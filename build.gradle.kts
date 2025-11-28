@@ -1,162 +1,159 @@
-import org.spongepowered.asm.gradle.plugins.MixinExtension
-import org.spongepowered.asm.gradle.plugins.struct.DynamicProperties
-import java.text.SimpleDateFormat
-import java.util.*
+@file:Suppress("PropertyName")
 
-buildscript {
-    repositories {
-        mavenCentral()
-        maven("https://maven.fabricmc.net/")
-    }
-    dependencies {
-        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.0-Beta")
-        classpath("org.spongepowered:mixingradle:0.7.+")
-    }
-}
-
-apply(plugin = "kotlin")
-apply(plugin = "org.spongepowered.mixin")
+val mod_id: String by extra
+val mod_name: String by extra
+val mod_license: String by extra
+val mod_authors: String by extra
+val mod_description: String by extra
+val mod_version: String by extra
+val mod_group_id: String by extra
+val minecraft_version: String by extra
+val minecraft_version_range: String by extra
+val forge_version: String by extra
+val kotlin_for_forge_version: String by extra
+val forge_version_range: String by extra
+val loader_version_range: String by extra
+val parchment_mappings_version: String by extra
+val parchment_minecraft_version: String by extra
 
 plugins {
-    eclipse
     idea
-    `maven-publish`
-    id("net.minecraftforge.gradle") version "[6.0,6.2)"
-    id("org.jetbrains.kotlin.jvm") version "1.8.22"
-    id("org.jetbrains.kotlin.plugin.serialization") version "1.8.22"
+    `java-library`
+    kotlin("jvm") version "2.2.20"
+    kotlin("plugin.serialization") version "2.2.20"
+    id("net.neoforged.moddev.legacyforge") version "2.0.120"
 }
 
-group = "com.pleahmacaka"
-version = "1.20-0.1.0"
-
-val modid = "examplemod"
-val vendor = "pleahmacaka"
-
-val minecraftVersion = "1.20.2"
-val forgeVersion = "48.0.20"
-
-java.toolchain.languageVersion.set(JavaLanguageVersion.of(17))
-
-println(
-    "Java: ${System.getProperty("java.version")} JVM: ${System.getProperty("java.vm.version")}(${
-        System.getProperty(
-            "java.vendor"
-        )
-    }) Arch: ${System.getProperty("os.arch")}"
-)
-
-minecraft {
-    mappings("official", minecraftVersion)
-    accessTransformer(file("src/main/resources/META-INF/accesstransformer.cfg"))
-
-    runs.all {
-        mods {
-            workingDirectory(project.file("run"))
-            property("forge.logging.markers", "REGISTRIES")
-            property("forge.logging.console.level", "debug")
-            property("forge.enabledGameTestNamespaces", modid)
-            property("terminal.jline", "true")
-            mods {
-                create(modid) {
-                    source(sourceSets.main.get())
-                }
-            }
-        }
-    }
-
-    runs.run {
-        create("client") {
-            property("log4j.configurationFile", "log4j2.xml")
-            jvmArg("-XX:+AllowEnhancedClassRedefinition")
-            args("--username", "Player")
-        }
-
-        create("server") {}
-        create("gameTestServer") {}
-        create("data") {
-            workingDirectory(project.file("run"))
-            args(
-                "--mod",
-                modid,
-                "--all",
-                "--output",
-                file("src/generated/resources/"),
-                "--existing",
-                file("src/main/resources")
-            )
-        }
-    }
+tasks.withType(Wrapper::class) {
+    distributionType = Wrapper.DistributionType.BIN
 }
 
-sourceSets.main.configure { resources.srcDirs("src/generated/resources/") }
+version = mod_version
+group = mod_group_id
 
 repositories {
     mavenCentral()
-    maven {
+    maven("https://thedarkcolour.github.io/KotlinForForge/") {
         name = "Kotlin for Forge"
-        url = uri("https://thedarkcolour.github.io/KotlinForForge/")
     }
 }
 
-fun getProperty(name: String): String {
-    return project.findProperty(name)?.toString() ?: System.getProperty(name)
+base.archivesName = mod_id
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(17)
+
+legacyForge {
+    version = "$minecraft_version-$forge_version"
+
+    parchment {
+        mappingsVersion = parchment_mappings_version
+        minecraftVersion = parchment_minecraft_version
+    }
+
+    runs {
+        create("client") {
+            client()
+            systemProperty("forge.enabledGameTestNamespaces", mod_id)
+        }
+
+        create("server") {
+            server()
+            programArgument("--nogui")
+            systemProperty("forge.enabledGameTestNamespaces", mod_id)
+        }
+
+        create("gameTestServer") {
+            type = "gameTestServer"
+            systemProperty("forge.enabledGameTestNamespaces", mod_id)
+        }
+
+        create("data") {
+            data()
+
+            programArguments.addAll(
+                "--mod",
+                mod_id,
+                "--all",
+                "--output",
+                file("src/generated/resources/").absolutePath,
+                "--existing",
+                file("src/main/resources/").absolutePath,
+            )
+        }
+
+        configureEach {
+            systemProperty("forge.logging.markers", "REGISTRIES")
+
+            logLevel = org.slf4j.event.Level.DEBUG
+        }
+    }
+
+    mods {
+        create(mod_id) {
+            sourceSet(sourceSets.main.orNull)
+        }
+    }
+}
+
+sourceSets.main {
+    resources.srcDir("src/generated/resources")
+}
+
+configurations {
+    val localRuntime by creating
+
+    runtimeClasspath {
+        extendsFrom(localRuntime)
+    }
+}
+
+obfuscation {
+    createRemappingConfiguration(configurations["localRuntime"])
 }
 
 dependencies {
-    minecraft("net.minecraftforge:forge:$minecraftVersion-$forgeVersion")
-    annotationProcessor("org.spongepowered:mixin:0.8.5:processor")
-    implementation("thedarkcolour:kotlinforforge:4.3.0")
+    implementation("thedarkcolour:kotlinforforge:$kotlin_for_forge_version")
 }
 
-val Project.mixin: MixinExtension
-    get() = extensions.getByType()
-
-mixin.run {
-    add(sourceSets.main.get(), "examplemod.mixins.refmap.json")
-    config("examplemod.mixins.json")
-    val debug = this.debug as DynamicProperties
-    debug.setProperty("verbose", true)
-    debug.setProperty("export", true)
-    setDebug(debug)
-}
-
-tasks.withType<Jar> {
-    archiveBaseName.set(modid)
-    manifest {
-        attributes(
+var generateModMetadata =
+    tasks.register("generateModMetadata", ProcessResources::class) {
+        var replaceProperties =
             mapOf(
-                "Specification-Title" to modid,
-                "Specification-Vendor" to vendor,
-                "Specification-Version" to "1",
-                "Implementation-Title" to project.name,
-                "Implementation-Version" to project.version.toString(),
-                "Implementation-Vendor" to vendor,
-                "Implementation-Timestamp" to SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ").format(Date())
+                "minecraft_version" to minecraft_version,
+                "minecraft_version_range" to minecraft_version_range,
+                "forge_version" to forge_version,
+                "forge_version_range" to forge_version_range,
+                "loader_version_range" to loader_version_range,
+                "mod_id" to mod_id,
+                "mod_name" to mod_name,
+                "mod_license" to mod_license,
+                "mod_version" to mod_version,
+                "mod_authors" to mod_authors,
+                "mod_description" to mod_description,
             )
-        )
+        inputs.properties(replaceProperties)
+        expand(replaceProperties)
+        from("src/main/resources")
+        into("build/generated/sources/modMetadata")
     }
-    finalizedBy("reobfJar")
+
+tasks.withType(ProcessResources::class) {
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
 }
 
-publishing {
-    publications {
-        create<MavenPublication>("mavenJava") {
-            from(components["java"])
-        }
-    }
-    repositories {
-        maven {
-            url = uri("file://${project.projectDir}/mcmodsrepo")
-        }
-    }
+sourceSets.main {
+    resources.srcDir(generateModMetadata.get().destinationDir)
 }
 
-tasks.withType<JavaCompile>().configureEach {
-    options.encoding = "UTF-8"
+legacyForge {
+    ideSyncTask(generateModMetadata)
 }
 
-tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
-    kotlinOptions {
-        jvmTarget = "17"
-    }
+tasks.withType(JavaCompile::class).configureEach {
+    options.encoding = "UTF-8" // Use the UTF-8 charset for Java compilation
+}
+
+idea {
+    module.isDownloadSources = true
+    module.isDownloadJavadoc = true
 }
