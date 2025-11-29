@@ -133,7 +133,11 @@ var generateModMetadata =
             )
         inputs.properties(replaceProperties)
         expand(replaceProperties)
-        from("src/main/resources")
+        from("src/main/resources") {
+            exclude {
+                it.name.contains(".png")
+            }
+        }
         into("build/generated/sources/modMetadata")
     }
 
