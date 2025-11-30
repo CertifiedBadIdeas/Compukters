@@ -1,0 +1,9 @@
+{
+  "parent": "compuktercraft:block/computer_on",
+  "textures": {
+    "cursor": "compuktercraft:block/computer_on",
+    "front": "compuktercraft:block/computer_advanced_front",
+    "side": "compuktercraft:block/computer_advanced_side",
+    "top": "compuktercraft:block/computer_advanced_top"
+  }
+}

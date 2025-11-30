@@ -36,6 +36,13 @@ repositories {
     maven("https://thedarkcolour.github.io/KotlinForForge/") {
         name = "Kotlin for Forge"
     }
+    maven("https://maven.neoforged.net") {
+        name = "NeoForge"
+        content {
+            includeGroup("net.neoforged")
+        }
+    }
+    maven("https://maven.minecraftforge.net/")
 }
 
 base.archivesName = mod_id

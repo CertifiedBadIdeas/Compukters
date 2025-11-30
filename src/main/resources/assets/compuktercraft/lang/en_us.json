@@ -1,4 +1,6 @@
 {
-  "item.compuktercraft.steel": "SOME STEEL",
-  "item.compuktercraft.steel_block": "SOME STEEL BLOCK"
+  "itemGroup.compuktercraft": "Compukter Craft",
+  "item.compuktercraft.computer_advanced": "Advanced Computer",
+  "block.compuktercraft.computer_advanced": "Advanced Computer",
+  "gui.compuktercraft.tooltip.computer_id": "Computer ID: %s"
 }

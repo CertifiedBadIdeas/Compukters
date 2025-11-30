@@ -1,4 +1,4 @@
-package ru.lazyhat.compukterkraft
+package ru.lazyhat.compuktercraft
 
 import net.minecraft.client.Minecraft
 import net.minecraftforge.fml.common.Mod
@@ -7,8 +7,6 @@ import net.minecraftforge.fml.event.lifecycle.FMLDedicatedServerSetupEvent
 import org.apache.logging.log4j.Level
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
-import ru.lazyhat.compukterkraft.block.ModBlocks
-import ru.lazyhat.compukterkraft.item.ModItems
 import thedarkcolour.kotlinforforge.forge.MOD_BUS
 import thedarkcolour.kotlinforforge.forge.runForDist
 
@@ -21,8 +19,7 @@ object CompukterCraftMod {
     init {
         LOGGER.log(Level.INFO, "$ID has started!")
 
-        ModItems.REGISTRY.register(MOD_BUS)
-        ModBlocks.REGISTRY.register(MOD_BUS)
+        ModRegistry.register()
 
         val obj =
             runForDist(
