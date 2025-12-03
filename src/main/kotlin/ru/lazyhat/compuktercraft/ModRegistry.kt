@@ -17,6 +17,7 @@ import net.minecraftforge.registries.DeferredRegister
 import net.minecraftforge.registries.RegistryObject
 import ru.lazyhat.compuktercraft.block.ComputerBlock
 import ru.lazyhat.compuktercraft.block.ComputerBlockEntity
+import ru.lazyhat.compuktercraft.block.ComputerFamily
 import ru.lazyhat.compuktercraft.item.ComputerItem
 import ru.lazyhat.compuktercraft.loot.BlockNamedEntityLootCondition
 import ru.lazyhat.compuktercraft.loot.ConstantLootConditionSerializer
@@ -43,7 +44,7 @@ object ModRegistry {
         val COMPUTER_ADVANCED: RegistryObject<ComputerBlock> =
             REGISTRY
                 .register(Names.COMPUTER_ADVANCED) {
-                    ComputerBlock(noRedstoneConductor().mapColor(MapColor.STONE), BlockEntities.COMPUTER_ADVANCED)
+                    ComputerBlock(BlockEntities.COMPUTER_ADVANCED, noRedstoneConductor().mapColor(MapColor.STONE))
                 }
     }
 
@@ -57,7 +58,10 @@ object ModRegistry {
         ): RegistryObject<BlockEntityType<T>> = REGISTRY.register(name) { BlockEntityType(factory, setOf(block.get()), null) }
 
         val COMPUTER_ADVANCED: RegistryObject<BlockEntityType<ComputerBlockEntity>> =
-            ofBlock(Blocks.COMPUTER_ADVANCED, Names.COMPUTER_ADVANCED) { p, s -> ComputerBlockEntity(COMPUTER_ADVANCED.get(), p, s) }
+            ofBlock(
+                Blocks.COMPUTER_ADVANCED,
+                Names.COMPUTER_ADVANCED,
+            ) { p, s -> ComputerBlockEntity(COMPUTER_ADVANCED.get(), p, s, ComputerFamily.ADVANCED) }
     }
 
     object Items {

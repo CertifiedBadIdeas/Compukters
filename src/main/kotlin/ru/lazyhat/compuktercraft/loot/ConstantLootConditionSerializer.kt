@@ -9,7 +9,6 @@ import com.google.gson.JsonSerializationContext
 import net.minecraft.world.level.storage.loot.Serializer
 import net.minecraft.world.level.storage.loot.predicates.LootItemCondition
 import net.minecraft.world.level.storage.loot.predicates.LootItemConditionType
-import ru.lazyhat.compuktercraft.CompukterCraftMod
 
 class ConstantLootConditionSerializer<T : LootItemCondition>(
     private val instance: T,
@@ -17,7 +16,6 @@ class ConstantLootConditionSerializer<T : LootItemCondition>(
     companion object {
         fun <T : LootItemCondition> type(condition: T): LootItemConditionType =
             LootItemConditionType(ConstantLootConditionSerializer(condition))
-                .also { CompukterCraftMod.LOGGER.info("LOOT SERIALIZER") }
     }
 
     override fun serialize(
