@@ -3,6 +3,7 @@ package ru.lazyhat.compuktercraft
 import net.minecraft.core.BlockPos
 import net.minecraft.core.registries.Registries
 import net.minecraft.network.chat.Component
+import net.minecraft.world.inventory.MenuType
 import net.minecraft.world.item.CreativeModeTab
 import net.minecraft.world.item.Item
 import net.minecraft.world.item.ItemStack
@@ -13,21 +14,25 @@ import net.minecraft.world.level.block.state.BlockBehaviour
 import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.material.MapColor
 import net.minecraft.world.level.storage.loot.predicates.LootItemConditionType
+import net.minecraftforge.common.extensions.IForgeMenuType
 import net.minecraftforge.registries.DeferredRegister
 import net.minecraftforge.registries.RegistryObject
 import ru.lazyhat.compuktercraft.block.ComputerBlock
 import ru.lazyhat.compuktercraft.block.ComputerBlockEntity
 import ru.lazyhat.compuktercraft.block.ComputerFamily
+import ru.lazyhat.compuktercraft.data.ComputerContainerData
 import ru.lazyhat.compuktercraft.item.ComputerItem
 import ru.lazyhat.compuktercraft.loot.BlockNamedEntityLootCondition
 import ru.lazyhat.compuktercraft.loot.ConstantLootConditionSerializer
 import ru.lazyhat.compuktercraft.loot.HasComputerIdLootCondition
 import ru.lazyhat.compuktercraft.loot.PlayerCreativeLootCondition
+import ru.lazyhat.compuktercraft.menu.ComputerMenuWithoutInventory
 import thedarkcolour.kotlinforforge.forge.MOD_BUS
 
 object ModRegistry {
     object Names {
         const val COMPUTER_ADVANCED = "computer_advanced"
+        const val COMPUTER = "computer"
     }
 
     object Blocks {
@@ -111,6 +116,19 @@ object ModRegistry {
             )
     }
 
+    object Menus {
+        val REGISTRY = DeferredRegister.create(Registries.MENU, CompukterCraftMod.ID)
+
+        val COMPUTER: RegistryObject<MenuType<ComputerMenuWithoutInventory>> =
+            REGISTRY.register(Names.COMPUTER) {
+                IForgeMenuType.create { id, playerInventory, data ->
+                    ComputerMenuWithoutInventory(COMPUTER.get(), id, playerInventory, ComputerContainerData(data)).also {
+                        CompukterCraftMod.LOGGER.info("ClientRegistry: ComputerMenuWithoutInventory from buffer created")
+                    }
+                }
+            }
+    }
+
     object CreativeTabs {
         val REGISTRY: DeferredRegister<CreativeModeTab> = DeferredRegister.create(Registries.CREATIVE_MODE_TAB, CompukterCraftMod.ID)
 
@@ -131,6 +149,7 @@ object ModRegistry {
         Blocks.REGISTRY.register(MOD_BUS)
         BlockEntities.REGISTRY.register(MOD_BUS)
         Items.REGISTRY.register(MOD_BUS)
+        Menus.REGISTRY.register(MOD_BUS)
         LootItemConditionTypes.REGISTRY.register(MOD_BUS)
         CreativeTabs.REGISTRY.register(MOD_BUS)
     }

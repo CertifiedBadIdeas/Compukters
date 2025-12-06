@@ -18,9 +18,8 @@ val parchment_minecraft_version: String by extra
 
 plugins {
     idea
-    `java-library`
-    kotlin("jvm") version "2.2.20"
-    kotlin("plugin.serialization") version "2.2.20"
+    kotlin("jvm") version "2.2.21"
+    kotlin("plugin.serialization") version "2.2.21"
     id("net.neoforged.moddev.legacyforge") version "2.0.120"
 }
 

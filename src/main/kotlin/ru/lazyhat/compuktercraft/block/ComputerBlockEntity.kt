@@ -6,6 +6,9 @@ import net.minecraft.world.entity.player.Player
 import net.minecraft.world.inventory.AbstractContainerMenu
 import net.minecraft.world.level.block.entity.BlockEntityType
 import net.minecraft.world.level.block.state.BlockState
+import ru.lazyhat.compuktercraft.CompukterCraftMod
+import ru.lazyhat.compuktercraft.ModRegistry
+import ru.lazyhat.compuktercraft.menu.ComputerMenuWithoutInventory
 
 class ComputerBlockEntity(
     type: BlockEntityType<out ComputerBlockEntity>,
@@ -17,7 +20,13 @@ class ComputerBlockEntity(
         containerId: Int,
         playerInventory: Inventory,
         player: Player,
-    ): AbstractContainerMenu? {
-        TODO("Not yet implemented")
-    }
+    ): AbstractContainerMenu =
+        ComputerMenuWithoutInventory(
+            ModRegistry.Menus.COMPUTER.get(),
+            containerId,
+            playerInventory,
+            createServerComputer(),
+        ).also {
+            CompukterCraftMod.LOGGER.info("ComputerID: ${it.getComputerPublic().instanceID} createMenu()")
+        }
 }

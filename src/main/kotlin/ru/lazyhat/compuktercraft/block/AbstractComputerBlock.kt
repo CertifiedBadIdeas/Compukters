@@ -3,7 +3,11 @@ package ru.lazyhat.compuktercraft.block
 import net.minecraft.core.BlockPos
 import net.minecraft.resources.ResourceLocation
 import net.minecraft.server.level.ServerLevel
+import net.minecraft.server.level.ServerPlayer
 import net.minecraft.stats.Stats
+import net.minecraft.world.InteractionHand
+import net.minecraft.world.InteractionResult
+import net.minecraft.world.SimpleMenuProvider
 import net.minecraft.world.entity.LivingEntity
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.item.ItemStack
@@ -16,8 +20,11 @@ import net.minecraft.world.level.block.entity.BlockEntityType
 import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.storage.loot.LootParams
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams
+import net.minecraft.world.phys.BlockHitResult
+import net.minecraftforge.network.NetworkHooks
 import net.minecraftforge.registries.RegistryObject
 import ru.lazyhat.compuktercraft.CompukterCraftMod
+import ru.lazyhat.compuktercraft.data.ComputerContainerData
 import ru.lazyhat.compuktercraft.utils.castTicker
 import ru.lazyhat.compuktercraft.utils.computerID
 import ru.lazyhat.compuktercraft.utils.computerLabel
@@ -32,7 +39,7 @@ abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
         val drop: ResourceLocation = ResourceLocation.fromNamespaceAndPath(CompukterCraftMod.ID, "computer")
 
         val serverTicker =
-            BlockEntityTicker<AbstractComputerBlockEntity> { level, pos, state, computer ->
+            BlockEntityTicker<AbstractComputerBlockEntity> { _, _, _, computer ->
                 computer.serverTick()
             }
     }
@@ -43,7 +50,7 @@ abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
         blockEntityType: BlockEntityType<T>,
     ): BlockEntityTicker<T>? = serverTicker.ifServerSide(level)?.castTicker()
 
-    abstract fun getItem(tile: AbstractComputerBlockEntity): ItemStack?
+    abstract fun getItem(tile: AbstractComputerBlockEntity): ItemStack
 
     override fun setPlacedBy(
         level: Level,
@@ -100,11 +107,49 @@ abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
         state: BlockState,
         params: LootParams.Builder,
     ): List<ItemStack> =
-        super.getDrops(
-            state,
-            (params.getOptionalParameter(LootContextParams.BLOCK_ENTITY) as? AbstractComputerBlockEntity)
-                ?.let { computerBlockEntity ->
-                    params.withDynamicDrop(drop) { it.accept(getItem(computerBlockEntity)) }
-                } ?: params,
-        )
+        super
+            .getDrops(
+                state,
+                (params.getOptionalParameter(LootContextParams.BLOCK_ENTITY) as? AbstractComputerBlockEntity)
+                    ?.let { computerBlockEntity ->
+                        params.withDynamicDrop(drop) { it.accept(getItem(computerBlockEntity)) }
+                    } ?: params,
+            ).also { CompukterCraftMod.LOGGER.info("GetDrops invoked") }
+
+    override fun use(
+        state: BlockState,
+        level: Level,
+        pos: BlockPos,
+        player: Player,
+        hand: InteractionHand,
+        hit: BlockHitResult,
+    ): InteractionResult {
+        if (!player.isCrouching) {
+            (level.getBlockEntity(pos) as? AbstractComputerBlockEntity)?.run {
+                ifServerSide(level)
+                    ?.let { computer ->
+                        val serverComputer = computer.createServerComputer()
+                        serverComputer.turnOn()
+
+                        NetworkHooks
+                            .openScreen(
+                                player as ServerPlayer,
+                                SimpleMenuProvider(
+                                    computer,
+                                    computer.name,
+                                ),
+                                ComputerContainerData(
+                                    serverComputer,
+                                    getItem(computer),
+                                )::toBytes,
+                            ).also {
+                                CompukterCraftMod.LOGGER.info("ComputerBlock openScreen invoked")
+                            }
+                        return InteractionResult.sidedSuccess(level.isClientSide)
+                    }
+            }
+        }
+
+        return super.use(state, level, pos, player, hand, hit)
+    }
 }

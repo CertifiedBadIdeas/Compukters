@@ -37,10 +37,8 @@ class ComputerBlock(
     override fun getStateForPlacement(context: BlockPlaceContext): BlockState =
         defaultBlockState().setValue(facing, context.horizontalDirection.opposite)
 
-    override fun getItem(tile: AbstractComputerBlockEntity): ItemStack? {
-        val item = asItem()
-        if (item !is ComputerItem) return null
-
-        return item.create(tile.computerID, tile.label)
+    override fun getItem(tile: AbstractComputerBlockEntity): ItemStack {
+        if (tile !is ComputerBlockEntity) return ItemStack.EMPTY
+        return (asItem() as? ComputerItem)?.create(tile.computerID, tile.label) ?: ItemStack.EMPTY
     }
 }

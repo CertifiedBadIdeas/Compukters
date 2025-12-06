@@ -3,11 +3,14 @@ package ru.lazyhat.compuktercraft.block
 import net.minecraft.core.BlockPos
 import net.minecraft.nbt.CompoundTag
 import net.minecraft.network.chat.Component
+import net.minecraft.server.level.ServerLevel
 import net.minecraft.world.Nameable
 import net.minecraft.world.inventory.MenuConstructor
 import net.minecraft.world.level.block.entity.BlockEntity
 import net.minecraft.world.level.block.entity.BlockEntityType
 import net.minecraft.world.level.block.state.BlockState
+import ru.lazyhat.compuktercraft.computer.ServerComputer
+import ru.lazyhat.compuktercraft.context.ServerContext
 import ru.lazyhat.compuktercraft.utils.computerID
 import ru.lazyhat.compuktercraft.utils.computerLabel
 import ru.lazyhat.compuktercraft.utils.ifServerSide
@@ -22,9 +25,11 @@ abstract class AbstractComputerBlockEntity(
 ) : BlockEntity(type, pos, state),
     Nameable,
     MenuConstructor {
+    private var instanceUUID: UUID? = null
     var family: ComputerFamily = family
         private set
 
+    private var fresh = false
     private var _label: String? = null
     private var _computerID: Int? = null
 
@@ -52,13 +57,45 @@ abstract class AbstractComputerBlockEntity(
                 }
         }
 
-    private var instanceUUID: UUID? = null
-
     fun serverTick() {
         if (level?.isClientSide ?: false) return
         if (_computerID != null) return
 
         _computerID = (0..9).random()
+    }
+
+    fun createServerComputer(): ServerComputer {
+        val server = level?.server ?: error("Cannot access server computer on the client.")
+        val serverLevel = level as? ServerLevel ?: error("[SERVER_LEVEL_GET] Cannot access server computer on the client.")
+
+        val changed = false
+
+        return ServerContext.getComputer(instanceUUID) ?: ServerContext.createComputer(serverLevel, blockPos, family).let {
+            fresh = true
+            instanceUUID = it.first
+            _computerID = it.second.instanceID
+
+            updateBlock()
+            it.second
+        }
+
+//        val computer = ServerContext.get(server).registry().get(instanceID)
+//        if (computer == null) {
+//            if (computerID == null) {
+//                computerID = ComputerCraftAPI.createUniqueNumberedSaveDir(server, IDAssigner.COMPUTER)
+//                BlockEntityHelpers.updateBlock(this)
+//            }
+//
+//            computer = createComputer(computerID)
+//            instanceID = computer.register()
+//
+//
+//            fresh = true
+//            changed = true
+//        }
+//
+//        //if (changed) updateInputsImmediately(computer)
+//        return computer!!
     }
 
     override fun saveAdditional(tag: CompoundTag) {

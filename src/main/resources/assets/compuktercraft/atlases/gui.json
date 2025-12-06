@@ -1,0 +1,22 @@
+{
+  "sources": [
+    {"type": "minecraft:single", "resource": "compuktercraft:gui/sprites/turtle_normal_selected_slot"},
+    {"type": "minecraft:single", "resource": "compuktercraft:gui/sprites/turtle_advanced_selected_slot"},
+    {"type": "minecraft:single", "resource": "compuktercraft:gui/sprites/buttons/turned_off"},
+    {"type": "minecraft:single", "resource": "compuktercraft:gui/sprites/buttons/turned_off_hover"},
+    {"type": "minecraft:single", "resource": "compuktercraft:gui/sprites/buttons/turned_on"},
+    {"type": "minecraft:single", "resource": "compuktercraft:gui/sprites/buttons/turned_on_hover"},
+    {"type": "minecraft:single", "resource": "compuktercraft:gui/sprites/buttons/terminate"},
+    {"type": "minecraft:single", "resource": "compuktercraft:gui/sprites/buttons/terminate_hover"},
+    {"type": "minecraft:single", "resource": "compuktercraft:gui/border_normal"},
+    {"type": "minecraft:single", "resource": "compuktercraft:gui/pocket_bottom_normal"},
+    {"type": "minecraft:single", "resource": "compuktercraft:gui/sidebar_normal"},
+    {"type": "minecraft:single", "resource": "compuktercraft:gui/border_advanced"},
+    {"type": "minecraft:single", "resource": "compuktercraft:gui/pocket_bottom_advanced"},
+    {"type": "minecraft:single", "resource": "compuktercraft:gui/sidebar_advanced"},
+    {"type": "minecraft:single", "resource": "compuktercraft:gui/border_command"},
+    {"type": "minecraft:single", "resource": "compuktercraft:gui/sidebar_command"},
+    {"type": "minecraft:single", "resource": "compuktercraft:gui/border_colour"},
+    {"type": "minecraft:single", "resource": "compuktercraft:gui/pocket_bottom_colour"}
+  ]
+}
