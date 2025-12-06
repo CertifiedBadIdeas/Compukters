@@ -304,7 +304,7 @@ object FixedWidthFontRenderer {
         y: Float,
         terminal: Terminal,
     ) {
-        if (isCursorVisible(terminal) && FrameInfo.getGlobalCursorBlink()) {
+        if (isCursorVisible(terminal) && FrameInfo.globalCursorBlink) {
             val colour = terminal.palette.getRenderColours(15 - terminal.getTextColour())
             drawChar(
                 emitter,

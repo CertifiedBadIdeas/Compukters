@@ -1,34 +1,27 @@
 // Copyright Daniel Ratcliffe, 2011-2022. Do not distribute without permission.
 //
 // SPDX-License-Identifier: LicenseRef-CCPL
-
-package ru.lazyhat.compuktercraft.gui;
+package ru.lazyhat.compuktercraft.gui
 
 /**
  * Tracks the current client-side tick and frame.
- * <p>
- * These are updated via {@link ClientHooks}.
+ *
+ *
+ * These are updated via [ClientHooks].
  */
-public final class FrameInfo {
-    private static int tick;
-    private static long renderFrame;
+object FrameInfo {
+	private var tick = 0
+	var renderFrame: Long = 0
+		private set
 
-    private FrameInfo() {
-    }
+	val globalCursorBlink: Boolean
+		get() = (tick / 8) % 2 == 0
 
-    public static boolean getGlobalCursorBlink() {
-        return (tick / 8) % 2 == 0;
-    }
+	fun onTick() {
+		tick++
+	}
 
-    public static long getRenderFrame() {
-        return renderFrame;
-    }
-
-    public static void onTick() {
-        tick++;
-    }
-
-    public static void onRenderTick() {
-        renderFrame++;
-    }
+	fun onRenderTick() {
+		renderFrame++
+	}
 }

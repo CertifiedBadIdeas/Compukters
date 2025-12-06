@@ -22,7 +22,7 @@ open class Terminal
         var cursorY: Int = 0
             protected set
 
-        protected var cursorBlink: Boolean = false
+        protected var cursorBlink: Boolean = true // false
         protected var cursorColour: Int = 0
         protected var cursorBackgroundColour: Int = 15
 

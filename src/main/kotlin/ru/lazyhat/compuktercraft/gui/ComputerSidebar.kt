@@ -39,13 +39,13 @@ object ComputerSidebar {
 
         val turnOn: DynamicImageButton.HintedMessage =
             DynamicImageButton.HintedMessage(
-                Component.translatable("gui.computercraft.tooltip.turn_on"),
+                Component.translatable("gui.compuktercraft.tooltip.turn_on"),
                 null as Component?,
             )
         val turnOff: DynamicImageButton.HintedMessage =
             DynamicImageButton.HintedMessage(
-                Component.translatable("gui.computercraft.tooltip.turn_off"),
-                Component.translatable("gui.computercraft.tooltip.turn_off.key"),
+                Component.translatable("gui.compuktercraft.tooltip.turn_off"),
+                Component.translatable("gui.compuktercraft.tooltip.turn_off.key"),
             )
         add.accept(
             DynamicImageButton(
@@ -70,8 +70,8 @@ object ComputerSidebar {
                 GuiSprites.TERMINATE::get,
                 { b -> input.terminate() },
                 DynamicImageButton.HintedMessage(
-                    Component.translatable("gui.computercraft.tooltip.terminate"),
-                    Component.translatable("gui.computercraft.tooltip.terminate.key"),
+                    Component.translatable("gui.compuktercraft.tooltip.terminate"),
+                    Component.translatable("gui.compuktercraft.tooltip.terminate.key"),
                 ),
             ),
         )
