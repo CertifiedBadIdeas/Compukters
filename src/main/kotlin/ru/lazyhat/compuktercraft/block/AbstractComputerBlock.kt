@@ -119,7 +119,7 @@ abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
                     ?.let { computerBlockEntity ->
                         params.withDynamicDrop(drop) { it.accept(getItem(computerBlockEntity)) }
                     } ?: params,
-            ).also { CompukterCraftMod.LOGGER.info("GetDrops invoked") }
+            ) // .also { CompukterCraftMod.LOGGER.info("GetDrops invoked") }
 
     override fun use(
         state: BlockState,
@@ -147,7 +147,7 @@ abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
                                     getItem(computer),
                                 )::toBytes,
                             ).also {
-                                CompukterCraftMod.LOGGER.info("ComputerBlock openScreen invoked")
+                                // CompukterCraftMod.LOGGER.info("ComputerBlock openScreen invoked")
                             }
                         return InteractionResult.sidedSuccess(level.isClientSide)
                     }

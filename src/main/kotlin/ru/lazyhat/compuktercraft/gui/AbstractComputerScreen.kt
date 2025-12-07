@@ -15,7 +15,6 @@ import net.minecraft.world.item.ItemStack
 import org.lwjgl.glfw.GLFW
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
-import ru.lazyhat.compuktercraft.CompukterCraftMod
 import ru.lazyhat.compuktercraft.block.ComputerFamily
 import ru.lazyhat.compuktercraft.menu.AbstractComputerMenu
 import java.util.Optional
@@ -42,7 +41,7 @@ abstract class AbstractComputerScreen<T : AbstractComputerMenu>(
     private val displayStack: ItemStack = container.displayStack
 
     init {
-        CompukterCraftMod.LOGGER.info("ComputerID: AbstractComputerScreen init")
+        // CompukterCraftMod.LOGGER.info("ComputerID: AbstractComputerScreen init")
         terminalData = container.getTerminal()
     }
 
@@ -55,7 +54,7 @@ abstract class AbstractComputerScreen<T : AbstractComputerMenu>(
     }
 
     override fun init() {
-        CompukterCraftMod.LOGGER.info("AbstractComputerScreen init()")
+        // CompukterCraftMod.LOGGER.info("AbstractComputerScreen init()")
         super.init()
         terminal = addRenderableWidget(createTerminal())
         ComputerSidebar.addButtons(menu::isOn, input, ::addRenderableWidget, leftPos, topPos + sidebarYOffset)

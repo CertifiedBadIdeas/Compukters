@@ -1,5 +1,6 @@
 package ru.lazyhat.compuktercraft.gui
 
+import net.minecraft.client.gui.Gui
 import net.minecraft.client.renderer.texture.TextureAtlasSprite
 import net.minecraft.client.renderer.texture.TextureManager
 import net.minecraft.client.resources.TextureAtlasHolder

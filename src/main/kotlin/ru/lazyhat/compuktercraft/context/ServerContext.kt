@@ -17,5 +17,9 @@ class ServerContext(
         fun create(server: MinecraftServer) {
             instance = ServerContext(server)
         }
+
+        fun close() {
+            resetInstance()
+        }
     }
 }

@@ -8,7 +8,6 @@ import net.minecraft.world.inventory.AbstractContainerMenu
 import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.entity.BlockEntityType
 import net.minecraft.world.level.block.state.BlockState
-import ru.lazyhat.compuktercraft.CompukterCraftMod
 import ru.lazyhat.compuktercraft.ModRegistry
 import ru.lazyhat.compuktercraft.computer.ComputerProperties
 import ru.lazyhat.compuktercraft.computer.ServerComputer
@@ -54,6 +53,6 @@ class ComputerBlockEntity(
             playerInventory,
             createServerComputer(),
         ).also {
-            CompukterCraftMod.LOGGER.info("ComputerID: ${it.getComputerPublic().instanceID} createMenu()")
+            // CompukterCraftMod.LOGGER.info("ComputerID: ${it.getComputerPublic().instanceID} createMenu()")
         }
 }

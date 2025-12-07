@@ -4,7 +4,6 @@
 package ru.lazyhat.compuktercraft.gui
 
 import net.minecraft.nbt.CompoundTag
-import ru.lazyhat.compuktercraft.CompukterCraftMod
 
 @OptIn(ExperimentalUnsignedTypes::class)
 class NetworkedTerminal : Terminal {
@@ -13,7 +12,7 @@ class NetworkedTerminal : Terminal {
     constructor(width: Int, height: Int, colour: Boolean, changedCallback: Runnable?) : super(width, height, colour, changedCallback)
 
     init {
-        CompukterCraftMod.LOGGER.info("Terminal init: w: $width, h: $height, c: $isColour")
+        // CompukterCraftMod.LOGGER.info("NTerminal init: w: $width, h: $height, c: $isColour")
     }
 
     @Synchronized

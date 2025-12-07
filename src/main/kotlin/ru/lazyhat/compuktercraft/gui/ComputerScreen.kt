@@ -6,7 +6,6 @@ package ru.lazyhat.compuktercraft.gui
 import net.minecraft.client.gui.GuiGraphics
 import net.minecraft.network.chat.Component
 import net.minecraft.world.entity.player.Inventory
-import ru.lazyhat.compuktercraft.CompukterCraftMod
 import ru.lazyhat.compuktercraft.gui.ComputerBorderRenderer.BORDER
 import ru.lazyhat.compuktercraft.menu.AbstractComputerMenu
 
@@ -24,7 +23,7 @@ class ComputerScreen<T : AbstractComputerMenu>(
     title: Component,
 ) : AbstractComputerScreen<T>(container, player, title, BORDER) {
     init {
-        CompukterCraftMod.LOGGER.info("ComputerID: ComputerScreen init")
+        // CompukterCraftMod.LOGGER.info("ComputerID: ComputerScreen init")
         imageWidth = TerminalWidget.getWidth(terminalData.width) + BORDER * 2 + AbstractComputerMenu.SIDEBAR_WIDTH
         imageHeight = TerminalWidget.getHeight(terminalData.height) + BORDER * 2
     }

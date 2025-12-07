@@ -123,7 +123,7 @@ object ModRegistry {
             REGISTRY.register(Names.COMPUTER) {
                 IForgeMenuType.create { id, playerInventory, data ->
                     ComputerMenuWithoutInventory(COMPUTER.get(), id, playerInventory, ComputerContainerData(data)).also {
-                        CompukterCraftMod.LOGGER.info("ClientRegistry: ComputerMenuWithoutInventory from buffer created")
+                        // CompukterCraftMod.LOGGER.info("ClientRegistry: ComputerMenuWithoutInventory from buffer created")
                     }
                 }
             }

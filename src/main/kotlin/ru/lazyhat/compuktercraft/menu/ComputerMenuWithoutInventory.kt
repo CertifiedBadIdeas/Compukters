@@ -5,7 +5,6 @@ import net.minecraft.world.entity.player.Player
 import net.minecraft.world.inventory.MenuType
 import net.minecraft.world.inventory.Slot
 import net.minecraft.world.item.ItemStack
-import ru.lazyhat.compuktercraft.CompukterCraftMod
 import ru.lazyhat.compuktercraft.block.ComputerFamily
 import ru.lazyhat.compuktercraft.computer.ServerComputer
 import ru.lazyhat.compuktercraft.data.ComputerContainerData
@@ -54,7 +53,7 @@ class ComputerMenuWithoutInventory(
     )
 
     init {
-        CompukterCraftMod.LOGGER.info("ComputerMenuWithoutInventory constructor invoked")
+        // CompukterCraftMod.LOGGER.info("ComputerMenuWithoutInventory constructor invoked")
         repeat(10) {
             addSlot(
                 object : Slot(playerInventory, it, 0, 0) {

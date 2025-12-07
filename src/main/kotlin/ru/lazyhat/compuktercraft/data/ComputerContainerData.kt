@@ -2,7 +2,6 @@ package ru.lazyhat.compuktercraft.data
 
 import net.minecraft.network.FriendlyByteBuf
 import net.minecraft.world.item.ItemStack
-import ru.lazyhat.compuktercraft.CompukterCraftMod
 import ru.lazyhat.compuktercraft.Config
 import ru.lazyhat.compuktercraft.block.ComputerFamily
 import ru.lazyhat.compuktercraft.computer.ServerComputer
@@ -19,7 +18,7 @@ class ComputerContainerData private constructor(
         TerminalState(buffer),
         buffer.readItem(),
         buffer.readInt().also {
-            CompukterCraftMod.LOGGER.info("ComputerContainerData init from buffer")
+            // CompukterCraftMod.LOGGER.info("ComputerContainerData init from buffer")
         },
     )
 
@@ -28,12 +27,12 @@ class ComputerContainerData private constructor(
         terminalState.write(buffer)
         buffer.writeItem(displayStack)
         buffer.writeInt(uploadMaxSize)
-        CompukterCraftMod.LOGGER.info("ComputerContainerData write to buffer")
+        // CompukterCraftMod.LOGGER.info("ComputerContainerData write to buffer")
     }
 
     constructor(computer: ServerComputer, displayStack: ItemStack) : this(
         computer.family.also {
-            CompukterCraftMod.LOGGER.info("ComputerContainerData standard init")
+            // CompukterCraftMod.LOGGER.info("ComputerContainerData standard init")
         },
         TerminalState.create(computer.terminal),
         displayStack,

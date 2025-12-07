@@ -9,6 +9,7 @@ import net.minecraft.world.inventory.MenuConstructor
 import net.minecraft.world.level.block.entity.BlockEntity
 import net.minecraft.world.level.block.entity.BlockEntityType
 import net.minecraft.world.level.block.state.BlockState
+import ru.lazyhat.compuktercraft.CompukterCraftMod
 import ru.lazyhat.compuktercraft.computer.ServerComputer
 import ru.lazyhat.compuktercraft.context.ServerContext
 import ru.lazyhat.compuktercraft.utils.computerID
@@ -29,11 +30,20 @@ abstract class AbstractComputerBlockEntity(
 
     private var fresh = false
     private var _label: String? = null
+        set(value) {
+            CompukterCraftMod.LOGGER.info("AbstractComputerBlockEntity.setLabel $value")
+            field = value
+        }
     private var _computerID: Int? = null
+        set(value) {
+            CompukterCraftMod.LOGGER.info("AbstractComputerBlockEntity.setComputerId $value")
+            field = value
+        }
 
     var label: String?
         get() = _label
         set(value) {
+            CompukterCraftMod.LOGGER.info("AbstractComputerBlockEntity.setLabelPublic $value")
             value
                 ?.ifServerSide(level)
                 ?.takeIf { _label != value }
@@ -46,6 +56,7 @@ abstract class AbstractComputerBlockEntity(
     var computerID: Int?
         get() = _computerID
         set(value) {
+            CompukterCraftMod.LOGGER.info("AbstractComputerBlockEntity.setComputerIdPublic $value")
             value
                 ?.ifServerSide(level)
                 ?.takeIf { _computerID != value }
@@ -54,6 +65,10 @@ abstract class AbstractComputerBlockEntity(
                     updateBlock()
                 }
         }
+
+    init {
+        CompukterCraftMod.LOGGER.info("AbstractComputerBlockEntity init ID: $_computerID, $_label")
+    }
 
     abstract fun updateBlockState(newState: ComputerState)
 
@@ -68,49 +83,35 @@ abstract class AbstractComputerBlockEntity(
         val server = level?.server ?: error("Cannot access server computer on the client.")
         val serverLevel = level as? ServerLevel ?: error("[SERVER_LEVEL_GET] Cannot access server computer on the client.")
 
-        return computerID
+        CompukterCraftMod.LOGGER.info("AbstractComputerBlockEntity.createServerComputer() ID: $_computerID")
+
+        return _computerID
             ?.let {
                 ServerContext.registry.getServerComputer(it)
-            } ?: run {
-            val newId = (0..9).random()
-
-            val computer = createComputer(newId)
-            ServerContext.registry.addServerComputer(computer)
-
-            fresh = true
-            _computerID = newId
-
-            updateBlock()
-            computer
-        }
-
-//        val computer = ServerContext.get(server).registry().get(instanceID)
-//        if (computer == null) {
-//            if (computerID == null) {
-//                computerID = ComputerCraftAPI.createUniqueNumberedSaveDir(server, IDAssigner.COMPUTER)
-//                BlockEntityHelpers.updateBlock(this)
-//            }
-//
-//            computer = createComputer(computerID)
-//            instanceID = computer.register()
-//
-//
-//            fresh = true
-//            changed = true
-//        }
-//
-//        //if (changed) updateInputsImmediately(computer)
-//        return computer!!
+            }
+            ?: run {
+                createComputer(
+                    _computerID
+                        ?: (0..9)
+                            .random()
+                            .also { computerID = it },
+                ).also {
+                    ServerContext.registry.addServerComputer(it)
+                    fresh = true
+                }
+            }
     }
 
     override fun saveAdditional(tag: CompoundTag) {
         tag.computerID = _computerID
         tag.computerLabel = _label
+        CompukterCraftMod.LOGGER.info("AbstractComputerBlockEntity.saveAdditional() tag: $tag")
 
         super.saveAdditional(tag)
     }
 
     override fun load(tag: CompoundTag) {
+        CompukterCraftMod.LOGGER.info("AbstractComputerBlockEntity.load() tag: $tag")
         _computerID = tag.computerID
         _label = tag.computerLabel
     }
