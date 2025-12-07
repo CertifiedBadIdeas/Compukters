@@ -49,7 +49,6 @@ class GuiSprites(
         fun initialize(textureManager: TextureManager) =
             GuiSprites(textureManager).also {
                 instance = it
-                CompukterCraftMod.LOGGER.info("ClientRegistry: GuiScripts initialized")
             }
     }
 

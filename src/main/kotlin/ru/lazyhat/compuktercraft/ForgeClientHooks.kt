@@ -7,12 +7,18 @@ import net.minecraftforge.api.distmarker.Dist
 import net.minecraftforge.event.TickEvent
 import net.minecraftforge.eventbus.api.SubscribeEvent
 import net.minecraftforge.fml.common.Mod
+import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent
 
 /**
  * Forge-specific dispatch for [ClientHooks].
  */
 @Mod.EventBusSubscriber(modid = CompukterCraftMod.ID, value = [Dist.CLIENT])
 object ForgeClientHooks {
+    @SubscribeEvent
+    fun onClientSetup(event: FMLClientSetupEvent) {
+        event.enqueueWork { ClientRegistry.registerMainThread() }
+    }
+
     @SubscribeEvent
     fun onTick(event: TickEvent.ClientTickEvent) {
         if (event.phase == TickEvent.Phase.START) ClientHooks.onTick()

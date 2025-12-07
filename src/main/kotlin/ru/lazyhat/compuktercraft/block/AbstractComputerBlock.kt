@@ -25,6 +25,7 @@ import net.minecraftforge.network.NetworkHooks
 import net.minecraftforge.registries.RegistryObject
 import ru.lazyhat.compuktercraft.CompukterCraftMod
 import ru.lazyhat.compuktercraft.data.ComputerContainerData
+import ru.lazyhat.compuktercraft.item.AbstractComputerItem
 import ru.lazyhat.compuktercraft.utils.castTicker
 import ru.lazyhat.compuktercraft.utils.computerID
 import ru.lazyhat.compuktercraft.utils.computerLabel
@@ -65,9 +66,13 @@ abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
             .getBlockEntity(pos)
             ?.ifServerSide(level)
             ?.let { it as? AbstractComputerBlockEntity }
+            ?.takeIf { stack.item is AbstractComputerItem }
             ?.let { tile ->
                 tile.computerID = stack.tag?.computerID
                 tile.label = stack.tag?.computerLabel
+                CompukterCraftMod.LOGGER.info("Computer: ${tile.computerID}, ${tile.label} placed")
+                CompukterCraftMod.LOGGER.info("HN: ${stack.hoverName}")
+                CompukterCraftMod.LOGGER.info("Tag: ${stack.tag}")
             }
     }
 
@@ -129,7 +134,6 @@ abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
                 ifServerSide(level)
                     ?.let { computer ->
                         val serverComputer = computer.createServerComputer()
-                        serverComputer.turnOn()
 
                         NetworkHooks
                             .openScreen(

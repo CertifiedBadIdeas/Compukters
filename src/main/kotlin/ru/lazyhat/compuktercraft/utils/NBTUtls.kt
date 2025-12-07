@@ -16,7 +16,7 @@ var CompoundTag.computerID: Int?
     }
 
 var CompoundTag.computerLabel: String?
-    get() = takeIf { it.contains(NBT.ID) }?.let { getString(NBT.LABEL) }
+    get() = takeIf { it.contains(NBT.LABEL) }?.let { getString(NBT.LABEL) }
     set(value) {
         value?.let { putString(NBT.LABEL, it) }
     }

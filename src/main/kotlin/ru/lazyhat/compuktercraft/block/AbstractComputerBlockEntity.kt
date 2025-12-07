@@ -15,7 +15,6 @@ import ru.lazyhat.compuktercraft.utils.computerID
 import ru.lazyhat.compuktercraft.utils.computerLabel
 import ru.lazyhat.compuktercraft.utils.ifServerSide
 import ru.lazyhat.compuktercraft.utils.updateBlock
-import java.util.UUID
 
 abstract class AbstractComputerBlockEntity(
     type: BlockEntityType<out AbstractComputerBlockEntity>,
@@ -25,7 +24,6 @@ abstract class AbstractComputerBlockEntity(
 ) : BlockEntity(type, pos, state),
     Nameable,
     MenuConstructor {
-    private var instanceUUID: UUID? = null
     var family: ComputerFamily = family
         private set
 
@@ -33,50 +31,57 @@ abstract class AbstractComputerBlockEntity(
     private var _label: String? = null
     private var _computerID: Int? = null
 
-    var label: String? = _label
+    var label: String?
         get() = _label
         set(value) {
             value
                 ?.ifServerSide(level)
-                ?.takeIf { field != value }
+                ?.takeIf { _label != value }
                 ?.let {
-                    field = value
+                    _label = value
                     updateBlock()
                 }
         }
 
-    var computerID: Int? = _computerID
+    var computerID: Int?
         get() = _computerID
         set(value) {
             value
                 ?.ifServerSide(level)
                 ?.takeIf { _computerID != value }
                 ?.let {
-                    field = value
+                    _computerID = value
                     updateBlock()
                 }
         }
 
-    fun serverTick() {
-        if (level?.isClientSide ?: false) return
-        if (_computerID != null) return
+    abstract fun updateBlockState(newState: ComputerState)
 
-        _computerID = (0..9).random()
+    abstract fun createComputer(id: Int): ServerComputer
+
+    fun serverTick() {
+        if (level?.isClientSide ?: true) return
+        if (_computerID == null) return
     }
 
     fun createServerComputer(): ServerComputer {
         val server = level?.server ?: error("Cannot access server computer on the client.")
         val serverLevel = level as? ServerLevel ?: error("[SERVER_LEVEL_GET] Cannot access server computer on the client.")
 
-        val changed = false
+        return computerID
+            ?.let {
+                ServerContext.registry.getServerComputer(it)
+            } ?: run {
+            val newId = (0..9).random()
 
-        return ServerContext.getComputer(instanceUUID) ?: ServerContext.createComputer(serverLevel, blockPos, family).let {
+            val computer = createComputer(newId)
+            ServerContext.registry.addServerComputer(computer)
+
             fresh = true
-            instanceUUID = it.first
-            _computerID = it.second.instanceID
+            _computerID = newId
 
             updateBlock()
-            it.second
+            computer
         }
 
 //        val computer = ServerContext.get(server).registry().get(instanceID)

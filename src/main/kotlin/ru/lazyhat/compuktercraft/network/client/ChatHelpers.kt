@@ -85,7 +85,7 @@ object ChatHelpers {
     fun makeComputerCommand(
         command: String?,
         computer: ServerComputer,
-    ): String = String.format("/compuktercraft %s @c[instance=%s]", command, computer.instanceUUID)
+    ): String = String.format("/compuktercraft %s @c[instance=%s]", command, computer.instanceID)
 
     fun makeComputerDumpCommand(computer: ServerComputer): Component =
         link(

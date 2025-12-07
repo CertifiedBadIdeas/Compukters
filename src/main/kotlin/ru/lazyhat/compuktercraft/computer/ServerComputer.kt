@@ -7,15 +7,13 @@ import ru.lazyhat.compuktercraft.CompukterCraftMod
 import ru.lazyhat.compuktercraft.Config
 import ru.lazyhat.compuktercraft.block.ComputerFamily
 import ru.lazyhat.compuktercraft.gui.NetworkedTerminal
-import java.util.UUID
 
 class ServerComputer(
-    level: ServerLevel,
-    position: BlockPos,
+    val instanceID: Int,
+    val level: ServerLevel,
+    val blockPos: BlockPos,
     properties: ComputerProperties,
 ) : ComputerEvents.Receiver {
-    val instanceID = (0..9).random()
-    val instanceUUID: UUID = UUID.randomUUID()
     val family = properties.family
     val terminal =
         NetworkedTerminal(

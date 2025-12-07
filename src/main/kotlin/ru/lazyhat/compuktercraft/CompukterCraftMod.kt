@@ -1,6 +1,5 @@
 package ru.lazyhat.compuktercraft
 
-import net.minecraftforge.event.server.ServerStartingEvent
 import net.minecraftforge.fml.ModList
 import net.minecraftforge.fml.common.Mod
 import net.minecraftforge.fml.common.Mod.EventBusSubscriber
@@ -38,7 +37,6 @@ object CompukterCraftMod {
             },
             serverTarget = {
                 MOD_BUS.addListener(::onServerSetup)
-                MOD_BUS.addListener(::onServerStarting)
             },
         )
 
@@ -54,11 +52,5 @@ object CompukterCraftMod {
     @Suppress("UNUSED_PARAMETER")
     private fun onServerSetup(event: FMLDedicatedServerSetupEvent) {
         LOGGER.log(Level.INFO, "Initializing server... with Compukter Craft!")
-    }
-
-    @Suppress("UNUSED_PARAMETER")
-    private fun onServerStarting(event: ServerStartingEvent) {
-        LOGGER.log(Level.INFO, "Starting server... with Compukter Craft!")
-        // ServerContext.create(event.server)
     }
 }
