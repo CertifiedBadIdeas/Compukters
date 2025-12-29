@@ -6,13 +6,16 @@ import ru.lazyhat.compuktercraft.utils.SingletonHolder
 // private val LOGGER: Logger = LogManager.getLogger(ServerContext::class.java)
 
 class ServerContext(
-    server: MinecraftServer,
+    val server: MinecraftServer,
 ) {
     val registry = ComputerRegistry()
 
     companion object : SingletonHolder<ServerContext>() {
         val registry
             get() = instance.registry
+
+        val server
+            get() = instance.server
 
         fun create(server: MinecraftServer) {
             instance = ServerContext(server)

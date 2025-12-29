@@ -1,5 +1,10 @@
 @file:Suppress("PropertyName")
 
+import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
+import org.slf4j.event.Level
+
+
+val kotlin_version: String by extra
 val mod_id: String by extra
 val mod_name: String by extra
 val mod_license: String by extra
@@ -21,6 +26,7 @@ plugins {
     kotlin("jvm") version "2.2.21"
     kotlin("plugin.serialization") version "2.2.21"
     id("net.neoforged.moddev.legacyforge") version "2.0.120"
+    id("com.github.johnrengelman.shadow") version "8.1.1"
 }
 
 tasks.withType(Wrapper::class) {
@@ -47,6 +53,93 @@ repositories {
 base.archivesName = mod_id
 
 java.toolchain.languageVersion = JavaLanguageVersion.of(17)
+
+val shadedDeps: Configuration by configurations.creating
+
+configurations["compileOnly"].extendsFrom(shadedDeps)
+
+dependencies {
+    implementation("thedarkcolour:kotlinforforge:${kotlin_for_forge_version}")
+
+    shadedDeps("org.jetbrains.kotlin:kotlin-scripting-common:$kotlin_version")
+    shadedDeps("org.jetbrains.kotlin:kotlin-scripting-dependencies:$kotlin_version")
+    shadedDeps("org.jetbrains.kotlin:kotlin-scripting-jvm:$kotlin_version")
+    shadedDeps("org.jetbrains.kotlin:kotlin-scripting-jvm-host:$kotlin_version")
+    shadedDeps("org.jetbrains.kotlin:kotlin-compiler-embeddable:$kotlin_version")
+}
+
+var generateModMetadata =
+    tasks.register("generateModMetadata", ProcessResources::class) {
+        var replaceProperties =
+            mapOf(
+                "minecraft_version" to minecraft_version,
+                "minecraft_version_range" to minecraft_version_range,
+                "forge_version" to forge_version,
+                "forge_version_range" to forge_version_range,
+                "loader_version_range" to loader_version_range,
+                "mod_id" to mod_id,
+                "mod_name" to mod_name,
+                "mod_license" to mod_license,
+                "mod_version" to mod_version,
+                "mod_authors" to mod_authors,
+                "mod_description" to mod_description,
+            )
+        inputs.properties(replaceProperties)
+        expand(replaceProperties)
+        from("src/main/resources") {
+            exclude {
+                it.name.contains(".png")
+            }
+        }
+        into("build/generated/sources/modMetadata")
+    }
+
+tasks.withType(ProcessResources::class) {
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+}
+
+val jar =
+    tasks.named<Jar>("jar") {
+        archiveClassifier.set("lite")
+        exclude(
+            "LICENSE.txt",
+            "META-INF/MANIFSET.MF",
+            "META-INF/maven/**",
+            "META-INF/*.RSA",
+            "META-INF/*.SF",
+            "META-INF/versions/**",
+        )
+        finalizedBy("reobfJar")
+    }
+
+val shadowJar =
+    tasks.named<ShadowJar>("shadowJar") {
+        archiveClassifier.set("")
+        duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+        configurations = listOf(shadedDeps)
+
+        // Главное: переименовываем проблемный пакет
+        // Теперь org.jetbrains.kotlin.native станет org.jetbrains.kotlin.fixednative
+        relocate("org.jetbrains.kotlin.native", "org.jetbrains.kotlin.fixednative")
+        relocate("org.jetbrains.kotlin.fir.backend.native", "org.jetbrains.kotlin.fir.backend.fixednative")
+        relocate("org.jetbrains.kotlin.fir.analysis.native", "org.jetbrains.kotlin.fir.analysis.fixednative")
+        relocate("org.jetbrains.kotlin.fir.analysis.diagnostics.native", "org.jetbrains.kotlin.fir.analysis.diagnostics.fixednative")
+
+        // Исключаем метаданные, которые могут конфликтовать
+        exclude("META-INF/maven/**")
+        exclude("META-INF/LICENSE*")
+        exclude("META-INF/NOTICE*")
+
+        // finalizedBy("reobfShadowJar")
+    }
+
+// (extensions["reobf"] as NamedDomainObjectContainer<*>).create("shadowJar")
+tasks.getByName("build").dependsOn("shadowJar", generateModMetadata.name)
+
+sourceSets.main {
+    resources.srcDir("src/generated/resources")
+    resources.srcDir(generateModMetadata.get().destinationDir)
+}
 
 legacyForge {
     version = "$minecraft_version-$forge_version"
@@ -89,8 +182,8 @@ legacyForge {
 
         configureEach {
             systemProperty("forge.logging.markers", "REGISTRIES")
-
-            logLevel = org.slf4j.event.Level.DEBUG
+            jvmArgument("--")
+            logLevel = Level.DEBUG
         }
     }
 
@@ -99,68 +192,18 @@ legacyForge {
             sourceSet(sourceSets.main.orNull)
         }
     }
-}
 
-sourceSets.main {
-    resources.srcDir("src/generated/resources")
-}
-
-configurations {
-    val localRuntime by creating
-
-    runtimeClasspath {
-        extendsFrom(localRuntime)
-    }
-}
-
-obfuscation {
-    createRemappingConfiguration(configurations["localRuntime"])
-}
-
-dependencies {
-    implementation("thedarkcolour:kotlinforforge:$kotlin_for_forge_version")
-}
-
-var generateModMetadata =
-    tasks.register("generateModMetadata", ProcessResources::class) {
-        var replaceProperties =
-            mapOf(
-                "minecraft_version" to minecraft_version,
-                "minecraft_version_range" to minecraft_version_range,
-                "forge_version" to forge_version,
-                "forge_version_range" to forge_version_range,
-                "loader_version_range" to loader_version_range,
-                "mod_id" to mod_id,
-                "mod_name" to mod_name,
-                "mod_license" to mod_license,
-                "mod_version" to mod_version,
-                "mod_authors" to mod_authors,
-                "mod_description" to mod_description,
-            )
-        inputs.properties(replaceProperties)
-        expand(replaceProperties)
-        from("src/main/resources") {
-            exclude {
-                it.name.contains(".png")
-            }
-        }
-        into("build/generated/sources/modMetadata")
-    }
-
-tasks.withType(ProcessResources::class) {
-    duplicatesStrategy = DuplicatesStrategy.INCLUDE
-}
-
-sourceSets.main {
-    resources.srcDir(generateModMetadata.get().destinationDir)
-}
-
-legacyForge {
     ideSyncTask(generateModMetadata)
 }
 
 tasks.withType(JavaCompile::class).configureEach {
     options.encoding = "UTF-8" // Use the UTF-8 charset for Java compilation
+}
+
+tasks {
+    whenTaskAdded {
+        if (name == "prepareRuns") dependsOn(shadowJar)
+    }
 }
 
 idea {

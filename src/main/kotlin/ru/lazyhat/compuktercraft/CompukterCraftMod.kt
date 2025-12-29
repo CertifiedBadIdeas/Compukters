@@ -11,6 +11,7 @@ import org.apache.logging.log4j.Logger
 import ru.lazyhat.compuktercraft.platform.NetworkHandler
 import thedarkcolour.kotlinforforge.forge.MOD_BUS
 import thedarkcolour.kotlinforforge.forge.runForDist
+import kotlin.script.experimental.jvmhost.BasicJvmScriptingHost
 
 @Mod(CompukterCraftMod.ID)
 @EventBusSubscriber(modid = CompukterCraftMod.ID, bus = EventBusSubscriber.Bus.MOD)
@@ -28,6 +29,8 @@ object CompukterCraftMod {
 
     init {
         LOGGER.log(Level.INFO, "$ID has started!")
+
+        checkScriptingDependency()
 
         ModRegistry.register()
 
@@ -53,4 +56,8 @@ object CompukterCraftMod {
     private fun onServerSetup(event: FMLDedicatedServerSetupEvent) {
         LOGGER.log(Level.INFO, "Initializing server... with Compukter Craft!")
     }
+}
+
+fun checkScriptingDependency() {
+    BasicJvmScriptingHost()
 }

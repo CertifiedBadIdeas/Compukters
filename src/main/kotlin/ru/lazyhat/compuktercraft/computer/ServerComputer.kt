@@ -1,12 +1,16 @@
 package ru.lazyhat.compuktercraft.computer
 
 import net.minecraft.core.BlockPos
+import net.minecraft.resources.ResourceLocation
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.world.entity.player.Player
 import ru.lazyhat.compuktercraft.CompukterCraftMod
 import ru.lazyhat.compuktercraft.Config
 import ru.lazyhat.compuktercraft.block.ComputerFamily
+import ru.lazyhat.compuktercraft.context.ServerContext
 import ru.lazyhat.compuktercraft.gui.NetworkedTerminal
+import kotlin.script.experimental.host.toScriptSource
+import kotlin.script.experimental.jvmhost.BasicJvmScriptingHost
 
 class ServerComputer(
     val instanceID: Int,
@@ -46,6 +50,20 @@ class ServerComputer(
     fun turnOn() {
         CompukterCraftMod.LOGGER.info("ComputerID: $instanceID turnOn")
         isOn = true
+        val biosStream =
+            ServerContext
+                .server
+                .resourceManager
+                .getResource(
+                    ResourceLocation
+                        .fromNamespaceAndPath(CompukterCraftMod.ID, "kotlin/bios.cc.kts"),
+                ).orElse(null)!!
+                .open()
+        BasicJvmScriptingHost().eval(
+            biosStream.readAllBytes().decodeToString().toScriptSource(),
+            ComputerScriptCompilationConfiguration(),
+            null,
+        )
     }
 
     fun reboot() {
