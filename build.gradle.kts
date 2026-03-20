@@ -55,12 +55,13 @@ architectury {
 
 dependencies {
     minecraft(libs.minecraft)
-
+    forge(libs.forge)
     mappings(loom.layered { officialMojangMappings(); parchment(libs.parchment.for1v20v1) })
-
     modImplementation(libs.architectury.forge)
 
-    forge(libs.forge)
+    implementation(libs.kotlin.stdlib)
+    runtimeClasspath(libs.kotlin.stdlib)
+    forgeRuntimeLibrary(libs.kotlin.stdlib)
 }
 
 val generateModMetadata =
