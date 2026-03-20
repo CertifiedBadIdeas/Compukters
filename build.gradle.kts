@@ -5,12 +5,10 @@ import kotlin.reflect.KProperty
 
 fun File.parseProperties(): Map<String, String> =
     readLines()
-        .mapNotNull { it.indexOf('=').takeIf { it != -1 }?.let { v -> v to it } }
+        .mapNotNull { it.indexOf('=').takeIf { i -> i != -1 }?.let { v -> v to it } }
         .associate { (index, str) -> str.substring(0, index) to str.substring(index + 1) }
 
-val modPropertiesFile =
-    file("mod.properties")
-
+val modPropertiesFile = file("mod.properties")
 val modPropertiesDelegate = modPropertiesFile.parseProperties()
 
 val kotlin_version by modPropertiesDelegate
@@ -45,16 +43,16 @@ group = mod_group_id
 
 repositories {
     mavenCentral()
-    maven("https://thedarkcolour.github.io/KotlinForForge/") {
-        name = "Kotlin for Forge"
-    }
+    //maven("https://thedarkcolour.github.io/KotlinForForge/") { name = "Kotlin for Forge" }
     maven("https://maven.neoforged.net") {
         name = "NeoForge"
         content {
             includeGroup("net.neoforged")
         }
     }
-    maven("https://maven.minecraftforge.net/")
+    maven("https://maven.minecraftforge.net/") {
+        name = "Forge"
+    }
 }
 
 base.archivesName = mod_id
@@ -62,8 +60,23 @@ base.archivesName = mod_id
 java.toolchain.languageVersion = JavaLanguageVersion.of(17)
 
 dependencies {
-    modImplementation(kotlin("stdlib-jdk8"))
     implementation(kotlin("stdlib-jdk8"))
+    implementation(kotlin("stdlib"))
+    implementation(kotlin("reflect"))
+
+    runtimeOnly(kotlin("stdlib"))
+    runtimeOnly(kotlin("stdlib-jdk8"))
+    runtimeOnly(kotlin("reflect"))
+
+//    add("clientAdditionalRuntimeClasspath", kotlin("stdlib"))
+//    add("clientAdditionalRuntimeClasspath", kotlin("reflect"))
+//
+//    add("additionalRuntimeClasspath", kotlin("stdlib"))
+//    add("additionalRuntimeClasspath", kotlin("reflect"))
+
+    jarJar(kotlin("stdlib-jdk8"))
+    jarJar(kotlin("stdlib"))
+    jarJar(kotlin("reflect"))
 }
 
 legacyForge {
@@ -75,75 +88,63 @@ legacyForge {
     }
 
     runs {
-        create("client") {
+        register("client") {
             client()
             systemProperty("forge.enabledGameTestNamespaces", mod_id)
         }
 
-        create("server") {
-            server()
-            programArgument("--nogui")
-            systemProperty("forge.enabledGameTestNamespaces", mod_id)
-        }
+//        register("server") {
+//            server()
+//            programArgument("--nogui")
+//            systemProperty("forge.enabledGameTestNamespaces", mod_id)
+//        }
+//
+//        register("gameTestServer") {
+//            type = "gameTestServer"
+//            systemProperty("forge.enabledGameTestNamespaces", mod_id)
+//        }
 
-        create("gameTestServer") {
-            type = "gameTestServer"
-            systemProperty("forge.enabledGameTestNamespaces", mod_id)
-        }
-
-        create("data") {
-            data()
-
-            programArguments.addAll(
-                "--mod",
-                mod_id,
-                "--all",
-                "--output",
-                file("src/generated/resources/").absolutePath,
-                "--existing",
-                file("src/main/resources/").absolutePath,
-            )
-        }
+//        register("data") {
+//            data()
+//
+//            programArguments.addAll(
+//                "--mod", mod_id,
+//                "--all",
+//                "--output", file("src/generatedCtqgjke/resources/").absolutePath,
+//                "--existing", file("src/main/resources/").absolutePath,
+//            )
+//        }
 
         configureEach {
             systemProperty("forge.logging.markers", "REGISTRIES")
-            // jvmArgument("--")
             logLevel = Level.DEBUG
         }
     }
 
     mods {
-        create(mod_id) {
-            sourceSet(sourceSets.main.orNull)
+        register(mod_id) {
+            sourceSet(sourceSets.main.get())
         }
     }
 }
 
 var generateModMetadata =
     tasks.register("generateModMetadata", ProcessResources::class) {
-        inputs.file(modPropertiesFile)
-
         val replaceProperties = modPropertiesFile.parseProperties()
-
-        inputs.properties(replaceProperties)
-
-        expand(replaceProperties)
-
         val from = file("src/main/resources")
-
-        inputs.dir(from)
-
-        from(from) {
-            exclude {
-                it.name.contains(".png")
-            }
-        }
-
         val intoDir = file("build/generated/resources")
+
+        inputs.file(modPropertiesFile)
+        inputs.properties(replaceProperties)
+        inputs.dir(from)
 
         outputs.dir(intoDir)
 
+        from(from) { exclude { it.name.contains(".png") } }
+
         into(intoDir)
+
+        expand(replaceProperties)
     }
 
 tasks.named("processResources") {
@@ -152,4 +153,18 @@ tasks.named("processResources") {
 
 sourceSets.main {
     resources.setSrcDirs(listOf("build/generated/resources"))
+}
+
+tasks.named<Jar>("jar") {
+    archiveClassifier.set("")
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+    finalizedBy("reobfJar")
+}
+
+idea {
+    module {
+        isDownloadJavadoc = true
+        isDownloadSources = true
+    }
 }
