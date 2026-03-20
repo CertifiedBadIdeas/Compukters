@@ -5,13 +5,22 @@
 kotlin = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlinSerialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 neoforge = { id = "net.neoforged.moddev.legacyforge", version = "2.0.140" }
+architectury-loom = { id = "dev.architectury.loom", version = "1.11.458" }
+architectury-plugin = { id = "architectury-plugin", version = "3.4.162" }
 shadow = { id = "com.gradleup.shadow", version = "9.4.0" }
 
 [versions]
 
 kotlin = "2.3.20"
+minecraft = "1.20.1"
 
 [libraries]
+
+minecraft = {module = "net.minecraft:minecraft", version.ref = "minecraft" }
+forge = "net.minecraftforge:forge:1.20.1-47.4.10"
+parchment-for1v20v1 = "org.parchmentmc.data:parchment-1.20.1:2023.09.03"
+
+architectury-forge = "dev.architectury:architectury-forge:9.2.14"
 
 kotlin-scripting-common = { module = "org.jetbrains.kotlin:kotlin-scripting-common", version.ref = "kotlin" }
 kotlin-scripting-dependencies = { module = "org.jetbrains.kotlin:kotlin-scripting-dependencies", version.ref = "kotlin" }
