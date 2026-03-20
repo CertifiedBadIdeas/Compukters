@@ -8,15 +8,13 @@ import net.minecraftforge.fml.event.lifecycle.FMLDedicatedServerSetupEvent
 import org.apache.logging.log4j.Level
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
-import ru.lazyhat.compuktercraft.platform.NetworkHandler
-import thedarkcolour.kotlinforforge.forge.MOD_BUS
-import thedarkcolour.kotlinforforge.forge.runForDist
-import kotlin.script.experimental.jvmhost.BasicJvmScriptingHost
 
 @Mod(CompukterCraftMod.ID)
 @EventBusSubscriber(modid = CompukterCraftMod.ID, bus = EventBusSubscriber.Bus.MOD)
-object CompukterCraftMod {
-    const val ID = "compuktercraft"
+open class CompukterCraftMod {
+    companion object {
+        const val ID = "compuktercraft"
+    }
 
     val LOGGER: Logger = LogManager.getLogger(ID)
     val installedVersion =
@@ -30,34 +28,30 @@ object CompukterCraftMod {
     init {
         LOGGER.log(Level.INFO, "$ID has started!")
 
-        checkScriptingDependency()
+        // checkScriptingDependency()
 
-        ModRegistry.register()
+        // ModRegistry.register()
 
-        runForDist(
-            clientTarget = {
-                MOD_BUS.addListener(::onClientSetup)
-            },
-            serverTarget = {
-                MOD_BUS.addListener(::onServerSetup)
-            },
-        )
+//        safeRunForDist(
+//            {
+//                // MOD_BUS.addListener(::onClientSetup)
+//            },
+//            {
+//                // MOD_BUS.addListener(::onServerSetup)
+//            },
+//        )
 
-        NetworkHandler.setup()
+        // NetworkHandler.setup()
     }
 
     @Suppress("UNUSED_PARAMETER")
-    private fun onClientSetup(event: FMLClientSetupEvent) {
+    fun onClientSetup(event: FMLClientSetupEvent) {
         LOGGER.log(Level.INFO, "Initializing client... with Compukter Craft!")
-        event.enqueueWork { ClientRegistry.registerMainThread() }
+        // event.enqueueWork { ClientRegistry.registerMainThread() }
     }
 
     @Suppress("UNUSED_PARAMETER")
-    private fun onServerSetup(event: FMLDedicatedServerSetupEvent) {
+    fun onServerSetup(event: FMLDedicatedServerSetupEvent) {
         LOGGER.log(Level.INFO, "Initializing server... with Compukter Craft!")
     }
-}
-
-fun checkScriptingDependency() {
-    BasicJvmScriptingHost()
 }
