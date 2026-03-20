@@ -59,9 +59,16 @@ dependencies {
     mappings(loom.layered { officialMojangMappings(); parchment(libs.parchment.for1v20v1) })
     modImplementation(libs.architectury.forge)
 
-    implementation(libs.kotlin.stdlib)
-    runtimeClasspath(libs.kotlin.stdlib)
+    implementation(libs.kotlin.scripting.jvm)
+    implementation(libs.kotlin.scripting.jvmHost)
+    implementation(libs.kotlin.scripting.common)
+    implementation(libs.kotlin.scripting.dependencies)
+
     forgeRuntimeLibrary(libs.kotlin.stdlib)
+    forgeRuntimeLibrary(libs.kotlin.scripting.jvm)
+    forgeRuntimeLibrary(libs.kotlin.scripting.jvmHost)
+    forgeRuntimeLibrary(libs.kotlin.scripting.common)
+    forgeRuntimeLibrary(libs.kotlin.scripting.dependencies)
 }
 
 val generateModMetadata =

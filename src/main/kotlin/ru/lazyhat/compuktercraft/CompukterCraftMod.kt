@@ -8,6 +8,7 @@ import net.minecraftforge.fml.event.lifecycle.FMLDedicatedServerSetupEvent
 import org.apache.logging.log4j.Level
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
+import kotlin.script.experimental.jvmhost.BasicJvmScriptingHost
 
 @Mod(CompukterCraftMod.ID)
 @EventBusSubscriber(modid = CompukterCraftMod.ID, bus = EventBusSubscriber.Bus.MOD)
@@ -28,7 +29,7 @@ open class CompukterCraftMod {
     init {
         LOGGER.log(Level.INFO, "$ID has started!")
 
-        // checkScriptingDependency()
+        checkScriptingDependency()
 
         // ModRegistry.register()
 
@@ -54,4 +55,8 @@ open class CompukterCraftMod {
     fun onServerSetup(event: FMLDedicatedServerSetupEvent) {
         LOGGER.log(Level.INFO, "Initializing server... with Compukter Craft!")
     }
+}
+
+fun checkScriptingDependency() {
+    BasicJvmScriptingHost()
 }
