@@ -23,10 +23,10 @@ val parchment_minecraft_version: String by extra
 
 plugins {
     idea
-    kotlin("jvm") version "2.2.21"
-    kotlin("plugin.serialization") version "2.2.21"
-    id("net.neoforged.moddev.legacyforge") version "2.0.120"
-    id("com.github.johnrengelman.shadow") version "8.1.1"
+    alias(libs.plugins.kotlin)
+    alias(libs.plugins.kotlinSerialization)
+    alias(libs.plugins.neoforge)
+    alias(libs.plugins.shadow)
 }
 
 tasks.withType(Wrapper::class) {
@@ -182,7 +182,6 @@ legacyForge {
 
         configureEach {
             systemProperty("forge.logging.markers", "REGISTRIES")
-            jvmArgument("--")
             logLevel = Level.DEBUG
         }
     }

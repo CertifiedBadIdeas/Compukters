@@ -1,1 +1,0 @@
-# All source licensed with GPLv3 except sources are licensed with CCPL
