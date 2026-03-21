@@ -30,16 +30,19 @@ import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent
 @Mod.EventBusSubscriber(modid = MOD_ID, value = [Dist.CLIENT])
 object ForgeClientHooks {
     @SubscribeEvent
+    @JvmStatic
     fun onClientSetup(event: FMLClientSetupEvent) {
         event.enqueueWork { ClientRegistry.registerMainThread() }
     }
 
     @SubscribeEvent
+    @JvmStatic
     fun onTick(event: TickEvent.ClientTickEvent) {
         if (event.phase == TickEvent.Phase.START) ClientHooks.onTick()
     }
 
     @SubscribeEvent
+    @JvmStatic
     fun onRenderTick(event: TickEvent.RenderTickEvent) {
         if (event.phase == TickEvent.Phase.START) ClientHooks.onRenderTick()
     }

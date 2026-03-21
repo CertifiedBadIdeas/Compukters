@@ -61,7 +61,7 @@ class CompukterKraftMod(
     @Suppress("UNUSED_PARAMETER")
     fun onClientSetup(event: FMLClientSetupEvent) {
         LOGGER.info { "Initializing client... with $MOD_NAME!" }
-        // event.enqueueWork { ClientRegistry.registerMainThread() }
+        event.enqueueWork { ClientRegistry.registerMainThread() }
     }
 
     @Suppress("UNUSED_PARAMETER")

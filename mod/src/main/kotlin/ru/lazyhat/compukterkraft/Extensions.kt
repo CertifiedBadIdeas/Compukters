@@ -21,6 +21,7 @@ package ru.lazyhat.compukterkraft
 
 import io.github.oshai.kotlinlogging.KLogger
 import io.github.oshai.kotlinlogging.KotlinLogging
+import net.minecraft.resources.ResourceLocation
 import net.minecraftforge.fml.ModList
 import kotlin.jvm.optionals.getOrDefault
 
@@ -36,3 +37,5 @@ val INSTALLED_VERSION: String by lazy {
         .map { it.modInfo.version.toString() }
         .getOrDefault("unknown")
 }
+
+fun String.asResource(): ResourceLocation = ResourceLocation.fromNamespaceAndPath(MOD_ID, this)

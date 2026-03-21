@@ -33,9 +33,13 @@ object ForgeClientRegistry {
     }
 
     @SubscribeEvent
+    @JvmStatic
     fun registerReloadListeners(event: RegisterClientReloadListenersEvent) {
+        LOGGER.info { "ForgeClientRegistry registerReloadListeners" }
         ClientRegistry.registerReloadListeners(
-            { reloadListener: PreparableReloadListener -> event.registerReloadListener(reloadListener) },
+            { reloadListener: PreparableReloadListener ->
+                event.registerReloadListener(reloadListener)
+            },
             Minecraft.getInstance(),
         )
     }

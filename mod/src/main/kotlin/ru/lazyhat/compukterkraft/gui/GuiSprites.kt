@@ -23,7 +23,8 @@ import net.minecraft.client.renderer.texture.TextureAtlasSprite
 import net.minecraft.client.renderer.texture.TextureManager
 import net.minecraft.client.resources.TextureAtlasHolder
 import net.minecraft.resources.ResourceLocation
-import ru.lazyhat.compukterkraft.MOD_ID
+import ru.lazyhat.compukterkraft.LOGGER
+import ru.lazyhat.compukterkraft.asResource
 import ru.lazyhat.compukterkraft.block.ComputerFamily
 import ru.lazyhat.compukterkraft.utils.SingletonHolder
 
@@ -31,7 +32,7 @@ class GuiSprites(
     textureManager: TextureManager,
 ) : TextureAtlasHolder(textureManager, TEXTURE, SPRITE_SHEET) {
     companion object : SingletonHolder<GuiSprites>() {
-        val SPRITE_SHEET: ResourceLocation = ResourceLocation.fromNamespaceAndPath(MOD_ID, "gui")
+        val SPRITE_SHEET: ResourceLocation = "gui".asResource()
         val TEXTURE: ResourceLocation = SPRITE_SHEET.withPath { "textures/atlas/$it.png" }
 
         val TURNED_OFF = button("turned_off")
@@ -42,8 +43,8 @@ class GuiSprites(
 
         fun button(name: String) =
             ButtonTextures(
-                ResourceLocation.fromNamespaceAndPath(MOD_ID, "gui/sprites/buttons/$name"),
-                ResourceLocation.fromNamespaceAndPath(MOD_ID, "gui/sprites/buttons/${name}_hover"),
+                "gui/sprites/buttons/$name".asResource(),
+                "gui/sprites/buttons/${name}_hover".asResource(),
             )
 
         fun computer(
@@ -51,9 +52,9 @@ class GuiSprites(
             pocket: Boolean,
             sidebar: Boolean,
         ) = ComputerTextures(
-            ResourceLocation.fromNamespaceAndPath(MOD_ID, "gui/border_$name"),
-            if (pocket) ResourceLocation.fromNamespaceAndPath(MOD_ID, "gui/pocket_bottom_$name") else null,
-            if (sidebar) ResourceLocation.fromNamespaceAndPath(MOD_ID, "gui/sidebar_$name") else null,
+            "gui/border_$name".asResource(),
+            if (pocket) "gui/pocket_bottom_$name".asResource() else null,
+            if (sidebar) "gui/sidebar_$name".asResource() else null,
         )
 
         fun getComputerTextures(family: ComputerFamily) =
@@ -67,6 +68,7 @@ class GuiSprites(
 
         fun initialize(textureManager: TextureManager) =
             GuiSprites(textureManager).also {
+                LOGGER.info { "Initializing ${it.javaClass.simpleName}" }
                 instance = it
             }
     }

@@ -28,11 +28,13 @@ import ru.lazyhat.compukterkraft.context.ServerContext
 @Mod.EventBusSubscriber(modid = MOD_ID)
 object ForgeCommonHooks {
     @SubscribeEvent
+    @JvmStatic
     fun onServerStarting(event: ServerStartingEvent) {
         ServerContext.create(event.server)
     }
 
     @SubscribeEvent
+    @JvmStatic
     fun onServerStopping(event: ServerStoppingEvent) {
         ServerContext.close()
     }

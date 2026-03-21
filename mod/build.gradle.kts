@@ -119,6 +119,8 @@ val generateModMetadata =
     }
 
 tasks.named<ProcessResources>("processResources") {
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+
     dependsOn(generateModMetadata)
 }
 
@@ -127,5 +129,5 @@ tasks.matching { it.name.startsWith("run") }.configureEach {
 }
 
 sourceSets.main {
-    resources.setSrcDirs(generateModMetadata.get().outputs.files)
+    resources.srcDir(generateModMetadata.get().outputs.files)
 }

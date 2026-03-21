@@ -19,12 +19,13 @@
 
 package ru.lazyhat.compukterkraft.scripting.runtime
 
+import ru.lazyhat.compukterkraft.MOD_ID
 import java.io.File
 
 object ScriptingPaths {
-    const val SCRIPTING_JAR = "compukterkraftScripting.jar"
+    const val SCRIPTING_JAR = "CompukterKraftScripting.jar"
 
-    fun rootDirectory(): File = File("compukterkraft")
+    fun rootDirectory(): File = File(MOD_ID)
 
     fun scriptsDirectory(): File = rootDirectory().resolve("scripts")
 
