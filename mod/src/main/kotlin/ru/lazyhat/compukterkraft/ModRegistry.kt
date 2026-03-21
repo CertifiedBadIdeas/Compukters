@@ -1,0 +1,175 @@
+/*
+ * The Compukter Kraft Developers
+ *
+ * Copyright (C) 2026 Vsevolod Petrov (lazyhat)
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+package ru.lazyhat.compukterkraft
+
+import net.minecraft.core.BlockPos
+import net.minecraft.core.registries.Registries
+import net.minecraft.network.chat.Component
+import net.minecraft.world.inventory.MenuType
+import net.minecraft.world.item.CreativeModeTab
+import net.minecraft.world.item.Item
+import net.minecraft.world.item.ItemStack
+import net.minecraft.world.level.block.Block
+import net.minecraft.world.level.block.entity.BlockEntity
+import net.minecraft.world.level.block.entity.BlockEntityType
+import net.minecraft.world.level.block.state.BlockBehaviour
+import net.minecraft.world.level.block.state.BlockState
+import net.minecraft.world.level.material.MapColor
+import net.minecraft.world.level.storage.loot.predicates.LootItemConditionType
+import net.minecraftforge.common.extensions.IForgeMenuType
+import net.minecraftforge.registries.DeferredRegister
+import net.minecraftforge.registries.RegistryObject
+import ru.lazyhat.compukterkraft.block.ComputerBlock
+import ru.lazyhat.compukterkraft.block.ComputerBlockEntity
+import ru.lazyhat.compukterkraft.block.ComputerFamily
+import ru.lazyhat.compukterkraft.data.ComputerContainerData
+import ru.lazyhat.compukterkraft.item.ComputerItem
+import ru.lazyhat.compukterkraft.loot.BlockNamedEntityLootCondition
+import ru.lazyhat.compukterkraft.loot.ConstantLootConditionSerializer
+import ru.lazyhat.compukterkraft.loot.HasComputerIdLootCondition
+import ru.lazyhat.compukterkraft.loot.PlayerCreativeLootCondition
+import ru.lazyhat.compukterkraft.menu.ComputerMenuWithoutInventory
+import thedarkcolour.kotlinforforge.forge.MOD_BUS
+
+object ModRegistry {
+    object Names {
+        const val COMPUTER_ADVANCED = "computer_advanced"
+        const val COMPUTER = "computer"
+    }
+
+    object Blocks {
+        val REGISTRY: DeferredRegister<Block> = DeferredRegister.create(Registries.BLOCK, compukterkraftMod.ID)
+
+        private fun properties(): BlockBehaviour.Properties = BlockBehaviour.Properties.of().strength(2f)
+
+        private fun noRedstoneConductor(): BlockBehaviour.Properties = properties().isRedstoneConductor { _, _, _ -> false }
+
+        private fun turtleProperties(): BlockBehaviour.Properties = BlockBehaviour.Properties.of().strength(2.5f)
+
+        private fun modemProperties(): BlockBehaviour.Properties = BlockBehaviour.Properties.of().strength(1.5f)
+
+        val COMPUTER_ADVANCED: RegistryObject<ComputerBlock> =
+            REGISTRY
+                .register(Names.COMPUTER_ADVANCED) {
+                    ComputerBlock(BlockEntities.COMPUTER_ADVANCED, noRedstoneConductor().mapColor(MapColor.STONE))
+                }
+    }
+
+    object BlockEntities {
+        val REGISTRY: DeferredRegister<BlockEntityType<*>> = DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, compukterkraftMod.ID)
+
+        private fun <T : BlockEntity, B : Block> ofBlock(
+            block: RegistryObject<B>,
+            name: String,
+            factory: (BlockPos, BlockState) -> T,
+        ): RegistryObject<BlockEntityType<T>> = REGISTRY.register(name) { BlockEntityType(factory, setOf(block.get()), null) }
+
+        val COMPUTER_ADVANCED: RegistryObject<BlockEntityType<ComputerBlockEntity>> =
+            ofBlock(
+                Blocks.COMPUTER_ADVANCED,
+                Names.COMPUTER_ADVANCED,
+            ) { p, s -> ComputerBlockEntity(COMPUTER_ADVANCED.get(), p, s, ComputerFamily.ADVANCED) }
+    }
+
+    object Items {
+        val REGISTRY: DeferredRegister<Item> = DeferredRegister.create(Registries.ITEM, compukterkraftMod.ID)
+
+        private fun properties(): Item.Properties = Item.Properties()
+
+        private fun <I : Item, B : Block> ofBlock(
+            parent: RegistryObject<B>,
+            name: String,
+            factory: (B, Item.Properties) -> I,
+        ): RegistryObject<I> =
+            REGISTRY.register(name) {
+                factory(parent.get(), properties())
+            }
+
+        val COMPUTER_ADVANCED: RegistryObject<ComputerItem> =
+            ofBlock(
+                Blocks.COMPUTER_ADVANCED,
+                Names.COMPUTER_ADVANCED,
+            ) { block, properties -> ComputerItem(block, properties) }
+    }
+
+    object LootItemConditionTypes {
+        val REGISTRY: DeferredRegister<LootItemConditionType> =
+            DeferredRegister.create(
+                Registries.LOOT_CONDITION_TYPE,
+                compukterkraftMod.ID,
+            )
+
+        val BLOCK_NAMED: RegistryObject<LootItemConditionType> =
+            REGISTRY.register(
+                "block_named",
+                { ConstantLootConditionSerializer.type(BlockNamedEntityLootCondition) },
+            )
+
+        val PLAYER_CREATIVE: RegistryObject<LootItemConditionType> =
+            REGISTRY.register(
+                "player_creative",
+                { ConstantLootConditionSerializer.type(PlayerCreativeLootCondition) },
+            )
+
+        val HAS_ID: RegistryObject<LootItemConditionType> =
+            REGISTRY.register(
+                "has_id",
+                { ConstantLootConditionSerializer.type(HasComputerIdLootCondition) },
+            )
+    }
+
+    object Menus {
+        val REGISTRY = DeferredRegister.create(Registries.MENU, compukterkraftMod.ID)
+
+        val COMPUTER: RegistryObject<MenuType<ComputerMenuWithoutInventory>> =
+            REGISTRY.register(Names.COMPUTER) {
+                IForgeMenuType.create { id, playerInventory, data ->
+                    ComputerMenuWithoutInventory(COMPUTER.get(), id, playerInventory, ComputerContainerData(data)).also {
+                        // compukterkraftMod.LOGGER.info("ClientRegistry: ComputerMenuWithoutInventory from buffer created")
+                    }
+                }
+            }
+    }
+
+    object CreativeTabs {
+        val REGISTRY: DeferredRegister<CreativeModeTab> = DeferredRegister.create(Registries.CREATIVE_MODE_TAB, compukterkraftMod.ID)
+
+        val TAB =
+            REGISTRY
+                .register("tab") {
+                    CreativeModeTab
+                        .builder()
+                        .icon { ItemStack(Items.COMPUTER_ADVANCED.get()) }
+                        .title(Component.translatable("itemGroup.compukterkraft"))
+                        .displayItems { context, out ->
+                            out.accept(ItemStack(Items.COMPUTER_ADVANCED.get()))
+                        }.build()
+                }
+    }
+
+    fun register() {
+        Blocks.REGISTRY.register(MOD_BUS)
+        BlockEntities.REGISTRY.register(MOD_BUS)
+        Items.REGISTRY.register(MOD_BUS)
+        Menus.REGISTRY.register(MOD_BUS)
+        LootItemConditionTypes.REGISTRY.register(MOD_BUS)
+        CreativeTabs.REGISTRY.register(MOD_BUS)
+    }
+}
