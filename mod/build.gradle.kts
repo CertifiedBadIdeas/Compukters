@@ -87,7 +87,7 @@ val copyScriptingJar =
         dependsOn(scriptingShadowJar)
         from(scriptingShadowJar.map { it.archiveFile })
         into(layout.projectDirectory.dir("run/compukterkraft"))
-        rename { "compukterkraftScripting.jar" }
+        rename { "CompukterKraftScripting.jar" }
     }
 
 val generateModMetadata =

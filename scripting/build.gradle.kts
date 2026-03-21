@@ -49,7 +49,7 @@ tasks.named<Jar>("jar") {
 
 tasks.named<ShadowJar>("shadowJar") {
     archiveClassifier.set("")
-    archiveFileName.set("compukterkraftScripting.jar")
+    archiveFileName.set("CompukterKraftScripting.jar")
     mergeServiceFiles()
 
     dependencies {
