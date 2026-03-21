@@ -3,34 +3,34 @@
 import org.gradle.kotlin.dsl.provideDelegate
 import kotlin.reflect.KProperty
 
-//operator fun Provider<String>.getValue(ref: Any?, prop: KProperty<*>): String = this.get()
+// operator fun Provider<String>.getValue(ref: Any?, prop: KProperty<*>): String = this.get()
 //
-//fun File.parseProperties(): Map<String, String> =
+// fun File.parseProperties(): Map<String, String> =
 //    readLines()
 //        .mapNotNull { it.indexOf('=').takeIf { i -> i != -1 }?.let { v -> v to it } }
 //        .associate { (index, str) -> str.substring(0, index) to str.substring(index + 1) }
 //
-//val modPropertiesFile = file("config/mod.properties")
-//val modPropertiesDelegate = extra.properties.mapValues { (_, v) -> v.toString() }
+// val modPropertiesFile = file("config/mod.properties")
+// val modPropertiesDelegate = extra.properties.mapValues { (_, v) -> v.toString() }
 //
-//val mod_id by modPropertiesDelegate
-//val mod_name by modPropertiesDelegate
-//val mod_license by modPropertiesDelegate
-//val mod_authors by modPropertiesDelegate
-//val mod_description by modPropertiesDelegate
-//val mod_version by modPropertiesDelegate
-//val mod_group_id by modPropertiesDelegate
-//val minecraft_version by libs.versions.minecraft
-//val minecraft_version_range by modPropertiesDelegate
-//val forge_version by modPropertiesDelegate
-//val forge_version_range by modPropertiesDelegate
-//val loader_version_range by modPropertiesDelegate
-//val parchment_mappings_version by modPropertiesDelegate
-//val parchment_minecraft_version by modPropertiesDelegate
+// val mod_id by modPropertiesDelegate
+// val mod_name by modPropertiesDelegate
+// val mod_license by modPropertiesDelegate
+// val mod_authors by modPropertiesDelegate
+// val mod_description by modPropertiesDelegate
+// val mod_version by modPropertiesDelegate
+// val mod_group_id by modPropertiesDelegate
+// val minecraft_version by libs.versions.minecraft
+// val minecraft_version_range by modPropertiesDelegate
+// val forge_version by modPropertiesDelegate
+// val forge_version_range by modPropertiesDelegate
+// val loader_version_range by modPropertiesDelegate
+// val parchment_mappings_version by modPropertiesDelegate
+// val parchment_minecraft_version by modPropertiesDelegate
 
 plugins {
     idea
-    alias(libs.plugins.kotlin)
+    alias(libs.plugins.kotlinConvention)
     alias(libs.plugins.architectury.loom)
     alias(libs.plugins.architectury.plugin)
 }
@@ -39,12 +39,11 @@ repositories {
     maven("https://maven.parchmentmc.org/")
 }
 
-//loom {
+// loom {
 //    forge {
 //        mixinConfig("compuktercraft.mixins.json")
 //    }
-//}
-
+// }
 
 architectury {
     minecraft = libs.versions.minecraft.get()
@@ -56,27 +55,36 @@ architectury {
 dependencies {
     minecraft(libs.minecraft)
     forge(libs.forge)
-    mappings(loom.layered { officialMojangMappings(); parchment(libs.parchment.for1v20v1) })
+    mappings(
+        loom.layered {
+            officialMojangMappings()
+            parchment(libs.parchment.for1v20v1)
+        },
+    )
     modImplementation(libs.architectury.forge)
 
-    implementation(libs.kotlin.scripting.jvm)
-    implementation(libs.kotlin.scripting.jvmHost)
-    implementation(libs.kotlin.scripting.common)
-    implementation(libs.kotlin.scripting.dependencies)
-
-    forgeRuntimeLibrary(libs.kotlin.stdlib)
-    forgeRuntimeLibrary(libs.kotlin.scripting.jvm)
-    forgeRuntimeLibrary(libs.kotlin.scripting.jvmHost)
-    forgeRuntimeLibrary(libs.kotlin.scripting.common)
-    forgeRuntimeLibrary(libs.kotlin.scripting.dependencies)
+    listOf(
+        libs.kotlin.stdlib,
+        libs.kotlin.scripting.jvm,
+        libs.kotlin.scripting.jvmHost,
+        libs.kotlin.scripting.common,
+        libs.kotlin.scripting.dependencies,
+    ).forEach {
+        implementation(it)
+        forgeRuntimeLibrary(it) {
+            exclude("org.jetbrains.kotlin")
+        }
+    }
 }
 
 val generateModMetadata =
     tasks.register("generateModMetadata", ProcessResources::class) {
         val modPropertiesFile = file("config/mod.properties")
-        val replaceProperties = modPropertiesFile.readLines()
-            .mapNotNull { it.indexOf('=').takeIf { i -> i != -1 }?.let { v -> v to it } }
-            .associate { (index, str) -> str.substring(0, index) to str.substring(index + 1) }
+        val replaceProperties =
+            modPropertiesFile
+                .readLines()
+                .mapNotNull { it.indexOf('=').takeIf { i -> i != -1 }?.let { v -> v to it } }
+                .associate { (index, str) -> str.substring(0, index) to str.substring(index + 1) }
         val from = file("src/main/resources")
         val intoDir = file("build/generated/resources")
 

@@ -15,9 +15,14 @@ dependencyResolutionManagement {
     }
 }
 
+enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
+
 plugins {
     id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
     id("de.fayard.refreshVersions") version "0.60.6"
 }
+
+includeBuild("build-scripts")
+include("scripting")
 
 rootProject.name = "Compukter-Craft"
