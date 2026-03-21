@@ -39,8 +39,8 @@ class ScriptingEnvironmentImpl(
         config.definitions.ifEmpty { listOf(ScriptDefinitionPresets.standardKts(config.modId)) }
 
     val hostConfiguration = ScriptingHostConfiguration {}
-    val runtimeClassLoader: ClassLoader
-        get() = Thread.currentThread().contextClassLoader ?: javaClass.classLoader
+    private val runtimeClassLoader: ClassLoader =
+        Thread.currentThread().contextClassLoader ?: javaClass.classLoader
 
     val defaultImports: List<String>
         get() = definitions.flatMap { it.defaultImports }.distinct()

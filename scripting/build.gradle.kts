@@ -41,6 +41,7 @@ dependencies {
     implementation(libs.kotlin.scripting.jvmHost)
     implementation(libs.kotlin.compiler.embeddable)
     implementation(libs.kotlinx.coroutines.core)
+    testImplementation(kotlin("test"))
 }
 
 tasks.named<Jar>("jar") {
@@ -61,4 +62,8 @@ tasks.named<ShadowJar>("shadowJar") {
 
 tasks.build {
     dependsOn(tasks.named("shadowJar"))
+}
+
+tasks.test {
+    useJUnitPlatform()
 }
