@@ -27,7 +27,7 @@ import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent
 /**
  * Forge-specific dispatch for [ClientHooks].
  */
-@Mod.EventBusSubscriber(modid = compukterkraftMod.ID, value = [Dist.CLIENT])
+@Mod.EventBusSubscriber(modid = MOD_ID, value = [Dist.CLIENT])
 object ForgeClientHooks {
     @SubscribeEvent
     fun onClientSetup(event: FMLClientSetupEvent) {

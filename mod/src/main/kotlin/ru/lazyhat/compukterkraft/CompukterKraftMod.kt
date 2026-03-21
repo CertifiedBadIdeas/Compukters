@@ -19,112 +19,99 @@
 
 package ru.lazyhat.compukterkraft
 
-import net.minecraftforge.fml.ModList
+import net.minecraftforge.api.distmarker.Dist
 import net.minecraftforge.fml.common.Mod
 import net.minecraftforge.fml.common.Mod.EventBusSubscriber
 import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent
 import net.minecraftforge.fml.event.lifecycle.FMLDedicatedServerSetupEvent
-import org.apache.logging.log4j.Level
-import org.apache.logging.log4j.LogManager
-import org.apache.logging.log4j.Logger
+import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext
+import net.minecraftforge.fml.loading.FMLEnvironment
+import ru.lazyhat.compukterkraft.platform.NetworkHandler
 import ru.lazyhat.compukterkraft.scripting.api.ScriptDefinitionPresets
 import ru.lazyhat.compukterkraft.scripting.api.ScriptingEnvironmentConfig
 import ru.lazyhat.compukterkraft.scripting.runtime.ScriptingEnvironmentHolder
 import ru.lazyhat.compukterkraft.scripting.runtime.ScriptingJarLoader
 import ru.lazyhat.compukterkraft.scripting.runtime.ScriptingPaths
 
-@Mod(CompukterKraftMod.ID)
-@EventBusSubscriber(modid = CompukterKraftMod.ID, bus = EventBusSubscriber.Bus.MOD)
-open class CompukterKraftMod {
-    companion object {
-        const val ID = "compukterkraft"
-        val SCRIPTING_LOADER = ScriptingJarLoader()
-    }
-
-    val LOGGER: Logger = LogManager.getLogger(ID)
-    val installedVersion =
-        ModList
-            .get()
-            .getModContainerById(ID)
-            .map {
-                it.modInfo.version.toString()
-            }.orElse("unknown")
+@Mod(MOD_ID)
+@EventBusSubscriber(modid = MOD_ID, bus = EventBusSubscriber.Bus.MOD)
+class CompukterKraftMod(
+    context: FMLJavaModLoadingContext,
+) {
+    val scriptingJarLoader: ScriptingJarLoader = ScriptingJarLoader()
 
     init {
-        LOGGER.log(Level.INFO, "$ID has started!")
+        LOGGER.info { "$MOD_ID has started!" }
+
+        val modEventBus = context.modEventBus
 
         initializeScripting()
 
-        // ModRegistry.register()
+        ModRegistry.register(modEventBus)
 
-//        safeRunForDist(
-//            {
-//                // MOD_BUS.addListener(::onClientSetup)
-//            },
-//            {
-//                // MOD_BUS.addListener(::onServerSetup)
-//            },
-//        )
+        if (FMLEnvironment.dist == Dist.CLIENT) {
+            modEventBus.addListener(::onClientSetup)
+        } else {
+            modEventBus.addListener(::onServerSetup)
+        }
 
-        // NetworkHandler.setup()
+        NetworkHandler.setup()
     }
 
     @Suppress("UNUSED_PARAMETER")
     fun onClientSetup(event: FMLClientSetupEvent) {
-        LOGGER.log(Level.INFO, "Initializing client... with Compukter Craft!")
+        LOGGER.info { "Initializing client... with $MOD_NAME!" }
         // event.enqueueWork { ClientRegistry.registerMainThread() }
     }
 
     @Suppress("UNUSED_PARAMETER")
     fun onServerSetup(event: FMLDedicatedServerSetupEvent) {
-        LOGGER.log(Level.INFO, "Initializing server... with Compukter Craft!")
+        LOGGER.info { "Initializing server... with $MOD_NAME!" }
     }
 
     private fun initializeScripting() {
         val config =
             ScriptingEnvironmentConfig(
-                modId = ID,
-                bundledScriptsRoot = "data/$ID/kotlin",
+                modId = MOD_ID,
+                bundledScriptsRoot = "data/$MOD_ID/kotlin",
                 externalScriptsDirectory = ScriptingPaths.scriptsDirectory().absolutePath,
-                definitions = listOf(ScriptDefinitionPresets.standardKts(ID)),
+                definitions = listOf(ScriptDefinitionPresets.standardKts(MOD_ID)),
             )
 
-        if (!SCRIPTING_LOADER.hasScriptingJar()) {
-            LOGGER.warn(
-                "Kotlin scripting is disabled: {} is missing in {}",
-                ScriptingPaths.SCRIPTING_JAR,
-                ScriptingPaths.rootDirectory().absolutePath,
-            )
+        if (!scriptingJarLoader.hasScriptingJar()) {
+            LOGGER.warn {
+                "Kotlin scripting is disabled: ${ScriptingPaths.SCRIPTING_JAR} is missing in ${ScriptingPaths.rootDirectory().absolutePath}"
+            }
             return
         }
 
-        val environment = SCRIPTING_LOADER.initialize(config)
+        val environment = scriptingJarLoader.initialize(config)
         if (environment == null) {
-            LOGGER.error("Failed to initialize Kotlin scripting: {}", SCRIPTING_LOADER.lastError)
+            LOGGER.error { "Failed to initialize Kotlin scripting: ${scriptingJarLoader.lastError}" }
             return
         }
 
-        LOGGER.info("Kotlin scripting environment loaded successfully.")
+        LOGGER.info { "Kotlin scripting environment loaded successfully." }
 
         val bootstrapScript = environment.bundledScript("bios.cc.kts")
         if (bootstrapScript == null) {
-            LOGGER.warn("Bundled bootstrap script bios.cc.kts was not found.")
+            LOGGER.warn { "Bundled bootstrap script bios.cc.kts was not found." }
             return
         }
 
         val compilation = environment.compiler.compile("bios.cc.kts", bootstrapScript)
         if (!compilation.isSuccess) {
-            LOGGER.error("Bundled bootstrap script failed to compile: {}", compilation.diagnostics.joinToString { it.message })
+            LOGGER.error { "Bundled bootstrap script failed to compile: ${compilation.diagnostics.joinToString { it.message }}" }
             return
         }
 
         val execution = compilation.value!!.execute()
         if (!execution.isSuccess) {
-            LOGGER.error("Bundled bootstrap script failed to execute: {}", execution.exceptionMessage ?: "unknown error")
+            LOGGER.error { "Bundled bootstrap script failed to execute: ${execution.exceptionMessage ?: "unknown error"}" }
             return
         }
 
-        LOGGER.info("Bundled bootstrap script executed successfully.")
-        LOGGER.debug("Scripting available = {}", ScriptingEnvironmentHolder.isAvailable)
+        LOGGER.info { "Bundled bootstrap script executed successfully." }
+        LOGGER.debug { "Scripting available = ${ScriptingEnvironmentHolder.isAvailable}" }
     }
 }

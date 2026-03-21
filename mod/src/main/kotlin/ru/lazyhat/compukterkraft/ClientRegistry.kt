@@ -33,9 +33,9 @@ object ClientRegistry {
                 ModRegistry.Menus.COMPUTER.get(),
                 { container, inventory, title -> ComputerScreen(container, inventory, title) },
             )
-            compukterkraftMod.LOGGER.info("ClientRegistry: ComputerScreen successfully registered")
+            LOGGER.info { "ClientRegistry: ComputerScreen successfully registered" }
         } catch (e: Exception) {
-            compukterkraftMod.LOGGER.error("ClientRegistry: ComputerScreen registered with error ${e.message}")
+            LOGGER.error { "ClientRegistry: ComputerScreen registered with error ${e.message}" }
         }
     }
 

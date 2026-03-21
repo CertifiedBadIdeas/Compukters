@@ -42,7 +42,8 @@ import net.minecraft.world.level.storage.loot.parameters.LootContextParams
 import net.minecraft.world.phys.BlockHitResult
 import net.minecraftforge.network.NetworkHooks
 import net.minecraftforge.registries.RegistryObject
-import ru.lazyhat.compukterkraft.compukterkraftMod
+import ru.lazyhat.compukterkraft.LOGGER
+import ru.lazyhat.compukterkraft.MOD_ID
 import ru.lazyhat.compukterkraft.data.ComputerContainerData
 import ru.lazyhat.compukterkraft.item.AbstractComputerItem
 import ru.lazyhat.compukterkraft.utils.castTicker
@@ -56,7 +57,7 @@ abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
 ) : HorizontalDirectionalBlock(properties),
     EntityBlock {
     companion object {
-        val drop: ResourceLocation = ResourceLocation.fromNamespaceAndPath(compukterkraftMod.ID, "computer")
+        val drop: ResourceLocation = ResourceLocation.fromNamespaceAndPath(MOD_ID, "computer")
 
         val serverTicker =
             BlockEntityTicker<AbstractComputerBlockEntity> { _, _, _, computer ->
@@ -89,9 +90,9 @@ abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
             ?.let { tile ->
                 tile.computerID = stack.tag?.computerID
                 tile.label = stack.tag?.computerLabel
-                compukterkraftMod.LOGGER.info("Computer: ${tile.computerID}, ${tile.label} placed")
-                compukterkraftMod.LOGGER.info("HN: ${stack.hoverName}")
-                compukterkraftMod.LOGGER.info("Tag: ${stack.tag}")
+                LOGGER.info { "Computer: ${tile.computerID}, ${tile.label} placed" }
+                LOGGER.info { "HN: ${stack.hoverName}" }
+                LOGGER.info { "Tag: ${stack.tag}" }
             }
     }
 
@@ -138,7 +139,7 @@ abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
                     ?.let { computerBlockEntity ->
                         params.withDynamicDrop(drop) { it.accept(getItem(computerBlockEntity)) }
                     } ?: params,
-            ) // .also { compukterkraftMod.LOGGER.info("GetDrops invoked") }
+            ) // .also { LOGGER.info("GetDrops invoked") }
 
     override fun use(
         state: BlockState,
@@ -166,7 +167,7 @@ abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
                                     getItem(computer),
                                 )::toBytes,
                             ).also {
-                                // compukterkraftMod.LOGGER.info("ComputerBlock openScreen invoked")
+                                // LOGGER.info("ComputerBlock openScreen invoked")
                             }
                         return InteractionResult.sidedSuccess(level.isClientSide)
                     }

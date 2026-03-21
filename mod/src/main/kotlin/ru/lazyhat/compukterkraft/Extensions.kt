@@ -19,21 +19,20 @@
 
 package ru.lazyhat.compukterkraft
 
-import net.minecraftforge.event.server.ServerStartingEvent
-import net.minecraftforge.event.server.ServerStoppingEvent
-import net.minecraftforge.eventbus.api.SubscribeEvent
-import net.minecraftforge.fml.common.Mod
-import ru.lazyhat.compukterkraft.context.ServerContext
+import io.github.oshai.kotlinlogging.KLogger
+import io.github.oshai.kotlinlogging.KotlinLogging
+import net.minecraftforge.fml.ModList
+import kotlin.jvm.optionals.getOrDefault
 
-@Mod.EventBusSubscriber(modid = MOD_ID)
-object ForgeCommonHooks {
-    @SubscribeEvent
-    fun onServerStarting(event: ServerStartingEvent) {
-        ServerContext.create(event.server)
-    }
+const val MOD_ID = "compukterkraft"
+const val MOD_NAME = "Compukter Kraft"
 
-    @SubscribeEvent
-    fun onServerStopping(event: ServerStoppingEvent) {
-        ServerContext.close()
-    }
+val LOGGER: KLogger = KotlinLogging.logger(MOD_ID)
+
+val INSTALLED_VERSION: String by lazy {
+    ModList
+        .get()
+        .getModContainerById(MOD_ID)
+        .map { it.modInfo.version.toString() }
+        .getOrDefault("unknown")
 }

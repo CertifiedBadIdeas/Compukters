@@ -38,7 +38,7 @@ class ComputerScreen<T : AbstractComputerMenu>(
     title: Component,
 ) : AbstractComputerScreen<T>(container, player, title, BORDER) {
     init {
-        // compukterkraftMod.LOGGER.info("ComputerID: ComputerScreen init")
+        // LOGGER.info("ComputerID: ComputerScreen init")
         imageWidth = TerminalWidget.getWidth(terminalData.width) + BORDER * 2 + AbstractComputerMenu.SIDEBAR_WIDTH
         imageHeight = TerminalWidget.getHeight(terminalData.height) + BORDER * 2
     }

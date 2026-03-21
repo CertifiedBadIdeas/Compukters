@@ -29,7 +29,8 @@ import net.minecraftforge.network.NetworkRegistry
 import net.minecraftforge.network.simple.SimpleChannel
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
-import ru.lazyhat.compukterkraft.compukterkraftMod
+import ru.lazyhat.compukterkraft.INSTALLED_VERSION
+import ru.lazyhat.compukterkraft.MOD_ID
 import ru.lazyhat.compukterkraft.network.MessageType
 import ru.lazyhat.compukterkraft.network.NetworkMessage
 import ru.lazyhat.compukterkraft.network.NetworkMessages
@@ -44,12 +45,12 @@ object NetworkHandler {
     private val network: SimpleChannel
 
     init {
-        val version = compukterkraftMod.installedVersion
+        val version = INSTALLED_VERSION
         network =
             NetworkRegistry.ChannelBuilder
-                .named(ResourceLocation.fromNamespaceAndPath(compukterkraftMod.ID, "network"))
-                .networkProtocolVersion(Supplier { version })
-                .clientAcceptedVersions(version!!::equals)
+                .named(ResourceLocation.fromNamespaceAndPath(MOD_ID, "network"))
+                .networkProtocolVersion { version }
+                .clientAcceptedVersions(version::equals)
                 .serverAcceptedVersions(version::equals)
                 .simpleChannel()
     }

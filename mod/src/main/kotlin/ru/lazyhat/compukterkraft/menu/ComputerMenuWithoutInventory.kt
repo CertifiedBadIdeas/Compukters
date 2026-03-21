@@ -72,7 +72,7 @@ class ComputerMenuWithoutInventory(
     )
 
     init {
-        // compukterkraftMod.LOGGER.info("ComputerMenuWithoutInventory constructor invoked")
+        // LOGGER.info("ComputerMenuWithoutInventory constructor invoked")
         repeat(10) {
             addSlot(
                 object : Slot(playerInventory, it, 0, 0) {

@@ -37,7 +37,7 @@ class ComputerContainerData private constructor(
         TerminalState(buffer),
         buffer.readItem(),
         buffer.readInt().also {
-            // compukterkraftMod.LOGGER.info("ComputerContainerData init from buffer")
+            // LOGGER.info("ComputerContainerData init from buffer")
         },
     )
 
@@ -46,12 +46,12 @@ class ComputerContainerData private constructor(
         terminalState.write(buffer)
         buffer.writeItem(displayStack)
         buffer.writeInt(uploadMaxSize)
-        // compukterkraftMod.LOGGER.info("ComputerContainerData write to buffer")
+        // LOGGER.info("ComputerContainerData write to buffer")
     }
 
     constructor(computer: ServerComputer, displayStack: ItemStack) : this(
         computer.family.also {
-            // compukterkraftMod.LOGGER.info("ComputerContainerData standard init")
+            // LOGGER.info("ComputerContainerData standard init")
         },
         TerminalState.create(computer.terminal),
         displayStack,

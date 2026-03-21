@@ -26,10 +26,10 @@ import net.minecraftforge.client.event.RegisterClientReloadListenersEvent
 import net.minecraftforge.eventbus.api.SubscribeEvent
 import net.minecraftforge.fml.common.Mod
 
-@Mod.EventBusSubscriber(modid = compukterkraftMod.ID, value = [Dist.CLIENT], bus = Mod.EventBusSubscriber.Bus.MOD)
+@Mod.EventBusSubscriber(modid = MOD_ID, value = [Dist.CLIENT], bus = Mod.EventBusSubscriber.Bus.MOD)
 object ForgeClientRegistry {
     init {
-        compukterkraftMod.LOGGER.info("ForgeClientRegistry init")
+        LOGGER.info { "ForgeClientRegistry init" }
     }
 
     @SubscribeEvent

@@ -27,7 +27,7 @@ class NetworkedTerminal : Terminal {
     constructor(width: Int, height: Int, colour: Boolean, changedCallback: Runnable?) : super(width, height, colour, changedCallback)
 
     init {
-        // compukterkraftMod.LOGGER.info("NTerminal init: w: $width, h: $height, c: $isColour")
+        // LOGGER.info("NTerminal init: w: $width, h: $height, c: $isColour")
     }
 
     @Synchronized

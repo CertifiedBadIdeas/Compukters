@@ -34,6 +34,7 @@ import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.material.MapColor
 import net.minecraft.world.level.storage.loot.predicates.LootItemConditionType
 import net.minecraftforge.common.extensions.IForgeMenuType
+import net.minecraftforge.eventbus.api.IEventBus
 import net.minecraftforge.registries.DeferredRegister
 import net.minecraftforge.registries.RegistryObject
 import ru.lazyhat.compukterkraft.block.ComputerBlock
@@ -46,7 +47,6 @@ import ru.lazyhat.compukterkraft.loot.ConstantLootConditionSerializer
 import ru.lazyhat.compukterkraft.loot.HasComputerIdLootCondition
 import ru.lazyhat.compukterkraft.loot.PlayerCreativeLootCondition
 import ru.lazyhat.compukterkraft.menu.ComputerMenuWithoutInventory
-import thedarkcolour.kotlinforforge.forge.MOD_BUS
 
 object ModRegistry {
     object Names {
@@ -55,7 +55,7 @@ object ModRegistry {
     }
 
     object Blocks {
-        val REGISTRY: DeferredRegister<Block> = DeferredRegister.create(Registries.BLOCK, compukterkraftMod.ID)
+        val REGISTRY: DeferredRegister<Block> = DeferredRegister.create(Registries.BLOCK, MOD_ID)
 
         private fun properties(): BlockBehaviour.Properties = BlockBehaviour.Properties.of().strength(2f)
 
@@ -73,8 +73,9 @@ object ModRegistry {
     }
 
     object BlockEntities {
-        val REGISTRY: DeferredRegister<BlockEntityType<*>> = DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, compukterkraftMod.ID)
+        val REGISTRY: DeferredRegister<BlockEntityType<*>> = DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, MOD_ID)
 
+        @Suppress("TYPE_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
         private fun <T : BlockEntity, B : Block> ofBlock(
             block: RegistryObject<B>,
             name: String,
@@ -89,7 +90,7 @@ object ModRegistry {
     }
 
     object Items {
-        val REGISTRY: DeferredRegister<Item> = DeferredRegister.create(Registries.ITEM, compukterkraftMod.ID)
+        val REGISTRY: DeferredRegister<Item> = DeferredRegister.create(Registries.ITEM, MOD_ID)
 
         private fun properties(): Item.Properties = Item.Properties()
 
@@ -113,7 +114,7 @@ object ModRegistry {
         val REGISTRY: DeferredRegister<LootItemConditionType> =
             DeferredRegister.create(
                 Registries.LOOT_CONDITION_TYPE,
-                compukterkraftMod.ID,
+                MOD_ID,
             )
 
         val BLOCK_NAMED: RegistryObject<LootItemConditionType> =
@@ -136,20 +137,20 @@ object ModRegistry {
     }
 
     object Menus {
-        val REGISTRY = DeferredRegister.create(Registries.MENU, compukterkraftMod.ID)
+        val REGISTRY = DeferredRegister.create(Registries.MENU, MOD_ID)
 
         val COMPUTER: RegistryObject<MenuType<ComputerMenuWithoutInventory>> =
             REGISTRY.register(Names.COMPUTER) {
                 IForgeMenuType.create { id, playerInventory, data ->
                     ComputerMenuWithoutInventory(COMPUTER.get(), id, playerInventory, ComputerContainerData(data)).also {
-                        // compukterkraftMod.LOGGER.info("ClientRegistry: ComputerMenuWithoutInventory from buffer created")
+                        // LOGGER.info("ClientRegistry: ComputerMenuWithoutInventory from buffer created")
                     }
                 }
             }
     }
 
     object CreativeTabs {
-        val REGISTRY: DeferredRegister<CreativeModeTab> = DeferredRegister.create(Registries.CREATIVE_MODE_TAB, compukterkraftMod.ID)
+        val REGISTRY: DeferredRegister<CreativeModeTab> = DeferredRegister.create(Registries.CREATIVE_MODE_TAB, MOD_ID)
 
         val TAB =
             REGISTRY
@@ -164,12 +165,12 @@ object ModRegistry {
                 }
     }
 
-    fun register() {
-        Blocks.REGISTRY.register(MOD_BUS)
-        BlockEntities.REGISTRY.register(MOD_BUS)
-        Items.REGISTRY.register(MOD_BUS)
-        Menus.REGISTRY.register(MOD_BUS)
-        LootItemConditionTypes.REGISTRY.register(MOD_BUS)
-        CreativeTabs.REGISTRY.register(MOD_BUS)
+    fun register(modEventBus: IEventBus) {
+        Blocks.REGISTRY.register(modEventBus)
+        BlockEntities.REGISTRY.register(modEventBus)
+        Items.REGISTRY.register(modEventBus)
+        Menus.REGISTRY.register(modEventBus)
+        LootItemConditionTypes.REGISTRY.register(modEventBus)
+        CreativeTabs.REGISTRY.register(modEventBus)
     }
 }

@@ -39,7 +39,7 @@ class DynamicImageButton(
     height: Int,
     private val texture: Boolean2ObjectFunction<TextureAtlasSprite>,
     onPress: OnPress,
-    private val message: Supplier<HintedMessage>,
+    private val hintedMessageLambda: Supplier<HintedMessage>,
 ) : Button(x, y, width, height, Component.empty(), onPress, DEFAULT_NARRATION) {
     constructor(
         x: Int,
@@ -70,9 +70,10 @@ class DynamicImageButton(
         mouseY: Int,
         partialTicks: Float,
     ) {
-        val message: HintedMessage = this.message.get()
-        setMessage(message.message)
-        setTooltip(message.tooltip)
+        hintedMessageLambda.get().let { hMessage ->
+            message = hMessage.message!!
+            tooltip = hMessage.tooltip
+        }
         super.render(graphics, mouseX, mouseY, partialTicks)
     }
 

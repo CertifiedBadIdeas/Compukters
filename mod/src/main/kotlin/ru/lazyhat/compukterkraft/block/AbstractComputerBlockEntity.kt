@@ -28,7 +28,7 @@ import net.minecraft.world.inventory.MenuConstructor
 import net.minecraft.world.level.block.entity.BlockEntity
 import net.minecraft.world.level.block.entity.BlockEntityType
 import net.minecraft.world.level.block.state.BlockState
-import ru.lazyhat.compukterkraft.compukterkraftMod
+import ru.lazyhat.compukterkraft.LOGGER
 import ru.lazyhat.compukterkraft.computer.ServerComputer
 import ru.lazyhat.compukterkraft.context.ServerContext
 import ru.lazyhat.compukterkraft.utils.computerID
@@ -50,19 +50,19 @@ abstract class AbstractComputerBlockEntity(
     private var fresh = false
     private var _label: String? = null
         set(value) {
-            compukterkraftMod.LOGGER.info("AbstractComputerBlockEntity.setLabel $value")
+            LOGGER.info { "AbstractComputerBlockEntity.setLabel $value" }
             field = value
         }
     private var _computerID: Int? = null
         set(value) {
-            compukterkraftMod.LOGGER.info("AbstractComputerBlockEntity.setComputerId $value")
+            LOGGER.info { "AbstractComputerBlockEntity.setComputerId $value" }
             field = value
         }
 
     var label: String?
         get() = _label
         set(value) {
-            compukterkraftMod.LOGGER.info("AbstractComputerBlockEntity.setLabelPublic $value")
+            LOGGER.info { "AbstractComputerBlockEntity.setLabelPublic $value" }
             value
                 ?.ifServerSide(level)
                 ?.takeIf { _label != value }
@@ -75,7 +75,7 @@ abstract class AbstractComputerBlockEntity(
     var computerID: Int?
         get() = _computerID
         set(value) {
-            compukterkraftMod.LOGGER.info("AbstractComputerBlockEntity.setComputerIdPublic $value")
+            LOGGER.info { "AbstractComputerBlockEntity.setComputerIdPublic $value" }
             value
                 ?.ifServerSide(level)
                 ?.takeIf { _computerID != value }
@@ -86,7 +86,7 @@ abstract class AbstractComputerBlockEntity(
         }
 
     init {
-        compukterkraftMod.LOGGER.info("AbstractComputerBlockEntity init ID: $_computerID, $_label")
+        LOGGER.info { "AbstractComputerBlockEntity init ID: $_computerID, $_label" }
     }
 
     abstract fun updateBlockState(newState: ComputerState)
@@ -102,7 +102,7 @@ abstract class AbstractComputerBlockEntity(
         val server = level?.server ?: error("Cannot access server computer on the client.")
         val serverLevel = level as? ServerLevel ?: error("[SERVER_LEVEL_GET] Cannot access server computer on the client.")
 
-        compukterkraftMod.LOGGER.info("AbstractComputerBlockEntity.createServerComputer() ID: $_computerID")
+        LOGGER.info { "AbstractComputerBlockEntity.createServerComputer() ID: $_computerID" }
 
         return _computerID
             ?.let {
@@ -124,13 +124,13 @@ abstract class AbstractComputerBlockEntity(
     override fun saveAdditional(tag: CompoundTag) {
         tag.computerID = _computerID
         tag.computerLabel = _label
-        compukterkraftMod.LOGGER.info("AbstractComputerBlockEntity.saveAdditional() tag: $tag")
+        LOGGER.info { "AbstractComputerBlockEntity.saveAdditional() tag: $tag" }
 
         super.saveAdditional(tag)
     }
 
     override fun load(tag: CompoundTag) {
-        compukterkraftMod.LOGGER.info("AbstractComputerBlockEntity.load() tag: $tag")
+        LOGGER.info { "AbstractComputerBlockEntity.load() tag: $tag" }
         _computerID = tag.computerID
         _label = tag.computerLabel
     }

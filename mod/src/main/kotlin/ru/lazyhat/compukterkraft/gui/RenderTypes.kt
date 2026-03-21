@@ -52,7 +52,7 @@ object RenderTypes {
 //     */
 //    val PRINTOUT_BACKGROUND: RenderType =
 //        RenderType.text(
-//            ResourceLocation.fromNamespaceAndPath(compukterkraftMod.ID, "textures/gui/printout.png"),
+//            ResourceLocation.fromNamespaceAndPath(MOD_ID, "textures/gui/printout.png"),
 //        )
 //
 

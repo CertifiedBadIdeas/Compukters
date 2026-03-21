@@ -72,6 +72,6 @@ class ComputerBlockEntity(
             playerInventory,
             createServerComputer(),
         ).also {
-            // compukterkraftMod.LOGGER.info("ComputerID: ${it.getComputerPublic().instanceID} createMenu()")
+            // LOGGER.info("ComputerID: ${it.getComputerPublic().instanceID} createMenu()")
         }
 }

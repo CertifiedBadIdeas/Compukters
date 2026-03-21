@@ -24,7 +24,7 @@ import net.minecraft.resources.ResourceLocation
 import net.minecraft.util.FastColor
 import org.joml.Matrix4f
 import org.joml.Vector3f
-import ru.lazyhat.compukterkraft.compukterkraftMod
+import ru.lazyhat.compukterkraft.MOD_ID
 import ru.lazyhat.compukterkraft.gui.RenderTypes.FULL_BRIGHT_LIGHTMAP
 
 /**
@@ -43,7 +43,7 @@ import ru.lazyhat.compukterkraft.gui.RenderTypes.FULL_BRIGHT_LIGHTMAP
  * [DirectFixedWidthFontRenderer].
  */
 object FixedWidthFontRenderer {
-    val FONT: ResourceLocation = ResourceLocation.fromNamespaceAndPath(compukterkraftMod.ID, "textures/gui/term_font.png")
+    val FONT: ResourceLocation = ResourceLocation.fromNamespaceAndPath(MOD_ID, "textures/gui/term_font.png")
 
     const val FONT_HEIGHT: Int = 9
     const val FONT_WIDTH: Int = 6

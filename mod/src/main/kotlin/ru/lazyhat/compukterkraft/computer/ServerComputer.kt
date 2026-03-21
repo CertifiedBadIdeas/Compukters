@@ -24,12 +24,11 @@ import net.minecraft.resources.ResourceLocation
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.world.entity.player.Player
 import ru.lazyhat.compukterkraft.Config
+import ru.lazyhat.compukterkraft.LOGGER
+import ru.lazyhat.compukterkraft.MOD_ID
 import ru.lazyhat.compukterkraft.block.ComputerFamily
-import ru.lazyhat.compukterkraft.compukterkraftMod
 import ru.lazyhat.compukterkraft.context.ServerContext
 import ru.lazyhat.compukterkraft.gui.NetworkedTerminal
-import kotlin.script.experimental.host.toScriptSource
-import kotlin.script.experimental.jvmhost.BasicJvmScriptingHost
 
 class ServerComputer(
     val instanceID: Int,
@@ -46,7 +45,7 @@ class ServerComputer(
         )
 
     init {
-        compukterkraftMod.LOGGER.info("ComputerID: $instanceID init")
+        LOGGER.info { "ComputerID: $instanceID init" }
     }
 
     var isOn = false
@@ -58,16 +57,16 @@ class ServerComputer(
         event: String,
         arguments: Array<Any>,
     ) {
-        compukterkraftMod.LOGGER.info("ComputerID: $instanceID event $event")
+        LOGGER.info { "ComputerID: $instanceID event $event" }
     }
 
     fun shutdown() {
-        compukterkraftMod.LOGGER.info("ComputerID: $instanceID shutdown")
+        LOGGER.info { "ComputerID: $instanceID shutdown" }
         isOn = false
     }
 
     fun turnOn() {
-        compukterkraftMod.LOGGER.info("ComputerID: $instanceID turnOn")
+        LOGGER.info { "ComputerID: $instanceID turnOn" }
         isOn = true
         val biosStream =
             ServerContext
@@ -75,22 +74,22 @@ class ServerComputer(
                 .resourceManager
                 .getResource(
                     ResourceLocation
-                        .fromNamespaceAndPath(compukterkraftMod.ID, "kotlin/bios.cc.kts"),
+                        .fromNamespaceAndPath(MOD_ID, "kotlin/bios.cc.kts"),
                 ).orElse(null)!!
                 .open()
-        BasicJvmScriptingHost().eval(
-            biosStream.readAllBytes().decodeToString().toScriptSource(),
-            ComputerScriptCompilationConfiguration(),
-            null,
-        )
+//        BasicJvmScriptingHost().eval(
+//            biosStream.readAllBytes().decodeToString().toScriptSource(),
+//            ComputerScriptCompilationConfiguration(),
+//            null,
+//        )
     }
 
     fun reboot() {
-        compukterkraftMod.LOGGER.info("ComputerID: $instanceID reboot")
+        LOGGER.info { "ComputerID: $instanceID reboot" }
     }
 
     fun close() {
-        compukterkraftMod.LOGGER.info("ComputerID: $instanceID close")
+        LOGGER.info { "ComputerID: $instanceID close" }
         isOn = false
     }
 }

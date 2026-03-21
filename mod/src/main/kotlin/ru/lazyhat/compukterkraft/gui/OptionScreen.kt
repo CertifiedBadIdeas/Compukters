@@ -26,7 +26,7 @@ import net.minecraft.client.gui.components.MultiLineLabel
 import net.minecraft.client.gui.screens.Screen
 import net.minecraft.network.chat.Component
 import net.minecraft.resources.ResourceLocation
-import ru.lazyhat.compukterkraft.compukterkraftMod
+import ru.lazyhat.compukterkraft.MOD_ID
 import kotlin.math.max
 
 /**
@@ -105,7 +105,7 @@ class OptionScreen private constructor(
     }
 
     companion object {
-        private val BACKGROUND = ResourceLocation.fromNamespaceAndPath(compukterkraftMod.ID, "textures/gui/blank_screen.png")
+        private val BACKGROUND = ResourceLocation.fromNamespaceAndPath(MOD_ID, "textures/gui/blank_screen.png")
 
         const val BUTTON_WIDTH: Int = 100
         const val BUTTON_HEIGHT: Int = 20

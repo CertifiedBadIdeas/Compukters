@@ -19,20 +19,19 @@
 
 package ru.lazyhat.compukterkraft.gui
 
-import net.minecraft.client.gui.Gui
 import net.minecraft.client.renderer.texture.TextureAtlasSprite
 import net.minecraft.client.renderer.texture.TextureManager
 import net.minecraft.client.resources.TextureAtlasHolder
 import net.minecraft.resources.ResourceLocation
+import ru.lazyhat.compukterkraft.MOD_ID
 import ru.lazyhat.compukterkraft.block.ComputerFamily
-import ru.lazyhat.compukterkraft.compukterkraftMod
 import ru.lazyhat.compukterkraft.utils.SingletonHolder
 
 class GuiSprites(
     textureManager: TextureManager,
 ) : TextureAtlasHolder(textureManager, TEXTURE, SPRITE_SHEET) {
     companion object : SingletonHolder<GuiSprites>() {
-        val SPRITE_SHEET: ResourceLocation = ResourceLocation.fromNamespaceAndPath(compukterkraftMod.ID, "gui")
+        val SPRITE_SHEET: ResourceLocation = ResourceLocation.fromNamespaceAndPath(MOD_ID, "gui")
         val TEXTURE: ResourceLocation = SPRITE_SHEET.withPath { "textures/atlas/$it.png" }
 
         val TURNED_OFF = button("turned_off")
@@ -43,8 +42,8 @@ class GuiSprites(
 
         fun button(name: String) =
             ButtonTextures(
-                ResourceLocation.fromNamespaceAndPath(compukterkraftMod.ID, "gui/sprites/buttons/$name"),
-                ResourceLocation.fromNamespaceAndPath(compukterkraftMod.ID, "gui/sprites/buttons/${name}_hover"),
+                ResourceLocation.fromNamespaceAndPath(MOD_ID, "gui/sprites/buttons/$name"),
+                ResourceLocation.fromNamespaceAndPath(MOD_ID, "gui/sprites/buttons/${name}_hover"),
             )
 
         fun computer(
@@ -52,9 +51,9 @@ class GuiSprites(
             pocket: Boolean,
             sidebar: Boolean,
         ) = ComputerTextures(
-            ResourceLocation.fromNamespaceAndPath(compukterkraftMod.ID, "gui/border_$name"),
-            if (pocket) ResourceLocation.fromNamespaceAndPath(compukterkraftMod.ID, "gui/pocket_bottom_$name") else null,
-            if (sidebar) ResourceLocation.fromNamespaceAndPath(compukterkraftMod.ID, "gui/sidebar_$name") else null,
+            ResourceLocation.fromNamespaceAndPath(MOD_ID, "gui/border_$name"),
+            if (pocket) ResourceLocation.fromNamespaceAndPath(MOD_ID, "gui/pocket_bottom_$name") else null,
+            if (sidebar) ResourceLocation.fromNamespaceAndPath(MOD_ID, "gui/sidebar_$name") else null,
         )
 
         fun getComputerTextures(family: ComputerFamily) =

@@ -20,8 +20,6 @@
 @file:Suppress("PropertyName")
 
 import org.gradle.jvm.tasks.Jar
-import org.gradle.kotlin.dsl.provideDelegate
-import kotlin.reflect.KProperty
 
 // operator fun Provider<String>.getValue(ref: Any?, prop: KProperty<*>): String = this.get()
 //
@@ -78,6 +76,9 @@ dependencies {
 
     implementation(libs.kotlin.stdlib)
     forgeRuntimeLibrary(libs.kotlin.stdlib)
+
+    implementation(libs.kotlin.logging)
+    forgeRuntimeLibrary(libs.kotlin.logging)
 }
 
 val copyScriptingJar =
