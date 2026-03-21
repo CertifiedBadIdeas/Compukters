@@ -21,6 +21,7 @@ package ru.lazyhat.compukterkraft.computer
 
 import net.minecraft.core.BlockPos
 import net.minecraft.server.level.ServerLevel
+import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.entity.player.Player
 import ru.lazyhat.compukterkraft.LOGGER
 import ru.lazyhat.compukterkraft.block.ComputerFamily
@@ -29,6 +30,7 @@ import ru.lazyhat.compukterkraft.computer.vm.ComputerProfileRegistry
 import ru.lazyhat.compukterkraft.computer.vm.ComputerVmCallbacks
 import ru.lazyhat.compukterkraft.computer.vm.ComputerVmLogger
 import ru.lazyhat.compukterkraft.gui.NetworkedTerminal
+import ru.lazyhat.compukterkraft.gui.TerminalState
 import ru.lazyhat.compukterkraft.machine.ComputerProgram
 import ru.lazyhat.compukterkraft.machine.ComputerVmHandle
 import ru.lazyhat.compukterkraft.machine.HostCall
@@ -36,6 +38,9 @@ import ru.lazyhat.compukterkraft.machine.HostResult
 import ru.lazyhat.compukterkraft.machine.VmEvent
 import ru.lazyhat.compukterkraft.machine.VmState
 import ru.lazyhat.compukterkraft.machine.VmStopReason
+import ru.lazyhat.compukterkraft.menu.ComputerMenu
+import ru.lazyhat.compukterkraft.network.client.ComputerTerminalClientMessage
+import ru.lazyhat.compukterkraft.network.server.ServerNetworking
 import ru.lazyhat.compukterkraft.scripting.runtime.ScriptingEnvironmentHolder
 
 class ServerComputer(
@@ -47,11 +52,14 @@ class ServerComputer(
     ComputerVmCallbacks {
     val family = properties.family
     private val profile = ComputerProfileRegistry.forFamily(family)
+    @Volatile
+    private var terminalDirty = true
     val terminal =
         NetworkedTerminal(
             profile.terminalWidth,
             profile.terminalHeight,
             profile.colorTerminal,
+            Runnable { terminalDirty = true },
         )
     private val logger = ComputerVmLogger { message -> LOGGER.info { message } }
     private var label: String? = properties.label
@@ -66,6 +74,10 @@ class ServerComputer(
         private set
 
     fun checkUsable(player: Player) = family.checkUsable(player)
+
+    fun updateLabel(value: String?) {
+        label = value
+    }
 
     override fun queueEvent(
         event: String,
@@ -138,16 +150,26 @@ class ServerComputer(
 
     fun close() {
         LOGGER.info { "ComputerID: $instanceID close" }
+        ServerContext.vmSupervisor.remove(instanceID, VmStopReason.CLOSED)
+        vmHandle = null
+        isOn = false
+        terminalDirty = true
     }
 
     fun serverTick() {
-        val handle = vmHandle ?: return
+        val handle = vmHandle
+        if (handle == null) {
+            syncTerminal()
+            return
+        }
         handle.requestSlice(level.gameTime)
 
         val results = handle.drainHostCalls().map(::applyHostCall)
         if (results.isNotEmpty()) {
             handle.deliverHostResults(results)
         }
+
+        syncTerminal()
 
         val snapshot = handle.snapshot()
         if (snapshot.state == VmState.STOPPED || snapshot.state == VmState.CRASHED) {
@@ -227,4 +249,19 @@ class ServerComputer(
             terminal.setCursorPos(0, terminal.cursorY + 1)
         }
     }
+
+    private fun syncTerminal() {
+        if (!terminalDirty) return
+        val terminalState = TerminalState.create(terminal)
+        for (player in watchingPlayers()) {
+            ServerNetworking.sendToPlayer(ComputerTerminalClientMessage(player.containerMenu, terminalState), player)
+        }
+        terminalDirty = false
+    }
+
+    private fun watchingPlayers(): List<ServerPlayer> =
+        ServerContext.server.playerList.players.filter { player ->
+            val menu = player.containerMenu
+            menu is ComputerMenu && menu.getComputerPublic().instanceID == instanceID
+        }
 }

@@ -68,6 +68,9 @@ abstract class AbstractComputerBlockEntity(
                 ?.takeIf { _label != value }
                 ?.let {
                     _label = value
+                    _computerID
+                        ?.let(ServerContext.registry::getServerComputer)
+                        ?.updateLabel(value)
                     updateBlock()
                 }
         }
@@ -96,7 +99,9 @@ abstract class AbstractComputerBlockEntity(
     fun serverTick() {
         if (level?.isClientSide ?: true) return
         if (_computerID == null) return
-        createServerComputer().serverTick()
+        val computer = createServerComputer()
+        computer.serverTick()
+        updateBlockState(if (computer.isOn) ComputerState.ON else ComputerState.OFF)
     }
 
     fun createServerComputer(): ServerComputer {
@@ -136,9 +141,26 @@ abstract class AbstractComputerBlockEntity(
         _label = tag.computerLabel
     }
 
+    override fun setRemoved() {
+        releaseServerComputer()
+        super.setRemoved()
+    }
+
+    override fun onChunkUnloaded() {
+        releaseServerComputer()
+        super.onChunkUnloaded()
+    }
+
     override fun getName(): Component = customName ?: Component.translatable(blockState.block.getDescriptionId())
 
     override fun hasCustomName(): Boolean = !_label.isNullOrEmpty()
 
     override fun getCustomName(): Component? = _label?.takeIf { it.isEmpty() }?.let { Component.literal(it) }
+
+    private fun releaseServerComputer() {
+        if (level?.isClientSide ?: true) return
+        _computerID
+            ?.let(ServerContext.registry::removeServerComputer)
+            ?.close()
+    }
 }

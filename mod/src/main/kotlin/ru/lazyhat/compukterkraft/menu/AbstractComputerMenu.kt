@@ -101,7 +101,7 @@ abstract class AbstractComputerMenu(
 
     override fun removed(player: Player) {
         super.removed(player)
-        computer?.close()
+        input?.close()
     }
 
     companion object {
