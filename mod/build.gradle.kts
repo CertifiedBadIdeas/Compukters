@@ -71,6 +71,9 @@ dependencies {
     )
     modImplementation(libs.architectury.forge)
 
+    implementation(libs.kotlinx.coroutines.core)
+    forgeRuntimeLibrary(libs.kotlinx.coroutines.core)
+
     implementation(projects.scriptingApi)
     forgeRuntimeLibrary(projects.scriptingApi)
 
