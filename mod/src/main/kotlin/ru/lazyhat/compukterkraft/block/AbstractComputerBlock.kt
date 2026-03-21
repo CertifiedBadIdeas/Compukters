@@ -153,7 +153,7 @@ abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
             (level.getBlockEntity(pos) as? AbstractComputerBlockEntity)?.run {
                 ifServerSide(level)
                     ?.let { computer ->
-                        val serverComputer = computer.createServerComputer()
+                        val serverComputer = computer.getOrCreateServerComputer()
 
                         NetworkHooks
                             .openScreen(

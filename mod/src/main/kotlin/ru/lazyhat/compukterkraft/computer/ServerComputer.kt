@@ -24,20 +24,13 @@ import net.minecraft.server.level.ServerLevel
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.entity.player.Player
 import ru.lazyhat.compukterkraft.LOGGER
-import ru.lazyhat.compukterkraft.block.ComputerFamily
-import ru.lazyhat.compukterkraft.context.ServerContext
 import ru.lazyhat.compukterkraft.computer.vm.ComputerProfileRegistry
 import ru.lazyhat.compukterkraft.computer.vm.ComputerVmCallbacks
 import ru.lazyhat.compukterkraft.computer.vm.ComputerVmLogger
+import ru.lazyhat.compukterkraft.context.ServerContext
 import ru.lazyhat.compukterkraft.gui.NetworkedTerminal
 import ru.lazyhat.compukterkraft.gui.TerminalState
-import ru.lazyhat.compukterkraft.machine.ComputerProgram
-import ru.lazyhat.compukterkraft.machine.ComputerVmHandle
-import ru.lazyhat.compukterkraft.machine.HostCall
-import ru.lazyhat.compukterkraft.machine.HostResult
-import ru.lazyhat.compukterkraft.machine.VmEvent
-import ru.lazyhat.compukterkraft.machine.VmState
-import ru.lazyhat.compukterkraft.machine.VmStopReason
+import ru.lazyhat.compukterkraft.machine.*
 import ru.lazyhat.compukterkraft.menu.ComputerMenu
 import ru.lazyhat.compukterkraft.network.client.ComputerTerminalClientMessage
 import ru.lazyhat.compukterkraft.network.server.ServerNetworking
@@ -52,6 +45,7 @@ class ServerComputer(
     ComputerVmCallbacks {
     val family = properties.family
     private val profile = ComputerProfileRegistry.forFamily(family)
+
     @Volatile
     private var terminalDirty = true
     val terminal =
@@ -114,14 +108,14 @@ class ServerComputer(
         val handle = ServerContext.vmSupervisor.getOrCreate(instanceID, profile, this, logger)
         val compilation = environment.compiler.compile(profile.bootScriptName, bootScript)
         if (!compilation.isSuccess) {
-            writeLineToTerminal(compilation.diagnostics.joinToString { it.message })
+            writeLineToTerminal("Compilation Error: ${compilation.diagnostics.joinToString { it.message }}")
             ServerContext.vmSupervisor.remove(instanceID, VmStopReason.CLOSED)
             return
         }
 
         val execution = compilation.value!!.execute(handle.executionProperties())
         if (!execution.isSuccess) {
-            writeLineToTerminal(execution.exceptionMessage ?: "Boot execution failed")
+            writeLineToTerminal("Evaluation Error: ${execution.exceptionMessage ?: "Boot execution failed"}")
             ServerContext.vmSupervisor.remove(instanceID, VmStopReason.CLOSED)
             return
         }
@@ -224,7 +218,12 @@ class ServerComputer(
                 }
 
                 is HostCall.FileReadText -> {
-                    HostResult.Success(call.id, ServerContext.vmSupervisor.workspace.readDocument(instanceID, call.path)?.text)
+                    HostResult.Success(
+                        call.id,
+                        ServerContext.vmSupervisor.workspace
+                            .readDocument(instanceID, call.path)
+                            ?.text,
+                    )
                 }
 
                 is HostCall.FileWriteText -> {

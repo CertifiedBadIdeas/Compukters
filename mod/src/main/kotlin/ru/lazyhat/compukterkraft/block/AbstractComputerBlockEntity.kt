@@ -99,16 +99,14 @@ abstract class AbstractComputerBlockEntity(
     fun serverTick() {
         if (level?.isClientSide ?: true) return
         if (_computerID == null) return
-        val computer = createServerComputer()
+        val computer = getOrCreateServerComputer()
         computer.serverTick()
         updateBlockState(if (computer.isOn) ComputerState.ON else ComputerState.OFF)
     }
 
-    fun createServerComputer(): ServerComputer {
+    fun getOrCreateServerComputer(): ServerComputer {
         val server = level?.server ?: error("Cannot access server computer on the client.")
         val serverLevel = level as? ServerLevel ?: error("[SERVER_LEVEL_GET] Cannot access server computer on the client.")
-
-        LOGGER.info { "AbstractComputerBlockEntity.createServerComputer() ID: $_computerID" }
 
         return _computerID
             ?.let {
@@ -160,6 +158,7 @@ abstract class AbstractComputerBlockEntity(
     private fun releaseServerComputer() {
         if (level?.isClientSide ?: true) return
         _computerID
+            .takeIf { ServerContext.isInitialized }
             ?.let(ServerContext.registry::removeServerComputer)
             ?.close()
     }

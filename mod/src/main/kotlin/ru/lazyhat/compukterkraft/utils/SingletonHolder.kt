@@ -29,6 +29,8 @@ abstract class SingletonHolder<T : Any> {
     @Volatile
     private var _instance: T? = null
 
+    val isInitialized get() = _instance != null
+
     protected var instance: T
         get() = checkNotNull(_instance) { "[SingletonHolder] holding class has not been initialized" }
 
