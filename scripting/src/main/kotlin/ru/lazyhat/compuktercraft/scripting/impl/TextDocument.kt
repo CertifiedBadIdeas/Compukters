@@ -1,3 +1,22 @@
+/*
+ * The Compukter Kraft Developers
+ *
+ * Copyright (C) 2026 Vsevolod Petrov (lazyhat)
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package ru.lazyhat.compuktercraft.scripting.impl
 
 import ru.lazyhat.compuktercraft.scripting.api.CompletionItemKind
@@ -18,7 +37,9 @@ internal data class DeclarationMatch(
     val range: Range,
 )
 
-internal class TextDocument(private val text: String) {
+internal class TextDocument(
+    private val text: String,
+) {
     private val lines = text.split('\n')
 
     fun wordAt(
@@ -65,19 +86,22 @@ internal class TextDocument(private val text: String) {
 
     fun declarations(): List<DeclarationMatch> {
         val regex = Regex("""\b(val|var|fun|class|object)\s+([A-Za-z_][A-Za-z0-9_]*)""")
-        return regex.findAll(text).map { match ->
-            val kind = when (match.groupValues[1]) {
-                "fun" -> CompletionItemKind.SYMBOL
-                "class", "object" -> CompletionItemKind.SYMBOL
-                else -> CompletionItemKind.SYMBOL
-            }
+        return regex
+            .findAll(text)
+            .map { match ->
+                val kind =
+                    when (match.groupValues[1]) {
+                        "fun" -> CompletionItemKind.SYMBOL
+                        "class", "object" -> CompletionItemKind.SYMBOL
+                        else -> CompletionItemKind.SYMBOL
+                    }
 
-            DeclarationMatch(
-                name = match.groupValues[2],
-                kind = kind,
-                range = range(match.range.first + match.groupValues[1].length + 1, match.groupValues[2].length),
-            )
-        }.toList()
+                DeclarationMatch(
+                    name = match.groupValues[2],
+                    kind = kind,
+                    range = range(match.range.first + match.groupValues[1].length + 1, match.groupValues[2].length),
+                )
+            }.toList()
     }
 
     fun definition(
@@ -91,8 +115,7 @@ internal class TextDocument(private val text: String) {
     fun highlightMatches(
         regex: Regex,
         type: HighlightTokenType,
-    ): List<HighlightToken> =
-        regex.findAll(text).map { HighlightToken(range(it.range.first, it.value.length), type) }.toList()
+    ): List<HighlightToken> = regex.findAll(text).map { HighlightToken(range(it.range.first, it.value.length), type) }.toList()
 
     private fun positionOf(offset: Int): Position {
         var consumed = 0
