@@ -1,4 +1,4 @@
-# Compukter Craft
+# Compukter Kraft
 
 Analog of ComputerCraft. But with one difference: Programming language is not a Lua.
 
