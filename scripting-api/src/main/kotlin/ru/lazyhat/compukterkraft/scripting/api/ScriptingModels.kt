@@ -19,11 +19,26 @@
 
 package ru.lazyhat.compukterkraft.scripting.api
 
+import ru.lazyhat.compukterkraft.machine.ComputerFileSystemApi
+import ru.lazyhat.compukterkraft.machine.ComputerPeripheralApi
+import ru.lazyhat.compukterkraft.machine.ComputerRedstoneApi
+import ru.lazyhat.compukterkraft.machine.ComputerRuntime
+import ru.lazyhat.compukterkraft.machine.ComputerScriptBindings
+import ru.lazyhat.compukterkraft.machine.ComputerSystemApi
+import ru.lazyhat.compukterkraft.machine.ComputerTerminalApi
+import kotlin.reflect.KClass
+
+data class ScriptPropertyDescriptor(
+    val name: String,
+    val type: KClass<*>,
+)
+
 data class ScriptDefinitionDescriptor(
     val fileExtension: String,
     val displayName: String,
     val baseClass: String = "kotlin.Any",
     val defaultImports: List<String> = emptyList(),
+    val providedProperties: List<ScriptPropertyDescriptor> = emptyList(),
 )
 
 data class ScriptingEnvironmentConfig(
@@ -69,6 +84,7 @@ data class CompilationResult<T>(
 }
 
 data class ScriptExecutionResult(
+    val value: Any? = null,
     val returnValue: String? = null,
     val diagnostics: List<Diagnostic> = emptyList(),
     val exceptionMessage: String? = null,
@@ -128,6 +144,28 @@ object ScriptDefinitionPresets {
                     "kotlin.math.*",
                     "kotlin.io.*",
                     "ru.lazyhat.compukterkraft.scripting.api.*",
+                ),
+        )
+
+    fun computerKts(modId: String): ScriptDefinitionDescriptor =
+        ScriptDefinitionDescriptor(
+            fileExtension = ComputerScriptBindings.FILE_EXTENSION,
+            displayName = "$modId Computer Script",
+            defaultImports =
+                listOf(
+                    "kotlin.math.*",
+                    "kotlin.io.*",
+                    "ru.lazyhat.compukterkraft.machine.*",
+                    "ru.lazyhat.compukterkraft.scripting.api.*",
+                ),
+            providedProperties =
+                listOf(
+                    ScriptPropertyDescriptor(ComputerScriptBindings.RUNTIME_PROPERTY, ComputerRuntime::class),
+                    ScriptPropertyDescriptor(ComputerScriptBindings.SYSTEM_PROPERTY, ComputerSystemApi::class),
+                    ScriptPropertyDescriptor(ComputerScriptBindings.TERMINAL_PROPERTY, ComputerTerminalApi::class),
+                    ScriptPropertyDescriptor(ComputerScriptBindings.FILESYSTEM_PROPERTY, ComputerFileSystemApi::class),
+                    ScriptPropertyDescriptor(ComputerScriptBindings.REDSTONE_PROPERTY, ComputerRedstoneApi::class),
+                    ScriptPropertyDescriptor(ComputerScriptBindings.PERIPHERALS_PROPERTY, ComputerPeripheralApi::class),
                 ),
         )
 }

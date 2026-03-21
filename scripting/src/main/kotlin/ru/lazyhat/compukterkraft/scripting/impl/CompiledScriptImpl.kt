@@ -23,6 +23,7 @@ import kotlinx.coroutines.runBlocking
 import ru.lazyhat.compukterkraft.scripting.api.CompiledScript
 import ru.lazyhat.compukterkraft.scripting.api.ScriptExecutionResult
 import kotlin.script.experimental.api.ResultWithDiagnostics
+import kotlin.script.experimental.api.ResultValue
 import kotlin.script.experimental.jvm.BasicJvmScriptEvaluator
 import kotlin.script.experimental.api.CompiledScript as KotlinCompiledScript
 
@@ -42,8 +43,16 @@ class CompiledScriptImpl(
 
         return when (evaluation) {
             is ResultWithDiagnostics.Success -> {
+                val value =
+                    when (val returnValue = evaluation.value.returnValue) {
+                        is ResultValue.Value -> returnValue.value
+                        is ResultValue.Unit -> Unit
+                        is ResultValue.Error -> returnValue.error
+                        ResultValue.NotEvaluated -> null
+                    }
                 ScriptExecutionResult(
-                    returnValue = evaluation.value.toString(),
+                    value = value,
+                    returnValue = value?.toString(),
                     diagnostics = diagnostics,
                 )
             }

@@ -44,4 +44,6 @@ class ComputerRegistry {
 
         computersByInstanceId.put(serverComputer.instanceID, serverComputer)
     }
+
+    fun removeServerComputer(instanceId: Int): ServerComputer? = computersByInstanceId.remove(instanceId)
 }

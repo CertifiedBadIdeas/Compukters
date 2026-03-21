@@ -20,6 +20,7 @@
 package ru.lazyhat.compukterkraft.context
 
 import net.minecraft.server.MinecraftServer
+import ru.lazyhat.compukterkraft.computer.vm.ComputerVmSupervisor
 import ru.lazyhat.compukterkraft.utils.SingletonHolder
 
 // private val LOGGER: Logger = LogManager.getLogger(ServerContext::class.java)
@@ -28,10 +29,14 @@ class ServerContext(
     val server: MinecraftServer,
 ) {
     val registry = ComputerRegistry()
+    val vmSupervisor = ComputerVmSupervisor()
 
     companion object : SingletonHolder<ServerContext>() {
         val registry
             get() = instance.registry
+
+        val vmSupervisor
+            get() = instance.vmSupervisor
 
         val server
             get() = instance.server
@@ -41,6 +46,7 @@ class ServerContext(
         }
 
         fun close() {
+            instance.vmSupervisor.close()
             resetInstance()
         }
     }

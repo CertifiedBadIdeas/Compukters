@@ -96,6 +96,7 @@ abstract class AbstractComputerBlockEntity(
     fun serverTick() {
         if (level?.isClientSide ?: true) return
         if (_computerID == null) return
+        createServerComputer().serverTick()
     }
 
     fun createServerComputer(): ServerComputer {

@@ -23,6 +23,7 @@ import kotlinx.coroutines.runBlocking
 import ru.lazyhat.compukterkraft.scripting.api.CompilationResult
 import ru.lazyhat.compukterkraft.scripting.api.CompiledScript
 import ru.lazyhat.compukterkraft.scripting.api.ScriptCompiler
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.script.experimental.api.ResultWithDiagnostics
 import kotlin.script.experimental.host.StringScriptSource
 import kotlin.script.experimental.jvm.BasicJvmScriptEvaluator
@@ -36,8 +37,17 @@ class ScriptCompilerImpl(
         JvmScriptCompiler(environment.hostConfiguration)
     }
     private val evaluator = BasicJvmScriptEvaluator()
+    private val cache = ConcurrentHashMap<Pair<String, String>, CompilationResult<CompiledScript>>()
 
     override fun compile(
+        name: String,
+        code: String,
+    ): CompilationResult<CompiledScript> =
+        cache.computeIfAbsent(name to code) {
+            compileUncached(name, code)
+        }
+
+    private fun compileUncached(
         name: String,
         code: String,
     ): CompilationResult<CompiledScript> {

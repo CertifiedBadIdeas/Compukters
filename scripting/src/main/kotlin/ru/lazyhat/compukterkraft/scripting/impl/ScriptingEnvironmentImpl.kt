@@ -22,11 +22,15 @@ package ru.lazyhat.compukterkraft.scripting.impl
 import ru.lazyhat.compukterkraft.scripting.api.ScriptCompiler
 import ru.lazyhat.compukterkraft.scripting.api.ScriptDefinitionDescriptor
 import ru.lazyhat.compukterkraft.scripting.api.ScriptDefinitionPresets
+import ru.lazyhat.compukterkraft.scripting.api.ScriptPropertyDescriptor
 import ru.lazyhat.compukterkraft.scripting.api.ScriptIdeService
 import ru.lazyhat.compukterkraft.scripting.api.ScriptingEnvironment
 import ru.lazyhat.compukterkraft.scripting.api.ScriptingEnvironmentConfig
+import kotlin.script.experimental.api.KotlinType
 import kotlin.script.experimental.api.ScriptCompilationConfiguration
 import kotlin.script.experimental.api.ScriptEvaluationConfiguration
+import kotlin.script.experimental.api.defaultImports
+import kotlin.script.experimental.api.providedProperties
 import kotlin.script.experimental.host.ScriptingHostConfiguration
 import kotlin.script.experimental.jvm.baseClassLoader
 import kotlin.script.experimental.jvm.dependenciesFromClassloader
@@ -51,6 +55,8 @@ class ScriptingEnvironmentImpl(
 
     fun compilationConfiguration(scriptName: String): ScriptCompilationConfiguration =
         ScriptCompilationConfiguration {
+            ScriptCompilationConfiguration.defaultImports(*this@ScriptingEnvironmentImpl.defaultImports.toTypedArray())
+            ScriptCompilationConfiguration.providedProperties(*configuredProvidedProperties().toTypedArray())
             jvm {
                 dependenciesFromClassloader(classLoader = runtimeClassLoader, wholeClasspath = true)
             }
@@ -58,10 +64,18 @@ class ScriptingEnvironmentImpl(
 
     fun evaluationConfiguration(properties: Map<String, Any?>): ScriptEvaluationConfiguration =
         ScriptEvaluationConfiguration {
+            providedProperties(properties)
             jvm {
                 baseClassLoader(runtimeClassLoader)
             }
         }
+
+    private fun configuredProvidedProperties(): List<Pair<String, KotlinType>> =
+        definitions
+            .flatMap { it.providedProperties }
+            .associateBy(ScriptPropertyDescriptor::name)
+            .values
+            .map { it.name to KotlinType(it.type) }
 
     override fun bundledScript(relativePath: String): String? {
         val normalizedPath = "${config.bundledScriptsRoot.trim('/')}/$relativePath"

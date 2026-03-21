@@ -26,6 +26,7 @@ import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent
 import net.minecraftforge.fml.event.lifecycle.FMLDedicatedServerSetupEvent
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext
 import net.minecraftforge.fml.loading.FMLEnvironment
+import ru.lazyhat.compukterkraft.machine.ComputerScriptBindings
 import ru.lazyhat.compukterkraft.platform.NetworkHandler
 import ru.lazyhat.compukterkraft.scripting.api.ScriptDefinitionPresets
 import ru.lazyhat.compukterkraft.scripting.api.ScriptingEnvironmentConfig
@@ -73,9 +74,9 @@ class CompukterKraftMod(
         val config =
             ScriptingEnvironmentConfig(
                 modId = MOD_ID,
-                bundledScriptsRoot = "data/$MOD_ID/kotlin",
+                bundledScriptsRoot = "rom",
                 externalScriptsDirectory = ScriptingPaths.scriptsDirectory().absolutePath,
-                definitions = listOf(ScriptDefinitionPresets.standardKts(MOD_ID)),
+                definitions = listOf(ScriptDefinitionPresets.computerKts(MOD_ID)),
             )
 
         if (!scriptingJarLoader.hasScriptingJar()) {
@@ -93,25 +94,19 @@ class CompukterKraftMod(
 
         LOGGER.info { "Kotlin scripting environment loaded successfully." }
 
-        val bootstrapScript = environment.bundledScript("bios.cc.kts")
+        val bootstrapScript = environment.bundledScript(ComputerScriptBindings.BIOS_SCRIPT_NAME)
         if (bootstrapScript == null) {
-            LOGGER.warn { "Bundled bootstrap script bios.cc.kts was not found." }
+            LOGGER.warn { "Bundled bootstrap script ${ComputerScriptBindings.BIOS_SCRIPT_NAME} was not found." }
             return
         }
 
-        val compilation = environment.compiler.compile("bios.cc.kts", bootstrapScript)
+        val compilation = environment.compiler.compile(ComputerScriptBindings.BIOS_SCRIPT_NAME, bootstrapScript)
         if (!compilation.isSuccess) {
             LOGGER.error { "Bundled bootstrap script failed to compile: ${compilation.diagnostics.joinToString { it.message }}" }
             return
         }
 
-        val execution = compilation.value!!.execute()
-        if (!execution.isSuccess) {
-            LOGGER.error { "Bundled bootstrap script failed to execute: ${execution.exceptionMessage ?: "unknown error"}" }
-            return
-        }
-
-        LOGGER.info { "Bundled bootstrap script executed successfully." }
+        LOGGER.info { "Bundled bootstrap script compiled successfully." }
         LOGGER.debug { "Scripting available = ${ScriptingEnvironmentHolder.isAvailable}" }
     }
 }
