@@ -17,11 +17,11 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package ru.lazyhat.compuktercraft.scripting.impl
+package ru.lazyhat.compukterkraft.scripting.impl
 
 import kotlinx.coroutines.runBlocking
-import ru.lazyhat.compuktercraft.scripting.api.CompiledScript
-import ru.lazyhat.compuktercraft.scripting.api.ScriptExecutionResult
+import ru.lazyhat.compukterkraft.scripting.api.CompiledScript
+import ru.lazyhat.compukterkraft.scripting.api.ScriptExecutionResult
 import kotlin.script.experimental.api.ResultWithDiagnostics
 import kotlin.script.experimental.jvm.BasicJvmScriptEvaluator
 import kotlin.script.experimental.api.CompiledScript as KotlinCompiledScript

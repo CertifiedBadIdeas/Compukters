@@ -17,7 +17,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package ru.lazyhat.compuktercraft.scripting.api
+package ru.lazyhat.compukterkraft.scripting.api
 
 import java.io.File
 

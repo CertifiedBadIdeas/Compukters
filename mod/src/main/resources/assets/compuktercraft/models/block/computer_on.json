@@ -1,7 +1,7 @@
 {
     "parent": "minecraft:block/orientable",
     "render_type": "cutout",
-    "compuktercraft:emissive_texture": "cursor",
+    "compukterkraft:emissive_texture": "cursor",
     "elements": [
         {
             "from": [ 0, 0, 0 ],

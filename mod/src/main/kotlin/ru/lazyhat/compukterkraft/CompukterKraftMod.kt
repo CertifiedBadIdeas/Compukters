@@ -17,7 +17,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package ru.lazyhat.compuktercraft
+package ru.lazyhat.compukterkraft
 
 import net.minecraftforge.fml.ModList
 import net.minecraftforge.fml.common.Mod
@@ -27,17 +27,17 @@ import net.minecraftforge.fml.event.lifecycle.FMLDedicatedServerSetupEvent
 import org.apache.logging.log4j.Level
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
-import ru.lazyhat.compuktercraft.scripting.api.ScriptDefinitionPresets
-import ru.lazyhat.compuktercraft.scripting.api.ScriptingEnvironmentConfig
-import ru.lazyhat.compuktercraft.scripting.runtime.ScriptingEnvironmentHolder
-import ru.lazyhat.compuktercraft.scripting.runtime.ScriptingJarLoader
-import ru.lazyhat.compuktercraft.scripting.runtime.ScriptingPaths
+import ru.lazyhat.compukterkraft.scripting.api.ScriptDefinitionPresets
+import ru.lazyhat.compukterkraft.scripting.api.ScriptingEnvironmentConfig
+import ru.lazyhat.compukterkraft.scripting.runtime.ScriptingEnvironmentHolder
+import ru.lazyhat.compukterkraft.scripting.runtime.ScriptingJarLoader
+import ru.lazyhat.compukterkraft.scripting.runtime.ScriptingPaths
 
-@Mod(CompukterCraftMod.ID)
-@EventBusSubscriber(modid = CompukterCraftMod.ID, bus = EventBusSubscriber.Bus.MOD)
-open class CompukterCraftMod {
+@Mod(CompukterKraftMod.ID)
+@EventBusSubscriber(modid = CompukterKraftMod.ID, bus = EventBusSubscriber.Bus.MOD)
+open class CompukterKraftMod {
     companion object {
-        const val ID = "compuktercraft"
+        const val ID = "compukterkraft"
         val SCRIPTING_LOADER = ScriptingJarLoader()
     }
 

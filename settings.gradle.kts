@@ -46,4 +46,4 @@ include("scripting")
 include("scripting-api")
 include("mod")
 
-rootProject.name = "Compukter-Craft"
+rootProject.name = "Compukter-Kraft"

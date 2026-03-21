@@ -17,9 +17,9 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package ru.lazyhat.compuktercraft.scripting.runtime
+package ru.lazyhat.compukterkraft.scripting.runtime
 
-import ru.lazyhat.compuktercraft.scripting.api.ScriptingEnvironment
+import ru.lazyhat.compukterkraft.scripting.api.ScriptingEnvironment
 
 object ScriptingEnvironmentHolder {
     @Volatile

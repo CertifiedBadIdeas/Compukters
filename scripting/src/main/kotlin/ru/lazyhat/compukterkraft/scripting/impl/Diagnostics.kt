@@ -17,12 +17,12 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package ru.lazyhat.compuktercraft.scripting.impl
+package ru.lazyhat.compukterkraft.scripting.impl
 
-import ru.lazyhat.compuktercraft.scripting.api.Diagnostic
-import ru.lazyhat.compuktercraft.scripting.api.DiagnosticSeverity
-import ru.lazyhat.compuktercraft.scripting.api.Position
-import ru.lazyhat.compuktercraft.scripting.api.Range
+import ru.lazyhat.compukterkraft.scripting.api.Diagnostic
+import ru.lazyhat.compukterkraft.scripting.api.DiagnosticSeverity
+import ru.lazyhat.compukterkraft.scripting.api.Position
+import ru.lazyhat.compukterkraft.scripting.api.Range
 import kotlin.script.experimental.api.ResultWithDiagnostics
 import kotlin.script.experimental.api.ScriptDiagnostic
 

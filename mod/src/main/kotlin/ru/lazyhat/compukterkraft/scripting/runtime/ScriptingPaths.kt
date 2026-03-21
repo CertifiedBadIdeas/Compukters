@@ -17,14 +17,14 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package ru.lazyhat.compuktercraft.scripting.runtime
+package ru.lazyhat.compukterkraft.scripting.runtime
 
 import java.io.File
 
 object ScriptingPaths {
-    const val SCRIPTING_JAR = "CompukterCraftScripting.jar"
+    const val SCRIPTING_JAR = "compukterkraftScripting.jar"
 
-    fun rootDirectory(): File = File("compuktercraft")
+    fun rootDirectory(): File = File("compukterkraft")
 
     fun scriptsDirectory(): File = rootDirectory().resolve("scripts")
 

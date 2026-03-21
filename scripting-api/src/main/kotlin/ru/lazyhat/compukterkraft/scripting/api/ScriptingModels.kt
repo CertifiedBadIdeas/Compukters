@@ -17,7 +17,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package ru.lazyhat.compuktercraft.scripting.api
+package ru.lazyhat.compukterkraft.scripting.api
 
 data class ScriptDefinitionDescriptor(
     val fileExtension: String,
@@ -127,7 +127,7 @@ object ScriptDefinitionPresets {
                 listOf(
                     "kotlin.math.*",
                     "kotlin.io.*",
-                    "ru.lazyhat.compuktercraft.scripting.api.*",
+                    "ru.lazyhat.compukterkraft.scripting.api.*",
                 ),
         )
 }

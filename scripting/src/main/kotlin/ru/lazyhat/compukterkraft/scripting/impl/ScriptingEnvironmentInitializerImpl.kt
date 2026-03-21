@@ -17,11 +17,11 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package ru.lazyhat.compuktercraft.scripting.impl
+package ru.lazyhat.compukterkraft.scripting.impl
 
-import ru.lazyhat.compuktercraft.scripting.api.ScriptingEnvironment
-import ru.lazyhat.compuktercraft.scripting.api.ScriptingEnvironmentConfig
-import ru.lazyhat.compuktercraft.scripting.api.ScriptingEnvironmentInitializer
+import ru.lazyhat.compukterkraft.scripting.api.ScriptingEnvironment
+import ru.lazyhat.compukterkraft.scripting.api.ScriptingEnvironmentConfig
+import ru.lazyhat.compukterkraft.scripting.api.ScriptingEnvironmentInitializer
 
 class ScriptingEnvironmentInitializerImpl : ScriptingEnvironmentInitializer {
     override fun initialize(config: ScriptingEnvironmentConfig): ScriptingEnvironment = ScriptingEnvironmentImpl(config)

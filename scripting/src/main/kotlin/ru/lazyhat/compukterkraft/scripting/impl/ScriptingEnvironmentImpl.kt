@@ -17,14 +17,14 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package ru.lazyhat.compuktercraft.scripting.impl
+package ru.lazyhat.compukterkraft.scripting.impl
 
-import ru.lazyhat.compuktercraft.scripting.api.ScriptCompiler
-import ru.lazyhat.compuktercraft.scripting.api.ScriptDefinitionDescriptor
-import ru.lazyhat.compuktercraft.scripting.api.ScriptDefinitionPresets
-import ru.lazyhat.compuktercraft.scripting.api.ScriptIdeService
-import ru.lazyhat.compuktercraft.scripting.api.ScriptingEnvironment
-import ru.lazyhat.compuktercraft.scripting.api.ScriptingEnvironmentConfig
+import ru.lazyhat.compukterkraft.scripting.api.ScriptCompiler
+import ru.lazyhat.compukterkraft.scripting.api.ScriptDefinitionDescriptor
+import ru.lazyhat.compukterkraft.scripting.api.ScriptDefinitionPresets
+import ru.lazyhat.compukterkraft.scripting.api.ScriptIdeService
+import ru.lazyhat.compukterkraft.scripting.api.ScriptingEnvironment
+import ru.lazyhat.compukterkraft.scripting.api.ScriptingEnvironmentConfig
 import kotlin.script.experimental.api.ScriptCompilationConfiguration
 import kotlin.script.experimental.api.ScriptEvaluationConfiguration
 import kotlin.script.experimental.host.ScriptingHostConfiguration

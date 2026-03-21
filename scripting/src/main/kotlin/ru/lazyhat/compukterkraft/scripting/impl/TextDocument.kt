@@ -17,14 +17,14 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package ru.lazyhat.compuktercraft.scripting.impl
+package ru.lazyhat.compukterkraft.scripting.impl
 
-import ru.lazyhat.compuktercraft.scripting.api.CompletionItemKind
-import ru.lazyhat.compuktercraft.scripting.api.DefinitionTarget
-import ru.lazyhat.compuktercraft.scripting.api.HighlightToken
-import ru.lazyhat.compuktercraft.scripting.api.HighlightTokenType
-import ru.lazyhat.compuktercraft.scripting.api.Position
-import ru.lazyhat.compuktercraft.scripting.api.Range
+import ru.lazyhat.compukterkraft.scripting.api.CompletionItemKind
+import ru.lazyhat.compukterkraft.scripting.api.DefinitionTarget
+import ru.lazyhat.compukterkraft.scripting.api.HighlightToken
+import ru.lazyhat.compukterkraft.scripting.api.HighlightTokenType
+import ru.lazyhat.compukterkraft.scripting.api.Position
+import ru.lazyhat.compukterkraft.scripting.api.Range
 
 internal data class WordSelection(
     val word: String,

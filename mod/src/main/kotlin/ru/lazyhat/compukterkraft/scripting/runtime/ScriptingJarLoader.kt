@@ -17,17 +17,17 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package ru.lazyhat.compuktercraft.scripting.runtime
+package ru.lazyhat.compukterkraft.scripting.runtime
 
-import ru.lazyhat.compuktercraft.scripting.api.ScriptingEnvironment
-import ru.lazyhat.compuktercraft.scripting.api.ScriptingEnvironmentConfig
-import ru.lazyhat.compuktercraft.scripting.api.ScriptingEnvironmentInitializer
+import ru.lazyhat.compukterkraft.scripting.api.ScriptingEnvironment
+import ru.lazyhat.compukterkraft.scripting.api.ScriptingEnvironmentConfig
+import ru.lazyhat.compukterkraft.scripting.api.ScriptingEnvironmentInitializer
 import java.io.File
 import java.net.URLClassLoader
 
 class ScriptingJarLoader(
     private val scriptingJar: File = ScriptingPaths.scriptingJar(),
-    private val implementationClassName: String = "ru.lazyhat.compuktercraft.scripting.impl.ScriptingEnvironmentInitializerImpl",
+    private val implementationClassName: String = "ru.lazyhat.compukterkraft.scripting.impl.ScriptingEnvironmentInitializerImpl",
 ) : AutoCloseable {
     var isLoaded = false
         private set
