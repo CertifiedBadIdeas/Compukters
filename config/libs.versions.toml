@@ -16,6 +16,7 @@ shadow = { id = "com.gradleup.shadow", version = "9.4.0" }
 [versions]
 
 kotlin = "2.3.20"
+coroutines = "1.10.2"
 minecraft = "1.20.1"
 
 [libraries]
@@ -32,4 +33,11 @@ kotlin-scripting-jvm = { module = "org.jetbrains.kotlin:kotlin-scripting-jvm", v
 kotlin-scripting-jvmHost = { module = "org.jetbrains.kotlin:kotlin-scripting-jvm-host", version.ref = "kotlin" }
 
 kotlin-compiler-embeddable = { module = "org.jetbrains.kotlin:kotlin-compiler-embeddable", version.ref = "kotlin" }
+kotlin-analysis-api = { module = "org.jetbrains.kotlin:analysis-api-for-ide", version.ref = "kotlin" }
+kotlin-analysis-api-k2 = { module = "org.jetbrains.kotlin:analysis-api-k2-for-ide", version.ref = "kotlin" }
+kotlin-analysis-api-standalone = { module = "org.jetbrains.kotlin:analysis-api-standalone-for-ide", version.ref = "kotlin" }
+kotlin-compiler-cli-for-ide = { module = "org.jetbrains.kotlin:kotlin-compiler-cli-for-ide", version.ref = "kotlin" }
+kotlin-compiler-common-for-ide = { module = "org.jetbrains.kotlin:kotlin-compiler-common-for-ide", version.ref = "kotlin" }
+kotlin-compiler-fir-for-ide = { module = "org.jetbrains.kotlin:kotlin-compiler-fir-for-ide", version.ref = "kotlin" }
+kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm", version.ref = "coroutines" }
 kotlin-stdlib = { module = "org.jetbrains.kotlin:kotlin-stdlib", version.ref = "kotlin" }

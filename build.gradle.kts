@@ -1,6 +1,7 @@
 @file:Suppress("PropertyName")
 
 import org.gradle.kotlin.dsl.provideDelegate
+import org.gradle.jvm.tasks.Jar
 import kotlin.reflect.KProperty
 
 // operator fun Provider<String>.getValue(ref: Any?, prop: KProperty<*>): String = this.get()
@@ -62,20 +63,17 @@ dependencies {
         },
     )
     modImplementation(libs.architectury.forge)
-
-    listOf(
-        libs.kotlin.stdlib,
-        libs.kotlin.scripting.jvm,
-        libs.kotlin.scripting.jvmHost,
-        libs.kotlin.scripting.common,
-        libs.kotlin.scripting.dependencies,
-    ).forEach {
-        implementation(it)
-        forgeRuntimeLibrary(it) {
-            exclude("org.jetbrains.kotlin")
-        }
-    }
 }
+
+val copyScriptingJar =
+    tasks.register<Copy>("copyScriptingJar") {
+        val scriptingShadowJar = project(":scripting").tasks.named<Jar>("shadowJar")
+
+        dependsOn(scriptingShadowJar)
+        from(scriptingShadowJar.map { it.archiveFile })
+        into(layout.projectDirectory.dir("run/compuktercraft"))
+        rename { "CompukterCraftScripting.jar" }
+    }
 
 val generateModMetadata =
     tasks.register("generateModMetadata", ProcessResources::class) {
@@ -103,6 +101,10 @@ val generateModMetadata =
 
 tasks.named<ProcessResources>("processResources") {
     dependsOn(generateModMetadata)
+}
+
+tasks.matching { it.name.startsWith("run") }.configureEach {
+    dependsOn(copyScriptingJar)
 }
 
 sourceSets.main {
