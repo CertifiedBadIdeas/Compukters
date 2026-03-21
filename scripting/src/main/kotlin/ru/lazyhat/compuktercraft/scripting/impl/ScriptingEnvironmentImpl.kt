@@ -19,16 +19,16 @@ class ScriptingEnvironmentImpl(
     override val definitions: List<ScriptDefinitionDescriptor> =
         config.definitions.ifEmpty { listOf(ScriptDefinitionPresets.standardKts(config.modId)) }
 
-    override val compiler: ScriptCompiler = ScriptCompilerImpl(this)
-    override val ide: ScriptIdeService = ScriptIdeServiceImpl(this)
-    override val isAvailable: Boolean = true
-
     val hostConfiguration = ScriptingHostConfiguration {}
     val runtimeClassLoader: ClassLoader
         get() = Thread.currentThread().contextClassLoader ?: javaClass.classLoader
 
     val defaultImports: List<String>
         get() = definitions.flatMap { it.defaultImports }.distinct()
+
+    override val compiler: ScriptCompiler = ScriptCompilerImpl(this)
+    override val ide: ScriptIdeService = ScriptIdeServiceImpl(this)
+    override val isAvailable: Boolean = true
 
     fun compilationConfiguration(scriptName: String): ScriptCompilationConfiguration =
         ScriptCompilationConfiguration {

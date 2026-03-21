@@ -14,9 +14,7 @@ repositories {
 }
 
 dependencies {
-    val rootSourceSets = rootProject.extensions.getByType(SourceSetContainer::class.java)
-    compileOnly(rootSourceSets.named("main").get().output)
-
+    implementation(projects.scriptingApi)
     implementation(libs.kotlin.stdlib)
     implementation(libs.kotlin.scripting.common)
     implementation(libs.kotlin.scripting.dependencies)
@@ -26,16 +24,8 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
 }
 
-kotlin {
-    jvmToolchain(17)
-}
-
 tasks.named<Jar>("jar") {
     archiveClassifier.set("dev")
-}
-
-tasks.named<KotlinCompile>("compileKotlin") {
-    dependsOn(rootProject.tasks.named("compileKotlin"))
 }
 
 tasks.named<ShadowJar>("shadowJar") {

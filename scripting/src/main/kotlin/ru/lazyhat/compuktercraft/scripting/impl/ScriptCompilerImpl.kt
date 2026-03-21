@@ -13,7 +13,9 @@ import kotlin.script.experimental.jvmhost.JvmScriptCompiler
 class ScriptCompilerImpl(
     private val environment: ScriptingEnvironmentImpl,
 ) : ScriptCompiler {
-    private val compiler = JvmScriptCompiler(environment.hostConfiguration)
+    private val compiler by lazy(LazyThreadSafetyMode.NONE) {
+        JvmScriptCompiler(environment.hostConfiguration)
+    }
     private val evaluator = BasicJvmScriptEvaluator()
 
     override fun compile(

@@ -44,7 +44,9 @@ data class CompilationResult<T>(
     val exceptionMessage: String? = null,
 ) {
     val isSuccess: Boolean
-        get() = value != null && exceptionMessage == null && diagnostics.none { it.severity == DiagnosticSeverity.ERROR || it.severity == DiagnosticSeverity.FATAL }
+        get() =
+            value != null && exceptionMessage == null &&
+                diagnostics.none { it.severity == DiagnosticSeverity.ERROR || it.severity == DiagnosticSeverity.FATAL }
 }
 
 data class ScriptExecutionResult(
@@ -53,7 +55,9 @@ data class ScriptExecutionResult(
     val exceptionMessage: String? = null,
 ) {
     val isSuccess: Boolean
-        get() = exceptionMessage == null && diagnostics.none { it.severity == DiagnosticSeverity.ERROR || it.severity == DiagnosticSeverity.FATAL }
+        get() =
+            exceptionMessage == null &&
+                diagnostics.none { it.severity == DiagnosticSeverity.ERROR || it.severity == DiagnosticSeverity.FATAL }
 }
 
 enum class CompletionItemKind {
@@ -100,10 +104,11 @@ object ScriptDefinitionPresets {
         ScriptDefinitionDescriptor(
             fileExtension = ".kts",
             displayName = "$modId Kotlin Script",
-            defaultImports = listOf(
-                "kotlin.math.*",
-                "kotlin.io.*",
-                "ru.lazyhat.compuktercraft.scripting.api.*",
-            ),
+            defaultImports =
+                listOf(
+                    "kotlin.math.*",
+                    "kotlin.io.*",
+                    "ru.lazyhat.compuktercraft.scripting.api.*",
+                ),
         )
 }

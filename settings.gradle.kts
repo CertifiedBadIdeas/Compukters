@@ -24,5 +24,7 @@ plugins {
 
 includeBuild("build-scripts")
 include("scripting")
+include("scripting-api")
+include("mod")
 
 rootProject.name = "Compukter-Craft"

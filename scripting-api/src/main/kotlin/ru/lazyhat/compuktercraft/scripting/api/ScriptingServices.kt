@@ -9,16 +9,24 @@ interface CompiledScript {
 }
 
 interface ScriptCompiler {
-    fun compile(name: String, code: String): CompilationResult<CompiledScript>
+    fun compile(
+        name: String,
+        code: String,
+    ): CompilationResult<CompiledScript>
 
-    fun compile(file: File): CompilationResult<CompiledScript> =
-        compile(file.name, file.readText())
+    fun compile(file: File): CompilationResult<CompiledScript> = compile(file.name, file.readText())
 }
 
 interface ScriptIdeService {
-    fun analyze(name: String, code: String): List<Diagnostic>
+    fun analyze(
+        name: String,
+        code: String,
+    ): List<Diagnostic>
 
-    fun highlight(name: String, code: String): List<HighlightToken>
+    fun highlight(
+        name: String,
+        code: String,
+    ): List<HighlightToken>
 
     fun complete(
         name: String,

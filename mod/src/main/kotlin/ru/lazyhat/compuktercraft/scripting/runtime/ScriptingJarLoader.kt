@@ -34,9 +34,11 @@ class ScriptingJarLoader(
             classLoader = URLClassLoader(arrayOf(scriptingJar.toURI().toURL()), parentLoader)
             currentThread.contextClassLoader = classLoader
 
-            val initializer = Class.forName(implementationClassName, true, classLoader)
-                .getDeclaredConstructor()
-                .newInstance() as ScriptingEnvironmentInitializer
+            val initializer =
+                Class
+                    .forName(implementationClassName, true, classLoader)
+                    .getDeclaredConstructor()
+                    .newInstance() as ScriptingEnvironmentInitializer
 
             initializer.initialize(config).also {
                 ScriptingEnvironmentHolder.install(it)

@@ -1,7 +1,7 @@
 @file:Suppress("PropertyName")
 
-import org.gradle.kotlin.dsl.provideDelegate
 import org.gradle.jvm.tasks.Jar
+import org.gradle.kotlin.dsl.provideDelegate
 import kotlin.reflect.KProperty
 
 // operator fun Provider<String>.getValue(ref: Any?, prop: KProperty<*>): String = this.get()
@@ -36,16 +36,6 @@ plugins {
     alias(libs.plugins.architectury.plugin)
 }
 
-repositories {
-    maven("https://maven.parchmentmc.org/")
-}
-
-// loom {
-//    forge {
-//        mixinConfig("compuktercraft.mixins.json")
-//    }
-// }
-
 architectury {
     minecraft = libs.versions.minecraft.get()
 
@@ -63,11 +53,17 @@ dependencies {
         },
     )
     modImplementation(libs.architectury.forge)
+
+    implementation(projects.scriptingApi)
+    forgeRuntimeLibrary(projects.scriptingApi)
+
+    implementation(libs.kotlin.stdlib)
+    forgeRuntimeLibrary(libs.kotlin.stdlib)
 }
 
 val copyScriptingJar =
     tasks.register<Copy>("copyScriptingJar") {
-        val scriptingShadowJar = project(":scripting").tasks.named<Jar>("shadowJar")
+        val scriptingShadowJar = project(projects.scripting.path).tasks.named<Jar>("shadowJar")
 
         dependsOn(scriptingShadowJar)
         from(scriptingShadowJar.map { it.archiveFile })
@@ -77,7 +73,7 @@ val copyScriptingJar =
 
 val generateModMetadata =
     tasks.register("generateModMetadata", ProcessResources::class) {
-        val modPropertiesFile = file("config/mod.properties")
+        val modPropertiesFile = file("$rootDir/config/mod.properties")
         val replaceProperties =
             modPropertiesFile
                 .readLines()
