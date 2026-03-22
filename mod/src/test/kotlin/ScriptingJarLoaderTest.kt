@@ -50,6 +50,6 @@ class ScriptingJarLoaderTest {
 
     private companion object {
         const val JAVA_CLASS_PATH_PROPERTY = "java.class.path"
-        const val KOTLIN_STDLIB_JAR_PREFIX = "kotlin-stdlib"
+        const val KOTLIN_STDLIB_JAR_PREFIX = "kotlin-stdlib-jdk8"
     }
 }

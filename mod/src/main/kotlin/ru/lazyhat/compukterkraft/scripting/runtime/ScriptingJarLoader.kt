@@ -26,10 +26,9 @@ import java.io.File
 import java.net.URI
 import java.net.URL
 import java.net.URLClassLoader
-import kotlin.jvm.JvmStatic
 
 class ScriptingJarLoader(
-    private val scriptingJar: File = ScriptingPaths.scriptingJar(),
+    private val scriptingJar: File = ScriptingPaths.compilerJar(),
     private val librariesDirectory: File = scriptingJar.absoluteFile.parentFile.resolve(ScriptingPaths.SCRIPTING_LIBRARIES_DIRECTORY),
     private val implementationClassName: String = "ru.lazyhat.compukterkraft.scripting.impl.ScriptingEnvironmentInitializerImpl",
 ) : AutoCloseable {
@@ -143,13 +142,12 @@ class ScriptingJarLoader(
             else -> null
         }
 
-    private fun File.isMatchingJar(jarPrefix: String): Boolean =
-        isFile && (name == "$jarPrefix.jar" || name.startsWith("$jarPrefix-"))
+    private fun File.isMatchingJar(jarPrefix: String): Boolean = isFile && (name == "$jarPrefix.jar" || name.startsWith("$jarPrefix-"))
 
     private companion object {
         const val JAVA_CLASS_PATH_PROPERTY = "java.class.path"
         const val KOTLIN_STDLIB_JAR_PROPERTY = "kotlin.java.stdlib.jar"
-        const val KOTLIN_STDLIB_JAR_PREFIX = "kotlin-stdlib"
+        const val KOTLIN_STDLIB_JAR_PREFIX = "kotlin-stdlib-jdk8"
     }
 }
 

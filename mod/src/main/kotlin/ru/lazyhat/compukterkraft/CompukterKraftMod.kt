@@ -52,7 +52,7 @@ class CompukterKraftMod(
 
         NetworkHandler.setup()
 
-        val scriptingJarLoader: ScriptingJarLoader = ScriptingJarLoader()
+        val scriptingJarLoader = ScriptingJarLoader()
         val config =
             ScriptingEnvironmentConfig(
                 modId = MOD_ID,
@@ -61,7 +61,9 @@ class CompukterKraftMod(
                 definitions = listOf(ScriptDefinitionPresets.computerKts(MOD_ID)),
             )
 
-        val environment = scriptingJarLoader.initialize(config)
+        scriptingJarLoader.initialize(config) ?: run {
+            LOGGER.error { "Failed to initialize scripting ${scriptingJarLoader.lastError}" }
+        }
     }
 
     @Suppress("UNUSED_PARAMETER")
