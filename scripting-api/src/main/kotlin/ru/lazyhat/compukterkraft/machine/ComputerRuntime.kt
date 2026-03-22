@@ -87,7 +87,7 @@ interface ComputerPeripheralApi
 
 object ComputerScriptBindings {
     const val FILE_EXTENSION = ".cc.kts"
-    const val BIOS_SCRIPT_NAME = "bios.cc.kts"
+    const val BIOS_SCRIPT_NAME = "bios.ck.kts"
     const val RUNTIME_PROPERTY = "runtime"
     const val SYSTEM_PROPERTY = "system"
     const val TERMINAL_PROPERTY = "terminal"

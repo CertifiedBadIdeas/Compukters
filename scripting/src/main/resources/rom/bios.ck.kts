@@ -17,12 +17,15 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-println("Hello world!")
+package rom
 
-object : ComputerProgram {
+import ru.lazyhat.compukterkraft.machine.ComputerProgram
+import ru.lazyhat.compukterkraft.machine.ComputerRuntime
+
+object BootProgram : ComputerProgram {
     override suspend fun run(runtime: ComputerRuntime) {
         runtime.terminal.clear()
-        runtime.terminal.printLine("Compukter Kraft BIOS")
+        runtime.terminal.printLine("Compukter Kraft OS")
         runtime.terminal.printLine("Computer #${runtime.system.computerId} (${runtime.profile.displayName})")
         runtime.terminal.printLine("Waiting for events...")
 
@@ -33,3 +36,5 @@ object : ComputerProgram {
         }
     }
 }
+
+BootProgram

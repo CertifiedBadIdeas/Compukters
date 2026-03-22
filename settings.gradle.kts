@@ -44,6 +44,7 @@ plugins {
 includeBuild("build-scripts")
 include("scripting")
 include("scripting-api")
+include("scripting-def")
 include("mod")
 
 rootProject.name = "Compukter-Kraft"

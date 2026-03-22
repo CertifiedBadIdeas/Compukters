@@ -175,6 +175,9 @@ private class ScriptingRuntimeClassLoader(
             "javax.",
             "jdk.",
             "sun.",
+            "kotlin.coroutines.",
+            "kotlin.jvm.functions.",
+            "kotlinx.coroutines.",
             "ru.lazyhat.compukterkraft.machine.",
             "ru.lazyhat.compukterkraft.scripting.api.",
         )

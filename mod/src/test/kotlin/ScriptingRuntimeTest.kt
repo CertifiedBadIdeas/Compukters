@@ -21,6 +21,16 @@ import kotlinx.coroutines.runBlocking
 import ru.lazyhat.compukterkraft.MOD_ID
 import ru.lazyhat.compukterkraft.block.ComputerFamily
 import ru.lazyhat.compukterkraft.computer.vm.ComputerProfileRegistry
+import ru.lazyhat.compukterkraft.machine.ComputerFileSystemApi
+import ru.lazyhat.compukterkraft.machine.ComputerPeripheralApi
+import ru.lazyhat.compukterkraft.machine.ComputerProgram
+import ru.lazyhat.compukterkraft.machine.ComputerRedstoneApi
+import ru.lazyhat.compukterkraft.machine.ComputerRuntime
+import ru.lazyhat.compukterkraft.machine.ComputerScriptBindings
+import ru.lazyhat.compukterkraft.machine.ComputerSystemApi
+import ru.lazyhat.compukterkraft.machine.ComputerTerminalApi
+import ru.lazyhat.compukterkraft.machine.ComputerWorkspaceEntry
+import ru.lazyhat.compukterkraft.machine.VmEvent
 import ru.lazyhat.compukterkraft.scripting.api.ScriptDefinitionPresets
 import ru.lazyhat.compukterkraft.scripting.api.ScriptingEnvironmentConfig
 import ru.lazyhat.compukterkraft.scripting.runtime.ScriptingJarLoader
@@ -88,6 +98,18 @@ class ScriptingRuntimeTest {
                 val compiledScript = runBlocking { environment.compiler.compile("test-bootscript", bootScript) }
 
                 assertNull(compiledScript.exceptionMessage, "${compiledScript.exceptionMessage}")
+                val compiledBootScript =
+                    assertNotNull(compiledScript.value, "Expected boot script to compile successfully")
+
+                val execution = compiledBootScript.execute(ComputerScriptBindings.toProperties(TestComputerRuntime(profile)))
+
+                assertNull(execution.exceptionMessage, "${execution.exceptionMessage}")
+                assertTrue(
+                    actual = execution.value is ComputerProgram,
+                    message =
+                        "Expected boot script to return ComputerProgram, got ${execution.value?.javaClass} " +
+                            "loaded by ${execution.value?.javaClass?.classLoader}",
+                )
             } finally {
                 scriptingJarLoader.close()
             }
@@ -103,4 +125,66 @@ class ScriptingRuntimeTest {
     private companion object {
         const val KOTLIN_STDLIB_JAR_PROPERTY = "kotlin.java.stdlib.jar"
     }
+}
+
+private class TestComputerRuntime(
+    override val profile: ru.lazyhat.compukterkraft.machine.ComputerProfile,
+) : ComputerRuntime {
+    override val system: ComputerSystemApi =
+        object : ComputerSystemApi {
+            override val computerId: Int = 1
+            override val label: String? = "Test"
+            override val currentTick: Long = 0L
+
+            override fun queueEvent(
+                name: String,
+                arguments: List<Any?>,
+            ) = Unit
+
+            override fun shutdown() = Unit
+
+            override fun reboot() = Unit
+
+            override fun log(message: String) = Unit
+        }
+
+    override val terminal: ComputerTerminalApi =
+        object : ComputerTerminalApi {
+            override suspend fun write(text: String) = Unit
+
+            override suspend fun printLine(text: String) = Unit
+
+            override suspend fun clear() = Unit
+
+            override suspend fun setCursor(
+                x: Int,
+                y: Int,
+            ) = Unit
+        }
+
+    override val filesystem: ComputerFileSystemApi =
+        object : ComputerFileSystemApi {
+            override suspend fun exists(path: String): Boolean = false
+
+            override suspend fun readText(path: String): String? = null
+
+            override suspend fun writeText(
+                path: String,
+                text: String,
+            ) = Unit
+
+            override suspend fun list(path: String): List<ComputerWorkspaceEntry> = emptyList()
+        }
+
+    override val redstone: ComputerRedstoneApi =
+        object : ComputerRedstoneApi {}
+
+    override val peripherals: ComputerPeripheralApi =
+        object : ComputerPeripheralApi {}
+
+    override suspend fun pullEvent(filter: String?): VmEvent = error("Not used by this test")
+
+    override suspend fun sleep(ticks: Long) = Unit
+
+    override suspend fun yield() = Unit
 }

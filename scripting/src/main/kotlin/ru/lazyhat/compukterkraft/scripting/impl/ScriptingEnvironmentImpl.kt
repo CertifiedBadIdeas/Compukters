@@ -22,13 +22,12 @@ package ru.lazyhat.compukterkraft.scripting.impl
 import ru.lazyhat.compukterkraft.scripting.api.ScriptCompiler
 import ru.lazyhat.compukterkraft.scripting.api.ScriptDefinitionDescriptor
 import ru.lazyhat.compukterkraft.scripting.api.ScriptDefinitionPresets
-import ru.lazyhat.compukterkraft.scripting.api.ScriptPropertyDescriptor
 import ru.lazyhat.compukterkraft.scripting.api.ScriptIdeService
+import ru.lazyhat.compukterkraft.scripting.api.ScriptPropertyDescriptor
 import ru.lazyhat.compukterkraft.scripting.api.ScriptingEnvironment
 import ru.lazyhat.compukterkraft.scripting.api.ScriptingEnvironmentConfig
 import java.io.File
 import java.net.URI
-import kotlin.jvm.JvmStatic
 import kotlin.reflect.full.IllegalCallableAccessException
 import kotlin.script.experimental.api.KotlinType
 import kotlin.script.experimental.api.ScriptCompilationConfiguration
@@ -153,7 +152,6 @@ class ScriptingEnvironmentImpl(
         when (protocol) {
             "jar" -> File(URI(toExternalForm().removePrefix("jar:").substringBefore('!'))).takeIf(File::exists)
             "file" -> File(toURI()).takeIf(File::exists)
-
             else -> null
         }
 

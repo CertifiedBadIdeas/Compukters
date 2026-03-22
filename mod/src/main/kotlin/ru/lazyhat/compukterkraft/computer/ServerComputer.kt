@@ -131,6 +131,7 @@ class ServerComputer(
         val program = execution.value as? ComputerProgram
         if (program == null) {
             writeLineToTerminal("Boot script must return ComputerProgram.")
+            LOGGER.error { "Boot script must return ComputerProgram actual: ${execution.value}" }
             ServerContext.vmSupervisor.remove(instanceID, VmStopReason.CLOSED)
             return
         }
