@@ -17,8 +17,6 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package rom
-
 import ru.lazyhat.compukterkraft.machine.ComputerProgram
 import ru.lazyhat.compukterkraft.machine.ComputerRuntime
 

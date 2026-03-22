@@ -19,6 +19,8 @@
 
 import ru.lazyhat.compukterkraft.computer.vm.FileComputerWorkspace
 import ru.lazyhat.compukterkraft.machine.ComputerScriptBindings
+import java.nio.file.Files
+import java.nio.file.Path
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -80,6 +82,24 @@ class FileComputerWorkspaceTest {
             assertFailsWith<IllegalArgumentException> {
                 workspace.writeDocument(3, "../escape.ck.kts", "println(\"nope\")")
             }
+        }
+    }
+
+    @Test
+    fun seedsBootScriptWithRelativeWorkspaceRoot() {
+        val relativeRoot = Path.of("build", "tmp", "relative-workspace-test")
+
+        try {
+            Files.createDirectories(relativeRoot)
+            val workspace = createWorkspace(relativeRoot)
+
+            workspace.ensureInitialized(9)
+
+            val bootScript = workspace.readDocument(9, ComputerScriptBindings.BIOS_SCRIPT_NAME)
+            assertNotNull(bootScript)
+            assertEquals(DEFAULT_BIOS, bootScript.text)
+        } finally {
+            relativeRoot.toFile().deleteRecursively()
         }
     }
 

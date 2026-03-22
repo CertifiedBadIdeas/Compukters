@@ -109,7 +109,7 @@ class FileComputerWorkspace(
         return Files.deleteIfExists(target)
     }
 
-    fun computerRoot(computerId: Int): Path = rootPath.resolve(computerId.toString())
+    fun computerRoot(computerId: Int): Path = rootPath.resolve(computerId.toString()).normalize()
 
     private fun resolve(
         computerId: Int,
