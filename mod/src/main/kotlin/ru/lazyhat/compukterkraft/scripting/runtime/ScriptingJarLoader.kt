@@ -23,10 +23,14 @@ import ru.lazyhat.compukterkraft.scripting.api.ScriptingEnvironment
 import ru.lazyhat.compukterkraft.scripting.api.ScriptingEnvironmentConfig
 import ru.lazyhat.compukterkraft.scripting.api.ScriptingEnvironmentInitializer
 import java.io.File
+import java.net.URI
+import java.net.URL
 import java.net.URLClassLoader
+import kotlin.jvm.JvmStatic
 
 class ScriptingJarLoader(
     private val scriptingJar: File = ScriptingPaths.scriptingJar(),
+    private val librariesDirectory: File = scriptingJar.absoluteFile.parentFile.resolve(ScriptingPaths.SCRIPTING_LIBRARIES_DIRECTORY),
     private val implementationClassName: String = "ru.lazyhat.compukterkraft.scripting.impl.ScriptingEnvironmentInitializerImpl",
 ) : AutoCloseable {
     var isLoaded = false
@@ -39,18 +43,30 @@ class ScriptingJarLoader(
 
     fun hasScriptingJar(): Boolean = scriptingJar.exists()
 
+    private fun runtimeUrls() =
+        buildList {
+            add(scriptingJar.toURI().toURL())
+            librariesDirectory
+                .takeIf(File::isDirectory)
+                ?.listFiles { file -> file.isFile && file.name.endsWith(".jar") }
+                ?.sortedBy { file -> file.name }
+                ?.forEach { add(it.toURI().toURL()) }
+        }.toTypedArray()
+
     fun initialize(config: ScriptingEnvironmentConfig): ScriptingEnvironment? {
         if (!hasScriptingJar()) {
             lastError = "Scripting jar not found at ${scriptingJar.absolutePath}"
             return null
         }
 
+        ensureKotlinRuntimeProperties()
+
         val currentThread = Thread.currentThread()
         val previousContextLoader = currentThread.contextClassLoader
         val parentLoader = ScriptingEnvironmentInitializer::class.java.classLoader
 
         return try {
-            classLoader = URLClassLoader(arrayOf(scriptingJar.toURI().toURL()), parentLoader)
+            classLoader = ScriptingRuntimeClassLoader(runtimeUrls(), parentLoader)
             currentThread.contextClassLoader = classLoader
 
             val initializer =
@@ -83,4 +99,115 @@ class ScriptingJarLoader(
             isLoaded = false
         }
     }
+
+    private fun ensureKotlinRuntimeProperties() {
+        ensureRuntimeProperty(
+            propertyName = KOTLIN_STDLIB_JAR_PROPERTY,
+            markerClass = JvmStatic::class.java,
+            jarPrefix = KOTLIN_STDLIB_JAR_PREFIX,
+        )
+    }
+
+    private fun ensureRuntimeProperty(
+        propertyName: String,
+        markerClass: Class<*>,
+        jarPrefix: String,
+    ) {
+        if (!System.getProperty(propertyName).isNullOrBlank()) {
+            return
+        }
+
+        resolveRuntimeJar(markerClass, jarPrefix)
+            ?.let { System.setProperty(propertyName, it.absolutePath) }
+    }
+
+    private fun resolveRuntimeJar(
+        markerClass: Class<*>,
+        jarPrefix: String,
+    ): File? =
+        markerClass.protectionDomain
+            ?.codeSource
+            ?.location
+            ?.toClasspathEntry()
+            ?.takeIf { it.isMatchingJar(jarPrefix) }
+            ?: markerClass.classLoader
+                ?.getResource("${markerClass.name.replace('.', '/')}.class")
+                ?.toClasspathEntry()
+                ?.takeIf { it.isMatchingJar(jarPrefix) }
+            ?: findJarInJavaClassPath(System.getProperty(JAVA_CLASS_PATH_PROPERTY), jarPrefix)
+
+    private fun URL.toClasspathEntry(): File? =
+        when (protocol) {
+            "jar" -> File(URI(toExternalForm().removePrefix("jar:").substringBefore('!'))).takeIf(File::exists)
+            "file" -> File(toURI()).takeIf(File::exists)
+            else -> null
+        }
+
+    private fun File.isMatchingJar(jarPrefix: String): Boolean =
+        isFile && (name == "$jarPrefix.jar" || name.startsWith("$jarPrefix-"))
+
+    private companion object {
+        const val JAVA_CLASS_PATH_PROPERTY = "java.class.path"
+        const val KOTLIN_STDLIB_JAR_PROPERTY = "kotlin.java.stdlib.jar"
+        const val KOTLIN_STDLIB_JAR_PREFIX = "kotlin-stdlib"
+    }
+}
+
+internal fun findJarInJavaClassPath(
+    classPath: String?,
+    jarPrefix: String,
+): File? =
+    classPath
+        ?.split(File.pathSeparatorChar)
+        ?.asSequence()
+        ?.map(::File)
+        ?.firstOrNull { file ->
+            file.isFile &&
+                file.name.endsWith(".jar") &&
+                (file.name == "$jarPrefix.jar" || file.name.startsWith("$jarPrefix-"))
+        }
+
+private class ScriptingRuntimeClassLoader(
+    urls: Array<URL>,
+    parent: ClassLoader,
+) : URLClassLoader(urls, parent) {
+    private val parentFirstPrefixes =
+        listOf(
+            "java.",
+            "javax.",
+            "jdk.",
+            "sun.",
+            "ru.lazyhat.compukterkraft.machine.",
+            "ru.lazyhat.compukterkraft.scripting.api.",
+        )
+
+    override fun loadClass(
+        name: String,
+        resolve: Boolean,
+    ): Class<*> =
+        synchronized(getClassLoadingLock(name)) {
+            findLoadedClass(name)?.let { loadedClass ->
+                if (resolve) {
+                    resolveClass(loadedClass)
+                }
+                return loadedClass
+            }
+
+            val loadedClass =
+                if (parentFirstPrefixes.any(name::startsWith)) {
+                    super.loadClass(name, resolve)
+                } else {
+                    try {
+                        findClass(name)
+                    } catch (_: ClassNotFoundException) {
+                        super.loadClass(name, resolve)
+                    }
+                }
+
+            if (resolve) {
+                resolveClass(loadedClass)
+            }
+
+            loadedClass
+        }
 }

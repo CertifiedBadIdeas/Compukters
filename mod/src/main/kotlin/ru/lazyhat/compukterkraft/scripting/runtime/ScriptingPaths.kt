@@ -24,10 +24,13 @@ import java.io.File
 
 object ScriptingPaths {
     const val SCRIPTING_JAR = "CompukterKraftScripting.jar"
+    const val SCRIPTING_LIBRARIES_DIRECTORY = "scripting-libs"
 
     fun rootDirectory(): File = File(MOD_ID)
 
     fun scriptsDirectory(): File = rootDirectory().resolve("scripts")
 
     fun scriptingJar(): File = rootDirectory().resolve(SCRIPTING_JAR)
+
+    fun scriptingLibrariesDirectory(): File = rootDirectory().resolve(SCRIPTING_LIBRARIES_DIRECTORY)
 }

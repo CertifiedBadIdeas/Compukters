@@ -26,6 +26,10 @@ import ru.lazyhat.compukterkraft.scripting.api.ScriptPropertyDescriptor
 import ru.lazyhat.compukterkraft.scripting.api.ScriptIdeService
 import ru.lazyhat.compukterkraft.scripting.api.ScriptingEnvironment
 import ru.lazyhat.compukterkraft.scripting.api.ScriptingEnvironmentConfig
+import java.io.File
+import java.net.URI
+import kotlin.jvm.JvmStatic
+import kotlin.reflect.full.IllegalCallableAccessException
 import kotlin.script.experimental.api.KotlinType
 import kotlin.script.experimental.api.ScriptCompilationConfiguration
 import kotlin.script.experimental.api.ScriptEvaluationConfiguration
@@ -35,6 +39,7 @@ import kotlin.script.experimental.host.ScriptingHostConfiguration
 import kotlin.script.experimental.jvm.baseClassLoader
 import kotlin.script.experimental.jvm.dependenciesFromClassloader
 import kotlin.script.experimental.jvm.jvm
+import kotlin.script.templates.standard.ScriptTemplateWithArgs
 
 class ScriptingEnvironmentImpl(
     override val config: ScriptingEnvironmentConfig,
@@ -45,6 +50,10 @@ class ScriptingEnvironmentImpl(
     val hostConfiguration = ScriptingHostConfiguration {}
     private val runtimeClassLoader: ClassLoader =
         Thread.currentThread().contextClassLoader ?: javaClass.classLoader
+
+    init {
+        ensureKotlinRuntimeProperties()
+    }
 
     val defaultImports: List<String>
         get() = definitions.flatMap { it.defaultImports }.distinct()
@@ -75,12 +84,84 @@ class ScriptingEnvironmentImpl(
             .flatMap { it.providedProperties }
             .associateBy(ScriptPropertyDescriptor::name)
             .values
-            .map { it.name to KotlinType(it.type) }
+            .map { descriptor ->
+                val propertyClass =
+                    withRuntimeClassLoader {
+                        runtimeClassLoader.loadClass(descriptor.typeName).kotlin
+                    }
+                descriptor.name to KotlinType(propertyClass)
+            }
 
     override fun bundledScript(relativePath: String): String? {
         val normalizedPath = "${config.bundledScriptsRoot.trim('/')}/$relativePath"
         return runtimeClassLoader.getResourceAsStream(normalizedPath)?.bufferedReader()?.use { it.readText() }
     }
 
+    internal fun <T> withRuntimeClassLoader(block: () -> T): T {
+        val thread = Thread.currentThread()
+        val previousClassLoader = thread.contextClassLoader
+        thread.contextClassLoader = runtimeClassLoader
+        return try {
+            block()
+        } finally {
+            thread.contextClassLoader = previousClassLoader
+        }
+    }
+
+    private fun ensureKotlinRuntimeProperties() {
+        ensureRuntimeProperty(
+            propertyName = KOTLIN_STDLIB_JAR_PROPERTY,
+            markerClass = JvmStatic::class.java,
+        )
+        ensureRuntimeProperty(
+            propertyName = KOTLIN_SCRIPT_RUNTIME_JAR_PROPERTY,
+            markerClass = ScriptTemplateWithArgs::class.java,
+        )
+        ensureRuntimeProperty(
+            propertyName = KOTLIN_REFLECT_JAR_PROPERTY,
+            markerClass = IllegalCallableAccessException::class.java,
+        )
+    }
+
+    private fun ensureRuntimeProperty(
+        propertyName: String,
+        markerClass: Class<*>,
+    ) {
+        if (!System.getProperty(propertyName).isNullOrBlank()) {
+            return
+        }
+
+        locateClasspathEntry(markerClass)?.let { classpathEntry ->
+            System.setProperty(propertyName, classpathEntry.absolutePath)
+        }
+    }
+
+    private fun locateClasspathEntry(markerClass: Class<*>): File? =
+        withRuntimeClassLoader {
+            markerClass.protectionDomain
+                ?.codeSource
+                ?.location
+                ?.toClasspathEntry()
+                ?: runtimeClassLoader.resolveClasspathEntry(markerClass)
+                ?: javaClass.classLoader.resolveClasspathEntry(markerClass)
+        }
+
+    private fun ClassLoader.resolveClasspathEntry(markerClass: Class<*>): File? =
+        getResource("${markerClass.name.replace('.', '/')}.class")?.toClasspathEntry()
+
+    private fun java.net.URL.toClasspathEntry(): File? =
+        when (protocol) {
+            "jar" -> File(URI(toExternalForm().removePrefix("jar:").substringBefore('!'))).takeIf(File::exists)
+            "file" -> File(toURI()).takeIf(File::exists)
+
+            else -> null
+        }
+
     override fun close() = Unit
+
+    private companion object {
+        const val KOTLIN_STDLIB_JAR_PROPERTY = "kotlin.java.stdlib.jar"
+        const val KOTLIN_REFLECT_JAR_PROPERTY = "kotlin.java.reflect.jar"
+        const val KOTLIN_SCRIPT_RUNTIME_JAR_PROPERTY = "kotlin.script.runtime.jar"
+    }
 }

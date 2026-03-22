@@ -43,6 +43,7 @@ kotlin-compiler-fir-for-ide = { module = "org.jetbrains.kotlin:kotlin-compiler-f
 kotlin-analysis-api = { module = "org.jetbrains.kotlin:analysis-api-for-ide", version.ref = "kotlin" }
 kotlin-analysis-api-k2 = { module = "org.jetbrains.kotlin:analysis-api-k2-for-ide", version.ref = "kotlin" }
 kotlin-analysis-api-standalone = { module = "org.jetbrains.kotlin:analysis-api-standalone-for-ide", version.ref = "kotlin" }
+kotlin-reflect = { module = "org.jetbrains.kotlin:kotlin-reflect", version.ref = "kotlin" }
 
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm", version.ref = "coroutines" }
 

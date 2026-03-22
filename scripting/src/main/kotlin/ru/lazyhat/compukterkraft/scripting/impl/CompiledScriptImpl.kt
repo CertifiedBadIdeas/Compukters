@@ -36,8 +36,10 @@ class CompiledScriptImpl(
 ) : CompiledScript {
     override fun execute(properties: Map<String, Any?>): ScriptExecutionResult {
         val evaluation =
-            runBlocking {
-                evaluator(compiledScript, environment.evaluationConfiguration(properties))
+            environment.withRuntimeClassLoader {
+                runBlocking {
+                    evaluator(compiledScript, environment.evaluationConfiguration(properties))
+                }
             }
         val diagnostics = evaluation.sharedDiagnostics()
 
@@ -61,7 +63,7 @@ class CompiledScriptImpl(
                 ScriptExecutionResult(
                     returnValue = code,
                     diagnostics = diagnostics,
-                    exceptionMessage = diagnostics.firstOrNull()?.message ?: "Execution failed",
+                    exceptionMessage = evaluation.renderFailureMessage("Execution failed"),
                 )
             }
         }

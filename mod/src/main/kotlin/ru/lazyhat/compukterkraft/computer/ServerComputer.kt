@@ -30,7 +30,13 @@ import ru.lazyhat.compukterkraft.computer.vm.ComputerVmLogger
 import ru.lazyhat.compukterkraft.context.ServerContext
 import ru.lazyhat.compukterkraft.gui.NetworkedTerminal
 import ru.lazyhat.compukterkraft.gui.TerminalState
-import ru.lazyhat.compukterkraft.machine.*
+import ru.lazyhat.compukterkraft.machine.ComputerProgram
+import ru.lazyhat.compukterkraft.machine.ComputerVmHandle
+import ru.lazyhat.compukterkraft.machine.HostCall
+import ru.lazyhat.compukterkraft.machine.HostResult
+import ru.lazyhat.compukterkraft.machine.VmEvent
+import ru.lazyhat.compukterkraft.machine.VmState
+import ru.lazyhat.compukterkraft.machine.VmStopReason
 import ru.lazyhat.compukterkraft.menu.ComputerMenu
 import ru.lazyhat.compukterkraft.network.client.ComputerTerminalClientMessage
 import ru.lazyhat.compukterkraft.network.server.ServerNetworking
@@ -108,7 +114,9 @@ class ServerComputer(
         val handle = ServerContext.vmSupervisor.getOrCreate(instanceID, profile, this, logger)
         val compilation = environment.compiler.compile(profile.bootScriptName, bootScript)
         if (!compilation.isSuccess) {
-            writeLineToTerminal("Compilation Error: ${compilation.diagnostics.joinToString { it.message }}")
+            val message = compilation.diagnostics.joinToString { it.message }
+            writeLineToTerminal("Compilation Error: $message")
+            LOGGER.error { message }
             ServerContext.vmSupervisor.remove(instanceID, VmStopReason.CLOSED)
             return
         }

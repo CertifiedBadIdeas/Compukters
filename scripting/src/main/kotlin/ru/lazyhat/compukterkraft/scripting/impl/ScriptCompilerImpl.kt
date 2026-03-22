@@ -52,8 +52,10 @@ class ScriptCompilerImpl(
         code: String,
     ): CompilationResult<CompiledScript> {
         val compilation =
-            runBlocking {
-                compiler(StringScriptSource(code, name), environment.compilationConfiguration(name))
+            environment.withRuntimeClassLoader {
+                runBlocking {
+                    compiler(StringScriptSource(code, name), environment.compilationConfiguration(name))
+                }
             }
         val diagnostics = compilation.sharedDiagnostics()
 
@@ -75,7 +77,7 @@ class ScriptCompilerImpl(
             is ResultWithDiagnostics.Failure -> {
                 CompilationResult(
                     diagnostics = diagnostics,
-                    exceptionMessage = diagnostics.firstOrNull()?.message ?: "Compilation failed",
+                    exceptionMessage = compilation.renderFailureMessage("Compilation failed"),
                 )
             }
         }

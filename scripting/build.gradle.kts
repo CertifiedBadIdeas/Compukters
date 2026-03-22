@@ -18,8 +18,6 @@
  */
 
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
-import org.gradle.api.tasks.SourceSetContainer
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
     alias(libs.plugins.kotlinConvention)
@@ -35,6 +33,7 @@ repositories {
 dependencies {
     implementation(projects.scriptingApi)
     implementation(libs.kotlin.stdlib)
+    implementation(libs.kotlin.reflect)
     implementation(libs.kotlin.scripting.common)
     implementation(libs.kotlin.scripting.dependencies)
     implementation(libs.kotlin.scripting.jvm)
@@ -50,20 +49,20 @@ tasks.named<Jar>("jar") {
 
 tasks.named<ShadowJar>("shadowJar") {
     archiveClassifier.set("")
-    archiveFileName.set("CompukterKraftScripting.jar")
+    archiveFileName.set("CompukterKraftCompiler.jar")
     mergeServiceFiles()
+    exclude("ru/lazyhat/compukterkraft/machine/**")
+    exclude("ru/lazyhat/compukterkraft/scripting/api/**")
 
     dependencies {
         exclude {
-            it.moduleGroup == rootProject.group.toString() || it.name == rootProject.name
+            it.moduleGroup == rootProject.group.toString() ||
+                it.name == rootProject.name ||
+                it.name == "scripting-api"
         }
     }
 }
 
 tasks.build {
     dependsOn(tasks.named("shadowJar"))
-}
-
-tasks.test {
-    useJUnitPlatform()
 }

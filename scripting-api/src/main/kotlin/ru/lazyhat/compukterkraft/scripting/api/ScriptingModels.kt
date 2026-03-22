@@ -30,8 +30,13 @@ import kotlin.reflect.KClass
 
 data class ScriptPropertyDescriptor(
     val name: String,
-    val type: KClass<*>,
-)
+    val typeName: String,
+) {
+    constructor(
+        name: String,
+        type: KClass<*>,
+    ) : this(name = name, typeName = type.java.name)
+}
 
 data class ScriptDefinitionDescriptor(
     val fileExtension: String,

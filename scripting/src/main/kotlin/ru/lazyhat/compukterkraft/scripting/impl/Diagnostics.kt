@@ -47,3 +47,13 @@ internal fun ScriptDiagnostic.asSharedDiagnostic(): Diagnostic =
     )
 
 internal fun ResultWithDiagnostics<*>.sharedDiagnostics(): List<Diagnostic> = reports.map { it.asSharedDiagnostic() }
+
+internal fun ResultWithDiagnostics.Failure.renderFailureMessage(defaultMessage: String): String =
+    reports.firstNotNullOfOrNull { report ->
+        report.exception?.let { throwable ->
+            buildString {
+                appendLine(report.message)
+                append(throwable.stackTraceToString())
+            }
+        }
+    } ?: reports.firstOrNull()?.message ?: defaultMessage

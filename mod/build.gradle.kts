@@ -19,8 +19,6 @@
 
 @file:Suppress("PropertyName")
 
-import org.gradle.jvm.tasks.Jar
-
 // operator fun Provider<String>.getValue(ref: Any?, prop: KProperty<*>): String = this.get()
 //
 // fun File.parseProperties(): Map<String, String> =
@@ -82,16 +80,17 @@ dependencies {
 
     implementation(libs.kotlin.logging)
     forgeRuntimeLibrary(libs.kotlin.logging)
+
+    testImplementation(kotlin("test"))
 }
 
 val copyScriptingJar =
     tasks.register<Copy>("copyScriptingJar") {
-        val scriptingShadowJar = project(projects.scripting.path).tasks.named<Jar>("shadowJar")
+        val scriptingJar = project(projects.scripting.path).tasks.named<Jar>("shadowJar")
 
-        dependsOn(scriptingShadowJar)
-        from(scriptingShadowJar.map { it.archiveFile })
+        dependsOn(scriptingJar)
+        from(scriptingJar.map { it.archiveFile })
         into(layout.projectDirectory.dir("run/compukterkraft"))
-        rename { "CompukterKraftScripting.jar" }
     }
 
 val generateModMetadata =
@@ -125,6 +124,10 @@ tasks.named<ProcessResources>("processResources") {
 }
 
 tasks.matching { it.name.startsWith("run") }.configureEach {
+    dependsOn(copyScriptingJar)
+}
+
+tasks.withType<Test>().configureEach {
     dependsOn(copyScriptingJar)
 }
 
