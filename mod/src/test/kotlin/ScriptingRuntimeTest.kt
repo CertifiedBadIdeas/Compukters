@@ -58,7 +58,7 @@ class ScriptingRuntimeTest {
         try {
             System.clearProperty(KOTLIN_STDLIB_JAR_PROPERTY)
 
-            val jarFile = "run/$MOD_ID/CompukterKraftScripting.jar"
+            val jarFile = "run/$MOD_ID/${ScriptingPaths.SCRIPTING_JAR}"
             val scriptingJarLoader =
                 ScriptingJarLoader(
                     scriptingJar = File(jarFile),
