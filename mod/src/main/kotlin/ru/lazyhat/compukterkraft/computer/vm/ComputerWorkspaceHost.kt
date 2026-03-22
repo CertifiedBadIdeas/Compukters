@@ -30,8 +30,8 @@ import ru.lazyhat.compukterkraft.machine.ComputerIdeSnapshot
 import ru.lazyhat.compukterkraft.machine.ComputerWorkspace
 import ru.lazyhat.compukterkraft.machine.ComputerWorkspaceDocument
 import ru.lazyhat.compukterkraft.machine.ComputerWorkspaceEntry
+import ru.lazyhat.compukterkraft.machine.ComputerScriptBindings
 import ru.lazyhat.compukterkraft.scripting.runtime.ScriptingEnvironmentHolder
-import ru.lazyhat.compukterkraft.scripting.runtime.ScriptingPaths
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
@@ -45,8 +45,19 @@ import kotlin.io.path.relativeTo
 import kotlin.io.path.writeText
 
 class FileComputerWorkspace(
-    private val rootPath: Path = ScriptingPaths.scriptsDirectory().toPath().resolve("computers"),
+    private val rootPath: Path,
+    private val initialBundledScripts: Set<String> = setOf(ComputerScriptBindings.BIOS_SCRIPT_NAME),
+    private val bundledScriptLoader: (String) -> String? = { null },
 ) : ComputerWorkspace {
+    fun ensureInitialized(computerId: Int): Path {
+        val root = computerRoot(computerId)
+        root.createDirectories()
+        initialBundledScripts.forEach { relativePath ->
+            seedBundledScript(root, relativePath)
+        }
+        return root
+    }
+
     override fun list(
         computerId: Int,
         path: String,
@@ -104,11 +115,23 @@ class FileComputerWorkspace(
         computerId: Int,
         path: String,
     ): Path {
-        val root = computerRoot(computerId)
-        root.createDirectories()
+        val root = ensureInitialized(computerId)
         val candidate = root.resolve(path.trimStart('/')).normalize()
         require(candidate.startsWith(root)) { "Path escapes computer workspace: $path" }
         return candidate
+    }
+
+    private fun seedBundledScript(
+        root: Path,
+        relativePath: String,
+    ) {
+        val target = root.resolve(relativePath.trimStart('/')).normalize()
+        require(target.startsWith(root)) { "Path escapes computer workspace: $relativePath" }
+        if (target.exists()) return
+
+        val bundledScript = bundledScriptLoader(relativePath) ?: return
+        target.parent?.createDirectories()
+        target.writeText(bundledScript, StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW)
     }
 
     private fun entryFor(

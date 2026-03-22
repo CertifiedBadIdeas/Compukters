@@ -46,8 +46,6 @@ abstract class AbstractComputerBlockEntity(
     MenuConstructor {
     var family: ComputerFamily = family
         private set
-
-    private var fresh = false
     private var _label: String? = null
         set(value) {
             LOGGER.info { "AbstractComputerBlockEntity.setLabel $value" }
@@ -105,22 +103,20 @@ abstract class AbstractComputerBlockEntity(
     }
 
     fun getOrCreateServerComputer(): ServerComputer {
-        val server = level?.server ?: error("Cannot access server computer on the client.")
-        val serverLevel = level as? ServerLevel ?: error("[SERVER_LEVEL_GET] Cannot access server computer on the client.")
+        level as? ServerLevel ?: error("[SERVER_LEVEL_GET] Cannot access server computer on the client.")
+        val resolvedComputerId =
+            _computerID ?: ServerContext.allocateComputerId().also { allocatedComputerId ->
+                computerID = allocatedComputerId
+                ServerContext.vmSupervisor.ensureWorkspaceInitialized(allocatedComputerId)
+            }
 
         return _computerID
             ?.let {
                 ServerContext.registry.getServerComputer(it)
             }
             ?: run {
-                createComputer(
-                    _computerID
-                        ?: (0..9)
-                            .random()
-                            .also { computerID = it },
-                ).also {
+                createComputer(resolvedComputerId).also {
                     ServerContext.registry.addServerComputer(it)
-                    fresh = true
                 }
             }
     }

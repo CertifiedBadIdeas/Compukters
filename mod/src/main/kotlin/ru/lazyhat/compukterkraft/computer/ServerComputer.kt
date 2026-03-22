@@ -104,15 +104,16 @@ class ServerComputer(
             return
         }
 
-        val bootScript = environment.bundledScript(profile.bootScriptName)
-        if (bootScript == null) {
-            writeLineToTerminal("Missing boot script: ${profile.bootScriptName}")
+        ServerContext.vmSupervisor.ensureWorkspaceInitialized(instanceID)
+        val bootScriptDocument = ServerContext.vmSupervisor.workspace.readDocument(instanceID, profile.bootScriptName)
+        if (bootScriptDocument == null) {
+            writeLineToTerminal("Missing boot script in workspace: ${profile.bootScriptName}")
             return
         }
 
         ServerContext.vmSupervisor.remove(instanceID, VmStopReason.CLOSED)
         val handle = ServerContext.vmSupervisor.getOrCreate(instanceID, profile, this, logger)
-        val compilation = environment.compiler.compile(profile.bootScriptName, bootScript)
+        val compilation = environment.compiler.compile(bootScriptDocument.path, bootScriptDocument.text)
         if (!compilation.isSuccess) {
             val message = compilation.diagnostics.joinToString { it.message }
             writeLineToTerminal("Compilation Error: $message")

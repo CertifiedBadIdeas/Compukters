@@ -44,6 +44,7 @@ import net.minecraftforge.network.NetworkHooks
 import net.minecraftforge.registries.RegistryObject
 import ru.lazyhat.compukterkraft.LOGGER
 import ru.lazyhat.compukterkraft.MOD_ID
+import ru.lazyhat.compukterkraft.context.ServerContext
 import ru.lazyhat.compukterkraft.data.ComputerContainerData
 import ru.lazyhat.compukterkraft.item.AbstractComputerItem
 import ru.lazyhat.compukterkraft.utils.castTicker
@@ -90,6 +91,8 @@ abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
             ?.let { tile ->
                 tile.computerID = stack.tag?.computerID
                 tile.label = stack.tag?.computerLabel
+                val resolvedComputerId = tile.computerID ?: ServerContext.allocateComputerId().also { tile.computerID = it }
+                ServerContext.vmSupervisor.ensureWorkspaceInitialized(resolvedComputerId)
                 LOGGER.info { "Computer: ${tile.computerID}, ${tile.label} placed" }
                 LOGGER.info { "HN: ${stack.hoverName}" }
                 LOGGER.info { "Tag: ${stack.tag}" }

@@ -29,7 +29,7 @@ class ServerContext(
     val server: MinecraftServer,
 ) {
     val registry = ComputerRegistry()
-    val vmSupervisor = ComputerVmSupervisor()
+    val vmSupervisor = ComputerVmSupervisor(server)
 
     companion object : SingletonHolder<ServerContext>() {
         val registry
@@ -40,6 +40,8 @@ class ServerContext(
 
         val server
             get() = instance.server
+
+        fun allocateComputerId(): Int = ComputerIdentitySavedData.get(server).allocateComputerId()
 
         fun create(server: MinecraftServer) {
             instance = ServerContext(server)

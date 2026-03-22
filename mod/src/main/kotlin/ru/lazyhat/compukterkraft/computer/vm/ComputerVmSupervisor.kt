@@ -19,23 +19,35 @@
 
 package ru.lazyhat.compukterkraft.computer.vm
 
+import net.minecraft.server.MinecraftServer
+import net.minecraft.world.level.storage.LevelResource
 import kotlinx.coroutines.asCoroutineDispatcher
+import ru.lazyhat.compukterkraft.MOD_ID
 import ru.lazyhat.compukterkraft.machine.ComputerIdeHost
 import ru.lazyhat.compukterkraft.machine.ComputerProfile
 import ru.lazyhat.compukterkraft.machine.ComputerVmHandle
 import ru.lazyhat.compukterkraft.machine.ComputerWorkspace
 import ru.lazyhat.compukterkraft.machine.VmStopReason
 import ru.lazyhat.compukterkraft.machine.VmSupervisor
+import ru.lazyhat.compukterkraft.scripting.runtime.ScriptingEnvironmentHolder
 import java.io.Closeable
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 
-class ComputerVmSupervisor : VmSupervisor,
+class ComputerVmSupervisor(
+    server: MinecraftServer,
+) : VmSupervisor,
     Closeable {
     private val executor = Executors.newFixedThreadPool(2)
     private val dispatcher = executor.asCoroutineDispatcher()
     private val handles = ConcurrentHashMap<Int, ComputerVmHandle>()
-    private val workspaceStore = FileComputerWorkspace()
+    private val workspaceStore =
+        FileComputerWorkspace(
+            rootPath = server.getWorldPath(LevelResource.ROOT).resolve(MOD_ID).resolve("computers"),
+            bundledScriptLoader = { relativePath ->
+                ScriptingEnvironmentHolder.environment?.bundledScript(relativePath)
+            },
+        )
     private val ideHost = EnvironmentComputerIdeHost(workspaceStore)
 
     val workspace: ComputerWorkspace
@@ -43,6 +55,10 @@ class ComputerVmSupervisor : VmSupervisor,
 
     val ide: ComputerIdeHost
         get() = ideHost
+
+    fun ensureWorkspaceInitialized(computerId: Int) {
+        workspaceStore.ensureInitialized(computerId)
+    }
 
     fun getOrCreate(
         computerId: Int,

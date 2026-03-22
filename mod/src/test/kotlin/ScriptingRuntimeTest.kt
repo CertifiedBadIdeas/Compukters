@@ -20,6 +20,7 @@
 import kotlinx.coroutines.runBlocking
 import ru.lazyhat.compukterkraft.MOD_ID
 import ru.lazyhat.compukterkraft.block.ComputerFamily
+import ru.lazyhat.compukterkraft.computer.vm.FileComputerWorkspace
 import ru.lazyhat.compukterkraft.computer.vm.ComputerProfileRegistry
 import ru.lazyhat.compukterkraft.machine.ComputerFileSystemApi
 import ru.lazyhat.compukterkraft.machine.ComputerPeripheralApi
@@ -36,6 +37,7 @@ import ru.lazyhat.compukterkraft.scripting.api.ScriptingEnvironmentConfig
 import ru.lazyhat.compukterkraft.scripting.runtime.ScriptingJarLoader
 import ru.lazyhat.compukterkraft.scripting.runtime.ScriptingPaths
 import java.io.File
+import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -91,25 +93,38 @@ class ScriptingRuntimeTest {
                 assertTrue(File(stdlibJar).exists(), "Configured stdlib path does not exist: $stdlibJar")
 
                 val profile = ComputerProfileRegistry.forFamily(ComputerFamily.ADVANCED)
-                val bootScript = environment.bundledScript(profile.bootScriptName)
+                val workspaceRoot = createTempDirectory("compukterkraft-seeded-workspace")
 
-                assertNotNull(bootScript, "Failed to load bootScript")
+                try {
+                    val workspace =
+                        FileComputerWorkspace(
+                            rootPath = workspaceRoot,
+                            bundledScriptLoader = environment::bundledScript,
+                        )
 
-                val compiledScript = runBlocking { environment.compiler.compile("test-bootscript", bootScript) }
+                    workspace.ensureInitialized(1)
+                    val bootScriptDocument = workspace.readDocument(1, profile.bootScriptName)
 
-                assertNull(compiledScript.exceptionMessage, "${compiledScript.exceptionMessage}")
-                val compiledBootScript =
-                    assertNotNull(compiledScript.value, "Expected boot script to compile successfully")
+                    assertNotNull(bootScriptDocument, "Expected workspace boot script to be seeded")
 
-                val execution = compiledBootScript.execute(ComputerScriptBindings.toProperties(TestComputerRuntime(profile)))
+                    val compiledScript = runBlocking { environment.compiler.compile(bootScriptDocument.path, bootScriptDocument.text) }
 
-                assertNull(execution.exceptionMessage, "${execution.exceptionMessage}")
-                assertTrue(
-                    actual = execution.value is ComputerProgram,
-                    message =
-                        "Expected boot script to return ComputerProgram, got ${execution.value?.javaClass} " +
-                            "loaded by ${execution.value?.javaClass?.classLoader}",
-                )
+                    assertNull(compiledScript.exceptionMessage, "${compiledScript.exceptionMessage}")
+                    val compiledBootScript =
+                        assertNotNull(compiledScript.value, "Expected boot script to compile successfully")
+
+                    val execution = compiledBootScript.execute(ComputerScriptBindings.toProperties(TestComputerRuntime(profile)))
+
+                    assertNull(execution.exceptionMessage, "${execution.exceptionMessage}")
+                    assertTrue(
+                        actual = execution.value is ComputerProgram,
+                        message =
+                            "Expected boot script to return ComputerProgram, got ${execution.value?.javaClass} " +
+                                "loaded by ${execution.value?.javaClass?.classLoader}",
+                    )
+                } finally {
+                    workspaceRoot.toFile().deleteRecursively()
+                }
             } finally {
                 scriptingJarLoader.close()
             }
