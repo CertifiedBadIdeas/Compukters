@@ -19,6 +19,8 @@
 
 package ru.lazyhat.compukterkraft.scripting.impl
 
+import ru.lazyhat.compukterkraft.lang.api.TokenKind
+import ru.lazyhat.compukterkraft.lang.frontend.SymbolKind
 import ru.lazyhat.compukterkraft.scripting.api.CompletionItem
 import ru.lazyhat.compukterkraft.scripting.api.CompletionItemKind
 import ru.lazyhat.compukterkraft.scripting.api.DefinitionTarget
@@ -34,20 +36,56 @@ class ScriptIdeServiceImpl(
     override fun analyze(
         name: String,
         code: String,
-    ): List<Diagnostic> = environment.compiler.compile(name, code).diagnostics
+    ): List<Diagnostic> = environment.frontend.analyze(name, code).diagnostics.map { it.toSharedDiagnostic() }
 
     override fun highlight(
         name: String,
         code: String,
     ): List<HighlightToken> {
-        val document = TextDocument(code)
-
-        return buildList {
-            addAll(document.highlightMatches(STRING_REGEX, HighlightTokenType.STRING))
-            addAll(document.highlightMatches(COMMENT_REGEX, HighlightTokenType.COMMENT))
-            addAll(document.highlightMatches(NUMBER_REGEX, HighlightTokenType.NUMBER))
-            addAll(document.highlightMatches(KEYWORD_REGEX, HighlightTokenType.KEYWORD))
-        }.sortedBy { it.range.start.line * 10_000 + it.range.start.column }
+        val analysis = environment.frontend.analyze(name, code)
+        val lexicalTokens =
+            analysis.tokens.mapNotNull { token ->
+                val type =
+                    when (token.kind) {
+                        TokenKind.FUN,
+                        TokenKind.LET,
+                        TokenKind.VAR,
+                        TokenKind.IF,
+                        TokenKind.ELSE,
+                        TokenKind.WHILE,
+                        TokenKind.RETURN,
+                        TokenKind.IMPORT,
+                        TokenKind.RECORD,
+                        TokenKind.TRUE,
+                        TokenKind.FALSE,
+                        TokenKind.NULL,
+                        -> HighlightTokenType.KEYWORD
+                        TokenKind.STRING -> HighlightTokenType.STRING
+                        TokenKind.NUMBER -> HighlightTokenType.NUMBER
+                        else -> null
+                    }
+                type?.let { HighlightToken(token.range.toSharedRange(), it) }
+            }
+        val semanticTokens =
+            analysis.symbols.mapNotNull { symbol ->
+                val range = symbol.range ?: return@mapNotNull null
+                val type =
+                    when (symbol.kind) {
+                        SymbolKind.FIELD,
+                        SymbolKind.VARIABLE,
+                        SymbolKind.PARAMETER,
+                        -> HighlightTokenType.PROPERTY
+                        SymbolKind.FUNCTION,
+                        SymbolKind.BUILTIN_FUNCTION,
+                        -> HighlightTokenType.FUNCTION
+                        SymbolKind.RECORD,
+                        SymbolKind.BUILTIN_TYPE,
+                        -> HighlightTokenType.TYPE
+                        SymbolKind.MODULE -> null
+                    }
+                type?.let { HighlightToken(range.toSharedRange(), it) }
+            }
+        return (lexicalTokens + semanticTokens).distinctBy { it.range to it.type }
     }
 
     override fun complete(
@@ -56,38 +94,42 @@ class ScriptIdeServiceImpl(
         line: Int,
         column: Int,
     ): List<CompletionItem> {
-        val document = TextDocument(code)
-        val prefix = document.prefixAt(line, column)
-        val importedSymbols =
-            environment.defaultImports.map { importPath ->
-                val symbol = importPath.substringAfterLast('.').removeSuffix("*")
-                CompletionItem(
-                    label = symbol,
-                    insertText = symbol,
-                    detail = importPath,
-                    kind = CompletionItemKind.IMPORT,
-                )
+        val analysis = environment.frontend.analyze(name, code)
+        val offset = offsetFor(code, line, column)
+        val prefix = prefixAt(code, offset)
+        val moduleQualifier = moduleQualifierAt(code, offset)
+        val items =
+            if (moduleQualifier != null) {
+                analysis.moduleMembers(moduleQualifier).map {
+                    CompletionItem(
+                        label = it.name,
+                        insertText = it.name,
+                        detail = it.detail,
+                        kind = CompletionItemKind.SYMBOL,
+                    )
+                }
+            } else {
+                analysis.visibleSymbolsAt(offset).map {
+                    CompletionItem(
+                        label = it.name,
+                        insertText = it.name,
+                        detail = it.detail,
+                        kind =
+                            when (it.kind) {
+                                SymbolKind.MODULE -> CompletionItemKind.IMPORT
+                                SymbolKind.BUILTIN_FUNCTION -> CompletionItemKind.SNIPPET
+                                else -> CompletionItemKind.SYMBOL
+                            },
+                    )
+                } + KEYWORDS.map {
+                    CompletionItem(
+                        label = it,
+                        detail = "Language keyword",
+                        kind = CompletionItemKind.KEYWORD,
+                    )
+                }
             }
-        val declaredSymbols =
-            document.declarations().map {
-                CompletionItem(
-                    label = it.name,
-                    insertText = it.name,
-                    detail = "Declared in current script",
-                    kind = it.kind,
-                )
-            }
-        val keywordItems =
-            KEYWORDS.map {
-                CompletionItem(
-                    label = it,
-                    insertText = it,
-                    detail = "Kotlin keyword",
-                    kind = CompletionItemKind.KEYWORD,
-                )
-            }
-
-        return (keywordItems + importedSymbols + declaredSymbols)
+        return items
             .distinctBy { it.label }
             .filter { prefix.isBlank() || it.label.startsWith(prefix) }
             .sortedBy { it.label }
@@ -99,20 +141,18 @@ class ScriptIdeServiceImpl(
         line: Int,
         column: Int,
     ): HoverInfo? {
-        val document = TextDocument(code)
-        val selection = document.wordAt(line, column) ?: return null
-        val keywordHover = KEYWORD_HOVERS[selection.word]
-        if (keywordHover != null) {
-            return HoverInfo(keywordHover, selection.range)
-        }
-
-        val declaration = document.declarations().firstOrNull { it.name == selection.word }
-        if (declaration != null) {
-            return HoverInfo("Declared in current script as `${declaration.name}`", declaration.range)
-        }
-
-        val imported = environment.defaultImports.firstOrNull { it.endsWith(selection.word) || it.endsWith("${selection.word}.*") }
-        return imported?.let { HoverInfo("Imported from `$it`", selection.range) }
+        val analysis = environment.frontend.analyze(name, code)
+        val offset = offsetFor(code, line, column)
+        val symbol = analysis.symbolAt(offset) ?: return null
+        val text =
+            buildString {
+                append(symbol.detail)
+                symbol.documentation?.let {
+                    appendLine()
+                    append(it)
+                }
+            }
+        return HoverInfo(text, symbol.range?.toSharedRange())
     }
 
     override fun definition(
@@ -121,46 +161,64 @@ class ScriptIdeServiceImpl(
         line: Int,
         column: Int,
     ): DefinitionTarget? {
-        val document = TextDocument(code)
-        val selection = document.wordAt(line, column) ?: return null
-        return document.definition(name, selection.word)
+        val analysis = environment.frontend.analyze(name, code)
+        val offset = offsetFor(code, line, column)
+        val symbol = analysis.referenceAt(offset)?.target ?: return null
+        val range = symbol.range ?: return null
+        return DefinitionTarget(name, range.toSharedRange())
+    }
+
+    private fun offsetFor(
+        code: String,
+        line: Int,
+        column: Int,
+    ): Int {
+        var currentLine = 0
+        var currentColumn = 0
+        code.forEachIndexed { index, ch ->
+            if (currentLine == line && currentColumn == column) {
+                return index
+            }
+            if (ch == '\n') {
+                currentLine += 1
+                currentColumn = 0
+            } else {
+                currentColumn += 1
+            }
+        }
+        return code.length
+    }
+
+    private fun prefixAt(
+        code: String,
+        offset: Int,
+    ): String {
+        var start = offset.coerceAtMost(code.length)
+        while (start > 0 && (code[start - 1].isLetterOrDigit() || code[start - 1] == '_')) {
+            start -= 1
+        }
+        return code.substring(start, offset.coerceAtMost(code.length))
+    }
+
+    private fun moduleQualifierAt(
+        code: String,
+        offset: Int,
+    ): String? {
+        val safeOffset = offset.coerceAtMost(code.length)
+        var cursor = safeOffset
+        while (cursor > 0 && (code[cursor - 1].isLetterOrDigit() || code[cursor - 1] == '_')) {
+            cursor -= 1
+        }
+        if (cursor == 0 || code[cursor - 1] != '.') return null
+        val end = cursor - 1
+        var start = end
+        while (start > 0 && (code[start - 1].isLetterOrDigit() || code[start - 1] == '_')) {
+            start -= 1
+        }
+        return code.substring(start, end)
     }
 
     private companion object {
-        val KEYWORDS =
-            listOf(
-                "class",
-                "object",
-                "fun",
-                "val",
-                "var",
-                "if",
-                "else",
-                "when",
-                "for",
-                "while",
-                "return",
-                "true",
-                "false",
-                "null",
-                "import",
-                "package",
-            )
-
-        val KEYWORD_HOVERS =
-            mapOf(
-                "class" to "Declares a Kotlin class.",
-                "object" to "Declares a Kotlin singleton object.",
-                "fun" to "Declares a Kotlin function.",
-                "val" to "Declares an immutable value.",
-                "var" to "Declares a mutable variable.",
-                "when" to "Matches and branches on expressions.",
-                "import" to "Brings symbols from another package into scope.",
-            )
-
-        val COMMENT_REGEX = Regex("""//.*|/\*[\s\S]*?\*/""")
-        val STRING_REGEX = Regex(""""([^"\\\\]|\\\\.)*"|'([^'\\\\]|\\\\.)*'""")
-        val NUMBER_REGEX = Regex("""\b\d+(\.\d+)?\b""")
-        val KEYWORD_REGEX = Regex("""\b(${KEYWORDS.joinToString("|")})\b""")
+        val KEYWORDS = listOf("fun", "let", "var", "if", "else", "while", "return", "import", "record", "true", "false", "null")
     }
 }

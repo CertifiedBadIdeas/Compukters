@@ -17,22 +17,11 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package ru.lazyhat.compukterkraft.scripting.impl
+plugins {
+    alias(libs.plugins.kotlinConvention)
+}
 
-import ru.lazyhat.compukterkraft.lang.api.BytecodeModule
-import ru.lazyhat.compukterkraft.lang.runtime.BytecodeComputerProgram
-import ru.lazyhat.compukterkraft.scripting.api.CompiledScript
-import ru.lazyhat.compukterkraft.scripting.api.ScriptExecutionResult
-
-class CompiledScriptImpl(
-    override val name: String,
-    private val module: BytecodeModule,
-) : CompiledScript {
-    override fun execute(properties: Map<String, Any?>): ScriptExecutionResult {
-        val program = BytecodeComputerProgram(module)
-        return ScriptExecutionResult(
-            value = program,
-            returnValue = "ComputerProgram(${module.name})",
-        )
-    }
+dependencies {
+    implementation(projects.langApi)
+    testImplementation(kotlin("test"))
 }

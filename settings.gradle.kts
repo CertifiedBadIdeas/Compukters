@@ -42,6 +42,9 @@ plugins {
 }
 
 includeBuild("build-scripts")
+include("lang-api")
+include("lang-frontend")
+include("lang-runtime")
 include("scripting")
 include("scripting-api")
 include("scripting-def")

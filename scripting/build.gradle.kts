@@ -31,6 +31,9 @@ repositories {
 }
 
 dependencies {
+    implementation(projects.langApi)
+    implementation(projects.langFrontend)
+    implementation(projects.langRuntime)
     implementation(projects.scriptingApi)
     implementation(libs.kotlin.stdlib)
     implementation(libs.kotlin.reflect)
@@ -56,9 +59,7 @@ tasks.named<ShadowJar>("shadowJar") {
 
     dependencies {
         exclude {
-            it.moduleGroup == rootProject.group.toString() ||
-                it.name == rootProject.name ||
-                it.name == "scripting-api"
+            it.name == "scripting-api"
         }
     }
 }

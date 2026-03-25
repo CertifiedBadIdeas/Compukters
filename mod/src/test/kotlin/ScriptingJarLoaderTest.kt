@@ -19,6 +19,7 @@
 
 import ru.lazyhat.compukterkraft.scripting.runtime.findJarInJavaClassPath
 import java.io.File
+import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -26,26 +27,21 @@ import kotlin.test.assertNotNull
 class ScriptingJarLoaderTest {
     @Test
     fun findsStdlibJarFromJavaClassPath() {
-        val stdlibJarFromClasspath =
-            System
-                .getProperty(JAVA_CLASS_PATH_PROPERTY)
-                .split(File.pathSeparatorChar)
-                .map(::File)
-                .firstOrNull { file ->
-                    file.isFile &&
-                        file.name.endsWith(".jar") &&
-                        (file.name == "$KOTLIN_STDLIB_JAR_PREFIX.jar" || file.name.startsWith("$KOTLIN_STDLIB_JAR_PREFIX-"))
-                }
+        val root = createTempDirectory("classpath-probe").toFile()
 
-        assertNotNull(stdlibJarFromClasspath, "Expected test JVM classpath to contain kotlin-stdlib")
+        try {
+            val stdlibJarFromClasspath = File(root, "$KOTLIN_STDLIB_JAR_PREFIX.jar").apply { writeText("stub") }
+            val resolved =
+                findJarInJavaClassPath(
+                    classPath = "union:/dev/runtime/example.jar!/${File.pathSeparator}${stdlibJarFromClasspath.absolutePath}",
+                    jarPrefix = KOTLIN_STDLIB_JAR_PREFIX,
+                )
 
-        val resolved =
-            findJarInJavaClassPath(
-                classPath = "union:/dev/runtime/example.jar!/${File.pathSeparator}${stdlibJarFromClasspath.absolutePath}",
-                jarPrefix = KOTLIN_STDLIB_JAR_PREFIX,
-            )
-
-        assertEquals(stdlibJarFromClasspath.absoluteFile, resolved?.absoluteFile)
+            assertNotNull(resolved)
+            assertEquals(stdlibJarFromClasspath.absoluteFile, resolved.absoluteFile)
+        } finally {
+            root.deleteRecursively()
+        }
     }
 
     private companion object {

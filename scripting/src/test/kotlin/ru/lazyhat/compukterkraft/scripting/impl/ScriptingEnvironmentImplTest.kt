@@ -45,7 +45,17 @@ class ScriptingEnvironmentImplTest {
 
             thread.contextClassLoader = URLClassLoader(emptyArray(), null)
 
-            val result = environment.compiler.compile("bootstrap.kts", """println("Computer started!")""")
+            val result =
+                environment.compiler.compile(
+                    "bootstrap.kts",
+                    """
+                    import terminal;
+
+                    fun main() {
+                        terminal.printLine("Computer started!");
+                    }
+                    """.trimIndent(),
+                )
 
             assertTrue(
                 actual = result.isSuccess,

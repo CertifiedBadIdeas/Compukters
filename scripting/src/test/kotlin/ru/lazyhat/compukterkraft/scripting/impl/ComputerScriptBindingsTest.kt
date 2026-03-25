@@ -22,6 +22,7 @@ package ru.lazyhat.compukterkraft.scripting.impl
 import ru.lazyhat.compukterkraft.machine.ComputerCapability
 import ru.lazyhat.compukterkraft.machine.ComputerFileSystemApi
 import ru.lazyhat.compukterkraft.machine.ComputerPeripheralApi
+import ru.lazyhat.compukterkraft.machine.ComputerProgram
 import ru.lazyhat.compukterkraft.machine.ComputerProfile
 import ru.lazyhat.compukterkraft.machine.ComputerRedstoneApi
 import ru.lazyhat.compukterkraft.machine.ComputerRuntime
@@ -32,13 +33,16 @@ import ru.lazyhat.compukterkraft.machine.ComputerWorkspaceEntry
 import ru.lazyhat.compukterkraft.machine.VmEvent
 import ru.lazyhat.compukterkraft.scripting.api.ScriptDefinitionPresets
 import ru.lazyhat.compukterkraft.scripting.api.ScriptingEnvironmentConfig
+import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
-import kotlin.test.assertEquals
+import kotlin.test.assertContains
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class ComputerScriptBindingsTest {
     @Test
-    fun executeProvidesComputerBindingsToScript() {
+    fun executeProducesProgramThatUsesRuntimeBindings() {
+        FakeRuntime.output.clear()
         val environment =
             ScriptingEnvironmentInitializerImpl().initialize(
                 ScriptingEnvironmentConfig(
@@ -48,16 +52,30 @@ class ComputerScriptBindingsTest {
                 ),
             )
 
-        val compilation = environment.compiler.compile("test.cc.kts", "system.computerId")
+        val compilation =
+            environment.compiler.compile(
+                "test.cc.kts",
+                """
+                import terminal;
+                import system;
+
+                fun main() {
+                    terminal.printLine("computer=" + system.computerId());
+                }
+                """.trimIndent(),
+            )
         assertTrue(compilation.isSuccess, compilation.diagnostics.joinToString { it.message })
 
         val result = compilation.value!!.execute(ComputerScriptBindings.toProperties(FakeRuntime))
         assertTrue(result.isSuccess, result.exceptionMessage ?: result.diagnostics.joinToString { it.message })
-        assertEquals(42, result.value)
-        assertEquals("42", result.returnValue)
+        val program = assertIs<ComputerProgram>(result.value)
+        runBlocking { program.run(FakeRuntime) }
+        assertContains(FakeRuntime.output, "computer=42")
     }
 
     private object FakeRuntime : ComputerRuntime {
+        val output = mutableListOf<String>()
+
         override val profile =
             ComputerProfile(
                 id = "test",
@@ -90,9 +108,13 @@ class ComputerScriptBindingsTest {
 
         override val terminal =
             object : ComputerTerminalApi {
-                override suspend fun write(text: String) = Unit
+                override suspend fun write(text: String) {
+                    output += text
+                }
 
-                override suspend fun printLine(text: String) = Unit
+                override suspend fun printLine(text: String) {
+                    output += text
+                }
 
                 override suspend fun clear() = Unit
 

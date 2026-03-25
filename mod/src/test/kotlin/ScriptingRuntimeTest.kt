@@ -65,80 +65,60 @@ import kotlin.test.assertTrue
 class ScriptingRuntimeTest {
     @Test
     fun verifyCompilation() {
-        val previousStdlibJar = System.getProperty(KOTLIN_STDLIB_JAR_PROPERTY)
+        val jarFile = "run/$MOD_ID/${ScriptingPaths.SCRIPTING_JAR}"
+        val scriptingJarLoader =
+            ScriptingJarLoader(
+                scriptingJar = File(jarFile),
+            )
+        val config =
+            ScriptingEnvironmentConfig(
+                modId = MOD_ID,
+                bundledScriptsRoot = "rom",
+                externalScriptsDirectory = ScriptingPaths.scriptsDirectory().absolutePath,
+                definitions = listOf(ScriptDefinitionPresets.computerKts(MOD_ID)),
+            )
 
         try {
-            System.clearProperty(KOTLIN_STDLIB_JAR_PROPERTY)
+            val environment = scriptingJarLoader.initialize(config)
 
-            val jarFile = "run/$MOD_ID/${ScriptingPaths.SCRIPTING_JAR}"
-            val scriptingJarLoader =
-                ScriptingJarLoader(
-                    scriptingJar = File(jarFile),
-                )
-            val config =
-                ScriptingEnvironmentConfig(
-                    modId = MOD_ID,
-                    bundledScriptsRoot = "rom",
-                    externalScriptsDirectory = ScriptingPaths.scriptsDirectory().absolutePath,
-                    definitions = listOf(ScriptDefinitionPresets.computerKts(MOD_ID)),
-                )
+            assertNotNull(environment, "Failed to initialize scripting environment ${scriptingJarLoader.lastError}")
+
+            val profile = ComputerProfileRegistry.forFamily(ComputerFamily.ADVANCED)
+            val workspaceRoot = createTempDirectory("compukterkraft-seeded-workspace")
 
             try {
-                val environment = scriptingJarLoader.initialize(config)
-
-                assertNotNull(environment, "Failed to initialize scripting environment ${scriptingJarLoader.lastError}")
-
-                val stdlibJar = System.getProperty(KOTLIN_STDLIB_JAR_PROPERTY)
-                assertNotNull(stdlibJar, "Expected scripting environment to set $KOTLIN_STDLIB_JAR_PROPERTY")
-                assertTrue(File(stdlibJar).exists(), "Configured stdlib path does not exist: $stdlibJar")
-
-                val profile = ComputerProfileRegistry.forFamily(ComputerFamily.ADVANCED)
-                val workspaceRoot = createTempDirectory("compukterkraft-seeded-workspace")
-
-                try {
-                    val workspace =
-                        FileComputerWorkspace(
-                            rootPath = workspaceRoot,
-                            bundledScriptLoader = environment::bundledScript,
-                        )
-
-                    workspace.ensureInitialized(1)
-                    val bootScriptDocument = workspace.readDocument(1, profile.bootScriptName)
-
-                    assertNotNull(bootScriptDocument, "Expected workspace boot script to be seeded")
-
-                    val compiledScript = runBlocking { environment.compiler.compile(bootScriptDocument.path, bootScriptDocument.text) }
-
-                    assertNull(compiledScript.exceptionMessage, "${compiledScript.exceptionMessage}")
-                    val compiledBootScript =
-                        assertNotNull(compiledScript.value, "Expected boot script to compile successfully")
-
-                    val execution = compiledBootScript.execute(ComputerScriptBindings.toProperties(TestComputerRuntime(profile)))
-
-                    assertNull(execution.exceptionMessage, "${execution.exceptionMessage}")
-                    assertTrue(
-                        actual = execution.value is ComputerProgram,
-                        message =
-                            "Expected boot script to return ComputerProgram, got ${execution.value?.javaClass} " +
-                                "loaded by ${execution.value?.javaClass?.classLoader}",
+                val workspace =
+                    FileComputerWorkspace(
+                        rootPath = workspaceRoot,
+                        bundledScriptLoader = environment::bundledScript,
                     )
-                } finally {
-                    workspaceRoot.toFile().deleteRecursively()
-                }
+
+                workspace.ensureInitialized(1)
+                val bootScriptDocument = workspace.readDocument(1, profile.bootScriptName)
+
+                assertNotNull(bootScriptDocument, "Expected workspace boot script to be seeded")
+
+                val compiledScript = runBlocking { environment.compiler.compile(bootScriptDocument.path, bootScriptDocument.text) }
+
+                assertNull(compiledScript.exceptionMessage, "${compiledScript.exceptionMessage}")
+                val compiledBootScript =
+                    assertNotNull(compiledScript.value, "Expected boot script to compile successfully")
+
+                val execution = compiledBootScript.execute(ComputerScriptBindings.toProperties(TestComputerRuntime(profile)))
+
+                assertNull(execution.exceptionMessage, "${execution.exceptionMessage}")
+                assertTrue(
+                    actual = execution.value is ComputerProgram,
+                    message =
+                        "Expected boot script to return ComputerProgram, got ${execution.value?.javaClass} " +
+                            "loaded by ${execution.value?.javaClass?.classLoader}",
+                )
             } finally {
-                scriptingJarLoader.close()
+                workspaceRoot.toFile().deleteRecursively()
             }
         } finally {
-            if (previousStdlibJar == null) {
-                System.clearProperty(KOTLIN_STDLIB_JAR_PROPERTY)
-            } else {
-                System.setProperty(KOTLIN_STDLIB_JAR_PROPERTY, previousStdlibJar)
-            }
+            scriptingJarLoader.close()
         }
-    }
-
-    private companion object {
-        const val KOTLIN_STDLIB_JAR_PROPERTY = "kotlin.java.stdlib.jar"
     }
 }
 

@@ -19,41 +19,28 @@
 
 package ru.lazyhat.compukterkraft.scripting.impl
 
+import ru.lazyhat.compukterkraft.lang.api.SourceRange
+import ru.lazyhat.compukterkraft.lang.frontend.FrontendDiagnostic
+import ru.lazyhat.compukterkraft.lang.frontend.FrontendSeverity
 import ru.lazyhat.compukterkraft.scripting.api.Diagnostic
 import ru.lazyhat.compukterkraft.scripting.api.DiagnosticSeverity
 import ru.lazyhat.compukterkraft.scripting.api.Position
 import ru.lazyhat.compukterkraft.scripting.api.Range
-import kotlin.script.experimental.api.ResultWithDiagnostics
-import kotlin.script.experimental.api.ScriptDiagnostic
 
-internal fun ScriptDiagnostic.asSharedDiagnostic(): Diagnostic =
+internal fun FrontendDiagnostic.toSharedDiagnostic(): Diagnostic =
     Diagnostic(
-        range =
-            location?.let {
-                Range(
-                    start = Position(it.start.line.coerceAtLeast(0), it.start.col.coerceAtLeast(0)),
-                    end = Position(it.end?.line ?: it.start.line, it.end?.col ?: it.start.col),
-                )
-            },
+        range = range?.toSharedRange(),
         severity =
             when (severity) {
-                ScriptDiagnostic.Severity.DEBUG -> DiagnosticSeverity.DEBUG
-                ScriptDiagnostic.Severity.INFO -> DiagnosticSeverity.INFO
-                ScriptDiagnostic.Severity.WARNING -> DiagnosticSeverity.WARNING
-                ScriptDiagnostic.Severity.ERROR -> DiagnosticSeverity.ERROR
-                ScriptDiagnostic.Severity.FATAL -> DiagnosticSeverity.FATAL
+                FrontendSeverity.INFO -> DiagnosticSeverity.INFO
+                FrontendSeverity.WARNING -> DiagnosticSeverity.WARNING
+                FrontendSeverity.ERROR -> DiagnosticSeverity.ERROR
             },
         message = message,
     )
 
-internal fun ResultWithDiagnostics<*>.sharedDiagnostics(): List<Diagnostic> = reports.map { it.asSharedDiagnostic() }
-
-internal fun ResultWithDiagnostics.Failure.renderFailureMessage(defaultMessage: String): String =
-    reports.firstNotNullOfOrNull { report ->
-        report.exception?.let { throwable ->
-            buildString {
-                appendLine(report.message)
-                append(throwable.stackTraceToString())
-            }
-        }
-    } ?: reports.firstOrNull()?.message ?: defaultMessage
+internal fun SourceRange.toSharedRange(): Range =
+    Range(
+        start = Position(start.line, start.column),
+        end = Position(end.line, end.column),
+    )

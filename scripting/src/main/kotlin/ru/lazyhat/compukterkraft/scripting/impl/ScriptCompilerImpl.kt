@@ -19,24 +19,14 @@
 
 package ru.lazyhat.compukterkraft.scripting.impl
 
-import kotlinx.coroutines.runBlocking
 import ru.lazyhat.compukterkraft.scripting.api.CompilationResult
 import ru.lazyhat.compukterkraft.scripting.api.CompiledScript
 import ru.lazyhat.compukterkraft.scripting.api.ScriptCompiler
 import java.util.concurrent.ConcurrentHashMap
-import kotlin.script.experimental.api.ResultWithDiagnostics
-import kotlin.script.experimental.host.StringScriptSource
-import kotlin.script.experimental.jvm.BasicJvmScriptEvaluator
-import kotlin.script.experimental.jvmhost.JvmScriptCompiler
-import kotlin.script.experimental.api.CompiledScript as KotlinCompiledScript
 
 class ScriptCompilerImpl(
     private val environment: ScriptingEnvironmentImpl,
 ) : ScriptCompiler {
-    private val compiler by lazy(LazyThreadSafetyMode.NONE) {
-        JvmScriptCompiler(environment.hostConfiguration)
-    }
-    private val evaluator = BasicJvmScriptEvaluator()
     private val cache = ConcurrentHashMap<Pair<String, String>, CompilationResult<CompiledScript>>()
 
     override fun compile(
@@ -44,42 +34,19 @@ class ScriptCompilerImpl(
         code: String,
     ): CompilationResult<CompiledScript> =
         cache.computeIfAbsent(name to code) {
-            compileUncached(name, code)
-        }
-
-    private fun compileUncached(
-        name: String,
-        code: String,
-    ): CompilationResult<CompiledScript> {
-        val compilation =
-            environment.withRuntimeClassLoader {
-                runBlocking {
-                    compiler(StringScriptSource(code, name), environment.compilationConfiguration(name))
-                }
-            }
-        val diagnostics = compilation.sharedDiagnostics()
-
-        return when (compilation) {
-            is ResultWithDiagnostics.Success<KotlinCompiledScript> -> {
+            val artifact = environment.frontend.compile(name, code)
+            val diagnostics = artifact.analysis.diagnostics.map { it.toSharedDiagnostic() }
+            val module = artifact.module
+            if (module == null) {
                 CompilationResult(
-                    value =
-                        CompiledScriptImpl(
-                            name = name,
-                            code = code,
-                            compiledScript = compilation.value,
-                            evaluator = evaluator,
-                            environment = environment,
-                        ),
+                    diagnostics = diagnostics,
+                    exceptionMessage = diagnostics.firstOrNull()?.message ?: "Compilation failed",
+                )
+            } else {
+                CompilationResult(
+                    value = CompiledScriptImpl(name = name, module = module),
                     diagnostics = diagnostics,
                 )
             }
-
-            is ResultWithDiagnostics.Failure -> {
-                CompilationResult(
-                    diagnostics = diagnostics,
-                    exceptionMessage = compilation.renderFailureMessage("Compilation failed"),
-                )
-            }
         }
-    }
 }

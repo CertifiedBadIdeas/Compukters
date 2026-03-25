@@ -17,22 +17,19 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import ru.lazyhat.compukterkraft.machine.ComputerProgram
-import ru.lazyhat.compukterkraft.machine.ComputerRuntime
+import terminal;
+import system;
+import events;
 
-object BootProgram : ComputerProgram {
-    override suspend fun run(runtime: ComputerRuntime) {
-        runtime.terminal.clear()
-        runtime.terminal.printLine("Compukter Kraft OS")
-        runtime.terminal.printLine("Computer #${runtime.system.computerId} (${runtime.profile.displayName})")
-        runtime.terminal.printLine("Waiting for events...")
+fun main() {
+    terminal.clear();
+    terminal.printLine("Compukter Kraft OS");
+    terminal.printLine("Computer #" + system.computerId());
+    terminal.printLine("Waiting for events...");
 
-        while (true) {
-            val event = runtime.pullEvent()
-            runtime.terminal.printLine("event: ${event.name}")
-            runtime.yield()
-        }
+    while (true) {
+        let event: Event = events.pull();
+        terminal.printLine("event: " + event.name);
+        yield();
     }
 }
-
-BootProgram
