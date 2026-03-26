@@ -36,7 +36,11 @@ class ScriptIdeServiceImpl(
     override fun analyze(
         name: String,
         code: String,
-    ): List<Diagnostic> = environment.frontend.analyze(name, code).diagnostics.map { it.toSharedDiagnostic() }
+    ): List<Diagnostic> =
+        environment.frontend
+            .analyze(name, code)
+            .diagnostics
+            .map { it.toSharedDiagnostic() }
 
     override fun highlight(
         name: String,
@@ -48,20 +52,23 @@ class ScriptIdeServiceImpl(
                 val type =
                     when (token.kind) {
                         TokenKind.FUN,
-                        TokenKind.LET,
+                        TokenKind.VAL,
                         TokenKind.VAR,
                         TokenKind.IF,
                         TokenKind.ELSE,
                         TokenKind.WHILE,
                         TokenKind.RETURN,
                         TokenKind.IMPORT,
-                        TokenKind.RECORD,
+                        TokenKind.STRUCT,
                         TokenKind.TRUE,
                         TokenKind.FALSE,
                         TokenKind.NULL,
                         -> HighlightTokenType.KEYWORD
+
                         TokenKind.STRING -> HighlightTokenType.STRING
+
                         TokenKind.NUMBER -> HighlightTokenType.NUMBER
+
                         else -> null
                     }
                 type?.let { HighlightToken(token.range.toSharedRange(), it) }
@@ -75,12 +82,15 @@ class ScriptIdeServiceImpl(
                         SymbolKind.VARIABLE,
                         SymbolKind.PARAMETER,
                         -> HighlightTokenType.PROPERTY
+
                         SymbolKind.FUNCTION,
                         SymbolKind.BUILTIN_FUNCTION,
                         -> HighlightTokenType.FUNCTION
+
                         SymbolKind.RECORD,
                         SymbolKind.BUILTIN_TYPE,
                         -> HighlightTokenType.TYPE
+
                         SymbolKind.MODULE -> null
                     }
                 type?.let { HighlightToken(range.toSharedRange(), it) }
@@ -121,13 +131,14 @@ class ScriptIdeServiceImpl(
                                 else -> CompletionItemKind.SYMBOL
                             },
                     )
-                } + KEYWORDS.map {
-                    CompletionItem(
-                        label = it,
-                        detail = "Language keyword",
-                        kind = CompletionItemKind.KEYWORD,
-                    )
-                }
+                } +
+                    KEYWORDS.map {
+                        CompletionItem(
+                            label = it,
+                            detail = "Language keyword",
+                            kind = CompletionItemKind.KEYWORD,
+                        )
+                    }
             }
         return items
             .distinctBy { it.label }

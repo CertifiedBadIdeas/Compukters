@@ -48,7 +48,6 @@ import ru.lazyhat.compukterkraft.lang.api.NullLiteralValue
 import ru.lazyhat.compukterkraft.lang.api.ParameterDeclaration
 import ru.lazyhat.compukterkraft.lang.api.Program
 import ru.lazyhat.compukterkraft.lang.api.RecordConstructionExpression
-import ru.lazyhat.compukterkraft.lang.api.RecordDeclaration
 import ru.lazyhat.compukterkraft.lang.api.RecordFieldDeclaration
 import ru.lazyhat.compukterkraft.lang.api.RecordFieldDefinition
 import ru.lazyhat.compukterkraft.lang.api.RecordFieldInitializer
@@ -57,6 +56,7 @@ import ru.lazyhat.compukterkraft.lang.api.SourceLocation
 import ru.lazyhat.compukterkraft.lang.api.SourceRange
 import ru.lazyhat.compukterkraft.lang.api.Statement
 import ru.lazyhat.compukterkraft.lang.api.StringLiteralValue
+import ru.lazyhat.compukterkraft.lang.api.StructDeclaration
 import ru.lazyhat.compukterkraft.lang.api.Token
 import ru.lazyhat.compukterkraft.lang.api.TokenKind
 import ru.lazyhat.compukterkraft.lang.api.TopLevelDeclaration
@@ -134,7 +134,7 @@ class AnalyzedProgram(
             addAll(
                 symbols.filter { symbol ->
                     val owner = symbol.ownerFunctionRange
-                    owner != null && owner.contains(offset) && symbol.range?.start?.offset ?: Int.MAX_VALUE <= offset
+                    owner != null && owner.contains(offset) && (symbol.range?.start?.offset ?: Int.MAX_VALUE) <= offset
                 },
             )
             addAll(
@@ -151,14 +151,15 @@ class AnalyzedProgram(
         }.distinctBy { it.kind to it.name }
 
     fun moduleMembers(moduleName: String): List<SymbolInfo> =
-        builtinModules.firstOrNull { it.name == moduleName }
+        builtinModules
+            .firstOrNull { it.name == moduleName }
             ?.functions
             ?.map {
                 SymbolInfo(
                     name = it.name,
                     kind = SymbolKind.BUILTIN_FUNCTION,
                     range = null,
-                    detail = "${moduleName}.${it.name}(${it.parameterTypes.joinToString()}) : ${it.returnType}",
+                    detail = "$moduleName.${it.name}(${it.parameterTypes.joinToString()}) : ${it.returnType}",
                     documentation = it.documentation,
                 )
             }.orEmpty()
@@ -248,7 +249,17 @@ class LanguageFrontend(
         val program = parser.parseProgram()
         val syntaxDiagnostics = lexer.diagnostics + parser.diagnostics
         if (program == null) {
-            return AnalyzedProgram(name, source, tokens, null, syntaxDiagnostics, emptyList(), emptyList(), registry.modules, registry.globals)
+            return AnalyzedProgram(
+                name,
+                source,
+                tokens,
+                null,
+                syntaxDiagnostics,
+                emptyList(),
+                emptyList(),
+                registry.modules,
+                registry.globals,
+            )
         }
         val semantic = SemanticAnalyzer(registry, name).analyze(program)
         return AnalyzedProgram(
@@ -335,7 +346,7 @@ private data class FunctionBinding(
 
 private data class RecordBinding(
     override val symbol: SymbolInfo,
-    val declaration: RecordDeclaration?,
+    val declaration: StructDeclaration?,
     val fields: Map<String, TypeRef>,
 ) : Binding
 
@@ -355,7 +366,7 @@ private data class SemanticResult(
     val symbols: List<SymbolInfo>,
     val references: List<ReferenceInfo>,
     val functionBindings: Map<FunctionDeclaration, FunctionBinding>,
-    val recordBindings: Map<RecordDeclaration, RecordBinding>,
+    val recordBindings: Map<StructDeclaration, RecordBinding>,
     val localBindings: IdentityHashMap<Expression, Binding>,
     val expressionTypes: IdentityHashMap<Expression, TypeRef>,
     val callBindings: IdentityHashMap<CallExpression, FunctionBinding>,
@@ -371,7 +382,7 @@ private class SemanticAnalyzer(
     private val symbols = mutableListOf<SymbolInfo>()
     private val references = mutableListOf<ReferenceInfo>()
     private val functionBindings = mutableMapOf<FunctionDeclaration, FunctionBinding>()
-    private val recordBindings = mutableMapOf<RecordDeclaration, RecordBinding>()
+    private val recordBindings = mutableMapOf<StructDeclaration, RecordBinding>()
     private val localBindings = IdentityHashMap<Expression, Binding>()
     private val expressionTypes = IdentityHashMap<Expression, TypeRef>()
     private val callBindings = IdentityHashMap<CallExpression, FunctionBinding>()
@@ -391,7 +402,7 @@ private class SemanticAnalyzer(
         for (declaration in program.declarations) {
             when (declaration) {
                 is FunctionDeclaration -> analyzeFunction(declaration)
-                is RecordDeclaration -> Unit
+                is StructDeclaration -> Unit
             }
         }
         return SemanticResult(
@@ -429,7 +440,7 @@ private class SemanticAnalyzer(
     }
 
     private fun registerTopLevel(declarations: List<TopLevelDeclaration>) {
-        declarations.filterIsInstance<RecordDeclaration>().forEach { declaration ->
+        declarations.filterIsInstance<StructDeclaration>().forEach { declaration ->
             if (typeNames.containsKey(declaration.name)) {
                 diagnostics += FrontendDiagnostic("Type `${declaration.name}` is already defined.", declaration.range)
                 return@forEach
@@ -509,8 +520,14 @@ private class SemanticAnalyzer(
         val scope = Scope(parentScope)
         block.statements.forEach { statement ->
             when (statement) {
-                is BlockStatement -> analyzeBlock(statement, scope, functionRange, expectedReturnType)
-                is ExpressionStatement -> analyzeExpression(statement.expression, scope)
+                is BlockStatement -> {
+                    analyzeBlock(statement, scope, functionRange, expectedReturnType)
+                }
+
+                is ExpressionStatement -> {
+                    analyzeExpression(statement.expression, scope)
+                }
+
                 is IfStatement -> {
                     val conditionType = analyzeExpression(statement.condition, scope)
                     expectAssignable(conditionType, TypeRef("Bool"), statement.condition.range, "Condition must be Bool.")
@@ -555,18 +572,40 @@ private class SemanticAnalyzer(
     ): TypeRef =
         expressionTypes[expression]
             ?: when (expression) {
-                is BinaryExpression -> analyzeBinary(expression, scope)
-                is CallExpression -> analyzeCall(expression, scope)
-                is GroupExpression -> analyzeExpression(expression.expression, scope)
-                is LiteralExpression -> analyzeLiteral(expression)
-                is MemberAccessExpression ->
+                is BinaryExpression -> {
+                    analyzeBinary(expression, scope)
+                }
+
+                is CallExpression -> {
+                    analyzeCall(expression, scope)
+                }
+
+                is GroupExpression -> {
+                    analyzeExpression(expression.expression, scope)
+                }
+
+                is LiteralExpression -> {
+                    analyzeLiteral(expression)
+                }
+
+                is MemberAccessExpression -> {
                     analyzeMember(expression, scope).let { (binding, type) ->
                         memberBindings[expression] = binding
                         type
                     }
-                is NameExpression -> analyzeName(expression, scope)
-                is RecordConstructionExpression -> analyzeRecordConstruction(expression, scope)
-                is UnaryExpression -> analyzeUnary(expression, scope)
+                }
+
+                is NameExpression -> {
+                    analyzeName(expression, scope)
+                }
+
+                is RecordConstructionExpression -> {
+                    analyzeRecordConstruction(expression, scope)
+                }
+
+                is UnaryExpression -> {
+                    analyzeUnary(expression, scope)
+                }
             }.also { expressionTypes[expression] = it }
 
     private fun analyzeLiteral(expression: LiteralExpression): TypeRef =
@@ -614,10 +653,11 @@ private class SemanticAnalyzer(
                 val member =
                     module.module.functions.firstOrNull { it.name == expression.memberName }
                         ?: run {
-                            diagnostics += FrontendDiagnostic(
-                                "Module `${module.module.name}` has no member `${expression.memberName}`.",
-                                expression.range,
-                            )
+                            diagnostics +=
+                                FrontendDiagnostic(
+                                    "Module `${module.module.name}` has no member `${expression.memberName}`.",
+                                    expression.range,
+                                )
                             return module to TypeRef("Unit")
                         }
                 val symbol =
@@ -628,7 +668,8 @@ private class SemanticAnalyzer(
                         detail = "${module.module.name}.${member.name}(${member.parameterTypes.joinToString()}) : ${member.returnType}",
                         documentation = member.documentation,
                     )
-                val binding = FunctionBinding(symbol, null, member.parameterTypes.map(::TypeRef), TypeRef(member.returnType), module.module.name)
+                val binding =
+                    FunctionBinding(symbol, null, member.parameterTypes.map(::TypeRef), TypeRef(member.returnType), module.module.name)
                 references += ReferenceInfo(expression.memberName, expression.range, symbol, member.returnType)
                 return binding to TypeRef(member.returnType)
             }
@@ -640,7 +681,8 @@ private class SemanticAnalyzer(
             recordBinding?.fields?.get(expression.memberName)
                 ?: builtinType?.fields?.firstOrNull { it.name == expression.memberName }?.let { TypeRef(it.typeName) }
         if (fieldType == null) {
-            diagnostics += FrontendDiagnostic("Type `${receiverType.displayName}` has no field `${expression.memberName}`.", expression.range)
+            diagnostics +=
+                FrontendDiagnostic("Type `${receiverType.displayName}` has no field `${expression.memberName}`.", expression.range)
             return VariableBinding(
                 SymbolInfo(expression.memberName, SymbolKind.FIELD, expression.range, "unknown field"),
                 TypeRef("Unit"),
@@ -708,24 +750,34 @@ private class SemanticAnalyzer(
                                 builtinModuleName = module.module.name,
                             )
                         } else {
-                            diagnostics += FrontendDiagnostic(
-                                "Expected ${module.module.functions.count { it.name == callee.memberName }} matching overloads but got ${expression.arguments.size} arguments.",
-                                expression.range,
-                            )
+                            diagnostics +=
+                                FrontendDiagnostic(
+                                    "Expected ${module.module.functions.count {
+                                        it.name == callee.memberName
+                                    }} matching overloads but got ${expression.arguments.size} arguments.",
+                                    expression.range,
+                                )
                             null
                         }
                     } else {
                         analyzeMember(callee, scope).first as? FunctionBinding
                     }
                 }
-                else -> null
+
+                else -> {
+                    null
+                }
             }
         if (binding == null) {
             diagnostics += FrontendDiagnostic("Expression is not callable.", expression.range)
             return TypeRef("Unit")
         }
         if (binding.parameterTypes.size != expression.arguments.size) {
-            diagnostics += FrontendDiagnostic("Expected ${binding.parameterTypes.size} arguments but got ${expression.arguments.size}.", expression.range)
+            diagnostics +=
+                FrontendDiagnostic(
+                    "Expected ${binding.parameterTypes.size} arguments but got ${expression.arguments.size}.",
+                    expression.range,
+                )
         }
         expression.arguments.forEachIndexed { index, argument ->
             val actual = analyzeExpression(argument, scope)
@@ -787,8 +839,14 @@ private class SemanticAnalyzer(
         return when (expression.operator) {
             BinaryOperator.ADD -> {
                 when {
-                    left.name == "String" || right.name == "String" -> TypeRef("String")
-                    left.name == right.name && left.name in setOf("Int", "Long") -> left
+                    left.name == "String" || right.name == "String" -> {
+                        TypeRef("String")
+                    }
+
+                    left.name == right.name && left.name in setOf("Int", "Long") -> {
+                        left
+                    }
+
                     else -> {
                         diagnostics += FrontendDiagnostic("Operator + expects numbers or strings.", expression.range)
                         TypeRef("Unit")
@@ -798,7 +856,8 @@ private class SemanticAnalyzer(
 
             BinaryOperator.SUBTRACT,
             BinaryOperator.MULTIPLY,
-            BinaryOperator.DIVIDE -> {
+            BinaryOperator.DIVIDE,
+            -> {
                 if (left.name != right.name || left.name !in setOf("Int", "Long")) {
                     diagnostics += FrontendDiagnostic("Numeric operator expects matching Int or Long operands.", expression.range)
                 }
@@ -806,7 +865,8 @@ private class SemanticAnalyzer(
             }
 
             BinaryOperator.AND,
-            BinaryOperator.OR -> {
+            BinaryOperator.OR,
+            -> {
                 expectAssignable(left, TypeRef("Bool"), expression.left.range, "Logical operators expect Bool operands.")
                 expectAssignable(right, TypeRef("Bool"), expression.right.range, "Logical operators expect Bool operands.")
                 TypeRef("Bool")
@@ -817,7 +877,8 @@ private class SemanticAnalyzer(
             BinaryOperator.LESS,
             BinaryOperator.LESS_EQUALS,
             BinaryOperator.GREATER,
-            BinaryOperator.GREATER_EQUALS -> {
+            BinaryOperator.GREATER_EQUALS,
+            -> {
                 if (!isAssignable(left, right) && !isAssignable(right, left)) {
                     diagnostics += FrontendDiagnostic("Operands are not comparable.", expression.range)
                 }
@@ -830,10 +891,11 @@ private class SemanticAnalyzer(
         syntax: TypeSyntax,
         range: SourceRange,
     ): TypeRef? {
-        val type = typeNames[syntax.name] ?: run {
-            diagnostics += FrontendDiagnostic("Unknown type `${syntax.displayName}`.", range)
-            return null
-        }
+        val type =
+            typeNames[syntax.name] ?: run {
+                diagnostics += FrontendDiagnostic("Unknown type `${syntax.displayName}`.", range)
+                return null
+            }
         return type.copy(nullable = syntax.nullable)
     }
 
@@ -877,14 +939,19 @@ private class BytecodeCompiler(
     private val semantic: SemanticResult,
 ) {
     private val functionIndices =
-        semantic.program.declarations.filterIsInstance<FunctionDeclaration>().mapIndexed { index, declaration ->
-            declaration to index
-        }.toMap()
+        semantic.program.declarations
+            .filterIsInstance<FunctionDeclaration>()
+            .mapIndexed { index, declaration ->
+                declaration to index
+            }.toMap()
 
     fun compile(name: String): BytecodeModule {
-        val functions = semantic.program.declarations.filterIsInstance<FunctionDeclaration>().map(::compileFunction)
+        val functions =
+            semantic.program.declarations
+                .filterIsInstance<FunctionDeclaration>()
+                .map(::compileFunction)
         val records =
-            semantic.program.declarations.filterIsInstance<RecordDeclaration>().map { declaration ->
+            semantic.program.declarations.filterIsInstance<StructDeclaration>().map { declaration ->
                 BytecodeRecord(
                     name = declaration.name,
                     fields =
@@ -896,7 +963,10 @@ private class BytecodeCompiler(
                         },
                 )
             }
-        val entryIndex = semantic.program.declarations.filterIsInstance<FunctionDeclaration>().indexOfFirst { it.name == "main" }
+        val entryIndex =
+            semantic.program.declarations
+                .filterIsInstance<FunctionDeclaration>()
+                .indexOfFirst { it.name == "main" }
         return BytecodeModule(
             name = name,
             functions = functions,
@@ -945,7 +1015,10 @@ private class BytecodeCompiler(
 
         private fun compileStatement(statement: Statement) {
             when (statement) {
-                is BlockStatement -> compileBlock(statement)
+                is BlockStatement -> {
+                    compileBlock(statement)
+                }
+
                 is ExpressionStatement -> {
                     compileExpression(statement.expression)
                     instructions += Instruction.Pop
@@ -1027,7 +1100,10 @@ private class BytecodeCompiler(
                     }
                 }
 
-                is GroupExpression -> compileExpression(expression.expression)
+                is GroupExpression -> {
+                    compileExpression(expression.expression)
+                }
+
                 is LiteralExpression -> {
                     when (val value = expression.value) {
                         is BoolLiteralValue -> instructions += Instruction.PushBool(value.value)
@@ -1091,18 +1167,54 @@ private class Lexer(
             val start = location()
             val ch = advance()
             when (ch) {
-                '(' -> addToken(TokenKind.LPAREN, "(", start)
-                ')' -> addToken(TokenKind.RPAREN, ")", start)
-                '{' -> addToken(TokenKind.LBRACE, "{", start)
-                '}' -> addToken(TokenKind.RBRACE, "}", start)
-                ':' -> addToken(TokenKind.COLON, ":", start)
-                ';' -> addToken(TokenKind.SEMICOLON, ";", start)
-                ',' -> addToken(TokenKind.COMMA, ",", start)
-                '.' -> addToken(TokenKind.DOT, ".", start)
-                '?' -> addToken(TokenKind.QUESTION, "?", start)
-                '+' -> addToken(TokenKind.PLUS, "+", start)
-                '-' -> addToken(TokenKind.MINUS, "-", start)
-                '*' -> addToken(TokenKind.STAR, "*", start)
+                '(' -> {
+                    addToken(TokenKind.LPAREN, "(", start)
+                }
+
+                ')' -> {
+                    addToken(TokenKind.RPAREN, ")", start)
+                }
+
+                '{' -> {
+                    addToken(TokenKind.LBRACE, "{", start)
+                }
+
+                '}' -> {
+                    addToken(TokenKind.RBRACE, "}", start)
+                }
+
+                ':' -> {
+                    addToken(TokenKind.COLON, ":", start)
+                }
+
+                ';' -> {
+                    addToken(TokenKind.SEMICOLON, ";", start)
+                }
+
+                ',' -> {
+                    addToken(TokenKind.COMMA, ",", start)
+                }
+
+                '.' -> {
+                    addToken(TokenKind.DOT, ".", start)
+                }
+
+                '?' -> {
+                    addToken(TokenKind.QUESTION, "?", start)
+                }
+
+                '+' -> {
+                    addToken(TokenKind.PLUS, "+", start)
+                }
+
+                '-' -> {
+                    addToken(TokenKind.MINUS, "-", start)
+                }
+
+                '*' -> {
+                    addToken(TokenKind.STAR, "*", start)
+                }
+
                 '/' -> {
                     if (match('/')) {
                         while (!isAtEnd() && peek() != '\n') advance()
@@ -1113,17 +1225,50 @@ private class Lexer(
                     }
                 }
 
-                '!' -> addToken(if (match('=')) TokenKind.BANG_EQUAL else TokenKind.BANG, if (previous() == '=') "!=" else "!", start)
-                '=' -> addToken(if (match('=')) TokenKind.EQUAL_EQUAL else TokenKind.EQUAL, if (previous() == '=') "==" else "=", start)
-                '<' -> addToken(if (match('=')) TokenKind.LTE else TokenKind.LT, if (previous() == '=') "<=" else "<", start)
-                '>' -> addToken(if (match('=')) TokenKind.GTE else TokenKind.GT, if (previous() == '=') ">=" else ">", start)
-                '&' -> if (match('&')) addToken(TokenKind.AMP_AMP, "&&", start) else diagnostics += FrontendDiagnostic("Unexpected `&`.", range(start))
-                '|' -> if (match('|')) addToken(TokenKind.PIPE_PIPE, "||", start) else diagnostics += FrontendDiagnostic("Unexpected `|`.", range(start))
-                '"' -> lexString(start)
-                else -> when {
-                    ch.isDigit() -> lexNumber(start, ch)
-                    ch.isIdentifierStart() -> lexIdentifier(start, ch)
-                    else -> diagnostics += FrontendDiagnostic("Unexpected character `$ch`.", range(start))
+                '!' -> {
+                    addToken(if (match('=')) TokenKind.BANG_EQUAL else TokenKind.BANG, if (previous() == '=') "!=" else "!", start)
+                }
+
+                '=' -> {
+                    addToken(if (match('=')) TokenKind.EQUAL_EQUAL else TokenKind.EQUAL, if (previous() == '=') "==" else "=", start)
+                }
+
+                '<' -> {
+                    addToken(if (match('=')) TokenKind.LTE else TokenKind.LT, if (previous() == '=') "<=" else "<", start)
+                }
+
+                '>' -> {
+                    addToken(if (match('=')) TokenKind.GTE else TokenKind.GT, if (previous() == '=') ">=" else ">", start)
+                }
+
+                '&' -> {
+                    if (match('&')) {
+                        addToken(TokenKind.AMP_AMP, "&&", start)
+                    } else {
+                        diagnostics +=
+                            FrontendDiagnostic("Unexpected `&`.", range(start))
+                    }
+                }
+
+                '|' -> {
+                    if (match('|')) {
+                        addToken(TokenKind.PIPE_PIPE, "||", start)
+                    } else {
+                        diagnostics +=
+                            FrontendDiagnostic("Unexpected `|`.", range(start))
+                    }
+                }
+
+                '"' -> {
+                    lexString(start)
+                }
+
+                else -> {
+                    when {
+                        ch.isDigit() -> lexNumber(start, ch)
+                        ch.isIdentifierStart() -> lexIdentifier(start, ch)
+                        else -> diagnostics += FrontendDiagnostic("Unexpected character `$ch`.", range(start))
+                    }
                 }
             }
         }
@@ -1196,14 +1341,14 @@ private class Lexer(
         val kind =
             when (text) {
                 "fun" -> TokenKind.FUN
-                "let" -> TokenKind.LET
+                "val" -> TokenKind.VAL
                 "var" -> TokenKind.VAR
                 "if" -> TokenKind.IF
                 "else" -> TokenKind.ELSE
                 "while" -> TokenKind.WHILE
                 "return" -> TokenKind.RETURN
                 "import" -> TokenKind.IMPORT
-                "record" -> TokenKind.RECORD
+                "struct" -> TokenKind.STRUCT
                 "true" -> TokenKind.TRUE
                 "false" -> TokenKind.FALSE
                 "null" -> TokenKind.NULL
@@ -1273,10 +1418,22 @@ private class Parser(
         val declarations = mutableListOf<TopLevelDeclaration>()
         while (!isAtEnd()) {
             when {
-                match(TokenKind.IMPORT) -> imports += parseImport() ?: return null
-                match(TokenKind.FUN) -> declarations += parseFunction() ?: return null
-                match(TokenKind.RECORD) -> declarations += parseRecord() ?: return null
-                check(TokenKind.EOF) -> break
+                match(TokenKind.IMPORT) -> {
+                    imports += parseImport() ?: return null
+                }
+
+                match(TokenKind.FUN) -> {
+                    declarations += parseFunction() ?: return null
+                }
+
+                match(TokenKind.STRUCT) -> {
+                    declarations += parseStruct() ?: return null
+                }
+
+                check(TokenKind.EOF) -> {
+                    break
+                }
+
                 else -> {
                     diagnostics += FrontendDiagnostic("Expected a top-level declaration.", peek().range)
                     return null
@@ -1310,9 +1467,9 @@ private class Parser(
         return FunctionDeclaration(name.text, parameters, returnType, body, SourceRange(name.range.start, body.range.end))
     }
 
-    private fun parseRecord(): RecordDeclaration? {
-        val name = consume(TokenKind.IDENTIFIER, "Expected record name.") ?: return null
-        consume(TokenKind.LBRACE, "Expected `{` after record name.") ?: return null
+    private fun parseStruct(): StructDeclaration? {
+        val name = consume(TokenKind.IDENTIFIER, "Expected struct name.") ?: return null
+        consume(TokenKind.LBRACE, "Expected `{` after struct name.") ?: return null
         val fields = mutableListOf<RecordFieldDeclaration>()
         while (!check(TokenKind.RBRACE) && !isAtEnd()) {
             val fieldName = consume(TokenKind.IDENTIFIER, "Expected field name.") ?: return null
@@ -1322,8 +1479,8 @@ private class Parser(
             consumeOptional(TokenKind.COMMA)
             consumeOptional(TokenKind.SEMICOLON)
         }
-        val end = consume(TokenKind.RBRACE, "Expected `}` after record body.") ?: return null
-        return RecordDeclaration(name.text, fields, SourceRange(name.range.start, end.range.end))
+        val end = consume(TokenKind.RBRACE, "Expected `}` after struct body.") ?: return null
+        return StructDeclaration(name.text, fields, SourceRange(name.range.start, end.range.end))
     }
 
     private fun parseBlock(): BlockStatement? {
@@ -1338,12 +1495,30 @@ private class Parser(
 
     private fun parseStatement(): Statement? =
         when {
-            match(TokenKind.LET) -> parseVariable(mutable = false)
-            match(TokenKind.VAR) -> parseVariable(mutable = true)
-            match(TokenKind.IF) -> parseIf()
-            match(TokenKind.WHILE) -> parseWhile()
-            match(TokenKind.RETURN) -> parseReturn()
-            check(TokenKind.LBRACE) -> parseBlock()
+            match(TokenKind.VAL) -> {
+                parseVariable(mutable = false)
+            }
+
+            match(TokenKind.VAR) -> {
+                parseVariable(mutable = true)
+            }
+
+            match(TokenKind.IF) -> {
+                parseIf()
+            }
+
+            match(TokenKind.WHILE) -> {
+                parseWhile()
+            }
+
+            match(TokenKind.RETURN) -> {
+                parseReturn()
+            }
+
+            check(TokenKind.LBRACE) -> {
+                parseBlock()
+            }
+
             else -> {
                 val expression = parseExpression() ?: return null
                 val range = expression.range
@@ -1433,7 +1608,9 @@ private class Parser(
                         BinaryExpression(expression, BinaryOperator.NOT_EQUALS, right, SourceRange(expression.range.start, right.range.end))
                     }
 
-                    else -> return expression
+                    else -> {
+                        return expression
+                    }
                 }
         }
     }
@@ -1450,7 +1627,12 @@ private class Parser(
 
                     match(TokenKind.LTE) -> {
                         val right = parseTerm() ?: return null
-                        BinaryExpression(expression, BinaryOperator.LESS_EQUALS, right, SourceRange(expression.range.start, right.range.end))
+                        BinaryExpression(
+                            expression,
+                            BinaryOperator.LESS_EQUALS,
+                            right,
+                            SourceRange(expression.range.start, right.range.end),
+                        )
                     }
 
                     match(TokenKind.GT) -> {
@@ -1460,10 +1642,17 @@ private class Parser(
 
                     match(TokenKind.GTE) -> {
                         val right = parseTerm() ?: return null
-                        BinaryExpression(expression, BinaryOperator.GREATER_EQUALS, right, SourceRange(expression.range.start, right.range.end))
+                        BinaryExpression(
+                            expression,
+                            BinaryOperator.GREATER_EQUALS,
+                            right,
+                            SourceRange(expression.range.start, right.range.end),
+                        )
                     }
 
-                    else -> return expression
+                    else -> {
+                        return expression
+                    }
                 }
         }
     }
@@ -1483,7 +1672,9 @@ private class Parser(
                         BinaryExpression(expression, BinaryOperator.SUBTRACT, right, SourceRange(expression.range.start, right.range.end))
                     }
 
-                    else -> return expression
+                    else -> {
+                        return expression
+                    }
                 }
         }
     }
@@ -1503,7 +1694,9 @@ private class Parser(
                         BinaryExpression(expression, BinaryOperator.DIVIDE, right, SourceRange(expression.range.start, right.range.end))
                     }
 
-                    else -> return expression
+                    else -> {
+                        return expression
+                    }
                 }
         }
     }
@@ -1520,7 +1713,9 @@ private class Parser(
                 UnaryExpression(UnaryOperator.NEGATE, operand, SourceRange(previous().range.start, operand.range.end))
             }
 
-            else -> parseCall()
+            else -> {
+                parseCall()
+            }
         }
 
     private fun parseCall(): Expression? {
@@ -1544,7 +1739,9 @@ private class Parser(
                         MemberAccessExpression(expression, member.text, SourceRange(expression.range.start, member.range.end))
                     }
 
-                    else -> return expression
+                    else -> {
+                        return expression
+                    }
                 }
         }
     }
@@ -1552,16 +1749,29 @@ private class Parser(
     private fun parsePrimary(): Expression? {
         val token = advance()
         return when (token.kind) {
-            TokenKind.TRUE -> LiteralExpression(BoolLiteralValue(true), token.range)
-            TokenKind.FALSE -> LiteralExpression(BoolLiteralValue(false), token.range)
-            TokenKind.NULL -> LiteralExpression(NullLiteralValue, token.range)
-            TokenKind.STRING -> LiteralExpression(StringLiteralValue(token.text), token.range)
-            TokenKind.NUMBER ->
+            TokenKind.TRUE -> {
+                LiteralExpression(BoolLiteralValue(true), token.range)
+            }
+
+            TokenKind.FALSE -> {
+                LiteralExpression(BoolLiteralValue(false), token.range)
+            }
+
+            TokenKind.NULL -> {
+                LiteralExpression(NullLiteralValue, token.range)
+            }
+
+            TokenKind.STRING -> {
+                LiteralExpression(StringLiteralValue(token.text), token.range)
+            }
+
+            TokenKind.NUMBER -> {
                 if (token.text.endsWith("L")) {
                     LiteralExpression(LongLiteralValue(token.text.dropLast(1).toLong()), token.range)
                 } else {
                     LiteralExpression(IntLiteralValue(token.text.toInt()), token.range)
                 }
+            }
 
             TokenKind.IDENTIFIER -> {
                 if (check(TokenKind.LBRACE)) {

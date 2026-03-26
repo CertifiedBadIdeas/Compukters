@@ -40,14 +40,14 @@ enum class TokenKind {
     FALSE,
     NULL,
     FUN,
-    LET,
+    VAL,
     VAR,
     IF,
     ELSE,
     WHILE,
     RETURN,
     IMPORT,
-    RECORD,
+    STRUCT,
     COLON,
     SEMICOLON,
     COMMA,
@@ -104,7 +104,7 @@ data class FunctionDeclaration(
     override val range: SourceRange,
 ) : TopLevelDeclaration
 
-data class RecordDeclaration(
+data class StructDeclaration(
     override val name: String,
     val fields: List<RecordFieldDeclaration>,
     override val range: SourceRange,
@@ -274,8 +274,10 @@ data class BuiltinRegistry(
 ) {
     fun module(name: String): BuiltinModule? = modules.firstOrNull { it.name == name }
 
-    fun global(name: String, argumentCount: Int): BuiltinFunction? =
-        globals.firstOrNull { it.name == name && it.parameterTypes.size == argumentCount }
+    fun global(
+        name: String,
+        argumentCount: Int,
+    ): BuiltinFunction? = globals.firstOrNull { it.name == name && it.parameterTypes.size == argumentCount }
 
     fun builtinType(name: String): BuiltinType? = builtinTypes.firstOrNull { it.name == name }
 }

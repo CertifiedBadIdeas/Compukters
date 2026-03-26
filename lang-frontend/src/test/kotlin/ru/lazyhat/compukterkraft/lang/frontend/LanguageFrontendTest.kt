@@ -34,7 +34,7 @@ class LanguageFrontendTest {
                 """
                 import terminal;
 
-                record Point {
+                struct Point {
                     x: Int,
                     y: Int
                 }
@@ -44,7 +44,7 @@ class LanguageFrontendTest {
                 }
 
                 fun main() {
-                    let point: Point = Point { x: 1, y: 2 };
+                    val point: Point = Point { x: 1, y: 2 };
                     terminal.printLine("sum=" + sum(point));
                 }
                 """.trimIndent(),
@@ -52,7 +52,7 @@ class LanguageFrontendTest {
 
         assertTrue(
             artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
-            artifact.analysis.diagnostics.joinToString { it.message },
+            artifact.analysis.diagnostics.joinToString { "${it.range}, ${it.message}" },
         )
         assertNotNull(artifact.module)
         assertTrue(artifact.analysis.symbols.any { it.name == "Point" })
@@ -66,7 +66,7 @@ class LanguageFrontendTest {
                 "broken.ck",
                 """
                 fun main() {
-                    let flag: Bool = 42;
+                    val flag: Bool = 42;
                 }
                 """.trimIndent(),
             )
