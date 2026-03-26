@@ -21,6 +21,8 @@ package ck.mod.menu
 import ck.mod.Config
 import ck.mod.block.ComputerFamily
 import ck.mod.computer.ServerComputer
+import ck.lang.runtime.ComputerWorkspaceDocument
+import ck.lang.runtime.ComputerWorkspaceEntry
 import ck.mod.data.ComputerContainerData
 import ck.mod.gui.NetworkedTerminal
 import ck.mod.gui.Terminal
@@ -56,6 +58,8 @@ abstract class AbstractComputerMenu(
 
     val input: ServerInputState<AbstractComputerMenu>?
     private val terminal: NetworkedTerminal?
+    private var workspaceEntries: List<ComputerWorkspaceEntry> = emptyList()
+    private var workspaceDocument: ComputerWorkspaceDocument? = null
     val displayStack: ItemStack
 
     init {
@@ -88,6 +92,14 @@ abstract class AbstractComputerMenu(
         state.apply(terminal)
     }
 
+    override fun updateWorkspaceEntries(entries: List<ComputerWorkspaceEntry>) {
+        workspaceEntries = entries
+    }
+
+    override fun updateWorkspaceDocument(document: ComputerWorkspaceDocument?) {
+        workspaceDocument = document
+    }
+
     /**
      * Get the current terminal state.
      *
@@ -98,6 +110,10 @@ abstract class AbstractComputerMenu(
         checkNotNull(terminal) { "Cannot update terminal on the server" }
         return terminal
     }
+
+    fun getWorkspaceEntries(): List<ComputerWorkspaceEntry> = workspaceEntries
+
+    fun getWorkspaceDocument(): ComputerWorkspaceDocument? = workspaceDocument
 
     override fun removed(player: Player) {
         super.removed(player)

@@ -19,6 +19,8 @@
 package ck.mod.menu
 
 import ck.mod.computer.ServerComputer
+import ck.lang.runtime.ComputerWorkspaceDocument
+import ck.lang.runtime.ComputerWorkspaceEntry
 import ck.mod.gui.TerminalState
 
 /**
@@ -50,4 +52,8 @@ interface ComputerMenu {
      * @throws UnsupportedOperationException When used on the server.
      */
     fun updateTerminal(state: TerminalState)
+
+    fun updateWorkspaceEntries(entries: List<ComputerWorkspaceEntry>)
+
+    fun updateWorkspaceDocument(document: ComputerWorkspaceDocument?)
 }

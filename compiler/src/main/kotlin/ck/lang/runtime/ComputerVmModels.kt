@@ -98,6 +98,11 @@ sealed interface HostCall {
         val path: String,
     ) : HostCall
 
+    data class FileIsDirectory(
+        override val id: Long,
+        val path: String,
+    ) : HostCall
+
     data class FileReadText(
         override val id: Long,
         val path: String,
@@ -107,6 +112,16 @@ sealed interface HostCall {
         override val id: Long,
         val path: String,
         val text: String,
+    ) : HostCall
+
+    data class FileMakeDirectory(
+        override val id: Long,
+        val path: String,
+    ) : HostCall
+
+    data class FileRemove(
+        override val id: Long,
+        val path: String,
     ) : HostCall
 
     data class FileList(

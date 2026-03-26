@@ -1,10 +1,5 @@
-import terminal;
-import events;
+import process;
 
 fun main() {
-    terminal.printLine("Compukter Kraft ready");
-    while true {
-        val event: Event = events.pull();
-        terminal.printLine(event.name);
-    }
+    process.run("shell.ck");
 }

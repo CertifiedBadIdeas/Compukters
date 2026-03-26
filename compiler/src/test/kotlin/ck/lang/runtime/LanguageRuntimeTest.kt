@@ -87,11 +87,64 @@ class LanguageRuntimeTest {
         val endSignal = restored.runUntilSignal()
         assertTrue(endSignal is VmSignal.Halt)
     }
+
+    @Test
+    fun exposesShellBuiltinsThroughRuntimeBridge() {
+        val artifact =
+            frontend.compile(
+                "shell.ck",
+                """
+                import terminal;
+                import filesystem;
+                import process;
+                import strings;
+
+                fun main() {
+                    terminal.printLine(terminal.readLine("> "));
+                    terminal.printLine(filesystem.list());
+                    terminal.printLine(process.currentDirectory());
+                    terminal.printLine(process.argument());
+                    terminal.printLine(strings.beforeSpace("mkdir test"));
+                    terminal.printLine(strings.afterSpace("mkdir test"));
+                    if filesystem.makeDir("tmp") {
+                        terminal.printLine("mk");
+                    } else {
+                        terminal.printLine("no");
+                    }
+                    if process.changeDirectory("tmp") {
+                        terminal.printLine("cd");
+                    } else {
+                        terminal.printLine("stay");
+                    }
+                    terminal.printLine(process.currentDirectory());
+                }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+
+        val runtime = RecordingRuntime(argument = "boot")
+        runBlocking {
+            BytecodeComputerProgram(requireNotNull(artifact.module)).run(runtime)
+        }
+
+        assertEquals(
+            listOf("typed", "docs/ readme.txt", "", "boot", "mkdir", "test", "mk", "cd", "tmp"),
+            runtime.lines,
+        )
+        assertEquals(listOf("tmp"), runtime.createdDirectories)
+    }
 }
 
-private class RecordingRuntime : ComputerRuntime {
+private class RecordingRuntime(
+    private val argument: String = "",
+) : ComputerRuntime {
     val lines = mutableListOf<String>()
     val eventFilters = mutableListOf<String?>()
+    val createdDirectories = mutableListOf<String>()
     var sleepCalls = 0
     var yieldCalls = 0
 
@@ -107,6 +160,7 @@ private class RecordingRuntime : ComputerRuntime {
             allowedCapabilities =
                 setOf(
                     ComputerCapability.TERMINAL,
+                    ComputerCapability.FILESYSTEM,
                     ComputerCapability.SYSTEM,
                     ComputerCapability.EVENTS,
                 ),
@@ -140,6 +194,8 @@ private class RecordingRuntime : ComputerRuntime {
                 lines += text
             }
 
+            override suspend fun readLine(prompt: String): String = "typed"
+
             override suspend fun clear() = Unit
 
             override suspend fun setCursor(
@@ -150,7 +206,9 @@ private class RecordingRuntime : ComputerRuntime {
 
     override val filesystem: ComputerFileSystemApi =
         object : ComputerFileSystemApi {
-            override suspend fun exists(path: String): Boolean = false
+            override suspend fun exists(path: String): Boolean = path == "readme.txt" || path == "docs" || path == "tmp"
+
+            override suspend fun isDirectory(path: String): Boolean = path == "docs" || path == "tmp"
 
             override suspend fun readText(path: String): String? = null
 
@@ -159,7 +217,39 @@ private class RecordingRuntime : ComputerRuntime {
                 text: String,
             ) = Unit
 
-            override suspend fun list(path: String): List<ComputerWorkspaceEntry> = emptyList()
+            override suspend fun makeDirectory(path: String): Boolean {
+                createdDirectories += path
+                return true
+            }
+
+            override suspend fun remove(path: String): Boolean = true
+
+            override suspend fun list(path: String): List<ComputerWorkspaceEntry> =
+                listOf(
+                    ComputerWorkspaceEntry("docs", directory = true),
+                    ComputerWorkspaceEntry("readme.txt", directory = false),
+                )
+        }
+
+    override val process =
+        object : ComputerProcessApi {
+            private var currentDirectory = ""
+
+            override val workingDirectory: String
+                get() = currentDirectory
+
+            override val argument: String
+                get() = this@RecordingRuntime.argument
+
+            override suspend fun changeDirectory(path: String): Boolean {
+                currentDirectory = path
+                return true
+            }
+
+            override suspend fun run(
+                path: String,
+                argument: String,
+            ): Int = 0
         }
 
     override val redstone: ComputerRedstoneApi = object : ComputerRedstoneApi {}

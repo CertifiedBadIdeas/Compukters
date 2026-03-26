@@ -19,6 +19,8 @@
 
 package ck.mod.network.client
 
+import ck.lang.runtime.ComputerWorkspaceDocument
+import ck.lang.runtime.ComputerWorkspaceEntry
 import ck.mod.menu.ComputerMenu
 import ck.mod.network.text.TableBuilder
 import net.minecraft.client.Minecraft
@@ -38,5 +40,23 @@ class ClientNetworkContextImpl : ClientNetworkContext {
         val menu = minecraft.player?.containerMenu
         if (menu?.containerId != containerId || menu !is ComputerMenu) return
         menu.updateTerminal(terminal)
+    }
+
+    override fun handleComputerWorkspaceEntries(
+        containerId: Int,
+        entries: List<ComputerWorkspaceEntry>,
+    ) {
+        val menu = minecraft.player?.containerMenu
+        if (menu?.containerId != containerId || menu !is ComputerMenu) return
+        menu.updateWorkspaceEntries(entries)
+    }
+
+    override fun handleComputerWorkspaceDocument(
+        containerId: Int,
+        document: ComputerWorkspaceDocument?,
+    ) {
+        val menu = minecraft.player?.containerMenu
+        if (menu?.containerId != containerId || menu !is ComputerMenu) return
+        menu.updateWorkspaceDocument(document)
     }
 }

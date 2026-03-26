@@ -141,11 +141,21 @@ interface ComputerWorkspace {
         path: String,
     ): ComputerWorkspaceDocument?
 
+    fun isDirectory(
+        computerId: Int,
+        path: String,
+    ): Boolean
+
     fun writeDocument(
         computerId: Int,
         path: String,
         text: String,
     ): ComputerWorkspaceDocument
+
+    fun makeDirectory(
+        computerId: Int,
+        path: String,
+    ): Boolean
 
     fun deleteDocument(
         computerId: Int,

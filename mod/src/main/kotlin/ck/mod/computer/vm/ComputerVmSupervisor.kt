@@ -71,6 +71,8 @@ class ComputerVmSupervisor(
                 dispatcher = dispatcher,
                 callbacks = callbacks,
                 logger = logger,
+                workspace = workspaceStore,
+                bundledScriptLoader = LanguageServices::bundledScript,
             )
         }
 

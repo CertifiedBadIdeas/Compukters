@@ -196,8 +196,7 @@ class BytecodeVirtualMachine(
                         }
 
                         else -> {
-                            val moduleName = instruction.moduleName ?: error("Missing module name for builtin call.")
-                            VmSignal.HostCall(moduleName, instruction.functionName, args)
+                            VmSignal.HostCall(instruction.moduleName, instruction.functionName, args)
                         }
                     }
                 }
@@ -461,6 +460,10 @@ private class RuntimeHostBridge(
                         VmValue.BoolValue(runtime.filesystem.exists(arguments[0].asString()))
                     }
 
+                    "isDirectory" -> {
+                        VmValue.BoolValue(runtime.filesystem.isDirectory(arguments[0].asString()))
+                    }
+
                     "readText" -> {
                         VmValue.StringValue(runtime.filesystem.readText(arguments[0].asString()) ?: "")
                     }
@@ -468,6 +471,19 @@ private class RuntimeHostBridge(
                     "writeText" -> {
                         runtime.filesystem.writeText(arguments[0].asString(), arguments[1].asString())
                         VmValue.UnitValue
+                    }
+
+                    "makeDir" -> {
+                        VmValue.BoolValue(runtime.filesystem.makeDirectory(arguments[0].asString()))
+                    }
+
+                    "remove" -> {
+                        VmValue.BoolValue(runtime.filesystem.remove(arguments[0].asString()))
+                    }
+
+                    "list" -> {
+                        val path = arguments.singleOrNull()?.asString().orEmpty()
+                        VmValue.StringValue(formatListing(runtime.filesystem.list(path)))
                     }
 
                     else -> {
@@ -527,6 +543,10 @@ private class RuntimeHostBridge(
                         VmValue.UnitValue
                     }
 
+                    "readLine" -> {
+                        VmValue.StringValue(runtime.terminal.readLine(arguments.singleOrNull()?.asString().orEmpty()))
+                    }
+
                     "clear" -> {
                         runtime.terminal.clear()
                         VmValue.UnitValue
@@ -539,6 +559,60 @@ private class RuntimeHostBridge(
 
                     else -> {
                         error("Unknown terminal function $functionName")
+                    }
+                }
+            }
+
+            "process" -> {
+                when (functionName) {
+                    "currentDirectory" -> {
+                        VmValue.StringValue(runtime.process.workingDirectory)
+                    }
+
+                    "argument" -> {
+                        VmValue.StringValue(runtime.process.argument)
+                    }
+
+                    "changeDirectory" -> {
+                        VmValue.BoolValue(runtime.process.changeDirectory(arguments[0].asString()))
+                    }
+
+                    "run" -> {
+                        VmValue.IntValue(
+                            when (arguments.size) {
+                                1 -> runtime.process.run(arguments[0].asString())
+                                2 -> runtime.process.run(arguments[0].asString(), arguments[1].asString())
+                                else -> error("Unsupported process.run arity ${arguments.size}")
+                            },
+                        )
+                    }
+
+                    else -> {
+                        error("Unknown process function $functionName")
+                    }
+                }
+            }
+
+            "strings" -> {
+                when (functionName) {
+                    "trim" -> {
+                        VmValue.StringValue(arguments[0].asString().trim())
+                    }
+
+                    "beforeSpace" -> {
+                        VmValue.StringValue(arguments[0].asString().substringBeforeFirstSpace())
+                    }
+
+                    "afterSpace" -> {
+                        VmValue.StringValue(arguments[0].asString().substringAfterFirstSpace())
+                    }
+
+                    "isBlank" -> {
+                        VmValue.BoolValue(arguments[0].asString().isBlank())
+                    }
+
+                    else -> {
+                        error("Unknown strings function $functionName")
                     }
                 }
             }
@@ -562,12 +636,32 @@ private class RuntimeHostBridge(
                 "system" -> ComputerCapability.SYSTEM
                 "terminal" -> ComputerCapability.TERMINAL
                 "events" -> ComputerCapability.EVENTS
+                "process" -> ComputerCapability.SYSTEM
                 else -> null
             }
         if (capability != null && capability !in runtime.profile.allowedCapabilities) {
             error("Capability $moduleName is not allowed for this computer profile.")
         }
     }
+}
+
+private fun formatListing(entries: List<ComputerWorkspaceEntry>): String =
+    entries.joinToString(" ") { entry ->
+        val name = entry.path.substringAfterLast('/').ifEmpty { entry.path }
+        if (entry.directory) "$name/" else name
+    }
+
+private fun String.substringBeforeFirstSpace(): String {
+    val normalized = trimStart()
+    val splitIndex = normalized.indexOfFirst(Char::isWhitespace)
+    return if (splitIndex == -1) normalized else normalized.substring(0, splitIndex)
+}
+
+private fun String.substringAfterFirstSpace(): String {
+    val normalized = trimStart()
+    val splitIndex = normalized.indexOfFirst(Char::isWhitespace)
+    if (splitIndex == -1) return ""
+    return normalized.substring(splitIndex).trimStart()
 }
 
 private fun VmValue.asBoolean(): Boolean =

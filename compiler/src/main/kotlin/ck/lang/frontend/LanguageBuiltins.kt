@@ -47,6 +47,13 @@ object LanguageBuiltins {
                                     "Unit",
                                     "Writes text and moves to the next line.",
                                 ),
+                                BuiltinFunction("readLine", emptyList(), "String", "Reads a line from terminal input."),
+                                BuiltinFunction(
+                                    "readLine",
+                                    listOf("String"),
+                                    "String",
+                                    "Prints a prompt and reads a line from terminal input.",
+                                ),
                                 BuiltinFunction("clear", emptyList(), "Unit", "Clears the terminal contents."),
                                 BuiltinFunction(
                                     "setCursor",
@@ -74,10 +81,40 @@ object LanguageBuiltins {
                                     "Reads a text file from the workspace.",
                                 ),
                                 BuiltinFunction(
+                                    "isDirectory",
+                                    listOf("String"),
+                                    "Bool",
+                                    "Returns true when a workspace path points at a directory.",
+                                ),
+                                BuiltinFunction(
                                     "writeText",
                                     listOf("String", "String"),
                                     "Unit",
                                     "Writes a text file in the workspace.",
+                                ),
+                                BuiltinFunction(
+                                    "makeDir",
+                                    listOf("String"),
+                                    "Bool",
+                                    "Creates a workspace directory and returns true when it succeeds.",
+                                ),
+                                BuiltinFunction(
+                                    "remove",
+                                    listOf("String"),
+                                    "Bool",
+                                    "Removes a workspace file or empty directory.",
+                                ),
+                                BuiltinFunction(
+                                    "list",
+                                    emptyList(),
+                                    "String",
+                                    "Lists the current directory as a space-separated string.",
+                                ),
+                                BuiltinFunction(
+                                    "list",
+                                    listOf("String"),
+                                    "String",
+                                    "Lists a directory as a space-separated string.",
                                 ),
                             ),
                     ),
@@ -122,6 +159,64 @@ object LanguageBuiltins {
                                     "Event",
                                     "Waits for an event with the requested name.",
                                 ),
+                            ),
+                    ),
+                    BuiltinModule(
+                        name = "process",
+                        documentation = "Current process information and program execution.",
+                        functions =
+                            listOf(
+                                BuiltinFunction(
+                                    "currentDirectory",
+                                    emptyList(),
+                                    "String",
+                                    "Returns the current working directory.",
+                                ),
+                                BuiltinFunction(
+                                    "argument",
+                                    emptyList(),
+                                    "String",
+                                    "Returns the raw argument passed to the current program.",
+                                ),
+                                BuiltinFunction(
+                                    "changeDirectory",
+                                    listOf("String"),
+                                    "Bool",
+                                    "Changes the current working directory.",
+                                ),
+                                BuiltinFunction(
+                                    "run",
+                                    listOf("String"),
+                                    "Int",
+                                    "Runs another program and returns its exit status.",
+                                ),
+                                BuiltinFunction(
+                                    "run",
+                                    listOf("String", "String"),
+                                    "Int",
+                                    "Runs another program with a raw argument string and returns its exit status.",
+                                ),
+                            ),
+                    ),
+                    BuiltinModule(
+                        name = "strings",
+                        documentation = "Simple string helpers for shell-style programs.",
+                        functions =
+                            listOf(
+                                BuiltinFunction("trim", listOf("String"), "String", "Trims leading and trailing whitespace."),
+                                BuiltinFunction(
+                                    "beforeSpace",
+                                    listOf("String"),
+                                    "String",
+                                    "Returns everything before the first whitespace character.",
+                                ),
+                                BuiltinFunction(
+                                    "afterSpace",
+                                    listOf("String"),
+                                    "String",
+                                    "Returns everything after the first whitespace character.",
+                                ),
+                                BuiltinFunction("isBlank", listOf("String"), "Bool", "Returns true when the string is blank."),
                             ),
                     ),
                 ),

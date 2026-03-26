@@ -19,7 +19,7 @@
 
 package ck.mod
 
-import ck.mod.gui.ComputerScreen
+import ck.mod.gui.ComputerWorkbenchScreen
 import ck.mod.gui.GuiSprites
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.screens.MenuScreens
@@ -31,11 +31,11 @@ object ClientRegistry {
         try {
             MenuScreens.register(
                 ModRegistry.Menus.COMPUTER.get(),
-                { container, inventory, title -> ComputerScreen(container, inventory, title) },
+                { container, inventory, title -> ComputerWorkbenchScreen(container, inventory, title) },
             )
-            LOGGER.info { "ClientRegistry: ComputerScreen successfully registered" }
+            LOGGER.info { "ClientRegistry: ComputerWorkbenchScreen successfully registered" }
         } catch (e: Exception) {
-            LOGGER.error { "ClientRegistry: ComputerScreen registered with error ${e.message}" }
+            LOGGER.error { "ClientRegistry: ComputerWorkbenchScreen registered with error ${e.message}" }
         }
     }
 

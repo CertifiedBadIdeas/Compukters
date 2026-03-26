@@ -90,6 +90,11 @@ class FileComputerWorkspace(
         return ComputerWorkspaceDocument(normalizeDisplayPath(target, computerRoot(computerId)), target.readText(), versionOf(target))
     }
 
+    override fun isDirectory(
+        computerId: Int,
+        path: String,
+    ): Boolean = resolve(computerId, path).isDirectory()
+
     override fun writeDocument(
         computerId: Int,
         path: String,
@@ -99,6 +104,16 @@ class FileComputerWorkspace(
         target.parent?.createDirectories()
         target.writeText(text, StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)
         return ComputerWorkspaceDocument(normalizeDisplayPath(target, computerRoot(computerId)), text, versionOf(target))
+    }
+
+    override fun makeDirectory(
+        computerId: Int,
+        path: String,
+    ): Boolean {
+        val target = resolve(computerId, path)
+        if (target.exists()) return target.isDirectory()
+        target.createDirectories()
+        return true
     }
 
     override fun deleteDocument(

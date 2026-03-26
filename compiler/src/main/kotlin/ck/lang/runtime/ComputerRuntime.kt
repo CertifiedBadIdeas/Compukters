@@ -28,6 +28,7 @@ interface ComputerRuntime {
     val system: ComputerSystemApi
     val terminal: ComputerTerminalApi
     val filesystem: ComputerFileSystemApi
+    val process: ComputerProcessApi
     val redstone: ComputerRedstoneApi
     val peripherals: ComputerPeripheralApi
 
@@ -60,6 +61,8 @@ interface ComputerTerminalApi {
 
     suspend fun printLine(text: String)
 
+    suspend fun readLine(prompt: String = ""): String
+
     suspend fun clear()
 
     suspend fun setCursor(
@@ -71,6 +74,8 @@ interface ComputerTerminalApi {
 interface ComputerFileSystemApi {
     suspend fun exists(path: String): Boolean
 
+    suspend fun isDirectory(path: String): Boolean
+
     suspend fun readText(path: String): String?
 
     suspend fun writeText(
@@ -78,7 +83,25 @@ interface ComputerFileSystemApi {
         text: String,
     )
 
+    suspend fun makeDirectory(path: String): Boolean
+
+    suspend fun remove(path: String): Boolean
+
     suspend fun list(path: String = ""): List<ComputerWorkspaceEntry>
+}
+
+interface ComputerProcessApi {
+    val workingDirectory: String
+    val argument: String
+
+    suspend fun changeDirectory(path: String): Boolean
+
+    suspend fun run(path: String): Int = run(path, "")
+
+    suspend fun run(
+        path: String,
+        argument: String,
+    ): Int
 }
 
 interface ComputerRedstoneApi

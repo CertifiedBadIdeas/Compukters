@@ -21,9 +21,11 @@ package ck.mod.network
 import ck.mod.network.client.ChatTableClientMessage
 import ck.mod.network.client.ClientNetworkContext
 import ck.mod.network.client.ComputerTerminalClientMessage
+import ck.mod.network.client.ComputerWorkspaceClientMessage
 import ck.mod.network.server.ComputerActionServerMessage
 import ck.mod.network.server.KeyEventServerMessage
 import ck.mod.network.server.MouseEventServerMessage
+import ck.mod.network.server.ComputerWorkspaceServerMessage
 import ck.mod.network.server.PasteEventComputerMessage
 import ck.mod.network.server.ServerNetworkContext
 import ck.mod.platform.NetworkHandler
@@ -70,6 +72,13 @@ object NetworkMessages {
             PasteEventComputerMessage::class.java,
             FriendlyByteBuf.Reader(::PasteEventComputerMessage),
         )
+    val COMPUTER_WORKSPACE_REQUEST: MessageType<ComputerWorkspaceServerMessage> =
+        registerServerbound(
+            4,
+            "computer_workspace_request",
+            ComputerWorkspaceServerMessage::class.java,
+            FriendlyByteBuf.Reader(::ComputerWorkspaceServerMessage),
+        )
 //    val UPLOAD_FILE: MessageType<UploadFileMessage>? =
 //        NetworkMessages.registerServerbound<T>(
 //            4,
@@ -106,6 +115,13 @@ object NetworkMessages {
             "computer_terminal",
             ComputerTerminalClientMessage::class.java,
             FriendlyByteBuf.Reader(::ComputerTerminalClientMessage),
+        )
+    val COMPUTER_WORKSPACE: MessageType<ComputerWorkspaceClientMessage> =
+        registerClientbound(
+            14,
+            "computer_workspace",
+            ComputerWorkspaceClientMessage::class.java,
+            FriendlyByteBuf.Reader(::ComputerWorkspaceClientMessage),
         )
 //    val PLAY_RECORD: MessageType<PlayRecordClientMessage>? =
 //        NetworkMessages.registerClientbound<T>(

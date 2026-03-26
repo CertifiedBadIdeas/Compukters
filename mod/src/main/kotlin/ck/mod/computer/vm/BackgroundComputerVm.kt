@@ -19,8 +19,11 @@
 
 package ck.mod.computer.vm
 
+import ck.lang.frontend.FrontendSeverity
+import ck.lang.runtime.BytecodeComputerProgram
 import ck.lang.runtime.ComputerFileSystemApi
 import ck.lang.runtime.ComputerPeripheralApi
+import ck.lang.runtime.ComputerProcessApi
 import ck.lang.runtime.ComputerProfile
 import ck.lang.runtime.ComputerProgram
 import ck.lang.runtime.ComputerRedstoneApi
@@ -28,6 +31,7 @@ import ck.lang.runtime.ComputerRuntime
 import ck.lang.runtime.ComputerSystemApi
 import ck.lang.runtime.ComputerTerminalApi
 import ck.lang.runtime.ComputerVmHandle
+import ck.lang.runtime.ComputerWorkspace
 import ck.lang.runtime.ComputerWorkspaceEntry
 import ck.lang.runtime.HostCall
 import ck.lang.runtime.HostResult
@@ -47,12 +51,16 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import org.lwjgl.glfw.GLFW
+import java.nio.ByteBuffer
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.yield as coroutineYield
+import ck.mod.language.LanguageServices
 
 fun interface ComputerVmLogger {
     fun log(message: String)
@@ -72,6 +80,8 @@ class BackgroundComputerVm(
     dispatcher: CoroutineDispatcher,
     private val callbacks: ComputerVmCallbacks,
     private val logger: ComputerVmLogger,
+    private val workspace: ComputerWorkspace,
+    private val bundledScriptLoader: (String) -> String? = { null },
 ) : ComputerVmHandle {
     private val scope = CoroutineScope(SupervisorJob() + dispatcher)
     private val eventQueue =
@@ -230,21 +240,29 @@ class BackgroundComputerVm(
         }
     }
 
-    private inner class RuntimeFacade : ComputerRuntime {
+    private inner class RuntimeFacade(
+        initialWorkingDirectory: String = "",
+        initialArgument: String = "",
+    ) : ComputerRuntime {
+        private val deferredEvents = ArrayDeque<VmEvent>()
+        var workingDirectory = normalizeWorkingDirectory(initialWorkingDirectory)
+        var cursorX = 0
+        var cursorY = 0
+
         override val profile: ComputerProfile
             get() = this@BackgroundComputerVm.profile
 
         override val system: ComputerSystemApi = SystemApi()
-        override val terminal: ComputerTerminalApi = TerminalApi()
-        override val filesystem: ComputerFileSystemApi = FileSystemApi()
+        override val terminal: ComputerTerminalApi = TerminalApi(this)
+        override val filesystem: ComputerFileSystemApi = FileSystemApi(this)
+        override val process: ComputerProcessApi = ProcessApi(this, initialArgument)
         override val redstone: ComputerRedstoneApi = object : ComputerRedstoneApi {}
         override val peripherals: ComputerPeripheralApi = object : ComputerPeripheralApi {}
 
         override suspend fun pullEvent(filter: String?): VmEvent {
             while (true) {
                 state = VmState.WAITING_EVENT
-                val event = eventQueue.receive()
-                queuedEvents.decrementAndGet()
+                val event = receiveEvent()
                 if (filter == null || event.name == filter) {
                     state = VmState.RUNNING
                     applySchedulingPoint()
@@ -265,6 +283,68 @@ class BackgroundComputerVm(
         override suspend fun yield() {
             applySchedulingPoint()
         }
+
+        suspend fun receiveEvent(): VmEvent {
+            val queued = deferredEvents.removeFirstOrNull()
+            if (queued != null) {
+                state = VmState.RUNNING
+                applySchedulingPoint()
+                return queued
+            }
+            val event = eventQueue.receive()
+            queuedEvents.decrementAndGet()
+            return event
+        }
+
+        fun deferEvent(event: VmEvent) {
+            deferredEvents.addLast(event)
+        }
+
+        fun resolvePath(path: String): String {
+            val trimmed = path.trim()
+            if (trimmed.isEmpty() || trimmed == ".") return workingDirectory
+
+            val segments = ArrayDeque<String>()
+            val source =
+                if (trimmed.startsWith('/')) {
+                    trimmed.removePrefix("/")
+                } else {
+                    listOf(workingDirectory, trimmed).filter { it.isNotEmpty() }.joinToString("/")
+                }
+            source
+                .split('/')
+                .filter { it.isNotEmpty() }
+                .forEach { segment ->
+                    when (segment) {
+                        "." -> Unit
+                        ".." -> segments.removeLastOrNull()
+                        else -> segments.addLast(segment)
+                    }
+                }
+            return segments.joinToString("/")
+        }
+
+        private fun normalizeWorkingDirectory(path: String): String = resolveWorkingDirectory(path)
+
+        fun updateWorkingDirectory(path: String) {
+            workingDirectory = normalizeWorkingDirectory(path)
+        }
+
+        fun advanceCursor(text: String) {
+            cursorX = (cursorX + text.length).coerceAtLeast(0)
+        }
+
+        fun nextLine() {
+            cursorX = 0
+            cursorY = (cursorY + 1).coerceAtMost(profile.terminalHeight - 1)
+        }
+
+        fun resetCursor() {
+            cursorX = 0
+            cursorY = 0
+        }
+
+        fun currentWorkingDirectory(): String = workingDirectory
     }
 
     private inner class SystemApi : ComputerSystemApi {
@@ -297,17 +377,75 @@ class BackgroundComputerVm(
         }
     }
 
-    private inner class TerminalApi : ComputerTerminalApi {
+    private inner class TerminalApi(
+        private val owner: RuntimeFacade,
+    ) : ComputerTerminalApi {
         override suspend fun write(text: String) {
             awaitHostCall<Unit> { HostCall.TerminalWrite(it, text) }
+            owner.advanceCursor(text)
         }
 
         override suspend fun printLine(text: String) {
             awaitHostCall<Unit> { HostCall.TerminalWrite(it, text, newLine = true) }
+            owner.nextLine()
+        }
+
+        override suspend fun readLine(prompt: String): String {
+            if (prompt.isNotEmpty()) {
+                write(prompt)
+            }
+
+            val line = StringBuilder()
+            while (true) {
+                state = VmState.WAITING_EVENT
+                val event = owner.receiveEvent()
+                state = VmState.RUNNING
+                when (event.name) {
+                    "char" -> {
+                        decodeTypedText(event)?.let { chunk ->
+                            line.append(chunk)
+                            write(chunk)
+                        }
+                    }
+
+                    "paste" -> {
+                        decodePastedText(event)?.let { chunk ->
+                            line.append(chunk)
+                            write(chunk)
+                        }
+                    }
+
+                    "key" -> {
+                        val keyCode = (event.arguments.firstOrNull() as? Int) ?: continue
+                        when (keyCode) {
+                            GLFW.GLFW_KEY_ENTER,
+                            GLFW.GLFW_KEY_KP_ENTER,
+                            -> {
+                                printLine("")
+                                return line.toString()
+                            }
+
+                            GLFW.GLFW_KEY_BACKSPACE -> {
+                                if (line.isNotEmpty()) {
+                                    line.deleteCharAt(line.lastIndex)
+                                    owner.cursorX = (owner.cursorX - 1).coerceAtLeast(0)
+                                    setCursor(owner.cursorX, owner.cursorY)
+                                    write(" ")
+                                    owner.cursorX = (owner.cursorX - 1).coerceAtLeast(0)
+                                    setCursor(owner.cursorX, owner.cursorY)
+                                }
+                            }
+                        }
+                    }
+
+                    else -> owner.deferEvent(event)
+                }
+            }
         }
 
         override suspend fun clear() {
             awaitHostCall<Unit> { HostCall.TerminalClear(it) }
+            owner.resetCursor()
         }
 
         override suspend fun setCursor(
@@ -315,21 +453,98 @@ class BackgroundComputerVm(
             y: Int,
         ) {
             awaitHostCall<Unit> { HostCall.TerminalSetCursor(it, x, y) }
+            owner.cursorX = x
+            owner.cursorY = y
         }
     }
 
-    private inner class FileSystemApi : ComputerFileSystemApi {
-        override suspend fun exists(path: String): Boolean = awaitHostCall { HostCall.FileExists(it, path) }
+    private inner class FileSystemApi(
+        private val owner: RuntimeFacade,
+    ) : ComputerFileSystemApi {
+        override suspend fun exists(path: String): Boolean = awaitHostCall { HostCall.FileExists(it, owner.resolvePath(path)) }
 
-        override suspend fun readText(path: String): String? = awaitHostCall { HostCall.FileReadText(it, path) }
+        override suspend fun isDirectory(path: String): Boolean = awaitHostCall { HostCall.FileIsDirectory(it, owner.resolvePath(path)) }
+
+        override suspend fun readText(path: String): String? = awaitHostCall { HostCall.FileReadText(it, owner.resolvePath(path)) }
 
         override suspend fun writeText(
             path: String,
             text: String,
         ) {
-            awaitHostCall<Unit> { HostCall.FileWriteText(it, path, text) }
+            awaitHostCall<Unit> { HostCall.FileWriteText(it, owner.resolvePath(path), text) }
         }
 
-        override suspend fun list(path: String): List<ComputerWorkspaceEntry> = awaitHostCall { HostCall.FileList(it, path) }
+        override suspend fun makeDirectory(path: String): Boolean =
+            awaitHostCall { HostCall.FileMakeDirectory(it, owner.resolvePath(path)) }
+
+        override suspend fun remove(path: String): Boolean = awaitHostCall { HostCall.FileRemove(it, owner.resolvePath(path)) }
+
+        override suspend fun list(path: String): List<ComputerWorkspaceEntry> =
+            awaitHostCall { HostCall.FileList(it, owner.resolvePath(path)) }
+    }
+
+    private inner class ProcessApi(
+        private val owner: RuntimeFacade,
+        override val argument: String,
+    ) : ComputerProcessApi {
+        override val workingDirectory: String
+            get() = owner.currentWorkingDirectory()
+
+        override suspend fun changeDirectory(path: String): Boolean {
+            val resolved = owner.resolvePath(path)
+            if (!owner.filesystem.isDirectory(resolved)) return false
+            owner.updateWorkingDirectory(resolved)
+            return true
+        }
+
+        override suspend fun run(
+            path: String,
+            argument: String,
+        ): Int {
+            val resolved = owner.resolvePath(path)
+            val source = loadProgramSource(resolved) ?: return 1
+            val artifact = LanguageServices.frontend.compile(resolved, source)
+            val module = artifact.module
+            if (module == null || artifact.analysis.diagnostics.any { it.severity == FrontendSeverity.ERROR }) {
+                val message = artifact.analysis.diagnostics.joinToString { it.message }
+                owner.terminal.printLine("Compilation Error: $message")
+                return 1
+            }
+
+            return try {
+                BytecodeComputerProgram(module).run(RuntimeFacade(owner.currentWorkingDirectory(), argument))
+                0
+            } catch (failure: Throwable) {
+                owner.terminal.printLine("Program error: ${failure.message ?: failure.javaClass.simpleName}")
+                1
+            }
+        }
+
+        private fun loadProgramSource(path: String): String? =
+            workspace.readDocument(computerId, path)?.text
+                ?: bundledScriptLoader(path)
+                ?: bundledScriptLoader(path.removePrefix("/"))
+                ?: run {
+                    logger.log("VM[$computerId] missing program: $path")
+                    null
+                }
+    }
+
+    private fun resolveWorkingDirectory(path: String): String =
+        path
+            .trim()
+            .trim('/')
+
+    private fun decodeTypedText(event: VmEvent): String? {
+        val bytes = event.arguments.firstOrNull() as? ByteArray ?: return null
+        return bytes.toString(StandardCharsets.UTF_8)
+    }
+
+    private fun decodePastedText(event: VmEvent): String? {
+        val buffer = event.arguments.firstOrNull() as? ByteBuffer ?: return null
+        val copy = buffer.asReadOnlyBuffer()
+        val bytes = ByteArray(copy.remaining())
+        copy.get(bytes)
+        return bytes.toString(StandardCharsets.UTF_8)
     }
 }

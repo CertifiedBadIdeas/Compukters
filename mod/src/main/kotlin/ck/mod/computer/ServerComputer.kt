@@ -204,7 +204,15 @@ class ServerComputer(
                 }
 
                 is HostCall.FileExists -> {
-                    HostResult.Success(call.id, ServerContext.vmSupervisor.workspace.readDocument(instanceID, call.path) != null)
+                    HostResult.Success(
+                        call.id,
+                        ServerContext.vmSupervisor.workspace.readDocument(instanceID, call.path) != null ||
+                            ServerContext.vmSupervisor.workspace.isDirectory(instanceID, call.path),
+                    )
+                }
+
+                is HostCall.FileIsDirectory -> {
+                    HostResult.Success(call.id, ServerContext.vmSupervisor.workspace.isDirectory(instanceID, call.path))
                 }
 
                 is HostCall.FileReadText -> {
@@ -219,6 +227,14 @@ class ServerComputer(
                 is HostCall.FileWriteText -> {
                     ServerContext.vmSupervisor.workspace.writeDocument(instanceID, call.path, call.text)
                     HostResult.Success(call.id)
+                }
+
+                is HostCall.FileMakeDirectory -> {
+                    HostResult.Success(call.id, ServerContext.vmSupervisor.workspace.makeDirectory(instanceID, call.path))
+                }
+
+                is HostCall.FileRemove -> {
+                    HostResult.Success(call.id, ServerContext.vmSupervisor.workspace.deleteDocument(instanceID, call.path))
                 }
 
                 is HostCall.FileList -> {

@@ -18,6 +18,8 @@
  */
 package ck.mod.network.client
 
+import ck.lang.runtime.ComputerWorkspaceDocument
+import ck.lang.runtime.ComputerWorkspaceEntry
 import ck.mod.gui.TerminalState
 import ck.mod.network.text.TableBuilder
 
@@ -30,6 +32,16 @@ interface ClientNetworkContext {
     fun handleComputerTerminal(
         containerId: Int,
         terminal: TerminalState,
+    )
+
+    fun handleComputerWorkspaceEntries(
+        containerId: Int,
+        entries: List<ComputerWorkspaceEntry>,
+    )
+
+    fun handleComputerWorkspaceDocument(
+        containerId: Int,
+        document: ComputerWorkspaceDocument?,
     )
 
 //    fun handleMonitorData(
