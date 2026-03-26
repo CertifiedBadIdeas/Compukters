@@ -18,15 +18,10 @@
  */
 package ck.mod.gui
 
-import ck.mod.gui.ComputerBorderRenderer.BORDER
 import ck.mod.menu.AbstractComputerMenu
-import com.mojang.blaze3d.vertex.Tesselator
 import net.minecraft.client.gui.GuiGraphics
-import net.minecraft.client.gui.components.Button
-import net.minecraft.client.renderer.MultiBufferSource
 import net.minecraft.network.chat.Component
 import net.minecraft.world.entity.player.Inventory
-import kotlin.math.max
 import kotlin.math.min
 
 class ComputerWorkbenchKoolScreen<T : AbstractComputerMenu>(
@@ -35,11 +30,11 @@ class ComputerWorkbenchKoolScreen<T : AbstractComputerMenu>(
     title: Component,
 ) : KoolScreen<T>(container, player, title) {
     private val presenter = ComputerWorkbenchPresenter(container)
-    private val terminalInput = TerminalInputController(presenter.terminalData, presenter.input)
+    private val terminalInput = WorkbenchTerminalInputController(presenter.input)
 
     init {
-        imageWidth = max(TerminalWidget.getWidth(presenter.terminalData.width) + BORDER * 2 + AbstractComputerMenu.SIDEBAR_WIDTH, 480)
-        imageHeight = max(TerminalWidget.getHeight(presenter.terminalData.height) + BORDER * 2, 280)
+        imageWidth = WorkbenchTerminalMetrics.imageWidth(presenter.terminalData)
+        imageHeight = WorkbenchTerminalMetrics.imageHeight(presenter.terminalData)
     }
 
     override fun init() {
@@ -60,20 +55,17 @@ class ComputerWorkbenchKoolScreen<T : AbstractComputerMenu>(
         mouseY: Int,
     ) {
         if (presenter.mode == ComputerWorkbenchPresenter.Mode.TERMINAL) {
-            val spriteRenderer = SpriteRenderer.createForGui(graphics, RenderTypes.GUI_SPRITES)
-            val computerTextures = GuiSprites.getComputerTextures(presenter.family)
-            ComputerBorderRenderer.render(
-                spriteRenderer,
-                computerTextures,
-                leftPos + AbstractComputerMenu.SIDEBAR_WIDTH + BORDER,
-                topPos + BORDER,
-                TerminalWidget.getWidth(presenter.terminalData.width),
-                TerminalWidget.getHeight(presenter.terminalData.height),
-                false,
+            WorkbenchTerminalRenderer.render(
+                graphics,
+                minecraft!!.font,
+                leftPos,
+                topPos,
+                imageWidth,
+                imageHeight,
+                terminalLayout(),
+                presenter.terminalData,
+                terminalInput.focused,
             )
-            ComputerSidebar.renderBackground(spriteRenderer, computerTextures, leftPos, topPos + BORDER)
-            graphics.flush()
-            renderTerminal(graphics)
         } else {
             graphics.fill(leftPos, topPos, leftPos + imageWidth, topPos + imageHeight, 0xFF12151D.toInt())
             graphics.fill(leftPos + 8, topPos + 34, leftPos + 128, topPos + imageHeight - 12, 0xFF1D2330.toInt())
@@ -120,12 +112,16 @@ class ComputerWorkbenchKoolScreen<T : AbstractComputerMenu>(
         scancode: Int,
         modifiers: Int,
     ): Boolean {
+        val previousMode = presenter.mode
         if (presenter.mode == ComputerWorkbenchPresenter.Mode.TERMINAL && terminalInput.focused) {
             if (terminalInput.keyPressed(key, scancode, modifiers)) {
                 return true
             }
         }
         if (presenter.keyPressed(key, scancode, modifiers, presenter.visibleEditorLines(layout()))) {
+            if (previousMode != presenter.mode && presenter.mode != ComputerWorkbenchPresenter.Mode.TERMINAL) {
+                terminalInput.focused = false
+            }
             return true
         }
         return super.keyPressed(key, scancode, modifiers)
@@ -167,7 +163,7 @@ class ComputerWorkbenchKoolScreen<T : AbstractComputerMenu>(
         }
 
         if (presenter.mode == ComputerWorkbenchPresenter.Mode.TERMINAL) {
-            terminalInput.focused = terminalInput.mouseClicked(terminalBounds(), mouseX, mouseY, button)
+            terminalInput.focused = terminalInput.mouseClicked(terminalLayout().terminalBounds, mouseX, mouseY)
             return terminalInput.focused || super.mouseClicked(mouseX, mouseY, button)
         }
 
@@ -192,12 +188,7 @@ class ComputerWorkbenchKoolScreen<T : AbstractComputerMenu>(
         mouseX: Double,
         mouseY: Double,
         button: Int,
-    ): Boolean {
-        if (presenter.mode == ComputerWorkbenchPresenter.Mode.TERMINAL) {
-            return terminalInput.mouseReleased(terminalBounds(), mouseX, mouseY, button) || super.mouseReleased(mouseX, mouseY, button)
-        }
-        return super.mouseReleased(mouseX, mouseY, button)
-    }
+    ): Boolean = super.mouseReleased(mouseX, mouseY, button)
 
     override fun mouseDragged(
         mouseX: Double,
@@ -205,42 +196,18 @@ class ComputerWorkbenchKoolScreen<T : AbstractComputerMenu>(
         button: Int,
         dragX: Double,
         dragY: Double,
-    ): Boolean {
-        if (presenter.mode == ComputerWorkbenchPresenter.Mode.TERMINAL) {
-            return terminalInput.mouseDragged(terminalBounds(), mouseX, mouseY, button) || super.mouseDragged(mouseX, mouseY, button, dragX, dragY)
-        }
-        return super.mouseDragged(mouseX, mouseY, button, dragX, dragY)
-    }
+    ): Boolean = super.mouseDragged(mouseX, mouseY, button, dragX, dragY)
 
     override fun mouseScrolled(
         mouseX: Double,
         mouseY: Double,
         delta: Double,
     ): Boolean {
-        if (presenter.mode == ComputerWorkbenchPresenter.Mode.TERMINAL) {
-            return terminalInput.mouseScrolled(terminalBounds(), mouseX, mouseY, delta) || super.mouseScrolled(mouseX, mouseY, delta)
-        }
         if (presenter.mode == ComputerWorkbenchPresenter.Mode.EDITOR && presenter.isInEditorArea(layout(), mouseX.toInt(), mouseY.toInt())) {
             presenter.scrollEditor(-delta.toInt())
             return true
         }
         return super.mouseScrolled(mouseX, mouseY, delta)
-    }
-
-    private fun renderTerminal(graphics: GuiGraphics) {
-        val bufferSource = MultiBufferSource.immediate(Tesselator.getInstance().builder)
-        val emitter = FixedWidthFontRenderer.toVertexConsumer(graphics.pose(), bufferSource.getBuffer(RenderTypes.TERMINAL))
-        FixedWidthFontRenderer.drawTerminal(
-            emitter,
-            terminalBounds().x.toFloat(),
-            terminalBounds().y.toFloat(),
-            presenter.terminalData,
-            0f,
-            0f,
-            0f,
-            0f,
-        )
-        bufferSource.endBatch()
     }
 
     private fun renderToolbar(graphics: GuiGraphics) {
@@ -403,22 +370,24 @@ class ComputerWorkbenchKoolScreen<T : AbstractComputerMenu>(
         mouseX: Int,
         mouseY: Int,
     ): Boolean {
-        val actions =
-            listOf(
-                { presenter.toggleMode() },
-                { presenter.saveDocument() },
-                {
-                    presenter.requestListing(presenter.browserPath)
-                    presenter.openDocument?.path?.let(presenter::requestDocument)
-                },
-                { presenter.navigateUp() },
-                { presenter.input.reboot() },
-            )
-
-        actions.forEachIndexed { index, action ->
+        repeat(5) { index ->
             val bounds = toolbarButtonBounds(index)
             if (mouseX in bounds.x..(bounds.x + bounds.width) && mouseY in bounds.y..(bounds.y + bounds.height)) {
-                action()
+                when (index) {
+                    0 -> {
+                        presenter.toggleMode()
+                        if (presenter.mode != ComputerWorkbenchPresenter.Mode.TERMINAL) {
+                            terminalInput.focused = false
+                        }
+                    }
+                    1 -> presenter.saveDocument()
+                    2 -> {
+                        presenter.requestListing(presenter.browserPath)
+                        presenter.openDocument?.path?.let(presenter::requestDocument)
+                    }
+                    3 -> presenter.navigateUp()
+                    4 -> presenter.input.reboot()
+                }
                 return true
             }
         }
@@ -429,12 +398,13 @@ class ComputerWorkbenchKoolScreen<T : AbstractComputerMenu>(
 
     private fun layout(): ComputerWorkbenchLayout = ComputerWorkbenchLayout(leftPos, topPos, imageWidth, imageHeight)
 
-    private fun terminalBounds(): TerminalBounds =
-        TerminalBounds(
-            leftPos + AbstractComputerMenu.SIDEBAR_WIDTH + BORDER + ComputerBorderRenderer.MARGIN,
-            topPos + BORDER + ComputerBorderRenderer.MARGIN,
-            presenter.terminalData.width * FixedWidthFontRenderer.FONT_WIDTH,
-            presenter.terminalData.height * FixedWidthFontRenderer.FONT_HEIGHT,
+    private fun terminalLayout(): WorkbenchTerminalLayout =
+        WorkbenchTerminalMetrics.layout(
+            leftPos,
+            topPos,
+            imageWidth,
+            imageHeight,
+            presenter.terminalData,
         )
 
     private data class ButtonBounds(
