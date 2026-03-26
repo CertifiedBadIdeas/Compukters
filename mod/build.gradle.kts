@@ -71,7 +71,7 @@ dependencies {
     modImplementation(libs.architectury.forge)
 
     forgeImplementation(projects.compiler)
-    forgeImplementation(libs.kool.core)
+    forgeImplementation(libs.kool.core.desktop)
     forgeImplementation(libs.kotlinx.coroutines.core)
     forgeImplementation(libs.kotlin.stdlib)
     forgeImplementation(libs.kotlin.logging)

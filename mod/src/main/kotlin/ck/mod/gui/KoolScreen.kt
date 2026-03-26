@@ -19,7 +19,13 @@
 
 package ck.mod.gui
 
-import ck.mod.literalComponent
-import net.minecraft.client.gui.screens.Screen
+import ck.mod.menu.AbstractComputerMenu
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
+import net.minecraft.network.chat.Component
+import net.minecraft.world.entity.player.Inventory
 
-open class KoolScreen : Screen("".literalComponent())
+abstract class KoolScreen<T : AbstractComputerMenu>(
+    container: T,
+    player: Inventory,
+    title: Component,
+) : AbstractContainerScreen<T>(container, player, title)

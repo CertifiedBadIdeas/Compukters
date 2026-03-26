@@ -35,3 +35,4 @@ kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-c
 kotlin-stdlib = { module = "org.jetbrains.kotlin:kotlin-stdlib", version.ref = "kotlin" }
 
 kool-core = { module = "de.fabmax.kool:kool-core", version = "0.19.0" }
+kool-core-desktop = { module = "de.fabmax.kool:kool-core-desktop", version = "0.19.0" }

@@ -19,7 +19,7 @@
 
 package ck.mod
 
-import ck.mod.gui.ComputerWorkbenchScreen
+import ck.mod.gui.ComputerWorkbenchKoolScreen
 import ck.mod.gui.GuiSprites
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.screens.MenuScreens
@@ -27,15 +27,22 @@ import net.minecraft.server.packs.resources.PreparableReloadListener
 import java.util.function.Consumer
 
 object ClientRegistry {
+    private var registeredMainThread = false
+
     fun registerMainThread() {
+        if (registeredMainThread) {
+            LOGGER.info { "ClientRegistry: registration already completed, skipping duplicate call" }
+            return
+        }
         try {
             MenuScreens.register(
                 ModRegistry.Menus.COMPUTER.get(),
-                { container, inventory, title -> ComputerWorkbenchScreen(container, inventory, title) },
+                { container, inventory, title -> ComputerWorkbenchKoolScreen(container, inventory, title) },
             )
-            LOGGER.info { "ClientRegistry: ComputerWorkbenchScreen successfully registered" }
+            registeredMainThread = true
+            LOGGER.info { "ClientRegistry: ComputerWorkbenchKoolScreen successfully registered" }
         } catch (e: Exception) {
-            LOGGER.error { "ClientRegistry: ComputerWorkbenchScreen registered with error ${e.message}" }
+            LOGGER.error { "ClientRegistry: ComputerWorkbenchKoolScreen registered with error ${e.message}" }
         }
     }
 
