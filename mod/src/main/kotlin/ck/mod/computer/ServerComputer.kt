@@ -60,8 +60,7 @@ class ServerComputer(
             profile.terminalWidth,
             profile.terminalHeight,
             profile.colorTerminal,
-            Runnable { terminalDirty = true },
-        )
+        ) { terminalDirty = true }
     private val logger = ComputerVmLogger { message -> LOGGER.info { message } }
     private var label: String? = properties.label
     private var vmHandle: ComputerVmHandle? = null

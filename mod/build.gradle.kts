@@ -19,6 +19,7 @@
 
 @file:Suppress("PropertyName")
 
+
 // operator fun Provider<String>.getValue(ref: Any?, prop: KProperty<*>): String = this.get()
 //
 // fun File.parseProperties(): Map<String, String> =
@@ -69,19 +70,31 @@ dependencies {
     )
     modImplementation(libs.architectury.forge)
 
-    implementation(libs.kotlinx.coroutines.core)
-    forgeRuntimeLibrary(libs.kotlinx.coroutines.core)
-
-    implementation(projects.compiler)
-    forgeRuntimeLibrary(projects.compiler)
-
-    implementation(libs.kotlin.stdlib)
-    forgeRuntimeLibrary(libs.kotlin.stdlib)
-
-    implementation(libs.kotlin.logging)
-    forgeRuntimeLibrary(libs.kotlin.logging)
+    forgeImplementation(projects.compiler)
+    forgeImplementation(libs.kool.core)
+    forgeImplementation(libs.kotlinx.coroutines.core)
+    forgeImplementation(libs.kotlin.stdlib)
+    forgeImplementation(libs.kotlin.logging)
 
     testImplementation(kotlin("test"))
+}
+
+fun <T : ModuleDependency> DependencyHandler.forgeImplementation(dependency: Provider<T>) {
+    implementation(dependency) {
+        isTransitive = false
+    }
+    forgeRuntimeLibrary(dependency) {
+        isTransitive = false
+    }
+}
+
+fun <T : ModuleDependency> DependencyHandler.forgeImplementation(dependency: T) {
+    implementation(dependency) {
+        isTransitive = false
+    }
+    forgeRuntimeLibrary(dependency) {
+        isTransitive = false
+    }
 }
 
 val generateModMetadata =

@@ -21,6 +21,7 @@ package ck.mod
 
 import io.github.oshai.kotlinlogging.KLogger
 import io.github.oshai.kotlinlogging.KotlinLogging
+import net.minecraft.network.chat.Component
 import net.minecraft.resources.ResourceLocation
 import net.minecraftforge.fml.ModList
 import kotlin.jvm.optionals.getOrDefault
@@ -39,3 +40,5 @@ val INSTALLED_VERSION: String by lazy {
 }
 
 fun String.asResource(): ResourceLocation = ResourceLocation.fromNamespaceAndPath(MOD_ID, this)
+
+fun String.literalComponent(): Component = Component.literal(this)
