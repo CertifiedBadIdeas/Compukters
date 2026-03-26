@@ -17,8 +17,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import ru.lazyhat.ck.lang.runtime.ComputerProgramFiles
-import ru.lazyhat.compukterkraft.computer.vm.FileComputerWorkspace
+import ck.lang.runtime.ComputerProgramFiles
+import ck.mod.computer.vm.FileComputerWorkspace
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.createTempDirectory

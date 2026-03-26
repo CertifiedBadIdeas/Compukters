@@ -17,14 +17,14 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import ru.lazyhat.ck.lang.frontend.FrontendSeverity
-import ru.lazyhat.ck.lang.runtime.BytecodeVirtualMachine
-import ru.lazyhat.ck.lang.runtime.VmSignal
-import ru.lazyhat.ck.lang.runtime.VmValue
-import ru.lazyhat.compukterkraft.block.ComputerFamily
-import ru.lazyhat.compukterkraft.computer.vm.ComputerProfileRegistry
-import ru.lazyhat.compukterkraft.computer.vm.FileComputerWorkspace
-import ru.lazyhat.compukterkraft.language.LanguageServices
+import ck.lang.frontend.FrontendSeverity
+import ck.lang.runtime.BytecodeVirtualMachine
+import ck.lang.runtime.VmSignal
+import ck.lang.runtime.VmValue
+import ck.mod.block.ComputerFamily
+import ck.mod.computer.vm.ComputerProfileRegistry
+import ck.mod.computer.vm.FileComputerWorkspace
+import ck.mod.language.LanguageServices
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
