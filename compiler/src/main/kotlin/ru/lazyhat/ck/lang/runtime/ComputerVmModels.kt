@@ -17,7 +17,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package ru.lazyhat.compukterkraft.machine
+package ru.lazyhat.ck.lang.runtime
 
 enum class ComputerCapability {
     TERMINAL,

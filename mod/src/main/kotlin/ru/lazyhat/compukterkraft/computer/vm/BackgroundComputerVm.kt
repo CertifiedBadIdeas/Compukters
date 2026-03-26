@@ -31,26 +31,26 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import ru.lazyhat.compukterkraft.machine.ComputerFileSystemApi
-import ru.lazyhat.compukterkraft.machine.ComputerPeripheralApi
-import ru.lazyhat.compukterkraft.machine.ComputerProfile
-import ru.lazyhat.compukterkraft.machine.ComputerProgram
-import ru.lazyhat.compukterkraft.machine.ComputerRedstoneApi
-import ru.lazyhat.compukterkraft.machine.ComputerRuntime
-import ru.lazyhat.compukterkraft.machine.ComputerSystemApi
-import ru.lazyhat.compukterkraft.machine.ComputerTerminalApi
-import ru.lazyhat.compukterkraft.machine.ComputerVmHandle
-import ru.lazyhat.compukterkraft.machine.ComputerWorkspaceEntry
-import ru.lazyhat.compukterkraft.machine.HostCall
-import ru.lazyhat.compukterkraft.machine.HostResult
-import ru.lazyhat.compukterkraft.machine.VmEvent
-import ru.lazyhat.compukterkraft.machine.VmSnapshot
-import ru.lazyhat.compukterkraft.machine.VmState
-import ru.lazyhat.compukterkraft.machine.VmStopReason
+import ru.lazyhat.ck.lang.runtime.ComputerFileSystemApi
+import ru.lazyhat.ck.lang.runtime.ComputerPeripheralApi
+import ru.lazyhat.ck.lang.runtime.ComputerProfile
+import ru.lazyhat.ck.lang.runtime.ComputerProgram
+import ru.lazyhat.ck.lang.runtime.ComputerRedstoneApi
+import ru.lazyhat.ck.lang.runtime.ComputerRuntime
+import ru.lazyhat.ck.lang.runtime.ComputerSystemApi
+import ru.lazyhat.ck.lang.runtime.ComputerTerminalApi
+import ru.lazyhat.ck.lang.runtime.ComputerVmHandle
+import ru.lazyhat.ck.lang.runtime.ComputerWorkspaceEntry
+import ru.lazyhat.ck.lang.runtime.HostCall
+import ru.lazyhat.ck.lang.runtime.HostResult
+import ru.lazyhat.ck.lang.runtime.VmEvent
+import ru.lazyhat.ck.lang.runtime.VmSnapshot
+import ru.lazyhat.ck.lang.runtime.VmState
+import ru.lazyhat.ck.lang.runtime.VmStopReason
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
-import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.yield as coroutineYield
 
@@ -153,12 +153,13 @@ class BackgroundComputerVm(
         slicePermits.trySend(Unit)
     }
 
-    override fun drainHostCalls(): List<HostCall> = buildList {
-        while (true) {
-            val call = hostCalls.poll() ?: break
-            add(call)
+    override fun drainHostCalls(): List<HostCall> =
+        buildList {
+            while (true) {
+                val call = hostCalls.poll() ?: break
+                add(call)
+            }
         }
-    }
 
     override fun deliverHostResults(results: List<HostResult>) {
         for (result in results) {
@@ -197,11 +198,12 @@ class BackgroundComputerVm(
     }
 
     private suspend fun awaitSlicePermit() {
-        state = when {
-            sleepUntilTick != null -> VmState.SLEEPING
-            state == VmState.BOOTING -> VmState.BOOTING
-            else -> VmState.RUNNING
-        }
+        state =
+            when {
+                sleepUntilTick != null -> VmState.SLEEPING
+                state == VmState.BOOTING -> VmState.BOOTING
+                else -> VmState.RUNNING
+            }
         slicePermits.receive()
         sliceDeadlineNanos = System.nanoTime() + profile.cpuBudgetNanosPerSlice
         state = VmState.RUNNING
@@ -328,7 +330,6 @@ class BackgroundComputerVm(
             awaitHostCall<Unit> { HostCall.FileWriteText(it, path, text) }
         }
 
-        override suspend fun list(path: String): List<ComputerWorkspaceEntry> =
-            awaitHostCall { HostCall.FileList(it, path) }
+        override suspend fun list(path: String): List<ComputerWorkspaceEntry> = awaitHostCall { HostCall.FileList(it, path) }
     }
 }

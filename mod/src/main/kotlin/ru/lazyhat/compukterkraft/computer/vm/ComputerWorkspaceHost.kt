@@ -19,18 +19,18 @@
 
 package ru.lazyhat.compukterkraft.computer.vm
 
-import ru.lazyhat.compukterkraft.machine.ComputerCompletionRequest
-import ru.lazyhat.compukterkraft.machine.ComputerCompletionResponse
-import ru.lazyhat.compukterkraft.machine.ComputerDefinitionRequest
-import ru.lazyhat.compukterkraft.machine.ComputerDefinitionResponse
-import ru.lazyhat.compukterkraft.machine.ComputerHoverRequest
-import ru.lazyhat.compukterkraft.machine.ComputerHoverResponse
-import ru.lazyhat.compukterkraft.machine.ComputerIdeHost
-import ru.lazyhat.compukterkraft.machine.ComputerIdeSnapshot
-import ru.lazyhat.compukterkraft.machine.ComputerProgramFiles
-import ru.lazyhat.compukterkraft.machine.ComputerWorkspace
-import ru.lazyhat.compukterkraft.machine.ComputerWorkspaceDocument
-import ru.lazyhat.compukterkraft.machine.ComputerWorkspaceEntry
+import ru.lazyhat.ck.lang.runtime.ComputerCompletionRequest
+import ru.lazyhat.ck.lang.runtime.ComputerCompletionResponse
+import ru.lazyhat.ck.lang.runtime.ComputerDefinitionRequest
+import ru.lazyhat.ck.lang.runtime.ComputerDefinitionResponse
+import ru.lazyhat.ck.lang.runtime.ComputerHoverRequest
+import ru.lazyhat.ck.lang.runtime.ComputerHoverResponse
+import ru.lazyhat.ck.lang.runtime.ComputerIdeHost
+import ru.lazyhat.ck.lang.runtime.ComputerIdeSnapshot
+import ru.lazyhat.ck.lang.runtime.ComputerProgramFiles
+import ru.lazyhat.ck.lang.runtime.ComputerWorkspace
+import ru.lazyhat.ck.lang.runtime.ComputerWorkspaceDocument
+import ru.lazyhat.ck.lang.runtime.ComputerWorkspaceEntry
 import ru.lazyhat.compukterkraft.language.LanguageServices
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files

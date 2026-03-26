@@ -17,7 +17,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package ru.lazyhat.compukterkraft.machine
+package ru.lazyhat.ck.lang.runtime
 
 import ru.lazyhat.ck.lang.api.SourceRange
 
@@ -131,7 +131,10 @@ data class ComputerDefinitionResponse(
 )
 
 interface ComputerWorkspace {
-    fun list(computerId: Int, path: String = ""): List<ComputerWorkspaceEntry>
+    fun list(
+        computerId: Int,
+        path: String = "",
+    ): List<ComputerWorkspaceEntry>
 
     fun readDocument(
         computerId: Int,

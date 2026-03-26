@@ -19,18 +19,16 @@
 
 package ru.lazyhat.ck.lang.frontend
 
-import ru.lazyhat.ck.lang.api.SourceLocation
-import ru.lazyhat.ck.lang.api.SourceRange
 import ru.lazyhat.ck.lang.api.Token
 import ru.lazyhat.ck.lang.api.TokenKind
-import ru.lazyhat.compukterkraft.machine.CompletionItem
-import ru.lazyhat.compukterkraft.machine.CompletionItemKind
-import ru.lazyhat.compukterkraft.machine.DefinitionTarget
-import ru.lazyhat.compukterkraft.machine.Diagnostic
-import ru.lazyhat.compukterkraft.machine.HighlightToken
-import ru.lazyhat.compukterkraft.machine.HighlightTokenKind
-import ru.lazyhat.compukterkraft.machine.HoverInfo
-import ru.lazyhat.compukterkraft.machine.IdeDiagnosticSeverity
+import ru.lazyhat.ck.lang.runtime.CompletionItem
+import ru.lazyhat.ck.lang.runtime.CompletionItemKind
+import ru.lazyhat.ck.lang.runtime.DefinitionTarget
+import ru.lazyhat.ck.lang.runtime.Diagnostic
+import ru.lazyhat.ck.lang.runtime.HighlightToken
+import ru.lazyhat.ck.lang.runtime.HighlightTokenKind
+import ru.lazyhat.ck.lang.runtime.HoverInfo
+import ru.lazyhat.ck.lang.runtime.IdeDiagnosticSeverity
 
 class LanguageIde(
     private val frontend: LanguageFrontend = LanguageFrontend(),
@@ -136,7 +134,11 @@ class LanguageIde(
     ): DefinitionTarget? {
         val snapshot = analyze(name, source)
         val offset = offsetAt(source, line, column)
-        val targetRange = snapshot.analysis.referenceAt(offset)?.target?.range ?: return null
+        val targetRange =
+            snapshot.analysis
+                .referenceAt(offset)
+                ?.target
+                ?.range ?: return null
         return DefinitionTarget(path = name, range = targetRange)
     }
 
@@ -176,13 +178,17 @@ class LanguageIde(
     private fun highlightKindForSymbol(kind: SymbolKind): HighlightTokenKind =
         when (kind) {
             SymbolKind.MODULE -> HighlightTokenKind.MODULE
+
             SymbolKind.FUNCTION,
             SymbolKind.BUILTIN_FUNCTION,
             -> HighlightTokenKind.FUNCTION
+
             SymbolKind.RECORD,
             SymbolKind.BUILTIN_TYPE,
             -> HighlightTokenKind.TYPE
+
             SymbolKind.FIELD -> HighlightTokenKind.FIELD
+
             SymbolKind.VARIABLE,
             SymbolKind.PARAMETER,
             -> HighlightTokenKind.IDENTIFIER
@@ -193,9 +199,13 @@ class LanguageIde(
             TokenKind.TRUE,
             TokenKind.FALSE,
             -> HighlightTokenKind.BOOLEAN
+
             TokenKind.NULL -> HighlightTokenKind.NULL
+
             TokenKind.NUMBER -> HighlightTokenKind.NUMBER
+
             TokenKind.STRING -> HighlightTokenKind.STRING
+
             TokenKind.FUN,
             TokenKind.VAL,
             TokenKind.VAR,
@@ -206,6 +216,7 @@ class LanguageIde(
             TokenKind.IMPORT,
             TokenKind.STRUCT,
             -> HighlightTokenKind.KEYWORD
+
             TokenKind.PLUS,
             TokenKind.MINUS,
             TokenKind.STAR,
@@ -221,6 +232,7 @@ class LanguageIde(
             TokenKind.AMP_AMP,
             TokenKind.PIPE_PIPE,
             -> HighlightTokenKind.OPERATOR
+
             TokenKind.COLON,
             TokenKind.SEMICOLON,
             TokenKind.COMMA,
@@ -231,7 +243,9 @@ class LanguageIde(
             TokenKind.LBRACE,
             TokenKind.RBRACE,
             -> HighlightTokenKind.PUNCTUATION
+
             TokenKind.IDENTIFIER -> HighlightTokenKind.IDENTIFIER
+
             TokenKind.EOF -> null
         }
 
@@ -242,14 +256,19 @@ class LanguageIde(
             kind =
                 when (symbol.kind) {
                     SymbolKind.MODULE -> CompletionItemKind.MODULE
+
                     SymbolKind.FUNCTION,
                     SymbolKind.BUILTIN_FUNCTION,
                     -> CompletionItemKind.FUNCTION
+
                     SymbolKind.VARIABLE -> CompletionItemKind.VARIABLE
+
                     SymbolKind.PARAMETER -> CompletionItemKind.PARAMETER
+
                     SymbolKind.RECORD,
                     SymbolKind.BUILTIN_TYPE,
                     -> CompletionItemKind.TYPE
+
                     SymbolKind.FIELD -> CompletionItemKind.FIELD
                 },
             documentation = symbol.documentation,

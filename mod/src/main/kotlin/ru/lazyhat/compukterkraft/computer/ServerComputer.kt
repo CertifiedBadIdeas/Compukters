@@ -25,6 +25,12 @@ import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.entity.player.Player
 import ru.lazyhat.ck.lang.frontend.FrontendSeverity
 import ru.lazyhat.ck.lang.runtime.BytecodeComputerProgram
+import ru.lazyhat.ck.lang.runtime.ComputerVmHandle
+import ru.lazyhat.ck.lang.runtime.HostCall
+import ru.lazyhat.ck.lang.runtime.HostResult
+import ru.lazyhat.ck.lang.runtime.VmEvent
+import ru.lazyhat.ck.lang.runtime.VmState
+import ru.lazyhat.ck.lang.runtime.VmStopReason
 import ru.lazyhat.compukterkraft.LOGGER
 import ru.lazyhat.compukterkraft.computer.vm.ComputerProfileRegistry
 import ru.lazyhat.compukterkraft.computer.vm.ComputerVmCallbacks
@@ -32,16 +38,10 @@ import ru.lazyhat.compukterkraft.computer.vm.ComputerVmLogger
 import ru.lazyhat.compukterkraft.context.ServerContext
 import ru.lazyhat.compukterkraft.gui.NetworkedTerminal
 import ru.lazyhat.compukterkraft.gui.TerminalState
-import ru.lazyhat.compukterkraft.machine.ComputerVmHandle
-import ru.lazyhat.compukterkraft.machine.HostCall
-import ru.lazyhat.compukterkraft.machine.HostResult
-import ru.lazyhat.compukterkraft.machine.VmEvent
-import ru.lazyhat.compukterkraft.machine.VmState
-import ru.lazyhat.compukterkraft.machine.VmStopReason
+import ru.lazyhat.compukterkraft.language.LanguageServices
 import ru.lazyhat.compukterkraft.menu.ComputerMenu
 import ru.lazyhat.compukterkraft.network.client.ComputerTerminalClientMessage
 import ru.lazyhat.compukterkraft.network.server.ServerNetworking
-import ru.lazyhat.compukterkraft.language.LanguageServices
 
 class ServerComputer(
     val instanceID: Int,

@@ -19,6 +19,7 @@
 
 package ru.lazyhat.ck.lang.frontend
 
+import ru.lazyhat.ck.lang.runtime.HighlightTokenKind
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -79,8 +80,8 @@ class LanguageIdeTest {
 
         val snapshot = ide.analyze("broken.ck", source)
         assertTrue(snapshot.diagnostics.any { it.message.contains("Expected Bool") })
-        assertTrue(snapshot.highlights.any { it.kind == ru.lazyhat.compukterkraft.machine.HighlightTokenKind.KEYWORD })
-        assertTrue(snapshot.highlights.any { it.kind == ru.lazyhat.compukterkraft.machine.HighlightTokenKind.FUNCTION })
+        assertTrue(snapshot.highlights.any { it.kind == HighlightTokenKind.KEYWORD })
+        assertTrue(snapshot.highlights.any { it.kind == HighlightTokenKind.FUNCTION })
     }
 
     private fun lineAndColumnOf(

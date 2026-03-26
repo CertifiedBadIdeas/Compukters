@@ -20,6 +20,7 @@
 package ru.lazyhat.ck.lang.frontend
 
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -71,7 +72,7 @@ class LanguageFrontendTest {
                 """.trimIndent(),
             )
 
-        assertTrue(artifact.module == null)
+        assertEquals(artifact.module, null)
         assertTrue(
             artifact.analysis.diagnostics.any { it.message.contains("Expected Bool") },
             artifact.analysis.diagnostics.joinToString { it.message },

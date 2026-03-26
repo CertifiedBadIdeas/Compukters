@@ -24,10 +24,6 @@ import ru.lazyhat.ck.lang.api.BytecodeFunction
 import ru.lazyhat.ck.lang.api.BytecodeModule
 import ru.lazyhat.ck.lang.api.Instruction
 import ru.lazyhat.ck.lang.api.UnaryOperator
-import ru.lazyhat.compukterkraft.machine.ComputerCapability
-import ru.lazyhat.compukterkraft.machine.ComputerProgram
-import ru.lazyhat.compukterkraft.machine.ComputerRuntime
-import ru.lazyhat.compukterkraft.machine.VmEvent
 
 sealed interface VmValue {
     data object UnitValue : VmValue

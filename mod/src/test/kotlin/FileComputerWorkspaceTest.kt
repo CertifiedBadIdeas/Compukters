@@ -17,8 +17,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+import ru.lazyhat.ck.lang.runtime.ComputerProgramFiles
 import ru.lazyhat.compukterkraft.computer.vm.FileComputerWorkspace
-import ru.lazyhat.compukterkraft.machine.ComputerProgramFiles
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.createTempDirectory
@@ -45,7 +45,11 @@ class FileComputerWorkspaceTest {
     fun preserveCustomizedBootScriptWhenReinitialized() {
         withWorkspace { workspace, _ ->
             workspace.ensureInitialized(7)
-            workspace.writeDocument(7, ComputerProgramFiles.BIOS_SCRIPT_NAME, "import terminal;\nfun main() { terminal.printLine(\"custom bios\"); }")
+            workspace.writeDocument(
+                7,
+                ComputerProgramFiles.BIOS_SCRIPT_NAME,
+                "import terminal;\nfun main() { terminal.printLine(\"custom bios\"); }",
+            )
 
             workspace.ensureInitialized(7)
 

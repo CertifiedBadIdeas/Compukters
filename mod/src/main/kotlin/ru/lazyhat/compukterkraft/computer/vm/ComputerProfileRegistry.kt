@@ -19,15 +19,15 @@
 
 package ru.lazyhat.compukterkraft.computer.vm
 
+import ru.lazyhat.ck.lang.runtime.ComputerCapability
+import ru.lazyhat.ck.lang.runtime.ComputerProfile
 import ru.lazyhat.compukterkraft.Config
 import ru.lazyhat.compukterkraft.block.ComputerFamily
-import ru.lazyhat.compukterkraft.machine.ComputerCapability
-import ru.lazyhat.compukterkraft.machine.ComputerProfile
 
 object ComputerProfileRegistry {
     fun forFamily(family: ComputerFamily): ComputerProfile =
         when (family) {
-            ComputerFamily.NORMAL ->
+            ComputerFamily.NORMAL -> {
                 ComputerProfile(
                     id = "normal",
                     displayName = "Normal Computer",
@@ -38,8 +38,9 @@ object ComputerProfileRegistry {
                     colorTerminal = false,
                     allowedCapabilities = defaultCapabilities(),
                 )
+            }
 
-            ComputerFamily.ADVANCED ->
+            ComputerFamily.ADVANCED -> {
                 ComputerProfile(
                     id = "advanced",
                     displayName = "Advanced Computer",
@@ -50,8 +51,9 @@ object ComputerProfileRegistry {
                     colorTerminal = true,
                     allowedCapabilities = defaultCapabilities(),
                 )
+            }
 
-            ComputerFamily.COMMAND ->
+            ComputerFamily.COMMAND -> {
                 ComputerProfile(
                     id = "command",
                     displayName = "Command Computer",
@@ -62,6 +64,7 @@ object ComputerProfileRegistry {
                     colorTerminal = true,
                     allowedCapabilities = defaultCapabilities() + ComputerCapability.REDSTONE + ComputerCapability.PERIPHERALS,
                 )
+            }
         }
 
     private fun defaultCapabilities(): Set<ComputerCapability> =

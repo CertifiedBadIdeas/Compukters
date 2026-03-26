@@ -19,16 +19,16 @@
 
 package ru.lazyhat.compukterkraft.computer.vm
 
+import kotlinx.coroutines.asCoroutineDispatcher
 import net.minecraft.server.MinecraftServer
 import net.minecraft.world.level.storage.LevelResource
-import kotlinx.coroutines.asCoroutineDispatcher
+import ru.lazyhat.ck.lang.runtime.ComputerIdeHost
+import ru.lazyhat.ck.lang.runtime.ComputerProfile
+import ru.lazyhat.ck.lang.runtime.ComputerVmHandle
+import ru.lazyhat.ck.lang.runtime.ComputerWorkspace
+import ru.lazyhat.ck.lang.runtime.VmStopReason
+import ru.lazyhat.ck.lang.runtime.VmSupervisor
 import ru.lazyhat.compukterkraft.MOD_ID
-import ru.lazyhat.compukterkraft.machine.ComputerIdeHost
-import ru.lazyhat.compukterkraft.machine.ComputerProfile
-import ru.lazyhat.compukterkraft.machine.ComputerVmHandle
-import ru.lazyhat.compukterkraft.machine.ComputerWorkspace
-import ru.lazyhat.compukterkraft.machine.VmStopReason
-import ru.lazyhat.compukterkraft.machine.VmSupervisor
 import ru.lazyhat.compukterkraft.language.LanguageServices
 import java.io.Closeable
 import java.util.concurrent.ConcurrentHashMap

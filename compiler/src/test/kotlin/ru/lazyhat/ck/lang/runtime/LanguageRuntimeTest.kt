@@ -22,16 +22,6 @@ package ru.lazyhat.ck.lang.runtime
 import kotlinx.coroutines.runBlocking
 import ru.lazyhat.ck.lang.frontend.FrontendSeverity
 import ru.lazyhat.ck.lang.frontend.LanguageFrontend
-import ru.lazyhat.compukterkraft.machine.ComputerCapability
-import ru.lazyhat.compukterkraft.machine.ComputerFileSystemApi
-import ru.lazyhat.compukterkraft.machine.ComputerPeripheralApi
-import ru.lazyhat.compukterkraft.machine.ComputerProfile
-import ru.lazyhat.compukterkraft.machine.ComputerRedstoneApi
-import ru.lazyhat.compukterkraft.machine.ComputerRuntime
-import ru.lazyhat.compukterkraft.machine.ComputerSystemApi
-import ru.lazyhat.compukterkraft.machine.ComputerTerminalApi
-import ru.lazyhat.compukterkraft.machine.ComputerWorkspaceEntry
-import ru.lazyhat.compukterkraft.machine.VmEvent
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
