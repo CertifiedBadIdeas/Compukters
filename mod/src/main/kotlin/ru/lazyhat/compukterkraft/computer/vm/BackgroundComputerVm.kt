@@ -37,7 +37,6 @@ import ru.lazyhat.compukterkraft.machine.ComputerProfile
 import ru.lazyhat.compukterkraft.machine.ComputerProgram
 import ru.lazyhat.compukterkraft.machine.ComputerRedstoneApi
 import ru.lazyhat.compukterkraft.machine.ComputerRuntime
-import ru.lazyhat.compukterkraft.machine.ComputerScriptBindings
 import ru.lazyhat.compukterkraft.machine.ComputerSystemApi
 import ru.lazyhat.compukterkraft.machine.ComputerTerminalApi
 import ru.lazyhat.compukterkraft.machine.ComputerVmHandle
@@ -166,8 +165,6 @@ class BackgroundComputerVm(
             hostResponses.remove(result.id)?.complete(result)
         }
     }
-
-    override fun executionProperties(): Map<String, Any?> = ComputerScriptBindings.toProperties(runtime)
 
     override fun snapshot(): VmSnapshot =
         VmSnapshot(

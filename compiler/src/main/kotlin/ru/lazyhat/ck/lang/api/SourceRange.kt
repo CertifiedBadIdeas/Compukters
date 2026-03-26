@@ -17,32 +17,11 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-pluginManagement {
-    repositories {
-        maven("https://maven.architectury.dev/")
-        maven("https://maven.fabricmc.net/")
-        maven("https://maven.minecraftforge.net/")
-        gradlePluginPortal()
-    }
+package ru.lazyhat.ck.lang.api
+
+data class SourceRange(
+    val start: SourceLocation,
+    val end: SourceLocation,
+) {
+    fun contains(offset: Int): Boolean = offset in start.offset..<end.offset
 }
-
-dependencyResolutionManagement {
-    versionCatalogs {
-        create("libs") {
-            from(files("config/libs.versions.toml"))
-        }
-    }
-}
-
-enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
-
-plugins {
-    id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
-    id("de.fayard.refreshVersions") version "0.60.6"
-}
-
-includeBuild("build-scripts")
-include("compiler")
-include("mod")
-
-rootProject.name = "Compukter-Kraft"

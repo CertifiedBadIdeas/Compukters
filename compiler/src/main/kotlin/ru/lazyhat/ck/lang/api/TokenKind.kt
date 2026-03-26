@@ -17,32 +17,46 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-pluginManagement {
-    repositories {
-        maven("https://maven.architectury.dev/")
-        maven("https://maven.fabricmc.net/")
-        maven("https://maven.minecraftforge.net/")
-        gradlePluginPortal()
-    }
+package ru.lazyhat.ck.lang.api
+
+enum class TokenKind {
+    IDENTIFIER,
+    NUMBER,
+    STRING,
+    TRUE,
+    FALSE,
+    NULL,
+    FUN,
+    VAL,
+    VAR,
+    IF,
+    ELSE,
+    WHILE,
+    RETURN,
+    IMPORT,
+    STRUCT,
+    COLON,
+    SEMICOLON,
+    COMMA,
+    DOT,
+    QUESTION,
+    LPAREN,
+    RPAREN,
+    LBRACE,
+    RBRACE,
+    PLUS,
+    MINUS,
+    STAR,
+    SLASH,
+    BANG,
+    EQUAL,
+    EQUAL_EQUAL,
+    BANG_EQUAL,
+    LT,
+    LTE,
+    GT,
+    GTE,
+    AMP_AMP,
+    PIPE_PIPE,
+    EOF,
 }
-
-dependencyResolutionManagement {
-    versionCatalogs {
-        create("libs") {
-            from(files("config/libs.versions.toml"))
-        }
-    }
-}
-
-enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
-
-plugins {
-    id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
-    id("de.fayard.refreshVersions") version "0.60.6"
-}
-
-includeBuild("build-scripts")
-include("compiler")
-include("mod")
-
-rootProject.name = "Compukter-Kraft"

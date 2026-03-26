@@ -17,32 +17,21 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-pluginManagement {
-    repositories {
-        maven("https://maven.architectury.dev/")
-        maven("https://maven.fabricmc.net/")
-        maven("https://maven.minecraftforge.net/")
-        gradlePluginPortal()
+package ru.lazyhat.compukterkraft.language
+
+import ru.lazyhat.ck.lang.frontend.LanguageFrontend
+import ru.lazyhat.ck.lang.frontend.LanguageIde
+import java.nio.charset.StandardCharsets
+
+object LanguageServices {
+    val frontend = LanguageFrontend()
+    val ide = LanguageIde(frontend)
+
+    fun bundledScript(relativePath: String): String? {
+        val normalized = relativePath.trimStart('/')
+        return LanguageServices::class.java.classLoader
+            .getResourceAsStream("rom/$normalized")
+            ?.bufferedReader(StandardCharsets.UTF_8)
+            ?.use { it.readText() }
     }
 }
-
-dependencyResolutionManagement {
-    versionCatalogs {
-        create("libs") {
-            from(files("config/libs.versions.toml"))
-        }
-    }
-}
-
-enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
-
-plugins {
-    id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
-    id("de.fayard.refreshVersions") version "0.60.6"
-}
-
-includeBuild("build-scripts")
-include("compiler")
-include("mod")
-
-rootProject.name = "Compukter-Kraft"

@@ -27,11 +27,11 @@ import ru.lazyhat.compukterkraft.machine.ComputerHoverRequest
 import ru.lazyhat.compukterkraft.machine.ComputerHoverResponse
 import ru.lazyhat.compukterkraft.machine.ComputerIdeHost
 import ru.lazyhat.compukterkraft.machine.ComputerIdeSnapshot
+import ru.lazyhat.compukterkraft.machine.ComputerProgramFiles
 import ru.lazyhat.compukterkraft.machine.ComputerWorkspace
 import ru.lazyhat.compukterkraft.machine.ComputerWorkspaceDocument
 import ru.lazyhat.compukterkraft.machine.ComputerWorkspaceEntry
-import ru.lazyhat.compukterkraft.machine.ComputerScriptBindings
-import ru.lazyhat.compukterkraft.scripting.runtime.ScriptingEnvironmentHolder
+import ru.lazyhat.compukterkraft.language.LanguageServices
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
@@ -46,7 +46,7 @@ import kotlin.io.path.writeText
 
 class FileComputerWorkspace(
     private val rootPath: Path,
-    private val initialBundledScripts: Set<String> = setOf(ComputerScriptBindings.BIOS_SCRIPT_NAME),
+    private val initialBundledScripts: Set<String> = setOf(ComputerProgramFiles.BIOS_SCRIPT_NAME),
     private val bundledScriptLoader: (String) -> String? = { null },
 ) : ComputerWorkspace {
     fun ensureInitialized(computerId: Int): Path {
@@ -161,11 +161,12 @@ class EnvironmentComputerIdeHost(
         path: String,
     ): ComputerIdeSnapshot? {
         val document = workspace.readDocument(computerId, path) ?: return null
-        val ide = ScriptingEnvironmentHolder.environment?.ide ?: return null
+        val ide = LanguageServices.ide
+        val snapshot = ide.analyze(document.path, document.text)
         return ComputerIdeSnapshot(
             document = document,
-            diagnostics = ide.analyze(document.path, document.text),
-            highlights = ide.highlight(document.path, document.text),
+            diagnostics = snapshot.diagnostics,
+            highlights = snapshot.highlights,
         )
     }
 
@@ -174,12 +175,11 @@ class EnvironmentComputerIdeHost(
         request: ComputerCompletionRequest,
     ): ComputerCompletionResponse {
         val document = workspace.readDocument(computerId, request.path)
-        val ide = ScriptingEnvironmentHolder.environment?.ide
         val items =
-            if (document == null || ide == null) {
+            if (document == null) {
                 emptyList()
             } else {
-                ide.complete(document.path, document.text, request.line, request.column)
+                LanguageServices.ide.complete(document.path, document.text, request.line, request.column)
             }
         return ComputerCompletionResponse(items)
     }
@@ -189,12 +189,11 @@ class EnvironmentComputerIdeHost(
         request: ComputerHoverRequest,
     ): ComputerHoverResponse {
         val document = workspace.readDocument(computerId, request.path)
-        val ide = ScriptingEnvironmentHolder.environment?.ide
         val info =
-            if (document == null || ide == null) {
+            if (document == null) {
                 null
             } else {
-                ide.hover(document.path, document.text, request.line, request.column)
+                LanguageServices.ide.hover(document.path, document.text, request.line, request.column)
             }
         return ComputerHoverResponse(info)
     }
@@ -204,12 +203,11 @@ class EnvironmentComputerIdeHost(
         request: ComputerDefinitionRequest,
     ): ComputerDefinitionResponse {
         val document = workspace.readDocument(computerId, request.path)
-        val ide = ScriptingEnvironmentHolder.environment?.ide
         val target =
-            if (document == null || ide == null) {
+            if (document == null) {
                 null
             } else {
-                ide.definition(document.path, document.text, request.line, request.column)
+                LanguageServices.ide.definition(document.path, document.text, request.line, request.column)
             }
         return ComputerDefinitionResponse(target)
     }

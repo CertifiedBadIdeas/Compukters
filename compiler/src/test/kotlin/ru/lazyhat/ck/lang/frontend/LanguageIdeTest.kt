@@ -1,0 +1,114 @@
+/*
+ * The Compukter Kraft Developers
+ *
+ * Copyright (C) 2026 Vsevolod Petrov (lazyhat)
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+package ru.lazyhat.ck.lang.frontend
+
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
+
+class LanguageIdeTest {
+    private val ide = LanguageIde()
+
+    @Test
+    fun providesCompletionHoverAndDefinition() {
+        val completionSource =
+            """
+            import terminal;
+
+            fun main() {
+                terminal.
+            }
+            """.trimIndent()
+        val completionCursor = lineAndColumnOf(completionSource, "terminal.") + 9
+        val completion = ide.complete("completion.ck", completionSource, completionCursor.first, completionCursor.second)
+        assertTrue(completion.any { it.label == "printLine" })
+
+        val source =
+            """
+            import terminal;
+
+            fun helper() {
+                terminal.printLine("hi");
+            }
+
+            fun main() {
+                helper();
+            }
+            """.trimIndent()
+
+        val hoverPosition = lineAndColumnOf(source, "printLine")
+        val hover = ide.hover("test.ck", source, hoverPosition.first, hoverPosition.second)
+        assertNotNull(hover)
+        assertTrue(hover.contents.contains("terminal.printLine"))
+
+        val definitionPosition = lineAndColumnOfLast(source, "helper")
+        val definition = ide.definition("test.ck", source, definitionPosition.first, definitionPosition.second)
+        assertNotNull(definition)
+        assertEquals("test.ck", definition.path)
+    }
+
+    @Test
+    fun producesDiagnosticsAndHighlights() {
+        val source =
+            """
+            import terminal;
+
+            fun main() {
+                val text: Bool = "oops";
+                terminal.printLine("hi");
+            }
+            """.trimIndent()
+
+        val snapshot = ide.analyze("broken.ck", source)
+        assertTrue(snapshot.diagnostics.any { it.message.contains("Expected Bool") })
+        assertTrue(snapshot.highlights.any { it.kind == ru.lazyhat.compukterkraft.machine.HighlightTokenKind.KEYWORD })
+        assertTrue(snapshot.highlights.any { it.kind == ru.lazyhat.compukterkraft.machine.HighlightTokenKind.FUNCTION })
+    }
+
+    private fun lineAndColumnOf(
+        source: String,
+        needle: String,
+    ): Pair<Int, Int> = lineAndColumnForOffset(source, source.indexOf(needle).also { require(it >= 0) })
+
+    private fun lineAndColumnOfLast(
+        source: String,
+        needle: String,
+    ): Pair<Int, Int> = lineAndColumnForOffset(source, source.lastIndexOf(needle).also { require(it >= 0) })
+
+    private fun lineAndColumnForOffset(
+        source: String,
+        offset: Int,
+    ): Pair<Int, Int> {
+        var line = 0
+        var column = 0
+        repeat(offset) { index ->
+            if (source[index] == '\n') {
+                line += 1
+                column = 0
+            } else {
+                column += 1
+            }
+        }
+        return line to column
+    }
+
+    private operator fun Pair<Int, Int>.plus(columnDelta: Int): Pair<Int, Int> = first to (second + columnDelta)
+}

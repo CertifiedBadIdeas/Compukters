@@ -8,13 +8,13 @@ Top-level declarations:
 
 - `import terminal;`
 - `import system;`
-- `record Vec2 { x: Int, y: Int }`
+- `struct Vec2 { x: Int, y: Int }`
 - `fun main() { ... }`
 - `fun add(x: Int, y: Int): Int { return x + y; }`
 
 Statements:
 
-- `let name = expr;`
+- `val name = expr;`
 - `var counter: Int = 0;`
 - `if condition { ... } else { ... }`
 - `while condition { ... }`
@@ -27,7 +27,7 @@ Expressions:
 - arithmetic and logic: `+ - * / == != < <= > >= && || !`
 - member access: `event.name`
 - function calls: `main()`, `terminal.write("hi")`
-- record construction: `Vec2 { x: 1, y: 2 }`
+- struct construction: `Vec2 { x: 1, y: 2 }`
 
 ## Types
 
@@ -40,7 +40,7 @@ Builtin types:
 - `String`
 - `Event`
 
-User-defined record types are declared with `record`.
+User-defined struct types are declared with `struct`.
 
 ## Builtin Modules
 
@@ -80,6 +80,10 @@ Global intrinsics:
 ## Entry Point
 
 Programs start from `fun main()`.
+
+## Files
+
+Source files use the `.ck` extension. The default bundled boot program is `bios.ck`.
 
 ## Constraints
 

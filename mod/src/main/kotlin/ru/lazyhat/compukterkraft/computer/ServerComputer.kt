@@ -23,6 +23,8 @@ import net.minecraft.core.BlockPos
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.entity.player.Player
+import ru.lazyhat.ck.lang.frontend.FrontendSeverity
+import ru.lazyhat.ck.lang.runtime.BytecodeComputerProgram
 import ru.lazyhat.compukterkraft.LOGGER
 import ru.lazyhat.compukterkraft.computer.vm.ComputerProfileRegistry
 import ru.lazyhat.compukterkraft.computer.vm.ComputerVmCallbacks
@@ -30,7 +32,6 @@ import ru.lazyhat.compukterkraft.computer.vm.ComputerVmLogger
 import ru.lazyhat.compukterkraft.context.ServerContext
 import ru.lazyhat.compukterkraft.gui.NetworkedTerminal
 import ru.lazyhat.compukterkraft.gui.TerminalState
-import ru.lazyhat.compukterkraft.machine.ComputerProgram
 import ru.lazyhat.compukterkraft.machine.ComputerVmHandle
 import ru.lazyhat.compukterkraft.machine.HostCall
 import ru.lazyhat.compukterkraft.machine.HostResult
@@ -40,7 +41,7 @@ import ru.lazyhat.compukterkraft.machine.VmStopReason
 import ru.lazyhat.compukterkraft.menu.ComputerMenu
 import ru.lazyhat.compukterkraft.network.client.ComputerTerminalClientMessage
 import ru.lazyhat.compukterkraft.network.server.ServerNetworking
-import ru.lazyhat.compukterkraft.scripting.runtime.ScriptingEnvironmentHolder
+import ru.lazyhat.compukterkraft.language.LanguageServices
 
 class ServerComputer(
     val instanceID: Int,
@@ -98,12 +99,6 @@ class ServerComputer(
     fun turnOn() {
         if (isOn) return
         LOGGER.info { "ComputerID: $instanceID turnOn" }
-        val environment = ScriptingEnvironmentHolder.environment
-        if (environment == null) {
-            writeLineToTerminal("Scripting unavailable.")
-            return
-        }
-
         ServerContext.vmSupervisor.ensureWorkspaceInitialized(instanceID)
         val bootScriptDocument = ServerContext.vmSupervisor.workspace.readDocument(instanceID, profile.bootScriptName)
         if (bootScriptDocument == null) {
@@ -113,26 +108,12 @@ class ServerComputer(
 
         ServerContext.vmSupervisor.remove(instanceID, VmStopReason.CLOSED)
         val handle = ServerContext.vmSupervisor.getOrCreate(instanceID, profile, this, logger)
-        val compilation = environment.compiler.compile(bootScriptDocument.path, bootScriptDocument.text)
-        if (!compilation.isSuccess) {
-            val message = compilation.diagnostics.joinToString { it.message }
+        val artifact = LanguageServices.frontend.compile(bootScriptDocument.path, bootScriptDocument.text)
+        val module = artifact.module
+        if (module == null || artifact.analysis.diagnostics.any { it.severity == FrontendSeverity.ERROR }) {
+            val message = artifact.analysis.diagnostics.joinToString { it.message }
             writeLineToTerminal("Compilation Error: $message")
             LOGGER.error { message }
-            ServerContext.vmSupervisor.remove(instanceID, VmStopReason.CLOSED)
-            return
-        }
-
-        val execution = compilation.value!!.execute(handle.executionProperties())
-        if (!execution.isSuccess) {
-            writeLineToTerminal("Evaluation Error: ${execution.exceptionMessage ?: "Boot execution failed"}")
-            ServerContext.vmSupervisor.remove(instanceID, VmStopReason.CLOSED)
-            return
-        }
-
-        val program = execution.value as? ComputerProgram
-        if (program == null) {
-            writeLineToTerminal("Boot script must return ComputerProgram.")
-            LOGGER.error { "Boot script must return ComputerProgram actual: ${execution.value}" }
             ServerContext.vmSupervisor.remove(instanceID, VmStopReason.CLOSED)
             return
         }
@@ -140,7 +121,7 @@ class ServerComputer(
         terminal.reset()
         vmHandle = handle
         rebootRequested = false
-        isOn = handle.start(program)
+        isOn = handle.start(BytecodeComputerProgram(module))
         if (isOn) {
             handle.enqueueEvent(VmEvent("boot"))
         }

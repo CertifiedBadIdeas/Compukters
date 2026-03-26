@@ -29,7 +29,7 @@ import ru.lazyhat.compukterkraft.machine.ComputerVmHandle
 import ru.lazyhat.compukterkraft.machine.ComputerWorkspace
 import ru.lazyhat.compukterkraft.machine.VmStopReason
 import ru.lazyhat.compukterkraft.machine.VmSupervisor
-import ru.lazyhat.compukterkraft.scripting.runtime.ScriptingEnvironmentHolder
+import ru.lazyhat.compukterkraft.language.LanguageServices
 import java.io.Closeable
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
@@ -44,9 +44,7 @@ class ComputerVmSupervisor(
     private val workspaceStore =
         FileComputerWorkspace(
             rootPath = server.getWorldPath(LevelResource.ROOT).resolve(MOD_ID).resolve("computers"),
-            bundledScriptLoader = { relativePath ->
-                ScriptingEnvironmentHolder.environment?.bundledScript(relativePath)
-            },
+            bundledScriptLoader = LanguageServices::bundledScript,
         )
     private val ideHost = EnvironmentComputerIdeHost(workspaceStore)
 

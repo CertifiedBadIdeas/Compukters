@@ -27,10 +27,6 @@ import net.minecraftforge.fml.event.lifecycle.FMLDedicatedServerSetupEvent
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext
 import net.minecraftforge.fml.loading.FMLEnvironment
 import ru.lazyhat.compukterkraft.platform.NetworkHandler
-import ru.lazyhat.compukterkraft.scripting.api.ScriptDefinitionPresets
-import ru.lazyhat.compukterkraft.scripting.api.ScriptingEnvironmentConfig
-import ru.lazyhat.compukterkraft.scripting.runtime.ScriptingJarLoader
-import ru.lazyhat.compukterkraft.scripting.runtime.ScriptingPaths
 
 @Mod(MOD_ID)
 @EventBusSubscriber(modid = MOD_ID, bus = EventBusSubscriber.Bus.MOD)
@@ -51,19 +47,6 @@ class CompukterKraftMod(
         }
 
         NetworkHandler.setup()
-
-        val scriptingJarLoader = ScriptingJarLoader()
-        val config =
-            ScriptingEnvironmentConfig(
-                modId = MOD_ID,
-                bundledScriptsRoot = "rom",
-                externalScriptsDirectory = ScriptingPaths.scriptsDirectory().absolutePath,
-                definitions = listOf(ScriptDefinitionPresets.computerKts(MOD_ID)),
-            )
-
-        scriptingJarLoader.initialize(config) ?: run {
-            LOGGER.error { "Failed to initialize scripting ${scriptingJarLoader.lastError}" }
-        }
     }
 
     @Suppress("UNUSED_PARAMETER")
@@ -76,43 +59,4 @@ class CompukterKraftMod(
     fun onServerSetup(event: FMLDedicatedServerSetupEvent) {
         LOGGER.info { "Initializing server... with $MOD_NAME!" }
     }
-
-//    private fun initializeScripting() {
-//        val config =
-//            ScriptingEnvironmentConfig(
-//                modId = MOD_ID,
-//                bundledScriptsRoot = "rom",
-//                externalScriptsDirectory = ScriptingPaths.scriptsDirectory().absolutePath,
-//                definitions = listOf(ScriptDefinitionPresets.computerKts(MOD_ID)),
-//            )
-//
-//        if (!scriptingJarLoader.hasScriptingJar()) {
-//            LOGGER.warn {
-//                "Kotlin scripting is disabled: ${ScriptingPaths.SCRIPTING_JAR} is missing in ${ScriptingPaths.rootDirectory().absolutePath}"
-//            }
-//            return
-//        }
-//
-//        if (environment == null) {
-//            LOGGER.error { "Failed to initialize Kotlin scripting: ${scriptingJarLoader.lastError}" }
-//            return
-//        }
-//
-//        LOGGER.info { "Kotlin scripting environment loaded successfully." }
-//
-//        val bootstrapScript = environment.bundledScript(ComputerScriptBindings.BIOS_SCRIPT_NAME)
-//        if (bootstrapScript == null) {
-//            LOGGER.warn { "Bundled bootstrap script ${ComputerScriptBindings.BIOS_SCRIPT_NAME} was not found." }
-//            return
-//        }
-//
-//        val compilation = environment.compiler.compile(ComputerScriptBindings.BIOS_SCRIPT_NAME, bootstrapScript)
-//        if (!compilation.isSuccess) {
-//            LOGGER.error { "Bundled bootstrap script failed to compile: ${compilation.diagnostics.joinToString { it.message }}" }
-//            return
-//        }
-//
-//        LOGGER.info { "Bundled bootstrap script compiled successfully." }
-//        LOGGER.debug { "Scripting available = ${ScriptingEnvironmentHolder.isAvailable}" }
-//    }
 }

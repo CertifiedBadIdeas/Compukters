@@ -72,8 +72,8 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
     forgeRuntimeLibrary(libs.kotlinx.coroutines.core)
 
-    implementation(projects.scriptingApi)
-    forgeRuntimeLibrary(projects.scriptingApi)
+    implementation(projects.compiler)
+    forgeRuntimeLibrary(projects.compiler)
 
     implementation(libs.kotlin.stdlib)
     forgeRuntimeLibrary(libs.kotlin.stdlib)
@@ -83,21 +83,6 @@ dependencies {
 
     testImplementation(kotlin("test"))
 }
-
-val copyScriptingJar =
-    tasks.register<Copy>("copyScriptingJar") {
-        val scriptingJar = project(projects.scripting.path).tasks.named<Jar>("shadowJar")
-        val scriptingApiJar = project(projects.scriptingApi.path).tasks.named<Jar>("jar")
-
-        dependsOn(scriptingJar)
-        dependsOn(scriptingApiJar)
-        from(scriptingJar.map { it.archiveFile })
-        into(layout.projectDirectory.dir("run/compukterkraft"))
-
-        into("scripting-libs") {
-            from(scriptingApiJar.map { it.archiveFile })
-        }
-    }
 
 val generateModMetadata =
     tasks.register("generateModMetadata", ProcessResources::class) {
@@ -127,14 +112,6 @@ tasks.named<ProcessResources>("processResources") {
     duplicatesStrategy = DuplicatesStrategy.INCLUDE
 
     dependsOn(generateModMetadata)
-}
-
-tasks.matching { it.name.startsWith("run") }.configureEach {
-    dependsOn(copyScriptingJar)
-}
-
-tasks.withType<Test>().configureEach {
-    dependsOn(copyScriptingJar)
 }
 
 sourceSets.main {

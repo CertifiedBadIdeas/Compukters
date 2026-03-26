@@ -18,7 +18,7 @@
  */
 
 import ru.lazyhat.compukterkraft.computer.vm.FileComputerWorkspace
-import ru.lazyhat.compukterkraft.machine.ComputerScriptBindings
+import ru.lazyhat.compukterkraft.machine.ComputerProgramFiles
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.createTempDirectory
@@ -34,7 +34,7 @@ class FileComputerWorkspaceTest {
         withWorkspace { workspace, _ ->
             workspace.ensureInitialized(7)
 
-            val bootScript = workspace.readDocument(7, ComputerScriptBindings.BIOS_SCRIPT_NAME)
+            val bootScript = workspace.readDocument(7, ComputerProgramFiles.BIOS_SCRIPT_NAME)
 
             assertNotNull(bootScript)
             assertEquals(DEFAULT_BIOS, bootScript.text)
@@ -45,14 +45,14 @@ class FileComputerWorkspaceTest {
     fun preserveCustomizedBootScriptWhenReinitialized() {
         withWorkspace { workspace, _ ->
             workspace.ensureInitialized(7)
-            workspace.writeDocument(7, ComputerScriptBindings.BIOS_SCRIPT_NAME, "println(\"custom bios\")")
+            workspace.writeDocument(7, ComputerProgramFiles.BIOS_SCRIPT_NAME, "import terminal;\nfun main() { terminal.printLine(\"custom bios\"); }")
 
             workspace.ensureInitialized(7)
 
-            val bootScript = workspace.readDocument(7, ComputerScriptBindings.BIOS_SCRIPT_NAME)
+            val bootScript = workspace.readDocument(7, ComputerProgramFiles.BIOS_SCRIPT_NAME)
 
             assertNotNull(bootScript)
-            assertEquals("println(\"custom bios\")", bootScript.text)
+            assertEquals("import terminal;\nfun main() { terminal.printLine(\"custom bios\"); }", bootScript.text)
         }
     }
 
@@ -65,11 +65,11 @@ class FileComputerWorkspaceTest {
             val worldOne = createWorkspace(worldOneRoot)
             val worldTwo = createWorkspace(worldTwoRoot)
 
-            worldOne.writeDocument(1, "startup.ck.kts", "println(\"world one\")")
+            worldOne.writeDocument(1, "startup.ck", "import terminal;\nfun main() { terminal.printLine(\"world one\"); }")
 
-            assertNotNull(worldOne.readDocument(1, "startup.ck.kts"))
-            assertNull(worldTwo.readDocument(1, "startup.ck.kts"))
-            assertNotNull(worldTwo.readDocument(1, ComputerScriptBindings.BIOS_SCRIPT_NAME))
+            assertNotNull(worldOne.readDocument(1, "startup.ck"))
+            assertNull(worldTwo.readDocument(1, "startup.ck"))
+            assertNotNull(worldTwo.readDocument(1, ComputerProgramFiles.BIOS_SCRIPT_NAME))
         } finally {
             worldOneRoot.toFile().deleteRecursively()
             worldTwoRoot.toFile().deleteRecursively()
@@ -80,7 +80,7 @@ class FileComputerWorkspaceTest {
     fun rejectsPathTraversalOutsideWorkspace() {
         withWorkspace { workspace, _ ->
             assertFailsWith<IllegalArgumentException> {
-                workspace.writeDocument(3, "../escape.ck.kts", "println(\"nope\")")
+                workspace.writeDocument(3, "../escape.ck", "import terminal;\nfun main() { terminal.printLine(\"nope\"); }")
             }
         }
     }
@@ -95,7 +95,7 @@ class FileComputerWorkspaceTest {
 
             workspace.ensureInitialized(9)
 
-            val bootScript = workspace.readDocument(9, ComputerScriptBindings.BIOS_SCRIPT_NAME)
+            val bootScript = workspace.readDocument(9, ComputerProgramFiles.BIOS_SCRIPT_NAME)
             assertNotNull(bootScript)
             assertEquals(DEFAULT_BIOS, bootScript.text)
         } finally {
@@ -117,11 +117,11 @@ class FileComputerWorkspaceTest {
         FileComputerWorkspace(
             rootPath = root,
             bundledScriptLoader = { relativePath ->
-                if (relativePath == ComputerScriptBindings.BIOS_SCRIPT_NAME) DEFAULT_BIOS else null
+                if (relativePath == ComputerProgramFiles.BIOS_SCRIPT_NAME) DEFAULT_BIOS else null
             },
         )
 
     private companion object {
-        const val DEFAULT_BIOS = "println(\"boot\")"
+        const val DEFAULT_BIOS = "import terminal;\nfun main() { terminal.printLine(\"boot\"); }"
     }
 }
