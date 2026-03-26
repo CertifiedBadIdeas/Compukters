@@ -19,42 +19,6 @@
 
 package ru.lazyhat.ck.lang.api
 
-data class SourceLocation(
-    val offset: Int,
-    val line: Int,
-    val column: Int,
-)
-
-data class Token(
-    val kind: TokenKind,
-    val text: String,
-    val range: SourceRange,
-)
-
-data class Program(
-    val imports: List<ImportDeclaration>,
-    val declarations: List<TopLevelDeclaration>,
-    val range: SourceRange?,
-)
-
-data class ImportDeclaration(
-    val moduleName: String,
-    val range: SourceRange,
-)
-
-sealed interface TopLevelDeclaration {
-    val name: String
-    val range: SourceRange
-}
-
-data class FunctionDeclaration(
-    override val name: String,
-    val parameters: List<ParameterDeclaration>,
-    val returnType: TypeSyntax?,
-    val body: BlockStatement,
-    override val range: SourceRange,
-) : TopLevelDeclaration
-
 data class StructDeclaration(
     override val name: String,
     val fields: List<RecordFieldDeclaration>,
@@ -197,26 +161,6 @@ data class BoolLiteralValue(
 ) : LiteralValue
 
 data object NullLiteralValue : LiteralValue
-
-enum class UnaryOperator {
-    NEGATE,
-    NOT,
-}
-
-enum class BinaryOperator {
-    ADD,
-    SUBTRACT,
-    MULTIPLY,
-    DIVIDE,
-    EQUALS,
-    NOT_EQUALS,
-    LESS,
-    LESS_EQUALS,
-    GREATER,
-    GREATER_EQUALS,
-    AND,
-    OR,
-}
 
 data class BuiltinRegistry(
     val modules: List<BuiltinModule>,
