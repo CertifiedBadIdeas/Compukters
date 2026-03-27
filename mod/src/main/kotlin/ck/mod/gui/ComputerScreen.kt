@@ -24,7 +24,7 @@ import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
 import net.minecraft.network.chat.Component
 import net.minecraft.world.entity.player.Inventory
 
-abstract class KoolScreen<T : AbstractComputerMenu>(
+abstract class ComputerScreen<T : AbstractComputerMenu>(
     container: T,
     player: Inventory,
     title: Component,

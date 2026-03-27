@@ -24,11 +24,11 @@ import net.minecraft.network.chat.Component
 import net.minecraft.world.entity.player.Inventory
 import kotlin.math.min
 
-class ComputerWorkbenchKoolScreen<T : AbstractComputerMenu>(
+class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
     container: T,
     player: Inventory,
     title: Component,
-) : KoolScreen<T>(container, player, title) {
+) : ComputerScreen<T>(container, player, title) {
     private val presenter = ComputerWorkbenchPresenter(container)
     private val terminalInput = WorkbenchTerminalInputController(presenter.input)
 
@@ -203,7 +203,9 @@ class ComputerWorkbenchKoolScreen<T : AbstractComputerMenu>(
         mouseY: Double,
         delta: Double,
     ): Boolean {
-        if (presenter.mode == ComputerWorkbenchPresenter.Mode.EDITOR && presenter.isInEditorArea(layout(), mouseX.toInt(), mouseY.toInt())) {
+        if (presenter.mode == ComputerWorkbenchPresenter.Mode.EDITOR &&
+            presenter.isInEditorArea(layout(), mouseX.toInt(), mouseY.toInt())
+        ) {
             presenter.scrollEditor(-delta.toInt())
             return true
         }
@@ -213,7 +215,7 @@ class ComputerWorkbenchKoolScreen<T : AbstractComputerMenu>(
     private fun renderToolbar(graphics: GuiGraphics) {
         val buttons =
             listOf(
-                toolbarButtonBounds(0) to if (presenter.mode == ComputerWorkbenchPresenter.Mode.TERMINAL) "IDE" else "Term",
+                toolbarButtonBounds(0) to if (presenter.mode == ComputerWorkbenchPresenter.Mode.TERMINAL) "IDE" else "Console",
                 toolbarButtonBounds(1) to "Save",
                 toolbarButtonBounds(2) to "Refresh",
                 toolbarButtonBounds(3) to "Up",
@@ -232,7 +234,14 @@ class ComputerWorkbenchKoolScreen<T : AbstractComputerMenu>(
         mouseY: Int,
     ) {
         val font = minecraft!!.font
-        graphics.drawString(font, Component.literal("/" + presenter.browserPath).visualOrderText, leftPos + 12, topPos + 38, 0xBFD5E8, false)
+        graphics.drawString(
+            font,
+            Component.literal("/" + presenter.browserPath).visualOrderText,
+            leftPos + 12,
+            topPos + 38,
+            0xBFD5E8,
+            false,
+        )
         var rowY = topPos + 54
         if (presenter.browserPath.isNotEmpty()) {
             drawWorkspaceRow(graphics, "..", rowY, mouseX, mouseY, true)
@@ -288,7 +297,12 @@ class ComputerWorkbenchKoolScreen<T : AbstractComputerMenu>(
         val path = presenter.openDocument?.path ?: "No file opened"
         val status = if (presenter.editorDirty) "* $path" else path
         graphics.drawString(font, status, leftPos + 140, topPos + imageHeight - 24, 0xE6ECF5, false)
-        val hover = presenter.hoverInfo?.contents ?: presenter.ideSnapshot?.diagnostics?.firstOrNull()?.message.orEmpty()
+        val hover =
+            presenter.hoverInfo?.contents ?: presenter.ideSnapshot
+                ?.diagnostics
+                ?.firstOrNull()
+                ?.message
+                .orEmpty()
         if (hover.isNotEmpty()) {
             graphics.drawString(font, hover.take(60), leftPos + 140, topPos + imageHeight - 14, 0xE0A96D, false)
         }
@@ -302,7 +316,11 @@ class ComputerWorkbenchKoolScreen<T : AbstractComputerMenu>(
         y: Int,
     ) {
         val font = minecraft!!.font
-        val tokens = presenter.ideSnapshot?.highlights.orEmpty().filter { it.range.start.line == lineIndex && it.range.end.line == lineIndex }
+        val tokens =
+            presenter.ideSnapshot
+                ?.highlights
+                .orEmpty()
+                .filter { it.range.start.line == lineIndex && it.range.end.line == lineIndex }
         if (tokens.isEmpty()) {
             graphics.drawString(font, lineText, x, y, 0xE6ECF5, false)
             return
@@ -311,8 +329,12 @@ class ComputerWorkbenchKoolScreen<T : AbstractComputerMenu>(
         var drawX = x
         var column = 0
         tokens.sortedBy { it.range.start.column }.forEach { token ->
-            val start = token.range.start.column.coerceIn(0, lineText.length)
-            val end = token.range.end.column.coerceIn(start, lineText.length)
+            val start =
+                token.range.start.column
+                    .coerceIn(0, lineText.length)
+            val end =
+                token.range.end.column
+                    .coerceIn(start, lineText.length)
             if (start > column) {
                 val plain = lineText.substring(column, start)
                 graphics.drawString(font, plain, drawX, y, 0xE6ECF5, false)
@@ -380,13 +402,23 @@ class ComputerWorkbenchKoolScreen<T : AbstractComputerMenu>(
                             terminalInput.focused = false
                         }
                     }
-                    1 -> presenter.saveDocument()
+
+                    1 -> {
+                        presenter.saveDocument()
+                    }
+
                     2 -> {
                         presenter.requestListing(presenter.browserPath)
                         presenter.openDocument?.path?.let(presenter::requestDocument)
                     }
-                    3 -> presenter.navigateUp()
-                    4 -> presenter.input.reboot()
+
+                    3 -> {
+                        presenter.navigateUp()
+                    }
+
+                    4 -> {
+                        presenter.input.reboot()
+                    }
                 }
                 return true
             }

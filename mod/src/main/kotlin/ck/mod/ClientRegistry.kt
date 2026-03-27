@@ -19,7 +19,7 @@
 
 package ck.mod
 
-import ck.mod.gui.ComputerWorkbenchKoolScreen
+import ck.mod.gui.ComputerWorkbenchScreen
 import ck.mod.gui.GuiSprites
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.screens.MenuScreens
@@ -37,7 +37,7 @@ object ClientRegistry {
         try {
             MenuScreens.register(
                 ModRegistry.Menus.COMPUTER.get(),
-                { container, inventory, title -> ComputerWorkbenchKoolScreen(container, inventory, title) },
+                { container, inventory, title -> ComputerWorkbenchScreen(container, inventory, title) },
             )
             registeredMainThread = true
             LOGGER.info { "ClientRegistry: ComputerWorkbenchKoolScreen successfully registered" }
