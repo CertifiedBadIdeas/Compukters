@@ -57,7 +57,7 @@ class ChatTableClientMessage : NetworkMessage<ClientNetworkContext> {
         this.table = table
     }
 
-    public override fun write(buf: FriendlyByteBuf) {
+    override fun write(buf: FriendlyByteBuf) {
         buf.writeUtf(table.id, MAX_LEN)
         buf.writeVarInt(table.columns)
         buf.writeBoolean(table.headers != null)
@@ -73,11 +73,11 @@ class ChatTableClientMessage : NetworkMessage<ClientNetworkContext> {
         buf.writeVarInt(table.additional)
     }
 
-    public override fun handle(context: ClientNetworkContext) {
+    override fun handle(context: ClientNetworkContext) {
         context.handleChatTable(table)
     }
 
-    public override fun type(): MessageType<ChatTableClientMessage> = NetworkMessages.CHAT_TABLE
+    override fun type(): MessageType<ChatTableClientMessage> = NetworkMessages.CHAT_TABLE
 
     companion object {
         private const val MAX_LEN = 16

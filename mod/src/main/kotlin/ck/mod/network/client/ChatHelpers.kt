@@ -38,7 +38,7 @@ object ChatHelpers {
         colour: ChatFormatting,
     ): MutableComponent = text(text).withStyle(colour)
 
-    fun text(text: String?): MutableComponent = Component.literal(if (text == null) "" else text)
+    fun text(text: String?): MutableComponent = Component.literal(text ?: "")
 
     fun list(vararg children: Component): MutableComponent {
         val component: MutableComponent = Component.empty()
@@ -61,7 +61,7 @@ object ChatHelpers {
         component: MutableComponent,
         command: String,
         toolTip: Component,
-    ): Component = ChatHelpers.link(component, ClickEvent(ClickEvent.Action.RUN_COMMAND, command), toolTip)
+    ): Component = link(component, ClickEvent(ClickEvent.Action.RUN_COMMAND, command), toolTip)
 
     fun clientLink(
         component: MutableComponent,
@@ -77,7 +77,7 @@ object ChatHelpers {
         click: ClickEvent?,
         toolTip: Component,
     ): Component {
-        var style = component.getStyle()
+        var style = component.style
 
         if (style.getColor() == null) style = style.withColor(ChatFormatting.YELLOW)
         style = style.withClickEvent(click)

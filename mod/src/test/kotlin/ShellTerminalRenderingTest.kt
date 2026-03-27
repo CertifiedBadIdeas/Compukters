@@ -64,4 +64,17 @@ class ShellTerminalRenderingTest {
         assertEquals(0, terminal.cursorX)
         assertEquals(1, terminal.cursorY)
     }
+
+    @Test
+    fun scrollsWhenPrintingPastLastLine() {
+        val terminal = NetworkedTerminal(12, 2, true)
+
+        TerminalHostWriter.printLine(terminal, "top")
+        TerminalHostWriter.printLine(terminal, "bottom")
+
+        assertEquals("bottom      ", terminal.getLine(0).toString())
+        assertEquals("            ", terminal.getLine(1).toString())
+        assertEquals(0, terminal.cursorX)
+        assertEquals(1, terminal.cursorY)
+    }
 }

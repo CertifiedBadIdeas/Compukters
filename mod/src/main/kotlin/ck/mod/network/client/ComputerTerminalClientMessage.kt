@@ -39,14 +39,14 @@ class ComputerTerminalClientMessage : NetworkMessage<ClientNetworkContext> {
         terminal = TerminalState(buf)
     }
 
-    public override fun write(buf: FriendlyByteBuf) {
+    override fun write(buf: FriendlyByteBuf) {
         buf.writeVarInt(containerId)
         terminal.write(buf)
     }
 
-    public override fun handle(context: ClientNetworkContext) {
+    override fun handle(context: ClientNetworkContext) {
         context.handleComputerTerminal(containerId, terminal)
     }
 
-    public override fun type(): MessageType<ComputerTerminalClientMessage> = NetworkMessages.COMPUTER_TERMINAL
+    override fun type(): MessageType<ComputerTerminalClientMessage> = NetworkMessages.COMPUTER_TERMINAL
 }

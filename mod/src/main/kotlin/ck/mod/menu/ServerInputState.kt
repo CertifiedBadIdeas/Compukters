@@ -53,7 +53,7 @@ class ServerInputState<T>(
 
     private var toUpload: MutableList<FileUpload>? = null
 
-    public override fun keyDown(
+    override fun keyDown(
         key: Int,
         repeat: Boolean,
     ) {
@@ -61,16 +61,16 @@ class ServerInputState<T>(
         ComputerEvents.keyDown(owner.getComputerPublic(), key, repeat)
     }
 
-    public override fun keyUp(key: Int) {
+    override fun keyUp(key: Int) {
         keysDown.remove(key)
         ComputerEvents.keyUp(owner.getComputerPublic(), key)
     }
 
-    public override fun charTyped(chr: Byte) {
+    override fun charTyped(chr: Byte) {
         if (StringUtil.isTypableChar(chr)) ComputerEvents.charTyped(owner.getComputerPublic(), chr)
     }
 
-    public override fun paste(contents: ByteBuffer?) {
+    override fun paste(contents: ByteBuffer?) {
         if (contents != null && contents.remaining() > 0 &&
             isValidClipboard(contents)
         ) {
@@ -78,7 +78,7 @@ class ServerInputState<T>(
         }
     }
 
-    public override fun mouseClick(
+    override fun mouseClick(
         button: Int,
         x: Int,
         y: Int,
@@ -90,7 +90,7 @@ class ServerInputState<T>(
         ComputerEvents.mouseClick(owner.getComputerPublic(), button, x, y)
     }
 
-    public override fun mouseUp(
+    override fun mouseUp(
         button: Int,
         x: Int,
         y: Int,
@@ -102,7 +102,7 @@ class ServerInputState<T>(
         ComputerEvents.mouseUp(owner.getComputerPublic(), button, x, y)
     }
 
-    public override fun mouseDrag(
+    override fun mouseDrag(
         button: Int,
         x: Int,
         y: Int,
@@ -114,7 +114,7 @@ class ServerInputState<T>(
         ComputerEvents.mouseDrag(owner.getComputerPublic(), button, x, y)
     }
 
-    public override fun mouseScroll(
+    override fun mouseScroll(
         direction: Int,
         x: Int,
         y: Int,
@@ -125,19 +125,19 @@ class ServerInputState<T>(
         ComputerEvents.mouseScroll(owner.getComputerPublic(), direction, x, y)
     }
 
-    public override fun terminate() {
+    override fun terminate() {
         owner.getComputerPublic().queueEvent("terminate")
     }
 
-    public override fun shutdown() {
+    override fun shutdown() {
         owner.getComputerPublic().shutdown()
     }
 
-    public override fun turnOn() {
+    override fun turnOn() {
         owner.getComputerPublic().turnOn()
     }
 
-    public override fun reboot() {
+    override fun reboot() {
         owner.getComputerPublic().reboot()
     }
 

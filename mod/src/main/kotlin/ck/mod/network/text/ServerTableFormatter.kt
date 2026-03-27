@@ -25,7 +25,7 @@ import org.apache.commons.lang3.StringUtils
 class ServerTableFormatter(
     private val source: CommandSourceStack,
 ) : TableFormatter {
-    public override fun getPadding(
+    override fun getPadding(
         component: Component,
         width: Int,
     ): Component? {
@@ -36,9 +36,9 @@ class ServerTableFormatter(
 
     override val columnPadding: Int = 1
 
-    public override fun getWidth(component: Component): Int = component.string.length
+    override fun getWidth(component: Component): Int = component.string.length
 
-    public override fun writeLine(
+    override fun writeLine(
         label: String?,
         component: Component,
     ) = source.sendSuccess({ component }, false)

@@ -94,20 +94,23 @@ open class Terminal
             backgroundColour = ArrayList(height)
             repeat(height) { i ->
                 if (i >= oldHeight) {
-                    text[i] = TextBuffer(' ', this.width)
-                    textColour[i] = TextBuffer(BASE_16[cursorColour], this.width)
-                    backgroundColour[i] = TextBuffer(BASE_16[cursorBackgroundColour], this.width)
+                    text.add(TextBuffer(' ', this.width))
+                    textColour.add(TextBuffer(BASE_16[cursorColour], this.width))
+                    backgroundColour.add(TextBuffer(BASE_16[cursorBackgroundColour], this.width))
                 } else if (this.width == oldWidth) {
-                    text[i] = oldText[i]
-                    textColour[i] = oldTextColour[i]
-                    backgroundColour[i] = oldBackgroundColour[i]
+                    text.add(oldText[i])
+                    textColour.add(oldTextColour[i])
+                    backgroundColour.add(oldBackgroundColour[i])
                 } else {
-                    text[i] = TextBuffer(' ', this.width)
-                    textColour[i] = TextBuffer(BASE_16[cursorColour], this.width)
-                    backgroundColour[i] = TextBuffer(BASE_16[cursorBackgroundColour], this.width)
-                    text[i].write(oldText[i])
-                    textColour[i].write(oldTextColour[i])
-                    backgroundColour[i].write(oldBackgroundColour[i])
+                    val newText = TextBuffer(' ', this.width)
+                    val newTextColour = TextBuffer(BASE_16[cursorColour], this.width)
+                    val newBackgroundColour = TextBuffer(BASE_16[cursorBackgroundColour], this.width)
+                    newText.write(oldText[i])
+                    newTextColour.write(oldTextColour[i])
+                    newBackgroundColour.write(oldBackgroundColour[i])
+                    text.add(newText)
+                    textColour.add(newTextColour)
+                    backgroundColour.add(newBackgroundColour)
                 }
             }
             setChanged()
@@ -190,13 +193,13 @@ open class Terminal
                 repeat(height) { y ->
                     val oldY = y + yDiff
                     if (oldY in 0..<height) {
-                        newText[y] = text[oldY]
-                        newTextColour[y] = textColour[oldY]
-                        newBackgroundColour[y] = backgroundColour[oldY]
+                        newText.add(text[oldY])
+                        newTextColour.add(textColour[oldY])
+                        newBackgroundColour.add(backgroundColour[oldY])
                     } else {
-                        newText[y] = TextBuffer(' ', width)
-                        newTextColour[y] = TextBuffer(BASE_16[cursorColour], width)
-                        newBackgroundColour[y] = TextBuffer(BASE_16[cursorBackgroundColour], width)
+                        newText.add(TextBuffer(' ', width))
+                        newTextColour.add(TextBuffer(BASE_16[cursorColour], width))
+                        newBackgroundColour.add(TextBuffer(BASE_16[cursorBackgroundColour], width))
                     }
                 }
                 text = newText

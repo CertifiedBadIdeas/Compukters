@@ -52,7 +52,7 @@ class ComputerActionServerMessage : ComputerServerMessage {
         }
     }
 
-    public override fun type(): MessageType<ComputerActionServerMessage> = NetworkMessages.COMPUTER_ACTION
+    override fun type(): MessageType<ComputerActionServerMessage> = NetworkMessages.COMPUTER_ACTION
 
     enum class Action {
         TERMINATE,

@@ -21,6 +21,7 @@ package ck.mod.network.client
 
 import ck.lang.runtime.ComputerWorkspaceDocument
 import ck.lang.runtime.ComputerWorkspaceEntry
+import ck.mod.gui.TerminalState
 import ck.mod.menu.ComputerMenu
 import ck.mod.network.text.TableBuilder
 import net.minecraft.client.Minecraft
@@ -29,34 +30,40 @@ class ClientNetworkContextImpl : ClientNetworkContext {
     private val minecraft: Minecraft
         get() = Minecraft.getInstance()
 
+    private inline fun withCheckedContainerMenu(
+        computerId: Int,
+        block: ComputerMenu.() -> Unit,
+    ) {
+        minecraft
+            .player
+            ?.containerMenu
+            ?.takeIf { it.containerId == computerId }
+            ?.let { it as? ComputerMenu }
+            ?.run(block)
+    }
+
     override fun handleChatTable(table: TableBuilder) {
         ClientTableFormatter(minecraft).display(table)
     }
 
     override fun handleComputerTerminal(
         containerId: Int,
-        terminal: ck.mod.gui.TerminalState,
-    ) {
-        val menu = minecraft.player?.containerMenu
-        if (menu?.containerId != containerId || menu !is ComputerMenu) return
-        menu.updateTerminal(terminal)
+        terminal: TerminalState,
+    ) = withCheckedContainerMenu(containerId) {
+        updateTerminal(terminal)
     }
 
     override fun handleComputerWorkspaceEntries(
         containerId: Int,
         entries: List<ComputerWorkspaceEntry>,
-    ) {
-        val menu = minecraft.player?.containerMenu
-        if (menu?.containerId != containerId || menu !is ComputerMenu) return
-        menu.updateWorkspaceEntries(entries)
+    ) = withCheckedContainerMenu(containerId) {
+        updateWorkspaceEntries(entries)
     }
 
     override fun handleComputerWorkspaceDocument(
         containerId: Int,
         document: ComputerWorkspaceDocument?,
-    ) {
-        val menu = minecraft.player?.containerMenu
-        if (menu?.containerId != containerId || menu !is ComputerMenu) return
-        menu.updateWorkspaceDocument(document)
+    ) = withCheckedContainerMenu(containerId) {
+        updateWorkspaceDocument(document)
     }
 }
