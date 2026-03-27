@@ -61,9 +61,10 @@ class WorkbenchTerminalInputController(
         }
 
         if (key >= 0) {
-            val repeat = keysDown.get(key)
-            keysDown.set(key)
-            computer.keyDown(key, repeat)
+            val actualKey = KeyConverter.physicalToActual(key, scancode)
+            val repeat = keysDown.get(actualKey)
+            keysDown.set(actualKey)
+            computer.keyDown(actualKey, repeat)
         }
         return true
     }
@@ -74,9 +75,12 @@ class WorkbenchTerminalInputController(
     ): Boolean {
         if (!focused) return false
 
-        if (key >= 0 && keysDown.get(key)) {
-            keysDown.set(key, false)
-            computer.keyUp(key)
+        if (key >= 0) {
+            val actualKey = KeyConverter.physicalToActual(key, scancode)
+            if (keysDown.get(actualKey)) {
+                keysDown.set(actualKey, false)
+                computer.keyUp(actualKey)
+            }
         }
         return true
     }

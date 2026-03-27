@@ -396,49 +396,56 @@ class BackgroundComputerVm(
             }
 
             val line = StringBuilder()
-            while (true) {
-                state = VmState.WAITING_EVENT
-                val event = owner.receiveEvent()
-                state = VmState.RUNNING
-                when (event.name) {
-                    "char" -> {
-                        decodeTypedText(event)?.let { chunk ->
-                            line.append(chunk)
-                            write(chunk)
-                        }
-                    }
-
-                    "paste" -> {
-                        decodePastedText(event)?.let { chunk ->
-                            line.append(chunk)
-                            write(chunk)
-                        }
-                    }
-
-                    "key" -> {
-                        val keyCode = (event.arguments.firstOrNull() as? Int) ?: continue
-                        when (keyCode) {
-                            GLFW.GLFW_KEY_ENTER,
-                            GLFW.GLFW_KEY_KP_ENTER,
-                            -> {
-                                printLine("")
-                                return line.toString()
+            val deferredEvents = ArrayDeque<VmEvent>()
+            try {
+                while (true) {
+                    state = VmState.WAITING_EVENT
+                    val event = owner.receiveEvent()
+                    state = VmState.RUNNING
+                    when (event.name) {
+                        "char" -> {
+                            decodeTypedText(event)?.let { chunk ->
+                                line.append(chunk)
+                                write(chunk)
                             }
+                        }
 
-                            GLFW.GLFW_KEY_BACKSPACE -> {
-                                if (line.isNotEmpty()) {
-                                    line.deleteCharAt(line.lastIndex)
-                                    owner.cursorX = (owner.cursorX - 1).coerceAtLeast(0)
-                                    setCursor(owner.cursorX, owner.cursorY)
-                                    write(" ")
-                                    owner.cursorX = (owner.cursorX - 1).coerceAtLeast(0)
-                                    setCursor(owner.cursorX, owner.cursorY)
+                        "paste" -> {
+                            decodePastedText(event)?.let { chunk ->
+                                line.append(chunk)
+                                write(chunk)
+                            }
+                        }
+
+                        "key" -> {
+                            val keyCode = (event.arguments.firstOrNull() as? Int) ?: continue
+                            when (keyCode) {
+                                GLFW.GLFW_KEY_ENTER,
+                                GLFW.GLFW_KEY_KP_ENTER,
+                                -> {
+                                    printLine("")
+                                    return line.toString()
+                                }
+
+                                GLFW.GLFW_KEY_BACKSPACE -> {
+                                    if (line.isNotEmpty()) {
+                                        line.deleteCharAt(line.lastIndex)
+                                        owner.cursorX = (owner.cursorX - 1).coerceAtLeast(0)
+                                        setCursor(owner.cursorX, owner.cursorY)
+                                        write(" ")
+                                        owner.cursorX = (owner.cursorX - 1).coerceAtLeast(0)
+                                        setCursor(owner.cursorX, owner.cursorY)
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    else -> owner.deferEvent(event)
+                        else -> deferredEvents.addLast(event)
+                    }
+                }
+            } finally {
+                while (deferredEvents.isNotEmpty()) {
+                    owner.deferEvent(deferredEvents.removeFirst())
                 }
             }
         }
