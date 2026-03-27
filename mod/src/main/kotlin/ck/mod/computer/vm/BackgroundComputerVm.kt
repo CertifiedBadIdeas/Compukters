@@ -49,9 +49,6 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import org.lwjgl.glfw.GLFW
-import java.nio.ByteBuffer
-import java.nio.charset.StandardCharsets
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
@@ -245,7 +242,7 @@ class BackgroundComputerVm(
         initialArgument: String = "",
     ) : ComputerRuntime {
         private val deferredEvents = ArrayDeque<VmEvent>()
-        var workingDirectory = normalizeWorkingDirectory(initialWorkingDirectory)
+        private val pathResolver = VmPathResolver(initialWorkingDirectory)
         var cursorX = 0
         var cursorY = 0
 
@@ -300,34 +297,8 @@ class BackgroundComputerVm(
             deferredEvents.addLast(event)
         }
 
-        fun resolvePath(path: String): String {
-            val trimmed = path.trim()
-            if (trimmed.isEmpty() || trimmed == ".") return workingDirectory
-
-            val segments = ArrayDeque<String>()
-            val source =
-                if (trimmed.startsWith('/')) {
-                    trimmed.removePrefix("/")
-                } else {
-                    listOf(workingDirectory, trimmed).filter { it.isNotEmpty() }.joinToString("/")
-                }
-            source
-                .split('/')
-                .filter { it.isNotEmpty() }
-                .forEach { segment ->
-                    when (segment) {
-                        "." -> Unit
-                        ".." -> segments.removeLastOrNull()
-                        else -> segments.addLast(segment)
-                    }
-                }
-            return segments.joinToString("/")
-        }
-
-        private fun normalizeWorkingDirectory(path: String): String = resolveWorkingDirectory(path)
-
         fun updateWorkingDirectory(path: String) {
-            workingDirectory = normalizeWorkingDirectory(path)
+            pathResolver.updateWorkingDirectory(path)
         }
 
         fun advanceCursor(text: String) {
@@ -344,7 +315,9 @@ class BackgroundComputerVm(
             cursorY = 0
         }
 
-        fun currentWorkingDirectory(): String = workingDirectory
+        fun resolvePath(path: String): String = pathResolver.resolve(path)
+
+        fun currentWorkingDirectory(): String = pathResolver.workingDirectory
     }
 
     private inner class SystemApi : ComputerSystemApi {
@@ -391,63 +364,21 @@ class BackgroundComputerVm(
         }
 
         override suspend fun readLine(prompt: String): String {
-            if (prompt.isNotEmpty()) {
-                write(prompt)
-            }
-
-            val line = StringBuilder()
-            val deferredEvents = ArrayDeque<VmEvent>()
-            try {
-                while (true) {
+            return TerminalLineReader(
+                receiveEvent = {
                     state = VmState.WAITING_EVENT
-                    val event = owner.receiveEvent()
-                    state = VmState.RUNNING
-                    when (event.name) {
-                        "char" -> {
-                            decodeTypedText(event)?.let { chunk ->
-                                line.append(chunk)
-                                write(chunk)
-                            }
-                        }
-
-                        "paste" -> {
-                            decodePastedText(event)?.let { chunk ->
-                                line.append(chunk)
-                                write(chunk)
-                            }
-                        }
-
-                        "key" -> {
-                            val keyCode = (event.arguments.firstOrNull() as? Int) ?: continue
-                            when (keyCode) {
-                                GLFW.GLFW_KEY_ENTER,
-                                GLFW.GLFW_KEY_KP_ENTER,
-                                -> {
-                                    printLine("")
-                                    return line.toString()
-                                }
-
-                                GLFW.GLFW_KEY_BACKSPACE -> {
-                                    if (line.isNotEmpty()) {
-                                        line.deleteCharAt(line.lastIndex)
-                                        owner.cursorX = (owner.cursorX - 1).coerceAtLeast(0)
-                                        setCursor(owner.cursorX, owner.cursorY)
-                                        write(" ")
-                                        owner.cursorX = (owner.cursorX - 1).coerceAtLeast(0)
-                                        setCursor(owner.cursorX, owner.cursorY)
-                                    }
-                                }
-                            }
-                        }
-
-                        else -> deferredEvents.addLast(event)
-                    }
-                }
-            } finally {
-                while (deferredEvents.isNotEmpty()) {
-                    owner.deferEvent(deferredEvents.removeFirst())
-                }
-            }
+                    owner.receiveEvent().also { state = VmState.RUNNING }
+                },
+                deferEvent = owner::deferEvent,
+                write = ::write,
+                printLine = ::printLine,
+                setCursor = ::setCursor,
+                currentCursor = { owner.cursorX to owner.cursorY },
+                updateCursor = { x, y ->
+                    owner.cursorX = x
+                    owner.cursorY = y
+                },
+            ).readLine(prompt)
         }
 
         override suspend fun clear() {
@@ -529,23 +460,5 @@ class BackgroundComputerVm(
                 1
             }
         }
-    }
-
-    private fun resolveWorkingDirectory(path: String): String =
-        path
-            .trim()
-            .trim('/')
-
-    private fun decodeTypedText(event: VmEvent): String? {
-        val bytes = event.arguments.firstOrNull() as? ByteArray ?: return null
-        return bytes.toString(StandardCharsets.UTF_8)
-    }
-
-    private fun decodePastedText(event: VmEvent): String? {
-        val buffer = event.arguments.firstOrNull() as? ByteBuffer ?: return null
-        val copy = buffer.asReadOnlyBuffer()
-        val bytes = ByteArray(copy.remaining())
-        copy.get(bytes)
-        return bytes.toString(StandardCharsets.UTF_8)
     }
 }
