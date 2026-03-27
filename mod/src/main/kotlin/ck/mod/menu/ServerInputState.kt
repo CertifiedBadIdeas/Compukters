@@ -21,15 +21,11 @@ package ck.mod.menu
 import ck.mod.computer.ComputerEvents
 import ck.mod.computer.ServerComputer
 import ck.mod.gui.input.InputHandler
-import ck.mod.network.upload.FileUpload
 import ck.mod.utils.StringUtil
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet
 import it.unimi.dsi.fastutil.ints.IntSet
 import net.minecraft.world.inventory.AbstractContainerMenu
-import org.slf4j.Logger
-import org.slf4j.LoggerFactory
 import java.nio.ByteBuffer
-import java.util.UUID
 
 /**
  * The default concrete implementation of [ServerInputHandler].
@@ -48,10 +44,6 @@ class ServerInputState<T>(
     private var lastMouseX = 0
     private var lastMouseY = 0
     private var lastMouseDown = -1
-
-    private var toUploadId: UUID? = null
-
-    private var toUpload: MutableList<FileUpload>? = null
 
     override fun keyDown(
         key: Int,
@@ -141,70 +133,6 @@ class ServerInputState<T>(
         owner.getComputerPublic().reboot()
     }
 
-//    override fun startUpload(
-//        uploadId: UUID,
-//        files: MutableList<FileUpload>,
-//    ) {
-//        toUploadId = uploadId
-//        toUpload = files
-//    }
-//
-//    override fun continueUpload(
-//        uploadId: UUID,
-//        slices: MutableList<FileSlice>,
-//    ) {
-//        if (toUploadId == null || toUpload == null || (toUploadId != uploadId)) {
-//            LOG.warn("Invalid continueUpload call, skipping.")
-//            return
-//        }
-//
-//        for (slice in slices) slice.apply(toUpload)
-//    }
-//
-//    public override fun finishUpload(
-//        uploader: ServerPlayer,
-//        uploadId: UUID,
-//    ) {
-//        if (toUploadId == null || toUpload == null || toUpload!!.isEmpty() || (toUploadId != uploadId)) {
-//            LOG.warn("Invalid finishUpload call, skipping.")
-//            return
-//        }
-//
-//        ServerNetworking.sendToPlayer(finishUpload(uploader), uploader)
-//    }
-//
-//    private fun finishUpload(player: ServerPlayer): UploadResultMessage {
-//        val computer: ServerComputer = owner.computer
-//        if (toUpload == null) {
-//            return UploadResultMessage.error(owner, UploadResult.COMPUTER_OFF_MSG)
-//        }
-//
-//        for (upload in toUpload) {
-//            if (!upload.checksumMatches()) {
-//                LOG.warn("Checksum failed to match for {}.", upload.name)
-//                return UploadResultMessage.error(owner, Component.translatable("gui.computercraft.upload.failed.corrupted"))
-//            }
-//        }
-//
-//        computer.queueEvent(
-//            TransferredFiles.EVENT,
-//            arrayOf<Any>(
-//                TransferredFiles(
-//                    toUpload!!
-//                        .stream()
-//                        .map<Any?> { x: FileUpload -> TransferredFile(x.getName(), ByteBufferChannel(x.getBytes())) }
-//                        .toList(),
-//                    {
-//                        if (player.isAlive() && player.containerMenu === owner) {
-//                            ServerNetworking.sendToPlayer(UploadResultMessage.consumed(owner), player)
-//                        }
-//                    },
-//                ),
-//            ),
-//        )
-//        return UploadResultMessage.queued(owner)
-//    }
-
     fun close() {
         val computer: ServerComputer = owner.getComputerPublic()
         val keys = keysDown.iterator()
@@ -217,8 +145,6 @@ class ServerInputState<T>(
     }
 
     companion object {
-        private val LOG: Logger = LoggerFactory.getLogger(ServerInputState::class.java)
-
         private fun isValidClipboard(buffer: ByteBuffer): Boolean {
             var i = buffer.position()
             val max = buffer.limit()

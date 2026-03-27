@@ -16,16 +16,24 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package ck.mod.gui.screen
 
-import ck.mod.gui.ComputerWorkbenchLayout
-import ck.mod.gui.ComputerWorkbenchPresenter
+import ck.mod.application.workbench.WorkbenchMode
+import ck.mod.application.workbench.WorkbenchStore
+import ck.mod.application.workbench.completionDetail
+import ck.mod.application.workbench.highlightColor
 import ck.mod.gui.WorkbenchTerminalInputController
 import ck.mod.gui.WorkbenchTerminalLayout
 import ck.mod.gui.WorkbenchTerminalMetrics
 import ck.mod.gui.WorkbenchTerminalRenderer
+import ck.mod.gui.input.ClientInputHandler
+import ck.mod.infrastructure.workbench.InputHandlerControlGateway
+import ck.mod.infrastructure.workbench.LanguageWorkbenchIdeFacade
+import ck.mod.infrastructure.workbench.MenuWorkspaceUpdateSource
+import ck.mod.infrastructure.workbench.NetworkWorkspaceGateway
 import ck.mod.menu.AbstractComputerMenu
+import ck.mod.ui.workbench.WorkbenchLayoutModel
+import ck.mod.ui.workbench.WorkspaceRowLayout
 import net.minecraft.client.gui.GuiGraphics
 import net.minecraft.network.chat.Component
 import net.minecraft.world.entity.player.Inventory
@@ -36,22 +44,34 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
     player: Inventory,
     title: Component,
 ) : ComputerScreen<T>(container, player, title) {
-    private val presenter = ComputerWorkbenchPresenter(container)
-    private val terminalInput = WorkbenchTerminalInputController(presenter.input)
+    private val terminalData = container.getTerminal()
+    private val inputHandler = ClientInputHandler(container)
+    private val terminalInput = WorkbenchTerminalInputController(inputHandler)
+    private val store =
+        WorkbenchStore(
+            workspaceGateway = NetworkWorkspaceGateway(container),
+            controlGateway = InputHandlerControlGateway(inputHandler),
+            ideFacade = LanguageWorkbenchIdeFacade,
+        )
 
     init {
-        imageWidth = WorkbenchTerminalMetrics.imageWidth(presenter.terminalData)
-        imageHeight = WorkbenchTerminalMetrics.imageHeight(presenter.terminalData)
+        imageWidth = WorkbenchTerminalMetrics.imageWidth(terminalData)
+        imageHeight = WorkbenchTerminalMetrics.imageHeight(terminalData)
     }
 
     override fun init() {
-        presenter.init()
         super.init()
+        store.bind(MenuWorkspaceUpdateSource(menu))
+        store.initialize()
+    }
+
+    override fun removed() {
+        store.dispose()
+        super.removed()
     }
 
     override fun containerTick() {
         super.containerTick()
-        presenter.tick()
         terminalInput.update()
     }
 
@@ -61,7 +81,7 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
         mouseX: Int,
         mouseY: Int,
     ) {
-        if (presenter.mode == ComputerWorkbenchPresenter.Mode.TERMINAL) {
+        if (store.state.mode == WorkbenchMode.TERMINAL) {
             WorkbenchTerminalRenderer.render(
                 graphics,
                 minecraft!!.font,
@@ -70,7 +90,7 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
                 imageWidth,
                 imageHeight,
                 terminalLayout(),
-                presenter.terminalData,
+                terminalData,
                 terminalInput.focused,
             )
         } else {
@@ -88,17 +108,18 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
         mouseY: Int,
         partialTicks: Float,
     ) {
-        if (presenter.mode == ComputerWorkbenchPresenter.Mode.EDITOR && presenter.isInEditorArea(layout(), mouseX, mouseY)) {
-            val position = presenter.mouseToCursor(layout(), minecraft!!.font, mouseX, mouseY)
-            presenter.updateHover(position.first, position.second)
+        val layout = layout()
+        if (store.state.mode == WorkbenchMode.EDITOR && layout.editorBounds.contains(mouseX, mouseY)) {
+            val position = layout.mouseToCursor(store.state, mouseX, mouseY)
+            store.updateHover(position.first, position.second)
         } else {
-            presenter.clearHover()
+            store.clearHover()
         }
 
         renderBackground(graphics)
         super.render(graphics, mouseX, mouseY, partialTicks)
 
-        if (presenter.mode == ComputerWorkbenchPresenter.Mode.EDITOR) {
+        if (store.state.mode == WorkbenchMode.EDITOR) {
             renderWorkspaceList(graphics, mouseX, mouseY)
             renderEditor(graphics)
             renderStatusBar(graphics)
@@ -119,18 +140,20 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
         scancode: Int,
         modifiers: Int,
     ): Boolean {
-        val previousMode = presenter.mode
-        if (presenter.mode == ComputerWorkbenchPresenter.Mode.TERMINAL && terminalInput.focused) {
+        val previousMode = store.state.mode
+        if (store.state.mode == WorkbenchMode.TERMINAL && terminalInput.focused) {
             if (terminalInput.keyPressed(key, scancode, modifiers)) {
                 return true
             }
         }
-        if (presenter.keyPressed(key, scancode, modifiers, presenter.visibleEditorLines(layout()))) {
-            if (previousMode != presenter.mode && presenter.mode != ComputerWorkbenchPresenter.Mode.TERMINAL) {
+
+        if (store.keyPressed(key, modifiers, layout().visibleEditorLines())) {
+            if (previousMode != store.state.mode && store.state.mode != WorkbenchMode.TERMINAL) {
                 terminalInput.focused = false
             }
             return true
         }
+
         return super.keyPressed(key, scancode, modifiers)
     }
 
@@ -139,7 +162,7 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
         scancode: Int,
         modifiers: Int,
     ): Boolean {
-        if (presenter.mode == ComputerWorkbenchPresenter.Mode.TERMINAL && terminalInput.focused) {
+        if (store.state.mode == WorkbenchMode.TERMINAL && terminalInput.focused) {
             if (terminalInput.keyReleased(key, scancode)) {
                 return true
             }
@@ -151,10 +174,10 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
         ch: Char,
         modifiers: Int,
     ): Boolean {
-        if (presenter.mode == ComputerWorkbenchPresenter.Mode.TERMINAL && terminalInput.focused) {
+        if (store.state.mode == WorkbenchMode.TERMINAL && terminalInput.focused) {
             return terminalInput.charTyped(ch)
         }
-        if (presenter.charTyped(ch, presenter.visibleEditorLines(layout()))) {
+        if (store.charTyped(ch, layout().visibleEditorLines())) {
             return true
         }
         return super.charTyped(ch, modifiers)
@@ -169,21 +192,28 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
             return true
         }
 
-        if (presenter.mode == ComputerWorkbenchPresenter.Mode.TERMINAL) {
+        if (store.state.mode == WorkbenchMode.TERMINAL) {
             terminalInput.focused = terminalInput.mouseClicked(terminalLayout().terminalBounds, mouseX, mouseY)
             return terminalInput.focused || super.mouseClicked(mouseX, mouseY, button)
         }
 
+        val layout = layout()
         if (button == 0) {
             terminalInput.focused = false
-            if (presenter.handleFileListClick(layout(), mouseX.toInt(), mouseY.toInt())) {
+
+            layout.workspaceRowAt(store.state, mouseX.toInt(), mouseY.toInt())?.let { row ->
+                handleWorkspaceRow(row)
                 return true
             }
-            if (presenter.handleCompletionClick(layout(), minecraft!!.font, mouseX.toInt(), mouseY.toInt())) {
+
+            layout.completionIndexAt(store.state, mouseX.toInt(), mouseY.toInt())?.let { index ->
+                store.applyCompletion(index)
                 return true
             }
-            if (presenter.isInEditorArea(layout(), mouseX.toInt(), mouseY.toInt())) {
-                presenter.placeCursorAt(layout(), minecraft!!.font, mouseX.toInt(), mouseY.toInt(), presenter.visibleEditorLines(layout()))
+
+            if (layout.editorBounds.contains(mouseX.toInt(), mouseY.toInt())) {
+                val target = layout.mouseToCursor(store.state, mouseX.toInt(), mouseY.toInt())
+                store.moveCursorTo(target.first, target.second, layout.visibleEditorLines())
                 return true
             }
         }
@@ -210,28 +240,19 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
         mouseY: Double,
         delta: Double,
     ): Boolean {
-        if (presenter.mode == ComputerWorkbenchPresenter.Mode.EDITOR &&
-            presenter.isInEditorArea(layout(), mouseX.toInt(), mouseY.toInt())
-        ) {
-            presenter.scrollEditor(-delta.toInt())
+        val layout = layout()
+        if (store.state.mode == WorkbenchMode.EDITOR && layout.editorBounds.contains(mouseX.toInt(), mouseY.toInt())) {
+            store.scrollEditor(-delta.toInt())
             return true
         }
         return super.mouseScrolled(mouseX, mouseY, delta)
     }
 
     private fun renderToolbar(graphics: GuiGraphics) {
-        val buttons =
-            listOf(
-                toolbarButtonBounds(0) to if (presenter.mode == ComputerWorkbenchPresenter.Mode.TERMINAL) "IDE" else "Console",
-                toolbarButtonBounds(1) to "Save",
-                toolbarButtonBounds(2) to "Refresh",
-                toolbarButtonBounds(3) to "Up",
-                toolbarButtonBounds(4) to "Reboot",
-            )
-
-        buttons.forEach { (bounds, label) ->
-            graphics.fill(bounds.x, bounds.y, bounds.x + bounds.width, bounds.y + bounds.height, 0xFF222938.toInt())
-            graphics.drawCenteredString(minecraft!!.font, label, bounds.x + bounds.width / 2, bounds.y + 7, 0xE6ECF5)
+        layout().toolbarButtons(store.state).forEach { button ->
+            val bounds = button.bounds
+            graphics.fill(bounds.x, bounds.y, bounds.right, bounds.bottom, 0xFF222938.toInt())
+            graphics.drawCenteredString(minecraft!!.font, button.label, bounds.x + bounds.width / 2, bounds.y + 7, 0xE6ECF5)
         }
     }
 
@@ -243,69 +264,60 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
         val font = minecraft!!.font
         graphics.drawString(
             font,
-            Component.literal("/" + presenter.browserPath).visualOrderText,
+            Component.literal("/" + store.state.browserPath).visualOrderText,
             leftPos + 12,
             topPos + 38,
             0xBFD5E8,
             false,
         )
-        var rowY = topPos + 54
-        if (presenter.browserPath.isNotEmpty()) {
-            drawWorkspaceRow(graphics, "..", rowY, mouseX, mouseY, true)
-            rowY += 12
-        }
-        presenter.cachedEntries.forEach { entry ->
-            val label = if (entry.directory) entry.path.substringAfterLast('/') + "/" else entry.path.substringAfterLast('/')
-            drawWorkspaceRow(graphics, label, rowY, mouseX, mouseY, false)
-            rowY += 12
+        layout().workspaceRows(store.state).forEach { row ->
+            drawWorkspaceRow(graphics, row, mouseX, mouseY)
         }
     }
 
     private fun drawWorkspaceRow(
         graphics: GuiGraphics,
-        label: String,
-        rowY: Int,
+        row: WorkspaceRowLayout,
         mouseX: Int,
         mouseY: Int,
-        selected: Boolean,
     ) {
-        val hovered = mouseX in (leftPos + 10)..(leftPos + 124) && mouseY in rowY..(rowY + 10)
-        if (hovered || selected) {
-            graphics.fill(leftPos + 10, rowY - 1, leftPos + 124, rowY + 10, 0x443F5F8F)
+        val hovered = row.bounds.contains(mouseX, mouseY)
+        if (hovered || row.selected) {
+            graphics.fill(row.bounds.x, row.bounds.y, row.bounds.right, row.bounds.bottom, 0x443F5F8F)
         }
-        graphics.drawString(minecraft!!.font, label, leftPos + 14, rowY, 0xE6ECF5, false)
+        graphics.drawString(minecraft!!.font, row.label, row.bounds.x + 4, row.bounds.y + 1, 0xE6ECF5, false)
     }
 
     private fun renderEditor(graphics: GuiGraphics) {
         val font = minecraft!!.font
-        val lines = presenter.editorLines()
-        val startLine = presenter.editorScrollLine.coerceAtLeast(0)
-        val visibleLines = presenter.visibleEditorLines(layout())
+        val lines = editorLines()
+        val startLine = store.state.editor.scrollLine.coerceAtLeast(0)
+        val visibleLines = layout().visibleEditorLines()
         val endLine = min(lines.size, startLine + visibleLines)
         var drawY = topPos + 40
 
         for (lineIndex in startLine until endLine) {
-            if (lineIndex == presenter.cursorLine) {
+            if (lineIndex == store.state.editor.cursorLine) {
                 graphics.fill(leftPos + 138, drawY - 1, leftPos + imageWidth - 10, drawY + 9, 0x33294055)
             }
             graphics.drawString(font, (lineIndex + 1).toString(), leftPos + 142, drawY, 0x7D899C, false)
             renderHighlightedLine(graphics, lines[lineIndex], lineIndex, leftPos + 176, drawY)
-            drawY += ComputerWorkbenchPresenter.LINE_HEIGHT
+            drawY += layout().editorLineHeight
         }
 
         renderCursor(graphics, lines)
-        if (presenter.completionItems.isNotEmpty()) {
+        if (store.state.editor.completionItems.isNotEmpty()) {
             renderCompletionPopup(graphics)
         }
     }
 
     private fun renderStatusBar(graphics: GuiGraphics) {
         val font = minecraft!!.font
-        val path = presenter.openDocument?.path ?: "No file opened"
-        val status = if (presenter.editorDirty) "* $path" else path
+        val path = store.state.openDocument?.path ?: "No file opened"
+        val status = if (store.state.editor.dirty) "* $path" else path
         graphics.drawString(font, status, leftPos + 140, topPos + imageHeight - 24, 0xE6ECF5, false)
         val hover =
-            presenter.hoverInfo?.contents ?: presenter.ideSnapshot
+            store.state.editor.hoverInfo?.contents ?: store.state.editor.ideSnapshot
                 ?.diagnostics
                 ?.firstOrNull()
                 ?.message
@@ -324,7 +336,7 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
     ) {
         val font = minecraft!!.font
         val tokens =
-            presenter.ideSnapshot
+            store.state.editor.ideSnapshot
                 ?.highlights
                 .orEmpty()
                 .filter { it.range.start.line == lineIndex && it.range.end.line == lineIndex }
@@ -336,19 +348,15 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
         var drawX = x
         var column = 0
         tokens.sortedBy { it.range.start.column }.forEach { token ->
-            val start =
-                token.range.start.column
-                    .coerceIn(0, lineText.length)
-            val end =
-                token.range.end.column
-                    .coerceIn(start, lineText.length)
+            val start = token.range.start.column.coerceIn(0, lineText.length)
+            val end = token.range.end.column.coerceIn(start, lineText.length)
             if (start > column) {
                 val plain = lineText.substring(column, start)
                 graphics.drawString(font, plain, drawX, y, 0xE6ECF5, false)
                 drawX += font.width(plain)
             }
             val colored = lineText.substring(start, end)
-            graphics.drawString(font, colored, drawX, y, presenter.highlightColor(token.kind), false)
+            graphics.drawString(font, colored, drawX, y, highlightColor(token.kind), false)
             drawX += font.width(colored)
             column = end
         }
@@ -361,13 +369,13 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
         graphics: GuiGraphics,
         lines: List<String>,
     ) {
-        val visibleLine = presenter.cursorLine - presenter.editorScrollLine
-        if (visibleLine < 0 || visibleLine >= presenter.visibleEditorLines(layout())) {
+        val visibleLine = store.state.editor.cursorLine - store.state.editor.scrollLine
+        if (visibleLine < 0 || visibleLine >= layout().visibleEditorLines()) {
             return
         }
-        val beforeCursor = lines.getOrElse(presenter.cursorLine) { "" }.take(presenter.cursorColumn)
+        val beforeCursor = lines.getOrElse(store.state.editor.cursorLine) { "" }.take(store.state.editor.cursorColumn)
         val x = leftPos + 176 + minecraft!!.font.width(beforeCursor)
-        val y = topPos + 40 + visibleLine * ComputerWorkbenchPresenter.LINE_HEIGHT
+        val y = topPos + 40 + visibleLine * layout().editorLineHeight
         if ((minecraft!!.gui.guiTicks / 6) % 2 == 0) {
             graphics.fill(x, y - 1, x + 1, y + 9, 0xFFFFFFFF.toInt())
         }
@@ -375,23 +383,16 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
 
     private fun renderCompletionPopup(graphics: GuiGraphics) {
         val font = minecraft!!.font
-        val lines = presenter.editorLines()
-        val visibleLine = presenter.cursorLine - presenter.editorScrollLine
-        if (visibleLine < 0) return
-
-        val beforeCursor = lines.getOrElse(presenter.cursorLine) { "" }.take(presenter.cursorColumn)
-        val popupX = leftPos + 176 + font.width(beforeCursor)
-        val popupY = topPos + 52 + visibleLine * ComputerWorkbenchPresenter.LINE_HEIGHT
-        val items = presenter.completionItems.take(8)
-        val width = items.maxOfOrNull { font.width(it.label + "  " + presenter.completionDetail(it.kind)) }?.plus(12) ?: 120
-        graphics.fill(popupX, popupY, popupX + width, popupY + items.size * 12 + 4, 0xEE11151E.toInt())
+        val popup = layout().completionPopup(store.state) ?: return
+        val items = store.state.editor.completionItems.take(popup.visibleItems)
+        graphics.fill(popup.bounds.x, popup.bounds.y, popup.bounds.right, popup.bounds.bottom, 0xEE11151E.toInt())
         items.forEachIndexed { index, item ->
-            val rowY = popupY + 2 + index * 12
-            if (index == presenter.selectedCompletion) {
-                graphics.fill(popupX + 2, rowY - 1, popupX + width - 2, rowY + 10, 0x664883C7)
+            val rowY = popup.bounds.y + 2 + index * popup.rowHeight
+            if (index == store.state.editor.selectedCompletion) {
+                graphics.fill(popup.bounds.x + 2, rowY - 1, popup.bounds.right - 2, rowY + 10, 0x664883C7)
             }
-            graphics.drawString(font, item.label, popupX + 6, rowY, 0xF5F7FA, false)
-            graphics.drawString(font, presenter.completionDetail(item.kind), popupX + width - 36, rowY, 0x9CA8B8, false)
+            graphics.drawString(font, item.label, popup.bounds.x + 6, rowY, 0xF5F7FA, false)
+            graphics.drawString(font, completionDetail(item.kind), popup.bounds.right - 36, rowY, 0x9CA8B8, false)
         }
     }
 
@@ -399,43 +400,34 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
         mouseX: Int,
         mouseY: Int,
     ): Boolean {
-        repeat(5) { index ->
-            val bounds = toolbarButtonBounds(index)
-            if (mouseX in bounds.x..(bounds.x + bounds.width) && mouseY in bounds.y..(bounds.y + bounds.height)) {
-                when (index) {
-                    0 -> {
-                        presenter.toggleMode()
-                        if (presenter.mode != ComputerWorkbenchPresenter.Mode.TERMINAL) {
-                            terminalInput.focused = false
-                        }
-                    }
-
-                    1 -> {
-                        presenter.saveDocument()
-                    }
-
-                    2 -> {
-                        presenter.requestListing(presenter.browserPath)
-                        presenter.openDocument?.path?.let(presenter::requestDocument)
-                    }
-
-                    3 -> {
-                        presenter.navigateUp()
-                    }
-
-                    4 -> {
-                        presenter.input.reboot()
+        layout().toolbarButtonAt(store.state, mouseX, mouseY)?.let { button ->
+            when (button.index) {
+                0 -> {
+                    store.toggleMode()
+                    if (store.state.mode != WorkbenchMode.TERMINAL) {
+                        terminalInput.focused = false
                     }
                 }
-                return true
+
+                1 -> store.saveDocument()
+                2 -> store.refreshWorkspace()
+                3 -> store.navigateUp()
+                4 -> store.rebootComputer()
             }
+            return true
         }
         return false
     }
 
-    private fun toolbarButtonBounds(index: Int): ButtonBounds = ButtonBounds(leftPos + 8 + index * 80, topPos + 8, 72, 20)
+    private fun handleWorkspaceRow(row: WorkspaceRowLayout) {
+        when {
+            row.path == null -> store.navigateUp()
+            row.directory -> store.requestListing(row.path)
+            else -> store.requestDocument(row.path)
+        }
+    }
 
-    private fun layout(): ComputerWorkbenchLayout = ComputerWorkbenchLayout(leftPos, topPos, imageWidth, imageHeight)
+    private fun layout(): WorkbenchLayoutModel = WorkbenchLayoutModel(leftPos, topPos, imageWidth, imageHeight, minecraft!!.font)
 
     private fun terminalLayout(): WorkbenchTerminalLayout =
         WorkbenchTerminalMetrics.layout(
@@ -443,13 +435,13 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
             topPos,
             imageWidth,
             imageHeight,
-            presenter.terminalData,
+            terminalData,
         )
 
-    private data class ButtonBounds(
-        val x: Int,
-        val y: Int,
-        val width: Int,
-        val height: Int,
-    )
+    private fun editorLines(): List<String> =
+        if (store.state.editor.text.isEmpty()) {
+            listOf("")
+        } else {
+            store.state.editor.text.split('\n')
+        }
 }

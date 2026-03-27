@@ -31,6 +31,9 @@ import net.minecraft.world.inventory.AbstractContainerMenu
 abstract class ComputerServerMessage : NetworkMessage<ServerNetworkContext> {
     private val containerId: Int
 
+    protected val targetContainerId: Int
+        get() = containerId
+
     protected constructor(menu: AbstractContainerMenu) {
         containerId = menu.containerId
     }

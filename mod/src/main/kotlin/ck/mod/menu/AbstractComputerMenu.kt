@@ -20,6 +20,7 @@ package ck.mod.menu
 
 import ck.lang.runtime.ComputerWorkspaceDocument
 import ck.lang.runtime.ComputerWorkspaceEntry
+import ck.mod.application.workbench.WorkbenchRemoteState
 import ck.mod.Config
 import ck.mod.block.ComputerFamily
 import ck.mod.computer.ServerComputer
@@ -58,8 +59,9 @@ abstract class AbstractComputerMenu(
 
     val input: ServerInputState<AbstractComputerMenu>?
     private val terminal: NetworkedTerminal?
-    private var workspaceEntries: List<ComputerWorkspaceEntry> = emptyList()
-    private var workspaceDocument: ComputerWorkspaceDocument? = null
+    private var workspaceState: WorkbenchRemoteState = WorkbenchRemoteState()
+    private val workspaceListeners = mutableMapOf<Int, (WorkbenchRemoteState) -> Unit>()
+    private var nextWorkspaceListenerId: Int = 0
     val displayStack: ItemStack
 
     init {
@@ -93,11 +95,13 @@ abstract class AbstractComputerMenu(
     }
 
     override fun updateWorkspaceEntries(entries: List<ComputerWorkspaceEntry>) {
-        workspaceEntries = entries
+        workspaceState = workspaceState.copy(entries = entries)
+        notifyWorkspaceListeners()
     }
 
     override fun updateWorkspaceDocument(document: ComputerWorkspaceDocument?) {
-        workspaceDocument = document
+        workspaceState = workspaceState.copy(document = document)
+        notifyWorkspaceListeners()
     }
 
     /**
@@ -111,9 +115,16 @@ abstract class AbstractComputerMenu(
         return terminal
     }
 
-    fun getWorkspaceEntries(): List<ComputerWorkspaceEntry> = workspaceEntries
+    fun getWorkspaceEntries(): List<ComputerWorkspaceEntry> = workspaceState.entries
 
-    fun getWorkspaceDocument(): ComputerWorkspaceDocument? = workspaceDocument
+    fun getWorkspaceDocument(): ComputerWorkspaceDocument? = workspaceState.document
+
+    fun addWorkspaceListener(listener: (WorkbenchRemoteState) -> Unit): AutoCloseable {
+        val listenerId = nextWorkspaceListenerId++
+        workspaceListeners[listenerId] = listener
+        listener(workspaceState)
+        return AutoCloseable { workspaceListeners.remove(listenerId) }
+    }
 
     override fun removed(player: Player) {
         super.removed(player)
@@ -122,5 +133,9 @@ abstract class AbstractComputerMenu(
 
     companion object {
         const val SIDEBAR_WIDTH: Int = 17
+    }
+
+    private fun notifyWorkspaceListeners() {
+        workspaceListeners.values.forEach { it(workspaceState) }
     }
 }

@@ -19,15 +19,14 @@
 
 package ck.mod.computer
 
-import ck.lang.frontend.FrontendSeverity
-import ck.lang.runtime.BytecodeComputerProgram
 import ck.lang.runtime.ComputerVmHandle
-import ck.lang.runtime.HostCall
-import ck.lang.runtime.HostResult
 import ck.lang.runtime.VmEvent
 import ck.lang.runtime.VmState
 import ck.lang.runtime.VmStopReason
 import ck.mod.LOGGER
+import ck.mod.application.runtime.ComputerProgramCompiler
+import ck.mod.application.runtime.HostCallDispatcher
+import ck.mod.application.runtime.WorkspaceProgramLoader
 import ck.mod.computer.vm.ComputerProfileRegistry
 import ck.mod.computer.vm.ComputerVmCallbacks
 import ck.mod.computer.vm.ComputerVmLogger
@@ -65,6 +64,12 @@ class ServerComputer(
     private var label: String? = properties.label
     private var vmHandle: ComputerVmHandle? = null
     private var rebootRequested = false
+    private val programLoader by lazy {
+        WorkspaceProgramLoader(ServerContext.vmSupervisor.workspace, LanguageServices::bundledScript)
+    }
+    private val hostCallDispatcher by lazy {
+        HostCallDispatcher(instanceID, terminal, ServerContext.vmSupervisor.workspace)
+    }
 
     init {
         LOGGER.info { "ComputerID: $instanceID init" }
@@ -99,18 +104,18 @@ class ServerComputer(
         if (isOn) return
         LOGGER.info { "ComputerID: $instanceID turnOn" }
         ServerContext.vmSupervisor.ensureWorkspaceInitialized(instanceID)
-        val bootScriptDocument = ServerContext.vmSupervisor.workspace.readDocument(instanceID, profile.bootScriptName)
-        if (bootScriptDocument == null) {
+        val bootScript = programLoader.load(instanceID, profile.bootScriptName)
+        if (bootScript == null) {
             writeLineToTerminal("Missing boot script in workspace: ${profile.bootScriptName}")
             return
         }
 
         ServerContext.vmSupervisor.remove(instanceID, VmStopReason.CLOSED)
         val handle = ServerContext.vmSupervisor.getOrCreate(instanceID, profile, this, logger)
-        val artifact = LanguageServices.frontend.compile(bootScriptDocument.path, bootScriptDocument.text)
-        val module = artifact.module
-        if (module == null || artifact.analysis.diagnostics.any { it.severity == FrontendSeverity.ERROR }) {
-            val message = artifact.analysis.diagnostics.joinToString { it.message }
+        val compiledProgram = ComputerProgramCompiler.compile(bootScript.path, bootScript.source)
+        val program = compiledProgram.program
+        if (program == null) {
+            val message = compiledProgram.errorMessage.orEmpty()
             writeLineToTerminal("Compilation Error: $message")
             LOGGER.error { message }
             ServerContext.vmSupervisor.remove(instanceID, VmStopReason.CLOSED)
@@ -120,7 +125,7 @@ class ServerComputer(
         terminal.reset()
         vmHandle = handle
         rebootRequested = false
-        isOn = handle.start(BytecodeComputerProgram(module))
+        isOn = handle.start(program)
         if (isOn) {
             handle.enqueueEvent(VmEvent("boot"))
         }
@@ -148,7 +153,7 @@ class ServerComputer(
         }
         handle.requestSlice(level.gameTime)
 
-        val results = handle.drainHostCalls().map(::applyHostCall)
+        val results = handle.drainHostCalls().map(hostCallDispatcher::dispatch)
         if (results.isNotEmpty()) {
             handle.deliverHostResults(results)
         }
@@ -179,71 +184,6 @@ class ServerComputer(
     override fun onVmRebootRequested() {
         rebootRequested = true
     }
-
-    private fun applyHostCall(call: HostCall): HostResult =
-        try {
-            when (call) {
-                is HostCall.TerminalWrite -> {
-                    if (call.newLine) {
-                        writeLineToTerminal(call.text)
-                    } else {
-                            TerminalHostWriter.write(terminal, call.text)
-                    }
-                    HostResult.Success(call.id)
-                }
-
-                is HostCall.TerminalClear -> {
-                    terminal.clear()
-                    terminal.setCursorPos(0, 0)
-                    HostResult.Success(call.id)
-                }
-
-                is HostCall.TerminalSetCursor -> {
-                    terminal.setCursorPos(call.x, call.y)
-                    HostResult.Success(call.id)
-                }
-
-                is HostCall.FileExists -> {
-                    HostResult.Success(
-                        call.id,
-                        ServerContext.vmSupervisor.workspace.readDocument(instanceID, call.path) != null ||
-                            ServerContext.vmSupervisor.workspace.isDirectory(instanceID, call.path),
-                    )
-                }
-
-                is HostCall.FileIsDirectory -> {
-                    HostResult.Success(call.id, ServerContext.vmSupervisor.workspace.isDirectory(instanceID, call.path))
-                }
-
-                is HostCall.FileReadText -> {
-                    HostResult.Success(
-                        call.id,
-                        ServerContext.vmSupervisor.workspace
-                            .readDocument(instanceID, call.path)
-                            ?.text,
-                    )
-                }
-
-                is HostCall.FileWriteText -> {
-                    ServerContext.vmSupervisor.workspace.writeDocument(instanceID, call.path, call.text)
-                    HostResult.Success(call.id)
-                }
-
-                is HostCall.FileMakeDirectory -> {
-                    HostResult.Success(call.id, ServerContext.vmSupervisor.workspace.makeDirectory(instanceID, call.path))
-                }
-
-                is HostCall.FileRemove -> {
-                    HostResult.Success(call.id, ServerContext.vmSupervisor.workspace.deleteDocument(instanceID, call.path))
-                }
-
-                is HostCall.FileList -> {
-                    HostResult.Success(call.id, ServerContext.vmSupervisor.workspace.list(instanceID, call.path))
-                }
-            }
-        } catch (failure: Throwable) {
-            HostResult.Failure(call.id, failure.message ?: failure.javaClass.simpleName)
-        }
 
     private fun writeLineToTerminal(text: String) = TerminalHostWriter.printLine(terminal, text)
 

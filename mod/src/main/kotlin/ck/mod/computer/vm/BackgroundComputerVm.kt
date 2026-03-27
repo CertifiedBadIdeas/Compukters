@@ -19,8 +19,6 @@
 
 package ck.mod.computer.vm
 
-import ck.lang.frontend.FrontendSeverity
-import ck.lang.runtime.BytecodeComputerProgram
 import ck.lang.runtime.ComputerFileSystemApi
 import ck.lang.runtime.ComputerPeripheralApi
 import ck.lang.runtime.ComputerProcessApi
@@ -60,7 +58,8 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.yield as coroutineYield
-import ck.mod.language.LanguageServices
+import ck.mod.application.runtime.ComputerProgramCompiler
+import ck.mod.application.runtime.WorkspaceProgramLoader
 
 fun interface ComputerVmLogger {
     fun log(message: String)
@@ -116,6 +115,7 @@ class BackgroundComputerVm(
 
     private var runner: Job? = null
     private val runtime = RuntimeFacade()
+    private val programLoader = WorkspaceProgramLoader(workspace, bundledScriptLoader)
 
     override fun start(program: ComputerProgram): Boolean {
         if (runner?.isActive == true) return false
@@ -509,32 +509,26 @@ class BackgroundComputerVm(
             argument: String,
         ): Int {
             val resolved = owner.resolvePath(path)
-            val source = loadProgramSource(resolved) ?: return 1
-            val artifact = LanguageServices.frontend.compile(resolved, source)
-            val module = artifact.module
-            if (module == null || artifact.analysis.diagnostics.any { it.severity == FrontendSeverity.ERROR }) {
-                val message = artifact.analysis.diagnostics.joinToString { it.message }
+            val programSource = programLoader.load(computerId, resolved) ?: run {
+                logger.log("VM[$computerId] missing program: $resolved")
+                return 1
+            }
+            val compiledProgram = ComputerProgramCompiler.compile(programSource.path, programSource.source)
+            val program = compiledProgram.program
+            if (program == null) {
+                val message = compiledProgram.errorMessage.orEmpty()
                 owner.terminal.printLine("Compilation Error: $message")
                 return 1
             }
 
             return try {
-                BytecodeComputerProgram(module).run(RuntimeFacade(owner.currentWorkingDirectory(), argument))
+                program.run(RuntimeFacade(owner.currentWorkingDirectory(), argument))
                 0
             } catch (failure: Throwable) {
                 owner.terminal.printLine("Program error: ${failure.message ?: failure.javaClass.simpleName}")
                 1
             }
         }
-
-        private fun loadProgramSource(path: String): String? =
-            workspace.readDocument(computerId, path)?.text
-                ?: bundledScriptLoader(path)
-                ?: bundledScriptLoader(path.removePrefix("/"))
-                ?: run {
-                    logger.log("VM[$computerId] missing program: $path")
-                    null
-                }
     }
 
     private fun resolveWorkingDirectory(path: String): String =

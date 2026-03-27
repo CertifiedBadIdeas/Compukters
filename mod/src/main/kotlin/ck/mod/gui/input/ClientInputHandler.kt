@@ -16,104 +16,70 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package ck.mod.gui.input
 
-import ck.mod.network.ClientNetworking
-import ck.mod.network.server.ComputerActionServerMessage
-import ck.mod.network.server.KeyEventServerMessage
-import ck.mod.network.server.MouseEventServerMessage
-import ck.mod.network.server.PasteEventComputerMessage
+import ck.mod.application.input.ComputerControlAction
+import ck.mod.application.input.ComputerInputGateway
+import ck.mod.application.input.KeyInputEvent
+import ck.mod.application.input.MouseInputEvent
+import ck.mod.application.input.PasteInputEvent
+import ck.mod.infrastructure.input.NetworkComputerInputGateway
 import net.minecraft.world.inventory.AbstractContainerMenu
 import java.nio.ByteBuffer
 
 /**
  * An [ck.mod.gui.InputHandler] for use on the client.
  *
- *
  * This queues events on the remote player's open [ComputerMenu].
  */
 class ClientInputHandler(
-    private val menu: AbstractContainerMenu,
+    menu: AbstractContainerMenu,
 ) : InputHandler {
-    override fun terminate() {
-        ClientNetworking.sendToServer(ComputerActionServerMessage(menu, ComputerActionServerMessage.Action.TERMINATE))
-    }
+    private val gateway: ComputerInputGateway = NetworkComputerInputGateway(menu)
 
-    override fun turnOn() {
-        ClientNetworking.sendToServer(ComputerActionServerMessage(menu, ComputerActionServerMessage.Action.TURN_ON))
-    }
+    override fun terminate() = gateway.sendControl(ComputerControlAction.TERMINATE)
 
-    override fun shutdown() {
-        ClientNetworking.sendToServer(ComputerActionServerMessage(menu, ComputerActionServerMessage.Action.SHUTDOWN))
-    }
+    override fun turnOn() = gateway.sendControl(ComputerControlAction.TURN_ON)
 
-    override fun reboot() {
-        ClientNetworking.sendToServer(ComputerActionServerMessage(menu, ComputerActionServerMessage.Action.REBOOT))
-    }
+    override fun shutdown() = gateway.sendControl(ComputerControlAction.SHUTDOWN)
+
+    override fun reboot() = gateway.sendControl(ComputerControlAction.REBOOT)
 
     override fun keyDown(
         key: Int,
         repeat: Boolean,
-    ) {
-        ClientNetworking.sendToServer(
-            KeyEventServerMessage(
-                menu,
-                if (repeat) KeyEventServerMessage.Action.REPEAT else KeyEventServerMessage.Action.DOWN,
-                key,
-            ),
-        )
-    }
+    ) = gateway.sendKey(KeyInputEvent.Down(key, repeat))
 
-    override fun keyUp(key: Int) {
-        ClientNetworking.sendToServer(KeyEventServerMessage(menu, KeyEventServerMessage.Action.UP, key))
-    }
+    override fun keyUp(key: Int) = gateway.sendKey(KeyInputEvent.Up(key))
 
-    override fun charTyped(chr: Byte) {
-        ClientNetworking.sendToServer(KeyEventServerMessage(menu, KeyEventServerMessage.Action.CHAR, chr.toInt()))
-    }
+    override fun charTyped(chr: Byte) = gateway.sendKey(KeyInputEvent.Character(chr))
 
     override fun paste(contents: ByteBuffer?) {
-        ClientNetworking.sendToServer(PasteEventComputerMessage(menu, contents ?: return))
+        contents ?: return
+        gateway.sendPaste(PasteInputEvent(contents))
     }
 
     override fun mouseClick(
         button: Int,
         x: Int,
         y: Int,
-    ) {
-        ClientNetworking.sendToServer(MouseEventServerMessage(menu, MouseEventServerMessage.Action.CLICK, button, x, y))
-    }
+    ) = gateway.sendMouse(MouseInputEvent.Click(button, x, y))
 
     override fun mouseUp(
         button: Int,
         x: Int,
         y: Int,
-    ) {
-        ClientNetworking.sendToServer(MouseEventServerMessage(menu, MouseEventServerMessage.Action.UP, button, x, y))
-    }
+    ) = gateway.sendMouse(MouseInputEvent.Up(button, x, y))
 
     override fun mouseDrag(
         button: Int,
         x: Int,
         y: Int,
-    ) {
-        ClientNetworking.sendToServer(MouseEventServerMessage(menu, MouseEventServerMessage.Action.DRAG, button, x, y))
-    }
+    ) = gateway.sendMouse(MouseInputEvent.Drag(button, x, y))
 
     override fun mouseScroll(
         direction: Int,
         x: Int,
         y: Int,
-    ) {
-        ClientNetworking.sendToServer(
-            MouseEventServerMessage(
-                menu,
-                MouseEventServerMessage.Action.SCROLL,
-                direction,
-                x,
-                y,
-            ),
-        )
-    }
+    ) = gateway.sendMouse(MouseInputEvent.Scroll(direction, x, y))
 }

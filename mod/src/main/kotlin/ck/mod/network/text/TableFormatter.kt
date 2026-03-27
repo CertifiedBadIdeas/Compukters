@@ -23,7 +23,6 @@ import ck.mod.network.client.ChatHelpers.coloured
 import net.minecraft.ChatFormatting
 import net.minecraft.network.chat.Component
 import net.minecraft.network.chat.MutableComponent
-import org.apache.commons.lang3.StringUtils
 
 interface TableFormatter {
     /**
@@ -36,7 +35,11 @@ interface TableFormatter {
     fun getPadding(
         component: Component,
         width: Int,
-    ): Component?
+    ): Component? {
+        val extraWidth = width - getWidth(component)
+        if (extraWidth <= 0) return null
+        return Component.literal(" ".repeat(extraWidth))
+    }
 
     /**
      * Get the minimum padding between each column.
@@ -100,7 +103,7 @@ interface TableFormatter {
             writeLine(
                 id,
                 coloured(
-                    StringUtils.repeat(HEADER.string, rowWidth),
+                    HEADER.string.repeat(rowWidth),
                     ChatFormatting.GRAY,
                 ),
             )

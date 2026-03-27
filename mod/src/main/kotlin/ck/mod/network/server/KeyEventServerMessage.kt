@@ -18,6 +18,8 @@
  */
 package ck.mod.network.server
 
+import ck.mod.application.input.KeyInputEvent
+import ck.mod.application.input.accept
 import ck.mod.menu.ComputerMenu
 import ck.mod.network.MessageType
 import ck.mod.network.NetworkMessages
@@ -48,13 +50,7 @@ class KeyEventServerMessage : ComputerServerMessage {
         context: ServerNetworkContext,
         container: ComputerMenu,
     ) {
-        val input = container.getInputPublic()
-        when (type) {
-            Action.UP -> input.keyUp(key)
-            Action.DOWN -> input.keyDown(key, false)
-            Action.REPEAT -> input.keyDown(key, true)
-            Action.CHAR -> input.charTyped(key.toByte())
-        }
+        container.getInputPublic().accept(type.toDomainEvent(key))
     }
 
     override fun type(): MessageType<KeyEventServerMessage> = NetworkMessages.KEY_EVENT
@@ -66,3 +62,11 @@ class KeyEventServerMessage : ComputerServerMessage {
         CHAR,
     }
 }
+
+private fun KeyEventServerMessage.Action.toDomainEvent(key: Int): KeyInputEvent =
+    when (this) {
+        KeyEventServerMessage.Action.DOWN -> KeyInputEvent.Down(key, repeat = false)
+        KeyEventServerMessage.Action.REPEAT -> KeyInputEvent.Down(key, repeat = true)
+        KeyEventServerMessage.Action.UP -> KeyInputEvent.Up(key)
+        KeyEventServerMessage.Action.CHAR -> KeyInputEvent.Character(key.toByte())
+    }

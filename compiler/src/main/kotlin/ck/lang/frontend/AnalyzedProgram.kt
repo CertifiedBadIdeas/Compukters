@@ -35,6 +35,14 @@ class AnalyzedProgram(
     private val builtinModules: List<BuiltinModule>,
     private val builtinGlobals: List<BuiltinFunction>,
 ) {
+    internal var semantic: SemanticResult? = null
+        private set
+
+    internal fun rememberSemantic(result: SemanticResult): AnalyzedProgram =
+        apply {
+            semantic = result
+        }
+
     fun symbolAt(offset: Int): SymbolInfo? =
         references.firstOrNull { it.range.contains(offset) }?.target
             ?: symbols.firstOrNull { it.range?.contains(offset) == true }

@@ -18,6 +18,8 @@
  */
 package ck.mod.network.server
 
+import ck.mod.application.input.PasteInputEvent
+import ck.mod.application.input.accept
 import ck.mod.menu.ComputerMenu
 import ck.mod.network.MessageType
 import ck.mod.network.NetworkMessages
@@ -60,7 +62,7 @@ class PasteEventComputerMessage : ComputerServerMessage {
         context: ServerNetworkContext,
         container: ComputerMenu,
     ) {
-        container.getInputPublic().paste(text)
+        container.getInputPublic().accept(PasteInputEvent(text))
     }
 
     public override fun type(): MessageType<PasteEventComputerMessage> = NetworkMessages.PASTE_EVENT

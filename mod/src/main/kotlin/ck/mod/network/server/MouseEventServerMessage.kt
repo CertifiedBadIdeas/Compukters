@@ -18,6 +18,8 @@
  */
 package ck.mod.network.server
 
+import ck.mod.application.input.MouseInputEvent
+import ck.mod.application.input.accept
 import ck.mod.menu.ComputerMenu
 import ck.mod.network.MessageType
 import ck.mod.network.NetworkMessages
@@ -56,13 +58,7 @@ class MouseEventServerMessage : ComputerServerMessage {
         context: ServerNetworkContext,
         container: ComputerMenu,
     ) {
-        val input = container.getInputPublic()
-        when (type) {
-            Action.CLICK -> input.mouseClick(arg, x, y)
-            Action.DRAG -> input.mouseDrag(arg, x, y)
-            Action.UP -> input.mouseUp(arg, x, y)
-            Action.SCROLL -> input.mouseScroll(arg, x, y)
-        }
+        container.getInputPublic().accept(type.toDomainEvent(arg, x, y))
     }
 
     public override fun type(): MessageType<MouseEventServerMessage> = NetworkMessages.MOUSE_EVENT
@@ -74,3 +70,15 @@ class MouseEventServerMessage : ComputerServerMessage {
         SCROLL,
     }
 }
+
+private fun MouseEventServerMessage.Action.toDomainEvent(
+    arg: Int,
+    x: Int,
+    y: Int,
+): MouseInputEvent =
+    when (this) {
+        MouseEventServerMessage.Action.CLICK -> MouseInputEvent.Click(arg, x, y)
+        MouseEventServerMessage.Action.DRAG -> MouseInputEvent.Drag(arg, x, y)
+        MouseEventServerMessage.Action.UP -> MouseInputEvent.Up(arg, x, y)
+        MouseEventServerMessage.Action.SCROLL -> MouseInputEvent.Scroll(arg, x, y)
+    }

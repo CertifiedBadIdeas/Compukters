@@ -20,7 +20,6 @@ package ck.mod.platform
 
 import org.jetbrains.annotations.ApiStatus
 import java.util.ServiceLoader
-import java.util.stream.Collectors
 
 /**
  * Utilities for loading services.
@@ -39,22 +38,13 @@ object Services {
      * @throws IllegalStateException When the service cannot be loaded.
      </T> */
     fun <T> load(klass: Class<T>): T {
-        val services = ServiceLoader.load(klass, klass.getClassLoader()).stream().toList()
+        val services: List<ServiceLoader.Provider<T>> = ServiceLoader.load(klass, klass.classLoader).stream().toList()
         return when (services.size) {
-            1 -> {
-                services[0]!!.get()
-            }
-
-            0 -> {
-                throw IllegalStateException("Cannot find service for " + klass.getName())
-            }
-
+            1 -> services.single().get()
+            0 -> throw IllegalStateException("Cannot find service for ${klass.name}")
             else -> {
-                val serviceTypes =
-                    services.stream().map { x: ServiceLoader.Provider<T?>? -> x!!.type().getName() }.collect(
-                        Collectors.joining(", "),
-                    )
-                throw IllegalStateException("Multiple services for " + klass.getName() + ": " + serviceTypes)
+                val serviceTypes = services.joinToString(", ") { it.type().name }
+                throw IllegalStateException("Multiple services for ${klass.name}: $serviceTypes")
             }
         }
     }
@@ -91,7 +81,7 @@ object Services {
         e: Throwable?,
     ): T {
         // Throw a new exception so there's a useful stack trace there somewhere!
-        throw ServiceException("Failed to instantiate " + klass.getName(), e)
+        throw ServiceException("Failed to instantiate ${klass.name}", e)
     }
 
     class LoadedService<T> internal constructor(

@@ -20,10 +20,7 @@
 package ck.mod.context
 
 import ck.mod.computer.vm.ComputerVmSupervisor
-import ck.mod.utils.SingletonHolder
 import net.minecraft.server.MinecraftServer
-
-// private val LOGGER: Logger = LogManager.getLogger(ServerContext::class.java)
 
 class ServerContext(
     val server: MinecraftServer,
@@ -31,25 +28,33 @@ class ServerContext(
     val registry = ComputerRegistry()
     val vmSupervisor = ComputerVmSupervisor(server)
 
-    companion object : SingletonHolder<ServerContext>() {
+    companion object {
+        private var current: ServerContext? = null
+
+        val isInitialized: Boolean
+            get() = current != null
+
         val registry
-            get() = instance.registry
+            get() = context().registry
 
         val vmSupervisor
-            get() = instance.vmSupervisor
+            get() = context().vmSupervisor
 
         val server
-            get() = instance.server
+            get() = context().server
 
         fun allocateComputerId(): Int = ComputerIdentitySavedData.get(server).allocateComputerId()
 
         fun create(server: MinecraftServer) {
-            instance = ServerContext(server)
+            check(current == null) { "ServerContext is already initialized" }
+            current = ServerContext(server)
         }
 
         fun close() {
-            instance.vmSupervisor.close()
-            resetInstance()
+            current?.vmSupervisor?.close()
+            current = null
         }
+
+        private fun context(): ServerContext = checkNotNull(current) { "ServerContext has not been initialized" }
     }
 }

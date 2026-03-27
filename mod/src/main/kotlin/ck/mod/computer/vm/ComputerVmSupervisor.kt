@@ -46,7 +46,7 @@ class ComputerVmSupervisor(
             rootPath = server.getWorldPath(LevelResource.ROOT).resolve(MOD_ID).resolve("computers"),
             bundledScriptLoader = LanguageServices::bundledScript,
         )
-    private val ideHost = EnvironmentComputerIdeHost(workspaceStore)
+    private val ideHost = WorkspaceComputerIdeHost(workspaceStore)
 
     val workspace: ComputerWorkspace
         get() = workspaceStore

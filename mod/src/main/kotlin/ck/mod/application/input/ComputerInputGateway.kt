@@ -16,24 +16,14 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
+package ck.mod.application.input
 
-package ck.mod.network.client
+interface ComputerInputGateway {
+    fun sendControl(action: ComputerControlAction)
 
-import ck.mod.network.text.TableFormatter
-import net.minecraft.client.Minecraft
-import net.minecraft.network.chat.Component
+    fun sendKey(event: KeyInputEvent)
 
-class ClientTableFormatter(
-    private val minecraft: Minecraft,
-) : TableFormatter {
-    override val columnPadding: Int = 1
+    fun sendMouse(event: MouseInputEvent)
 
-    override fun getWidth(component: Component): Int = minecraft.font.width(component)
-
-    override fun writeLine(
-        label: String?,
-        component: Component,
-    ) {
-        minecraft.gui.chat.addMessage(component)
-    }
+    fun sendPaste(event: PasteInputEvent)
 }

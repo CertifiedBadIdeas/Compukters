@@ -66,7 +66,7 @@ class ComputerWorkspaceServerMessage : ComputerServerMessage {
                 val entries = supervisor.workspace.list(computer.instanceID, path)
                 ServerNetworking.sendToPlayer(
                     ck.mod.network.client
-                        .ComputerWorkspaceClientMessage(player.containerMenu.containerId, entries),
+                        .ComputerWorkspaceClientMessage(targetContainerId, entries),
                     player,
                 )
             }
@@ -75,7 +75,7 @@ class ComputerWorkspaceServerMessage : ComputerServerMessage {
                 val document = supervisor.workspace.readDocument(computer.instanceID, path)
                 ServerNetworking.sendToPlayer(
                     ck.mod.network.client
-                        .ComputerWorkspaceClientMessage(player.containerMenu.containerId, document),
+                        .ComputerWorkspaceClientMessage(targetContainerId, document),
                     player,
                 )
             }
@@ -84,7 +84,7 @@ class ComputerWorkspaceServerMessage : ComputerServerMessage {
                 val document = supervisor.workspace.writeDocument(computer.instanceID, path, text)
                 ServerNetworking.sendToPlayer(
                     ck.mod.network.client
-                        .ComputerWorkspaceClientMessage(player.containerMenu.containerId, document),
+                        .ComputerWorkspaceClientMessage(targetContainerId, document),
                     player,
                 )
             }

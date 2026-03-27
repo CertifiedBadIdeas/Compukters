@@ -19,19 +19,10 @@
 
 package ck.mod.computer.vm
 
-import ck.lang.runtime.ComputerCompletionRequest
-import ck.lang.runtime.ComputerCompletionResponse
-import ck.lang.runtime.ComputerDefinitionRequest
-import ck.lang.runtime.ComputerDefinitionResponse
-import ck.lang.runtime.ComputerHoverRequest
-import ck.lang.runtime.ComputerHoverResponse
-import ck.lang.runtime.ComputerIdeHost
-import ck.lang.runtime.ComputerIdeSnapshot
 import ck.lang.runtime.ComputerProgramFiles
 import ck.lang.runtime.ComputerWorkspace
 import ck.lang.runtime.ComputerWorkspaceDocument
 import ck.lang.runtime.ComputerWorkspaceEntry
-import ck.mod.language.LanguageServices
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
@@ -166,64 +157,4 @@ class FileComputerWorkspace(
     ): String = path.relativeTo(root).toString().replace('\\', '/')
 
     private fun versionOf(path: Path): Long = Files.getLastModifiedTime(path).toMillis()
-}
-
-class EnvironmentComputerIdeHost(
-    private val workspace: ComputerWorkspace,
-) : ComputerIdeHost {
-    override fun snapshot(
-        computerId: Int,
-        path: String,
-    ): ComputerIdeSnapshot? {
-        val document = workspace.readDocument(computerId, path) ?: return null
-        val ide = LanguageServices.ide
-        val snapshot = ide.analyze(document.path, document.text)
-        return ComputerIdeSnapshot(
-            document = document,
-            diagnostics = snapshot.diagnostics,
-            highlights = snapshot.highlights,
-        )
-    }
-
-    override fun complete(
-        computerId: Int,
-        request: ComputerCompletionRequest,
-    ): ComputerCompletionResponse {
-        val document = workspace.readDocument(computerId, request.path)
-        val items =
-            if (document == null) {
-                emptyList()
-            } else {
-                LanguageServices.ide.complete(document.path, document.text, request.line, request.column)
-            }
-        return ComputerCompletionResponse(items)
-    }
-
-    override fun hover(
-        computerId: Int,
-        request: ComputerHoverRequest,
-    ): ComputerHoverResponse {
-        val document = workspace.readDocument(computerId, request.path)
-        val info =
-            if (document == null) {
-                null
-            } else {
-                LanguageServices.ide.hover(document.path, document.text, request.line, request.column)
-            }
-        return ComputerHoverResponse(info)
-    }
-
-    override fun definition(
-        computerId: Int,
-        request: ComputerDefinitionRequest,
-    ): ComputerDefinitionResponse {
-        val document = workspace.readDocument(computerId, request.path)
-        val target =
-            if (document == null) {
-                null
-            } else {
-                LanguageServices.ide.definition(document.path, document.text, request.line, request.column)
-            }
-        return ComputerDefinitionResponse(target)
-    }
 }

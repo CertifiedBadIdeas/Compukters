@@ -34,15 +34,13 @@ import it.unimi.dsi.fastutil.ints.IntSet
 import net.minecraft.network.FriendlyByteBuf
 
 /**
- * List of all [MessageType]s provided by CC: Tweaked.
- *
- * @see PlatformHelper The platform helper is used to send packets.
+ * Registry of all network message types used by the mod.
  */
 object NetworkMessages {
     private val seenIds: IntSet = IntOpenHashSet()
-    private val seenChannel: MutableSet<String> = HashSet()
-    private val serverMessages: MutableList<MessageType<out NetworkMessage<ServerNetworkContext>>> = ArrayList()
-    private val clientMessages: MutableList<MessageType<out NetworkMessage<ClientNetworkContext>>> = ArrayList()
+    private val seenChannel = mutableSetOf<String>()
+    private val serverMessages = mutableListOf<MessageType<out NetworkMessage<ServerNetworkContext>>>()
+    private val clientMessages = mutableListOf<MessageType<out NetworkMessage<ClientNetworkContext>>>()
 
     val COMPUTER_ACTION: MessageType<ComputerActionServerMessage> =
         registerServerbound(
@@ -79,14 +77,6 @@ object NetworkMessages {
             ComputerWorkspaceServerMessage::class.java,
             FriendlyByteBuf.Reader(::ComputerWorkspaceServerMessage),
         )
-//    val UPLOAD_FILE: MessageType<UploadFileMessage>? =
-//        NetworkMessages.registerServerbound<T>(
-//            4,
-//            "upload_file",
-//            UploadFileMessage::class.java,
-//            FriendlyByteBuf.Reader { UploadFileMessage() },
-//        )
-
     val CHAT_TABLE: MessageType<ChatTableClientMessage> =
         registerClientbound(
             10,
@@ -94,21 +84,6 @@ object NetworkMessages {
             ChatTableClientMessage::class.java,
             FriendlyByteBuf.Reader(::ChatTableClientMessage),
         )
-
-//    val POCKET_COMPUTER_DATA: MessageType<PocketComputerDataMessage>? =
-//        NetworkMessages.registerClientbound<T>(
-//            11,
-//            "pocket_computer_data",
-//            PocketComputerDataMessage::class.java,
-//            FriendlyByteBuf.Reader { PocketComputerDataMessage() },
-//        )
-//    val POCKET_COMPUTER_DELETED: MessageType<PocketComputerDeletedClientMessage>? =
-//        NetworkMessages.registerClientbound<T>(
-//            12,
-//            "pocket_computer_deleted",
-//            PocketComputerDeletedClientMessage::class.java,
-//            FriendlyByteBuf.Reader { PocketComputerDeletedClientMessage() },
-//        )
     val COMPUTER_TERMINAL: MessageType<ComputerTerminalClientMessage> =
         registerClientbound(
             13,
@@ -123,62 +98,6 @@ object NetworkMessages {
             ComputerWorkspaceClientMessage::class.java,
             FriendlyByteBuf.Reader(::ComputerWorkspaceClientMessage),
         )
-//    val PLAY_RECORD: MessageType<PlayRecordClientMessage>? =
-//        NetworkMessages.registerClientbound<T>(
-//            14,
-//            "play_record",
-//            PlayRecordClientMessage::class.java,
-//            FriendlyByteBuf.Reader { PlayRecordClientMessage() },
-//        )
-//    val MONITOR_CLIENT: MessageType<MonitorClientMessage>? =
-//        NetworkMessages.registerClientbound<T>(
-//            15,
-//            "monitor_client",
-//            MonitorClientMessage::class.java,
-//            FriendlyByteBuf.Reader { MonitorClientMessage() },
-//        )
-//    val SPEAKER_AUDIO: MessageType<SpeakerAudioClientMessage>? =
-//        NetworkMessages.registerClientbound<T>(
-//            16,
-//            "speaker_audio",
-//            SpeakerAudioClientMessage::class.java,
-//            FriendlyByteBuf.Reader { SpeakerAudioClientMessage() },
-//        )
-//    val SPEAKER_MOVE: MessageType<SpeakerMoveClientMessage>? =
-//        NetworkMessages.registerClientbound<T>(
-//            17,
-//            "speaker_move",
-//            SpeakerMoveClientMessage::class.java,
-//            FriendlyByteBuf.Reader { SpeakerMoveClientMessage() },
-//        )
-//    val SPEAKER_PLAY: MessageType<SpeakerPlayClientMessage>? =
-//        NetworkMessages.registerClientbound<T>(
-//            18,
-//            "speaker_play",
-//            SpeakerPlayClientMessage::class.java,
-//            FriendlyByteBuf.Reader { SpeakerPlayClientMessage() },
-//        )
-//    val SPEAKER_STOP: MessageType<SpeakerStopClientMessage>? =
-//        NetworkMessages.registerClientbound<T>(
-//            19,
-//            "speaker_stop",
-//            SpeakerStopClientMessage::class.java,
-//            FriendlyByteBuf.Reader { SpeakerStopClientMessage() },
-//        )
-//    val UPLOAD_RESULT: MessageType<UploadResultMessage> =
-//        NetworkMessages.registerClientbound(
-//            20,
-//            "upload_result",
-//            UploadResultMessage::class.java,
-//            FriendlyByteBuf.Reader(::UploadResultMessage),
-//        )
-//    val UPGRADES_LOADED: MessageType<UpgradesLoadedMessage>? =
-//        NetworkMessages.registerClientbound<T>(
-//            21,
-//            "upgrades_loaded",
-//            UpgradesLoadedMessage::class.java,
-//            FriendlyByteBuf.Reader { UpgradesLoadedMessage() },
-//        )
 
     @Suppress("UNCHECKED_CAST")
     private fun <C, T : NetworkMessage<C>> register(

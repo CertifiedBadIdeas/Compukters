@@ -70,87 +70,21 @@ import kotlin.collections.toMutableList
 class LanguageFrontend(
     private val registry: BuiltinRegistry = LanguageBuiltins.registry,
 ) {
+    private val analyzer: AnalyzerFacade = DefaultAnalyzerFacade(registry)
+    private val compiler: CompilerFacade = DefaultCompilerFacade(registry, analyzer)
+
     fun analyze(
         name: String,
         source: String,
-    ): AnalyzedProgram {
-        val lexer = Lexer(source)
-        val tokens = lexer.lex()
-        val parser = Parser(tokens, lexer.diagnostics)
-        val program = parser.parseProgram()
-        val syntaxDiagnostics = lexer.diagnostics + parser.diagnostics
-        if (program == null) {
-            return AnalyzedProgram(
-                name,
-                source,
-                tokens,
-                null,
-                syntaxDiagnostics,
-                emptyList(),
-                emptyList(),
-                registry.modules,
-                registry.globals,
-            )
-        }
-        val semantic = SemanticAnalyzer(registry, name).analyze(program)
-        return AnalyzedProgram(
-            name = name,
-            source = source,
-            tokens = tokens,
-            program = program,
-            diagnostics = syntaxDiagnostics + semantic.diagnostics,
-            symbols = semantic.symbols,
-            references = semantic.references,
-            builtinModules = registry.modules,
-            builtinGlobals = registry.globals,
-        )
-    }
+    ): AnalyzedProgram = analyzer.analyze(name, source)
 
     fun compile(
         name: String,
         source: String,
-    ): CompilationArtifact {
-        val analysis = analyze(name, source)
-        if (analysis.program == null || analysis.diagnostics.any { it.severity == FrontendSeverity.ERROR }) {
-            return CompilationArtifact(module = null, analysis = analysis)
-        }
-        val semantic = SemanticAnalyzer(registry, name).analyze(analysis.program)
-        if (semantic.diagnostics.any { it.severity == FrontendSeverity.ERROR }) {
-            return CompilationArtifact(
-                module = null,
-                analysis =
-                    AnalyzedProgram(
-                        name = analysis.name,
-                        source = analysis.source,
-                        tokens = analysis.tokens,
-                        program = analysis.program,
-                        diagnostics = analysis.diagnostics + semantic.diagnostics,
-                        symbols = semantic.symbols,
-                        references = semantic.references,
-                        builtinModules = registry.modules,
-                        builtinGlobals = registry.globals,
-                    ),
-            )
-        }
-        return CompilationArtifact(
-            module = BytecodeCompiler(registry, semantic).compile(name),
-            analysis =
-                AnalyzedProgram(
-                    name = analysis.name,
-                    source = analysis.source,
-                    tokens = analysis.tokens,
-                    program = analysis.program,
-                    diagnostics = analysis.diagnostics + semantic.diagnostics,
-                    symbols = semantic.symbols,
-                    references = semantic.references,
-                    builtinModules = registry.modules,
-                    builtinGlobals = registry.globals,
-                ),
-        )
-    }
+    ): CompilationArtifact = compiler.compile(name, source)
 }
 
-private data class TypeRef(
+internal data class TypeRef(
     val name: String,
     val nullable: Boolean = false,
 ) {
@@ -158,16 +92,16 @@ private data class TypeRef(
         get() = if (nullable) "$name?" else name
 }
 
-private sealed interface Binding {
+internal sealed interface Binding {
     val symbol: SymbolInfo
 }
 
-private data class VariableBinding(
+internal data class VariableBinding(
     override val symbol: SymbolInfo,
     val type: TypeRef,
 ) : Binding
 
-private data class FunctionBinding(
+internal data class FunctionBinding(
     override val symbol: SymbolInfo,
     val declaration: FunctionDeclaration?,
     val parameterTypes: List<TypeRef>,
@@ -175,24 +109,24 @@ private data class FunctionBinding(
     val builtinModuleName: String? = null,
 ) : Binding
 
-private data class RecordBinding(
+internal data class RecordBinding(
     override val symbol: SymbolInfo,
     val declaration: StructDeclaration?,
     val fields: Map<String, TypeRef>,
 ) : Binding
 
-private data class ModuleBinding(
+internal data class ModuleBinding(
     override val symbol: SymbolInfo,
     val module: BuiltinModule,
 ) : Binding
 
-private data class MemberBinding(
+internal data class MemberBinding(
     override val symbol: SymbolInfo,
     val ownerType: TypeRef,
     val type: TypeRef,
 ) : Binding
 
-private data class SemanticResult(
+internal data class SemanticResult(
     val diagnostics: List<FrontendDiagnostic>,
     val symbols: List<SymbolInfo>,
     val references: List<ReferenceInfo>,
@@ -205,7 +139,7 @@ private data class SemanticResult(
     val program: Program,
 )
 
-private class SemanticAnalyzer(
+internal class SemanticAnalyzer(
     private val registry: BuiltinRegistry,
     private val sourceName: String,
 ) {
@@ -765,7 +699,7 @@ private class SemanticAnalyzer(
     }
 }
 
-private class BytecodeCompiler(
+internal class BytecodeCompiler(
     private val registry: BuiltinRegistry,
     private val semantic: SemanticResult,
 ) {
@@ -982,7 +916,7 @@ private class BytecodeCompiler(
     }
 }
 
-private class Lexer(
+internal class Lexer(
     private val source: String,
 ) {
     val diagnostics = mutableListOf<FrontendDiagnostic>()
@@ -1237,7 +1171,7 @@ private class Lexer(
     private fun Char.isIdentifierPart(): Boolean = isLetterOrDigit() || this == '_'
 }
 
-private class Parser(
+internal class Parser(
     private val tokens: List<Token>,
     initialDiagnostics: List<FrontendDiagnostic>,
 ) {

@@ -18,6 +18,8 @@
  */
 package ck.mod.network.server
 
+import ck.mod.application.input.ComputerControlAction
+import ck.mod.application.input.accept
 import ck.mod.menu.ComputerMenu
 import ck.mod.network.MessageType
 import ck.mod.network.NetworkMessages
@@ -44,12 +46,7 @@ class ComputerActionServerMessage : ComputerServerMessage {
         context: ServerNetworkContext,
         container: ComputerMenu,
     ) {
-        when (action) {
-            Action.TERMINATE -> container.getInputPublic().terminate()
-            Action.TURN_ON -> container.getInputPublic().turnOn()
-            Action.REBOOT -> container.getInputPublic().reboot()
-            Action.SHUTDOWN -> container.getInputPublic().shutdown()
-        }
+        container.getInputPublic().accept(action.toDomainAction())
     }
 
     override fun type(): MessageType<ComputerActionServerMessage> = NetworkMessages.COMPUTER_ACTION
@@ -61,3 +58,11 @@ class ComputerActionServerMessage : ComputerServerMessage {
         REBOOT,
     }
 }
+
+private fun ComputerActionServerMessage.Action.toDomainAction(): ComputerControlAction =
+    when (this) {
+        ComputerActionServerMessage.Action.TERMINATE -> ComputerControlAction.TERMINATE
+        ComputerActionServerMessage.Action.TURN_ON -> ComputerControlAction.TURN_ON
+        ComputerActionServerMessage.Action.SHUTDOWN -> ComputerControlAction.SHUTDOWN
+        ComputerActionServerMessage.Action.REBOOT -> ComputerControlAction.REBOOT
+    }
