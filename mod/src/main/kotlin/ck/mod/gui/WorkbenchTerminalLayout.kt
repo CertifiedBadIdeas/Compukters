@@ -18,6 +18,7 @@
  */
 package ck.mod.gui
 
+import ck.mod.gui.terminal.Terminal
 import kotlin.math.max
 
 data class TerminalRect(
@@ -46,7 +47,8 @@ object WorkbenchTerminalMetrics {
     private const val INNER_PADDING = 12
     private const val STATUS_HEIGHT = 20
 
-    fun imageWidth(terminal: Terminal): Int = max(terminalPixelWidth(terminal.width) + INNER_PADDING * 2 + OUTER_PADDING * 2, MIN_IMAGE_WIDTH)
+    fun imageWidth(terminal: Terminal): Int =
+        max(terminalPixelWidth(terminal.width) + INNER_PADDING * 2 + OUTER_PADDING * 2, MIN_IMAGE_WIDTH)
 
     fun imageHeight(terminal: Terminal): Int =
         max(terminalPixelHeight(terminal.height) + INNER_PADDING * 2 + STATUS_HEIGHT + CONTENT_TOP + OUTER_PADDING, MIN_IMAGE_HEIGHT)
@@ -58,7 +60,13 @@ object WorkbenchTerminalMetrics {
         imageHeight: Int,
         terminal: Terminal,
     ): WorkbenchTerminalLayout {
-        val panelBounds = TerminalRect(leftPos + OUTER_PADDING, topPos + CONTENT_TOP, imageWidth - OUTER_PADDING * 2, imageHeight - CONTENT_TOP - OUTER_PADDING)
+        val panelBounds =
+            TerminalRect(
+                leftPos + OUTER_PADDING,
+                topPos + CONTENT_TOP,
+                imageWidth - OUTER_PADDING * 2,
+                imageHeight - CONTENT_TOP - OUTER_PADDING,
+            )
         val statusBounds =
             TerminalRect(
                 panelBounds.x,

@@ -26,6 +26,9 @@ import ck.lang.runtime.ComputerWorkspaceDocument
 import ck.lang.runtime.ComputerWorkspaceEntry
 import ck.lang.runtime.HighlightTokenKind
 import ck.lang.runtime.HoverInfo
+import ck.mod.gui.input.ClientInputHandler
+import ck.mod.gui.input.InputHandler
+import ck.mod.gui.terminal.Terminal
 import ck.mod.language.LanguageServices
 import ck.mod.menu.AbstractComputerMenu
 import ck.mod.network.ClientNetworking
@@ -163,7 +166,10 @@ class ComputerWorkbenchPresenter<T : AbstractComputerMenu>(
         }
     }
 
-    fun updateHover(line: Int, column: Int) {
+    fun updateHover(
+        line: Int,
+        column: Int,
+    ) {
         val document = openDocument ?: return
         hoverInfo = ide.hover(document.path, editorText, line, column)
     }
@@ -268,18 +274,29 @@ class ComputerWorkbenchPresenter<T : AbstractComputerMenu>(
 
         when (key) {
             GLFW.GLFW_KEY_LEFT -> moveCursorHorizontal(-1, visibleEditorLines)
+
             GLFW.GLFW_KEY_RIGHT -> moveCursorHorizontal(1, visibleEditorLines)
+
             GLFW.GLFW_KEY_UP -> moveCursorVertical(-1, visibleEditorLines)
+
             GLFW.GLFW_KEY_DOWN -> moveCursorVertical(1, visibleEditorLines)
+
             GLFW.GLFW_KEY_BACKSPACE -> deleteBackward()
+
             GLFW.GLFW_KEY_DELETE -> deleteForward()
+
             GLFW.GLFW_KEY_ENTER,
             GLFW.GLFW_KEY_KP_ENTER,
             -> insertText("\n", visibleEditorLines)
+
             GLFW.GLFW_KEY_TAB -> insertText("    ", visibleEditorLines)
+
             GLFW.GLFW_KEY_PAGE_UP -> editorScrollLine = (editorScrollLine - visibleEditorLines).coerceAtLeast(0)
+
             GLFW.GLFW_KEY_PAGE_DOWN -> editorScrollLine += visibleEditorLines
+
             GLFW.GLFW_KEY_F12 -> navigateToDefinition()
+
             else -> return true
         }
 
@@ -354,8 +371,9 @@ class ComputerWorkbenchPresenter<T : AbstractComputerMenu>(
         layout: ComputerWorkbenchLayout,
         mouseX: Int,
         mouseY: Int,
-    ): Boolean = mouseX in (layout.leftPos + 136)..(layout.leftPos + layout.imageWidth - 10) &&
-        mouseY in (layout.topPos + 34)..(layout.topPos + layout.imageHeight - 32)
+    ): Boolean =
+        mouseX in (layout.leftPos + 136)..(layout.leftPos + layout.imageWidth - 10) &&
+            mouseY in (layout.topPos + 34)..(layout.topPos + layout.imageHeight - 32)
 
     fun placeCursorAt(
         layout: ComputerWorkbenchLayout,

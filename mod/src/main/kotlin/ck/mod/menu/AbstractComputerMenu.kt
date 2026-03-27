@@ -18,15 +18,15 @@
  */
 package ck.mod.menu
 
+import ck.lang.runtime.ComputerWorkspaceDocument
+import ck.lang.runtime.ComputerWorkspaceEntry
 import ck.mod.Config
 import ck.mod.block.ComputerFamily
 import ck.mod.computer.ServerComputer
-import ck.lang.runtime.ComputerWorkspaceDocument
-import ck.lang.runtime.ComputerWorkspaceEntry
 import ck.mod.data.ComputerContainerData
 import ck.mod.gui.NetworkedTerminal
-import ck.mod.gui.Terminal
 import ck.mod.gui.TerminalState
+import ck.mod.gui.terminal.Terminal
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.inventory.AbstractContainerMenu
 import net.minecraft.world.inventory.ContainerData
@@ -77,17 +77,17 @@ abstract class AbstractComputerMenu(
     val isOn: Boolean
         get() = data.get(0) != 0
 
-    public override fun getComputerPublic(): ServerComputer {
+    override fun getComputerPublic(): ServerComputer {
         if (computer == null) throw UnsupportedOperationException("Cannot access server computer on the client")
         return computer
     }
 
-    public override fun getInputPublic(): ServerInputHandler {
+    override fun getInputPublic(): ServerInputHandler {
         if (input == null) throw UnsupportedOperationException("Cannot access server computer on the client")
         return input
     }
 
-    public override fun updateTerminal(state: TerminalState) {
+    override fun updateTerminal(state: TerminalState) {
         if (terminal == null) throw UnsupportedOperationException("Cannot update terminal on the server")
         state.apply(terminal)
     }

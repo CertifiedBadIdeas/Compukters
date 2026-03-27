@@ -18,6 +18,7 @@
  */
 package ck.mod.gui
 
+import ck.mod.gui.terminal.Terminal
 import net.minecraft.nbt.CompoundTag
 
 @OptIn(ExperimentalUnsignedTypes::class)

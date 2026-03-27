@@ -18,10 +18,12 @@
  */
 package ck.mod.gui
 
+import ck.mod.gui.terminal.Terminal
 import com.mojang.blaze3d.vertex.Tesselator
 import net.minecraft.client.gui.Font
 import net.minecraft.client.gui.GuiGraphics
 import net.minecraft.client.renderer.MultiBufferSource
+import net.minecraft.client.renderer.RenderType
 
 object WorkbenchTerminalRenderer {
     private const val WINDOW_BACKGROUND = 0xFF12151D.toInt()
@@ -99,7 +101,13 @@ object WorkbenchTerminalRenderer {
         )
 
         val bufferSource = MultiBufferSource.immediate(Tesselator.getInstance().builder)
-        val emitter = FixedWidthFontRenderer.toVertexConsumer(graphics.pose(), bufferSource.getBuffer(RenderTypes.TERMINAL))
+        val emitter =
+            FixedWidthFontRenderer.toVertexConsumer(
+                graphics.pose(),
+                bufferSource.getBuffer(
+                    RenderType.text(FixedWidthFontRenderer.FONT),
+                ),
+            )
         FixedWidthFontRenderer.drawTerminal(
             emitter,
             layout.terminalBounds.x.toFloat(),

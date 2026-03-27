@@ -33,7 +33,7 @@ import kotlin.test.assertTrue
 
 class LanguageWorkspaceRuntimeTest {
     @Test
-    fun seededBiosCompilesAndStartsEventLoop() {
+    fun seededBiosCompilesAndDelegatesToShell() {
         val profile = ComputerProfileRegistry.forFamily(ComputerFamily.ADVANCED)
         val root = createTempDirectory("compukterkraft-language-workspace")
 
@@ -57,25 +57,13 @@ class LanguageWorkspaceRuntimeTest {
             val vm = BytecodeVirtualMachine(requireNotNull(artifact.module))
             val firstSignal = vm.runUntilSignal()
             assertEquals(
-                VmSignal.HostCall("terminal", "printLine", listOf(VmValue.StringValue("Compukter Kraft ready"))),
+                VmSignal.HostCall("process", "run", listOf(VmValue.StringValue("shell.ck"))),
                 firstSignal,
             )
 
-            vm.resumeWith(VmValue.UnitValue)
+            vm.resumeWith(VmValue.IntValue(0))
             val secondSignal = vm.runUntilSignal()
-            assertEquals(VmSignal.WaitEvent(null), secondSignal)
-
-            vm.resumeWith(
-                VmValue.RecordValue(
-                    typeName = "Event",
-                    fields = mapOf("name" to VmValue.StringValue("boot")),
-                ),
-            )
-            val thirdSignal = vm.runUntilSignal()
-            assertEquals(
-                VmSignal.HostCall("terminal", "printLine", listOf(VmValue.StringValue("boot"))),
-                thirdSignal,
-            )
+            assertEquals(VmSignal.Halt, secondSignal)
         } finally {
             root.toFile().deleteRecursively()
         }

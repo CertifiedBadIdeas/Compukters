@@ -17,7 +17,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package ck.mod.gui
+package ck.mod.gui.screen
 
 import ck.mod.menu.AbstractComputerMenu
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen

@@ -187,7 +187,7 @@ class ServerComputer(
                     if (call.newLine) {
                         writeLineToTerminal(call.text)
                     } else {
-                        terminal.write(call.text)
+                            TerminalHostWriter.write(terminal, call.text)
                     }
                     HostResult.Success(call.id)
                 }
@@ -245,15 +245,7 @@ class ServerComputer(
             HostResult.Failure(call.id, failure.message ?: failure.javaClass.simpleName)
         }
 
-    private fun writeLineToTerminal(text: String) {
-        terminal.write(text.take(terminal.width))
-        if (terminal.cursorY >= terminal.height - 1) {
-            terminal.scroll(1)
-            terminal.setCursorPos(0, terminal.height - 1)
-        } else {
-            terminal.setCursorPos(0, terminal.cursorY + 1)
-        }
-    }
+    private fun writeLineToTerminal(text: String) = TerminalHostWriter.printLine(terminal, text)
 
     private fun syncTerminal() {
         if (!terminalDirty) return

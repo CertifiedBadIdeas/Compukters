@@ -18,11 +18,7 @@
  */
 package ck.mod.menu
 
-import ck.mod.gui.InputHandler
-import ck.mod.network.upload.FileSlice
-import ck.mod.network.upload.FileUpload
-import net.minecraft.server.level.ServerPlayer
-import java.util.UUID
+import ck.mod.gui.input.InputHandler
 
 /**
  * An [InputHandler] which operates on the server, receiving data from the client over the network.

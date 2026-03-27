@@ -16,8 +16,15 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-package ck.mod.gui
 
+package ck.mod.gui.screen
+
+import ck.mod.gui.ComputerWorkbenchLayout
+import ck.mod.gui.ComputerWorkbenchPresenter
+import ck.mod.gui.WorkbenchTerminalInputController
+import ck.mod.gui.WorkbenchTerminalLayout
+import ck.mod.gui.WorkbenchTerminalMetrics
+import ck.mod.gui.WorkbenchTerminalRenderer
 import ck.mod.menu.AbstractComputerMenu
 import net.minecraft.client.gui.GuiGraphics
 import net.minecraft.network.chat.Component

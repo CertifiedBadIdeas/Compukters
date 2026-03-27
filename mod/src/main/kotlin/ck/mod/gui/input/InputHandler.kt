@@ -16,7 +16,8 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-package ck.mod.gui
+
+package ck.mod.gui.input
 
 import java.nio.ByteBuffer
 

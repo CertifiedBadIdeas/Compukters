@@ -107,7 +107,7 @@ class FileComputerWorkspaceTest {
         }
     }
 
-    private fun withWorkspace(block: (FileComputerWorkspace, java.nio.file.Path) -> Unit) {
+    private fun withWorkspace(block: (FileComputerWorkspace, Path) -> Unit) {
         val root = createTempDirectory("compukterkraft-workspace")
 
         try {
@@ -117,7 +117,7 @@ class FileComputerWorkspaceTest {
         }
     }
 
-    private fun createWorkspace(root: java.nio.file.Path): FileComputerWorkspace =
+    private fun createWorkspace(root: Path): FileComputerWorkspace =
         FileComputerWorkspace(
             rootPath = root,
             bundledScriptLoader = { relativePath ->

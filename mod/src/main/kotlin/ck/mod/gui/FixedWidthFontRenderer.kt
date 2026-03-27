@@ -19,7 +19,7 @@
 package ck.mod.gui
 
 import ck.mod.MOD_ID
-import ck.mod.gui.RenderTypes.FULL_BRIGHT_LIGHTMAP
+import ck.mod.gui.terminal.Terminal
 import com.mojang.blaze3d.vertex.PoseStack
 import com.mojang.blaze3d.vertex.VertexConsumer
 import net.minecraft.resources.ResourceLocation
@@ -43,6 +43,7 @@ import org.joml.Vector3f
  * [DirectFixedWidthFontRenderer].
  */
 object FixedWidthFontRenderer {
+    const val FULL_BRIGHT_LIGHTMAP: Int = (0xF shl 4) or (0xF shl 20)
     val FONT: ResourceLocation = ResourceLocation.fromNamespaceAndPath(MOD_ID, "textures/gui/term_font.png")
 
     const val FONT_HEIGHT: Int = 9

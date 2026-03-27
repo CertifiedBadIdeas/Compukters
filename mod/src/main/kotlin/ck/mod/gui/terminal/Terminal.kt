@@ -16,8 +16,12 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-package ck.mod.gui
 
+package ck.mod.gui.terminal
+
+import ck.mod.gui.Colour
+import ck.mod.gui.Palette
+import ck.mod.gui.TextBuffer
 import java.nio.ByteBuffer
 
 open class Terminal

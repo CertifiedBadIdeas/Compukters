@@ -16,7 +16,8 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-package ck.mod.gui
+
+package ck.mod.gui.input
 
 import ck.mod.network.ClientNetworking
 import ck.mod.network.server.ComputerActionServerMessage
@@ -27,7 +28,7 @@ import net.minecraft.world.inventory.AbstractContainerMenu
 import java.nio.ByteBuffer
 
 /**
- * An [InputHandler] for use on the client.
+ * An [ck.mod.gui.InputHandler] for use on the client.
  *
  *
  * This queues events on the remote player's open [ComputerMenu].
@@ -35,23 +36,23 @@ import java.nio.ByteBuffer
 class ClientInputHandler(
     private val menu: AbstractContainerMenu,
 ) : InputHandler {
-    public override fun terminate() {
+    override fun terminate() {
         ClientNetworking.sendToServer(ComputerActionServerMessage(menu, ComputerActionServerMessage.Action.TERMINATE))
     }
 
-    public override fun turnOn() {
+    override fun turnOn() {
         ClientNetworking.sendToServer(ComputerActionServerMessage(menu, ComputerActionServerMessage.Action.TURN_ON))
     }
 
-    public override fun shutdown() {
+    override fun shutdown() {
         ClientNetworking.sendToServer(ComputerActionServerMessage(menu, ComputerActionServerMessage.Action.SHUTDOWN))
     }
 
-    public override fun reboot() {
+    override fun reboot() {
         ClientNetworking.sendToServer(ComputerActionServerMessage(menu, ComputerActionServerMessage.Action.REBOOT))
     }
 
-    public override fun keyDown(
+    override fun keyDown(
         key: Int,
         repeat: Boolean,
     ) {
@@ -64,19 +65,19 @@ class ClientInputHandler(
         )
     }
 
-    public override fun keyUp(key: Int) {
+    override fun keyUp(key: Int) {
         ClientNetworking.sendToServer(KeyEventServerMessage(menu, KeyEventServerMessage.Action.UP, key))
     }
 
-    public override fun charTyped(chr: Byte) {
+    override fun charTyped(chr: Byte) {
         ClientNetworking.sendToServer(KeyEventServerMessage(menu, KeyEventServerMessage.Action.CHAR, chr.toInt()))
     }
 
-    public override fun paste(contents: ByteBuffer?) {
+    override fun paste(contents: ByteBuffer?) {
         ClientNetworking.sendToServer(PasteEventComputerMessage(menu, contents ?: return))
     }
 
-    public override fun mouseClick(
+    override fun mouseClick(
         button: Int,
         x: Int,
         y: Int,
@@ -84,7 +85,7 @@ class ClientInputHandler(
         ClientNetworking.sendToServer(MouseEventServerMessage(menu, MouseEventServerMessage.Action.CLICK, button, x, y))
     }
 
-    public override fun mouseUp(
+    override fun mouseUp(
         button: Int,
         x: Int,
         y: Int,
@@ -92,7 +93,7 @@ class ClientInputHandler(
         ClientNetworking.sendToServer(MouseEventServerMessage(menu, MouseEventServerMessage.Action.UP, button, x, y))
     }
 
-    public override fun mouseDrag(
+    override fun mouseDrag(
         button: Int,
         x: Int,
         y: Int,
@@ -100,11 +101,19 @@ class ClientInputHandler(
         ClientNetworking.sendToServer(MouseEventServerMessage(menu, MouseEventServerMessage.Action.DRAG, button, x, y))
     }
 
-    public override fun mouseScroll(
+    override fun mouseScroll(
         direction: Int,
         x: Int,
         y: Int,
     ) {
-        ClientNetworking.sendToServer(MouseEventServerMessage(menu, MouseEventServerMessage.Action.SCROLL, direction, x, y))
+        ClientNetworking.sendToServer(
+            MouseEventServerMessage(
+                menu,
+                MouseEventServerMessage.Action.SCROLL,
+                direction,
+                x,
+                y,
+            ),
+        )
     }
 }

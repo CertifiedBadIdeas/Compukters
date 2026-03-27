@@ -19,12 +19,8 @@
 
 package ck.mod
 
-import ck.mod.gui.ComputerWorkbenchScreen
-import ck.mod.gui.GuiSprites
-import net.minecraft.client.Minecraft
+import ck.mod.gui.screen.ComputerWorkbenchScreen
 import net.minecraft.client.gui.screens.MenuScreens
-import net.minecraft.server.packs.resources.PreparableReloadListener
-import java.util.function.Consumer
 
 object ClientRegistry {
     private var registeredMainThread = false
@@ -44,12 +40,5 @@ object ClientRegistry {
         } catch (e: Exception) {
             LOGGER.error { "ClientRegistry: ComputerWorkbenchKoolScreen registered with error ${e.message}" }
         }
-    }
-
-    fun registerReloadListeners(
-        register: Consumer<PreparableReloadListener>,
-        minecraft: Minecraft,
-    ) {
-        register.accept(GuiSprites.initialize(minecraft.getTextureManager()))
     }
 }

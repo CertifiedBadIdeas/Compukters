@@ -20,7 +20,7 @@ package ck.mod.menu
 
 import ck.mod.computer.ComputerEvents
 import ck.mod.computer.ServerComputer
-import ck.mod.gui.InputHandler
+import ck.mod.gui.input.InputHandler
 import ck.mod.network.upload.FileUpload
 import ck.mod.utils.StringUtil
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet

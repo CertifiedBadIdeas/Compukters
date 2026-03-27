@@ -18,6 +18,7 @@
  */
 package ck.mod.gui
 
+import ck.mod.gui.input.InputHandler
 import ck.mod.utils.StringUtil
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.screens.Screen

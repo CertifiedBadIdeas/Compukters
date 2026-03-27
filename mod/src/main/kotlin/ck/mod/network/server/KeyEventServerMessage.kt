@@ -34,7 +34,7 @@ class KeyEventServerMessage : ComputerServerMessage {
     }
 
     constructor(buf: FriendlyByteBuf) : super(buf) {
-        type = buf.readEnum<Action>(Action::class.java)
+        type = buf.readEnum(Action::class.java)
         key = buf.readVarInt()
     }
 
@@ -57,7 +57,7 @@ class KeyEventServerMessage : ComputerServerMessage {
         }
     }
 
-    public override fun type(): MessageType<KeyEventServerMessage> = NetworkMessages.KEY_EVENT
+    override fun type(): MessageType<KeyEventServerMessage> = NetworkMessages.KEY_EVENT
 
     enum class Action {
         DOWN,

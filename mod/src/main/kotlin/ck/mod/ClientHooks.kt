@@ -29,13 +29,13 @@ import ck.mod.gui.FrameInfo
  */
 object ClientHooks {
     fun onTick() {
-        _root_ide_package_.ck.mod.gui.FrameInfo
+        FrameInfo
             .onTick()
     }
 
     fun onRenderTick() {
         // PauseAwareTimer.tick(Minecraft.getInstance().isPaused())
-        _root_ide_package_.ck.mod.gui.FrameInfo
+        FrameInfo
             .onRenderTick()
     }
 

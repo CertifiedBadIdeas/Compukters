@@ -42,18 +42,13 @@ import java.util.function.Supplier
 object NetworkHandler {
     private val LOG: Logger = LoggerFactory.getLogger(NetworkHandler::class.java)
 
-    private val network: SimpleChannel
-
-    init {
-        val version = INSTALLED_VERSION
-        network =
-            NetworkRegistry.ChannelBuilder
-                .named(ResourceLocation.fromNamespaceAndPath(MOD_ID, "network"))
-                .networkProtocolVersion { version }
-                .clientAcceptedVersions(version::equals)
-                .serverAcceptedVersions(version::equals)
-                .simpleChannel()
-    }
+    private val network: SimpleChannel =
+        NetworkRegistry.ChannelBuilder
+            .named(ResourceLocation.fromNamespaceAndPath(MOD_ID, "network"))
+            .networkProtocolVersion { INSTALLED_VERSION }
+            .clientAcceptedVersions(INSTALLED_VERSION::equals)
+            .serverAcceptedVersions(INSTALLED_VERSION::equals)
+            .simpleChannel()
 
     fun setup() {
         for (type in NetworkMessages.serverbound) {
