@@ -20,8 +20,8 @@ package ck.mod.menu
 
 import ck.lang.runtime.ComputerWorkspaceDocument
 import ck.lang.runtime.ComputerWorkspaceEntry
-import ck.mod.application.workbench.WorkbenchRemoteState
 import ck.mod.Config
+import ck.mod.application.workbench.WorkbenchRemoteState
 import ck.mod.block.ComputerFamily
 import ck.mod.computer.ServerComputer
 import ck.mod.data.ComputerContainerData
@@ -75,9 +75,6 @@ abstract class AbstractComputerMenu(
     }
 
     override fun stillValid(player: Player): Boolean = (computer == null || computer.checkUsable(player)) && canUse(player)
-
-    val isOn: Boolean
-        get() = data.get(0) != 0
 
     override fun getComputerPublic(): ServerComputer {
         if (computer == null) throw UnsupportedOperationException("Cannot access server computer on the client")

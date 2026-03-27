@@ -37,7 +37,6 @@ import ck.mod.language.LanguageServices
 import ck.mod.menu.ComputerMenu
 import ck.mod.network.client.ComputerTerminalClientMessage
 import ck.mod.network.server.ServerNetworking
-import net.minecraft.core.BlockPos
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.entity.player.Player
@@ -45,7 +44,6 @@ import net.minecraft.world.entity.player.Player
 class ServerComputer(
     val instanceID: Int,
     val level: ServerLevel,
-    val blockPos: BlockPos,
     properties: ComputerProperties,
 ) : ComputerEvents.Receiver,
     ComputerVmCallbacks {
