@@ -16,31 +16,33 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-package ck.mod.network.client
+package ck.mod.ui.render
 
-import ck.lang.runtime.ComputerWorkspaceDocument
-import ck.lang.runtime.ComputerWorkspaceEntry
 import ck.lang.runtime.ScreenBufferSnapshot
-import ck.mod.network.text.TableBuilder
+import ck.mod.gui.WorkbenchTerminalLayout
+import ck.mod.ui.dsl.UiRenderer
+import ck.mod.ui.dsl.buildTerminalUi
+import net.minecraft.client.gui.Font
+import net.minecraft.client.gui.GuiGraphics
 
 /**
- * The context under which clientbound packets are evaluated.
+ * Renders a terminal panel with chrome (borders, status bar) and the character grid.
+ *
+ * Delegates layout description to [buildTerminalUi] (pure function) and rendering to [UiRenderer].
  */
-interface ClientNetworkContext {
-    fun handleChatTable(table: TableBuilder)
-
-    fun handleComputerTerminal(
-        containerId: Int,
+object WorkbenchTerminalRenderer {
+    fun render(
+        graphics: GuiGraphics,
+        font: Font,
+        leftPos: Int,
+        topPos: Int,
+        imageWidth: Int,
+        imageHeight: Int,
+        layout: WorkbenchTerminalLayout,
         snapshot: ScreenBufferSnapshot,
-    )
-
-    fun handleComputerWorkspaceEntries(
-        containerId: Int,
-        entries: List<ComputerWorkspaceEntry>,
-    )
-
-    fun handleComputerWorkspaceDocument(
-        containerId: Int,
-        document: ComputerWorkspaceDocument?,
-    )
+        focused: Boolean,
+    ) {
+        val nodes = buildTerminalUi(leftPos, topPos, imageWidth, imageHeight, layout, snapshot, focused)
+        UiRenderer.render(graphics, font, nodes)
+    }
 }

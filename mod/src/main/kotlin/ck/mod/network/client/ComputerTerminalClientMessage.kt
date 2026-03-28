@@ -18,6 +18,7 @@
  */
 package ck.mod.network.client
 
+import ck.lang.runtime.ScreenBufferSnapshot
 import ck.mod.gui.TerminalState
 import ck.mod.network.MessageType
 import ck.mod.network.NetworkMessage
@@ -25,27 +26,30 @@ import ck.mod.network.NetworkMessages
 import net.minecraft.network.FriendlyByteBuf
 import net.minecraft.world.inventory.AbstractContainerMenu
 
+/**
+ * Server → client message carrying a terminal screen snapshot.
+ */
 class ComputerTerminalClientMessage : NetworkMessage<ClientNetworkContext> {
     private val containerId: Int
-    private val terminal: TerminalState
+    private val terminalState: TerminalState
 
-    constructor(menu: AbstractContainerMenu, terminal: TerminalState) {
+    constructor(menu: AbstractContainerMenu, snapshot: ScreenBufferSnapshot) {
         containerId = menu.containerId
-        this.terminal = terminal
+        terminalState = TerminalState(snapshot)
     }
 
     constructor(buf: FriendlyByteBuf) {
         containerId = buf.readVarInt()
-        terminal = TerminalState(buf)
+        terminalState = TerminalState(buf)
     }
 
     override fun write(buf: FriendlyByteBuf) {
         buf.writeVarInt(containerId)
-        terminal.write(buf)
+        terminalState.write(buf)
     }
 
     override fun handle(context: ClientNetworkContext) {
-        context.handleComputerTerminal(containerId, terminal)
+        context.handleComputerTerminal(containerId, terminalState.toSnapshot())
     }
 
     override fun type(): MessageType<ComputerTerminalClientMessage> = NetworkMessages.COMPUTER_TERMINAL

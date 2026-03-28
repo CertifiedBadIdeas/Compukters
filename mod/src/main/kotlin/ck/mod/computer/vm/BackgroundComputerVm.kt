@@ -25,6 +25,8 @@ import ck.lang.runtime.ComputerVmHandle
 import ck.lang.runtime.ComputerWorkspace
 import ck.lang.runtime.HostCall
 import ck.lang.runtime.HostResult
+import ck.lang.runtime.ScreenBuffer
+import ck.lang.runtime.ScreenBufferSnapshot
 import ck.lang.runtime.VmEvent
 import ck.lang.runtime.VmSnapshot
 import ck.lang.runtime.VmState
@@ -53,6 +55,22 @@ interface ComputerVmCallbacks {
     fun onVmRebootRequested()
 }
 
+/**
+ * The main VM host for a single computer instance.
+ *
+ * Runs a compiled [ComputerProgram] on a background coroutine [dispatcher]. Owns a [ScreenBuffer]
+ * that the VM coroutine writes to directly (no HostCall roundtrip for terminal I/O).
+ *
+ * ## Thread model
+ * - **VM coroutine:** calls `runtime.terminal.write()`, `runtime.filesystem.*()`, etc.
+ *   Terminal writes go directly to [screenBuffer]. Filesystem ops go through [HostCallManager].
+ * - **Server tick thread:** calls [requestSlice], [drainHostCalls], [deliverHostResults],
+ *   [readScreenSnapshot], and [snapshot]. These are the cross-thread entry points.
+ *
+ * ## Lifecycle
+ * Created by [ComputerManager][ck.mod.context.ComputerManager], started with [start],
+ * stopped with [stop]. On reboot, the old VM is stopped and a new one is created.
+ */
 class BackgroundComputerVm(
     override val computerId: Int,
     override val profile: ComputerProfile,
@@ -70,6 +88,7 @@ class BackgroundComputerVm(
     private val hostCallManager = HostCallManager()
     private val programLoader = WorkspaceProgramLoader(workspace, bundledScriptLoader)
     private val pathResolver = VmPathResolver()
+    private val screenBuffer = ScreenBuffer(profile.terminalWidth, profile.terminalHeight, profile.colorTerminal)
 
     private var runner: Job? = null
     private var runtime: VmRuntime? = createRuntime("", "")
@@ -129,6 +148,10 @@ class BackgroundComputerVm(
             stopReason = stateManager.stopReason,
             errorMessage = stateManager.errorMessage,
         )
+
+    override fun readScreenSnapshot(): ScreenBufferSnapshot? = screenBuffer.snapshot()
+
+    override fun forceScreenSnapshot(): ScreenBufferSnapshot = screenBuffer.forceSnapshot()
 
     // ── VmContext ───────────────────────────────────────────────────
 
@@ -204,7 +227,7 @@ class BackgroundComputerVm(
             currentTickProvider = { stateManager.currentTick },
             labelProvider = callbacks::currentLabel,
         )
-        val terminalApi = VmTerminalApi(ctx = this)
+        val terminalApi = VmTerminalApi(screenBuffer = screenBuffer, ctx = this)
         val filesystemApi = VmFileSystemApi(ctx = this)
         val processApi = VmProcessApi(
             ctx = this,

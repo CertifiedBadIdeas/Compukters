@@ -46,7 +46,7 @@ class ComputerActionServerMessage : ComputerServerMessage {
         context: ServerNetworkContext,
         container: ComputerMenu,
     ) {
-        container.getInputPublic().accept(action.toDomainAction())
+        container.serverSide.input.accept(action.toDomainAction())
     }
 
     override fun type(): MessageType<ComputerActionServerMessage> = NetworkMessages.COMPUTER_ACTION

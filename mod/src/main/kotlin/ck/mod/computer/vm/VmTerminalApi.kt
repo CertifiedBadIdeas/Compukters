@@ -20,28 +20,25 @@
 package ck.mod.computer.vm
 
 import ck.lang.runtime.ComputerTerminalApi
-import ck.lang.runtime.HostCall
+import ck.lang.runtime.ScreenBuffer
 
+/**
+ * Terminal API implementation that writes directly to a [ScreenBuffer].
+ *
+ * No HostCall roundtrip — all writes are immediate on the VM coroutine thread.
+ * The server tick thread reads snapshots via [ScreenBuffer.snapshot].
+ */
 class VmTerminalApi(
+    override val screenBuffer: ScreenBuffer,
     private val ctx: VmContext,
 ) : ComputerTerminalApi {
-    /**
-     * Local shadow of the cursor position.
-     * The authoritative cursor lives in [NetworkedTerminal] on the server main thread;
-     * this shadow is only used by [TerminalLineReader] for backspace handling.
-     */
-    private var cursorX = 0
-    private var cursorY = 0
 
-    override suspend fun write(text: String) {
-        ctx.awaitHostCall<Unit> { HostCall.TerminalWrite(it, text) }
-        cursorX = (cursorX + text.length).coerceAtLeast(0)
+    override fun write(text: String) {
+        screenBuffer.write(text)
     }
 
-    override suspend fun printLine(text: String) {
-        ctx.awaitHostCall<Unit> { HostCall.TerminalWrite(it, text, newLine = true) }
-        cursorX = 0
-        cursorY = (cursorY + 1).coerceAtMost(50)
+    override fun printLine(text: String) {
+        screenBuffer.printLine(text)
     }
 
     override suspend fun readLine(prompt: String): String =
@@ -51,22 +48,15 @@ class VmTerminalApi(
             write = ::write,
             printLine = ::printLine,
             setCursor = ::setCursor,
-            currentCursor = { cursorX to cursorY },
-            updateCursor = { x, y -> cursorX = x; cursorY = y },
+            currentCursor = { screenBuffer.cursorX to screenBuffer.cursorY },
+            updateCursor = { x, y -> /* no-op: setCursor already updates screenBuffer */ },
         ).readLine(prompt)
 
-    override suspend fun clear() {
-        ctx.awaitHostCall<Unit> { HostCall.TerminalClear(it) }
-        cursorX = 0
-        cursorY = 0
+    override fun clear() {
+        screenBuffer.clear()
     }
 
-    override suspend fun setCursor(
-        x: Int,
-        y: Int,
-    ) {
-        ctx.awaitHostCall<Unit> { HostCall.TerminalSetCursor(it, x, y) }
-        cursorX = x
-        cursorY = y
+    override fun setCursor(x: Int, y: Int) {
+        screenBuffer.setCursor(x, y)
     }
 }

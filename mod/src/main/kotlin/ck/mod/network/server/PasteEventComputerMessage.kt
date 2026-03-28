@@ -62,7 +62,7 @@ class PasteEventComputerMessage : ComputerServerMessage {
         context: ServerNetworkContext,
         container: ComputerMenu,
     ) {
-        container.getInputPublic().accept(PasteInputEvent(text))
+        container.serverSide.input.accept(PasteInputEvent(text))
     }
 
     public override fun type(): MessageType<PasteEventComputerMessage> = NetworkMessages.PASTE_EVENT

@@ -50,7 +50,7 @@ class KeyEventServerMessage : ComputerServerMessage {
         context: ServerNetworkContext,
         container: ComputerMenu,
     ) {
-        container.getInputPublic().accept(type.toDomainEvent(key))
+        container.serverSide.input.accept(type.toDomainEvent(key))
     }
 
     override fun type(): MessageType<KeyEventServerMessage> = NetworkMessages.KEY_EVENT

@@ -21,6 +21,7 @@ package ck.mod.network.client
 
 import ck.lang.runtime.ComputerWorkspaceDocument
 import ck.lang.runtime.ComputerWorkspaceEntry
+import ck.lang.runtime.ScreenBufferSnapshot
 import ck.mod.gui.TerminalState
 import ck.mod.menu.ComputerMenu
 import ck.mod.network.text.TableBuilder
@@ -48,9 +49,9 @@ class ClientNetworkContextImpl : ClientNetworkContext {
 
     override fun handleComputerTerminal(
         containerId: Int,
-        terminal: TerminalState,
+        snapshot: ScreenBufferSnapshot,
     ) = withCheckedContainerMenu(containerId) {
-        updateTerminal(terminal)
+        updateTerminal(snapshot)
     }
 
     override fun handleComputerWorkspaceEntries(

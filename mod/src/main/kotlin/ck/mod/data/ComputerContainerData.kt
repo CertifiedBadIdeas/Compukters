@@ -19,6 +19,7 @@
 
 package ck.mod.data
 
+import ck.lang.runtime.ScreenBufferSnapshot
 import ck.mod.Config
 import ck.mod.block.ComputerFamily
 import ck.mod.computer.ServerComputer
@@ -28,32 +29,28 @@ import net.minecraft.world.item.ItemStack
 
 class ComputerContainerData private constructor(
     val family: ComputerFamily,
-    val terminalState: TerminalState,
+    val terminalSnapshot: ScreenBufferSnapshot,
     val displayStack: ItemStack,
     val uploadMaxSize: Int,
 ) : IContainerData {
     constructor(buffer: FriendlyByteBuf) : this(
         buffer.readEnum(ComputerFamily::class.java),
-        TerminalState(buffer),
+        TerminalState(buffer).toSnapshot(),
         buffer.readItem(),
-        buffer.readInt().also {
-            // LOGGER.info("ComputerContainerData init from buffer")
-        },
+        buffer.readInt(),
     )
 
     override fun toBytes(buffer: FriendlyByteBuf) {
         buffer.writeEnum(family)
-        terminalState.write(buffer)
+        TerminalState(terminalSnapshot).write(buffer)
         buffer.writeItem(displayStack)
         buffer.writeInt(uploadMaxSize)
-        // LOGGER.info("ComputerContainerData write to buffer")
     }
 
     constructor(computer: ServerComputer, displayStack: ItemStack) : this(
-        computer.family.also {
-            // LOGGER.info("ComputerContainerData standard init")
-        },
-        TerminalState.create(computer.terminal),
+        computer.family,
+        computer.lastScreenSnapshot
+            ?: ScreenBufferSnapshot.empty(51, 19, computer.family != ComputerFamily.NORMAL),
         displayStack,
         Config.uploadMaxSize,
     )

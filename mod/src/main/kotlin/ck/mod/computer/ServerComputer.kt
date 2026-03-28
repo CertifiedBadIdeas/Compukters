@@ -20,18 +20,18 @@
 package ck.mod.computer
 
 import ck.lang.runtime.ComputerVmHandle
+import ck.lang.runtime.ScreenBufferSnapshot
 import ck.lang.runtime.VmEvent
 import ck.lang.runtime.VmState
 import ck.lang.runtime.VmStopReason
 import ck.mod.LOGGER
 import ck.mod.application.runtime.ComputerProgramCompiler
+import ck.mod.application.runtime.HostCallDispatcher
 import ck.mod.application.runtime.WorkspaceProgramLoader
 import ck.mod.computer.vm.ComputerProfileRegistry
 import ck.mod.computer.vm.ComputerVmCallbacks
 import ck.mod.computer.vm.ComputerVmLogger
 import ck.mod.context.ServerContext
-import ck.mod.gui.NetworkedTerminal
-import ck.mod.gui.TerminalState
 import ck.mod.language.LanguageServices
 import ck.mod.menu.ComputerMenu
 import ck.mod.network.client.ComputerTerminalClientMessage
@@ -40,6 +40,15 @@ import net.minecraft.server.level.ServerLevel
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.entity.player.Player
 
+/**
+ * Server-side representation of a single computer instance.
+ *
+ * Owns the [ComputerVmHandle] and orchestrates the VM lifecycle:
+ * boot → tick → sync screen → detect stop/crash/reboot.
+ *
+ * Terminal output is read from the VM's [ScreenBuffer] as an immutable
+ * [ScreenBufferSnapshot] each tick and forwarded to watching players.
+ */
 class ServerComputer(
     val instanceID: Int,
     val level: ServerLevel,
@@ -49,17 +58,14 @@ class ServerComputer(
     val family = properties.family
     private val profile = ComputerProfileRegistry.forFamily(family)
 
-    @Volatile
-    private var terminalDirty = true
-    val terminal =
-        NetworkedTerminal(
-            profile.terminalWidth,
-            profile.terminalHeight,
-            profile.colorTerminal,
-        ) { terminalDirty = true }
     private val logger = ComputerVmLogger { message -> LOGGER.info { message } }
     private var label: String? = properties.label
     private var vmHandle: ComputerVmHandle? = null
+
+    /** Last known screen snapshot — used for initial sync when new players open the GUI. */
+    @Volatile
+    var lastScreenSnapshot: ScreenBufferSnapshot? = null
+        private set
 
     /**
      * Set by [onVmRebootRequested] from the VM coroutine, consumed by [serverTick].
@@ -73,7 +79,7 @@ class ServerComputer(
         WorkspaceProgramLoader(computerManager.workspace, LanguageServices::bundledScript)
     }
     private val hostCallDispatcher by lazy {
-        ck.mod.application.runtime.HostCallDispatcher(instanceID, terminal, computerManager.workspace)
+        HostCallDispatcher(instanceID, computerManager.workspace)
     }
 
     init {
@@ -119,7 +125,7 @@ class ServerComputer(
         computerManager.ensureWorkspaceInitialized(instanceID)
         val bootScript = programLoader.load(instanceID, profile.bootScriptName)
         if (bootScript == null) {
-            writeLineToTerminal("Missing boot script in workspace: ${profile.bootScriptName}")
+            LOGGER.error { "Missing boot script in workspace: ${profile.bootScriptName}" }
             return
         }
 
@@ -129,13 +135,11 @@ class ServerComputer(
         val program = compiledProgram.program
         if (program == null) {
             val message = compiledProgram.errorMessage.orEmpty()
-            writeLineToTerminal("Compilation Error: $message")
-            LOGGER.error { message }
+            LOGGER.error { "Compilation Error: $message" }
             computerManager.removeVm(instanceID, VmStopReason.CLOSED)
             return
         }
 
-        terminal.reset()
         vmHandle = handle
         rebootRequested = false
         val started = handle.start(program)
@@ -154,28 +158,29 @@ class ServerComputer(
         LOGGER.info { "ComputerID: $instanceID close" }
         computerManager.removeVm(instanceID, VmStopReason.CLOSED)
         vmHandle = null
-        terminalDirty = true
     }
 
     fun serverTick() {
         val handle = vmHandle
         if (handle == null) {
-            syncTerminal()
             return
         }
         handle.requestSlice(level.gameTime)
 
+        // Dispatch filesystem host calls (terminal writes no longer go through HostCall)
         val results = handle.drainHostCalls().map(hostCallDispatcher::dispatch)
         if (results.isNotEmpty()) {
             handle.deliverHostResults(results)
         }
 
-        syncTerminal()
+        // Sync screen buffer to watching players
+        syncScreen(handle)
 
+        // Check for VM stop / crash / reboot
         val snapshot = handle.snapshot()
         if (snapshot.state == VmState.STOPPED || snapshot.state == VmState.CRASHED) {
             if (snapshot.state == VmState.CRASHED && snapshot.errorMessage != null) {
-                writeLineToTerminal("VM crash: ${snapshot.errorMessage}")
+                LOGGER.warn { "ComputerID: $instanceID VM crash: ${snapshot.errorMessage}" }
             }
 
             computerManager.removeVm(instanceID, VmStopReason.CLOSED)
@@ -200,20 +205,22 @@ class ServerComputer(
 
     // ── Internal ────────────────────────────────────────────────────
 
-    private fun writeLineToTerminal(text: String) = TerminalHostWriter.printLine(terminal, text)
-
-    private fun syncTerminal() {
-        if (!terminalDirty) return
-        val terminalState = TerminalState.create(terminal)
-        for (player in watchingPlayers()) {
-            ServerNetworking.sendToPlayer(ComputerTerminalClientMessage(player.containerMenu, terminalState), player)
+    private fun syncScreen(handle: ComputerVmHandle) {
+        val screenSnapshot = handle.readScreenSnapshot() ?: return
+        lastScreenSnapshot = screenSnapshot
+        val players = watchingPlayers()
+        if (players.isEmpty()) return
+        for (player in players) {
+            ServerNetworking.sendToPlayer(
+                ComputerTerminalClientMessage(player.containerMenu, screenSnapshot),
+                player,
+            )
         }
-        terminalDirty = false
     }
 
     private fun watchingPlayers(): List<ServerPlayer> =
         ServerContext.server.playerList.players.filter { player ->
             val menu = player.containerMenu
-            menu is ComputerMenu && menu.getComputerPublic().instanceID == instanceID
+            menu is ComputerMenu && menu.serverSide.computer.instanceID == instanceID
         }
 }

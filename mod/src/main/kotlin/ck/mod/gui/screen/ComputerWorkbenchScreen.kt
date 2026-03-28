@@ -25,7 +25,7 @@ import ck.mod.application.workbench.highlightColor
 import ck.mod.gui.WorkbenchTerminalInputController
 import ck.mod.gui.WorkbenchTerminalLayout
 import ck.mod.gui.WorkbenchTerminalMetrics
-import ck.mod.gui.WorkbenchTerminalRenderer
+import ck.mod.ui.render.WorkbenchTerminalRenderer
 import ck.mod.gui.input.ClientInputHandler
 import ck.mod.infrastructure.workbench.InputHandlerControlGateway
 import ck.mod.infrastructure.workbench.LanguageWorkbenchIdeFacade
@@ -44,7 +44,6 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
     player: Inventory,
     title: Component,
 ) : ComputerScreen<T>(container, player, title) {
-    private val terminalData = container.getTerminal()
     private val inputHandler = ClientInputHandler(container)
     private val terminalInput = WorkbenchTerminalInputController(inputHandler)
     private val store =
@@ -55,8 +54,9 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
         )
 
     init {
-        imageWidth = WorkbenchTerminalMetrics.imageWidth(terminalData)
-        imageHeight = WorkbenchTerminalMetrics.imageHeight(terminalData)
+        val snap = container.clientSide.screenSnapshot
+        imageWidth = WorkbenchTerminalMetrics.imageWidth(snap.width, snap.height)
+        imageHeight = WorkbenchTerminalMetrics.imageHeight(snap.width, snap.height)
     }
 
     override fun init() {
@@ -90,7 +90,7 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
                 imageWidth,
                 imageHeight,
                 terminalLayout(),
-                terminalData,
+                menu.clientSide.screenSnapshot,
                 terminalInput.focused,
             )
         } else {
@@ -429,14 +429,17 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
 
     private fun layout(): WorkbenchLayoutModel = WorkbenchLayoutModel(leftPos, topPos, imageWidth, imageHeight, minecraft!!.font)
 
-    private fun terminalLayout(): WorkbenchTerminalLayout =
-        WorkbenchTerminalMetrics.layout(
+    private fun terminalLayout(): WorkbenchTerminalLayout {
+        val snap = menu.clientSide.screenSnapshot
+        return WorkbenchTerminalMetrics.layout(
             leftPos,
             topPos,
             imageWidth,
             imageHeight,
-            terminalData,
+            snap.width,
+            snap.height,
         )
+    }
 
     private fun editorLines(): List<String> =
         if (store.state.editor.text.isEmpty()) {

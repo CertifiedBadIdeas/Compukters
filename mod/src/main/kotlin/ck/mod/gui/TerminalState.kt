@@ -18,50 +18,50 @@
  */
 package ck.mod.gui
 
+import ck.lang.runtime.ScreenBufferSnapshot
 import ck.mod.utils.readUByteArray
 import ck.mod.utils.writeUByteArray
 import net.minecraft.network.FriendlyByteBuf
 
 /**
- * A snapshot of a terminal's state.
+ * Network-serializable snapshot of a terminal screen.
  *
- *
- * This is somewhat memory inefficient (we build a buffer, only to write it elsewhere), however it means we get a
- * complete and accurate description of a terminal, which avoids a lot of complexities with resizing terminals, dirty
- * states, etc...
+ * Bridges between [ScreenBufferSnapshot] (the runtime representation)
+ * and [FriendlyByteBuf] (the Minecraft network format).
  */
 @OptIn(ExperimentalUnsignedTypes::class)
 class TerminalState {
-    private val colour: Boolean
     val width: Int
     val height: Int
+    val colour: Boolean
     val cursorX: Int
     val cursorY: Int
     val cursorBlink: Boolean
-    val cursorBgColour: Int
-    val cursorFgColour: Int
-    val contents: UByteArray
+    val currentFg: Int
+    val currentBg: Int
+    private val contents: UByteArray
 
-    internal constructor(
-        colour: Boolean,
-        width: Int,
-        height: Int,
-        cursorX: Int,
-        cursorY: Int,
-        cursorBlink: Boolean,
-        cursorFgColour: Int,
-        cursorBgColour: Int,
-        contents: UByteArray,
-    ) {
-        this.colour = colour
-        this.width = width
-        this.height = height
-        this.cursorX = cursorX
-        this.cursorY = cursorY
-        this.cursorBlink = cursorBlink
-        this.cursorFgColour = cursorFgColour
-        this.cursorBgColour = cursorBgColour
-        this.contents = contents
+    constructor(snapshot: ScreenBufferSnapshot) {
+        width = snapshot.width
+        height = snapshot.height
+        colour = snapshot.colour
+        cursorX = snapshot.cursorX
+        cursorY = snapshot.cursorY
+        cursorBlink = snapshot.cursorBlink
+        currentFg = snapshot.currentFg
+        currentBg = snapshot.currentBg
+        // Pack: for each row — chars then (bg<<4|fg) pairs
+        val packed = UByteArray(width * height * 2)
+        var idx = 0
+        for (y in 0 until height) {
+            for (x in 0 until width) {
+                packed[idx++] = (snapshot.charAt(x, y).code and 0xFF).toUByte()
+            }
+            for (x in 0 until width) {
+                packed[idx++] = ((snapshot.bgAt(x, y) shl 4) or snapshot.fgAt(x, y)).toUByte()
+            }
+        }
+        contents = packed
     }
 
     constructor(buf: FriendlyByteBuf) {
@@ -71,11 +71,9 @@ class TerminalState {
         cursorX = buf.readVarInt()
         cursorY = buf.readVarInt()
         cursorBlink = buf.readBoolean()
-
         val cursorColour = buf.readByte()
-        this.cursorBgColour = (cursorColour.toInt() shr 4) and 0xF
-        this.cursorFgColour = cursorColour.toInt() and 0xF
-
+        currentBg = (cursorColour.toInt() shr 4) and 0xF
+        currentFg = cursorColour.toInt() and 0xF
         contents = buf.readUByteArray()
     }
 
@@ -86,24 +84,44 @@ class TerminalState {
         buf.writeVarInt(cursorX)
         buf.writeVarInt(cursorY)
         buf.writeBoolean(cursorBlink)
-        buf.writeByte(cursorBgColour shl 4 or cursorFgColour)
-
+        buf.writeByte(currentBg shl 4 or currentFg)
         buf.writeUByteArray(contents)
     }
 
-    fun size(): Int = contents.size
-
-    fun apply(terminal: NetworkedTerminal) {
-        terminal.read(this)
-    }
-
-    fun create(): NetworkedTerminal {
-        val terminal = NetworkedTerminal(width, height, colour)
-        terminal.read(this)
-        return terminal
+    /**
+     * Reconstruct a [ScreenBufferSnapshot] from the network data.
+     */
+    fun toSnapshot(): ScreenBufferSnapshot {
+        val chars = CharArray(width * height)
+        val fgColours = ByteArray(width * height)
+        val bgColours = ByteArray(width * height)
+        var idx = 0
+        for (y in 0 until height) {
+            for (x in 0 until width) {
+                chars[y * width + x] = contents[idx++].toInt().toChar()
+            }
+            for (x in 0 until width) {
+                val packed = contents[idx++].toInt()
+                bgColours[y * width + x] = ((packed shr 4) and 0xF).toByte()
+                fgColours[y * width + x] = (packed and 0xF).toByte()
+            }
+        }
+        return ScreenBufferSnapshot(
+            width = width,
+            height = height,
+            colour = colour,
+            cursorX = cursorX,
+            cursorY = cursorY,
+            cursorBlink = cursorBlink,
+            currentFg = currentFg,
+            currentBg = currentBg,
+            chars = chars,
+            fgColours = fgColours,
+            bgColours = bgColours,
+        )
     }
 
     companion object {
-        fun create(terminal: NetworkedTerminal): TerminalState = terminal.write()
+        fun fromSnapshot(snapshot: ScreenBufferSnapshot): TerminalState = TerminalState(snapshot)
     }
 }

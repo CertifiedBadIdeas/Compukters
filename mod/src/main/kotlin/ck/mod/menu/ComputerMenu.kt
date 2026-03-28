@@ -18,40 +18,44 @@
  */
 package ck.mod.menu
 
-import ck.mod.computer.ServerComputer
 import ck.lang.runtime.ComputerWorkspaceDocument
 import ck.lang.runtime.ComputerWorkspaceEntry
-import ck.mod.gui.TerminalState
+import ck.lang.runtime.ScreenBufferSnapshot
+import ck.mod.block.ComputerFamily
 
 /**
  * An instance of [AbstractContainerMenu] which provides a computer. You should implement this if you provide
  * custom computer GUIs.
+ *
+ * Server-only and client-only operations are accessed through [side]:
+ * - `menu.serverSide.computer` / `menu.serverSide.input` — server-side only
+ * - `menu.clientSide.screenSnapshot` — client-side only
  */
 interface ComputerMenu {
-    /**
-     * Get the computer you are interacting with.
-     *
-     * @return The computer you are interacting with.
-     * @throws UnsupportedOperationException When used on the client side.
-     */
-    fun getComputerPublic(): ServerComputer
+    /** Type-safe side discriminator. */
+    val side: MenuSide
+
+    /** The computer family. */
+    val family: ComputerFamily
 
     /**
-     * Get the input controller for this container. This should be used when receiving events from the client.
-     *
-     * @return This container's input.
-     * @throws UnsupportedOperationException When used on the client side.
+     * Convenience accessor for the server side.
+     * @throws ClassCastException When called on the client.
      */
-    fun getInputPublic(): ServerInputHandler
+    val serverSide: MenuSide.Server
+        get() = side as MenuSide.Server
 
     /**
-     * Set the current terminal state. This is called on the client when the server syncs a computer's terminal
-     * contents.
-     *
-     * @param state The new terminal state.
-     * @throws UnsupportedOperationException When used on the server.
+     * Convenience accessor for the client side.
+     * @throws ClassCastException When called on the server.
      */
-    fun updateTerminal(state: TerminalState)
+    val clientSide: MenuSide.Client
+        get() = side as MenuSide.Client
+
+    /**
+     * Set the current terminal screen snapshot. Called on the client when the server syncs.
+     */
+    fun updateTerminal(snapshot: ScreenBufferSnapshot)
 
     fun updateWorkspaceEntries(entries: List<ComputerWorkspaceEntry>)
 

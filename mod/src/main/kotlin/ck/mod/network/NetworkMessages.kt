@@ -53,7 +53,7 @@ import net.minecraft.network.FriendlyByteBuf
  * | ID | Channel              | Class                              | Trigger                                        | State modified on client                      |
  * |----|----------------------|------------------------------------|-------------------------------------------------|-----------------------------------------------|
  * | 10 | `chat_table`         | [ChatTableClientMessage]           | Server sends a formatted table to display in chat | Minecraft chat HUD                            |
- * | 13 | `computer_terminal`  | [ComputerTerminalClientMessage]    | Terminal dirty flag set during [ServerComputer.serverTick] | [ComputerMenu.updateTerminal] → client-side [NetworkedTerminal] |
+ * | 13 | `computer_terminal`  | [ComputerTerminalClientMessage]    | Screen buffer dirty flag set during [ServerComputer.serverTick] | [ComputerMenu.updateTerminal] → client-side [ScreenBufferSnapshot] |
  * | 14 | `computer_workspace` | [ComputerWorkspaceClientMessage]   | Response to a workspace request (LIST/READ/WRITE) | [ComputerMenu.updateWorkspaceEntries] / [ComputerMenu.updateWorkspaceDocument] |
  */
 object NetworkMessages {

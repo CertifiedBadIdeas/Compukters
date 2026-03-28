@@ -58,7 +58,7 @@ class ComputerWorkspaceServerMessage : ComputerServerMessage {
         context: ServerNetworkContext,
         container: ComputerMenu,
     ) {
-        val computer = container.getComputerPublic()
+        val computer = container.serverSide.computer
         val workspace = ck.mod.context.ServerContext.computerManager.workspace
         val player = context.sender()
         when (action) {

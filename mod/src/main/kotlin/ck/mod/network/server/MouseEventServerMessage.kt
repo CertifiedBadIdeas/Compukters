@@ -58,7 +58,7 @@ class MouseEventServerMessage : ComputerServerMessage {
         context: ServerNetworkContext,
         container: ComputerMenu,
     ) {
-        container.getInputPublic().accept(type.toDomainEvent(arg, x, y))
+        container.serverSide.input.accept(type.toDomainEvent(arg, x, y))
     }
 
     public override fun type(): MessageType<MouseEventServerMessage> = NetworkMessages.MOUSE_EVENT

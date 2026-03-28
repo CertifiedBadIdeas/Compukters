@@ -57,15 +57,18 @@ interface ComputerSystemApi {
 }
 
 interface ComputerTerminalApi {
-    suspend fun write(text: String)
+    /** The underlying screen buffer. Direct access for readLine and other VM-side logic. */
+    val screenBuffer: ScreenBuffer
 
-    suspend fun printLine(text: String)
+    fun write(text: String)
+
+    fun printLine(text: String)
 
     suspend fun readLine(prompt: String = ""): String
 
-    suspend fun clear()
+    fun clear()
 
-    suspend fun setCursor(
+    fun setCursor(
         x: Int,
         y: Int,
     )

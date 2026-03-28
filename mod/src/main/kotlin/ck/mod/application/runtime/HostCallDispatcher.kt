@@ -21,37 +21,20 @@ package ck.mod.application.runtime
 import ck.lang.runtime.ComputerWorkspace
 import ck.lang.runtime.HostCall
 import ck.lang.runtime.HostResult
-import ck.mod.computer.TerminalHostWriter
-import ck.mod.gui.NetworkedTerminal
 
+/**
+ * Dispatches [HostCall]s from the VM to the appropriate server-side handler.
+ *
+ * Terminal I/O is no longer routed through HostCalls — the VM writes directly
+ * to its [ScreenBuffer]. Only filesystem operations remain.
+ */
 class HostCallDispatcher(
     private val computerId: Int,
-    private val terminal: NetworkedTerminal,
     private val workspace: ComputerWorkspace,
 ) {
     fun dispatch(call: HostCall): HostResult =
         try {
             when (call) {
-                is HostCall.TerminalWrite -> {
-                    if (call.newLine) {
-                        TerminalHostWriter.printLine(terminal, call.text)
-                    } else {
-                        TerminalHostWriter.write(terminal, call.text)
-                    }
-                    HostResult.Success(call.id)
-                }
-
-                is HostCall.TerminalClear -> {
-                    terminal.clear()
-                    terminal.setCursorPos(0, 0)
-                    HostResult.Success(call.id)
-                }
-
-                is HostCall.TerminalSetCursor -> {
-                    terminal.setCursorPos(call.x, call.y)
-                    HostResult.Success(call.id)
-                }
-
                 is HostCall.FileExists -> {
                     HostResult.Success(
                         call.id,

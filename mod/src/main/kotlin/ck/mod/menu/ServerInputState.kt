@@ -51,23 +51,23 @@ class ServerInputState<T>(
         repeat: Boolean,
     ) {
         keysDown.add(key)
-        ComputerEvents.keyDown(owner.getComputerPublic(), key, repeat)
+        ComputerEvents.keyDown(owner.serverSide.computer, key, repeat)
     }
 
     override fun keyUp(key: Int) {
         keysDown.remove(key)
-        ComputerEvents.keyUp(owner.getComputerPublic(), key)
+        ComputerEvents.keyUp(owner.serverSide.computer, key)
     }
 
     override fun charTyped(chr: Byte) {
-        if (StringUtil.isTypableChar(chr)) ComputerEvents.charTyped(owner.getComputerPublic(), chr)
+        if (StringUtil.isTypableChar(chr)) ComputerEvents.charTyped(owner.serverSide.computer, chr)
     }
 
     override fun paste(contents: ByteBuffer?) {
         if (contents != null && contents.remaining() > 0 &&
             isValidClipboard(contents)
         ) {
-            ComputerEvents.paste(owner.getComputerPublic(), contents)
+            ComputerEvents.paste(owner.serverSide.computer, contents)
         }
     }
 
@@ -80,7 +80,7 @@ class ServerInputState<T>(
         lastMouseY = y
         lastMouseDown = button
 
-        ComputerEvents.mouseClick(owner.getComputerPublic(), button, x, y)
+        ComputerEvents.mouseClick(owner.serverSide.computer, button, x, y)
     }
 
     override fun mouseUp(
@@ -92,7 +92,7 @@ class ServerInputState<T>(
         lastMouseY = y
         lastMouseDown = -1
 
-        ComputerEvents.mouseUp(owner.getComputerPublic(), button, x, y)
+        ComputerEvents.mouseUp(owner.serverSide.computer, button, x, y)
     }
 
     override fun mouseDrag(
@@ -104,7 +104,7 @@ class ServerInputState<T>(
         lastMouseY = y
         lastMouseDown = button
 
-        ComputerEvents.mouseDrag(owner.getComputerPublic(), button, x, y)
+        ComputerEvents.mouseDrag(owner.serverSide.computer, button, x, y)
     }
 
     override fun mouseScroll(
@@ -115,27 +115,27 @@ class ServerInputState<T>(
         lastMouseX = x
         lastMouseY = y
 
-        ComputerEvents.mouseScroll(owner.getComputerPublic(), direction, x, y)
+        ComputerEvents.mouseScroll(owner.serverSide.computer, direction, x, y)
     }
 
     override fun terminate() {
-        owner.getComputerPublic().queueEvent("terminate")
+        owner.serverSide.computer.queueEvent("terminate")
     }
 
     override fun shutdown() {
-        owner.getComputerPublic().shutdown()
+        owner.serverSide.computer.shutdown()
     }
 
     override fun turnOn() {
-        owner.getComputerPublic().turnOn()
+        owner.serverSide.computer.turnOn()
     }
 
     override fun reboot() {
-        owner.getComputerPublic().reboot()
+        owner.serverSide.computer.reboot()
     }
 
     fun close() {
-        val computer: ServerComputer = owner.getComputerPublic()
+        val computer: ServerComputer = owner.serverSide.computer
         val keys = keysDown.iterator()
         while (keys.hasNext()) ComputerEvents.keyUp(computer, keys.nextInt())
 

@@ -77,22 +77,6 @@ data class VmSnapshot(
 sealed interface HostCall {
     val id: Long
 
-    data class TerminalWrite(
-        override val id: Long,
-        val text: String,
-        val newLine: Boolean = false,
-    ) : HostCall
-
-    data class TerminalClear(
-        override val id: Long,
-    ) : HostCall
-
-    data class TerminalSetCursor(
-        override val id: Long,
-        val x: Int,
-        val y: Int,
-    ) : HostCall
-
     data class FileExists(
         override val id: Long,
         val path: String,
@@ -161,6 +145,17 @@ interface ComputerVmHandle : AutoCloseable {
     fun deliverHostResults(results: List<HostResult>)
 
     fun snapshot(): VmSnapshot
+
+    /**
+     * Take an immutable snapshot of the VM's screen buffer if it has changed since the last call.
+     * Returns `null` when the screen has not been modified.
+     */
+    fun readScreenSnapshot(): ScreenBufferSnapshot?
+
+    /**
+     * Force a screen snapshot regardless of dirty state (e.g. when a new player opens the GUI).
+     */
+    fun forceScreenSnapshot(): ScreenBufferSnapshot
 
     override fun close() = stop(VmStopReason.CLOSED)
 }

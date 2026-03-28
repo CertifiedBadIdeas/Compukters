@@ -20,13 +20,11 @@ package ck.mod.menu
 
 import ck.lang.runtime.ComputerWorkspaceDocument
 import ck.lang.runtime.ComputerWorkspaceEntry
+import ck.lang.runtime.ScreenBufferSnapshot
 import ck.mod.application.workbench.WorkbenchRemoteState
 import ck.mod.block.ComputerFamily
 import ck.mod.computer.ServerComputer
 import ck.mod.data.ComputerContainerData
-import ck.mod.gui.NetworkedTerminal
-import ck.mod.gui.TerminalState
-import ck.mod.gui.terminal.Terminal
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.inventory.AbstractContainerMenu
 import net.minecraft.world.inventory.ContainerData
@@ -47,18 +45,21 @@ sealed interface MenuSide {
     ) : MenuSide
 
     /**
-     * Client-side state: owns the local [NetworkedTerminal] and workspace cache.
+     * Client-side state: owns the latest [ScreenBufferSnapshot].
      */
     class Client(
-        val terminal: NetworkedTerminal,
-    ) : MenuSide
+        initialSnapshot: ScreenBufferSnapshot,
+    ) : MenuSide {
+        @Volatile
+        var screenSnapshot: ScreenBufferSnapshot = initialSnapshot
+    }
 }
 
 abstract class AbstractComputerMenu(
     type: MenuType<out AbstractComputerMenu>,
     id: Int,
     private val canUse: (Player) -> Boolean,
-    val family: ComputerFamily,
+    override val family: ComputerFamily,
     computer: ServerComputer?,
     containerData: ComputerContainerData?,
 ) : AbstractContainerMenu(type, id),
@@ -75,27 +76,24 @@ abstract class AbstractComputerMenu(
     /**
      * Type-safe side discriminator.
      * On the server: [MenuSide.Server] — holds the [ServerComputer] + input.
-     * On the client: [MenuSide.Client] — holds the local terminal.
+     * On the client: [MenuSide.Client] — holds the latest [ScreenBufferSnapshot].
      */
-    val side: MenuSide
+    override val side: MenuSide = if (computer != null) {
+        MenuSide.Server(computer, ServerInputState(this))
+    } else {
+        val snapshot = containerData?.terminalSnapshot
+            ?: ScreenBufferSnapshot.empty(51, 19, false)
+        MenuSide.Client(snapshot)
+    }
 
     private var workspaceState: WorkbenchRemoteState = WorkbenchRemoteState()
     private val workspaceListeners = mutableMapOf<Int, (WorkbenchRemoteState) -> Unit>()
     private var nextWorkspaceListenerId: Int = 0
-    val displayStack: ItemStack
+    val displayStack: ItemStack = containerData?.displayStack ?: ItemStack.EMPTY
 
     init {
         addDataSlots(data)
 
-        side = if (computer != null) {
-            MenuSide.Server(computer, ServerInputState(this))
-        } else {
-            val terminal = containerData?.terminalState?.create()
-                ?: NetworkedTerminal(51, 19, false) // Fallback — should not happen
-            MenuSide.Client(terminal)
-        }
-
-        displayStack = containerData?.displayStack ?: ItemStack.EMPTY
         uploadMaxSize = containerData?.uploadMaxSize ?: ck.mod.Config.uploadMaxSize
     }
 
@@ -104,18 +102,10 @@ abstract class AbstractComputerMenu(
         return (server == null || server.computer.checkUsable(player)) && canUse(player)
     }
 
-    override fun getComputerPublic(): ServerComputer =
-        (side as? MenuSide.Server)?.computer
-            ?: throw UnsupportedOperationException("Cannot access server computer on the client")
-
-    override fun getInputPublic(): ServerInputHandler =
-        (side as? MenuSide.Server)?.input
-            ?: throw UnsupportedOperationException("Cannot access server input on the client")
-
-    override fun updateTerminal(state: TerminalState) {
+    override fun updateTerminal(snapshot: ScreenBufferSnapshot) {
         val client = side as? MenuSide.Client
             ?: throw UnsupportedOperationException("Cannot update terminal on the server")
-        state.apply(client.terminal)
+        client.screenSnapshot = snapshot
     }
 
     override fun updateWorkspaceEntries(entries: List<ComputerWorkspaceEntry>) {
@@ -128,17 +118,6 @@ abstract class AbstractComputerMenu(
         notifyWorkspaceListeners()
     }
 
-    /**
-     * Get the current terminal state.
-     *
-     * @return The current terminal state.
-     * @throws IllegalStateException When accessed on the server.
-     */
-    fun getTerminal(): Terminal {
-        val client = side as? MenuSide.Client
-            ?: error("Cannot access terminal on the server")
-        return client.terminal
-    }
 
     fun getWorkspaceEntries(): List<ComputerWorkspaceEntry> = workspaceState.entries
 

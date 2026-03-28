@@ -17,64 +17,74 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import ck.mod.computer.TerminalHostWriter
-import ck.mod.gui.NetworkedTerminal
+import ck.lang.runtime.ScreenBuffer
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
+/**
+ * Tests for [ScreenBuffer] write/scroll behaviour (replaces old TerminalHostWriter tests).
+ */
 class ShellTerminalRenderingTest {
     @Test
     fun appendsTypedCharactersAfterPrompt() {
-        val terminal = NetworkedTerminal(12, 2, true)
+        val buffer = ScreenBuffer(12, 2, true)
 
-        TerminalHostWriter.write(terminal, "/ > ")
-        TerminalHostWriter.write(terminal, "abc")
+        buffer.write("/ > ")
+        buffer.write("abc")
 
-        assertEquals("/ > abc     ", terminal.getLine(0).toString())
-        assertEquals(7, terminal.cursorX)
-        assertEquals(0, terminal.cursorY)
+        val line = (0 until 12).map { buffer.forceSnapshot().charAt(it, 0) }.joinToString("")
+        assertEquals("/ > abc     ", line)
+        assertEquals(7, buffer.cursorX)
+        assertEquals(0, buffer.cursorY)
     }
 
     @Test
     fun preservesPromptWhenBackspaceErasesLastTypedCharacter() {
-        val terminal = NetworkedTerminal(12, 2, true)
+        val buffer = ScreenBuffer(12, 2, true)
 
-        TerminalHostWriter.write(terminal, "/ > ")
-        TerminalHostWriter.write(terminal, "ab")
+        buffer.write("/ > ")
+        buffer.write("ab")
 
-        terminal.setCursorPos(5, 0)
-        TerminalHostWriter.write(terminal, " ")
-        terminal.setCursorPos(5, 0)
+        buffer.setCursor(5, 0)
+        buffer.write(" ")
+        buffer.setCursor(5, 0)
 
-        assertEquals("/ > a       ", terminal.getLine(0).toString())
-        assertEquals(5, terminal.cursorX)
-        assertEquals(0, terminal.cursorY)
+        val line = (0 until 12).map { buffer.forceSnapshot().charAt(it, 0) }.joinToString("")
+        assertEquals("/ > a       ", line)
+        assertEquals(5, buffer.cursorX)
+        assertEquals(0, buffer.cursorY)
     }
 
     @Test
     fun movesToNextLineAfterSubmittingInput() {
-        val terminal = NetworkedTerminal(12, 2, true)
+        val buffer = ScreenBuffer(12, 2, true)
 
-        TerminalHostWriter.write(terminal, "/ > ")
-        TerminalHostWriter.write(terminal, "42")
-        TerminalHostWriter.printLine(terminal, "")
+        buffer.write("/ > ")
+        buffer.write("42")
+        buffer.printLine("")
 
-        assertEquals("/ > 42      ", terminal.getLine(0).toString())
-        assertEquals("            ", terminal.getLine(1).toString())
-        assertEquals(0, terminal.cursorX)
-        assertEquals(1, terminal.cursorY)
+        val snap = buffer.forceSnapshot()
+        val line0 = (0 until 12).map { snap.charAt(it, 0) }.joinToString("")
+        val line1 = (0 until 12).map { snap.charAt(it, 1) }.joinToString("")
+        assertEquals("/ > 42      ", line0)
+        assertEquals("            ", line1)
+        assertEquals(0, buffer.cursorX)
+        assertEquals(1, buffer.cursorY)
     }
 
     @Test
     fun scrollsWhenPrintingPastLastLine() {
-        val terminal = NetworkedTerminal(12, 2, true)
+        val buffer = ScreenBuffer(12, 2, true)
 
-        TerminalHostWriter.printLine(terminal, "top")
-        TerminalHostWriter.printLine(terminal, "bottom")
+        buffer.printLine("top")
+        buffer.printLine("bottom")
 
-        assertEquals("bottom      ", terminal.getLine(0).toString())
-        assertEquals("            ", terminal.getLine(1).toString())
-        assertEquals(0, terminal.cursorX)
-        assertEquals(1, terminal.cursorY)
+        val snap = buffer.forceSnapshot()
+        val line0 = (0 until 12).map { snap.charAt(it, 0) }.joinToString("")
+        val line1 = (0 until 12).map { snap.charAt(it, 1) }.joinToString("")
+        assertEquals("bottom      ", line0)
+        assertEquals("            ", line1)
+        assertEquals(0, buffer.cursorX)
+        assertEquals(1, buffer.cursorY)
     }
 }

@@ -26,7 +26,6 @@ class ServerContext(
     val server: MinecraftServer,
 ) {
     val vmSupervisor = ComputerVmSupervisor(server)
-    val registry = ComputerRegistry()
     val computerManager = ComputerManager(vmSupervisor)
 
     companion object {
@@ -35,8 +34,6 @@ class ServerContext(
         val isInitialized: Boolean
             get() = current != null
 
-        val registry
-            get() = context().registry
 
         val vmSupervisor
             get() = context().vmSupervisor

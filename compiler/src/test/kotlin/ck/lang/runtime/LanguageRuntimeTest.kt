@@ -186,19 +186,21 @@ private class RecordingRuntime(
 
     override val terminal =
         object : ComputerTerminalApi {
-            override suspend fun write(text: String) {
+            override val screenBuffer = ScreenBuffer(51, 19, true)
+
+            override fun write(text: String) {
                 lines += text
             }
 
-            override suspend fun printLine(text: String) {
+            override fun printLine(text: String) {
                 lines += text
             }
 
             override suspend fun readLine(prompt: String): String = "typed"
 
-            override suspend fun clear() = Unit
+            override fun clear() = Unit
 
-            override suspend fun setCursor(
+            override fun setCursor(
                 x: Int,
                 y: Int,
             ) = Unit

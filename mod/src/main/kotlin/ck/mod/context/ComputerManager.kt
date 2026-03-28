@@ -36,8 +36,7 @@ import java.io.Closeable
  * Unified registry that owns both the [ServerComputer] instances and the
  * underlying [ComputerVmHandle] objects.
  *
- * Replaces the old [ComputerRegistry] + [ComputerVmSupervisor] pair,
- * eliminating parallel maps for the same entity.
+ * Provides a single entry point for computer and VM lifecycle management.
  */
 class ComputerManager(
     private val vmSupervisor: ComputerVmSupervisor,

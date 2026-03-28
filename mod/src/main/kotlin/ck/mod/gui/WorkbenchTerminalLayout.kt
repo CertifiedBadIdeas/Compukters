@@ -18,7 +18,7 @@
  */
 package ck.mod.gui
 
-import ck.mod.gui.terminal.Terminal
+import ck.mod.ui.render.FixedWidthFontRenderer
 import kotlin.math.max
 
 data class TerminalRect(
@@ -39,6 +39,10 @@ data class WorkbenchTerminalLayout(
     val statusBounds: TerminalRect,
 )
 
+/**
+ * Computes terminal panel metrics from terminal grid dimensions (columns × rows).
+ * No dependency on [Terminal] — works purely with width/height integers.
+ */
 object WorkbenchTerminalMetrics {
     private const val MIN_IMAGE_WIDTH = 480
     private const val MIN_IMAGE_HEIGHT = 280
@@ -47,18 +51,19 @@ object WorkbenchTerminalMetrics {
     private const val INNER_PADDING = 12
     private const val STATUS_HEIGHT = 20
 
-    fun imageWidth(terminal: Terminal): Int =
-        max(terminalPixelWidth(terminal.width) + INNER_PADDING * 2 + OUTER_PADDING * 2, MIN_IMAGE_WIDTH)
+    fun imageWidth(terminalColumns: Int, terminalRows: Int): Int =
+        max(terminalPixelWidth(terminalColumns) + INNER_PADDING * 2 + OUTER_PADDING * 2, MIN_IMAGE_WIDTH)
 
-    fun imageHeight(terminal: Terminal): Int =
-        max(terminalPixelHeight(terminal.height) + INNER_PADDING * 2 + STATUS_HEIGHT + CONTENT_TOP + OUTER_PADDING, MIN_IMAGE_HEIGHT)
+    fun imageHeight(terminalColumns: Int, terminalRows: Int): Int =
+        max(terminalPixelHeight(terminalRows) + INNER_PADDING * 2 + STATUS_HEIGHT + CONTENT_TOP + OUTER_PADDING, MIN_IMAGE_HEIGHT)
 
     fun layout(
         leftPos: Int,
         topPos: Int,
         imageWidth: Int,
         imageHeight: Int,
-        terminal: Terminal,
+        terminalColumns: Int,
+        terminalRows: Int,
     ): WorkbenchTerminalLayout {
         val panelBounds =
             TerminalRect(
@@ -75,8 +80,8 @@ object WorkbenchTerminalMetrics {
                 STATUS_HEIGHT,
             )
 
-        val terminalWidth = terminalPixelWidth(terminal.width)
-        val terminalHeight = terminalPixelHeight(terminal.height)
+        val terminalWidth = terminalPixelWidth(terminalColumns)
+        val terminalHeight = terminalPixelHeight(terminalRows)
         val terminalAreaHeight = statusBounds.y - panelBounds.y
         val terminalX = panelBounds.x + ((panelBounds.width - terminalWidth) / 2).coerceAtLeast(INNER_PADDING)
         val terminalY = panelBounds.y + ((terminalAreaHeight - terminalHeight) / 2).coerceAtLeast(INNER_PADDING)
