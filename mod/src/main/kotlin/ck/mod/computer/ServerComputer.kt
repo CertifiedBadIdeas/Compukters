@@ -36,6 +36,9 @@ import ck.mod.language.LanguageServices
 import ck.mod.menu.ComputerMenu
 import ck.mod.network.client.ComputerTerminalClientMessage
 import ck.mod.network.server.ServerNetworking
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.entity.player.Player
@@ -62,16 +65,19 @@ class ServerComputer(
     private var label: String? = properties.label
     private var vmHandle: ComputerVmHandle? = null
 
-    /** Last known screen snapshot — used for initial sync when new players open the GUI. */
-    @Volatile
-    var lastScreenSnapshot: ScreenBufferSnapshot? = null
-        private set
+    private val _screenSnapshot = MutableStateFlow<ScreenBufferSnapshot?>(null)
+    /**
+     * Last known screen snapshot — used for initial sync when new players open the GUI.
+     * Observe via [screenSnapshotFlow] or read the current value with [lastScreenSnapshot].
+     */
+    val screenSnapshotFlow: StateFlow<ScreenBufferSnapshot?> = _screenSnapshot.asStateFlow()
+    /** Current screen snapshot (synchronous read). */
+    val lastScreenSnapshot: ScreenBufferSnapshot? get() = _screenSnapshot.value
 
+    private val _rebootRequested = MutableStateFlow(false)
     /**
      * Set by [onVmRebootRequested] from the VM coroutine, consumed by [serverTick].
      */
-    @Volatile
-    private var rebootRequested = false
 
     private val computerManager get() = ServerContext.computerManager
 
@@ -141,7 +147,7 @@ class ServerComputer(
         }
 
         vmHandle = handle
-        rebootRequested = false
+        _rebootRequested.value = false
         val started = handle.start(program)
         if (started) {
             handle.enqueueEvent(VmEvent("boot"))
@@ -150,7 +156,7 @@ class ServerComputer(
 
     fun reboot() {
         LOGGER.info { "ComputerID: $instanceID reboot" }
-        rebootRequested = true
+        _rebootRequested.value = true
         vmHandle?.stop(VmStopReason.REBOOT) ?: turnOn()
     }
 
@@ -186,8 +192,8 @@ class ServerComputer(
             computerManager.removeVm(instanceID, VmStopReason.CLOSED)
             vmHandle = null
 
-            if (snapshot.stopReason == VmStopReason.REBOOT || rebootRequested) {
-                rebootRequested = false
+            if (snapshot.stopReason == VmStopReason.REBOOT || _rebootRequested.value) {
+                _rebootRequested.value = false
                 turnOn()
             }
         }
@@ -200,14 +206,14 @@ class ServerComputer(
     override fun onVmStop(reason: VmStopReason) = Unit
 
     override fun onVmRebootRequested() {
-        rebootRequested = true
+        _rebootRequested.value = true
     }
 
     // ── Internal ────────────────────────────────────────────────────
 
     private fun syncScreen(handle: ComputerVmHandle) {
         val screenSnapshot = handle.readScreenSnapshot() ?: return
-        lastScreenSnapshot = screenSnapshot
+        _screenSnapshot.value = screenSnapshot
         val players = watchingPlayers()
         if (players.isEmpty()) return
         for (player in players) {

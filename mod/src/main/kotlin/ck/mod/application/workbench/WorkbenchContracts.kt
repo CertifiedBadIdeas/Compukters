@@ -25,14 +25,20 @@ import ck.lang.runtime.ComputerWorkspaceEntry
 import ck.lang.runtime.DefinitionTarget
 import ck.lang.runtime.HighlightTokenKind
 import ck.lang.runtime.HoverInfo
+import kotlinx.coroutines.flow.StateFlow
 
 data class WorkbenchRemoteState(
     val entries: List<ComputerWorkspaceEntry> = emptyList(),
     val document: ComputerWorkspaceDocument? = null,
 )
 
-fun interface WorkbenchUpdateSource {
-    fun subscribe(listener: (WorkbenchRemoteState) -> Unit): AutoCloseable
+/**
+ * Provides a reactive [StateFlow] of workspace state updates.
+ * Replaces the previous callback-based subscription model.
+ */
+interface WorkbenchUpdateSource {
+    /** Observable stream of remote workspace state. */
+    val stateFlow: StateFlow<WorkbenchRemoteState>
 }
 
 interface WorkspaceGateway {

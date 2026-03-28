@@ -25,6 +25,9 @@ import ck.mod.application.workbench.WorkbenchRemoteState
 import ck.mod.block.ComputerFamily
 import ck.mod.computer.ServerComputer
 import ck.mod.data.ComputerContainerData
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.inventory.AbstractContainerMenu
 import net.minecraft.world.inventory.ContainerData
@@ -45,13 +48,21 @@ sealed interface MenuSide {
     ) : MenuSide
 
     /**
-     * Client-side state: owns the latest [ScreenBufferSnapshot].
+     * Client-side state: owns the latest [ScreenBufferSnapshot] as a [StateFlow].
      */
     class Client(
         initialSnapshot: ScreenBufferSnapshot,
     ) : MenuSide {
-        @Volatile
-        var screenSnapshot: ScreenBufferSnapshot = initialSnapshot
+        private val _screenSnapshot = MutableStateFlow(initialSnapshot)
+        /** Observable screen snapshot — emits whenever the server syncs a new frame. */
+        val screenSnapshotFlow: StateFlow<ScreenBufferSnapshot> = _screenSnapshot.asStateFlow()
+        /** Current screen snapshot (synchronous read). */
+        val screenSnapshot: ScreenBufferSnapshot get() = _screenSnapshot.value
+
+        /** Update from a network message. */
+        fun updateScreenSnapshot(snapshot: ScreenBufferSnapshot) {
+            _screenSnapshot.value = snapshot
+        }
     }
 }
 
@@ -86,9 +97,10 @@ abstract class AbstractComputerMenu(
         MenuSide.Client(snapshot)
     }
 
-    private var workspaceState: WorkbenchRemoteState = WorkbenchRemoteState()
-    private val workspaceListeners = mutableMapOf<Int, (WorkbenchRemoteState) -> Unit>()
-    private var nextWorkspaceListenerId: Int = 0
+    private val _workspaceStateFlow = MutableStateFlow(WorkbenchRemoteState())
+    /** Observable workspace state — replaces the old callback-based listener system. */
+    val workspaceStateFlow: StateFlow<WorkbenchRemoteState> = _workspaceStateFlow.asStateFlow()
+
     val displayStack: ItemStack = containerData?.displayStack ?: ItemStack.EMPTY
 
     init {
@@ -105,30 +117,21 @@ abstract class AbstractComputerMenu(
     override fun updateTerminal(snapshot: ScreenBufferSnapshot) {
         val client = side as? MenuSide.Client
             ?: throw UnsupportedOperationException("Cannot update terminal on the server")
-        client.screenSnapshot = snapshot
+        client.updateScreenSnapshot(snapshot)
     }
 
     override fun updateWorkspaceEntries(entries: List<ComputerWorkspaceEntry>) {
-        workspaceState = workspaceState.copy(entries = entries)
-        notifyWorkspaceListeners()
+        _workspaceStateFlow.value = _workspaceStateFlow.value.copy(entries = entries)
     }
 
     override fun updateWorkspaceDocument(document: ComputerWorkspaceDocument?) {
-        workspaceState = workspaceState.copy(document = document)
-        notifyWorkspaceListeners()
+        _workspaceStateFlow.value = _workspaceStateFlow.value.copy(document = document)
     }
 
 
-    fun getWorkspaceEntries(): List<ComputerWorkspaceEntry> = workspaceState.entries
+    fun getWorkspaceEntries(): List<ComputerWorkspaceEntry> = _workspaceStateFlow.value.entries
 
-    fun getWorkspaceDocument(): ComputerWorkspaceDocument? = workspaceState.document
-
-    fun addWorkspaceListener(listener: (WorkbenchRemoteState) -> Unit): AutoCloseable {
-        val listenerId = nextWorkspaceListenerId++
-        workspaceListeners[listenerId] = listener
-        listener(workspaceState)
-        return AutoCloseable { workspaceListeners.remove(listenerId) }
-    }
+    fun getWorkspaceDocument(): ComputerWorkspaceDocument? = _workspaceStateFlow.value.document
 
     override fun removed(player: Player) {
         super.removed(player)
@@ -137,9 +140,5 @@ abstract class AbstractComputerMenu(
 
     companion object {
         const val SIDEBAR_WIDTH: Int = 17
-    }
-
-    private fun notifyWorkspaceListeners() {
-        workspaceListeners.values.forEach { it(workspaceState) }
     }
 }

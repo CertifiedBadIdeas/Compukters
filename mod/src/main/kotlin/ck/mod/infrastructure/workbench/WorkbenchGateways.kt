@@ -33,11 +33,15 @@ import ck.mod.language.LanguageServices
 import ck.mod.menu.AbstractComputerMenu
 import ck.mod.network.ClientNetworking
 import ck.mod.network.server.ComputerWorkspaceServerMessage
+import kotlinx.coroutines.flow.StateFlow
 
+/**
+ * Adapts [AbstractComputerMenu.workspaceStateFlow] to the [WorkbenchUpdateSource] interface.
+ */
 class MenuWorkspaceUpdateSource(
     private val menu: AbstractComputerMenu,
 ) : WorkbenchUpdateSource {
-    override fun subscribe(listener: (WorkbenchRemoteState) -> Unit): AutoCloseable = menu.addWorkspaceListener(listener)
+    override val stateFlow: StateFlow<WorkbenchRemoteState> = menu.workspaceStateFlow
 }
 
 class NetworkWorkspaceGateway(

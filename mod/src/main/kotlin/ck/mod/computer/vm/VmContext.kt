@@ -40,7 +40,7 @@ interface VmContext {
     fun setState(state: VmState)
 
     /** Set or clear the sleep-until tick. */
-    suspend fun setSleepUntil(tick: Long?)
+    fun setSleepUntil(tick: Long?)
 
     /** Cooperative scheduling point — yields the time-slice when the budget is exhausted. */
     suspend fun schedulingPoint()

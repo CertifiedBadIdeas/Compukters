@@ -161,7 +161,7 @@ class BackgroundComputerVm(
 
     override fun setState(state: VmState) = stateManager.setState(state)
 
-    override suspend fun setSleepUntil(tick: Long?) = stateManager.setSleepUntil(tick)
+    override fun setSleepUntil(tick: Long?) = stateManager.setSleepUntil(tick)
 
     override suspend fun schedulingPoint() = applySchedulingPoint()
 

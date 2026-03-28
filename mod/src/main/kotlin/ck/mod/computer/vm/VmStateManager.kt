@@ -21,34 +21,46 @@ package ck.mod.computer.vm
 
 import ck.lang.runtime.VmState
 import ck.lang.runtime.VmStopReason
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 /**
  * Tracks the VM lifecycle progression: state, stop reason, error message.
- * Guarded by a [Mutex] for the stop transition.
+ *
+ * All fields are backed by [MutableStateFlow] so that consumers can either
+ * read the current value synchronously (`.value`) or observe changes reactively
+ * via [StateFlow.collect]. The stop transition is guarded by a [Mutex].
  */
 class VmLifecycleState {
     private val lock = Mutex()
 
-    @Volatile
-    var state: VmState = VmState.COLD
-        private set
+    private val _state = MutableStateFlow(VmState.COLD)
+    /** Observable lifecycle state. Use [state] for synchronous reads. */
+    val stateFlow: StateFlow<VmState> = _state.asStateFlow()
+    /** Current lifecycle state (synchronous read). */
+    val state: VmState get() = _state.value
 
-    @Volatile
-    var stopReason: VmStopReason? = null
-        private set
+    private val _stopReason = MutableStateFlow<VmStopReason?>(null)
+    /** Observable stop reason. */
+    val stopReasonFlow: StateFlow<VmStopReason?> = _stopReason.asStateFlow()
+    /** Current stop reason (synchronous read). */
+    val stopReason: VmStopReason? get() = _stopReason.value
 
-    @Volatile
-    var errorMessage: String? = null
-        private set
+    private val _errorMessage = MutableStateFlow<String?>(null)
+    /** Observable error message. */
+    val errorMessageFlow: StateFlow<String?> = _errorMessage.asStateFlow()
+    /** Current error message (synchronous read). */
+    val errorMessage: String? get() = _errorMessage.value
 
-    val isBooting: Boolean get() = state == VmState.BOOTING
+    val isBooting: Boolean get() = _state.value == VmState.BOOTING
 
-    val isStopped: Boolean get() = state == VmState.STOPPED || state == VmState.CRASHED
+    val isStopped: Boolean get() = _state.value == VmState.STOPPED || _state.value == VmState.CRASHED
 
     fun setState(newState: VmState) {
-        state = newState
+        _state.value = newState
     }
 
     suspend fun withLock(block: suspend () -> Unit) {
@@ -57,50 +69,58 @@ class VmLifecycleState {
 
     suspend fun stopVm(reason: VmStopReason, error: String? = null) {
         lock.withLock {
-            stopReason = reason
-            errorMessage = error
-            state = if (reason == VmStopReason.CRASHED) VmState.CRASHED else VmState.STOPPED
+            _stopReason.value = reason
+            _errorMessage.value = error
+            _state.value = if (reason == VmStopReason.CRASHED) VmState.CRASHED else VmState.STOPPED
         }
     }
 }
 
 /**
  * Tracks tick-based scheduling data: current tick, sleep deadline, slice budget.
- * All fields are [Volatile] — no mutex needed, they're updated from a single writer (server tick)
- * or the VM coroutine.
+ *
+ * All fields are backed by [MutableStateFlow] — atomic reads/writes, observable
+ * via [StateFlow.collect]. Updated from a single writer (server tick thread or VM coroutine).
  */
 class VmSchedulingState {
-    @Volatile
-    var currentTick: Long = 0
-        private set
+    private val _currentTick = MutableStateFlow(0L)
+    /** Observable current tick. */
+    val currentTickFlow: StateFlow<Long> = _currentTick.asStateFlow()
+    /** Current tick (synchronous read). */
+    val currentTick: Long get() = _currentTick.value
 
-    @Volatile
-    var sleepUntilTick: Long? = null
-        private set
+    private val _sleepUntilTick = MutableStateFlow<Long?>(null)
+    /** Observable sleep-until tick. */
+    val sleepUntilTickFlow: StateFlow<Long?> = _sleepUntilTick.asStateFlow()
+    /** Sleep-until tick (synchronous read). */
+    val sleepUntilTick: Long? get() = _sleepUntilTick.value
 
-    @Volatile
-    var sliceDeadlineNanos: Long = 0
-        private set
+    private val _sliceDeadlineNanos = MutableStateFlow(0L)
+    /** Observable slice deadline (nanos). */
+    val sliceDeadlineNanosFlow: StateFlow<Long> = _sliceDeadlineNanos.asStateFlow()
+    /** Slice deadline in nanos (synchronous read). */
+    val sliceDeadlineNanos: Long get() = _sliceDeadlineNanos.value
 
     fun updateCurrentTick(tick: Long) {
-        currentTick = tick
+        _currentTick.value = tick
     }
 
     fun updateSliceDeadlineNanos(budgetNanos: Long) {
-        sliceDeadlineNanos = System.nanoTime() + budgetNanos
+        _sliceDeadlineNanos.value = System.nanoTime() + budgetNanos
     }
 
-    suspend fun setSleepUntil(tick: Long?) {
-        sleepUntilTick = tick
+    fun setSleepUntil(tick: Long?) {
+        _sleepUntilTick.value = tick
     }
 
-    fun shouldWake(tick: Long): Boolean = sleepUntilTick?.let { tick >= it } ?: true
+    fun shouldWake(tick: Long): Boolean = _sleepUntilTick.value?.let { tick >= it } ?: true
 }
 
 /**
  * Combined manager that delegates to [VmLifecycleState] and [VmSchedulingState].
- * Exists for backward compatibility during the refactoring — callers can migrate
- * to the split classes gradually.
+ *
+ * Exposes both synchronous value getters (e.g. [state]) and reactive [StateFlow]
+ * properties (e.g. [stateFlow]) for each piece of state.
  */
 class VmStateManager {
     val lifecycle = VmLifecycleState()
@@ -109,8 +129,11 @@ class VmStateManager {
     // ── Lifecycle delegates ─────────────────────────────────────────
 
     val state: VmState get() = lifecycle.state
+    val stateFlow: StateFlow<VmState> get() = lifecycle.stateFlow
     val stopReason: VmStopReason? get() = lifecycle.stopReason
+    val stopReasonFlow: StateFlow<VmStopReason?> get() = lifecycle.stopReasonFlow
     val errorMessage: String? get() = lifecycle.errorMessage
+    val errorMessageFlow: StateFlow<String?> get() = lifecycle.errorMessageFlow
     val isBooting: Boolean get() = lifecycle.isBooting
     val isStopped: Boolean get() = lifecycle.isStopped
 
@@ -123,10 +146,13 @@ class VmStateManager {
     // ── Scheduling delegates ────────────────────────────────────────
 
     val currentTick: Long get() = scheduling.currentTick
+    val currentTickFlow: StateFlow<Long> get() = scheduling.currentTickFlow
     val sleepUntilTick: Long? get() = scheduling.sleepUntilTick
+    val sleepUntilTickFlow: StateFlow<Long?> get() = scheduling.sleepUntilTickFlow
     val sliceDeadlineNanos: Long get() = scheduling.sliceDeadlineNanos
+    val sliceDeadlineNanosFlow: StateFlow<Long> get() = scheduling.sliceDeadlineNanosFlow
 
     fun updateCurrentTick(tick: Long) = scheduling.updateCurrentTick(tick)
     fun updateSliceDeadlineNanos(budgetNanos: Long) = scheduling.updateSliceDeadlineNanos(budgetNanos)
-    suspend fun setSleepUntil(tick: Long?) = scheduling.setSleepUntil(tick)
+    fun setSleepUntil(tick: Long?) = scheduling.setSleepUntil(tick)
 }

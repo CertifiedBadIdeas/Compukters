@@ -25,13 +25,13 @@ import ck.mod.application.workbench.highlightColor
 import ck.mod.gui.WorkbenchTerminalInputController
 import ck.mod.gui.WorkbenchTerminalLayout
 import ck.mod.gui.WorkbenchTerminalMetrics
-import ck.mod.ui.render.WorkbenchTerminalRenderer
 import ck.mod.gui.input.ClientInputHandler
 import ck.mod.infrastructure.workbench.InputHandlerControlGateway
 import ck.mod.infrastructure.workbench.LanguageWorkbenchIdeFacade
 import ck.mod.infrastructure.workbench.MenuWorkspaceUpdateSource
 import ck.mod.infrastructure.workbench.NetworkWorkspaceGateway
 import ck.mod.menu.AbstractComputerMenu
+import ck.mod.ui.render.WorkbenchTerminalRenderer
 import ck.mod.ui.workbench.WorkbenchLayoutModel
 import ck.mod.ui.workbench.WorkspaceRowLayout
 import net.minecraft.client.gui.GuiGraphics
@@ -72,6 +72,7 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
 
     override fun containerTick() {
         super.containerTick()
+        store.tick()
         terminalInput.update()
     }
 
@@ -291,7 +292,9 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
     private fun renderEditor(graphics: GuiGraphics) {
         val font = minecraft!!.font
         val lines = editorLines()
-        val startLine = store.state.editor.scrollLine.coerceAtLeast(0)
+        val startLine =
+            store.state.editor.scrollLine
+                .coerceAtLeast(0)
         val visibleLines = layout().visibleEditorLines()
         val endLine = min(lines.size, startLine + visibleLines)
         var drawY = topPos + 40
@@ -306,7 +309,9 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
         }
 
         renderCursor(graphics, lines)
-        if (store.state.editor.completionItems.isNotEmpty()) {
+        if (store.state.editor.completionItems
+                .isNotEmpty()
+        ) {
             renderCompletionPopup(graphics)
         }
     }
@@ -317,7 +322,8 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
         val status = if (store.state.editor.dirty) "* $path" else path
         graphics.drawString(font, status, leftPos + 140, topPos + imageHeight - 24, 0xE6ECF5, false)
         val hover =
-            store.state.editor.hoverInfo?.contents ?: store.state.editor.ideSnapshot
+            store.state.editor.hoverInfo
+                ?.contents ?: store.state.editor.ideSnapshot
                 ?.diagnostics
                 ?.firstOrNull()
                 ?.message
@@ -348,8 +354,12 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
         var drawX = x
         var column = 0
         tokens.sortedBy { it.range.start.column }.forEach { token ->
-            val start = token.range.start.column.coerceIn(0, lineText.length)
-            val end = token.range.end.column.coerceIn(start, lineText.length)
+            val start =
+                token.range.start.column
+                    .coerceIn(0, lineText.length)
+            val end =
+                token.range.end.column
+                    .coerceIn(start, lineText.length)
             if (start > column) {
                 val plain = lineText.substring(column, start)
                 graphics.drawString(font, plain, drawX, y, 0xE6ECF5, false)
@@ -384,7 +394,9 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
     private fun renderCompletionPopup(graphics: GuiGraphics) {
         val font = minecraft!!.font
         val popup = layout().completionPopup(store.state) ?: return
-        val items = store.state.editor.completionItems.take(popup.visibleItems)
+        val items =
+            store.state.editor.completionItems
+                .take(popup.visibleItems)
         graphics.fill(popup.bounds.x, popup.bounds.y, popup.bounds.right, popup.bounds.bottom, 0xEE11151E.toInt())
         items.forEachIndexed { index, item ->
             val rowY = popup.bounds.y + 2 + index * popup.rowHeight
@@ -409,10 +421,21 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
                     }
                 }
 
-                1 -> store.saveDocument()
-                2 -> store.refreshWorkspace()
-                3 -> store.navigateUp()
-                4 -> store.rebootComputer()
+                1 -> {
+                    store.saveDocument()
+                }
+
+                2 -> {
+                    store.refreshWorkspace()
+                }
+
+                3 -> {
+                    store.navigateUp()
+                }
+
+                4 -> {
+                    store.rebootComputer()
+                }
             }
             return true
         }
@@ -442,9 +465,12 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
     }
 
     private fun editorLines(): List<String> =
-        if (store.state.editor.text.isEmpty()) {
+        if (store.state.editor.text
+                .isEmpty()
+        ) {
             listOf("")
         } else {
-            store.state.editor.text.split('\n')
+            store.state.editor.text
+                .split('\n')
         }
 }

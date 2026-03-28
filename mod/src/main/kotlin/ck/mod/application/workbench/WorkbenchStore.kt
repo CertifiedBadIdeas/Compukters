@@ -18,35 +18,66 @@
  */
 package ck.mod.application.workbench
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import org.lwjgl.glfw.GLFW
 
+/**
+ * Client-side state container for the computer workbench GUI.
+ *
+ * All state is exposed via [stateFlow] ([StateFlow]) so consumers can
+ * observe changes reactively. Synchronous reads use [state] (delegates to `.value`).
+ *
+ * Remote workspace updates arrive through a [WorkbenchUpdateSource]'s [StateFlow].
+ * Call [tick] each game tick to merge any pending remote changes.
+ */
 class WorkbenchStore(
     private val workspaceGateway: WorkspaceGateway,
     private val controlGateway: ComputerControlGateway,
     private val ideFacade: WorkbenchIdeFacade,
 ) {
-    var state: WorkbenchState = WorkbenchState()
-        private set
+    private val _state = MutableStateFlow(WorkbenchState())
+    /** Observable workbench state. */
+    val stateFlow: StateFlow<WorkbenchState> = _state.asStateFlow()
+    /** Current workbench state (synchronous read). */
+    val state: WorkbenchState get() = _state.value
 
-    private var updateSubscription: AutoCloseable? = null
+    private var updateSource: WorkbenchUpdateSource? = null
+    /** Tracks the last remote state we merged, to detect changes. */
+    private var lastMergedRemote: WorkbenchRemoteState = WorkbenchRemoteState()
 
+    /**
+     * Bind a [WorkbenchUpdateSource] whose [StateFlow] will be polled every [tick].
+     */
     fun bind(updateSource: WorkbenchUpdateSource) {
-        updateSubscription?.close()
-        updateSubscription = updateSource.subscribe(::mergeRemoteState)
+        this.updateSource = updateSource
+        // Immediately merge the current value
+        mergeRemoteState(updateSource.stateFlow.value)
     }
 
     fun dispose() {
-        updateSubscription?.close()
-        updateSubscription = null
+        updateSource = null
     }
 
     fun initialize() {
         requestListing("")
     }
 
+    /**
+     * Call once per game tick (from `containerTick`) to merge any pending remote state changes.
+     */
+    fun tick() {
+        val source = updateSource ?: return
+        val remote = source.stateFlow.value
+        if (remote != lastMergedRemote) {
+            mergeRemoteState(remote)
+        }
+    }
+
     fun toggleMode() {
         val nextMode = if (state.mode == WorkbenchMode.TERMINAL) WorkbenchMode.EDITOR else WorkbenchMode.TERMINAL
-        state = state.copy(mode = nextMode)
+        _state.value = state.copy(mode = nextMode)
         if (nextMode == WorkbenchMode.EDITOR) {
             requestListing(state.browserPath)
         }
@@ -54,7 +85,7 @@ class WorkbenchStore(
 
     fun requestListing(path: String) {
         val normalizedPath = path.trim('/').trim()
-        state = state.copy(browserPath = normalizedPath)
+        _state.value = state.copy(browserPath = normalizedPath)
         workspaceGateway.list(normalizedPath)
     }
 
@@ -65,7 +96,7 @@ class WorkbenchStore(
     fun saveDocument() {
         val path = state.openDocument?.path ?: return
         workspaceGateway.write(path, state.editor.text)
-        state = state.copy(editor = state.editor.copy(dirty = false))
+        _state.value = state.copy(editor = state.editor.copy(dirty = false))
         refreshIde()
     }
 
@@ -88,11 +119,11 @@ class WorkbenchStore(
     ) {
         val document = state.openDocument ?: return
         val hoverInfo = ideFacade.hover(document.path, state.editor.text, line, column)
-        state = state.copy(editor = state.editor.copy(hoverInfo = hoverInfo))
+        _state.value = state.copy(editor = state.editor.copy(hoverInfo = hoverInfo))
     }
 
     fun clearHover() {
-        state = state.copy(editor = state.editor.copy(hoverInfo = null))
+        _state.value = state.copy(editor = state.editor.copy(hoverInfo = null))
     }
 
     fun openCompletion() {
@@ -104,16 +135,16 @@ class WorkbenchStore(
                 state.editor.cursorLine,
                 state.editor.cursorColumn,
             )
-        state = state.copy(editor = state.editor.copy(completionItems = items, selectedCompletion = 0))
+        _state.value = state.copy(editor = state.editor.copy(completionItems = items, selectedCompletion = 0))
     }
 
     fun closeCompletion() {
-        state = state.copy(editor = state.editor.copy(completionItems = emptyList(), selectedCompletion = 0))
+        _state.value = state.copy(editor = state.editor.copy(completionItems = emptyList(), selectedCompletion = 0))
     }
 
     fun applyCompletion(index: Int = state.editor.selectedCompletion) {
         val item = state.editor.completionItems.getOrNull(index) ?: return
-        state = state.copy(editor = state.editor.applyCompletion(item))
+        _state.value = state.copy(editor = state.editor.applyCompletion(item))
         refreshIde()
     }
 
@@ -122,11 +153,11 @@ class WorkbenchStore(
         column: Int,
         visibleEditorLines: Int,
     ) {
-        state = state.copy(editor = state.editor.withCursor(line, column, visibleEditorLines))
+        _state.value = state.copy(editor = state.editor.withCursor(line, column, visibleEditorLines))
     }
 
     fun scrollEditor(deltaLines: Int) {
-        state = state.copy(editor = state.editor.scrollBy(deltaLines))
+        _state.value = state.copy(editor = state.editor.scrollBy(deltaLines))
     }
 
     fun keyPressed(
@@ -201,7 +232,7 @@ class WorkbenchStore(
                 else -> return true
             }
 
-        state = state.copy(editor = nextEditor)
+        _state.value = state.copy(editor = nextEditor)
         refreshIde()
         return true
     }
@@ -214,13 +245,14 @@ class WorkbenchStore(
             return false
         }
         if (!Character.isISOControl(ch)) {
-            state = state.copy(editor = state.editor.insertText(ch.toString(), visibleEditorLines))
+            _state.value = state.copy(editor = state.editor.insertText(ch.toString(), visibleEditorLines))
             refreshIde()
         }
         return true
     }
 
     private fun mergeRemoteState(remoteState: WorkbenchRemoteState) {
+        lastMergedRemote = remoteState
         val documentChanged = remoteState.document != state.openDocument
         var nextState = state
 
@@ -240,7 +272,7 @@ class WorkbenchStore(
                 )
         }
 
-        state = nextState
+        _state.value = nextState
         if (documentChanged && remoteState.document != null) {
             refreshIde()
         }
@@ -249,7 +281,7 @@ class WorkbenchStore(
     private fun refreshIde() {
         val document = state.openDocument ?: return
         val snapshot = ideFacade.analyze(document.path, state.editor.text)
-        state =
+        _state.value =
             state.copy(
                 editor =
                     state.editor.copy(
@@ -277,6 +309,6 @@ class WorkbenchStore(
         val items = state.editor.completionItems
         if (items.isEmpty()) return
         val normalizedIndex = ((index % items.size) + items.size) % items.size
-        state = state.copy(editor = state.editor.copy(selectedCompletion = normalizedIndex))
+        _state.value = state.copy(editor = state.editor.copy(selectedCompletion = normalizedIndex))
     }
 }

@@ -27,6 +27,8 @@ import ck.lang.runtime.ComputerWorkspaceDocument
 import ck.lang.runtime.ComputerWorkspaceEntry
 import ck.lang.runtime.DefinitionTarget
 import ck.lang.runtime.HoverInfo
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import org.lwjgl.glfw.GLFW
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -35,7 +37,7 @@ import kotlin.test.assertTrue
 
 class WorkbenchStoreTest {
     @Test
-    fun mergesRemoteStateWithoutPolling() {
+    fun mergesRemoteStateOnTick() {
         val workspaceGateway = FakeWorkspaceGateway()
         val store = WorkbenchStore(workspaceGateway, FakeComputerControlGateway(), FakeWorkbenchIdeFacade())
         val updates = FakeWorkbenchUpdateSource()
@@ -51,6 +53,7 @@ class WorkbenchStoreTest {
                 document = ComputerWorkspaceDocument("startup.ck", "fun main() {}", 7),
             ),
         )
+        store.tick()
 
         assertEquals("startup.ck", store.state.openDocument?.path)
         assertEquals("fun main() {}", store.state.editor.text)
@@ -70,6 +73,7 @@ class WorkbenchStoreTest {
                 document = ComputerWorkspaceDocument("startup.ck", "fun main() {}", 1),
             ),
         )
+        store.tick()
         store.toggleMode()
 
         store.moveCursorTo(0, 13, visibleEditorLines = 20)
@@ -100,6 +104,7 @@ class WorkbenchStoreTest {
                 document = ComputerWorkspaceDocument("main.ck", "pri", 1),
             ),
         )
+        store.tick()
 
         store.moveCursorTo(0, 3, visibleEditorLines = 20)
         store.openCompletion()
@@ -109,16 +114,11 @@ class WorkbenchStoreTest {
     }
 
     private class FakeWorkbenchUpdateSource : WorkbenchUpdateSource {
-        private var listener: ((WorkbenchRemoteState) -> Unit)? = null
-
-        override fun subscribe(listener: (WorkbenchRemoteState) -> Unit): AutoCloseable {
-            this.listener = listener
-            listener(WorkbenchRemoteState())
-            return AutoCloseable { this.listener = null }
-        }
+        private val _stateFlow = MutableStateFlow(WorkbenchRemoteState())
+        override val stateFlow: StateFlow<WorkbenchRemoteState> = _stateFlow
 
         fun push(state: WorkbenchRemoteState) {
-            listener?.invoke(state)
+            _stateFlow.value = state
         }
     }
 
