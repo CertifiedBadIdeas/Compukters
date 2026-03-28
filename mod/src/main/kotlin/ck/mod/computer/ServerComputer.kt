@@ -25,7 +25,6 @@ import ck.lang.runtime.VmState
 import ck.lang.runtime.VmStopReason
 import ck.mod.LOGGER
 import ck.mod.application.runtime.ComputerProgramCompiler
-import ck.mod.application.runtime.HostCallDispatcher
 import ck.mod.application.runtime.WorkspaceProgramLoader
 import ck.mod.computer.vm.ComputerProfileRegistry
 import ck.mod.computer.vm.ComputerVmCallbacks
@@ -61,20 +60,36 @@ class ServerComputer(
     private val logger = ComputerVmLogger { message -> LOGGER.info { message } }
     private var label: String? = properties.label
     private var vmHandle: ComputerVmHandle? = null
+
+    /**
+     * Set by [onVmRebootRequested] from the VM coroutine, consumed by [serverTick].
+     */
+    @Volatile
     private var rebootRequested = false
+
+    private val computerManager get() = ServerContext.computerManager
+
     private val programLoader by lazy {
-        WorkspaceProgramLoader(ServerContext.vmSupervisor.workspace, LanguageServices::bundledScript)
+        WorkspaceProgramLoader(computerManager.workspace, LanguageServices::bundledScript)
     }
     private val hostCallDispatcher by lazy {
-        HostCallDispatcher(instanceID, terminal, ServerContext.vmSupervisor.workspace)
+        ck.mod.application.runtime.HostCallDispatcher(instanceID, terminal, computerManager.workspace)
     }
 
     init {
         LOGGER.info { "ComputerID: $instanceID init" }
     }
 
-    var isOn = false
-        private set
+    /**
+     * Whether the VM is currently running.
+     * Derived from the VM handle snapshot — no separate boolean to keep in sync.
+     */
+    val isOn: Boolean
+        get() {
+            val handle = vmHandle ?: return false
+            val state = handle.snapshot().state
+            return state != VmState.COLD && state != VmState.STOPPED && state != VmState.CRASHED
+        }
 
     fun checkUsable(player: Player) = family.checkUsable(player)
 
@@ -101,30 +116,30 @@ class ServerComputer(
     fun turnOn() {
         if (isOn) return
         LOGGER.info { "ComputerID: $instanceID turnOn" }
-        ServerContext.vmSupervisor.ensureWorkspaceInitialized(instanceID)
+        computerManager.ensureWorkspaceInitialized(instanceID)
         val bootScript = programLoader.load(instanceID, profile.bootScriptName)
         if (bootScript == null) {
             writeLineToTerminal("Missing boot script in workspace: ${profile.bootScriptName}")
             return
         }
 
-        ServerContext.vmSupervisor.remove(instanceID, VmStopReason.CLOSED)
-        val handle = ServerContext.vmSupervisor.getOrCreate(instanceID, profile, this, logger)
+        computerManager.removeVm(instanceID, VmStopReason.CLOSED)
+        val handle = computerManager.getOrCreateVm(instanceID, profile, this, logger)
         val compiledProgram = ComputerProgramCompiler.compile(bootScript.path, bootScript.source)
         val program = compiledProgram.program
         if (program == null) {
             val message = compiledProgram.errorMessage.orEmpty()
             writeLineToTerminal("Compilation Error: $message")
             LOGGER.error { message }
-            ServerContext.vmSupervisor.remove(instanceID, VmStopReason.CLOSED)
+            computerManager.removeVm(instanceID, VmStopReason.CLOSED)
             return
         }
 
         terminal.reset()
         vmHandle = handle
         rebootRequested = false
-        isOn = handle.start(program)
-        if (isOn) {
+        val started = handle.start(program)
+        if (started) {
             handle.enqueueEvent(VmEvent("boot"))
         }
     }
@@ -137,9 +152,8 @@ class ServerComputer(
 
     fun close() {
         LOGGER.info { "ComputerID: $instanceID close" }
-        ServerContext.vmSupervisor.remove(instanceID, VmStopReason.CLOSED)
+        computerManager.removeVm(instanceID, VmStopReason.CLOSED)
         vmHandle = null
-        isOn = false
         terminalDirty = true
     }
 
@@ -164,9 +178,8 @@ class ServerComputer(
                 writeLineToTerminal("VM crash: ${snapshot.errorMessage}")
             }
 
-            ServerContext.vmSupervisor.remove(instanceID, VmStopReason.CLOSED)
+            computerManager.removeVm(instanceID, VmStopReason.CLOSED)
             vmHandle = null
-            isOn = false
 
             if (snapshot.stopReason == VmStopReason.REBOOT || rebootRequested) {
                 rebootRequested = false
@@ -175,6 +188,8 @@ class ServerComputer(
         }
     }
 
+    // ── ComputerVmCallbacks ─────────────────────────────────────────
+
     override fun currentLabel(): String? = label
 
     override fun onVmStop(reason: VmStopReason) = Unit
@@ -182,6 +197,8 @@ class ServerComputer(
     override fun onVmRebootRequested() {
         rebootRequested = true
     }
+
+    // ── Internal ────────────────────────────────────────────────────
 
     private fun writeLineToTerminal(text: String) = TerminalHostWriter.printLine(terminal, text)
 

@@ -59,11 +59,11 @@ class ComputerWorkspaceServerMessage : ComputerServerMessage {
         container: ComputerMenu,
     ) {
         val computer = container.getComputerPublic()
-        val supervisor = ck.mod.context.ServerContext.vmSupervisor
+        val workspace = ck.mod.context.ServerContext.computerManager.workspace
         val player = context.sender()
         when (action) {
             Action.LIST -> {
-                val entries = supervisor.workspace.list(computer.instanceID, path)
+                val entries = workspace.list(computer.instanceID, path)
                 ServerNetworking.sendToPlayer(
                     ck.mod.network.client
                         .ComputerWorkspaceClientMessage(targetContainerId, entries),
@@ -72,7 +72,7 @@ class ComputerWorkspaceServerMessage : ComputerServerMessage {
             }
 
             Action.READ -> {
-                val document = supervisor.workspace.readDocument(computer.instanceID, path)
+                val document = workspace.readDocument(computer.instanceID, path)
                 ServerNetworking.sendToPlayer(
                     ck.mod.network.client
                         .ComputerWorkspaceClientMessage(targetContainerId, document),
@@ -81,7 +81,7 @@ class ComputerWorkspaceServerMessage : ComputerServerMessage {
             }
 
             Action.WRITE -> {
-                val document = supervisor.workspace.writeDocument(computer.instanceID, path, text)
+                val document = workspace.writeDocument(computer.instanceID, path, text)
                 ServerNetworking.sendToPlayer(
                     ck.mod.network.client
                         .ComputerWorkspaceClientMessage(targetContainerId, document),

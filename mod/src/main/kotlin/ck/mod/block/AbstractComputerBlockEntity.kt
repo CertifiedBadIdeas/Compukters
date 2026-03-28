@@ -67,7 +67,7 @@ abstract class AbstractComputerBlockEntity(
                 ?.let {
                     _label = value
                     _computerID
-                        ?.let(ServerContext.registry::getServerComputer)
+                        ?.let(ServerContext.computerManager::get)
                         ?.updateLabel(value)
                     updateBlock()
                 }
@@ -107,16 +107,16 @@ abstract class AbstractComputerBlockEntity(
         val resolvedComputerId =
             _computerID ?: ServerContext.allocateComputerId().also { allocatedComputerId ->
                 computerID = allocatedComputerId
-                ServerContext.vmSupervisor.ensureWorkspaceInitialized(allocatedComputerId)
+                ServerContext.computerManager.ensureWorkspaceInitialized(allocatedComputerId)
             }
 
         return _computerID
             ?.let {
-                ServerContext.registry.getServerComputer(it)
+                ServerContext.computerManager.get(it)
             }
             ?: run {
                 createComputer(resolvedComputerId).also {
-                    ServerContext.registry.addServerComputer(it)
+                    ServerContext.computerManager.add(it)
                 }
             }
     }
@@ -155,7 +155,7 @@ abstract class AbstractComputerBlockEntity(
         if (level?.isClientSide ?: true) return
         _computerID
             .takeIf { ServerContext.isInitialized }
-            ?.let(ServerContext.registry::removeServerComputer)
+            ?.let(ServerContext.computerManager::remove)
             ?.close()
     }
 }

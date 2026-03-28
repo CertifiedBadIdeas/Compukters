@@ -18,9 +18,9 @@
  */
 package ck.mod.infrastructure.workbench
 
+import ck.lang.runtime.CompletionItem
 import ck.lang.runtime.ComputerIdeSnapshot
 import ck.lang.runtime.ComputerWorkspaceDocument
-import ck.lang.runtime.CompletionItem
 import ck.lang.runtime.DefinitionTarget
 import ck.lang.runtime.HoverInfo
 import ck.mod.application.workbench.ComputerControlGateway
@@ -44,18 +44,37 @@ class NetworkWorkspaceGateway(
     private val menu: AbstractComputerMenu,
 ) : WorkspaceGateway {
     override fun list(path: String) {
-        ClientNetworking.sendToServer(ComputerWorkspaceServerMessage(menu, ComputerWorkspaceServerMessage.Action.LIST, path))
+        ClientNetworking.sendToServer(
+            ComputerWorkspaceServerMessage(
+                menu,
+                ComputerWorkspaceServerMessage.Action.LIST,
+                path,
+            ),
+        )
     }
 
     override fun read(path: String) {
-        ClientNetworking.sendToServer(ComputerWorkspaceServerMessage(menu, ComputerWorkspaceServerMessage.Action.READ, path))
+        ClientNetworking.sendToServer(
+            ComputerWorkspaceServerMessage(
+                menu,
+                ComputerWorkspaceServerMessage.Action.READ,
+                path,
+            ),
+        )
     }
 
     override fun write(
         path: String,
         text: String,
     ) {
-        ClientNetworking.sendToServer(ComputerWorkspaceServerMessage(menu, ComputerWorkspaceServerMessage.Action.WRITE, path, text))
+        ClientNetworking.sendToServer(
+            ComputerWorkspaceServerMessage(
+                menu,
+                ComputerWorkspaceServerMessage.Action.WRITE,
+                path,
+                text,
+            ),
+        )
     }
 }
 

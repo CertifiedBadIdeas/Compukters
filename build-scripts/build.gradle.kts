@@ -27,6 +27,7 @@ repositories {
 
 dependencies {
     implementation(plugin(libs.plugins.kotlin))
+    implementation(plugin(libs.plugins.kotlinter))
 }
 
 fun DependencyHandlerScope.plugin(plugin: Provider<PluginDependency>): Provider<String> =

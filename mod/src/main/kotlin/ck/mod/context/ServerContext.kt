@@ -25,8 +25,9 @@ import net.minecraft.server.MinecraftServer
 class ServerContext(
     val server: MinecraftServer,
 ) {
-    val registry = ComputerRegistry()
     val vmSupervisor = ComputerVmSupervisor(server)
+    val registry = ComputerRegistry()
+    val computerManager = ComputerManager(vmSupervisor)
 
     companion object {
         private var current: ServerContext? = null
@@ -40,6 +41,9 @@ class ServerContext(
         val vmSupervisor
             get() = context().vmSupervisor
 
+        val computerManager
+            get() = context().computerManager
+
         val server
             get() = context().server
 
@@ -51,7 +55,7 @@ class ServerContext(
         }
 
         fun close() {
-            current?.vmSupervisor?.close()
+            current?.computerManager?.close()
             current = null
         }
 

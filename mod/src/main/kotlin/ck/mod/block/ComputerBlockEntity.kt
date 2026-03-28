@@ -43,7 +43,6 @@ class ComputerBlockEntity(
         ServerComputer(
             id,
             level as ServerLevel,
-            blockPos,
             ComputerProperties(
                 family,
                 label,

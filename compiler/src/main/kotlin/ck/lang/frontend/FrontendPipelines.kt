@@ -150,7 +150,10 @@ internal class DefaultCompilerFacade(
     ): CompilationArtifact {
         val analysis = analyzer.analyze(name, source)
         val semantic = analysis.semantic
-        if (analysis.program == null || semantic == null || analysis.diagnostics.any { it.severity == FrontendSeverity.ERROR }) {
+        if (analysis.program == null ||
+            semantic == null ||
+            analysis.diagnostics.any { it.severity == FrontendSeverity.ERROR }
+        ) {
             return CompilationArtifact(module = null, analysis = analysis)
         }
 

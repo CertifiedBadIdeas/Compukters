@@ -69,7 +69,11 @@ class FileComputerWorkspaceTest {
             val worldOne = createWorkspace(worldOneRoot)
             val worldTwo = createWorkspace(worldTwoRoot)
 
-            worldOne.writeDocument(1, "startup.ck", "import terminal;\nfun main() { terminal.printLine(\"world one\"); }")
+            worldOne.writeDocument(
+                1,
+                "startup.ck",
+                "import terminal;\nfun main() { terminal.printLine(\"world one\"); }",
+            )
 
             assertNotNull(worldOne.readDocument(1, "startup.ck"))
             assertNull(worldTwo.readDocument(1, "startup.ck"))
@@ -84,7 +88,11 @@ class FileComputerWorkspaceTest {
     fun rejectsPathTraversalOutsideWorkspace() {
         withWorkspace { workspace, _ ->
             assertFailsWith<IllegalArgumentException> {
-                workspace.writeDocument(3, "../escape.ck", "import terminal;\nfun main() { terminal.printLine(\"nope\"); }")
+                workspace.writeDocument(
+                    3,
+                    "../escape.ck",
+                    "import terminal;\nfun main() { terminal.printLine(\"nope\"); }",
+                )
             }
         }
     }

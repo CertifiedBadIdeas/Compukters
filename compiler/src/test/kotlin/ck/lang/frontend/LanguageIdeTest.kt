@@ -39,7 +39,13 @@ class LanguageIdeTest {
             }
             """.trimIndent()
         val completionCursor = lineAndColumnOf(completionSource, "terminal.") + 9
-        val completion = ide.complete("completion.ck", completionSource, completionCursor.first, completionCursor.second)
+        val completion =
+            ide.complete(
+                "completion.ck",
+                completionSource,
+                completionCursor.first,
+                completionCursor.second,
+            )
         assertTrue(completion.any { it.label == "printLine" })
 
         val source =
@@ -61,7 +67,13 @@ class LanguageIdeTest {
         assertTrue(hover.contents.contains("terminal.printLine"))
 
         val definitionPosition = lineAndColumnOfLast(source, "helper")
-        val definition = ide.definition("test.ck", source, definitionPosition.first, definitionPosition.second)
+        val definition =
+            ide.definition(
+                "test.ck",
+                source,
+                definitionPosition.first,
+                definitionPosition.second,
+            )
         assertNotNull(definition)
         assertEquals("test.ck", definition.path)
     }
@@ -87,12 +99,20 @@ class LanguageIdeTest {
     private fun lineAndColumnOf(
         source: String,
         needle: String,
-    ): Pair<Int, Int> = lineAndColumnForOffset(source, source.indexOf(needle).also { require(it >= 0) })
+    ): Pair<Int, Int> =
+        lineAndColumnForOffset(
+            source,
+            source.indexOf(needle).also { require(it >= 0) },
+        )
 
     private fun lineAndColumnOfLast(
         source: String,
         needle: String,
-    ): Pair<Int, Int> = lineAndColumnForOffset(source, source.lastIndexOf(needle).also { require(it >= 0) })
+    ): Pair<Int, Int> =
+        lineAndColumnForOffset(
+            source,
+            source.lastIndexOf(needle).also { require(it >= 0) },
+        )
 
     private fun lineAndColumnForOffset(
         source: String,

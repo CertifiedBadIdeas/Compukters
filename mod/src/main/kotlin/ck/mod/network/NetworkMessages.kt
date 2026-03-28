@@ -23,9 +23,9 @@ import ck.mod.network.client.ClientNetworkContext
 import ck.mod.network.client.ComputerTerminalClientMessage
 import ck.mod.network.client.ComputerWorkspaceClientMessage
 import ck.mod.network.server.ComputerActionServerMessage
+import ck.mod.network.server.ComputerWorkspaceServerMessage
 import ck.mod.network.server.KeyEventServerMessage
 import ck.mod.network.server.MouseEventServerMessage
-import ck.mod.network.server.ComputerWorkspaceServerMessage
 import ck.mod.network.server.PasteEventComputerMessage
 import ck.mod.network.server.ServerNetworkContext
 import ck.mod.platform.NetworkHandler
@@ -35,6 +35,26 @@ import net.minecraft.network.FriendlyByteBuf
 
 /**
  * Registry of all network message types used by the mod.
+ *
+ * ## Packet Protocol
+ *
+ * ### Client → Server (serverbound)
+ *
+ * | ID | Channel                      | Class                              | Trigger                                           | State modified on server                     |
+ * |----|------------------------------|------------------------------------|----------------------------------------------------|----------------------------------------------|
+ * | 0  | `computer_action`            | [ComputerActionServerMessage]      | Player clicks Turn On / Shutdown / Reboot / Terminate button | [ServerComputer] lifecycle (turnOn/shutdown/reboot) |
+ * | 1  | `key_event`                  | [KeyEventServerMessage]            | Player presses/releases a key while computer GUI is open | VM event queue (`key` / `key_up`)            |
+ * | 2  | `mouse_event`                | [MouseEventServerMessage]          | Player clicks/drags/scrolls inside the terminal area | VM event queue (`mouse_click` / `mouse_up` / `mouse_drag` / `mouse_scroll`) |
+ * | 3  | `paste_event`                | [PasteEventComputerMessage]        | Player pastes text (Ctrl+V)                        | VM event queue (`paste`)                     |
+ * | 4  | `computer_workspace_request` | [ComputerWorkspaceServerMessage]   | IDE panel requests file list, reads or writes a document | Workspace filesystem; triggers clientbound response |
+ *
+ * ### Server → Client (clientbound)
+ *
+ * | ID | Channel              | Class                              | Trigger                                        | State modified on client                      |
+ * |----|----------------------|------------------------------------|-------------------------------------------------|-----------------------------------------------|
+ * | 10 | `chat_table`         | [ChatTableClientMessage]           | Server sends a formatted table to display in chat | Minecraft chat HUD                            |
+ * | 13 | `computer_terminal`  | [ComputerTerminalClientMessage]    | Terminal dirty flag set during [ServerComputer.serverTick] | [ComputerMenu.updateTerminal] → client-side [NetworkedTerminal] |
+ * | 14 | `computer_workspace` | [ComputerWorkspaceClientMessage]   | Response to a workspace request (LIST/READ/WRITE) | [ComputerMenu.updateWorkspaceEntries] / [ComputerMenu.updateWorkspaceDocument] |
  */
 object NetworkMessages {
     private val seenIds: IntSet = IntOpenHashSet()

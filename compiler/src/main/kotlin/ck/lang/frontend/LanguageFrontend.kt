@@ -1429,12 +1429,22 @@ internal class Parser(
                 when {
                     match(TokenKind.PLUS) -> {
                         val right = parseFactor() ?: return null
-                        BinaryExpression(expression, BinaryOperator.ADD, right, SourceRange(expression.range.start, right.range.end))
+                        BinaryExpression(
+                            expression,
+                            BinaryOperator.ADD,
+                            right,
+                            SourceRange(expression.range.start, right.range.end),
+                        )
                     }
 
                     match(TokenKind.MINUS) -> {
                         val right = parseFactor() ?: return null
-                        BinaryExpression(expression, BinaryOperator.SUBTRACT, right, SourceRange(expression.range.start, right.range.end))
+                        BinaryExpression(
+                            expression,
+                            BinaryOperator.SUBTRACT,
+                            right,
+                            SourceRange(expression.range.start, right.range.end),
+                        )
                     }
 
                     else -> {
@@ -1451,12 +1461,22 @@ internal class Parser(
                 when {
                     match(TokenKind.STAR) -> {
                         val right = parseUnary() ?: return null
-                        BinaryExpression(expression, BinaryOperator.MULTIPLY, right, SourceRange(expression.range.start, right.range.end))
+                        BinaryExpression(
+                            expression,
+                            BinaryOperator.MULTIPLY,
+                            right,
+                            SourceRange(expression.range.start, right.range.end),
+                        )
                     }
 
                     match(TokenKind.SLASH) -> {
                         val right = parseUnary() ?: return null
-                        BinaryExpression(expression, BinaryOperator.DIVIDE, right, SourceRange(expression.range.start, right.range.end))
+                        BinaryExpression(
+                            expression,
+                            BinaryOperator.DIVIDE,
+                            right,
+                            SourceRange(expression.range.start, right.range.end),
+                        )
                     }
 
                     else -> {
@@ -1470,12 +1490,20 @@ internal class Parser(
         when {
             match(TokenKind.BANG) -> {
                 val operand = parseUnary() ?: return null
-                UnaryExpression(UnaryOperator.NOT, operand, SourceRange(previous().range.start, operand.range.end))
+                UnaryExpression(
+                    UnaryOperator.NOT,
+                    operand,
+                    SourceRange(previous().range.start, operand.range.end),
+                )
             }
 
             match(TokenKind.MINUS) -> {
                 val operand = parseUnary() ?: return null
-                UnaryExpression(UnaryOperator.NEGATE, operand, SourceRange(previous().range.start, operand.range.end))
+                UnaryExpression(
+                    UnaryOperator.NEGATE,
+                    operand,
+                    SourceRange(previous().range.start, operand.range.end),
+                )
             }
 
             else -> {
@@ -1496,12 +1524,20 @@ internal class Parser(
                             } while (match(TokenKind.COMMA))
                         }
                         val end = consume(TokenKind.RPAREN, "Expected `)` after arguments.") ?: return null
-                        CallExpression(expression, arguments, SourceRange(expression.range.start, end.range.end))
+                        CallExpression(
+                            expression,
+                            arguments,
+                            SourceRange(expression.range.start, end.range.end),
+                        )
                     }
 
                     match(TokenKind.DOT) -> {
                         val member = consume(TokenKind.IDENTIFIER, "Expected member name after `.`.") ?: return null
-                        MemberAccessExpression(expression, member.text, SourceRange(expression.range.start, member.range.end))
+                        MemberAccessExpression(
+                            expression,
+                            member.text,
+                            SourceRange(expression.range.start, member.range.end),
+                        )
                     }
 
                     else -> {

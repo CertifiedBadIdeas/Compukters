@@ -92,7 +92,7 @@ abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
                 tile.computerID = stack.tag?.computerID
                 tile.label = stack.tag?.computerLabel
                 val resolvedComputerId = tile.computerID ?: ServerContext.allocateComputerId().also { tile.computerID = it }
-                ServerContext.vmSupervisor.ensureWorkspaceInitialized(resolvedComputerId)
+                ServerContext.computerManager.ensureWorkspaceInitialized(resolvedComputerId)
                 LOGGER.info { "Computer: ${tile.computerID}, ${tile.label} placed" }
                 LOGGER.info { "HN: ${stack.hoverName}" }
                 LOGGER.info { "Tag: ${stack.tag}" }

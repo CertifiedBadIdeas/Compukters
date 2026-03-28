@@ -20,7 +20,6 @@ package ck.mod.menu
 
 import ck.lang.runtime.ComputerWorkspaceDocument
 import ck.lang.runtime.ComputerWorkspaceEntry
-import ck.mod.Config
 import ck.mod.application.workbench.WorkbenchRemoteState
 import ck.mod.block.ComputerFamily
 import ck.mod.computer.ServerComputer
@@ -35,6 +34,26 @@ import net.minecraft.world.inventory.MenuType
 import net.minecraft.world.inventory.SimpleContainerData
 import net.minecraft.world.item.ItemStack
 
+/**
+ * Type-safe representation of which side of the network this menu lives on.
+ */
+sealed interface MenuSide {
+    /**
+     * Server-side state: owns [ServerComputer] and [ServerInputState].
+     */
+    class Server(
+        val computer: ServerComputer,
+        val input: ServerInputState<out AbstractComputerMenu>,
+    ) : MenuSide
+
+    /**
+     * Client-side state: owns the local [NetworkedTerminal] and workspace cache.
+     */
+    class Client(
+        val terminal: NetworkedTerminal,
+    ) : MenuSide
+}
+
 abstract class AbstractComputerMenu(
     type: MenuType<out AbstractComputerMenu>,
     id: Int,
@@ -47,18 +66,19 @@ abstract class AbstractComputerMenu(
     val uploadMaxSize: Int
 
     private val data: ContainerData =
-        if (computer ==
-            null
-        ) {
+        if (computer == null) {
             SimpleContainerData(1)
         } else {
             SingleContainerData { if (computer.isOn) 1 else 0 }
         }
 
-    protected val computer: ServerComputer?
+    /**
+     * Type-safe side discriminator.
+     * On the server: [MenuSide.Server] — holds the [ServerComputer] + input.
+     * On the client: [MenuSide.Client] — holds the local terminal.
+     */
+    val side: MenuSide
 
-    val input: ServerInputState<AbstractComputerMenu>?
-    private val terminal: NetworkedTerminal?
     private var workspaceState: WorkbenchRemoteState = WorkbenchRemoteState()
     private val workspaceListeners = mutableMapOf<Int, (WorkbenchRemoteState) -> Unit>()
     private var nextWorkspaceListenerId: Int = 0
@@ -67,28 +87,35 @@ abstract class AbstractComputerMenu(
     init {
         addDataSlots(data)
 
-        this.computer = computer
-        input = if (computer == null) null else ServerInputState(this)
-        terminal = containerData?.terminalState?.create()
+        side = if (computer != null) {
+            MenuSide.Server(computer, ServerInputState(this))
+        } else {
+            val terminal = containerData?.terminalState?.create()
+                ?: NetworkedTerminal(51, 19, false) // Fallback — should not happen
+            MenuSide.Client(terminal)
+        }
+
         displayStack = containerData?.displayStack ?: ItemStack.EMPTY
-        uploadMaxSize = containerData?.uploadMaxSize ?: Config.uploadMaxSize
+        uploadMaxSize = containerData?.uploadMaxSize ?: ck.mod.Config.uploadMaxSize
     }
 
-    override fun stillValid(player: Player): Boolean = (computer == null || computer.checkUsable(player)) && canUse(player)
-
-    override fun getComputerPublic(): ServerComputer {
-        if (computer == null) throw UnsupportedOperationException("Cannot access server computer on the client")
-        return computer
+    override fun stillValid(player: Player): Boolean {
+        val server = side as? MenuSide.Server
+        return (server == null || server.computer.checkUsable(player)) && canUse(player)
     }
 
-    override fun getInputPublic(): ServerInputHandler {
-        if (input == null) throw UnsupportedOperationException("Cannot access server computer on the client")
-        return input
-    }
+    override fun getComputerPublic(): ServerComputer =
+        (side as? MenuSide.Server)?.computer
+            ?: throw UnsupportedOperationException("Cannot access server computer on the client")
+
+    override fun getInputPublic(): ServerInputHandler =
+        (side as? MenuSide.Server)?.input
+            ?: throw UnsupportedOperationException("Cannot access server input on the client")
 
     override fun updateTerminal(state: TerminalState) {
-        if (terminal == null) throw UnsupportedOperationException("Cannot update terminal on the server")
-        state.apply(terminal)
+        val client = side as? MenuSide.Client
+            ?: throw UnsupportedOperationException("Cannot update terminal on the server")
+        state.apply(client.terminal)
     }
 
     override fun updateWorkspaceEntries(entries: List<ComputerWorkspaceEntry>) {
@@ -108,8 +135,9 @@ abstract class AbstractComputerMenu(
      * @throws IllegalStateException When accessed on the server.
      */
     fun getTerminal(): Terminal {
-        checkNotNull(terminal) { "Cannot update terminal on the server" }
-        return terminal
+        val client = side as? MenuSide.Client
+            ?: error("Cannot access terminal on the server")
+        return client.terminal
     }
 
     fun getWorkspaceEntries(): List<ComputerWorkspaceEntry> = workspaceState.entries
@@ -125,7 +153,7 @@ abstract class AbstractComputerMenu(
 
     override fun removed(player: Player) {
         super.removed(player)
-        input?.close()
+        (side as? MenuSide.Server)?.input?.close()
     }
 
     companion object {
