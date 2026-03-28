@@ -43,6 +43,9 @@ class ComputerMenuWithoutInventory(
         computer,
         menuData,
     ) {
+    /**
+     * Client constructor
+     */
     constructor(
         menuType: MenuType<out AbstractComputerMenu>,
         containerId: Int,
@@ -57,6 +60,9 @@ class ComputerMenuWithoutInventory(
         menuData,
     )
 
+    /**
+     * Server constructor
+     */
     constructor(
         menuType: MenuType<out AbstractComputerMenu>,
         containerId: Int,

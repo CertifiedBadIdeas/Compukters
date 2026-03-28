@@ -8,6 +8,7 @@ kotlinConvention = { id = "kotlin-convention" }
 # external
 kotlin = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlinSerialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+detekt = { id = "dev.detekt", version = "2.0.0-alpha.2" }
 neoforge = { id = "net.neoforged.moddev.legacyforge", version = "2.0.140" }
 architectury-loom = { id = "dev.architectury.loom", version = "1.11.458" }
 architectury-plugin = { id = "architectury-plugin", version = "3.4.162" }

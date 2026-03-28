@@ -38,7 +38,8 @@ import java.nio.ByteBuffer
 class ServerInputState<T>(
     private val owner: T,
 ) : ServerInputHandler,
-    InputHandler where T : AbstractContainerMenu, T : ComputerMenu {
+    InputHandler
+    where T : AbstractContainerMenu, T : ComputerMenu {
     private val keysDown: IntSet = IntOpenHashSet(4)
 
     private var lastMouseX = 0
