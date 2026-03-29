@@ -63,6 +63,8 @@ import ck.lang.api.UnaryExpression
 import ck.lang.api.UnaryOperator
 import ck.lang.api.VariableDeclarationStatement
 import ck.lang.api.WhileStatement
+import ck.lang.api.WhenBranch
+import ck.lang.api.WhenStatement
 import java.util.IdentityHashMap
 import kotlin.collections.mapIndexed
 import kotlin.collections.toMutableList
@@ -284,49 +286,76 @@ internal class SemanticAnalyzer(
     ) {
         val scope = Scope(parentScope)
         block.statements.forEach { statement ->
-            when (statement) {
-                is BlockStatement -> {
-                    analyzeBlock(statement, scope, functionRange, expectedReturnType)
-                }
+            analyzeStatement(statement, scope, functionRange, expectedReturnType)
+        }
+    }
 
-                is ExpressionStatement -> {
-                    analyzeExpression(statement.expression, scope)
-                }
+    private fun analyzeStatement(
+        statement: Statement,
+        scope: Scope,
+        functionRange: SourceRange,
+        expectedReturnType: TypeRef,
+    ) {
+        when (statement) {
+            is BlockStatement -> {
+                analyzeBlock(statement, scope, functionRange, expectedReturnType)
+            }
 
-                is IfStatement -> {
-                    val conditionType = analyzeExpression(statement.condition, scope)
-                    expectAssignable(conditionType, TypeRef("Bool"), statement.condition.range, "Condition must be Bool.")
-                    analyzeBlock(statement.thenBranch, scope, functionRange, expectedReturnType)
-                    statement.elseBranch?.let { analyzeBlock(it, scope, functionRange, expectedReturnType) }
-                }
+            is ExpressionStatement -> {
+                analyzeExpression(statement.expression, scope)
+            }
 
-                is ReturnStatement -> {
-                    val actual = statement.expression?.let { analyzeExpression(it, scope) } ?: TypeRef("Unit")
-                    expectAssignable(actual, expectedReturnType, statement.range, "Return type mismatch.")
-                }
+            is IfStatement -> {
+                val conditionType = analyzeExpression(statement.condition, scope)
+                expectAssignable(conditionType, TypeRef("Bool"), statement.condition.range, "Condition must be Bool.")
+                analyzeBlock(statement.thenBranch, scope, functionRange, expectedReturnType)
+                statement.elseBranch?.let { analyzeStatement(it, scope, functionRange, expectedReturnType) }
+            }
 
-                is VariableDeclarationStatement -> {
-                    val valueType = analyzeExpression(statement.initializer, scope)
-                    val declaredType =
-                        statement.type?.let { resolveType(it, statement.range) } ?: valueType
-                    expectAssignable(valueType, declaredType, statement.range, "Initializer type mismatch.")
-                    val symbol =
-                        SymbolInfo(
-                            name = statement.name,
-                            kind = SymbolKind.VARIABLE,
-                            range = statement.range,
-                            detail = "${if (statement.mutable) "var" else "val"} ${statement.name}: ${declaredType.displayName}",
-                            ownerFunctionRange = functionRange,
-                        )
-                    symbols += symbol
-                    scope.define(statement.name, VariableBinding(symbol, declaredType))
-                }
+            is ReturnStatement -> {
+                val actual = statement.expression?.let { analyzeExpression(it, scope) } ?: TypeRef("Unit")
+                expectAssignable(actual, expectedReturnType, statement.range, "Return type mismatch.")
+            }
 
-                is WhileStatement -> {
-                    val conditionType = analyzeExpression(statement.condition, scope)
-                    expectAssignable(conditionType, TypeRef("Bool"), statement.condition.range, "Condition must be Bool.")
-                    analyzeBlock(statement.body, scope, functionRange, expectedReturnType)
+            is VariableDeclarationStatement -> {
+                val valueType = analyzeExpression(statement.initializer, scope)
+                val declaredType =
+                    statement.type?.let { resolveType(it, statement.range) } ?: valueType
+                expectAssignable(valueType, declaredType, statement.range, "Initializer type mismatch.")
+                val symbol =
+                    SymbolInfo(
+                        name = statement.name,
+                        kind = SymbolKind.VARIABLE,
+                        range = statement.range,
+                        detail = "${if (statement.mutable) "var" else "val"} ${statement.name}: ${declaredType.displayName}",
+                        ownerFunctionRange = functionRange,
+                    )
+                symbols += symbol
+                scope.define(statement.name, VariableBinding(symbol, declaredType))
+            }
+
+            is WhileStatement -> {
+                val conditionType = analyzeExpression(statement.condition, scope)
+                expectAssignable(conditionType, TypeRef("Bool"), statement.condition.range, "Condition must be Bool.")
+                analyzeBlock(statement.body, scope, functionRange, expectedReturnType)
+            }
+
+            is WhenStatement -> {
+                val subjectType = statement.subject?.let { analyzeExpression(it, scope) }
+                for (branch in statement.branches) {
+                    for (value in branch.values) {
+                        val valueType = analyzeExpression(value, scope)
+                        if (subjectType != null) {
+                            if (!isAssignable(valueType, subjectType) && !isAssignable(subjectType, valueType)) {
+                                diagnostics += FrontendDiagnostic("When branch value type mismatch.", value.range)
+                            }
+                        } else {
+                            expectAssignable(valueType, TypeRef("Bool"), value.range, "When condition must be Bool.")
+                        }
+                    }
+                    analyzeBlock(branch.body, scope, functionRange, expectedReturnType)
                 }
+                statement.elseBranch?.let { analyzeBlock(it, scope, functionRange, expectedReturnType) }
             }
         }
     }
@@ -797,7 +826,11 @@ internal class BytecodeCompiler(
                     val jumpToEnd = instructions.size
                     instructions += Instruction.Jump(-1)
                     val elseStart = instructions.size
-                    statement.elseBranch?.let(::compileBlock)
+                    when (val elseBranch = statement.elseBranch) {
+                        is BlockStatement -> compileBlock(elseBranch)
+                        is Statement -> compileStatement(elseBranch)
+                        null -> {}
+                    }
                     val end = instructions.size
                     instructions[jumpToElse] = Instruction.JumpIfFalse(elseStart)
                     instructions[jumpToEnd] = Instruction.Jump(end)
@@ -830,6 +863,67 @@ internal class BytecodeCompiler(
                     val end = instructions.size
                     instructions[exitJump] = Instruction.JumpIfFalse(end)
                 }
+
+                is WhenStatement -> {
+                    compileWhen(statement)
+                }
+            }
+        }
+
+        private fun compileWhen(statement: WhenStatement) {
+            val subjectSlot: Int? = if (statement.subject != null) {
+                compileExpression(statement.subject)
+                val slot = locals.size
+                val typeName = semantic.expressionTypes[statement.subject]?.name ?: "Unit"
+                locals += BytecodeLocal("\$when", typeName)
+                scopes.last()["\$when"] = slot
+                instructions += Instruction.StoreLocal(slot)
+                slot
+            } else {
+                null
+            }
+
+            val jumpsToEnd = mutableListOf<Int>()
+
+            for (branch in statement.branches) {
+                if (subjectSlot != null) {
+                    val jumpsToBody = mutableListOf<Int>()
+                    for ((i, value) in branch.values.withIndex()) {
+                        instructions += Instruction.LoadLocal(subjectSlot)
+                        compileExpression(value)
+                        instructions += Instruction.Binary(BinaryOperator.EQUALS)
+                        if (i < branch.values.size - 1) {
+                            val jumpToBody = instructions.size
+                            instructions += Instruction.JumpIfTrue(-1)
+                            jumpsToBody += jumpToBody
+                        } else {
+                            val jumpToNext = instructions.size
+                            instructions += Instruction.JumpIfFalse(-1)
+                            val bodyStart = instructions.size
+                            for (j in jumpsToBody) {
+                                instructions[j] = Instruction.JumpIfTrue(bodyStart)
+                            }
+                            compileBlock(branch.body)
+                            jumpsToEnd += instructions.size
+                            instructions += Instruction.Jump(-1)
+                            instructions[jumpToNext] = Instruction.JumpIfFalse(instructions.size)
+                        }
+                    }
+                } else {
+                    compileExpression(branch.values.first())
+                    val jumpToNext = instructions.size
+                    instructions += Instruction.JumpIfFalse(-1)
+                    compileBlock(branch.body)
+                    jumpsToEnd += instructions.size
+                    instructions += Instruction.Jump(-1)
+                    instructions[jumpToNext] = Instruction.JumpIfFalse(instructions.size)
+                }
+            }
+
+            statement.elseBranch?.let(::compileBlock)
+            val end = instructions.size
+            for (j in jumpsToEnd) {
+                instructions[j] = Instruction.Jump(end)
             }
         }
 
@@ -973,7 +1067,12 @@ internal class Lexer(
                 }
 
                 '-' -> {
-                    addToken(TokenKind.MINUS, "-", start)
+                    if (!isAtEnd() && peek() == '>') {
+                        advance()
+                        addToken(TokenKind.ARROW, "->", start)
+                    } else {
+                        addToken(TokenKind.MINUS, "-", start)
+                    }
                 }
 
                 '*' -> {
@@ -1111,6 +1210,7 @@ internal class Lexer(
                 "if" -> TokenKind.IF
                 "else" -> TokenKind.ELSE
                 "while" -> TokenKind.WHILE
+                "when" -> TokenKind.WHEN
                 "return" -> TokenKind.RETURN
                 "import" -> TokenKind.IMPORT
                 "struct" -> TokenKind.STRUCT
@@ -1276,6 +1376,10 @@ internal class Parser(
                 parseWhile()
             }
 
+            match(TokenKind.WHEN) -> {
+                parseWhen()
+            }
+
             match(TokenKind.RETURN) -> {
                 parseReturn()
             }
@@ -1310,7 +1414,15 @@ internal class Parser(
     private fun parseIf(): IfStatement? {
         val condition = parseExpression() ?: return null
         val thenBranch = parseBlock() ?: return null
-        val elseBranch = if (match(TokenKind.ELSE)) parseBlock() else null
+        val elseBranch: Statement? = if (match(TokenKind.ELSE)) {
+            if (match(TokenKind.IF)) {
+                parseIf()
+            } else {
+                parseBlock()
+            }
+        } else {
+            null
+        }
         return IfStatement(condition, thenBranch, elseBranch, SourceRange(condition.range.start, (elseBranch ?: thenBranch).range.end))
     }
 
@@ -1318,6 +1430,38 @@ internal class Parser(
         val condition = parseExpression() ?: return null
         val body = parseBlock() ?: return null
         return WhileStatement(condition, body, SourceRange(condition.range.start, body.range.end))
+    }
+
+    private fun parseWhen(): WhenStatement? {
+        val start = previous().range.start
+        val subject: Expression? = if (match(TokenKind.LPAREN)) {
+            val expr = parseExpression() ?: return null
+            consume(TokenKind.RPAREN, "Expected `)` after when subject.") ?: return null
+            expr
+        } else {
+            null
+        }
+        consume(TokenKind.LBRACE, "Expected `{` after when.") ?: return null
+        val branches = mutableListOf<WhenBranch>()
+        var elseBranch: BlockStatement? = null
+        while (!check(TokenKind.RBRACE) && !isAtEnd()) {
+            if (match(TokenKind.ELSE)) {
+                consume(TokenKind.ARROW, "Expected `->` after else.") ?: return null
+                elseBranch = parseBlock() ?: return null
+                break
+            }
+            val branchStart = peek().range.start
+            val values = mutableListOf<Expression>()
+            values += parseExpression() ?: return null
+            while (match(TokenKind.COMMA)) {
+                values += parseExpression() ?: return null
+            }
+            consume(TokenKind.ARROW, "Expected `->` after when value.") ?: return null
+            val body = parseBlock() ?: return null
+            branches += WhenBranch(values, body, SourceRange(branchStart, body.range.end))
+        }
+        val end = consume(TokenKind.RBRACE, "Expected `}` after when body.") ?: return null
+        return WhenStatement(subject, branches, elseBranch, SourceRange(start, end.range.end))
     }
 
     private fun parseReturn(): ReturnStatement? {

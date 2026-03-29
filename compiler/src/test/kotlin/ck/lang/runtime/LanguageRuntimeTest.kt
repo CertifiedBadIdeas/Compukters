@@ -137,6 +137,239 @@ class LanguageRuntimeTest {
         )
         assertEquals(listOf("tmp"), runtime.createdDirectories)
     }
+
+    @Test
+    fun executesElseIfChains() {
+        val artifact =
+            frontend.compile(
+                "elseif.ck",
+                """
+                import terminal;
+
+                fun main() {
+                    val x: Int = 2;
+                    if x == 1 {
+                        terminal.printLine("one");
+                    } else if x == 2 {
+                        terminal.printLine("two");
+                    } else if x == 3 {
+                        terminal.printLine("three");
+                    } else {
+                        terminal.printLine("other");
+                    }
+                }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+
+        val runtime = RecordingRuntime()
+        runBlocking {
+            BytecodeComputerProgram(requireNotNull(artifact.module)).run(runtime)
+        }
+
+        assertEquals(listOf("two"), runtime.lines)
+    }
+
+    @Test
+    fun executesElseIfFallsToElse() {
+        val artifact =
+            frontend.compile(
+                "elseif_else.ck",
+                """
+                import terminal;
+
+                fun main() {
+                    val x: Int = 99;
+                    if x == 1 {
+                        terminal.printLine("one");
+                    } else if x == 2 {
+                        terminal.printLine("two");
+                    } else {
+                        terminal.printLine("other");
+                    }
+                }
+                """.trimIndent(),
+            )
+
+        val runtime = RecordingRuntime()
+        runBlocking {
+            BytecodeComputerProgram(requireNotNull(artifact.module)).run(runtime)
+        }
+
+        assertEquals(listOf("other"), runtime.lines)
+    }
+
+    @Test
+    fun executesWhenWithSubject() {
+        val artifact =
+            frontend.compile(
+                "when_subject.ck",
+                """
+                import terminal;
+
+                fun main() {
+                    val x: Int = 2;
+                    when(x) {
+                        1 -> {
+                            terminal.printLine("one");
+                        }
+                        2 -> {
+                            terminal.printLine("two");
+                        }
+                        3 -> {
+                            terminal.printLine("three");
+                        }
+                        else -> {
+                            terminal.printLine("other");
+                        }
+                    }
+                }
+                """.trimIndent(),
+            )
+
+        val runtime = RecordingRuntime()
+        runBlocking {
+            BytecodeComputerProgram(requireNotNull(artifact.module)).run(runtime)
+        }
+
+        assertEquals(listOf("two"), runtime.lines)
+    }
+
+    @Test
+    fun executesWhenWithSubjectMultipleValues() {
+        val artifact =
+            frontend.compile(
+                "when_multi.ck",
+                """
+                import terminal;
+
+                fun main() {
+                    val x: Int = 3;
+                    when(x) {
+                        1 -> {
+                            terminal.printLine("one");
+                        }
+                        2, 3 -> {
+                            terminal.printLine("two or three");
+                        }
+                        else -> {
+                            terminal.printLine("other");
+                        }
+                    }
+                }
+                """.trimIndent(),
+            )
+
+        val runtime = RecordingRuntime()
+        runBlocking {
+            BytecodeComputerProgram(requireNotNull(artifact.module)).run(runtime)
+        }
+
+        assertEquals(listOf("two or three"), runtime.lines)
+    }
+
+    @Test
+    fun executesWhenWithSubjectElseBranch() {
+        val artifact =
+            frontend.compile(
+                "when_else.ck",
+                """
+                import terminal;
+
+                fun main() {
+                    val x: Int = 99;
+                    when(x) {
+                        1 -> {
+                            terminal.printLine("one");
+                        }
+                        2 -> {
+                            terminal.printLine("two");
+                        }
+                        else -> {
+                            terminal.printLine("other");
+                        }
+                    }
+                }
+                """.trimIndent(),
+            )
+
+        val runtime = RecordingRuntime()
+        runBlocking {
+            BytecodeComputerProgram(requireNotNull(artifact.module)).run(runtime)
+        }
+
+        assertEquals(listOf("other"), runtime.lines)
+    }
+
+    @Test
+    fun executesWhenWithoutSubject() {
+        val artifact =
+            frontend.compile(
+                "when_no_subject.ck",
+                """
+                import terminal;
+
+                fun main() {
+                    val x: Int = 5;
+                    when {
+                        x > 10 -> {
+                            terminal.printLine("big");
+                        }
+                        x > 0 -> {
+                            terminal.printLine("positive");
+                        }
+                        else -> {
+                            terminal.printLine("non-positive");
+                        }
+                    }
+                }
+                """.trimIndent(),
+            )
+
+        val runtime = RecordingRuntime()
+        runBlocking {
+            BytecodeComputerProgram(requireNotNull(artifact.module)).run(runtime)
+        }
+
+        assertEquals(listOf("positive"), runtime.lines)
+    }
+
+    @Test
+    fun executesWhenWithoutSubjectElse() {
+        val artifact =
+            frontend.compile(
+                "when_no_subject_else.ck",
+                """
+                import terminal;
+
+                fun main() {
+                    val x: Int = 0;
+                    when {
+                        x > 10 -> {
+                            terminal.printLine("big");
+                        }
+                        x > 0 -> {
+                            terminal.printLine("positive");
+                        }
+                        else -> {
+                            terminal.printLine("zero or negative");
+                        }
+                    }
+                }
+                """.trimIndent(),
+            )
+
+        val runtime = RecordingRuntime()
+        runBlocking {
+            BytecodeComputerProgram(requireNotNull(artifact.module)).run(runtime)
+        }
+
+        assertEquals(listOf("zero or negative"), runtime.lines)
+    }
 }
 
 private class RecordingRuntime(

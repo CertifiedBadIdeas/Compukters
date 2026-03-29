@@ -145,6 +145,6 @@ class LanguageIde(
     )
 
     private companion object {
-        val KEYWORDS = listOf("fun", "val", "var", "if", "else", "while", "return", "import", "struct", "true", "false", "null")
+        val KEYWORDS = listOf("fun", "val", "var", "if", "else", "when", "while", "return", "import", "struct", "true", "false", "null")
     }
 }

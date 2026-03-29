@@ -32,6 +32,7 @@ enum class TokenKind {
     IF,
     ELSE,
     WHILE,
+    WHEN,
     RETURN,
     IMPORT,
     STRUCT,
@@ -58,5 +59,6 @@ enum class TokenKind {
     GTE,
     AMP_AMP,
     PIPE_PIPE,
+    ARROW,
     EOF,
 }

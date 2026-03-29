@@ -92,6 +92,7 @@ internal object IdePresentationSupport {
             TokenKind.IF,
             TokenKind.ELSE,
             TokenKind.WHILE,
+            TokenKind.WHEN,
             TokenKind.RETURN,
             TokenKind.IMPORT,
             TokenKind.STRUCT,
@@ -111,6 +112,7 @@ internal object IdePresentationSupport {
             TokenKind.GTE,
             TokenKind.AMP_AMP,
             TokenKind.PIPE_PIPE,
+            TokenKind.ARROW,
             -> HighlightTokenKind.OPERATOR
 
             TokenKind.COLON,

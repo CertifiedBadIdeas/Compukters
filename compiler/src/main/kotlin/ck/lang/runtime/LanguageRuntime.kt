@@ -227,6 +227,10 @@ class BytecodeVirtualMachine(
                     if (!frame.pop().asBoolean()) frame.instructionPointer = instruction.target
                 }
 
+                is Instruction.JumpIfTrue -> {
+                    if (frame.pop().asBoolean()) frame.instructionPointer = instruction.target
+                }
+
                 is Instruction.LoadLocal -> {
                     frame.stack += frame.locals[instruction.slot]
                 }

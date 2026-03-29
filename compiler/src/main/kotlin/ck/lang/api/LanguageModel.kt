@@ -66,7 +66,7 @@ data class VariableDeclarationStatement(
 data class IfStatement(
     val condition: Expression,
     val thenBranch: BlockStatement,
-    val elseBranch: BlockStatement?,
+    val elseBranch: Statement?,
     override val range: SourceRange,
 ) : Statement
 
@@ -83,6 +83,19 @@ data class ReturnStatement(
 
 data class ExpressionStatement(
     val expression: Expression,
+    override val range: SourceRange,
+) : Statement
+
+data class WhenBranch(
+    val values: List<Expression>,
+    val body: BlockStatement,
+    val range: SourceRange,
+)
+
+data class WhenStatement(
+    val subject: Expression?,
+    val branches: List<WhenBranch>,
+    val elseBranch: BlockStatement?,
     override val range: SourceRange,
 ) : Statement
 
@@ -265,6 +278,10 @@ sealed interface Instruction {
     ) : Instruction
 
     data class JumpIfFalse(
+        val target: Int,
+    ) : Instruction
+
+    data class JumpIfTrue(
         val target: Int,
     ) : Instruction
 

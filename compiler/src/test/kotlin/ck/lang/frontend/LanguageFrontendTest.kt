@@ -78,4 +78,145 @@ class LanguageFrontendTest {
             artifact.analysis.diagnostics.joinToString { it.message },
         )
     }
+
+    @Test
+    fun compilesElseIfChains() {
+        val artifact =
+            frontend.compile(
+                "elseif.ck",
+                """
+                import terminal;
+
+                fun main() {
+                    val x: Int = 2;
+                    if x == 1 {
+                        terminal.printLine("one");
+                    } else if x == 2 {
+                        terminal.printLine("two");
+                    } else if x == 3 {
+                        terminal.printLine("three");
+                    } else {
+                        terminal.printLine("other");
+                    }
+                }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.joinToString { "${it.range}, ${it.message}" },
+        )
+        assertNotNull(artifact.module)
+    }
+
+    @Test
+    fun compilesWhenWithSubject() {
+        val artifact =
+            frontend.compile(
+                "when_subject.ck",
+                """
+                import terminal;
+
+                fun main() {
+                    val x: Int = 2;
+                    when(x) {
+                        1 -> {
+                            terminal.printLine("one");
+                        }
+                        2, 3 -> {
+                            terminal.printLine("two or three");
+                        }
+                        else -> {
+                            terminal.printLine("other");
+                        }
+                    }
+                }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.joinToString { "${it.range}, ${it.message}" },
+        )
+        assertNotNull(artifact.module)
+    }
+
+    @Test
+    fun compilesWhenWithoutSubject() {
+        val artifact =
+            frontend.compile(
+                "when_no_subject.ck",
+                """
+                import terminal;
+
+                fun main() {
+                    val x: Int = 5;
+                    when {
+                        x > 10 -> {
+                            terminal.printLine("big");
+                        }
+                        x > 0 -> {
+                            terminal.printLine("positive");
+                        }
+                        else -> {
+                            terminal.printLine("non-positive");
+                        }
+                    }
+                }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.joinToString { "${it.range}, ${it.message}" },
+        )
+        assertNotNull(artifact.module)
+    }
+
+    @Test
+    fun reportsWhenBranchTypeMismatch() {
+        val artifact =
+            frontend.compile(
+                "when_mismatch.ck",
+                """
+                fun main() {
+                    val x: Int = 1;
+                    when(x) {
+                        "hello" -> {
+                            val y: Int = 1;
+                        }
+                    }
+                }
+                """.trimIndent(),
+            )
+
+        assertEquals(artifact.module, null)
+        assertTrue(
+            artifact.analysis.diagnostics.any { it.message.contains("When branch value type mismatch") },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+    }
+
+    @Test
+    fun reportsWhenConditionMustBeBool() {
+        val artifact =
+            frontend.compile(
+                "when_bool.ck",
+                """
+                fun main() {
+                    when {
+                        42 -> {
+                            val y: Int = 1;
+                        }
+                    }
+                }
+                """.trimIndent(),
+            )
+
+        assertEquals(artifact.module, null)
+        assertTrue(
+            artifact.analysis.diagnostics.any { it.message.contains("Expected Bool") },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+    }
 }

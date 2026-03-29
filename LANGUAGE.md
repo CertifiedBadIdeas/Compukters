@@ -17,9 +17,36 @@ Statements:
 - `val name = expr;`
 - `var counter: Int = 0;`
 - `if condition { ... } else { ... }`
+- `if condition { ... } else if condition { ... } else { ... }`
 - `while condition { ... }`
+- `when(subject) { value -> { ... } else -> { ... } }`
+- `when { condition -> { ... } else -> { ... } }`
 - `return expr;`
 - expression statements such as `terminal.printLine("ok");`
+
+### `when` statement
+
+`when` provides multi-way dispatch. Two forms are supported:
+
+With subject (compared via `==`):
+
+```
+when(x) {
+    1 -> { terminal.printLine("one"); }
+    2, 3 -> { terminal.printLine("two or three"); }
+    else -> { terminal.printLine("other"); }
+}
+```
+
+Without subject (each branch is a `Bool` condition):
+
+```
+when {
+    x > 10 -> { terminal.printLine("big"); }
+    x > 0 -> { terminal.printLine("positive"); }
+    else -> { terminal.printLine("non-positive"); }
+}
+```
 
 Expressions:
 
