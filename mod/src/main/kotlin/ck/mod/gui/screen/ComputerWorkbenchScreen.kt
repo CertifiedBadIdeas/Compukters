@@ -26,6 +26,7 @@ import ck.mod.gui.WorkbenchTerminalInputController
 import ck.mod.gui.WorkbenchTerminalLayout
 import ck.mod.gui.WorkbenchTerminalMetrics
 import ck.mod.gui.input.ClientInputHandler
+import ck.mod.infrastructure.coroutines.minecraft
 import ck.mod.infrastructure.workbench.InputHandlerControlGateway
 import ck.mod.infrastructure.workbench.LanguageWorkbenchIdeFacade
 import ck.mod.infrastructure.workbench.MenuWorkspaceUpdateSource
@@ -34,6 +35,10 @@ import ck.mod.menu.AbstractComputerMenu
 import ck.mod.ui.render.WorkbenchTerminalRenderer
 import ck.mod.ui.workbench.WorkbenchLayoutModel
 import ck.mod.ui.workbench.WorkspaceRowLayout
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import net.minecraft.client.gui.GuiGraphics
 import net.minecraft.network.chat.Component
 import net.minecraft.world.entity.player.Inventory
@@ -52,6 +57,7 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
             controlGateway = InputHandlerControlGateway(inputHandler),
             ideFacade = LanguageWorkbenchIdeFacade,
         )
+    private var screenScope: CoroutineScope? = null
 
     init {
         val snap = container.clientSide.screenSnapshot
@@ -61,18 +67,21 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
 
     override fun init() {
         super.init()
-        store.bind(MenuWorkspaceUpdateSource(menu))
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.minecraft)
+        screenScope = scope
+        store.bind(scope, MenuWorkspaceUpdateSource(menu))
         store.initialize()
     }
 
     override fun removed() {
         store.dispose()
+        screenScope?.cancel()
+        screenScope = null
         super.removed()
     }
 
     override fun containerTick() {
         super.containerTick()
-        store.tick()
         terminalInput.update()
     }
 

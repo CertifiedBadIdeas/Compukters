@@ -18,99 +18,49 @@
  */
 package ck.mod.computer
 
-import java.nio.ByteBuffer
+import ck.mod.application.input.ControlInputEvent
+import ck.mod.application.input.InputEvent
+import ck.mod.application.input.KeyInputEvent
+import ck.mod.application.input.MouseInputEvent
+import ck.mod.application.input.PasteInputEvent
 
 /**
  * Built-in events that can be queued on a computer.
  */
 object ComputerEvents {
-    fun keyDown(
-        receiver: Receiver,
-        key: Int,
-        repeat: Boolean,
-    ) {
-        receiver.queueEvent("key", arrayOf(key, repeat))
-    }
-
-    fun keyUp(
-        receiver: Receiver,
-        key: Int,
-    ) {
-        receiver.queueEvent("key_up", arrayOf(key))
-    }
 
     /**
-     * Type a character on the computer.
-     *
-     * @param receiver The computer to queue the event on.
-     * @param chr      The character to type.
-     * @see StringUtil.isTypableChar
+     * Dispatch a unified [InputEvent] to the receiver, converting it to the appropriate
+     * VM event name and arguments.
      */
-    fun charTyped(
-        receiver: Receiver,
-        chr: Byte,
-    ) {
-        receiver.queueEvent("char", arrayOf(byteArrayOf(chr)))
-    }
-
-    /**
-     * Paste a string.
-     *
-     * @param receiver The computer to queue the event on.
-     * @param contents The string to paste.
-     * @see StringUtil.getClipboardString
-     */
-    fun paste(
-        receiver: Receiver,
-        contents: ByteBuffer,
-    ) {
-        receiver.queueEvent("paste", arrayOf(contents))
-    }
-
-    fun mouseClick(
-        receiver: Receiver,
-        button: Int,
-        x: Int,
-        y: Int,
-    ) {
-        receiver.queueEvent("mouse_click", arrayOf(button, x, y))
-    }
-
-    fun mouseUp(
-        receiver: Receiver,
-        button: Int,
-        x: Int,
-        y: Int,
-    ) {
-        receiver.queueEvent("mouse_up", arrayOf(button, x, y))
-    }
-
-    fun mouseDrag(
-        receiver: Receiver,
-        button: Int,
-        x: Int,
-        y: Int,
-    ) {
-        receiver.queueEvent("mouse_drag", arrayOf(button, x, y))
-    }
-
-    fun mouseScroll(
-        receiver: Receiver,
-        direction: Int,
-        x: Int,
-        y: Int,
-    ) {
-        receiver.queueEvent("mouse_scroll", arrayOf(direction, x, y))
+    fun dispatch(receiver: Receiver, event: InputEvent) {
+        when (event) {
+            is ControlInputEvent -> when (event.action) {
+                ck.mod.application.input.ComputerControlAction.TERMINATE ->
+                    receiver.queueEvent("terminate")
+                ck.mod.application.input.ComputerControlAction.SHUTDOWN ->
+                    receiver.queueEvent("shutdown")
+                ck.mod.application.input.ComputerControlAction.TURN_ON ->
+                    receiver.queueEvent("turn_on")
+                ck.mod.application.input.ComputerControlAction.REBOOT ->
+                    receiver.queueEvent("reboot")
+            }
+            is KeyInputEvent.Down -> receiver.queueEvent("key", arrayOf(event.key, event.repeat))
+            is KeyInputEvent.Up -> receiver.queueEvent("key_up", arrayOf(event.key))
+            is KeyInputEvent.Character -> receiver.queueEvent("char", arrayOf(byteArrayOf(event.value)))
+            is PasteInputEvent -> receiver.queueEvent("paste", arrayOf(event.contents))
+            is MouseInputEvent.Click -> receiver.queueEvent("mouse_click", arrayOf(event.button, event.x, event.y))
+            is MouseInputEvent.Up -> receiver.queueEvent("mouse_up", arrayOf(event.button, event.x, event.y))
+            is MouseInputEvent.Drag -> receiver.queueEvent("mouse_drag", arrayOf(event.button, event.x, event.y))
+            is MouseInputEvent.Scroll -> receiver.queueEvent("mouse_scroll", arrayOf(event.direction, event.x, event.y))
+        }
     }
 
     /**
      * An object that can receive computer events.
      */
     fun interface Receiver {
-        fun queueEvent(
-            event: String,
-            arguments: Array<Any>,
-        )
+        fun queueEvent(event: String, arguments: Array<Any>)
 
         fun queueEvent(event: String) = queueEvent(event, emptyArray())
     }

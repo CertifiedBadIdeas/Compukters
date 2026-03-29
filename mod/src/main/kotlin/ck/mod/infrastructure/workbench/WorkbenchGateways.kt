@@ -23,12 +23,14 @@ import ck.lang.runtime.ComputerIdeSnapshot
 import ck.lang.runtime.ComputerWorkspaceDocument
 import ck.lang.runtime.DefinitionTarget
 import ck.lang.runtime.HoverInfo
+import ck.mod.application.input.ComputerControlAction
+import ck.mod.application.input.ControlInputEvent
+import ck.mod.application.input.InputEventSink
 import ck.mod.application.workbench.ComputerControlGateway
 import ck.mod.application.workbench.WorkbenchIdeFacade
 import ck.mod.application.workbench.WorkbenchRemoteState
 import ck.mod.application.workbench.WorkbenchUpdateSource
 import ck.mod.application.workbench.WorkspaceGateway
-import ck.mod.gui.input.InputHandler
 import ck.mod.language.LanguageServices
 import ck.mod.menu.AbstractComputerMenu
 import ck.mod.network.ClientNetworking
@@ -82,13 +84,7 @@ class NetworkWorkspaceGateway(
     }
 }
 
-class InputHandlerControlGateway(
-    private val inputHandler: InputHandler,
-) : ComputerControlGateway {
-    override fun reboot() {
-        inputHandler.reboot()
-    }
-}
+class InputHandlerControlGateway(\n    private val inputEventSink: InputEventSink,\n) : ComputerControlGateway {\n    override fun reboot() {\n        inputEventSink.accept(ControlInputEvent(ComputerControlAction.REBOOT))\n    }\n}
 
 object LanguageWorkbenchIdeFacade : WorkbenchIdeFacade {
     private val ide = LanguageServices.ide

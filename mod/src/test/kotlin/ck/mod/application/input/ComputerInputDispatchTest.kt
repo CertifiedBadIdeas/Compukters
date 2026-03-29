@@ -18,103 +18,53 @@
  */
 package ck.mod.application.input
 
-import ck.mod.menu.ServerInputHandler
+import ck.mod.computer.ComputerEvents
 import java.nio.ByteBuffer
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class ComputerInputDispatchTest {
     @Test
-    fun dispatchesControlKeyMouseAndPasteEvents() {
-        val handler = RecordingServerInputHandler()
+    fun dispatchesKeyAndMouseAndPasteEvents() {
+        val receiver = RecordingReceiver()
         val buffer = ByteBuffer.wrap(byteArrayOf(1, 2, 3))
 
-        handler.accept(ComputerControlAction.REBOOT)
-        handler.accept(KeyInputEvent.Down(key = 42, repeat = true))
-        handler.accept(KeyInputEvent.Character(7))
-        handler.accept(MouseInputEvent.Scroll(direction = -1, x = 3, y = 9))
-        handler.accept(PasteInputEvent(buffer))
+        ComputerEvents.dispatch(receiver, KeyInputEvent.Down(key = 42, repeat = true))
+        ComputerEvents.dispatch(receiver, KeyInputEvent.Up(key = 42))
+        ComputerEvents.dispatch(receiver, KeyInputEvent.Character(7))
+        ComputerEvents.dispatch(receiver, MouseInputEvent.Click(button = 0, x = 5, y = 10))
+        ComputerEvents.dispatch(receiver, MouseInputEvent.Scroll(direction = -1, x = 3, y = 9))
+        ComputerEvents.dispatch(receiver, PasteInputEvent(buffer))
 
         assertEquals(
-            listOf(
-                "reboot",
-                "keyDown:42:true",
-                "char:7",
-                "scroll:-1:3:9",
-                "paste:3",
-            ),
-            handler.calls,
+            listOf("key", "key_up", "char", "mouse_click", "mouse_scroll", "paste"),
+            receiver.events.map { it.first },
+        )
+        // Verify key event args
+        assertEquals(listOf(42, true), receiver.events[0].second.toList())
+        assertEquals(listOf(42), receiver.events[1].second.toList())
+    }
+
+    @Test
+    fun dispatchesAllControlActions() {
+        val receiver = RecordingReceiver()
+
+        ComputerEvents.dispatch(receiver, ControlInputEvent(ComputerControlAction.TERMINATE))
+        ComputerEvents.dispatch(receiver, ControlInputEvent(ComputerControlAction.SHUTDOWN))
+        ComputerEvents.dispatch(receiver, ControlInputEvent(ComputerControlAction.TURN_ON))
+        ComputerEvents.dispatch(receiver, ControlInputEvent(ComputerControlAction.REBOOT))
+
+        assertEquals(
+            listOf("terminate", "shutdown", "turn_on", "reboot"),
+            receiver.events.map { it.first },
         )
     }
 
-    private class RecordingServerInputHandler : ServerInputHandler {
-        val calls = mutableListOf<String>()
+    private class RecordingReceiver : ComputerEvents.Receiver {
+        val events = mutableListOf<Pair<String, Array<Any>>>()
 
-        override fun keyDown(
-            key: Int,
-            repeat: Boolean,
-        ) {
-            calls += "keyDown:$key:$repeat"
-        }
-
-        override fun keyUp(key: Int) {
-            calls += "keyUp:$key"
-        }
-
-        override fun charTyped(chr: Byte) {
-            calls += "char:$chr"
-        }
-
-        override fun paste(contents: ByteBuffer?) {
-            calls += "paste:${contents?.remaining() ?: 0}"
-        }
-
-        override fun mouseClick(
-            button: Int,
-            x: Int,
-            y: Int,
-        ) {
-            calls += "click:$button:$x:$y"
-        }
-
-        override fun mouseUp(
-            button: Int,
-            x: Int,
-            y: Int,
-        ) {
-            calls += "up:$button:$x:$y"
-        }
-
-        override fun mouseDrag(
-            button: Int,
-            x: Int,
-            y: Int,
-        ) {
-            calls += "drag:$button:$x:$y"
-        }
-
-        override fun mouseScroll(
-            direction: Int,
-            x: Int,
-            y: Int,
-        ) {
-            calls += "scroll:$direction:$x:$y"
-        }
-
-        override fun terminate() {
-            calls += "terminate"
-        }
-
-        override fun shutdown() {
-            calls += "shutdown"
-        }
-
-        override fun turnOn() {
-            calls += "turnOn"
-        }
-
-        override fun reboot() {
-            calls += "reboot"
+        override fun queueEvent(event: String, arguments: Array<Any>) {
+            events += event to arguments
         }
     }
 }

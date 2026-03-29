@@ -39,20 +39,15 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.yield as coroutineYield
 
 fun interface ComputerVmLogger {
     fun log(message: String)
-}
-
-interface ComputerVmCallbacks {
-    fun currentLabel(): String?
-
-    fun onVmStop(reason: VmStopReason)
-
-    fun onVmRebootRequested()
 }
 
 /**
@@ -75,11 +70,15 @@ class BackgroundComputerVm(
     override val computerId: Int,
     override val profile: ComputerProfile,
     dispatcher: CoroutineDispatcher,
-    private val callbacks: ComputerVmCallbacks,
+    private val labelProvider: () -> String?,
     private val logger: ComputerVmLogger,
     workspace: ComputerWorkspace,
     bundledScriptLoader: (String) -> String? = { null },
 ) : ComputerVmHandle, VmContext {
+
+    private val _lifecycleEvents = MutableSharedFlow<VmLifecycleEvent>(extraBufferCapacity = 4)
+    /** Observe VM lifecycle transitions (stop, reboot request). */
+    val lifecycleEvents: SharedFlow<VmLifecycleEvent> = _lifecycleEvents.asSharedFlow()
 
     private val scope = CoroutineScope(SupervisorJob() + dispatcher)
     private val slicePermits = Channel<Unit>(capacity = 1)
@@ -186,9 +185,9 @@ class BackgroundComputerVm(
             runner = null
 
             if (reason == VmStopReason.REBOOT) {
-                callbacks.onVmRebootRequested()
+                _lifecycleEvents.emit(VmLifecycleEvent.RebootRequested)
             } else {
-                callbacks.onVmStop(reason)
+                _lifecycleEvents.emit(VmLifecycleEvent.Stopped(reason))
             }
         }
     }
@@ -225,7 +224,7 @@ class BackgroundComputerVm(
             ctx = this,
             computerId = computerId,
             currentTickProvider = { stateManager.currentTick },
-            labelProvider = callbacks::currentLabel,
+            labelProvider = labelProvider,
         )
         val terminalApi = VmTerminalApi(screenBuffer = screenBuffer, ctx = this)
         val filesystemApi = VmFileSystemApi(ctx = this)

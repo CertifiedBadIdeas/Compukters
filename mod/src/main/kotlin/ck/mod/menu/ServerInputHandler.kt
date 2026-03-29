@@ -18,10 +18,10 @@
  */
 package ck.mod.menu
 
-import ck.mod.gui.input.InputHandler
+import ck.mod.application.input.InputEvent
 
 /**
- * An [InputHandler] which operates on the server, receiving data from the client over the network.
+ * Handles user-provided input on the server, receiving data from the client over the network.
  *
  * @see ServerInputState The default implementation of this interface.
  *
@@ -29,37 +29,9 @@ import ck.mod.gui.input.InputHandler
  *
  * @see ComputerMenu
  */
-interface ServerInputHandler : InputHandler {
+interface ServerInputHandler {
     /**
-     * Start a file upload into this container.
-     *
-     * @param uploadId The unique ID of this upload.
-     * @param files    The files to upload.
+     * Accept a unified [InputEvent], dispatching it to the VM and tracking input state.
      */
-//    fun startUpload(
-//        uploadId: UUID,
-//        files: MutableList<FileUpload>,
-//    )
-
-    /**
-     * Append more data to partially uploaded files.
-     *
-     * @param uploadId The unique ID of this upload.
-     * @param slices   Additional parts of file data to upload.
-     */
-//    fun continueUpload(
-//        uploadId: UUID,
-//        slices: MutableList<FileSlice>,
-//    )
-
-    /**
-     * Finish off an upload. This either writes the uploaded files or informs the user that files will be overwritten.
-     *
-     * @param uploader The player uploading files.
-     * @param uploadId The unique ID of this upload.
-     */
-//    fun finishUpload(
-//        uploader: ServerPlayer,
-//        uploadId: UUID,
-//    )
+    fun accept(event: InputEvent)
 }

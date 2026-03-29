@@ -18,9 +18,14 @@
  */
 package ck.mod.menu
 
+import ck.mod.application.input.ComputerControlAction
+import ck.mod.application.input.ControlInputEvent
+import ck.mod.application.input.InputEvent
+import ck.mod.application.input.KeyInputEvent
+import ck.mod.application.input.MouseInputEvent
+import ck.mod.application.input.PasteInputEvent
 import ck.mod.computer.ComputerEvents
 import ck.mod.computer.ServerComputer
-import ck.mod.gui.input.InputHandler
 import ck.mod.utils.StringUtil
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet
 import it.unimi.dsi.fastutil.ints.IntSet
@@ -30,15 +35,14 @@ import java.nio.ByteBuffer
 /**
  * The default concrete implementation of [ServerInputHandler].
  *
- *
- * This keeps track of the current key and mouse state, and releases them when the container is closed.
+ * Accepts a unified [InputEvent], tracks key/mouse state, and dispatches to the VM.
+ * On [close], releases all held keys and mouse buttons.
  *
  * @param <T> The type of container this server input belongs to.
 </T> */
 class ServerInputState<T>(
     private val owner: T,
-) : ServerInputHandler,
-    InputHandler
+) : ServerInputHandler
     where T : AbstractContainerMenu, T : ComputerMenu {
     private val keysDown: IntSet = IntOpenHashSet(4)
 
@@ -46,100 +50,73 @@ class ServerInputState<T>(
     private var lastMouseY = 0
     private var lastMouseDown = -1
 
-    override fun keyDown(
-        key: Int,
-        repeat: Boolean,
-    ) {
-        keysDown.add(key)
-        ComputerEvents.keyDown(owner.serverSide.computer, key, repeat)
-    }
+    override fun accept(event: InputEvent) {
+        val computer = owner.serverSide.computer
+        when (event) {
+            is KeyInputEvent.Down -> {
+                keysDown.add(event.key)
+                ComputerEvents.dispatch(computer, event)
+            }
 
-    override fun keyUp(key: Int) {
-        keysDown.remove(key)
-        ComputerEvents.keyUp(owner.serverSide.computer, key)
-    }
+            is KeyInputEvent.Up -> {
+                keysDown.remove(event.key)
+                ComputerEvents.dispatch(computer, event)
+            }
 
-    override fun charTyped(chr: Byte) {
-        if (StringUtil.isTypableChar(chr)) ComputerEvents.charTyped(owner.serverSide.computer, chr)
-    }
+            is KeyInputEvent.Character -> {
+                if (StringUtil.isTypableChar(event.value)) {
+                    ComputerEvents.dispatch(computer, event)
+                }
+            }
 
-    override fun paste(contents: ByteBuffer?) {
-        if (contents != null && contents.remaining() > 0 &&
-            isValidClipboard(contents)
-        ) {
-            ComputerEvents.paste(owner.serverSide.computer, contents)
+            is PasteInputEvent -> {
+                if (event.contents != null && event.contents.remaining() > 0 && isValidClipboard(event.contents)) {
+                    ComputerEvents.dispatch(computer, event)
+                }
+            }
+
+            is MouseInputEvent.Click -> {
+                lastMouseX = event.x
+                lastMouseY = event.y
+                lastMouseDown = event.button
+                ComputerEvents.dispatch(computer, event)
+            }
+
+            is MouseInputEvent.Up -> {
+                lastMouseX = event.x
+                lastMouseY = event.y
+                lastMouseDown = -1
+                ComputerEvents.dispatch(computer, event)
+            }
+
+            is MouseInputEvent.Drag -> {
+                lastMouseX = event.x
+                lastMouseY = event.y
+                lastMouseDown = event.button
+                ComputerEvents.dispatch(computer, event)
+            }
+
+            is MouseInputEvent.Scroll -> {
+                lastMouseX = event.x
+                lastMouseY = event.y
+                ComputerEvents.dispatch(computer, event)
+            }
+
+            is ControlInputEvent -> when (event.action) {
+                ComputerControlAction.TERMINATE -> computer.queueEvent("terminate")
+                ComputerControlAction.SHUTDOWN -> computer.shutdown()
+                ComputerControlAction.TURN_ON -> computer.turnOn()
+                ComputerControlAction.REBOOT -> computer.reboot()
+            }
         }
-    }
-
-    override fun mouseClick(
-        button: Int,
-        x: Int,
-        y: Int,
-    ) {
-        lastMouseX = x
-        lastMouseY = y
-        lastMouseDown = button
-
-        ComputerEvents.mouseClick(owner.serverSide.computer, button, x, y)
-    }
-
-    override fun mouseUp(
-        button: Int,
-        x: Int,
-        y: Int,
-    ) {
-        lastMouseX = x
-        lastMouseY = y
-        lastMouseDown = -1
-
-        ComputerEvents.mouseUp(owner.serverSide.computer, button, x, y)
-    }
-
-    override fun mouseDrag(
-        button: Int,
-        x: Int,
-        y: Int,
-    ) {
-        lastMouseX = x
-        lastMouseY = y
-        lastMouseDown = button
-
-        ComputerEvents.mouseDrag(owner.serverSide.computer, button, x, y)
-    }
-
-    override fun mouseScroll(
-        direction: Int,
-        x: Int,
-        y: Int,
-    ) {
-        lastMouseX = x
-        lastMouseY = y
-
-        ComputerEvents.mouseScroll(owner.serverSide.computer, direction, x, y)
-    }
-
-    override fun terminate() {
-        owner.serverSide.computer.queueEvent("terminate")
-    }
-
-    override fun shutdown() {
-        owner.serverSide.computer.shutdown()
-    }
-
-    override fun turnOn() {
-        owner.serverSide.computer.turnOn()
-    }
-
-    override fun reboot() {
-        owner.serverSide.computer.reboot()
     }
 
     fun close() {
         val computer: ServerComputer = owner.serverSide.computer
         val keys = keysDown.iterator()
-        while (keys.hasNext()) ComputerEvents.keyUp(computer, keys.nextInt())
+        while (keys.hasNext()) ComputerEvents.dispatch(computer, KeyInputEvent.Up(keys.nextInt()))
 
-        if (lastMouseDown != -1) ComputerEvents.mouseUp(computer, lastMouseDown, lastMouseX, lastMouseY)
+        if (lastMouseDown != -1) ComputerEvents.dispatch(computer, MouseInputEvent.Up(lastMouseDown, lastMouseX, lastMouseY))
 
         keysDown.clear()
         lastMouseDown = -1

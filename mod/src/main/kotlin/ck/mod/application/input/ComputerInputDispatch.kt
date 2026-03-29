@@ -20,32 +20,24 @@ package ck.mod.application.input
 
 import ck.mod.menu.ServerInputHandler
 
-fun ServerInputHandler.accept(action: ComputerControlAction) {
-    when (action) {
-        ComputerControlAction.TERMINATE -> terminate()
-        ComputerControlAction.TURN_ON -> turnOn()
-        ComputerControlAction.SHUTDOWN -> shutdown()
-        ComputerControlAction.REBOOT -> reboot()
-    }
-}
-
-fun ServerInputHandler.accept(event: KeyInputEvent) {
+/**
+ * Dispatch a unified [InputEvent] to the appropriate [ServerInputHandler] method.
+ */
+fun ServerInputHandler.accept(event: InputEvent) {
     when (event) {
+        is ControlInputEvent -> when (event.action) {
+            ComputerControlAction.TERMINATE -> terminate()
+            ComputerControlAction.TURN_ON -> turnOn()
+            ComputerControlAction.SHUTDOWN -> shutdown()
+            ComputerControlAction.REBOOT -> reboot()
+        }
         is KeyInputEvent.Down -> keyDown(event.key, event.repeat)
         is KeyInputEvent.Up -> keyUp(event.key)
         is KeyInputEvent.Character -> charTyped(event.value)
-    }
-}
-
-fun ServerInputHandler.accept(event: MouseInputEvent) {
-    when (event) {
         is MouseInputEvent.Click -> mouseClick(event.button, event.x, event.y)
         is MouseInputEvent.Up -> mouseUp(event.button, event.x, event.y)
         is MouseInputEvent.Drag -> mouseDrag(event.button, event.x, event.y)
         is MouseInputEvent.Scroll -> mouseScroll(event.direction, event.x, event.y)
+        is PasteInputEvent -> paste(event.contents)
     }
-}
-
-fun ServerInputHandler.accept(event: PasteInputEvent) {
-    paste(event.contents)
 }

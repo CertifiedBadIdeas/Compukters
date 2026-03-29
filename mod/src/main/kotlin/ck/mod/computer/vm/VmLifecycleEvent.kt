@@ -16,21 +16,21 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-package ck.mod.gui.input
+package ck.mod.computer.vm
 
-import ck.mod.application.input.ComputerInputGateway
-import ck.mod.application.input.InputEvent
-import ck.mod.application.input.InputEventSink
-import ck.mod.infrastructure.input.NetworkComputerInputGateway
-import net.minecraft.world.inventory.AbstractContainerMenu
+import ck.lang.runtime.VmStopReason
 
 /**
- * Client-side [InputEventSink] that forwards all input to the server via [ComputerInputGateway].
+ * Events emitted by the VM coroutine when a lifecycle transition occurs.
+ *
+ * Consumers (e.g. [ck.mod.computer.ServerComputer]) collect the
+ * [BackgroundComputerVm.lifecycleEvents] [SharedFlow][kotlinx.coroutines.flow.SharedFlow]
+ * to react to these transitions.
  */
-class ClientInputHandler(
-    menu: AbstractContainerMenu,
-) : InputEventSink {
-    private val gateway: ComputerInputGateway = NetworkComputerInputGateway(menu)
+sealed interface VmLifecycleEvent {
+    /** The VM has stopped (normally, by request, or due to a crash). */
+    data class Stopped(val reason: VmStopReason) : VmLifecycleEvent
 
-    override fun accept(event: InputEvent) = gateway.send(event)
+    /** The VM has requested a reboot (stop + restart). */
+    data object RebootRequested : VmLifecycleEvent
 }

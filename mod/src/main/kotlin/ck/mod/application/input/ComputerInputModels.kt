@@ -20,6 +20,14 @@ package ck.mod.application.input
 
 import java.nio.ByteBuffer
 
+/**
+ * Unified sealed interface for all input events that can be sent to a computer.
+ *
+ * Subtypes cover keyboard input ([KeyInputEvent]), mouse input ([MouseInputEvent]),
+ * clipboard paste ([PasteInputEvent]), and control actions ([ControlInputEvent]).
+ */
+sealed interface InputEvent
+
 enum class ComputerControlAction {
     TERMINATE,
     TURN_ON,
@@ -27,7 +35,10 @@ enum class ComputerControlAction {
     REBOOT,
 }
 
-sealed interface KeyInputEvent {
+/** Control actions (turn on, shutdown, reboot, terminate). */
+data class ControlInputEvent(val action: ComputerControlAction) : InputEvent
+
+sealed interface KeyInputEvent : InputEvent {
     data class Down(
         val key: Int,
         val repeat: Boolean,
@@ -42,7 +53,7 @@ sealed interface KeyInputEvent {
     ) : KeyInputEvent
 }
 
-sealed interface MouseInputEvent {
+sealed interface MouseInputEvent : InputEvent {
     data class Click(
         val button: Int,
         val x: Int,
@@ -70,4 +81,4 @@ sealed interface MouseInputEvent {
 
 data class PasteInputEvent(
     val contents: ByteBuffer,
-)
+) : InputEvent

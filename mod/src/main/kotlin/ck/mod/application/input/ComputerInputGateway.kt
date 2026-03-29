@@ -18,12 +18,19 @@
  */
 package ck.mod.application.input
 
+/**
+ * Accepts [InputEvent]s and forwards them towards a computer.
+ *
+ * On the client side, the implementation serializes events into network packets.
+ * On the server side, the implementation dispatches events to [ComputerEvents].
+ */
+fun interface InputEventSink {
+    fun accept(event: InputEvent)
+}
+
+/**
+ * Client-side gateway that sends [InputEvent]s to the server over the network.
+ */
 interface ComputerInputGateway {
-    fun sendControl(action: ComputerControlAction)
-
-    fun sendKey(event: KeyInputEvent)
-
-    fun sendMouse(event: MouseInputEvent)
-
-    fun sendPaste(event: PasteInputEvent)
+    fun send(event: InputEvent)
 }

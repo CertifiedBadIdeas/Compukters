@@ -25,7 +25,7 @@ import ck.lang.runtime.ComputerVmHandle
 import ck.lang.runtime.ComputerWorkspace
 import ck.lang.runtime.VmStopReason
 import ck.mod.computer.ServerComputer
-import ck.mod.computer.vm.ComputerVmCallbacks
+import ck.mod.computer.vm.BackgroundComputerVm
 import ck.mod.computer.vm.ComputerVmLogger
 import ck.mod.computer.vm.ComputerVmSupervisor
 import it.unimi.dsi.fastutil.ints.Int2ObjectMap
@@ -68,9 +68,9 @@ class ComputerManager(
     fun getOrCreateVm(
         computerId: Int,
         profile: ComputerProfile,
-        callbacks: ComputerVmCallbacks,
+        labelProvider: () -> String?,
         logger: ComputerVmLogger,
-    ): ComputerVmHandle = vmSupervisor.getOrCreate(computerId, profile, callbacks, logger)
+    ): BackgroundComputerVm = vmSupervisor.getOrCreate(computerId, profile, labelProvider, logger)
 
     fun removeVm(
         computerId: Int,

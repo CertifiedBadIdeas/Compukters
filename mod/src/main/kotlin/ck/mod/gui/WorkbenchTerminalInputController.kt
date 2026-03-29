@@ -18,7 +18,9 @@
  */
 package ck.mod.gui
 
-import ck.mod.gui.input.InputHandler
+import ck.mod.application.input.InputEventSink
+import ck.mod.application.input.KeyInputEvent
+import ck.mod.application.input.PasteInputEvent
 import ck.mod.utils.StringUtil
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.screens.Screen
@@ -26,7 +28,7 @@ import org.lwjgl.glfw.GLFW
 import java.util.BitSet
 
 class WorkbenchTerminalInputController(
-    private val computer: InputHandler,
+    private val computer: InputEventSink,
 ) {
     private val keysDown = BitSet(256)
 
@@ -45,7 +47,7 @@ class WorkbenchTerminalInputController(
 
         val terminalChar = StringUtil.unicodeToTerminal(ch.code)
         if (StringUtil.isTypableChar(terminalChar)) {
-            computer.charTyped(terminalChar.toByte())
+            computer.accept(KeyInputEvent.Character(terminalChar.toByte()))
         }
         return true
     }
@@ -65,7 +67,7 @@ class WorkbenchTerminalInputController(
             val actualKey = KeyConverter.physicalToActual(key, scancode)
             val repeat = keysDown.get(actualKey)
             keysDown.set(actualKey)
-            computer.keyDown(actualKey, repeat)
+            computer.accept(KeyInputEvent.Down(actualKey, repeat))
         }
         return true
     }
@@ -80,7 +82,7 @@ class WorkbenchTerminalInputController(
             val actualKey = KeyConverter.physicalToActual(key, scancode)
             if (keysDown.get(actualKey)) {
                 keysDown.set(actualKey, false)
-                computer.keyUp(actualKey)
+                computer.accept(KeyInputEvent.Up(actualKey))
             }
         }
         return true
@@ -98,14 +100,14 @@ class WorkbenchTerminalInputController(
     private fun paste() {
         val clipboard = StringUtil.getClipboardString(Minecraft.getInstance().keyboardHandler.clipboard)
         if (clipboard.remaining() > 0) {
-            computer.paste(clipboard)
+            computer.accept(PasteInputEvent(clipboard))
         }
     }
 
     private fun releaseState() {
         for (key in 0..<keysDown.size()) {
             if (keysDown.get(key)) {
-                computer.keyUp(key)
+                computer.accept(KeyInputEvent.Up(key))
             }
         }
         keysDown.clear()

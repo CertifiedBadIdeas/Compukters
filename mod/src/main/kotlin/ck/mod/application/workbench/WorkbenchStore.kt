@@ -18,9 +18,13 @@
  */
 package ck.mod.application.workbench
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
 import org.lwjgl.glfw.GLFW
 
 /**
@@ -30,7 +34,7 @@ import org.lwjgl.glfw.GLFW
  * observe changes reactively. Synchronous reads use [state] (delegates to `.value`).
  *
  * Remote workspace updates arrive through a [WorkbenchUpdateSource]'s [StateFlow].
- * Call [tick] each game tick to merge any pending remote changes.
+ * Call [bind] with a [CoroutineScope] to start reactively collecting remote state changes.
  */
 class WorkbenchStore(
     private val workspaceGateway: WorkspaceGateway,
@@ -43,36 +47,30 @@ class WorkbenchStore(
     /** Current workbench state (synchronous read). */
     val state: WorkbenchState get() = _state.value
 
-    private var updateSource: WorkbenchUpdateSource? = null
-    /** Tracks the last remote state we merged, to detect changes. */
-    private var lastMergedRemote: WorkbenchRemoteState = WorkbenchRemoteState()
+    private var collectJob: Job? = null
 
     /**
-     * Bind a [WorkbenchUpdateSource] whose [StateFlow] will be polled every [tick].
+     * Bind a [WorkbenchUpdateSource] and start reactively collecting its [StateFlow].
+     * Remote changes are merged into local state as soon as they arrive.
      */
-    fun bind(updateSource: WorkbenchUpdateSource) {
-        this.updateSource = updateSource
+    fun bind(scope: CoroutineScope, updateSource: WorkbenchUpdateSource) {
+        collectJob?.cancel()
         // Immediately merge the current value
         mergeRemoteState(updateSource.stateFlow.value)
+        collectJob = scope.launch {
+            updateSource.stateFlow.collect { remote ->
+                mergeRemoteState(remote)
+            }
+        }
     }
 
     fun dispose() {
-        updateSource = null
+        collectJob?.cancel()
+        collectJob = null
     }
 
     fun initialize() {
         requestListing("")
-    }
-
-    /**
-     * Call once per game tick (from `containerTick`) to merge any pending remote state changes.
-     */
-    fun tick() {
-        val source = updateSource ?: return
-        val remote = source.stateFlow.value
-        if (remote != lastMergedRemote) {
-            mergeRemoteState(remote)
-        }
     }
 
     fun toggleMode() {
@@ -252,7 +250,6 @@ class WorkbenchStore(
     }
 
     private fun mergeRemoteState(remoteState: WorkbenchRemoteState) {
-        lastMergedRemote = remoteState
         val documentChanged = remoteState.document != state.openDocument
         var nextState = state
 

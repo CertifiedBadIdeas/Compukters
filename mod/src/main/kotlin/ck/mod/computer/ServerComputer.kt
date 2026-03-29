@@ -28,17 +28,23 @@ import ck.mod.LOGGER
 import ck.mod.application.runtime.ComputerProgramCompiler
 import ck.mod.application.runtime.HostCallDispatcher
 import ck.mod.application.runtime.WorkspaceProgramLoader
+import ck.mod.computer.vm.BackgroundComputerVm
 import ck.mod.computer.vm.ComputerProfileRegistry
-import ck.mod.computer.vm.ComputerVmCallbacks
 import ck.mod.computer.vm.ComputerVmLogger
+import ck.mod.computer.vm.VmLifecycleEvent
 import ck.mod.context.ServerContext
 import ck.mod.language.LanguageServices
 import ck.mod.menu.ComputerMenu
 import ck.mod.network.client.ComputerTerminalClientMessage
 import ck.mod.network.server.ServerNetworking
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.entity.player.Player
@@ -56,14 +62,18 @@ class ServerComputer(
     val instanceID: Int,
     val level: ServerLevel,
     properties: ComputerProperties,
-) : ComputerEvents.Receiver,
-    ComputerVmCallbacks {
+) : ComputerEvents.Receiver {
     val family = properties.family
     private val profile = ComputerProfileRegistry.forFamily(family)
 
     private val logger = ComputerVmLogger { message -> LOGGER.info { message } }
     private var label: String? = properties.label
-    private var vmHandle: ComputerVmHandle? = null
+
+    private fun label(): String? = label
+
+    private var vmHandle: BackgroundComputerVm? = null
+
+    private val serverScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     private val _screenSnapshot = MutableStateFlow<ScreenBufferSnapshot?>(null)
     /**
@@ -75,9 +85,6 @@ class ServerComputer(
     val lastScreenSnapshot: ScreenBufferSnapshot? get() = _screenSnapshot.value
 
     private val _rebootRequested = MutableStateFlow(false)
-    /**
-     * Set by [onVmRebootRequested] from the VM coroutine, consumed by [serverTick].
-     */
 
     private val computerManager get() = ServerContext.computerManager
 
@@ -136,7 +143,7 @@ class ServerComputer(
         }
 
         computerManager.removeVm(instanceID, VmStopReason.CLOSED)
-        val handle = computerManager.getOrCreateVm(instanceID, profile, this, logger)
+        val handle = computerManager.getOrCreateVm(instanceID, profile, ::label, logger)
         val compiledProgram = ComputerProgramCompiler.compile(bootScript.path, bootScript.source)
         val program = compiledProgram.program
         if (program == null) {
@@ -151,6 +158,7 @@ class ServerComputer(
         val started = handle.start(program)
         if (started) {
             handle.enqueueEvent(VmEvent("boot"))
+            observeLifecycle(handle)
         }
     }
 
@@ -164,16 +172,15 @@ class ServerComputer(
         LOGGER.info { "ComputerID: $instanceID close" }
         computerManager.removeVm(instanceID, VmStopReason.CLOSED)
         vmHandle = null
+        serverScope.cancel()
     }
 
     fun serverTick() {
-        val handle = vmHandle
-        if (handle == null) {
-            return
-        }
+        val handle = vmHandle ?: return
+
         handle.requestSlice(level.gameTime)
 
-        // Dispatch filesystem host calls (terminal writes no longer go through HostCall)
+        // Dispatch filesystem host calls
         val results = handle.drainHostCalls().map(hostCallDispatcher::dispatch)
         if (results.isNotEmpty()) {
             handle.deliverHostResults(results)
@@ -181,32 +188,38 @@ class ServerComputer(
 
         // Sync screen buffer to watching players
         syncScreen(handle)
+    }
 
-        // Check for VM stop / crash / reboot
-        val snapshot = handle.snapshot()
-        if (snapshot.state == VmState.STOPPED || snapshot.state == VmState.CRASHED) {
-            if (snapshot.state == VmState.CRASHED && snapshot.errorMessage != null) {
-                LOGGER.warn { "ComputerID: $instanceID VM crash: ${snapshot.errorMessage}" }
-            }
+    // ── Lifecycle observation ────────────────────────────────────────
 
-            computerManager.removeVm(instanceID, VmStopReason.CLOSED)
-            vmHandle = null
-
-            if (snapshot.stopReason == VmStopReason.REBOOT || _rebootRequested.value) {
-                _rebootRequested.value = false
-                turnOn()
+    private fun observeLifecycle(handle: BackgroundComputerVm) {
+        serverScope.launch {
+            handle.lifecycleEvents.collect { event ->
+                when (event) {
+                    is VmLifecycleEvent.RebootRequested -> {
+                        _rebootRequested.value = true
+                    }
+                    is VmLifecycleEvent.Stopped -> {
+                        handleVmStopped(event.reason)
+                    }
+                }
             }
         }
     }
 
-    // ── ComputerVmCallbacks ─────────────────────────────────────────
+    private fun handleVmStopped(reason: VmStopReason) {
+        val snapshot = vmHandle?.snapshot() ?: return
+        if (snapshot.state == VmState.CRASHED && snapshot.errorMessage != null) {
+            LOGGER.warn { "ComputerID: $instanceID VM crash: ${snapshot.errorMessage}" }
+        }
 
-    override fun currentLabel(): String? = label
+        computerManager.removeVm(instanceID, VmStopReason.CLOSED)
+        vmHandle = null
 
-    override fun onVmStop(reason: VmStopReason) = Unit
-
-    override fun onVmRebootRequested() {
-        _rebootRequested.value = true
+        if (reason == VmStopReason.REBOOT || _rebootRequested.value) {
+            _rebootRequested.value = false
+            turnOn()
+        }
     }
 
     // ── Internal ────────────────────────────────────────────────────

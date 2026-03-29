@@ -61,20 +61,20 @@ class ComputerVmSupervisor(
     fun getOrCreate(
         computerId: Int,
         profile: ComputerProfile,
-        callbacks: ComputerVmCallbacks,
+        labelProvider: () -> String?,
         logger: ComputerVmLogger,
-    ): ComputerVmHandle =
+    ): BackgroundComputerVm =
         handles.computeIfAbsent(computerId) {
             BackgroundComputerVm(
                 computerId = computerId,
                 profile = profile,
                 dispatcher = dispatcher,
-                callbacks = callbacks,
+                labelProvider = labelProvider,
                 logger = logger,
                 workspace = workspaceStore,
                 bundledScriptLoader = LanguageServices::bundledScript,
             )
-        }
+        } as BackgroundComputerVm
 
     override fun get(computerId: Int): ComputerVmHandle? = handles[computerId]
 

@@ -19,7 +19,7 @@
 package ck.mod.network.server
 
 import ck.mod.application.input.ComputerControlAction
-import ck.mod.application.input.accept
+import ck.mod.application.input.ControlInputEvent
 import ck.mod.menu.ComputerMenu
 import ck.mod.network.MessageType
 import ck.mod.network.NetworkMessages
@@ -46,7 +46,7 @@ class ComputerActionServerMessage : ComputerServerMessage {
         context: ServerNetworkContext,
         container: ComputerMenu,
     ) {
-        container.serverSide.input.accept(action.toDomainAction())
+        container.serverSide.input.accept(ControlInputEvent(action.toDomainAction()))
     }
 
     override fun type(): MessageType<ComputerActionServerMessage> = NetworkMessages.COMPUTER_ACTION

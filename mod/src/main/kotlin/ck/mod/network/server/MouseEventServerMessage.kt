@@ -19,7 +19,6 @@
 package ck.mod.network.server
 
 import ck.mod.application.input.MouseInputEvent
-import ck.mod.application.input.accept
 import ck.mod.menu.ComputerMenu
 import ck.mod.network.MessageType
 import ck.mod.network.NetworkMessages

@@ -19,7 +19,6 @@
 package ck.mod.network.server
 
 import ck.mod.application.input.PasteInputEvent
-import ck.mod.application.input.accept
 import ck.mod.menu.ComputerMenu
 import ck.mod.network.MessageType
 import ck.mod.network.NetworkMessages
@@ -32,7 +31,7 @@ import java.nio.ByteBuffer
 /**
  * Paste a string on a [ServerComputer].
  *
- * @see ServerInputHandler.paste
+ * @see ServerInputHandler.accept
  */
 class PasteEventComputerMessage : ComputerServerMessage {
     private val text: ByteBuffer
