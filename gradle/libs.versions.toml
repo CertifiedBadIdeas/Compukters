@@ -4,6 +4,7 @@
 
 # buildSrc
 kotlinConvention = { id = "kotlin-convention" }
+releaseConvention = { id = "release-convention" }
 
 # external
 kotlin = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
