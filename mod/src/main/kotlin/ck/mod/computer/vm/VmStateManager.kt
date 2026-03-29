@@ -21,6 +21,7 @@ package ck.mod.computer.vm
 
 import ck.lang.runtime.VmState
 import ck.lang.runtime.VmStopReason
+import ck.mod.LOGGER
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -61,6 +62,7 @@ class VmLifecycleState {
         reason: VmStopReason,
         error: String? = null,
     ) {
+        LOGGER.info { "Stopping VM: reason=$reason, error=$error" }
         lock.withLock {
             _state.value = if (error != null) VmState.Crashed(error) else VmState.Stopped(reason)
         }
@@ -131,8 +133,6 @@ class VmStateManager {
     val isStopped: Boolean get() = lifecycle.isStopped
 
     fun setState(newState: VmState) = lifecycle.setState(newState)
-
-    suspend fun withStateLock(block: suspend () -> Unit) = lifecycle.withLock(block)
 
     suspend fun stopVm(
         reason: VmStopReason,

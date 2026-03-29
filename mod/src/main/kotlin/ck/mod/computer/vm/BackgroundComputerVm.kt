@@ -31,6 +31,7 @@ import ck.lang.runtime.VmEvent
 import ck.lang.runtime.VmSnapshot
 import ck.lang.runtime.VmState
 import ck.lang.runtime.VmStopReason
+import ck.mod.LOGGER
 import ck.mod.application.runtime.ComputerProgramCompiler
 import ck.mod.application.runtime.WorkspaceProgramLoader
 import kotlinx.coroutines.CancellationException
@@ -141,6 +142,7 @@ class BackgroundComputerVm(
 
     override fun stop(reason: VmStopReason) {
         scope.launch {
+            LOGGER.info { "ComputerID: $computerId stop requested, reason: $reason" }
             stopInternal(reason)
         }
     }
@@ -198,13 +200,18 @@ class BackgroundComputerVm(
         reason: VmStopReason = VmStopReason.REQUESTED,
         errorMessage: String? = null,
     ) {
-        if (stateManager.isStopped) return
-
-        stateManager.withStateLock {
-            stateManager.stopVm(reason, errorMessage)
-            runner?.cancel()
-            runner = null
+        if (stateManager.isStopped) {
+            LOGGER.info { "ComputerID: $computerId already stopped, ignoring stop request (reason: $reason, error: $errorMessage)" }
+            return
         }
+
+        LOGGER.info { "ComputerID: $computerId stopped with reason: $reason, error: $errorMessage" }
+
+        stateManager.stopVm(reason, errorMessage)
+        runner?.cancel()
+        runner = null
+
+        LOGGER.info { "ComputerID: $computerId stop lock request ended (reason: $reason, error: $errorMessage)" }
     }
 
     private suspend fun awaitSlicePermit() {

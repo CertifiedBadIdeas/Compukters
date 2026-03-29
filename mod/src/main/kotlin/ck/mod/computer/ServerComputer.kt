@@ -166,7 +166,9 @@ class ServerComputer(
 
     private fun observeLifecycle(handle: BackgroundComputerVm) {
         serverScope.launch {
+            LOGGER.info { "ComputerID: $instanceID event listening start" }
             handle.terminalStates.collect { state ->
+                LOGGER.info { "ComputerID: $instanceID VM state: $state" }
                 if (state is VmState.Stopped || state is VmState.Crashed) {
                     handleVmStopped(state)
                 }
@@ -179,10 +181,13 @@ class ServerComputer(
             LOGGER.warn { "ComputerID: $instanceID VM crash: ${terminalState.errorMessage}" }
         }
 
+        LOGGER.info { "ComputerID: $instanceID stop handling $terminalState" }
+
         computerManager.removeVm(instanceID, VmStopReason.CLOSED)
         vmHandle = null
 
         if (terminalState is VmState.Stopped && terminalState.reason == VmStopReason.REBOOT) {
+            LOGGER.info { "ComputerID: $instanceID turning on because it was rebooted" }
             turnOn()
         }
     }

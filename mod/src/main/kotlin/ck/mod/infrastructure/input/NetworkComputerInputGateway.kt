@@ -18,6 +18,7 @@
  */
 package ck.mod.infrastructure.input
 
+import ck.mod.LOGGER
 import ck.mod.application.input.ComputerControlAction
 import ck.mod.application.input.ComputerInputGateway
 import ck.mod.application.input.ControlInputEvent
@@ -36,46 +37,65 @@ class NetworkComputerInputGateway(
     private val menu: AbstractContainerMenu,
 ) : ComputerInputGateway {
     override fun send(event: InputEvent) {
+        LOGGER.info { "Sending input event to server: $event" }
         when (event) {
-            is ControlInputEvent -> ClientNetworking.sendToServer(
-                ComputerActionServerMessage(menu, event.action.toWireAction()),
-            )
+            is ControlInputEvent -> {
+                ClientNetworking.sendToServer(
+                    ComputerActionServerMessage(menu, event.action.toWireAction()),
+                )
+            }
 
-            is KeyInputEvent.Down -> ClientNetworking.sendToServer(
-                KeyEventServerMessage(
-                    menu,
-                    if (event.repeat) KeyEventServerMessage.Action.REPEAT else KeyEventServerMessage.Action.DOWN,
-                    event.key,
-                ),
-            )
+            is KeyInputEvent.Down -> {
+                ClientNetworking.sendToServer(
+                    KeyEventServerMessage(
+                        menu,
+                        if (event.repeat) KeyEventServerMessage.Action.REPEAT else KeyEventServerMessage.Action.DOWN,
+                        event.key,
+                    ),
+                )
+            }
 
-            is KeyInputEvent.Up -> ClientNetworking.sendToServer(
-                KeyEventServerMessage(menu, KeyEventServerMessage.Action.UP, event.key),
-            )
+            is KeyInputEvent.Up -> {
+                ClientNetworking.sendToServer(
+                    KeyEventServerMessage(menu, KeyEventServerMessage.Action.UP, event.key),
+                )
+            }
 
-            is KeyInputEvent.Character -> ClientNetworking.sendToServer(
-                KeyEventServerMessage(menu, KeyEventServerMessage.Action.CHAR, event.value.toInt()),
-            )
+            is KeyInputEvent.Character -> {
+                ClientNetworking.sendToServer(
+                    KeyEventServerMessage(menu, KeyEventServerMessage.Action.CHAR, event.value.toInt()),
+                )
+            }
 
-            is MouseInputEvent.Click -> ClientNetworking.sendToServer(
-                MouseEventServerMessage(menu, MouseEventServerMessage.Action.CLICK, event.button, event.x, event.y),
-            )
+            is MouseInputEvent.Click -> {
+                ClientNetworking.sendToServer(
+                    MouseEventServerMessage(menu, MouseEventServerMessage.Action.CLICK, event.button, event.x, event.y),
+                )
+            }
 
-            is MouseInputEvent.Up -> ClientNetworking.sendToServer(
-                MouseEventServerMessage(menu, MouseEventServerMessage.Action.UP, event.button, event.x, event.y),
-            )
+            is MouseInputEvent.Up -> {
+                ClientNetworking.sendToServer(
+                    MouseEventServerMessage(menu, MouseEventServerMessage.Action.UP, event.button, event.x, event.y),
+                )
+            }
 
-            is MouseInputEvent.Drag -> ClientNetworking.sendToServer(
-                MouseEventServerMessage(menu, MouseEventServerMessage.Action.DRAG, event.button, event.x, event.y),
-            )
+            is MouseInputEvent.Drag -> {
+                ClientNetworking.sendToServer(
+                    MouseEventServerMessage(menu, MouseEventServerMessage.Action.DRAG, event.button, event.x, event.y),
+                )
+            }
 
-            is MouseInputEvent.Scroll -> ClientNetworking.sendToServer(
-                MouseEventServerMessage(menu, MouseEventServerMessage.Action.SCROLL, event.direction, event.x, event.y),
-            )
+            is MouseInputEvent.Scroll -> {
+                ClientNetworking.sendToServer(
+                    MouseEventServerMessage(menu, MouseEventServerMessage.Action.SCROLL, event.direction, event.x, event.y),
+                )
+            }
 
-            is PasteInputEvent -> ClientNetworking.sendToServer(
-                PasteEventComputerMessage(menu, event.contents),
-            )
+            is PasteInputEvent -> {
+                ClientNetworking.sendToServer(
+                    PasteEventComputerMessage(menu, event.contents),
+                )
+            }
         }
     }
 }
