@@ -183,12 +183,7 @@ class BackgroundComputerVm(
             stateManager.stopVm(reason, errorMessage)
             runner?.cancel()
             runner = null
-
-            if (reason == VmStopReason.REBOOT) {
-                _lifecycleEvents.emit(VmLifecycleEvent.RebootRequested)
-            } else {
-                _lifecycleEvents.emit(VmLifecycleEvent.Stopped(reason))
-            }
+            _lifecycleEvents.emit(VmLifecycleEvent.Stopped(reason))
         }
     }
 

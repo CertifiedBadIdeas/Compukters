@@ -82,8 +82,6 @@ class ServerComputer(
     /** Current screen snapshot (synchronous read). */
     val lastScreenSnapshot: ScreenBufferSnapshot? get() = _screenSnapshot.value
 
-    private val _rebootRequested = MutableStateFlow(false)
-
     private val computerManager get() = ServerContext.computerManager
 
     private val programLoader by lazy {
@@ -152,7 +150,6 @@ class ServerComputer(
         }
 
         vmHandle = handle
-        _rebootRequested.value = false
         val started = handle.start(program)
         if (started) {
             handle.enqueueEvent(VmEvent("boot"))
@@ -162,7 +159,6 @@ class ServerComputer(
 
     fun reboot() {
         LOGGER.info { "ComputerID: $instanceID reboot" }
-        _rebootRequested.value = true
         vmHandle?.stop(VmStopReason.REBOOT) ?: turnOn()
     }
 
@@ -194,12 +190,7 @@ class ServerComputer(
         serverScope.launch {
             handle.lifecycleEvents.collect { event ->
                 when (event) {
-                    is VmLifecycleEvent.RebootRequested -> {
-                        _rebootRequested.value = true
-                    }
-                    is VmLifecycleEvent.Stopped -> {
-                        handleVmStopped(event.reason)
-                    }
+                    is VmLifecycleEvent.Stopped -> handleVmStopped(event.reason)
                 }
             }
         }
@@ -214,8 +205,7 @@ class ServerComputer(
         computerManager.removeVm(instanceID, VmStopReason.CLOSED)
         vmHandle = null
 
-        if (reason == VmStopReason.REBOOT || _rebootRequested.value) {
-            _rebootRequested.value = false
+        if (reason == VmStopReason.REBOOT) {
             turnOn()
         }
     }

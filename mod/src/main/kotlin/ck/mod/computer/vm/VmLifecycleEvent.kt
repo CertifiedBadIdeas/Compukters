@@ -28,9 +28,6 @@ import ck.lang.runtime.VmStopReason
  * to react to these transitions.
  */
 sealed interface VmLifecycleEvent {
-    /** The VM has stopped (normally, by request, or due to a crash). */
+    /** The VM has stopped (normally, by request, due to a reboot, or due to a crash). */
     data class Stopped(val reason: VmStopReason) : VmLifecycleEvent
-
-    /** The VM has requested a reboot (stop + restart). */
-    data object RebootRequested : VmLifecycleEvent
 }
