@@ -44,7 +44,8 @@ val minecraftVersion = libs.versions.minecraft.get()
 val modVersion = "$minecraftVersion-${rootProject.version}"
 modProperties["mod_version"] = modVersion
 
-base.archivesName = modProperties["mod_name"]!!.replace(" ", "") + "-" + modVersion
+base.archivesName = modProperties["mod_name"]!!.replace(" ", "")
+version = modVersion
 
 dependencies {
     minecraft(libs.minecraft)
