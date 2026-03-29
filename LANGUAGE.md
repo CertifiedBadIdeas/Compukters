@@ -16,8 +16,8 @@ Statements:
 
 - `val name = expr;`
 - `var counter: Int = 0;`
-- `if condition { ... } else { ... }`
-- `if condition { ... } else if condition { ... } else { ... }`
+- `if (condition) { ... } else { ... }`
+- `if (condition) { ... } else if (condition) { ... } else { ... }`
 - `while condition { ... }`
 - `when(subject) { value -> { ... } else -> { ... } }`
 - `when { condition -> { ... } else -> { ... } }`

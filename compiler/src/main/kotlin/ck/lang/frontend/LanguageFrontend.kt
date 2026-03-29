@@ -1412,7 +1412,9 @@ internal class Parser(
     }
 
     private fun parseIf(): IfStatement? {
+        consume(TokenKind.LPAREN, "Expected `(` after `if`.") ?: return null
         val condition = parseExpression() ?: return null
+        consume(TokenKind.RPAREN, "Expected `)` after if condition.") ?: return null
         val thenBranch = parseBlock() ?: return null
         val elseBranch: Statement? = if (match(TokenKind.ELSE)) {
             if (match(TokenKind.IF)) {

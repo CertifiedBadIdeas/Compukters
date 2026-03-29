@@ -4,7 +4,7 @@ import system;
 import terminal;
 
 fun displayPath(path: String): String {
-    if path == "" {
+    if (path == "") {
         return "/";
     }
     return "/" + path;
@@ -24,17 +24,17 @@ fun printHelp() {
 }
 
 fun runExternal(command: String, argument: String) {
-    if process.run(command + ".ck", argument) != 0 {
+    if (process.run(command + ".ck", argument) != 0) {
         terminal.printLine("Unknown command: " + command);
     }
 }
 
 fun handleCd(argument: String) {
-    if strings.isBlank(argument) {
+    if (strings.isBlank(argument)) {
         terminal.printLine(displayPath(process.currentDirectory()));
         return;
     }
-    if !process.changeDirectory(argument) {
+    if (!process.changeDirectory(argument)) {
         terminal.printLine("Directory not found: " + argument);
     }
 }
@@ -45,31 +45,23 @@ fun main() {
     while true {
         val line: String = terminal.readLine(displayPath(process.currentDirectory()) + " > ");
         val trimmed: String = strings.trim(line);
-        if strings.isBlank(trimmed) {
+        if (strings.isBlank(trimmed)) {
             yield();
         } else {
             val name: String = commandName(trimmed);
             val argument: String = commandArgument(trimmed);
-            if name == "help" {
+            if (name == "help") {
                 printHelp();
+            } else if (name == "cd") {
+                handleCd(argument);
+            } else if (name == "pwd") {
+                runExternal("pwd", argument);
+            } else if (name == "reboot") {
+                system.reboot();
+            } else if (name == "shutdown") {
+                system.shutdown();
             } else {
-                if name == "cd" {
-                    handleCd(argument);
-                } else {
-                    if name == "pwd" {
-                        runExternal("pwd", argument);
-                    } else {
-                        if name == "reboot" {
-                            system.reboot();
-                        } else {
-                            if name == "shutdown" {
-                                system.shutdown();
-                            } else {
-                                runExternal(name, argument);
-                            }
-                        }
-                    }
-                }
+                runExternal(name, argument);
             }
         }
     }

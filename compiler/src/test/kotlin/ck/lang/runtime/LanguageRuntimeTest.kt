@@ -106,12 +106,12 @@ class LanguageRuntimeTest {
                     terminal.printLine(process.argument());
                     terminal.printLine(strings.beforeSpace("mkdir test"));
                     terminal.printLine(strings.afterSpace("mkdir test"));
-                    if filesystem.makeDir("tmp") {
+                    if (filesystem.makeDir("tmp")) {
                         terminal.printLine("mk");
                     } else {
                         terminal.printLine("no");
                     }
-                    if process.changeDirectory("tmp") {
+                    if (process.changeDirectory("tmp")) {
                         terminal.printLine("cd");
                     } else {
                         terminal.printLine("stay");
@@ -148,11 +148,11 @@ class LanguageRuntimeTest {
 
                 fun main() {
                     val x: Int = 2;
-                    if x == 1 {
+                    if (x == 1) {
                         terminal.printLine("one");
-                    } else if x == 2 {
+                    } else if (x == 2) {
                         terminal.printLine("two");
-                    } else if x == 3 {
+                    } else if (x == 3) {
                         terminal.printLine("three");
                     } else {
                         terminal.printLine("other");
@@ -184,9 +184,9 @@ class LanguageRuntimeTest {
 
                 fun main() {
                     val x: Int = 99;
-                    if x == 1 {
+                    if (x == 1) {
                         terminal.printLine("one");
-                    } else if x == 2 {
+                    } else if (x == 2) {
                         terminal.printLine("two");
                     } else {
                         terminal.printLine("other");

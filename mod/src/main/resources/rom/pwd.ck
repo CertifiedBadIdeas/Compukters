@@ -3,7 +3,7 @@ import terminal;
 
 fun main() {
     val path: String = process.currentDirectory();
-    if path == "" {
+    if (path == "") {
         terminal.printLine("/");
     } else {
         terminal.printLine("/" + path);

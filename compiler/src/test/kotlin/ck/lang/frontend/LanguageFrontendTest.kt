@@ -89,11 +89,11 @@ class LanguageFrontendTest {
 
                 fun main() {
                     val x: Int = 2;
-                    if x == 1 {
+                    if (x == 1) {
                         terminal.printLine("one");
-                    } else if x == 2 {
+                    } else if (x == 2) {
                         terminal.printLine("two");
-                    } else if x == 3 {
+                    } else if (x == 3) {
                         terminal.printLine("three");
                     } else {
                         terminal.printLine("other");
@@ -216,6 +216,72 @@ class LanguageFrontendTest {
         assertEquals(artifact.module, null)
         assertTrue(
             artifact.analysis.diagnostics.any { it.message.contains("Expected Bool") },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+    }
+
+    @Test
+    fun reportsElseFollowedByNonIfStatement() {
+        val cases = listOf(
+            "else_while.ck" to """
+                fun main() {
+                    if (true) {
+                        val x: Int = 1;
+                    } else while
+                }
+            """,
+            "else_val.ck" to """
+                fun main() {
+                    if (true) {
+                        val x: Int = 1;
+                    } else val
+                }
+            """,
+            "else_return.ck" to """
+                fun main() {
+                    if (true) {
+                        val x: Int = 1;
+                    } else return
+                }
+            """,
+            "else_when.ck" to """
+                fun main() {
+                    if (true) {
+                        val x: Int = 1;
+                    } else when
+                }
+            """,
+        )
+
+        for ((name, source) in cases) {
+            val artifact = frontend.compile(name, source.trimIndent())
+            assertTrue(
+                artifact.analysis.diagnostics.any {
+                    it.severity == FrontendSeverity.ERROR
+                },
+                "Expected parse error for $name but got: ${artifact.analysis.diagnostics.joinToString { it.message }}",
+            )
+        }
+    }
+
+    @Test
+    fun reportsIfWithoutParentheses() {
+        val artifact =
+            frontend.compile(
+                "if_no_parens.ck",
+                """
+                fun main() {
+                    if true {
+                        val x: Int = 1;
+                    }
+                }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.any {
+                it.severity == FrontendSeverity.ERROR && it.message.contains("Expected `(`")
+            },
             artifact.analysis.diagnostics.joinToString { it.message },
         )
     }
