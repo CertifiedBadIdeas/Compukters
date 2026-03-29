@@ -41,10 +41,10 @@ class VmRuntime(
 
     override suspend fun pullEvent(filter: String?): VmEvent {
         while (true) {
-            ctx.setState(VmState.WAITING_EVENT)
+            ctx.setState(VmState.WaitingEvent)
             val event = ctx.receiveEvent()
             if (filter == null || event.name == filter) {
-                ctx.setState(VmState.RUNNING)
+                ctx.setState(VmState.Running)
                 ctx.schedulingPoint()
                 return event
             }

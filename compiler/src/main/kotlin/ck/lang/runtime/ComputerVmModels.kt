@@ -41,21 +41,36 @@ data class ComputerProfile(
     val bootScriptName: String = ComputerProgramFiles.BIOS_SCRIPT_NAME,
 )
 
-enum class VmState {
-    COLD,
-    BOOTING,
-    RUNNING,
-    WAITING_EVENT,
-    SLEEPING,
-    STOPPED,
-    CRASHED,
+sealed interface VmState {
+    data object Cold : VmState
+
+    data object Booting : VmState
+
+    data object Running : VmState
+
+    data object WaitingEvent : VmState
+
+    data object Sleeping : VmState
+
+    data class Stopped(
+        val reason: VmStopReason,
+    ) : VmState
+
+    data class Crashed(
+        val errorMessage: String?,
+    ) : VmState
+
+    /** True when the VM is in a terminal state ([Stopped] or [Crashed]). */
+    val isTerminal: Boolean get() = this is Stopped || this is Crashed
+
+    /** True when the VM is actively executing ([Running], [WaitingEvent], [Sleeping], [Booting]). */
+    val isActive: Boolean get() = !isTerminal && this !is Cold
 }
 
 enum class VmStopReason {
     REQUESTED,
     REBOOT,
     CLOSED,
-    CRASHED,
 }
 
 data class VmEvent(
@@ -70,8 +85,6 @@ data class VmSnapshot(
     val currentTick: Long,
     val queuedEvents: Int,
     val pendingHostCalls: Int,
-    val stopReason: VmStopReason? = null,
-    val errorMessage: String? = null,
 )
 
 sealed interface HostCall {

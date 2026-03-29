@@ -31,7 +31,6 @@ import ck.mod.application.runtime.WorkspaceProgramLoader
 import ck.mod.computer.vm.BackgroundComputerVm
 import ck.mod.computer.vm.ComputerProfileRegistry
 import ck.mod.computer.vm.ComputerVmLogger
-import ck.mod.computer.vm.VmLifecycleEvent
 import ck.mod.context.ServerContext
 import ck.mod.language.LanguageServices
 import ck.mod.menu.ComputerMenu
@@ -74,11 +73,13 @@ class ServerComputer(
     private val serverScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     private val _screenSnapshot = MutableStateFlow<ScreenBufferSnapshot?>(null)
+
     /**
      * Last known screen snapshot — used for initial sync when new players open the GUI.
      * Observe via [screenSnapshotFlow] or read the current value with [lastScreenSnapshot].
      */
     val screenSnapshotFlow: StateFlow<ScreenBufferSnapshot?> = _screenSnapshot.asStateFlow()
+
     /** Current screen snapshot (synchronous read). */
     val lastScreenSnapshot: ScreenBufferSnapshot? get() = _screenSnapshot.value
 
@@ -102,8 +103,7 @@ class ServerComputer(
     val isOn: Boolean
         get() {
             val handle = vmHandle ?: return false
-            val state = handle.snapshot().state
-            return state != VmState.COLD && state != VmState.STOPPED && state != VmState.CRASHED
+            return handle.snapshot().state.isActive
         }
 
     fun checkUsable(player: Player) = family.checkUsable(player)
@@ -188,24 +188,23 @@ class ServerComputer(
 
     private fun observeLifecycle(handle: BackgroundComputerVm) {
         serverScope.launch {
-            handle.lifecycleEvents.collect { event ->
-                when (event) {
-                    is VmLifecycleEvent.Stopped -> handleVmStopped(event.reason)
+            handle.terminalStates.collect { state ->
+                if (state is VmState.Stopped || state is VmState.Crashed) {
+                    handleVmStopped(state)
                 }
             }
         }
     }
 
-    private fun handleVmStopped(reason: VmStopReason) {
-        val snapshot = vmHandle?.snapshot() ?: return
-        if (snapshot.state == VmState.CRASHED && snapshot.errorMessage != null) {
-            LOGGER.warn { "ComputerID: $instanceID VM crash: ${snapshot.errorMessage}" }
+    private fun handleVmStopped(terminalState: VmState) {
+        if (terminalState is VmState.Crashed && terminalState.errorMessage != null) {
+            LOGGER.warn { "ComputerID: $instanceID VM crash: ${terminalState.errorMessage}" }
         }
 
         computerManager.removeVm(instanceID, VmStopReason.CLOSED)
         vmHandle = null
 
-        if (reason == VmStopReason.REBOOT) {
+        if (terminalState is VmState.Stopped && terminalState.reason == VmStopReason.REBOOT) {
             turnOn()
         }
     }

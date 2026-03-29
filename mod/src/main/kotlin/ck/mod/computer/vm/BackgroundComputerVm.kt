@@ -39,9 +39,10 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.launch
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.yield as coroutineYield
@@ -76,10 +77,6 @@ class BackgroundComputerVm(
     bundledScriptLoader: (String) -> String? = { null },
 ) : ComputerVmHandle, VmContext {
 
-    private val _lifecycleEvents = MutableSharedFlow<VmLifecycleEvent>(extraBufferCapacity = 4)
-    /** Observe VM lifecycle transitions (stop, reboot request). */
-    val lifecycleEvents: SharedFlow<VmLifecycleEvent> = _lifecycleEvents.asSharedFlow()
-
     private val scope = CoroutineScope(SupervisorJob() + dispatcher)
     private val slicePermits = Channel<Unit>(capacity = 1)
     private val stateManager = VmStateManager()
@@ -89,6 +86,14 @@ class BackgroundComputerVm(
     private val pathResolver = VmPathResolver()
     private val screenBuffer = ScreenBuffer(profile.terminalWidth, profile.terminalHeight, profile.colorTerminal)
 
+    /**
+     * Observe terminal VM states (stopped, crashed).
+     * Derived from [VmStateManager.stateFlow] — emits only terminal transitions.
+     */
+    val terminalStates: SharedFlow<VmState> = stateManager.stateFlow
+        .filter { it.isTerminal }
+        .shareIn(scope, SharingStarted.Eagerly)
+
     private var runner: Job? = null
     private var runtime: VmRuntime? = createRuntime("", "")
 
@@ -97,7 +102,7 @@ class BackgroundComputerVm(
     override fun start(program: ComputerProgram): Boolean {
         if (runner?.isActive == true) return false
 
-        stateManager.setState(VmState.BOOTING)
+        stateManager.setState(VmState.Booting)
         runner =
             scope.launch {
                 try {
@@ -108,7 +113,7 @@ class BackgroundComputerVm(
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (failure: Throwable) {
-                    stopInternal(VmStopReason.CRASHED, failure.message ?: failure.javaClass.simpleName)
+                    stopInternal(errorMessage = failure.message ?: failure.javaClass.simpleName)
                 }
             }
 
@@ -144,8 +149,6 @@ class BackgroundComputerVm(
             currentTick = stateManager.currentTick,
             queuedEvents = eventManager.queuedCount(),
             pendingHostCalls = hostCallManager.pendingCallsCount(),
-            stopReason = stateManager.stopReason,
-            errorMessage = stateManager.errorMessage,
         )
 
     override fun readScreenSnapshot(): ScreenBufferSnapshot? = screenBuffer.snapshot()
@@ -174,7 +177,7 @@ class BackgroundComputerVm(
     // ── Internal ────────────────────────────────────────────────────
 
     private suspend fun stopInternal(
-        reason: VmStopReason,
+        reason: VmStopReason = VmStopReason.REQUESTED,
         errorMessage: String? = null,
     ) {
         if (stateManager.isStopped) return
@@ -183,21 +186,20 @@ class BackgroundComputerVm(
             stateManager.stopVm(reason, errorMessage)
             runner?.cancel()
             runner = null
-            _lifecycleEvents.emit(VmLifecycleEvent.Stopped(reason))
         }
     }
 
     private suspend fun awaitSlicePermit() {
         stateManager.setState(
             when {
-                stateManager.sleepUntilTick != null -> VmState.SLEEPING
-                stateManager.isBooting -> VmState.BOOTING
-                else -> VmState.RUNNING
+                stateManager.sleepUntilTick != null -> VmState.Sleeping
+                stateManager.isBooting -> VmState.Booting
+                else -> VmState.Running
             },
         )
         slicePermits.receive()
         stateManager.updateSliceDeadlineNanos(profile.cpuBudgetNanosPerSlice)
-        stateManager.setState(VmState.RUNNING)
+        stateManager.setState(VmState.Running)
     }
 
     private suspend fun applySchedulingPoint() {
