@@ -19,32 +19,6 @@
 
 @file:Suppress("PropertyName")
 
-
-// operator fun Provider<String>.getValue(ref: Any?, prop: KProperty<*>): String = this.get()
-//
-// fun File.parseProperties(): Map<String, String> =
-//    readLines()
-//        .mapNotNull { it.indexOf('=').takeIf { i -> i != -1 }?.let { v -> v to it } }
-//        .associate { (index, str) -> str.substring(0, index) to str.substring(index + 1) }
-//
-// val modPropertiesFile = file("config/mod.properties")
-// val modPropertiesDelegate = extra.properties.mapValues { (_, v) -> v.toString() }
-//
-// val mod_id by modPropertiesDelegate
-// val mod_name by modPropertiesDelegate
-// val mod_license by modPropertiesDelegate
-// val mod_authors by modPropertiesDelegate
-// val mod_description by modPropertiesDelegate
-// val mod_version by modPropertiesDelegate
-// val mod_group_id by modPropertiesDelegate
-// val minecraft_version by libs.versions.minecraft
-// val minecraft_version_range by modPropertiesDelegate
-// val forge_version by modPropertiesDelegate
-// val forge_version_range by modPropertiesDelegate
-// val loader_version_range by modPropertiesDelegate
-// val parchment_mappings_version by modPropertiesDelegate
-// val parchment_minecraft_version by modPropertiesDelegate
-
 plugins {
     idea
     alias(libs.plugins.kotlinConvention)
@@ -58,6 +32,14 @@ architectury {
     platformSetupLoomIde()
     forge()
 }
+
+val modProperties =
+    file("$rootDir/config/mod.properties")
+        .readLines()
+        .mapNotNull { it.indexOf('=').takeIf { i -> i != -1 }?.let { v -> v to it } }
+        .associate { (index, str) -> str.substring(0, index) to str.substring(index + 1) }
+
+base.archivesName = modProperties["mod_name"]!!.replace(" ", "") + "-" + modProperties["mod_version"]!!
 
 dependencies {
     minecraft(libs.minecraft)
@@ -86,6 +68,7 @@ fun <T : ModuleDependency> DependencyHandler.forgeImplementation(dependency: Pro
     forgeRuntimeLibrary(dependency) {
         isTransitive = false
     }
+    include(dependency)
 }
 
 fun <T : ModuleDependency> DependencyHandler.forgeImplementation(dependency: T) {
@@ -95,6 +78,7 @@ fun <T : ModuleDependency> DependencyHandler.forgeImplementation(dependency: T) 
     forgeRuntimeLibrary(dependency) {
         isTransitive = false
     }
+    include(dependency)
 }
 
 val generateModMetadata =
