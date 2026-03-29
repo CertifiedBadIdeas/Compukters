@@ -145,7 +145,7 @@ interface ComputerVmHandle : AutoCloseable {
     val computerId: Int
     val profile: ComputerProfile
 
-    fun start(program: ComputerProgram): Boolean
+    fun boot(): Boolean
 
     fun stop(reason: VmStopReason = VmStopReason.REQUESTED)
 

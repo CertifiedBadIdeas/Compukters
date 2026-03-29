@@ -68,12 +68,12 @@ BlockEntity.use()
             └─ ServerComputer(instanceID, level, properties)
 
 ServerComputer.turnOn()
+  ├─ ComputerWorkspaceInitializer.ensureInitialized(id)
   ├─ ComputerManager.getOrCreateVm(id, profile, callbacks, logger)
   │    └─ BackgroundComputerVm(id, profile, dispatcher, callbacks, logger, workspace)
   │         └─ owns ScreenBuffer(width, height, colour)
-  ├─ ComputerProgramCompiler.compile(bootScript)
-  └─ vmHandle.start(program)
-       └─ scope.launch { program.run(runtime) }
+  └─ vmHandle.boot()
+       └─ load boot script → compile → scope.launch { program.run(runtime) }
 
 ServerComputer.serverTick()  [every game tick, 50ms]
   ├─ vmHandle.requestSlice()

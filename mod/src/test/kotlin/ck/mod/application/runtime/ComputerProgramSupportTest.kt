@@ -18,8 +18,10 @@
  */
 package ck.mod.application.runtime
 
-import ck.mod.computer.vm.FileComputerWorkspace
+import ck.mod.computer.vm.ComputerWorkspaceHost
+import kotlin.io.path.createDirectories
 import kotlin.io.path.createTempDirectory
+import kotlin.io.path.writeText
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -28,24 +30,37 @@ import kotlin.test.assertTrue
 
 class ComputerProgramSupportTest {
     @Test
-    fun loadsBundledProgramWhenWorkspaceDocumentIsMissing() {
+    fun loadsDocumentFromWorkspace() {
         val root = createTempDirectory("compukterkraft-program-loader")
         try {
-            val workspace =
-                FileComputerWorkspace(
-                    rootPath = root,
-                    bundledScriptLoader = { null },
-                )
-            val loader =
-                WorkspaceProgramLoader(workspace) { path ->
-                    if (path == "shell.ck") "fun main() { }" else null
-                }
+            val workspace = ComputerWorkspaceHost(rootPath = root)
+            root
+                .resolve("7")
+                .createDirectories()
+                .resolve("shell.ck")
+                .writeText("fun main() { }")
+            val loader = WorkspaceProgramLoader(workspace)
 
             val program = loader.load(7, "shell.ck")
 
             assertNotNull(program)
             assertEquals("shell.ck", program.path)
             assertEquals("fun main() { }", program.source)
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun returnsNullWhenDocumentIsMissing() {
+        val root = createTempDirectory("compukterkraft-program-loader")
+        try {
+            val workspace = ComputerWorkspaceHost(rootPath = root)
+            val loader = WorkspaceProgramLoader(workspace)
+
+            val program = loader.load(7, "shell.ck")
+
+            assertNull(program)
         } finally {
             root.toFile().deleteRecursively()
         }

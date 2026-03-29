@@ -36,22 +36,13 @@ data class CompiledComputerProgram(
 
 class WorkspaceProgramLoader(
     private val workspace: ComputerWorkspace,
-    private val bundledScriptLoader: (String) -> String? = { null },
 ) {
     fun load(
         computerId: Int,
         path: String,
     ): LoadedComputerProgramSource? {
-        workspace.readDocument(computerId, path)?.let { document ->
-            return LoadedComputerProgramSource(document.path, document.text)
-        }
-
-        val bundledSource =
-            bundledScriptLoader(path)
-                ?: bundledScriptLoader(path.removePrefix("/"))
-                ?: return null
-
-        return LoadedComputerProgramSource(path, bundledSource)
+        val document = workspace.readDocument(computerId, path) ?: return null
+        return LoadedComputerProgramSource(document.path, document.text)
     }
 }
 

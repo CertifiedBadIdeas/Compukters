@@ -26,7 +26,6 @@ import ck.lang.runtime.ComputerWorkspace
 import ck.lang.runtime.VmStopReason
 import ck.lang.runtime.VmSupervisor
 import ck.mod.MOD_ID
-import ck.mod.language.LanguageServices
 import kotlinx.coroutines.asCoroutineDispatcher
 import net.minecraft.server.MinecraftServer
 import net.minecraft.world.level.storage.LevelResource
@@ -41,11 +40,9 @@ class ComputerVmSupervisor(
     private val executor = Executors.newFixedThreadPool(2)
     private val dispatcher = executor.asCoroutineDispatcher()
     private val handles = ConcurrentHashMap<Int, ComputerVmHandle>()
-    private val workspaceStore =
-        FileComputerWorkspace(
-            rootPath = server.getWorldPath(LevelResource.ROOT).resolve(MOD_ID).resolve("computers"),
-            bundledScriptLoader = LanguageServices::bundledScript,
-        )
+    private val computersPath = server.getWorldPath(LevelResource.ROOT).resolve(MOD_ID).resolve("computers")
+    private val workspaceInitializer = ComputerWorkspaceInitializer(computersPath)
+    private val workspaceStore = ComputerWorkspaceHost(rootPath = computersPath)
     private val ideHost = WorkspaceComputerIdeHost(workspaceStore)
 
     val workspace: ComputerWorkspace
@@ -55,7 +52,7 @@ class ComputerVmSupervisor(
         get() = ideHost
 
     fun ensureWorkspaceInitialized(computerId: Int) {
-        workspaceStore.ensureInitialized(computerId)
+        workspaceInitializer.ensureInitialized(computerId)
     }
 
     fun getOrCreate(
@@ -72,7 +69,6 @@ class ComputerVmSupervisor(
                 labelProvider = labelProvider,
                 logger = logger,
                 workspace = workspaceStore,
-                bundledScriptLoader = LanguageServices::bundledScript,
             )
         } as BackgroundComputerVm
 

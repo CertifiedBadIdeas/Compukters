@@ -25,14 +25,11 @@ import ck.lang.runtime.VmEvent
 import ck.lang.runtime.VmState
 import ck.lang.runtime.VmStopReason
 import ck.mod.LOGGER
-import ck.mod.application.runtime.ComputerProgramCompiler
 import ck.mod.application.runtime.HostCallDispatcher
-import ck.mod.application.runtime.WorkspaceProgramLoader
 import ck.mod.computer.vm.BackgroundComputerVm
 import ck.mod.computer.vm.ComputerProfileRegistry
 import ck.mod.computer.vm.ComputerVmLogger
 import ck.mod.context.ServerContext
-import ck.mod.language.LanguageServices
 import ck.mod.menu.ComputerMenu
 import ck.mod.network.client.ComputerTerminalClientMessage
 import ck.mod.network.server.ServerNetworking
@@ -85,9 +82,6 @@ class ServerComputer(
 
     private val computerManager get() = ServerContext.computerManager
 
-    private val programLoader by lazy {
-        WorkspaceProgramLoader(computerManager.workspace, LanguageServices::bundledScript)
-    }
     private val hostCallDispatcher by lazy {
         HostCallDispatcher(instanceID, computerManager.workspace)
     }
@@ -132,29 +126,13 @@ class ServerComputer(
         if (isOn) return
         LOGGER.info { "ComputerID: $instanceID turnOn" }
         computerManager.ensureWorkspaceInitialized(instanceID)
-        val bootScript = programLoader.load(instanceID, profile.bootScriptName)
-        if (bootScript == null) {
-            LOGGER.error { "Missing boot script in workspace: ${profile.bootScriptName}" }
-            return
-        }
 
         computerManager.removeVm(instanceID, VmStopReason.CLOSED)
         val handle = computerManager.getOrCreateVm(instanceID, profile, { label }, logger)
-        val compiledProgram = ComputerProgramCompiler.compile(bootScript.path, bootScript.source)
-        val program = compiledProgram.program
-        if (program == null) {
-            val message = compiledProgram.errorMessage.orEmpty()
-            LOGGER.error { "Compilation Error: $message" }
-            computerManager.removeVm(instanceID, VmStopReason.CLOSED)
-            return
-        }
-
         vmHandle = handle
-        val started = handle.start(program)
-        if (started) {
-            handle.enqueueEvent(VmEvent("boot"))
-            observeLifecycle(handle)
-        }
+
+        handle.boot()
+        observeLifecycle(handle)
     }
 
     fun reboot() {

@@ -17,46 +17,34 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import ck.lang.runtime.ComputerProgramFiles
-import ck.mod.computer.vm.FileComputerWorkspace
-import java.nio.file.Files
+import ck.mod.computer.vm.ComputerWorkspaceHost
+import ck.mod.computer.vm.ComputerWorkspaceInitializer
 import java.nio.file.Path
 import kotlin.io.path.createTempDirectory
+import kotlin.io.path.exists
+import kotlin.io.path.readText
+import kotlin.io.path.writeText
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class FileComputerWorkspaceTest {
     @Test
-    fun seedsBootScriptIntoNewWorkspace() {
+    fun readAndWriteDocument() {
         withWorkspace { workspace, _ ->
-            workspace.ensureInitialized(7)
-
-            val bootScript = workspace.readDocument(7, ComputerProgramFiles.BIOS_SCRIPT_NAME)
-
-            assertNotNull(bootScript)
-            assertEquals(DEFAULT_BIOS, bootScript.text)
-        }
-    }
-
-    @Test
-    fun preserveCustomizedBootScriptWhenReinitialized() {
-        withWorkspace { workspace, _ ->
-            workspace.ensureInitialized(7)
             workspace.writeDocument(
                 7,
-                ComputerProgramFiles.BIOS_SCRIPT_NAME,
-                "import terminal;\nfun main() { terminal.printLine(\"custom bios\"); }",
+                "test.ck",
+                "import terminal;\nfun main() { terminal.printLine(\"hello\"); }",
             )
 
-            workspace.ensureInitialized(7)
+            val doc = workspace.readDocument(7, "test.ck")
 
-            val bootScript = workspace.readDocument(7, ComputerProgramFiles.BIOS_SCRIPT_NAME)
-
-            assertNotNull(bootScript)
-            assertEquals("import terminal;\nfun main() { terminal.printLine(\"custom bios\"); }", bootScript.text)
+            assertNotNull(doc)
+            assertEquals("import terminal;\nfun main() { terminal.printLine(\"hello\"); }", doc.text)
         }
     }
 
@@ -66,8 +54,8 @@ class FileComputerWorkspaceTest {
         val worldTwoRoot = createTempDirectory("compukterkraft-world-two")
 
         try {
-            val worldOne = createWorkspace(worldOneRoot)
-            val worldTwo = createWorkspace(worldTwoRoot)
+            val worldOne = ComputerWorkspaceHost(rootPath = worldOneRoot)
+            val worldTwo = ComputerWorkspaceHost(rootPath = worldTwoRoot)
 
             worldOne.writeDocument(
                 1,
@@ -77,7 +65,6 @@ class FileComputerWorkspaceTest {
 
             assertNotNull(worldOne.readDocument(1, "startup.ck"))
             assertNull(worldTwo.readDocument(1, "startup.ck"))
-            assertNotNull(worldTwo.readDocument(1, ComputerProgramFiles.BIOS_SCRIPT_NAME))
         } finally {
             worldOneRoot.toFile().deleteRecursively()
             worldTwoRoot.toFile().deleteRecursively()
@@ -97,43 +84,58 @@ class FileComputerWorkspaceTest {
         }
     }
 
-    @Test
-    fun seedsBootScriptWithRelativeWorkspaceRoot() {
-        val relativeRoot = Path.of("build", "tmp", "relative-workspace-test")
-
-        try {
-            Files.createDirectories(relativeRoot)
-            val workspace = createWorkspace(relativeRoot)
-
-            workspace.ensureInitialized(9)
-
-            val bootScript = workspace.readDocument(9, ComputerProgramFiles.BIOS_SCRIPT_NAME)
-            assertNotNull(bootScript)
-            assertEquals(DEFAULT_BIOS, bootScript.text)
-        } finally {
-            relativeRoot.toFile().deleteRecursively()
-        }
-    }
-
-    private fun withWorkspace(block: (FileComputerWorkspace, Path) -> Unit) {
+    private fun withWorkspace(block: (ComputerWorkspaceHost, Path) -> Unit) {
         val root = createTempDirectory("compukterkraft-workspace")
 
         try {
-            block(createWorkspace(root), root)
+            block(ComputerWorkspaceHost(rootPath = root), root)
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+}
+
+class ComputerWorkspaceInitializerTest {
+    @Test
+    fun clonesAllRomScriptsIntoNewWorkspace() {
+        val root = createTempDirectory("compukterkraft-init")
+        try {
+            val initializer = ComputerWorkspaceInitializer(root)
+            initializer.ensureInitialized(1)
+
+            val computerDir = root.resolve("1")
+            assertTrue(computerDir.exists())
+            assertTrue(computerDir.resolve("bios.ck").exists())
+            assertTrue(computerDir.resolve("shell.ck").exists())
+            assertTrue(computerDir.resolve("ls.ck").exists())
+            assertTrue(computerDir.resolve("mkdir.ck").exists())
+            assertTrue(computerDir.resolve("rmdir.ck").exists())
+            assertTrue(computerDir.resolve("pwd.ck").exists())
         } finally {
             root.toFile().deleteRecursively()
         }
     }
 
-    private fun createWorkspace(root: Path): FileComputerWorkspace =
-        FileComputerWorkspace(
-            rootPath = root,
-            bundledScriptLoader = { relativePath ->
-                if (relativePath == ComputerProgramFiles.BIOS_SCRIPT_NAME) DEFAULT_BIOS else null
-            },
-        )
+    @Test
+    fun doesNotTouchExistingWorkspace() {
+        val root = createTempDirectory("compukterkraft-init")
+        try {
+            val initializer = ComputerWorkspaceInitializer(root)
+            initializer.ensureInitialized(2)
 
-    private companion object {
-        const val DEFAULT_BIOS = "import terminal;\nfun main() { terminal.printLine(\"boot\"); }"
+            val computerDir = root.resolve("2")
+            val biosFile = computerDir.resolve("bios.ck")
+            val originalContent = biosFile.readText()
+
+            // Modify the file
+            biosFile.writeText("custom bios")
+
+            // Re-initialize — should NOT overwrite
+            initializer.ensureInitialized(2)
+
+            assertEquals("custom bios", biosFile.readText())
+        } finally {
+            root.toFile().deleteRecursively()
+        }
     }
 }

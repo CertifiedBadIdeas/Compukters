@@ -23,7 +23,8 @@ import ck.lang.runtime.VmSignal
 import ck.lang.runtime.VmValue
 import ck.mod.block.ComputerFamily
 import ck.mod.computer.vm.ComputerProfileRegistry
-import ck.mod.computer.vm.FileComputerWorkspace
+import ck.mod.computer.vm.ComputerWorkspaceHost
+import ck.mod.computer.vm.ComputerWorkspaceInitializer
 import ck.mod.language.LanguageServices
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
@@ -38,12 +39,9 @@ class LanguageWorkspaceRuntimeTest {
         val root = createTempDirectory("compukterkraft-language-workspace")
 
         try {
-            val workspace =
-                FileComputerWorkspace(
-                    rootPath = root,
-                    bundledScriptLoader = LanguageServices::bundledScript,
-                )
-            workspace.ensureInitialized(1)
+            val initializer = ComputerWorkspaceInitializer(root)
+            initializer.ensureInitialized(1)
+            val workspace = ComputerWorkspaceHost(rootPath = root)
 
             val bootScript = workspace.readDocument(1, profile.bootScriptName)
             assertNotNull(bootScript)

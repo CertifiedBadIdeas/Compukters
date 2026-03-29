@@ -1,127 +1,170 @@
-## Plan: VM Boot Self-Containment Refactoring
+## План: Автономная загрузка VM
 
-> **Status: Draft — awaiting approval**
+> **Статус: Черновик — ожидает утверждения**
 
-ServerComputer currently owns boot script loading & compilation, violating the principle that VM should be a self-contained black box. Refactor so that: (1) all ROM scripts are seeded into workspace during initialization, (2) `WorkspaceProgramLoader` drops the bundled fallback, (3) `BackgroundComputerVm` gains a `boot()` method that internally loads+compiles+starts, (4) `ServerComputer.turnOn()` reduces to `ensureWorkspace → boot()`.
+Сейчас `ServerComputer` владеет загрузкой и компиляцией boot-скрипта, нарушая принцип «VM — самодостаточный чёрный ящик». Рефакторинг: (1) при первом создании workspace клонировать всю папку `rom/` из classpath, (2) убрать fallback из `WorkspaceProgramLoader`, (3) заменить `start(program)` на `boot()` — VM сама загружает, компилирует и запускает boot-скрипт, (4) `ServerComputer.turnOn()` сводится к `ensureWorkspace → boot()`.
 
 ---
 
-### Phase 1 — Seed All ROM Scripts Into Workspace
+### Фаза 1 — Клонирование папки `rom/` при создании workspace
 
-**Rationale:** Currently only `bios.ck` is seeded. Other ROM scripts (shell.ck, ls.ck, mkdir.ck, rmdir.ck, pwd.ck) are loaded at runtime via a `bundledScriptLoader` fallback. After this phase, all scripts live in the workspace from the start.
+**Обоснование:** Сейчас в workspace при инициализации копируется только `bios.ck`. Остальные ROM-скрипты (shell.ck, ls.ck, mkdir.ck, rmdir.ck, pwd.ck) подгружаются на лету через fallback `bundledScriptLoader`. После этой фазы все скрипты живут в workspace с самого начала.
 
-#### Step 1.1: Add ROM script name constants
-In `ComputerProgramFiles` (compiler/src/main/kotlin/ck/lang/runtime/ComputerRuntime.kt, L114-117), add a set of all bundled script names:
+**Принцип:** Клонирование происходит **один раз** — при первом создании папки `computerId`. Если папка уже существует, никакие файлы не копируются и не перезаписываются. Это гарантирует, что пользовательские изменения никогда не будут потеряны.
+
+#### Шаг 1.1: Выделить `ComputerWorkspaceInitializer` — отдельный класс для подготовки workspace
+Сейчас `FileComputerWorkspace` смешивает две ответственности: (а) CRUD-операции с файлами (реализация `ComputerWorkspace`) и (б) инициализацию workspace (создание папки, копирование ROM). Это разные задачи — подготовка workspace ≠ работа с ним.
+
+Создать новый класс `ComputerWorkspaceInitializer` (mod/.../ComputerWorkspaceHost.kt или отдельный файл):
 ```kotlin
-val ROM_SCRIPTS = setOf("bios.ck", "shell.ck", "ls.ck", "mkdir.ck", "rmdir.ck", "pwd.ck")
+class ComputerWorkspaceInitializer(
+    private val rootPath: Path,
+) {
+    fun ensureInitialized(computerId: Int): Path {
+        val root = rootPath.resolve(computerId.toString()).normalize()
+        if (root.exists()) return root
+        root.createDirectories()
+        cloneRomTo(root)
+        return root
+    }
+
+    private fun cloneRomTo(targetDir: Path) { /* classpath rom/ → targetDir */ }
+}
 ```
+- Если папка `computerRoot(computerId)` **уже существует** — ничего не делать, вернуть путь
+- Если папки **нет** — создать её и скопировать **всё содержимое** classpath `rom/` в корень workspace
+- Клонирование реализовать через `ClassLoader.getResourceAsStream()` / `getResource()` — класс сам знает откуда брать ROM-ресурсы
 
-#### Step 1.2: Expand `initialBundledScripts` default
-In `FileComputerWorkspace` (mod/src/main/kotlin/ck/mod/computer/vm/ComputerWorkspaceHost.kt, L40), change the default from `setOf(ComputerProgramFiles.BIOS_SCRIPT_NAME)` to `ComputerProgramFiles.ROM_SCRIPTS`.
+#### Шаг 1.2: Очистить `FileComputerWorkspace` — только CRUD
+Из `FileComputerWorkspace` (mod/.../ComputerWorkspaceHost.kt):
+- Убрать параметры `initialBundledScripts` и `bundledScriptLoader`
+- Убрать метод `ensureInitialized()` и `seedBundledScript()`
+- Убрать вызов `ensureInitialized()` из `resolve()` — инициализация теперь ответственность вызывающего кода
+- Класс остаётся чистой реализацией `ComputerWorkspace`: `list`, `readDocument`, `writeDocument`, `makeDirectory`, `deleteDocument`, `computerRoot`, `resolve`
 
-`ensureInitialized()` already iterates `initialBundledScripts` and calls `seedBundledScript()` for each — no changes needed to the seeding logic. Existing scripts are preserved (L136: `if (target.exists()) return`).
+#### Шаг 1.3: Обновить `ComputerVmSupervisor`
+В `ComputerVmSupervisor` (mod/.../ComputerVmSupervisor.kt):
+- Создать `ComputerWorkspaceInitializer(rootPath)` рядом с `FileComputerWorkspace(rootPath)`
+- Убрать `bundledScriptLoader = LanguageServices::bundledScript` из конструктора `FileComputerWorkspace` (параметр удалён)
+- `ensureWorkspaceInitialized(computerId)` теперь делегирует в `ComputerWorkspaceInitializer`, а не в `FileComputerWorkspace`
 
-#### Step 1.3: Update FileComputerWorkspaceTest
-In `mod/src/test/kotlin/FileComputerWorkspaceTest.kt`:
-- Update `createWorkspace()` helper (L131-134) to return content for all ROM scripts, not just bios.ck
-- Add test verifying all 6 ROM scripts are seeded into a new workspace
-- Existing test `preserveCustomizedBootScriptWhenReinitialized` still valid — seeding skips existing files
-
----
-
-### Phase 2 — Remove Bundled Fallback From WorkspaceProgramLoader
-
-**Rationale:** Once all ROM scripts are in workspace, the fallback in `WorkspaceProgramLoader.load()` is dead code. Removing it enforces the "workspace is the single source of truth" principle.
-
-#### Step 2.1: Simplify WorkspaceProgramLoader
-In `ComputerProgramSupport.kt` (mod/src/main/kotlin/ck/mod/application/runtime/ComputerProgramSupport.kt, L37-56):
-- Remove `bundledScriptLoader` constructor parameter
-- Remove fallback logic (L49-54): `bundledScriptLoader(path) ?: bundledScriptLoader(path.removePrefix("/"))`
-- `load()` becomes: read from workspace, return `LoadedComputerProgramSource` or null
-
-#### Step 2.2: Update all WorkspaceProgramLoader call sites
-- `BackgroundComputerVm` (L85): `WorkspaceProgramLoader(workspace)` — no `bundledScriptLoader`
-- `ServerComputer` (L88-90): `WorkspaceProgramLoader(computerManager.workspace)` — no `bundledScriptLoader`. *Note: this field will be fully removed in Phase 4.*
+#### Шаг 1.4: Обновить `FileComputerWorkspaceTest`
+В `mod/src/test/kotlin/FileComputerWorkspaceTest.kt`:
+- Убрать `bundledScriptLoader` из хелпера `createWorkspace()` — `FileComputerWorkspace` больше не принимает этот параметр
+- Тесты на CRUD (`list`, `readDocument`, `writeDocument` и т.д.) остаются без изменений
+- Добавить отдельные тесты для `ComputerWorkspaceInitializer`:
+  - Новый workspace → все ROM-скрипты из classpath `rom/` присутствуют
+  - Повторный `ensureInitialized()` на существующей папке → файлы не трогаются
 
 ---
 
-### Phase 3 — Add `boot()` to BackgroundComputerVm
+### Фаза 2 — Убрать bundled fallback из WorkspaceProgramLoader
 
-**Rationale:** The VM should be self-contained. It already owns a `WorkspaceProgramLoader` internally (L85). Adding `boot()` moves the load→compile→start chain inside the VM, so external callers don't need to know about compilation.
+**Обоснование:** Раз все ROM-скрипты уже в workspace, fallback в `WorkspaceProgramLoader.load()` — мёртвый код. Удаление закрепляет принцип «workspace — единственный источник истины».
 
-#### Step 3.1: Add `boot(): Boolean` method
-In `BackgroundComputerVm` (mod/src/main/kotlin/ck/mod/computer/vm/BackgroundComputerVm.kt), add:
-- `fun boot(): Boolean` — uses `profile.bootScriptName` to load from its `programLoader`, calls `ComputerProgramCompiler.compile()`, then calls `start(compiledProgram)` + enqueues "boot" event
-- Returns `false` if boot script is missing or compilation fails (logs errors)
-- `start(program: ComputerProgram)` remains as-is for direct program execution (useful for testing)
+#### Шаг 2.1: Упростить WorkspaceProgramLoader
+В `ComputerProgramSupport.kt` (mod/.../ComputerProgramSupport.kt, L37-56):
+- Убрать параметр `bundledScriptLoader`
+- Убрать fallback-логику (L49-54)
+- `load()` становится: прочитать из workspace → вернуть `LoadedComputerProgramSource` или null
 
-#### Step 3.2: Remove `bundledScriptLoader` from BackgroundComputerVm constructor
-In `BackgroundComputerVm` (L77): remove `bundledScriptLoader` parameter. The internal `programLoader` (L85) becomes just `WorkspaceProgramLoader(workspace)`.
-
-#### Step 3.3: Update ComputerVmSupervisor.getOrCreate()
-In `ComputerVmSupervisor` (mod/src/main/kotlin/ck/mod/computer/vm/ComputerVmSupervisor.kt, L67-77): remove `bundledScriptLoader = LanguageServices::bundledScript` from `BackgroundComputerVm(...)` constructor call.
+#### Шаг 2.2: Обновить все call sites
+- `BackgroundComputerVm` (L85): `WorkspaceProgramLoader(workspace)` без `bundledScriptLoader`
+- `ServerComputer` (L88-90): убрать `bundledScriptLoader`. *Поле `programLoader` полностью удаляется в Фазе 4.*
 
 ---
 
-### Phase 4 — Simplify ServerComputer.turnOn()
+### Фаза 3 — Заменить `start(program)` на `boot()` в ComputerVmHandle
 
-**Rationale:** With `boot()` on the VM, ServerComputer no longer needs to know about program loading or compilation. It becomes a pure Minecraft connector.
+**Обоснование:** VM должна быть самодостаточной. Она уже владеет `WorkspaceProgramLoader` (L85). Метод `boot()` инкапсулирует цепочку загрузка→компиляция→запуск внутри VM. Метод `start(program: ComputerProgram)` удаляется — внешние вызывающие стороны не должны знать о программах и компиляции.
 
-#### Step 4.1: Rewrite `turnOn()`
-In `ServerComputer` (mod/src/main/kotlin/ck/mod/computer/ServerComputer.kt, L131-158), replace:
+#### Шаг 3.1: Заменить `start(program)` на `boot()` в интерфейсе `ComputerVmHandle`
+В `ComputerVmModels.kt` (compiler/.../ComputerVmModels.kt):
+- Убрать `fun start(program: ComputerProgram): Boolean`
+- Добавить `fun boot(): Boolean`
+
+#### Шаг 3.2: Реализовать `boot()` в `BackgroundComputerVm`
+В `BackgroundComputerVm` (mod/.../BackgroundComputerVm.kt):
+- `fun boot(): Boolean` — читает `profile.bootScriptName` через `programLoader`, компилирует через `ComputerProgramCompiler.compile()`, запускает корутину (та же логика, что сейчас в `start()`), отправляет событие `VmEvent("boot")`
+- Возвращает `false` если boot-скрипт не найден или компиляция провалилась (логирует ошибки)
+
+#### Шаг 3.3: Убрать `bundledScriptLoader` из конструктора BackgroundComputerVm
+В `BackgroundComputerVm` (L77): убрать параметр `bundledScriptLoader`. Внутренний `programLoader` (L85) становится `WorkspaceProgramLoader(workspace)`.
+
+#### Шаг 3.4: Обновить `ComputerVmSupervisor.getOrCreate()`
+В `ComputerVmSupervisor` (mod/.../ComputerVmSupervisor.kt, L67-77): убрать `bundledScriptLoader = LanguageServices::bundledScript` из конструктора `BackgroundComputerVm(...)`.
+
+---
+
+### Фаза 4 — Упростить ServerComputer.turnOn()
+
+**Обоснование:** С `boot()` на VM, `ServerComputer` больше не должен знать о загрузке программ и компиляции. Он становится чистым связующим звеном с Minecraft.
+
+#### Шаг 4.1: Переписать `turnOn()`
+В `ServerComputer` (mod/.../ServerComputer.kt, L131-158) заменить:
 ```
 ensureWorkspace → programLoader.load → ComputerProgramCompiler.compile → getOrCreateVm → handle.start(program) → enqueueEvent("boot") → observeLifecycle
 ```
-With:
+На:
 ```
 ensureWorkspace → removeVm → getOrCreateVm → handle.boot() → observeLifecycle
 ```
 
-#### Step 4.2: Remove dead fields and imports
-From `ServerComputer`:
-- Remove `programLoader` lazy field (L88-90)
-- Remove `import ComputerProgramCompiler` (L28)
-- Remove `import WorkspaceProgramLoader` (L30)
-- Remove `import LanguageServices` (L35)
+#### Шаг 4.2: Удалить мёртвые поля и импорты
+Из `ServerComputer`:
+- Удалить lazy-поле `programLoader` (L88-90)
+- Удалить `import ComputerProgramCompiler` (L28)
+- Удалить `import WorkspaceProgramLoader` (L30)
+- Удалить `import LanguageServices` (L35)
 
 ---
 
-### Relevant Files
+### Затронутые файлы
 
-- `compiler/src/main/kotlin/ck/lang/runtime/ComputerRuntime.kt` — add `ROM_SCRIPTS` set to `ComputerProgramFiles`
-- `compiler/src/main/kotlin/ck/lang/runtime/ComputerVmModels.kt` — no changes (reference: `ComputerProfile.bootScriptName`, `ComputerVmHandle.start()`)
-- `mod/src/main/kotlin/ck/mod/computer/vm/ComputerWorkspaceHost.kt` — expand `initialBundledScripts` default
-- `mod/src/main/kotlin/ck/mod/application/runtime/ComputerProgramSupport.kt` — simplify `WorkspaceProgramLoader`, keep `ComputerProgramCompiler`
-- `mod/src/main/kotlin/ck/mod/computer/vm/BackgroundComputerVm.kt` — add `boot()`, remove `bundledScriptLoader` param
-- `mod/src/main/kotlin/ck/mod/computer/vm/ComputerVmSupervisor.kt` — remove `bundledScriptLoader` from `getOrCreate()`
-- `mod/src/main/kotlin/ck/mod/computer/ServerComputer.kt` — simplify `turnOn()`, remove `programLoader`
-- `mod/src/main/kotlin/ck/mod/computer/vm/VmProcessApi.kt` — no changes (uses `WorkspaceProgramLoader` via `BackgroundComputerVm.programLoader`)
-- `mod/src/main/kotlin/ck/mod/language/LanguageServices.kt` — no changes (still provides `bundledScript()` for workspace seeding)
-- `mod/src/test/kotlin/FileComputerWorkspaceTest.kt` — update tests for all ROM scripts
+- `compiler/.../ComputerVmModels.kt` — заменить `start(program)` на `boot()` в интерфейсе `ComputerVmHandle`
+- `mod/.../ComputerWorkspaceHost.kt` — выделить `ComputerWorkspaceInitializer` (клонирование `rom/` из classpath), очистить `FileComputerWorkspace` до чистого CRUD (убрать `initialBundledScripts`, `bundledScriptLoader`, `seedBundledScript()`, `ensureInitialized()`)
+- `mod/.../ComputerProgramSupport.kt` — упростить `WorkspaceProgramLoader`, оставить `ComputerProgramCompiler`
+- `mod/.../BackgroundComputerVm.kt` — реализовать `boot()`, убрать `start()`, убрать `bundledScriptLoader`
+- `mod/.../ComputerVmSupervisor.kt` — создать `ComputerWorkspaceInitializer`, убрать `bundledScriptLoader` из `getOrCreate()` и из конструктора `FileComputerWorkspace`, делегировать `ensureWorkspaceInitialized()` в инициализатор
+- `mod/.../ServerComputer.kt` — упростить `turnOn()`, удалить `programLoader`
+- `mod/.../VmProcessApi.kt` — без изменений (использует `WorkspaceProgramLoader` через `BackgroundComputerVm.programLoader`)
+- `mod/src/test/kotlin/FileComputerWorkspaceTest.kt` — убрать `bundledScriptLoader`, добавить тесты для `ComputerWorkspaceInitializer`
 
 ---
 
-### Verification
+### Проверка
 
-1. `./gradlew :compiler:test :mod:test` — all existing tests pass
-2. `FileComputerWorkspaceTest` — new test verifies all 6 ROM scripts are seeded
-3. Manual in-game test: boot a new computer → verify bios.ck runs → shell.ck loads → `ls` works (all from workspace, no ROM fallback)
-4. Manual in-game test: boot an existing computer (workspace already has scripts) → verify `ensureInitialized()` doesn't overwrite user-modified scripts
-5. Manual in-game test: reboot → verify `handleVmStopped` triggers `turnOn()` which calls `boot()` correctly
-
----
-
-### Decisions
-
-- `boot()` is on `BackgroundComputerVm` only, NOT on the `ComputerVmHandle` interface. The interface is in `:compiler` which should not depend on `LanguageServices`/compilation. `ServerComputer` already uses `BackgroundComputerVm` type directly.
-- `start(program: ComputerProgram)` remains on the interface for direct program injection (useful for testing).
-- `FileComputerWorkspace` keeps its `bundledScriptLoader` parameter — it's needed to read ROM content from classpath resources during seeding.
-- ROM script names are hardcoded in `ComputerProgramFiles.ROM_SCRIPTS`. If new ROM scripts are added, the set must be updated. This is intentional — explicit > implicit.
-- `ComputerProgramCompiler` stays in `mod` module (not moved into `:compiler`). It depends on `LanguageServices` which is mod-specific.
+1. `./gradlew :compiler:test :mod:test` — все существующие тесты проходят
+2. `FileComputerWorkspaceTest` — новый тест: все ROM-скрипты клонированы в новый workspace
+3. `FileComputerWorkspaceTest` — новый тест: повторный `ensureInitialized()` не трогает существующие файлы
+4. Ручной тест в игре: загрузить новый компьютер → bios.ck запускается → shell.ck загружается → `ls` работает (всё из workspace, без ROM fallback)
+5. Ручной тест в игре: загрузить существующий компьютер → пользовательские скрипты не затронуты
+6. Ручной тест в игре: перезагрузка → `handleVmStopped` вызывает `turnOn()` → `boot()` отрабатывает корректно
 
 ---
 
-### Further Considerations
+### Решения
 
-1. **ROM script discovery vs hardcoded set**: Instead of `ROM_SCRIPTS = setOf(...)`, we could scan classpath `rom/` directory at startup. This avoids forgetting to update the set. However, classpath scanning is fragile in modded environments. **Recommend: hardcoded set** — explicit and predictable.
-2. **Should `boot()` be on `ComputerVmHandle` interface?**: If future VM implementations (e.g., test doubles) need boot-from-workspace, we'd need to duplicate the logic. For now, keeping it on `BackgroundComputerVm` is simpler and avoids pulling compilation into the `:compiler` module boundary. Revisit if a second implementation appears.
+- `boot()` находится на интерфейсе `ComputerVmHandle` — это единственный способ запуска VM. Метод `start(program)` удаляется полностью.
+- Подготовка workspace вынесена в отдельный класс `ComputerWorkspaceInitializer`. `FileComputerWorkspace` — чистый CRUD, не знает про ROM и инициализацию. Параметры `bundledScriptLoader` и `initialBundledScripts` удаляются.
+- Если папка с `computerId` уже существует, `ensureInitialized()` не копирует и не перезаписывает ничего.
+- `ComputerProgramCompiler` остаётся в модуле `:mod`. Зависит от `LanguageServices`, который специфичен для мода.
+
+---
+
+### Дальнейшие соображения
+
+1. **`boot()` на интерфейсе `ComputerVmHandle` — плюсы и минусы:**
+
+   **Плюсы:**
+   - **Единый контракт:** Все реализации VM загружаются одинаково — через workspace. Внешний код не может передать произвольную программу, что усиливает инкапсуляцию.
+   - **Простота API:** Один метод `boot()` вместо цепочки `load → compile → start`. Вызывающий код (ServerComputer) не знает про `ComputerProgram`, `ComputerProgramCompiler` и т.д.
+   - **Самодостаточность:** VM сама решает, что загрузить и как скомпилировать. Если в будущем изменится формат программ или процесс компиляции — менять нужно только реализацию VM.
+   - **Безопасность:** Невозможно случайно запустить VM с «неправильной» программой — boot-скрипт определяется профилем (`ComputerProfile.bootScriptName`).
+
+   **Минусы:**
+   - **Тестирование:** Нельзя напрямую передать mock-программу в `start()`. Вместо этого тесты должны подготовить workspace с нужными файлами и вызвать `boot()`. Это чуть больше настройки, но точнее отражает реальный сценарий использования.
+   - **Граница модулей:** Интерфейс `ComputerVmHandle` живёт в `:compiler`, а `boot()` будет зависеть от `ComputerProgramCompiler` и `LanguageServices` — которые в `:mod`. Реализация `boot()` в `BackgroundComputerVm` (`:mod`) — не проблема, но сигнатура `boot()` на интерфейсе не раскрывает зависимость от компилятора, что может вводить в заблуждение при чтении только `:compiler` модуля.
+   - **Гибкость:** Если когда-нибудь понадобится запустить VM с программой из другого источника (не из workspace) — придётся менять интерфейс. Однако текущий дизайн намеренно исключает такой сценарий: VM работает только с собственным workspace.
+
+   **Вывод:** Плюсы перевешивают. `boot()` на интерфейсе усиливает принцип «VM — чёрный ящик». Потеря `start(program)` компенсируется тем, что тесты через workspace точнее моделируют реальное поведение.

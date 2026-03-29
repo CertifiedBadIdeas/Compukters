@@ -31,6 +31,7 @@ import ck.lang.runtime.VmEvent
 import ck.lang.runtime.VmSnapshot
 import ck.lang.runtime.VmState
 import ck.lang.runtime.VmStopReason
+import ck.mod.application.runtime.ComputerProgramCompiler
 import ck.mod.application.runtime.WorkspaceProgramLoader
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -64,7 +65,7 @@ fun interface ComputerVmLogger {
  *   [readScreenSnapshot], and [snapshot]. These are the cross-thread entry points.
  *
  * ## Lifecycle
- * Created by [ComputerManager][ck.mod.context.ComputerManager], started with [start],
+ * Created by [ComputerManager][ck.mod.context.ComputerManager], started with [boot],
  * stopped with [stop]. On reboot, the old VM is stopped and a new one is created.
  */
 class BackgroundComputerVm(
@@ -74,15 +75,14 @@ class BackgroundComputerVm(
     private val labelProvider: () -> String?,
     private val logger: ComputerVmLogger,
     workspace: ComputerWorkspace,
-    bundledScriptLoader: (String) -> String? = { null },
-) : ComputerVmHandle, VmContext {
-
+) : ComputerVmHandle,
+    VmContext {
     private val scope = CoroutineScope(SupervisorJob() + dispatcher)
     private val slicePermits = Channel<Unit>(capacity = 1)
     private val stateManager = VmStateManager()
     private val eventManager = EventManager(profile.maxEventQueueSize)
     private val hostCallManager = HostCallManager()
-    private val programLoader = WorkspaceProgramLoader(workspace, bundledScriptLoader)
+    private val programLoader = WorkspaceProgramLoader(workspace)
     private val pathResolver = VmPathResolver()
     private val screenBuffer = ScreenBuffer(profile.terminalWidth, profile.terminalHeight, profile.colorTerminal)
 
@@ -90,25 +90,43 @@ class BackgroundComputerVm(
      * Observe terminal VM states (stopped, crashed).
      * Derived from [VmStateManager.stateFlow] — emits only terminal transitions.
      */
-    val terminalStates: SharedFlow<VmState> = stateManager.stateFlow
-        .filter { it.isTerminal }
-        .shareIn(scope, SharingStarted.Eagerly)
+    val terminalStates: SharedFlow<VmState> =
+        stateManager.stateFlow
+            .filter { it.isTerminal }
+            .shareIn(scope, SharingStarted.Eagerly)
 
     private var runner: Job? = null
-    private var runtime: VmRuntime? = createRuntime("", "")
+    private val runtime: VmRuntime = createRuntime("", "")
 
     // ── ComputerVmHandle ────────────────────────────────────────────
 
-    override fun start(program: ComputerProgram): Boolean {
+    override fun boot(): Boolean {
         if (runner?.isActive == true) return false
 
         stateManager.setState(VmState.Booting)
+
         runner =
             scope.launch {
                 try {
+                    val source =
+                        programLoader.load(computerId, profile.bootScriptName)
+                            ?: run {
+                                stopInternal(errorMessage = "Missing boot script: ${profile.bootScriptName}")
+                                return@launch
+                            }
+
+                    val compiled = ComputerProgramCompiler.compile(source.path, source.source)
+
+                    val program =
+                        compiled.program
+                            ?: run {
+                                stopInternal(errorMessage = "Boot compilation failed: ${compiled.errorMessage.orEmpty()}")
+                                return@launch
+                            }
+
                     awaitSlicePermit()
                     logger.log("VM[$computerId] boot program started")
-                    program.run(runtime!!)
+                    program.run(runtime)
                     stopInternal(VmStopReason.REQUESTED)
                 } catch (cancelled: CancellationException) {
                     throw cancelled
@@ -117,6 +135,7 @@ class BackgroundComputerVm(
                 }
             }
 
+        enqueueEvent(VmEvent("boot"))
         return true
     }
 
@@ -167,8 +186,7 @@ class BackgroundComputerVm(
 
     override suspend fun schedulingPoint() = applySchedulingPoint()
 
-    override suspend fun <T> awaitHostCall(callFactory: (Long) -> HostCall): T =
-        hostCallManager.awaitHostCall(callFactory)
+    override suspend fun <T> awaitHostCall(callFactory: (Long) -> HostCall): T = hostCallManager.awaitHostCall(callFactory)
 
     override fun resolvePath(path: String): String = pathResolver.resolve(path)
 
@@ -217,24 +235,26 @@ class BackgroundComputerVm(
     ): VmRuntime {
         pathResolver.updateWorkingDirectory(workingDirectory)
 
-        val systemApi = VmSystemApi(
-            ctx = this,
-            computerId = computerId,
-            currentTickProvider = { stateManager.currentTick },
-            labelProvider = labelProvider,
-        )
+        val systemApi =
+            VmSystemApi(
+                ctx = this,
+                computerId = computerId,
+                currentTickProvider = { stateManager.currentTick },
+                labelProvider = labelProvider,
+            )
         val terminalApi = VmTerminalApi(screenBuffer = screenBuffer, ctx = this)
         val filesystemApi = VmFileSystemApi(ctx = this)
-        val processApi = VmProcessApi(
-            ctx = this,
-            initialArgument = argument,
-            computerId = computerId,
-            pathResolver = pathResolver,
-            filesystemApi = filesystemApi,
-            programLoader = programLoader,
-            runtimeCreator = { wd, arg -> createRuntime(wd, arg) },
-            terminal = terminalApi,
-        )
+        val processApi =
+            VmProcessApi(
+                ctx = this,
+                initialArgument = argument,
+                computerId = computerId,
+                pathResolver = pathResolver,
+                filesystemApi = filesystemApi,
+                programLoader = programLoader,
+                runtimeCreator = { wd, arg -> createRuntime(wd, arg) },
+                terminal = terminalApi,
+            )
 
         return VmRuntime(
             ctx = this,

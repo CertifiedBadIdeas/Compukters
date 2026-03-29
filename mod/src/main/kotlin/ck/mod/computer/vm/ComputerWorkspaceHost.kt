@@ -19,7 +19,6 @@
 
 package ck.mod.computer.vm
 
-import ck.lang.runtime.ComputerProgramFiles
 import ck.lang.runtime.ComputerWorkspace
 import ck.lang.runtime.ComputerWorkspaceDocument
 import ck.lang.runtime.ComputerWorkspaceEntry
@@ -35,20 +34,9 @@ import kotlin.io.path.readText
 import kotlin.io.path.relativeTo
 import kotlin.io.path.writeText
 
-class FileComputerWorkspace(
+class ComputerWorkspaceHost(
     private val rootPath: Path,
-    private val initialBundledScripts: Set<String> = setOf(ComputerProgramFiles.BIOS_SCRIPT_NAME),
-    private val bundledScriptLoader: (String) -> String? = { null },
 ) : ComputerWorkspace {
-    fun ensureInitialized(computerId: Int): Path {
-        val root = computerRoot(computerId)
-        root.createDirectories()
-        initialBundledScripts.forEach { relativePath ->
-            seedBundledScript(root, relativePath)
-        }
-        return root
-    }
-
     override fun list(
         computerId: Int,
         path: String,
@@ -121,23 +109,11 @@ class FileComputerWorkspace(
         computerId: Int,
         path: String,
     ): Path {
-        val root = ensureInitialized(computerId)
+        val root = computerRoot(computerId)
+        root.createDirectories()
         val candidate = root.resolve(path.trimStart('/')).normalize()
         require(candidate.startsWith(root)) { "Path escapes computer workspace: $path" }
         return candidate
-    }
-
-    private fun seedBundledScript(
-        root: Path,
-        relativePath: String,
-    ) {
-        val target = root.resolve(relativePath.trimStart('/')).normalize()
-        require(target.startsWith(root)) { "Path escapes computer workspace: $relativePath" }
-        if (target.exists()) return
-
-        val bundledScript = bundledScriptLoader(relativePath) ?: return
-        target.parent?.createDirectories()
-        target.writeText(bundledScript, StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW)
     }
 
     private fun entryFor(
