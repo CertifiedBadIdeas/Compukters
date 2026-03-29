@@ -69,8 +69,6 @@ class ServerComputer(
     private val logger = ComputerVmLogger { message -> LOGGER.info { message } }
     private var label: String? = properties.label
 
-    private fun label(): String? = label
-
     private var vmHandle: BackgroundComputerVm? = null
 
     private val serverScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -143,7 +141,7 @@ class ServerComputer(
         }
 
         computerManager.removeVm(instanceID, VmStopReason.CLOSED)
-        val handle = computerManager.getOrCreateVm(instanceID, profile, ::label, logger)
+        val handle = computerManager.getOrCreateVm(instanceID, profile, { label }, logger)
         val compiledProgram = ComputerProgramCompiler.compile(bootScript.path, bootScript.source)
         val program = compiledProgram.program
         if (program == null) {

@@ -27,22 +27,27 @@ import ck.lang.runtime.ComputerWorkspaceDocument
 import ck.lang.runtime.ComputerWorkspaceEntry
 import ck.lang.runtime.DefinitionTarget
 import ck.lang.runtime.HoverInfo
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.runTest
 import org.lwjgl.glfw.GLFW
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class WorkbenchStoreTest {
     @Test
-    fun mergesRemoteStateOnTick() {
+    fun mergesRemoteStateReactively() = runTest(UnconfinedTestDispatcher()) {
         val workspaceGateway = FakeWorkspaceGateway()
         val store = WorkbenchStore(workspaceGateway, FakeComputerControlGateway(), FakeWorkbenchIdeFacade())
         val updates = FakeWorkbenchUpdateSource()
 
-        store.bind(updates)
+        store.bind(backgroundScope, updates)
         store.initialize()
 
         assertEquals(listOf(""), workspaceGateway.listRequests)
@@ -53,7 +58,6 @@ class WorkbenchStoreTest {
                 document = ComputerWorkspaceDocument("startup.ck", "fun main() {}", 7),
             ),
         )
-        store.tick()
 
         assertEquals("startup.ck", store.state.openDocument?.path)
         assertEquals("fun main() {}", store.state.editor.text)
@@ -62,18 +66,17 @@ class WorkbenchStoreTest {
     }
 
     @Test
-    fun writesDocumentThroughGateway() {
+    fun writesDocumentThroughGateway() = runTest(UnconfinedTestDispatcher()) {
         val workspaceGateway = FakeWorkspaceGateway()
         val store = WorkbenchStore(workspaceGateway, FakeComputerControlGateway(), FakeWorkbenchIdeFacade())
         val updates = FakeWorkbenchUpdateSource()
 
-        store.bind(updates)
+        store.bind(backgroundScope, updates)
         updates.push(
             WorkbenchRemoteState(
                 document = ComputerWorkspaceDocument("startup.ck", "fun main() {}", 1),
             ),
         )
-        store.tick()
         store.toggleMode()
 
         store.moveCursorTo(0, 13, visibleEditorLines = 20)
@@ -92,19 +95,18 @@ class WorkbenchStoreTest {
     }
 
     @Test
-    fun appliesCompletionFromStoreState() {
+    fun appliesCompletionFromStoreState() = runTest(UnconfinedTestDispatcher()) {
         val workspaceGateway = FakeWorkspaceGateway()
         val ideFacade = FakeWorkbenchIdeFacade()
         val store = WorkbenchStore(workspaceGateway, FakeComputerControlGateway(), ideFacade)
         val updates = FakeWorkbenchUpdateSource()
 
-        store.bind(updates)
+        store.bind(backgroundScope, updates)
         updates.push(
             WorkbenchRemoteState(
                 document = ComputerWorkspaceDocument("main.ck", "pri", 1),
             ),
         )
-        store.tick()
 
         store.moveCursorTo(0, 3, visibleEditorLines = 20)
         store.openCompletion()

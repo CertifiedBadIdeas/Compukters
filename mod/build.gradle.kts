@@ -76,6 +76,7 @@ dependencies {
     forgeImplementation(libs.kotlin.logging)
 
     testImplementation(kotlin("test"))
+    testImplementation(libs.kotlinx.coroutines.test)
 }
 
 fun <T : ModuleDependency> DependencyHandler.forgeImplementation(dependency: Provider<T>) {

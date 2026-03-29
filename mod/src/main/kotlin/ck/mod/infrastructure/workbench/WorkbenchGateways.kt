@@ -84,7 +84,13 @@ class NetworkWorkspaceGateway(
     }
 }
 
-class InputHandlerControlGateway(\n    private val inputEventSink: InputEventSink,\n) : ComputerControlGateway {\n    override fun reboot() {\n        inputEventSink.accept(ControlInputEvent(ComputerControlAction.REBOOT))\n    }\n}
+class InputHandlerControlGateway(
+    private val inputEventSink: InputEventSink,
+) : ComputerControlGateway {
+    override fun reboot() {
+        inputEventSink.accept(ControlInputEvent(ComputerControlAction.REBOOT))
+    }
+}
 
 object LanguageWorkbenchIdeFacade : WorkbenchIdeFacade {
     private val ide = LanguageServices.ide
