@@ -17,9 +17,6 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import org.gradle.internal.impldep.org.eclipse.jgit.lib.ObjectChecker.tag
-import org.gradle.util.internal.GUtil.prefix
-
 /*
  * The Compukter Kraft Developers
  *
@@ -41,12 +38,52 @@ import org.gradle.util.internal.GUtil.prefix
 
 plugins {
     alias(libs.plugins.kotlin) apply false
-    alias(libs.plugins.release)
 }
 
-release {
-    tagTemplate.set("v$version")
-    git {
-        requireBranch.set("")
+tasks.register("release") {
+    group = "release"
+    description = "Remove -SNAPSHOT, tag, bump minor version, push"
+    doLast {
+        fun git(vararg args: String) {
+            val process = ProcessBuilder("git", *args)
+                .directory(projectDir)
+                .inheritIO()
+                .start()
+            require(process.waitFor() == 0) { "git ${args.toList()} failed" }
+        }
+
+        val propsFile = file("gradle.properties")
+        val props = propsFile.readText()
+        val currentVersion = version.toString()
+
+        require(currentVersion.endsWith("-SNAPSHOT")) {
+            "Version '$currentVersion' is not a SNAPSHOT — nothing to release."
+        }
+
+        val releaseVersion = currentVersion.removeSuffix("-SNAPSHOT")
+
+        // 1. Write release version
+        propsFile.writeText(props.replace("version = $currentVersion", "version = $releaseVersion"))
+        git("add", "gradle.properties")
+        git("commit", "-m", "release: v$releaseVersion")
+        git("tag", "v$releaseVersion")
+
+        // 2. Bump minor version
+        val parts = releaseVersion.split(".")
+        val nextVersion = "${parts[0]}.${parts[1].toInt() + 1}-SNAPSHOT"
+        propsFile.writeText(propsFile.readText().replace("version = $releaseVersion", "version = $nextVersion"))
+        git("add", "gradle.properties")
+        git("commit", "-m", "chore: bump version to $nextVersion")
+
+        println("Released v$releaseVersion, next development version: $nextVersion")
+        println("Run 'git push && git push --tags' to publish.")
+    }
+}
+
+tasks.register("currentVersion") {
+    group = "release"
+    description = "Print the current project version"
+    doLast {
+        println("Project version: $version")
     }
 }
