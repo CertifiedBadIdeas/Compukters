@@ -101,6 +101,9 @@ abstract class AbstractComputerMenu(
     /** Observable workspace state — replaces the old callback-based listener system. */
     val workspaceStateFlow: StateFlow<WorkbenchRemoteState> = _workspaceStateFlow.asStateFlow()
 
+    /** Whether the computer is currently on (synced from server via [ContainerData]). */
+    val isComputerOn: Boolean get() = data.get(0) == 1
+
     val displayStack: ItemStack = containerData?.displayStack ?: ItemStack.EMPTY
 
     init {

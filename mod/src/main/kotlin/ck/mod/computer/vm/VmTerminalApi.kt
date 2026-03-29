@@ -41,16 +41,22 @@ class VmTerminalApi(
         screenBuffer.printLine(text)
     }
 
-    override suspend fun readLine(prompt: String): String =
-        TerminalLineReader(
-            receiveEvent = { ctx.receiveEvent() },
-            deferEvent = ctx::deferEvent,
-            write = ::write,
-            printLine = ::printLine,
-            setCursor = ::setCursor,
-            currentCursor = { screenBuffer.cursorX to screenBuffer.cursorY },
-            updateCursor = { x, y -> /* no-op: setCursor already updates screenBuffer */ },
-        ).readLine(prompt)
+    override suspend fun readLine(prompt: String): String {
+        screenBuffer.setCursorBlink(true)
+        try {
+            return TerminalLineReader(
+                receiveEvent = { ctx.receiveEvent() },
+                deferEvent = ctx::deferEvent,
+                write = ::write,
+                printLine = ::printLine,
+                setCursor = ::setCursor,
+                currentCursor = { screenBuffer.cursorX to screenBuffer.cursorY },
+                updateCursor = { x, y -> /* no-op: setCursor already updates screenBuffer */ },
+            ).readLine(prompt)
+        } finally {
+            screenBuffer.setCursorBlink(false)
+        }
+    }
 
     override fun clear() {
         screenBuffer.clear()

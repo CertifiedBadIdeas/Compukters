@@ -20,8 +20,10 @@ package ck.mod.gui
 
 import ck.mod.application.input.InputEventSink
 import ck.mod.application.input.KeyInputEvent
+import ck.mod.application.input.MouseInputEvent
 import ck.mod.application.input.PasteInputEvent
 import ck.mod.utils.StringUtil
+import ck.mod.ui.render.FixedWidthFontRenderer
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.screens.Screen
 import org.lwjgl.glfw.GLFW
@@ -95,6 +97,20 @@ class WorkbenchTerminalInputController(
     ): Boolean {
         focused = bounds.contains(mouseX.toInt(), mouseY.toInt())
         return focused
+    }
+
+    fun mouseScrolled(
+        bounds: TerminalRect,
+        mouseX: Double,
+        mouseY: Double,
+        delta: Double,
+    ): Boolean {
+        if (!focused || !bounds.contains(mouseX.toInt(), mouseY.toInt())) return false
+        val cellX = ((mouseX.toInt() - bounds.x) / FixedWidthFontRenderer.FONT_WIDTH) + 1
+        val cellY = ((mouseY.toInt() - bounds.y) / FixedWidthFontRenderer.FONT_HEIGHT) + 1
+        val direction = if (delta > 0) 1 else -1
+        computer.accept(MouseInputEvent.Scroll(direction, cellX, cellY))
+        return true
     }
 
     private fun paste() {

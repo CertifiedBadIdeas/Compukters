@@ -82,6 +82,9 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
 
     override fun containerTick() {
         super.containerTick()
+        if (!menu.isComputerOn && terminalInput.focused) {
+            terminalInput.focused = false
+        }
         terminalInput.update()
     }
 
@@ -92,6 +95,8 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
         mouseY: Int,
     ) {
         if (store.state.mode == WorkbenchMode.TERMINAL) {
+            val snapshot = menu.clientSide.screenSnapshot
+            val displaySnapshot = if (menu.isComputerOn) snapshot else snapshot.copy(cursorBlink = false)
             WorkbenchTerminalRenderer.render(
                 graphics,
                 minecraft!!.font,
@@ -100,8 +105,8 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
                 imageWidth,
                 imageHeight,
                 terminalLayout(),
-                menu.clientSide.screenSnapshot,
-                terminalInput.focused,
+                displaySnapshot,
+                terminalInput.focused && menu.isComputerOn,
             )
         } else {
             graphics.fill(leftPos, topPos, leftPos + imageWidth, topPos + imageHeight, 0xFF12151D.toInt())
@@ -151,7 +156,7 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
         modifiers: Int,
     ): Boolean {
         val previousMode = store.state.mode
-        if (store.state.mode == WorkbenchMode.TERMINAL && terminalInput.focused) {
+        if (store.state.mode == WorkbenchMode.TERMINAL && terminalInput.focused && menu.isComputerOn) {
             if (terminalInput.keyPressed(key, scancode, modifiers)) {
                 return true
             }
@@ -172,7 +177,7 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
         scancode: Int,
         modifiers: Int,
     ): Boolean {
-        if (store.state.mode == WorkbenchMode.TERMINAL && terminalInput.focused) {
+        if (store.state.mode == WorkbenchMode.TERMINAL && terminalInput.focused && menu.isComputerOn) {
             if (terminalInput.keyReleased(key, scancode)) {
                 return true
             }
@@ -184,7 +189,7 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
         ch: Char,
         modifiers: Int,
     ): Boolean {
-        if (store.state.mode == WorkbenchMode.TERMINAL && terminalInput.focused) {
+        if (store.state.mode == WorkbenchMode.TERMINAL && terminalInput.focused && menu.isComputerOn) {
             return terminalInput.charTyped(ch)
         }
         if (store.charTyped(ch, layout().visibleEditorLines())) {
@@ -203,7 +208,11 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
         }
 
         if (store.state.mode == WorkbenchMode.TERMINAL) {
-            terminalInput.focused = terminalInput.mouseClicked(terminalLayout().terminalBounds, mouseX, mouseY)
+            if (menu.isComputerOn) {
+                terminalInput.focused = terminalInput.mouseClicked(terminalLayout().terminalBounds, mouseX, mouseY)
+            } else {
+                terminalInput.focused = false
+            }
             return terminalInput.focused || super.mouseClicked(mouseX, mouseY, button)
         }
 
@@ -250,6 +259,11 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
         mouseY: Double,
         delta: Double,
     ): Boolean {
+        if (store.state.mode == WorkbenchMode.TERMINAL && menu.isComputerOn) {
+            if (terminalInput.mouseScrolled(terminalLayout().terminalBounds, mouseX, mouseY, delta)) {
+                return true
+            }
+        }
         val layout = layout()
         if (store.state.mode == WorkbenchMode.EDITOR && layout.editorBounds.contains(mouseX.toInt(), mouseY.toInt())) {
             store.scrollEditor(-delta.toInt())
@@ -308,6 +322,9 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
         val endLine = min(lines.size, startLine + visibleLines)
         var drawY = topPos + 40
 
+        val bounds = layout().editorBounds
+        graphics.enableScissor(bounds.x, bounds.y, bounds.right, bounds.bottom)
+
         for (lineIndex in startLine until endLine) {
             if (lineIndex == store.state.editor.cursorLine) {
                 graphics.fill(leftPos + 138, drawY - 1, leftPos + imageWidth - 10, drawY + 9, 0x33294055)
@@ -318,6 +335,9 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
         }
 
         renderCursor(graphics, lines)
+
+        graphics.disableScissor()
+
         if (store.state.editor.completionItems
                 .isNotEmpty()
         ) {
