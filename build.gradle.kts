@@ -19,4 +19,17 @@
 
 plugins {
     alias(libs.plugins.kotlin) apply false
+    alias(libs.plugins.axion.release)
 }
+
+scmVersion {
+    tag {
+        prefix.set("v")
+    }
+    versionCreator { version, _ ->
+        version.substringBeforeLast(".")
+    }
+    versionIncrementer("incrementMinor")
+}
+
+version = scmVersion.version

@@ -38,8 +38,13 @@ val modProperties =
         .readLines()
         .mapNotNull { it.indexOf('=').takeIf { i -> i != -1 }?.let { v -> v to it } }
         .associate { (index, str) -> str.substring(0, index) to str.substring(index + 1) }
+        .toMutableMap()
 
-base.archivesName = modProperties["mod_name"]!!.replace(" ", "") + "-" + modProperties["mod_version"]!!
+val minecraftVersion = libs.versions.minecraft.get()
+val modVersion = "$minecraftVersion-${rootProject.version}"
+modProperties["mod_version"] = modVersion
+
+base.archivesName = modProperties["mod_name"]!!.replace(" ", "") + "-" + modVersion
 
 dependencies {
     minecraft(libs.minecraft)
@@ -83,16 +88,10 @@ fun <T : ModuleDependency> DependencyHandler.forgeImplementation(dependency: T) 
 
 val generateModMetadata =
     tasks.register("generateModMetadata", ProcessResources::class) {
-        val modPropertiesFile = file("$rootDir/config/mod.properties")
-        val replaceProperties =
-            modPropertiesFile
-                .readLines()
-                .mapNotNull { it.indexOf('=').takeIf { i -> i != -1 }?.let { v -> v to it } }
-                .associate { (index, str) -> str.substring(0, index) to str.substring(index + 1) }
+        val replaceProperties = modProperties.toMap()
         val from = file("src/main/resources")
         val intoDir = file("build/generated/resources")
 
-        inputs.file(modPropertiesFile)
         inputs.properties(replaceProperties)
         inputs.dir(from)
 
