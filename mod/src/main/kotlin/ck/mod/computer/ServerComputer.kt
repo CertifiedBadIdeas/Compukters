@@ -38,8 +38,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.server.level.ServerPlayer
@@ -69,16 +67,10 @@ class ServerComputer(
 
     private val serverScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    private val _screenSnapshot = MutableStateFlow<ScreenBufferSnapshot?>(null)
-
-    /**
-     * Last known screen snapshot — used for initial sync when new players open the GUI.
-     * Observe via [screenSnapshotFlow] or read the current value with [lastScreenSnapshot].
-     */
-    val screenSnapshotFlow: StateFlow<ScreenBufferSnapshot?> = _screenSnapshot.asStateFlow()
+    private val screenSnapshot = MutableStateFlow<ScreenBufferSnapshot?>(null)
 
     /** Current screen snapshot (synchronous read). */
-    val lastScreenSnapshot: ScreenBufferSnapshot? get() = _screenSnapshot.value
+    val lastScreenSnapshot: ScreenBufferSnapshot? get() = screenSnapshot.value
 
     private val computerManager get() = ServerContext.computerManager
 
@@ -195,13 +187,12 @@ class ServerComputer(
     // ── Internal ────────────────────────────────────────────────────
 
     private fun syncScreen(handle: ComputerVmHandle) {
-        val screenSnapshot = handle.readScreenSnapshot() ?: return
-        _screenSnapshot.value = screenSnapshot
-        val players = watchingPlayers()
-        if (players.isEmpty()) return
+        val snapshot = handle.readScreenSnapshot() ?: return
+        screenSnapshot.value = snapshot
+        val players = watchingPlayers().takeIf { it.isNotEmpty() } ?: return
         for (player in players) {
             ServerNetworking.sendToPlayer(
-                ComputerTerminalClientMessage(player.containerMenu, screenSnapshot),
+                ComputerTerminalClientMessage(player.containerMenu, snapshot),
                 player,
             )
         }

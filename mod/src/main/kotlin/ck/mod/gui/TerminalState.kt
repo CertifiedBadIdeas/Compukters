@@ -120,8 +120,4 @@ class TerminalState {
             bgColours = bgColours,
         )
     }
-
-    companion object {
-        fun fromSnapshot(snapshot: ScreenBufferSnapshot): TerminalState = TerminalState(snapshot)
-    }
 }

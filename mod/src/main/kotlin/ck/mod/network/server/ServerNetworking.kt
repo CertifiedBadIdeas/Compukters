@@ -53,7 +53,7 @@ object ServerNetworking {
      */
     fun sendToPlayers(
         message: NetworkMessage<ClientNetworkContext>,
-        players: MutableCollection<ServerPlayer>,
+        players: Collection<ServerPlayer>,
     ) {
         if (players.isEmpty()) return
         val packet =
