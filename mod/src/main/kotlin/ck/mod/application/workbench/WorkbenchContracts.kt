@@ -69,6 +69,13 @@ interface WorkbenchIdeFacade {
         column: Int,
     ): List<CompletionItem>
 
+    fun completeFromLastAnalysis(
+        path: String,
+        source: String,
+        line: Int,
+        column: Int,
+    ): List<CompletionItem>
+
     fun hover(
         path: String,
         source: String,

@@ -18,6 +18,7 @@
  */
 package ck.mod.infrastructure.workbench
 
+import ck.lang.frontend.AnalyzedProgram
 import ck.lang.runtime.CompletionItem
 import ck.lang.runtime.ComputerIdeSnapshot
 import ck.lang.runtime.ComputerWorkspaceDocument
@@ -95,11 +96,18 @@ class InputHandlerControlGateway(
 object LanguageWorkbenchIdeFacade : WorkbenchIdeFacade {
     private val ide = LanguageServices.ide
 
+    private var lastAnalysisPath: String? = null
+    private var lastAnalysisSource: String? = null
+    private var lastAnalysis: AnalyzedProgram? = null
+
     override fun analyze(
         path: String,
         source: String,
     ): ComputerIdeSnapshot =
         ide.analyze(path, source).let { snapshot ->
+            lastAnalysisPath = path
+            lastAnalysisSource = source
+            lastAnalysis = snapshot.analysis
             ComputerIdeSnapshot(
                 ComputerWorkspaceDocument(path = path, text = source, version = 0L),
                 snapshot.diagnostics,
@@ -113,6 +121,19 @@ object LanguageWorkbenchIdeFacade : WorkbenchIdeFacade {
         line: Int,
         column: Int,
     ): List<CompletionItem> = ide.complete(path, source, line, column)
+
+    override fun completeFromLastAnalysis(
+        path: String,
+        source: String,
+        line: Int,
+        column: Int,
+    ): List<CompletionItem> {
+        val cached = lastAnalysis
+        if (cached != null && lastAnalysisPath == path && lastAnalysisSource == source) {
+            return ide.completeFromAnalysis(cached, source, line, column)
+        }
+        return ide.complete(path, source, line, column)
+    }
 
     override fun hover(
         path: String,
