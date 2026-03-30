@@ -245,8 +245,34 @@ class WorkbenchStore(
         if (!Character.isISOControl(ch)) {
             _state.value = state.copy(editor = state.editor.insertText(ch.toString(), visibleEditorLines))
             refreshIde()
+            if (ch == '.' || shouldTriggerImportCompletion(ch)) {
+                openCompletionFromCurrentSnapshot()
+            }
         }
         return true
+    }
+
+    private fun shouldTriggerImportCompletion(ch: Char): Boolean {
+        if (ch != ' ') return false
+        val lines = state.editor.text.split('\n')
+        val line = lines.getOrNull(state.editor.cursorLine) ?: return false
+        val textBeforeCursor = line.substring(0, state.editor.cursorColumn)
+        return textBeforeCursor.endsWith("import ")
+    }
+
+    private fun openCompletionFromCurrentSnapshot() {
+        val document = state.openDocument ?: return
+        val items = ideFacade.completeFromLastAnalysis(
+            document.path,
+            state.editor.text,
+            state.editor.cursorLine,
+            state.editor.cursorColumn,
+        )
+        if (items.isNotEmpty()) {
+            _state.value = state.copy(
+                editor = state.editor.copy(completionItems = items, selectedCompletion = 0),
+            )
+        }
     }
 
     private fun mergeRemoteState(remoteState: WorkbenchRemoteState) {
