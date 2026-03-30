@@ -30,7 +30,7 @@ data class ParsedSource(
     val source: String,
     val tokens: List<Token>,
     val syntaxDiagnostics: List<FrontendDiagnostic>,
-    val program: Program?,
+    val program: Program,
 )
 
 interface ParserFacade {
@@ -111,19 +111,6 @@ internal class DefaultAnalyzerFacade(
     ): AnalyzedProgram {
         val parsed = parser.parse(name, source)
         val program = parsed.program
-        if (program == null) {
-            return AnalyzedProgram(
-                name = parsed.name,
-                source = parsed.source,
-                tokens = parsed.tokens,
-                program = null,
-                diagnostics = parsed.syntaxDiagnostics,
-                symbols = emptyList(),
-                references = emptyList(),
-                builtinModules = registry.modules,
-                builtinGlobals = registry.globals,
-            )
-        }
 
         val semantic = SemanticAnalyzer(registry, name).analyze(program)
         return AnalyzedProgram(
@@ -150,8 +137,7 @@ internal class DefaultCompilerFacade(
     ): CompilationArtifact {
         val analysis = analyzer.analyze(name, source)
         val semantic = analysis.semantic
-        if (analysis.program == null ||
-            semantic == null ||
+        if (semantic == null ||
             analysis.diagnostics.any { it.severity == FrontendSeverity.ERROR }
         ) {
             return CompilationArtifact(module = null, analysis = analysis)

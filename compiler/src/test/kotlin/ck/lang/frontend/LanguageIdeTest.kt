@@ -132,4 +132,24 @@ class LanguageIdeTest {
     }
 
     private operator fun Pair<Int, Int>.plus(columnDelta: Int): Pair<Int, Int> = first to (second + columnDelta)
+
+    @Test
+    fun recoversFromIncompleteImport() {
+        val source = "import terminal;\nimport \nfun main() {\n    terminal.printLine(\"hi\");\n}"
+        val snapshot = ide.analyze("recovery.ck", source)
+        assertTrue(snapshot.diagnostics.isNotEmpty(), "Should have diagnostics for incomplete import")
+        // main function should be visible — this requires the AST (parser recovery)
+        val completions = ide.complete("recovery.ck", source, 4, 0)
+        assertTrue(completions.any { it.label == "main" }, "Should see main function after recovery")
+    }
+
+    @Test
+    fun recoversFromGarbageToken() {
+        val source = "import terminal;\n123\nfun main() {}"
+        val snapshot = ide.analyze("garbage.ck", source)
+        assertTrue(snapshot.diagnostics.isNotEmpty(), "Should have diagnostics for garbage tokens")
+        // main function should be visible — this requires the AST (parser recovery)
+        val completions = ide.complete("garbage.ck", source, 2, 0)
+        assertTrue(completions.any { it.label == "main" }, "Should see main function after recovery")
+    }
 }

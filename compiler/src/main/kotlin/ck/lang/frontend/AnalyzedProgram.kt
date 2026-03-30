@@ -28,7 +28,7 @@ class AnalyzedProgram(
     val name: String,
     val source: String,
     val tokens: List<Token>,
-    val program: Program?,
+    val program: Program,
     val diagnostics: List<FrontendDiagnostic>,
     val symbols: List<SymbolInfo>,
     val references: List<ReferenceInfo>,

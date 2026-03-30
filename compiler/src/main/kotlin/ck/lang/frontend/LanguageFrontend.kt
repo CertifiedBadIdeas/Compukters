@@ -1278,21 +1278,24 @@ internal class Parser(
     val diagnostics = initialDiagnostics.toMutableList()
     private var index = 0
 
-    fun parseProgram(): Program? {
+    fun parseProgram(): Program {
         val imports = mutableListOf<ImportDeclaration>()
         val declarations = mutableListOf<TopLevelDeclaration>()
         while (!isAtEnd()) {
             when {
                 match(TokenKind.IMPORT) -> {
-                    imports += parseImport() ?: return null
+                    val imp = parseImport()
+                    if (imp != null) imports += imp else synchronize()
                 }
 
                 match(TokenKind.FUN) -> {
-                    declarations += parseFunction() ?: return null
+                    val decl = parseFunction()
+                    if (decl != null) declarations += decl else synchronize()
                 }
 
                 match(TokenKind.STRUCT) -> {
-                    declarations += parseStruct() ?: return null
+                    val decl = parseStruct()
+                    if (decl != null) declarations += decl else synchronize()
                 }
 
                 check(TokenKind.EOF) -> {
@@ -1301,11 +1304,19 @@ internal class Parser(
 
                 else -> {
                     diagnostics += FrontendDiagnostic("Expected a top-level declaration.", peek().range)
-                    return null
+                    synchronize()
                 }
             }
         }
         return Program(imports, declarations, declarations.lastOrNull()?.range ?: imports.lastOrNull()?.range)
+    }
+
+    private fun synchronize() {
+        while (!isAtEnd()) {
+            if (match(TokenKind.SEMICOLON)) return
+            if (check(TokenKind.FUN) || check(TokenKind.IMPORT) || check(TokenKind.STRUCT)) return
+            advance()
+        }
     }
 
     private fun parseImport(): ImportDeclaration? {
