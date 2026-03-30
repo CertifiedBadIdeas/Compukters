@@ -116,6 +116,7 @@ class LanguageIde(
                                 label = it,
                                 detail = "keyword",
                                 kind = CompletionItemKind.KEYWORD,
+                                insertText = if (it in BODY_KEYWORDS) "$it " else null,
                             )
                         }.toList(),
                 )
@@ -171,5 +172,6 @@ class LanguageIde(
 
     private companion object {
         val KEYWORDS = listOf("fun", "val", "var", "if", "else", "when", "while", "return", "import", "struct", "true", "false", "null")
+        val BODY_KEYWORDS = setOf("fun", "val", "var", "if", "else", "when", "while", "return", "import", "struct")
     }
 }

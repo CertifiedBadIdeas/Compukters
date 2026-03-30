@@ -164,11 +164,12 @@ internal fun EditorState.applyCompletion(item: CompletionItem): EditorState {
     val lines = lines().toMutableList()
     val line = lines[cursorLine]
     val prefixStart = line.findIdentifierStart(cursorColumn)
-    lines[cursorLine] = line.substring(0, prefixStart) + item.label + line.substring(cursorColumn)
+    val textToInsert = item.insertText ?: item.label
+    lines[cursorLine] = line.substring(0, prefixStart) + textToInsert + line.substring(cursorColumn)
     return copy(
         text = lines.joinToString("\n"),
         dirty = true,
-        cursorColumn = prefixStart + item.label.length,
+        cursorColumn = prefixStart + textToInsert.length,
         completionItems = emptyList(),
         selectedCompletion = 0,
     )

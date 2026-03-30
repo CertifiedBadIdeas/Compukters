@@ -81,6 +81,7 @@ data class CompletionItem(
     val detail: String,
     val kind: CompletionItemKind,
     val documentation: String? = null,
+    val insertText: String? = null,
 )
 
 data class HoverInfo(

@@ -197,4 +197,18 @@ class LanguageIdeTest {
         assertFalse(moduleLabels.contains("terminal"), "Should not suggest already-imported terminal")
         assertEquals(setOf("filesystem", "system", "events", "process", "strings"), moduleLabels)
     }
+
+    @Test
+    fun keywordCompletionsHaveTrailingSpace() {
+        val completions = ide.complete("test.ck", "imp", 0, 3)
+        val importItem = completions.first { it.label == "import" }
+        assertEquals("import ", importItem.insertText, "import keyword should have trailing space")
+    }
+
+    @Test
+    fun literalCompletionsHaveNoTrailingSpace() {
+        val completions = ide.complete("test.ck", "tru", 0, 3)
+        val trueItem = completions.first { it.label == "true" }
+        assertNull(trueItem.insertText, "true literal should not have trailing space")
+    }
 }
