@@ -67,6 +67,13 @@ interface IdeFacade {
         column: Int,
     ): List<CompletionItem>
 
+    fun completeFromAnalysis(
+        analysis: AnalyzedProgram,
+        source: String,
+        line: Int,
+        column: Int,
+    ): List<CompletionItem>
+
     fun hover(
         name: String,
         source: String,

@@ -43,6 +43,9 @@ class AnalyzedProgram(
             semantic = result
         }
 
+    val importedModuleNames: Set<String>
+        get() = program.imports.map { it.moduleName }.toSet()
+
     fun symbolAt(offset: Int): SymbolInfo? =
         references.firstOrNull { it.range.contains(offset) }?.target
             ?: symbols.firstOrNull { it.range?.contains(offset) == true }

@@ -48,11 +48,36 @@ class LanguageIde(
         column: Int,
     ): List<CompletionItem> {
         val snapshot = analyze(name, source)
+        return completeFromAnalysis(snapshot.analysis, source, line, column)
+    }
+
+    override fun completeFromAnalysis(
+        analysis: AnalyzedProgram,
+        source: String,
+        line: Int,
+        column: Int,
+    ): List<CompletionItem> {
         val offset = SourceTextSupport.offsetAt(source, line, column)
+        val importPrefix = SourceTextSupport.importPrefix(source, offset)
+        if (importPrefix != null) {
+            val alreadyImported = analysis.importedModuleNames
+            return LanguageBuiltins.registry.modules
+                .asSequence()
+                .filter { it.name.startsWith(importPrefix) }
+                .filter { it.name !in alreadyImported }
+                .map {
+                    CompletionItem(
+                        label = it.name,
+                        detail = it.documentation,
+                        kind = CompletionItemKind.MODULE,
+                        documentation = it.documentation,
+                    )
+                }.toList()
+        }
         val prefix = SourceTextSupport.identifierPrefix(source, offset)
         val modulePrefix = SourceTextSupport.moduleMemberPrefix(source, offset)
         return if (modulePrefix != null) {
-            snapshot.analysis
+            analysis
                 .moduleMembers(modulePrefix.first)
                 .asSequence()
                 .filter { it.name.startsWith(modulePrefix.second) }
@@ -62,7 +87,7 @@ class LanguageIde(
         } else {
             buildList {
                 addAll(
-                    snapshot.analysis
+                    analysis
                         .visibleSymbolsAt(offset)
                         .asSequence()
                         .filter { it.name.startsWith(prefix) }

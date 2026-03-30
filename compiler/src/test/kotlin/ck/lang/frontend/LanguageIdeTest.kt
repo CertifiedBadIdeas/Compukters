@@ -19,9 +19,11 @@
 
 package ck.lang.frontend
 
+import ck.lang.runtime.CompletionItemKind
 import ck.lang.runtime.HighlightTokenKind
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -171,5 +173,28 @@ class LanguageIdeTest {
         // "import terminal;\nimport sy" — second import
         val prefix4 = SourceTextSupport.importPrefix("import terminal;\nimport sy", 26)
         assertEquals("sy", prefix4)
+    }
+
+    @Test
+    fun completesImportModules() {
+        val allModules = ide.complete("test.ck", "import ", 0, 7)
+        val moduleLabels = allModules.filter { it.kind == CompletionItemKind.MODULE }.map { it.label }.toSet()
+        assertEquals(setOf("terminal", "filesystem", "system", "events", "process", "strings"), moduleLabels)
+    }
+
+    @Test
+    fun completesImportModulesWithPrefix() {
+        val filtered = ide.complete("test.ck", "import te", 0, 9)
+        val moduleLabels = filtered.filter { it.kind == CompletionItemKind.MODULE }.map { it.label }
+        assertEquals(listOf("terminal"), moduleLabels)
+    }
+
+    @Test
+    fun completesImportModulesExcludingAlreadyImported() {
+        val source = "import terminal;\nimport "
+        val completions = ide.complete("test.ck", source, 1, 7)
+        val moduleLabels = completions.filter { it.kind == CompletionItemKind.MODULE }.map { it.label }.toSet()
+        assertFalse(moduleLabels.contains("terminal"), "Should not suggest already-imported terminal")
+        assertEquals(setOf("filesystem", "system", "events", "process", "strings"), moduleLabels)
     }
 }
