@@ -21,6 +21,16 @@ package ck.lang.frontend
 internal object SourceTextSupport {
     private val identifierPrefixRegex = Regex("""[A-Za-z_][A-Za-z0-9_]*$""")
     private val moduleMemberRegex = Regex("""([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z0-9_]*)$""")
+    private val importPrefixRegex = Regex("""import\s+(\w*)$""")
+
+    fun importPrefix(
+        source: String,
+        offset: Int,
+    ): String? {
+        val prefix = source.take(offset)
+        val match = importPrefixRegex.find(prefix) ?: return null
+        return match.groupValues[1]
+    }
 
     fun moduleMemberPrefix(
         source: String,

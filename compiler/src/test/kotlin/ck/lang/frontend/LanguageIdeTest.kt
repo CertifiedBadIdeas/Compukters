@@ -23,6 +23,7 @@ import ck.lang.runtime.HighlightTokenKind
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class LanguageIdeTest {
@@ -151,5 +152,24 @@ class LanguageIdeTest {
         // main function should be visible — this requires the AST (parser recovery)
         val completions = ide.complete("garbage.ck", source, 2, 0)
         assertTrue(completions.any { it.label == "main" }, "Should see main function after recovery")
+    }
+
+    @Test
+    fun importPrefixDetectsImportContext() {
+        // "import te" — cursor at end
+        val prefix1 = SourceTextSupport.importPrefix("import te", 9)
+        assertEquals("te", prefix1)
+
+        // "import " — cursor right after space
+        val prefix2 = SourceTextSupport.importPrefix("import ", 7)
+        assertEquals("", prefix2)
+
+        // "terminal." — not import context
+        val prefix3 = SourceTextSupport.importPrefix("terminal.", 9)
+        assertNull(prefix3)
+
+        // "import terminal;\nimport sy" — second import
+        val prefix4 = SourceTextSupport.importPrefix("import terminal;\nimport sy", 26)
+        assertEquals("sy", prefix4)
     }
 }
