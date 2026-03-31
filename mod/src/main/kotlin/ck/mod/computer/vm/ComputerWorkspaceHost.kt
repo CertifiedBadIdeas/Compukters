@@ -26,6 +26,7 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.io.path.createDirectories
 import kotlin.io.path.exists
 import kotlin.io.path.isDirectory
@@ -36,7 +37,10 @@ import kotlin.io.path.writeText
 
 class ComputerWorkspaceHost(
     private val rootPath: Path,
+    private val defaultDiskQuotaBytes: Long = Long.MAX_VALUE,
 ) : ComputerWorkspace {
+    private val diskQuotaOverrides = ConcurrentHashMap<Int, Long>()
+
     override fun list(
         computerId: Int,
         path: String,
@@ -80,6 +84,7 @@ class ComputerWorkspaceHost(
         text: String,
     ): ComputerWorkspaceDocument {
         val target = resolve(computerId, path)
+        ensureWithinDiskQuota(computerId, target, text.toByteArray(StandardCharsets.UTF_8).size.toLong())
         target.parent?.createDirectories()
         target.writeText(text, StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)
         return ComputerWorkspaceDocument(normalizeDisplayPath(target, computerRoot(computerId)), text, versionOf(target))
@@ -101,6 +106,13 @@ class ComputerWorkspaceHost(
     ): Boolean {
         val target = resolve(computerId, path)
         return Files.deleteIfExists(target)
+    }
+
+    fun setDiskQuota(
+        computerId: Int,
+        diskQuotaBytes: Long,
+    ) {
+        diskQuotaOverrides[computerId] = diskQuotaBytes
     }
 
     fun computerRoot(computerId: Int): Path = rootPath.resolve(computerId.toString()).normalize()
@@ -133,4 +145,32 @@ class ComputerWorkspaceHost(
     ): String = path.relativeTo(root).toString().replace('\\', '/')
 
     private fun versionOf(path: Path): Long = Files.getLastModifiedTime(path).toMillis()
+
+    private fun ensureWithinDiskQuota(
+        computerId: Int,
+        target: Path,
+        newSizeBytes: Long,
+    ) {
+        val quota = diskQuotaOverrides[computerId] ?: defaultDiskQuotaBytes
+        if (quota == Long.MAX_VALUE) return
+
+        val existingSize = if (target.exists() && !target.isDirectory()) Files.size(target) else 0L
+        val usedBytes = currentDiskUsage(computerId)
+        val nextUsage = usedBytes - existingSize + newSizeBytes
+        check(nextUsage <= quota) { "Disk quota exceeded: $nextUsage > $quota" }
+    }
+
+    private fun currentDiskUsage(computerId: Int): Long {
+        val root = computerRoot(computerId)
+        if (!root.exists()) return 0L
+
+        return Files
+            .walk(root)
+            .use { stream ->
+                stream
+                    .filter(Files::isRegularFile)
+                    .mapToLong(Files::size)
+                    .sum()
+            }
+    }
 }

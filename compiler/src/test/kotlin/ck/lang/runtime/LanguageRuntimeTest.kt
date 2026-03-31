@@ -24,6 +24,7 @@ import ck.lang.frontend.LanguageFrontend
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class LanguageRuntimeTest {
@@ -63,6 +64,56 @@ class LanguageRuntimeTest {
         assertEquals(1, runtime.sleepCalls)
         assertEquals(1, runtime.yieldCalls)
         assertEquals(listOf<String?>("boot"), runtime.eventFilters)
+    }
+
+    @Test
+    fun usesInstructionBudgetFromProfileResources() {
+        val artifact =
+            frontend.compile(
+                "budget.ck",
+                """
+                fun main() {
+                    val a: Int = 1;
+                    val b: Int = 2;
+                    val c: Int = a + b;
+                    val d: Int = c + 1;
+                }
+                """.trimIndent(),
+            )
+
+        val lowBudgetRuntime = RecordingRuntime(instructionsPerSlice = 2)
+        runBlocking {
+            BytecodeComputerProgram(requireNotNull(artifact.module)).run(lowBudgetRuntime)
+        }
+
+        val highBudgetRuntime = RecordingRuntime(instructionsPerSlice = 128)
+        runBlocking {
+            BytecodeComputerProgram(requireNotNull(artifact.module)).run(highBudgetRuntime)
+        }
+
+        assertTrue(lowBudgetRuntime.yieldCalls > 0)
+        assertEquals(0, highBudgetRuntime.yieldCalls)
+    }
+
+    @Test
+    fun failsWhenVmMemoryExceedsProfileLimit() {
+        val artifact =
+            frontend.compile(
+                "memory.ck",
+                """
+                fun main() {
+                    val text: String = "123456789";
+                }
+                """.trimIndent(),
+            )
+
+        val runtime = RecordingRuntime(vmRamBytes = 4)
+
+        assertFailsWith<IllegalStateException> {
+            runBlocking {
+                BytecodeComputerProgram(requireNotNull(artifact.module)).run(runtime)
+            }
+        }
     }
 
     @Test
@@ -374,6 +425,8 @@ class LanguageRuntimeTest {
 
 private class RecordingRuntime(
     private val argument: String = "",
+    private val instructionsPerSlice: Int = 64,
+    private val vmRamBytes: Long = 64 * 1024,
 ) : ComputerRuntime {
     val lines = mutableListOf<String>()
     val eventFilters = mutableListOf<String?>()
@@ -396,6 +449,25 @@ private class RecordingRuntime(
                     ComputerCapability.FILESYSTEM,
                     ComputerCapability.SYSTEM,
                     ComputerCapability.EVENTS,
+                ),
+            resources =
+                ComputerResources(
+                    cpu =
+                        ComputerCpuResources(
+                            instructionsPerSlice = instructionsPerSlice,
+                            wallTimeGuardNanosPerSlice = 1_000_000,
+                        ),
+                    memory = ComputerMemoryResources(vmRamBytes = vmRamBytes),
+                    storage =
+                        ComputerStorageResources(
+                            programRomBytes = 64 * 1024,
+                            diskBytes = 256 * 1024,
+                        ),
+                    queues =
+                        ComputerQueueResources(
+                            eventQueueSlots = 16,
+                            hostCallQueueSlots = 16,
+                        ),
                 ),
         )
 

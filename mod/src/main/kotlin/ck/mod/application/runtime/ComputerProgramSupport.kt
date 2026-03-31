@@ -18,8 +18,13 @@
  */
 package ck.mod.application.runtime
 
+import ck.lang.api.BytecodeFunction
+import ck.lang.api.BytecodeModule
+import ck.lang.api.BytecodeRecord
+import ck.lang.api.Instruction
 import ck.lang.frontend.FrontendSeverity
 import ck.lang.runtime.BytecodeComputerProgram
+import ck.lang.runtime.ComputerProfile
 import ck.lang.runtime.ComputerProgram
 import ck.lang.runtime.ComputerWorkspace
 import ck.mod.language.LanguageServices
@@ -50,6 +55,7 @@ object ComputerProgramCompiler {
     fun compile(
         path: String,
         source: String,
+        profile: ComputerProfile? = null,
     ): CompiledComputerProgram {
         val artifact = LanguageServices.frontend.compile(path, source)
         val module = artifact.module
@@ -63,8 +69,53 @@ object ComputerProgramCompiler {
                 program = null,
                 errorMessage = errorMessage.ifEmpty { "Compilation failed." },
             )
+        } else if (profile != null && module.estimatedRomBytes() > profile.resources.storage.programRomBytes) {
+            CompiledComputerProgram(
+                program = null,
+                errorMessage = "Program exceeds ROM limit: ${module.estimatedRomBytes()} > ${profile.resources.storage.programRomBytes}",
+            )
         } else {
             CompiledComputerProgram(program = BytecodeComputerProgram(module))
         }
     }
 }
+
+private fun BytecodeModule.estimatedRomBytes(): Long =
+    name.length.toLong() +
+        16L +
+        functions.sumOf(BytecodeFunction::estimatedRomBytes) +
+        records.sumOf(BytecodeRecord::estimatedRomBytes)
+
+private fun BytecodeFunction.estimatedRomBytes(): Long =
+    name.length.toLong() +
+        returnType.length +
+        24L +
+        parameters.sumOf { it.name.length.toLong() + it.typeName.length } +
+        locals.sumOf { it.name.length.toLong() + it.typeName.length } +
+        instructions.sumOf(Instruction::estimatedRomBytes)
+
+private fun BytecodeRecord.estimatedRomBytes(): Long =
+    name.length.toLong() + 8L + fields.sumOf { it.name.length.toLong() + it.typeName.length }
+
+private fun Instruction.estimatedRomBytes(): Long =
+    when (this) {
+        is Instruction.Binary -> 4L
+        is Instruction.CallBuiltin -> 12L + functionName.length + (moduleName?.length ?: 0)
+        is Instruction.CallFunction -> 8L
+        is Instruction.ConstructRecord -> 8L + typeName.length + fieldNames.sumOf(String::length)
+        is Instruction.GetField -> 4L + fieldName.length
+        is Instruction.Jump -> 4L
+        is Instruction.JumpIfFalse -> 4L
+        is Instruction.JumpIfTrue -> 4L
+        is Instruction.LoadLocal -> 4L
+        Instruction.Pop -> 2L
+        is Instruction.PushBool -> 2L
+        is Instruction.PushInt -> 8L
+        is Instruction.PushLong -> 12L
+        Instruction.PushNull -> 2L
+        is Instruction.PushString -> 8L + value.length
+        Instruction.PushUnit -> 2L
+        Instruction.Return -> 2L
+        is Instruction.StoreLocal -> 4L
+        is Instruction.Unary -> 4L
+    }

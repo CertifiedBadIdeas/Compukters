@@ -84,6 +84,23 @@ class FileComputerWorkspaceTest {
         }
     }
 
+    @Test
+    fun rejectsWritesThatExceedDiskQuota() {
+        val root = createTempDirectory("compukterkraft-quota")
+
+        try {
+            val workspace = ComputerWorkspaceHost(rootPath = root, defaultDiskQuotaBytes = 8)
+
+            assertFailsWith<IllegalStateException> {
+                workspace.writeDocument(7, "big.ck", "123456789")
+            }
+
+            assertNull(workspace.readDocument(7, "big.ck"))
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
     private fun withWorkspace(block: (ComputerWorkspaceHost, Path) -> Unit) {
         val root = createTempDirectory("compukterkraft-workspace")
 

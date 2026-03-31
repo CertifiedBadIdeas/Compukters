@@ -20,7 +20,12 @@
 package ck.mod.computer.vm
 
 import ck.lang.runtime.ComputerCapability
+import ck.lang.runtime.ComputerCpuResources
+import ck.lang.runtime.ComputerMemoryResources
 import ck.lang.runtime.ComputerProfile
+import ck.lang.runtime.ComputerQueueResources
+import ck.lang.runtime.ComputerResources
+import ck.lang.runtime.ComputerStorageResources
 import ck.mod.Config
 import ck.mod.block.ComputerFamily
 
@@ -37,6 +42,7 @@ object ComputerProfileRegistry {
                     terminalHeight = Config.DEFAULT_COMPUTER_TERM_HEIGHT,
                     colorTerminal = false,
                     allowedCapabilities = defaultCapabilities(),
+                    resources = defaultResources(instructionsPerSlice = 64, wallTimeGuardNanosPerSlice = 1_000_000, eventQueueSlots = 64, diskBytes = Config.computerSpaceLimit.toLong()),
                 )
             }
 
@@ -50,6 +56,7 @@ object ComputerProfileRegistry {
                     terminalHeight = Config.DEFAULT_COMPUTER_TERM_HEIGHT,
                     colorTerminal = true,
                     allowedCapabilities = defaultCapabilities(),
+                    resources = defaultResources(instructionsPerSlice = 128, wallTimeGuardNanosPerSlice = 2_000_000, eventQueueSlots = 128, diskBytes = Config.computerSpaceLimit.toLong()),
                 )
             }
 
@@ -63,9 +70,27 @@ object ComputerProfileRegistry {
                     terminalHeight = Config.DEFAULT_COMPUTER_TERM_HEIGHT,
                     colorTerminal = true,
                     allowedCapabilities = defaultCapabilities() + ComputerCapability.REDSTONE + ComputerCapability.PERIPHERALS,
+                    resources = defaultResources(instructionsPerSlice = 256, wallTimeGuardNanosPerSlice = 4_000_000, eventQueueSlots = 256, diskBytes = Config.computerSpaceLimit.toLong()),
                 )
             }
         }
+
+    private fun defaultResources(
+        instructionsPerSlice: Int,
+        wallTimeGuardNanosPerSlice: Long,
+        eventQueueSlots: Int,
+        diskBytes: Long,
+    ): ComputerResources =
+        ComputerResources(
+            cpu =
+                ComputerCpuResources(
+                    instructionsPerSlice = instructionsPerSlice,
+                    wallTimeGuardNanosPerSlice = wallTimeGuardNanosPerSlice,
+                ),
+            memory = ComputerMemoryResources(),
+            storage = ComputerStorageResources(diskBytes = diskBytes),
+            queues = ComputerQueueResources(eventQueueSlots = eventQueueSlots, hostCallQueueSlots = eventQueueSlots),
+        )
 
     private fun defaultCapabilities(): Set<ComputerCapability> =
         setOf(

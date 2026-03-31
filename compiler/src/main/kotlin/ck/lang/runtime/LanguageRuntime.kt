@@ -68,6 +68,8 @@ data class FrameSnapshot(
 sealed interface VmSignal {
     data object Halt : VmSignal
 
+    data object Pause : VmSignal
+
     data object Yield : VmSignal
 
     data class Sleep(
@@ -90,11 +92,20 @@ class BytecodeComputerProgram(
 ) : ComputerProgram {
     override suspend fun run(runtime: ComputerRuntime) {
         val bridge = RuntimeHostBridge(runtime)
-        val vm = BytecodeVirtualMachine(module)
+        val vm =
+            BytecodeVirtualMachine(
+                module,
+                instructionBudgetPerSlice = runtime.profile.resources.cpu.instructionsPerSlice,
+                maxVmRamBytes = runtime.profile.resources.memory.vmRamBytes,
+            )
         while (true) {
             when (val signal = vm.runUntilSignal()) {
                 VmSignal.Halt -> {
                     return
+                }
+
+                VmSignal.Pause -> {
+                    runtime.yield()
                 }
 
                 VmSignal.Yield -> {
@@ -122,11 +133,14 @@ class BytecodeComputerProgram(
 class BytecodeVirtualMachine(
     private val module: BytecodeModule,
     snapshot: BytecodeVmSnapshot? = null,
+    instructionBudgetPerSlice: Int = DEFAULT_INSTRUCTION_BUDGET,
+    private val maxVmRamBytes: Long = Long.MAX_VALUE,
 ) {
     private val frames = ArrayDeque<FrameState>()
     private var lastResult: VmValue? = snapshot?.lastResult
     private var halted: Boolean = snapshot?.halted ?: false
     private var instructionsSinceYield = 0
+    private val instructionBudgetPerSlice = instructionBudgetPerSlice.coerceAtLeast(1)
 
     init {
         if (snapshot != null) {
@@ -276,9 +290,10 @@ class BytecodeVirtualMachine(
                     applyUnary(frame, instruction.operator)
                 }
             }
-            if (instructionsSinceYield >= YIELD_INTERVAL) {
+            ensureWithinMemoryLimit()
+            if (instructionsSinceYield >= instructionBudgetPerSlice) {
                 instructionsSinceYield = 0
-                return VmSignal.Yield
+                return VmSignal.Pause
             }
         }
         return VmSignal.Halt
@@ -427,6 +442,12 @@ class BytecodeVirtualMachine(
         }
     }
 
+    private fun ensureWithinMemoryLimit() {
+        if (maxVmRamBytes == Long.MAX_VALUE) return
+        val usedBytes = frames.sumOf(FrameState::estimatedMemoryBytes)
+        check(usedBytes <= maxVmRamBytes) { "VM out of memory: $usedBytes > $maxVmRamBytes" }
+    }
+
     private data class FrameState(
         val functionIndex: Int,
         var instructionPointer: Int,
@@ -441,9 +462,23 @@ class BytecodeVirtualMachine(
             buildList {
                 repeat(count) { add(pop()) }
             }.asReversed()
+
+        fun estimatedMemoryBytes(): Long =
+            16L + locals.sumOf(VmValue::estimatedMemoryBytes) + stack.sumOf(VmValue::estimatedMemoryBytes)
     }
 
     private companion object {
-        const val YIELD_INTERVAL = 64
+        const val DEFAULT_INSTRUCTION_BUDGET = 64
     }
 }
+
+private fun VmValue.estimatedMemoryBytes(): Long =
+    when (this) {
+        VmValue.UnitValue -> 0L
+        VmValue.NullValue -> 0L
+        is VmValue.BoolValue -> 1L
+        is VmValue.IntValue -> 4L
+        is VmValue.LongValue -> 8L
+        is VmValue.StringValue -> value.length.toLong()
+        is VmValue.RecordValue -> typeName.length.toLong() + fields.entries.sumOf { it.key.length.toLong() + it.value.estimatedMemoryBytes() }
+    }

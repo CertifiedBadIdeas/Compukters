@@ -29,6 +29,32 @@ enum class ComputerCapability {
     IDE,
 }
 
+data class ComputerCpuResources(
+    val instructionsPerSlice: Int = 64,
+    val wallTimeGuardNanosPerSlice: Long,
+)
+
+data class ComputerMemoryResources(
+    val vmRamBytes: Long = Long.MAX_VALUE,
+)
+
+data class ComputerStorageResources(
+    val programRomBytes: Long = Long.MAX_VALUE,
+    val diskBytes: Long = Long.MAX_VALUE,
+)
+
+data class ComputerQueueResources(
+    val eventQueueSlots: Int,
+    val hostCallQueueSlots: Int = eventQueueSlots,
+)
+
+data class ComputerResources(
+    val cpu: ComputerCpuResources,
+    val memory: ComputerMemoryResources = ComputerMemoryResources(),
+    val storage: ComputerStorageResources = ComputerStorageResources(),
+    val queues: ComputerQueueResources,
+)
+
 data class ComputerProfile(
     val id: String,
     val displayName: String,
@@ -39,6 +65,11 @@ data class ComputerProfile(
     val colorTerminal: Boolean,
     val allowedCapabilities: Set<ComputerCapability> = ComputerCapability.entries.toSet(),
     val bootScriptName: String = ComputerProgramFiles.BIOS_SCRIPT_NAME,
+    val resources: ComputerResources =
+        ComputerResources(
+            cpu = ComputerCpuResources(wallTimeGuardNanosPerSlice = cpuBudgetNanosPerSlice),
+            queues = ComputerQueueResources(eventQueueSlots = maxEventQueueSize),
+        ),
 )
 
 sealed interface VmState {

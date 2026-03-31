@@ -18,6 +18,12 @@
  */
 package ck.mod.application.runtime
 
+import ck.lang.runtime.ComputerCpuResources
+import ck.lang.runtime.ComputerMemoryResources
+import ck.lang.runtime.ComputerProfile
+import ck.lang.runtime.ComputerQueueResources
+import ck.lang.runtime.ComputerResources
+import ck.lang.runtime.ComputerStorageResources
 import ck.mod.computer.vm.ComputerWorkspaceHost
 import kotlin.io.path.createDirectories
 import kotlin.io.path.createTempDirectory
@@ -72,5 +78,31 @@ class ComputerProgramSupportTest {
 
         assertNull(compiled.program)
         assertTrue(compiled.errorMessage?.contains("Expected Bool") == true)
+    }
+
+    @Test
+    fun rejectsProgramWhenCompiledBytecodeExceedsRomLimit() {
+        val profile =
+            ComputerProfile(
+                id = "test",
+                displayName = "Test",
+                cpuBudgetNanosPerSlice = 1_000_000,
+                maxEventQueueSize = 16,
+                terminalWidth = 16,
+                terminalHeight = 8,
+                colorTerminal = true,
+                resources =
+                    ComputerResources(
+                        cpu = ComputerCpuResources(wallTimeGuardNanosPerSlice = 1_000_000),
+                        memory = ComputerMemoryResources(),
+                        storage = ComputerStorageResources(programRomBytes = 1, diskBytes = 1024),
+                        queues = ComputerQueueResources(eventQueueSlots = 16, hostCallQueueSlots = 16),
+                    ),
+            )
+
+        val compiled = ComputerProgramCompiler.compile("tiny.ck", "fun main() { }", profile)
+
+        assertNull(compiled.program)
+        assertTrue(compiled.errorMessage?.contains("ROM") == true)
     }
 }

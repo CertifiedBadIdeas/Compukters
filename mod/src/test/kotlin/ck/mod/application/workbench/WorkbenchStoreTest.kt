@@ -175,6 +175,13 @@ class WorkbenchStoreTest {
                 ),
             )
 
+        override fun completeFromLastAnalysis(
+            path: String,
+            source: String,
+            line: Int,
+            column: Int,
+        ): List<CompletionItem> = complete(path, source, line, column)
+
         override fun hover(
             path: String,
             source: String,

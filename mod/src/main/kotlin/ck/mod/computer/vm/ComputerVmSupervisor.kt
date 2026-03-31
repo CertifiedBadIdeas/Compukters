@@ -25,6 +25,7 @@ import ck.lang.runtime.ComputerVmHandle
 import ck.lang.runtime.ComputerWorkspace
 import ck.lang.runtime.VmStopReason
 import ck.lang.runtime.VmSupervisor
+import ck.mod.Config
 import ck.mod.MOD_ID
 import kotlinx.coroutines.asCoroutineDispatcher
 import net.minecraft.server.MinecraftServer
@@ -42,7 +43,7 @@ class ComputerVmSupervisor(
     private val handles = ConcurrentHashMap<Int, ComputerVmHandle>()
     private val computersPath = server.getWorldPath(LevelResource.ROOT).resolve(MOD_ID).resolve("computers")
     private val workspaceInitializer = ComputerWorkspaceInitializer(computersPath)
-    private val workspaceStore = ComputerWorkspaceHost(rootPath = computersPath)
+    private val workspaceStore = ComputerWorkspaceHost(rootPath = computersPath, defaultDiskQuotaBytes = Config.computerSpaceLimit.toLong())
     private val ideHost = WorkspaceComputerIdeHost(workspaceStore)
 
     val workspace: ComputerWorkspace
@@ -62,6 +63,7 @@ class ComputerVmSupervisor(
         logger: ComputerVmLogger,
     ): BackgroundComputerVm =
         handles.computeIfAbsent(computerId) {
+            workspaceStore.setDiskQuota(computerId, profile.resources.storage.diskBytes)
             BackgroundComputerVm(
                 computerId = computerId,
                 profile = profile,

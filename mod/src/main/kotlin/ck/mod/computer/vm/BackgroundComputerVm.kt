@@ -81,7 +81,7 @@ class BackgroundComputerVm(
     private val scope = CoroutineScope(SupervisorJob() + dispatcher)
     private val slicePermits = Channel<Unit>(capacity = 1)
     private val stateManager = VmStateManager()
-    private val eventManager = EventManager(profile.maxEventQueueSize)
+    private val eventManager = EventManager(profile.resources.queues.eventQueueSlots)
     private val hostCallManager = HostCallManager()
     private val programLoader = WorkspaceProgramLoader(workspace)
     private val pathResolver = VmPathResolver()
@@ -116,7 +116,7 @@ class BackgroundComputerVm(
                                 return@launch
                             }
 
-                    val compiled = ComputerProgramCompiler.compile(source.path, source.source)
+                    val compiled = ComputerProgramCompiler.compile(source.path, source.source, profile)
 
                     val program =
                         compiled.program
@@ -223,7 +223,7 @@ class BackgroundComputerVm(
             },
         )
         slicePermits.receive()
-        stateManager.updateSliceDeadlineNanos(profile.cpuBudgetNanosPerSlice)
+        stateManager.updateSliceDeadlineNanos(profile.resources.cpu.wallTimeGuardNanosPerSlice)
         stateManager.setState(VmState.Running)
     }
 
@@ -259,6 +259,7 @@ class BackgroundComputerVm(
                 pathResolver = pathResolver,
                 filesystemApi = filesystemApi,
                 programLoader = programLoader,
+                profile = profile,
                 runtimeCreator = { wd, arg -> createRuntime(wd, arg) },
                 terminal = terminalApi,
             )

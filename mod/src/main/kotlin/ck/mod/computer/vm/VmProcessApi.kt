@@ -20,6 +20,7 @@
 package ck.mod.computer.vm
 
 import ck.lang.runtime.ComputerProcessApi
+import ck.lang.runtime.ComputerProfile
 import ck.lang.runtime.ComputerRuntime
 import ck.lang.runtime.ComputerTerminalApi
 import ck.mod.application.runtime.ComputerProgramCompiler
@@ -32,6 +33,7 @@ internal class VmProcessApi(
     private val pathResolver: VmPathResolver,
     private val filesystemApi: VmFileSystemApi,
     private val programLoader: WorkspaceProgramLoader,
+    private val profile: ComputerProfile,
     private val runtimeCreator: (String, String) -> ComputerRuntime,
     private val terminal: ComputerTerminalApi,
 ) : ComputerProcessApi {
@@ -54,7 +56,7 @@ internal class VmProcessApi(
             ctx.log("VM[$computerId] missing program: $resolved")
             return 1
         }
-        val compiledProgram = ComputerProgramCompiler.compile(programSource.path, programSource.source)
+        val compiledProgram = ComputerProgramCompiler.compile(programSource.path, programSource.source, profile)
         val program = compiledProgram.program
         if (program == null) {
             val message = compiledProgram.errorMessage.orEmpty()
