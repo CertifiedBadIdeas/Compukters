@@ -25,17 +25,25 @@ import kotlinx.coroutines.CompletableDeferred
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicInteger
 
-class HostCallManager {
+class HostCallManager(
+    private val maxQueueSize: Int = Int.MAX_VALUE,
+) {
     private val hostCalls = ConcurrentLinkedQueue<HostCall>()
     private val hostResponses = ConcurrentHashMap<Long, CompletableDeferred<HostResult>>()
     private val nextHostCallId = AtomicLong()
+    private val queuedCalls = AtomicInteger()
 
     suspend fun <T> awaitHostCall(callFactory: (Long) -> HostCall): T {
+        check(maxQueueSize <= 0 || queuedCalls.get() < maxQueueSize) {
+            "Host call queue is full (limit=$maxQueueSize)"
+        }
         val callId = nextHostCallId.incrementAndGet()
         val deferred = CompletableDeferred<HostResult>()
         hostResponses[callId] = deferred
         hostCalls.add(callFactory(callId))
+        queuedCalls.incrementAndGet()
         return when (val result = deferred.await()) {
             is HostResult.Success -> result.value as T
             is HostResult.Failure -> error(result.message)
@@ -45,6 +53,7 @@ class HostCallManager {
     fun drainHostCalls(): List<HostCall> = buildList {
         while (true) {
             val call = hostCalls.poll() ?: break
+            queuedCalls.decrementAndGet()
             add(call)
         }
     }
@@ -55,5 +64,5 @@ class HostCallManager {
         }
     }
 
-    fun pendingCallsCount(): Int = hostCalls.size
+    fun pendingCallsCount(): Int = queuedCalls.get()
 }

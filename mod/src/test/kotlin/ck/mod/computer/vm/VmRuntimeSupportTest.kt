@@ -18,11 +18,18 @@
  */
 package ck.mod.computer.vm
 
+import ck.lang.runtime.HostCall
+import ck.lang.runtime.HostResult
 import ck.lang.runtime.VmEvent
 import java.nio.ByteBuffer
+import kotlinx.coroutines.async
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class VmRuntimeSupportTest {
     @Test
@@ -43,4 +50,31 @@ class VmRuntimeSupportTest {
         assertEquals("world", VmEventTextDecoder.pastedText(pasted))
         assertNull(VmEventTextDecoder.typedText(VmEvent("char")))
     }
+
+    @Test
+    fun rejectsHostCallsWhenQueueIsFull() =
+        runBlocking {
+            val manager = HostCallManager(maxQueueSize = 1)
+
+            val first =
+                async(start = CoroutineStart.UNDISPATCHED) {
+                    manager.awaitHostCall<Boolean> { id ->
+                        HostCall.FileExists(id, "boot.ck")
+                    }
+                }
+
+            assertEquals(1, manager.pendingCallsCount())
+
+            val failure =
+                assertFailsWith<IllegalStateException> {
+                    manager.awaitHostCall<Boolean> { id ->
+                        HostCall.FileExists(id, "shell.ck")
+                    }
+                }
+
+            assertTrue(failure.message?.contains("Host call queue is full") == true)
+
+            manager.deliverHostResults(listOf(HostResult.Success(1L, true)))
+            assertTrue(first.await())
+        }
 }

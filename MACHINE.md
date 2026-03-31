@@ -43,6 +43,9 @@ Background coroutine
 
 ### `ComputerVmSupervisor`
 
+
+Подтверждает, что:
+
 Файл: `mod/src/main/kotlin/ck/mod/computer/vm/ComputerVmSupervisor.kt`
 
 Этот класс создает общую инфраструктуру для всех VM:
@@ -1137,15 +1140,15 @@ ROM-файл `shell.ck` показывает, как предполагаетс�
 
 ### 16.1. CPU time per slice
 
-Есть. Ограничивается `cpuBudgetNanosPerSlice` из профиля.
+Есть, но теперь это только safety guard. Ограничивается `profile.resources.cpu.wallTimeGuardNanosPerSlice`.
 
 ### 16.2. Частота кооперативной отдачи управления
 
-Есть. Байткодная VM делает yield каждые 64 инструкции.
+Есть. Основной CPU-лимит задается как `profile.resources.cpu.instructionsPerSlice`, а не как жестко зашитые 64 инструкции.
 
 ### 16.3. Event queue size
 
-Есть. Ограничивается `maxEventQueueSize`, при переполнении используется `DROP_OLDEST`.
+Есть. Ограничивается `profile.resources.queues.eventQueueSlots`, при переполнении используется `DROP_OLDEST`.
 
 ### 16.4. Размер экрана
 
@@ -1161,7 +1164,7 @@ ROM-файл `shell.ck` показывает, как предполагаетс�
 
 ### 16.7. Ограничение числа host calls
 
-Явного лимита нет. Очередь host calls основана на `ConcurrentLinkedQueue`, то есть формально не ограничена по размеру.
+Есть. Ограничивается `profile.resources.queues.hostCallQueueSlots`. При переполнении новый host call отклоняется с ошибкой `Host call queue is full (...)`.
 
 ### 16.8. Ограничение числа процессов
 
@@ -1169,7 +1172,15 @@ ROM-файл `shell.ck` показывает, как предполагаетс�
 
 ### 16.9. Ограничение памяти программы
 
-Явного отдельного лимита в разобранном коде не видно. VM использует обычные структуры Kotlin/JVM без специального memory quota.
+Есть. Ограничивается `profile.resources.memory.vmRamBytes`. Сейчас это логическая оценка текущего VM state: locals, operand stack, strings и record values. При превышении VM падает с ошибкой `VM out of memory ...`.
+
+### 16.10. Ограничение размера программы
+
+Есть. Ограничивается `profile.resources.storage.programRomBytes`. Проверяется по размеру скомпилированного `BytecodeModule`, а не по размеру исходника. Слишком большая boot- или child-программа отклоняется до старта выполнения.
+
+### 16.11. Ограничение диска компьютера
+
+Есть. Ограничивается `profile.resources.storage.diskBytes`. Проверяется в `ComputerWorkspaceHost` на операциях записи по реальному размеру файлов внутри workspace конкретного компьютера.
 
 ## 18. Что стоит понимать как важные нюансы реализации
 
@@ -1179,6 +1190,8 @@ ROM-файл `shell.ck` показывает, как предполагаетс�
 - файловая система ходит через `HostCallManager` и серверный `HostCallDispatcher`.
 
 Это разное поведение и разная стоимость операций.
+
+При этом filesystem все еще обслуживается через server tick orchestration. Полной отвязки VM и host execution от тиков в текущей реализации еще нет.
 
 ### 17.2. Shell это не системная магия, а обычная программа
 
@@ -1191,6 +1204,13 @@ BIOS и shell лежат в ROM как `.ck` файлы. Их можно чит�
 ### 17.4. `process.run(...)` не использует `resolvePath(...)`
 
 Это заметное отличие от остальных файловых операций. Если будет отладка поведения shell и относительных путей, это одно из первых мест, куда надо смотреть.
+
+### 17.5. CPU и yield теперь разделены на две разные семантики
+
+- явный builtin `yield()` возвращает в программу `unit` после возобновления;
+- служебная пауза scheduler по instruction budget ничего в стек не пушит.
+
+Это важно, иначе таймслайс-паузы портили бы стек значений VM.
 
 ## 19. Какие тесты подтверждают поведение
 
@@ -1209,6 +1229,7 @@ BIOS и shell лежат в ROM как `.ck` файлы. Их можно чит�
 - документы читаются и записываются в workspace;
 - разные world roots изолированы друг от друга;
 - traversal через `../` запрещен;
+- запись сверх disk quota отклоняется;
 - ROM копируется в новый workspace;
 - повторная инициализация не затирает измененные файлы.
 
@@ -1216,8 +1237,29 @@ BIOS и shell лежат в ROM как `.ck` файлы. Их можно чит�
 
 Подтверждает, что:
 
-- `VmPathResolver` корректно обрабатывает относительные и абсолютные пути;
-- `VmEventTextDecoder` правильно декодирует `char` и `paste` события.
+- path resolver работает как раньше;
+- event text decoder работает как раньше;
+- host call queue ограничена и отклоняет новые вызовы при переполнении.
+
+### `mod/src/test/kotlin/ck/mod/computer/vm/BackgroundComputerVmTest.kt`
+
+Подтверждает, что:
+
+- ошибка `program ROM exceeded` доходит до `VmState.Crashed` как понятное сообщение при boot.
+
+### `mod/src/test/kotlin/ck/mod/application/runtime/ComputerProgramSupportTest.kt`
+
+Подтверждает, что:
+
+- compile support отклоняет программу, если скомпилированный bytecode превышает `programRomBytes`.
+
+### `compiler/src/test/kotlin/ck/lang/runtime/LanguageRuntimeTest.kt`
+
+Подтверждает, что:
+
+- instruction budget берется из `profile.resources.cpu.instructionsPerSlice`;
+- VM RAM limit реально ограничивает выполнение;
+- существующие host/sleep/yield сценарии не сломаны новой моделью.
 
 ### `mod/src/test/kotlin/ck/mod/application/runtime/ComputerProgramSupportTest.kt`
 

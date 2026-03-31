@@ -82,7 +82,7 @@ class BackgroundComputerVm(
     private val slicePermits = Channel<Unit>(capacity = 1)
     private val stateManager = VmStateManager()
     private val eventManager = EventManager(profile.resources.queues.eventQueueSlots)
-    private val hostCallManager = HostCallManager()
+    private val hostCallManager = HostCallManager(profile.resources.queues.hostCallQueueSlots)
     private val programLoader = WorkspaceProgramLoader(workspace)
     private val pathResolver = VmPathResolver()
     private val screenBuffer = ScreenBuffer(profile.terminalWidth, profile.terminalHeight, profile.colorTerminal)
