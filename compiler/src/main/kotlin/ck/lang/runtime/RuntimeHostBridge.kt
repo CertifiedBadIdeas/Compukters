@@ -48,22 +48,39 @@ internal class RuntimeHostBridge(
         arguments: List<VmValue>,
     ): VmValue =
         when (functionName) {
-            "exists" -> VmValue.BoolValue(runtime.filesystem.exists(arguments[0].asString()))
-            "isDirectory" -> VmValue.BoolValue(runtime.filesystem.isDirectory(arguments[0].asString()))
-            "readText" -> VmValue.StringValue(runtime.filesystem.readText(arguments[0].asString()) ?: "")
+            "exists" -> {
+                VmValue.BoolValue(runtime.filesystem.exists(arguments[0].asString()))
+            }
+
+            "isDirectory" -> {
+                VmValue.BoolValue(runtime.filesystem.isDirectory(arguments[0].asString()))
+            }
+
+            "readText" -> {
+                VmValue.StringValue(runtime.filesystem.readText(arguments[0].asString()) ?: "")
+            }
+
             "writeText" -> {
                 runtime.filesystem.writeText(arguments[0].asString(), arguments[1].asString())
                 VmValue.UnitValue
             }
 
-            "makeDir" -> VmValue.BoolValue(runtime.filesystem.makeDirectory(arguments[0].asString()))
-            "remove" -> VmValue.BoolValue(runtime.filesystem.remove(arguments[0].asString()))
+            "makeDir" -> {
+                VmValue.BoolValue(runtime.filesystem.makeDirectory(arguments[0].asString()))
+            }
+
+            "remove" -> {
+                VmValue.BoolValue(runtime.filesystem.remove(arguments[0].asString()))
+            }
+
             "list" -> {
                 val path = arguments.singleOrNull()?.asString().orEmpty()
                 VmValue.StringValue(formatWorkspaceListing(runtime.filesystem.list(path)))
             }
 
-            else -> error("Unknown filesystem function $functionName")
+            else -> {
+                error("Unknown filesystem function $functionName")
+            }
         }
 
     private suspend fun invokeSystem(
@@ -71,10 +88,22 @@ internal class RuntimeHostBridge(
         arguments: List<VmValue>,
     ): VmValue =
         when (functionName) {
-            "computerId" -> VmValue.IntValue(runtime.system.computerId)
-            "currentTick" -> VmValue.LongValue(runtime.system.currentTick)
-            "label" -> VmValue.StringValue(runtime.system.label.orEmpty())
-            "profileName" -> VmValue.StringValue(runtime.profile.displayName)
+            "computerId" -> {
+                VmValue.IntValue(runtime.system.computerId)
+            }
+
+            "currentTick" -> {
+                VmValue.LongValue(runtime.system.currentTick)
+            }
+
+            "label" -> {
+                VmValue.StringValue(runtime.system.label.orEmpty())
+            }
+
+            "profileName" -> {
+                VmValue.StringValue(runtime.profile.displayName)
+            }
+
             "log" -> {
                 runtime.system.log(arguments[0].asString())
                 VmValue.UnitValue
@@ -90,7 +119,9 @@ internal class RuntimeHostBridge(
                 VmValue.UnitValue
             }
 
-            else -> error("Unknown system function $functionName")
+            else -> {
+                error("Unknown system function $functionName")
+            }
         }
 
     private suspend fun invokeTerminal(
@@ -108,7 +139,10 @@ internal class RuntimeHostBridge(
                 VmValue.UnitValue
             }
 
-            "readLine" -> VmValue.StringValue(runtime.terminal.readLine(arguments.singleOrNull()?.asString().orEmpty()))
+            "readLine" -> {
+                VmValue.StringValue(runtime.terminal.readLine(arguments.singleOrNull()?.asString().orEmpty()))
+            }
+
             "clear" -> {
                 runtime.terminal.clear()
                 VmValue.UnitValue
@@ -119,7 +153,9 @@ internal class RuntimeHostBridge(
                 VmValue.UnitValue
             }
 
-            else -> error("Unknown terminal function $functionName")
+            else -> {
+                error("Unknown terminal function $functionName")
+            }
         }
 
     private suspend fun invokeProcess(
@@ -127,10 +163,19 @@ internal class RuntimeHostBridge(
         arguments: List<VmValue>,
     ): VmValue =
         when (functionName) {
-            "currentDirectory" -> VmValue.StringValue(runtime.process.workingDirectory)
-            "argument" -> VmValue.StringValue(runtime.process.argument)
-            "changeDirectory" -> VmValue.BoolValue(runtime.process.changeDirectory(arguments[0].asString()))
-            "run" ->
+            "currentDirectory" -> {
+                VmValue.StringValue(runtime.process.workingDirectory)
+            }
+
+            "argument" -> {
+                VmValue.StringValue(runtime.process.argument)
+            }
+
+            "changeDirectory" -> {
+                VmValue.BoolValue(runtime.process.changeDirectory(arguments[0].asString()))
+            }
+
+            "run" -> {
                 VmValue.IntValue(
                     when (arguments.size) {
                         1 -> runtime.process.run(arguments[0].asString())
@@ -138,8 +183,11 @@ internal class RuntimeHostBridge(
                         else -> error("Unsupported process.run arity ${arguments.size}")
                     },
                 )
+            }
 
-            else -> error("Unknown process function $functionName")
+            else -> {
+                error("Unknown process function $functionName")
+            }
         }
 
     private fun invokeStrings(

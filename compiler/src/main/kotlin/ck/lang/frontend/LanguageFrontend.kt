@@ -62,9 +62,9 @@ import ck.lang.api.TypeSyntax
 import ck.lang.api.UnaryExpression
 import ck.lang.api.UnaryOperator
 import ck.lang.api.VariableDeclarationStatement
-import ck.lang.api.WhileStatement
 import ck.lang.api.WhenBranch
 import ck.lang.api.WhenStatement
+import ck.lang.api.WhileStatement
 import java.util.IdentityHashMap
 import kotlin.collections.mapIndexed
 import kotlin.collections.toMutableList
@@ -535,7 +535,9 @@ internal class SemanticAnalyzer(
                                         name = builtin.name,
                                         kind = SymbolKind.BUILTIN_FUNCTION,
                                         range = callee.range,
-                                        detail = "${module.module.name}.${builtin.name}(${builtin.parameterTypes.joinToString()}) : ${builtin.returnType}",
+                                        detail =
+                                            "${module.module.name}.${builtin.name}" +
+                                                "(${builtin.parameterTypes.joinToString()}) : ${builtin.returnType}",
                                         documentation = builtin.documentation,
                                     ),
                                 declaration = null,
@@ -827,8 +829,14 @@ internal class BytecodeCompiler(
                     instructions += Instruction.Jump(-1)
                     val elseStart = instructions.size
                     when (val elseBranch = statement.elseBranch) {
-                        is BlockStatement -> compileBlock(elseBranch)
-                        is Statement -> compileStatement(elseBranch)
+                        is BlockStatement -> {
+                            compileBlock(elseBranch)
+                        }
+
+                        is Statement -> {
+                            compileStatement(elseBranch)
+                        }
+
                         null -> {}
                     }
                     val end = instructions.size
@@ -871,17 +879,18 @@ internal class BytecodeCompiler(
         }
 
         private fun compileWhen(statement: WhenStatement) {
-            val subjectSlot: Int? = if (statement.subject != null) {
-                compileExpression(statement.subject)
-                val slot = locals.size
-                val typeName = semantic.expressionTypes[statement.subject]?.name ?: "Unit"
-                locals += BytecodeLocal("\$when", typeName)
-                scopes.last()["\$when"] = slot
-                instructions += Instruction.StoreLocal(slot)
-                slot
-            } else {
-                null
-            }
+            val subjectSlot: Int? =
+                if (statement.subject != null) {
+                    compileExpression(statement.subject)
+                    val slot = locals.size
+                    val typeName = semantic.expressionTypes[statement.subject]?.name ?: "Unit"
+                    locals += BytecodeLocal("\$when", typeName)
+                    scopes.last()["\$when"] = slot
+                    instructions += Instruction.StoreLocal(slot)
+                    slot
+                } else {
+                    null
+                }
 
             val jumpsToEnd = mutableListOf<Int>()
 
@@ -1427,15 +1436,16 @@ internal class Parser(
         val condition = parseExpression() ?: return null
         consume(TokenKind.RPAREN, "Expected `)` after if condition.") ?: return null
         val thenBranch = parseBlock() ?: return null
-        val elseBranch: Statement? = if (match(TokenKind.ELSE)) {
-            if (match(TokenKind.IF)) {
-                parseIf()
+        val elseBranch: Statement? =
+            if (match(TokenKind.ELSE)) {
+                if (match(TokenKind.IF)) {
+                    parseIf()
+                } else {
+                    parseBlock()
+                }
             } else {
-                parseBlock()
+                null
             }
-        } else {
-            null
-        }
         return IfStatement(condition, thenBranch, elseBranch, SourceRange(condition.range.start, (elseBranch ?: thenBranch).range.end))
     }
 
@@ -1447,13 +1457,14 @@ internal class Parser(
 
     private fun parseWhen(): WhenStatement? {
         val start = previous().range.start
-        val subject: Expression? = if (match(TokenKind.LPAREN)) {
-            val expr = parseExpression() ?: return null
-            consume(TokenKind.RPAREN, "Expected `)` after when subject.") ?: return null
-            expr
-        } else {
-            null
-        }
+        val subject: Expression? =
+            if (match(TokenKind.LPAREN)) {
+                val expr = parseExpression() ?: return null
+                consume(TokenKind.RPAREN, "Expected `)` after when subject.") ?: return null
+                expr
+            } else {
+                null
+            }
         consume(TokenKind.LBRACE, "Expected `{` after when.") ?: return null
         val branches = mutableListOf<WhenBranch>()
         var elseBranch: BlockStatement? = null
