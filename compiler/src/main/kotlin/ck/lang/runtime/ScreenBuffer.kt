@@ -121,7 +121,10 @@ class ScreenBuffer(
     /**
      * Move the cursor to ([x], [y]) without writing anything.
      */
-    fun setCursor(x: Int, y: Int) {
+    fun setCursor(
+        x: Int,
+        y: Int,
+    ) {
         cursorX = x
         cursorY = y
         dirty = true
@@ -205,19 +208,20 @@ class ScreenBuffer(
         if (!dirty) return null
         synchronized(this) {
             if (!dirty) return null
-            val snap = ScreenBufferSnapshot(
-                width = width,
-                height = height,
-                colour = colour,
-                cursorX = cursorX,
-                cursorY = cursorY,
-                cursorBlink = cursorBlink,
-                currentFg = currentFg,
-                currentBg = currentBg,
-                chars = chars.copyOf(),
-                fgColours = fgColours.copyOf(),
-                bgColours = bgColours.copyOf(),
-            )
+            val snap =
+                ScreenBufferSnapshot(
+                    width = width,
+                    height = height,
+                    colour = colour,
+                    cursorX = cursorX,
+                    cursorY = cursorY,
+                    cursorBlink = cursorBlink,
+                    currentFg = currentFg,
+                    currentBg = currentBg,
+                    chars = chars.copyOf(),
+                    fgColours = fgColours.copyOf(),
+                    bgColours = bgColours.copyOf(),
+                )
             dirty = false
             return snap
         }
@@ -272,24 +276,33 @@ data class ScreenBufferSnapshot(
     val bgColours: ByteArray,
 ) {
     /** Get the character at grid position ([x], [y]). */
-    fun charAt(x: Int, y: Int): Char = chars[y * width + x]
+    fun charAt(
+        x: Int,
+        y: Int,
+    ): Char = chars[y * width + x]
 
     /** Get the foreground colour index at grid position ([x], [y]). */
-    fun fgAt(x: Int, y: Int): Int = fgColours[y * width + x].toInt() and 0xFF
+    fun fgAt(
+        x: Int,
+        y: Int,
+    ): Int = fgColours[y * width + x].toInt() and 0xFF
 
     /** Get the background colour index at grid position ([x], [y]). */
-    fun bgAt(x: Int, y: Int): Int = bgColours[y * width + x].toInt() and 0xFF
+    fun bgAt(
+        x: Int,
+        y: Int,
+    ): Int = bgColours[y * width + x].toInt() and 0xFF
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is ScreenBufferSnapshot) return false
-        return width == other.width && height == other.height && colour == other.colour
-                && cursorX == other.cursorX && cursorY == other.cursorY
-                && cursorBlink == other.cursorBlink
-                && currentFg == other.currentFg && currentBg == other.currentBg
-                && chars.contentEquals(other.chars)
-                && fgColours.contentEquals(other.fgColours)
-                && bgColours.contentEquals(other.bgColours)
+        return width == other.width && height == other.height && colour == other.colour &&
+            cursorX == other.cursorX && cursorY == other.cursorY &&
+            cursorBlink == other.cursorBlink &&
+            currentFg == other.currentFg && currentBg == other.currentBg &&
+            chars.contentEquals(other.chars) &&
+            fgColours.contentEquals(other.fgColours) &&
+            bgColours.contentEquals(other.bgColours)
     }
 
     override fun hashCode(): Int {
@@ -301,7 +314,11 @@ data class ScreenBufferSnapshot(
 
     companion object {
         /** Create an empty snapshot (used as a fallback on the client before first sync). */
-        fun empty(width: Int, height: Int, colour: Boolean): ScreenBufferSnapshot =
+        fun empty(
+            width: Int,
+            height: Int,
+            colour: Boolean,
+        ): ScreenBufferSnapshot =
             ScreenBufferSnapshot(
                 width = width,
                 height = height,
@@ -317,4 +334,3 @@ data class ScreenBufferSnapshot(
             )
     }
 }
-

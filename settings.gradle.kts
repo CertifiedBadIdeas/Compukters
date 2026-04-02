@@ -27,6 +27,7 @@ pluginManagement {
         maven("https://maven.architectury.dev/")
         maven("https://maven.fabricmc.net/")
         maven("https://maven.minecraftforge.net/")
+        maven("https://maven.neoforged.net/releases/")
         gradlePluginPortal()
     }
 }
@@ -40,6 +41,10 @@ plugins {
 
 includeBuild("build-scripts")
 include("compiler")
-include("mod")
+include("core")
+include("forge1201")
+include("fabric1201")
+include("neoforge1211")
+include("fabric1211")
 
 rootProject.name = "Compukter-Kraft"

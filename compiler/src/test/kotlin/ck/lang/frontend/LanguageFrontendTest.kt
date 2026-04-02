@@ -222,36 +222,37 @@ class LanguageFrontendTest {
 
     @Test
     fun reportsElseFollowedByNonIfStatement() {
-        val cases = listOf(
-            "else_while.ck" to """
+        val cases =
+            listOf(
+                "else_while.ck" to """
                 fun main() {
                     if (true) {
                         val x: Int = 1;
                     } else while
                 }
             """,
-            "else_val.ck" to """
+                "else_val.ck" to """
                 fun main() {
                     if (true) {
                         val x: Int = 1;
                     } else val
                 }
             """,
-            "else_return.ck" to """
+                "else_return.ck" to """
                 fun main() {
                     if (true) {
                         val x: Int = 1;
                     } else return
                 }
             """,
-            "else_when.ck" to """
+                "else_when.ck" to """
                 fun main() {
                     if (true) {
                         val x: Int = 1;
                     } else when
                 }
             """,
-        )
+            )
 
         for ((name, source) in cases) {
             val artifact = frontend.compile(name, source.trimIndent())

@@ -83,9 +83,13 @@ internal object IdePresentationSupport {
     private fun highlightKindForToken(kind: TokenKind): HighlightTokenKind? =
         when (kind) {
             TokenKind.TRUE, TokenKind.FALSE -> HighlightTokenKind.BOOLEAN
+
             TokenKind.NULL -> HighlightTokenKind.NULL
+
             TokenKind.NUMBER -> HighlightTokenKind.NUMBER
+
             TokenKind.STRING -> HighlightTokenKind.STRING
+
             TokenKind.FUN,
             TokenKind.VAL,
             TokenKind.VAR,
@@ -127,6 +131,7 @@ internal object IdePresentationSupport {
             -> HighlightTokenKind.PUNCTUATION
 
             TokenKind.IDENTIFIER -> HighlightTokenKind.IDENTIFIER
+
             TokenKind.EOF -> null
         }
 }

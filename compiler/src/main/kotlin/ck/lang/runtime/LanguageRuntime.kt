@@ -463,8 +463,7 @@ class BytecodeVirtualMachine(
                 repeat(count) { add(pop()) }
             }.asReversed()
 
-        fun estimatedMemoryBytes(): Long =
-            16L + locals.sumOf(VmValue::estimatedMemoryBytes) + stack.sumOf(VmValue::estimatedMemoryBytes)
+        fun estimatedMemoryBytes(): Long = 16L + locals.sumOf(VmValue::estimatedMemoryBytes) + stack.sumOf(VmValue::estimatedMemoryBytes)
     }
 
     private companion object {
@@ -474,11 +473,32 @@ class BytecodeVirtualMachine(
 
 private fun VmValue.estimatedMemoryBytes(): Long =
     when (this) {
-        VmValue.UnitValue -> 0L
-        VmValue.NullValue -> 0L
-        is VmValue.BoolValue -> 1L
-        is VmValue.IntValue -> 4L
-        is VmValue.LongValue -> 8L
-        is VmValue.StringValue -> value.length.toLong()
-        is VmValue.RecordValue -> typeName.length.toLong() + fields.entries.sumOf { it.key.length.toLong() + it.value.estimatedMemoryBytes() }
+        VmValue.UnitValue -> {
+            0L
+        }
+
+        VmValue.NullValue -> {
+            0L
+        }
+
+        is VmValue.BoolValue -> {
+            1L
+        }
+
+        is VmValue.IntValue -> {
+            4L
+        }
+
+        is VmValue.LongValue -> {
+            8L
+        }
+
+        is VmValue.StringValue -> {
+            value.length.toLong()
+        }
+
+        is VmValue.RecordValue -> {
+            typeName.length.toLong() +
+                fields.entries.sumOf { it.key.length.toLong() + it.value.estimatedMemoryBytes() }
+        }
     }
