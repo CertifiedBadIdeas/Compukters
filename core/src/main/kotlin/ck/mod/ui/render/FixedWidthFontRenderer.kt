@@ -192,7 +192,16 @@ object FixedWidthFontRenderer {
             // Left margin
             if (leftMarginSize > 0) {
                 val colour = Palette.DEFAULT.getRenderColours(15 - snapshot.bgAt(0, row))
-                drawQuad(emitter, x - leftMarginSize, rowY, 0f, leftMarginSize, FONT_HEIGHT.toFloat(), colour, FULL_BRIGHT_LIGHTMAP)
+                drawQuad(
+                    emitter,
+                    x - leftMarginSize,
+                    rowY,
+                    0f,
+                    leftMarginSize,
+                    FONT_HEIGHT.toFloat(),
+                    colour,
+                    FULL_BRIGHT_LIGHTMAP,
+                )
             }
             // Right margin
             if (rightMarginSize > 0) {
@@ -295,29 +304,25 @@ object FixedWidthFontRenderer {
         val a: Int = FastColor.ARGB32.alpha(colour)
 
         consumer
-            .vertex(poseMatrix, x1, y1, z)
-            .color(r, g, b, a)
-            .uv(u1, v1)
-            .uv2(light)
-            .endVertex()
+            .addVertex(poseMatrix, x1, y1, z)
+            .setColor(r, g, b, a)
+            .setUv(u1, v1)
+            .setLight(light)
         consumer
-            .vertex(poseMatrix, x1, y2, z)
-            .color(r, g, b, a)
-            .uv(u1, v2)
-            .uv2(light)
-            .endVertex()
+            .addVertex(poseMatrix, x1, y2, z)
+            .setColor(r, g, b, a)
+            .setUv(u1, v2)
+            .setLight(light)
         consumer
-            .vertex(poseMatrix, x2, y2, z)
-            .color(r, g, b, a)
-            .uv(u2, v2)
-            .uv2(light)
-            .endVertex()
+            .addVertex(poseMatrix, x2, y2, z)
+            .setColor(r, g, b, a)
+            .setUv(u2, v2)
+            .setLight(light)
         consumer
-            .vertex(poseMatrix, x2, y1, z)
-            .color(r, g, b, a)
-            .uv(u2, v1)
-            .uv2(light)
-            .endVertex()
+            .addVertex(poseMatrix, x2, y1, z)
+            .setColor(r, g, b, a)
+            .setUv(u2, v1)
+            .setLight(light)
     }
 
     class QuadEmitter(
