@@ -19,9 +19,13 @@
 package ck.mod.computer.vm
 
 import ck.lang.runtime.VmEvent
-import org.lwjgl.glfw.GLFW
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
+
+// GLFW key constants (stable across all versions)
+private const val KEY_ENTER = 257
+private const val KEY_KP_ENTER = 335
+private const val KEY_BACKSPACE = 259
 
 internal class VmPathResolver(
     initialWorkingDirectory: String = "",
@@ -114,14 +118,14 @@ internal class TerminalLineReader(
                     "key" -> {
                         val keyCode = event.arguments.firstOrNull() as? Int ?: continue
                         when (keyCode) {
-                            GLFW.GLFW_KEY_ENTER,
-                            GLFW.GLFW_KEY_KP_ENTER,
+                            KEY_ENTER,
+                            KEY_KP_ENTER,
                             -> {
                                 printLine("")
                                 return line.toString()
                             }
 
-                            GLFW.GLFW_KEY_BACKSPACE -> {
+                            KEY_BACKSPACE -> {
                                 if (line.isNotEmpty()) {
                                     line.deleteCharAt(line.lastIndex)
                                     val (cursorX, cursorY) = currentCursor()
