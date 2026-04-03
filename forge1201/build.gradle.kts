@@ -58,7 +58,8 @@ dependencies {
     )
     modImplementation(libs.architectury.forge)
 
-    implementation(project(path = ":core", configuration = "namedElements"))
+    implementation(project(path = ":core1201", configuration = "namedElements"))
+    implementation(projects.core)
 
     forgeImplementation(projects.compiler)
     forgeImplementation(libs.kotlinx.coroutines.core)
