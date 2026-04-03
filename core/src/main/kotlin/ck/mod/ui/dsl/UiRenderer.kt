@@ -20,7 +20,7 @@
 package ck.mod.ui.dsl
 
 import ck.mod.ui.render.FixedWidthFontRenderer
-import com.mojang.blaze3d.vertex.Tesselator
+import com.mojang.blaze3d.vertex.ByteBufferBuilder
 import net.minecraft.client.gui.Font
 import net.minecraft.client.gui.GuiGraphics
 import net.minecraft.client.renderer.MultiBufferSource
@@ -64,11 +64,12 @@ object UiRenderer {
             }
 
             is TerminalView -> {
-                val bufferSource = MultiBufferSource.immediate(Tesselator.getInstance().builder)
+                val renderType = RenderType.text(FixedWidthFontRenderer.FONT)
+                val bufferSource = MultiBufferSource.immediate(ByteBufferBuilder(renderType.bufferSize()))
                 val emitter =
                     FixedWidthFontRenderer.toVertexConsumer(
                         graphics.pose(),
-                        bufferSource.getBuffer(RenderType.text(FixedWidthFontRenderer.FONT)),
+                        bufferSource.getBuffer(renderType),
                     )
                 FixedWidthFontRenderer.drawTerminal(
                     emitter,

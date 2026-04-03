@@ -23,20 +23,28 @@ plugins {
     alias(libs.plugins.architectury.plugin)
 }
 
+repositories {
+    maven("https://maven.neoforged.net/releases/")
+}
+
+kotlin {
+    jvmToolchain(21)
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}
+
 architectury {
-    minecraft = libs.versions.minecraft.asProvider().get()
-    common("forge", "fabric")
+    minecraft = libs.versions.minecraft.v1211.get()
+    common("neoforge", "fabric")
 }
 
 dependencies {
-    minecraft(libs.minecraft.asProvider())
-    forge(libs.forge)
-    mappings(
-        loom.layered {
-            officialMojangMappings()
-            parchment(libs.parchment.for1v20v1)
-        },
-    )
+    minecraft(libs.minecraft.v1211)
+    neoForge(libs.neoforge)
+    mappings(loom.officialMojangMappings())
 
     implementation(projects.compiler)
     implementation(libs.kotlinx.coroutines.core)
