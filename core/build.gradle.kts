@@ -26,6 +26,7 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlin.stdlib)
     implementation(libs.kotlin.logging)
+    implementation(libs.slf4j.api)
 
     testImplementation(kotlin("test"))
     testImplementation(libs.kotlinx.coroutines.test)
