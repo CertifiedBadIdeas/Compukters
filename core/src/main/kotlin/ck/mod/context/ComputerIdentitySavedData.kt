@@ -19,7 +19,6 @@
 
 package ck.mod.context
 
-import net.minecraft.core.HolderLookup
 import net.minecraft.nbt.CompoundTag
 import net.minecraft.server.MinecraftServer
 import net.minecraft.world.level.saveddata.SavedData
@@ -34,10 +33,7 @@ class ComputerIdentitySavedData(
         return allocatedId
     }
 
-    override fun save(
-        tag: CompoundTag,
-        registries: HolderLookup.Provider,
-    ): CompoundTag =
+    override fun save(tag: CompoundTag): CompoundTag =
         tag.apply {
             putInt(NEXT_COMPUTER_ID_TAG, nextComputerId)
         }
@@ -51,15 +47,9 @@ class ComputerIdentitySavedData(
             server
                 .overworld()
                 .dataStorage
-                .computeIfAbsent(
-                    Factory(::ComputerIdentitySavedData, ::load, null),
-                    DATA_NAME,
-                )
+                .computeIfAbsent(::load, ::ComputerIdentitySavedData, DATA_NAME)
 
-        private fun load(
-            tag: CompoundTag,
-            registries: HolderLookup.Provider,
-        ): ComputerIdentitySavedData =
+        private fun load(tag: CompoundTag): ComputerIdentitySavedData =
             ComputerIdentitySavedData(
                 nextComputerId = tag.getInt(NEXT_COMPUTER_ID_TAG).coerceAtLeast(FIRST_COMPUTER_ID),
             )
