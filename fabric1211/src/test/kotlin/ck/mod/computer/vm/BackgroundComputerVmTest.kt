@@ -27,6 +27,7 @@ import ck.lang.runtime.ComputerQueueResources
 import ck.lang.runtime.ComputerResources
 import ck.lang.runtime.ComputerStorageResources
 import ck.lang.runtime.VmState
+import kotlinx.coroutines.async
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -77,9 +78,15 @@ class BackgroundComputerVmTest {
 
             val terminalState =
                 runBlocking {
-                    withTimeout(5_000) {
-                        vm.terminalStates.first()
-                    }
+                    val terminalState =
+                        async {
+                            withTimeout(5_000) {
+                                vm.terminalStates.first()
+                            }
+                        }
+
+                    vm.requestSlice(0)
+                    terminalState.await()
                 }
 
             assertTrue(terminalState is VmState.Crashed)

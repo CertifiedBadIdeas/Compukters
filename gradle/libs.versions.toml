@@ -20,6 +20,7 @@ shadow = { id = "com.gradleup.shadow", version = "9.4.0" }
 kotlin = "2.3.20"
 coroutines = "1.10.2"
 kotlin-logging = "8.0.01"
+slf4j = "2.0.17"
 minecraft = "1.20.1"
 minecraft-v1211 = "1.21.1"
 
@@ -42,6 +43,7 @@ fabric-api-v1211 = "net.fabricmc.fabric-api:fabric-api:0.110.0+1.21.1"
 architectury-fabric-v1211 = "dev.architectury:architectury-fabric:13.0.2"
 
 kotlin-logging = { module = "io.github.oshai:kotlin-logging-jvm", version.ref = "kotlin-logging" }
+slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
 
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm", version.ref = "coroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
