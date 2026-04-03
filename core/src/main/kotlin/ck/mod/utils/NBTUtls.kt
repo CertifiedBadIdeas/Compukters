@@ -19,10 +19,8 @@
 
 package ck.mod.utils
 
-import net.minecraft.core.component.DataComponents
 import net.minecraft.nbt.CompoundTag
 import net.minecraft.world.item.ItemStack
-import net.minecraft.world.item.component.CustomData
 
 private object NBT {
     const val ID: String = "ComputerID"
@@ -48,14 +46,5 @@ var CompoundTag.computerOn: Boolean
         putBoolean(NBT.ON, value)
     }
 
-val ItemStack.computerDataTag: CompoundTag?
-    get() = get(DataComponents.CUSTOM_DATA)?.copyTag()
-
-fun ItemStack.updateComputerData(update: CompoundTag.() -> Unit) {
-    CustomData.update(DataComponents.CUSTOM_DATA, this) { tag ->
-        tag.update()
-    }
-}
-
 val ItemStack.computerLabelByHoverName: String?
-    get() = takeIf { it.has(DataComponents.CUSTOM_NAME) }?.hoverName?.string
+    get() = takeIf { it.hasCustomHoverName() }?.hoverName?.string
