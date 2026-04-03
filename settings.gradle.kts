@@ -42,6 +42,8 @@ plugins {
 includeBuild("build-scripts")
 include("compiler")
 include("core")
+include("core1201")
+include("core1211")
 include("forge1201")
 include("fabric1201")
 include("neoforge1211")
