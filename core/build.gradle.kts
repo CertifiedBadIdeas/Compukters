@@ -19,25 +19,9 @@
 
 plugins {
     alias(libs.plugins.kotlinConvention)
-    alias(libs.plugins.architectury.loom)
-    alias(libs.plugins.architectury.plugin)
-}
-
-architectury {
-    minecraft = libs.versions.minecraft.asProvider().get()
-    common("forge", "fabric")
 }
 
 dependencies {
-    minecraft(libs.minecraft.asProvider())
-    forge(libs.forge)
-    mappings(
-        loom.layered {
-            officialMojangMappings()
-            parchment(libs.parchment.for1v20v1)
-        },
-    )
-
     implementation(projects.compiler)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlin.stdlib)
