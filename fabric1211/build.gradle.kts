@@ -68,6 +68,9 @@ dependencies {
     modImplementation(libs.fabric.api.v1211)
     modImplementation(libs.architectury.fabric.v1211)
 
+    implementation(project(path = ":core1211", configuration = "namedElements"))
+    implementation(projects.core)
+
     fabricImplementation(projects.compiler)
     fabricImplementation(libs.kotlinx.coroutines.core)
     fabricImplementation(libs.kotlin.stdlib)
