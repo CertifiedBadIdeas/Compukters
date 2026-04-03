@@ -473,10 +473,11 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
     }
 
     private fun handleWorkspaceRow(row: WorkspaceRowLayout) {
+        val path = row.path
         when {
-            row.path == null -> store.navigateUp()
-            row.directory -> store.requestListing(row.path)
-            else -> store.requestDocument(row.path)
+            path == null -> store.navigateUp()
+            row.directory -> store.requestListing(path)
+            else -> store.requestDocument(path)
         }
     }
 
