@@ -34,6 +34,6 @@ val INSTALLED_VERSION: String by lazy {
         .getOrDefault("unknown")
 }
 
-fun String.asResource(): ResourceLocation = ResourceLocation.fromNamespaceAndPath(MOD_ID, this)
+fun String.asResource(): ResourceLocation = ResourceLocation(MOD_ID, this)
 
 fun String.literalComponent(): Component = Component.literal(this)

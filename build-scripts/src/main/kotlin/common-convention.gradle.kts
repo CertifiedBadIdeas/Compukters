@@ -17,19 +17,17 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-@file:Suppress("PropertyName")
-
 plugins {
-    idea
-    alias(libs.plugins.v12111)
-    alias(libs.plugins.neoforgeConvention)
-    alias(libs.plugins.metadataConvention)
+    id("kotlin-convention")
 }
 
-extra["ck.minecraftVersionRange"] = "[1.21.11]"
-extra["ck.neoforgeVersionRange"] = "[21.11,)"
-extra["ck.loaderVersionRange"] = "[4,)"
+val libs = libsCatalog()
 
 dependencies {
-    implementation(project(path = projects.v12111Common.path, configuration = "namedElements"))
+    implementation(project(":core"))
+    implementation(project(":compiler"))
+
+    implementation(libs.findLibrary("kotlin-stdlib").get())
+    implementation(libs.findLibrary("kotlin-logging").get())
+    implementation(libs.findLibrary("kotlinx-coroutines-core").get())
 }

@@ -27,8 +27,8 @@ import ck.lang.runtime.ComputerQueueResources
 import ck.lang.runtime.ComputerResources
 import ck.lang.runtime.ComputerStorageResources
 import ck.lang.runtime.VmState
-import kotlinx.coroutines.async
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout

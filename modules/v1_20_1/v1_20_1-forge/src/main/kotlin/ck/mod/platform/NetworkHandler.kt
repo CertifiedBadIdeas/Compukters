@@ -19,7 +19,7 @@
 package ck.mod.platform
 
 import ck.mod.INSTALLED_VERSION
-import ck.mod.MOD_ID
+import ck.mod.asResource
 import ck.mod.network.MessageType
 import ck.mod.network.NetworkMessage
 import ck.mod.network.NetworkMessages
@@ -29,7 +29,6 @@ import net.minecraft.network.FriendlyByteBuf
 import net.minecraft.network.protocol.Packet
 import net.minecraft.network.protocol.game.ClientGamePacketListener
 import net.minecraft.network.protocol.game.ServerGamePacketListener
-import net.minecraft.resources.ResourceLocation
 import net.minecraftforge.network.NetworkDirection
 import net.minecraftforge.network.NetworkEvent
 import net.minecraftforge.network.NetworkRegistry
@@ -44,7 +43,7 @@ object NetworkHandler {
 
     private val network: SimpleChannel =
         NetworkRegistry.ChannelBuilder
-            .named(ResourceLocation.fromNamespaceAndPath(MOD_ID, "network"))
+            .named("network".asResource())
             .networkProtocolVersion { INSTALLED_VERSION }
             .clientAcceptedVersions(INSTALLED_VERSION::equals)
             .serverAcceptedVersions(INSTALLED_VERSION::equals)

@@ -18,42 +18,10 @@
  */
 
 plugins {
-    alias(libs.plugins.kotlinConvention)
-    alias(libs.plugins.architectury.loom)
-    alias(libs.plugins.architectury.plugin)
-}
-
-kotlin {
-    jvmToolchain(21)
-}
-
-java {
-    sourceCompatibility = JavaVersion.VERSION_21
-    targetCompatibility = JavaVersion.VERSION_21
+    alias(libs.plugins.v1211)
+    alias(libs.plugins.commonConvention)
 }
 
 architectury {
-    minecraft =
-        libs.versions.minecraft.v1211
-            .get()
     common("neoforge", "fabric")
-}
-
-dependencies {
-    minecraft(libs.minecraft.v1211)
-    mappings(
-        loom.layered {
-            officialMojangMappings()
-            parchment(libs.parchment.v1211)
-        },
-    )
-
-    implementation(projects.core)
-    implementation(projects.compiler)
-    implementation(libs.kotlinx.coroutines.core)
-    implementation(libs.kotlin.stdlib)
-    implementation(libs.kotlin.logging)
-
-    testImplementation(kotlin("test"))
-    testImplementation(libs.kotlinx.coroutines.test)
 }
