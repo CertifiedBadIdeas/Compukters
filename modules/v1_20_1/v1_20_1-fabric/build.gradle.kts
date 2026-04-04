@@ -28,20 +28,11 @@ plugins {
 
 architectury {
     minecraft =
-        libs.versions.minecraft.v1211
+        libs.versions.minecraft.v1201
             .get()
 
     platformSetupLoomIde()
     fabric()
-}
-
-kotlin {
-    jvmToolchain(21)
-}
-
-java {
-    sourceCompatibility = JavaVersion.VERSION_21
-    targetCompatibility = JavaVersion.VERSION_21
 }
 
 val modProperties =
@@ -52,23 +43,27 @@ val modProperties =
         .toMutableMap()
 
 val minecraftVersion =
-    libs.versions.minecraft.v1211
+    libs.versions.minecraft.v1201
         .get()
 val modVersion = "$minecraftVersion-${rootProject.version}"
 modProperties["mod_version"] = modVersion
-modProperties["minecraft_version_range"] = ">=1.21.1"
 
 base.archivesName = modProperties["mod_name"]!!.replace(" ", "")
 version = modVersion
 
 dependencies {
-    minecraft(libs.minecraft.v1211)
-    mappings(loom.officialMojangMappings())
-    modImplementation(libs.fabric.loader.v1211)
-    modImplementation(libs.fabric.api.v1211)
-    modImplementation(libs.architectury.fabric.v1211)
+    minecraft(libs.minecraft.v1201)
+    mappings(
+        loom.layered {
+            officialMojangMappings()
+            parchment(libs.parchment.for1v20v1)
+        },
+    )
+    modImplementation(libs.fabric.loader.v1201)
+    modImplementation(libs.fabric.api.v1201)
+    modImplementation(libs.architectury.fabric.v1201)
 
-    implementation(project(path = ":core1211", configuration = "namedElements"))
+    implementation(project(path = projects.v1201Common.path, configuration = "namedElements"))
     implementation(projects.core)
 
     fabricImplementation(projects.compiler)

@@ -27,10 +27,21 @@ plugins {
 }
 
 architectury {
-    minecraft = libs.versions.minecraft.asProvider().get()
+    minecraft =
+        libs.versions.minecraft.v1211
+            .get()
 
     platformSetupLoomIde()
-    forge()
+    fabric()
+}
+
+kotlin {
+    jvmToolchain(21)
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
 }
 
 val modProperties =
@@ -40,51 +51,44 @@ val modProperties =
         .associate { (index, str) -> str.substring(0, index) to str.substring(index + 1) }
         .toMutableMap()
 
-val minecraftVersion = libs.versions.minecraft.asProvider().get()
+val minecraftVersion =
+    libs.versions.minecraft.v1211
+        .get()
 val modVersion = "$minecraftVersion-${rootProject.version}"
 modProperties["mod_version"] = modVersion
+modProperties["minecraft_version_range"] = ">=1.21.1"
 
 base.archivesName = modProperties["mod_name"]!!.replace(" ", "")
 version = modVersion
 
 dependencies {
-    minecraft(libs.minecraft.asProvider())
-    forge(libs.forge)
-    mappings(
-        loom.layered {
-            officialMojangMappings()
-            parchment(libs.parchment.for1v20v1)
-        },
-    )
-    modImplementation(libs.architectury.forge)
+    minecraft(libs.minecraft.v1211)
+    mappings(loom.officialMojangMappings())
+    modImplementation(libs.fabric.loader.v1211)
+    modImplementation(libs.fabric.api.v1211)
+    modImplementation(libs.architectury.fabric.v1211)
 
-    implementation(project(path = ":core1201", configuration = "namedElements"))
+    implementation(project(path = projects.v1211Common.path, configuration = "namedElements"))
     implementation(projects.core)
 
-    forgeImplementation(projects.compiler)
-    forgeImplementation(libs.kotlinx.coroutines.core)
-    forgeImplementation(libs.kotlin.stdlib)
-    forgeImplementation(libs.kotlin.logging)
+    fabricImplementation(projects.compiler)
+    fabricImplementation(libs.kotlinx.coroutines.core)
+    fabricImplementation(libs.kotlin.stdlib)
+    fabricImplementation(libs.kotlin.logging)
 
     testImplementation(kotlin("test"))
     testImplementation(libs.kotlinx.coroutines.test)
 }
 
-fun <T : ModuleDependency> DependencyHandler.forgeImplementation(dependency: Provider<T>) {
+fun <T : ModuleDependency> DependencyHandler.fabricImplementation(dependency: Provider<T>) {
     implementation(dependency) {
-        isTransitive = false
-    }
-    forgeRuntimeLibrary(dependency) {
         isTransitive = false
     }
     include(dependency)
 }
 
-fun <T : ModuleDependency> DependencyHandler.forgeImplementation(dependency: T) {
+fun <T : ModuleDependency> DependencyHandler.fabricImplementation(dependency: T) {
     implementation(dependency) {
-        isTransitive = false
-    }
-    forgeRuntimeLibrary(dependency) {
         isTransitive = false
     }
     include(dependency)

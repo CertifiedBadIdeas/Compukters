@@ -18,6 +18,7 @@
  */
 
 @file:OptIn(InternalRefreshVersionsApi::class)
+@file:Suppress("ktlint:standard:property-naming", "PropertyName")
 
 import de.fayard.refreshVersions.core.internal.InternalRefreshVersionsApi
 
@@ -40,13 +41,32 @@ plugins {
 }
 
 includeBuild("build-scripts")
-include("compiler")
-include("core")
-include("core1201")
-include("core1211")
-include("forge1201")
-include("fabric1201")
-include("neoforge1211")
-include("fabric1211")
+val modulesDir = rootDir.resolve("modules")
+val commonDir = modulesDir.resolve("common")
+val loadersDir = modulesDir.resolve("loaders")
+
+val v1_20_1Dir = modulesDir.resolve("v1_20_1")
+val v1_21_1Dir = modulesDir.resolve("v1_21_1")
+
+fun include(
+    path: String,
+    dir: File,
+) {
+    include(path)
+    project(":$path").apply {
+        projectDir = dir.resolve(path)
+    }
+}
+
+include("compiler", modulesDir)
+include("core", modulesDir)
+
+include("v1_20_1-common", v1_20_1Dir)
+include("v1_20_1-forge", v1_20_1Dir)
+include("v1_20_1-fabric", v1_20_1Dir)
+
+include("v1_21_1-common", v1_21_1Dir)
+include("v1_21_1-neoforge", v1_21_1Dir)
+include("v1_21_1-fabric", v1_21_1Dir)
 
 rootProject.name = "Compukter-Kraft"

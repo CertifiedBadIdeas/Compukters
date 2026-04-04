@@ -79,7 +79,7 @@ dependencies {
     mappings(loom.officialMojangMappings())
     modImplementation(libs.architectury.neoforge)
 
-    implementation(project(path = ":core1211", configuration = "namedElements"))
+    implementation(project(path = projects.v1211Common.path, configuration = "namedElements"))
     implementation(projects.core)
 
     neoForgeImplementation(projects.compiler)

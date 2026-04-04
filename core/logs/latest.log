@@ -1,3 +1,0 @@
-[03Apr2026 00:06:24.410] [DefaultDispatcher-worker-1 @coroutine#11/INFO] [compukterkraft/]: ComputerID: 1 stopped with reason: REQUESTED, error: Boot compilation failed: Program exceeds ROM limit: 59 > 1
-[03Apr2026 00:06:24.413] [DefaultDispatcher-worker-1 @coroutine#11/INFO] [compukterkraft/]: Stopping VM: reason=REQUESTED, error=Boot compilation failed: Program exceeds ROM limit: 59 > 1
-[03Apr2026 00:06:24.414] [DefaultDispatcher-worker-1 @coroutine#11/INFO] [compukterkraft/]: ComputerID: 1 stop lock request ended (reason: REQUESTED, error: Boot compilation failed: Program exceeds ROM limit: 59 > 1)

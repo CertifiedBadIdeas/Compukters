@@ -24,12 +24,14 @@ plugins {
 }
 
 architectury {
-    minecraft = libs.versions.minecraft.asProvider().get()
+    minecraft =
+        libs.versions.minecraft.v1201
+            .get()
     common("forge", "fabric")
 }
 
 dependencies {
-    minecraft(libs.minecraft.asProvider())
+    minecraft(libs.minecraft.v1201)
     forge(libs.forge)
     mappings(
         loom.layered {
