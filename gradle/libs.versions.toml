@@ -21,21 +21,22 @@ kotlin = "2.3.20"
 coroutines = "1.10.2"
 kotlin-logging = "8.0.01"
 slf4j = "2.0.17"
-minecraft = "1.20.1"
+minecraft-v1201 = "1.20.1"
 minecraft-v1211 = "1.21.1"
 
 [libraries]
 
-minecraft = {module = "net.minecraft:minecraft", version.ref = "minecraft" }
+minecraft-v1201 = {module = "net.minecraft:minecraft", version.ref = "minecraft-v1201" }
 forge = "net.minecraftforge:forge:1.20.1-47.4.10"
 parchment-for1v20v1 = "org.parchmentmc.data:parchment-1.20.1:2023.09.03"
 
 architectury-forge = "dev.architectury:architectury-forge:9.2.14"
-fabric-loader = "net.fabricmc:fabric-loader:0.16.14"
-fabric-api = "net.fabricmc.fabric-api:fabric-api:0.92.3+1.20.1"
-architectury-fabric = "dev.architectury:architectury-fabric:9.2.14"
+fabric-loader-v1201 = "net.fabricmc:fabric-loader:0.16.14"
+fabric-api-v1201 = "net.fabricmc.fabric-api:fabric-api:0.92.3+1.20.1"
+architectury-fabric-v1201 = "dev.architectury:architectury-fabric:9.2.14"
 
 minecraft-v1211 = { module = "net.minecraft:minecraft", version.ref = "minecraft-v1211" }
+
 neoforge = "net.neoforged:neoforge:21.1.222"
 architectury-neoforge = "dev.architectury:architectury-neoforge:13.0.2"
 fabric-loader-v1211 = "net.fabricmc:fabric-loader:0.16.14"
