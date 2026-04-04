@@ -21,103 +21,13 @@
 
 plugins {
     idea
-    alias(libs.plugins.kotlinConvention)
-    alias(libs.plugins.architectury.loom)
-    alias(libs.plugins.architectury.plugin)
+    alias(libs.plugins.v1211)
+    alias(libs.plugins.fabricConvention)
+    alias(libs.plugins.metadataConvention)
 }
 
-architectury {
-    minecraft =
-        libs.versions.minecraft.v1211
-            .get()
-
-    platformSetupLoomIde()
-    fabric()
-}
-
-kotlin {
-    jvmToolchain(21)
-}
-
-java {
-    sourceCompatibility = JavaVersion.VERSION_21
-    targetCompatibility = JavaVersion.VERSION_21
-}
-
-val modProperties =
-    file("$rootDir/config/mod.properties")
-        .readLines()
-        .mapNotNull { it.indexOf('=').takeIf { i -> i != -1 }?.let { v -> v to it } }
-        .associate { (index, str) -> str.substring(0, index) to str.substring(index + 1) }
-        .toMutableMap()
-
-val minecraftVersion =
-    libs.versions.minecraft.v1211
-        .get()
-val modVersion = "$minecraftVersion-${rootProject.version}"
-modProperties["mod_version"] = modVersion
-modProperties["minecraft_version_range"] = ">=1.21.1"
-
-base.archivesName = modProperties["mod_name"]!!.replace(" ", "")
-version = modVersion
+extra["ck.minecraftVersionRange"] = ">=1.21.1"
 
 dependencies {
-    minecraft(libs.minecraft.v1211)
-    mappings(loom.officialMojangMappings())
-    modImplementation(libs.fabric.loader.v1211)
-    modImplementation(libs.fabric.api.v1211)
-    modImplementation(libs.architectury.fabric.v1211)
-
     implementation(project(path = projects.v1211Common.path, configuration = "namedElements"))
-    implementation(projects.core)
-
-    fabricImplementation(projects.compiler)
-    fabricImplementation(libs.kotlinx.coroutines.core)
-    fabricImplementation(libs.kotlin.stdlib)
-    fabricImplementation(libs.kotlin.logging)
-
-    testImplementation(kotlin("test"))
-    testImplementation(libs.kotlinx.coroutines.test)
-}
-
-fun <T : ModuleDependency> DependencyHandler.fabricImplementation(dependency: Provider<T>) {
-    implementation(dependency) {
-        isTransitive = false
-    }
-    include(dependency)
-}
-
-fun <T : ModuleDependency> DependencyHandler.fabricImplementation(dependency: T) {
-    implementation(dependency) {
-        isTransitive = false
-    }
-    include(dependency)
-}
-
-val generateModMetadata =
-    tasks.register("generateModMetadata", ProcessResources::class) {
-        val replaceProperties = modProperties.toMap()
-        val from = file("src/main/resources")
-        val intoDir = file("build/generated/resources")
-
-        inputs.properties(replaceProperties)
-        inputs.dir(from)
-
-        outputs.dir(intoDir)
-
-        from(from) { exclude { it.name.contains(".png") } }
-
-        into(intoDir)
-
-        expand(replaceProperties)
-    }
-
-tasks.named<ProcessResources>("processResources") {
-    duplicatesStrategy = DuplicatesStrategy.INCLUDE
-
-    dependsOn(generateModMetadata)
-}
-
-sourceSets.main {
-    resources.srcDir(generateModMetadata.get().outputs.files)
 }

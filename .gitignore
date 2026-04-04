@@ -23,6 +23,7 @@ run
 runs
 run-data
 .worktrees
+logs
 
 repo
 versions.properties

@@ -17,15 +17,18 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import gradle.kotlin.dsl.accessors._7dbbf0184c82f528c03e1535b8794f5d.test
-
 plugins {
     id("org.jetbrains.kotlin.jvm")
     id("org.jmailen.kotlinter")
 }
 
 repositories {
-    mavenCentral()
+    mavenCentral {
+        name = "Central"
+    }
+    maven("https://maven.neoforged.net/releases/") {
+        name = "NeoForged"
+    }
     maven("https://maven.parchmentmc.org/") {
         name = "Parchment MC"
     }

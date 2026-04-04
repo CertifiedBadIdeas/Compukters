@@ -16,44 +16,11 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 plugins {
-    alias(libs.plugins.kotlinConvention)
-    alias(libs.plugins.architectury.loom)
-    alias(libs.plugins.architectury.plugin)
-}
-
-kotlin {
-    jvmToolchain(21)
-}
-
-java {
-    sourceCompatibility = JavaVersion.VERSION_21
-    targetCompatibility = JavaVersion.VERSION_21
+    alias(libs.plugins.v12111)
+    alias(libs.plugins.commonConvention)
 }
 
 architectury {
-    minecraft =
-        libs.versions.minecraft.v12111
-            .get()
     common("neoforge", "fabric")
-}
-
-dependencies {
-    minecraft(libs.minecraft.v12111)
-    mappings(
-        loom.layered {
-            officialMojangMappings()
-            parchment(libs.parchment.v12111)
-        },
-    )
-
-    implementation(projects.core)
-    implementation(projects.compiler)
-    implementation(libs.kotlinx.coroutines.core)
-    implementation(libs.kotlin.stdlib)
-    implementation(libs.kotlin.logging)
-
-    testImplementation(kotlin("test"))
-    testImplementation(libs.kotlinx.coroutines.test)
 }

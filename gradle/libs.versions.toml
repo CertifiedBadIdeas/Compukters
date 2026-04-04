@@ -4,6 +4,11 @@
 
 # buildSrc
 kotlinConvention = { id = "kotlin-convention" }
+commonConvention = { id = "common-convention" }
+fabricConvention = { id = "fabric-convention" }
+forgeConvention = { id = "forge-convention" }
+neoforgeConvention = { id = "neoforge-convention" }
+metadataConvention = { id = "metadata" }
 releaseConvention = { id = "release-convention" }
 
 # external
@@ -15,6 +20,10 @@ shadow = { id = "com.gradleup.shadow", version = "9.4.0" }
 
 architectury-loom = { id = "dev.architectury.loom", version = "1.14.473" }
 architectury-plugin = { id = "architectury-plugin", version = "3.5.163" }
+
+v1201 = { id = "1.20.1-convention" }
+v1211 = { id = "1.21.1-convention" }
+v12111 = { id = "1.21.11-convention" }
 
 [versions]
 

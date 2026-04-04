@@ -21,120 +21,15 @@
 
 plugins {
     idea
-    alias(libs.plugins.kotlinConvention)
-    alias(libs.plugins.architectury.loom)
-    alias(libs.plugins.architectury.plugin)
+    alias(libs.plugins.v1211)
+    alias(libs.plugins.neoforgeConvention)
+    alias(libs.plugins.metadataConvention)
 }
 
-architectury {
-    minecraft =
-        libs.versions.minecraft.v1211
-            .get()
-
-    platformSetupLoomIde()
-    neoForge()
-}
-
-repositories {
-    maven("https://maven.neoforged.net/releases/")
-}
-
-kotlin {
-    jvmToolchain(21)
-}
-
-java {
-    sourceCompatibility = JavaVersion.VERSION_21
-    targetCompatibility = JavaVersion.VERSION_21
-}
-
-val modProperties =
-    file("$rootDir/config/mod.properties")
-        .readLines()
-        .mapNotNull { it.indexOf('=').takeIf { i -> i != -1 }?.let { v -> v to it } }
-        .associate { (index, str) -> str.substring(0, index) to str.substring(index + 1) }
-        .toMutableMap()
-
-val minecraftVersion =
-    libs.versions.minecraft.v1211
-        .get()
-val modVersion = "$minecraftVersion-${rootProject.version}"
-modProperties["mod_version"] = modVersion
-modProperties["minecraft_version_range"] = "[1.21.1, 1.22)"
-modProperties["neoforge_version_range"] = "[21.1,)"
-modProperties["loader_version_range"] = "[4,)"
-
-base.archivesName = modProperties["mod_name"]!!.replace(" ", "")
-version = modVersion
-
-tasks.register("listConfigs") {
-    doLast {
-        configurations.names.sorted().forEach { println(it) }
-    }
-}
+extra["ck.minecraftVersionRange"] = "[1.21.1, 1.22)"
+extra["ck.neoforgeVersionRange"] = "[21.1,)"
+extra["ck.loaderVersionRange"] = "[4,)"
 
 dependencies {
-    minecraft(libs.minecraft.v1211)
-    neoForge(libs.neoforge.v1211)
-    mappings(loom.officialMojangMappings())
-    modImplementation(libs.architectury.neoforge.v1211)
-
     implementation(project(path = projects.v1211Common.path, configuration = "namedElements"))
-    implementation(projects.core)
-
-    neoForgeImplementation(projects.compiler)
-    neoForgeImplementation(libs.kotlinx.coroutines.core)
-    neoForgeImplementation(libs.kotlin.stdlib)
-    neoForgeImplementation(libs.kotlin.logging)
-
-    testImplementation(kotlin("test"))
-    testImplementation(libs.kotlinx.coroutines.test)
-}
-
-fun <T : ModuleDependency> DependencyHandler.neoForgeImplementation(dependency: Provider<T>) {
-    implementation(dependency) {
-        isTransitive = false
-    }
-    forgeRuntimeLibrary(dependency) {
-        isTransitive = false
-    }
-    include(dependency)
-}
-
-fun <T : ModuleDependency> DependencyHandler.neoForgeImplementation(dependency: T) {
-    implementation(dependency) {
-        isTransitive = false
-    }
-    forgeRuntimeLibrary(dependency) {
-        isTransitive = false
-    }
-    include(dependency)
-}
-
-val generateModMetadata =
-    tasks.register("generateModMetadata", ProcessResources::class) {
-        val replaceProperties = modProperties.toMap()
-        val from = file("src/main/resources")
-        val intoDir = file("build/generated/resources")
-
-        inputs.properties(replaceProperties)
-        inputs.dir(from)
-
-        outputs.dir(intoDir)
-
-        from(from) { exclude { it.name.contains(".png") } }
-
-        into(intoDir)
-
-        expand(replaceProperties)
-    }
-
-tasks.named<ProcessResources>("processResources") {
-    duplicatesStrategy = DuplicatesStrategy.INCLUDE
-
-    dependsOn(generateModMetadata)
-}
-
-sourceSets.main {
-    resources.srcDir(generateModMetadata.get().outputs.files)
 }

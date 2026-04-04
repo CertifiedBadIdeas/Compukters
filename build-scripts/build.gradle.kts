@@ -22,12 +22,19 @@ plugins {
 }
 
 repositories {
+    mavenCentral()
+    maven("https://maven.architectury.dev/")
+    maven("https://maven.fabricmc.net/")
+    maven("https://maven.minecraftforge.net/")
+    maven("https://maven.neoforged.net/releases/")
     gradlePluginPortal()
 }
 
 dependencies {
     implementation(plugin(libs.plugins.kotlin))
     implementation(plugin(libs.plugins.kotlinter))
+    implementation(plugin(libs.plugins.architectury.loom))
+    implementation(plugin(libs.plugins.architectury.plugin))
 }
 
 fun DependencyHandlerScope.plugin(plugin: Provider<PluginDependency>): Provider<String> =

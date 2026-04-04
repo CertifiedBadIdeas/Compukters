@@ -18,33 +18,10 @@
  */
 
 plugins {
-    alias(libs.plugins.kotlinConvention)
-    alias(libs.plugins.architectury.loom)
-    alias(libs.plugins.architectury.plugin)
+    alias(libs.plugins.v1201)
+    alias(libs.plugins.commonConvention)
 }
 
 architectury {
-    minecraft =
-        libs.versions.minecraft.v1201
-            .get()
     common("forge", "fabric")
-}
-
-dependencies {
-    minecraft(libs.minecraft.v1201)
-    mappings(
-        loom.layered {
-            officialMojangMappings()
-            parchment(libs.parchment.v1201)
-        },
-    )
-
-    implementation(projects.core)
-    implementation(projects.compiler)
-    implementation(libs.kotlinx.coroutines.core)
-    implementation(libs.kotlin.stdlib)
-    implementation(libs.kotlin.logging)
-
-    testImplementation(kotlin("test"))
-    testImplementation(libs.kotlinx.coroutines.test)
 }

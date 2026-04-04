@@ -21,98 +21,11 @@
 
 plugins {
     idea
-    alias(libs.plugins.kotlinConvention)
-    alias(libs.plugins.architectury.loom)
-    alias(libs.plugins.architectury.plugin)
+    alias(libs.plugins.v1201)
+    alias(libs.plugins.fabricConvention)
+    alias(libs.plugins.metadataConvention)
 }
-
-architectury {
-    minecraft =
-        libs.versions.minecraft.v1201
-            .get()
-
-    platformSetupLoomIde()
-    fabric()
-}
-
-val modProperties =
-    file("$rootDir/config/mod.properties")
-        .readLines()
-        .mapNotNull { it.indexOf('=').takeIf { i -> i != -1 }?.let { v -> v to it } }
-        .associate { (index, str) -> str.substring(0, index) to str.substring(index + 1) }
-        .toMutableMap()
-
-val minecraftVersion =
-    libs.versions.minecraft.v1201
-        .get()
-val modVersion = "$minecraftVersion-${rootProject.version}"
-modProperties["mod_version"] = modVersion
-
-base.archivesName = modProperties["mod_name"]!!.replace(" ", "")
-version = modVersion
 
 dependencies {
-    minecraft(libs.minecraft.v1201)
-    mappings(
-        loom.layered {
-            officialMojangMappings()
-            parchment(libs.parchment.v1201)
-        },
-    )
-    modImplementation(libs.fabric.loader.v1201)
-    modImplementation(libs.fabric.api.v1201)
-    modImplementation(libs.architectury.fabric.v1201)
-
     implementation(project(path = projects.v1201Common.path, configuration = "namedElements"))
-    implementation(projects.core)
-
-    fabricImplementation(projects.compiler)
-    fabricImplementation(libs.kotlinx.coroutines.core)
-    fabricImplementation(libs.kotlin.stdlib)
-    fabricImplementation(libs.kotlin.logging)
-
-    testImplementation(kotlin("test"))
-    testImplementation(libs.kotlinx.coroutines.test)
-}
-
-fun <T : ModuleDependency> DependencyHandler.fabricImplementation(dependency: Provider<T>) {
-    implementation(dependency) {
-        isTransitive = false
-    }
-    include(dependency)
-}
-
-fun <T : ModuleDependency> DependencyHandler.fabricImplementation(dependency: T) {
-    implementation(dependency) {
-        isTransitive = false
-    }
-    include(dependency)
-}
-
-val generateModMetadata =
-    tasks.register("generateModMetadata", ProcessResources::class) {
-        val replaceProperties = modProperties.toMap()
-        val from = file("src/main/resources")
-        val intoDir = file("build/generated/resources")
-
-        inputs.properties(replaceProperties)
-        inputs.dir(from)
-
-        outputs.dir(intoDir)
-
-        from(from) { exclude { it.name.contains(".png") } }
-
-        into(intoDir)
-
-        expand(replaceProperties)
-    }
-
-tasks.named<ProcessResources>("processResources") {
-    duplicatesStrategy = DuplicatesStrategy.INCLUDE
-
-    dependsOn(generateModMetadata)
-}
-
-sourceSets.main {
-    resources.srcDir(generateModMetadata.get().outputs.files)
 }

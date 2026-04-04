@@ -20,7 +20,7 @@
 package ck.mod.block
 
 import ck.mod.LOGGER
-import ck.mod.MOD_ID
+import ck.mod.asResource
 import ck.mod.context.ServerContext
 import ck.mod.data.ComputerContainerData
 import ck.mod.item.AbstractComputerItem
@@ -58,7 +58,7 @@ abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
 ) : HorizontalDirectionalBlock(properties),
     EntityBlock {
     companion object {
-        val drop: ResourceLocation = ResourceLocation.fromNamespaceAndPath(MOD_ID, "computer")
+        val drop: ResourceLocation = "computer".asResource()
 
         val serverTicker =
             BlockEntityTicker<AbstractComputerBlockEntity> { _, _, _, computer ->

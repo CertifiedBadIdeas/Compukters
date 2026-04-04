@@ -37,7 +37,7 @@ import org.joml.Vector3f
  */
 object FixedWidthFontRenderer {
     const val FULL_BRIGHT_LIGHTMAP: Int = (0xF shl 4) or (0xF shl 20)
-    val FONT: ResourceLocation = ResourceLocation.fromNamespaceAndPath(MOD_ID, "textures/gui/term_font.png")
+    val FONT: ResourceLocation = ResourceLocation(MOD_ID, "textures/gui/term_font.png")
 
     const val FONT_HEIGHT: Int = 9
     const val FONT_WIDTH: Int = 6
