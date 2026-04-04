@@ -75,9 +75,9 @@ tasks.register("listConfigs") {
 
 dependencies {
     minecraft(libs.minecraft.v1211)
-    neoForge(libs.neoforge)
+    neoForge(libs.neoforge.v1211)
     mappings(loom.officialMojangMappings())
-    modImplementation(libs.architectury.neoforge)
+    modImplementation(libs.architectury.neoforge.v1211)
 
     implementation(project(path = projects.v1211Common.path, configuration = "namedElements"))
     implementation(projects.core)

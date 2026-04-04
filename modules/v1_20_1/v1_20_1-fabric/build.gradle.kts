@@ -56,7 +56,7 @@ dependencies {
     mappings(
         loom.layered {
             officialMojangMappings()
-            parchment(libs.parchment.for1v20v1)
+            parchment(libs.parchment.v1201)
         },
     )
     modImplementation(libs.fabric.loader.v1201)

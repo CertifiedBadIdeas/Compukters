@@ -32,11 +32,10 @@ architectury {
 
 dependencies {
     minecraft(libs.minecraft.v1201)
-    forge(libs.forge)
     mappings(
         loom.layered {
             officialMojangMappings()
-            parchment(libs.parchment.for1v20v1)
+            parchment(libs.parchment.v1201)
         },
     )
 

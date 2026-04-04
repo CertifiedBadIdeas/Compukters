@@ -23,10 +23,6 @@ plugins {
     alias(libs.plugins.architectury.plugin)
 }
 
-repositories {
-    maven("https://maven.neoforged.net/releases/")
-}
-
 kotlin {
     jvmToolchain(21)
 }
@@ -37,14 +33,20 @@ java {
 }
 
 architectury {
-    minecraft = libs.versions.minecraft.v1211.get()
+    minecraft =
+        libs.versions.minecraft.v1211
+            .get()
     common("neoforge", "fabric")
 }
 
 dependencies {
     minecraft(libs.minecraft.v1211)
-    neoForge(libs.neoforge)
-    mappings(loom.officialMojangMappings())
+    mappings(
+        loom.layered {
+            officialMojangMappings()
+            parchment(libs.parchment.v1211)
+        },
+    )
 
     implementation(projects.core)
     implementation(projects.compiler)
