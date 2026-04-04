@@ -23,19 +23,28 @@ plugins {
     alias(libs.plugins.architectury.plugin)
 }
 
+kotlin {
+    jvmToolchain(21)
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}
+
 architectury {
     minecraft =
-        libs.versions.minecraft.v1201
+        libs.versions.minecraft.v12111
             .get()
-    common("forge", "fabric")
+    common("neoforge", "fabric")
 }
 
 dependencies {
-    minecraft(libs.minecraft.v1201)
+    minecraft(libs.minecraft.v12111)
     mappings(
         loom.layered {
             officialMojangMappings()
-            parchment(libs.parchment.v1201)
+            parchment(libs.parchment.v12111)
         },
     )
 

@@ -53,14 +53,14 @@ version = modVersion
 
 dependencies {
     minecraft(libs.minecraft.v1201)
-    forge(libs.forge)
+    forge(libs.forge.v1201)
     mappings(
         loom.layered {
             officialMojangMappings()
-            parchment(libs.parchment.for1v20v1)
+            parchment(libs.parchment.v1201)
         },
     )
-    modImplementation(libs.architectury.forge)
+    modImplementation(libs.architectury.forge.v1201)
 
     implementation(project(path = projects.v1201Common.path, configuration = "namedElements"))
     implementation(projects.core)

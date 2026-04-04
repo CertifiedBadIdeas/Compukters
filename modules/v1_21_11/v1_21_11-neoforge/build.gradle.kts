@@ -28,7 +28,7 @@ plugins {
 
 architectury {
     minecraft =
-        libs.versions.minecraft.v1211
+        libs.versions.minecraft.v12111
             .get()
 
     platformSetupLoomIde()
@@ -56,12 +56,12 @@ val modProperties =
         .toMutableMap()
 
 val minecraftVersion =
-    libs.versions.minecraft.v1211
+    libs.versions.minecraft.v12111
         .get()
 val modVersion = "$minecraftVersion-${rootProject.version}"
 modProperties["mod_version"] = modVersion
-modProperties["minecraft_version_range"] = "[1.21.1, 1.22)"
-modProperties["neoforge_version_range"] = "[21.1,)"
+modProperties["minecraft_version_range"] = "[1.21.11]"
+modProperties["neoforge_version_range"] = "[21.11,)"
 modProperties["loader_version_range"] = "[4,)"
 
 base.archivesName = modProperties["mod_name"]!!.replace(" ", "")
@@ -74,12 +74,12 @@ tasks.register("listConfigs") {
 }
 
 dependencies {
-    minecraft(libs.minecraft.v1211)
-    neoForge(libs.neoforge.v1211)
+    minecraft(libs.minecraft.v12111)
+    neoForge(libs.neoforge.v12111)
     mappings(loom.officialMojangMappings())
-    modImplementation(libs.architectury.neoforge.v1211)
+    modImplementation(libs.architectury.neoforge.v12111)
 
-    implementation(project(path = projects.v1211Common.path, configuration = "namedElements"))
+    implementation(project(path = projects.v12111Common.path, configuration = "namedElements"))
     implementation(projects.core)
 
     neoForgeImplementation(projects.compiler)
