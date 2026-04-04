@@ -23,6 +23,7 @@ import ck.lang.runtime.ComputerWorkspaceEntry
 import ck.lang.runtime.ScreenBufferSnapshot
 import ck.mod.application.workbench.WorkbenchRemoteState
 import ck.mod.block.ComputerFamily
+import ck.mod.block.checkUsable
 import ck.mod.computer.ServerComputer
 import ck.mod.data.ComputerContainerData
 import kotlinx.coroutines.flow.MutableStateFlow

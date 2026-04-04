@@ -26,6 +26,7 @@ import ck.lang.runtime.VmState
 import ck.lang.runtime.VmStopReason
 import ck.mod.LOGGER
 import ck.mod.application.runtime.HostCallDispatcher
+import ck.mod.block.checkUsable
 import ck.mod.computer.vm.BackgroundComputerVm
 import ck.mod.computer.vm.ComputerProfileRegistry
 import ck.mod.computer.vm.ComputerVmLogger

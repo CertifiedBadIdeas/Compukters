@@ -20,12 +20,14 @@
 package ck.mod.context
 
 import ck.mod.computer.vm.ComputerVmSupervisor
+import ck.mod.platform.api.ServerWorldAccess
 import net.minecraft.server.MinecraftServer
+import net.minecraft.world.level.storage.LevelResource
 
 class ServerContext(
     val server: MinecraftServer,
 ) {
-    val vmSupervisor = ComputerVmSupervisor(server)
+    val vmSupervisor = ComputerVmSupervisor(ServerWorldAccess { server.getWorldPath(LevelResource.ROOT) })
     val computerManager = ComputerManager(vmSupervisor)
 
     companion object {

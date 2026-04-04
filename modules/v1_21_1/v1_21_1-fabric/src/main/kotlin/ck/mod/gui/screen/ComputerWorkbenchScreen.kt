@@ -32,6 +32,8 @@ import ck.mod.infrastructure.workbench.LanguageWorkbenchIdeFacade
 import ck.mod.infrastructure.workbench.MenuWorkspaceUpdateSource
 import ck.mod.infrastructure.workbench.NetworkWorkspaceGateway
 import ck.mod.menu.AbstractComputerMenu
+import ck.mod.platform.MinecraftInputProvider
+import ck.mod.platform.api.FontMetrics
 import ck.mod.ui.render.WorkbenchTerminalRenderer
 import ck.mod.ui.workbench.WorkbenchLayoutModel
 import ck.mod.ui.workbench.WorkspaceRowLayout
@@ -50,7 +52,7 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
     title: Component,
 ) : ComputerScreen<T>(container, player, title) {
     private val inputHandler = ClientInputHandler(container)
-    private val terminalInput = WorkbenchTerminalInputController(inputHandler)
+    private val terminalInput = WorkbenchTerminalInputController(inputHandler, MinecraftInputProvider)
     private val store =
         WorkbenchStore(
             workspaceGateway = NetworkWorkspaceGateway(container),
@@ -481,7 +483,16 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
         }
     }
 
-    private fun layout(): WorkbenchLayoutModel = WorkbenchLayoutModel(leftPos, topPos, imageWidth, imageHeight, minecraft!!.font)
+    private fun layout(): WorkbenchLayoutModel =
+        WorkbenchLayoutModel(
+            leftPos,
+            topPos,
+            imageWidth,
+            imageHeight,
+            FontMetrics {
+                minecraft!!.font.width(it)
+            },
+        )
 
     private fun terminalLayout(): WorkbenchTerminalLayout {
         val snap = menu.clientSide.screenSnapshot
