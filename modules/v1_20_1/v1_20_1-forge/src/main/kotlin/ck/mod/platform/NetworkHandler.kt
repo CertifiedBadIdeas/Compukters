@@ -20,7 +20,7 @@ package ck.mod.platform
 
 import ck.mod.INSTALLED_VERSION
 import ck.mod.asResource
-import ck.mod.network.MessageType
+import ck.mod.network.MessageTypeImpl
 import ck.mod.network.NetworkMessage
 import ck.mod.network.NetworkMessages
 import ck.mod.network.client.ClientNetworkContext
@@ -112,11 +112,16 @@ object NetworkHandler {
             ).add()
     }
 
-    class MessageTypeImpl<T : NetworkMessage<*>>(
-        val id: Int,
-        val klass: Class<T>,
-        val reader: Function<FriendlyByteBuf, T?>,
-    ) : MessageType<T>
+    fun sendToPlayer(
+        message: NetworkMessage<ClientNetworkContext>,
+        player: net.minecraft.server.level.ServerPlayer,
+    ) {
+        player.connection.send(createClientboundPacket(message))
+    }
+
+    fun sendToServer(message: NetworkMessage<ServerNetworkContext>) {
+        net.minecraft.client.Minecraft.getInstance().connection?.send(createServerboundPacket(message))
+    }
 
     /**
      * This holds an instance of [ClientNetworkContext]. This is a separate class to ensure that the instance is

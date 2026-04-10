@@ -19,21 +19,20 @@
 package ck.mod.network
 
 import ck.mod.network.server.ServerNetworkContext
-import ck.mod.platform.NetworkHandler
-import net.minecraft.client.Minecraft
-import net.minecraft.client.multiplayer.ClientPacketListener
 
 /**
  * Methods for sending packets from clients to the server.
+ *
+ * The [serverSender] must be set by each loader during client initialization,
+ * before any networking calls are made.
  */
 object ClientNetworking {
+    lateinit var serverSender: (NetworkMessage<ServerNetworkContext>) -> Unit
+
     /**
      * Send a network message to the server.
      *
      * @param message The message to send.
      */
-    fun sendToServer(message: NetworkMessage<ServerNetworkContext>) {
-        val connection: ClientPacketListener? = Minecraft.getInstance().connection
-        connection?.send(NetworkHandler.createServerboundPacket(message))
-    }
+    fun sendToServer(message: NetworkMessage<ServerNetworkContext>) = serverSender(message)
 }

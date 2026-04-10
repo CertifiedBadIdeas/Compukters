@@ -19,6 +19,8 @@
 
 package ck.mod
 
+import ck.mod.network.ClientNetworking
+import ck.mod.network.server.ServerNetworking
 import ck.mod.platform.NetworkHandler
 import net.minecraftforge.api.distmarker.Dist
 import net.minecraftforge.fml.common.Mod
@@ -47,6 +49,8 @@ class CompukterKraftMod(
         }
 
         NetworkHandler.setup()
+        ServerNetworking.playerSender = NetworkHandler::sendToPlayer
+        ClientNetworking.serverSender = NetworkHandler::sendToServer
     }
 
     @Suppress("UNUSED_PARAMETER")
