@@ -31,8 +31,8 @@ object CommonModBootstrap {
         network: PlatformNetworkRegistrar,
         clientHooks: PlatformClientHooks,
     ) {
-        blocks.registerBlock(CommonContentDescriptors.COMPUTER_ADVANCED_BLOCK)
-        menus.registerMenu(CommonContentDescriptors.COMPUTER_MENU)
+        blocks.registerBlock(CommonBlockDescriptor.ComputerAdvanced)
+        menus.registerMenu(CommonMenuDescriptor.Computer)
 
         CommonNetworkProtocol.serverboundChannels.forEach(network::registerServerbound)
         CommonNetworkProtocol.clientboundChannels.forEach(network::registerClientbound)

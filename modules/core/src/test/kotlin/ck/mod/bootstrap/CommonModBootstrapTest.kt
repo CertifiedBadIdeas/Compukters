@@ -36,8 +36,8 @@ class CommonModBootstrapTest {
 
         CommonModBootstrap.registerCommon(blocks, menus, network, clientHooks)
 
-        assertEquals(listOf("computer_advanced"), blocks.blockNames)
-        assertEquals(listOf("computer"), menus.menuNames)
+        assertEquals(listOf(CommonBlockDescriptor.ComputerAdvanced), blocks.blocks)
+        assertEquals(listOf(CommonMenuDescriptor.Computer), menus.menus)
         assertEquals(
             listOf(
                 "computer_action",
@@ -60,18 +60,18 @@ class CommonModBootstrapTest {
     }
 
     private class RecordingBlockRegistrar : PlatformBlockRegistrar {
-        val blockNames = mutableListOf<String>()
+        val blocks = mutableListOf<CommonBlockDescriptor>()
 
-        override fun registerBlock(name: String) {
-            blockNames += name
+        override fun registerBlock(descriptor: CommonBlockDescriptor) {
+            blocks += descriptor
         }
     }
 
     private class RecordingMenuRegistrar : PlatformMenuRegistrar {
-        val menuNames = mutableListOf<String>()
+        val menus = mutableListOf<CommonMenuDescriptor>()
 
-        override fun registerMenu(name: String) {
-            menuNames += name
+        override fun registerMenu(descriptor: CommonMenuDescriptor) {
+            menus += descriptor
         }
     }
 

@@ -19,6 +19,8 @@
 
 package ck.mod.platform.api
 
+import ck.mod.bootstrap.CommonMenuDescriptor
+
 interface PlatformMenuRegistrar {
-    fun registerMenu(name: String)
+    fun registerMenu(descriptor: CommonMenuDescriptor)
 }
