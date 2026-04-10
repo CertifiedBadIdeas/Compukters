@@ -28,7 +28,6 @@ import ck.mod.network.server.KeyEventServerMessage
 import ck.mod.network.server.MouseEventServerMessage
 import ck.mod.network.server.PasteEventComputerMessage
 import ck.mod.network.server.ServerNetworkContext
-import ck.mod.platform.NetworkHandler
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet
 import it.unimi.dsi.fastutil.ints.IntSet
 import net.minecraft.network.FriendlyByteBuf
@@ -129,7 +128,7 @@ object NetworkMessages {
     ): MessageType<T> {
         require(seenIds.add(id)) { "Duplicate id $id" }
         require(seenChannel.add(channel)) { "Duplicate channel $channel" }
-        val type = NetworkHandler.MessageTypeImpl(id, klass, reader)
+        val type = MessageTypeImpl(id, klass, reader)
         messages.add(type)
         return type
     }

@@ -19,6 +19,8 @@
 
 package ck.mod
 
+import ck.mod.network.ClientNetworking
+import ck.mod.network.server.ServerNetworking
 import ck.mod.platform.NetworkHandler
 import net.fabricmc.api.ModInitializer
 
@@ -28,6 +30,8 @@ class CompukterKraftMod : ModInitializer {
 
         ModRegistry.register()
         NetworkHandler.setup()
+        ServerNetworking.playerSender = NetworkHandler::sendToPlayer
+        ClientNetworking.serverSender = NetworkHandler::sendToServer
         FabricCommonHooks.register()
     }
 }

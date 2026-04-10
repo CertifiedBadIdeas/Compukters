@@ -16,31 +16,27 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-package ck.mod.network.client
+package ck.mod.network
 
-import ck.lang.runtime.ComputerWorkspaceDocument
-import ck.lang.runtime.ComputerWorkspaceEntry
-import ck.lang.runtime.ScreenBufferSnapshot
-import ck.mod.network.text.TableBuilder
+import net.minecraft.network.FriendlyByteBuf
+import java.util.function.Function
 
 /**
- * The context under which clientbound packets are evaluated.
- */
-interface ClientNetworkContext {
-    fun handleChatTable(table: TableBuilder)
+ * A type of message to send over the network.
+ *
+ *
+ * Much like recipe or argument serialisers, each type of [NetworkMessage] should have a unique type associated
+ * with it. This holds platform-specific information about how the packet should be sent over the network.
+ *
+ * @param <T> The type of message to send
+ * @see NetworkMessages
+ *
+ * @see NetworkMessage.type
+</T> */
+interface MessageType<T : NetworkMessage<*>>
 
-    fun handleComputerTerminal(
-        containerId: Int,
-        snapshot: ScreenBufferSnapshot,
-    )
-
-    fun handleComputerWorkspaceEntries(
-        containerId: Int,
-        entries: List<ComputerWorkspaceEntry>,
-    )
-
-    fun handleComputerWorkspaceDocument(
-        containerId: Int,
-        document: ComputerWorkspaceDocument?,
-    )
-}
+class MessageTypeImpl<T : NetworkMessage<*>>(
+    val id: Int,
+    val klass: Class<T>,
+    val reader: Function<FriendlyByteBuf, T?>,
+) : MessageType<T>

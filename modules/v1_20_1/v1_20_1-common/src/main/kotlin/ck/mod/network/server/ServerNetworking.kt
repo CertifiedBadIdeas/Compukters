@@ -16,21 +16,31 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-package ck.mod.network
+package ck.mod.network.server
 
-import ck.mod.network.server.ServerNetworkContext
-import ck.mod.platform.NetworkHandler
+import ck.mod.network.NetworkMessage
+import ck.mod.network.client.ClientNetworkContext
+import net.minecraft.server.level.ServerPlayer
 
 /**
- * Methods for sending packets from clients to the server.
+ * Methods for sending network messages from the server to clients.
+ *
+ * The [playerSender] must be set by each loader during initialization,
+ * before any networking calls are made.
  */
-object ClientNetworking {
+object ServerNetworking {
+    lateinit var playerSender: (NetworkMessage<ClientNetworkContext>, ServerPlayer) -> Unit
+
     /**
-     * Send a network message to the server.
+     * Send a message to a specific player.
      *
      * @param message The message to send.
+     * @param player  The player to send it to.
      */
-    fun sendToServer(message: NetworkMessage<ServerNetworkContext>) {
-        NetworkHandler.sendToServer(message)
+    fun sendToPlayer(
+        message: NetworkMessage<ClientNetworkContext>,
+        player: ServerPlayer,
+    ) {
+        playerSender(message, player)
     }
 }
