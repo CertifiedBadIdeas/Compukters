@@ -20,8 +20,8 @@
 package ck.mod
 
 import ck.mod.block.ComputerBlock
-import ck.mod.block.ComputerBlockEntity
 import ck.mod.block.ComputerFamily
+import ck.mod.block.ForgeComputerBlockEntity
 import ck.mod.data.ComputerContainerData
 import ck.mod.item.ComputerItem
 import ck.mod.loot.BlockNamedEntityLootCondition
@@ -68,7 +68,7 @@ object ModRegistry {
         val COMPUTER_ADVANCED: RegistryObject<ComputerBlock> =
             REGISTRY
                 .register(Names.COMPUTER_ADVANCED) {
-                    ComputerBlock(BlockEntities.COMPUTER_ADVANCED, noRedstoneConductor().mapColor(MapColor.STONE))
+                    ComputerBlock(noRedstoneConductor().mapColor(MapColor.STONE))
                 }
     }
 
@@ -82,11 +82,11 @@ object ModRegistry {
             factory: (BlockPos, BlockState) -> T,
         ): RegistryObject<BlockEntityType<T>> = REGISTRY.register(name) { BlockEntityType(factory, setOf(block.get()), null) }
 
-        val COMPUTER_ADVANCED: RegistryObject<BlockEntityType<ComputerBlockEntity>> =
+        val COMPUTER_ADVANCED: RegistryObject<BlockEntityType<ForgeComputerBlockEntity>> =
             ofBlock(
                 Blocks.COMPUTER_ADVANCED,
                 Names.COMPUTER_ADVANCED,
-            ) { p, s -> ComputerBlockEntity(COMPUTER_ADVANCED.get(), p, s, ComputerFamily.ADVANCED) }
+            ) { p, s -> ForgeComputerBlockEntity(COMPUTER_ADVANCED.get(), p, s, ComputerFamily.ADVANCED) }
     }
 
     object Items {

@@ -140,18 +140,13 @@ abstract class AbstractComputerBlockEntity(
         super.setRemoved()
     }
 
-    override fun onChunkUnloaded() {
-        releaseServerComputer()
-        super.onChunkUnloaded()
-    }
-
     override fun getName(): Component = customName ?: Component.translatable(blockState.block.getDescriptionId())
 
     override fun hasCustomName(): Boolean = !_label.isNullOrEmpty()
 
     override fun getCustomName(): Component? = _label?.takeIf { it.isEmpty() }?.let { Component.literal(it) }
 
-    private fun releaseServerComputer() {
+    protected fun releaseServerComputer() {
         if (level?.isClientSide ?: true) return
         _computerID
             .takeIf { ServerContext.isInitialized }

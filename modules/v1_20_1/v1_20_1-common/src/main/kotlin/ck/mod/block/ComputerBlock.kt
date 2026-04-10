@@ -19,6 +19,7 @@
 
 package ck.mod.block
 
+import ck.mod.binding.ModObjects
 import ck.mod.item.ComputerItem
 import net.minecraft.core.Direction
 import net.minecraft.world.item.ItemStack
@@ -30,12 +31,10 @@ import net.minecraft.world.level.block.state.StateDefinition
 import net.minecraft.world.level.block.state.properties.BlockStateProperties
 import net.minecraft.world.level.block.state.properties.DirectionProperty
 import net.minecraft.world.level.block.state.properties.EnumProperty
-import java.util.function.Supplier
 
 class ComputerBlock(
-    val type: Supplier<BlockEntityType<ComputerBlockEntity>>,
     properties: Properties,
-) : AbstractComputerBlock<ComputerBlockEntity>(type, properties) {
+) : AbstractComputerBlock<ComputerBlockEntity>(properties) {
     companion object {
         val state: EnumProperty<ComputerState> = EnumProperty.create("state", ComputerState::class.java)
         val facing: DirectionProperty = BlockStateProperties.HORIZONTAL_FACING
@@ -48,6 +47,8 @@ class ComputerBlock(
                 .setValue(state, ComputerState.OFF),
         )
     }
+
+    override fun blockEntityType(): BlockEntityType<ComputerBlockEntity> = ModObjects.computerBlockEntityType()
 
     override fun createBlockStateDefinition(builder: StateDefinition.Builder<Block, BlockState>) {
         builder.add(facing, state)

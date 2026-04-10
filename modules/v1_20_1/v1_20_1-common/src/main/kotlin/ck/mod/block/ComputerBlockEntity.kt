@@ -20,7 +20,7 @@
 package ck.mod.block
 
 import ck.mod.LOGGER
-import ck.mod.ModRegistry
+import ck.mod.binding.ModObjects
 import ck.mod.computer.ComputerProperties
 import ck.mod.computer.ServerComputer
 import ck.mod.menu.ComputerMenuWithoutInventory
@@ -33,7 +33,7 @@ import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.entity.BlockEntityType
 import net.minecraft.world.level.block.state.BlockState
 
-class ComputerBlockEntity(
+open class ComputerBlockEntity(
     type: BlockEntityType<out ComputerBlockEntity>,
     pos: BlockPos,
     state: BlockState,
@@ -67,7 +67,7 @@ class ComputerBlockEntity(
         player: Player,
     ): AbstractContainerMenu =
         ComputerMenuWithoutInventory(
-            ModRegistry.Menus.COMPUTER,
+            ModObjects.computerMenuType(),
             containerId,
             playerInventory,
             getOrCreateServerComputer(),

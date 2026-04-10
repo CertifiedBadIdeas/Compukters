@@ -19,9 +19,13 @@
 
 package ck.mod
 
+import ck.mod.binding.ModObjects
+import ck.mod.data.ComputerContainerData
 import ck.mod.network.ClientNetworking
 import ck.mod.network.server.ServerNetworking
 import ck.mod.platform.NetworkHandler
+import net.minecraft.server.level.ServerPlayer
+import net.minecraft.world.SimpleMenuProvider
 import net.minecraftforge.api.distmarker.Dist
 import net.minecraftforge.fml.common.Mod
 import net.minecraftforge.fml.common.Mod.EventBusSubscriber
@@ -41,6 +45,24 @@ class CompukterKraftMod(
         val modEventBus = context.modEventBus
 
         ModRegistry.register(modEventBus)
+        ModObjects.computerBlockEntityType = {
+            @Suppress("UNCHECKED_CAST")
+            ModRegistry.BlockEntities.COMPUTER_ADVANCED.get() as net.minecraft.world.level.block.entity.BlockEntityType<ck.mod.block.ComputerBlockEntity>
+        }
+        ModObjects.computerMenuType = { ModRegistry.Menus.COMPUTER.get() }
+        ModObjects.openComputerMenu = { player: ServerPlayer, computer, menuData: ComputerContainerData ->
+            net.minecraftforge.network.NetworkHooks.openScreen(
+                player,
+                SimpleMenuProvider(
+                    computer,
+                    computer.name,
+                ),
+                menuData::toBytes,
+            )
+        }
+        ModObjects.blockNamedEntityLootConditionType = { ModRegistry.LootItemConditionTypes.BLOCK_NAMED.get() }
+        ModObjects.hasComputerIdLootConditionType = { ModRegistry.LootItemConditionTypes.HAS_ID.get() }
+        ModObjects.playerCreativeLootConditionType = { ModRegistry.LootItemConditionTypes.PLAYER_CREATIVE.get() }
 
         if (FMLEnvironment.dist == Dist.CLIENT) {
             modEventBus.addListener(::onClientSetup)

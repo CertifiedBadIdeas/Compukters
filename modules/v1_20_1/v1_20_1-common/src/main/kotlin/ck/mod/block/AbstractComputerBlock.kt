@@ -21,6 +21,7 @@ package ck.mod.block
 
 import ck.mod.LOGGER
 import ck.mod.MOD_ID
+import ck.mod.binding.ModObjects
 import ck.mod.context.ServerContext
 import ck.mod.data.ComputerContainerData
 import ck.mod.item.AbstractComputerItem
@@ -28,7 +29,6 @@ import ck.mod.utils.castTicker
 import ck.mod.utils.computerID
 import ck.mod.utils.computerLabel
 import ck.mod.utils.ifServerSide
-import net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerFactory
 import net.minecraft.core.BlockPos
 import net.minecraft.resources.ResourceLocation
 import net.minecraft.server.level.ServerLevel
@@ -49,10 +49,8 @@ import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.storage.loot.LootParams
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams
 import net.minecraft.world.phys.BlockHitResult
-import java.util.function.Supplier
 
 abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
-    private val type: Supplier<BlockEntityType<T>>,
     properties: Properties,
 ) : HorizontalDirectionalBlock(properties),
     EntityBlock {
@@ -70,6 +68,8 @@ abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
         state: BlockState,
         blockEntityType: BlockEntityType<T>,
     ): BlockEntityTicker<T>? = serverTicker.ifServerSide(level)?.castTicker()
+
+    protected abstract fun blockEntityType(): BlockEntityType<T>
 
     abstract fun getItem(tile: AbstractComputerBlockEntity): ItemStack
 
@@ -101,7 +101,7 @@ abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
     override fun newBlockEntity(
         pos: BlockPos,
         state: BlockState,
-    ): BlockEntity? = type.get().create(pos, state)
+    ): BlockEntity? = blockEntityType().create(pos, state)
 
     override fun playerDestroy(
         level: Level,
@@ -141,7 +141,7 @@ abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
                     ?.let { computerBlockEntity ->
                         params.withDynamicDrop(drop) { it.accept(getItem(computerBlockEntity)) }
                     } ?: params,
-            ) // .also { LOGGER.info("GetDrops invoked") }
+            )
 
     override fun use(
         state: BlockState,
@@ -156,25 +156,10 @@ abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
                 ifServerSide(level)
                     ?.let { computer ->
                         val serverComputer = computer.getOrCreateServerComputer()
-                        val containerData = ComputerContainerData(serverComputer, getItem(computer))
-
-                        (player as ServerPlayer).openMenu(
-                            object : ExtendedScreenHandlerFactory {
-                                override fun createMenu(
-                                    id: Int,
-                                    inv: net.minecraft.world.entity.player.Inventory,
-                                    p: Player,
-                                ) = computer.createMenu(id, inv, p)
-
-                                override fun getDisplayName() = computer.name
-
-                                override fun writeScreenOpeningData(
-                                    player: ServerPlayer,
-                                    buf: net.minecraft.network.FriendlyByteBuf,
-                                ) {
-                                    containerData.toBytes(buf)
-                                }
-                            },
+                        ModObjects.openComputerMenu(
+                            player as ServerPlayer,
+                            computer,
+                            ComputerContainerData(serverComputer, getItem(computer)),
                         )
                         return InteractionResult.sidedSuccess(level.isClientSide)
                     }
