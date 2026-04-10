@@ -21,6 +21,7 @@ package ck.mod.block
 
 import ck.mod.LOGGER
 import ck.mod.MOD_ID
+import ck.mod.binding.ModObjects
 import ck.mod.context.ServerContext
 import ck.mod.data.ComputerContainerData
 import ck.mod.item.AbstractComputerItem
@@ -37,7 +38,6 @@ import net.minecraft.stats.Stats
 import net.minecraft.world.InteractionHand
 import net.minecraft.world.InteractionResult
 import net.minecraft.world.ItemInteractionResult
-import net.minecraft.world.SimpleMenuProvider
 import net.minecraft.world.entity.LivingEntity
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.item.ItemStack
@@ -46,15 +46,12 @@ import net.minecraft.world.level.block.EntityBlock
 import net.minecraft.world.level.block.HorizontalDirectionalBlock
 import net.minecraft.world.level.block.entity.BlockEntity
 import net.minecraft.world.level.block.entity.BlockEntityTicker
-import net.minecraft.world.level.block.entity.BlockEntityType
 import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.storage.loot.LootParams
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams
 import net.minecraft.world.phys.BlockHitResult
-import net.neoforged.neoforge.registries.DeferredHolder
 
 abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
-    private val type: DeferredHolder<BlockEntityType<*>, BlockEntityType<T>>,
     properties: Properties,
 ) : HorizontalDirectionalBlock(properties),
     EntityBlock {
@@ -70,8 +67,10 @@ abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
     override fun <T : BlockEntity> getTicker(
         level: Level,
         state: BlockState,
-        blockEntityType: BlockEntityType<T>,
+        blockEntityType: net.minecraft.world.level.block.entity.BlockEntityType<T>,
     ): BlockEntityTicker<T>? = serverTicker.ifServerSide(level)?.castTicker()
+
+    protected abstract fun blockEntityType(): net.minecraft.world.level.block.entity.BlockEntityType<T>
 
     abstract fun getItem(tile: AbstractComputerBlockEntity): ItemStack
 
@@ -103,7 +102,7 @@ abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
     override fun newBlockEntity(
         pos: BlockPos,
         state: BlockState,
-    ): BlockEntity? = type.get().create(pos, state)
+    ): BlockEntity? = blockEntityType().create(pos, state)
 
     override fun playerDestroy(
         level: Level,
@@ -143,7 +142,7 @@ abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
                     ?.let { computerBlockEntity ->
                         params.withDynamicDrop(drop) { it.accept(getItem(computerBlockEntity)) }
                     } ?: params,
-            ) // .also { LOGGER.info("GetDrops invoked") }
+            )
 
     override fun useItemOn(
         stack: ItemStack,
@@ -167,18 +166,11 @@ abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
                 ifServerSide(level)
                     ?.let { computer ->
                         val serverComputer = computer.getOrCreateServerComputer()
-
-                        (player as ServerPlayer).openMenu(
-                            SimpleMenuProvider(
-                                computer,
-                                computer.name,
-                            ),
-                        ) { buffer ->
-                            ComputerContainerData(
-                                serverComputer,
-                                getItem(computer),
-                            ).toBytes(buffer)
-                        }
+                        ModObjects.openComputerMenu(
+                            player as ServerPlayer,
+                            computer,
+                            ComputerContainerData(serverComputer, getItem(computer)),
+                        )
                         return InteractionResult.sidedSuccess(level.isClientSide)
                     }
             }

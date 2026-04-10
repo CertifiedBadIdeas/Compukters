@@ -20,8 +20,8 @@
 package ck.mod
 
 import ck.mod.block.ComputerBlock
-import ck.mod.block.ComputerBlockEntity
 import ck.mod.block.ComputerFamily
+import ck.mod.block.NeoForgeComputerBlockEntity
 import ck.mod.data.ComputerContainerData
 import ck.mod.item.ComputerItem
 import ck.mod.loot.BlockNamedEntityLootCondition
@@ -71,10 +71,7 @@ object ModRegistry {
                 .register(
                     Names.COMPUTER_ADVANCED,
                     Supplier {
-                        ComputerBlock(
-                            BlockEntities.COMPUTER_ADVANCED,
-                            noRedstoneConductor().mapColor(MapColor.STONE),
-                        )
+                        ComputerBlock(noRedstoneConductor().mapColor(MapColor.STONE))
                     },
                 )
     }
@@ -95,11 +92,11 @@ object ModRegistry {
                 },
             )
 
-        val COMPUTER_ADVANCED: DeferredHolder<BlockEntityType<*>, BlockEntityType<ComputerBlockEntity>> =
+        val COMPUTER_ADVANCED: DeferredHolder<BlockEntityType<*>, BlockEntityType<NeoForgeComputerBlockEntity>> =
             ofBlock(
                 Blocks.COMPUTER_ADVANCED,
                 Names.COMPUTER_ADVANCED,
-            ) { p, s -> ComputerBlockEntity(COMPUTER_ADVANCED.get(), p, s, ComputerFamily.ADVANCED) }
+            ) { p, s -> NeoForgeComputerBlockEntity(COMPUTER_ADVANCED.get(), p, s, ComputerFamily.ADVANCED) }
     }
 
     object Items {

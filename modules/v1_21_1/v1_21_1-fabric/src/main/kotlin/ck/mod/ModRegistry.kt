@@ -91,7 +91,7 @@ object ModRegistry {
                 Registry.register(
                     BuiltInRegistries.BLOCK,
                     id(Names.COMPUTER_ADVANCED),
-                    ComputerBlock(Supplier { BlockEntities.COMPUTER_ADVANCED }, noRedstoneConductor().mapColor(MapColor.STONE)),
+                    ComputerBlock(noRedstoneConductor().mapColor(MapColor.STONE)),
                 )
         }
     }
