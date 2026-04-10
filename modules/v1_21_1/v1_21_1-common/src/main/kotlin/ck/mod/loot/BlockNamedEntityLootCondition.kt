@@ -18,24 +18,21 @@
  */
 package ck.mod.loot
 
-import ck.mod.ModRegistry
-import ck.mod.block.ComputerBlockEntity
+import ck.mod.binding.ModObjects
+import net.minecraft.world.Nameable
 import net.minecraft.world.level.storage.loot.LootContext
 import net.minecraft.world.level.storage.loot.parameters.LootContextParam
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams
 import net.minecraft.world.level.storage.loot.predicates.LootItemCondition
 import net.minecraft.world.level.storage.loot.predicates.LootItemConditionType
 
-/**
- * A loot condition which checks if the block entity has a computer ID.
- */
-object HasComputerIdLootCondition : LootItemCondition {
+object BlockNamedEntityLootCondition : LootItemCondition {
     override fun test(lootContext: LootContext): Boolean =
         lootContext.getParamOrNull(LootContextParams.BLOCK_ENTITY)?.let { tile ->
-            tile is ComputerBlockEntity && tile.computerID != null
+            tile is Nameable && tile.hasCustomName()
         } ?: false
 
     override fun getReferencedContextParams(): Set<LootContextParam<*>> = setOf(LootContextParams.BLOCK_ENTITY)
 
-    override fun getType(): LootItemConditionType = ModRegistry.LootItemConditionTypes.HAS_ID
+    override fun getType(): LootItemConditionType = ModObjects.blockNamedEntityLootConditionType()
 }
