@@ -18,6 +18,8 @@
  */
 package ck.mod.network
 
+import net.minecraft.network.FriendlyByteBuf
+
 /**
  * A type of message to send over the network.
  *
@@ -31,3 +33,8 @@ package ck.mod.network
  * @see NetworkMessage.type
 </T> */
 interface MessageType<T : NetworkMessage<*>>
+
+class MessageTypeImpl<T : NetworkMessage<*>>(
+    val id: Int,
+    val reader: (FriendlyByteBuf) -> T,
+) : MessageType<T>

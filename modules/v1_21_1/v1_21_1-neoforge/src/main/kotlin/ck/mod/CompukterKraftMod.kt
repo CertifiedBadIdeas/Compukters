@@ -19,6 +19,10 @@
 
 package ck.mod
 
+import ck.mod.context.ComputerIdentitySavedData
+import ck.mod.context.ServerContext
+import ck.mod.network.ClientNetworking
+import ck.mod.network.server.ServerNetworking
 import ck.mod.platform.NetworkHandler
 import net.neoforged.api.distmarker.Dist
 import net.neoforged.bus.api.IEventBus
@@ -35,6 +39,9 @@ class CompukterKraftMod(
 
         ModRegistry.register(modEventBus)
         NetworkHandler.setup(modEventBus)
+        ServerNetworking.playerSender = NetworkHandler::sendToPlayer
+        ClientNetworking.serverSender = NetworkHandler::sendToServer
+        ServerContext.idAllocator = { server -> ComputerIdentitySavedData.get(server).allocateComputerId() }
 
         if (dist != Dist.CLIENT) {
             modEventBus.addListener(::onServerSetup)

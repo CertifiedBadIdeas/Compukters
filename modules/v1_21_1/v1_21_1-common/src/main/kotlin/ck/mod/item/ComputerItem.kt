@@ -19,15 +19,15 @@
 
 package ck.mod.item
 
-import ck.mod.block.ComputerBlock
 import ck.mod.utils.computerID
 import ck.mod.utils.updateComputerData
 import net.minecraft.core.component.DataComponents
 import net.minecraft.network.chat.Component
 import net.minecraft.world.item.ItemStack
+import net.minecraft.world.level.block.Block
 
 class ComputerItem(
-    block: ComputerBlock,
+    block: Block,
     properties: Properties,
 ) : AbstractComputerItem(block, properties) {
     fun create(
