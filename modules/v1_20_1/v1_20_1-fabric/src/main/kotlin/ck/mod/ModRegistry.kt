@@ -66,7 +66,6 @@ import net.minecraft.world.level.block.state.BlockBehaviour
 import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.material.MapColor
 import net.minecraft.world.level.storage.loot.predicates.LootItemConditionType
-import java.util.function.Supplier
 
 object ModRegistry {
     object Names {
@@ -89,7 +88,7 @@ object ModRegistry {
                 Registry.register(
                     BuiltInRegistries.BLOCK,
                     id(Names.COMPUTER_ADVANCED),
-                    ComputerBlock(Supplier { BlockEntities.COMPUTER_ADVANCED }, noRedstoneConductor().mapColor(MapColor.STONE)),
+                    ComputerBlock(noRedstoneConductor().mapColor(MapColor.STONE)),
                 )
         }
     }
