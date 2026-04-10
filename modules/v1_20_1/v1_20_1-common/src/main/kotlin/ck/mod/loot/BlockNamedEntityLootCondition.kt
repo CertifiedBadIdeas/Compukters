@@ -18,24 +18,21 @@
  */
 package ck.mod.loot
 
-import ck.mod.ModRegistry
-import net.minecraft.world.entity.player.Player
+import ck.mod.binding.ModObjects
+import net.minecraft.world.Nameable
 import net.minecraft.world.level.storage.loot.LootContext
 import net.minecraft.world.level.storage.loot.parameters.LootContextParam
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams
 import net.minecraft.world.level.storage.loot.predicates.LootItemCondition
 import net.minecraft.world.level.storage.loot.predicates.LootItemConditionType
 
-/**
- * A loot condition which checks if the entity is in creative mode.
- */
-object PlayerCreativeLootCondition : LootItemCondition {
+object BlockNamedEntityLootCondition : LootItemCondition {
     override fun test(lootContext: LootContext): Boolean =
-        lootContext.getParamOrNull(LootContextParams.THIS_ENTITY)?.let { entity ->
-            entity is Player && entity.abilities.instabuild
+        lootContext.getParamOrNull(LootContextParams.BLOCK_ENTITY)?.let { tile ->
+            tile is Nameable && tile.hasCustomName()
         } ?: false
 
-    override fun getReferencedContextParams(): Set<LootContextParam<*>> = setOf(LootContextParams.THIS_ENTITY)
+    override fun getReferencedContextParams(): Set<LootContextParam<*>> = setOf(LootContextParams.BLOCK_ENTITY)
 
-    override fun getType(): LootItemConditionType = ModRegistry.LootItemConditionTypes.PLAYER_CREATIVE
+    override fun getType(): LootItemConditionType = ModObjects.blockNamedEntityLootConditionType()
 }

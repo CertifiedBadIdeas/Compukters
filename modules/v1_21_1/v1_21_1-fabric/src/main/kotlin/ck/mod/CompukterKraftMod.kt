@@ -21,8 +21,8 @@ package ck.mod
 
 import ck.mod.data.ComputerContainerData
 import ck.mod.binding.ModObjects
-import ck.mod.context.ComputerIdentitySavedData
 import ck.mod.context.ServerContext
+import ck.mod.context.getComputerIdentitySavedData
 import ck.mod.network.ClientNetworking
 import ck.mod.network.server.ServerNetworking
 import ck.mod.platform.NetworkHandler
@@ -59,7 +59,7 @@ class CompukterKraftMod : ModInitializer {
         NetworkHandler.setup()
         ServerNetworking.playerSender = NetworkHandler::sendToPlayer
         ClientNetworking.serverSender = NetworkHandler::sendToServer
-        ServerContext.idAllocator = { server -> ComputerIdentitySavedData.get(server).allocateComputerId() }
+        ServerContext.idAllocator = { server -> getComputerIdentitySavedData(server).allocateComputerId() }
         FabricCommonHooks.register()
     }
 }

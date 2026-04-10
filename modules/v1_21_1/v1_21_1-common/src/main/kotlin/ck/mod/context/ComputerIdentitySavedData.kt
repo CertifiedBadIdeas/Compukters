@@ -21,8 +21,12 @@ package ck.mod.context
 
 import net.minecraft.core.HolderLookup
 import net.minecraft.nbt.CompoundTag
-import net.minecraft.server.MinecraftServer
 import net.minecraft.world.level.saveddata.SavedData
+
+const val COMPUTER_IDENTITY_SAVED_DATA_NAME = "compukterkraft_computer_identity"
+
+private const val NEXT_COMPUTER_ID_TAG = "NextComputerId"
+private const val FIRST_COMPUTER_ID = 1
 
 class ComputerIdentitySavedData(
     private var nextComputerId: Int = FIRST_COMPUTER_ID,
@@ -41,27 +45,12 @@ class ComputerIdentitySavedData(
         tag.apply {
             putInt(NEXT_COMPUTER_ID_TAG, nextComputerId)
         }
-
-    companion object {
-        private const val DATA_NAME = "compukterkraft_computer_identity"
-        private const val NEXT_COMPUTER_ID_TAG = "NextComputerId"
-        private const val FIRST_COMPUTER_ID = 1
-
-        fun get(server: MinecraftServer): ComputerIdentitySavedData =
-            server
-                .overworld()
-                .dataStorage
-                .computeIfAbsent(
-                    Factory(::ComputerIdentitySavedData, ::load, null),
-                    DATA_NAME,
-                )
-
-        private fun load(
-            tag: CompoundTag,
-            registries: HolderLookup.Provider,
-        ): ComputerIdentitySavedData =
-            ComputerIdentitySavedData(
-                nextComputerId = tag.getInt(NEXT_COMPUTER_ID_TAG).coerceAtLeast(FIRST_COMPUTER_ID),
-            )
-    }
 }
+
+fun loadComputerIdentitySavedData(
+    tag: CompoundTag,
+    registries: HolderLookup.Provider,
+): ComputerIdentitySavedData =
+    ComputerIdentitySavedData(
+        nextComputerId = tag.getInt(NEXT_COMPUTER_ID_TAG).coerceAtLeast(FIRST_COMPUTER_ID),
+    )
