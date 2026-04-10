@@ -19,6 +19,7 @@
 
 package ck.mod
 
+import ck.mod.binding.ModObjects
 import ck.mod.context.ComputerIdentitySavedData
 import ck.mod.context.ServerContext
 import ck.mod.network.ClientNetworking
@@ -38,6 +39,11 @@ class CompukterKraftMod(
         LOGGER.info { "$MOD_ID has started!" }
 
         ModRegistry.register(modEventBus)
+        ModObjects.computerBlockEntityType = { ModRegistry.BlockEntities.COMPUTER_ADVANCED.get() }
+        ModObjects.computerMenuType = { ModRegistry.Menus.COMPUTER.get() }
+        ModObjects.blockNamedEntityLootConditionType = { ModRegistry.LootItemConditionTypes.BLOCK_NAMED.get() }
+        ModObjects.hasComputerIdLootConditionType = { ModRegistry.LootItemConditionTypes.HAS_ID.get() }
+        ModObjects.playerCreativeLootConditionType = { ModRegistry.LootItemConditionTypes.PLAYER_CREATIVE.get() }
         NetworkHandler.setup(modEventBus)
         ServerNetworking.playerSender = NetworkHandler::sendToPlayer
         ClientNetworking.serverSender = NetworkHandler::sendToServer
