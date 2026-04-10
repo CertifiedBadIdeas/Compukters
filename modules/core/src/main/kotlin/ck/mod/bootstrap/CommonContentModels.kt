@@ -17,10 +17,16 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package ck.mod.platform.api
+package ck.mod.bootstrap
 
-import ck.mod.bootstrap.CommonMenuDescriptor
+enum class CommonBlockDescriptor(
+    val id: String,
+) {
+    ComputerAdvanced("computer_advanced"),
+}
 
-interface PlatformMenuRegistrar {
-    fun registerMenu(descriptor: CommonMenuDescriptor)
+enum class CommonMenuDescriptor(
+    val id: String,
+) {
+    Computer("computer"),
 }

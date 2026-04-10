@@ -19,6 +19,8 @@
 
 package ck.mod.platform.api
 
+import ck.mod.bootstrap.CommonBlockDescriptor
+
 interface PlatformBlockRegistrar {
-    fun registerBlock(name: String)
+    fun registerBlock(descriptor: CommonBlockDescriptor)
 }
