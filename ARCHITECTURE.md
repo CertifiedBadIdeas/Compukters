@@ -3,12 +3,35 @@
 ## Overview
 
 Compukter Kraft is a Minecraft mod that adds programmable computers with a custom language, compiler, and bytecode VM.
-The project is split into two Gradle modules:
+The project is split into multiple Gradle modules across a multi-version, multi-loader architecture:
 
-| Module     | Purpose                                                                     |
-|------------|-----------------------------------------------------------------------------|
-| `compiler` | Language frontend (parser, type checker), bytecode compiler, and VM runtime |
-| `mod`      | Minecraft integration: blocks, menus, networking, rendering                 |
+| Module               | Purpose                                                                     |
+|----------------------|-----------------------------------------------------------------------------|
+| `compiler`           | Language frontend (parser, type checker), bytecode compiler, and VM runtime |
+| `core`               | Shared mod logic: bootstrap descriptors, platform port interfaces, no MC deps |
+| `v1_x_x-common`     | Architectury common module per MC version: shared Minecraft-facing code     |
+| `v1_x_x-{fabric,forge,neoforge}` | Loader leaf modules: bootstrap, event hooks, registry, network handler |
+
+### Module Ownership Rules
+
+- **`core`** owns shared behavior, descriptors (`CommonBlockDescriptor`, `CommonMenuDescriptor`), and platform port interfaces (`PlatformBlockRegistrar`, `PlatformMenuRegistrar`, etc.)
+- **`v1_x_x-common`** owns Minecraft-facing version adapters and classes: blocks, items, menus, screens, network messages, context/runtime, UI rendering
+- **Loader leaf modules** own only bootstrap (`CompukterKraftMod`), loader-specific event hooks (`FabricCommonHooks`, `ForgeCommonHooks`), registry (`ModRegistry`), network handler (`NetworkHandler`), and block/entity definitions that differ by loader (due to registry wrapper types)
+
+### Delegate Pattern for Cross-Module Dependencies
+
+When common code needs to call loader-specific functionality (e.g., sending network packets), we use `lateinit` function references set by each loader during initialization:
+
+```kotlin
+// In v1_x_x-common
+object ServerNetworking {
+    lateinit var playerSender: (NetworkMessage<ClientNetworkContext>, ServerPlayer) -> Unit
+    fun sendToPlayer(message, player) = playerSender(message, player)
+}
+
+// In loader CompukterKraftMod.kt
+ServerNetworking.playerSender = NetworkHandler::sendToPlayer
+```
 
 ---
 
@@ -100,28 +123,43 @@ ServerComputer.close()
 |                            | Interfaces: `ComputerRuntime`, `ComputerTerminalApi`         |
 |                            | Models: `ComputerProfile`, `VmSnapshot`, `HostCall`          |
 
-### `mod` module
+### `core` module
 
 | Package                            | Responsibility                                                     |
 |------------------------------------|--------------------------------------------------------------------|
-| `ck.mod`                           | Mod entry point, config, logger                                    |
-| `ck.mod.block`                     | Block entities, block definitions, `ComputerFamily`                |
+| `ck.mod.bootstrap`                 | `CommonModBootstrap`, content descriptors, `CommonNetworkProtocol` |
+| `ck.mod.platform.api`              | Port interfaces: `PlatformBlockRegistrar`, `PlatformMenuRegistrar` |
+| `ck.mod.block`                     | `ComputerFamily` enum (pure Kotlin, no MC deps)                    |
+
+### `v1_x_x-common` modules
+
+| Package                            | Responsibility                                                     |
+|------------------------------------|--------------------------------------------------------------------|
+| `ck.mod.block`                     | `ComputerState`, `ComputerFamilyExt`                               |
 | `ck.mod.computer`                  | `ServerComputer`, `ComputerEvents`, `ComputerProperties`           |
-| `ck.mod.computer.vm`               | `BackgroundComputerVm`, `VmTerminalApi`, `VmContext`, schedulers   |
-| `ck.mod.context`                   | `ServerContext`, `ComputerManager` — server-wide singletons        |
-| `ck.mod.application.runtime`       | `HostCallDispatcher`, `WorkspaceProgramLoader`, compiler bridge    |
-| `ck.mod.application.workbench`     | `WorkbenchStore`, editor/IDE state management                      |
-| `ck.mod.menu`                      | `AbstractComputerMenu`, `MenuSide`, `ServerInputState`             |
+| `ck.mod.context`                   | `ServerContext`, `ComputerManager`, `ComputerIdentitySavedData`    |
+| `ck.mod.data`                      | `ComputerContainerData`, `IContainerData`                          |
+| `ck.mod.gui`                       | Layout models, input controllers, `TerminalState`                  |
+| `ck.mod.gui.screen`                | `ComputerScreen`, `ComputerWorkbenchScreen`                        |
+| `ck.mod.infrastructure`            | Adapters: input gateway, workbench gateways, coroutine dispatcher  |
+| `ck.mod.item`                      | `AbstractComputerItem`, `ComputerItem`                             |
+| `ck.mod.menu`                      | `AbstractComputerMenu`, `ComputerMenu`, `ServerInputState`         |
+| `ck.mod.network`                   | `NetworkMessages`, `MessageType`, `ClientNetworking`               |
 | `ck.mod.network.client`            | Client-bound network messages                                      |
-| `ck.mod.network.server`            | Server-bound network messages                                      |
-| `ck.mod.gui`                       | Layout models, input controllers, `Palette`, `Colour`, `FrameInfo` |
-| `ck.mod.gui.screen`                | `ComputerWorkbenchScreen` — Minecraft Screen implementation        |
+| `ck.mod.network.server`            | Server-bound network messages, `ServerNetworking`                  |
+| `ck.mod.network.text`              | Table formatting utilities                                         |
 | `ck.mod.ui.dsl`                    | Declarative UI: `UiNode`, `UiRenderer`, `buildTerminalUi()`       |
 | `ck.mod.ui.render`                 | `FixedWidthFontRenderer`, `WorkbenchTerminalRenderer` (Blaze3D)    |
-| `ck.mod.ui.workbench`              | `WorkbenchLayoutModel` — screen layout calculations                |
-| `ck.mod.data`                      | `ComputerContainerData`, saved data                                |
-| `ck.mod.language`                  | `LanguageServices` — bridge to compiler module                     |
-| `ck.mod.infrastructure`            | Adapters: workspace gateway, IDE facade, input gateway             |
+| `ck.mod.utils`                     | `BlockEntityUtils`, `BufferUtils`, `CommandUtils`, `LevelUtils`    |
+
+### Loader leaf modules
+
+| Package                            | Responsibility                                                     |
+|------------------------------------|--------------------------------------------------------------------|
+| `ck.mod`                           | Mod entry point (`CompukterKraftMod`), `ModRegistry`, `Extensions` |
+| `ck.mod.block`                     | `AbstractComputerBlock`, `AbstractComputerBlockEntity`, concrete blocks |
+| `ck.mod.loot`                      | Loot conditions (use loader-specific registry access)              |
+| `ck.mod.platform`                  | `NetworkHandler` — loader-specific packet registration             |
 
 ---
 
