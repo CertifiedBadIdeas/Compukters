@@ -20,7 +20,6 @@
 package ck.mod.binding
 
 import ck.mod.block.AbstractComputerBlockEntity
-import ck.mod.block.ComputerBlockEntity
 import ck.mod.data.ComputerContainerData
 import ck.mod.menu.ComputerMenuWithoutInventory
 import net.minecraft.server.level.ServerPlayer
@@ -29,7 +28,7 @@ import net.minecraft.world.level.block.entity.BlockEntityType
 import net.minecraft.world.level.storage.loot.predicates.LootItemConditionType
 
 object ModObjects {
-    lateinit var computerBlockEntityType: () -> BlockEntityType<ComputerBlockEntity>
+    lateinit var computerBlockEntityType: () -> BlockEntityType<*>
     lateinit var computerMenuType: () -> MenuType<ComputerMenuWithoutInventory>
     lateinit var openComputerMenu: (ServerPlayer, AbstractComputerBlockEntity, ComputerContainerData) -> Unit
     lateinit var blockNamedEntityLootConditionType: () -> LootItemConditionType
