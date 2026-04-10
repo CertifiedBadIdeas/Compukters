@@ -19,23 +19,31 @@
 
 package ck.mod.item
 
-import ck.mod.block.ComputerBlock
+import ck.mod.utils.computerDataTag
 import ck.mod.utils.computerID
-import ck.mod.utils.updateComputerData
-import net.minecraft.core.component.DataComponents
+import ck.mod.utils.computerLabelByHoverName
+import net.minecraft.ChatFormatting
 import net.minecraft.network.chat.Component
+import net.minecraft.world.item.BlockItem
+import net.minecraft.world.item.Item
 import net.minecraft.world.item.ItemStack
+import net.minecraft.world.item.TooltipFlag
+import net.minecraft.world.level.block.Block
 
-class ComputerItem(
-    block: ComputerBlock,
+abstract class AbstractComputerItem(
+    block: Block,
     properties: Properties,
-) : AbstractComputerItem(block, properties) {
-    fun create(
-        id: Int?,
-        label: String?,
-    ): ItemStack =
-        ItemStack(this).apply {
-            updateComputerData { computerID = id }
-            label?.let { set(DataComponents.CUSTOM_NAME, Component.literal(it)) }
+) : BlockItem(block, properties) {
+    override fun appendHoverText(
+        stack: ItemStack,
+        context: Item.TooltipContext,
+        list: MutableList<Component>,
+        options: TooltipFlag,
+    ) {
+        if (options.isAdvanced || stack.computerLabelByHoverName == null) {
+            stack.computerDataTag?.computerID?.let {
+                list.add(Component.translatable("gui.compukterkraft.tooltip.computer_id", it).withStyle(ChatFormatting.GRAY))
+            }
         }
+    }
 }

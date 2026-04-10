@@ -20,7 +20,7 @@ package ck.mod.platform
 
 import ck.mod.INSTALLED_VERSION
 import ck.mod.MOD_ID
-import ck.mod.network.MessageType
+import ck.mod.network.MessageTypeImpl
 import ck.mod.network.NetworkMessage
 import ck.mod.network.NetworkMessages
 import ck.mod.network.client.ClientNetworkContext
@@ -105,11 +105,6 @@ object NetworkHandler {
         val type = NetworkMessages.clientboundById(id)
         return type.reader(buffer)
     }
-
-    class MessageTypeImpl<T : NetworkMessage<*>>(
-        val id: Int,
-        val reader: (FriendlyByteBuf) -> T,
-    ) : MessageType<T>
 
     class ClientboundPayload(
         private val id: Int,

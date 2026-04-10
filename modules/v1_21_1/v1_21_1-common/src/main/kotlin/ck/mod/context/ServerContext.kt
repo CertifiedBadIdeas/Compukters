@@ -33,6 +33,8 @@ class ServerContext(
     companion object {
         private var current: ServerContext? = null
 
+        lateinit var idAllocator: (MinecraftServer) -> Int
+
         val isInitialized: Boolean
             get() = current != null
 
@@ -45,7 +47,7 @@ class ServerContext(
         val server
             get() = context().server
 
-        fun allocateComputerId(): Int = ComputerIdentitySavedData.get(server).allocateComputerId()
+        fun allocateComputerId(): Int = idAllocator(server)
 
         fun create(server: MinecraftServer) {
             check(current == null) { "ServerContext is already initialized" }

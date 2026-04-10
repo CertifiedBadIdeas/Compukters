@@ -28,7 +28,6 @@ import ck.mod.network.server.KeyEventServerMessage
 import ck.mod.network.server.MouseEventServerMessage
 import ck.mod.network.server.PasteEventComputerMessage
 import ck.mod.network.server.ServerNetworkContext
-import ck.mod.platform.NetworkHandler
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet
 import it.unimi.dsi.fastutil.ints.IntSet
 import net.minecraft.network.FriendlyByteBuf
@@ -120,7 +119,7 @@ object NetworkMessages {
     ): MessageType<T> {
         require(seenIds.add(id)) { "Duplicate id $id" }
         require(seenChannel.add(channel)) { "Duplicate channel $channel" }
-        val type = NetworkHandler.MessageTypeImpl(id, reader)
+        val type = MessageTypeImpl(id, reader)
         messages.add(type)
         return type
     }
@@ -137,16 +136,16 @@ object NetworkMessages {
         reader: (FriendlyByteBuf) -> T,
     ): MessageType<T> = register(clientMessages, id, channel, reader)
 
-    internal fun serverboundById(id: Int): NetworkHandler.MessageTypeImpl<out NetworkMessage<ServerNetworkContext>> =
+    fun serverboundById(id: Int): MessageTypeImpl<out NetworkMessage<ServerNetworkContext>> =
         serverMessages
-            .firstOrNull { (it as NetworkHandler.MessageTypeImpl<out NetworkMessage<ServerNetworkContext>>).id == id }
-            ?.let { it as NetworkHandler.MessageTypeImpl<out NetworkMessage<ServerNetworkContext>> }
+            .firstOrNull { (it as MessageTypeImpl<out NetworkMessage<ServerNetworkContext>>).id == id }
+            ?.let { it as MessageTypeImpl<out NetworkMessage<ServerNetworkContext>> }
             ?: error("Unknown serverbound message id: $id")
 
-    internal fun clientboundById(id: Int): NetworkHandler.MessageTypeImpl<out NetworkMessage<ClientNetworkContext>> =
+    fun clientboundById(id: Int): MessageTypeImpl<out NetworkMessage<ClientNetworkContext>> =
         clientMessages
-            .firstOrNull { (it as NetworkHandler.MessageTypeImpl<out NetworkMessage<ClientNetworkContext>>).id == id }
-            ?.let { it as NetworkHandler.MessageTypeImpl<out NetworkMessage<ClientNetworkContext>> }
+            .firstOrNull { (it as MessageTypeImpl<out NetworkMessage<ClientNetworkContext>>).id == id }
+            ?.let { it as MessageTypeImpl<out NetworkMessage<ClientNetworkContext>> }
             ?: error("Unknown clientbound message id: $id")
 
     /**

@@ -16,31 +16,23 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-package ck.mod.network.client
+package ck.mod.network
 
-import ck.lang.runtime.ComputerWorkspaceDocument
-import ck.lang.runtime.ComputerWorkspaceEntry
-import ck.lang.runtime.ScreenBufferSnapshot
-import ck.mod.network.text.TableBuilder
+import ck.mod.network.server.ServerNetworkContext
 
 /**
- * The context under which clientbound packets are evaluated.
+ * Methods for sending packets from clients to the server.
+ *
+ * The [serverSender] must be set by each loader during client initialization,
+ * before any networking calls are made.
  */
-interface ClientNetworkContext {
-    fun handleChatTable(table: TableBuilder)
+object ClientNetworking {
+    lateinit var serverSender: (NetworkMessage<ServerNetworkContext>) -> Unit
 
-    fun handleComputerTerminal(
-        containerId: Int,
-        snapshot: ScreenBufferSnapshot,
-    )
-
-    fun handleComputerWorkspaceEntries(
-        containerId: Int,
-        entries: List<ComputerWorkspaceEntry>,
-    )
-
-    fun handleComputerWorkspaceDocument(
-        containerId: Int,
-        document: ComputerWorkspaceDocument?,
-    )
+    /**
+     * Send a network message to the server.
+     *
+     * @param message The message to send.
+     */
+    fun sendToServer(message: NetworkMessage<ServerNetworkContext>) = serverSender(message)
 }
