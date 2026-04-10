@@ -19,12 +19,15 @@
 
 package ck.mod
 
+import ck.mod.data.ComputerContainerData
 import ck.mod.binding.ModObjects
 import ck.mod.context.ComputerIdentitySavedData
 import ck.mod.context.ServerContext
 import ck.mod.network.ClientNetworking
 import ck.mod.network.server.ServerNetworking
 import ck.mod.platform.NetworkHandler
+import net.minecraft.server.level.ServerPlayer
+import net.minecraft.world.SimpleMenuProvider
 import net.neoforged.api.distmarker.Dist
 import net.neoforged.bus.api.IEventBus
 import net.neoforged.fml.common.Mod
@@ -39,8 +42,21 @@ class CompukterKraftMod(
         LOGGER.info { "$MOD_ID has started!" }
 
         ModRegistry.register(modEventBus)
-        ModObjects.computerBlockEntityType = { ModRegistry.BlockEntities.COMPUTER_ADVANCED.get() }
+        ModObjects.computerBlockEntityType = {
+            @Suppress("UNCHECKED_CAST")
+            ModRegistry.BlockEntities.COMPUTER_ADVANCED.get() as net.minecraft.world.level.block.entity.BlockEntityType<ck.mod.block.ComputerBlockEntity>
+        }
         ModObjects.computerMenuType = { ModRegistry.Menus.COMPUTER.get() }
+        ModObjects.openComputerMenu = { player: ServerPlayer, computer, menuData: ComputerContainerData ->
+            player.openMenu(
+                SimpleMenuProvider(
+                    computer,
+                    computer.name,
+                ),
+            ) { buffer ->
+                menuData.toBytes(buffer)
+            }
+        }
         ModObjects.blockNamedEntityLootConditionType = { ModRegistry.LootItemConditionTypes.BLOCK_NAMED.get() }
         ModObjects.hasComputerIdLootConditionType = { ModRegistry.LootItemConditionTypes.HAS_ID.get() }
         ModObjects.playerCreativeLootConditionType = { ModRegistry.LootItemConditionTypes.PLAYER_CREATIVE.get() }

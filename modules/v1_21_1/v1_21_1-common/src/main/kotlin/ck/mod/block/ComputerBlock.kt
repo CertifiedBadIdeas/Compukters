@@ -19,7 +19,7 @@
 
 package ck.mod.block
 
-import ck.mod.ModRegistry
+import ck.mod.binding.ModObjects
 import ck.mod.item.ComputerItem
 import com.mojang.serialization.MapCodec
 import net.minecraft.core.Direction
@@ -32,20 +32,12 @@ import net.minecraft.world.level.block.state.StateDefinition
 import net.minecraft.world.level.block.state.properties.BlockStateProperties
 import net.minecraft.world.level.block.state.properties.DirectionProperty
 import net.minecraft.world.level.block.state.properties.EnumProperty
-import java.util.function.Supplier
 
 class ComputerBlock(
-    val type: Supplier<BlockEntityType<ComputerBlockEntity>>,
     properties: Properties,
-) : AbstractComputerBlock<ComputerBlockEntity>(type, properties) {
+) : AbstractComputerBlock<ComputerBlockEntity>(properties) {
     companion object {
-        private val CODEC: MapCodec<ComputerBlock> =
-            simpleCodec { properties ->
-                ComputerBlock(
-                    Supplier { ModRegistry.BlockEntities.COMPUTER_ADVANCED },
-                    properties,
-                )
-            }
+        private val CODEC: MapCodec<ComputerBlock> = simpleCodec(::ComputerBlock)
 
         val state: EnumProperty<ComputerState> = EnumProperty.create("state", ComputerState::class.java)
         val facing: DirectionProperty = BlockStateProperties.HORIZONTAL_FACING
@@ -57,6 +49,10 @@ class ComputerBlock(
                 .setValue(facing, Direction.NORTH)
                 .setValue(state, ComputerState.OFF),
         )
+    }
+
+    override fun blockEntityType(): BlockEntityType<ComputerBlockEntity> {
+        return ModObjects.computerBlockEntityType()
     }
 
     override fun createBlockStateDefinition(builder: StateDefinition.Builder<Block, BlockState>) {

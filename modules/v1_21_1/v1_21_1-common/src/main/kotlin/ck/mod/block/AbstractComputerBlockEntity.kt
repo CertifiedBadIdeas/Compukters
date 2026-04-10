@@ -154,7 +154,7 @@ abstract class AbstractComputerBlockEntity(
 
     override fun getCustomName(): Component? = _label?.takeIf { it.isEmpty() }?.let { Component.literal(it) }
 
-    private fun releaseServerComputer() {
+    protected fun releaseServerComputer() {
         if (level?.isClientSide ?: true) return
         _computerID
             .takeIf { ServerContext.isInitialized }
