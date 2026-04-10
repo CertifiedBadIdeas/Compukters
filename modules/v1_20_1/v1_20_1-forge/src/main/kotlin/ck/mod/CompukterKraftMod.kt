@@ -45,10 +45,7 @@ class CompukterKraftMod(
         val modEventBus = context.modEventBus
 
         ModRegistry.register(modEventBus)
-        ModObjects.computerBlockEntityType = {
-            @Suppress("UNCHECKED_CAST")
-            ModRegistry.BlockEntities.COMPUTER_ADVANCED.get() as net.minecraft.world.level.block.entity.BlockEntityType<ck.mod.block.ComputerBlockEntity>
-        }
+        ModObjects.computerBlockEntityType = { ModRegistry.BlockEntities.COMPUTER_ADVANCED.get() }
         ModObjects.computerMenuType = { ModRegistry.Menus.COMPUTER.get() }
         ModObjects.openComputerMenu = { player: ServerPlayer, computer, menuData: ComputerContainerData ->
             net.minecraftforge.network.NetworkHooks.openScreen(
