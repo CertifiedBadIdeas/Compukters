@@ -87,7 +87,13 @@ class NetworkComputerInputGateway(
 
             is MouseInputEvent.Scroll -> {
                 ClientNetworking.sendToServer(
-                    MouseEventServerMessage(menu, MouseEventServerMessage.Action.SCROLL, event.direction, event.x, event.y),
+                    MouseEventServerMessage(
+                        menu,
+                        MouseEventServerMessage.Action.SCROLL,
+                        event.direction,
+                        event.x,
+                        event.y,
+                    ),
                 )
             }
 

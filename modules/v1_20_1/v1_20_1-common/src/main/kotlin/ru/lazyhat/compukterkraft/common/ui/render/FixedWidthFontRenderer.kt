@@ -24,7 +24,7 @@ import net.minecraft.resources.ResourceLocation
 import net.minecraft.util.FastColor
 import org.joml.Matrix4f
 import org.joml.Vector3f
-import ru.lazyhat.compukterkraft.core.MOD_ID
+import ru.lazyhat.compukterkraft.common.asResource
 import ru.lazyhat.compukterkraft.core.gui.Colour
 import ru.lazyhat.compukterkraft.core.gui.FrameInfo
 import ru.lazyhat.compukterkraft.core.gui.Palette
@@ -37,7 +37,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
  */
 object FixedWidthFontRenderer {
     const val FULL_BRIGHT_LIGHTMAP: Int = (0xF shl 4) or (0xF shl 20)
-    val FONT: ResourceLocation = ResourceLocation(MOD_ID, "textures/gui/term_font.png")
+    val FONT: ResourceLocation = "textures/gui/term_font.png".asResource()
 
     const val FONT_HEIGHT: Int = 9
     const val FONT_WIDTH: Int = 6
@@ -192,7 +192,16 @@ object FixedWidthFontRenderer {
             // Left margin
             if (leftMarginSize > 0) {
                 val colour = Palette.DEFAULT.getRenderColours(15 - snapshot.bgAt(0, row))
-                drawQuad(emitter, x - leftMarginSize, rowY, 0f, leftMarginSize, FONT_HEIGHT.toFloat(), colour, FULL_BRIGHT_LIGHTMAP)
+                drawQuad(
+                    emitter,
+                    x - leftMarginSize,
+                    rowY,
+                    0f,
+                    leftMarginSize,
+                    FONT_HEIGHT.toFloat(),
+                    colour,
+                    FULL_BRIGHT_LIGHTMAP,
+                )
             }
             // Right margin
             if (rightMarginSize > 0) {

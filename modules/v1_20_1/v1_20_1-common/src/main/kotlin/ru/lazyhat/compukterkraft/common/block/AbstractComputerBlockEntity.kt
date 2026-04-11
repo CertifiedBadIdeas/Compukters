@@ -131,6 +131,8 @@ abstract class AbstractComputerBlockEntity(
     }
 
     override fun load(tag: CompoundTag) {
+        super.load(tag)
+
         LOGGER.info { "AbstractComputerBlockEntity.load() tag: $tag" }
         _computerID = tag.computerID
         _label = tag.computerLabel

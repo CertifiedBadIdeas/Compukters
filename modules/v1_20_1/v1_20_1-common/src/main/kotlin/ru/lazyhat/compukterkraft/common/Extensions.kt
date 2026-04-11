@@ -17,19 +17,12 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package ru.lazyhat.compukterkraft.impl.context
+package ru.lazyhat.compukterkraft.common
 
-import net.minecraft.server.MinecraftServer
-import net.minecraft.world.level.saveddata.SavedData.Factory
-import ru.lazyhat.compukterkraft.common.context.COMPUTER_IDENTITY_SAVED_DATA_NAME
-import ru.lazyhat.compukterkraft.common.context.ComputerIdentitySavedData
-import ru.lazyhat.compukterkraft.common.context.loadComputerIdentitySavedData
+import net.minecraft.network.chat.Component
+import net.minecraft.resources.ResourceLocation
+import ru.lazyhat.compukterkraft.core.MOD_ID
 
-fun getComputerIdentitySavedData(server: MinecraftServer): ComputerIdentitySavedData =
-    server
-        .overworld()
-        .dataStorage
-        .computeIfAbsent(
-            Factory(::ComputerIdentitySavedData, ::loadComputerIdentitySavedData),
-            COMPUTER_IDENTITY_SAVED_DATA_NAME,
-        )
+fun String.asResource(): ResourceLocation = ResourceLocation(MOD_ID, this)
+
+fun String.literalComponent(): Component = Component.literal(this)

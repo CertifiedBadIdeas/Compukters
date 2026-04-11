@@ -21,20 +21,17 @@ package ru.lazyhat.compukterkraft.impl
 
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.SimpleMenuProvider
-import net.minecraft.world.level.block.entity.BlockEntityType
 import net.neoforged.api.distmarker.Dist
 import net.neoforged.bus.api.IEventBus
 import net.neoforged.fml.common.Mod
 import net.neoforged.fml.event.lifecycle.FMLDedicatedServerSetupEvent
 import ru.lazyhat.compukterkraft.common.binding.ModObjects
-import ru.lazyhat.compukterkraft.common.block.ComputerBlockEntity
-import ru.lazyhat.compukterkraft.common.context.ServerContext
 import ru.lazyhat.compukterkraft.common.data.ComputerContainerData
 import ru.lazyhat.compukterkraft.common.network.ClientNetworking
 import ru.lazyhat.compukterkraft.common.network.server.ServerNetworking
+import ru.lazyhat.compukterkraft.core.LOGGER
 import ru.lazyhat.compukterkraft.core.MOD_ID
 import ru.lazyhat.compukterkraft.core.MOD_NAME
-import ru.lazyhat.compukterkraft.impl.context.getComputerIdentitySavedData
 import ru.lazyhat.compukterkraft.impl.platform.NetworkHandler
 
 @Mod(MOD_ID)
@@ -48,7 +45,7 @@ class CompukterKraftMod(
         ModRegistry.register(modEventBus)
         ModObjects.computerBlockEntityType = {
             @Suppress("UNCHECKED_CAST")
-            ModRegistry.BlockEntities.COMPUTER_ADVANCED.get() as BlockEntityType<ComputerBlockEntity>
+            ModRegistry.BlockEntities.COMPUTER_ADVANCED.get()
         }
         ModObjects.computerMenuType = { ModRegistry.Menus.COMPUTER.get() }
         ModObjects.openComputerMenu = { player: ServerPlayer, computer, menuData: ComputerContainerData ->
@@ -67,7 +64,6 @@ class CompukterKraftMod(
         NetworkHandler.setup(modEventBus)
         ServerNetworking.playerSender = NetworkHandler::sendToPlayer
         ClientNetworking.serverSender = NetworkHandler::sendToServer
-        ServerContext.idAllocator = { server -> getComputerIdentitySavedData(server).allocateComputerId() }
 
         if (dist != Dist.CLIENT) {
             modEventBus.addListener(::onServerSetup)

@@ -38,6 +38,7 @@ import net.neoforged.neoforge.common.extensions.IMenuTypeExtension
 import net.neoforged.neoforge.registries.DeferredHolder
 import net.neoforged.neoforge.registries.DeferredRegister
 import ru.lazyhat.compukterkraft.common.block.ComputerBlock
+import ru.lazyhat.compukterkraft.common.block.ComputerBlockEntity
 import ru.lazyhat.compukterkraft.common.data.ComputerContainerData
 import ru.lazyhat.compukterkraft.common.item.ComputerItem
 import ru.lazyhat.compukterkraft.common.loot.BlockNamedEntityLootCondition
@@ -45,6 +46,7 @@ import ru.lazyhat.compukterkraft.common.loot.ConstantLootConditionSerializer
 import ru.lazyhat.compukterkraft.common.loot.HasComputerIdLootCondition
 import ru.lazyhat.compukterkraft.common.loot.PlayerCreativeLootCondition
 import ru.lazyhat.compukterkraft.common.menu.ComputerMenuWithoutInventory
+import ru.lazyhat.compukterkraft.core.LOGGER
 import ru.lazyhat.compukterkraft.core.MOD_ID
 import ru.lazyhat.compukterkraft.core.block.ComputerFamily
 import ru.lazyhat.compukterkraft.impl.block.NeoForgeComputerBlockEntity
@@ -93,7 +95,7 @@ object ModRegistry {
                 },
             )
 
-        val COMPUTER_ADVANCED: DeferredHolder<BlockEntityType<*>, BlockEntityType<NeoForgeComputerBlockEntity>> =
+        val COMPUTER_ADVANCED: DeferredHolder<BlockEntityType<*>, BlockEntityType<ComputerBlockEntity>> =
             ofBlock(
                 Blocks.COMPUTER_ADVANCED,
                 Names.COMPUTER_ADVANCED,
@@ -159,7 +161,7 @@ object ModRegistry {
                 Supplier {
                     IMenuTypeExtension.create { id, playerInventory, data ->
                         ComputerMenuWithoutInventory(COMPUTER.get(), id, playerInventory, ComputerContainerData(data)).also {
-                            // LOGGER.info("ClientRegistry: ComputerMenuWithoutInventory from buffer created")
+                            LOGGER.info { "ClientRegistry: ComputerMenuWithoutInventory from buffer created" }
                         }
                     }
                 },

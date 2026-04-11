@@ -19,15 +19,9 @@
 
 package ru.lazyhat.compukterkraft.impl
 
-import io.github.oshai.kotlinlogging.KLogger
-import io.github.oshai.kotlinlogging.KotlinLogging
-import net.minecraft.network.chat.Component
-import net.minecraft.resources.ResourceLocation
 import net.neoforged.fml.ModList
 import ru.lazyhat.compukterkraft.core.MOD_ID
 import kotlin.jvm.optionals.getOrDefault
-
-val LOGGER: KLogger = KotlinLogging.logger(MOD_ID)
 
 val INSTALLED_VERSION: String by lazy {
     ModList
@@ -36,7 +30,3 @@ val INSTALLED_VERSION: String by lazy {
         .map { it.modInfo.version.toString() }
         .getOrDefault("unknown")
 }
-
-fun String.asResource(): ResourceLocation = ResourceLocation.fromNamespaceAndPath(MOD_ID, this)
-
-fun String.literalComponent(): Component = Component.literal(this)

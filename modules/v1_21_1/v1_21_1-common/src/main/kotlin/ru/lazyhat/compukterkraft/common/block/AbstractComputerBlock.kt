@@ -21,7 +21,6 @@ package ru.lazyhat.compukterkraft.common.block
 
 import net.minecraft.core.BlockPos
 import net.minecraft.resources.ResourceLocation
-import net.minecraft.server.level.ServerLevel
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.stats.Stats
 import net.minecraft.world.InteractionHand
@@ -35,6 +34,7 @@ import net.minecraft.world.level.block.EntityBlock
 import net.minecraft.world.level.block.HorizontalDirectionalBlock
 import net.minecraft.world.level.block.entity.BlockEntity
 import net.minecraft.world.level.block.entity.BlockEntityTicker
+import net.minecraft.world.level.block.entity.BlockEntityType
 import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.storage.loot.LootParams
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams
@@ -67,10 +67,10 @@ abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
     override fun <T : BlockEntity> getTicker(
         level: Level,
         state: BlockState,
-        blockEntityType: net.minecraft.world.level.block.entity.BlockEntityType<T>,
+        blockEntityType: BlockEntityType<T>,
     ): BlockEntityTicker<T>? = serverTicker.ifServerSide(level)?.castTicker()
 
-    protected abstract fun blockEntityType(): net.minecraft.world.level.block.entity.BlockEntityType<T>
+    protected abstract fun blockEntityType(): BlockEntityType<T>
 
     abstract fun getItem(tile: AbstractComputerBlockEntity): ItemStack
 
@@ -124,9 +124,9 @@ abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
         state: BlockState,
         player: Player,
     ): BlockState {
-        if (level !is ServerLevel) return super.playerWillDestroy(level, pos, state, player)
-
-        dropResources(state, level, pos, level.getBlockEntity(pos))
+        ifServerSide(level) {
+            dropResources(state, level, pos, level.getBlockEntity(pos))
+        }
         return super.playerWillDestroy(level, pos, state, player)
     }
 

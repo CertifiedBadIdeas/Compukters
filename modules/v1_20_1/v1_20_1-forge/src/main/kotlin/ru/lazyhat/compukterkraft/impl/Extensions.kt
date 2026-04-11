@@ -19,8 +19,6 @@
 
 package ru.lazyhat.compukterkraft.impl
 
-import net.minecraft.network.chat.Component
-import net.minecraft.resources.ResourceLocation
 import net.minecraftforge.fml.ModList
 import ru.lazyhat.compukterkraft.core.MOD_ID
 import kotlin.jvm.optionals.getOrDefault
@@ -32,7 +30,3 @@ val INSTALLED_VERSION: String by lazy {
         .map { it.modInfo.version.toString() }
         .getOrDefault("unknown")
 }
-
-fun String.asResource(): ResourceLocation = ResourceLocation(MOD_ID, this)
-
-fun String.literalComponent(): Component = Component.literal(this)

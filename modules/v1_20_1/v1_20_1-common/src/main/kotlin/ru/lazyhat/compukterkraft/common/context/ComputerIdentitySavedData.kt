@@ -23,6 +23,11 @@ import net.minecraft.nbt.CompoundTag
 import net.minecraft.server.MinecraftServer
 import net.minecraft.world.level.saveddata.SavedData
 
+const val COMPUTER_IDENTITY_SAVED_DATA_NAME = "compukterkraft_computer_identity"
+
+private const val NEXT_COMPUTER_ID_TAG = "NextComputerId"
+private const val FIRST_COMPUTER_ID = 1
+
 class ComputerIdentitySavedData(
     private var nextComputerId: Int = FIRST_COMPUTER_ID,
 ) : SavedData() {
@@ -39,19 +44,15 @@ class ComputerIdentitySavedData(
         }
 
     companion object {
-        private const val DATA_NAME = "compukterkraft_computer_identity"
-        private const val NEXT_COMPUTER_ID_TAG = "NextComputerId"
-        private const val FIRST_COMPUTER_ID = 1
+        fun load(tag: CompoundTag): ComputerIdentitySavedData =
+            ComputerIdentitySavedData(
+                nextComputerId = tag.getInt(NEXT_COMPUTER_ID_TAG).coerceAtLeast(FIRST_COMPUTER_ID),
+            )
 
         fun get(server: MinecraftServer): ComputerIdentitySavedData =
             server
                 .overworld()
                 .dataStorage
-                .computeIfAbsent(::load, ::ComputerIdentitySavedData, DATA_NAME)
-
-        private fun load(tag: CompoundTag): ComputerIdentitySavedData =
-            ComputerIdentitySavedData(
-                nextComputerId = tag.getInt(NEXT_COMPUTER_ID_TAG).coerceAtLeast(FIRST_COMPUTER_ID),
-            )
+                .computeIfAbsent(::load, ::ComputerIdentitySavedData, COMPUTER_IDENTITY_SAVED_DATA_NAME)
     }
 }

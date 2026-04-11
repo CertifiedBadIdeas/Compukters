@@ -20,19 +20,13 @@
 package ru.lazyhat.compukterkraft.impl
 
 import net.fabricmc.loader.api.FabricLoader
-import net.minecraft.network.chat.Component
-import net.minecraft.resources.ResourceLocation
 import ru.lazyhat.compukterkraft.core.MOD_ID
-import kotlin.jvm.optionals.getOrElse
+import kotlin.jvm.optionals.getOrDefault
 
 val INSTALLED_VERSION: String by lazy {
     FabricLoader
         .getInstance()
         .getModContainer(MOD_ID)
         .map { it.metadata.version.friendlyString }
-        .getOrElse { "unknown" }
+        .getOrDefault("unknown")
 }
-
-fun String.asResource(): ResourceLocation = ResourceLocation(MOD_ID, this)
-
-fun String.literalComponent(): Component = Component.literal(this)

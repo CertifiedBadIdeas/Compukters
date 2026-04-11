@@ -139,6 +139,7 @@ abstract class AbstractComputerBlockEntity(
         registries: HolderLookup.Provider,
     ) {
         super.loadAdditional(tag, registries)
+
         LOGGER.info { "AbstractComputerBlockEntity.load() tag: $tag" }
         _computerID = tag.computerID
         _label = tag.computerLabel

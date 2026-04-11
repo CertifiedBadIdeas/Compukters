@@ -19,15 +19,12 @@
 
 import org.gradle.api.Project
 import org.gradle.api.artifacts.MinimalExternalModuleDependency
-import org.gradle.api.artifacts.ProjectDependency
 import org.gradle.api.artifacts.VersionCatalog
 import org.gradle.api.artifacts.VersionCatalogsExtension
 import org.gradle.api.plugins.ExtensionAware
 import org.gradle.api.plugins.ExtraPropertiesExtension
 import org.gradle.api.provider.Provider
-import org.gradle.kotlin.dsl.DependencyHandlerScope
 import org.gradle.kotlin.dsl.getByType
-import org.gradle.kotlin.dsl.project
 
 data class BuildContext(
     val versionKey: String,
@@ -77,9 +74,6 @@ fun Project.loaderKind(): LoaderKind =
 
 fun Project.versionLibrary(aliasPrefix: String): Provider<MinimalExternalModuleDependency> =
     libsCatalog().findLibrary("$aliasPrefix-${buildContext().versionKey}").get()
-
-fun DependencyHandlerScope.commonVersionProject(buildContext: BuildContext): ProjectDependency =
-    project(":v${buildContext.minecraftVersion.replace('.','_')}-common")
 
 fun Project.readAllModProperties(): Map<String, String> =
     file("$rootDir/config/mod.properties")

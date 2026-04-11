@@ -24,3 +24,17 @@ import net.minecraft.world.level.Level
 fun <T : Any> T.ifClientSide(level: Level?): T? = takeIf { level?.isClientSide == true }
 
 fun <T : Any> T.ifServerSide(level: Level?): T? = takeIf { level?.isClientSide == false }
+
+fun ifServerSide(
+    level: Level?,
+    block: () -> Unit,
+) {
+    if (level?.isClientSide == false) block()
+}
+
+fun ifClientSide(
+    level: Level?,
+    block: () -> Unit,
+) {
+    if (level?.isClientSide == true) block()
+}

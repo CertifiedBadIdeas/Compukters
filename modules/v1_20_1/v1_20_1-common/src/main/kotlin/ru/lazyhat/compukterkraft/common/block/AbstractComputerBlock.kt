@@ -21,7 +21,6 @@ package ru.lazyhat.compukterkraft.common.block
 
 import net.minecraft.core.BlockPos
 import net.minecraft.resources.ResourceLocation
-import net.minecraft.server.level.ServerLevel
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.stats.Stats
 import net.minecraft.world.InteractionHand
@@ -123,10 +122,10 @@ abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
         state: BlockState,
         player: Player,
     ) {
+        ifServerSide(level) {
+            dropResources(state, level, pos, level.getBlockEntity(pos))
+        }
         super.playerWillDestroy(level, pos, state, player)
-        if (level !is ServerLevel) return
-
-        dropResources(state, level, pos, level.getBlockEntity(pos))
     }
 
     @Deprecated("Deprecated")
