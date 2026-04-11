@@ -32,6 +32,7 @@ import ru.lazyhat.compukterkraft.common.computer.ServerComputer
 import ru.lazyhat.compukterkraft.common.menu.ComputerMenuWithoutInventory
 import ru.lazyhat.compukterkraft.core.LOGGER
 import ru.lazyhat.compukterkraft.core.block.ComputerFamily
+import ru.lazyhat.compukterkraft.core.content.ComputerBlockEntityPolicy
 import ru.lazyhat.compukterkraft.core.computer.ComputerProperties
 
 open class ComputerBlockEntity(
@@ -51,15 +52,16 @@ open class ComputerBlockEntity(
         )
 
     override fun updateBlockState(newState: ComputerState) {
-        blockState
-            .takeIf { it.getValue(ComputerBlock.state) != newState }
-            ?.let {
-                level?.setBlock(
-                    blockPos,
-                    blockState.setValue(ComputerBlock.state, newState),
-                    Block.UPDATE_CLIENTS,
-                )
-            }
+        val currentState = blockState.getValue(ComputerBlock.state).toStateModel()
+        val nextState = newState.toStateModel()
+
+        if (!ComputerBlockEntityPolicy.shouldUpdateVisualState(currentState, nextState)) return
+
+        level?.setBlock(
+            blockPos,
+            blockState.setValue(ComputerBlock.state, nextState.toMinecraftState()),
+            Block.UPDATE_CLIENTS,
+        )
     }
 
     override fun createMenu(

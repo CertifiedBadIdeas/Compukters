@@ -36,6 +36,7 @@ import ru.lazyhat.compukterkraft.common.utils.ifServerSide
 import ru.lazyhat.compukterkraft.common.utils.updateBlock
 import ru.lazyhat.compukterkraft.core.LOGGER
 import ru.lazyhat.compukterkraft.core.block.ComputerFamily
+import ru.lazyhat.compukterkraft.core.content.ComputerBlockEntityPolicy
 
 abstract class AbstractComputerBlockEntity(
     type: BlockEntityType<out AbstractComputerBlockEntity>,
@@ -64,12 +65,12 @@ abstract class AbstractComputerBlockEntity(
             LOGGER.info { "AbstractComputerBlockEntity.setLabelPublic $value" }
             value
                 ?.ifServerSide(level)
-                ?.takeIf { _label != value }
+                ?.takeIf { ComputerBlockEntityPolicy.shouldPersistLabel(_label, value) }
                 ?.let {
-                    _label = value
+                    _label = it
                     _computerID
                         ?.let(ServerContext.computerManager::get)
-                        ?.updateLabel(value)
+                        ?.updateLabel(it)
                     updateBlock()
                 }
         }
@@ -80,9 +81,9 @@ abstract class AbstractComputerBlockEntity(
             LOGGER.info { "AbstractComputerBlockEntity.setComputerIdPublic $value" }
             value
                 ?.ifServerSide(level)
-                ?.takeIf { _computerID != value }
+                ?.takeIf { ComputerBlockEntityPolicy.shouldPersistComputerId(_computerID, value) }
                 ?.let {
-                    _computerID = value
+                    _computerID = it
                     updateBlock()
                 }
         }
@@ -96,19 +97,22 @@ abstract class AbstractComputerBlockEntity(
     abstract fun createComputer(id: Int): ServerComputer
 
     fun serverTick() {
-        if (level?.isClientSide ?: true) return
-        if (_computerID == null) return
+        if (!ComputerBlockEntityPolicy.shouldRunServerTick(level?.isClientSide ?: true, _computerID)) return
         val computer = getOrCreateServerComputer()
         computer.serverTick()
-        updateBlockState(if (computer.isOn) ComputerState.ON else ComputerState.OFF)
+        updateBlockState(
+            ComputerBlockEntityPolicy.desiredVisualState(computer.isOn).toMinecraftState(),
+        )
     }
 
     fun getOrCreateServerComputer(): ServerComputer {
         level as? ServerLevel ?: error("[SERVER_LEVEL_GET] Cannot access server computer on the client.")
         val resolvedComputerId =
-            _computerID ?: ServerContext.allocateComputerId().also { allocatedComputerId ->
-                computerID = allocatedComputerId
-                ServerContext.computerManager.ensureWorkspaceInitialized(allocatedComputerId)
+            ComputerBlockEntityPolicy.resolveComputerId(_computerID) {
+                ServerContext.allocateComputerId().also { allocatedComputerId ->
+                    computerID = allocatedComputerId
+                    ServerContext.computerManager.ensureWorkspaceInitialized(allocatedComputerId)
+                }
             }
 
         return _computerID
