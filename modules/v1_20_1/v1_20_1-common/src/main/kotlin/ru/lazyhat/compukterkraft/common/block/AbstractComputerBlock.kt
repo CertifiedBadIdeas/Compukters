@@ -47,6 +47,7 @@ import ru.lazyhat.compukterkraft.common.utils.computerID
 import ru.lazyhat.compukterkraft.common.utils.computerLabel
 import ru.lazyhat.compukterkraft.common.utils.ifServerSide
 import ru.lazyhat.compukterkraft.core.LOGGER
+import ru.lazyhat.compukterkraft.core.content.ComputerBlockPolicy
 import ru.lazyhat.compukterkraft.core.MOD_ID
 
 abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
@@ -150,7 +151,7 @@ abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
         hand: InteractionHand,
         hit: BlockHitResult,
     ): InteractionResult {
-        if (!player.isCrouching) {
+        if (ComputerBlockPolicy.shouldOpenMenu(player.isCrouching)) {
             (level.getBlockEntity(pos) as? AbstractComputerBlockEntity)?.run {
                 ifServerSide(level)
                     ?.let { computer ->

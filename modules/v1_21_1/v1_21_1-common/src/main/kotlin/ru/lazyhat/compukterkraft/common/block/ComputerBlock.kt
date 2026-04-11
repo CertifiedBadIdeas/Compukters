@@ -20,7 +20,6 @@
 package ru.lazyhat.compukterkraft.common.block
 
 import com.mojang.serialization.MapCodec
-import net.minecraft.core.Direction
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.context.BlockPlaceContext
 import net.minecraft.world.level.block.Block
@@ -32,10 +31,13 @@ import net.minecraft.world.level.block.state.properties.DirectionProperty
 import net.minecraft.world.level.block.state.properties.EnumProperty
 import ru.lazyhat.compukterkraft.common.binding.ModObjects
 import ru.lazyhat.compukterkraft.common.item.ComputerItem
+import ru.lazyhat.compukterkraft.core.content.ComputerBlockPolicy
 
 class ComputerBlock(
     properties: Properties,
 ) : AbstractComputerBlock<ComputerBlockEntity>(properties) {
+    private val defaults = ComputerBlockPolicy.defaultState()
+
     companion object {
         private val CODEC: MapCodec<ComputerBlock> = simpleCodec(::ComputerBlock)
 
@@ -46,8 +48,8 @@ class ComputerBlock(
     init {
         registerDefaultState(
             defaultBlockState()
-                .setValue(facing, Direction.NORTH)
-                .setValue(state, ComputerState.OFF),
+                .setValue(facing, defaults.facing.toMinecraftDirection())
+                .setValue(state, defaults.state.toMinecraftState()),
         )
     }
 
@@ -58,7 +60,10 @@ class ComputerBlock(
     }
 
     override fun getStateForPlacement(context: BlockPlaceContext): BlockState =
-        defaultBlockState().setValue(facing, context.horizontalDirection.opposite)
+        defaultBlockState().setValue(
+            facing,
+            ComputerBlockPolicy.placementFacing(context.horizontalDirection.toFacingModel()).toMinecraftDirection(),
+        )
 
     override fun codec(): MapCodec<out ComputerBlock> = CODEC
 
