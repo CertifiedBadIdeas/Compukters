@@ -26,7 +26,7 @@ class NetworkHandlerPayloadIdTest {
     @Test
     fun serverboundPayloadClassInitializes() {
         try {
-            Class.forName("ck.mod.platform.NetworkHandler\$ServerboundPayload")
+            Class.forName("${NetworkHandler::class.java.name}\$ServerboundPayload")
         } catch (error: Throwable) {
             fail("Serverbound payload class should initialize without invalid resource location: $error")
         }

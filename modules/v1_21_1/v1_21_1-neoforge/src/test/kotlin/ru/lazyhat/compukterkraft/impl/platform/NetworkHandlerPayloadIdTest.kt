@@ -17,7 +17,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package ck.mod.platform
+package ru.lazyhat.compukterkraft.impl.platform
 
 import kotlin.test.Test
 import kotlin.test.fail
@@ -26,7 +26,7 @@ class NetworkHandlerPayloadIdTest {
     @Test
     fun serverboundPayloadClassInitializes() {
         try {
-            Class.forName("ck.mod.platform.NetworkHandler\$ServerboundPayload")
+            Class.forName("${NetworkHandler::class.java.name}\$ServerboundPayload")
         } catch (error: Throwable) {
             fail("Serverbound payload class should initialize without invalid resource location: $error")
         }
