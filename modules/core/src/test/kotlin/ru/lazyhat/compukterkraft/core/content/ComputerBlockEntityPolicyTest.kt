@@ -23,6 +23,12 @@ class ComputerBlockEntityPolicyTest {
     }
 
     @Test
+    fun convertsComputerOnStateToVisualModel() {
+        assertEquals(ComputerVisualStateModel.ON, ComputerBlockEntityPolicy.desiredVisualState(true))
+        assertEquals(ComputerVisualStateModel.OFF, ComputerBlockEntityPolicy.desiredVisualState(false))
+    }
+
+    @Test
     fun onlyPersistsChangedNonNullIdentityValues() {
         assertFalse(ComputerBlockEntityPolicy.shouldPersistLabel(current = "alpha", requested = "alpha"))
         assertFalse(ComputerBlockEntityPolicy.shouldPersistLabel(current = "alpha", requested = null))
