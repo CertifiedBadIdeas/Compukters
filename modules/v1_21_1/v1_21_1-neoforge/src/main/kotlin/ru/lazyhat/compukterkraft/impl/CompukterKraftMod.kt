@@ -32,6 +32,8 @@ import ru.lazyhat.compukterkraft.common.context.ServerContext
 import ru.lazyhat.compukterkraft.common.data.ComputerContainerData
 import ru.lazyhat.compukterkraft.common.network.ClientNetworking
 import ru.lazyhat.compukterkraft.common.network.server.ServerNetworking
+import ru.lazyhat.compukterkraft.core.MOD_ID
+import ru.lazyhat.compukterkraft.core.MOD_NAME
 import ru.lazyhat.compukterkraft.impl.context.getComputerIdentitySavedData
 import ru.lazyhat.compukterkraft.impl.platform.NetworkHandler
 

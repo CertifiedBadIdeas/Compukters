@@ -25,6 +25,8 @@ import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent
 import net.neoforged.neoforge.client.event.ClientTickEvent
 import net.neoforged.neoforge.client.event.RenderFrameEvent
 import ru.lazyhat.compukterkraft.core.ClientHooks
+import ru.lazyhat.compukterkraft.core.MOD_ID
+import ru.lazyhat.compukterkraft.core.MOD_NAME
 
 /**
  * Forge-specific dispatch for [ClientHooks].

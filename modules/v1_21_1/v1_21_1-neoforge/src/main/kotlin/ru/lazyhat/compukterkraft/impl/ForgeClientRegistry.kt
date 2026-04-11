@@ -23,6 +23,7 @@ import net.neoforged.api.distmarker.Dist
 import net.neoforged.bus.api.SubscribeEvent
 import net.neoforged.fml.common.EventBusSubscriber
 import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent
+import ru.lazyhat.compukterkraft.core.MOD_ID
 
 @EventBusSubscriber(modid = MOD_ID, value = [Dist.CLIENT])
 object ForgeClientRegistry {

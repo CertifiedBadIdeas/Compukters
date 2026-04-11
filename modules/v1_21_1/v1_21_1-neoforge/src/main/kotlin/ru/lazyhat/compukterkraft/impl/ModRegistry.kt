@@ -45,6 +45,7 @@ import ru.lazyhat.compukterkraft.common.loot.ConstantLootConditionSerializer
 import ru.lazyhat.compukterkraft.common.loot.HasComputerIdLootCondition
 import ru.lazyhat.compukterkraft.common.loot.PlayerCreativeLootCondition
 import ru.lazyhat.compukterkraft.common.menu.ComputerMenuWithoutInventory
+import ru.lazyhat.compukterkraft.core.MOD_ID
 import ru.lazyhat.compukterkraft.core.block.ComputerFamily
 import ru.lazyhat.compukterkraft.impl.block.NeoForgeComputerBlockEntity
 import java.util.function.Supplier

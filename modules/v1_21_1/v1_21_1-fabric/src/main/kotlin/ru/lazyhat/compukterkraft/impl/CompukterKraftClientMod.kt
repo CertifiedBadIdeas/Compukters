@@ -22,6 +22,7 @@ package ru.lazyhat.compukterkraft.impl
 import net.fabricmc.api.ClientModInitializer
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 import ru.lazyhat.compukterkraft.core.ClientHooks
+import ru.lazyhat.compukterkraft.core.MOD_NAME
 import ru.lazyhat.compukterkraft.impl.platform.NetworkHandler
 
 class CompukterKraftClientMod : ClientModInitializer {

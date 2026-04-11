@@ -34,9 +34,9 @@ import ru.lazyhat.compukterkraft.common.network.NetworkMessage
 import ru.lazyhat.compukterkraft.common.network.NetworkMessages
 import ru.lazyhat.compukterkraft.common.network.client.ClientNetworkContext
 import ru.lazyhat.compukterkraft.common.network.server.ServerNetworkContext
+import ru.lazyhat.compukterkraft.core.MOD_ID
 import ru.lazyhat.compukterkraft.core.platform.Services
 import ru.lazyhat.compukterkraft.impl.INSTALLED_VERSION
-import ru.lazyhat.compukterkraft.impl.MOD_ID
 
 object NetworkHandler {
     private fun payloadType(path: String): ResourceLocation = ResourceLocation.fromNamespaceAndPath(MOD_ID, path)
