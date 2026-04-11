@@ -57,7 +57,4 @@ dependencies {
             parchment(parchmentMappings)
         },
     )
-
-    testImplementation(kotlin("test"))
-    testImplementation(libs.findLibrary("kotlinx-coroutines-test").get())
 }
