@@ -33,6 +33,15 @@ object ServerNetworking {
 ServerNetworking.playerSender = NetworkHandler::sendToPlayer
 ```
 
+### Boundary Enforcement
+
+The repository treats these boundaries as executable rules, not just conventions:
+
+- `core` must not import `net.minecraft.*`
+- loader leaf modules must stay limited to bootstrap, registry, network, hooks, and tiny unavoidable shims
+
+These rules are enforced by `ArchitectureBoundaryTest` in `modules/core`.
+
 ## Data Flow
 
 ```
