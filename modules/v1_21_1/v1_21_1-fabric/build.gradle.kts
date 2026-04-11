@@ -26,8 +26,6 @@ plugins {
     alias(libs.plugins.metadataConvention)
 }
 
-extra["ck.minecraftVersionRange"] = ">=1.21.1"
-
 dependencies {
     implementation(project(path = projects.v1211Common.path, configuration = "namedElements"))
 }

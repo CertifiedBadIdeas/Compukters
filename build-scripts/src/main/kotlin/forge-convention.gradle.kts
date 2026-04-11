@@ -35,9 +35,9 @@ dependencies {
     add("forge", versionLibrary("forge"))
     modImplementation(versionLibrary("architectury-forge"))
 
-    forgeImplementation(project(":core"))
+    implementation(project(":core"))
+
     forgeImplementation(project(":compiler"))
-    forgeImplementation(commonVersionProject(buildContext()))
     forgeImplementation(libs.findLibrary("kotlinx-coroutines-core").get())
     forgeImplementation(libs.findLibrary("kotlin-stdlib").get())
     forgeImplementation(libs.findLibrary("kotlin-logging").get())

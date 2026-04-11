@@ -26,10 +26,6 @@ plugins {
     alias(libs.plugins.metadataConvention)
 }
 
-extra["ck.minecraftVersionRange"] = "[1.21.1, 1.22)"
-extra["ck.neoforgeVersionRange"] = "[21.1,)"
-extra["ck.loaderVersionRange"] = "[4,)"
-
 dependencies {
     implementation(project(path = projects.v1211Common.path, configuration = "namedElements"))
 }
