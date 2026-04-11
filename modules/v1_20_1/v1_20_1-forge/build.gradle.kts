@@ -26,6 +26,6 @@ plugins {
     alias(libs.plugins.metadataConvention)
 }
 
-// dependencies {
-//    implementation(project(path = projects.v1201Common.path, configuration = "namedElements"))
-// }
+dependencies {
+    implementation(project(path = projects.v1201Common.path, configuration = "namedElements"))
+}
