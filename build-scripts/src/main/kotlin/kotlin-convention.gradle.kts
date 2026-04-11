@@ -34,6 +34,8 @@ repositories {
     }
 }
 
+group = readAllModProperties().getValue("common_mod_group_id")
+
 kotlin {
     jvmToolchain(17)
 }

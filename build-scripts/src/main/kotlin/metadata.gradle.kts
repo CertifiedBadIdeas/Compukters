@@ -21,13 +21,14 @@ plugins {
     id("kotlin-convention")
 }
 
-val modProperties = readVersionedModProperties()
 val modVersion = computeModVersion()
 
-modProperties["mod_version"] = modVersion
-optionalSetting("ck.minecraftVersionRange")?.let { modProperties["minecraft_version_range"] = it }
-optionalSetting("ck.loaderVersionRange")?.let { modProperties["loader_version_range"] = it }
-optionalSetting("ck.neoforgeVersionRange")?.let { modProperties["neoforge_version_range"] = it }
+val modProperties =
+    readVersionedModProperties()
+        .toMutableMap()
+        .apply {
+            this["mod_version"] = modVersion
+        }.toMap()
 
 base.archivesName = modProperties.getValue("mod_id").replace(" ", "")
 version = modVersion
