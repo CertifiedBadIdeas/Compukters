@@ -25,12 +25,11 @@ import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.entity.player.Inventory
 import net.minecraft.world.entity.player.Player
 import ru.lazyhat.compukterkraft.common.binding.ModObjects
-import ru.lazyhat.compukterkraft.common.context.ServerContext
 import ru.lazyhat.compukterkraft.common.data.ComputerContainerData
 import ru.lazyhat.compukterkraft.common.network.ClientNetworking
 import ru.lazyhat.compukterkraft.common.network.server.ServerNetworking
+import ru.lazyhat.compukterkraft.core.LOGGER
 import ru.lazyhat.compukterkraft.core.MOD_ID
-import ru.lazyhat.compukterkraft.impl.context.getComputerIdentitySavedData
 import ru.lazyhat.compukterkraft.impl.platform.NetworkHandler
 
 class CompukterKraftMod : ModInitializer {
@@ -61,7 +60,6 @@ class CompukterKraftMod : ModInitializer {
         NetworkHandler.setup()
         ServerNetworking.playerSender = NetworkHandler::sendToPlayer
         ClientNetworking.serverSender = NetworkHandler::sendToServer
-        ServerContext.idAllocator = { server -> getComputerIdentitySavedData(server).allocateComputerId() }
         FabricCommonHooks.register()
     }
 }

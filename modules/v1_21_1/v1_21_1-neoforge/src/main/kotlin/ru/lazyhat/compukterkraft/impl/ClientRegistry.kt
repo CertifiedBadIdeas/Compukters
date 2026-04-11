@@ -21,6 +21,7 @@ package ru.lazyhat.compukterkraft.impl
 
 import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent
 import ru.lazyhat.compukterkraft.common.gui.screen.ComputerWorkbenchScreen
+import ru.lazyhat.compukterkraft.core.LOGGER
 
 object ClientRegistry {
     fun register(event: RegisterMenuScreensEvent) {

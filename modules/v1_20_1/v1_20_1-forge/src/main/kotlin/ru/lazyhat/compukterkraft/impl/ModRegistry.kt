@@ -38,6 +38,7 @@ import net.minecraftforge.eventbus.api.IEventBus
 import net.minecraftforge.registries.DeferredRegister
 import net.minecraftforge.registries.RegistryObject
 import ru.lazyhat.compukterkraft.common.block.ComputerBlock
+import ru.lazyhat.compukterkraft.common.block.ComputerBlockEntity
 import ru.lazyhat.compukterkraft.common.data.ComputerContainerData
 import ru.lazyhat.compukterkraft.common.item.ComputerItem
 import ru.lazyhat.compukterkraft.common.loot.BlockNamedEntityLootCondition
@@ -45,6 +46,7 @@ import ru.lazyhat.compukterkraft.common.loot.ConstantLootConditionSerializer
 import ru.lazyhat.compukterkraft.common.loot.HasComputerIdLootCondition
 import ru.lazyhat.compukterkraft.common.loot.PlayerCreativeLootCondition
 import ru.lazyhat.compukterkraft.common.menu.ComputerMenuWithoutInventory
+import ru.lazyhat.compukterkraft.core.LOGGER
 import ru.lazyhat.compukterkraft.core.MOD_ID
 import ru.lazyhat.compukterkraft.core.block.ComputerFamily
 import ru.lazyhat.compukterkraft.impl.block.ForgeComputerBlockEntity
@@ -81,9 +83,12 @@ object ModRegistry {
             block: RegistryObject<B>,
             name: String,
             factory: (BlockPos, BlockState) -> T,
-        ): RegistryObject<BlockEntityType<T>> = REGISTRY.register(name) { BlockEntityType(factory, setOf(block.get()), null) }
+        ): RegistryObject<BlockEntityType<T>> =
+            REGISTRY.register(name) {
+                BlockEntityType.Builder.of(factory, block.get()).build(null)
+            }
 
-        val COMPUTER_ADVANCED: RegistryObject<BlockEntityType<ForgeComputerBlockEntity>> =
+        val COMPUTER_ADVANCED: RegistryObject<BlockEntityType<ComputerBlockEntity>> =
             ofBlock(
                 Blocks.COMPUTER_ADVANCED,
                 Names.COMPUTER_ADVANCED,
@@ -144,7 +149,7 @@ object ModRegistry {
             REGISTRY.register(Names.COMPUTER) {
                 IForgeMenuType.create { id, playerInventory, data ->
                     ComputerMenuWithoutInventory(COMPUTER.get(), id, playerInventory, ComputerContainerData(data)).also {
-                        // LOGGER.info("ClientRegistry: ComputerMenuWithoutInventory from buffer created")
+                        LOGGER.info { "ClientRegistry: ComputerMenuWithoutInventory from buffer created" }
                     }
                 }
             }

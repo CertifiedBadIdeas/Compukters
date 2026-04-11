@@ -55,6 +55,7 @@ import net.minecraft.world.level.block.state.BlockBehaviour
 import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.material.MapColor
 import net.minecraft.world.level.storage.loot.predicates.LootItemConditionType
+import ru.lazyhat.compukterkraft.common.asResource
 import ru.lazyhat.compukterkraft.common.block.ComputerBlock
 import ru.lazyhat.compukterkraft.common.block.ComputerBlockEntity
 import ru.lazyhat.compukterkraft.common.data.ComputerContainerData
@@ -64,7 +65,6 @@ import ru.lazyhat.compukterkraft.common.loot.ConstantLootConditionSerializer
 import ru.lazyhat.compukterkraft.common.loot.HasComputerIdLootCondition
 import ru.lazyhat.compukterkraft.common.loot.PlayerCreativeLootCondition
 import ru.lazyhat.compukterkraft.common.menu.ComputerMenuWithoutInventory
-import ru.lazyhat.compukterkraft.core.MOD_ID
 import ru.lazyhat.compukterkraft.core.block.ComputerFamily
 
 object ModRegistry {
@@ -73,7 +73,7 @@ object ModRegistry {
         const val COMPUTER = "computer"
     }
 
-    private fun id(name: String): ResourceLocation = ResourceLocation(MOD_ID, name)
+    private fun id(name: String): ResourceLocation = name.asResource()
 
     object Blocks {
         private fun properties(): BlockBehaviour.Properties = BlockBehaviour.Properties.of().strength(2f)
@@ -103,18 +103,18 @@ object ModRegistry {
                 Registry.register(
                     BuiltInRegistries.BLOCK_ENTITY_TYPE,
                     id(Names.COMPUTER_ADVANCED),
-                    BlockEntityType(
-                        { p: BlockPos, s: BlockState ->
-                            ComputerBlockEntity(
-                                COMPUTER_ADVANCED,
-                                p,
-                                s,
-                                ComputerFamily.ADVANCED,
-                            )
-                        },
-                        setOf(Blocks.COMPUTER_ADVANCED),
-                        null,
-                    ),
+                    BlockEntityType.Builder
+                        .of(
+                            { p: BlockPos, s: BlockState ->
+                                ComputerBlockEntity(
+                                    COMPUTER_ADVANCED,
+                                    p,
+                                    s,
+                                    ComputerFamily.ADVANCED,
+                                )
+                            },
+                            Blocks.COMPUTER_ADVANCED,
+                        ).build(null),
                 )
         }
     }

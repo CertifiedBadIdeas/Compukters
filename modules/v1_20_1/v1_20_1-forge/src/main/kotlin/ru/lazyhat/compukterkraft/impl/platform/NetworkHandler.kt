@@ -29,6 +29,7 @@ import net.minecraftforge.network.NetworkRegistry
 import net.minecraftforge.network.simple.SimpleChannel
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+import ru.lazyhat.compukterkraft.common.asResource
 import ru.lazyhat.compukterkraft.common.network.MessageTypeImpl
 import ru.lazyhat.compukterkraft.common.network.NetworkMessage
 import ru.lazyhat.compukterkraft.common.network.NetworkMessages
@@ -36,7 +37,6 @@ import ru.lazyhat.compukterkraft.common.network.client.ClientNetworkContext
 import ru.lazyhat.compukterkraft.common.network.server.ServerNetworkContext
 import ru.lazyhat.compukterkraft.core.platform.Services
 import ru.lazyhat.compukterkraft.impl.INSTALLED_VERSION
-import ru.lazyhat.compukterkraft.impl.asResource
 import java.util.function.Supplier
 
 object NetworkHandler {

@@ -26,7 +26,6 @@ import ru.lazyhat.compukterkraft.common.menu.ComputerMenu
 import ru.lazyhat.compukterkraft.common.network.MessageType
 import ru.lazyhat.compukterkraft.common.network.NetworkMessages
 import ru.lazyhat.compukterkraft.common.network.client.ComputerWorkspaceClientMessage
-import ru.lazyhat.compukterkraft.common.network.server.ServerNetworking.sendToPlayer
 
 class ComputerWorkspaceServerMessage : ComputerServerMessage {
     private val action: Action
@@ -67,7 +66,7 @@ class ComputerWorkspaceServerMessage : ComputerServerMessage {
         when (action) {
             Action.LIST -> {
                 val entries = workspace.list(computer.instanceID, path)
-                sendToPlayer(
+                ServerNetworking.sendToPlayer(
                     ComputerWorkspaceClientMessage(targetContainerId, entries),
                     player,
                 )
@@ -75,7 +74,7 @@ class ComputerWorkspaceServerMessage : ComputerServerMessage {
 
             Action.READ -> {
                 val document = workspace.readDocument(computer.instanceID, path)
-                sendToPlayer(
+                ServerNetworking.sendToPlayer(
                     ComputerWorkspaceClientMessage(targetContainerId, document),
                     player,
                 )
@@ -83,7 +82,7 @@ class ComputerWorkspaceServerMessage : ComputerServerMessage {
 
             Action.WRITE -> {
                 val document = workspace.writeDocument(computer.instanceID, path, text)
-                sendToPlayer(
+                ServerNetworking.sendToPlayer(
                     ComputerWorkspaceClientMessage(targetContainerId, document),
                     player,
                 )

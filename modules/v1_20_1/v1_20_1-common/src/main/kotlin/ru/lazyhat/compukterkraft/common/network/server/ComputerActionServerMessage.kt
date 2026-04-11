@@ -34,7 +34,7 @@ class ComputerActionServerMessage : ComputerServerMessage {
     }
 
     constructor(buf: FriendlyByteBuf) : super(buf) {
-        action = buf.readEnum<Action>(Action::class.java)
+        action = buf.readEnum(Action::class.java)
     }
 
     override fun write(buf: FriendlyByteBuf) {

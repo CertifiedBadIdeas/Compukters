@@ -21,6 +21,7 @@ package ru.lazyhat.compukterkraft.impl
 
 import net.minecraft.client.gui.screens.MenuScreens
 import ru.lazyhat.compukterkraft.common.gui.screen.ComputerWorkbenchScreen
+import ru.lazyhat.compukterkraft.core.LOGGER
 
 object ClientRegistry {
     private var registeredMainThread = false

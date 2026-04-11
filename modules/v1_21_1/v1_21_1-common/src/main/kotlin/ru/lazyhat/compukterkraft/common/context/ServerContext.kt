@@ -22,18 +22,15 @@ package ru.lazyhat.compukterkraft.common.context
 import net.minecraft.server.MinecraftServer
 import net.minecraft.world.level.storage.LevelResource
 import ru.lazyhat.compukterkraft.core.computer.vm.ComputerVmSupervisor
-import ru.lazyhat.compukterkraft.core.platform.api.ServerWorldAccess
 
 class ServerContext(
     val server: MinecraftServer,
 ) {
-    val vmSupervisor = ComputerVmSupervisor(ServerWorldAccess { server.getWorldPath(LevelResource.ROOT) })
+    val vmSupervisor = ComputerVmSupervisor { server.getWorldPath(LevelResource.ROOT) }
     val computerManager = ComputerManager(vmSupervisor)
 
     companion object {
         private var current: ServerContext? = null
-
-        lateinit var idAllocator: (MinecraftServer) -> Int
 
         val isInitialized: Boolean
             get() = current != null
@@ -47,7 +44,7 @@ class ServerContext(
         val server
             get() = context().server
 
-        fun allocateComputerId(): Int = idAllocator(server)
+        fun allocateComputerId(): Int = ComputerIdentitySavedData.get(server).allocateComputerId()
 
         fun create(server: MinecraftServer) {
             check(current == null) { "ServerContext is already initialized" }

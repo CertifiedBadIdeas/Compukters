@@ -48,10 +48,7 @@ class ComputerBlock(
         )
     }
 
-    override fun blockEntityType(): BlockEntityType<ComputerBlockEntity> {
-        @Suppress("UNCHECKED_CAST")
-        return ModObjects.computerBlockEntityType() as BlockEntityType<ComputerBlockEntity>
-    }
+    override fun blockEntityType(): BlockEntityType<ComputerBlockEntity> = ModObjects.computerBlockEntityType()
 
     override fun createBlockStateDefinition(builder: StateDefinition.Builder<Block, BlockState>) {
         builder.add(facing, state)

@@ -41,7 +41,6 @@ import ru.lazyhat.compukterkraft.core.application.workbench.highlightColor
 import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalInputController
 import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalLayout
 import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalMetrics
-import ru.lazyhat.compukterkraft.core.platform.api.FontMetrics
 import ru.lazyhat.compukterkraft.core.ui.workbench.WorkbenchLayoutModel
 import ru.lazyhat.compukterkraft.core.ui.workbench.WorkspaceRowLayout
 import kotlin.math.min
@@ -488,10 +487,9 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
             topPos,
             imageWidth,
             imageHeight,
-            FontMetrics {
-                minecraft!!.font.width(it)
-            },
-        )
+        ) {
+            minecraft!!.font.width(it)
+        }
 
     private fun terminalLayout(): WorkbenchTerminalLayout {
         val snap = menu.clientSide.screenSnapshot

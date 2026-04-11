@@ -70,11 +70,12 @@ object UiRenderer {
             }
 
             is TerminalView -> {
+                val renderType = RenderType.text(FixedWidthFontRenderer.FONT)
                 val bufferSource = MultiBufferSource.immediate(Tesselator.getInstance().builder)
                 val emitter =
                     FixedWidthFontRenderer.toVertexConsumer(
                         graphics.pose(),
-                        bufferSource.getBuffer(RenderType.text(FixedWidthFontRenderer.FONT)),
+                        bufferSource.getBuffer(renderType),
                     )
                 FixedWidthFontRenderer.drawTerminal(
                     emitter,

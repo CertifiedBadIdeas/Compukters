@@ -17,16 +17,12 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package ru.lazyhat.compukterkraft.impl
+package ru.lazyhat.compukterkraft.common
 
-import net.neoforged.fml.ModList
+import net.minecraft.network.chat.Component
+import net.minecraft.resources.ResourceLocation
 import ru.lazyhat.compukterkraft.core.MOD_ID
-import kotlin.jvm.optionals.getOrDefault
 
-val INSTALLED_VERSION: String by lazy {
-    ModList
-        .get()
-        .getModContainerById(MOD_ID)
-        .map { it.modInfo.version.toString() }
-        .getOrDefault("unknown")
-}
+fun String.asResource(): ResourceLocation = ResourceLocation.fromNamespaceAndPath(MOD_ID, this)
+
+fun String.literalComponent(): Component = Component.literal(this)

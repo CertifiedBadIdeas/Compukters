@@ -21,6 +21,7 @@ package ru.lazyhat.compukterkraft.common.context
 
 import net.minecraft.core.HolderLookup
 import net.minecraft.nbt.CompoundTag
+import net.minecraft.server.MinecraftServer
 import net.minecraft.world.level.saveddata.SavedData
 
 const val COMPUTER_IDENTITY_SAVED_DATA_NAME = "compukterkraft_computer_identity"
@@ -45,12 +46,24 @@ class ComputerIdentitySavedData(
         tag.apply {
             putInt(NEXT_COMPUTER_ID_TAG, nextComputerId)
         }
-}
 
-fun loadComputerIdentitySavedData(
-    tag: CompoundTag,
-    registries: HolderLookup.Provider,
-): ComputerIdentitySavedData =
-    ComputerIdentitySavedData(
-        nextComputerId = tag.getInt(NEXT_COMPUTER_ID_TAG).coerceAtLeast(FIRST_COMPUTER_ID),
-    )
+    companion object {
+        fun load(
+            tag: CompoundTag,
+            registries: HolderLookup.Provider,
+        ): ComputerIdentitySavedData =
+            ComputerIdentitySavedData(
+                nextComputerId = tag.getInt(NEXT_COMPUTER_ID_TAG).coerceAtLeast(FIRST_COMPUTER_ID),
+            )
+
+        fun get(server: MinecraftServer): ComputerIdentitySavedData =
+            @Suppress("TYPE_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
+            server
+                .overworld()
+                .dataStorage
+                .computeIfAbsent(
+                    Factory(::ComputerIdentitySavedData, ::load, null),
+                    COMPUTER_IDENTITY_SAVED_DATA_NAME,
+                )
+    }
+}

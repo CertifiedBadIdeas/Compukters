@@ -25,6 +25,7 @@ import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent
 import net.neoforged.neoforge.client.event.ClientTickEvent
 import net.neoforged.neoforge.client.event.RenderFrameEvent
 import ru.lazyhat.compukterkraft.core.ClientHooks
+import ru.lazyhat.compukterkraft.core.LOGGER
 import ru.lazyhat.compukterkraft.core.MOD_ID
 import ru.lazyhat.compukterkraft.core.MOD_NAME
 
@@ -50,61 +51,4 @@ object ForgeClientHooks {
     fun onRenderTick(event: RenderFrameEvent.Pre) {
         ClientHooks.onRenderTick()
     }
-
-// 	@SubscribeEvent
-// 	fun onWorldUnload(event: LevelEvent.Unload) {
-// 		if (event.getLevel().isClientSide()) ClientHooks.onWorldUnload()
-// 	}
-//
-// 	@SubscribeEvent
-// 	fun onDisconnect(event: LoggingOut?) {
-// 		ClientHooks.onDisconnect()
-// 	}
-//
-// 	@SubscribeEvent
-// 	fun drawHighlight(event: RenderHighlightEvent.Block) {
-// 		if (ClientHooks.drawHighlight(event.getPoseStack(), event.getMultiBufferSource(), event.getCamera(), event.getTarget())) {
-// 			event.setCanceled(true)
-// 		}
-// 	}
-//
-// 	@SubscribeEvent
-// 	fun onRenderText(event: DebugText) {
-// 		ClientHooks.addGameDebugInfo(event.getLeft()::add)
-// 		ClientHooks.addBlockDebugInfo(event.getRight()::add)
-// 	}
-//
-// 	@SubscribeEvent
-// 	fun onRenderInHand(event: RenderHandEvent) {
-// 		if (ClientHooks.onRenderHeldItem(
-// 				event.getPoseStack(), event.getMultiBufferSource(), event.getPackedLight(),
-// 				event.getHand(), event.getInterpolatedPitch(), event.getEquipProgress(), event.getSwingProgress(), event.getItemStack()
-// 			)
-// 		) {
-// 			event.setCanceled(true)
-// 		}
-// 	}
-//
-// 	@SubscribeEvent
-// 	fun onRenderInFrame(event: RenderItemInFrameEvent) {
-// 		if (ClientHooks.onRenderItemFrame(
-// 				event.getPoseStack(), event.getMultiBufferSource(), event.getItemFrameEntity(), event.getItemStack(), event.getPackedLight()
-// 			)
-// 		) {
-// 			event.setCanceled(true)
-// 		}
-// 	}
-//
-// 	@SubscribeEvent
-// 	fun playStreaming(event: PlayStreamingSourceEvent) {
-// 		if (event.getSound() !is SpeakerSound || sound.getStream() == null) return
-// 		ClientHooks.onPlayStreaming(event.getEngine(), event.getChannel(), sound.getStream())
-// 	}
-//
-// 	@SubscribeEvent
-// 	fun registerClientCommands(event: RegisterClientCommandsEvent) {
-// 		ClientRegistry.registerClientCommands(
-// 			event.getDispatcher(),
-// 			{ obj: CommandSourceStack?, message: Component? -> obj.sendFailure(message) })
-// 	}
 }
