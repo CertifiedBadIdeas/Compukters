@@ -21,7 +21,7 @@ plugins {
     id("kotlin-convention")
 }
 
-val modProperties = readModProperties()
+val modProperties = readVersionedModProperties()
 val modVersion = computeModVersion()
 
 modProperties["mod_version"] = modVersion
@@ -29,7 +29,7 @@ optionalSetting("ck.minecraftVersionRange")?.let { modProperties["minecraft_vers
 optionalSetting("ck.loaderVersionRange")?.let { modProperties["loader_version_range"] = it }
 optionalSetting("ck.neoforgeVersionRange")?.let { modProperties["neoforge_version_range"] = it }
 
-base.archivesName = modProperties.getValue("mod_name").replace(" ", "")
+base.archivesName = modProperties.getValue("mod_id").replace(" ", "")
 version = modVersion
 
 val generateModMetadata =

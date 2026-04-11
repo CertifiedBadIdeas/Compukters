@@ -39,8 +39,8 @@ fun ComputerFamily.checkUsable(player: Player): Boolean =
     }
 
 private fun checkCommandUsable(player: Player): Boolean {
-    val server: MinecraftServer? = player.getServer()
-    if (server == null || !server.isCommandBlockEnabled()) {
+    val server: MinecraftServer? = player.server
+    if (server == null || !server.isCommandBlockEnabled) {
         player.displayClientMessage(Component.translatable("advMode.notEnabled"), true)
         return false
     } else if (!canUseCommandBlock(player)) {

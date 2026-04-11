@@ -42,12 +42,17 @@ private const val LOADER_KIND_KEY = "ck.loaderKind"
 
 fun Project.libsCatalog(): VersionCatalog = extensions.getByType<VersionCatalogsExtension>().named("libs")
 
-fun Project.setBuildContext(versionKey: String, minecraftVersion: String, javaVersion: Int) {
-    extraProperties()[BUILD_CONTEXT_KEY] = BuildContext(
-        versionKey = versionKey,
-        minecraftVersion = minecraftVersion,
-        javaVersion = javaVersion,
-    )
+fun Project.setBuildContext(
+    versionKey: String,
+    minecraftVersion: String,
+    javaVersion: Int,
+) {
+    extraProperties()[BUILD_CONTEXT_KEY] =
+        BuildContext(
+            versionKey = versionKey,
+            minecraftVersion = minecraftVersion,
+            javaVersion = javaVersion,
+        )
 }
 
 fun Project.buildContext(): BuildContext =
@@ -65,12 +70,22 @@ fun Project.loaderKind(): LoaderKind =
 fun Project.versionLibrary(aliasPrefix: String): Provider<MinimalExternalModuleDependency> =
     libsCatalog().findLibrary("$aliasPrefix-${buildContext().versionKey}").get()
 
-fun Project.readModProperties(): MutableMap<String, String> =
+fun Project.readVersionedModProperties(): MutableMap<String, String> =
     file("$rootDir/config/mod.properties")
         .readLines()
-        .mapNotNull { line -> line.indexOf('=').takeIf { it != -1 }?.let { index -> line.substring(0, index) to line.substring(index + 1) } }
-        .toMap()
-        .toMutableMap()
+        .mapNotNull { line ->
+            line.indexOf('=').takeIf { it != -1 }?.let { index -> line.substring(0, index) to line.substring(index + 1) }
+        }.toMap()
+        .let { map ->
+            val minecraftVersion = buildContext().minecraftVersion
+
+            map
+                .filterKeys { it.startsWith(minecraftVersion) }
+                .mapKeys { (key, _) -> key.substringAfter("${minecraftVersion}_") } +
+                map
+                    .filterKeys { it.startsWith("common") }
+                    .mapKeys { it.key.substringAfter("common_") }
+        }.toMutableMap()
 
 fun Project.computeModVersion(): String = "${buildContext().minecraftVersion}-${rootProject.version}"
 
