@@ -38,6 +38,7 @@ enum class HorizontalFacingModel {
 enum class ComputerVisualStateModel {
     OFF,
     ON,
+    BLINKING,
 }
 
 data class ComputerBlockDefaults(

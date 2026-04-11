@@ -40,6 +40,18 @@ class ComputerBlockPolicyTest {
     }
 
     @Test
+    fun visualStateModelContainsAllKnownStates() {
+        assertEquals(
+            listOf(
+                ComputerVisualStateModel.OFF,
+                ComputerVisualStateModel.ON,
+                ComputerVisualStateModel.BLINKING,
+            ),
+            ComputerVisualStateModel.entries,
+        )
+    }
+
+    @Test
     fun horizontalFacingOpposite() {
         assertEquals(HorizontalFacingModel.SOUTH, HorizontalFacingModel.NORTH.opposite())
         assertEquals(HorizontalFacingModel.NORTH, HorizontalFacingModel.SOUTH.opposite())
