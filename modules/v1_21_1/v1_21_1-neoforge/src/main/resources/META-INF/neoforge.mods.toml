@@ -1,5 +1,5 @@
 modLoader="javafml"
-loaderVersion="${loader_version_range}"
+loaderVersion="${neoforge_loader_version_range}"
 license="${mod_license}"
 
 [[mods]]
@@ -16,7 +16,7 @@ config="compuktercraft.mixins.json"
 [[dependencies.${mod_id}]]
 modId="neoforge"
 mandatory=true
-versionRange="${neoforge_version_range}"
+versionRange="${neoforge_mod_version_range}"
 ordering="NONE"
 side="BOTH"
 
