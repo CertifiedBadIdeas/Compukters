@@ -19,6 +19,8 @@
 
 package ru.lazyhat.compukterkraft.common.block
 
+// NOTE: Keep the v1_21_1 and v1_20_1 adapter implementations in sync.
+
 import net.minecraft.core.Direction
 import ru.lazyhat.compukterkraft.core.content.ComputerVisualStateModel
 import ru.lazyhat.compukterkraft.core.content.HorizontalFacingModel
@@ -31,6 +33,7 @@ internal fun HorizontalFacingModel.toMinecraftDirection(): Direction =
         HorizontalFacingModel.WEST -> Direction.WEST
     }
 
+/** Accepts only horizontal directions and intentionally rejects vertical ones. */
 internal fun Direction.toFacingModel(): HorizontalFacingModel =
     when (this) {
         Direction.NORTH -> HorizontalFacingModel.NORTH
