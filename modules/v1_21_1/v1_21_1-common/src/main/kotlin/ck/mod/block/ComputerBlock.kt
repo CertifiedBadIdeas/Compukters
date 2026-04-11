@@ -51,9 +51,7 @@ class ComputerBlock(
         )
     }
 
-    override fun blockEntityType(): BlockEntityType<ComputerBlockEntity> {
-        return ModObjects.computerBlockEntityType()
-    }
+    override fun blockEntityType(): BlockEntityType<ComputerBlockEntity> = ModObjects.computerBlockEntityType()
 
     override fun createBlockStateDefinition(builder: StateDefinition.Builder<Block, BlockState>) {
         builder.add(facing, state)

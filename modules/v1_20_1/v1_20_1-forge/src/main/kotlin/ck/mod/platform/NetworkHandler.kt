@@ -120,7 +120,10 @@ object NetworkHandler {
     }
 
     fun sendToServer(message: NetworkMessage<ServerNetworkContext>) {
-        net.minecraft.client.Minecraft.getInstance().connection?.send(createServerboundPacket(message))
+        net.minecraft.client.Minecraft
+            .getInstance()
+            .connection
+            ?.send(createServerboundPacket(message))
     }
 
     /**
