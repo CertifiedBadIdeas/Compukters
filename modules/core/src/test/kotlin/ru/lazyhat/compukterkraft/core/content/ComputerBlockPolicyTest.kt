@@ -40,6 +40,14 @@ class ComputerBlockPolicyTest {
     }
 
     @Test
+    fun horizontalFacingOpposite() {
+        assertEquals(HorizontalFacingModel.SOUTH, HorizontalFacingModel.NORTH.opposite())
+        assertEquals(HorizontalFacingModel.NORTH, HorizontalFacingModel.SOUTH.opposite())
+        assertEquals(HorizontalFacingModel.WEST, HorizontalFacingModel.EAST.opposite())
+        assertEquals(HorizontalFacingModel.EAST, HorizontalFacingModel.WEST.opposite())
+    }
+
+    @Test
     fun crouchingPlayerDoesNotOpenMenu() {
         assertTrue(ComputerBlockPolicy.shouldOpenMenu(isPlayerCrouching = false))
         assertFalse(ComputerBlockPolicy.shouldOpenMenu(isPlayerCrouching = true))
