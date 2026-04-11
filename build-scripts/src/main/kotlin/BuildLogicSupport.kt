@@ -19,11 +19,15 @@
 
 import org.gradle.api.Project
 import org.gradle.api.artifacts.MinimalExternalModuleDependency
+import org.gradle.api.artifacts.ProjectDependency
 import org.gradle.api.artifacts.VersionCatalog
 import org.gradle.api.artifacts.VersionCatalogsExtension
+import org.gradle.api.plugins.ExtensionAware
 import org.gradle.api.plugins.ExtraPropertiesExtension
 import org.gradle.api.provider.Provider
+import org.gradle.kotlin.dsl.DependencyHandlerScope
 import org.gradle.kotlin.dsl.getByType
+import org.gradle.kotlin.dsl.project
 
 data class BuildContext(
     val versionKey: String,
@@ -40,9 +44,9 @@ enum class LoaderKind {
 private const val BUILD_CONTEXT_KEY = "ck.buildContext"
 private const val LOADER_KIND_KEY = "ck.loaderKind"
 
-fun Project.libsCatalog(): VersionCatalog = extensions.getByType<VersionCatalogsExtension>().named("libs")
+fun ExtensionAware.libsCatalog(): VersionCatalog = extensions.getByType<VersionCatalogsExtension>().named("libs")
 
-fun Project.setBuildContext(
+fun ExtensionAware.setBuildContext(
     versionKey: String,
     minecraftVersion: String,
     javaVersion: Int,
@@ -55,27 +59,37 @@ fun Project.setBuildContext(
         )
 }
 
+fun ExtensionAware.buildContextOrNull(): BuildContext? = (extraProperties()[BUILD_CONTEXT_KEY] as? BuildContext)
+
 fun Project.buildContext(): BuildContext =
-    (extraProperties()[BUILD_CONTEXT_KEY] as? BuildContext)
+    buildContextOrNull()
         ?: error("Build context is not configured for $path. Apply a version convention plugin first.")
 
-fun Project.setLoaderKind(loaderKind: LoaderKind) {
+fun ExtensionAware.setLoaderKind(loaderKind: LoaderKind) {
     extraProperties()[LOADER_KIND_KEY] = loaderKind
 }
 
+fun ExtensionAware.loaderKindOrNull(): LoaderKind? = extraProperties()[LOADER_KIND_KEY] as? LoaderKind
+
 fun Project.loaderKind(): LoaderKind =
-    (extraProperties()[LOADER_KIND_KEY] as? LoaderKind)
+    loaderKindOrNull()
         ?: error("Loader kind is not configured for $path. Apply a loader convention plugin first.")
 
 fun Project.versionLibrary(aliasPrefix: String): Provider<MinimalExternalModuleDependency> =
     libsCatalog().findLibrary("$aliasPrefix-${buildContext().versionKey}").get()
 
-fun Project.readVersionedModProperties(): MutableMap<String, String> =
+fun DependencyHandlerScope.commonVersionProject(buildContext: BuildContext): ProjectDependency =
+    project(":v${buildContext.minecraftVersion.replace('.','_')}-common")
+
+fun Project.readAllModProperties(): Map<String, String> =
     file("$rootDir/config/mod.properties")
         .readLines()
         .mapNotNull { line ->
             line.indexOf('=').takeIf { it != -1 }?.let { index -> line.substring(0, index) to line.substring(index + 1) }
         }.toMap()
+
+fun Project.readVersionedModProperties(): Map<String, String> =
+    readAllModProperties()
         .let { map ->
             val minecraftVersion = buildContext().minecraftVersion
 
@@ -85,16 +99,8 @@ fun Project.readVersionedModProperties(): MutableMap<String, String> =
                 map
                     .filterKeys { it.startsWith("common") }
                     .mapKeys { it.key.substringAfter("common_") }
-        }.toMutableMap()
+        }
 
 fun Project.computeModVersion(): String = "${buildContext().minecraftVersion}-${rootProject.version}"
 
-fun Project.optionalSetting(name: String): String? {
-    val extra = extraProperties()
-    return when {
-        extra.has(name) -> extra[name].toString()
-        else -> providers.gradleProperty(name).orNull
-    }
-}
-
-private fun Project.extraProperties(): ExtraPropertiesExtension = extensions.getByType<ExtraPropertiesExtension>()
+private fun ExtensionAware.extraProperties(): ExtraPropertiesExtension = extensions.getByType<ExtraPropertiesExtension>()

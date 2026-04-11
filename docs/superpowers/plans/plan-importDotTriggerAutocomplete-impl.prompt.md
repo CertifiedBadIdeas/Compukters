@@ -65,7 +65,7 @@ fun recoversFromGarbageToken() {
 
 - [ ] **Step 1.2: Run tests to verify they fail**
 
-Run: `./gradlew :compiler:test --tests "ck.lang.frontend.LanguageIdeTest.recoversFromIncompleteImport" --tests "ck.lang.frontend.LanguageIdeTest.recoversFromGarbageToken" --no-daemon`
+Run: `./gradlew :compiler:test --tests "ru.lazyhat.compukterkraft.lang.frontend.LanguageIdeTest.recoversFromIncompleteImport" --tests "ru.lazyhat.compukterkraft.lang.frontend.LanguageIdeTest.recoversFromGarbageToken" --no-daemon`
 
 Expected: FAIL — parser returns `null` for incomplete programs, no recovery happens.
 
@@ -252,7 +252,7 @@ Note: `SourceTextSupport` is `internal`, and the test is in the same package —
 
 - [ ] **Step 2.2: Run test to verify it fails**
 
-Run: `./gradlew :compiler:test --tests "ck.lang.frontend.LanguageIdeTest.importPrefixDetectsImportContext" --no-daemon`
+Run: `./gradlew :compiler:test --tests "ru.lazyhat.compukterkraft.lang.frontend.LanguageIdeTest.importPrefixDetectsImportContext" --no-daemon`
 
 Expected: FAIL — `importPrefix` does not exist yet.
 
@@ -281,7 +281,7 @@ internal object SourceTextSupport {
 
 - [ ] **Step 2.4: Run test to verify it passes**
 
-Run: `./gradlew :compiler:test --tests "ck.lang.frontend.LanguageIdeTest.importPrefixDetectsImportContext" --no-daemon`
+Run: `./gradlew :compiler:test --tests "ru.lazyhat.compukterkraft.lang.frontend.LanguageIdeTest.importPrefixDetectsImportContext" --no-daemon`
 
 Expected: PASS
 
@@ -338,12 +338,12 @@ fun completesImportModulesExcludingAlreadyImported() {
 Add the import for `CompletionItemKind` at the top of the test file:
 
 ```kotlin
-import ck.lang.runtime.CompletionItemKind
+import ru.lazyhat.compukterkraft.lang.runtime.CompletionItemKind
 ```
 
 - [ ] **Step 3.2: Run tests to verify they fail**
 
-Run: `./gradlew :compiler:test --tests "ck.lang.frontend.LanguageIdeTest.completesImportModules" --tests "ck.lang.frontend.LanguageIdeTest.completesImportModulesWithPrefix" --tests "ck.lang.frontend.LanguageIdeTest.completesImportModulesExcludingAlreadyImported" --no-daemon`
+Run: `./gradlew :compiler:test --tests "ru.lazyhat.compukterkraft.lang.frontend.LanguageIdeTest.completesImportModules" --tests "ru.lazyhat.compukterkraft.lang.frontend.LanguageIdeTest.completesImportModulesWithPrefix" --tests "ru.lazyhat.compukterkraft.lang.frontend.LanguageIdeTest.completesImportModulesExcludingAlreadyImported" --no-daemon`
 
 Expected: FAIL — import completion logic does not exist yet.
 
@@ -533,7 +533,7 @@ fun literalCompletionsHaveNoTrailingSpace() {
 
 - [ ] **Step 4.2: Run tests to verify they fail**
 
-Run: `./gradlew :compiler:test --tests "ck.lang.frontend.LanguageIdeTest.keywordCompletionsHaveTrailingSpace" --tests "ck.lang.frontend.LanguageIdeTest.literalCompletionsHaveNoTrailingSpace" --no-daemon`
+Run: `./gradlew :compiler:test --tests "ru.lazyhat.compukterkraft.lang.frontend.LanguageIdeTest.keywordCompletionsHaveTrailingSpace" --tests "ru.lazyhat.compukterkraft.lang.frontend.LanguageIdeTest.literalCompletionsHaveNoTrailingSpace" --no-daemon`
 
 Expected: FAIL — `insertText` field does not exist on `CompletionItem`.
 
@@ -673,7 +673,7 @@ interface WorkbenchIdeFacade {
 In `mod/src/main/kotlin/ck/mod/infrastructure/workbench/WorkbenchGateways.kt`, update the object. Add imports for `AnalyzedProgram`:
 
 ```kotlin
-import ck.lang.frontend.AnalyzedProgram
+import ru.lazyhat.compukterkraft.lang.frontend.AnalyzedProgram
 ```
 
 Replace the full `LanguageWorkbenchIdeFacade` object:

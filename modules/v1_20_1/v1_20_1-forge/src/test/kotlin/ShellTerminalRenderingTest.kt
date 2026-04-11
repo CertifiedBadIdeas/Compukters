@@ -17,7 +17,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import ck.lang.runtime.ScreenBuffer
+import ru.lazyhat.compukterkraft.lang.runtime.ScreenBuffer
 import kotlin.test.Test
 import kotlin.test.assertEquals
 

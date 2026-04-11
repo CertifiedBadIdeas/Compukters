@@ -114,9 +114,9 @@ ServerComputer.close()
 
 | Package                    | Responsibility                                               |
 |----------------------------|--------------------------------------------------------------|
-| `ck.lang.api`              | Bytecode format: `Instruction`, `BytecodeModule`, operators  |
-| `ck.lang.frontend`         | Parser, type checker, code generator, IDE support            |
-| `ck.lang.runtime`          | VM runtime: `BytecodeVirtualMachine`, `RuntimeHostBridge`    |
+| `ru.lazyhat.compukterkraft.lang.api`              | Bytecode format: `Instruction`, `BytecodeModule`, operators  |
+| `ru.lazyhat.compukterkraft.lang.frontend`         | Parser, type checker, code generator, IDE support            |
+| `ru.lazyhat.compukterkraft.lang.runtime`          | VM runtime: `BytecodeVirtualMachine`, `RuntimeHostBridge`    |
 |                            | Data types: `ScreenBuffer`, `ScreenBufferSnapshot`           |
 |                            | Interfaces: `ComputerRuntime`, `ComputerTerminalApi`         |
 |                            | Models: `ComputerProfile`, `VmSnapshot`, `HostCall`          |
