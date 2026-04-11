@@ -15,8 +15,8 @@ The project is split into multiple Gradle modules across a multi-version, multi-
 ### Module Ownership Rules
 
 - **`core`** owns shared behavior, descriptors (`CommonBlockDescriptor`, `CommonMenuDescriptor`), and platform port interfaces (`PlatformBlockRegistrar`, `PlatformMenuRegistrar`, etc.)
-- **`v1_x_x-common`** owns Minecraft-facing version adapters and classes: blocks, items, menus, screens, network messages, context/runtime, UI rendering
-- **Loader leaf modules** own only bootstrap (`CompukterKraftMod`), loader-specific event hooks (`FabricCommonHooks`, `ForgeCommonHooks`), registry (`ModRegistry`), network handler (`NetworkHandler`), and block/entity definitions that differ by loader (due to registry wrapper types)
+- **`v1_x_x-common`** owns Minecraft-facing version adapters and classes: blocks, block entities, items, menus, screens, network messages, version-specific context adapters, and Minecraft rendering glue
+- **Loader leaf modules** own bootstrap (`CompukterKraftMod`, `CompukterKraftClientMod`), loader-specific event hooks (`FabricCommonHooks`, `ForgeCommonHooks`, `ForgeClientHooks`), client registration/bootstrap (`ClientRegistry`, `ForgeClientRegistry`), registry (`ModRegistry`), loader helper extensions (`Extensions`), network handler (`NetworkHandler`), and tiny loader-only shims/adapters where the Minecraft API still differs (`ForgeComputerBlockEntity`, `NeoForgeComputerBlockEntity`, `ComputerIdentitySavedDataAccess`)
 
 ### Delegate Pattern for Cross-Module Dependencies
 
@@ -32,8 +32,6 @@ object ServerNetworking {
 // In loader CompukterKraftMod.kt
 ServerNetworking.playerSender = NetworkHandler::sendToPlayer
 ```
-
----
 
 ## Data Flow
 
@@ -87,7 +85,7 @@ ServerNetworking.playerSender = NetworkHandler::sendToPlayer
 ```
 BlockEntity.use()
   └─ getOrCreateServerComputer()
-       └─ ComputerManager.getOrCreateComputer()
+    └─ ComputerManager.getOrCreateVm()
             └─ ServerComputer(instanceID, level, properties)
 
 ServerComputer.turnOn()
@@ -135,11 +133,11 @@ ServerComputer.close()
 
 | Package                            | Responsibility                                                     |
 |------------------------------------|--------------------------------------------------------------------|
-| `ck.mod.block`                     | `ComputerState`, `ComputerFamilyExt`                               |
-| `ck.mod.computer`                  | `ServerComputer`, `ComputerEvents`, `ComputerProperties`           |
+| `ck.mod.block`                     | Concrete blocks/block entities, `ComputerState`, `ComputerFamilyExt` |
+| `ck.mod.computer`                  | `ServerComputer`                                                   |
 | `ck.mod.context`                   | `ServerContext`, `ComputerManager`, `ComputerIdentitySavedData`    |
 | `ck.mod.data`                      | `ComputerContainerData`, `IContainerData`                          |
-| `ck.mod.gui`                       | Layout models, input controllers, `TerminalState`                  |
+| `ck.mod.gui`                       | `TerminalState`                                                    |
 | `ck.mod.gui.screen`                | `ComputerScreen`, `ComputerWorkbenchScreen`                        |
 | `ck.mod.infrastructure`            | Adapters: input gateway, workbench gateways, coroutine dispatcher  |
 | `ck.mod.item`                      | `AbstractComputerItem`, `ComputerItem`                             |
@@ -148,7 +146,7 @@ ServerComputer.close()
 | `ck.mod.network.client`            | Client-bound network messages                                      |
 | `ck.mod.network.server`            | Server-bound network messages, `ServerNetworking`                  |
 | `ck.mod.network.text`              | Table formatting utilities                                         |
-| `ck.mod.ui.dsl`                    | Declarative UI: `UiNode`, `UiRenderer`, `buildTerminalUi()`       |
+| `ck.mod.ui.dsl`                    | Minecraft-side `UiRenderer`                                        |
 | `ck.mod.ui.render`                 | `FixedWidthFontRenderer`, `WorkbenchTerminalRenderer` (Blaze3D)    |
 | `ck.mod.utils`                     | `BlockEntityUtils`, `BufferUtils`, `CommandUtils`, `LevelUtils`    |
 
@@ -156,9 +154,9 @@ ServerComputer.close()
 
 | Package                            | Responsibility                                                     |
 |------------------------------------|--------------------------------------------------------------------|
-| `ck.mod`                           | Mod entry point (`CompukterKraftMod`), `ModRegistry`, `Extensions` |
-| `ck.mod.block`                     | `AbstractComputerBlock`, `AbstractComputerBlockEntity`, concrete blocks |
-| `ck.mod.loot`                      | Loot conditions (use loader-specific registry access)              |
+| `ck.mod`                           | Mod entry points, `ModRegistry`, `Extensions`, client bootstrap helpers |
+| `ck.mod.block`                     | Tiny loader-only shims for API drift (`ForgeComputerBlockEntity`, `NeoForgeComputerBlockEntity`) |
+| `ck.mod.context`                   | Tiny saved-data access adapters where loader APIs still diverge    |
 | `ck.mod.platform`                  | `NetworkHandler` — loader-specific packet registration             |
 
 ---
@@ -171,21 +169,21 @@ The main VM host. Runs the compiled program on a background coroutine dispatcher
 
 - **Thread model:** One coroutine per computer. The VM coroutine writes to `ScreenBuffer` directly (no HostCall roundtrip for terminal I/O). The server tick thread reads snapshots via `ScreenBuffer.snapshot()`.
 - **Scheduling:** Each tick, the server calls `requestSlice()` which sends a permit through a `Channel`. The VM coroutine suspends at scheduling points when it exhausts its CPU budget.
-- **Lifecycle:** Created by `ComputerManager`, started with `start(program)`, stopped with `stop(reason)`.
+- **Lifecycle:** Created by `ComputerManager`, booted by `ServerComputer`, stopped with `stop(reason)`.
 
 ### `ComputerManager`
 
 Server-wide singleton that manages all active computers and their VMs.
 
-- Maintains `ConcurrentHashMap<Int, BackgroundComputerVm>` keyed by computer ID.
-- Owns the shared `ComputerWorkspace` (filesystem).
-- Provides `getOrCreateVm()`, `removeVm()`, `ensureWorkspaceInitialized()`.
+- Maintains the registry of active `ServerComputer` instances.
+- Delegates VM-handle lifecycle and shared workspace/IDE access to `ComputerVmSupervisor`.
+- Provides `getOrCreateVm()`, `removeVm()`, `ensureWorkspaceInitialized()`, `add()`, and `remove()`.
 
 ### `ServerComputer`
 
 Server-side representation of one computer instance. Orchestrates the VM lifecycle.
 
-- Calls `vmHandle.serverTick()` each game tick.
+- Each game tick it requests a VM slice, dispatches host calls, and synchronizes the latest screen snapshot.
 - Reads `ScreenBufferSnapshot` and sends it to watching players.
 - Dispatches filesystem HostCalls through `HostCallDispatcher`.
 - Handles reboot/shutdown/crash state transitions.
@@ -211,7 +209,7 @@ Converts `List<UiNode>` into Minecraft draw calls.
 
 - `UiNode` is a sealed interface: `Rect`, `Text`, `RightAlignedText`, `TerminalView`, `Group`.
 - `buildTerminalUi()` is a pure function that produces nodes from layout + snapshot.
-- Only `UiRenderer` and `FixedWidthFontRenderer` know about `GuiGraphics` / Blaze3D.
+- Minecraft rendering glue such as `UiRenderer`, `FixedWidthFontRenderer`, `WorkbenchTerminalRenderer`, and screen classes is where `GuiGraphics` / Blaze3D knowledge remains.
 
 ---
 
