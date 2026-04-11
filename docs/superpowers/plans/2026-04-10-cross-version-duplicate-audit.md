@@ -85,9 +85,9 @@ The current architectural boundary stops at:
 
 - concrete Minecraft-facing content in `v1_x_x-common`
 - bootstrap/binding/wiring and tiny shims in loader modules
-- existing descriptor/policy/orchestration logic already in `core`
+- existing descriptor/policy/orchestration logic already in `core`, plus the remaining pure policy extraction from `v1_x_x-common`
 
-No additional block/loot behavior extraction into `core` is part of the documented boundary.
+The remaining follow-up is pure policy extraction from `v1_x_x-common` into `core`, while concrete Minecraft wrappers and API translation stay in `v1_x_x-common`.
 
 ## Recommendations
 

@@ -14,8 +14,8 @@ The project is split into multiple Gradle modules across a multi-version, multi-
 
 ### Module Ownership Rules
 
-- **`core`** owns shared behavior, descriptors (`CommonBlockDescriptor`, `CommonMenuDescriptor`), and platform port interfaces (`PlatformBlockRegistrar`, `PlatformMenuRegistrar`, etc.)
-- **`v1_x_x-common`** owns Minecraft-facing version adapters and classes: blocks, block entities, items, menus, screens, network messages, version-specific context adapters, and Minecraft rendering glue
+- **`core`** owns shared behavior, descriptors (`CommonBlockDescriptor`, `CommonMenuDescriptor`), platform port interfaces (`PlatformBlockRegistrar`, `PlatformMenuRegistrar`, etc.), and neutral content policy/decision logic such as default block state, menu-open gating, block-entity state-transition rules, and loot predicates
+- **`v1_x_x-common`** owns Minecraft-facing version adapters and classes: blocks, block entities, items, menus, screens, network messages, version-specific context adapters, Minecraft rendering glue, and translation of `core` policies into `Block`, `BlockEntity`, `Menu`, `Screen`, and loot-condition implementations
 - **Loader leaf modules** own bootstrap (`CompukterKraftMod`, `CompukterKraftClientMod`), loader-specific event hooks (`FabricCommonHooks`, `ForgeCommonHooks`, `ForgeClientHooks`), client registration/bootstrap (`ClientRegistry`, `ForgeClientRegistry`), registry (`ModRegistry`), loader helper extensions (`Extensions`), network handler (`NetworkHandler`), and tiny loader-only shims/adapters where the Minecraft API still differs (`ForgeComputerBlockEntity`, `NeoForgeComputerBlockEntity`, `ComputerIdentitySavedDataAccess`)
 
 ### Delegate Pattern for Cross-Module Dependencies
@@ -38,6 +38,8 @@ ServerNetworking.playerSender = NetworkHandler::sendToPlayer
 The repository treats these boundaries as executable rules, not just conventions:
 
 - `core` must not import `net.minecraft.*`
+- `core` owns neutral content policy and decision logic; it does not own concrete Minecraft classes
+- `v1_x_x-common` translates those neutral policies into concrete Minecraft API behavior for blocks, block entities, menus, screens, and loot conditions
 - loader leaf modules must stay limited to bootstrap, registry, network, hooks, and tiny unavoidable shims
 
 These rules are enforced by `ArchitectureBoundaryTest` in `modules/core`.

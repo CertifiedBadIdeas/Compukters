@@ -164,6 +164,15 @@ Unify `ComputerIdentitySavedData` ownership so that loader modules only provide 
 
 Refactor the newly centralized `common` classes into thin wrappers over behavior/services/policies defined in `core`.
 
+This phase is limited to pure policy slices and neutral models that can be expressed without Minecraft API classes. It is not a wholesale move of concrete `Block`, `BlockEntity`, `Menu`, `Screen`, or loot-condition classes into `core`.
+
+Examples of the intended extraction boundary include:
+
+- default block-state policy
+- menu-open gating rules
+- block-entity lifecycle/state-transition decisions
+- loot predicate logic represented in neutral models
+
 ### Phase 6: Final Loader Audit
 
 Audit each loader module. Any remaining production class outside bootstrap/binding/network-wiring categories must be justified explicitly or moved upward.
