@@ -19,15 +19,17 @@
 
 package ck.mod
 
-import ck.mod.data.ComputerContainerData
 import ck.mod.binding.ModObjects
+import ck.mod.block.ComputerBlockEntity
 import ck.mod.context.ServerContext
 import ck.mod.context.getComputerIdentitySavedData
+import ck.mod.data.ComputerContainerData
 import ck.mod.network.ClientNetworking
 import ck.mod.network.server.ServerNetworking
 import ck.mod.platform.NetworkHandler
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.SimpleMenuProvider
+import net.minecraft.world.level.block.entity.BlockEntityType
 import net.neoforged.api.distmarker.Dist
 import net.neoforged.bus.api.IEventBus
 import net.neoforged.fml.common.Mod
@@ -44,7 +46,7 @@ class CompukterKraftMod(
         ModRegistry.register(modEventBus)
         ModObjects.computerBlockEntityType = {
             @Suppress("UNCHECKED_CAST")
-            ModRegistry.BlockEntities.COMPUTER_ADVANCED.get() as net.minecraft.world.level.block.entity.BlockEntityType<ck.mod.block.ComputerBlockEntity>
+            ModRegistry.BlockEntities.COMPUTER_ADVANCED.get() as BlockEntityType<ComputerBlockEntity>
         }
         ModObjects.computerMenuType = { ModRegistry.Menus.COMPUTER.get() }
         ModObjects.openComputerMenu = { player: ServerPlayer, computer, menuData: ComputerContainerData ->
