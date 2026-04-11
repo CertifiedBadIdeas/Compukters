@@ -25,11 +25,12 @@ import net.minecraft.world.level.storage.loot.parameters.LootContextParams
 import net.minecraft.world.level.storage.loot.predicates.LootItemCondition
 import net.minecraft.world.level.storage.loot.predicates.LootItemConditionType
 import ru.lazyhat.compukterkraft.common.binding.ModObjects
+import ru.lazyhat.compukterkraft.core.content.LootConditionPolicy
 
 object BlockNamedEntityLootCondition : LootItemCondition {
     override fun test(lootContext: LootContext): Boolean =
         lootContext.getParamOrNull(LootContextParams.BLOCK_ENTITY)?.let { tile ->
-            tile is Nameable && tile.hasCustomName()
+            tile is Nameable && LootConditionPolicy.hasCustomName(tile.hasCustomName())
         } ?: false
 
     override fun getReferencedContextParams(): Set<LootContextParam<*>> = setOf(LootContextParams.BLOCK_ENTITY)
