@@ -162,18 +162,17 @@ abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
         hit: BlockHitResult,
     ): InteractionResult {
         if (!player.isCrouching) {
-            (level.getBlockEntity(pos) as? AbstractComputerBlockEntity)?.run {
-                ifServerSide(level)
-                    ?.let { computer ->
-                        val serverComputer = computer.getOrCreateServerComputer()
-                        ModObjects.openComputerMenu(
-                            player as ServerPlayer,
-                            computer,
-                            ComputerContainerData(serverComputer, getItem(computer)),
-                        )
-                        return InteractionResult.sidedSuccess(level.isClientSide)
-                    }
-            }
+            (level.getBlockEntity(pos) as? AbstractComputerBlockEntity)
+                ?.ifServerSide(level)
+                ?.let { computer ->
+                    val serverComputer = computer.getOrCreateServerComputer()
+                    ModObjects.openComputerMenu(
+                        player as ServerPlayer,
+                        computer,
+                        ComputerContainerData(serverComputer, getItem(computer)),
+                    )
+                    return InteractionResult.sidedSuccess(level.isClientSide)
+                }
         }
 
         return super.useWithoutItem(state, level, pos, player, hit)

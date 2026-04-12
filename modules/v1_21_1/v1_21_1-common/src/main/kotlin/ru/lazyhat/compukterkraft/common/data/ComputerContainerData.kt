@@ -25,6 +25,7 @@ import ru.lazyhat.compukterkraft.common.computer.ServerComputer
 import ru.lazyhat.compukterkraft.common.gui.TerminalState
 import ru.lazyhat.compukterkraft.core.Config
 import ru.lazyhat.compukterkraft.core.block.ComputerFamily
+import ru.lazyhat.compukterkraft.core.gui.ComputerTerminalDefaults
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 
 class ComputerContainerData private constructor(
@@ -50,7 +51,7 @@ class ComputerContainerData private constructor(
     constructor(computer: ServerComputer, displayStack: ItemStack) : this(
         computer.family,
         computer.lastScreenSnapshot
-            ?: ScreenBufferSnapshot.empty(51, 19, computer.family != ComputerFamily.NORMAL),
+            ?: ComputerTerminalDefaults.fallbackSnapshot(computer.family),
         displayStack,
         Config.uploadMaxSize,
     )
