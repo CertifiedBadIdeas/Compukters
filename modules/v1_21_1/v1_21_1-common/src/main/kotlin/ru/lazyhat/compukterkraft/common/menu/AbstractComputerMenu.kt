@@ -92,6 +92,7 @@ abstract class AbstractComputerMenu(
      * On the server: [MenuSide.Server] — holds the [ServerComputer] + input.
      * On the client: [MenuSide.Client] — holds the latest [ScreenBufferSnapshot].
      */
+
     override val side: MenuSide =
         if (computer != null) {
             MenuSide.Server(computer, ServerInputState(this))

@@ -18,7 +18,7 @@
  */
 package ru.lazyhat.compukterkraft.lang.frontend
 
-internal object SourceTextSupport {
+object SourceTextSupport {
     private val identifierPrefixRegex = Regex("""[A-Za-z_][A-Za-z0-9_]*$""")
     private val moduleMemberRegex = Regex("""([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z0-9_]*)$""")
     private val importPrefixRegex = Regex("""import\s+(\w*)$""")
@@ -45,6 +45,17 @@ internal object SourceTextSupport {
         source: String,
         offset: Int,
     ): String = identifierPrefixRegex.find(source.take(offset))?.value.orEmpty()
+
+    fun shouldAutoTriggerIdentifierCompletion(
+        source: String,
+        offset: Int,
+    ): Boolean {
+        val prefix = identifierPrefix(source, offset)
+        if (prefix.isEmpty()) return false
+        val prefixSource = source.take(offset)
+        if (prefixSource.endsWith("import ")) return false
+        return prefix.length == prefixSource.takeLastWhile { it == '_' || it.isLetterOrDigit() }.length
+    }
 
     fun offsetAt(
         source: String,

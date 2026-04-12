@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import ru.lazyhat.compukterkraft.core.input.KeyCodes
+import ru.lazyhat.compukterkraft.lang.frontend.SourceTextSupport
 
 /**
  * Client-side state container for the computer workbench GUI.
@@ -260,19 +261,20 @@ class WorkbenchStore(
         if (!Character.isISOControl(ch)) {
             _state.value = state.copy(editor = state.editor.insertText(ch.toString(), visibleEditorLines))
             refreshIde()
-            if (ch == '.' || shouldTriggerImportCompletion(ch)) {
+            if (shouldOpenCompletionAfterCharTyped(ch)) {
                 openCompletionFromCurrentSnapshot()
             }
         }
         return true
     }
 
-    private fun shouldTriggerImportCompletion(ch: Char): Boolean {
-        if (ch != ' ') return false
-        val lines = state.editor.text.split('\n')
-        val line = lines.getOrNull(state.editor.cursorLine) ?: return false
-        val textBeforeCursor = line.substring(0, state.editor.cursorColumn)
-        return textBeforeCursor.endsWith("import ")
+    private fun shouldOpenCompletionAfterCharTyped(ch: Char): Boolean {
+        if (ch == '.') return true
+        if (!(ch == '_' || ch.isLetterOrDigit())) return false
+        return SourceTextSupport.shouldAutoTriggerIdentifierCompletion(
+            state.editor.text,
+            SourceTextSupport.offsetAt(state.editor.text, state.editor.cursorLine, state.editor.cursorColumn),
+        )
     }
 
     private fun openCompletionFromCurrentSnapshot() {
