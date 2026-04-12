@@ -58,19 +58,9 @@ fun include(
 include("compiler", modulesDir)
 include("core", modulesDir)
 
-val v1_20_1Dir = modulesDir.resolve("v1_20_1")
-include("v1_20_1-common", v1_20_1Dir)
-include("v1_20_1-forge", v1_20_1Dir)
-include("v1_20_1-fabric", v1_20_1Dir)
-
 val v1_21_1Dir = modulesDir.resolve("v1_21_1")
 include("v1_21_1-common", v1_21_1Dir)
 include("v1_21_1-neoforge", v1_21_1Dir)
 include("v1_21_1-fabric", v1_21_1Dir)
-
-val v1_21_11Dir = modulesDir.resolve("v1_21_11")
-include("v1_21_11-common", v1_21_11Dir)
-include("v1_21_11-neoforge", v1_21_11Dir)
-include("v1_21_11-fabric", v1_21_11Dir)
 
 rootProject.name = "Compukter-Kraft"

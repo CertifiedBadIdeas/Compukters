@@ -6,7 +6,6 @@
 kotlinConvention = { id = "kotlin-convention" }
 commonConvention = { id = "common-convention" }
 fabricConvention = { id = "fabric-convention" }
-forgeConvention = { id = "forge-convention" }
 neoforgeConvention = { id = "neoforge-convention" }
 metadataConvention = { id = "metadata" }
 releaseConvention = { id = "release-convention" }
@@ -15,13 +14,11 @@ releaseConvention = { id = "release-convention" }
 kotlin = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlinSerialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 kotlinter = { id = "org.jmailen.kotlinter", version = "5.4.2" }
-neoforge = { id = "net.neoforged.moddev.legacyforge", version = "2.0.140" }
 shadow = { id = "com.gradleup.shadow", version = "9.4.0" }
 
 architectury-loom = { id = "dev.architectury.loom", version = "1.14.473" }
 architectury-plugin = { id = "architectury-plugin", version = "3.5.163" }
 
-v1201 = { id = "1.20.1-convention" }
 v1211 = { id = "1.21.1-convention" }
 v12111 = { id = "1.21.11-convention" }
 
@@ -32,9 +29,6 @@ kotlin = "2.3.20"
 coroutines = "1.10.2"
 kotlin-logging = "8.0.01"
 slf4j = "2.0.17"
-
-# 1.20.1
-minecraft-v1201 = "1.20.1"
 
 # 1.21.1
 minecraft-v1211 = "1.21.1"
@@ -50,17 +44,6 @@ kotlin-stdlib = { module = "org.jetbrains.kotlin:kotlin-stdlib", version.ref = "
 
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm", version.ref = "coroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
-
-# 1.20.1
-minecraft-v1201 = {module = "net.minecraft:minecraft", version.ref = "minecraft-v1201" }
-parchment-v1201 = "org.parchmentmc.data:parchment-1.20.1:2023.09.03"
-
-architectury-forge-v1201 = "dev.architectury:architectury-forge:9.2.14"
-forge-v1201 = "net.minecraftforge:forge:1.20.1-47.4.10"
-
-architectury-fabric-v1201 = "dev.architectury:architectury-fabric:9.2.14"
-fabric-loader-v1201 = "net.fabricmc:fabric-loader:0.16.14"
-fabric-api-v1201 = "net.fabricmc.fabric-api:fabric-api:0.92.7+1.20.1"
 
 # 1.21.1
 minecraft-v1211 = { module = "net.minecraft:minecraft", version.ref = "minecraft-v1211" }
