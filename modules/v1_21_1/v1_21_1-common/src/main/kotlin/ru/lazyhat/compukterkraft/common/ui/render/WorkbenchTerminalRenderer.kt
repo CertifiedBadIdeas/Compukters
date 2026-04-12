@@ -41,8 +41,23 @@ object WorkbenchTerminalRenderer {
         layout: WorkbenchTerminalLayout,
         snapshot: ScreenBufferSnapshot,
         focused: Boolean,
+        poweredOn: Boolean,
+        showFocusHint: Boolean,
+        placeholderText: String,
     ) {
-        val nodes = buildTerminalUi(leftPos, topPos, imageWidth, imageHeight, layout, snapshot, focused)
+        val nodes =
+            buildTerminalUi(
+                leftPos = leftPos,
+                topPos = topPos,
+                imageWidth = imageWidth,
+                imageHeight = imageHeight,
+                layout = layout,
+                snapshot = snapshot,
+                focused = focused,
+                poweredOn = poweredOn,
+                showFocusHint = showFocusHint,
+                placeholderText = placeholderText,
+            )
         UiRenderer.render(graphics, font, nodes)
     }
 }

@@ -34,6 +34,7 @@ data class TerminalRect(
 
 data class WorkbenchTerminalLayout(
     val panelBounds: TerminalRect,
+    val terminalSurfaceBounds: TerminalRect,
     val terminalBounds: TerminalRect,
     val statusBounds: TerminalRect,
 )
@@ -82,15 +83,22 @@ object WorkbenchTerminalMetrics {
                 panelBounds.width,
                 STATUS_HEIGHT,
             )
+        val terminalSurfaceBounds =
+            TerminalRect(
+                panelBounds.x,
+                panelBounds.y,
+                panelBounds.width,
+                statusBounds.y - panelBounds.y,
+            )
 
         val terminalWidth = terminalPixelWidth(terminalColumns)
         val terminalHeight = terminalPixelHeight(terminalRows)
-        val terminalAreaHeight = statusBounds.y - panelBounds.y
-        val terminalX = panelBounds.x + ((panelBounds.width - terminalWidth) / 2).coerceAtLeast(INNER_PADDING)
-        val terminalY = panelBounds.y + ((terminalAreaHeight - terminalHeight) / 2).coerceAtLeast(INNER_PADDING)
+        val terminalX = terminalSurfaceBounds.x
+        val terminalY = terminalSurfaceBounds.y
 
         return WorkbenchTerminalLayout(
             panelBounds = panelBounds,
+            terminalSurfaceBounds = terminalSurfaceBounds,
             terminalBounds = TerminalRect(terminalX, terminalY, terminalWidth, terminalHeight),
             statusBounds = statusBounds,
         )

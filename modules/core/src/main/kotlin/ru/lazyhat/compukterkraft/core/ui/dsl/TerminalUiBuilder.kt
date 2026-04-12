@@ -51,6 +51,9 @@ fun buildTerminalUi(
     layout: WorkbenchTerminalLayout,
     snapshot: ScreenBufferSnapshot,
     focused: Boolean,
+    poweredOn: Boolean,
+    showFocusHint: Boolean,
+    placeholderText: String,
 ): List<UiNode> =
     buildList {
         // Window background
@@ -85,10 +88,10 @@ fun buildTerminalUi(
         val borderColour = if (focused) TerminalColors.TERMINAL_BORDER_FOCUSED else TerminalColors.TERMINAL_BORDER
         add(
             Rect(
-                layout.terminalBounds.x - 1,
-                layout.terminalBounds.y - 1,
-                layout.terminalBounds.width + 2,
-                layout.terminalBounds.height + 2,
+                layout.terminalSurfaceBounds.x - 1,
+                layout.terminalSurfaceBounds.y - 1,
+                layout.terminalSurfaceBounds.width + 2,
+                layout.terminalSurfaceBounds.height + 2,
                 borderColour,
             ),
         )
@@ -96,20 +99,19 @@ fun buildTerminalUi(
         // Terminal background
         add(
             Rect(
-                layout.terminalBounds.x,
-                layout.terminalBounds.y,
-                layout.terminalBounds.width,
-                layout.terminalBounds.height,
+                layout.terminalSurfaceBounds.x,
+                layout.terminalSurfaceBounds.y,
+                layout.terminalSurfaceBounds.width,
+                layout.terminalSurfaceBounds.height,
                 TerminalColors.TERMINAL_BACKGROUND,
             ),
         )
 
-        // Title
-        add(Text(layout.panelBounds.x + 12, layout.panelBounds.y + 8, "Terminal", TerminalColors.TITLE_COLOR))
-
         // Status bar text
-        val statusText = if (focused) "Input active  |  Ctrl+V paste" else "Click terminal to focus input"
-        add(Text(layout.statusBounds.x + 12, layout.statusBounds.y + 6, statusText, TerminalColors.MUTED_TEXT))
+        if (poweredOn) {
+            val statusText = if (showFocusHint) "Click terminal to focus input" else "Input active  |  Ctrl+V paste"
+            add(Text(layout.statusBounds.x + 12, layout.statusBounds.y + 6, statusText, TerminalColors.MUTED_TEXT))
+        }
 
         // Size text (right-aligned)
         val sizeText = "${snapshot.width} x ${snapshot.height}"
@@ -123,6 +125,9 @@ fun buildTerminalUi(
             ),
         )
 
-        // Terminal character grid
-        add(TerminalView(layout.terminalBounds.x, layout.terminalBounds.y, snapshot))
+        if (poweredOn) {
+            add(TerminalView(layout.terminalBounds.x, layout.terminalBounds.y, snapshot))
+        } else {
+            add(Text(layout.terminalSurfaceBounds.x + 12, layout.terminalSurfaceBounds.y + 12, placeholderText, TerminalColors.MUTED_TEXT))
+        }
     }
