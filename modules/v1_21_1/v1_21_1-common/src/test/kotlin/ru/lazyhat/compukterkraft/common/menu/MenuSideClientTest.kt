@@ -17,19 +17,23 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package ru.lazyhat.compukterkraft.core.ui.workbench
+package ru.lazyhat.compukterkraft.common.menu
 
-import ru.lazyhat.compukterkraft.core.application.workbench.WorkbenchMode
+import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
-object WorkbenchTerminalInteractionPolicy {
-    fun showFocusHint(
-        terminalState: WorkbenchTerminalViewState,
-        focused: Boolean,
-    ): Boolean = terminalState is WorkbenchTerminalViewState.Active && !focused
+class MenuSideClientTest {
+    @Test
+    fun clientSideCanStartWithoutSnapshotAndLaterReceiveOne() {
+        val client = MenuSide.Client(initialSnapshot = null)
 
-    fun canAcceptInput(
-        mode: WorkbenchMode,
-        terminalState: WorkbenchTerminalViewState,
-        focused: Boolean,
-    ): Boolean = mode == WorkbenchMode.TERMINAL && terminalState is WorkbenchTerminalViewState.Active && focused
+        assertNull(client.screenSnapshot)
+
+        val snapshot = ScreenBufferSnapshot.empty(width = 12, height = 6, colour = true)
+        client.updateScreenSnapshot(snapshot)
+
+        assertEquals(snapshot, client.screenSnapshot)
+    }
 }

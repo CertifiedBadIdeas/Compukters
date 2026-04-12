@@ -32,7 +32,6 @@ import ru.lazyhat.compukterkraft.common.data.ComputerContainerData
 import ru.lazyhat.compukterkraft.core.Config
 import ru.lazyhat.compukterkraft.core.application.workbench.WorkbenchRemoteState
 import ru.lazyhat.compukterkraft.core.block.ComputerFamily
-import ru.lazyhat.compukterkraft.core.gui.ComputerTerminalDefaults
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceDocument
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceEntry
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
@@ -53,15 +52,15 @@ sealed interface MenuSide {
      * Client-side state: owns the latest [ScreenBufferSnapshot] as a [StateFlow].
      */
     class Client(
-        initialSnapshot: ScreenBufferSnapshot,
+        initialSnapshot: ScreenBufferSnapshot?,
     ) : MenuSide {
         private val _screenSnapshot = MutableStateFlow(initialSnapshot)
 
         /** Observable screen snapshot — emits whenever the server syncs a new frame. */
-        val screenSnapshotFlow: StateFlow<ScreenBufferSnapshot> = _screenSnapshot.asStateFlow()
+        val screenSnapshotFlow: StateFlow<ScreenBufferSnapshot?> = _screenSnapshot.asStateFlow()
 
         /** Current screen snapshot (synchronous read). */
-        val screenSnapshot: ScreenBufferSnapshot get() = _screenSnapshot.value
+        val screenSnapshot: ScreenBufferSnapshot? get() = _screenSnapshot.value
 
         /** Update from a network message. */
         fun updateScreenSnapshot(snapshot: ScreenBufferSnapshot) {
@@ -97,10 +96,7 @@ abstract class AbstractComputerMenu(
         if (computer != null) {
             MenuSide.Server(computer, ServerInputState(this))
         } else {
-            val snapshot =
-                containerData?.terminalSnapshot
-                    ?: ComputerTerminalDefaults.fallbackSnapshot(family)
-            MenuSide.Client(snapshot)
+            MenuSide.Client(containerData?.terminalSnapshot)
         }
 
     private val _workspaceStateFlow = MutableStateFlow(WorkbenchRemoteState())
@@ -146,9 +142,5 @@ abstract class AbstractComputerMenu(
     override fun removed(player: Player) {
         super.removed(player)
         (side as? MenuSide.Server)?.input?.close()
-    }
-
-    companion object {
-        const val SIDEBAR_WIDTH: Int = 17
     }
 }

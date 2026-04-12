@@ -19,17 +19,26 @@
 
 package ru.lazyhat.compukterkraft.core.ui.workbench
 
-import ru.lazyhat.compukterkraft.core.application.workbench.WorkbenchMode
+import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 
-object WorkbenchTerminalInteractionPolicy {
-    fun showFocusHint(
-        terminalState: WorkbenchTerminalViewState,
-        focused: Boolean,
-    ): Boolean = terminalState is WorkbenchTerminalViewState.Active && !focused
+sealed interface WorkbenchTerminalViewState {
+    data object PoweredOff : WorkbenchTerminalViewState
 
-    fun canAcceptInput(
-        mode: WorkbenchMode,
-        terminalState: WorkbenchTerminalViewState,
-        focused: Boolean,
-    ): Boolean = mode == WorkbenchMode.TERMINAL && terminalState is WorkbenchTerminalViewState.Active && focused
+    data object Connecting : WorkbenchTerminalViewState
+
+    data class Active(
+        val snapshot: ScreenBufferSnapshot,
+    ) : WorkbenchTerminalViewState
+
+    companion object {
+        fun from(
+            isComputerOn: Boolean,
+            snapshot: ScreenBufferSnapshot?,
+        ): WorkbenchTerminalViewState =
+            when {
+                !isComputerOn -> PoweredOff
+                snapshot == null -> Connecting
+                else -> Active(snapshot)
+            }
+    }
 }

@@ -41,10 +41,12 @@ import ru.lazyhat.compukterkraft.core.application.workbench.highlightColor
 import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalInputController
 import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalLayout
 import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalMetrics
+import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 import ru.lazyhat.compukterkraft.core.platform.api.FontMetrics
 import ru.lazyhat.compukterkraft.core.ui.workbench.WorkbenchTerminalInteractionPolicy
 import ru.lazyhat.compukterkraft.core.ui.workbench.WorkbenchLayoutModel
 import ru.lazyhat.compukterkraft.core.ui.workbench.WorkspaceRowLayout
+import ru.lazyhat.compukterkraft.core.ui.workbench.WorkbenchTerminalViewState
 import kotlin.math.min
 
 class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
@@ -63,9 +65,9 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
     private var screenScope: CoroutineScope? = null
 
     init {
-        val snap = container.clientSide.screenSnapshot
-        imageWidth = WorkbenchTerminalMetrics.imageWidth(snap.width, snap.height)
-        imageHeight = WorkbenchTerminalMetrics.imageHeight(snap.width, snap.height)
+        val (terminalColumns, terminalRows) = terminalDimensions(container.clientSide.screenSnapshot)
+        imageWidth = WorkbenchTerminalMetrics.imageWidth(terminalColumns, terminalRows)
+        imageHeight = WorkbenchTerminalMetrics.imageHeight(terminalColumns, terminalRows)
     }
 
     override fun init() {
@@ -85,9 +87,11 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
 
     override fun containerTick() {
         super.containerTick()
-        if (!menu.isComputerOn && terminalInput.focused) {
+        val terminalState = WorkbenchTerminalViewState.from(menu.isComputerOn, menu.clientSide.screenSnapshot)
+        if (terminalState !is WorkbenchTerminalViewState.Active && terminalInput.focused) {
             terminalInput.focused = false
         }
+        syncTerminalWindowSize(terminalState)
         terminalInput.update()
     }
 
@@ -99,8 +103,9 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
     ) {
         if (store.state.mode == WorkbenchMode.TERMINAL) {
             val snapshot = menu.clientSide.screenSnapshot
-            val focused = WorkbenchTerminalInteractionPolicy.canAcceptInput(store.state.mode, menu.isComputerOn, terminalInput.focused)
-            val showFocusHint = WorkbenchTerminalInteractionPolicy.showFocusHint(menu.isComputerOn, terminalInput.focused)
+            val terminalState = WorkbenchTerminalViewState.from(menu.isComputerOn, snapshot)
+            val focused = WorkbenchTerminalInteractionPolicy.canAcceptInput(store.state.mode, terminalState, terminalInput.focused)
+            val showFocusHint = WorkbenchTerminalInteractionPolicy.showFocusHint(terminalState, terminalInput.focused)
             WorkbenchTerminalRenderer.render(
                 graphics,
                 minecraft!!.font,
@@ -109,11 +114,11 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
                 imageWidth,
                 imageHeight,
                 terminalLayout(),
-                snapshot,
+                terminalState,
                 focused,
-                menu.isComputerOn,
                 showFocusHint,
                 Component.translatable("gui.compukterkraft.terminal.powered_off").string,
+                Component.translatable("gui.compukterkraft.terminal.connecting").string,
             )
         } else {
             graphics.fill(leftPos, topPos, leftPos + imageWidth, topPos + imageHeight, 0xFF12151D.toInt())
@@ -163,7 +168,8 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
         modifiers: Int,
     ): Boolean {
         val previousMode = store.state.mode
-        if (WorkbenchTerminalInteractionPolicy.canAcceptInput(store.state.mode, menu.isComputerOn, terminalInput.focused)) {
+        val terminalState = WorkbenchTerminalViewState.from(menu.isComputerOn, menu.clientSide.screenSnapshot)
+        if (WorkbenchTerminalInteractionPolicy.canAcceptInput(store.state.mode, terminalState, terminalInput.focused)) {
             if (terminalInput.keyPressed(key, scancode, modifiers)) {
                 return true
             }
@@ -184,7 +190,8 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
         scancode: Int,
         modifiers: Int,
     ): Boolean {
-        if (WorkbenchTerminalInteractionPolicy.canAcceptInput(store.state.mode, menu.isComputerOn, terminalInput.focused)) {
+        val terminalState = WorkbenchTerminalViewState.from(menu.isComputerOn, menu.clientSide.screenSnapshot)
+        if (WorkbenchTerminalInteractionPolicy.canAcceptInput(store.state.mode, terminalState, terminalInput.focused)) {
             if (terminalInput.keyReleased(key, scancode)) {
                 return true
             }
@@ -196,7 +203,8 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
         ch: Char,
         modifiers: Int,
     ): Boolean {
-        if (WorkbenchTerminalInteractionPolicy.canAcceptInput(store.state.mode, menu.isComputerOn, terminalInput.focused)) {
+        val terminalState = WorkbenchTerminalViewState.from(menu.isComputerOn, menu.clientSide.screenSnapshot)
+        if (WorkbenchTerminalInteractionPolicy.canAcceptInput(store.state.mode, terminalState, terminalInput.focused)) {
             return terminalInput.charTyped(ch)
         }
         if (store.charTyped(ch, layout().visibleEditorLines())) {
@@ -215,7 +223,8 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
         }
 
         if (store.state.mode == WorkbenchMode.TERMINAL) {
-            if (menu.isComputerOn) {
+            val terminalState = WorkbenchTerminalViewState.from(menu.isComputerOn, menu.clientSide.screenSnapshot)
+            if (terminalState is WorkbenchTerminalViewState.Active) {
                 terminalInput.focused = terminalInput.mouseClicked(terminalLayout().terminalBounds, mouseX, mouseY)
             } else {
                 terminalInput.focused = false
@@ -267,7 +276,8 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
         horizontalAmount: Double,
         verticalAmount: Double,
     ): Boolean {
-        if (store.state.mode == WorkbenchMode.TERMINAL && menu.isComputerOn) {
+        val terminalState = WorkbenchTerminalViewState.from(menu.isComputerOn, menu.clientSide.screenSnapshot)
+        if (store.state.mode == WorkbenchMode.TERMINAL && terminalState is WorkbenchTerminalViewState.Active) {
             if (terminalInput.mouseScrolled(terminalLayout().terminalBounds, mouseX, mouseY, verticalAmount)) {
                 return true
             }
@@ -499,16 +509,40 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
         }
 
     private fun terminalLayout(): WorkbenchTerminalLayout {
-        val snap = menu.clientSide.screenSnapshot
+        val (terminalColumns, terminalRows) = terminalDimensions(menu.clientSide.screenSnapshot)
         return WorkbenchTerminalMetrics.layout(
             leftPos,
             topPos,
             imageWidth,
             imageHeight,
-            snap.width,
-            snap.height,
+            terminalColumns,
+            terminalRows,
         )
     }
+
+    private fun syncTerminalWindowSize(terminalState: WorkbenchTerminalViewState) {
+        val (terminalColumns, terminalRows) =
+            when (terminalState) {
+                is WorkbenchTerminalViewState.Active -> terminalDimensions(terminalState.snapshot)
+                WorkbenchTerminalViewState.PoweredOff, WorkbenchTerminalViewState.Connecting -> 0 to 0
+            }
+
+        val nextWidth = WorkbenchTerminalMetrics.imageWidth(terminalColumns, terminalRows)
+        val nextHeight = WorkbenchTerminalMetrics.imageHeight(terminalColumns, terminalRows)
+        if (imageWidth != nextWidth || imageHeight != nextHeight) {
+            imageWidth = nextWidth
+            imageHeight = nextHeight
+            leftPos = (width - imageWidth) / 2
+            topPos = (height - imageHeight) / 2
+        }
+    }
+
+    private fun terminalDimensions(snapshot: ScreenBufferSnapshot?): Pair<Int, Int> =
+        if (snapshot == null) {
+            0 to 0
+        } else {
+            snapshot.width to snapshot.height
+        }
 
     private fun editorLines(): List<String> =
         if (store.state.editor.text

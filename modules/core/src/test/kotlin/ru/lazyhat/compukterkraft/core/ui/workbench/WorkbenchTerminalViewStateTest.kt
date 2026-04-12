@@ -19,17 +19,23 @@
 
 package ru.lazyhat.compukterkraft.core.ui.workbench
 
-import ru.lazyhat.compukterkraft.core.application.workbench.WorkbenchMode
+import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
+import kotlin.test.Test
+import kotlin.test.assertIs
 
-object WorkbenchTerminalInteractionPolicy {
-    fun showFocusHint(
-        terminalState: WorkbenchTerminalViewState,
-        focused: Boolean,
-    ): Boolean = terminalState is WorkbenchTerminalViewState.Active && !focused
+class WorkbenchTerminalViewStateTest {
+    @Test
+    fun derivesPoweredOffConnectingAndActiveStates() {
+        val snapshot = ScreenBufferSnapshot.empty(width = 10, height = 5, colour = true)
 
-    fun canAcceptInput(
-        mode: WorkbenchMode,
-        terminalState: WorkbenchTerminalViewState,
-        focused: Boolean,
-    ): Boolean = mode == WorkbenchMode.TERMINAL && terminalState is WorkbenchTerminalViewState.Active && focused
+        assertIs<WorkbenchTerminalViewState.PoweredOff>(
+            WorkbenchTerminalViewState.from(isComputerOn = false, snapshot = null),
+        )
+        assertIs<WorkbenchTerminalViewState.Connecting>(
+            WorkbenchTerminalViewState.from(isComputerOn = true, snapshot = null),
+        )
+        assertIs<WorkbenchTerminalViewState.Active>(
+            WorkbenchTerminalViewState.from(isComputerOn = true, snapshot = snapshot),
+        )
+    }
 }

@@ -29,7 +29,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
  *
  * Server-only and client-only operations are accessed through [side]:
  * - `menu.serverSide.computer` / `menu.serverSide.input` — server-side only
- * - `menu.clientSide.screenSnapshot` — client-side only
+ * - `menu.clientSide.screenSnapshot` — client-side only, nullable until the first terminal sync arrives
  */
 interface ComputerMenu {
     /** Type-safe side discriminator. */
