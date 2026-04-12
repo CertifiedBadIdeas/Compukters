@@ -17,21 +17,17 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package ru.lazyhat.compukterkraft.common.item
+package ru.lazyhat.compukterkraft.core.content
 
-import net.minecraft.world.item.ItemStack
-import net.minecraft.world.level.block.Block
-import ru.lazyhat.compukterkraft.core.content.ComputerItemData
+import kotlin.test.Test
+import kotlin.test.assertEquals
 
-class ComputerItem(
-    block: Block,
-    properties: Properties,
-) : AbstractComputerItem(block, properties) {
-    fun create(
-        id: Int?,
-        label: String?,
-    ): ItemStack =
-        defaultInstance.also {
-            it.writeComputerItemData(ComputerItemData(id, label))
-        }
+class ComputerPersistencePolicyTest {
+    @Test
+    fun buildsPersistencePayloadFromCurrentIdentity() {
+        assertEquals(
+            ComputerPersistenceData(computerId = 12, label = "delta"),
+            ComputerPersistencePolicy.snapshot(computerId = 12, label = "delta"),
+        )
+    }
 }

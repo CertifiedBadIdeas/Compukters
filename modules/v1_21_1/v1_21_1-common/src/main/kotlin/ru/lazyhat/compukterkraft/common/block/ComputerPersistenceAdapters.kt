@@ -17,21 +17,20 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package ru.lazyhat.compukterkraft.common.item
+package ru.lazyhat.compukterkraft.common.block
 
-import net.minecraft.world.item.ItemStack
-import net.minecraft.world.level.block.Block
-import ru.lazyhat.compukterkraft.core.content.ComputerItemData
+import net.minecraft.nbt.CompoundTag
+import ru.lazyhat.compukterkraft.common.utils.computerID
+import ru.lazyhat.compukterkraft.common.utils.computerLabel
+import ru.lazyhat.compukterkraft.core.content.ComputerPersistenceData
 
-class ComputerItem(
-    block: Block,
-    properties: Properties,
-) : AbstractComputerItem(block, properties) {
-    fun create(
-        id: Int?,
-        label: String?,
-    ): ItemStack =
-        defaultInstance.also {
-            it.writeComputerItemData(ComputerItemData(id, label))
-        }
+fun CompoundTag.writeComputerPersistence(data: ComputerPersistenceData) {
+    computerID = data.computerId
+    computerLabel = data.label
 }
+
+fun CompoundTag.readComputerPersistence(): ComputerPersistenceData =
+    ComputerPersistenceData(
+        computerId = computerID,
+        label = computerLabel,
+    )

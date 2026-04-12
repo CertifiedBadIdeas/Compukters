@@ -33,13 +33,21 @@ private object NBT {
 var CompoundTag.computerID: Int?
     get() = takeIf { it.contains(NBT.ID) }?.let { getInt(NBT.ID) }
     set(value) {
-        value?.let { putInt(NBT.ID, it) }
+        if (value != null) {
+            putInt(NBT.ID, value)
+        } else {
+            remove(NBT.ID)
+        }
     }
 
 var CompoundTag.computerLabel: String?
     get() = takeIf { it.contains(NBT.LABEL) }?.let { getString(NBT.LABEL) }
     set(value) {
-        value?.let { putString(NBT.LABEL, it) }
+        if (value != null) {
+            putString(NBT.LABEL, value)
+        } else {
+            remove(NBT.LABEL)
+        }
     }
 
 var CompoundTag.computerOn: Boolean

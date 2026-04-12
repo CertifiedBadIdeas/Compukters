@@ -30,13 +30,12 @@ import net.minecraft.world.level.block.entity.BlockEntityType
 import net.minecraft.world.level.block.state.BlockState
 import ru.lazyhat.compukterkraft.common.computer.ServerComputer
 import ru.lazyhat.compukterkraft.common.context.ServerContext
-import ru.lazyhat.compukterkraft.common.utils.computerID
-import ru.lazyhat.compukterkraft.common.utils.computerLabel
 import ru.lazyhat.compukterkraft.common.utils.ifServerSide
 import ru.lazyhat.compukterkraft.common.utils.updateBlock
 import ru.lazyhat.compukterkraft.core.LOGGER
 import ru.lazyhat.compukterkraft.core.block.ComputerFamily
 import ru.lazyhat.compukterkraft.core.content.ComputerBlockEntityPolicy
+import ru.lazyhat.compukterkraft.core.content.ComputerPersistencePolicy
 
 abstract class AbstractComputerBlockEntity(
     type: BlockEntityType<out AbstractComputerBlockEntity>,
@@ -127,8 +126,12 @@ abstract class AbstractComputerBlockEntity(
     }
 
     override fun saveAdditional(tag: CompoundTag) {
-        tag.computerID = _computerID
-        tag.computerLabel = _label
+        tag.writeComputerPersistence(
+            ComputerPersistencePolicy.snapshot(
+                computerId = _computerID,
+                label = _label,
+            ),
+        )
         LOGGER.info { "AbstractComputerBlockEntity.saveAdditional() tag: $tag" }
 
         super.saveAdditional(tag)
@@ -138,8 +141,10 @@ abstract class AbstractComputerBlockEntity(
         super.load(tag)
 
         LOGGER.info { "AbstractComputerBlockEntity.load() tag: $tag" }
-        _computerID = tag.computerID
-        _label = tag.computerLabel
+        tag.readComputerPersistence().also { data ->
+            _computerID = data.computerId
+            _label = data.label
+        }
     }
 
     override fun setRemoved() {

@@ -19,29 +19,33 @@
 
 package ru.lazyhat.compukterkraft.common.item
 
-import net.minecraft.ChatFormatting
+import net.minecraft.core.component.DataComponents
 import net.minecraft.network.chat.Component
-import net.minecraft.world.item.BlockItem
 import net.minecraft.world.item.ItemStack
-import net.minecraft.world.item.TooltipFlag
-import net.minecraft.world.level.Level
-import net.minecraft.world.level.block.Block
+import ru.lazyhat.compukterkraft.common.utils.computerDataTag
+import ru.lazyhat.compukterkraft.common.utils.computerID
+import ru.lazyhat.compukterkraft.common.utils.computerLabel
 import ru.lazyhat.compukterkraft.common.utils.computerLabelByHoverName
+import ru.lazyhat.compukterkraft.common.utils.updateComputerData
+import ru.lazyhat.compukterkraft.core.content.ComputerItemData
 
-abstract class AbstractComputerItem(
-    block: Block,
-    properties: Properties,
-) : BlockItem(block, properties) {
-    override fun appendHoverText(
-        stack: ItemStack,
-        world: Level?,
-        list: MutableList<Component>,
-        options: TooltipFlag,
-    ) {
-        if (options.isAdvanced || stack.computerLabelByHoverName == null) {
-            stack.readComputerItemData().computerId?.let {
-                list.add(Component.translatable("gui.compukterkraft.tooltip.computer_id", it).withStyle(ChatFormatting.GRAY))
-            }
-        }
+fun ItemStack.readComputerItemData(): ComputerItemData =
+    ComputerItemData(
+        computerId = computerDataTag?.computerID,
+        label = computerDataTag?.computerLabel ?: computerLabelByHoverName,
+    )
+
+fun ItemStack.writeComputerItemData(data: ComputerItemData) {
+    val label = data.label
+
+    updateComputerData {
+        computerID = data.computerId
+        computerLabel = label
+    }
+
+    if (label != null) {
+        set(DataComponents.CUSTOM_NAME, Component.literal(label))
+    } else {
+        remove(DataComponents.CUSTOM_NAME)
     }
 }

@@ -19,12 +19,9 @@
 
 package ru.lazyhat.compukterkraft.common.item
 
-import net.minecraft.core.component.DataComponents
-import net.minecraft.network.chat.Component
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.level.block.Block
-import ru.lazyhat.compukterkraft.common.utils.computerID
-import ru.lazyhat.compukterkraft.common.utils.updateComputerData
+import ru.lazyhat.compukterkraft.core.content.ComputerItemData
 
 class ComputerItem(
     block: Block,
@@ -34,8 +31,7 @@ class ComputerItem(
         id: Int?,
         label: String?,
     ): ItemStack =
-        ItemStack(this).apply {
-            updateComputerData { computerID = id }
-            label?.let { set(DataComponents.CUSTOM_NAME, Component.literal(it)) }
+        defaultInstance.also {
+            it.writeComputerItemData(ComputerItemData(id, label))
         }
 }

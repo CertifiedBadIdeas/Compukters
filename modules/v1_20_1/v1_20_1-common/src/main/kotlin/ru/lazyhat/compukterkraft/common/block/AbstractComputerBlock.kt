@@ -42,12 +42,12 @@ import ru.lazyhat.compukterkraft.common.binding.ModObjects
 import ru.lazyhat.compukterkraft.common.context.ServerContext
 import ru.lazyhat.compukterkraft.common.data.ComputerContainerData
 import ru.lazyhat.compukterkraft.common.item.AbstractComputerItem
+import ru.lazyhat.compukterkraft.common.item.readComputerItemData
 import ru.lazyhat.compukterkraft.common.utils.castTicker
-import ru.lazyhat.compukterkraft.common.utils.computerID
-import ru.lazyhat.compukterkraft.common.utils.computerLabel
 import ru.lazyhat.compukterkraft.common.utils.ifServerSide
 import ru.lazyhat.compukterkraft.core.LOGGER
 import ru.lazyhat.compukterkraft.core.content.ComputerBlockPolicy
+import ru.lazyhat.compukterkraft.core.content.ComputerItemDataPolicy
 import ru.lazyhat.compukterkraft.core.MOD_ID
 
 abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
@@ -88,10 +88,13 @@ abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
             ?.let { it as? AbstractComputerBlockEntity }
             ?.takeIf { stack.item is AbstractComputerItem }
             ?.let { tile ->
-                tile.computerID = stack.tag?.computerID
-                tile.label = stack.tag?.computerLabel
-                val resolvedComputerId = tile.computerID ?: ServerContext.allocateComputerId().also { tile.computerID = it }
-                ServerContext.computerManager.ensureWorkspaceInitialized(resolvedComputerId)
+                val resolvedData = ComputerItemDataPolicy.resolvePlacedData(
+                    stack.readComputerItemData(),
+                ) { ServerContext.allocateComputerId() }
+
+                tile.computerID = resolvedData.computerId
+                tile.label = resolvedData.label
+                ServerContext.computerManager.ensureWorkspaceInitialized(checkNotNull(resolvedData.computerId))
                 LOGGER.info { "Computer: ${tile.computerID}, ${tile.label} placed" }
                 LOGGER.info { "HN: ${stack.hoverName}" }
                 LOGGER.info { "Tag: ${stack.tag}" }
