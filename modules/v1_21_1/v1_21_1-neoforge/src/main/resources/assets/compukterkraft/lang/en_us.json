@@ -177,6 +177,7 @@
   "gui.compukterkraft.config.upload_nag_delay.tooltip": "The delay in seconds after which we'll notify about unhandled imports. Set to 0 to disable.",
   "gui.compukterkraft.pocket_computer_overlay": "Pocket computer open. Press ESC to close.",
   "gui.compukterkraft.terminal": "Computer terminal",
+  "gui.compukterkraft.terminal.powered_off": "Computer is off. Turn it on first.",
   "gui.compukterkraft.tooltip.computer_id": "Computer ID: %s",
   "gui.compukterkraft.tooltip.copy": "Copy to clipboard",
   "gui.compukterkraft.tooltip.disk_id": "Disk ID: %s",

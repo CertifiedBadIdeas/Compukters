@@ -42,6 +42,7 @@ import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalInputController
 import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalLayout
 import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalMetrics
 import ru.lazyhat.compukterkraft.core.platform.api.FontMetrics
+import ru.lazyhat.compukterkraft.core.ui.workbench.WorkbenchTerminalInteractionPolicy
 import ru.lazyhat.compukterkraft.core.ui.workbench.WorkbenchLayoutModel
 import ru.lazyhat.compukterkraft.core.ui.workbench.WorkspaceRowLayout
 import kotlin.math.min
@@ -98,7 +99,8 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
     ) {
         if (store.state.mode == WorkbenchMode.TERMINAL) {
             val snapshot = menu.clientSide.screenSnapshot
-            val displaySnapshot = if (menu.isComputerOn) snapshot else snapshot.copy(cursorBlink = false)
+            val focused = WorkbenchTerminalInteractionPolicy.canAcceptInput(store.state.mode, menu.isComputerOn, terminalInput.focused)
+            val showFocusHint = WorkbenchTerminalInteractionPolicy.showFocusHint(menu.isComputerOn, terminalInput.focused)
             WorkbenchTerminalRenderer.render(
                 graphics,
                 minecraft!!.font,
@@ -107,8 +109,11 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
                 imageWidth,
                 imageHeight,
                 terminalLayout(),
-                displaySnapshot,
-                terminalInput.focused && menu.isComputerOn,
+                snapshot,
+                focused,
+                menu.isComputerOn,
+                showFocusHint,
+                Component.translatable("gui.compukterkraft.terminal.powered_off").string,
             )
         } else {
             graphics.fill(leftPos, topPos, leftPos + imageWidth, topPos + imageHeight, 0xFF12151D.toInt())
@@ -158,7 +163,7 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
         modifiers: Int,
     ): Boolean {
         val previousMode = store.state.mode
-        if (store.state.mode == WorkbenchMode.TERMINAL && terminalInput.focused && menu.isComputerOn) {
+        if (WorkbenchTerminalInteractionPolicy.canAcceptInput(store.state.mode, menu.isComputerOn, terminalInput.focused)) {
             if (terminalInput.keyPressed(key, scancode, modifiers)) {
                 return true
             }
@@ -179,7 +184,7 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
         scancode: Int,
         modifiers: Int,
     ): Boolean {
-        if (store.state.mode == WorkbenchMode.TERMINAL && terminalInput.focused && menu.isComputerOn) {
+        if (WorkbenchTerminalInteractionPolicy.canAcceptInput(store.state.mode, menu.isComputerOn, terminalInput.focused)) {
             if (terminalInput.keyReleased(key, scancode)) {
                 return true
             }
@@ -191,7 +196,7 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
         ch: Char,
         modifiers: Int,
     ): Boolean {
-        if (store.state.mode == WorkbenchMode.TERMINAL && terminalInput.focused && menu.isComputerOn) {
+        if (WorkbenchTerminalInteractionPolicy.canAcceptInput(store.state.mode, menu.isComputerOn, terminalInput.focused)) {
             return terminalInput.charTyped(ch)
         }
         if (store.charTyped(ch, layout().visibleEditorLines())) {
