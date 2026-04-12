@@ -20,6 +20,7 @@
 package ru.lazyhat.compukterkraft.core.ui.dsl
 
 import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalLayout
+import ru.lazyhat.compukterkraft.core.ui.workbench.WorkbenchTerminalViewState
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 
 /**
@@ -49,11 +50,11 @@ fun buildTerminalUi(
     imageWidth: Int,
     imageHeight: Int,
     layout: WorkbenchTerminalLayout,
-    snapshot: ScreenBufferSnapshot,
+    terminalState: WorkbenchTerminalViewState,
     focused: Boolean,
-    poweredOn: Boolean,
     showFocusHint: Boolean,
-    placeholderText: String,
+    poweredOffText: String,
+    connectingText: String,
 ): List<UiNode> =
     buildList {
         // Window background
@@ -85,7 +86,13 @@ fun buildTerminalUi(
         )
 
         // Terminal border
-        val borderColour = if (focused) TerminalColors.TERMINAL_BORDER_FOCUSED else TerminalColors.TERMINAL_BORDER
+        val borderColour =
+            if (terminalState is WorkbenchTerminalViewState.Active && focused) {
+                TerminalColors.TERMINAL_BORDER_FOCUSED
+            } else {
+                TerminalColors.TERMINAL_BORDER
+            }
+
         add(
             Rect(
                 layout.terminalSurfaceBounds.x - 1,
@@ -97,37 +104,61 @@ fun buildTerminalUi(
         )
 
         // Terminal background
-        add(
-            Rect(
-                layout.terminalSurfaceBounds.x,
-                layout.terminalSurfaceBounds.y,
-                layout.terminalSurfaceBounds.width,
-                layout.terminalSurfaceBounds.height,
-                TerminalColors.TERMINAL_BACKGROUND,
-            ),
-        )
+        if (terminalState is WorkbenchTerminalViewState.Active) {
+            add(
+                Rect(
+                    layout.terminalSurfaceBounds.x,
+                    layout.terminalSurfaceBounds.y,
+                    layout.terminalSurfaceBounds.width,
+                    layout.terminalSurfaceBounds.height,
+                    TerminalColors.TERMINAL_BACKGROUND,
+                ),
+            )
+        }
 
         // Status bar text
-        if (poweredOn) {
+        if (terminalState is WorkbenchTerminalViewState.Active) {
             val statusText = if (showFocusHint) "Click terminal to focus input" else "Input active  |  Ctrl+V paste"
             add(Text(layout.statusBounds.x + 12, layout.statusBounds.y + 6, statusText, TerminalColors.MUTED_TEXT))
         }
 
         // Size text (right-aligned)
-        val sizeText = "${snapshot.width} x ${snapshot.height}"
-        add(
-            RightAlignedText(
-                layout.statusBounds.x + 12,
-                layout.statusBounds.y + 6,
-                layout.statusBounds.width - 24,
-                sizeText,
-                TerminalColors.MUTED_TEXT,
-            ),
-        )
+        when (terminalState) {
+            is WorkbenchTerminalViewState.Active -> {
+                val snapshot: ScreenBufferSnapshot = terminalState.snapshot
+                val sizeText = "${snapshot.width} x ${snapshot.height}"
+                add(
+                    RightAlignedText(
+                        layout.statusBounds.x + 12,
+                        layout.statusBounds.y + 6,
+                        layout.statusBounds.width - 24,
+                        sizeText,
+                        TerminalColors.MUTED_TEXT,
+                    ),
+                )
+                add(TerminalView(layout.terminalBounds.x, layout.terminalBounds.y, snapshot))
+            }
 
-        if (poweredOn) {
-            add(TerminalView(layout.terminalBounds.x, layout.terminalBounds.y, snapshot))
-        } else {
-            add(Text(layout.terminalSurfaceBounds.x + 12, layout.terminalSurfaceBounds.y + 12, placeholderText, TerminalColors.MUTED_TEXT))
+            WorkbenchTerminalViewState.PoweredOff -> {
+                add(
+                    Text(
+                        layout.terminalSurfaceBounds.x + 12,
+                        layout.terminalSurfaceBounds.y + 12,
+                        poweredOffText,
+                        TerminalColors.MUTED_TEXT,
+                    ),
+                )
+            }
+
+            WorkbenchTerminalViewState.Connecting -> {
+                add(
+                    Text(
+                        layout.terminalSurfaceBounds.x + 12,
+                        layout.terminalSurfaceBounds.y + 12,
+                        connectingText,
+                        TerminalColors.MUTED_TEXT,
+                    ),
+                )
+            }
         }
     }

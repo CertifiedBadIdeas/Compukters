@@ -23,7 +23,7 @@ import net.minecraft.client.gui.GuiGraphics
 import ru.lazyhat.compukterkraft.common.ui.dsl.UiRenderer
 import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalLayout
 import ru.lazyhat.compukterkraft.core.ui.dsl.buildTerminalUi
-import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
+import ru.lazyhat.compukterkraft.core.ui.workbench.WorkbenchTerminalViewState
 
 /**
  * Renders a terminal panel with chrome (borders, status bar) and the character grid.
@@ -39,11 +39,11 @@ object WorkbenchTerminalRenderer {
         imageWidth: Int,
         imageHeight: Int,
         layout: WorkbenchTerminalLayout,
-        snapshot: ScreenBufferSnapshot,
+        terminalState: WorkbenchTerminalViewState,
         focused: Boolean,
-        poweredOn: Boolean,
         showFocusHint: Boolean,
-        placeholderText: String,
+        poweredOffText: String,
+        connectingText: String,
     ) {
         val nodes =
             buildTerminalUi(
@@ -52,11 +52,11 @@ object WorkbenchTerminalRenderer {
                 imageWidth = imageWidth,
                 imageHeight = imageHeight,
                 layout = layout,
-                snapshot = snapshot,
+                terminalState = terminalState,
                 focused = focused,
-                poweredOn = poweredOn,
                 showFocusHint = showFocusHint,
-                placeholderText = placeholderText,
+                poweredOffText = poweredOffText,
+                connectingText = connectingText,
             )
         UiRenderer.render(graphics, font, nodes)
     }

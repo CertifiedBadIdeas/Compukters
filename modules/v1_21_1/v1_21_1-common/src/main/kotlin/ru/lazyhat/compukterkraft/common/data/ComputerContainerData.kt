@@ -25,33 +25,32 @@ import ru.lazyhat.compukterkraft.common.computer.ServerComputer
 import ru.lazyhat.compukterkraft.common.gui.TerminalState
 import ru.lazyhat.compukterkraft.core.Config
 import ru.lazyhat.compukterkraft.core.block.ComputerFamily
-import ru.lazyhat.compukterkraft.core.gui.ComputerTerminalDefaults
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 
 class ComputerContainerData private constructor(
     val family: ComputerFamily,
-    val terminalSnapshot: ScreenBufferSnapshot,
+    val terminalSnapshot: ScreenBufferSnapshot?,
     val displayStack: ItemStack,
     val uploadMaxSize: Int,
 ) : IContainerData {
     constructor(buffer: RegistryFriendlyByteBuf) : this(
         buffer.readEnum(ComputerFamily::class.java),
-        TerminalState(buffer).toSnapshot(),
+        if (buffer.readBoolean()) TerminalState(buffer).toSnapshot() else null,
         ItemStack.OPTIONAL_STREAM_CODEC.decode(buffer),
         buffer.readInt(),
     )
 
     override fun toBytes(buffer: RegistryFriendlyByteBuf) {
         buffer.writeEnum(family)
-        TerminalState(terminalSnapshot).write(buffer)
+        buffer.writeBoolean(terminalSnapshot != null)
+        terminalSnapshot?.let { TerminalState(it).write(buffer) }
         ItemStack.OPTIONAL_STREAM_CODEC.encode(buffer, displayStack)
         buffer.writeInt(uploadMaxSize)
     }
 
     constructor(computer: ServerComputer, displayStack: ItemStack) : this(
         computer.family,
-        computer.lastScreenSnapshot
-            ?: ComputerTerminalDefaults.fallbackSnapshot(computer.family),
+        computer.lastScreenSnapshot,
         displayStack,
         Config.uploadMaxSize,
     )
