@@ -160,7 +160,12 @@ object ModRegistry {
                 Names.COMPUTER,
                 Supplier {
                     IMenuTypeExtension.create { id, playerInventory, data ->
-                        ComputerMenuWithoutInventory(COMPUTER.get(), id, playerInventory, ComputerContainerData(data)).also {
+                        ComputerMenuWithoutInventory(
+                            COMPUTER.get(),
+                            id,
+                            playerInventory,
+                            ComputerContainerData(data),
+                        ).also {
                             LOGGER.info { "ClientRegistry: ComputerMenuWithoutInventory from buffer created" }
                         }
                     }

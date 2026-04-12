@@ -45,8 +45,8 @@ object Config {
     var advancedTurtleFuelLimit: Int = 100000
     var turtlesCanPush: Boolean = true
 
-    const val DEFAULT_COMPUTER_TERM_WIDTH: Int = 51
-    const val DEFAULT_COMPUTER_TERM_HEIGHT: Int = 19
+    const val DEFAULT_COMPUTER_TERM_WIDTH: Int = 77
+    const val DEFAULT_COMPUTER_TERM_HEIGHT: Int = 24
 
     const val TURTLE_TERM_WIDTH: Int = 39
     const val TURTLE_TERM_HEIGHT: Int = 13

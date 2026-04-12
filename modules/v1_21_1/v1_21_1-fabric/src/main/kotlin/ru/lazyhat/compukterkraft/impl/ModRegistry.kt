@@ -178,7 +178,12 @@ object ModRegistry {
                     id(Names.COMPUTER),
                     ExtendedScreenHandlerType(
                         { syncId, playerInventory, data ->
-                            ComputerMenuWithoutInventory(COMPUTER, syncId, playerInventory, data)
+                            ComputerMenuWithoutInventory(
+                                COMPUTER,
+                                syncId,
+                                playerInventory,
+                                data,
+                            )
                         },
                         StreamCodec.of(
                             { buf: RegistryFriendlyByteBuf, data: ComputerContainerData -> data.toBytes(buf) },
