@@ -11,6 +11,7 @@ The project is split into multiple Gradle modules across a multi-version, multi-
 | `core`               | Shared mod logic: bootstrap descriptors, platform port interfaces, no MC deps |
 | `v1_x_x-common`     | Architectury common module per MC version: shared Minecraft-facing code     |
 | `v1_x_x-{fabric,forge,neoforge}` | Loader leaf modules: bootstrap, event hooks, registry, network handler |
+| `v1_x_x-create-neoforge` | Optional Create mod compat (NeoForge-only): guarded bootstrap, compat APIs |
 
 ### Module Ownership Rules
 

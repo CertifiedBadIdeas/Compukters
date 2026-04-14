@@ -17,32 +17,15 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-plugins {
-    id("org.jetbrains.kotlin.jvm")
-    id("org.jmailen.kotlinter")
-}
+package ru.lazyhat.compukterkraft.impl.create
 
-repositories {
-    mavenCentral {
-        name = "Central"
+object CreateCompatBootstrap {
+    fun initializeIfPresent(
+        isCreateLoaded: () -> Boolean,
+        register: () -> Unit,
+    ): Boolean {
+        if (!isCreateLoaded()) return false
+        register()
+        return true
     }
-    maven("https://api.modrinth.com/maven") {
-        name = "Modrinth"
-    }
-    maven("https://maven.neoforged.net/releases/") {
-        name = "NeoForged"
-    }
-    maven("https://maven.parchmentmc.org/") {
-        name = "Parchment MC"
-    }
-}
-
-group = readAllModProperties().getValue("common_mod_group_id")
-
-kotlin {
-    jvmToolchain(17)
-}
-
-tasks.test {
-    useJUnitPlatform()
 }

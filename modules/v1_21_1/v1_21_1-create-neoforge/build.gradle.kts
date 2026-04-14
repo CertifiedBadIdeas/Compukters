@@ -17,32 +17,18 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+@file:Suppress("PropertyName")
+
 plugins {
-    id("org.jetbrains.kotlin.jvm")
-    id("org.jmailen.kotlinter")
+    alias(libs.plugins.v1211)
+    alias(libs.plugins.neoforgeConvention)
 }
 
-repositories {
-    mavenCentral {
-        name = "Central"
-    }
-    maven("https://api.modrinth.com/maven") {
-        name = "Modrinth"
-    }
-    maven("https://maven.neoforged.net/releases/") {
-        name = "NeoForged"
-    }
-    maven("https://maven.parchmentmc.org/") {
-        name = "Parchment MC"
-    }
-}
+dependencies {
+    implementation(project(path = projects.v1211Common.path, configuration = "namedElements"))
+    implementation(projects.core)
 
-group = readAllModProperties().getValue("common_mod_group_id")
+    testImplementation(kotlin("test"))
 
-kotlin {
-    jvmToolchain(17)
-}
-
-tasks.test {
-    useJUnitPlatform()
+    modCompileOnly(versionLibrary("create-neoforge"))
 }
