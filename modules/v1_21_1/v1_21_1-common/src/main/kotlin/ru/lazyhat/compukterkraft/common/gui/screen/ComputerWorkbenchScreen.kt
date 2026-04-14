@@ -41,12 +41,11 @@ import ru.lazyhat.compukterkraft.core.application.workbench.highlightColor
 import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalInputController
 import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalLayout
 import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalMetrics
-import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
-import ru.lazyhat.compukterkraft.core.platform.api.FontMetrics
-import ru.lazyhat.compukterkraft.core.ui.workbench.WorkbenchTerminalInteractionPolicy
 import ru.lazyhat.compukterkraft.core.ui.workbench.WorkbenchLayoutModel
-import ru.lazyhat.compukterkraft.core.ui.workbench.WorkspaceRowLayout
+import ru.lazyhat.compukterkraft.core.ui.workbench.WorkbenchTerminalInteractionPolicy
 import ru.lazyhat.compukterkraft.core.ui.workbench.WorkbenchTerminalViewState
+import ru.lazyhat.compukterkraft.core.ui.workbench.WorkspaceRowLayout
+import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 import kotlin.math.min
 
 class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
