@@ -34,6 +34,10 @@ import kotlinx.coroutines.launch
 import ru.lazyhat.compukterkraft.core.LOGGER
 import ru.lazyhat.compukterkraft.core.application.runtime.ComputerProgramCompiler
 import ru.lazyhat.compukterkraft.core.application.runtime.WorkspaceProgramLoader
+import ru.lazyhat.compukterkraft.core.computer.vm.api.VmFileSystemApi
+import ru.lazyhat.compukterkraft.core.computer.vm.api.VmProcessApi
+import ru.lazyhat.compukterkraft.core.computer.vm.api.VmSystemApi
+import ru.lazyhat.compukterkraft.core.computer.vm.api.VmTerminalApi
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerProfile
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerVmHandle
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspace

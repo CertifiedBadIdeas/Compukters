@@ -17,10 +17,12 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package ru.lazyhat.compukterkraft.core.computer.vm
+package ru.lazyhat.compukterkraft.core.computer.vm.api
 
 import ru.lazyhat.compukterkraft.core.application.runtime.ComputerProgramCompiler
 import ru.lazyhat.compukterkraft.core.application.runtime.WorkspaceProgramLoader
+import ru.lazyhat.compukterkraft.core.computer.vm.VmContext
+import ru.lazyhat.compukterkraft.core.computer.vm.VmPathResolver
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerProcessApi
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerProfile
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerRuntime

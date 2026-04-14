@@ -17,8 +17,9 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package ru.lazyhat.compukterkraft.core.computer.vm
+package ru.lazyhat.compukterkraft.core.computer.vm.api
 
+import ru.lazyhat.compukterkraft.core.computer.vm.VmContext
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerFileSystemApi
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceEntry
 import ru.lazyhat.compukterkraft.lang.runtime.HostCall
