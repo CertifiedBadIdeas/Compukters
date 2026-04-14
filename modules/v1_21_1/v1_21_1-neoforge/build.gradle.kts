@@ -31,10 +31,12 @@ loom {
         maybeCreate("main").apply {
             sourceSet("main", project(projects.v1211Common.path))
             sourceSet("main", project(projects.core.path))
+            sourceSet("main", project(projects.v1211CreateNeoforge.path))
         }
     }
 }
 
 dependencies {
     implementation(project(path = projects.v1211Common.path, configuration = "namedElements"))
+    implementation(project(path = projects.v1211CreateNeoforge.path, configuration = "namedElements"))
 }

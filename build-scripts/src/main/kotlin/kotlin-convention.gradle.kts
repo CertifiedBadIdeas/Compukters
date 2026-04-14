@@ -26,6 +26,9 @@ repositories {
     mavenCentral {
         name = "Central"
     }
+    maven("https://api.modrinth.com/maven") {
+        name = "Modrinth"
+    }
     maven("https://maven.neoforged.net/releases/") {
         name = "NeoForged"
     }
