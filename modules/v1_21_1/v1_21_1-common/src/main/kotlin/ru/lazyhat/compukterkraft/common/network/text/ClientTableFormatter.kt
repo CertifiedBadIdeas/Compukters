@@ -17,7 +17,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package ru.lazyhat.compukterkraft.common.network.client
+package ru.lazyhat.compukterkraft.common.network.text
 
 import net.minecraft.client.Minecraft
 import net.minecraft.network.chat.Component

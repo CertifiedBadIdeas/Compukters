@@ -16,7 +16,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-package ru.lazyhat.compukterkraft.common.network.client
+package ru.lazyhat.compukterkraft.common.network.text
 
 import net.minecraft.network.FriendlyByteBuf
 import net.minecraft.network.chat.ComponentSerialization

@@ -16,7 +16,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-package ru.lazyhat.compukterkraft.common.gui
+package ru.lazyhat.compukterkraft.common.ui
 
 import net.minecraft.network.FriendlyByteBuf
 import ru.lazyhat.compukterkraft.common.utils.readUByteArray

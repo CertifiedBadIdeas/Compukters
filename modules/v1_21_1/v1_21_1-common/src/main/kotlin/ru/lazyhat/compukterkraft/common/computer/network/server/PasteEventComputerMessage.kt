@@ -16,53 +16,53 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-package ru.lazyhat.compukterkraft.common.network.server
+package ru.lazyhat.compukterkraft.common.computer.network.server
 
+import io.netty.handler.codec.DecoderException
 import net.minecraft.network.FriendlyByteBuf
 import net.minecraft.world.inventory.AbstractContainerMenu
 import ru.lazyhat.compukterkraft.common.menu.ComputerMenu
 import ru.lazyhat.compukterkraft.common.network.MessageType
 import ru.lazyhat.compukterkraft.common.network.NetworkMessages
-import ru.lazyhat.compukterkraft.core.computer.input.ComputerControlAction
-import ru.lazyhat.compukterkraft.core.computer.input.ControlInputEvent
+import ru.lazyhat.compukterkraft.core.computer.input.PasteInputEvent
+import ru.lazyhat.compukterkraft.core.utils.StringUtil
+import java.nio.ByteBuffer
 
-class ComputerActionServerMessage : ComputerServerMessage {
-    private val action: Action
+/**
+ * Paste a string on a [ServerComputer].
+ *
+ * @see ServerInputHandler.accept
+ */
+class PasteEventComputerMessage : ComputerServerMessage {
+    private val text: ByteBuffer
 
-    constructor(menu: AbstractContainerMenu, action: Action) : super(menu) {
-        this.action = action
+    constructor(menu: AbstractContainerMenu, text: ByteBuffer) : super(menu) {
+        this.text = text
     }
 
     constructor(buf: FriendlyByteBuf) : super(buf) {
-        action = buf.readEnum<Action>(Action::class.java)
+        val length: Int = buf.readVarInt()
+        if (length > StringUtil.MAX_PASTE_LENGTH) {
+            throw DecoderException("ByteArray with size " + length + " is bigger than allowed " + StringUtil.MAX_PASTE_LENGTH)
+        }
+
+        val text = ByteArray(length)
+        buf.readBytes(text)
+        this.text = ByteBuffer.wrap(text)
     }
 
     override fun write(buf: FriendlyByteBuf) {
         super.write(buf)
-        buf.writeEnum(action)
+        buf.writeVarInt(text.remaining())
+        buf.writeBytes(text.duplicate())
     }
 
     override fun handle(
         context: ServerNetworkContext,
         container: ComputerMenu,
     ) {
-        container.serverSide.input.accept(ControlInputEvent(action.toDomainAction()))
+        container.serverSide.input.accept(PasteInputEvent(text))
     }
 
-    override fun type(): MessageType<ComputerActionServerMessage> = NetworkMessages.COMPUTER_ACTION
-
-    enum class Action {
-        TERMINATE,
-        TURN_ON,
-        SHUTDOWN,
-        REBOOT,
-    }
+    public override fun type(): MessageType<PasteEventComputerMessage> = NetworkMessages.PASTE_EVENT
 }
-
-private fun ComputerActionServerMessage.Action.toDomainAction(): ComputerControlAction =
-    when (this) {
-        ComputerActionServerMessage.Action.TERMINATE -> ComputerControlAction.TERMINATE
-        ComputerActionServerMessage.Action.TURN_ON -> ComputerControlAction.TURN_ON
-        ComputerActionServerMessage.Action.SHUTDOWN -> ComputerControlAction.SHUTDOWN
-        ComputerActionServerMessage.Action.REBOOT -> ComputerControlAction.REBOOT
-    }
