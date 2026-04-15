@@ -22,7 +22,7 @@ package ru.lazyhat.compukterkraft.common.computer.screen
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
 import net.minecraft.network.chat.Component
 import net.minecraft.world.entity.player.Inventory
-import ru.lazyhat.compukterkraft.common.menu.AbstractComputerMenu
+import ru.lazyhat.compukterkraft.common.computer.menu.AbstractComputerMenu
 
 abstract class ComputerScreen<T : AbstractComputerMenu>(
     container: T,

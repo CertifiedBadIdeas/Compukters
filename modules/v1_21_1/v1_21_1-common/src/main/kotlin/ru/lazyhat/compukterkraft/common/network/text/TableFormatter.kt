@@ -22,7 +22,7 @@ package ru.lazyhat.compukterkraft.common.network.text
 import net.minecraft.ChatFormatting
 import net.minecraft.network.chat.Component
 import net.minecraft.network.chat.MutableComponent
-import ru.lazyhat.compukterkraft.common.network.client.ChatHelpers.coloured
+import ru.lazyhat.compukterkraft.common.network.text.ChatHelpers.coloured
 
 interface TableFormatter {
     /**

@@ -21,8 +21,8 @@ package ru.lazyhat.compukterkraft.common.computer.data
 
 import net.minecraft.network.RegistryFriendlyByteBuf
 import net.minecraft.world.item.ItemStack
-import ru.lazyhat.compukterkraft.common.computer.ServerComputer
-import ru.lazyhat.compukterkraft.common.gui.TerminalState
+import ru.lazyhat.compukterkraft.common.computer.context.ServerComputer
+import ru.lazyhat.compukterkraft.common.ui.TerminalState
 import ru.lazyhat.compukterkraft.core.Config
 import ru.lazyhat.compukterkraft.core.block.ComputerFamily
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot

@@ -19,9 +19,9 @@
 package ru.lazyhat.compukterkraft.common.infrastructure.workbench
 
 import kotlinx.coroutines.flow.StateFlow
-import ru.lazyhat.compukterkraft.common.menu.AbstractComputerMenu
+import ru.lazyhat.compukterkraft.common.computer.menu.AbstractComputerMenu
 import ru.lazyhat.compukterkraft.common.network.ClientNetworking
-import ru.lazyhat.compukterkraft.common.network.server.ComputerWorkspaceServerMessage
+import ru.lazyhat.compukterkraft.common.computer.network.server.ComputerWorkspaceServerMessage
 import ru.lazyhat.compukterkraft.core.computer.input.ComputerControlAction
 import ru.lazyhat.compukterkraft.core.computer.input.ControlInputEvent
 import ru.lazyhat.compukterkraft.core.computer.input.InputEventSink

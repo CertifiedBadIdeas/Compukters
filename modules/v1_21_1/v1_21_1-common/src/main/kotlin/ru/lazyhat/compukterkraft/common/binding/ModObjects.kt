@@ -23,10 +23,10 @@ import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.inventory.MenuType
 import net.minecraft.world.level.block.entity.BlockEntityType
 import net.minecraft.world.level.storage.loot.predicates.LootItemConditionType
-import ru.lazyhat.compukterkraft.common.block.AbstractComputerBlockEntity
-import ru.lazyhat.compukterkraft.common.block.ComputerBlockEntity
-import ru.lazyhat.compukterkraft.common.data.ComputerContainerData
-import ru.lazyhat.compukterkraft.common.menu.ComputerMenuWithoutInventory
+import ru.lazyhat.compukterkraft.common.computer.block.AbstractComputerBlockEntity
+import ru.lazyhat.compukterkraft.common.computer.block.ComputerBlockEntity
+import ru.lazyhat.compukterkraft.common.computer.data.ComputerContainerData
+import ru.lazyhat.compukterkraft.common.computer.menu.ComputerMenuWithoutInventory
 
 object ModObjects {
     lateinit var computerBlockEntityType: () -> BlockEntityType<ComputerBlockEntity>
