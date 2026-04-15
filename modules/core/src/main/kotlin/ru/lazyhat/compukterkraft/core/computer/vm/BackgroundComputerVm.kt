@@ -35,11 +35,17 @@ import ru.lazyhat.compukterkraft.core.LOGGER
 import ru.lazyhat.compukterkraft.core.application.runtime.ComputerProgramCompiler
 import ru.lazyhat.compukterkraft.core.application.runtime.WorkspaceProgramLoader
 import ru.lazyhat.compukterkraft.core.computer.vm.api.VmFileSystemApi
+import ru.lazyhat.compukterkraft.core.computer.vm.api.VmPeripheralRegistry
+import ru.lazyhat.compukterkraft.core.computer.vm.api.VmPeripheralRuntimeApi
 import ru.lazyhat.compukterkraft.core.computer.vm.api.VmProcessApi
 import ru.lazyhat.compukterkraft.core.computer.vm.api.VmSystemApi
 import ru.lazyhat.compukterkraft.core.computer.vm.api.VmTerminalApi
+import ru.lazyhat.compukterkraft.lang.api.BuiltinModule
+import ru.lazyhat.compukterkraft.lang.api.BuiltinRegistry
+import ru.lazyhat.compukterkraft.lang.frontend.LanguageBuiltins
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerProfile
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerVmHandle
+import ru.lazyhat.compukterkraft.lang.runtime.ComputerCapability
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.HostCall
 import ru.lazyhat.compukterkraft.lang.runtime.HostResult
@@ -55,6 +61,11 @@ import kotlinx.coroutines.yield as coroutineYield
 fun interface ComputerVmLogger {
     fun log(message: String)
 }
+
+private data class RuntimeApiRegistryProfile(
+    val baseRegistry: BuiltinRegistry,
+    val optionalModules: List<BuiltinModule> = emptyList(),
+)
 
 /**
  * The main VM host for a single computer instance.
@@ -89,6 +100,8 @@ class BackgroundComputerVm(
     private val programLoader = WorkspaceProgramLoader(workspace)
     private val pathResolver = VmPathResolver()
     private val screenBuffer = ScreenBuffer(profile.terminalWidth, profile.terminalHeight, profile.colorTerminal)
+    private val peripheralRegistry = VmPeripheralRegistry()
+    private val runtimeRegistryProfile = createRuntimeRegistryProfile()
 
     /**
      * Observe terminal VM states (stopped, crashed).
@@ -119,7 +132,13 @@ class BackgroundComputerVm(
                                 return@launch
                             }
 
-                    val compiled = ComputerProgramCompiler.compile(source.path, source.source, profile)
+                    val compiled =
+                        ComputerProgramCompiler.compile(
+                            source.path,
+                            source.source,
+                            profile,
+                            runtimeRegistryProfile.baseRegistry,
+                        )
 
                     val program =
                         compiled.program
@@ -254,6 +273,7 @@ class BackgroundComputerVm(
             )
         val terminalApi = VmTerminalApi(screenBuffer = screenBuffer, ctx = this)
         val filesystemApi = VmFileSystemApi(ctx = this)
+        val peripheralsApi = VmPeripheralRuntimeApi(peripheralRegistry)
         val processApi =
             VmProcessApi(
                 ctx = this,
@@ -270,10 +290,40 @@ class BackgroundComputerVm(
         return VmRuntime(
             ctx = this,
             initialProfile = profile,
+            runtimeRegistry = runtimeRegistryProfile.baseRegistry,
             systemApi = systemApi,
             terminalApi = terminalApi,
             filesystemApi = filesystemApi,
             processApi = processApi,
+            peripheralsApi = peripheralsApi,
+        )
+    }
+
+    private fun createRuntimeRegistryProfile(): RuntimeApiRegistryProfile {
+        val defaultRegistry = LanguageBuiltins.defaultRuntimeRegistry
+        val baseModules =
+            buildList {
+                defaultRegistry.module("terminal")?.let(::add)
+                defaultRegistry.module("system")?.let(::add)
+                if (ComputerCapability.FILESYSTEM in profile.allowedCapabilities) {
+                    defaultRegistry.module("filesystem")?.let(::add)
+                }
+                if (ComputerCapability.EVENTS in profile.allowedCapabilities) {
+                    defaultRegistry.module("events")?.let(::add)
+                }
+                if (ComputerCapability.SYSTEM in profile.allowedCapabilities) {
+                    defaultRegistry.module("process")?.let(::add)
+                    defaultRegistry.module("strings")?.let(::add)
+                }
+            }
+
+        return RuntimeApiRegistryProfile(
+            baseRegistry =
+                BuiltinRegistry(
+                    modules = baseModules,
+                    globals = defaultRegistry.globals,
+                    builtinTypes = defaultRegistry.builtinTypes,
+                ),
         )
     }
 }

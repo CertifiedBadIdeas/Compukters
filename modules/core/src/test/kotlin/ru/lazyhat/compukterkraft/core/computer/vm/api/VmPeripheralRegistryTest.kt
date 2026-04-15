@@ -17,21 +17,33 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package ru.lazyhat.compukterkraft.core.language
+package ru.lazyhat.compukterkraft.core.computer.vm.api
 
-import ru.lazyhat.compukterkraft.lang.frontend.LanguageFrontend
-import ru.lazyhat.compukterkraft.lang.frontend.LanguageIde
-import java.nio.charset.StandardCharsets
+import kotlin.test.Test
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
-object LanguageServices {
-    val frontend = LanguageFrontend()
-    val ide = LanguageIde(frontend, frontend.registry)
+class VmPeripheralRegistryTest {
+    @Test
+    fun reportsMonitorPresenceFromAttachedDevices() {
+        val registry = VmPeripheralRegistry()
+        val api = VmPeripheralRuntimeApi(registry)
 
-    fun bundledScript(relativePath: String): String? {
-        val normalized = relativePath.trimStart('/')
-        return LanguageServices::class.java.classLoader
-            .getResourceAsStream("rom/$normalized")
-            ?.bufferedReader(StandardCharsets.UTF_8)
-            ?.use { it.readText() }
+        assertFalse(api.monitorExists())
+
+        registry.attach(
+            VmPeripheralDevice(
+                id = "monitor-1",
+                type = "monitor",
+                label = "Main Monitor",
+                side = "left",
+            ),
+        )
+
+        assertTrue(api.monitorExists())
+
+        registry.detach("monitor-1")
+
+        assertFalse(api.monitorExists())
     }
 }

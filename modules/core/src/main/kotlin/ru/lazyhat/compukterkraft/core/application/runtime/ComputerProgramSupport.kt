@@ -19,11 +19,14 @@
 package ru.lazyhat.compukterkraft.core.application.runtime
 
 import ru.lazyhat.compukterkraft.core.language.LanguageServices
+import ru.lazyhat.compukterkraft.lang.api.BuiltinRegistry
 import ru.lazyhat.compukterkraft.lang.api.BytecodeFunction
 import ru.lazyhat.compukterkraft.lang.api.BytecodeModule
 import ru.lazyhat.compukterkraft.lang.api.BytecodeRecord
 import ru.lazyhat.compukterkraft.lang.api.Instruction
 import ru.lazyhat.compukterkraft.lang.frontend.FrontendSeverity
+import ru.lazyhat.compukterkraft.lang.frontend.LanguageBuiltins
+import ru.lazyhat.compukterkraft.lang.frontend.LanguageFrontend
 import ru.lazyhat.compukterkraft.lang.runtime.BytecodeComputerProgram
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerProfile
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerProgram
@@ -56,8 +59,9 @@ object ComputerProgramCompiler {
         path: String,
         source: String,
         profile: ComputerProfile? = null,
+        runtimeRegistry: BuiltinRegistry = LanguageBuiltins.defaultRuntimeRegistry,
     ): CompiledComputerProgram {
-        val artifact = LanguageServices.frontend.compile(path, source)
+        val artifact = LanguageFrontend(runtimeRegistry).compile(path, source)
         val module = artifact.module
         val errorMessage =
             artifact.analysis.diagnostics

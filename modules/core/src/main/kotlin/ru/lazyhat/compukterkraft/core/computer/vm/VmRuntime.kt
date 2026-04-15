@@ -19,6 +19,7 @@
 
 package ru.lazyhat.compukterkraft.core.computer.vm
 
+import ru.lazyhat.compukterkraft.lang.api.BuiltinRegistry
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerFileSystemApi
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerPeripheralApi
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerProcessApi
@@ -33,6 +34,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.VmState
 class VmRuntime(
     private val ctx: VmContext,
     private val initialProfile: ComputerProfile,
+    val runtimeRegistry: BuiltinRegistry,
     private val systemApi: ComputerSystemApi,
     private val terminalApi: ComputerTerminalApi,
     private val filesystemApi: ComputerFileSystemApi,

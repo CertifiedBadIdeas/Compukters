@@ -33,6 +33,7 @@ internal class RuntimeHostBridge(
             "terminal" -> invokeTerminal(functionName, arguments)
             "process" -> invokeProcess(functionName, arguments)
             "strings" -> invokeStrings(functionName, arguments)
+            "monitor" -> invokeMonitor(functionName, arguments)
             else -> error("Unknown module $moduleName")
         }
     }
@@ -202,6 +203,15 @@ internal class RuntimeHostBridge(
             else -> error("Unknown strings function $functionName")
         }
 
+    private fun invokeMonitor(
+        functionName: String,
+        arguments: List<VmValue>,
+    ): VmValue =
+        when (functionName) {
+            "exists" -> VmValue.BoolValue(runtime.peripherals.monitorExists())
+            else -> error("Unknown monitor function $functionName")
+        }
+
     private fun ensureCapability(moduleName: String) {
         val capability =
             when (moduleName) {
@@ -210,6 +220,7 @@ internal class RuntimeHostBridge(
                 "terminal" -> ComputerCapability.TERMINAL
                 "events" -> ComputerCapability.EVENTS
                 "process" -> ComputerCapability.SYSTEM
+                "monitor" -> ComputerCapability.PERIPHERALS
                 else -> null
             }
         if (capability != null && capability !in runtime.profile.allowedCapabilities) {

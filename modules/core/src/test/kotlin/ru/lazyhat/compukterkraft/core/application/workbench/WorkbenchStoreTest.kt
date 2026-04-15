@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
+import ru.lazyhat.compukterkraft.core.input.KeyCodes
 import ru.lazyhat.compukterkraft.lang.api.SourceLocation
 import ru.lazyhat.compukterkraft.lang.api.SourceRange
 import ru.lazyhat.compukterkraft.lang.runtime.CompletionItem
@@ -89,6 +90,100 @@ class WorkbenchStoreTest {
             assertEquals(listOf("completeFromLastAnalysis:0:9"), ideFacade.calls)
         }
 
+    @Test
+    fun importPickerRequestsAvailableImportsFromFacade() =
+        runTest(UnconfinedTestDispatcher()) {
+            val ideFacade = FakeWorkbenchIdeFacade()
+            val store = WorkbenchStore(FakeWorkspaceGateway(), FakeComputerControlGateway(), ideFacade)
+            val updates = FakeWorkbenchUpdateSource()
+
+            store.bind(backgroundScope, updates)
+            updates.push(document = ComputerWorkspaceDocument("main.ck", "", 0))
+            store.toggleMode()
+
+            store.openImportPicker()
+
+            assertTrue(ideFacade.calls.contains("availableImports"))
+        }
+
+    @Test
+    fun opensImportPickerWithAvailableImports() =
+        runTest(UnconfinedTestDispatcher()) {
+            val ideFacade = FakeWorkbenchIdeFacade()
+            val store = WorkbenchStore(FakeWorkspaceGateway(), FakeComputerControlGateway(), ideFacade)
+            val updates = FakeWorkbenchUpdateSource()
+
+            store.bind(backgroundScope, updates)
+            updates.push(document = ComputerWorkspaceDocument("main.ck", "", 0))
+            store.toggleMode()
+
+            store.openImportPicker()
+
+            assertTrue(store.state.editor.importPickerVisible)
+            assertEquals(listOf("terminal"), store.state.editor.importPickerItems.map { it.label })
+        }
+
+    @Test
+    fun appliesSelectedImportFromPicker() =
+        runTest(UnconfinedTestDispatcher()) {
+            val ideFacade = FakeWorkbenchIdeFacade()
+            val store = WorkbenchStore(FakeWorkspaceGateway(), FakeComputerControlGateway(), ideFacade)
+            val updates = FakeWorkbenchUpdateSource()
+
+            store.bind(backgroundScope, updates)
+            updates.push(document = ComputerWorkspaceDocument("main.ck", "fun main() {}", 0))
+            store.toggleMode()
+
+            store.openImportPicker()
+            store.applyImportPickerSelection(0, visibleEditorLines = 20)
+
+            assertTrue(store.state.editor.text.startsWith("import terminal;\n"))
+            assertTrue(!store.state.editor.importPickerVisible)
+        }
+
+    @Test
+    fun ctrlAOpensImportPicker() =
+        runTest(UnconfinedTestDispatcher()) {
+            val ideFacade = FakeWorkbenchIdeFacade()
+            val store = WorkbenchStore(FakeWorkspaceGateway(), FakeComputerControlGateway(), ideFacade)
+            val updates = FakeWorkbenchUpdateSource()
+
+            store.bind(backgroundScope, updates)
+            updates.push(document = ComputerWorkspaceDocument("main.ck", "", 0))
+            store.toggleMode()
+
+            store.keyPressed(KeyCodes.KEY_A, KeyCodes.MOD_CONTROL, visibleEditorLines = 20)
+
+            assertTrue(store.state.editor.importPickerVisible)
+            assertTrue(ideFacade.calls.contains("availableImports"))
+        }
+
+    @Test
+    fun enterAppliesSelectedImportWhilePickerIsOpen() =
+        runTest(UnconfinedTestDispatcher()) {
+            val ideFacade =
+                FakeWorkbenchIdeFacade(
+                    availableImports =
+                        listOf(
+                            CompletionItem(label = "terminal", detail = "base", kind = CompletionItemKind.MODULE),
+                            CompletionItem(label = "filesystem", detail = "base", kind = CompletionItemKind.MODULE),
+                        ),
+                )
+            val store = WorkbenchStore(FakeWorkspaceGateway(), FakeComputerControlGateway(), ideFacade)
+            val updates = FakeWorkbenchUpdateSource()
+
+            store.bind(backgroundScope, updates)
+            updates.push(document = ComputerWorkspaceDocument("main.ck", "fun main() {}", 0))
+            store.toggleMode()
+            store.openImportPicker()
+
+            store.keyPressed(KeyCodes.KEY_DOWN, modifiers = 0, visibleEditorLines = 20)
+            store.keyPressed(KeyCodes.KEY_ENTER, modifiers = 0, visibleEditorLines = 20)
+
+            assertTrue(store.state.editor.text.startsWith("import filesystem;\n"))
+            assertTrue(!store.state.editor.importPickerVisible)
+        }
+
     private class FakeWorkbenchUpdateSource : WorkbenchUpdateSource {
         private val _stateFlow = MutableStateFlow(WorkbenchRemoteState())
         override val stateFlow: StateFlow<WorkbenchRemoteState> = _stateFlow
@@ -120,7 +215,10 @@ class WorkbenchStoreTest {
         }
     }
 
-    private class FakeWorkbenchIdeFacade : WorkbenchIdeFacade {
+    private class FakeWorkbenchIdeFacade(
+        private val availableImports: List<CompletionItem> =
+            listOf(CompletionItem(label = "terminal", detail = "base", kind = CompletionItemKind.MODULE)),
+    ) : WorkbenchIdeFacade {
         val calls = mutableListOf<String>()
 
         override fun analyze(
@@ -149,6 +247,14 @@ class WorkbenchStoreTest {
         ): List<CompletionItem> {
             calls += "completeFromLastAnalysis:$line:$column"
             return listOf(CompletionItem(label = "while", detail = "keyword", kind = CompletionItemKind.KEYWORD))
+        }
+
+        override fun availableImports(
+            path: String,
+            source: String,
+        ): List<CompletionItem> {
+            calls += "availableImports"
+            return availableImports
         }
 
         override fun hover(

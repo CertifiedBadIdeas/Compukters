@@ -27,6 +27,7 @@ import net.minecraft.network.chat.Component
 import net.minecraft.world.entity.player.Inventory
 import ru.lazyhat.compukterkraft.common.gui.input.ClientInputHandler
 import ru.lazyhat.compukterkraft.common.infrastructure.coroutines.minecraft
+import ru.lazyhat.compukterkraft.common.infrastructure.workbench.ComputerFamilyCatalogSource
 import ru.lazyhat.compukterkraft.common.infrastructure.workbench.InputHandlerControlGateway
 import ru.lazyhat.compukterkraft.common.infrastructure.workbench.LanguageWorkbenchIdeFacade
 import ru.lazyhat.compukterkraft.common.infrastructure.workbench.MenuWorkspaceUpdateSource
@@ -59,7 +60,7 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
         WorkbenchStore(
             workspaceGateway = NetworkWorkspaceGateway(container),
             controlGateway = InputHandlerControlGateway(inputHandler),
-            ideFacade = LanguageWorkbenchIdeFacade,
+            ideFacade = LanguageWorkbenchIdeFacade(ComputerFamilyCatalogSource(container.family)),
         )
     private var screenScope: CoroutineScope? = null
 
@@ -235,6 +236,16 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
         if (button == 0) {
             terminalInput.focused = false
 
+            layout.importPickerIndexAt(store.state, mouseX.toInt(), mouseY.toInt())?.let { index ->
+                store.applyImportPickerSelection(index, visibleEditorLines = layout.visibleEditorLines())
+                return true
+            }
+
+            if (store.state.editor.importPickerVisible && layout.importPickerPopup(store.state)?.bounds?.contains(mouseX.toInt(), mouseY.toInt()) == false) {
+                store.closeImportPicker()
+                return true
+            }
+
             layout.workspaceRowAt(store.state, mouseX.toInt(), mouseY.toInt())?.let { row ->
                 handleWorkspaceRow(row)
                 return true
@@ -360,6 +371,10 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
         ) {
             renderCompletionPopup(graphics)
         }
+
+        if (store.state.editor.importPickerVisible) {
+            renderImportPickerPopup(graphics)
+        }
     }
 
     private fun renderStatusBar(graphics: GuiGraphics) {
@@ -454,6 +469,24 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
         }
     }
 
+    private fun renderImportPickerPopup(graphics: GuiGraphics) {
+        val font = minecraft!!.font
+        val popup = layout().importPickerPopup(store.state) ?: return
+        val items = store.state.editor.importPickerItems.take(popup.visibleItems)
+
+        graphics.fill(popup.bounds.x, popup.bounds.y, popup.bounds.right, popup.bounds.bottom, 0xF0121721.toInt())
+        graphics.fill(popup.bounds.x, popup.bounds.y, popup.bounds.right, popup.bounds.y + 14, 0xFF1F2937.toInt())
+        graphics.drawString(font, "Available imports", popup.bounds.x + 6, popup.bounds.y + 3, 0xF5F7FA, false)
+
+        items.forEachIndexed { index, item ->
+            val rowY = popup.bounds.y + 18 + index * popup.rowHeight
+            if (index == store.state.editor.selectedImportPickerIndex) {
+                graphics.fill(popup.bounds.x + 2, rowY - 1, popup.bounds.right - 2, rowY + 10, 0x664883C7)
+            }
+            graphics.drawString(font, item.label, popup.bounds.x + 8, rowY, 0xF5F7FA, false)
+        }
+    }
+
     private fun handleToolbarClick(
         mouseX: Int,
         mouseY: Int,
@@ -481,6 +514,10 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
 
                 4 -> {
                     store.rebootComputer()
+                }
+
+                5 -> {
+                    store.openImportPicker()
                 }
             }
             return true

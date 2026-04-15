@@ -95,4 +95,63 @@ class BackgroundComputerVmTest {
             root.toFile().deleteRecursively()
         }
     }
+
+    @Test
+    fun bootFailsBeforeExecutionWhenVmRegistryDoesNotSupportImportedModule() {
+        val root = createTempDirectory("compukterkraft-background-vm")
+
+        try {
+            val workspace = ComputerWorkspaceHost(root)
+            workspace.writeDocument(1, "bios.ck", "import filesystem;\nfun main() {}")
+
+            val profile =
+                ComputerProfile(
+                    id = "terminal-only",
+                    displayName = "Terminal Only",
+                    cpuBudgetNanosPerSlice = 1_000_000,
+                    maxEventQueueSize = 16,
+                    terminalWidth = 16,
+                    terminalHeight = 8,
+                    colorTerminal = true,
+                    allowedCapabilities = setOf(ComputerCapability.TERMINAL, ComputerCapability.SYSTEM),
+                    resources =
+                        ComputerResources(
+                            cpu = ComputerCpuResources(wallTimeGuardNanosPerSlice = 1_000_000),
+                            memory = ComputerMemoryResources(),
+                            storage = ComputerStorageResources(programRomBytes = 4096, diskBytes = 1024),
+                            queues = ComputerQueueResources(eventQueueSlots = 16, hostCallQueueSlots = 16),
+                        ),
+                )
+
+            val vm =
+                BackgroundComputerVm(
+                    computerId = 1,
+                    profile = profile,
+                    dispatcher = Dispatchers.Default,
+                    labelProvider = { null },
+                    logger = ComputerVmLogger { },
+                    workspace = workspace,
+                )
+
+            vm.boot()
+
+            val terminalState =
+                runBlocking {
+                    val terminalState =
+                        async {
+                            withTimeout(5_000) {
+                                vm.terminalStates.first()
+                            }
+                        }
+
+                    vm.requestSlice(0)
+                    terminalState.await()
+                }
+
+            assertTrue(terminalState is VmState.Crashed)
+            assertTrue(terminalState.errorMessage?.contains("not supported by this VM") == true)
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
 }

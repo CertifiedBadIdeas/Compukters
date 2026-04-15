@@ -19,6 +19,8 @@
 
 package ru.lazyhat.compukterkraft.lang.frontend
 
+import ru.lazyhat.compukterkraft.lang.api.BuiltinRegistry
+import ru.lazyhat.compukterkraft.lang.api.ModuleOrigin
 import ru.lazyhat.compukterkraft.lang.runtime.CompletionItemKind
 import ru.lazyhat.compukterkraft.lang.runtime.HighlightTokenKind
 import kotlin.test.Test
@@ -210,5 +212,41 @@ class LanguageIdeTest {
         val completions = ide.complete("test.ck", "tru", 0, 3)
         val trueItem = completions.first { it.label == "true" }
         assertNull(trueItem.insertText, "true literal should not have trailing space")
+    }
+
+    @Test
+    fun defaultRuntimeRegistryExposesBaseModuleMetadata() {
+        val registry = LanguageBuiltins.defaultRuntimeRegistry
+
+        assertTrue(registry.modules.any { it.name == "terminal" && it.origin == ModuleOrigin.BASE_VM })
+        assertTrue(registry.modules.none { it.name == "monitor" })
+    }
+
+    @Test
+    fun reportsUnavailableRuntimeModuleForTargetVm() {
+        val terminalOnly =
+            BuiltinRegistry(
+                modules = listOf(requireNotNull(LanguageBuiltins.defaultRuntimeRegistry.module("terminal"))),
+                globals = LanguageBuiltins.defaultRuntimeRegistry.globals,
+                builtinTypes = LanguageBuiltins.defaultRuntimeRegistry.builtinTypes,
+            )
+        val ide = LanguageIde(LanguageFrontend(terminalOnly))
+
+        val snapshot = ide.analyze("test.ck", "import filesystem;\nfun main() {}")
+        assertTrue(snapshot.diagnostics.any { it.message.contains("not supported by this VM") })
+    }
+
+    @Test
+    fun importCompletionUsesInjectedRuntimeRegistry() {
+        val terminalOnly =
+            BuiltinRegistry(
+                modules = listOf(requireNotNull(LanguageBuiltins.defaultRuntimeRegistry.module("terminal"))),
+                globals = LanguageBuiltins.defaultRuntimeRegistry.globals,
+                builtinTypes = LanguageBuiltins.defaultRuntimeRegistry.builtinTypes,
+            )
+        val ide = LanguageIde(LanguageFrontend(terminalOnly))
+
+        val items = ide.complete("test.ck", "import ", 0, 7)
+        assertEquals(listOf("terminal"), items.map { it.label })
     }
 }

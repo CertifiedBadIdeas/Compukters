@@ -175,6 +175,11 @@ data class BoolLiteralValue(
 
 data object NullLiteralValue : ru.lazyhat.compukterkraft.lang.api.LiteralValue
 
+enum class ModuleOrigin {
+    BASE_VM,
+    OPTIONAL_VM,
+}
+
 data class BuiltinRegistry(
     val modules: List<ru.lazyhat.compukterkraft.lang.api.BuiltinModule>,
     val globals: List<ru.lazyhat.compukterkraft.lang.api.BuiltinFunction>,
@@ -198,6 +203,7 @@ data class BuiltinModule(
     val name: String,
     val documentation: String,
     val functions: List<ru.lazyhat.compukterkraft.lang.api.BuiltinFunction>,
+    val origin: ru.lazyhat.compukterkraft.lang.api.ModuleOrigin = ru.lazyhat.compukterkraft.lang.api.ModuleOrigin.BASE_VM,
 )
 
 data class BuiltinFunction(

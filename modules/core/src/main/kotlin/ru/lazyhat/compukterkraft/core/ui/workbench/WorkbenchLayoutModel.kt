@@ -65,6 +65,12 @@ data class CompletionPopupLayout(
     val visibleItems: Int,
 )
 
+data class ImportPickerPopupLayout(
+    val bounds: UiRect,
+    val rowHeight: Int,
+    val visibleItems: Int,
+)
+
 class WorkbenchLayoutModel(
     val leftPos: Int,
     val topPos: Int,
@@ -88,6 +94,7 @@ class WorkbenchLayoutModel(
             ToolbarButtonLayout(2, "Refresh", toolbarButtonBounds(2)),
             ToolbarButtonLayout(3, "Up", toolbarButtonBounds(3)),
             ToolbarButtonLayout(4, "Reboot", toolbarButtonBounds(4)),
+            ToolbarButtonLayout(5, "Imports", toolbarButtonBounds(5)),
         )
 
     fun workspaceRows(state: WorkbenchState): List<WorkspaceRowLayout> {
@@ -168,6 +175,40 @@ class WorkbenchLayoutModel(
         val popup = completionPopup(state) ?: return null
         if (!popup.bounds.contains(mouseX, mouseY)) return null
         return ((mouseY - popup.bounds.y - 2) / popup.rowHeight).coerceIn(0, state.editor.completionItems.size - 1)
+    }
+
+    fun importPickerPopup(state: WorkbenchState): ImportPickerPopupLayout? {
+        if (!state.editor.importPickerVisible || state.editor.importPickerItems.isEmpty()) return null
+
+        val visibleItems = state.editor.importPickerItems.size.coerceAtMost(MAX_COMPLETION_ITEMS)
+        val popupWidth =
+            max(
+                160,
+                state.editor.importPickerItems
+                    .take(visibleItems)
+                    .maxOfOrNull { font.width(it.label) + 28 } ?: 160,
+            )
+        val popupHeight = visibleItems * COMPLETION_ROW_HEIGHT + 24
+        val popupX = editorBounds.x + (editorBounds.width - popupWidth) / 2
+        val popupY = editorBounds.y + 12
+
+        return ImportPickerPopupLayout(
+            bounds = UiRect(popupX, popupY, popupWidth, popupHeight),
+            rowHeight = COMPLETION_ROW_HEIGHT,
+            visibleItems = visibleItems,
+        )
+    }
+
+    fun importPickerIndexAt(
+        state: WorkbenchState,
+        mouseX: Int,
+        mouseY: Int,
+    ): Int? {
+        val popup = importPickerPopup(state) ?: return null
+        if (!popup.bounds.contains(mouseX, mouseY)) return null
+        val rowsTop = popup.bounds.y + 18
+        if (mouseY < rowsTop) return null
+        return ((mouseY - rowsTop) / popup.rowHeight).coerceIn(0, state.editor.importPickerItems.size - 1)
     }
 
     fun mouseToCursor(

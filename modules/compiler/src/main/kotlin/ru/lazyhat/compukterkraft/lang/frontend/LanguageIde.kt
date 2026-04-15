@@ -28,6 +28,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.HoverInfo
 
 class LanguageIde(
     private val frontend: LanguageFrontend = LanguageFrontend(),
+    private val registry: ru.lazyhat.compukterkraft.lang.api.BuiltinRegistry = frontend.registry,
 ) : IdeFacade {
     override fun analyze(
         name: String,
@@ -61,7 +62,7 @@ class LanguageIde(
         val importPrefix = SourceTextSupport.importPrefix(source, offset)
         if (importPrefix != null) {
             val alreadyImported = analysis.importedModuleNames
-            return LanguageBuiltins.registry.modules
+            return registry.modules
                 .asSequence()
                 .filter { it.name.startsWith(importPrefix) }
                 .filter { it.name !in alreadyImported }
@@ -95,7 +96,7 @@ class LanguageIde(
                         .toList(),
                 )
                 addAll(
-                    LanguageBuiltins.registry.builtinTypes
+                    registry.builtinTypes
                         .asSequence()
                         .filter { it.name.startsWith(prefix) }
                         .map {
