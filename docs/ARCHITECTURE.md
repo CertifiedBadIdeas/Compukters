@@ -16,7 +16,7 @@ The project is split into multiple Gradle modules across a multi-version, multi-
 ### Module Ownership Rules
 
 - **`core`** owns shared behavior, descriptors (`CommonBlockDescriptor`, `CommonMenuDescriptor`), and platform port interfaces (`PlatformBlockRegistrar`, `PlatformMenuRegistrar`, etc.)
-- **`v1_x_x-common`** owns Minecraft-facing version adapters and classes: blocks, block entities, items, menus, screens, network messages, version-specific context adapters, and Minecraft rendering glue
+- **`v1_x_x-common`** owns Minecraft-facing version adapters organized by **feature**: each block/device has its own package (e.g., `computer/`) containing block, block entity, item, menu, screen, input, network messages, context, data, and loot. Shared infrastructure lives in cross-cutting packages: `network/` (transport), `ui/` (rendering), `infrastructure/` (coroutines, gateways), `platform/`, `binding/`, `utils/`
 - **Loader leaf modules** own bootstrap (`CompukterKraftMod`, `CompukterKraftClientMod`), loader-specific event hooks (`FabricCommonHooks`, `ForgeCommonHooks`, `ForgeClientHooks`), client registration/bootstrap (`ClientRegistry`, `ForgeClientRegistry`), registry (`ModRegistry`), loader helper extensions (`Extensions`), network handler (`NetworkHandler`), and tiny loader-only shims/adapters where the Minecraft API still differs (`ForgeComputerBlockEntity`, `NeoForgeComputerBlockEntity`, `ComputerIdentitySavedDataAccess`)
 
 ### Delegate Pattern for Cross-Module Dependencies
@@ -135,39 +135,50 @@ ServerComputer.close()
 
 | Package                            | Responsibility                                                     |
 |------------------------------------|--------------------------------------------------------------------|
-| `ck.mod.bootstrap`                 | `CommonModBootstrap`, content descriptors, `CommonNetworkProtocol` |
-| `ck.mod.platform.api`              | Port interfaces: `PlatformBlockRegistrar`, `PlatformMenuRegistrar` |
-| `ck.mod.block`                     | `ComputerFamily` enum (pure Kotlin, no MC deps)                    |
+| `ck.core.bootstrap`               | `CommonModBootstrap`, content descriptors, `CommonNetworkProtocol` |
+| `ck.core.platform.api`             | Port interfaces: `PlatformBlockRegistrar`, `PlatformMenuRegistrar` |
+| `ck.core.block`                    | `ComputerFamily` enum (pure Kotlin, no MC deps)                    |
+| `ck.core.computer`                 | `ComputerContext` — shared computer context                        |
+| `ck.core.computer.runtime`         | VM lifecycle, `ServerComputer` support                             |
+| `ck.core.computer.input`           | Input dispatch: `ComputerInputDispatcher`, `ServerInputHandler`    |
+| `ck.core.computer.workbench`       | IDE/workbench contracts and state                                  |
 
 ### `v1_x_x-common` modules
 
-| Package                            | Responsibility                                                     |
-|------------------------------------|--------------------------------------------------------------------|
-| `ck.mod.block`                     | Concrete blocks/block entities, `ComputerState`, `ComputerFamilyExt` |
-| `ck.mod.computer`                  | `ServerComputer`                                                   |
-| `ck.mod.context`                   | `ServerContext`, `ComputerManager`, `ComputerIdentitySavedData`    |
-| `ck.mod.data`                      | `ComputerContainerData`, `IContainerData`                          |
-| `ck.mod.gui`                       | `TerminalState`                                                    |
-| `ck.mod.gui.screen`                | `ComputerScreen`, `ComputerWorkbenchScreen`                        |
-| `ck.mod.infrastructure`            | Adapters: input gateway, workbench gateways, coroutine dispatcher  |
-| `ck.mod.item`                      | `AbstractComputerItem`, `ComputerItem`                             |
-| `ck.mod.menu`                      | `AbstractComputerMenu`, `ComputerMenu`, `ServerInputState`         |
-| `ck.mod.network`                   | `NetworkMessages`, `MessageType`, `ClientNetworking`               |
-| `ck.mod.network.client`            | Client-bound network messages                                      |
-| `ck.mod.network.server`            | Server-bound network messages, `ServerNetworking`                  |
-| `ck.mod.network.text`              | Table formatting utilities                                         |
-| `ck.mod.ui.dsl`                    | Minecraft-side `UiRenderer`                                        |
-| `ck.mod.ui.render`                 | `FixedWidthFontRenderer`, `WorkbenchTerminalRenderer` (Blaze3D)    |
-| `ck.mod.utils`                     | `BlockEntityUtils`, `BufferUtils`, `CommandUtils`, `LevelUtils`    |
+**Feature packages (computer-specific):**
+
+| Package                               | Responsibility                                                     |
+|---------------------------------------|--------------------------------------------------------------------|
+| `ck.common.computer.block`            | Concrete blocks/block entities, `ComputerState`, `ComputerFamilyExt` |
+| `ck.common.computer.item`             | `AbstractComputerItem`, `ComputerItem`                             |
+| `ck.common.computer.menu`             | `AbstractComputerMenu`, `ComputerMenu`, `ServerInputState`         |
+| `ck.common.computer.screen`           | `ComputerScreen`, `ComputerWorkbenchScreen`                        |
+| `ck.common.computer.input`            | Computer input binding                                             |
+| `ck.common.computer.context`          | `ServerContext`, `ComputerManager`, `ComputerIdentitySavedData`    |
+| `ck.common.computer.data`             | `ComputerContainerData`, `IContainerData`                          |
+| `ck.common.computer.loot`             | Loot functions and conditions                                      |
+| `ck.common.computer.network.server`   | Server-bound computer network messages                             |
+| `ck.common.computer.network.client`   | Client-bound computer network messages                             |
+
+**Shared infrastructure packages:**
+
+| Package                               | Responsibility                                                     |
+|---------------------------------------|--------------------------------------------------------------------|
+| `ck.common.network`                   | `NetworkMessages`, `MessageType`, `ServerNetworking`, `ClientNetworking` |
+| `ck.common.network.text`              | Table formatting utilities                                         |
+| `ck.common.infrastructure`            | Adapters: input gateway, workbench gateways, coroutine dispatcher  |
+| `ck.common.ui`                        | `TerminalState`                                                    |
+| `ck.common.ui.dsl`                    | Minecraft-side `UiRenderer`                                        |
+| `ck.common.ui.render`                 | `FixedWidthFontRenderer`, `WorkbenchTerminalRenderer` (Blaze3D)    |
+| `ck.common.utils`                     | `BlockEntityUtils`, `BufferUtils`, `CommandUtils`, `LevelUtils`    |
 
 ### Loader leaf modules
 
 | Package                            | Responsibility                                                     |
 |------------------------------------|--------------------------------------------------------------------|
-| `ck.mod`                           | Mod entry points, `ModRegistry`, `Extensions`, client bootstrap helpers |
-| `ck.mod.block`                     | Tiny loader-only shims for API drift (`ForgeComputerBlockEntity`, `NeoForgeComputerBlockEntity`) |
-| `ck.mod.context`                   | Tiny saved-data access adapters where loader APIs still diverge    |
-| `ck.mod.platform`                  | `NetworkHandler` — loader-specific packet registration             |
+| `ck.impl`                              | Mod entry points, `ModRegistry`, `Extensions`, client bootstrap helpers |
+| `ck.impl.computer.block`              | Tiny loader-only shims for API drift (`ForgeComputerBlockEntity`, `NeoForgeComputerBlockEntity`) |
+| `ck.impl.platform`                    | `NetworkHandler` — loader-specific packet registration             |
 
 ---
 
