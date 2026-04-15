@@ -18,11 +18,11 @@
  */
 package ru.lazyhat.compukterkraft.impl.application.input
 
-import ru.lazyhat.compukterkraft.core.application.input.ComputerControlAction
-import ru.lazyhat.compukterkraft.core.application.input.ControlInputEvent
-import ru.lazyhat.compukterkraft.core.application.input.KeyInputEvent
-import ru.lazyhat.compukterkraft.core.application.input.MouseInputEvent
-import ru.lazyhat.compukterkraft.core.application.input.PasteInputEvent
+import ru.lazyhat.compukterkraft.core.computer.input.ComputerControlAction
+import ru.lazyhat.compukterkraft.core.computer.input.ControlInputEvent
+import ru.lazyhat.compukterkraft.core.computer.input.KeyInputEvent
+import ru.lazyhat.compukterkraft.core.computer.input.MouseInputEvent
+import ru.lazyhat.compukterkraft.core.computer.input.PasteInputEvent
 import ru.lazyhat.compukterkraft.core.computer.ComputerEvents
 import java.nio.ByteBuffer
 import kotlin.test.Test

@@ -35,10 +35,10 @@ import ru.lazyhat.compukterkraft.common.infrastructure.workbench.NetworkWorkspac
 import ru.lazyhat.compukterkraft.common.menu.AbstractComputerMenu
 import ru.lazyhat.compukterkraft.common.platform.MinecraftInputProvider
 import ru.lazyhat.compukterkraft.common.ui.render.WorkbenchTerminalRenderer
-import ru.lazyhat.compukterkraft.core.application.workbench.WorkbenchMode
-import ru.lazyhat.compukterkraft.core.application.workbench.WorkbenchStore
-import ru.lazyhat.compukterkraft.core.application.workbench.completionDetail
-import ru.lazyhat.compukterkraft.core.application.workbench.highlightColor
+import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchMode
+import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchStore
+import ru.lazyhat.compukterkraft.core.computer.workbench.completionDetail
+import ru.lazyhat.compukterkraft.core.computer.workbench.highlightColor
 import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalInputController
 import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalLayout
 import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalMetrics

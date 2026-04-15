@@ -23,7 +23,7 @@ import net.minecraft.world.inventory.AbstractContainerMenu
 import ru.lazyhat.compukterkraft.common.menu.ComputerMenu
 import ru.lazyhat.compukterkraft.common.network.MessageType
 import ru.lazyhat.compukterkraft.common.network.NetworkMessages
-import ru.lazyhat.compukterkraft.core.application.input.MouseInputEvent
+import ru.lazyhat.compukterkraft.core.computer.input.MouseInputEvent
 
 class MouseEventServerMessage : ComputerServerMessage {
     private val type: Action
