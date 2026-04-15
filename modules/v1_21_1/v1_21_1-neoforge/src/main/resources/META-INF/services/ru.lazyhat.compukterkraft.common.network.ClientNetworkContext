@@ -17,4 +17,4 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 
-ru.lazyhat.compukterkraft.common.network.client.ClientNetworkContextImpl
+ru.lazyhat.compukterkraft.common.network.ClientNetworkContextImpl
