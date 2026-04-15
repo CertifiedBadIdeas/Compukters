@@ -109,7 +109,9 @@ interface ComputerProcessApi {
 
 interface ComputerRedstoneApi
 
-interface ComputerPeripheralApi
+interface ComputerPeripheralApi {
+    fun monitorExists(): Boolean = false
+}
 
 object ComputerProgramFiles {
     const val FILE_EXTENSION = ".ck"

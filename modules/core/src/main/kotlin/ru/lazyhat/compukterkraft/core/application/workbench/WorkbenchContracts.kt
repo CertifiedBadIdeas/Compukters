@@ -19,6 +19,7 @@
 package ru.lazyhat.compukterkraft.core.application.workbench
 
 import kotlinx.coroutines.flow.StateFlow
+import ru.lazyhat.compukterkraft.lang.api.BuiltinRegistry
 import ru.lazyhat.compukterkraft.lang.runtime.CompletionItem
 import ru.lazyhat.compukterkraft.lang.runtime.CompletionItemKind
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerIdeSnapshot
@@ -57,6 +58,10 @@ interface ComputerControlGateway {
     fun reboot()
 }
 
+interface IdeRuntimeCatalogSource {
+    fun runtimeRegistry(): BuiltinRegistry
+}
+
 interface WorkbenchIdeFacade {
     fun analyze(
         path: String,
@@ -75,6 +80,11 @@ interface WorkbenchIdeFacade {
         source: String,
         line: Int,
         column: Int,
+    ): List<CompletionItem>
+
+    fun availableImports(
+        path: String,
+        source: String,
     ): List<CompletionItem>
 
     fun hover(

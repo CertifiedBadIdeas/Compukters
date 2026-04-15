@@ -20,7 +20,12 @@
 package ru.lazyhat.compukterkraft.lang.runtime
 
 import kotlinx.coroutines.runBlocking
+import ru.lazyhat.compukterkraft.lang.api.BuiltinFunction
+import ru.lazyhat.compukterkraft.lang.api.BuiltinModule
+import ru.lazyhat.compukterkraft.lang.api.BuiltinRegistry
+import ru.lazyhat.compukterkraft.lang.api.ModuleOrigin
 import ru.lazyhat.compukterkraft.lang.frontend.FrontendSeverity
+import ru.lazyhat.compukterkraft.lang.frontend.LanguageBuiltins
 import ru.lazyhat.compukterkraft.lang.frontend.LanguageFrontend
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -421,12 +426,69 @@ class LanguageRuntimeTest {
 
         assertEquals(listOf("zero or negative"), runtime.lines)
     }
+
+    @Test
+    fun routesMonitorExistsThroughRuntimeBridge() {
+        val frontend =
+            LanguageFrontend(
+                BuiltinRegistry(
+                    modules =
+                        LanguageBuiltins.defaultRuntimeRegistry.modules +
+                            BuiltinModule(
+                                name = "monitor",
+                                documentation = "Connected monitor registry.",
+                                functions =
+                                    listOf(
+                                        BuiltinFunction(
+                                            "exists",
+                                            emptyList(),
+                                            "Bool",
+                                            "Returns true when any monitor is connected.",
+                                        ),
+                                    ),
+                                origin = ModuleOrigin.OPTIONAL_VM,
+                            ),
+                    globals = LanguageBuiltins.defaultRuntimeRegistry.globals,
+                    builtinTypes = LanguageBuiltins.defaultRuntimeRegistry.builtinTypes,
+                ),
+            )
+
+        val artifact =
+            frontend.compile(
+                "monitor.ck",
+                """
+                import terminal;
+                import monitor;
+
+                fun main() {
+                    if (monitor.exists()) {
+                        terminal.printLine("connected");
+                    } else {
+                        terminal.printLine("missing");
+                    }
+                }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+
+        val runtime = RecordingRuntime()
+        runBlocking {
+            BytecodeComputerProgram(requireNotNull(artifact.module)).run(runtime)
+        }
+
+        assertEquals(listOf("missing"), runtime.lines)
+    }
 }
 
 private class RecordingRuntime(
     private val argument: String = "",
     private val instructionsPerSlice: Int = 64,
     private val vmRamBytes: Long = 64 * 1024,
+    private val monitorConnected: Boolean = false,
 ) : ComputerRuntime {
     val lines = mutableListOf<String>()
     val eventFilters = mutableListOf<String?>()
@@ -449,6 +511,7 @@ private class RecordingRuntime(
                     ComputerCapability.FILESYSTEM,
                     ComputerCapability.SYSTEM,
                     ComputerCapability.EVENTS,
+                    ComputerCapability.PERIPHERALS,
                 ),
             resources =
                 ComputerResources(
@@ -560,7 +623,10 @@ private class RecordingRuntime(
         }
 
     override val redstone: ComputerRedstoneApi = object : ComputerRedstoneApi {}
-    override val peripherals: ComputerPeripheralApi = object : ComputerPeripheralApi {}
+    override val peripherals: ComputerPeripheralApi =
+        object : ComputerPeripheralApi {
+            override fun monitorExists(): Boolean = monitorConnected
+        }
 
     override suspend fun pullEvent(filter: String?): VmEvent {
         eventFilters += filter

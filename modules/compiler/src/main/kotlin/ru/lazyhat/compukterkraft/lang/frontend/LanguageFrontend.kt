@@ -68,7 +68,7 @@ import ru.lazyhat.compukterkraft.lang.api.WhileStatement
 import java.util.IdentityHashMap
 
 class LanguageFrontend(
-    private val registry: BuiltinRegistry = LanguageBuiltins.registry,
+    val registry: BuiltinRegistry = LanguageBuiltins.defaultRuntimeRegistry,
 ) {
     private val analyzer: AnalyzerFacade =
         DefaultAnalyzerFacade(registry)
@@ -198,7 +198,7 @@ internal class SemanticAnalyzer(
             if (module == null) {
                 diagnostics +=
                     FrontendDiagnostic(
-                        "Unknown module `${declaration.moduleName}`.",
+                        "Runtime module `${declaration.moduleName}` is not supported by this VM.",
                         declaration.range,
                     )
                 return@forEach

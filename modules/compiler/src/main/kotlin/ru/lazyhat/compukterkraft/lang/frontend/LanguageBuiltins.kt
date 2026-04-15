@@ -23,16 +23,18 @@ import ru.lazyhat.compukterkraft.lang.api.BuiltinFunction
 import ru.lazyhat.compukterkraft.lang.api.BuiltinModule
 import ru.lazyhat.compukterkraft.lang.api.BuiltinRegistry
 import ru.lazyhat.compukterkraft.lang.api.BuiltinType
+import ru.lazyhat.compukterkraft.lang.api.ModuleOrigin
 import ru.lazyhat.compukterkraft.lang.api.RecordFieldDefinition
 
 object LanguageBuiltins {
-    val registry =
+    val defaultRuntimeRegistry =
         BuiltinRegistry(
             modules =
                 listOf(
                     BuiltinModule(
                         name = "terminal",
                         documentation = "Terminal I/O operations.",
+                        origin = ModuleOrigin.BASE_VM,
                         functions =
                             listOf(
                                 BuiltinFunction(
@@ -66,6 +68,7 @@ object LanguageBuiltins {
                     BuiltinModule(
                         name = "filesystem",
                         documentation = "Sandboxed filesystem access through the computer workspace.",
+                        origin = ModuleOrigin.BASE_VM,
                         functions =
                             listOf(
                                 BuiltinFunction(
@@ -121,6 +124,7 @@ object LanguageBuiltins {
                     BuiltinModule(
                         name = "system",
                         documentation = "System introspection and lifecycle controls.",
+                        origin = ModuleOrigin.BASE_VM,
                         functions =
                             listOf(
                                 BuiltinFunction("computerId", emptyList(), "Int", "Returns the current computer id."),
@@ -145,6 +149,7 @@ object LanguageBuiltins {
                     BuiltinModule(
                         name = "events",
                         documentation = "Event queue access.",
+                        origin = ModuleOrigin.BASE_VM,
                         functions =
                             listOf(
                                 BuiltinFunction(
@@ -164,6 +169,7 @@ object LanguageBuiltins {
                     BuiltinModule(
                         name = "process",
                         documentation = "Current process information and program execution.",
+                        origin = ModuleOrigin.BASE_VM,
                         functions =
                             listOf(
                                 BuiltinFunction(
@@ -201,6 +207,7 @@ object LanguageBuiltins {
                     BuiltinModule(
                         name = "strings",
                         documentation = "Simple string helpers for shell-style programs.",
+                        origin = ModuleOrigin.BASE_VM,
                         functions =
                             listOf(
                                 BuiltinFunction("trim", listOf("String"), "String", "Trims leading and trailing whitespace."),
@@ -249,4 +256,8 @@ object LanguageBuiltins {
                     ),
                 ),
         )
+
+            @Deprecated("Use defaultRuntimeRegistry")
+            val registry: BuiltinRegistry
+            get() = defaultRuntimeRegistry
 }

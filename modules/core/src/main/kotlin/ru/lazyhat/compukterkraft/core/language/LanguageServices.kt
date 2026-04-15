@@ -25,7 +25,7 @@ import java.nio.charset.StandardCharsets
 
 object LanguageServices {
     val frontend = LanguageFrontend()
-    val ide = LanguageIde(frontend)
+    val ide = LanguageIde(frontend, frontend.registry)
 
     fun bundledScript(relativePath: String): String? {
         val normalized = relativePath.trimStart('/')

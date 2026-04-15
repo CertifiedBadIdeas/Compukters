@@ -26,13 +26,21 @@ import ru.lazyhat.compukterkraft.core.application.input.ComputerControlAction
 import ru.lazyhat.compukterkraft.core.application.input.ControlInputEvent
 import ru.lazyhat.compukterkraft.core.application.input.InputEventSink
 import ru.lazyhat.compukterkraft.core.application.workbench.ComputerControlGateway
+import ru.lazyhat.compukterkraft.core.application.workbench.IdeRuntimeCatalogSource
 import ru.lazyhat.compukterkraft.core.application.workbench.WorkbenchIdeFacade
 import ru.lazyhat.compukterkraft.core.application.workbench.WorkbenchRemoteState
 import ru.lazyhat.compukterkraft.core.application.workbench.WorkbenchUpdateSource
 import ru.lazyhat.compukterkraft.core.application.workbench.WorkspaceGateway
-import ru.lazyhat.compukterkraft.core.language.LanguageServices
+import ru.lazyhat.compukterkraft.core.block.ComputerFamily
+import ru.lazyhat.compukterkraft.core.computer.vm.ComputerProfileRegistry
+import ru.lazyhat.compukterkraft.lang.api.BuiltinRegistry
 import ru.lazyhat.compukterkraft.lang.frontend.AnalyzedProgram
+import ru.lazyhat.compukterkraft.lang.frontend.LanguageBuiltins
+import ru.lazyhat.compukterkraft.lang.frontend.LanguageFrontend
+import ru.lazyhat.compukterkraft.lang.frontend.LanguageIde
 import ru.lazyhat.compukterkraft.lang.runtime.CompletionItem
+import ru.lazyhat.compukterkraft.lang.runtime.CompletionItemKind
+import ru.lazyhat.compukterkraft.lang.runtime.ComputerCapability
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerIdeSnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceDocument
 import ru.lazyhat.compukterkraft.lang.runtime.DefinitionTarget
@@ -93,8 +101,41 @@ class InputHandlerControlGateway(
     }
 }
 
-object LanguageWorkbenchIdeFacade : WorkbenchIdeFacade {
-    private val ide = LanguageServices.ide
+class ComputerFamilyCatalogSource(
+    private val family: ComputerFamily,
+) : IdeRuntimeCatalogSource {
+    override fun runtimeRegistry(): BuiltinRegistry {
+        val profile = ComputerProfileRegistry.forFamily(family)
+        val defaultRegistry = LanguageBuiltins.defaultRuntimeRegistry
+        val modules =
+            buildList {
+                defaultRegistry.module("terminal")?.let(::add)
+                defaultRegistry.module("system")?.let(::add)
+                if (ComputerCapability.FILESYSTEM in profile.allowedCapabilities) {
+                    defaultRegistry.module("filesystem")?.let(::add)
+                }
+                if (ComputerCapability.EVENTS in profile.allowedCapabilities) {
+                    defaultRegistry.module("events")?.let(::add)
+                }
+                if (ComputerCapability.SYSTEM in profile.allowedCapabilities) {
+                    defaultRegistry.module("process")?.let(::add)
+                    defaultRegistry.module("strings")?.let(::add)
+                }
+            }
+
+        return BuiltinRegistry(
+            modules = modules,
+            globals = defaultRegistry.globals,
+            builtinTypes = defaultRegistry.builtinTypes,
+        )
+    }
+}
+
+class LanguageWorkbenchIdeFacade(
+    catalogSource: IdeRuntimeCatalogSource,
+) : WorkbenchIdeFacade {
+    private val registry = catalogSource.runtimeRegistry()
+    private val ide = LanguageIde(LanguageFrontend(registry), registry)
 
     private var lastAnalysisPath: String? = null
     private var lastAnalysisSource: String? = null
@@ -133,6 +174,17 @@ object LanguageWorkbenchIdeFacade : WorkbenchIdeFacade {
             return ide.completeFromAnalysis(cached, source, line, column)
         }
         return ide.complete(path, source, line, column)
+    }
+
+    override fun availableImports(
+        path: String,
+        source: String,
+    ): List<CompletionItem> {
+        val probeSource = if (source.contains("import ")) source else "$source\nimport "
+        val probeLine = probeSource.lines().lastIndex
+        val probeColumn = probeSource.lines().last().length
+        return completeFromLastAnalysis(path, probeSource, probeLine, probeColumn)
+            .filter { it.kind == CompletionItemKind.MODULE }
     }
 
     override fun hover(
