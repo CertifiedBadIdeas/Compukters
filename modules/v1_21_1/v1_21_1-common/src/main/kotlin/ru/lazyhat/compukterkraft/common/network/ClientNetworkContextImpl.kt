@@ -20,8 +20,9 @@
 package ru.lazyhat.compukterkraft.common.network
 
 import net.minecraft.client.Minecraft
-import ru.lazyhat.compukterkraft.common.menu.ComputerMenu
+import ru.lazyhat.compukterkraft.common.computer.menu.ComputerMenu
 import ru.lazyhat.compukterkraft.common.network.text.TableBuilder
+import ru.lazyhat.compukterkraft.common.network.text.ClientTableFormatter
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceDocument
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceEntry
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot

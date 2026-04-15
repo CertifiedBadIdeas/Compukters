@@ -31,7 +31,7 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties
 import net.minecraft.world.level.block.state.properties.DirectionProperty
 import net.minecraft.world.level.block.state.properties.EnumProperty
 import ru.lazyhat.compukterkraft.common.binding.ModObjects
-import ru.lazyhat.compukterkraft.common.item.ComputerItem
+import ru.lazyhat.compukterkraft.common.computer.item.ComputerItem
 
 class ComputerBlock(
     properties: Properties,

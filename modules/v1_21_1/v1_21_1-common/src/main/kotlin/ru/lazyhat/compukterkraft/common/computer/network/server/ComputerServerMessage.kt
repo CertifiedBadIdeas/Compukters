@@ -17,11 +17,12 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 package ru.lazyhat.compukterkraft.common.computer.network.server
+import ru.lazyhat.compukterkraft.common.network.ServerNetworkContext
 
 import net.minecraft.network.FriendlyByteBuf
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.inventory.AbstractContainerMenu
-import ru.lazyhat.compukterkraft.common.menu.ComputerMenu
+import ru.lazyhat.compukterkraft.common.computer.menu.ComputerMenu
 import ru.lazyhat.compukterkraft.common.network.NetworkMessage
 
 /**

@@ -21,16 +21,16 @@ package ru.lazyhat.compukterkraft.common.network
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet
 import it.unimi.dsi.fastutil.ints.IntSet
 import net.minecraft.network.FriendlyByteBuf
-import ru.lazyhat.compukterkraft.common.network.client.ChatTableClientMessage
-import ru.lazyhat.compukterkraft.common.network.client.ClientNetworkContext
-import ru.lazyhat.compukterkraft.common.network.client.ComputerTerminalClientMessage
-import ru.lazyhat.compukterkraft.common.network.client.ComputerWorkspaceClientMessage
-import ru.lazyhat.compukterkraft.common.network.server.ComputerActionServerMessage
-import ru.lazyhat.compukterkraft.common.network.server.ComputerWorkspaceServerMessage
-import ru.lazyhat.compukterkraft.common.network.server.KeyEventServerMessage
-import ru.lazyhat.compukterkraft.common.network.server.MouseEventServerMessage
-import ru.lazyhat.compukterkraft.common.network.server.PasteEventComputerMessage
-import ru.lazyhat.compukterkraft.common.network.server.ServerNetworkContext
+import ru.lazyhat.compukterkraft.common.network.text.ChatTableClientMessage
+import ru.lazyhat.compukterkraft.common.network.ClientNetworkContext
+import ru.lazyhat.compukterkraft.common.computer.network.client.ComputerTerminalClientMessage
+import ru.lazyhat.compukterkraft.common.computer.network.client.ComputerWorkspaceClientMessage
+import ru.lazyhat.compukterkraft.common.computer.network.server.ComputerActionServerMessage
+import ru.lazyhat.compukterkraft.common.computer.network.server.ComputerWorkspaceServerMessage
+import ru.lazyhat.compukterkraft.common.computer.network.server.KeyEventServerMessage
+import ru.lazyhat.compukterkraft.common.computer.network.server.MouseEventServerMessage
+import ru.lazyhat.compukterkraft.common.computer.network.server.PasteEventComputerMessage
+import ru.lazyhat.compukterkraft.common.network.ServerNetworkContext
 
 /**
  * Registry of all network message types used by the mod.

@@ -19,7 +19,7 @@
 package ru.lazyhat.compukterkraft.common.computer.input
 
 import net.minecraft.world.inventory.AbstractContainerMenu
-import ru.lazyhat.compukterkraft.common.infrastructure.input.NetworkComputerInputGateway
+import ru.lazyhat.compukterkraft.common.computer.input.NetworkComputerInputGateway
 import ru.lazyhat.compukterkraft.core.computer.input.ComputerInputGateway
 import ru.lazyhat.compukterkraft.core.computer.input.InputEvent
 import ru.lazyhat.compukterkraft.core.computer.input.InputEventSink

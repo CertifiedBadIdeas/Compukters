@@ -24,7 +24,7 @@ import net.minecraft.world.level.storage.loot.parameters.LootContextParams
 import net.minecraft.world.level.storage.loot.predicates.LootItemCondition
 import net.minecraft.world.level.storage.loot.predicates.LootItemConditionType
 import ru.lazyhat.compukterkraft.common.binding.ModObjects
-import ru.lazyhat.compukterkraft.common.block.ComputerBlockEntity
+import ru.lazyhat.compukterkraft.common.computer.block.ComputerBlockEntity
 
 object HasComputerIdLootCondition : LootItemCondition {
     override fun test(lootContext: LootContext): Boolean =

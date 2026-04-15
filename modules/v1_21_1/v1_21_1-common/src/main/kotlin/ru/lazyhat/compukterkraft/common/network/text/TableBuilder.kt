@@ -21,9 +21,9 @@ package ru.lazyhat.compukterkraft.common.network.text
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.network.chat.Component
 import net.minecraft.server.level.ServerPlayer
-import ru.lazyhat.compukterkraft.common.network.client.ChatHelpers
-import ru.lazyhat.compukterkraft.common.network.client.ChatTableClientMessage
-import ru.lazyhat.compukterkraft.common.network.server.ServerNetworking
+import ru.lazyhat.compukterkraft.common.network.text.ChatHelpers
+import ru.lazyhat.compukterkraft.common.network.text.ChatTableClientMessage
+import ru.lazyhat.compukterkraft.common.network.ServerNetworking
 import ru.lazyhat.compukterkraft.common.utils.CommandUtils
 
 class TableBuilder {

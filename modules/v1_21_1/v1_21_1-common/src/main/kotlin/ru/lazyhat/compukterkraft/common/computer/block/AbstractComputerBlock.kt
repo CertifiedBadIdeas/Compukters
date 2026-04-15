@@ -40,9 +40,9 @@ import net.minecraft.world.level.storage.loot.LootParams
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams
 import net.minecraft.world.phys.BlockHitResult
 import ru.lazyhat.compukterkraft.common.binding.ModObjects
-import ru.lazyhat.compukterkraft.common.context.ServerContext
-import ru.lazyhat.compukterkraft.common.data.ComputerContainerData
-import ru.lazyhat.compukterkraft.common.item.AbstractComputerItem
+import ru.lazyhat.compukterkraft.common.computer.context.ServerContext
+import ru.lazyhat.compukterkraft.common.computer.data.ComputerContainerData
+import ru.lazyhat.compukterkraft.common.computer.item.AbstractComputerItem
 import ru.lazyhat.compukterkraft.common.utils.castTicker
 import ru.lazyhat.compukterkraft.common.utils.computerDataTag
 import ru.lazyhat.compukterkraft.common.utils.computerID

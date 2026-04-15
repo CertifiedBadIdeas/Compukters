@@ -17,7 +17,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package ru.lazyhat.compukterkraft.common.menu
+package ru.lazyhat.compukterkraft.common.computer.menu
 
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 import kotlin.test.Test

@@ -28,11 +28,11 @@ import kotlinx.coroutines.launch
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.entity.player.Player
-import ru.lazyhat.compukterkraft.common.block.checkUsable
-import ru.lazyhat.compukterkraft.common.context.ServerContext
-import ru.lazyhat.compukterkraft.common.menu.ComputerMenu
-import ru.lazyhat.compukterkraft.common.network.client.ComputerTerminalClientMessage
-import ru.lazyhat.compukterkraft.common.network.server.ServerNetworking
+import ru.lazyhat.compukterkraft.common.computer.block.checkUsable
+import ru.lazyhat.compukterkraft.common.computer.context.ServerContext
+import ru.lazyhat.compukterkraft.common.computer.menu.ComputerMenu
+import ru.lazyhat.compukterkraft.common.computer.network.client.ComputerTerminalClientMessage
+import ru.lazyhat.compukterkraft.common.network.ServerNetworking
 import ru.lazyhat.compukterkraft.core.LOGGER
 import ru.lazyhat.compukterkraft.core.computer.runtime.HostCallDispatcher
 import ru.lazyhat.compukterkraft.core.computer.ComputerEvents

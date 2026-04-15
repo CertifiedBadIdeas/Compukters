@@ -18,6 +18,7 @@
  */
 
 package ru.lazyhat.compukterkraft.common.computer.network.client
+import ru.lazyhat.compukterkraft.common.network.ClientNetworkContext
 
 import net.minecraft.network.FriendlyByteBuf
 import ru.lazyhat.compukterkraft.common.network.MessageType

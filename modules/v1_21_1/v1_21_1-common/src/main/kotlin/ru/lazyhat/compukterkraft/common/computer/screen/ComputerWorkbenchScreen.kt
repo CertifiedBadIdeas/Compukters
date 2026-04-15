@@ -25,14 +25,14 @@ import kotlinx.coroutines.cancel
 import net.minecraft.client.gui.GuiGraphics
 import net.minecraft.network.chat.Component
 import net.minecraft.world.entity.player.Inventory
-import ru.lazyhat.compukterkraft.common.gui.input.ClientInputHandler
+import ru.lazyhat.compukterkraft.common.computer.input.ClientInputHandler
 import ru.lazyhat.compukterkraft.common.infrastructure.coroutines.minecraft
 import ru.lazyhat.compukterkraft.common.infrastructure.workbench.ComputerFamilyCatalogSource
 import ru.lazyhat.compukterkraft.common.infrastructure.workbench.InputHandlerControlGateway
 import ru.lazyhat.compukterkraft.common.infrastructure.workbench.LanguageWorkbenchIdeFacade
 import ru.lazyhat.compukterkraft.common.infrastructure.workbench.MenuWorkspaceUpdateSource
 import ru.lazyhat.compukterkraft.common.infrastructure.workbench.NetworkWorkspaceGateway
-import ru.lazyhat.compukterkraft.common.menu.AbstractComputerMenu
+import ru.lazyhat.compukterkraft.common.computer.menu.AbstractComputerMenu
 import ru.lazyhat.compukterkraft.common.platform.MinecraftInputProvider
 import ru.lazyhat.compukterkraft.common.ui.render.WorkbenchTerminalRenderer
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchMode

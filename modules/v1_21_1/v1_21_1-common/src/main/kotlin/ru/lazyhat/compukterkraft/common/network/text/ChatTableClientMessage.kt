@@ -20,10 +20,10 @@ package ru.lazyhat.compukterkraft.common.network.text
 
 import net.minecraft.network.FriendlyByteBuf
 import net.minecraft.network.chat.ComponentSerialization
+import ru.lazyhat.compukterkraft.common.network.ClientNetworkContext
 import ru.lazyhat.compukterkraft.common.network.MessageType
 import ru.lazyhat.compukterkraft.common.network.NetworkMessage
 import ru.lazyhat.compukterkraft.common.network.NetworkMessages
-import ru.lazyhat.compukterkraft.common.network.text.TableBuilder
 
 class ChatTableClientMessage : NetworkMessage<ClientNetworkContext> {
     private val table: TableBuilder

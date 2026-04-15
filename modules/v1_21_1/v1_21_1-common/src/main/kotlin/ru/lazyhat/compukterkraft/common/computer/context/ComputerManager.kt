@@ -21,7 +21,7 @@ package ru.lazyhat.compukterkraft.common.computer.context
 
 import it.unimi.dsi.fastutil.ints.Int2ObjectMap
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap
-import ru.lazyhat.compukterkraft.common.computer.ServerComputer
+import ru.lazyhat.compukterkraft.common.computer.context.ServerComputer
 import ru.lazyhat.compukterkraft.core.computer.vm.BackgroundComputerVm
 import ru.lazyhat.compukterkraft.core.computer.vm.ComputerVmLogger
 import ru.lazyhat.compukterkraft.core.computer.vm.ComputerVmSupervisor

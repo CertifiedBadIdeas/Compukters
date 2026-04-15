@@ -18,7 +18,7 @@
  */
 package ru.lazyhat.compukterkraft.common.network
 
-import ru.lazyhat.compukterkraft.common.network.server.ServerNetworkContext
+import ru.lazyhat.compukterkraft.common.network.ServerNetworkContext
 
 /**
  * Methods for sending packets from clients to the server.
