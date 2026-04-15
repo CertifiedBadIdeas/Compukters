@@ -106,7 +106,7 @@ class ArchitectureBoundaryTest {
                 "ru/lazyhat/compukterkraft/impl/ForgeClientRegistry.kt",
                 "ru/lazyhat/compukterkraft/impl/ForgeCommonHooks.kt",
                 "ru/lazyhat/compukterkraft/impl/ModRegistry.kt",
-                "ru/lazyhat/compukterkraft/impl/block/NeoForgeComputerBlockEntity.kt",
+                "ru/lazyhat/compukterkraft/impl/computer/block/NeoForgeComputerBlockEntity.kt",
                 "ru/lazyhat/compukterkraft/impl/platform/NetworkHandler.kt",
             ),
         )
