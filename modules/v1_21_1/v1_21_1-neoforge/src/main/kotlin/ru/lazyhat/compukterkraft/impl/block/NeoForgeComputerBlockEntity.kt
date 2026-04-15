@@ -22,7 +22,7 @@ package ru.lazyhat.compukterkraft.impl.block
 import net.minecraft.core.BlockPos
 import net.minecraft.world.level.block.entity.BlockEntityType
 import net.minecraft.world.level.block.state.BlockState
-import ru.lazyhat.compukterkraft.common.block.ComputerBlockEntity
+import ru.lazyhat.compukterkraft.common.computer.block.ComputerBlockEntity
 import ru.lazyhat.compukterkraft.core.block.ComputerFamily
 
 class NeoForgeComputerBlockEntity(
