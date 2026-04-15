@@ -190,6 +190,11 @@ class WorkbenchStoreTest {
             column: Int,
         ): List<CompletionItem> = complete(path, source, line, column)
 
+        override fun availableImports(
+            path: String,
+            source: String,
+        ): List<CompletionItem> = emptyList()
+
         override fun hover(
             path: String,
             source: String,
