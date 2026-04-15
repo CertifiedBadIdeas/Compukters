@@ -49,7 +49,7 @@ import ru.lazyhat.compukterkraft.common.computer.menu.ComputerMenuWithoutInvento
 import ru.lazyhat.compukterkraft.core.LOGGER
 import ru.lazyhat.compukterkraft.core.MOD_ID
 import ru.lazyhat.compukterkraft.core.block.ComputerFamily
-import ru.lazyhat.compukterkraft.impl.block.NeoForgeComputerBlockEntity
+import ru.lazyhat.compukterkraft.impl.computer.block.NeoForgeComputerBlockEntity
 import java.util.function.Supplier
 
 object ModRegistry {

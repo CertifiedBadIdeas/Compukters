@@ -16,7 +16,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-package ru.lazyhat.compukterkraft.impl.application.runtime
+package ru.lazyhat.compukterkraft.impl.computer.runtime
 
 import ru.lazyhat.compukterkraft.core.computer.runtime.ComputerProgramCompiler
 import ru.lazyhat.compukterkraft.core.computer.runtime.WorkspaceProgramLoader

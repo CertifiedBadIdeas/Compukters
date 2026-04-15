@@ -17,7 +17,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package ru.lazyhat.compukterkraft.impl.block
+package ru.lazyhat.compukterkraft.impl.computer.block
 
 import net.minecraft.core.BlockPos
 import net.minecraft.world.level.block.entity.BlockEntityType
