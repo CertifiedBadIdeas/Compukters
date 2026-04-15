@@ -16,7 +16,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-package ru.lazyhat.compukterkraft.common.network.server
+package ru.lazyhat.compukterkraft.common.network
 
 import net.minecraft.server.level.ServerPlayer
 import ru.lazyhat.compukterkraft.common.network.NetworkMessage

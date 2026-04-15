@@ -17,7 +17,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package ru.lazyhat.compukterkraft.common.network.server
+package ru.lazyhat.compukterkraft.common.computer.network.server
 
 import net.minecraft.network.FriendlyByteBuf
 import net.minecraft.world.inventory.AbstractContainerMenu

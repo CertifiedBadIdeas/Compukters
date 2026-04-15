@@ -16,56 +16,53 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-package ru.lazyhat.compukterkraft.common.network.server
+package ru.lazyhat.compukterkraft.common.computer.network.server
 
 import net.minecraft.network.FriendlyByteBuf
 import net.minecraft.world.inventory.AbstractContainerMenu
 import ru.lazyhat.compukterkraft.common.menu.ComputerMenu
 import ru.lazyhat.compukterkraft.common.network.MessageType
 import ru.lazyhat.compukterkraft.common.network.NetworkMessages
-import ru.lazyhat.compukterkraft.core.computer.input.KeyInputEvent
+import ru.lazyhat.compukterkraft.core.computer.input.ComputerControlAction
+import ru.lazyhat.compukterkraft.core.computer.input.ControlInputEvent
 
-class KeyEventServerMessage : ComputerServerMessage {
-    private val type: Action
-    private val key: Int
+class ComputerActionServerMessage : ComputerServerMessage {
+    private val action: Action
 
-    constructor(menu: AbstractContainerMenu, type: Action, key: Int) : super(menu) {
-        this.type = type
-        this.key = key
+    constructor(menu: AbstractContainerMenu, action: Action) : super(menu) {
+        this.action = action
     }
 
     constructor(buf: FriendlyByteBuf) : super(buf) {
-        type = buf.readEnum(Action::class.java)
-        key = buf.readVarInt()
+        action = buf.readEnum<Action>(Action::class.java)
     }
 
     override fun write(buf: FriendlyByteBuf) {
         super.write(buf)
-        buf.writeEnum(type)
-        buf.writeVarInt(key)
+        buf.writeEnum(action)
     }
 
     override fun handle(
         context: ServerNetworkContext,
         container: ComputerMenu,
     ) {
-        container.serverSide.input.accept(type.toDomainEvent(key))
+        container.serverSide.input.accept(ControlInputEvent(action.toDomainAction()))
     }
 
-    override fun type(): MessageType<KeyEventServerMessage> = NetworkMessages.KEY_EVENT
+    override fun type(): MessageType<ComputerActionServerMessage> = NetworkMessages.COMPUTER_ACTION
 
     enum class Action {
-        DOWN,
-        REPEAT,
-        UP,
-        CHAR,
+        TERMINATE,
+        TURN_ON,
+        SHUTDOWN,
+        REBOOT,
     }
 }
 
-private fun KeyEventServerMessage.Action.toDomainEvent(key: Int): KeyInputEvent =
+private fun ComputerActionServerMessage.Action.toDomainAction(): ComputerControlAction =
     when (this) {
-        KeyEventServerMessage.Action.DOWN -> KeyInputEvent.Down(key, repeat = false)
-        KeyEventServerMessage.Action.REPEAT -> KeyInputEvent.Down(key, repeat = true)
-        KeyEventServerMessage.Action.UP -> KeyInputEvent.Up(key)
-        KeyEventServerMessage.Action.CHAR -> KeyInputEvent.Character(key.toByte())
+        ComputerActionServerMessage.Action.TERMINATE -> ComputerControlAction.TERMINATE
+        ComputerActionServerMessage.Action.TURN_ON -> ComputerControlAction.TURN_ON
+        ComputerActionServerMessage.Action.SHUTDOWN -> ComputerControlAction.SHUTDOWN
+        ComputerActionServerMessage.Action.REBOOT -> ComputerControlAction.REBOOT
     }

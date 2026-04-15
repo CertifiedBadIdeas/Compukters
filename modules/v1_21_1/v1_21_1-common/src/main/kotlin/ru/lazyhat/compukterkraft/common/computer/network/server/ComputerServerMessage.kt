@@ -16,41 +16,44 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-package ru.lazyhat.compukterkraft.common.network.client
+package ru.lazyhat.compukterkraft.common.computer.network.server
 
 import net.minecraft.network.FriendlyByteBuf
+import net.minecraft.world.entity.player.Player
 import net.minecraft.world.inventory.AbstractContainerMenu
-import ru.lazyhat.compukterkraft.common.gui.TerminalState
-import ru.lazyhat.compukterkraft.common.network.MessageType
+import ru.lazyhat.compukterkraft.common.menu.ComputerMenu
 import ru.lazyhat.compukterkraft.common.network.NetworkMessage
-import ru.lazyhat.compukterkraft.common.network.NetworkMessages
-import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 
 /**
- * Server → client message carrying a terminal screen snapshot.
+ * A packet, which performs an action on the currently open [ComputerMenu].
  */
-class ComputerTerminalClientMessage : NetworkMessage<ClientNetworkContext> {
+abstract class ComputerServerMessage : NetworkMessage<ServerNetworkContext> {
     private val containerId: Int
-    private val terminalState: TerminalState
 
-    constructor(menu: AbstractContainerMenu, snapshot: ScreenBufferSnapshot) {
+    protected val targetContainerId: Int
+        get() = containerId
+
+    protected constructor(menu: AbstractContainerMenu) {
         containerId = menu.containerId
-        terminalState = TerminalState(snapshot)
     }
 
-    constructor(buf: FriendlyByteBuf) {
-        containerId = buf.readVarInt()
-        terminalState = TerminalState(buf)
+    constructor(buffer: FriendlyByteBuf) {
+        containerId = buffer.readVarInt()
     }
 
     override fun write(buf: FriendlyByteBuf) {
         buf.writeVarInt(containerId)
-        terminalState.write(buf)
     }
 
-    override fun handle(context: ClientNetworkContext) {
-        context.handleComputerTerminal(containerId, terminalState.toSnapshot())
+    override fun handle(context: ServerNetworkContext) {
+        val player: Player = context.sender()
+        if (player.containerMenu.containerId == containerId && player.containerMenu is ComputerMenu) {
+            handle(context, player.containerMenu as ComputerMenu)
+        }
     }
 
-    override fun type(): MessageType<ComputerTerminalClientMessage> = NetworkMessages.COMPUTER_TERMINAL
+    protected abstract fun handle(
+        context: ServerNetworkContext,
+        container: ComputerMenu,
+    )
 }
