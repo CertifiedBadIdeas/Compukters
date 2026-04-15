@@ -34,7 +34,7 @@ import ru.lazyhat.compukterkraft.common.menu.ComputerMenu
 import ru.lazyhat.compukterkraft.common.network.client.ComputerTerminalClientMessage
 import ru.lazyhat.compukterkraft.common.network.server.ServerNetworking
 import ru.lazyhat.compukterkraft.core.LOGGER
-import ru.lazyhat.compukterkraft.core.application.runtime.HostCallDispatcher
+import ru.lazyhat.compukterkraft.core.computer.runtime.HostCallDispatcher
 import ru.lazyhat.compukterkraft.core.computer.ComputerEvents
 import ru.lazyhat.compukterkraft.core.computer.ComputerProperties
 import ru.lazyhat.compukterkraft.core.computer.vm.BackgroundComputerVm

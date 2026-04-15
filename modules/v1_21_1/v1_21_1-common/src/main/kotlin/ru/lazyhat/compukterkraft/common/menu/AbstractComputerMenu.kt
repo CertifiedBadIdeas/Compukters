@@ -30,7 +30,7 @@ import net.minecraft.world.item.ItemStack
 import ru.lazyhat.compukterkraft.common.computer.ServerComputer
 import ru.lazyhat.compukterkraft.common.data.ComputerContainerData
 import ru.lazyhat.compukterkraft.core.Config
-import ru.lazyhat.compukterkraft.core.application.workbench.WorkbenchRemoteState
+import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchRemoteState
 import ru.lazyhat.compukterkraft.core.block.ComputerFamily
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceDocument
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceEntry

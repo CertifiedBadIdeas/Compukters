@@ -18,8 +18,8 @@
  */
 package ru.lazyhat.compukterkraft.impl.application.runtime
 
-import ru.lazyhat.compukterkraft.core.application.runtime.ComputerProgramCompiler
-import ru.lazyhat.compukterkraft.core.application.runtime.WorkspaceProgramLoader
+import ru.lazyhat.compukterkraft.core.computer.runtime.ComputerProgramCompiler
+import ru.lazyhat.compukterkraft.core.computer.runtime.WorkspaceProgramLoader
 import ru.lazyhat.compukterkraft.core.computer.vm.ComputerWorkspaceHost
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerCpuResources
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerMemoryResources

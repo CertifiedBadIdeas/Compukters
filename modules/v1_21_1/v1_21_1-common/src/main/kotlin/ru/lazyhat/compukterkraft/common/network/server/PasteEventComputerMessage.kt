@@ -24,7 +24,7 @@ import net.minecraft.world.inventory.AbstractContainerMenu
 import ru.lazyhat.compukterkraft.common.menu.ComputerMenu
 import ru.lazyhat.compukterkraft.common.network.MessageType
 import ru.lazyhat.compukterkraft.common.network.NetworkMessages
-import ru.lazyhat.compukterkraft.core.application.input.PasteInputEvent
+import ru.lazyhat.compukterkraft.core.computer.input.PasteInputEvent
 import ru.lazyhat.compukterkraft.core.utils.StringUtil
 import java.nio.ByteBuffer
 
