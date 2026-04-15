@@ -26,9 +26,9 @@ import net.neoforged.bus.api.IEventBus
 import net.neoforged.fml.common.Mod
 import net.neoforged.fml.event.lifecycle.FMLDedicatedServerSetupEvent
 import ru.lazyhat.compukterkraft.common.binding.ModObjects
-import ru.lazyhat.compukterkraft.common.data.ComputerContainerData
+import ru.lazyhat.compukterkraft.common.computer.data.ComputerContainerData
 import ru.lazyhat.compukterkraft.common.network.ClientNetworking
-import ru.lazyhat.compukterkraft.common.network.server.ServerNetworking
+import ru.lazyhat.compukterkraft.common.network.ServerNetworking
 import ru.lazyhat.compukterkraft.core.LOGGER
 import ru.lazyhat.compukterkraft.core.MOD_ID
 import ru.lazyhat.compukterkraft.core.MOD_NAME

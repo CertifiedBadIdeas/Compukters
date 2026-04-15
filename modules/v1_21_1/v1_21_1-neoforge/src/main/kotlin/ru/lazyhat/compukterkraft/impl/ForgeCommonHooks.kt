@@ -23,7 +23,7 @@ import net.neoforged.bus.api.SubscribeEvent
 import net.neoforged.fml.common.EventBusSubscriber
 import net.neoforged.neoforge.event.server.ServerStartingEvent
 import net.neoforged.neoforge.event.server.ServerStoppingEvent
-import ru.lazyhat.compukterkraft.common.context.ServerContext
+import ru.lazyhat.compukterkraft.common.computer.context.ServerContext
 import ru.lazyhat.compukterkraft.core.MOD_ID
 
 @EventBusSubscriber(modid = MOD_ID)
