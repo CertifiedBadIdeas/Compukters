@@ -18,8 +18,8 @@
  */
 package ru.lazyhat.compukterkraft.core.ui.workbench
 
-import ru.lazyhat.compukterkraft.core.application.workbench.WorkbenchState
-import ru.lazyhat.compukterkraft.core.application.workbench.completionDetail
+import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchState
+import ru.lazyhat.compukterkraft.core.computer.workbench.completionDetail
 import ru.lazyhat.compukterkraft.core.platform.api.FontMetrics
 import kotlin.math.abs
 import kotlin.math.max

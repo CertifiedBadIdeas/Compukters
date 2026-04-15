@@ -32,8 +32,8 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.launch
 import ru.lazyhat.compukterkraft.core.LOGGER
-import ru.lazyhat.compukterkraft.core.application.runtime.ComputerProgramCompiler
-import ru.lazyhat.compukterkraft.core.application.runtime.WorkspaceProgramLoader
+import ru.lazyhat.compukterkraft.core.computer.runtime.ComputerProgramCompiler
+import ru.lazyhat.compukterkraft.core.computer.runtime.WorkspaceProgramLoader
 import ru.lazyhat.compukterkraft.core.computer.vm.api.VmFileSystemApi
 import ru.lazyhat.compukterkraft.core.computer.vm.api.VmPeripheralRegistry
 import ru.lazyhat.compukterkraft.core.computer.vm.api.VmPeripheralRuntimeApi
