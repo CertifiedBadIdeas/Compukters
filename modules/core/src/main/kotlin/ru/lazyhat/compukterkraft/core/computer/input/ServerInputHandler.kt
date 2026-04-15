@@ -16,9 +16,9 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-package ru.lazyhat.compukterkraft.core.menu
+package ru.lazyhat.compukterkraft.core.computer.input
 
-import ru.lazyhat.compukterkraft.core.application.input.InputEvent
+import ru.lazyhat.compukterkraft.core.computer.input.InputEvent
 
 /**
  * Handles user-provided input on the server, receiving data from the client over the network.

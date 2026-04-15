@@ -16,7 +16,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-package ru.lazyhat.compukterkraft.core.application.workbench
+package ru.lazyhat.compukterkraft.core.computer.workbench
 
 import ru.lazyhat.compukterkraft.lang.runtime.CompletionItem
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerIdeSnapshot

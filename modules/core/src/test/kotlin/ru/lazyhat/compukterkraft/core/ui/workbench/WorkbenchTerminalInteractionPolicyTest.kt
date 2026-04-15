@@ -19,7 +19,7 @@
 
 package ru.lazyhat.compukterkraft.core.ui.workbench
 
-import ru.lazyhat.compukterkraft.core.application.workbench.WorkbenchMode
+import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchMode
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue

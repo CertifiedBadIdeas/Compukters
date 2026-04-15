@@ -19,8 +19,8 @@
 
 package ru.lazyhat.compukterkraft.core.computer.vm.api
 
-import ru.lazyhat.compukterkraft.core.application.runtime.ComputerProgramCompiler
-import ru.lazyhat.compukterkraft.core.application.runtime.WorkspaceProgramLoader
+import ru.lazyhat.compukterkraft.core.computer.runtime.ComputerProgramCompiler
+import ru.lazyhat.compukterkraft.core.computer.runtime.WorkspaceProgramLoader
 import ru.lazyhat.compukterkraft.core.computer.vm.VmContext
 import ru.lazyhat.compukterkraft.core.computer.vm.VmPathResolver
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerProcessApi
