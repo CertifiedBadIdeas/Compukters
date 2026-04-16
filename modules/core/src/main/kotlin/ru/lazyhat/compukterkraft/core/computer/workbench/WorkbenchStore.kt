@@ -117,6 +117,26 @@ class WorkbenchStore(
         controlGateway.reboot()
     }
 
+    fun pullFromTarget() {
+        if (!state.actions.canPull) return
+        controlGateway.pullFromTarget()
+    }
+
+    fun pushToTarget() {
+        if (!state.actions.canPush) return
+        controlGateway.pushToTarget()
+    }
+
+    fun runTargetProgram() {
+        if (!state.actions.canRun) return
+        controlGateway.runTargetProgram()
+    }
+
+    fun attachTargetTerminal() {
+        if (!state.actions.canAttachTerminal) return
+        controlGateway.attachTargetTerminal()
+    }
+
     fun updateHover(
         line: Int,
         column: Int,
@@ -385,7 +405,20 @@ class WorkbenchStore(
                 )
         }
 
-        _state.value = nextState
+        val actionState =
+            WorkbenchActionState(
+                canPull = remoteState.target.connected,
+                canPush = remoteState.target.connected,
+                canRun = remoteState.target.connected,
+                canAttachTerminal = remoteState.target.connected,
+            )
+
+        _state.value =
+            nextState.copy(
+                target = remoteState.target,
+                sync = remoteState.sync,
+                actions = actionState,
+            )
         if (documentChanged && remoteState.document != null) {
             refreshIde()
         }

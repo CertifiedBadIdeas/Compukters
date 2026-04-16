@@ -16,25 +16,27 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-package ru.lazyhat.compukterkraft.common.computer.screen
+
+package ru.lazyhat.compukterkraft.common.workbench.screen
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import net.minecraft.client.gui.GuiGraphics
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
 import net.minecraft.network.chat.Component
 import net.minecraft.world.entity.player.Inventory
-import ru.lazyhat.compukterkraft.common.computer.input.ClientInputHandler
+import ru.lazyhat.compukterkraft.common.workbench.input.WorkbenchClientInputHandler
 import ru.lazyhat.compukterkraft.common.infrastructure.coroutines.minecraft
-import ru.lazyhat.compukterkraft.common.infrastructure.workbench.ComputerFamilyCatalogSource
-import ru.lazyhat.compukterkraft.common.infrastructure.workbench.InputHandlerControlGateway
 import ru.lazyhat.compukterkraft.common.infrastructure.workbench.LanguageWorkbenchIdeFacade
 import ru.lazyhat.compukterkraft.common.infrastructure.workbench.MenuWorkspaceUpdateSource
-import ru.lazyhat.compukterkraft.common.infrastructure.workbench.NetworkWorkspaceGateway
-import ru.lazyhat.compukterkraft.common.computer.menu.AbstractComputerMenu
+import ru.lazyhat.compukterkraft.common.infrastructure.workbench.NetworkWorkbenchControlGateway
+import ru.lazyhat.compukterkraft.common.infrastructure.workbench.NetworkWorkbenchWorkspaceGateway
+import ru.lazyhat.compukterkraft.common.infrastructure.workbench.WorkbenchTargetCatalogSource
 import ru.lazyhat.compukterkraft.common.platform.MinecraftInputProvider
 import ru.lazyhat.compukterkraft.common.ui.render.WorkbenchTerminalRenderer
+import ru.lazyhat.compukterkraft.common.workbench.menu.WorkbenchMenuWithoutInventory
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchMode
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchStore
 import ru.lazyhat.compukterkraft.core.computer.workbench.completionDetail
@@ -42,6 +44,7 @@ import ru.lazyhat.compukterkraft.core.computer.workbench.highlightColor
 import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalInputController
 import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalLayout
 import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalMetrics
+import ru.lazyhat.compukterkraft.core.ui.workbench.ToolbarButtonLayout
 import ru.lazyhat.compukterkraft.core.ui.workbench.WorkbenchLayoutModel
 import ru.lazyhat.compukterkraft.core.ui.workbench.WorkbenchTerminalInteractionPolicy
 import ru.lazyhat.compukterkraft.core.ui.workbench.WorkbenchTerminalViewState
@@ -49,23 +52,23 @@ import ru.lazyhat.compukterkraft.core.ui.workbench.WorkspaceRowLayout
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 import kotlin.math.min
 
-class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
-    container: T,
+class WorkbenchEditorScreen(
+    container: WorkbenchMenuWithoutInventory,
     player: Inventory,
     title: Component,
-) : ComputerScreen<T>(container, player, title) {
-    private val inputHandler = ClientInputHandler(container)
+) : AbstractContainerScreen<WorkbenchMenuWithoutInventory>(container, player, title) {
+    private val inputHandler = WorkbenchClientInputHandler(container)
     private val terminalInput = WorkbenchTerminalInputController(inputHandler, MinecraftInputProvider)
     private val store =
         WorkbenchStore(
-            workspaceGateway = NetworkWorkspaceGateway(container),
-            controlGateway = InputHandlerControlGateway(inputHandler),
-            ideFacade = LanguageWorkbenchIdeFacade(ComputerFamilyCatalogSource(container.family)),
+            workspaceGateway = NetworkWorkbenchWorkspaceGateway(container),
+            controlGateway = NetworkWorkbenchControlGateway(container),
+            ideFacade = LanguageWorkbenchIdeFacade(WorkbenchTargetCatalogSource(container.workspaceStateFlow.value.target)),
         )
     private var screenScope: CoroutineScope? = null
 
     init {
-        val (terminalColumns, terminalRows) = terminalDimensions(container.clientSide.screenSnapshot)
+        val (terminalColumns, terminalRows) = terminalDimensions(container.screenSnapshot)
         imageWidth = WorkbenchTerminalMetrics.imageWidth(terminalColumns, terminalRows)
         imageHeight = WorkbenchTerminalMetrics.imageHeight(terminalColumns, terminalRows)
     }
@@ -87,7 +90,7 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
 
     override fun containerTick() {
         super.containerTick()
-        val terminalState = WorkbenchTerminalViewState.from(menu.isComputerOn, menu.clientSide.screenSnapshot)
+        val terminalState = WorkbenchTerminalViewState.from(store.state.target.connected, menu.screenSnapshot)
         if (terminalState !is WorkbenchTerminalViewState.Active && terminalInput.focused) {
             terminalInput.focused = false
         }
@@ -102,8 +105,7 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
         mouseY: Int,
     ) {
         if (store.state.mode == WorkbenchMode.TERMINAL) {
-            val snapshot = menu.clientSide.screenSnapshot
-            val terminalState = WorkbenchTerminalViewState.from(menu.isComputerOn, snapshot)
+            val terminalState = WorkbenchTerminalViewState.from(store.state.target.connected, menu.screenSnapshot)
             val focused = WorkbenchTerminalInteractionPolicy.canAcceptInput(store.state.mode, terminalState, terminalInput.focused)
             val showFocusHint = WorkbenchTerminalInteractionPolicy.showFocusHint(terminalState, terminalInput.focused)
             WorkbenchTerminalRenderer.render(
@@ -168,7 +170,7 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
         modifiers: Int,
     ): Boolean {
         val previousMode = store.state.mode
-        val terminalState = WorkbenchTerminalViewState.from(menu.isComputerOn, menu.clientSide.screenSnapshot)
+        val terminalState = WorkbenchTerminalViewState.from(store.state.target.connected, menu.screenSnapshot)
         if (WorkbenchTerminalInteractionPolicy.canAcceptInput(store.state.mode, terminalState, terminalInput.focused)) {
             if (terminalInput.keyPressed(key, scancode, modifiers)) {
                 return true
@@ -190,7 +192,7 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
         scancode: Int,
         modifiers: Int,
     ): Boolean {
-        val terminalState = WorkbenchTerminalViewState.from(menu.isComputerOn, menu.clientSide.screenSnapshot)
+        val terminalState = WorkbenchTerminalViewState.from(store.state.target.connected, menu.screenSnapshot)
         if (WorkbenchTerminalInteractionPolicy.canAcceptInput(store.state.mode, terminalState, terminalInput.focused)) {
             if (terminalInput.keyReleased(key, scancode)) {
                 return true
@@ -203,7 +205,7 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
         ch: Char,
         modifiers: Int,
     ): Boolean {
-        val terminalState = WorkbenchTerminalViewState.from(menu.isComputerOn, menu.clientSide.screenSnapshot)
+        val terminalState = WorkbenchTerminalViewState.from(store.state.target.connected, menu.screenSnapshot)
         if (WorkbenchTerminalInteractionPolicy.canAcceptInput(store.state.mode, terminalState, terminalInput.focused)) {
             return terminalInput.charTyped(ch)
         }
@@ -223,7 +225,7 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
         }
 
         if (store.state.mode == WorkbenchMode.TERMINAL) {
-            val terminalState = WorkbenchTerminalViewState.from(menu.isComputerOn, menu.clientSide.screenSnapshot)
+            val terminalState = WorkbenchTerminalViewState.from(store.state.target.connected, menu.screenSnapshot)
             if (terminalState is WorkbenchTerminalViewState.Active) {
                 terminalInput.focused = terminalInput.mouseClicked(terminalLayout().terminalBounds, mouseX, mouseY)
             } else {
@@ -286,7 +288,7 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
         horizontalAmount: Double,
         verticalAmount: Double,
     ): Boolean {
-        val terminalState = WorkbenchTerminalViewState.from(menu.isComputerOn, menu.clientSide.screenSnapshot)
+        val terminalState = WorkbenchTerminalViewState.from(store.state.target.connected, menu.screenSnapshot)
         if (store.state.mode == WorkbenchMode.TERMINAL && terminalState is WorkbenchTerminalViewState.Active) {
             if (terminalInput.mouseScrolled(terminalLayout().terminalBounds, mouseX, mouseY, verticalAmount)) {
                 return true
@@ -301,12 +303,28 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
     }
 
     private fun renderToolbar(graphics: GuiGraphics) {
-        layout().toolbarButtons(store.state).forEach { button ->
+        workbenchToolbarButtons().forEach { button ->
             val bounds = button.bounds
-            graphics.fill(bounds.x, bounds.y, bounds.right, bounds.bottom, 0xFF222938.toInt())
-            graphics.drawCenteredString(minecraft!!.font, button.label, bounds.x + bounds.width / 2, bounds.y + 7, 0xE6ECF5)
+            val disabled = button.index in 2..4 && !store.state.target.connected
+            graphics.fill(bounds.x, bounds.y, bounds.right, bounds.bottom, if (disabled) 0xFF1B202A.toInt() else 0xFF222938.toInt())
+            graphics.drawCenteredString(minecraft!!.font, button.label, bounds.x + bounds.width / 2, bounds.y + 7, if (disabled) 0x6F7C8C else 0xE6ECF5.toInt())
         }
     }
+
+    private fun workbenchToolbarButtons(): List<ToolbarButtonLayout> =
+        layout().toolbarButtons(store.state).map { button ->
+            val label =
+                when (button.index) {
+                    0 -> if (store.state.mode == WorkbenchMode.TERMINAL) "IDE" else "Console"
+                    1 -> "Save"
+                    2 -> "Pull"
+                    3 -> "Push"
+                    4 -> "Run"
+                    5 -> "Imports"
+                    else -> button.label
+                }
+            button.copy(label = label)
+        }
 
     private fun renderWorkspaceList(
         graphics: GuiGraphics,
@@ -314,14 +332,7 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
         mouseY: Int,
     ) {
         val font = minecraft!!.font
-        graphics.drawString(
-            font,
-            Component.literal("/" + store.state.browserPath).visualOrderText,
-            leftPos + 12,
-            topPos + 38,
-            0xBFD5E8,
-            false,
-        )
+        graphics.drawString(font, Component.literal("/" + store.state.browserPath).visualOrderText, leftPos + 12, topPos + 38, 0xBFD5E8, false)
         layout().workspaceRows(store.state).forEach { row ->
             drawWorkspaceRow(graphics, row, mouseX, mouseY)
         }
@@ -343,9 +354,7 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
     private fun renderEditor(graphics: GuiGraphics) {
         val font = minecraft!!.font
         val lines = editorLines()
-        val startLine =
-            store.state.editor.scrollLine
-                .coerceAtLeast(0)
+        val startLine = store.state.editor.scrollLine.coerceAtLeast(0)
         val visibleLines = layout().visibleEditorLines()
         val endLine = min(lines.size, startLine + visibleLines)
         var drawY = topPos + 40
@@ -366,9 +375,7 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
 
         graphics.disableScissor()
 
-        if (store.state.editor.completionItems
-                .isNotEmpty()
-        ) {
+        if (store.state.editor.completionItems.isNotEmpty()) {
             renderCompletionPopup(graphics)
         }
 
@@ -382,13 +389,7 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
         val path = store.state.openDocument?.path ?: "No file opened"
         val status = if (store.state.editor.dirty) "* $path" else path
         graphics.drawString(font, status, leftPos + 140, topPos + imageHeight - 24, 0xE6ECF5, false)
-        val hover =
-            store.state.editor.hoverInfo
-                ?.contents ?: store.state.editor.ideSnapshot
-                ?.diagnostics
-                ?.firstOrNull()
-                ?.message
-                .orEmpty()
+        val hover = store.state.editor.hoverInfo?.contents ?: store.state.editor.ideSnapshot?.diagnostics?.firstOrNull()?.message.orEmpty()
         if (hover.isNotEmpty()) {
             graphics.drawString(font, hover.take(60), leftPos + 140, topPos + imageHeight - 14, 0xE0A96D, false)
         }
@@ -415,12 +416,8 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
         var drawX = x
         var column = 0
         tokens.sortedBy { it.range.start.column }.forEach { token ->
-            val start =
-                token.range.start.column
-                    .coerceIn(0, lineText.length)
-            val end =
-                token.range.end.column
-                    .coerceIn(start, lineText.length)
+            val start = token.range.start.column.coerceIn(0, lineText.length)
+            val end = token.range.end.column.coerceIn(start, lineText.length)
             if (start > column) {
                 val plain = lineText.substring(column, start)
                 graphics.drawString(font, plain, drawX, y, 0xE6ECF5, false)
@@ -455,9 +452,7 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
     private fun renderCompletionPopup(graphics: GuiGraphics) {
         val font = minecraft!!.font
         val popup = layout().completionPopup(store.state) ?: return
-        val items =
-            store.state.editor.completionItems
-                .take(popup.visibleItems)
+        val items = store.state.editor.completionItems.take(popup.visibleItems)
         graphics.fill(popup.bounds.x, popup.bounds.y, popup.bounds.right, popup.bounds.bottom, 0xEE11151E.toInt())
         items.forEachIndexed { index, item ->
             val rowY = popup.bounds.y + 2 + index * popup.rowHeight
@@ -491,7 +486,7 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
         mouseX: Int,
         mouseY: Int,
     ): Boolean {
-        layout().toolbarButtonAt(store.state, mouseX, mouseY)?.let { button ->
+        workbenchToolbarButtons().firstOrNull { it.bounds.contains(mouseX, mouseY) }?.let { button ->
             when (button.index) {
                 0 -> {
                     store.toggleMode()
@@ -499,26 +494,11 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
                         terminalInput.focused = false
                     }
                 }
-
-                1 -> {
-                    store.saveDocument()
-                }
-
-                2 -> {
-                    store.refreshWorkspace()
-                }
-
-                3 -> {
-                    store.navigateUp()
-                }
-
-                4 -> {
-                    store.rebootComputer()
-                }
-
-                5 -> {
-                    store.openImportPicker()
-                }
+                1 -> store.saveDocument()
+                2 -> store.pullFromTarget()
+                3 -> store.pushToTarget()
+                4 -> store.runTargetProgram()
+                5 -> store.openImportPicker()
             }
             return true
         }
@@ -535,32 +515,20 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
     }
 
     private fun layout(): WorkbenchLayoutModel =
-        WorkbenchLayoutModel(
-            leftPos,
-            topPos,
-            imageWidth,
-            imageHeight,
-        ) {
+        WorkbenchLayoutModel(leftPos, topPos, imageWidth, imageHeight) {
             minecraft!!.font.width(it)
         }
 
     private fun terminalLayout(): WorkbenchTerminalLayout {
-        val (terminalColumns, terminalRows) = terminalDimensions(menu.clientSide.screenSnapshot)
-        return WorkbenchTerminalMetrics.layout(
-            leftPos,
-            topPos,
-            imageWidth,
-            imageHeight,
-            terminalColumns,
-            terminalRows,
-        )
+        val (terminalColumns, terminalRows) = terminalDimensions(menu.screenSnapshot)
+        return WorkbenchTerminalMetrics.layout(leftPos, topPos, imageWidth, imageHeight, terminalColumns, terminalRows)
     }
 
     private fun syncTerminalWindowSize(terminalState: WorkbenchTerminalViewState) {
         val (terminalColumns, terminalRows) =
             when (terminalState) {
                 is WorkbenchTerminalViewState.Active -> terminalDimensions(terminalState.snapshot)
-                WorkbenchTerminalViewState.PoweredOff, WorkbenchTerminalViewState.Connecting -> 0 to 0
+                WorkbenchTerminalViewState.PoweredOff, WorkbenchTerminalViewState.Connecting -> terminalDimensions(null)
             }
 
         val nextWidth = WorkbenchTerminalMetrics.imageWidth(terminalColumns, terminalRows)
@@ -575,18 +543,15 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
 
     private fun terminalDimensions(snapshot: ScreenBufferSnapshot?): Pair<Int, Int> =
         if (snapshot == null) {
-            0 to 0
+            16 to 8
         } else {
             snapshot.width to snapshot.height
         }
 
     private fun editorLines(): List<String> =
-        if (store.state.editor.text
-                .isEmpty()
-        ) {
+        if (store.state.editor.text.isEmpty()) {
             listOf("")
         } else {
-            store.state.editor.text
-                .split('\n')
+            store.state.editor.text.split('\n')
         }
 }

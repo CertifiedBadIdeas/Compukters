@@ -46,6 +46,11 @@ import ru.lazyhat.compukterkraft.common.computer.loot.ConstantLootConditionSeria
 import ru.lazyhat.compukterkraft.common.computer.loot.HasComputerIdLootCondition
 import ru.lazyhat.compukterkraft.common.computer.loot.PlayerCreativeLootCondition
 import ru.lazyhat.compukterkraft.common.computer.menu.ComputerMenuWithoutInventory
+import ru.lazyhat.compukterkraft.common.workbench.block.WorkbenchBlock
+import ru.lazyhat.compukterkraft.common.workbench.block.WorkbenchBlockEntity
+import ru.lazyhat.compukterkraft.common.workbench.data.WorkbenchContainerData
+import ru.lazyhat.compukterkraft.common.workbench.item.WorkbenchItem
+import ru.lazyhat.compukterkraft.common.workbench.menu.WorkbenchMenuWithoutInventory
 import ru.lazyhat.compukterkraft.core.LOGGER
 import ru.lazyhat.compukterkraft.core.MOD_ID
 import ru.lazyhat.compukterkraft.core.block.ComputerFamily
@@ -56,6 +61,7 @@ object ModRegistry {
     object Names {
         const val COMPUTER_ADVANCED = "computer_advanced"
         const val COMPUTER = "computer"
+        const val WORKBENCH = "workbench"
     }
 
     object Blocks {
@@ -77,6 +83,14 @@ object ModRegistry {
                         ComputerBlock(noRedstoneConductor().mapColor(MapColor.STONE))
                     },
                 )
+
+        val WORKBENCH: DeferredHolder<Block, WorkbenchBlock> =
+            REGISTRY.register(
+                Names.WORKBENCH,
+                Supplier {
+                    WorkbenchBlock(noRedstoneConductor().mapColor(MapColor.WOOD))
+                },
+            )
     }
 
     object BlockEntities {
@@ -100,6 +114,12 @@ object ModRegistry {
                 Blocks.COMPUTER_ADVANCED,
                 Names.COMPUTER_ADVANCED,
             ) { p, s -> NeoForgeComputerBlockEntity(COMPUTER_ADVANCED.get(), p, s, ComputerFamily.ADVANCED) }
+
+        val WORKBENCH: DeferredHolder<BlockEntityType<*>, BlockEntityType<WorkbenchBlockEntity>> =
+            ofBlock(
+                Blocks.WORKBENCH,
+                Names.WORKBENCH,
+            ) { p, s -> WorkbenchBlockEntity(p, s) }
     }
 
     object Items {
@@ -124,6 +144,12 @@ object ModRegistry {
                 Blocks.COMPUTER_ADVANCED,
                 Names.COMPUTER_ADVANCED,
             ) { block, properties -> ComputerItem(block, properties) }
+
+        val WORKBENCH: DeferredHolder<Item, WorkbenchItem> =
+            ofBlock(
+                Blocks.WORKBENCH,
+                Names.WORKBENCH,
+            ) { block, properties -> WorkbenchItem(block, properties) }
     }
 
     object LootItemConditionTypes {
@@ -171,6 +197,21 @@ object ModRegistry {
                     }
                 },
             )
+
+        val WORKBENCH: DeferredHolder<MenuType<*>, MenuType<WorkbenchMenuWithoutInventory>> =
+            REGISTRY.register(
+                Names.WORKBENCH,
+                Supplier {
+                    IMenuTypeExtension.create { id, playerInventory, data ->
+                        WorkbenchMenuWithoutInventory(
+                            WORKBENCH.get(),
+                            id,
+                            playerInventory,
+                            WorkbenchContainerData(data),
+                        )
+                    }
+                },
+            )
     }
 
     object CreativeTabs {
@@ -187,6 +228,7 @@ object ModRegistry {
                             .title(Component.translatable("itemGroup.compukterkraft"))
                             .displayItems { _, out ->
                                 out.accept(ItemStack(Items.COMPUTER_ADVANCED.get()))
+                                out.accept(ItemStack(Items.WORKBENCH.get()))
                             }.build()
                     },
                 )

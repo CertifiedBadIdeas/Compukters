@@ -26,6 +26,7 @@ import net.minecraft.world.item.component.CustomData
 
 private object NBT {
     const val ID: String = "ComputerID"
+    const val FAMILY_ID: String = "ComputerFamilyId"
     const val LABEL: String = "Label"
     const val ON: String = "On"
 }
@@ -40,6 +41,12 @@ var CompoundTag.computerLabel: String?
     get() = takeIf { it.contains(NBT.LABEL) }?.let { getString(NBT.LABEL) }
     set(value) {
         value?.let { putString(NBT.LABEL, it) }
+    }
+
+var CompoundTag.computerFamilyId: String?
+    get() = takeIf { it.contains(NBT.FAMILY_ID) }?.let { getString(NBT.FAMILY_ID) }
+    set(value) {
+        value?.let { putString(NBT.FAMILY_ID, it) }
     }
 
 var CompoundTag.computerOn: Boolean

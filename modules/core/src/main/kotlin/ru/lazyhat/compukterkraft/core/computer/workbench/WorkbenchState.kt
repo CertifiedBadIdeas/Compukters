@@ -29,6 +29,13 @@ enum class WorkbenchMode {
     EDITOR,
 }
 
+data class WorkbenchActionState(
+    val canPull: Boolean = false,
+    val canPush: Boolean = false,
+    val canRun: Boolean = false,
+    val canAttachTerminal: Boolean = false,
+)
+
 data class EditorState(
     val text: String = "",
     val dirty: Boolean = false,
@@ -50,4 +57,7 @@ data class WorkbenchState(
     val entries: List<ComputerWorkspaceEntry> = emptyList(),
     val openDocument: ComputerWorkspaceDocument? = null,
     val editor: EditorState = EditorState(),
+    val target: WorkbenchTargetState = WorkbenchTargetState(),
+    val sync: WorkbenchSyncState = WorkbenchSyncState(),
+    val actions: WorkbenchActionState = WorkbenchActionState(),
 )

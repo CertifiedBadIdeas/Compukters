@@ -16,25 +16,18 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
+package ru.lazyhat.compukterkraft.common.workbench.input
 
-package ru.lazyhat.compukterkraft.core.bootstrap
+import net.minecraft.world.inventory.AbstractContainerMenu
+import ru.lazyhat.compukterkraft.common.workbench.input.NetworkWorkbenchInputGateway
+import ru.lazyhat.compukterkraft.core.computer.input.ComputerInputGateway
+import ru.lazyhat.compukterkraft.core.computer.input.InputEvent
+import ru.lazyhat.compukterkraft.core.computer.input.InputEventSink
 
-object CommonNetworkProtocol {
-    val serverboundChannels =
-        listOf(
-            "computer_action",
-            "key_event",
-            "mouse_event",
-            "paste_event",
-            "computer_workspace_request",
-            "workbench_workspace_request",
-        )
+class WorkbenchClientInputHandler(
+    menu: AbstractContainerMenu,
+) : InputEventSink {
+    private val gateway: ComputerInputGateway = NetworkWorkbenchInputGateway(menu)
 
-    val clientboundChannels =
-        listOf(
-            "chat_table",
-            "computer_terminal",
-            "computer_workspace",
-            "workbench_workspace",
-        )
+    override fun accept(event: InputEvent) = gateway.send(event)
 }

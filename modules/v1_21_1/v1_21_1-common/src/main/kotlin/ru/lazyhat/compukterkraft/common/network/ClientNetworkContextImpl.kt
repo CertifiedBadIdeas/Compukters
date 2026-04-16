@@ -21,8 +21,10 @@ package ru.lazyhat.compukterkraft.common.network
 
 import net.minecraft.client.Minecraft
 import ru.lazyhat.compukterkraft.common.computer.menu.ComputerMenu
+import ru.lazyhat.compukterkraft.common.workbench.menu.AbstractWorkbenchMenu
 import ru.lazyhat.compukterkraft.common.network.text.TableBuilder
 import ru.lazyhat.compukterkraft.common.network.text.ClientTableFormatter
+import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchRemoteState
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceDocument
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceEntry
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
@@ -40,6 +42,18 @@ class ClientNetworkContextImpl : ClientNetworkContext {
             ?.containerMenu
             ?.takeIf { it.containerId == computerId }
             ?.let { it as? ComputerMenu }
+            ?.run(block)
+    }
+
+    private inline fun withCheckedWorkbenchMenu(
+        containerId: Int,
+        block: AbstractWorkbenchMenu.() -> Unit,
+    ) {
+        minecraft
+            .player
+            ?.containerMenu
+            ?.takeIf { it.containerId == containerId }
+            ?.let { it as? AbstractWorkbenchMenu }
             ?.run(block)
     }
 
@@ -66,5 +80,19 @@ class ClientNetworkContextImpl : ClientNetworkContext {
         document: ComputerWorkspaceDocument?,
     ) = withCheckedContainerMenu(containerId) {
         updateWorkspaceDocument(document)
+    }
+
+    override fun handleWorkbenchWorkspace(
+        containerId: Int,
+        remoteState: WorkbenchRemoteState,
+    ) = withCheckedWorkbenchMenu(containerId) {
+        updateRemoteState(remoteState)
+    }
+
+    override fun handleWorkbenchTerminal(
+        containerId: Int,
+        snapshot: ScreenBufferSnapshot?,
+    ) = withCheckedWorkbenchMenu(containerId) {
+        updateScreenSnapshot(snapshot)
     }
 }

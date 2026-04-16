@@ -17,24 +17,13 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package ru.lazyhat.compukterkraft.core.bootstrap
+package ru.lazyhat.compukterkraft.common.workbench.item
 
-object CommonNetworkProtocol {
-    val serverboundChannels =
-        listOf(
-            "computer_action",
-            "key_event",
-            "mouse_event",
-            "paste_event",
-            "computer_workspace_request",
-            "workbench_workspace_request",
-        )
+import net.minecraft.world.item.BlockItem
+import net.minecraft.world.item.Item
+import net.minecraft.world.level.block.Block
 
-    val clientboundChannels =
-        listOf(
-            "chat_table",
-            "computer_terminal",
-            "computer_workspace",
-            "workbench_workspace",
-        )
-}
+class WorkbenchItem(
+    block: Block,
+    properties: Item.Properties,
+) : BlockItem(block, properties)

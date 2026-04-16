@@ -27,6 +27,7 @@ import net.neoforged.fml.common.Mod
 import net.neoforged.fml.event.lifecycle.FMLDedicatedServerSetupEvent
 import ru.lazyhat.compukterkraft.common.binding.ModObjects
 import ru.lazyhat.compukterkraft.common.computer.data.ComputerContainerData
+import ru.lazyhat.compukterkraft.common.workbench.data.WorkbenchContainerData
 import ru.lazyhat.compukterkraft.common.network.ClientNetworking
 import ru.lazyhat.compukterkraft.common.network.ServerNetworking
 import ru.lazyhat.compukterkraft.core.LOGGER
@@ -54,6 +55,21 @@ class CompukterKraftMod(
                 SimpleMenuProvider(
                     computer,
                     computer.name,
+                ),
+            ) { buffer ->
+                menuData.toBytes(buffer)
+            }
+        }
+        ModObjects.workbenchBlockEntityType = {
+            @Suppress("UNCHECKED_CAST")
+            ModRegistry.BlockEntities.WORKBENCH.get()
+        }
+        ModObjects.workbenchMenuType = { ModRegistry.Menus.WORKBENCH.get() }
+        ModObjects.openWorkbenchMenu = { player: ServerPlayer, workbench, menuData: WorkbenchContainerData ->
+            player.openMenu(
+                SimpleMenuProvider(
+                    workbench,
+                    workbench.displayName,
                 ),
             ) { buffer ->
                 menuData.toBytes(buffer)

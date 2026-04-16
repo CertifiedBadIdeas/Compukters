@@ -32,7 +32,9 @@ object CommonModBootstrap {
         clientHooks: PlatformClientHooks,
     ) {
         blocks.registerBlock(CommonBlockDescriptor.ComputerAdvanced)
+        blocks.registerBlock(CommonBlockDescriptor.Workbench)
         menus.registerMenu(CommonMenuDescriptor.Computer)
+        menus.registerMenu(CommonMenuDescriptor.Workbench)
 
         CommonNetworkProtocol.serverboundChannels.forEach(network::registerServerbound)
         CommonNetworkProtocol.clientboundChannels.forEach(network::registerClientbound)

@@ -27,11 +27,17 @@ import ru.lazyhat.compukterkraft.common.computer.block.AbstractComputerBlockEnti
 import ru.lazyhat.compukterkraft.common.computer.block.ComputerBlockEntity
 import ru.lazyhat.compukterkraft.common.computer.data.ComputerContainerData
 import ru.lazyhat.compukterkraft.common.computer.menu.ComputerMenuWithoutInventory
+import ru.lazyhat.compukterkraft.common.workbench.block.WorkbenchBlockEntity
+import ru.lazyhat.compukterkraft.common.workbench.data.WorkbenchContainerData
+import ru.lazyhat.compukterkraft.common.workbench.menu.WorkbenchMenuWithoutInventory
 
 object ModObjects {
     lateinit var computerBlockEntityType: () -> BlockEntityType<ComputerBlockEntity>
     lateinit var computerMenuType: () -> MenuType<ComputerMenuWithoutInventory>
     lateinit var openComputerMenu: (ServerPlayer, AbstractComputerBlockEntity, ComputerContainerData) -> Unit
+    lateinit var workbenchBlockEntityType: () -> BlockEntityType<WorkbenchBlockEntity>
+    lateinit var workbenchMenuType: () -> MenuType<WorkbenchMenuWithoutInventory>
+    lateinit var openWorkbenchMenu: (ServerPlayer, WorkbenchBlockEntity, WorkbenchContainerData) -> Unit
     lateinit var blockNamedEntityLootConditionType: () -> LootItemConditionType
     lateinit var hasComputerIdLootConditionType: () -> LootItemConditionType
     lateinit var playerCreativeLootConditionType: () -> LootItemConditionType
