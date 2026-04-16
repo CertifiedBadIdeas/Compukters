@@ -20,7 +20,7 @@
 package ru.lazyhat.compukterkraft.impl
 
 import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent
-import ru.lazyhat.compukterkraft.common.computer.screen.ComputerWorkbenchScreen
+import ru.lazyhat.compukterkraft.common.computer.screen.ComputerTerminalScreen
 import ru.lazyhat.compukterkraft.common.workbench.screen.WorkbenchEditorScreen
 import ru.lazyhat.compukterkraft.core.LOGGER
 
@@ -29,15 +29,15 @@ object ClientRegistry {
         try {
             event.register(
                 ModRegistry.Menus.COMPUTER.get(),
-                { container, inventory, title -> ComputerWorkbenchScreen(container, inventory, title) },
+                { container, inventory, title -> ComputerTerminalScreen(container, inventory, title) },
             )
             event.register(
                 ModRegistry.Menus.WORKBENCH.get(),
                 { container, inventory, title -> WorkbenchEditorScreen(container, inventory, title) },
             )
-            LOGGER.info { "ClientRegistry: ComputerWorkbenchKoolScreen successfully registered" }
+            LOGGER.info { "ClientRegistry: terminal-only computer screen successfully registered" }
         } catch (e: Exception) {
-            LOGGER.error { "ClientRegistry: ComputerWorkbenchKoolScreen registered with error ${e.message}" }
+            LOGGER.error { "ClientRegistry: computer screen registration failed: ${e.message}" }
         }
     }
 }

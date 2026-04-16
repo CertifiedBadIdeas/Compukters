@@ -24,9 +24,7 @@ import net.minecraft.network.FriendlyByteBuf
 import ru.lazyhat.compukterkraft.common.network.text.ChatTableClientMessage
 import ru.lazyhat.compukterkraft.common.network.ClientNetworkContext
 import ru.lazyhat.compukterkraft.common.computer.network.client.ComputerTerminalClientMessage
-import ru.lazyhat.compukterkraft.common.computer.network.client.ComputerWorkspaceClientMessage
 import ru.lazyhat.compukterkraft.common.computer.network.server.ComputerActionServerMessage
-import ru.lazyhat.compukterkraft.common.computer.network.server.ComputerWorkspaceServerMessage
 import ru.lazyhat.compukterkraft.common.computer.network.server.KeyEventServerMessage
 import ru.lazyhat.compukterkraft.common.computer.network.server.MouseEventServerMessage
 import ru.lazyhat.compukterkraft.common.computer.network.server.PasteEventComputerMessage
@@ -49,7 +47,7 @@ import ru.lazyhat.compukterkraft.common.workbench.network.server.WorkbenchWorksp
  * | 1  | `key_event`                  | [KeyEventServerMessage]            | Player presses/releases a key while computer GUI is open | VM event queue (`key` / `key_up`)            |
  * | 2  | `mouse_event`                | [MouseEventServerMessage]          | Player clicks/drags/scrolls inside the terminal area | VM event queue (`mouse_click` / `mouse_up` / `mouse_drag` / `mouse_scroll`) |
  * | 3  | `paste_event`                | [PasteEventComputerMessage]        | Player pastes text (Ctrl+V)                        | VM event queue (`paste`)                     |
- * | 4  | `computer_workspace_request` | [ComputerWorkspaceServerMessage]   | IDE panel requests file list, reads or writes a document | Workspace filesystem; triggers clientbound response |
+ * | 4  | unused                       | —                                  | Reserved for removed computer workspace requests | — |
  * | 5  | `workbench_workspace_request` | [WorkbenchWorkspaceServerMessage] | Workbench editor requests file, sync, or target actions | Workbench authoring session; triggers clientbound response |
  * | 6  | `workbench_input`            | [WorkbenchInputServerMessage]     | Player sends terminal key/mouse/paste input through the Workbench | Target VM event queue via Workbench runtime bridge |
  *
@@ -59,7 +57,7 @@ import ru.lazyhat.compukterkraft.common.workbench.network.server.WorkbenchWorksp
  * |----|----------------------|------------------------------------|-------------------------------------------------|-----------------------------------------------|
  * | 10 | `chat_table`         | [ChatTableClientMessage]           | Server sends a formatted table to display in chat | Minecraft chat HUD                            |
  * | 13 | `computer_terminal`  | [ComputerTerminalClientMessage]    | Screen buffer dirty flag set during [ServerComputer.serverTick] | [ComputerMenu.updateTerminal] → client-side [ScreenBufferSnapshot] |
- * | 14 | `computer_workspace` | [ComputerWorkspaceClientMessage]   | Response to a workspace request (LIST/READ/WRITE) | [ComputerMenu.updateWorkspaceEntries] / [ComputerMenu.updateWorkspaceDocument] |
+ * | 14 | unused               | —                                  | Reserved for removed computer workspace sync | — |
  * | 15 | `workbench_workspace` | [WorkbenchWorkspaceClientMessage] | Response to a Workbench action or workspace request | [AbstractWorkbenchMenu.updateRemoteState] |
  * | 16 | `workbench_terminal`  | [WorkbenchTerminalClientMessage]  | Target terminal snapshot changed while Workbench is open | [AbstractWorkbenchMenu.updateScreenSnapshot] |
  */
@@ -93,12 +91,6 @@ object NetworkMessages {
             "paste_event",
             { buf -> PasteEventComputerMessage(buf) },
         )
-    val COMPUTER_WORKSPACE_REQUEST: MessageType<ComputerWorkspaceServerMessage> =
-        registerServerbound(
-            4,
-            "computer_workspace_request",
-            { buf -> ComputerWorkspaceServerMessage(buf) },
-        )
     val WORKBENCH_WORKSPACE_REQUEST: MessageType<WorkbenchWorkspaceServerMessage> =
         registerServerbound(
             5,
@@ -122,12 +114,6 @@ object NetworkMessages {
             13,
             "computer_terminal",
             { buf -> ComputerTerminalClientMessage(buf) },
-        )
-    val COMPUTER_WORKSPACE: MessageType<ComputerWorkspaceClientMessage> =
-        registerClientbound(
-            14,
-            "computer_workspace",
-            { buf -> ComputerWorkspaceClientMessage(buf) },
         )
     val WORKBENCH_WORKSPACE: MessageType<WorkbenchWorkspaceClientMessage> =
         registerClientbound(

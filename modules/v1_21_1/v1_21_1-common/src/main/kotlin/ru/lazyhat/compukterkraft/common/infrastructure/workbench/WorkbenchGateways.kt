@@ -19,9 +19,7 @@
 package ru.lazyhat.compukterkraft.common.infrastructure.workbench
 
 import kotlinx.coroutines.flow.StateFlow
-import ru.lazyhat.compukterkraft.common.computer.menu.AbstractComputerMenu
 import ru.lazyhat.compukterkraft.common.network.ClientNetworking
-import ru.lazyhat.compukterkraft.common.computer.network.server.ComputerWorkspaceServerMessage
 import ru.lazyhat.compukterkraft.common.workbench.menu.AbstractWorkbenchMenu
 import ru.lazyhat.compukterkraft.common.workbench.network.server.WorkbenchWorkspaceServerMessage
 import ru.lazyhat.compukterkraft.core.computer.input.ComputerControlAction
@@ -49,51 +47,11 @@ import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceDocument
 import ru.lazyhat.compukterkraft.lang.runtime.DefinitionTarget
 import ru.lazyhat.compukterkraft.lang.runtime.HoverInfo
 
-/**
- * Adapts [AbstractComputerMenu.workspaceStateFlow] to the [WorkbenchUpdateSource] interface.
- */
+/** Adapts menu-owned Workbench remote state to the [WorkbenchUpdateSource] interface. */
 class MenuWorkspaceUpdateSource(
     private val remoteStateFlow: StateFlow<WorkbenchRemoteState>,
 ) : WorkbenchUpdateSource {
     override val stateFlow: StateFlow<WorkbenchRemoteState> = remoteStateFlow
-}
-
-class NetworkWorkspaceGateway(
-    private val menu: AbstractComputerMenu,
-) : WorkspaceGateway {
-    override fun list(path: String) {
-        ClientNetworking.sendToServer(
-            ComputerWorkspaceServerMessage(
-                menu,
-                ComputerWorkspaceServerMessage.Action.LIST,
-                path,
-            ),
-        )
-    }
-
-    override fun read(path: String) {
-        ClientNetworking.sendToServer(
-            ComputerWorkspaceServerMessage(
-                menu,
-                ComputerWorkspaceServerMessage.Action.READ,
-                path,
-            ),
-        )
-    }
-
-    override fun write(
-        path: String,
-        text: String,
-    ) {
-        ClientNetworking.sendToServer(
-            ComputerWorkspaceServerMessage(
-                menu,
-                ComputerWorkspaceServerMessage.Action.WRITE,
-                path,
-                text,
-            ),
-        )
-    }
 }
 
 class NetworkWorkbenchWorkspaceGateway(

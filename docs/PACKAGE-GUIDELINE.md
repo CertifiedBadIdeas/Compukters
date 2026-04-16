@@ -60,13 +60,15 @@ common/<device>/
 ## Module Rules
 
 ### core (platform-agnostic)
-- `computer/` — all computer-specific logic: VM, runtime, input, workbench
+- `computer/` — all computer-specific runtime logic: VM, runtime, input
+- `workbench/` — authoring logic: editor state, target-aware development flows
 - `gui/`, `ui/` — shared terminal/UI abstractions (no net.minecraft.* imports!)
 - `platform/api/` — interfaces for loader-specific services
 - `bootstrap/` — content descriptors, mod initialization contracts
 
 ### v1_x_x-common (Minecraft-facing, loader-agnostic)
-- `computer/` — all computer Minecraft integration (blocks, items, menus, etc.)
+- `computer/` — all computer Minecraft integration for runtime devices (blocks, items, menus, terminal UI)
+- `workbench/` — Workbench Minecraft integration for authoring devices
 - `network/` — shared network transport (not device-specific messages)
 - `ui/` — shared rendering (FixedWidthFontRenderer, UiRenderer)
 - `infrastructure/` — coroutine dispatchers, workbench gateways

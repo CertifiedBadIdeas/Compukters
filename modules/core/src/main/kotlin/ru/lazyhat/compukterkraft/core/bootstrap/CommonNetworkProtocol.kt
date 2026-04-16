@@ -26,15 +26,15 @@ object CommonNetworkProtocol {
             "key_event",
             "mouse_event",
             "paste_event",
-            "computer_workspace_request",
             "workbench_workspace_request",
+            "workbench_input",
         )
 
     val clientboundChannels =
         listOf(
             "chat_table",
             "computer_terminal",
-            "computer_workspace",
             "workbench_workspace",
+            "workbench_terminal",
         )
 }
