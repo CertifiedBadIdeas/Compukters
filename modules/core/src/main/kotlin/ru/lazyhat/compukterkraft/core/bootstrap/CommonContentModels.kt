@@ -23,10 +23,12 @@ enum class CommonBlockDescriptor(
     val id: String,
 ) {
     ComputerAdvanced("computer_advanced"),
+    Workbench("workbench"),
 }
 
 enum class CommonMenuDescriptor(
     val id: String,
 ) {
     Computer("computer"),
+    Workbench("workbench"),
 }

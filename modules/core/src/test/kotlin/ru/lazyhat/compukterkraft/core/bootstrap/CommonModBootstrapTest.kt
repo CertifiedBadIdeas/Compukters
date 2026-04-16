@@ -25,6 +25,7 @@ import ru.lazyhat.compukterkraft.core.platform.api.PlatformMenuRegistrar
 import ru.lazyhat.compukterkraft.core.platform.api.PlatformNetworkRegistrar
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class CommonModBootstrapTest {
     @Test
@@ -65,6 +66,14 @@ class CommonModBootstrapTest {
         override fun registerBlock(descriptor: CommonBlockDescriptor) {
             blocks += descriptor
         }
+    }
+
+    @Test
+    fun exposesWorkbenchDescriptors() {
+        assertTrue(CommonBlockDescriptor.entries.any { it.name == "Workbench" })
+        assertTrue(CommonMenuDescriptor.entries.any { it.name == "Workbench" })
+        assertTrue(CommonNetworkProtocol.serverboundChannels.contains("workbench_workspace_request"))
+        assertTrue(CommonNetworkProtocol.clientboundChannels.contains("workbench_workspace"))
     }
 
     private class RecordingMenuRegistrar : PlatformMenuRegistrar {

@@ -27,6 +27,7 @@ object CommonNetworkProtocol {
             "mouse_event",
             "paste_event",
             "computer_workspace_request",
+            "workbench_workspace_request",
         )
 
     val clientboundChannels =
@@ -34,5 +35,6 @@ object CommonNetworkProtocol {
             "chat_table",
             "computer_terminal",
             "computer_workspace",
+            "workbench_workspace",
         )
 }

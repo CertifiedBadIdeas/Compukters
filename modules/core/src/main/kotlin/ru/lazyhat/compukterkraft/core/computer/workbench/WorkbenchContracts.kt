@@ -29,9 +29,22 @@ import ru.lazyhat.compukterkraft.lang.runtime.DefinitionTarget
 import ru.lazyhat.compukterkraft.lang.runtime.HighlightTokenKind
 import ru.lazyhat.compukterkraft.lang.runtime.HoverInfo
 
+data class WorkbenchTargetState(
+    val connected: Boolean = false,
+    val displayName: String? = null,
+    val familyId: String? = null,
+)
+
+data class WorkbenchSyncState(
+    val dirtyLocal: Boolean = false,
+    val dirtyRemote: Boolean = false,
+)
+
 data class WorkbenchRemoteState(
     val entries: List<ComputerWorkspaceEntry> = emptyList(),
     val document: ComputerWorkspaceDocument? = null,
+    val target: WorkbenchTargetState = WorkbenchTargetState(),
+    val sync: WorkbenchSyncState = WorkbenchSyncState(),
 )
 
 /**
@@ -56,6 +69,14 @@ interface WorkspaceGateway {
 
 interface ComputerControlGateway {
     fun reboot()
+
+    fun pullFromTarget()
+
+    fun pushToTarget()
+
+    fun runTargetProgram()
+
+    fun attachTargetTerminal()
 }
 
 interface IdeRuntimeCatalogSource {

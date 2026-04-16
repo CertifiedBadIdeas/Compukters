@@ -74,7 +74,7 @@ class ComputerWorkbenchScreen<T : AbstractComputerMenu>(
         super.init()
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.minecraft)
         screenScope = scope
-        store.bind(scope, MenuWorkspaceUpdateSource(menu))
+        store.bind(scope, MenuWorkspaceUpdateSource(menu.workspaceStateFlow))
         store.initialize()
     }
 

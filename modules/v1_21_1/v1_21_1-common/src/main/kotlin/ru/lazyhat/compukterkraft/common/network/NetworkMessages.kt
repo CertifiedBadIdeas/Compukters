@@ -31,6 +31,10 @@ import ru.lazyhat.compukterkraft.common.computer.network.server.KeyEventServerMe
 import ru.lazyhat.compukterkraft.common.computer.network.server.MouseEventServerMessage
 import ru.lazyhat.compukterkraft.common.computer.network.server.PasteEventComputerMessage
 import ru.lazyhat.compukterkraft.common.network.ServerNetworkContext
+import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchTerminalClientMessage
+import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchWorkspaceClientMessage
+import ru.lazyhat.compukterkraft.common.workbench.network.server.WorkbenchInputServerMessage
+import ru.lazyhat.compukterkraft.common.workbench.network.server.WorkbenchWorkspaceServerMessage
 
 /**
  * Registry of all network message types used by the mod.
@@ -46,6 +50,8 @@ import ru.lazyhat.compukterkraft.common.network.ServerNetworkContext
  * | 2  | `mouse_event`                | [MouseEventServerMessage]          | Player clicks/drags/scrolls inside the terminal area | VM event queue (`mouse_click` / `mouse_up` / `mouse_drag` / `mouse_scroll`) |
  * | 3  | `paste_event`                | [PasteEventComputerMessage]        | Player pastes text (Ctrl+V)                        | VM event queue (`paste`)                     |
  * | 4  | `computer_workspace_request` | [ComputerWorkspaceServerMessage]   | IDE panel requests file list, reads or writes a document | Workspace filesystem; triggers clientbound response |
+ * | 5  | `workbench_workspace_request` | [WorkbenchWorkspaceServerMessage] | Workbench editor requests file, sync, or target actions | Workbench authoring session; triggers clientbound response |
+ * | 6  | `workbench_input`            | [WorkbenchInputServerMessage]     | Player sends terminal key/mouse/paste input through the Workbench | Target VM event queue via Workbench runtime bridge |
  *
  * ### Server → Client (clientbound)
  *
@@ -54,6 +60,8 @@ import ru.lazyhat.compukterkraft.common.network.ServerNetworkContext
  * | 10 | `chat_table`         | [ChatTableClientMessage]           | Server sends a formatted table to display in chat | Minecraft chat HUD                            |
  * | 13 | `computer_terminal`  | [ComputerTerminalClientMessage]    | Screen buffer dirty flag set during [ServerComputer.serverTick] | [ComputerMenu.updateTerminal] → client-side [ScreenBufferSnapshot] |
  * | 14 | `computer_workspace` | [ComputerWorkspaceClientMessage]   | Response to a workspace request (LIST/READ/WRITE) | [ComputerMenu.updateWorkspaceEntries] / [ComputerMenu.updateWorkspaceDocument] |
+ * | 15 | `workbench_workspace` | [WorkbenchWorkspaceClientMessage] | Response to a Workbench action or workspace request | [AbstractWorkbenchMenu.updateRemoteState] |
+ * | 16 | `workbench_terminal`  | [WorkbenchTerminalClientMessage]  | Target terminal snapshot changed while Workbench is open | [AbstractWorkbenchMenu.updateScreenSnapshot] |
  */
 object NetworkMessages {
     private val seenIds: IntSet = IntOpenHashSet()
@@ -91,6 +99,18 @@ object NetworkMessages {
             "computer_workspace_request",
             { buf -> ComputerWorkspaceServerMessage(buf) },
         )
+    val WORKBENCH_WORKSPACE_REQUEST: MessageType<WorkbenchWorkspaceServerMessage> =
+        registerServerbound(
+            5,
+            "workbench_workspace_request",
+            { buf -> WorkbenchWorkspaceServerMessage(buf) },
+        )
+    val WORKBENCH_INPUT: MessageType<WorkbenchInputServerMessage> =
+        registerServerbound(
+            6,
+            "workbench_input",
+            { buf -> WorkbenchInputServerMessage(buf) },
+        )
     val CHAT_TABLE: MessageType<ChatTableClientMessage> =
         registerClientbound(
             10,
@@ -108,6 +128,18 @@ object NetworkMessages {
             14,
             "computer_workspace",
             { buf -> ComputerWorkspaceClientMessage(buf) },
+        )
+    val WORKBENCH_WORKSPACE: MessageType<WorkbenchWorkspaceClientMessage> =
+        registerClientbound(
+            15,
+            "workbench_workspace",
+            { buf -> WorkbenchWorkspaceClientMessage(buf) },
+        )
+    val WORKBENCH_TERMINAL: MessageType<WorkbenchTerminalClientMessage> =
+        registerClientbound(
+            16,
+            "workbench_terminal",
+            { buf -> WorkbenchTerminalClientMessage(buf) },
         )
 
     @Suppress("UNCHECKED_CAST")

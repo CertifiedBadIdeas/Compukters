@@ -22,6 +22,8 @@ import kotlinx.coroutines.flow.StateFlow
 import ru.lazyhat.compukterkraft.common.computer.menu.AbstractComputerMenu
 import ru.lazyhat.compukterkraft.common.network.ClientNetworking
 import ru.lazyhat.compukterkraft.common.computer.network.server.ComputerWorkspaceServerMessage
+import ru.lazyhat.compukterkraft.common.workbench.menu.AbstractWorkbenchMenu
+import ru.lazyhat.compukterkraft.common.workbench.network.server.WorkbenchWorkspaceServerMessage
 import ru.lazyhat.compukterkraft.core.computer.input.ComputerControlAction
 import ru.lazyhat.compukterkraft.core.computer.input.ControlInputEvent
 import ru.lazyhat.compukterkraft.core.computer.input.InputEventSink
@@ -29,6 +31,7 @@ import ru.lazyhat.compukterkraft.core.computer.workbench.ComputerControlGateway
 import ru.lazyhat.compukterkraft.core.computer.workbench.IdeRuntimeCatalogSource
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchIdeFacade
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchRemoteState
+import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchTargetState
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchUpdateSource
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkspaceGateway
 import ru.lazyhat.compukterkraft.core.block.ComputerFamily
@@ -50,9 +53,9 @@ import ru.lazyhat.compukterkraft.lang.runtime.HoverInfo
  * Adapts [AbstractComputerMenu.workspaceStateFlow] to the [WorkbenchUpdateSource] interface.
  */
 class MenuWorkspaceUpdateSource(
-    private val menu: AbstractComputerMenu,
+    private val remoteStateFlow: StateFlow<WorkbenchRemoteState>,
 ) : WorkbenchUpdateSource {
-    override val stateFlow: StateFlow<WorkbenchRemoteState> = menu.workspaceStateFlow
+    override val stateFlow: StateFlow<WorkbenchRemoteState> = remoteStateFlow
 }
 
 class NetworkWorkspaceGateway(
@@ -93,11 +96,84 @@ class NetworkWorkspaceGateway(
     }
 }
 
+class NetworkWorkbenchWorkspaceGateway(
+    private val menu: AbstractWorkbenchMenu,
+) : WorkspaceGateway {
+    override fun list(path: String) {
+        ClientNetworking.sendToServer(
+            WorkbenchWorkspaceServerMessage(
+                menu,
+                WorkbenchWorkspaceServerMessage.Action.LIST,
+                path,
+            ),
+        )
+    }
+
+    override fun read(path: String) {
+        ClientNetworking.sendToServer(
+            WorkbenchWorkspaceServerMessage(
+                menu,
+                WorkbenchWorkspaceServerMessage.Action.READ,
+                path,
+            ),
+        )
+    }
+
+    override fun write(
+        path: String,
+        text: String,
+    ) {
+        ClientNetworking.sendToServer(
+            WorkbenchWorkspaceServerMessage(
+                menu,
+                WorkbenchWorkspaceServerMessage.Action.WRITE,
+                path,
+                text,
+            ),
+        )
+    }
+}
+
 class InputHandlerControlGateway(
     private val inputEventSink: InputEventSink,
 ) : ComputerControlGateway {
     override fun reboot() {
         inputEventSink.accept(ControlInputEvent(ComputerControlAction.REBOOT))
+    }
+
+    override fun pullFromTarget() {
+    }
+
+    override fun pushToTarget() {
+    }
+
+    override fun runTargetProgram() {
+    }
+
+    override fun attachTargetTerminal() {
+    }
+}
+
+class NetworkWorkbenchControlGateway(
+    private val menu: AbstractWorkbenchMenu,
+) : ComputerControlGateway {
+    override fun reboot() {
+    }
+
+    override fun pullFromTarget() {
+        ClientNetworking.sendToServer(WorkbenchWorkspaceServerMessage(menu, WorkbenchWorkspaceServerMessage.Action.PULL))
+    }
+
+    override fun pushToTarget() {
+        ClientNetworking.sendToServer(WorkbenchWorkspaceServerMessage(menu, WorkbenchWorkspaceServerMessage.Action.PUSH))
+    }
+
+    override fun runTargetProgram() {
+        ClientNetworking.sendToServer(WorkbenchWorkspaceServerMessage(menu, WorkbenchWorkspaceServerMessage.Action.RUN))
+    }
+
+    override fun attachTargetTerminal() {
+        ClientNetworking.sendToServer(WorkbenchWorkspaceServerMessage(menu, WorkbenchWorkspaceServerMessage.Action.ATTACH_TERMINAL))
     }
 }
 
@@ -128,6 +204,18 @@ class ComputerFamilyCatalogSource(
             globals = defaultRegistry.globals,
             builtinTypes = defaultRegistry.builtinTypes,
         )
+    }
+}
+
+class WorkbenchTargetCatalogSource(
+    private val targetState: WorkbenchTargetState,
+) : IdeRuntimeCatalogSource {
+    override fun runtimeRegistry(): BuiltinRegistry {
+        val family =
+            targetState.familyId
+                ?.let { familyId -> ComputerFamily.entries.firstOrNull { it.name.equals(familyId, ignoreCase = true) } }
+                ?: ComputerFamily.NORMAL
+        return ComputerFamilyCatalogSource(family).runtimeRegistry()
     }
 }
 

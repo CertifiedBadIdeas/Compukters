@@ -184,6 +184,77 @@ class WorkbenchStoreTest {
             assertTrue(!store.state.editor.importPickerVisible)
         }
 
+    @Test
+    fun disablesTargetActionsWhenNoTargetIsConnected() =
+        runTest(UnconfinedTestDispatcher()) {
+            val ideFacade = FakeWorkbenchIdeFacade()
+            val store = WorkbenchStore(FakeWorkspaceGateway(), FakeComputerControlGateway(), ideFacade)
+            val updates = FakeWorkbenchUpdateSource()
+
+            store.bind(backgroundScope, updates)
+            updates.push(document = ComputerWorkspaceDocument("main.ck", "fun main() {}", 0))
+            store.toggleMode()
+
+            assertTrue(!store.state.target.connected)
+            assertTrue(!store.state.actions.canPull)
+            assertTrue(!store.state.actions.canPush)
+            assertTrue(!store.state.actions.canRun)
+            assertTrue(!store.state.actions.canAttachTerminal)
+        }
+
+    @Test
+    fun enablesTargetActionsWhenTargetDescriptorArrives() =
+        runTest(UnconfinedTestDispatcher()) {
+            val ideFacade = FakeWorkbenchIdeFacade()
+            val store = WorkbenchStore(FakeWorkspaceGateway(), FakeComputerControlGateway(), ideFacade)
+            val updates = FakeWorkbenchUpdateSource()
+
+            store.bind(backgroundScope, updates)
+            updates.push(
+                document = ComputerWorkspaceDocument("main.ck", "fun main() {}", 0),
+                target = WorkbenchTargetState(connected = true, displayName = "Pocket Computer", familyId = "normal"),
+            )
+
+            assertTrue(store.state.target.connected)
+            assertTrue(store.state.actions.canPull)
+            assertTrue(store.state.actions.canPush)
+            assertTrue(store.state.actions.canRun)
+            assertTrue(store.state.actions.canAttachTerminal)
+        }
+
+    @Test
+    fun runActionDelegatesToControlGateway() =
+        runTest(UnconfinedTestDispatcher()) {
+            val ideFacade = FakeWorkbenchIdeFacade()
+            val controlGateway = FakeComputerControlGateway()
+            val store = WorkbenchStore(FakeWorkspaceGateway(), controlGateway, ideFacade)
+            val updates = FakeWorkbenchUpdateSource()
+
+            store.bind(backgroundScope, updates)
+            updates.push(target = WorkbenchTargetState(connected = true, displayName = "Pocket Computer", familyId = "normal"))
+
+            store.runTargetProgram()
+
+            assertEquals(listOf("run"), controlGateway.calls)
+        }
+
+    @Test
+    fun pullAndPushActionsDelegateToControlGateway() =
+        runTest(UnconfinedTestDispatcher()) {
+            val ideFacade = FakeWorkbenchIdeFacade()
+            val controlGateway = FakeComputerControlGateway()
+            val store = WorkbenchStore(FakeWorkspaceGateway(), controlGateway, ideFacade)
+            val updates = FakeWorkbenchUpdateSource()
+
+            store.bind(backgroundScope, updates)
+            updates.push(target = WorkbenchTargetState(connected = true, displayName = "Pocket Computer", familyId = "normal"))
+
+            store.pullFromTarget()
+            store.pushToTarget()
+
+            assertEquals(listOf("pull", "push"), controlGateway.calls)
+        }
+
     private class FakeWorkbenchUpdateSource : WorkbenchUpdateSource {
         private val _stateFlow = MutableStateFlow(WorkbenchRemoteState())
         override val stateFlow: StateFlow<WorkbenchRemoteState> = _stateFlow
@@ -191,8 +262,9 @@ class WorkbenchStoreTest {
         fun push(
             entries: List<ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceEntry> = emptyList(),
             document: ComputerWorkspaceDocument? = null,
+            target: WorkbenchTargetState = WorkbenchTargetState(),
         ) {
-            _stateFlow.value = WorkbenchRemoteState(entries = entries, document = document)
+            _stateFlow.value = WorkbenchRemoteState(entries = entries, document = document, target = target)
         }
     }
 
@@ -211,7 +283,26 @@ class WorkbenchStoreTest {
     }
 
     private class FakeComputerControlGateway : ComputerControlGateway {
+        val calls = mutableListOf<String>()
+
         override fun reboot() {
+            calls += "reboot"
+        }
+
+        override fun pullFromTarget() {
+            calls += "pull"
+        }
+
+        override fun pushToTarget() {
+            calls += "push"
+        }
+
+        override fun runTargetProgram() {
+            calls += "run"
+        }
+
+        override fun attachTargetTerminal() {
+            calls += "attach"
         }
     }
 

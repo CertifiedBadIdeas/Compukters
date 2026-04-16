@@ -1,0 +1,259 @@
+/*
+ * The Compukter Kraft Developers
+ *
+ * Copyright (C) 2026 Vsevolod Petrov (lazyhat)
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+package ru.lazyhat.compukterkraft.common.workbench.block
+
+import net.minecraft.core.BlockPos
+import net.minecraft.core.HolderLookup
+import net.minecraft.nbt.CompoundTag
+import net.minecraft.network.chat.Component
+import net.minecraft.server.level.ServerLevel
+import net.minecraft.server.level.ServerPlayer
+import net.minecraft.world.MenuProvider
+import net.minecraft.world.entity.player.Inventory
+import net.minecraft.world.entity.player.Player
+import net.minecraft.world.inventory.AbstractContainerMenu
+import net.minecraft.world.item.ItemStack
+import net.minecraft.world.level.block.entity.BlockEntity
+import net.minecraft.world.level.block.state.BlockState
+import ru.lazyhat.compukterkraft.common.binding.ModObjects
+import ru.lazyhat.compukterkraft.common.computer.context.ServerComputer
+import ru.lazyhat.compukterkraft.common.computer.context.ServerContext
+import ru.lazyhat.compukterkraft.common.workbench.context.ServerWorkbench
+import ru.lazyhat.compukterkraft.common.workbench.context.WorkbenchTargetRuntimeBridge
+import ru.lazyhat.compukterkraft.common.workbench.data.WorkbenchContainerData
+import ru.lazyhat.compukterkraft.common.workbench.menu.WorkbenchMenuWithoutInventory
+import ru.lazyhat.compukterkraft.common.workbench.menu.AbstractWorkbenchMenu
+import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchTerminalClientMessage
+import ru.lazyhat.compukterkraft.common.network.ServerNetworking
+import ru.lazyhat.compukterkraft.core.block.ComputerFamily
+import ru.lazyhat.compukterkraft.core.computer.ComputerProperties
+import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
+
+class WorkbenchBlockEntity(
+    pos: BlockPos,
+    state: BlockState,
+) : BlockEntity(ModObjects.workbenchBlockEntityType(), pos, state), MenuProvider {
+    private var workspaceId: Int? = null
+    private var targetComputerId: Int? = null
+    private var targetDisplayName: String? = null
+    private var targetFamilyId: String? = null
+    private var serverWorkbench: ServerWorkbench? = null
+    private var detachedTargetComputer: ServerComputer? = null
+    private var lastSyncedSnapshot: ScreenBufferSnapshot? = null
+
+    override fun createMenu(
+        containerId: Int,
+        playerInventory: Inventory,
+        player: Player,
+    ): AbstractContainerMenu {
+        val workbench = getOrCreateServerWorkbench()
+        return WorkbenchMenuWithoutInventory(
+            ModObjects.workbenchMenuType(),
+            containerId,
+            playerInventory,
+            WorkbenchContainerData.from(workbench.targetState()),
+            workbench,
+        )
+    }
+
+    override fun getDisplayName(): Component = Component.translatable("block.compukterkraft.workbench")
+
+    fun openFor(player: Player) {
+        val serverPlayer = player as? ServerPlayer ?: return
+        ModObjects.openWorkbenchMenu(serverPlayer, this, WorkbenchContainerData.from(getOrCreateServerWorkbench().targetState()))
+    }
+
+    fun setTargetStack(stack: ItemStack) {
+        val descriptor = ServerWorkbench.extractTargetDescriptor(stack)
+        if (descriptor.computerId != targetComputerId) {
+            releaseDetachedTargetComputer()
+            lastSyncedSnapshot = null
+        }
+        targetComputerId = descriptor.computerId
+        targetDisplayName = descriptor.displayName
+        targetFamilyId = descriptor.familyId
+        serverWorkbench?.setTarget(descriptor)
+        setChanged()
+    }
+
+    fun getOrCreateServerWorkbench(): ServerWorkbench {
+        check(level?.isClientSide == false) { "Cannot access server workbench on the client." }
+
+        val resolvedWorkspaceId =
+            workspaceId ?: ServerContext.allocateComputerId().also { allocatedWorkspaceId ->
+                workspaceId = allocatedWorkspaceId
+                ServerContext.computerManager.ensureWorkspaceInitialized(allocatedWorkspaceId)
+                setChanged()
+            }
+
+        return serverWorkbench
+            ?: ServerWorkbench(
+                workspaceId = resolvedWorkspaceId,
+                workspace = ServerContext.computerManager.workspace,
+                initialTarget =
+                    ServerWorkbench.TargetDescriptor(
+                        computerId = targetComputerId,
+                        displayName = targetDisplayName,
+                        familyId = targetFamilyId,
+                    ),
+            ).also {
+                it.bindRuntimeBridge(RuntimeBridge())
+                serverWorkbench = it
+            }
+    }
+
+    fun serverTick() {
+        if (level?.isClientSide != false) return
+
+        val workbench = serverWorkbench ?: return
+        val targetDescriptor = workbench.targetDescriptor()
+        val targetId = targetDescriptor.computerId
+
+        if (targetId == null) {
+            releaseDetachedTargetComputer()
+            syncTargetSnapshot(null)
+            return
+        }
+
+        val liveComputer = ServerContext.computerManager.get(targetId)
+        if (liveComputer != null) {
+            releaseDetachedTargetComputer()
+            syncTargetSnapshot(liveComputer.lastScreenSnapshot)
+            return
+        }
+
+        detachedTargetComputer?.serverTick()
+        syncTargetSnapshot(detachedTargetComputer?.lastScreenSnapshot)
+    }
+
+    override fun saveAdditional(
+        tag: CompoundTag,
+        registries: HolderLookup.Provider,
+    ) {
+        workspaceId?.let { tag.putInt(WORKSPACE_ID_TAG, it) }
+        targetComputerId?.let { tag.putInt(TARGET_COMPUTER_ID_TAG, it) }
+        targetDisplayName?.let { tag.putString(TARGET_DISPLAY_NAME_TAG, it) }
+        targetFamilyId?.let { tag.putString(TARGET_FAMILY_ID_TAG, it) }
+        super.saveAdditional(tag, registries)
+    }
+
+    override fun loadAdditional(
+        tag: CompoundTag,
+        registries: HolderLookup.Provider,
+    ) {
+        super.loadAdditional(tag, registries)
+        workspaceId = tag.takeIf { it.contains(WORKSPACE_ID_TAG) }?.getInt(WORKSPACE_ID_TAG)
+        targetComputerId = tag.takeIf { it.contains(TARGET_COMPUTER_ID_TAG) }?.getInt(TARGET_COMPUTER_ID_TAG)
+        targetDisplayName = tag.takeIf { it.contains(TARGET_DISPLAY_NAME_TAG) }?.getString(TARGET_DISPLAY_NAME_TAG)
+        targetFamilyId = tag.takeIf { it.contains(TARGET_FAMILY_ID_TAG) }?.getString(TARGET_FAMILY_ID_TAG)
+        serverWorkbench = null
+        releaseDetachedTargetComputer()
+        lastSyncedSnapshot = null
+    }
+
+    override fun setRemoved() {
+        releaseDetachedTargetComputer()
+        super.setRemoved()
+    }
+
+    private fun resolveTargetComputer(createDetached: Boolean): ServerComputer? {
+        val targetId = getOrCreateServerWorkbench().targetDescriptor().computerId ?: return null
+        val liveComputer = ServerContext.computerManager.get(targetId)
+        if (liveComputer != null) {
+            releaseDetachedTargetComputer()
+            return liveComputer
+        }
+
+        val existingDetached = detachedTargetComputer?.takeIf { it.instanceID == targetId }
+        if (existingDetached != null || !createDetached) {
+            return existingDetached
+        }
+
+        val serverLevel = level as? ServerLevel ?: return null
+        ServerContext.computerManager.ensureWorkspaceInitialized(targetId)
+        return ServerComputer(
+            instanceID = targetId,
+            level = serverLevel,
+            properties = ComputerProperties(resolveTargetFamily(targetFamilyId), targetDisplayName),
+        ).also {
+            detachedTargetComputer = it
+        }
+    }
+
+    private fun syncTargetSnapshot(snapshot: ScreenBufferSnapshot?) {
+        if (snapshot == lastSyncedSnapshot) return
+        lastSyncedSnapshot = snapshot
+
+        val workbench = serverWorkbench ?: return
+        viewingPlayers(workbench).forEach { player ->
+            val menu = player.containerMenu as? AbstractWorkbenchMenu ?: return@forEach
+            menu.updateScreenSnapshot(snapshot)
+            ServerNetworking.sendToPlayer(WorkbenchTerminalClientMessage(menu, snapshot), player)
+        }
+    }
+
+    private fun viewingPlayers(workbench: ServerWorkbench): List<ServerPlayer> =
+        ServerContext.server.playerList.players.filter { player ->
+            val menu = player.containerMenu as? AbstractWorkbenchMenu ?: return@filter false
+            menu.serverWorkbenchIdentity() === workbench
+        }
+
+    private fun releaseDetachedTargetComputer() {
+        detachedTargetComputer?.close()
+        detachedTargetComputer = null
+    }
+
+    private fun resolveTargetFamily(familyId: String?): ComputerFamily =
+        familyId
+            ?.let { id -> ComputerFamily.entries.firstOrNull { it.name.equals(id, ignoreCase = true) } }
+            ?: ComputerFamily.NORMAL
+
+    private inner class RuntimeBridge : WorkbenchTargetRuntimeBridge {
+        override fun runTargetProgram(target: ServerWorkbench.TargetDescriptor) {
+            resolveTargetComputer(createDetached = true)?.turnOn()
+            syncTargetSnapshot(resolveTargetComputer(createDetached = false)?.lastScreenSnapshot)
+        }
+
+        override fun attachTerminal(target: ServerWorkbench.TargetDescriptor) {
+            syncTargetSnapshot(resolveTargetComputer(createDetached = false)?.lastScreenSnapshot)
+        }
+
+        override fun queueEvent(
+            target: ServerWorkbench.TargetDescriptor,
+            event: String,
+            arguments: Array<Any>,
+        ): Boolean {
+            val computer = resolveTargetComputer(createDetached = false) ?: return false
+            if (!computer.isOn) return false
+            computer.queueEvent(event, arguments)
+            return true
+        }
+
+        override fun currentScreenSnapshot(target: ServerWorkbench.TargetDescriptor): ScreenBufferSnapshot? =
+            resolveTargetComputer(createDetached = false)?.lastScreenSnapshot
+    }
+
+    companion object {
+        private const val WORKSPACE_ID_TAG = "WorkbenchWorkspaceId"
+        private const val TARGET_COMPUTER_ID_TAG = "TargetComputerId"
+        private const val TARGET_DISPLAY_NAME_TAG = "TargetDisplayName"
+        private const val TARGET_FAMILY_ID_TAG = "TargetFamilyId"
+    }
+}

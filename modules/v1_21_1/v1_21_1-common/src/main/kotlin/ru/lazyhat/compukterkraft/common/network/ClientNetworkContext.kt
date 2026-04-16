@@ -19,6 +19,7 @@
 package ru.lazyhat.compukterkraft.common.network
 
 import ru.lazyhat.compukterkraft.common.network.text.TableBuilder
+import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchRemoteState
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceDocument
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceEntry
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
@@ -42,5 +43,15 @@ interface ClientNetworkContext {
     fun handleComputerWorkspaceDocument(
         containerId: Int,
         document: ComputerWorkspaceDocument?,
+    )
+
+    fun handleWorkbenchWorkspace(
+        containerId: Int,
+        remoteState: WorkbenchRemoteState,
+    )
+
+    fun handleWorkbenchTerminal(
+        containerId: Int,
+        snapshot: ScreenBufferSnapshot?,
     )
 }

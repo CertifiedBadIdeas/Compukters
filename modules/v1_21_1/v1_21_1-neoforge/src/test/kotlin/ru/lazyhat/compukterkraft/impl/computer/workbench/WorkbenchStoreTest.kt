@@ -156,6 +156,18 @@ class WorkbenchStoreTest {
     private class FakeComputerControlGateway : ComputerControlGateway {
         override fun reboot() {
         }
+
+        override fun pullFromTarget() {
+        }
+
+        override fun pushToTarget() {
+        }
+
+        override fun runTargetProgram() {
+        }
+
+        override fun attachTargetTerminal() {
+        }
     }
 
     private class FakeWorkbenchIdeFacade : WorkbenchIdeFacade {
