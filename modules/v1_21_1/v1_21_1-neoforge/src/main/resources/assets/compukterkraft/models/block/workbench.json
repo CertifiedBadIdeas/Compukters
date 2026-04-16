@@ -1,0 +1,9 @@
+{
+  "parent": "minecraft:block/orientable",
+  "textures": {
+    "front": "compukterkraft:block/workbench_front",
+    "side": "compukterkraft:block/workbench_side",
+    "top": "compukterkraft:block/workbench_side",
+    "back": "compukterkraft:block/workbench_back"
+  }
+}
