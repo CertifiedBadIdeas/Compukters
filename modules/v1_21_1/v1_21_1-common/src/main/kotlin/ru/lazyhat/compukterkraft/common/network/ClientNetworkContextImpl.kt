@@ -25,8 +25,6 @@ import ru.lazyhat.compukterkraft.common.workbench.menu.AbstractWorkbenchMenu
 import ru.lazyhat.compukterkraft.common.network.text.TableBuilder
 import ru.lazyhat.compukterkraft.common.network.text.ClientTableFormatter
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchRemoteState
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceDocument
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceEntry
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 
 class ClientNetworkContextImpl : ClientNetworkContext {
@@ -66,20 +64,6 @@ class ClientNetworkContextImpl : ClientNetworkContext {
         snapshot: ScreenBufferSnapshot,
     ) = withCheckedContainerMenu(containerId) {
         updateTerminal(snapshot)
-    }
-
-    override fun handleComputerWorkspaceEntries(
-        containerId: Int,
-        entries: List<ComputerWorkspaceEntry>,
-    ) = withCheckedContainerMenu(containerId) {
-        updateWorkspaceEntries(entries)
-    }
-
-    override fun handleComputerWorkspaceDocument(
-        containerId: Int,
-        document: ComputerWorkspaceDocument?,
-    ) = withCheckedContainerMenu(containerId) {
-        updateWorkspaceDocument(document)
     }
 
     override fun handleWorkbenchWorkspace(

@@ -30,10 +30,7 @@ import net.minecraft.world.item.ItemStack
 import ru.lazyhat.compukterkraft.common.computer.context.ServerComputer
 import ru.lazyhat.compukterkraft.common.computer.data.ComputerContainerData
 import ru.lazyhat.compukterkraft.core.Config
-import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchRemoteState
 import ru.lazyhat.compukterkraft.core.block.ComputerFamily
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceDocument
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceEntry
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 
 /**
@@ -100,11 +97,6 @@ abstract class AbstractComputerMenu(
             MenuSide.Client(containerData?.terminalSnapshot)
         }
 
-    private val _workspaceStateFlow = MutableStateFlow(WorkbenchRemoteState())
-
-    /** Observable workspace state — replaces the old callback-based listener system. */
-    val workspaceStateFlow: StateFlow<WorkbenchRemoteState> = _workspaceStateFlow.asStateFlow()
-
     /** Whether the computer is currently on (synced from server via [ContainerData]). */
     val isComputerOn: Boolean get() = data.get(0) == 1
 
@@ -127,18 +119,6 @@ abstract class AbstractComputerMenu(
                 ?: throw UnsupportedOperationException("Cannot update terminal on the server")
         client.updateScreenSnapshot(snapshot)
     }
-
-    override fun updateWorkspaceEntries(entries: List<ComputerWorkspaceEntry>) {
-        _workspaceStateFlow.value = _workspaceStateFlow.value.copy(entries = entries)
-    }
-
-    override fun updateWorkspaceDocument(document: ComputerWorkspaceDocument?) {
-        _workspaceStateFlow.value = _workspaceStateFlow.value.copy(document = document)
-    }
-
-    fun getWorkspaceEntries(): List<ComputerWorkspaceEntry> = _workspaceStateFlow.value.entries
-
-    fun getWorkspaceDocument(): ComputerWorkspaceDocument? = _workspaceStateFlow.value.document
 
     override fun removed(player: Player) {
         super.removed(player)

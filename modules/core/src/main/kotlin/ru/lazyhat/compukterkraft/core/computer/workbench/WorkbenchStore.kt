@@ -28,7 +28,7 @@ import ru.lazyhat.compukterkraft.core.input.KeyCodes
 import ru.lazyhat.compukterkraft.lang.frontend.SourceTextSupport
 
 /**
- * Client-side state container for the computer workbench GUI.
+ * Client-side state container for the Workbench authoring GUI.
  *
  * All state is exposed via [stateFlow] ([StateFlow]) so consumers can
  * observe changes reactively. Synchronous reads use [state] (delegates to `.value`).

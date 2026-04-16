@@ -81,7 +81,7 @@ These rules are enforced by `ArchitectureBoundaryTest` in `modules/core`.
 │    └─ ComputerMenu.updateTerminal(snapshot)                          │
 │         └─ MenuSide.Client.screenSnapshot = snapshot                 │
 │                                                                      │
-│  ComputerWorkbenchScreen.renderBg()                                  │
+│  ComputerTerminalScreen.renderBg()                                   │
 │    └─ buildTerminalUi(layout, snapshot) → List<UiNode>               │
 │         └─ UiRenderer.render(graphics, font, nodes)                  │
 │              └─ FixedWidthFontRenderer.drawTerminal(snapshot)        │
@@ -152,7 +152,7 @@ ServerComputer.close()
 | `ck.common.computer.block`            | Concrete blocks/block entities, `ComputerState`, `ComputerFamilyExt` |
 | `ck.common.computer.item`             | `AbstractComputerItem`, `ComputerItem`                             |
 | `ck.common.computer.menu`             | `AbstractComputerMenu`, `ComputerMenu`, `ServerInputState`         |
-| `ck.common.computer.screen`           | `ComputerScreen`, `ComputerWorkbenchScreen`                        |
+| `ck.common.computer.screen`           | `ComputerScreen`, `ComputerTerminalScreen`                         |
 | `ck.common.computer.input`            | Computer input binding                                             |
 | `ck.common.computer.context`          | `ServerContext`, `ComputerManager`, `ComputerIdentitySavedData`    |
 | `ck.common.computer.data`             | `ComputerContainerData`, `IContainerData`                          |
@@ -219,7 +219,7 @@ Flat character grid (`CharArray` + `ByteArray` colours) owned by `BackgroundComp
 
 ### `WorkbenchStore`
 
-Client-side state management for the computer workbench GUI.
+Client-side state management for the Workbench authoring GUI.
 
 - Manages editor state, workspace file list, IDE features (diagnostics, completions).
 - Pure state container — no Minecraft dependencies.

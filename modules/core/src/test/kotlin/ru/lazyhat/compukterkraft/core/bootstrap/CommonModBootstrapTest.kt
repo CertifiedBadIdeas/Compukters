@@ -37,15 +37,16 @@ class CommonModBootstrapTest {
 
         CommonModBootstrap.registerCommon(blocks, menus, network, clientHooks)
 
-        assertEquals(listOf(CommonBlockDescriptor.ComputerAdvanced), blocks.blocks)
-        assertEquals(listOf(CommonMenuDescriptor.Computer), menus.menus)
+        assertEquals(listOf(CommonBlockDescriptor.ComputerAdvanced, CommonBlockDescriptor.Workbench), blocks.blocks)
+        assertEquals(listOf(CommonMenuDescriptor.Computer, CommonMenuDescriptor.Workbench), menus.menus)
         assertEquals(
             listOf(
                 "computer_action",
                 "key_event",
                 "mouse_event",
                 "paste_event",
-                "computer_workspace_request",
+                "workbench_workspace_request",
+                "workbench_input",
             ),
             network.serverbound,
         )
@@ -53,7 +54,8 @@ class CommonModBootstrapTest {
             listOf(
                 "chat_table",
                 "computer_terminal",
-                "computer_workspace",
+                "workbench_workspace",
+                "workbench_terminal",
             ),
             network.clientbound,
         )
@@ -73,7 +75,9 @@ class CommonModBootstrapTest {
         assertTrue(CommonBlockDescriptor.entries.any { it.name == "Workbench" })
         assertTrue(CommonMenuDescriptor.entries.any { it.name == "Workbench" })
         assertTrue(CommonNetworkProtocol.serverboundChannels.contains("workbench_workspace_request"))
+        assertTrue(CommonNetworkProtocol.serverboundChannels.contains("workbench_input"))
         assertTrue(CommonNetworkProtocol.clientboundChannels.contains("workbench_workspace"))
+        assertTrue(CommonNetworkProtocol.clientboundChannels.contains("workbench_terminal"))
     }
 
     private class RecordingMenuRegistrar : PlatformMenuRegistrar {

@@ -19,8 +19,6 @@
 package ru.lazyhat.compukterkraft.common.computer.menu
 
 import ru.lazyhat.compukterkraft.core.block.ComputerFamily
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceDocument
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceEntry
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 
 /**
@@ -56,8 +54,4 @@ interface ComputerMenu {
      * Set the current terminal screen snapshot. Called on the client when the server syncs.
      */
     fun updateTerminal(snapshot: ScreenBufferSnapshot)
-
-    fun updateWorkspaceEntries(entries: List<ComputerWorkspaceEntry>)
-
-    fun updateWorkspaceDocument(document: ComputerWorkspaceDocument?)
 }

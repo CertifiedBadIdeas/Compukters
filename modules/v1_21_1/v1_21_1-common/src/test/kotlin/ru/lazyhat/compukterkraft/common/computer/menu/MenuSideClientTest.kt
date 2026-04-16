@@ -22,6 +22,7 @@ package ru.lazyhat.compukterkraft.common.computer.menu
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 
 class MenuSideClientTest {
@@ -35,5 +36,18 @@ class MenuSideClientTest {
         client.updateScreenSnapshot(snapshot)
 
         assertEquals(snapshot, client.screenSnapshot)
+    }
+
+    @Test
+    fun abstractComputerMenuDoesNotExposeWorkspaceAuthoringApi() {
+        val methodNames = AbstractComputerMenu::class.java.methods.map { it.name }.toSet()
+        val fieldNames = AbstractComputerMenu::class.java.declaredFields.map { it.name }.toSet()
+
+        assertFalse("updateWorkspaceEntries" in methodNames)
+        assertFalse("updateWorkspaceDocument" in methodNames)
+        assertFalse("getWorkspaceEntries" in methodNames)
+        assertFalse("getWorkspaceDocument" in methodNames)
+        assertFalse("workspaceStateFlow" in methodNames)
+        assertFalse("_workspaceStateFlow" in fieldNames)
     }
 }
