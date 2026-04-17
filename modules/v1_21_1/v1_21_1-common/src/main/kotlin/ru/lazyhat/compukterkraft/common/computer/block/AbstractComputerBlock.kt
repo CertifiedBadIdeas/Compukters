@@ -112,10 +112,8 @@ abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
         blockEntity: BlockEntity?,
         tool: ItemStack,
     ) {
-        with(player) {
-            awardStat(Stats.BLOCK_MINED.get(this@AbstractComputerBlock))
-            causeFoodExhaustion(0.005f)
-        }
+        player.awardStat(Stats.BLOCK_MINED.get(this@AbstractComputerBlock))
+        player.causeFoodExhaustion(0.005f)
     }
 
     override fun playerWillDestroy(
