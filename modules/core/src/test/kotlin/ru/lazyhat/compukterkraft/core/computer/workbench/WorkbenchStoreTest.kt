@@ -281,6 +281,19 @@ class WorkbenchStoreTest {
             assertEquals(listOf("pull", "push"), controlGateway.calls)
         }
 
+    @Test
+    fun escapeIsNotHandledByEditorStore() =
+        runTest(UnconfinedTestDispatcher()) {
+            val store = WorkbenchStore(FakeWorkspaceGateway(), FakeComputerControlGateway(), FakeWorkbenchIdeFacade())
+            val updates = FakeWorkbenchUpdateSource()
+
+            store.bind(backgroundScope, updates)
+            updates.push(document = ComputerWorkspaceDocument("main.ck", "fun main() {}", 0))
+            store.toggleMode()
+
+            assertFalse(store.keyPressed(KeyCodes.KEY_ESCAPE, modifiers = 0, visibleEditorLines = 20))
+        }
+
     private class FakeWorkbenchUpdateSource : WorkbenchUpdateSource {
         private val _stateFlow = MutableStateFlow(WorkbenchRemoteState())
         override val stateFlow: StateFlow<WorkbenchRemoteState> = _stateFlow

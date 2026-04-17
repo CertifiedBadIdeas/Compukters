@@ -45,6 +45,7 @@ object WorkbenchTerminalRenderer {
         poweredOffText: String,
         connectingText: String,
         statusRightInset: Int = 0,
+        drawWindowBackground: Boolean = true,
     ) {
         val nodes =
             buildTerminalUi(
@@ -59,6 +60,7 @@ object WorkbenchTerminalRenderer {
                 poweredOffText = poweredOffText,
                 connectingText = connectingText,
                 statusRightInset = statusRightInset,
+                drawWindowBackground = drawWindowBackground,
             )
         UiRenderer.render(graphics, font, nodes)
     }

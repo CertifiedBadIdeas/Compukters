@@ -21,6 +21,7 @@ package ru.lazyhat.compukterkraft.core.ui.workbench
 import ru.lazyhat.compukterkraft.core.platform.api.FontMetrics
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class WorkbenchLayoutModelTest {
@@ -53,4 +54,15 @@ class WorkbenchLayoutModelTest {
         assertTrue(layout.headerBounds.height > 0)
         assertTrue(layout.terminalToggleBounds.width > 0)
     }
+
+    @Test
+    fun fullscreenLayoutKeepsHeaderControlsSeparated() {
+        val layout = WorkbenchLayoutModel.fullscreen(0, 0, 1280, 720, false, fontMetrics)
+
+        assertFalse(layout.terminalToggleBounds.overlaps(layout.rebootBounds))
+        assertFalse(layout.rebootBounds.overlaps(layout.targetSlotBounds))
+    }
+
+    private fun UiRect.overlaps(other: UiRect): Boolean =
+        x < other.right && right > other.x && y < other.bottom && bottom > other.y
 }
