@@ -46,7 +46,7 @@ object Config {
     var turtlesCanPush: Boolean = true
 
     const val DEFAULT_COMPUTER_TERM_WIDTH: Int = 77
-    const val DEFAULT_COMPUTER_TERM_HEIGHT: Int = 24
+    const val DEFAULT_COMPUTER_TERM_HEIGHT: Int = 27
 
     const val TURTLE_TERM_WIDTH: Int = 39
     const val TURTLE_TERM_HEIGHT: Int = 13

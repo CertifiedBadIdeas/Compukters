@@ -23,6 +23,7 @@ import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalMetrics
 import ru.lazyhat.compukterkraft.core.ui.workbench.WorkbenchTerminalViewState
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -99,5 +100,27 @@ class TerminalUiBuilderTest {
         assertFalse("Click terminal to focus input" in texts)
         assertFalse(texts.any { it.contains(" x ") })
         assertTrue(nodes.none { it is TerminalView })
+    }
+
+    @Test
+    fun activeViewReservesRightStatusAreaForExternalControls() {
+        val nodes =
+            buildTerminalUi(
+                leftPos = 0,
+                topPos = 0,
+                imageWidth = 480,
+                imageHeight = 280,
+                layout = layout,
+                terminalState = WorkbenchTerminalViewState.Active(snapshot),
+                focused = true,
+                showFocusHint = false,
+                poweredOffText = "Computer is off. Turn it on first.",
+                connectingText = "Connecting...",
+                statusRightInset = 52,
+            )
+
+        val sizeText = nodes.filterIsInstance<RightAlignedText>().single { it.text == "16 x 8" }
+
+        assertEquals(layout.statusBounds.width - 24 - 52, sizeText.areaWidth)
     }
 }

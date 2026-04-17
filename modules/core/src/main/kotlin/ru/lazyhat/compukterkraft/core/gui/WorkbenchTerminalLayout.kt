@@ -47,7 +47,7 @@ object WorkbenchTerminalMetrics {
     private const val MIN_IMAGE_WIDTH = 480
     private const val MIN_IMAGE_HEIGHT = 280
     private const val OUTER_PADDING = 8
-    private const val CONTENT_TOP = 34
+    private const val DEFAULT_CONTENT_TOP = 34
     private const val STATUS_HEIGHT = 20
 
     fun imageWidth(
@@ -58,7 +58,8 @@ object WorkbenchTerminalMetrics {
     fun imageHeight(
         terminalColumns: Int,
         terminalRows: Int,
-    ): Int = max(terminalPixelHeight(terminalRows) + STATUS_HEIGHT + CONTENT_TOP + OUTER_PADDING, MIN_IMAGE_HEIGHT)
+        contentTopInset: Int = DEFAULT_CONTENT_TOP,
+    ): Int = max(terminalPixelHeight(terminalRows) + STATUS_HEIGHT + contentTopInset + OUTER_PADDING, MIN_IMAGE_HEIGHT)
 
     fun layout(
         leftPos: Int,
@@ -67,13 +68,14 @@ object WorkbenchTerminalMetrics {
         imageHeight: Int,
         terminalColumns: Int,
         terminalRows: Int,
+        contentTopInset: Int = DEFAULT_CONTENT_TOP,
     ): WorkbenchTerminalLayout {
         val panelBounds =
             TerminalRect(
                 leftPos + OUTER_PADDING,
-                topPos + CONTENT_TOP,
+                topPos + contentTopInset,
                 imageWidth - OUTER_PADDING * 2,
-                imageHeight - CONTENT_TOP - OUTER_PADDING,
+                imageHeight - contentTopInset - OUTER_PADDING,
             )
         val statusBounds =
             TerminalRect(
