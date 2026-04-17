@@ -19,7 +19,7 @@
 package ru.lazyhat.compukterkraft.core
 
 /**
- * ComputerCraft's global config.
+ * CompukterKraft's global config.
  *
  * @see ConfigSpec The definition of our config values.
  */
