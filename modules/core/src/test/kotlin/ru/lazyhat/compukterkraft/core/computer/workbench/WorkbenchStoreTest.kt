@@ -34,10 +34,36 @@ import ru.lazyhat.compukterkraft.lang.runtime.DefinitionTarget
 import ru.lazyhat.compukterkraft.lang.runtime.HoverInfo
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class WorkbenchStoreTest {
+    @Test
+    fun terminalDockStartsHiddenAndCanBeToggled() =
+        runTest(UnconfinedTestDispatcher()) {
+            val store = WorkbenchStore(FakeWorkspaceGateway(), FakeComputerControlGateway(), FakeWorkbenchIdeFacade())
+
+            assertFalse(store.state.terminalVisible)
+
+            store.toggleTerminalVisibility()
+            assertTrue(store.state.terminalVisible)
+
+            store.toggleTerminalVisibility()
+            assertFalse(store.state.terminalVisible)
+        }
+
+    @Test
+    fun rebootDelegatesToControlGateway() =
+        runTest(UnconfinedTestDispatcher()) {
+            val controlGateway = FakeComputerControlGateway()
+            val store = WorkbenchStore(FakeWorkspaceGateway(), controlGateway, FakeWorkbenchIdeFacade())
+
+            store.rebootComputer()
+
+            assertEquals(listOf("reboot"), controlGateway.calls)
+        }
+
     @Test
     fun opensCompletionWhenTypingIdentifierPrefix() =
         runTest(UnconfinedTestDispatcher()) {

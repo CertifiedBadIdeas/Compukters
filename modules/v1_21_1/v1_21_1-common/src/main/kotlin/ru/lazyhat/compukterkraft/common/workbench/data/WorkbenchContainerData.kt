@@ -20,6 +20,7 @@
 package ru.lazyhat.compukterkraft.common.workbench.data
 
 import net.minecraft.network.RegistryFriendlyByteBuf
+import net.minecraft.world.item.ItemStack
 import ru.lazyhat.compukterkraft.common.computer.data.IContainerData
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchRemoteState
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchTargetState
@@ -28,13 +29,15 @@ class WorkbenchContainerData private constructor(
     val targetConnected: Boolean,
     val targetDisplayName: String?,
     val targetFamilyId: String?,
+    val displayStack: ItemStack,
 ) : IContainerData {
-    constructor() : this(false, null, null)
+    constructor() : this(false, null, null, ItemStack.EMPTY)
 
     constructor(buffer: RegistryFriendlyByteBuf) : this(
         buffer.readBoolean(),
         if (buffer.readBoolean()) buffer.readUtf() else null,
         if (buffer.readBoolean()) buffer.readUtf() else null,
+        ItemStack.OPTIONAL_STREAM_CODEC.decode(buffer),
     )
 
     override fun toBytes(buffer: RegistryFriendlyByteBuf) {
@@ -43,6 +46,7 @@ class WorkbenchContainerData private constructor(
         targetDisplayName?.let(buffer::writeUtf)
         buffer.writeBoolean(targetFamilyId != null)
         targetFamilyId?.let(buffer::writeUtf)
+        ItemStack.OPTIONAL_STREAM_CODEC.encode(buffer, displayStack)
     }
 
     fun toRemoteState(): WorkbenchRemoteState =
@@ -56,11 +60,15 @@ class WorkbenchContainerData private constructor(
         )
 
     companion object {
-        fun from(target: WorkbenchTargetState): WorkbenchContainerData =
+        fun from(
+            target: WorkbenchTargetState,
+            displayStack: ItemStack = ItemStack.EMPTY,
+        ): WorkbenchContainerData =
             WorkbenchContainerData(
                 targetConnected = target.connected,
                 targetDisplayName = target.displayName,
                 targetFamilyId = target.familyId,
+                displayStack = displayStack,
             )
     }
 }

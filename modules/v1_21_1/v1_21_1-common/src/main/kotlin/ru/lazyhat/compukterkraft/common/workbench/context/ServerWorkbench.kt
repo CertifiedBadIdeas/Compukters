@@ -96,6 +96,11 @@ class ServerWorkbench(
         runtimeBridge.runTargetProgram(targetDescriptor)
     }
 
+    fun rebootTarget() {
+        if (targetDescriptor.computerId == null) return
+        runtimeBridge.rebootTarget(targetDescriptor)
+    }
+
     fun attachTerminal() {
         if (targetDescriptor.computerId == null) return
         runtimeBridge.attachTerminal(targetDescriptor)
@@ -213,6 +218,8 @@ class ServerWorkbench(
 }
 
 interface WorkbenchTargetRuntimeBridge {
+    fun rebootTarget(target: ServerWorkbench.TargetDescriptor)
+
     fun runTargetProgram(target: ServerWorkbench.TargetDescriptor)
 
     fun attachTerminal(target: ServerWorkbench.TargetDescriptor)
@@ -226,6 +233,8 @@ interface WorkbenchTargetRuntimeBridge {
     fun currentScreenSnapshot(target: ServerWorkbench.TargetDescriptor): ScreenBufferSnapshot?
 
     data object None : WorkbenchTargetRuntimeBridge {
+        override fun rebootTarget(target: ServerWorkbench.TargetDescriptor) = Unit
+
         override fun runTargetProgram(target: ServerWorkbench.TargetDescriptor) = Unit
 
         override fun attachTerminal(target: ServerWorkbench.TargetDescriptor) = Unit

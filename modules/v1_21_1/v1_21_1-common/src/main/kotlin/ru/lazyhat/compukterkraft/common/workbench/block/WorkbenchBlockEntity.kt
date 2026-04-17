@@ -51,6 +51,7 @@ class WorkbenchBlockEntity(
     state: BlockState,
 ) : BlockEntity(ModObjects.workbenchBlockEntityType(), pos, state), MenuProvider {
     private var workspaceId: Int? = null
+    private var targetStack: ItemStack = ItemStack.EMPTY
     private var targetComputerId: Int? = null
     private var targetDisplayName: String? = null
     private var targetFamilyId: String? = null
@@ -68,8 +69,9 @@ class WorkbenchBlockEntity(
             ModObjects.workbenchMenuType(),
             containerId,
             playerInventory,
-            WorkbenchContainerData.from(workbench.targetState()),
+            WorkbenchContainerData.from(workbench.targetState(), currentTargetStack()),
             workbench,
+            ::setTargetStack,
         )
     }
 
@@ -77,21 +79,25 @@ class WorkbenchBlockEntity(
 
     fun openFor(player: Player) {
         val serverPlayer = player as? ServerPlayer ?: return
-        ModObjects.openWorkbenchMenu(serverPlayer, this, WorkbenchContainerData.from(getOrCreateServerWorkbench().targetState()))
+        ModObjects.openWorkbenchMenu(serverPlayer, this, WorkbenchContainerData.from(getOrCreateServerWorkbench().targetState(), currentTargetStack()))
     }
 
     fun setTargetStack(stack: ItemStack) {
-        val descriptor = ServerWorkbench.extractTargetDescriptor(stack)
+        val singleStack = if (stack.isEmpty) ItemStack.EMPTY else stack.copy().also { it.count = 1 }
+        val descriptor = ServerWorkbench.extractTargetDescriptor(singleStack)
         if (descriptor.computerId != targetComputerId) {
             releaseDetachedTargetComputer()
             lastSyncedSnapshot = null
         }
+        targetStack = singleStack
         targetComputerId = descriptor.computerId
         targetDisplayName = descriptor.displayName
         targetFamilyId = descriptor.familyId
         serverWorkbench?.setTarget(descriptor)
         setChanged()
     }
+
+    fun currentTargetStack(): ItemStack = targetStack.copy()
 
     fun getOrCreateServerWorkbench(): ServerWorkbench {
         check(level?.isClientSide == false) { "Cannot access server workbench on the client." }
@@ -148,6 +154,9 @@ class WorkbenchBlockEntity(
         registries: HolderLookup.Provider,
     ) {
         workspaceId?.let { tag.putInt(WORKSPACE_ID_TAG, it) }
+        if (!targetStack.isEmpty) {
+            tag.put(TARGET_STACK_TAG, targetStack.save(registries))
+        }
         targetComputerId?.let { tag.putInt(TARGET_COMPUTER_ID_TAG, it) }
         targetDisplayName?.let { tag.putString(TARGET_DISPLAY_NAME_TAG, it) }
         targetFamilyId?.let { tag.putString(TARGET_FAMILY_ID_TAG, it) }
@@ -160,6 +169,7 @@ class WorkbenchBlockEntity(
     ) {
         super.loadAdditional(tag, registries)
         workspaceId = tag.takeIf { it.contains(WORKSPACE_ID_TAG) }?.getInt(WORKSPACE_ID_TAG)
+        targetStack = if (tag.contains(TARGET_STACK_TAG)) ItemStack.parseOptional(registries, tag.getCompound(TARGET_STACK_TAG)) else ItemStack.EMPTY
         targetComputerId = tag.takeIf { it.contains(TARGET_COMPUTER_ID_TAG) }?.getInt(TARGET_COMPUTER_ID_TAG)
         targetDisplayName = tag.takeIf { it.contains(TARGET_DISPLAY_NAME_TAG) }?.getString(TARGET_DISPLAY_NAME_TAG)
         targetFamilyId = tag.takeIf { it.contains(TARGET_FAMILY_ID_TAG) }?.getString(TARGET_FAMILY_ID_TAG)
@@ -226,6 +236,11 @@ class WorkbenchBlockEntity(
             ?: ComputerFamily.NORMAL
 
     private inner class RuntimeBridge : WorkbenchTargetRuntimeBridge {
+        override fun rebootTarget(target: ServerWorkbench.TargetDescriptor) {
+            resolveTargetComputer(createDetached = true)?.reboot()
+            syncTargetSnapshot(resolveTargetComputer(createDetached = false)?.lastScreenSnapshot)
+        }
+
         override fun runTargetProgram(target: ServerWorkbench.TargetDescriptor) {
             resolveTargetComputer(createDetached = true)?.turnOn()
             syncTargetSnapshot(resolveTargetComputer(createDetached = false)?.lastScreenSnapshot)
@@ -252,6 +267,7 @@ class WorkbenchBlockEntity(
 
     companion object {
         private const val WORKSPACE_ID_TAG = "WorkbenchWorkspaceId"
+        private const val TARGET_STACK_TAG = "TargetStack"
         private const val TARGET_COMPUTER_ID_TAG = "TargetComputerId"
         private const val TARGET_DISPLAY_NAME_TAG = "TargetDisplayName"
         private const val TARGET_FAMILY_ID_TAG = "TargetFamilyId"

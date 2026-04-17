@@ -87,6 +87,10 @@ class WorkbenchStore(
         }
     }
 
+    fun toggleTerminalVisibility() {
+        _state.value = state.copy(terminalVisible = !state.terminalVisible)
+    }
+
     fun requestListing(path: String) {
         val normalizedPath = path.trim('/').trim()
         _state.value = state.copy(browserPath = normalizedPath)
@@ -227,7 +231,7 @@ class WorkbenchStore(
         visibleEditorLines: Int,
     ): Boolean {
         if (key == KeyCodes.KEY_F4) {
-            toggleMode()
+            toggleTerminalVisibility()
             return true
         }
         if (state.mode != WorkbenchMode.EDITOR) {

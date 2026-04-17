@@ -41,9 +41,11 @@ import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchMode
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchStore
 import ru.lazyhat.compukterkraft.core.computer.workbench.completionDetail
 import ru.lazyhat.compukterkraft.core.computer.workbench.highlightColor
+import ru.lazyhat.compukterkraft.core.gui.TerminalFontConstants
+import ru.lazyhat.compukterkraft.core.gui.TerminalRect
 import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalInputController
 import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalLayout
-import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalMetrics
+import ru.lazyhat.compukterkraft.core.platform.api.FontMetrics
 import ru.lazyhat.compukterkraft.core.ui.workbench.ToolbarButtonLayout
 import ru.lazyhat.compukterkraft.core.ui.workbench.WorkbenchLayoutModel
 import ru.lazyhat.compukterkraft.core.ui.workbench.WorkbenchTerminalInteractionPolicy
@@ -67,17 +69,20 @@ class WorkbenchEditorScreen(
         )
     private var screenScope: CoroutineScope? = null
 
-    init {
-        val (terminalColumns, terminalRows) = terminalDimensions(container.screenSnapshot)
-        imageWidth = WorkbenchTerminalMetrics.imageWidth(terminalColumns, terminalRows)
-        imageHeight = WorkbenchTerminalMetrics.imageHeight(terminalColumns, terminalRows)
-    }
-
     override fun init() {
+        imageWidth = width
+        imageHeight = height
+        leftPos = 0
+        topPos = 0
         super.init()
+        leftPos = 0
+        topPos = 0
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.minecraft)
         screenScope = scope
         store.bind(scope, MenuWorkspaceUpdateSource(menu.workspaceStateFlow))
+        if (store.state.mode != WorkbenchMode.EDITOR) {
+            store.toggleMode()
+        }
         store.initialize()
     }
 
@@ -91,10 +96,10 @@ class WorkbenchEditorScreen(
     override fun containerTick() {
         super.containerTick()
         val terminalState = WorkbenchTerminalViewState.from(store.state.target.connected, menu.screenSnapshot)
-        if (terminalState !is WorkbenchTerminalViewState.Active && terminalInput.focused) {
+        if (!store.state.terminalVisible || terminalState !is WorkbenchTerminalViewState.Active) {
             terminalInput.focused = false
         }
-        syncTerminalWindowSize(terminalState)
+        syncFullscreenWindowSize()
         terminalInput.update()
     }
 
@@ -104,9 +109,15 @@ class WorkbenchEditorScreen(
         mouseX: Int,
         mouseY: Int,
     ) {
-        if (store.state.mode == WorkbenchMode.TERMINAL) {
-            val terminalState = WorkbenchTerminalViewState.from(store.state.target.connected, menu.screenSnapshot)
-            val focused = WorkbenchTerminalInteractionPolicy.canAcceptInput(store.state.mode, terminalState, terminalInput.focused)
+        val layout = layout()
+        val terminalState = WorkbenchTerminalViewState.from(store.state.target.connected, menu.screenSnapshot)
+        graphics.fill(leftPos, topPos, leftPos + imageWidth, topPos + imageHeight, 0xFF0B0E14.toInt())
+        graphics.fill(layout.headerBounds.x, layout.headerBounds.y, layout.headerBounds.right, layout.headerBounds.bottom, 0xFF161B25.toInt())
+        graphics.fill(layout.sidebarBounds.x, layout.sidebarBounds.y, layout.sidebarBounds.right, layout.sidebarBounds.bottom, 0xFF1D2330.toInt())
+        graphics.fill(layout.editorBounds.x, layout.editorBounds.y, layout.editorBounds.right, layout.editorBounds.bottom, 0xFF0D1016.toInt())
+        graphics.fill(layout.statusBarBounds.x, layout.statusBarBounds.y, layout.statusBarBounds.right, layout.statusBarBounds.bottom, 0xFF161B25.toInt())
+        if (store.state.terminalVisible) {
+            val focused = terminalAcceptsInput(terminalState)
             val showFocusHint = WorkbenchTerminalInteractionPolicy.showFocusHint(terminalState, terminalInput.focused)
             WorkbenchTerminalRenderer.render(
                 graphics,
@@ -122,13 +133,9 @@ class WorkbenchEditorScreen(
                 Component.translatable("gui.compukterkraft.terminal.powered_off").string,
                 Component.translatable("gui.compukterkraft.terminal.connecting").string,
             )
-        } else {
-            graphics.fill(leftPos, topPos, leftPos + imageWidth, topPos + imageHeight, 0xFF12151D.toInt())
-            graphics.fill(leftPos + 8, topPos + 34, leftPos + 128, topPos + imageHeight - 12, 0xFF1D2330.toInt())
-            graphics.fill(leftPos + 136, topPos + 34, leftPos + imageWidth - 8, topPos + imageHeight - 32, 0xFF0D1016.toInt())
-            graphics.fill(leftPos + 136, topPos + imageHeight - 28, leftPos + imageWidth - 8, topPos + imageHeight - 8, 0xFF161B25.toInt())
         }
         renderToolbar(graphics)
+        renderHeader(graphics)
     }
 
     override fun render(
@@ -138,7 +145,7 @@ class WorkbenchEditorScreen(
         partialTicks: Float,
     ) {
         val layout = layout()
-        if (store.state.mode == WorkbenchMode.EDITOR && layout.editorBounds.contains(mouseX, mouseY)) {
+        if (layout.editorBounds.contains(mouseX, mouseY)) {
             val position = layout.mouseToCursor(store.state, mouseX, mouseY)
             store.updateHover(position.first, position.second)
         } else {
@@ -148,11 +155,9 @@ class WorkbenchEditorScreen(
         renderBackground(graphics, mouseX, mouseY, partialTicks)
         super.render(graphics, mouseX, mouseY, partialTicks)
 
-        if (store.state.mode == WorkbenchMode.EDITOR) {
-            renderWorkspaceList(graphics, mouseX, mouseY)
-            renderEditor(graphics)
-            renderStatusBar(graphics)
-        }
+        renderWorkspaceList(graphics, mouseX, mouseY)
+        renderEditor(graphics)
+        renderStatusBar(graphics)
 
         renderTooltip(graphics, mouseX, mouseY)
     }
@@ -169,16 +174,15 @@ class WorkbenchEditorScreen(
         scancode: Int,
         modifiers: Int,
     ): Boolean {
-        val previousMode = store.state.mode
         val terminalState = WorkbenchTerminalViewState.from(store.state.target.connected, menu.screenSnapshot)
-        if (WorkbenchTerminalInteractionPolicy.canAcceptInput(store.state.mode, terminalState, terminalInput.focused)) {
+        if (terminalAcceptsInput(terminalState)) {
             if (terminalInput.keyPressed(key, scancode, modifiers)) {
                 return true
             }
         }
 
         if (store.keyPressed(key, modifiers, layout().visibleEditorLines())) {
-            if (previousMode != store.state.mode && store.state.mode != WorkbenchMode.TERMINAL) {
+            if (!store.state.terminalVisible) {
                 terminalInput.focused = false
             }
             return true
@@ -193,7 +197,7 @@ class WorkbenchEditorScreen(
         modifiers: Int,
     ): Boolean {
         val terminalState = WorkbenchTerminalViewState.from(store.state.target.connected, menu.screenSnapshot)
-        if (WorkbenchTerminalInteractionPolicy.canAcceptInput(store.state.mode, terminalState, terminalInput.focused)) {
+        if (terminalAcceptsInput(terminalState)) {
             if (terminalInput.keyReleased(key, scancode)) {
                 return true
             }
@@ -206,7 +210,7 @@ class WorkbenchEditorScreen(
         modifiers: Int,
     ): Boolean {
         val terminalState = WorkbenchTerminalViewState.from(store.state.target.connected, menu.screenSnapshot)
-        if (WorkbenchTerminalInteractionPolicy.canAcceptInput(store.state.mode, terminalState, terminalInput.focused)) {
+        if (terminalAcceptsInput(terminalState)) {
             return terminalInput.charTyped(ch)
         }
         if (store.charTyped(ch, layout().visibleEditorLines())) {
@@ -224,14 +228,13 @@ class WorkbenchEditorScreen(
             return true
         }
 
-        if (store.state.mode == WorkbenchMode.TERMINAL) {
-            val terminalState = WorkbenchTerminalViewState.from(store.state.target.connected, menu.screenSnapshot)
-            if (terminalState is WorkbenchTerminalViewState.Active) {
+        val terminalState = WorkbenchTerminalViewState.from(store.state.target.connected, menu.screenSnapshot)
+        if (store.state.terminalVisible) {
+            if (terminalState is WorkbenchTerminalViewState.Active && terminalLayout().terminalBounds.contains(mouseX.toInt(), mouseY.toInt())) {
                 terminalInput.focused = terminalInput.mouseClicked(terminalLayout().terminalBounds, mouseX, mouseY)
-            } else {
-                terminalInput.focused = false
+                return terminalInput.focused || super.mouseClicked(mouseX, mouseY, button)
             }
-            return terminalInput.focused || super.mouseClicked(mouseX, mouseY, button)
+            terminalInput.focused = false
         }
 
         val layout = layout()
@@ -289,13 +292,13 @@ class WorkbenchEditorScreen(
         verticalAmount: Double,
     ): Boolean {
         val terminalState = WorkbenchTerminalViewState.from(store.state.target.connected, menu.screenSnapshot)
-        if (store.state.mode == WorkbenchMode.TERMINAL && terminalState is WorkbenchTerminalViewState.Active) {
+        if (store.state.terminalVisible && terminalState is WorkbenchTerminalViewState.Active) {
             if (terminalInput.mouseScrolled(terminalLayout().terminalBounds, mouseX, mouseY, verticalAmount)) {
                 return true
             }
         }
         val layout = layout()
-        if (store.state.mode == WorkbenchMode.EDITOR && layout.editorBounds.contains(mouseX.toInt(), mouseY.toInt())) {
+        if (layout.editorBounds.contains(mouseX.toInt(), mouseY.toInt())) {
             store.scrollEditor(-verticalAmount.toInt())
             return true
         }
@@ -309,13 +312,44 @@ class WorkbenchEditorScreen(
             graphics.fill(bounds.x, bounds.y, bounds.right, bounds.bottom, if (disabled) 0xFF1B202A.toInt() else 0xFF222938.toInt())
             graphics.drawCenteredString(minecraft!!.font, button.label, bounds.x + bounds.width / 2, bounds.y + 7, if (disabled) 0x6F7C8C else 0xE6ECF5.toInt())
         }
+
+        val layout = layout()
+        graphics.fill(
+            layout.terminalToggleBounds.x,
+            layout.terminalToggleBounds.y,
+            layout.terminalToggleBounds.right,
+            layout.terminalToggleBounds.bottom,
+            if (store.state.terminalVisible) 0xFF35516B.toInt() else 0xFF222938.toInt(),
+        )
+        graphics.drawCenteredString(
+            minecraft!!.font,
+            if (store.state.terminalVisible) "Hide" else "Terminal",
+            layout.terminalToggleBounds.x + layout.terminalToggleBounds.width / 2,
+            layout.terminalToggleBounds.y + 7,
+            0xE6ECF5.toInt(),
+        )
+
+        val rebootDisabled = !store.state.target.connected
+        graphics.fill(
+            layout.rebootBounds.x,
+            layout.rebootBounds.y,
+            layout.rebootBounds.right,
+            layout.rebootBounds.bottom,
+            if (rebootDisabled) 0xFF1B202A.toInt() else 0xFF5A2A2A.toInt(),
+        )
+        graphics.drawCenteredString(
+            minecraft!!.font,
+            "Reboot",
+            layout.rebootBounds.x + layout.rebootBounds.width / 2,
+            layout.rebootBounds.y + 7,
+            if (rebootDisabled) 0x6F7C8C else 0xFFF1E7E7.toInt(),
+        )
     }
 
     private fun workbenchToolbarButtons(): List<ToolbarButtonLayout> =
-        layout().toolbarButtons(store.state).map { button ->
+        layout().toolbarButtons(store.state).filter { it.index in 1..5 }.map { button ->
             val label =
                 when (button.index) {
-                    0 -> if (store.state.mode == WorkbenchMode.TERMINAL) "IDE" else "Console"
                     1 -> "Save"
                     2 -> "Pull"
                     3 -> "Push"
@@ -326,14 +360,26 @@ class WorkbenchEditorScreen(
             button.copy(label = label)
         }
 
+    private fun renderHeader(graphics: GuiGraphics) {
+        val font = minecraft!!.font
+        val layout = layout()
+        val slotX = menu.slots.firstOrNull()?.x ?: layout.targetSlotBounds.x
+        val slotY = menu.slots.firstOrNull()?.y ?: layout.targetSlotBounds.y
+        val targetLabel = store.state.target.displayName ?: "No target computer"
+        val targetColor = if (store.state.target.connected) 0xE6ECF5.toInt() else 0x8A97A8
+        graphics.drawString(font, title, layout.headerBounds.x + 12, layout.headerBounds.y + 12, 0xF5F7FA.toInt(), false)
+        graphics.drawString(font, targetLabel, slotX + 24, slotY + 5, targetColor, false)
+    }
+
     private fun renderWorkspaceList(
         graphics: GuiGraphics,
         mouseX: Int,
         mouseY: Int,
     ) {
         val font = minecraft!!.font
-        graphics.drawString(font, Component.literal("/" + store.state.browserPath).visualOrderText, leftPos + 12, topPos + 38, 0xBFD5E8, false)
-        layout().workspaceRows(store.state).forEach { row ->
+        val layout = layout()
+        graphics.drawString(font, Component.literal("/" + store.state.browserPath).visualOrderText, layout.sidebarBounds.x + 4, layout.sidebarBounds.y + 6, 0xBFD5E8, false)
+        layout.workspaceRows(store.state).forEach { row ->
             drawWorkspaceRow(graphics, row, mouseX, mouseY)
         }
     }
@@ -353,22 +399,24 @@ class WorkbenchEditorScreen(
 
     private fun renderEditor(graphics: GuiGraphics) {
         val font = minecraft!!.font
+        val layout = layout()
+        val editorOrigin = layout.editorTextOrigin()
         val lines = editorLines()
         val startLine = store.state.editor.scrollLine.coerceAtLeast(0)
-        val visibleLines = layout().visibleEditorLines()
+        val visibleLines = layout.visibleEditorLines()
         val endLine = min(lines.size, startLine + visibleLines)
-        var drawY = topPos + 40
+        var drawY = editorOrigin.second
 
-        val bounds = layout().editorBounds
+        val bounds = layout.editorBounds
         graphics.enableScissor(bounds.x, bounds.y, bounds.right, bounds.bottom)
 
         for (lineIndex in startLine until endLine) {
             if (lineIndex == store.state.editor.cursorLine) {
-                graphics.fill(leftPos + 138, drawY - 1, leftPos + imageWidth - 10, drawY + 9, 0x33294055)
+                graphics.fill(bounds.x + 2, drawY - 1, bounds.right - 2, drawY + 9, 0x33294055)
             }
-            graphics.drawString(font, (lineIndex + 1).toString(), leftPos + 142, drawY, 0x7D899C, false)
-            renderHighlightedLine(graphics, lines[lineIndex], lineIndex, leftPos + 176, drawY)
-            drawY += layout().editorLineHeight
+            graphics.drawString(font, (lineIndex + 1).toString(), bounds.x + 6, drawY, 0x7D899C, false)
+            renderHighlightedLine(graphics, lines[lineIndex], lineIndex, editorOrigin.first, drawY)
+            drawY += layout.editorLineHeight
         }
 
         renderCursor(graphics, lines)
@@ -386,12 +434,13 @@ class WorkbenchEditorScreen(
 
     private fun renderStatusBar(graphics: GuiGraphics) {
         val font = minecraft!!.font
+        val bounds = layout().statusBarBounds
         val path = store.state.openDocument?.path ?: "No file opened"
         val status = if (store.state.editor.dirty) "* $path" else path
-        graphics.drawString(font, status, leftPos + 140, topPos + imageHeight - 24, 0xE6ECF5, false)
+        graphics.drawString(font, status, bounds.x + 6, bounds.y + 6, 0xE6ECF5, false)
         val hover = store.state.editor.hoverInfo?.contents ?: store.state.editor.ideSnapshot?.diagnostics?.firstOrNull()?.message.orEmpty()
         if (hover.isNotEmpty()) {
-            graphics.drawString(font, hover.take(60), leftPos + 140, topPos + imageHeight - 14, 0xE0A96D, false)
+            graphics.drawString(font, hover.take(96), bounds.x + 180, bounds.y + 6, 0xE0A96D, false)
         }
     }
 
@@ -438,12 +487,14 @@ class WorkbenchEditorScreen(
         lines: List<String>,
     ) {
         val visibleLine = store.state.editor.cursorLine - store.state.editor.scrollLine
-        if (visibleLine < 0 || visibleLine >= layout().visibleEditorLines()) {
+        val layout = layout()
+        if (visibleLine < 0 || visibleLine >= layout.visibleEditorLines()) {
             return
         }
         val beforeCursor = lines.getOrElse(store.state.editor.cursorLine) { "" }.take(store.state.editor.cursorColumn)
-        val x = leftPos + 176 + minecraft!!.font.width(beforeCursor)
-        val y = topPos + 40 + visibleLine * layout().editorLineHeight
+        val editorOrigin = layout.editorTextOrigin()
+        val x = editorOrigin.first + minecraft!!.font.width(beforeCursor)
+        val y = editorOrigin.second + visibleLine * layout.editorLineHeight
         if ((minecraft!!.gui.guiTicks / 6) % 2 == 0) {
             graphics.fill(x, y - 1, x + 1, y + 9, 0xFFFFFFFF.toInt())
         }
@@ -486,14 +537,22 @@ class WorkbenchEditorScreen(
         mouseX: Int,
         mouseY: Int,
     ): Boolean {
+        val layout = layout()
+        if (layout.terminalToggleBounds.contains(mouseX, mouseY)) {
+            store.toggleTerminalVisibility()
+            if (!store.state.terminalVisible) {
+                terminalInput.focused = false
+            }
+            return true
+        }
+        if (layout.rebootBounds.contains(mouseX, mouseY)) {
+            if (store.state.target.connected) {
+                store.rebootComputer()
+            }
+            return true
+        }
         workbenchToolbarButtons().firstOrNull { it.bounds.contains(mouseX, mouseY) }?.let { button ->
             when (button.index) {
-                0 -> {
-                    store.toggleMode()
-                    if (store.state.mode != WorkbenchMode.TERMINAL) {
-                        terminalInput.focused = false
-                    }
-                }
                 1 -> store.saveDocument()
                 2 -> store.pullFromTarget()
                 3 -> store.pushToTarget()
@@ -515,31 +574,49 @@ class WorkbenchEditorScreen(
     }
 
     private fun layout(): WorkbenchLayoutModel =
-        WorkbenchLayoutModel(leftPos, topPos, imageWidth, imageHeight) {
-            minecraft!!.font.width(it)
-        }
+        WorkbenchLayoutModel.fullscreen(
+            leftPos,
+            topPos,
+            imageWidth,
+            imageHeight,
+            store.state.terminalVisible,
+            FontMetrics { text -> minecraft!!.font.width(text) },
+        )
 
     private fun terminalLayout(): WorkbenchTerminalLayout {
         val (terminalColumns, terminalRows) = terminalDimensions(menu.screenSnapshot)
-        return WorkbenchTerminalMetrics.layout(leftPos, topPos, imageWidth, imageHeight, terminalColumns, terminalRows)
+        val dockBounds =
+            layout().terminalDockBounds
+                ?.let { TerminalRect(it.x, it.y, it.width, it.height) }
+                ?: TerminalRect(leftPos + 8, topPos + imageHeight - 188, imageWidth - 16, 180)
+        val panelBounds = TerminalRect(dockBounds.x, dockBounds.y, dockBounds.width, dockBounds.height)
+        val statusBounds = TerminalRect(panelBounds.x, panelBounds.y + panelBounds.height - 20, panelBounds.width, 20)
+        val terminalSurfaceBounds = TerminalRect(panelBounds.x, panelBounds.y, panelBounds.width, statusBounds.y - panelBounds.y)
+        val terminalBounds =
+            TerminalRect(
+                terminalSurfaceBounds.x,
+                terminalSurfaceBounds.y,
+                min(terminalColumns * TerminalFontConstants.FONT_WIDTH, terminalSurfaceBounds.width),
+                min(terminalRows * TerminalFontConstants.FONT_HEIGHT, terminalSurfaceBounds.height),
+            )
+        return WorkbenchTerminalLayout(panelBounds, terminalSurfaceBounds, terminalBounds, statusBounds)
     }
 
-    private fun syncTerminalWindowSize(terminalState: WorkbenchTerminalViewState) {
-        val (terminalColumns, terminalRows) =
-            when (terminalState) {
-                is WorkbenchTerminalViewState.Active -> terminalDimensions(terminalState.snapshot)
-                WorkbenchTerminalViewState.PoweredOff, WorkbenchTerminalViewState.Connecting -> terminalDimensions(null)
-            }
-
-        val nextWidth = WorkbenchTerminalMetrics.imageWidth(terminalColumns, terminalRows)
-        val nextHeight = WorkbenchTerminalMetrics.imageHeight(terminalColumns, terminalRows)
-        if (imageWidth != nextWidth || imageHeight != nextHeight) {
-            imageWidth = nextWidth
-            imageHeight = nextHeight
-            leftPos = (width - imageWidth) / 2
-            topPos = (height - imageHeight) / 2
+    private fun syncFullscreenWindowSize() {
+        if (imageWidth != width || imageHeight != height || leftPos != 0 || topPos != 0) {
+            imageWidth = width
+            imageHeight = height
+            leftPos = 0
+            topPos = 0
         }
     }
+
+    private fun terminalAcceptsInput(terminalState: WorkbenchTerminalViewState): Boolean =
+        WorkbenchTerminalInteractionPolicy.canAcceptInput(
+            if (store.state.terminalVisible) WorkbenchMode.TERMINAL else WorkbenchMode.EDITOR,
+            terminalState,
+            terminalInput.focused,
+        )
 
     private fun terminalDimensions(snapshot: ScreenBufferSnapshot?): Pair<Int, Int> =
         if (snapshot == null) {

@@ -96,6 +96,10 @@ abstract class AbstractWorkbenchMenu(
                 workbench.runTargetProgram()
                 workbench.snapshot(_workspaceStateFlow.value.document?.path)
             }
+            WorkbenchWorkspaceServerMessage.Action.REBOOT -> {
+                workbench.rebootTarget()
+                workbench.snapshot(_workspaceStateFlow.value.document?.path)
+            }
             WorkbenchWorkspaceServerMessage.Action.ATTACH_TERMINAL -> {
                 workbench.attachTerminal()
                 workbench.snapshot(_workspaceStateFlow.value.document?.path)

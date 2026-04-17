@@ -53,6 +53,7 @@ data class EditorState(
 
 data class WorkbenchState(
     val mode: WorkbenchMode = WorkbenchMode.TERMINAL,
+    val terminalVisible: Boolean = false,
     val browserPath: String = "",
     val entries: List<ComputerWorkspaceEntry> = emptyList(),
     val openDocument: ComputerWorkspaceDocument? = null,
