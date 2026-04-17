@@ -20,24 +20,35 @@
 package ru.lazyhat.compukterkraft.impl.platform
 
 import kotlin.test.Test
-import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ComputerLootTableResourceTest {
     @Test
-    fun advancedComputerLootTableDoesNotSuppressCreativeDrops() {
+    fun advancedComputerLootTableMatchesCcTweakedConditions() {
         val json =
             checkNotNull(
                 javaClass.classLoader.getResource("data/compukterkraft/loot_tables/blocks/computer_advanced.json"),
             ).readText()
 
-        assertFalse(
-            json.contains("compukterkraft:player_creative"),
-            "Advanced computer loot table should not suppress drops for creative players.",
-        )
         assertTrue(
             json.contains("\"name\": \"compukterkraft:computer\""),
             "Advanced computer loot table should keep the dynamic computer drop entry.",
+        )
+        assertTrue(
+            json.contains("compukterkraft:block_named"),
+            "Advanced computer loot table should drop a computer when the block entity carries a custom name.",
+        )
+        assertTrue(
+            json.contains("compukterkraft:has_id"),
+            "Advanced computer loot table should drop a computer when the block entity has a persisted computer id.",
+        )
+        assertTrue(
+            json.contains("compukterkraft:player_creative"),
+            "Advanced computer loot table should explicitly invert the creative-player condition like CC:Tweaked.",
+        )
+        assertTrue(
+            json.contains("\"condition\": \"minecraft:inverted\""),
+            "Advanced computer loot table should invert the creative-player condition instead of removing it.",
         )
     }
 }
