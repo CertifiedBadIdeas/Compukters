@@ -1,0 +1,14 @@
+{
+  "block.compukterkraft.computer_advanced": "Advanced Computer",
+  "block.compukterkraft.workbench": "Workbench",
+  "item.compukterkraft.computer_advanced": "Advanced Computer",
+  "item.compukterkraft.workbench": "Workbench",
+  "itemGroup.compukterkraft": "Compukter Kraft",
+  "gui.compukterkraft.terminal.powered_off": "Computer is off. Turn it on first.",
+  "gui.compukterkraft.terminal.connecting": "Connecting...",
+  "gui.compukterkraft.tooltip.computer_id": "Computer ID: %s",
+  "gui.compukterkraft.tooltip.copy": "Copy to clipboard",
+  "commands.compukterkraft.generic.yes": "Y",
+  "commands.compukterkraft.generic.no": "N",
+  "commands.compukterkraft.dump.action": "View more info about this computer"
+}

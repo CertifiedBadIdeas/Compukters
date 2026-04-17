@@ -1,0 +1,14 @@
+{
+  "block.compukterkraft.computer_advanced": "Продвинутый компьютер",
+  "block.compukterkraft.workbench": "Верстак",
+  "item.compukterkraft.computer_advanced": "Продвинутый компьютер",
+  "item.compukterkraft.workbench": "Верстак",
+  "itemGroup.compukterkraft": "Compukter Kraft",
+  "gui.compukterkraft.terminal.powered_off": "Компьютер выключен. Сначала включите его.",
+  "gui.compukterkraft.terminal.connecting": "Подключение...",
+  "gui.compukterkraft.tooltip.computer_id": "ID компьютера: %s",
+  "gui.compukterkraft.tooltip.copy": "Скопировать в буфер обмена",
+  "commands.compukterkraft.generic.yes": "Д",
+  "commands.compukterkraft.generic.no": "Н",
+  "commands.compukterkraft.dump.action": "Показать больше информации об этом компьютере"
+}
