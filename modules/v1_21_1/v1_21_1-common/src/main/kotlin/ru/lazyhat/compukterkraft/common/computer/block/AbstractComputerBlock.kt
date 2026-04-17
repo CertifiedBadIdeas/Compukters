@@ -112,6 +112,9 @@ abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
         blockEntity: BlockEntity?,
         tool: ItemStack,
     ) {
+        LOGGER.info {
+            "Computer drop: playerDestroy pos=$pos blockEntity=${blockEntity?.javaClass?.simpleName} computerId=${(blockEntity as? AbstractComputerBlockEntity)?.computerID} tool=${tool.item}"
+        }
         super.playerDestroy(level, player, pos, state, blockEntity, tool)
     }
 
@@ -123,6 +126,9 @@ abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
     ): BlockState {
         ifServerSide(level) {
             if (player.abilities.instabuild) {
+                LOGGER.info {
+                    "Computer drop: creative playerWillDestroy pos=$pos blockEntity=${level.getBlockEntity(pos)?.javaClass?.simpleName} computerId=${(level.getBlockEntity(pos) as? AbstractComputerBlockEntity)?.computerID}"
+                }
                 dropResources(state, level, pos, level.getBlockEntity(pos))
             }
         }
@@ -133,15 +139,26 @@ abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
     override fun getDrops(
         state: BlockState,
         params: LootParams.Builder,
-    ): List<ItemStack> =
-        super
+    ): List<ItemStack> {
+        val computerBlockEntity = params.getOptionalParameter(LootContextParams.BLOCK_ENTITY) as? AbstractComputerBlockEntity
+        LOGGER.info {
+            "Computer drop: getDrops blockEntity=${computerBlockEntity?.javaClass?.simpleName} computerId=${computerBlockEntity?.computerID}"
+        }
+        return super
             .getDrops(
                 state,
-                (params.getOptionalParameter(LootContextParams.BLOCK_ENTITY) as? AbstractComputerBlockEntity)
-                    ?.let { computerBlockEntity ->
-                        params.withDynamicDrop(drop) { it.accept(getItem(computerBlockEntity)) }
+                computerBlockEntity
+                    ?.let {
+                        params.withDynamicDrop(drop) { consumer ->
+                            val stack = getItem(it)
+                            LOGGER.info {
+                                "Computer drop: dynamic stack item=${stack.item} count=${stack.count} empty=${stack.isEmpty} computerId=${stack.computerDataTag?.computerID}"
+                            }
+                            consumer.accept(stack)
+                        }
                     } ?: params,
             )
+    }
 
     override fun useItemOn(
         stack: ItemStack,
