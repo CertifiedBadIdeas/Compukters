@@ -1,8 +1,0 @@
-{
-  "parent": "minecraft:block/orientable",
-  "textures": {
-    "front": "compukterkraft:block/computer_advanced_front",
-    "side": "compukterkraft:block/computer_advanced_side",
-    "top": "compukterkraft:block/computer_advanced_top"
-  }
-}

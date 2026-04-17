@@ -1,9 +1,0 @@
-{
-  "parent": "compukterkraft:block/computer_on",
-  "textures": {
-    "cursor": "compukterkraft:block/computer_blink",
-    "front": "compukterkraft:block/computer_advanced_front",
-    "side": "compukterkraft:block/computer_advanced_side",
-    "top": "compukterkraft:block/computer_advanced_top"
-  }
-}
