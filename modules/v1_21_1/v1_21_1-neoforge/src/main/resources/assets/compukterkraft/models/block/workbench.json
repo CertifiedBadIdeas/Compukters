@@ -1,9 +1,24 @@
 {
   "parent": "minecraft:block/orientable",
+  "render_type": "cutout",
   "textures": {
     "front": "compukterkraft:block/workbench_front",
     "side": "compukterkraft:block/workbench_side",
     "top": "compukterkraft:block/workbench_side",
     "back": "compukterkraft:block/workbench_back"
-  }
+  },
+  "elements": [
+    {
+      "from": [0, 0, 0],
+      "to": [16, 16, 16],
+      "faces": {
+        "down":  { "texture": "#top",   "cullface": "down" },
+        "up":    { "texture": "#top",   "cullface": "up" },
+        "north": { "texture": "#front", "cullface": "north" },
+        "south": { "texture": "#back",  "cullface": "south" },
+        "west":  { "texture": "#side",  "cullface": "west" },
+        "east":  { "texture": "#side",  "cullface": "east" }
+      }
+    }
+  ]
 }
