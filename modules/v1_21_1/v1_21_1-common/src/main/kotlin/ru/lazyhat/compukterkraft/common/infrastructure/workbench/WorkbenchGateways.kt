@@ -116,6 +116,7 @@ class NetworkWorkbenchControlGateway(
     private val menu: AbstractWorkbenchMenu,
 ) : ComputerControlGateway {
     override fun reboot() {
+        ClientNetworking.sendToServer(WorkbenchWorkspaceServerMessage(menu, WorkbenchWorkspaceServerMessage.Action.REBOOT))
     }
 
     override fun pullFromTarget() {

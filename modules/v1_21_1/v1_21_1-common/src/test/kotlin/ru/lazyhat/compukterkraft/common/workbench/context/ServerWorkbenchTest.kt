@@ -165,9 +165,29 @@ class ServerWorkbenchTest {
         assertNotNull(workbench.currentScreenSnapshot())
     }
 
+    @Test
+    fun rebootDelegatesToRuntimeBridge() {
+        val workbench =
+            ServerWorkbench(
+                workspaceId = 17,
+                workspace = ComputerWorkspaceHost(createTempDirectory("server-workbench-reboot")),
+                initialTarget = ServerWorkbench.TargetDescriptor(computerId = 5, displayName = "Pocket Dev", familyId = "advanced"),
+            )
+        val bridge = FakeRuntimeBridge()
+        workbench.bindRuntimeBridge(bridge)
+
+        workbench.rebootTarget()
+
+        assertEquals(listOf("reboot:5"), bridge.calls)
+    }
+
     private class FakeRuntimeBridge : WorkbenchTargetRuntimeBridge {
         val calls = mutableListOf<String>()
         private val snapshot = ScreenBuffer(16, 8, true).forceSnapshot()
+
+        override fun rebootTarget(target: ServerWorkbench.TargetDescriptor) {
+            calls += "reboot:${target.computerId}"
+        }
 
         override fun runTargetProgram(target: ServerWorkbench.TargetDescriptor) {
             calls += "run:${target.computerId}"

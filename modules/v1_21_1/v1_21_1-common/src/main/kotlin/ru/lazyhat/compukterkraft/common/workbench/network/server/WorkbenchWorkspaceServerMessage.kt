@@ -79,6 +79,7 @@ class WorkbenchWorkspaceServerMessage : NetworkMessage<ServerNetworkContext> {
         PULL,
         PUSH,
         RUN,
+        REBOOT,
         ATTACH_TERMINAL,
     }
 }

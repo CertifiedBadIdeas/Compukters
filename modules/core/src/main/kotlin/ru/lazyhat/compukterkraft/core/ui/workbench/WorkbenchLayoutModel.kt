@@ -77,15 +77,20 @@ class WorkbenchLayoutModel(
     val imageWidth: Int,
     val imageHeight: Int,
     private val font: FontMetrics,
+    val headerBounds: UiRect = UiRect(leftPos, topPos, imageWidth, LEGACY_HEADER_HEIGHT),
+    val sidebarBounds: UiRect = UiRect(leftPos + 8, topPos + 34, 120, imageHeight - 46),
+    val editorBounds: UiRect = UiRect(leftPos + 136, topPos + 34, imageWidth - 144, imageHeight - 66),
+    val statusBarBounds: UiRect = UiRect(leftPos + 136, topPos + imageHeight - 28, imageWidth - 144, 20),
+    val terminalDockBounds: UiRect? = null,
+    val targetSlotBounds: UiRect = UiRect(leftPos + imageWidth - 28, topPos + 7, 18, 18),
+    val terminalToggleBounds: UiRect = UiRect(leftPos + 8, topPos + 8, 72, 20),
+    val rebootBounds: UiRect = UiRect(leftPos + 8 + 4 * 80, topPos + 8, 72, 20),
 ) {
     val editorLineHeight: Int = LINE_HEIGHT
-    val sidebarBounds: UiRect = UiRect(leftPos + 8, topPos + 34, 120, imageHeight - 46)
-    val editorBounds: UiRect = UiRect(leftPos + 136, topPos + 34, imageWidth - 144, imageHeight - 66)
-    val statusBarBounds: UiRect = UiRect(leftPos + 136, topPos + imageHeight - 28, imageWidth - 144, 20)
 
-    fun visibleEditorLines(): Int = ((imageHeight - 82) / LINE_HEIGHT).coerceAtLeast(1)
+    fun visibleEditorLines(): Int = ((editorBounds.height - 6) / LINE_HEIGHT).coerceAtLeast(1)
 
-    fun editorTextOrigin(): Pair<Int, Int> = leftPos + 176 to topPos + 40
+    fun editorTextOrigin(): Pair<Int, Int> = editorBounds.x + EDITOR_TEXT_PADDING_X to editorBounds.y + 6
 
     fun toolbarButtons(state: WorkbenchState): List<ToolbarButtonLayout> =
         listOf(
@@ -99,13 +104,14 @@ class WorkbenchLayoutModel(
 
     fun workspaceRows(state: WorkbenchState): List<WorkspaceRowLayout> {
         val rows = mutableListOf<WorkspaceRowLayout>()
-        var rowY = topPos + 54
+        var rowY = sidebarBounds.y + 22
+        val rowWidth = (sidebarBounds.width - 8).coerceAtLeast(32)
 
         if (state.browserPath.isNotEmpty()) {
             rows +=
                 WorkspaceRowLayout(
                     label = "..",
-                    bounds = UiRect(leftPos + 10, rowY - 1, 114, 11),
+                    bounds = UiRect(sidebarBounds.x + 2, rowY - 1, rowWidth, 11),
                     path = null,
                     selected = true,
                     directory = true,
@@ -117,7 +123,7 @@ class WorkbenchLayoutModel(
             rows +=
                 WorkspaceRowLayout(
                     label = if (entry.directory) entry.path.substringAfterLast('/') + "/" else entry.path.substringAfterLast('/'),
-                    bounds = UiRect(leftPos + 10, rowY - 1, 114, 11),
+                    bounds = UiRect(sidebarBounds.x + 2, rowY - 1, rowWidth, 11),
                     path = entry.path,
                     selected = false,
                     directory = entry.directory,
@@ -149,7 +155,7 @@ class WorkbenchLayoutModel(
         val line = editorLines(state).getOrElse(state.editor.cursorLine) { "" }
         val beforeCursor = line.take(state.editor.cursorColumn)
         val popupX = editorTextOrigin().first + font.width(beforeCursor)
-        val popupY = topPos + 52 + visibleLine * LINE_HEIGHT
+        val popupY = editorTextOrigin().second + visibleLine * LINE_HEIGHT
         val visibleItems =
             state.editor.completionItems.size
                 .coerceAtMost(MAX_COMPLETION_ITEMS)
@@ -236,13 +242,79 @@ class WorkbenchLayoutModel(
         return lineIndex to bestColumn
     }
 
-    private fun toolbarButtonBounds(index: Int): UiRect = UiRect(leftPos + 8 + index * 80, topPos + 8, 72, 20)
+    private fun toolbarButtonBounds(index: Int): UiRect = UiRect(headerBounds.x + 8 + index * 80, headerBounds.y + (headerBounds.height - 20) / 2, 72, 20)
 
-    private companion object {
+    companion object {
+        fun fullscreen(
+            leftPos: Int,
+            topPos: Int,
+            screenWidth: Int,
+            screenHeight: Int,
+            terminalVisible: Boolean,
+            font: FontMetrics,
+        ): WorkbenchLayoutModel {
+            val headerBounds = UiRect(leftPos, topPos, screenWidth, FULLSCREEN_HEADER_HEIGHT)
+            val bodyTop = headerBounds.bottom + FULLSCREEN_SECTION_GAP
+            val sidebarBounds =
+                UiRect(
+                    leftPos + FULLSCREEN_OUTER_PADDING,
+                    bodyTop,
+                    FULLSCREEN_SIDEBAR_WIDTH,
+                    (screenHeight - FULLSCREEN_HEADER_HEIGHT - FULLSCREEN_STATUS_HEIGHT - FULLSCREEN_OUTER_PADDING * 2 - FULLSCREEN_SECTION_GAP)
+                        .coerceAtLeast(1),
+                )
+            val statusBarBounds = UiRect(leftPos, topPos + screenHeight - FULLSCREEN_STATUS_HEIGHT, screenWidth, FULLSCREEN_STATUS_HEIGHT)
+            val terminalDockBounds =
+                if (terminalVisible) {
+                    UiRect(
+                        sidebarBounds.right + FULLSCREEN_SECTION_GAP,
+                        statusBarBounds.y - FULLSCREEN_DOCK_HEIGHT - FULLSCREEN_SECTION_GAP,
+                        screenWidth - FULLSCREEN_SIDEBAR_WIDTH - FULLSCREEN_OUTER_PADDING * 2 - FULLSCREEN_SECTION_GAP,
+                        FULLSCREEN_DOCK_HEIGHT,
+                    )
+                } else {
+                    null
+                }
+            val editorBottom = (terminalDockBounds?.y ?: statusBarBounds.y) - FULLSCREEN_SECTION_GAP
+            val editorBounds =
+                UiRect(
+                    sidebarBounds.right + FULLSCREEN_SECTION_GAP,
+                    bodyTop,
+                    screenWidth - FULLSCREEN_SIDEBAR_WIDTH - FULLSCREEN_OUTER_PADDING * 2 - FULLSCREEN_SECTION_GAP,
+                    (editorBottom - bodyTop).coerceAtLeast(1),
+                )
+            val targetSlotBounds = UiRect(leftPos + screenWidth - 150, topPos + 7, 18, 18)
+            val terminalToggleBounds = UiRect(leftPos + screenWidth - 126, topPos + 6, 56, 20)
+            val rebootBounds = UiRect(leftPos + screenWidth - 64, topPos + 6, 56, 20)
+            return WorkbenchLayoutModel(
+                leftPos = leftPos,
+                topPos = topPos,
+                imageWidth = screenWidth,
+                imageHeight = screenHeight,
+                font = font,
+                headerBounds = headerBounds,
+                sidebarBounds = sidebarBounds,
+                editorBounds = editorBounds,
+                statusBarBounds = statusBarBounds,
+                terminalDockBounds = terminalDockBounds,
+                targetSlotBounds = targetSlotBounds,
+                terminalToggleBounds = terminalToggleBounds,
+                rebootBounds = rebootBounds,
+            )
+        }
+
         const val LINE_HEIGHT = 10
         const val WORKSPACE_ROW_STEP = 12
         const val COMPLETION_ROW_HEIGHT = 12
         const val MAX_COMPLETION_ITEMS = 8
+        private const val LEGACY_HEADER_HEIGHT = 32
+        private const val EDITOR_TEXT_PADDING_X = 40
+        private const val FULLSCREEN_HEADER_HEIGHT = 32
+        private const val FULLSCREEN_STATUS_HEIGHT = 20
+        private const val FULLSCREEN_OUTER_PADDING = 12
+        private const val FULLSCREEN_SECTION_GAP = 12
+        private const val FULLSCREEN_SIDEBAR_WIDTH = 220
+        private const val FULLSCREEN_DOCK_HEIGHT = 180
     }
 
     private fun editorLines(state: WorkbenchState): List<String> =

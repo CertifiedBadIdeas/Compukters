@@ -19,6 +19,7 @@
 
 package ru.lazyhat.compukterkraft.common.workbench.menu
 
+import net.minecraft.world.SimpleContainer
 import net.minecraft.world.entity.player.Inventory
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.inventory.MenuType
@@ -33,23 +34,50 @@ class WorkbenchMenuWithoutInventory(
     playerInventory: Inventory,
     containerData: WorkbenchContainerData,
     serverWorkbench: ServerWorkbench? = null,
+    private val onTargetStackChanged: ((ItemStack) -> Unit)? = null,
 ) : AbstractWorkbenchMenu(menuType, containerId, containerData, serverWorkbench) {
-    init {
-        repeat(10) {
-            addSlot(
-                object : Slot(playerInventory, it, 0, 0) {
-                    override fun mayPlace(stack: ItemStack): Boolean = false
-
-                    override fun mayPickup(player: Player): Boolean = false
-
-                    override fun isActive(): Boolean = false
-                },
-            )
+    private val targetContainer =
+        SimpleContainer(1).apply {
+            setItem(0, containerData.displayStack.copy())
         }
+
+    init {
+        addSlot(
+            object : Slot(targetContainer, 0, 12, 7) {
+                override fun mayPlace(stack: ItemStack): Boolean {
+                    val descriptor = ServerWorkbench.extractTargetDescriptor(stack)
+                    return descriptor.computerId != null || descriptor.familyId != null
+                }
+
+                override fun mayPickup(player: Player): Boolean = true
+
+                override fun isActive(): Boolean = true
+
+                override fun setChanged() {
+                    super.setChanged()
+                    syncTargetStack()
+                }
+
+                override fun onTake(
+                    player: Player,
+                    stack: ItemStack,
+                ) {
+                    super.onTake(player, stack)
+                    syncTargetStack()
+                }
+            },
+        )
     }
 
     override fun quickMoveStack(
         player: Player,
         index: Int,
     ): ItemStack = ItemStack.EMPTY
+
+    private fun syncTargetStack() {
+        val stack = targetContainer.getItem(0).copy()
+        serverWorkbench?.setTarget(stack)
+        onTargetStackChanged?.invoke(stack)
+        refreshFromServerWorkbench()
+    }
 }

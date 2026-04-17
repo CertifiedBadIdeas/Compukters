@@ -36,6 +36,21 @@ import kotlin.test.assertTrue
 
 class WorkbenchMenuSmokeTest {
     @Test
+    fun exposesActiveTargetSlotForWorkbenchHeader() {
+        TestMinecraftBootstrap.ensureInitialized()
+
+        val menu =
+            WorkbenchMenuWithoutInventory(
+                MenuType.GENERIC_9x1,
+                5,
+                TestInventoryFactory.create(),
+                WorkbenchContainerData(),
+            )
+
+        assertTrue(menu.slots.first().isActive)
+    }
+
+    @Test
     fun constructsWorkbenchMenuWithoutTarget() {
         TestMinecraftBootstrap.ensureInitialized()
 
@@ -100,6 +115,32 @@ class WorkbenchMenuSmokeTest {
         assertEquals("fun main() {}", remoteState.document?.text)
         assertTrue(remoteState.sync.dirtyLocal)
         assertEquals("advanced", remoteState.target.familyId)
+    }
+
+    @Test
+    fun handlesRebootActionAgainstServerWorkbenchSession() {
+        TestMinecraftBootstrap.ensureInitialized()
+
+        val workbench =
+            ServerWorkbench(
+                workspaceId = 22,
+                workspace = ComputerWorkspaceHost(createTempDirectory("workbench-menu-reboot")),
+                initialTarget = ServerWorkbench.TargetDescriptor(computerId = 9, displayName = "Pocket Dev", familyId = "advanced"),
+            )
+
+        val menu =
+            WorkbenchMenuWithoutInventory(
+                MenuType.GENERIC_9x1,
+                6,
+                TestInventoryFactory.create(),
+                WorkbenchContainerData.from(workbench.targetState()),
+                workbench,
+            )
+
+        val remoteState = menu.handleWorkspaceAction(WorkbenchWorkspaceServerMessage.Action.REBOOT, "", "")
+
+        assertNotNull(remoteState)
+        assertTrue(remoteState.target.connected)
     }
 
     @Test
