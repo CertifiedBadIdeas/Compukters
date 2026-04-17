@@ -63,6 +63,15 @@ class WorkbenchLayoutModelTest {
         assertFalse(layout.rebootBounds.overlaps(layout.targetSlotBounds))
     }
 
+    @Test
+    fun fullscreenLayoutReservesInventoryPanelAboveStatusBar() {
+        val layout = WorkbenchLayoutModel.fullscreen(0, 0, 1280, 720, false, fontMetrics)
+
+        assertTrue(layout.inventoryBounds.height > 0)
+        assertTrue(layout.editorBounds.bottom <= layout.inventoryBounds.y)
+        assertTrue(layout.inventoryBounds.bottom <= layout.statusBarBounds.y)
+    }
+
     private fun UiRect.overlaps(other: UiRect): Boolean =
         x < other.right && right > other.x && y < other.bottom && bottom > other.y
 }

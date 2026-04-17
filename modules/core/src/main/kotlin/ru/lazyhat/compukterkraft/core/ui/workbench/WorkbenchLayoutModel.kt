@@ -80,6 +80,7 @@ class WorkbenchLayoutModel(
     val headerBounds: UiRect = UiRect(leftPos, topPos, imageWidth, LEGACY_HEADER_HEIGHT),
     val sidebarBounds: UiRect = UiRect(leftPos + 8, topPos + 34, 120, imageHeight - 46),
     val editorBounds: UiRect = UiRect(leftPos + 136, topPos + 34, imageWidth - 144, imageHeight - 66),
+    val inventoryBounds: UiRect = UiRect(leftPos + 136, topPos + imageHeight - 116, imageWidth - 144, 76),
     val statusBarBounds: UiRect = UiRect(leftPos + 136, topPos + imageHeight - 28, imageWidth - 144, 20),
     val terminalDockBounds: UiRect? = null,
     val targetSlotBounds: UiRect = UiRect(leftPos + imageWidth - 28, topPos + 7, 18, 18),
@@ -264,18 +265,25 @@ class WorkbenchLayoutModel(
                         .coerceAtLeast(1),
                 )
             val statusBarBounds = UiRect(leftPos, topPos + screenHeight - FULLSCREEN_STATUS_HEIGHT, screenWidth, FULLSCREEN_STATUS_HEIGHT)
+            val inventoryBounds =
+                UiRect(
+                    sidebarBounds.right + FULLSCREEN_SECTION_GAP,
+                    statusBarBounds.y - FULLSCREEN_INVENTORY_HEIGHT - FULLSCREEN_SECTION_GAP,
+                    screenWidth - FULLSCREEN_SIDEBAR_WIDTH - FULLSCREEN_OUTER_PADDING * 2 - FULLSCREEN_SECTION_GAP,
+                    FULLSCREEN_INVENTORY_HEIGHT,
+                )
             val terminalDockBounds =
                 if (terminalVisible) {
                     UiRect(
                         sidebarBounds.right + FULLSCREEN_SECTION_GAP,
-                        statusBarBounds.y - FULLSCREEN_DOCK_HEIGHT - FULLSCREEN_SECTION_GAP,
+                        inventoryBounds.y - FULLSCREEN_DOCK_HEIGHT - FULLSCREEN_SECTION_GAP,
                         screenWidth - FULLSCREEN_SIDEBAR_WIDTH - FULLSCREEN_OUTER_PADDING * 2 - FULLSCREEN_SECTION_GAP,
                         FULLSCREEN_DOCK_HEIGHT,
                     )
                 } else {
                     null
                 }
-            val editorBottom = (terminalDockBounds?.y ?: statusBarBounds.y) - FULLSCREEN_SECTION_GAP
+            val editorBottom = (terminalDockBounds?.y ?: inventoryBounds.y) - FULLSCREEN_SECTION_GAP
             val editorBounds =
                 UiRect(
                     sidebarBounds.right + FULLSCREEN_SECTION_GAP,
@@ -295,6 +303,7 @@ class WorkbenchLayoutModel(
                 headerBounds = headerBounds,
                 sidebarBounds = sidebarBounds,
                 editorBounds = editorBounds,
+                inventoryBounds = inventoryBounds,
                 statusBarBounds = statusBarBounds,
                 terminalDockBounds = terminalDockBounds,
                 targetSlotBounds = targetSlotBounds,
@@ -314,6 +323,7 @@ class WorkbenchLayoutModel(
         private const val FULLSCREEN_OUTER_PADDING = 12
         private const val FULLSCREEN_SECTION_GAP = 12
         private const val FULLSCREEN_SIDEBAR_WIDTH = 220
+        private const val FULLSCREEN_INVENTORY_HEIGHT = 76
         private const val FULLSCREEN_DOCK_HEIGHT = 180
     }
 

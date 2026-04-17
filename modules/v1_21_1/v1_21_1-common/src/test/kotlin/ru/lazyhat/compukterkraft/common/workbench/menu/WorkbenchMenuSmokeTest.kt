@@ -160,4 +160,20 @@ class WorkbenchMenuSmokeTest {
 
         assertEquals(snapshot, menu.screenSnapshot)
     }
+
+    @Test
+    fun exposesPlayerInventorySlotsInsideWorkbenchMenu() {
+        TestMinecraftBootstrap.ensureInitialized()
+
+        val menu =
+            WorkbenchMenuWithoutInventory(
+                MenuType.GENERIC_9x1,
+                7,
+                TestInventoryFactory.create(),
+                WorkbenchContainerData(),
+            )
+
+        assertEquals(37, menu.slots.size)
+        assertTrue(menu.slots.drop(1).all { it.isActive })
+    }
 }
