@@ -1,0 +1,8 @@
+{
+  "variants": {
+    "facing=east": {"model": "compukterkraft:block/computer_advanced", "y": 90},
+    "facing=north": {"model": "compukterkraft:block/computer_advanced", "y": 0},
+    "facing=south": {"model": "compukterkraft:block/computer_advanced", "y": 180},
+    "facing=west": {"model": "compukterkraft:block/computer_advanced", "y": 270}
+  }
+}
