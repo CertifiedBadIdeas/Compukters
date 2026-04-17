@@ -27,16 +27,28 @@ import kotlin.test.assertTrue
 
 class ComputerBlockDropSourceTest {
     @Test
-    fun abstractComputerBlockUsesVanillaDropPathAndCreativeSpecificManualDrop() {
+    fun abstractComputerBlockMatchesCcTweakedDropLifecycle() {
         val source = abstractComputerBlockSource().readText()
 
         assertTrue(
-            source.contains("super.playerDestroy(level, player, pos, state, blockEntity, tool)"),
-            "AbstractComputerBlock.playerDestroy should delegate to the vanilla drop path.",
+            source.contains("player.awardStat(Stats.BLOCK_MINED.get(this))"),
+            "AbstractComputerBlock.playerDestroy should award the mined-block statistic directly.",
         )
         assertTrue(
-            source.contains("player.abilities.instabuild"),
-            "AbstractComputerBlock.playerWillDestroy should gate manual drops behind a creative-player check.",
+            source.contains("player.causeFoodExhaustion(0.005f)"),
+            "AbstractComputerBlock.playerDestroy should apply vanilla exhaustion directly.",
+        )
+        assertTrue(
+            !source.contains("super.playerDestroy(level, player, pos, state, blockEntity, tool)"),
+            "AbstractComputerBlock.playerDestroy should not delegate to the vanilla drop path when mirroring CC:Tweaked.",
+        )
+        assertTrue(
+            source.contains("dropResources(state, level, pos, level.getBlockEntity(pos))"),
+            "AbstractComputerBlock.playerWillDestroy should always trigger the server-side loot path from playerWillDestroy.",
+        )
+        assertTrue(
+            !source.contains("player.abilities.instabuild"),
+            "AbstractComputerBlock.playerWillDestroy should not special-case creative players when mirroring CC:Tweaked.",
         )
     }
 
