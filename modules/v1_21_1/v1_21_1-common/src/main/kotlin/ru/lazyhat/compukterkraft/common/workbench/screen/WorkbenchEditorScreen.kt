@@ -36,6 +36,7 @@ import ru.lazyhat.compukterkraft.common.infrastructure.workbench.NetworkWorkbenc
 import ru.lazyhat.compukterkraft.common.infrastructure.workbench.WorkbenchTargetCatalogSource
 import ru.lazyhat.compukterkraft.common.platform.MinecraftInputProvider
 import ru.lazyhat.compukterkraft.common.ui.render.WorkbenchTerminalRenderer
+import ru.lazyhat.compukterkraft.common.workbench.menu.WorkbenchPositionableSlot
 import ru.lazyhat.compukterkraft.common.workbench.menu.WorkbenchMenuWithoutInventory
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchMode
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchStore
@@ -84,6 +85,7 @@ class WorkbenchEditorScreen(
             store.toggleMode()
         }
         store.initialize()
+        syncSlotPositions()
     }
 
     override fun removed() {
@@ -100,6 +102,7 @@ class WorkbenchEditorScreen(
             terminalInput.focused = false
         }
         syncFullscreenWindowSize()
+        syncSlotPositions()
         terminalInput.update()
     }
 
@@ -115,6 +118,7 @@ class WorkbenchEditorScreen(
         graphics.fill(layout.headerBounds.x, layout.headerBounds.y, layout.headerBounds.right, layout.headerBounds.bottom, 0xFF161B25.toInt())
         graphics.fill(layout.sidebarBounds.x, layout.sidebarBounds.y, layout.sidebarBounds.right, layout.sidebarBounds.bottom, 0xFF1D2330.toInt())
         graphics.fill(layout.editorBounds.x, layout.editorBounds.y, layout.editorBounds.right, layout.editorBounds.bottom, 0xFF0D1016.toInt())
+        graphics.fill(layout.inventoryBounds.x, layout.inventoryBounds.y, layout.inventoryBounds.right, layout.inventoryBounds.bottom, 0xFF12161F.toInt())
         graphics.fill(layout.statusBarBounds.x, layout.statusBarBounds.y, layout.statusBarBounds.right, layout.statusBarBounds.bottom, 0xFF161B25.toInt())
         if (store.state.terminalVisible) {
             val focused = terminalAcceptsInput(terminalState)
@@ -137,6 +141,7 @@ class WorkbenchEditorScreen(
         }
         renderToolbar(graphics)
         renderHeader(graphics)
+        renderInventoryChrome(graphics)
     }
 
     override fun render(
@@ -370,6 +375,13 @@ class WorkbenchEditorScreen(
         val targetColor = if (store.state.target.connected) 0xE6ECF5.toInt() else 0x8A97A8
         graphics.drawString(font, title, layout.headerBounds.x + 12, layout.headerBounds.y + 12, 0xF5F7FA.toInt(), false)
         graphics.drawString(font, targetLabel, slotX + 24, slotY + 5, targetColor, false)
+    }
+
+    private fun renderInventoryChrome(graphics: GuiGraphics) {
+        val layout = layout()
+        val bounds = layout.inventoryBounds
+        graphics.fill(bounds.x, bounds.y, bounds.right, bounds.y + 1, 0xFF2A3242.toInt())
+        graphics.drawString(minecraft!!.font, "Inventory", bounds.x + 6, bounds.y - 10, 0x8A97A8, false)
     }
 
     private fun renderWorkspaceList(
@@ -612,6 +624,29 @@ class WorkbenchEditorScreen(
         }
     }
 
+    private fun syncSlotPositions() {
+        val layout = layout()
+        val targetSlot = menu.slots.getOrNull(0) as? WorkbenchPositionableSlot ?: return
+        targetSlot.relocate(layout.targetSlotBounds.x, layout.targetSlotBounds.y)
+
+        val inventoryBounds = layout.inventoryBounds
+        val originX = inventoryBounds.x + (inventoryBounds.width - INVENTORY_GRID_WIDTH) / 2
+        val mainOriginY = inventoryBounds.y
+        val hotbarY = inventoryBounds.y + HOTBAR_OFFSET_Y
+
+        for (row in 0 until 3) {
+            for (column in 0 until 9) {
+                val slot = menu.slots.getOrNull(1 + row * 9 + column) as? WorkbenchPositionableSlot ?: return
+                slot.relocate(originX + column * SLOT_SPACING, mainOriginY + row * SLOT_SPACING)
+            }
+        }
+
+        for (column in 0 until 9) {
+            val slot = menu.slots.getOrNull(28 + column) as? WorkbenchPositionableSlot ?: return
+            slot.relocate(originX + column * SLOT_SPACING, hotbarY)
+        }
+    }
+
     private fun terminalAcceptsInput(terminalState: WorkbenchTerminalViewState): Boolean =
         WorkbenchTerminalInteractionPolicy.canAcceptInput(
             if (store.state.terminalVisible) WorkbenchMode.TERMINAL else WorkbenchMode.EDITOR,
@@ -632,4 +667,10 @@ class WorkbenchEditorScreen(
         } else {
             store.state.editor.text.split('\n')
         }
+
+    companion object {
+        private const val SLOT_SPACING = 18
+        private const val INVENTORY_GRID_WIDTH = SLOT_SPACING * 9
+        private const val HOTBAR_OFFSET_Y = SLOT_SPACING * 3 + 4
+    }
 }

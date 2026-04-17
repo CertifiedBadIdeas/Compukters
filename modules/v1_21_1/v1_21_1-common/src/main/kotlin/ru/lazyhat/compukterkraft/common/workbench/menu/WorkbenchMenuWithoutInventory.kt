@@ -19,6 +19,7 @@
 
 package ru.lazyhat.compukterkraft.common.workbench.menu
 
+import net.minecraft.world.Container
 import net.minecraft.world.SimpleContainer
 import net.minecraft.world.entity.player.Inventory
 import net.minecraft.world.entity.player.Player
@@ -43,7 +44,7 @@ class WorkbenchMenuWithoutInventory(
 
     init {
         addSlot(
-            object : Slot(targetContainer, 0, 12, 7) {
+            object : WorkbenchPositionableSlot(targetContainer, 0, 12, 7) {
                 override fun mayPlace(stack: ItemStack): Boolean {
                     val descriptor = ServerWorkbench.extractTargetDescriptor(stack)
                     return descriptor.computerId != null || descriptor.familyId != null
@@ -67,6 +68,17 @@ class WorkbenchMenuWithoutInventory(
                 }
             },
         )
+
+        for (row in 0 until 3) {
+            for (column in 0 until 9) {
+                val inventoryIndex = column + row * 9 + 9
+                addSlot(WorkbenchPositionableSlot(playerInventory, inventoryIndex, 0, 0))
+            }
+        }
+
+        for (column in 0 until 9) {
+            addSlot(WorkbenchPositionableSlot(playerInventory, column, 0, 0))
+        }
     }
 
     override fun quickMoveStack(
@@ -79,5 +91,25 @@ class WorkbenchMenuWithoutInventory(
         serverWorkbench?.setTarget(stack)
         onTargetStackChanged?.invoke(stack)
         refreshFromServerWorkbench()
+    }
+}
+
+open class WorkbenchPositionableSlot(
+    container: Container,
+    index: Int,
+    x: Int,
+    y: Int,
+) : Slot(container, index, x, y) {
+    fun relocate(
+        x: Int,
+        y: Int,
+    ) {
+        xField.setInt(this, x)
+        yField.setInt(this, y)
+    }
+
+    private companion object {
+        val xField = Slot::class.java.getDeclaredField("x").apply { isAccessible = true }
+        val yField = Slot::class.java.getDeclaredField("y").apply { isAccessible = true }
     }
 }
