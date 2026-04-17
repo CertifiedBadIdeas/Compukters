@@ -27,6 +27,12 @@ plugins {
 }
 
 loom {
+    runs {
+        named("client") {
+            property("kotlinx.coroutines.debug", "off")
+        }
+    }
+
     mods {
         maybeCreate("main").apply {
             sourceSet("main", project(projects.v1211Common.path))
