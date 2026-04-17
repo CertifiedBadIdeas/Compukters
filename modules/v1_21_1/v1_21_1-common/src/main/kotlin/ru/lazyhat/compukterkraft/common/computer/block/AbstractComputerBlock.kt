@@ -112,8 +112,7 @@ abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
         blockEntity: BlockEntity?,
         tool: ItemStack,
     ) {
-        player.awardStat(Stats.BLOCK_MINED.get(this@AbstractComputerBlock))
-        player.causeFoodExhaustion(0.005f)
+        super.playerDestroy(level, player, pos, state, blockEntity, tool)
     }
 
     override fun playerWillDestroy(
@@ -123,7 +122,9 @@ abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
         player: Player,
     ): BlockState {
         ifServerSide(level) {
-            dropResources(state, level, pos, level.getBlockEntity(pos))
+            if (player.abilities.instabuild) {
+                dropResources(state, level, pos, level.getBlockEntity(pos))
+            }
         }
         return super.playerWillDestroy(level, pos, state, player)
     }
