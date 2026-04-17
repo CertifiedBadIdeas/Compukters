@@ -132,6 +132,7 @@ class WorkbenchEditorScreen(
                 showFocusHint,
                 Component.translatable("gui.compukterkraft.terminal.powered_off").string,
                 Component.translatable("gui.compukterkraft.terminal.connecting").string,
+                drawWindowBackground = false,
             )
         }
         renderToolbar(graphics)

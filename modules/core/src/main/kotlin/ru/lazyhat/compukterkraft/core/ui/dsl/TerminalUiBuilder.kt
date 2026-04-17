@@ -56,10 +56,12 @@ fun buildTerminalUi(
     poweredOffText: String,
     connectingText: String,
     statusRightInset: Int = 0,
+    drawWindowBackground: Boolean = true,
 ): List<UiNode> =
     buildList {
-        // Window background
-        add(Rect(leftPos, topPos, imageWidth, imageHeight, TerminalColors.WINDOW_BACKGROUND))
+        if (drawWindowBackground) {
+            add(Rect(leftPos, topPos, imageWidth, imageHeight, TerminalColors.WINDOW_BACKGROUND))
+        }
 
         // Panel background
         add(

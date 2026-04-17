@@ -123,4 +123,26 @@ class TerminalUiBuilderTest {
 
         assertEquals(layout.statusBounds.width - 24 - 52, sizeText.areaWidth)
     }
+
+    @Test
+    fun dockViewDoesNotPaintFullscreenWindowBackground() {
+        val nodes =
+            buildTerminalUi(
+                leftPos = 0,
+                topPos = 0,
+                imageWidth = 480,
+                imageHeight = 280,
+                layout = layout,
+                terminalState = WorkbenchTerminalViewState.Active(snapshot),
+                focused = true,
+                showFocusHint = false,
+                poweredOffText = "Computer is off. Turn it on first.",
+                connectingText = "Connecting...",
+                drawWindowBackground = false,
+            )
+
+        val fullscreenRect = nodes.filterIsInstance<Rect>().any { it.x == 0 && it.y == 0 && it.w == 480 && it.h == 280 }
+
+        assertFalse(fullscreenRect)
+    }
 }

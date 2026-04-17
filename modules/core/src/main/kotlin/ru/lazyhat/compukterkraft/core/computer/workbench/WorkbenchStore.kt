@@ -335,7 +335,7 @@ class WorkbenchStore(
 
                 KeyCodes.KEY_F12 -> navigateToDefinition(visibleEditorLines)
 
-                else -> return true
+                else -> return false
             }
 
         _state.value = state.copy(editor = nextEditor)
