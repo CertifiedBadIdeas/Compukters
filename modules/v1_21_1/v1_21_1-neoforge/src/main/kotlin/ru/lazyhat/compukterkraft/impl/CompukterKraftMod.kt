@@ -27,9 +27,9 @@ import net.neoforged.fml.common.Mod
 import net.neoforged.fml.event.lifecycle.FMLDedicatedServerSetupEvent
 import ru.lazyhat.compukterkraft.common.binding.ModObjects
 import ru.lazyhat.compukterkraft.common.computer.data.ComputerContainerData
-import ru.lazyhat.compukterkraft.common.workbench.data.WorkbenchContainerData
 import ru.lazyhat.compukterkraft.common.network.ClientNetworking
 import ru.lazyhat.compukterkraft.common.network.ServerNetworking
+import ru.lazyhat.compukterkraft.common.workbench.data.WorkbenchContainerData
 import ru.lazyhat.compukterkraft.core.LOGGER
 import ru.lazyhat.compukterkraft.core.MOD_ID
 import ru.lazyhat.compukterkraft.core.MOD_NAME
@@ -78,6 +78,7 @@ class CompukterKraftMod(
         ModObjects.blockNamedEntityLootConditionType = { ModRegistry.LootItemConditionTypes.BLOCK_NAMED.get() }
         ModObjects.hasComputerIdLootConditionType = { ModRegistry.LootItemConditionTypes.HAS_ID.get() }
         ModObjects.playerCreativeLootConditionType = { ModRegistry.LootItemConditionTypes.PLAYER_CREATIVE.get() }
+
         NetworkHandler.setup(modEventBus)
         ServerNetworking.playerSender = NetworkHandler::sendToPlayer
         ClientNetworking.serverSender = NetworkHandler::sendToServer
