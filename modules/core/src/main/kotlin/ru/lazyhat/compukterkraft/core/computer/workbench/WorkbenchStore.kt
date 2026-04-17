@@ -257,6 +257,10 @@ class WorkbenchStore(
             }
         }
 
+        if (shouldCapturePrintableKeyDown(key, modifiers)) {
+            return true
+        }
+
         if (state.editor.importPickerVisible) {
             when (key) {
                 KeyCodes.KEY_UP -> {
@@ -342,6 +346,11 @@ class WorkbenchStore(
         refreshIde()
         return true
     }
+
+    private fun shouldCapturePrintableKeyDown(
+        key: Int,
+        modifiers: Int,
+    ): Boolean = (modifiers and KeyCodes.MOD_CONTROL) == 0 && key in 32..126
 
     fun charTyped(
         ch: Char,

@@ -294,6 +294,19 @@ class WorkbenchStoreTest {
             assertFalse(store.keyPressed(KeyCodes.KEY_ESCAPE, modifiers = 0, visibleEditorLines = 20))
         }
 
+    @Test
+    fun capturesPrintableKeyDownBeforeCharTypedInEditorMode() =
+        runTest(UnconfinedTestDispatcher()) {
+            val store = WorkbenchStore(FakeWorkspaceGateway(), FakeComputerControlGateway(), FakeWorkbenchIdeFacade())
+            val updates = FakeWorkbenchUpdateSource()
+
+            store.bind(backgroundScope, updates)
+            updates.push(document = ComputerWorkspaceDocument("main.ck", "", 0))
+            store.toggleMode()
+
+            assertTrue(store.keyPressed(69, modifiers = 0, visibleEditorLines = 20))
+        }
+
     private class FakeWorkbenchUpdateSource : WorkbenchUpdateSource {
         private val _stateFlow = MutableStateFlow(WorkbenchRemoteState())
         override val stateFlow: StateFlow<WorkbenchRemoteState> = _stateFlow
