@@ -55,6 +55,7 @@ fun buildTerminalUi(
     showFocusHint: Boolean,
     poweredOffText: String,
     connectingText: String,
+    statusRightInset: Int = 0,
 ): List<UiNode> =
     buildList {
         // Window background
@@ -131,7 +132,7 @@ fun buildTerminalUi(
                     RightAlignedText(
                         layout.statusBounds.x + 12,
                         layout.statusBounds.y + 6,
-                        layout.statusBounds.width - 24,
+                        layout.statusBounds.width - 24 - statusRightInset,
                         sizeText,
                         TerminalColors.MUTED_TEXT,
                     ),

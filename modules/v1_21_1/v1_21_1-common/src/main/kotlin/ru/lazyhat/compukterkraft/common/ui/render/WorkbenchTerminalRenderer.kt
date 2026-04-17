@@ -44,6 +44,7 @@ object WorkbenchTerminalRenderer {
         showFocusHint: Boolean,
         poweredOffText: String,
         connectingText: String,
+        statusRightInset: Int = 0,
     ) {
         val nodes =
             buildTerminalUi(
@@ -57,6 +58,7 @@ object WorkbenchTerminalRenderer {
                 showFocusHint = showFocusHint,
                 poweredOffText = poweredOffText,
                 connectingText = connectingText,
+                statusRightInset = statusRightInset,
             )
         UiRenderer.render(graphics, font, nodes)
     }

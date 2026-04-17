@@ -118,4 +118,6 @@ object ComputerProfileRegistry {
             ComputerCapability.SYSTEM,
             ComputerCapability.IDE,
         )
+
+    private const val NORMAL_COMPUTER_EXTRA_HEIGHT: Int = 2
 }
