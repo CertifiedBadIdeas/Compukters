@@ -128,7 +128,7 @@ abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
         val replacementState = super.playerWillDestroy(level, pos, state, player)
         ifServerSide(level) {
             LOGGER.info {
-                "Computer drop: creative playerWillDestroy pos=$pos blockEntity=${level.getBlockEntity(
+                "Computer drop: playerWillDestroy pos=$pos blockEntity=${level.getBlockEntity(
                     pos,
                 )?.javaClass?.simpleName} computerId=${(level.getBlockEntity(pos) as? AbstractComputerBlockEntity)?.computerID}"
             }
