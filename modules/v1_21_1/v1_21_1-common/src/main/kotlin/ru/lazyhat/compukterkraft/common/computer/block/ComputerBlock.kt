@@ -32,9 +32,6 @@ import net.minecraft.world.level.block.state.properties.DirectionProperty
 import net.minecraft.world.level.block.state.properties.EnumProperty
 import ru.lazyhat.compukterkraft.common.binding.ModObjects
 import ru.lazyhat.compukterkraft.common.computer.item.ComputerItem
-import ru.lazyhat.compukterkraft.common.utils.computerDataTag
-import ru.lazyhat.compukterkraft.common.utils.computerID
-import ru.lazyhat.compukterkraft.core.LOGGER as CK_LOGGER
 
 class ComputerBlock(
     properties: Properties,
@@ -67,10 +64,6 @@ class ComputerBlock(
 
     override fun getItem(tile: AbstractComputerBlockEntity): ItemStack {
         if (tile !is ComputerBlockEntity) return ItemStack.EMPTY
-        val stack = (asItem() as? ComputerItem)?.create(tile.computerID, tile.label) ?: ItemStack.EMPTY
-        CK_LOGGER.info {
-            "Computer drop: getItem tile=${tile.javaClass.simpleName} computerId=${tile.computerID} label=${tile.label} item=${stack.item} count=${stack.count} empty=${stack.isEmpty} stackComputerId=${stack.computerDataTag?.computerID}"
-        }
-        return stack
+        return (asItem() as? ComputerItem)?.create(tile.computerID, tile.label) ?: ItemStack.EMPTY
     }
 }

@@ -27,7 +27,7 @@ class ComputerLootTableResourceTest {
     fun advancedComputerLootTableMatchesCcTweakedConditions() {
         val json =
             checkNotNull(
-                javaClass.classLoader.getResource("data/compukterkraft/loot_tables/blocks/computer_advanced.json"),
+                javaClass.classLoader.getResource("data/compukterkraft/loot_table/blocks/computer_advanced.json"),
             ).readText()
 
         assertTrue(
