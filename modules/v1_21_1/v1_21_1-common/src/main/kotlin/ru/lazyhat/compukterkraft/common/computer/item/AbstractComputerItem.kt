@@ -22,11 +22,10 @@ package ru.lazyhat.compukterkraft.common.computer.item
 import net.minecraft.ChatFormatting
 import net.minecraft.network.chat.Component
 import net.minecraft.world.item.BlockItem
-import net.minecraft.world.item.Item
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.TooltipFlag
 import net.minecraft.world.level.block.Block
-import ru.lazyhat.compukterkraft.common.utils.computerDataTag
+import ru.lazyhat.compukterkraft.common.utils.computerDataTagCopy
 import ru.lazyhat.compukterkraft.common.utils.computerID
 import ru.lazyhat.compukterkraft.common.utils.computerLabelByHoverName
 
@@ -36,12 +35,12 @@ abstract class AbstractComputerItem(
 ) : BlockItem(block, properties) {
     override fun appendHoverText(
         stack: ItemStack,
-        context: Item.TooltipContext,
+        context: TooltipContext,
         list: MutableList<Component>,
         options: TooltipFlag,
     ) {
         if (options.isAdvanced || stack.computerLabelByHoverName == null) {
-            stack.computerDataTag?.computerID?.let {
+            stack.computerDataTagCopy()?.computerID?.let {
                 list.add(Component.translatable("gui.compukterkraft.tooltip.computer_id", it).withStyle(ChatFormatting.GRAY))
             }
         }

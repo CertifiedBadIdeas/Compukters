@@ -21,6 +21,7 @@ package ru.lazyhat.compukterkraft.common.utils
 
 import net.minecraft.core.component.DataComponents
 import net.minecraft.nbt.CompoundTag
+import net.minecraft.tags.TagEntry.tag
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.component.CustomData
 
@@ -28,7 +29,15 @@ private object NBT {
     const val ID: String = "ComputerID"
     const val FAMILY_ID: String = "ComputerFamilyId"
     const val LABEL: String = "Label"
-    const val ON: String = "On"
+}
+
+private val ItemStack.computerData: CustomData?
+    get() = get(DataComponents.CUSTOM_DATA)
+
+fun ItemStack.computerDataTagCopy(): CompoundTag? = computerData?.copyTag()
+
+fun ItemStack.updateComputerDataTag(update: CompoundTag.() -> Unit) {
+    CustomData.update(DataComponents.CUSTOM_DATA, this, update)
 }
 
 var CompoundTag.computerID: Int?
@@ -48,21 +57,6 @@ var CompoundTag.computerFamilyId: String?
     set(value) {
         value?.let { putString(NBT.FAMILY_ID, it) }
     }
-
-var CompoundTag.computerOn: Boolean
-    get() = getBoolean(NBT.ON)
-    set(value) {
-        putBoolean(NBT.ON, value)
-    }
-
-val ItemStack.computerDataTag: CompoundTag?
-    get() = get(DataComponents.CUSTOM_DATA)?.copyTag()
-
-fun ItemStack.updateComputerData(update: CompoundTag.() -> Unit) {
-    CustomData.update(DataComponents.CUSTOM_DATA, this) { tag ->
-        tag.update()
-    }
-}
 
 val ItemStack.computerLabelByHoverName: String?
     get() = takeIf { it.has(DataComponents.CUSTOM_NAME) }?.hoverName?.string
