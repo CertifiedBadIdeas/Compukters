@@ -23,9 +23,7 @@ import net.minecraft.core.component.DataComponents
 import net.minecraft.network.chat.Component
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
-import ru.lazyhat.compukterkraft.common.utils.computerFamilyId
-import ru.lazyhat.compukterkraft.common.utils.computerID
-import ru.lazyhat.compukterkraft.common.utils.updateComputerData
+import ru.lazyhat.compukterkraft.common.utils.updateComputerDataTag
 import ru.lazyhat.compukterkraft.common.workbench.test.TestMinecraftBootstrap
 import ru.lazyhat.compukterkraft.core.computer.vm.ComputerWorkspaceHost
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBuffer
@@ -45,7 +43,7 @@ class ServerWorkbenchTest {
         val workspace = ComputerWorkspaceHost(root)
         val stack =
             ItemStack(Items.STONE).apply {
-                updateComputerData {
+                updateComputerDataTag {
                     computerID = 73
                     computerFamilyId = "advanced"
                 }
@@ -67,7 +65,7 @@ class ServerWorkbenchTest {
 
         val stack =
             ItemStack(Items.STONE).apply {
-                updateComputerData {
+                updateComputerDataTag {
                     computerFamilyId = "advanced"
                 }
                 set(DataComponents.CUSTOM_NAME, Component.literal("Unbound Pocket"))

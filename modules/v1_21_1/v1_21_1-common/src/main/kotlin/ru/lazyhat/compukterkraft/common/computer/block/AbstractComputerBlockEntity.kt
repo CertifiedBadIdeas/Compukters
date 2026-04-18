@@ -133,17 +133,18 @@ abstract class AbstractComputerBlockEntity(
         super.setRemoved()
     }
 
-    override fun getName(): Component = customName ?: Component.translatable(blockState.block.getDescriptionId())
+    override fun getName(): Component = customName ?: Component.translatable(blockState.block.descriptionId)
 
     override fun hasCustomName(): Boolean = !_label.isNullOrEmpty()
 
     override fun getCustomName(): Component? = _label?.takeIf { it.isEmpty() }?.let { Component.literal(it) }
 
     protected fun releaseServerComputer() {
-        if (level?.isClientSide ?: true) return
-        _computerID
-            .takeIf { ServerContext.isInitialized }
-            ?.let(ServerContext.computerManager::remove)
-            ?.close()
+      ifServerSide(level) {
+          _computerID
+              .takeIf { ServerContext.isInitialized }
+              ?.let(ServerContext.computerManager::remove)
+              ?.close()
+      }
     }
 }

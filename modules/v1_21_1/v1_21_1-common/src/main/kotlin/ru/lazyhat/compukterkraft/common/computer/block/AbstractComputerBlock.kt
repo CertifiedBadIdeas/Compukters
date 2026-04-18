@@ -44,7 +44,7 @@ import ru.lazyhat.compukterkraft.common.computer.context.ServerContext
 import ru.lazyhat.compukterkraft.common.computer.data.ComputerContainerData
 import ru.lazyhat.compukterkraft.common.computer.item.AbstractComputerItem
 import ru.lazyhat.compukterkraft.common.utils.castTicker
-import ru.lazyhat.compukterkraft.common.utils.computerDataTag
+import ru.lazyhat.compukterkraft.common.utils.computerDataTagCopy
 import ru.lazyhat.compukterkraft.common.utils.computerID
 import ru.lazyhat.compukterkraft.common.utils.computerLabel
 import ru.lazyhat.compukterkraft.common.utils.ifServerSide
@@ -88,9 +88,16 @@ abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
             ?.let { it as? AbstractComputerBlockEntity }
             ?.takeIf { stack.item is AbstractComputerItem }
             ?.let { tile ->
-                tile.computerID = stack.computerDataTag?.computerID
-                tile.label = stack.computerDataTag?.computerLabel
-                val resolvedComputerId = tile.computerID ?: ServerContext.allocateComputerId().also { tile.computerID = it }
+                stack
+                    .computerDataTagCopy()
+                    ?.also {
+                        tile.computerID = it.computerID
+                        tile.label = it.computerLabel
+                    }
+
+                val resolvedComputerId =
+                    tile.computerID ?: ServerContext.allocateComputerId().also { tile.computerID = it }
+
                 ServerContext.computerManager.ensureWorkspaceInitialized(resolvedComputerId)
             }
     }
@@ -130,7 +137,8 @@ abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
         state: BlockState,
         params: LootParams.Builder,
     ): List<ItemStack> {
-        val computerBlockEntity = params.getOptionalParameter(LootContextParams.BLOCK_ENTITY) as? AbstractComputerBlockEntity
+        val computerBlockEntity =
+            params.getOptionalParameter(LootContextParams.BLOCK_ENTITY) as? AbstractComputerBlockEntity
         return super.getDrops(
             state,
             computerBlockEntity

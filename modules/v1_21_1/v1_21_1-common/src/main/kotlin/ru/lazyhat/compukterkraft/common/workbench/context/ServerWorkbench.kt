@@ -22,7 +22,7 @@ package ru.lazyhat.compukterkraft.common.workbench.context
 import net.minecraft.world.item.ItemStack
 import ru.lazyhat.compukterkraft.common.computer.item.AbstractComputerItem
 import ru.lazyhat.compukterkraft.common.computer.item.ComputerItem
-import ru.lazyhat.compukterkraft.common.utils.computerDataTag
+import ru.lazyhat.compukterkraft.common.utils.computerDataTagCopy
 import ru.lazyhat.compukterkraft.common.utils.computerFamilyId
 import ru.lazyhat.compukterkraft.common.utils.computerID
 import ru.lazyhat.compukterkraft.core.block.ComputerFamily
@@ -197,7 +197,7 @@ class ServerWorkbench(
         fun extractTargetDescriptor(stack: ItemStack): TargetDescriptor {
             if (stack.isEmpty) return TargetDescriptor()
 
-            val customData = stack.computerDataTag
+            val customData = stack.computerDataTagCopy()
             val computerId = customData?.computerID
             val storedFamilyId = customData?.computerFamilyId
             if (computerId == null && storedFamilyId == null && stack.item !is AbstractComputerItem) return TargetDescriptor()

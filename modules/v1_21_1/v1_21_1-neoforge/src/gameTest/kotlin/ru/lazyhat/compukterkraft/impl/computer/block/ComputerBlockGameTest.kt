@@ -27,10 +27,11 @@ import net.minecraft.world.item.ItemStack
 import net.minecraft.world.level.GameType
 import net.neoforged.neoforge.gametest.GameTestHolder
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate
+import ru.lazyhat.compukterkraft.common.computer.block.AbstractComputerBlockEntity
 import ru.lazyhat.compukterkraft.common.computer.item.ComputerItem
-import ru.lazyhat.compukterkraft.common.utils.computerDataTag
+import ru.lazyhat.compukterkraft.common.utils.computerDataTagCopy
 import ru.lazyhat.compukterkraft.common.utils.computerID
-import ru.lazyhat.compukterkraft.common.utils.computerLabelByHoverName
+import ru.lazyhat.compukterkraft.common.utils.computerLabel
 import ru.lazyhat.compukterkraft.core.MOD_ID
 import ru.lazyhat.compukterkraft.impl.ModRegistry
 
@@ -84,8 +85,8 @@ class ComputerBlockGameTest {
         }
     }
 
-    @GameTest(template = "computer_platform", templateNamespace = MOD_ID)
     @Suppress("DEPRECATION")
+    @GameTest(template = "computer_platform", templateNamespace = MOD_ID)
     fun creativeDestroyDropsComputerItemWithIdAndLabel(helper: GameTestHelper) {
         val pos = BlockPos(1, 2, 1)
         val absolutePos = helper.absolutePos(pos)
@@ -98,14 +99,28 @@ class ComputerBlockGameTest {
 
         placeComputer(helper, pos, sourceStack)
 
-        helper.runAfterDelay(2L) {
+        helper.runAfterDelay(3L) {
+            helper.assertBlockEntityData<AbstractComputerBlockEntity>(pos, {
+                helper.assertTrue(
+                    it.computerID == expectedId,
+                    "Entity: expected placed computer block entity to have computer id $expectedId, actual ${it.computerID}",
+                )
+                helper.assertTrue(
+                    it.label == expectedLabel,
+                    "Entity: expected placed computer block entity to have computer label $expectedLabel, actual ${it.label}",
+                )
+                true
+            }, { "" })
+        }
+
+        helper.runAfterDelay(5L) {
             helper.assertTrue(
                 creativePlayer.gameMode.destroyBlock(absolutePos),
                 "Expected creative mock player to destroy the placed computer block",
             )
         }
 
-        helper.runAfterDelay(4L) {
+        helper.runAfterDelay(7L) {
             helper.assertItemEntityPresent(ModRegistry.Items.COMPUTER_ADVANCED.get(), pos, 2.0)
 
             val droppedStack =
@@ -114,14 +129,16 @@ class ComputerBlockGameTest {
                     .single { it.item.`is`(ModRegistry.Items.COMPUTER_ADVANCED.get()) }
                     .item
 
-            helper.assertTrue(
-                droppedStack.computerDataTag?.computerID == expectedId,
-                "Expected creative drop to preserve computer id $expectedId",
-            )
-            helper.assertTrue(
-                droppedStack.computerLabelByHoverName == expectedLabel,
-                "Expected creative drop to preserve computer label $expectedLabel",
-            )
+            with(droppedStack.computerDataTagCopy()!!) {
+                helper.assertTrue(
+                    computerID == expectedId,
+                    "Expected creative drop to preserve computer id $expectedId, actual ${computerID}",
+                )
+                helper.assertTrue(
+                    computerLabel == expectedLabel,
+                    "Expected creative drop to preserve computer label $expectedLabel, actual ${computerLabel}",
+                )
+            }
             helper.succeed()
         }
     }

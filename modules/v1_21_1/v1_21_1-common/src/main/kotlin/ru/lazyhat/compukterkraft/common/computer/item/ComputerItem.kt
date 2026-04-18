@@ -25,7 +25,8 @@ import net.minecraft.world.item.ItemStack
 import net.minecraft.world.level.block.Block
 import ru.lazyhat.compukterkraft.common.utils.computerFamilyId
 import ru.lazyhat.compukterkraft.common.utils.computerID
-import ru.lazyhat.compukterkraft.common.utils.updateComputerData
+import ru.lazyhat.compukterkraft.common.utils.computerLabel
+import ru.lazyhat.compukterkraft.common.utils.updateComputerDataTag
 import ru.lazyhat.compukterkraft.core.block.ComputerFamily
 
 class ComputerItem(
@@ -37,9 +38,10 @@ class ComputerItem(
         label: String?,
     ): ItemStack =
         ItemStack(this).apply {
-            updateComputerData {
+            updateComputerDataTag {
                 computerID = id
                 computerFamilyId = ComputerFamily.ADVANCED.name.lowercase()
+                computerLabel = label
             }
             label?.let { set(DataComponents.CUSTOM_NAME, Component.literal(it)) }
         }
