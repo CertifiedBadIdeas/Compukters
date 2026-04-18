@@ -25,12 +25,15 @@ import net.minecraft.world.level.storage.loot.parameters.LootContextParams
 import net.minecraft.world.level.storage.loot.predicates.LootItemCondition
 import net.minecraft.world.level.storage.loot.predicates.LootItemConditionType
 import ru.lazyhat.compukterkraft.common.binding.ModObjects
+import ru.lazyhat.compukterkraft.core.LOGGER
 
 object PlayerCreativeLootCondition : LootItemCondition {
-    override fun test(lootContext: LootContext): Boolean =
-        lootContext.getParamOrNull(LootContextParams.THIS_ENTITY)?.let { entity ->
+    override fun test(lootContext: LootContext): Boolean {
+        LOGGER.info { "PlayerCreativeLootCondition Test condition: $lootContext" }
+        return lootContext.getParamOrNull(LootContextParams.THIS_ENTITY)?.let { entity ->
             entity is Player && entity.abilities.instabuild
         } ?: false
+    }
 
     override fun getReferencedContextParams(): Set<LootContextParam<*>> = setOf(LootContextParams.THIS_ENTITY)
 
