@@ -22,13 +22,13 @@ import it.unimi.dsi.fastutil.ints.IntOpenHashSet
 import it.unimi.dsi.fastutil.ints.IntSet
 import net.minecraft.world.inventory.AbstractContainerMenu
 import ru.lazyhat.compukterkraft.common.computer.context.ServerComputer
+import ru.lazyhat.compukterkraft.core.computer.ComputerEvents
 import ru.lazyhat.compukterkraft.core.computer.input.ComputerControlAction
 import ru.lazyhat.compukterkraft.core.computer.input.ControlInputEvent
 import ru.lazyhat.compukterkraft.core.computer.input.InputEvent
 import ru.lazyhat.compukterkraft.core.computer.input.KeyInputEvent
 import ru.lazyhat.compukterkraft.core.computer.input.MouseInputEvent
 import ru.lazyhat.compukterkraft.core.computer.input.PasteInputEvent
-import ru.lazyhat.compukterkraft.core.computer.ComputerEvents
 import ru.lazyhat.compukterkraft.core.computer.input.ServerInputHandler
 import ru.lazyhat.compukterkraft.core.utils.StringUtil
 import java.nio.ByteBuffer

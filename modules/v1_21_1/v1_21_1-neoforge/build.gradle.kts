@@ -26,10 +26,36 @@ plugins {
     alias(libs.plugins.metadataConvention)
 }
 
+val gameTest by sourceSets.creating
+
+configurations[gameTest.implementationConfigurationName].extendsFrom(configurations.testImplementation.get())
+configurations[gameTest.runtimeOnlyConfigurationName].extendsFrom(configurations.testRuntimeOnly.get())
+gameTest.compileClasspath += sourceSets.main.get().compileClasspath + sourceSets.main.get().output
+gameTest.runtimeClasspath += sourceSets.main.get().runtimeClasspath + sourceSets.main.get().output
+
+tasks.named("check") {
+    dependsOn(gameTest.classesTaskName)
+}
+
+tasks.configureEach {
+    if (name == "runGameTestServer") {
+        dependsOn(gameTest.classesTaskName)
+    }
+}
+
 loom {
     runs {
         named("client") {
             property("kotlinx.coroutines.debug", "off")
+        }
+
+        register("gameTestServer") {
+            server()
+            property("neoforge.enableGameTest", "true")
+            property("neoforge.enabledGameTestNamespaces", "compukterkraft,minecraft")
+            property("neoforge.gameTestServer", "true")
+            property("kotlinx.coroutines.debug", "off")
+            ideConfigGenerated(true)
         }
     }
 
@@ -38,6 +64,7 @@ loom {
             sourceSet("main", project(projects.v1211Common.path))
             sourceSet("main", project(projects.core.path))
             sourceSet("main", project(projects.v1211CreateNeoforge.path))
+            sourceSet(gameTest.name)
         }
     }
 }
@@ -45,4 +72,8 @@ loom {
 dependencies {
     implementation(project(path = projects.v1211Common.path, configuration = "namedElements"))
     implementation(project(path = projects.v1211CreateNeoforge.path, configuration = "namedElements"))
+
+    add(gameTest.implementationConfigurationName, sourceSets.main.get().output)
+    add(gameTest.implementationConfigurationName, project(path = projects.v1211Common.path, configuration = "namedElements"))
+    add(gameTest.implementationConfigurationName, project(path = projects.v1211CreateNeoforge.path, configuration = "namedElements"))
 }

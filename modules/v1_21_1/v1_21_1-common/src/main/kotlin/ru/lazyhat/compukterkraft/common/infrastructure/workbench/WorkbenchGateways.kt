@@ -22,9 +22,11 @@ import kotlinx.coroutines.flow.StateFlow
 import ru.lazyhat.compukterkraft.common.network.ClientNetworking
 import ru.lazyhat.compukterkraft.common.workbench.menu.AbstractWorkbenchMenu
 import ru.lazyhat.compukterkraft.common.workbench.network.server.WorkbenchWorkspaceServerMessage
+import ru.lazyhat.compukterkraft.core.block.ComputerFamily
 import ru.lazyhat.compukterkraft.core.computer.input.ComputerControlAction
 import ru.lazyhat.compukterkraft.core.computer.input.ControlInputEvent
 import ru.lazyhat.compukterkraft.core.computer.input.InputEventSink
+import ru.lazyhat.compukterkraft.core.computer.vm.ComputerProfileRegistry
 import ru.lazyhat.compukterkraft.core.computer.workbench.ComputerControlGateway
 import ru.lazyhat.compukterkraft.core.computer.workbench.IdeRuntimeCatalogSource
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchIdeFacade
@@ -32,8 +34,6 @@ import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchRemoteState
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchTargetState
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchUpdateSource
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkspaceGateway
-import ru.lazyhat.compukterkraft.core.block.ComputerFamily
-import ru.lazyhat.compukterkraft.core.computer.vm.ComputerProfileRegistry
 import ru.lazyhat.compukterkraft.lang.api.BuiltinRegistry
 import ru.lazyhat.compukterkraft.lang.frontend.AnalyzedProgram
 import ru.lazyhat.compukterkraft.lang.frontend.LanguageBuiltins

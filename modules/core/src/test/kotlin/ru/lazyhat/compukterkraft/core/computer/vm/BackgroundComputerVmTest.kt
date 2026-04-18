@@ -24,6 +24,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import ru.lazyhat.compukterkraft.core.computer.runtime.test.runtimeProfile
+import ru.lazyhat.compukterkraft.core.computer.runtime.test.runtimeTestWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerCapability
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerCpuResources
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerMemoryResources
@@ -32,11 +34,48 @@ import ru.lazyhat.compukterkraft.lang.runtime.ComputerQueueResources
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerResources
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerStorageResources
 import ru.lazyhat.compukterkraft.lang.runtime.VmState
+import ru.lazyhat.compukterkraft.lang.runtime.VmStopReason
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class BackgroundComputerVmTest {
+    @Test
+    fun bootCompletesWhenVmRegistrySupportsImportedModule() {
+        runtimeTestWorkspace("compukterkraft-background-vm-success") { workspace ->
+            workspace.writeProgram(1, "bios.ck", "import filesystem;\nfun main() {}")
+
+            val vm =
+                BackgroundComputerVm(
+                    computerId = 1,
+                    profile = runtimeProfile(),
+                    dispatcher = Dispatchers.Default,
+                    labelProvider = { null },
+                    logger = ComputerVmLogger { },
+                    workspace = workspace.host,
+                )
+
+            vm.boot()
+
+            val terminalState =
+                runBlocking {
+                    val deferred =
+                        async {
+                            withTimeout(5_000) {
+                                vm.terminalStates.first()
+                            }
+                        }
+
+                    vm.requestSlice(0)
+                    deferred.await()
+                }
+
+            assertTrue(terminalState is VmState.Stopped)
+            assertEquals(VmStopReason.REQUESTED, terminalState.reason)
+        }
+    }
+
     @Test
     fun surfacesRomLimitFailureAsCrashedState() {
         val root = createTempDirectory("compukterkraft-background-vm")
@@ -97,7 +136,7 @@ class BackgroundComputerVmTest {
     }
 
     @Test
-    fun bootFailsBeforeExecutionWhenVmRegistryDoesNotSupportImportedModule() {
+    fun bootRejectsOptionalPeripheralModuleWhenVmRegistryDoesNotExposeIt() {
         val root = createTempDirectory("compukterkraft-background-vm")
 
         try {

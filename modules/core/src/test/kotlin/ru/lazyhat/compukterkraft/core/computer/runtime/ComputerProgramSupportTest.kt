@@ -18,57 +18,118 @@
  */
 package ru.lazyhat.compukterkraft.core.computer.runtime
 
-import ru.lazyhat.compukterkraft.core.computer.vm.ComputerWorkspaceHost
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerCpuResources
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerMemoryResources
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerProfile
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerQueueResources
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerResources
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerStorageResources
-import kotlin.io.path.createDirectories
-import kotlin.io.path.createTempDirectory
-import kotlin.io.path.writeText
+import ru.lazyhat.compukterkraft.core.computer.runtime.test.runtimeProfile
+import ru.lazyhat.compukterkraft.core.computer.runtime.test.runtimeTestWorkspace
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ComputerProgramSupportTest {
     @Test
+    fun fixtureWritesProgramIntoIsolatedWorkspace() {
+        runtimeTestWorkspace("fixture") { workspace ->
+            workspace.writeProgram(7, "boot.ck", "fun main() { terminal.printLine(\"first\"); }")
+            workspace.writeProgram(8, "boot.ck", "fun main() { terminal.printLine(\"second\"); }")
+
+            val loader = WorkspaceProgramLoader(workspace.host)
+
+            val first = loader.load(7, "boot.ck")
+            val second = loader.load(8, "boot.ck")
+
+            assertNotNull(first)
+            assertNotNull(second)
+            assertEquals("fun main() { terminal.printLine(\"first\"); }", first.source)
+            assertEquals("fun main() { terminal.printLine(\"second\"); }", second.source)
+        }
+    }
+
+    @Test
     fun loadsDocumentFromWorkspace() {
-        val root = createTempDirectory("compukterkraft-program-loader")
-        try {
-            val workspace = ComputerWorkspaceHost(rootPath = root)
-            root
-                .resolve("7")
-                .createDirectories()
-                .resolve("shell.ck")
-                .writeText("fun main() { }")
-            val loader = WorkspaceProgramLoader(workspace)
+        runtimeTestWorkspace("program-loader") { workspace ->
+            workspace.writeProgram(7, "shell.ck", "fun main() { }")
+            val loader = WorkspaceProgramLoader(workspace.host)
 
             val program = loader.load(7, "shell.ck")
 
             assertNotNull(program)
             assertEquals("shell.ck", program.path)
             assertEquals("fun main() { }", program.source)
-        } finally {
-            root.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun loadsDocumentFromNestedWorkspacePath() {
+        runtimeTestWorkspace("program-loader-nested") { workspace ->
+            workspace.writeProgram(7, "lib/shell.ck", "fun main() { }")
+            val loader = WorkspaceProgramLoader(workspace.host)
+
+            val program = loader.load(7, "lib/shell.ck")
+
+            assertNotNull(program)
+            assertEquals("lib/shell.ck", program.path)
+            assertEquals("fun main() { }", program.source)
+        }
+    }
+
+    @Test
+    fun rejectsProgramPathTraversalOutsideWorkspace() {
+        runtimeTestWorkspace("program-loader-sandbox") { workspace ->
+            assertFailsWith<IllegalArgumentException> {
+                workspace.writeProgram(7, "../shell.ck", "fun main() { }")
+            }
+        }
+    }
+
+    @Test
+    fun normalizesAbsoluteLookingProgramPathInsideWorkspace() {
+        runtimeTestWorkspace("program-loader-absolute") { workspace ->
+            workspace.writeProgram(7, "/tmp/shell.ck", "fun main() { }")
+            val loader = WorkspaceProgramLoader(workspace.host)
+
+            val program = loader.load(7, "tmp/shell.ck")
+
+            assertNotNull(program)
+            assertEquals("tmp/shell.ck", program.path)
+            assertEquals("fun main() { }", program.source)
+        }
+    }
+
+    @Test
+    fun rejectsProgramPathTraversalWhenLoadingProgram() {
+        runtimeTestWorkspace("program-loader-load-traversal") { workspace ->
+            val loader = WorkspaceProgramLoader(workspace.host)
+
+            assertFailsWith<IllegalArgumentException> {
+                loader.load(7, "../shell.ck")
+            }
+        }
+    }
+
+    @Test
+    fun normalizesAbsoluteLookingProgramPathWhenLoadingProgram() {
+        runtimeTestWorkspace("program-loader-load-absolute") { workspace ->
+            workspace.writeProgram(7, "tmp/shell.ck", "fun main() { }")
+            val loader = WorkspaceProgramLoader(workspace.host)
+
+            val program = loader.load(7, "/tmp/shell.ck")
+
+            assertNotNull(program)
+            assertEquals("tmp/shell.ck", program.path)
+            assertEquals("fun main() { }", program.source)
         }
     }
 
     @Test
     fun returnsNullWhenDocumentIsMissing() {
-        val root = createTempDirectory("compukterkraft-program-loader")
-        try {
-            val workspace = ComputerWorkspaceHost(rootPath = root)
-            val loader = WorkspaceProgramLoader(workspace)
+        runtimeTestWorkspace("program-loader") { workspace ->
+            val loader = WorkspaceProgramLoader(workspace.host)
 
             val program = loader.load(7, "shell.ck")
 
             assertNull(program)
-        } finally {
-            root.toFile().deleteRecursively()
         }
     }
 
@@ -82,23 +143,7 @@ class ComputerProgramSupportTest {
 
     @Test
     fun rejectsProgramWhenCompiledBytecodeExceedsRomLimit() {
-        val profile =
-            ComputerProfile(
-                id = "test",
-                displayName = "Test",
-                cpuBudgetNanosPerSlice = 1_000_000,
-                maxEventQueueSize = 16,
-                terminalWidth = 16,
-                terminalHeight = 8,
-                colorTerminal = true,
-                resources =
-                    ComputerResources(
-                        cpu = ComputerCpuResources(wallTimeGuardNanosPerSlice = 1_000_000),
-                        memory = ComputerMemoryResources(),
-                        storage = ComputerStorageResources(programRomBytes = 1, diskBytes = 1024),
-                        queues = ComputerQueueResources(eventQueueSlots = 16, hostCallQueueSlots = 16),
-                    ),
-            )
+        val profile = runtimeProfile(programRomBytes = 1)
 
         val compiled = ComputerProgramCompiler.compile("tiny.ck", "fun main() { }", profile)
 

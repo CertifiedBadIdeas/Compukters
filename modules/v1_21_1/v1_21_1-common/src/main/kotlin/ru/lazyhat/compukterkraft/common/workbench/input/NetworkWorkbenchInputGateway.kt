@@ -56,25 +56,49 @@ class NetworkWorkbenchInputGateway(
 
             is MouseInputEvent.Click -> {
                 ClientNetworking.sendToServer(
-                    WorkbenchInputServerMessage(menu, WorkbenchInputServerMessage.Action.MOUSE_CLICK, arg = event.button, x = event.x, y = event.y),
+                    WorkbenchInputServerMessage(
+                        menu,
+                        WorkbenchInputServerMessage.Action.MOUSE_CLICK,
+                        arg = event.button,
+                        x = event.x,
+                        y = event.y,
+                    ),
                 )
             }
 
             is MouseInputEvent.Drag -> {
                 ClientNetworking.sendToServer(
-                    WorkbenchInputServerMessage(menu, WorkbenchInputServerMessage.Action.MOUSE_DRAG, arg = event.button, x = event.x, y = event.y),
+                    WorkbenchInputServerMessage(
+                        menu,
+                        WorkbenchInputServerMessage.Action.MOUSE_DRAG,
+                        arg = event.button,
+                        x = event.x,
+                        y = event.y,
+                    ),
                 )
             }
 
             is MouseInputEvent.Up -> {
                 ClientNetworking.sendToServer(
-                    WorkbenchInputServerMessage(menu, WorkbenchInputServerMessage.Action.MOUSE_UP, arg = event.button, x = event.x, y = event.y),
+                    WorkbenchInputServerMessage(
+                        menu,
+                        WorkbenchInputServerMessage.Action.MOUSE_UP,
+                        arg = event.button,
+                        x = event.x,
+                        y = event.y,
+                    ),
                 )
             }
 
             is MouseInputEvent.Scroll -> {
                 ClientNetworking.sendToServer(
-                    WorkbenchInputServerMessage(menu, WorkbenchInputServerMessage.Action.MOUSE_SCROLL, arg = event.direction, x = event.x, y = event.y),
+                    WorkbenchInputServerMessage(
+                        menu,
+                        WorkbenchInputServerMessage.Action.MOUSE_SCROLL,
+                        arg = event.direction,
+                        x = event.x,
+                        y = event.y,
+                    ),
                 )
             }
 
@@ -84,7 +108,9 @@ class NetworkWorkbenchInputGateway(
                 )
             }
 
-            else -> Unit
+            else -> {
+                Unit
+            }
         }
     }
 }

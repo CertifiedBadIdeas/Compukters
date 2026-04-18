@@ -19,11 +19,11 @@
 package ru.lazyhat.compukterkraft.common.computer.input
 
 import net.minecraft.world.inventory.AbstractContainerMenu
-import ru.lazyhat.compukterkraft.common.network.ClientNetworking
 import ru.lazyhat.compukterkraft.common.computer.network.server.ComputerActionServerMessage
 import ru.lazyhat.compukterkraft.common.computer.network.server.KeyEventServerMessage
 import ru.lazyhat.compukterkraft.common.computer.network.server.MouseEventServerMessage
 import ru.lazyhat.compukterkraft.common.computer.network.server.PasteEventComputerMessage
+import ru.lazyhat.compukterkraft.common.network.ClientNetworking
 import ru.lazyhat.compukterkraft.core.LOGGER
 import ru.lazyhat.compukterkraft.core.computer.input.ComputerControlAction
 import ru.lazyhat.compukterkraft.core.computer.input.ComputerInputGateway

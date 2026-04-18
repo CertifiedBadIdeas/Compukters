@@ -20,6 +20,7 @@
 package ru.lazyhat.compukterkraft.core.computer.vm.api
 
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -45,5 +46,28 @@ class VmPeripheralRegistryTest {
         registry.detach("monitor-1")
 
         assertFalse(api.monitorExists())
+    }
+
+    @Test
+    fun detachRemovesOnlyTheNamedDevice() {
+        val registry = VmPeripheralRegistry()
+
+        registry.attach(VmPeripheralDevice(id = "monitor-1", type = "monitor", side = "left"))
+        registry.attach(VmPeripheralDevice(id = "monitor-2", type = "monitor", side = "right"))
+
+        registry.detach("monitor-1")
+
+        assertEquals(listOf("monitor-2"), registry.devicesOfType("monitor").map { it.id })
+        assertTrue(registry.hasDevice("monitor"))
+    }
+
+    @Test
+    fun reportsNoMonitorAfterLastDeviceDetaches() {
+        val registry = VmPeripheralRegistry()
+
+        registry.attach(VmPeripheralDevice(id = "monitor-1", type = "monitor"))
+        registry.detach("monitor-1")
+
+        assertFalse(registry.hasDevice("monitor"))
     }
 }
