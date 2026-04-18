@@ -55,8 +55,14 @@ class ComputerBlockDropSourceTest {
     private fun abstractComputerBlockSource(): Path {
         val candidates =
             listOf(
-                Path.of(System.getProperty("user.dir"), "src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/block/AbstractComputerBlock.kt"),
-                Path.of(System.getProperty("user.dir"), "modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/block/AbstractComputerBlock.kt"),
+                Path.of(
+                    System.getProperty("user.dir"),
+                    "src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/block/AbstractComputerBlock.kt",
+                ),
+                Path.of(
+                    System.getProperty("user.dir"),
+                    "modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/block/AbstractComputerBlock.kt",
+                ),
             )
 
         return candidates.firstOrNull(Files::exists)

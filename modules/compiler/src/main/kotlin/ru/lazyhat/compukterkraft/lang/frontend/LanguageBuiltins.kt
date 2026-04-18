@@ -257,7 +257,7 @@ object LanguageBuiltins {
                 ),
         )
 
-            @Deprecated("Use defaultRuntimeRegistry")
-            val registry: BuiltinRegistry
-            get() = defaultRuntimeRegistry
+    @Deprecated("Use defaultRuntimeRegistry")
+    val registry: BuiltinRegistry
+        get() = defaultRuntimeRegistry
 }

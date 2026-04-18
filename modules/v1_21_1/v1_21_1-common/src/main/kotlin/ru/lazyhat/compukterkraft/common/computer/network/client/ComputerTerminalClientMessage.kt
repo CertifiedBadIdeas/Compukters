@@ -17,14 +17,13 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 package ru.lazyhat.compukterkraft.common.computer.network.client
-import ru.lazyhat.compukterkraft.common.network.ClientNetworkContext
-
 import net.minecraft.network.FriendlyByteBuf
 import net.minecraft.world.inventory.AbstractContainerMenu
-import ru.lazyhat.compukterkraft.common.ui.TerminalState
+import ru.lazyhat.compukterkraft.common.network.ClientNetworkContext
 import ru.lazyhat.compukterkraft.common.network.MessageType
 import ru.lazyhat.compukterkraft.common.network.NetworkMessage
 import ru.lazyhat.compukterkraft.common.network.NetworkMessages
+import ru.lazyhat.compukterkraft.common.ui.TerminalState
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 
 /**

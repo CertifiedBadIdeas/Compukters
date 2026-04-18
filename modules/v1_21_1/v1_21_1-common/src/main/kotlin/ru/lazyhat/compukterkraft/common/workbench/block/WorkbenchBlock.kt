@@ -41,7 +41,8 @@ import ru.lazyhat.compukterkraft.common.utils.ifServerSide
 
 class WorkbenchBlock(
     properties: Properties,
-) : HorizontalDirectionalBlock(properties), EntityBlock {
+) : HorizontalDirectionalBlock(properties),
+    EntityBlock {
     companion object {
         private val CODEC: MapCodec<WorkbenchBlock> = simpleCodec(::WorkbenchBlock)
         val facing: DirectionProperty = BlockStateProperties.HORIZONTAL_FACING
@@ -69,8 +70,10 @@ class WorkbenchBlock(
     override fun getStateForPlacement(context: BlockPlaceContext): BlockState =
         defaultBlockState().setValue(facing, context.horizontalDirection.opposite)
 
-    override fun newBlockEntity(pos: net.minecraft.core.BlockPos, state: BlockState): BlockEntity =
-        WorkbenchBlockEntity(pos, state)
+    override fun newBlockEntity(
+        pos: net.minecraft.core.BlockPos,
+        state: BlockState,
+    ): BlockEntity = WorkbenchBlockEntity(pos, state)
 
     override fun useWithoutItem(
         state: BlockState,

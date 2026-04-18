@@ -21,9 +21,9 @@ package ru.lazyhat.compukterkraft.common.network
 
 import net.minecraft.client.Minecraft
 import ru.lazyhat.compukterkraft.common.computer.menu.ComputerMenu
-import ru.lazyhat.compukterkraft.common.workbench.menu.AbstractWorkbenchMenu
-import ru.lazyhat.compukterkraft.common.network.text.TableBuilder
 import ru.lazyhat.compukterkraft.common.network.text.ClientTableFormatter
+import ru.lazyhat.compukterkraft.common.network.text.TableBuilder
+import ru.lazyhat.compukterkraft.common.workbench.menu.AbstractWorkbenchMenu
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchRemoteState
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 

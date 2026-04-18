@@ -19,8 +19,8 @@
 package ru.lazyhat.compukterkraft.common.network
 
 import net.minecraft.server.level.ServerPlayer
-import ru.lazyhat.compukterkraft.common.network.NetworkMessage
 import ru.lazyhat.compukterkraft.common.network.ClientNetworkContext
+import ru.lazyhat.compukterkraft.common.network.NetworkMessage
 
 /**
  * Methods for sending network messages from the server to clients.

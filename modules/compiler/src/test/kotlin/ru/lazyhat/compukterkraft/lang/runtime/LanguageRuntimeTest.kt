@@ -428,7 +428,7 @@ class LanguageRuntimeTest {
     }
 
     @Test
-    fun routesMonitorExistsThroughRuntimeBridge() {
+    fun routesMonitorExistsThroughRuntimeBridgeWhenDeviceIsMissing() {
         val frontend =
             LanguageFrontend(
                 BuiltinRegistry(
@@ -481,6 +481,62 @@ class LanguageRuntimeTest {
         }
 
         assertEquals(listOf("missing"), runtime.lines)
+    }
+
+    @Test
+    fun routesMonitorExistsThroughRuntimeBridgeWhenDeviceIsConnected() {
+        val frontend =
+            LanguageFrontend(
+                BuiltinRegistry(
+                    modules =
+                        LanguageBuiltins.defaultRuntimeRegistry.modules +
+                            BuiltinModule(
+                                name = "monitor",
+                                documentation = "Connected monitor registry.",
+                                functions =
+                                    listOf(
+                                        BuiltinFunction(
+                                            "exists",
+                                            emptyList(),
+                                            "Bool",
+                                            "Returns true when any monitor is connected.",
+                                        ),
+                                    ),
+                                origin = ModuleOrigin.OPTIONAL_VM,
+                            ),
+                    globals = LanguageBuiltins.defaultRuntimeRegistry.globals,
+                    builtinTypes = LanguageBuiltins.defaultRuntimeRegistry.builtinTypes,
+                ),
+            )
+
+        val artifact =
+            frontend.compile(
+                "monitor_connected.ck",
+                """
+                import terminal;
+                import monitor;
+
+                fun main() {
+                    if (monitor.exists()) {
+                        terminal.printLine("connected");
+                    } else {
+                        terminal.printLine("missing");
+                    }
+                }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+
+        val runtime = RecordingRuntime(monitorConnected = true)
+        runBlocking {
+            BytecodeComputerProgram(requireNotNull(artifact.module)).run(runtime)
+        }
+
+        assertEquals(listOf("connected"), runtime.lines)
     }
 }
 

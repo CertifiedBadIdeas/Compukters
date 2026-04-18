@@ -187,7 +187,9 @@ class WorkbenchLayoutModel(
     fun importPickerPopup(state: WorkbenchState): ImportPickerPopupLayout? {
         if (!state.editor.importPickerVisible || state.editor.importPickerItems.isEmpty()) return null
 
-        val visibleItems = state.editor.importPickerItems.size.coerceAtMost(MAX_COMPLETION_ITEMS)
+        val visibleItems =
+            state.editor.importPickerItems.size
+                .coerceAtMost(MAX_COMPLETION_ITEMS)
         val popupWidth =
             max(
                 160,
@@ -243,7 +245,13 @@ class WorkbenchLayoutModel(
         return lineIndex to bestColumn
     }
 
-    private fun toolbarButtonBounds(index: Int): UiRect = UiRect(headerBounds.x + 8 + index * 80, headerBounds.y + (headerBounds.height - 20) / 2, 72, 20)
+    private fun toolbarButtonBounds(index: Int): UiRect =
+        UiRect(
+            headerBounds.x + 8 + index * 80,
+            headerBounds.y + (headerBounds.height - 20) / 2,
+            72,
+            20,
+        )
 
     companion object {
         fun fullscreen(
@@ -261,8 +269,10 @@ class WorkbenchLayoutModel(
                     leftPos + FULLSCREEN_OUTER_PADDING,
                     bodyTop,
                     FULLSCREEN_SIDEBAR_WIDTH,
-                    (screenHeight - FULLSCREEN_HEADER_HEIGHT - FULLSCREEN_STATUS_HEIGHT - FULLSCREEN_OUTER_PADDING * 2 - FULLSCREEN_SECTION_GAP)
-                        .coerceAtLeast(1),
+                    (
+                        screenHeight - FULLSCREEN_HEADER_HEIGHT - FULLSCREEN_STATUS_HEIGHT - FULLSCREEN_OUTER_PADDING * 2 -
+                            FULLSCREEN_SECTION_GAP
+                    ).coerceAtLeast(1),
                 )
             val statusBarBounds = UiRect(leftPos, topPos + screenHeight - FULLSCREEN_STATUS_HEIGHT, screenWidth, FULLSCREEN_STATUS_HEIGHT)
             val inventoryBounds =

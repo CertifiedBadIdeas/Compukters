@@ -22,10 +22,10 @@ package ru.lazyhat.compukterkraft.impl.platform
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
+import kotlin.io.path.readText
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
-import kotlin.io.path.readText
 
 class LocalizationParityResourceTest {
     @Test

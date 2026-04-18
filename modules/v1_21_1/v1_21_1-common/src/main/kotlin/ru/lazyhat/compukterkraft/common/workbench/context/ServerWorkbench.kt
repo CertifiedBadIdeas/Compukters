@@ -25,9 +25,9 @@ import ru.lazyhat.compukterkraft.common.computer.item.ComputerItem
 import ru.lazyhat.compukterkraft.common.utils.computerDataTag
 import ru.lazyhat.compukterkraft.common.utils.computerFamilyId
 import ru.lazyhat.compukterkraft.common.utils.computerID
+import ru.lazyhat.compukterkraft.core.block.ComputerFamily
 import ru.lazyhat.compukterkraft.core.computer.ComputerEvents
 import ru.lazyhat.compukterkraft.core.computer.input.InputEvent
-import ru.lazyhat.compukterkraft.core.block.ComputerFamily
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchRemoteState
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchSyncState
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchTargetState

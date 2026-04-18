@@ -21,14 +21,14 @@ package ru.lazyhat.compukterkraft.common.network
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet
 import it.unimi.dsi.fastutil.ints.IntSet
 import net.minecraft.network.FriendlyByteBuf
-import ru.lazyhat.compukterkraft.common.network.text.ChatTableClientMessage
-import ru.lazyhat.compukterkraft.common.network.ClientNetworkContext
 import ru.lazyhat.compukterkraft.common.computer.network.client.ComputerTerminalClientMessage
 import ru.lazyhat.compukterkraft.common.computer.network.server.ComputerActionServerMessage
 import ru.lazyhat.compukterkraft.common.computer.network.server.KeyEventServerMessage
 import ru.lazyhat.compukterkraft.common.computer.network.server.MouseEventServerMessage
 import ru.lazyhat.compukterkraft.common.computer.network.server.PasteEventComputerMessage
+import ru.lazyhat.compukterkraft.common.network.ClientNetworkContext
 import ru.lazyhat.compukterkraft.common.network.ServerNetworkContext
+import ru.lazyhat.compukterkraft.common.network.text.ChatTableClientMessage
 import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchTerminalClientMessage
 import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchWorkspaceClientMessage
 import ru.lazyhat.compukterkraft.common.workbench.network.server.WorkbenchInputServerMessage
