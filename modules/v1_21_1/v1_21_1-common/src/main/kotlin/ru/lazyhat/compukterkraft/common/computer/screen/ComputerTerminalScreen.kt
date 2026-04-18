@@ -220,11 +220,29 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
         controlButtons().forEach { button ->
             val hovered = button.bounds.contains(mouseX, mouseY)
             val background = if (hovered) BUTTON_BACKGROUND_HOVER else BUTTON_BACKGROUND
-            graphics.fill(button.bounds.x, button.bounds.y, button.bounds.x + button.bounds.width, button.bounds.y + button.bounds.height, background)
+            graphics.fill(
+                button.bounds.x,
+                button.bounds.y,
+                button.bounds.x + button.bounds.width,
+                button.bounds.y + button.bounds.height,
+                background,
+            )
             graphics.fill(button.bounds.x, button.bounds.y, button.bounds.x + button.bounds.width, button.bounds.y + 1, button.accent)
-            graphics.fill(button.bounds.x, button.bounds.y + button.bounds.height - 1, button.bounds.x + button.bounds.width, button.bounds.y + button.bounds.height, BUTTON_BORDER)
+            graphics.fill(
+                button.bounds.x,
+                button.bounds.y + button.bounds.height - 1,
+                button.bounds.x + button.bounds.width,
+                button.bounds.y + button.bounds.height,
+                BUTTON_BORDER,
+            )
             graphics.fill(button.bounds.x, button.bounds.y, button.bounds.x + 1, button.bounds.y + button.bounds.height, BUTTON_BORDER)
-            graphics.fill(button.bounds.x + button.bounds.width - 1, button.bounds.y, button.bounds.x + button.bounds.width, button.bounds.y + button.bounds.height, BUTTON_BORDER)
+            graphics.fill(
+                button.bounds.x + button.bounds.width - 1,
+                button.bounds.y,
+                button.bounds.x + button.bounds.width,
+                button.bounds.y + button.bounds.height,
+                BUTTON_BORDER,
+            )
             when (button.kind) {
                 ControlButtonKind.POWER -> renderPowerIcon(graphics, button.bounds.x, button.bounds.y, button.iconColor)
                 ControlButtonKind.REBOOT -> renderRebootIcon(graphics, button.bounds.x, button.bounds.y, button.iconColor)
@@ -277,7 +295,9 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
         statusBounds: TerminalRect,
         slotFromRight: Int,
     ): TerminalRect {
-        val x = statusBounds.x + statusBounds.width - STATUS_BUTTON_MARGIN_END - STATUS_BUTTON_SIZE * (slotFromRight + 1) - STATUS_BUTTON_GAP * slotFromRight
+        val x =
+            statusBounds.x + statusBounds.width - STATUS_BUTTON_MARGIN_END - STATUS_BUTTON_SIZE * (slotFromRight + 1) -
+                STATUS_BUTTON_GAP * slotFromRight
         val y = statusBounds.y + (statusBounds.height - STATUS_BUTTON_SIZE) / 2
         return TerminalRect(x, y, STATUS_BUTTON_SIZE, STATUS_BUTTON_SIZE)
     }

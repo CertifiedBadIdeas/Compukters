@@ -25,10 +25,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.inventory.AbstractContainerMenu
 import net.minecraft.world.inventory.MenuType
-import ru.lazyhat.compukterkraft.core.computer.input.InputEvent
 import ru.lazyhat.compukterkraft.common.workbench.context.ServerWorkbench
 import ru.lazyhat.compukterkraft.common.workbench.data.WorkbenchContainerData
 import ru.lazyhat.compukterkraft.common.workbench.network.server.WorkbenchWorkspaceServerMessage
+import ru.lazyhat.compukterkraft.core.computer.input.InputEvent
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchRemoteState
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 
@@ -78,28 +78,39 @@ abstract class AbstractWorkbenchMenu(
     ): WorkbenchRemoteState? {
         val workbench = serverWorkbench ?: return null
         return when (action) {
-            WorkbenchWorkspaceServerMessage.Action.LIST -> workbench.snapshot(_workspaceStateFlow.value.document?.path)
-            WorkbenchWorkspaceServerMessage.Action.READ -> workbench.snapshot(path)
+            WorkbenchWorkspaceServerMessage.Action.LIST -> {
+                workbench.snapshot(_workspaceStateFlow.value.document?.path)
+            }
+
+            WorkbenchWorkspaceServerMessage.Action.READ -> {
+                workbench.snapshot(path)
+            }
+
             WorkbenchWorkspaceServerMessage.Action.WRITE -> {
                 workbench.write(path, text)
                 workbench.snapshot(path)
             }
+
             WorkbenchWorkspaceServerMessage.Action.PULL -> {
                 workbench.pullFromTarget()
                 workbench.snapshot(_workspaceStateFlow.value.document?.path)
             }
+
             WorkbenchWorkspaceServerMessage.Action.PUSH -> {
                 workbench.pushToTarget()
                 workbench.snapshot(_workspaceStateFlow.value.document?.path)
             }
+
             WorkbenchWorkspaceServerMessage.Action.RUN -> {
                 workbench.runTargetProgram()
                 workbench.snapshot(_workspaceStateFlow.value.document?.path)
             }
+
             WorkbenchWorkspaceServerMessage.Action.REBOOT -> {
                 workbench.rebootTarget()
                 workbench.snapshot(_workspaceStateFlow.value.document?.path)
             }
+
             WorkbenchWorkspaceServerMessage.Action.ATTACH_TERMINAL -> {
                 workbench.attachTerminal()
                 workbench.snapshot(_workspaceStateFlow.value.document?.path)

@@ -35,13 +35,13 @@ import net.minecraft.world.level.block.state.BlockState
 import ru.lazyhat.compukterkraft.common.binding.ModObjects
 import ru.lazyhat.compukterkraft.common.computer.context.ServerComputer
 import ru.lazyhat.compukterkraft.common.computer.context.ServerContext
+import ru.lazyhat.compukterkraft.common.network.ServerNetworking
 import ru.lazyhat.compukterkraft.common.workbench.context.ServerWorkbench
 import ru.lazyhat.compukterkraft.common.workbench.context.WorkbenchTargetRuntimeBridge
 import ru.lazyhat.compukterkraft.common.workbench.data.WorkbenchContainerData
-import ru.lazyhat.compukterkraft.common.workbench.menu.WorkbenchMenuWithoutInventory
 import ru.lazyhat.compukterkraft.common.workbench.menu.AbstractWorkbenchMenu
+import ru.lazyhat.compukterkraft.common.workbench.menu.WorkbenchMenuWithoutInventory
 import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchTerminalClientMessage
-import ru.lazyhat.compukterkraft.common.network.ServerNetworking
 import ru.lazyhat.compukterkraft.core.block.ComputerFamily
 import ru.lazyhat.compukterkraft.core.computer.ComputerProperties
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
@@ -49,7 +49,8 @@ import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 class WorkbenchBlockEntity(
     pos: BlockPos,
     state: BlockState,
-) : BlockEntity(ModObjects.workbenchBlockEntityType(), pos, state), MenuProvider {
+) : BlockEntity(ModObjects.workbenchBlockEntityType(), pos, state),
+    MenuProvider {
     private var workspaceId: Int? = null
     private var targetStack: ItemStack = ItemStack.EMPTY
     private var targetComputerId: Int? = null
@@ -79,7 +80,11 @@ class WorkbenchBlockEntity(
 
     fun openFor(player: Player) {
         val serverPlayer = player as? ServerPlayer ?: return
-        ModObjects.openWorkbenchMenu(serverPlayer, this, WorkbenchContainerData.from(getOrCreateServerWorkbench().targetState(), currentTargetStack()))
+        ModObjects.openWorkbenchMenu(
+            serverPlayer,
+            this,
+            WorkbenchContainerData.from(getOrCreateServerWorkbench().targetState(), currentTargetStack()),
+        )
     }
 
     fun setTargetStack(stack: ItemStack) {
@@ -169,7 +174,8 @@ class WorkbenchBlockEntity(
     ) {
         super.loadAdditional(tag, registries)
         workspaceId = tag.takeIf { it.contains(WORKSPACE_ID_TAG) }?.getInt(WORKSPACE_ID_TAG)
-        targetStack = if (tag.contains(TARGET_STACK_TAG)) ItemStack.parseOptional(registries, tag.getCompound(TARGET_STACK_TAG)) else ItemStack.EMPTY
+        targetStack =
+            if (tag.contains(TARGET_STACK_TAG)) ItemStack.parseOptional(registries, tag.getCompound(TARGET_STACK_TAG)) else ItemStack.EMPTY
         targetComputerId = tag.takeIf { it.contains(TARGET_COMPUTER_ID_TAG) }?.getInt(TARGET_COMPUTER_ID_TAG)
         targetDisplayName = tag.takeIf { it.contains(TARGET_DISPLAY_NAME_TAG) }?.getString(TARGET_DISPLAY_NAME_TAG)
         targetFamilyId = tag.takeIf { it.contains(TARGET_FAMILY_ID_TAG) }?.getString(TARGET_FAMILY_ID_TAG)

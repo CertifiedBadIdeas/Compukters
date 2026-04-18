@@ -78,7 +78,10 @@ class WorkbenchStoreTest {
             store.charTyped('w', visibleEditorLines = 20)
 
             assertEquals(listOf("completeFromLastAnalysis:0:1"), ideFacade.calls)
-            assertTrue(store.state.editor.completionItems.isNotEmpty())
+            assertTrue(
+                store.state.editor.completionItems
+                    .isNotEmpty(),
+            )
         }
 
     @Test
@@ -96,7 +99,10 @@ class WorkbenchStoreTest {
             store.charTyped(' ', visibleEditorLines = 20)
 
             assertTrue(ideFacade.calls.isEmpty())
-            assertTrue(store.state.editor.completionItems.isEmpty())
+            assertTrue(
+                store.state.editor.completionItems
+                    .isEmpty(),
+            )
         }
 
     @Test
@@ -146,7 +152,11 @@ class WorkbenchStoreTest {
             store.openImportPicker()
 
             assertTrue(store.state.editor.importPickerVisible)
-            assertEquals(listOf("terminal"), store.state.editor.importPickerItems.map { it.label })
+            assertEquals(
+                listOf("terminal"),
+                store.state.editor.importPickerItems
+                    .map { it.label },
+            )
         }
 
     @Test
@@ -163,7 +173,10 @@ class WorkbenchStoreTest {
             store.openImportPicker()
             store.applyImportPickerSelection(0, visibleEditorLines = 20)
 
-            assertTrue(store.state.editor.text.startsWith("import terminal;\n"))
+            assertTrue(
+                store.state.editor.text
+                    .startsWith("import terminal;\n"),
+            )
             assertTrue(!store.state.editor.importPickerVisible)
         }
 
@@ -206,7 +219,10 @@ class WorkbenchStoreTest {
             store.keyPressed(KeyCodes.KEY_DOWN, modifiers = 0, visibleEditorLines = 20)
             store.keyPressed(KeyCodes.KEY_ENTER, modifiers = 0, visibleEditorLines = 20)
 
-            assertTrue(store.state.editor.text.startsWith("import filesystem;\n"))
+            assertTrue(
+                store.state.editor.text
+                    .startsWith("import filesystem;\n"),
+            )
             assertTrue(!store.state.editor.importPickerVisible)
         }
 
@@ -379,8 +395,7 @@ class WorkbenchStoreTest {
             source: String,
             line: Int,
             column: Int,
-        ): List<CompletionItem> =
-            listOf(CompletionItem(label = "manual", detail = "", kind = CompletionItemKind.KEYWORD))
+        ): List<CompletionItem> = listOf(CompletionItem(label = "manual", detail = "", kind = CompletionItemKind.KEYWORD))
 
         override fun completeFromLastAnalysis(
             path: String,

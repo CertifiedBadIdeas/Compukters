@@ -73,7 +73,8 @@ class ServerWorkbenchTest {
                 set(DataComponents.CUSTOM_NAME, Component.literal("Unbound Pocket"))
             }
 
-        val workbench = ServerWorkbench(workspaceId = 11, workspace = ComputerWorkspaceHost(createTempDirectory("server-workbench-unbound")))
+        val workbench =
+            ServerWorkbench(workspaceId = 11, workspace = ComputerWorkspaceHost(createTempDirectory("server-workbench-unbound")))
         workbench.setTarget(stack)
 
         assertEquals("Unbound Pocket", workbench.targetState().displayName)
@@ -159,7 +160,10 @@ class ServerWorkbenchTest {
 
         workbench.runTargetProgram()
         workbench.attachTerminal()
-        workbench.handleInput(ru.lazyhat.compukterkraft.core.computer.input.KeyInputEvent.Down(28, repeat = false))
+        workbench.handleInput(
+            ru.lazyhat.compukterkraft.core.computer.input.KeyInputEvent
+                .Down(28, repeat = false),
+        )
 
         assertEquals(listOf("run:5", "attach:5", "event:key"), bridge.calls)
         assertNotNull(workbench.currentScreenSnapshot())
