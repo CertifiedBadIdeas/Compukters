@@ -25,15 +25,12 @@ import net.minecraft.world.level.storage.loot.predicates.LootItemCondition
 import net.minecraft.world.level.storage.loot.predicates.LootItemConditionType
 import ru.lazyhat.compukterkraft.common.binding.ModObjects
 import ru.lazyhat.compukterkraft.common.computer.block.AbstractComputerBlockEntity
-import ru.lazyhat.compukterkraft.core.LOGGER
 
 object HasComputerIdLootCondition : LootItemCondition {
-    override fun test(lootContext: LootContext): Boolean {
-        LOGGER.info { "HasComputerIdLoggCondition Test condition: $lootContext" }
-        return lootContext.getParamOrNull(LootContextParams.BLOCK_ENTITY)?.let { tile ->
+    override fun test(lootContext: LootContext): Boolean =
+        lootContext.getParamOrNull(LootContextParams.BLOCK_ENTITY)?.let { tile ->
             tile is AbstractComputerBlockEntity && tile.computerID != null
         } ?: false
-    }
 
     override fun getReferencedContextParams(): Set<LootContextParam<*>> = setOf(LootContextParams.BLOCK_ENTITY)
 
