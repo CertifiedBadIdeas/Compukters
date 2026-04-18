@@ -1,3 +1,22 @@
+/*
+ * The Compukter Kraft Developers
+ *
+ * Copyright (C) 2026 Vsevolod Petrov (lazyhat)
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package ru.lazyhat.compukterkraft.core.architecture
 
 import java.nio.file.Files
@@ -28,9 +47,10 @@ class ArchitectureBoundaryTest {
             "Expected core source directory at $coreSourcesRoot before scanning for forbidden imports.",
         )
 
-        val offenders = kotlinFilesUnder(coreSourcesRoot).filter { file ->
-            Files.readAllLines(file).any(::containsForbiddenMinecraftImport)
-        }
+        val offenders =
+            kotlinFilesUnder(coreSourcesRoot).filter { file ->
+                Files.readAllLines(file).any(::containsForbiddenMinecraftImport)
+            }
 
         assertTrue(
             offenders.isEmpty(),
@@ -56,74 +76,83 @@ class ArchitectureBoundaryTest {
         error("Could not locate settings.gradle.kts starting from ${startingPaths.joinToString()}")
     }
 
-    private fun containsForbiddenMinecraftImport(line: String): Boolean =
-        forbiddenMinecraftImportPattern.containsMatchIn(line)
+    private fun containsForbiddenMinecraftImport(line: String): Boolean = forbiddenMinecraftImportPattern.containsMatchIn(line)
 
     // Some test runners can omit a usable codeSource location, so user.dir remains the fallback.
     private fun testClassLocationPathOrNull(): Path? =
         runCatching {
-            Path.of(ArchitectureBoundaryTest::class.java.protectionDomain.codeSource.location.toURI()).toAbsolutePath()
+            Path
+                .of(
+                    ArchitectureBoundaryTest::class.java.protectionDomain.codeSource.location
+                        .toURI(),
+                ).toAbsolutePath()
         }.getOrNull()
 
     @Test
     fun loaderLeafModulesContainOnlyAllowedMainSourceFiles() {
         val repoRoot = findRepoRoot()
-        val allowedFiles = mapOf(
-            "modules/v1_20_1/v1_20_1-fabric/src/main/kotlin" to setOf(
-                "ru/lazyhat/compukterkraft/impl/ClientRegistry.kt",
-                "ru/lazyhat/compukterkraft/impl/CompukterKraftClientMod.kt",
-                "ru/lazyhat/compukterkraft/impl/CompukterKraftMod.kt",
-                "ru/lazyhat/compukterkraft/impl/Extensions.kt",
-                "ru/lazyhat/compukterkraft/impl/FabricCommonHooks.kt",
-                "ru/lazyhat/compukterkraft/impl/ModRegistry.kt",
-                "ru/lazyhat/compukterkraft/impl/platform/NetworkHandler.kt",
-            ),
-            "modules/v1_20_1/v1_20_1-forge/src/main/kotlin" to setOf(
-                "ru/lazyhat/compukterkraft/impl/ClientRegistry.kt",
-                "ru/lazyhat/compukterkraft/impl/CompukterKraftMod.kt",
-                "ru/lazyhat/compukterkraft/impl/Extensions.kt",
-                "ru/lazyhat/compukterkraft/impl/ForgeClientHooks.kt",
-                "ru/lazyhat/compukterkraft/impl/ForgeClientRegistry.kt",
-                "ru/lazyhat/compukterkraft/impl/ForgeCommonHooks.kt",
-                "ru/lazyhat/compukterkraft/impl/ModRegistry.kt",
-                "ru/lazyhat/compukterkraft/impl/block/ForgeComputerBlockEntity.kt",
-                "ru/lazyhat/compukterkraft/impl/platform/NetworkHandler.kt",
-            ),
-            "modules/v1_21_1/v1_21_1-fabric/src/main/kotlin" to setOf(
-                "ru/lazyhat/compukterkraft/impl/ClientRegistry.kt",
-                "ru/lazyhat/compukterkraft/impl/CompukterKraftClientMod.kt",
-                "ru/lazyhat/compukterkraft/impl/CompukterKraftMod.kt",
-                "ru/lazyhat/compukterkraft/impl/Extensions.kt",
-                "ru/lazyhat/compukterkraft/impl/FabricCommonHooks.kt",
-                "ru/lazyhat/compukterkraft/impl/ModRegistry.kt",
-                "ru/lazyhat/compukterkraft/impl/platform/NetworkHandler.kt",
-            ),
-            "modules/v1_21_1/v1_21_1-neoforge/src/main/kotlin" to setOf(
-                "ru/lazyhat/compukterkraft/impl/ClientRegistry.kt",
-                "ru/lazyhat/compukterkraft/impl/CompukterKraftMod.kt",
-                "ru/lazyhat/compukterkraft/impl/Extensions.kt",
-                "ru/lazyhat/compukterkraft/impl/ForgeClientHooks.kt",
-                "ru/lazyhat/compukterkraft/impl/ForgeClientRegistry.kt",
-                "ru/lazyhat/compukterkraft/impl/ForgeCommonHooks.kt",
-                "ru/lazyhat/compukterkraft/impl/ModRegistry.kt",
-                "ru/lazyhat/compukterkraft/impl/computer/block/NeoForgeComputerBlockEntity.kt",
-                "ru/lazyhat/compukterkraft/impl/platform/NetworkHandler.kt",
-            ),
-        )
+        val allowedFiles =
+            mapOf(
+                "modules/v1_20_1/v1_20_1-fabric/src/main/kotlin" to
+                    setOf(
+                        "ru/lazyhat/compukterkraft/impl/ClientRegistry.kt",
+                        "ru/lazyhat/compukterkraft/impl/CompukterKraftClientMod.kt",
+                        "ru/lazyhat/compukterkraft/impl/CompukterKraftMod.kt",
+                        "ru/lazyhat/compukterkraft/impl/Extensions.kt",
+                        "ru/lazyhat/compukterkraft/impl/FabricCommonHooks.kt",
+                        "ru/lazyhat/compukterkraft/impl/ModRegistry.kt",
+                        "ru/lazyhat/compukterkraft/impl/platform/NetworkHandler.kt",
+                    ),
+                "modules/v1_20_1/v1_20_1-forge/src/main/kotlin" to
+                    setOf(
+                        "ru/lazyhat/compukterkraft/impl/ClientRegistry.kt",
+                        "ru/lazyhat/compukterkraft/impl/CompukterKraftMod.kt",
+                        "ru/lazyhat/compukterkraft/impl/Extensions.kt",
+                        "ru/lazyhat/compukterkraft/impl/ForgeClientHooks.kt",
+                        "ru/lazyhat/compukterkraft/impl/ForgeClientRegistry.kt",
+                        "ru/lazyhat/compukterkraft/impl/ForgeCommonHooks.kt",
+                        "ru/lazyhat/compukterkraft/impl/ModRegistry.kt",
+                        "ru/lazyhat/compukterkraft/impl/block/ForgeComputerBlockEntity.kt",
+                        "ru/lazyhat/compukterkraft/impl/platform/NetworkHandler.kt",
+                    ),
+                "modules/v1_21_1/v1_21_1-fabric/src/main/kotlin" to
+                    setOf(
+                        "ru/lazyhat/compukterkraft/impl/ClientRegistry.kt",
+                        "ru/lazyhat/compukterkraft/impl/CompukterKraftClientMod.kt",
+                        "ru/lazyhat/compukterkraft/impl/CompukterKraftMod.kt",
+                        "ru/lazyhat/compukterkraft/impl/Extensions.kt",
+                        "ru/lazyhat/compukterkraft/impl/FabricCommonHooks.kt",
+                        "ru/lazyhat/compukterkraft/impl/ModRegistry.kt",
+                        "ru/lazyhat/compukterkraft/impl/platform/NetworkHandler.kt",
+                    ),
+                "modules/v1_21_1/v1_21_1-neoforge/src/main/kotlin" to
+                    setOf(
+                        "ru/lazyhat/compukterkraft/impl/ClientRegistry.kt",
+                        "ru/lazyhat/compukterkraft/impl/CompukterKraftMod.kt",
+                        "ru/lazyhat/compukterkraft/impl/Extensions.kt",
+                        "ru/lazyhat/compukterkraft/impl/ForgeClientHooks.kt",
+                        "ru/lazyhat/compukterkraft/impl/ForgeClientRegistry.kt",
+                        "ru/lazyhat/compukterkraft/impl/ForgeCommonHooks.kt",
+                        "ru/lazyhat/compukterkraft/impl/ModRegistry.kt",
+                        "ru/lazyhat/compukterkraft/impl/computer/block/NeoForgeComputerBlockEntity.kt",
+                        "ru/lazyhat/compukterkraft/impl/platform/NetworkHandler.kt",
+                    ),
+            )
 
-        val violations = allowedFiles.flatMap { (modulePath, allowed) ->
-            val root = repoRoot.resolve(modulePath)
-            if (!Files.isDirectory(root)) return@flatMap emptyList()
-            kotlinFilesUnder(root)
-                .map { file -> root.relativize(file).invariantSeparatorsPathString }
-                .sorted()
-                .filterNot { relative -> relative in allowed }
-                .map { relative -> "$modulePath/$relative" }
-        }
+        val violations =
+            allowedFiles.flatMap { (modulePath, allowed) ->
+                val root = repoRoot.resolve(modulePath)
+                if (!Files.isDirectory(root)) return@flatMap emptyList()
+                kotlinFilesUnder(root)
+                    .map { file -> root.relativize(file).invariantSeparatorsPathString }
+                    .sorted()
+                    .filterNot { relative -> relative in allowed }
+                    .map { relative -> "$modulePath/$relative" }
+            }
 
         assertTrue(
             violations.isEmpty(),
-            "loader leaf modules must stay thin, unexpected files found: ${violations.joinToString()}"
+            "loader leaf modules must stay thin, unexpected files found: ${violations.joinToString()}",
         )
     }
 

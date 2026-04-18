@@ -22,9 +22,9 @@ package ru.lazyhat.compukterkraft.common.workbench.menu
 import net.minecraft.world.inventory.MenuType
 import ru.lazyhat.compukterkraft.common.workbench.context.ServerWorkbench
 import ru.lazyhat.compukterkraft.common.workbench.data.WorkbenchContainerData
+import ru.lazyhat.compukterkraft.common.workbench.network.server.WorkbenchWorkspaceServerMessage
 import ru.lazyhat.compukterkraft.common.workbench.test.TestInventoryFactory
 import ru.lazyhat.compukterkraft.common.workbench.test.TestMinecraftBootstrap
-import ru.lazyhat.compukterkraft.common.workbench.network.server.WorkbenchWorkspaceServerMessage
 import ru.lazyhat.compukterkraft.core.computer.vm.ComputerWorkspaceHost
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchTargetState
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBuffer

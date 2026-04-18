@@ -35,7 +35,6 @@ import ru.lazyhat.compukterkraft.common.utils.computerID
 import ru.lazyhat.compukterkraft.common.utils.computerLabel
 import ru.lazyhat.compukterkraft.common.utils.ifServerSide
 import ru.lazyhat.compukterkraft.common.utils.updateBlock
-import ru.lazyhat.compukterkraft.core.LOGGER
 import ru.lazyhat.compukterkraft.core.block.ComputerFamily
 
 abstract class AbstractComputerBlockEntity(
@@ -49,20 +48,11 @@ abstract class AbstractComputerBlockEntity(
     var family: ComputerFamily = family
         private set
     private var _label: String? = null
-        set(value) {
-            LOGGER.info { "AbstractComputerBlockEntity.setLabel $value" }
-            field = value
-        }
     private var _computerID: Int? = null
-        set(value) {
-            LOGGER.info { "AbstractComputerBlockEntity.setComputerId $value" }
-            field = value
-        }
 
     var label: String?
         get() = _label
         set(value) {
-            LOGGER.info { "AbstractComputerBlockEntity.setLabelPublic $value" }
             value
                 ?.ifServerSide(level)
                 ?.takeIf { _label != value }
@@ -78,7 +68,6 @@ abstract class AbstractComputerBlockEntity(
     var computerID: Int?
         get() = _computerID
         set(value) {
-            LOGGER.info { "AbstractComputerBlockEntity.setComputerIdPublic $value" }
             value
                 ?.ifServerSide(level)
                 ?.takeIf { _computerID != value }
@@ -87,10 +76,6 @@ abstract class AbstractComputerBlockEntity(
                     updateBlock()
                 }
         }
-
-    init {
-        LOGGER.info { "AbstractComputerBlockEntity init ID: $_computerID, $_label" }
-    }
 
     abstract fun updateBlockState(newState: ComputerState)
 
@@ -129,7 +114,6 @@ abstract class AbstractComputerBlockEntity(
     ) {
         tag.computerID = _computerID
         tag.computerLabel = _label
-        LOGGER.info { "AbstractComputerBlockEntity.saveAdditional() tag: $tag" }
 
         super.saveAdditional(tag, registries)
     }
@@ -140,7 +124,6 @@ abstract class AbstractComputerBlockEntity(
     ) {
         super.loadAdditional(tag, registries)
 
-        LOGGER.info { "AbstractComputerBlockEntity.load() tag: $tag" }
         _computerID = tag.computerID
         _label = tag.computerLabel
     }

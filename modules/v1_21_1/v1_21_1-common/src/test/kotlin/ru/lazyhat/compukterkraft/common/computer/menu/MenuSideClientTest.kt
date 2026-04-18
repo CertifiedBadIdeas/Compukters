@@ -40,8 +40,14 @@ class MenuSideClientTest {
 
     @Test
     fun abstractComputerMenuDoesNotExposeWorkspaceAuthoringApi() {
-        val methodNames = AbstractComputerMenu::class.java.methods.map { it.name }.toSet()
-        val fieldNames = AbstractComputerMenu::class.java.declaredFields.map { it.name }.toSet()
+        val methodNames =
+            AbstractComputerMenu::class.java.methods
+                .map { it.name }
+                .toSet()
+        val fieldNames =
+            AbstractComputerMenu::class.java.declaredFields
+                .map { it.name }
+                .toSet()
 
         assertFalse("updateWorkspaceEntries" in methodNames)
         assertFalse("updateWorkspaceDocument" in methodNames)

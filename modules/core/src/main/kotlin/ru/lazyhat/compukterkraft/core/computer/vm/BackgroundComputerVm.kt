@@ -43,9 +43,9 @@ import ru.lazyhat.compukterkraft.core.computer.vm.api.VmTerminalApi
 import ru.lazyhat.compukterkraft.lang.api.BuiltinModule
 import ru.lazyhat.compukterkraft.lang.api.BuiltinRegistry
 import ru.lazyhat.compukterkraft.lang.frontend.LanguageBuiltins
+import ru.lazyhat.compukterkraft.lang.runtime.ComputerCapability
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerProfile
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerVmHandle
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerCapability
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.HostCall
 import ru.lazyhat.compukterkraft.lang.runtime.HostResult

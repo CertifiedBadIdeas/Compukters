@@ -72,6 +72,5 @@ class WorkbenchLayoutModelTest {
         assertTrue(layout.inventoryBounds.bottom <= layout.statusBarBounds.y)
     }
 
-    private fun UiRect.overlaps(other: UiRect): Boolean =
-        x < other.right && right > other.x && y < other.bottom && bottom > other.y
+    private fun UiRect.overlaps(other: UiRect): Boolean = x < other.right && right > other.x && y < other.bottom && bottom > other.y
 }
