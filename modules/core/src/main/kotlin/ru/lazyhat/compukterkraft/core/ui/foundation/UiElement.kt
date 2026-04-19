@@ -21,7 +21,6 @@ sealed interface UiElement {
     data class Text(
         override val modifier: UiModifier = Modifier,
         val value: UiExpression<String>,
-        val color: Int = 0xFFFFFF,
     ) : UiElement
 
     data class TerminalSurface(
@@ -65,9 +64,8 @@ class UiScope {
     fun text(
         value: UiExpression<String>,
         modifier: UiModifier = Modifier,
-        color: Int = 0xFFFFFF,
     ) {
-        children += UiElement.Text(modifier, value, color)
+        children += UiElement.Text(modifier, value)
     }
 
     fun terminalSurface(
