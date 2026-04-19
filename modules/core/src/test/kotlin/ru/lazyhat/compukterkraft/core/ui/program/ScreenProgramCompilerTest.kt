@@ -58,7 +58,7 @@ class ScreenProgramCompilerTest {
 
         val program = compiler.compile(
             ui {
-                    if_(expr { visible }) {
+                If(expr { visible }) {
                     button(text = textExpr { "Shown" }) { }
                 }
             },

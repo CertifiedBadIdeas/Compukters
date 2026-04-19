@@ -31,7 +31,8 @@ data class UiModifier(
     val padding: UiPadding = UiPadding(),
     val alignment: UiAlignment? = null,
     val weight: Float? = null,
-    val color: Color? = null,
+    val textColor: Color? = null,
+    val backgroundColor: Color? = null,
 ) {
     fun offset(
         x: Int,
@@ -75,7 +76,9 @@ data class UiModifier(
         return copy(padding = UiPadding(left, top, right, bottom))
     }
 
-    fun color(value: Color): UiModifier = copy(color = value)
+    fun textColor(value: Color): UiModifier = copy(textColor = value)
+
+    fun backgroundColor(value: Color): UiModifier = copy(backgroundColor = value)
 
     companion object {
         val Empty = UiModifier()
