@@ -2,6 +2,7 @@ package ru.lazyhat.compukterkraft.core.ui.program
 
 import ru.lazyhat.compukterkraft.core.ui.foundation.Color
 import ru.lazyhat.compukterkraft.core.ui.foundation.UiElement
+import ru.lazyhat.compukterkraft.core.ui.foundation.UiRole
 
 class ScreenProgramCompiler {
     fun compile(root: UiElement): ScreenProgram {
@@ -50,8 +51,12 @@ class ScreenProgramCompiler {
 
         when (element) {
             is UiElement.Box -> {
-                if (element.modifier.role == ru.lazyhat.compukterkraft.core.ui.foundation.UiRole.Button) {
-                    renderOps += RenderOp.FillRect(nodeId, element.modifier.color ?: Color.Transparent)
+                val backgroundColor = element.modifier.backgroundColor
+                if (
+                    element.modifier.role == UiRole.Button ||
+                    backgroundColor != null
+                ) {
+                    renderOps += RenderOp.FillRect(nodeId, backgroundColor ?: Color.Transparent)
                 }
                 addInteraction(nodeId, element, hitRegions, inputRoutes, focusTargets)
                 element.children.forEachIndexed { index, child ->
@@ -102,7 +107,7 @@ class ScreenProgramCompiler {
             }
 
             is UiElement.Text -> {
-                renderOps += RenderOp.DrawText(nodeId, element.value.evaluate(), element.modifier.color ?: Color.Transparent)
+                renderOps += RenderOp.DrawText(nodeId, element.value.evaluate(), element.modifier.textColor ?: Color.Transparent)
             }
 
             is UiElement.TerminalSurface -> {
