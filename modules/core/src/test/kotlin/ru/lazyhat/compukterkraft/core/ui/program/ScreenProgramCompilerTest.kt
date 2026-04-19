@@ -3,6 +3,7 @@ package ru.lazyhat.compukterkraft.core.ui.program
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import ru.lazyhat.compukterkraft.core.platform.api.FontMetrics
 import ru.lazyhat.compukterkraft.core.ui.foundation.Modifier
 import ru.lazyhat.compukterkraft.core.ui.foundation.UiAlignment
 import ru.lazyhat.compukterkraft.core.ui.foundation.UiRole
@@ -11,6 +12,8 @@ import ru.lazyhat.compukterkraft.core.ui.foundation.textExpr
 import ru.lazyhat.compukterkraft.core.ui.foundation.ui
 
 class ScreenProgramCompilerTest {
+    private val fontMetrics = FontMetrics { text -> text.length * 6 }
+
     @Test
     fun buttonSugarCompilesToRenderHitInputAndFocusPrograms() {
         val compiler = ScreenProgramCompiler()
@@ -127,5 +130,24 @@ class ScreenProgramCompilerTest {
             program.layoutProgram.staticNodes.single { it.nodeId == "root-0-0" },
         )
         assertEquals("root-0-0", program.hitTestProgram.regions.single().nodeId)
+    }
+
+    @Test
+    fun centeredTextUsesMeasuredBoundsInCompiledLayout() {
+        val compiler = ScreenProgramCompiler(fontMetrics = fontMetrics)
+
+        val program = compiler.compile(
+            ui(100, 40) {
+                text(
+                    value = textExpr { "AB" },
+                    modifier = Modifier.align(UiAlignment.Center),
+                )
+            },
+        )
+
+        assertEquals(
+            LayoutNode("root-0", 44, 15, 12, 9),
+            program.layoutProgram.staticNodes.single { it.nodeId == "root-0" },
+        )
     }
 }

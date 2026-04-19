@@ -103,3 +103,5 @@ fun ui(
     height: Int,
     block: UiScope.() -> Unit,
 ): UiElement = UiElement.Box(modifier = Modifier.size(width, height), children = UiScope().apply(block).build())
+
+fun ui(block: UiScope.() -> Unit): UiElement = UiElement.Box(children = UiScope().apply(block).build())
