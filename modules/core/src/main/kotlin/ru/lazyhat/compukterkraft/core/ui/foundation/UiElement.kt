@@ -31,11 +31,18 @@ sealed interface UiElement {
 class UiScope {
     private val children = mutableListOf<UiElement>()
 
-    fun box(modifier: UiModifier = Modifier, block: UiScope.() -> Unit) {
+    fun box(
+        modifier: UiModifier = Modifier,
+        block: UiScope.() -> Unit,
+    ) {
         children += UiElement.Box(modifier, UiScope().apply(block).build())
     }
 
-    fun text(value: UiExpression<String>, modifier: UiModifier = Modifier, color: Int = 0xFFFFFF) {
+    fun text(
+        value: UiExpression<String>,
+        modifier: UiModifier = Modifier,
+        color: Int = 0xFFFFFF,
+    ) {
         children += UiElement.Text(modifier, value, color)
     }
 
@@ -48,7 +55,11 @@ class UiScope {
         children += UiElement.TerminalSurface(modifier.role(UiRole.TerminalSurface), snapshot, onFocus, onKey)
     }
 
-    fun if_(condition: UiExpression<Boolean>, block: UiScope.() -> Unit) {
+    @Suppress("FunctionName")
+    fun If(
+        condition: UiExpression<Boolean>,
+        block: UiScope.() -> Unit,
+    ) {
         children += UiElement.IfNode(condition = condition, children = UiScope().apply(block).build())
     }
 
