@@ -31,6 +31,7 @@ data class UiModifier(
     val padding: UiPadding = UiPadding(),
     val alignment: UiAlignment? = null,
     val weight: Float? = null,
+    val color: Color? = null,
     val textColor: Color? = null,
     val backgroundColor: Color? = null,
 ) {
@@ -75,6 +76,8 @@ data class UiModifier(
         require(left >= 0 && top >= 0 && right >= 0 && bottom >= 0)
         return copy(padding = UiPadding(left, top, right, bottom))
     }
+
+    fun color(value: Color): UiModifier = copy(color = value)
 
     fun textColor(value: Color): UiModifier = copy(textColor = value)
 

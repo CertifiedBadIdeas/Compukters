@@ -1,12 +1,15 @@
 package ru.lazyhat.compukterkraft.core.ui.program
 
+import ru.lazyhat.compukterkraft.core.platform.api.FontMetrics
 import ru.lazyhat.compukterkraft.core.ui.foundation.Color
 import ru.lazyhat.compukterkraft.core.ui.foundation.UiElement
 import ru.lazyhat.compukterkraft.core.ui.foundation.UiRole
 
-class ScreenProgramCompiler {
+class ScreenProgramCompiler(
+    private val fontMetrics: FontMetrics? = null,
+) {
     fun compile(root: UiElement): ScreenProgram {
-        val resolvedLayout = UiLayoutResolver(rootWidth = 0, rootHeight = 0).resolve(root)
+        val resolvedLayout = UiLayoutResolver(rootWidth = 0, rootHeight = 0, fontMetrics = fontMetrics).resolve(root)
         val layoutNodes = resolvedLayout.values.toMutableList()
         val renderOps = mutableListOf<RenderOp>()
         val hitRegions = mutableListOf<HitRegion>()
@@ -51,7 +54,7 @@ class ScreenProgramCompiler {
 
         when (element) {
             is UiElement.Box -> {
-                val backgroundColor = element.modifier.backgroundColor
+                val backgroundColor = resolveBackgroundColor(element)
                 if (
                     element.modifier.role == UiRole.Button ||
                     backgroundColor != null
@@ -107,7 +110,7 @@ class ScreenProgramCompiler {
             }
 
             is UiElement.Text -> {
-                renderOps += RenderOp.DrawText(nodeId, element.value.evaluate(), element.modifier.textColor ?: Color.Transparent)
+                renderOps += RenderOp.DrawText(nodeId, element.value.evaluate(), resolveTextColor(element))
             }
 
             is UiElement.TerminalSurface -> {
@@ -160,4 +163,10 @@ class ScreenProgramCompiler {
             focusTargets += FocusTarget(regionId, element.modifier.role, focusTargets.size)
         }
     }
+
+    private fun resolveBackgroundColor(element: UiElement.Box): Color? =
+        element.modifier.backgroundColor ?: element.modifier.color
+
+    private fun resolveTextColor(element: UiElement.Text): Color =
+        element.modifier.textColor ?: element.modifier.color ?: Color.Transparent
 }
