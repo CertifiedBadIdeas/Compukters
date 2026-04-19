@@ -38,8 +38,8 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
         ui(width, height) {
             box(
                 Modifier
+                    .size(width / 3 * 2, height / 3 * 2)
                     .align(UiAlignment.Center)
-                    .padding(100)
                     .backgroundColor(Color.Blue),
             ) {
                 text(
