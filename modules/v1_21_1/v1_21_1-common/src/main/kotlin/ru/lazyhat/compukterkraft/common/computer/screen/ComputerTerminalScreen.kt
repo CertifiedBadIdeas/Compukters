@@ -24,7 +24,7 @@ import net.minecraft.world.entity.player.Inventory
 import ru.lazyhat.compukterkraft.common.computer.input.ClientInputHandler
 import ru.lazyhat.compukterkraft.common.computer.menu.AbstractComputerMenu
 import ru.lazyhat.compukterkraft.common.platform.MinecraftInputProvider
-import ru.lazyhat.compukterkraft.common.ui.render.WorkbenchTerminalRenderer
+import ru.lazyhat.compukterkraft.common.ui.program.DslContainerScreen
 import ru.lazyhat.compukterkraft.core.computer.input.ComputerControlAction
 import ru.lazyhat.compukterkraft.core.computer.input.ControlInputEvent
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchMode
@@ -32,6 +32,16 @@ import ru.lazyhat.compukterkraft.core.gui.TerminalRect
 import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalInputController
 import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalLayout
 import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalMetrics
+import ru.lazyhat.compukterkraft.core.ui.foundation.Modifier
+import ru.lazyhat.compukterkraft.core.ui.foundation.UiRole
+import ru.lazyhat.compukterkraft.core.ui.foundation.expr
+import ru.lazyhat.compukterkraft.core.ui.foundation.textExpr
+import ru.lazyhat.compukterkraft.core.ui.foundation.ui
+import ru.lazyhat.compukterkraft.core.ui.program.InputEventType
+import ru.lazyhat.compukterkraft.core.ui.program.ScreenProgram
+import ru.lazyhat.compukterkraft.core.ui.program.ScreenProgramCompiler
+import ru.lazyhat.compukterkraft.core.ui.program.ScreenRuntimeExecutor
+import ru.lazyhat.compukterkraft.core.ui.program.SlotValues
 import ru.lazyhat.compukterkraft.core.ui.workbench.WorkbenchTerminalInteractionPolicy
 import ru.lazyhat.compukterkraft.core.ui.workbench.WorkbenchTerminalViewState
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
@@ -40,9 +50,11 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
     container: T,
     player: Inventory,
     title: Component,
-) : ComputerScreen<T>(container, player, title) {
+) : DslContainerScreen<T>(container, player, title) {
     private val inputHandler = ClientInputHandler(container)
     private val terminalInput = WorkbenchTerminalInputController(inputHandler, MinecraftInputProvider)
+    private val compiler = ScreenProgramCompiler()
+    private var currentExecutor: ScreenRuntimeExecutor? = null
 
     init {
         val (terminalColumns, terminalRows) = terminalDimensions(container.clientSide.screenSnapshot)
@@ -66,33 +78,10 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
         mouseX: Int,
         mouseY: Int,
     ) {
-        val snapshot = menu.clientSide.screenSnapshot
-        val terminalState = WorkbenchTerminalViewState.from(menu.isComputerOn, snapshot)
-        val focused =
-            WorkbenchTerminalInteractionPolicy.canAcceptInput(
-                WorkbenchMode.TERMINAL,
-                terminalState,
-                terminalInput.focused,
-            )
-        val showFocusHint = WorkbenchTerminalInteractionPolicy.showFocusHint(terminalState, terminalInput.focused)
-
-        WorkbenchTerminalRenderer.render(
-            graphics,
-            minecraft!!.font,
-            leftPos,
-            topPos,
-            imageWidth,
-            imageHeight,
-            terminalLayout(),
-            terminalState,
-            focused,
-            showFocusHint,
-            Component.translatable("gui.compukterkraft.terminal.powered_off").string,
-            Component.translatable("gui.compukterkraft.terminal.connecting").string,
-            statusRightInset = STATUS_TEXT_RIGHT_INSET,
-        )
-
-        renderControlButtons(graphics, mouseX, mouseY)
+        graphics.fill(leftPos, topPos, leftPos + imageWidth, topPos + imageHeight, 0xFF12151D.toInt())
+        val executor = buildExecutor()
+        currentExecutor = executor
+        renderProgram(graphics, executor)
     }
 
     override fun render(
@@ -119,6 +108,10 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
         scancode: Int,
         modifiers: Int,
     ): Boolean {
+        if (currentExecutor?.keyPressed(key) == true) {
+            return true
+        }
+
         val terminalState = WorkbenchTerminalViewState.from(menu.isComputerOn, menu.clientSide.screenSnapshot)
         if (WorkbenchTerminalInteractionPolicy.canAcceptInput(WorkbenchMode.TERMINAL, terminalState, terminalInput.focused)) {
             if (terminalInput.keyPressed(key, scancode, modifiers)) {
@@ -158,21 +151,120 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
         mouseY: Double,
         button: Int,
     ): Boolean {
-        if (button == 0) {
-            controlButtonAt(mouseX.toInt(), mouseY.toInt())?.let { controlButton ->
-                terminalInput.focused = false
-                inputHandler.accept(ControlInputEvent(controlButton.action))
-                return true
-            }
+        if (button == 0 && currentExecutor?.mouseClicked(mouseX.toInt(), mouseY.toInt()) == true) {
+            return true
         }
 
         val terminalState = WorkbenchTerminalViewState.from(menu.isComputerOn, menu.clientSide.screenSnapshot)
         if (terminalState is WorkbenchTerminalViewState.Active) {
-            terminalInput.focused = terminalInput.mouseClicked(terminalLayout().terminalBounds, mouseX, mouseY)
+            if (!terminalLayout().terminalBounds.contains(mouseX.toInt(), mouseY.toInt())) {
+                terminalInput.focused = false
+            }
         } else {
             terminalInput.focused = false
         }
         return terminalInput.focused || super.mouseClicked(mouseX, mouseY, button)
+    }
+
+    private fun buildExecutor(): ScreenRuntimeExecutor {
+        val program = buildProgram()
+        val buttons = controlButtons()
+        val clickRoutes = program.inputProgram.routes.filter { it.eventType == InputEventType.Click }
+        val clickHandlers =
+            clickRoutes.zip(buttons).associate { (route, controlButton) ->
+                route.handlerId to {
+                    terminalInput.focused = false
+                    inputHandler.accept(ControlInputEvent(controlButton.action))
+                }
+            }
+        val keyHandlers =
+            program.inputProgram.routes
+                .filter { it.eventType == InputEventType.KeyPressed }
+                .associate { route ->
+                    route.handlerId to { keyCode: Int -> terminalInput.keyPressed(keyCode, 0, 0) }
+                }
+        val focusHandlers =
+            program.hitTestProgram.regions
+                .filter { it.role == UiRole.TerminalSurface }
+                .associate { region ->
+                    region.regionId to { terminalInput.focused = true }
+                }
+
+        return ScreenRuntimeExecutor(
+            program = program,
+            slotProvider = { SlotValues() },
+            clickHandlers = clickHandlers,
+            keyHandlers = keyHandlers,
+            focusHandlers = focusHandlers,
+        )
+    }
+
+    private fun buildProgram(): ScreenProgram {
+        val terminalState = WorkbenchTerminalViewState.from(menu.isComputerOn, menu.clientSide.screenSnapshot)
+        val layout = terminalLayout()
+        val buttons = controlButtons()
+
+        return compiler.compile(
+            ui {
+                buttons.forEach { controlButton ->
+                    button(
+                        text =
+                            textExpr {
+                                when (controlButton.kind) {
+                                    ControlButtonKind.POWER -> "Power"
+                                    ControlButtonKind.REBOOT -> "Reboot"
+                                }
+                            },
+                        modifier = Modifier.offset(controlButton.bounds.x, controlButton.bounds.y).size(controlButton.bounds.width, controlButton.bounds.height),
+                    ) { }
+                }
+
+                text(
+                    value =
+                        textExpr {
+                            when (terminalState) {
+                                is WorkbenchTerminalViewState.Active -> {
+                                    if (terminalInput.focused) {
+                                        "Input active  |  Ctrl+V paste"
+                                    } else {
+                                        "Click terminal to focus input"
+                                    }
+                                }
+                                WorkbenchTerminalViewState.PoweredOff -> Component.translatable("gui.compukterkraft.terminal.powered_off").string
+                                WorkbenchTerminalViewState.Connecting -> Component.translatable("gui.compukterkraft.terminal.connecting").string
+                            }
+                        },
+                    modifier = Modifier.offset(layout.statusBounds.x + 12, layout.statusBounds.y + 6),
+                    color = 0x9CA8B8,
+                )
+
+                if (terminalState is WorkbenchTerminalViewState.Active) {
+                    text(
+                        value = textExpr { "${terminalState.snapshot.width} x ${terminalState.snapshot.height}" },
+                        modifier = Modifier.offset(layout.statusBounds.x + layout.statusBounds.width - STATUS_TEXT_RIGHT_INSET, layout.statusBounds.y + 6),
+                        color = 0x9CA8B8,
+                    )
+                    terminalSurface(
+                        snapshot = expr { terminalState.snapshot },
+                        modifier = Modifier.offset(layout.terminalBounds.x, layout.terminalBounds.y).size(layout.terminalBounds.width, layout.terminalBounds.height).focusable(),
+                        onKey = { keyCode -> terminalInput.keyPressed(keyCode, 0, 0) },
+                    )
+                } else {
+                    text(
+                        value =
+                            textExpr {
+                                when (terminalState) {
+                                    WorkbenchTerminalViewState.PoweredOff -> Component.translatable("gui.compukterkraft.terminal.powered_off").string
+                                    WorkbenchTerminalViewState.Connecting -> Component.translatable("gui.compukterkraft.terminal.connecting").string
+                                    is WorkbenchTerminalViewState.Active -> ""
+                                }
+                            },
+                        modifier = Modifier.offset(layout.terminalSurfaceBounds.x + 12, layout.terminalSurfaceBounds.y + 12),
+                        color = 0x9CA8B8,
+                    )
+                }
+            },
+        )
     }
 
     private fun terminalLayout(): WorkbenchTerminalLayout {
@@ -212,44 +304,6 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
             snapshot.width to snapshot.height
         }
 
-    private fun renderControlButtons(
-        graphics: GuiGraphics,
-        mouseX: Int,
-        mouseY: Int,
-    ) {
-        controlButtons().forEach { button ->
-            val hovered = button.bounds.contains(mouseX, mouseY)
-            val background = if (hovered) BUTTON_BACKGROUND_HOVER else BUTTON_BACKGROUND
-            graphics.fill(
-                button.bounds.x,
-                button.bounds.y,
-                button.bounds.x + button.bounds.width,
-                button.bounds.y + button.bounds.height,
-                background,
-            )
-            graphics.fill(button.bounds.x, button.bounds.y, button.bounds.x + button.bounds.width, button.bounds.y + 1, button.accent)
-            graphics.fill(
-                button.bounds.x,
-                button.bounds.y + button.bounds.height - 1,
-                button.bounds.x + button.bounds.width,
-                button.bounds.y + button.bounds.height,
-                BUTTON_BORDER,
-            )
-            graphics.fill(button.bounds.x, button.bounds.y, button.bounds.x + 1, button.bounds.y + button.bounds.height, BUTTON_BORDER)
-            graphics.fill(
-                button.bounds.x + button.bounds.width - 1,
-                button.bounds.y,
-                button.bounds.x + button.bounds.width,
-                button.bounds.y + button.bounds.height,
-                BUTTON_BORDER,
-            )
-            when (button.kind) {
-                ControlButtonKind.POWER -> renderPowerIcon(graphics, button.bounds.x, button.bounds.y, button.iconColor)
-                ControlButtonKind.REBOOT -> renderRebootIcon(graphics, button.bounds.x, button.bounds.y, button.iconColor)
-            }
-        }
-    }
-
     private fun renderControlTooltip(
         graphics: GuiGraphics,
         mouseX: Int,
@@ -272,16 +326,12 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
                 action = powerAction,
                 tooltipKey = powerTooltipKey,
                 bounds = powerBounds,
-                accent = POWER_ACCENT,
-                iconColor = BUTTON_ICON,
             ),
             ControlButton(
                 kind = ControlButtonKind.REBOOT,
                 action = ComputerControlAction.REBOOT,
                 tooltipKey = "gui.compukterkraft.control.reboot",
                 bounds = rebootBounds,
-                accent = REBOOT_ACCENT,
-                iconColor = BUTTON_ICON,
             ),
         )
     }
@@ -302,43 +352,11 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
         return TerminalRect(x, y, STATUS_BUTTON_SIZE, STATUS_BUTTON_SIZE)
     }
 
-    private fun renderPowerIcon(
-        graphics: GuiGraphics,
-        buttonX: Int,
-        buttonY: Int,
-        color: Int,
-    ) {
-        val originX = buttonX + 4
-        val originY = buttonY + 3
-        graphics.fill(originX + 4, originY, originX + 6, originY + 5, color)
-        graphics.fill(originX + 2, originY + 4, originX + 4, originY + 9, color)
-        graphics.fill(originX + 6, originY + 4, originX + 8, originY + 9, color)
-        graphics.fill(originX + 3, originY + 8, originX + 7, originY + 10, color)
-    }
-
-    private fun renderRebootIcon(
-        graphics: GuiGraphics,
-        buttonX: Int,
-        buttonY: Int,
-        color: Int,
-    ) {
-        val originX = buttonX + 3
-        val originY = buttonY + 3
-        graphics.fill(originX + 2, originY, originX + 8, originY + 2, color)
-        graphics.fill(originX + 1, originY + 2, originX + 3, originY + 7, color)
-        graphics.fill(originX + 3, originY + 6, originX + 8, originY + 8, color)
-        graphics.fill(originX + 7, originY + 1, originX + 9, originY + 6, color)
-        graphics.fill(originX + 7, originY, originX + 11, originY + 2, color)
-        graphics.fill(originX + 8, originY + 2, originX + 11, originY + 5, color)
-    }
-
     private data class ControlButton(
         val kind: ControlButtonKind,
         val action: ComputerControlAction,
         val tooltipKey: String,
         val bounds: TerminalRect,
-        val accent: Int,
-        val iconColor: Int,
     )
 
     private enum class ControlButtonKind {
@@ -352,11 +370,5 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
         private const val STATUS_BUTTON_GAP = 6
         private const val STATUS_BUTTON_MARGIN_END = 10
         private const val STATUS_TEXT_RIGHT_INSET = 52
-        private const val BUTTON_BACKGROUND = 0xFF1B202A.toInt()
-        private const val BUTTON_BACKGROUND_HOVER = 0xFF222938.toInt()
-        private const val BUTTON_BORDER = 0xFF2C3444.toInt()
-        private const val BUTTON_ICON = 0xFFE6ECF5.toInt()
-        private const val POWER_ACCENT = 0xFF4FA56C.toInt()
-        private const val REBOOT_ACCENT = 0xFFC9894F.toInt()
     }
 }
