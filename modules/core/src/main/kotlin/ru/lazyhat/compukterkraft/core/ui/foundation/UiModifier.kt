@@ -31,10 +31,17 @@ data class UiModifier(
     val padding: UiPadding = UiPadding(),
     val alignment: UiAlignment? = null,
     val weight: Float? = null,
+    val color: Color? = null,
 ) {
-    fun offset(x: Int, y: Int): UiModifier = copy(x = this.x + x, y = this.y + y)
+    fun offset(
+        x: Int,
+        y: Int,
+    ): UiModifier = copy(x = this.x + x, y = this.y + y)
 
-    fun size(width: Int, height: Int): UiModifier = copy(width = width, height = height)
+    fun size(
+        width: Int,
+        height: Int,
+    ): UiModifier = copy(width = width, height = height)
 
     fun zIndex(value: Int): UiModifier = copy(zIndex = value)
 
@@ -53,7 +60,10 @@ data class UiModifier(
 
     fun padding(all: Int): UiModifier = padding(all, all, all, all)
 
-    fun padding(horizontal: Int, vertical: Int): UiModifier = padding(horizontal, vertical, horizontal, vertical)
+    fun padding(
+        horizontal: Int,
+        vertical: Int,
+    ): UiModifier = padding(horizontal, vertical, horizontal, vertical)
 
     fun padding(
         left: Int,
@@ -64,6 +74,8 @@ data class UiModifier(
         require(left >= 0 && top >= 0 && right >= 0 && bottom >= 0)
         return copy(padding = UiPadding(left, top, right, bottom))
     }
+
+    fun color(value: Color): UiModifier = copy(color = value)
 
     companion object {
         val Empty = UiModifier()

@@ -22,11 +22,12 @@ import net.minecraft.network.chat.Component
 import net.minecraft.world.entity.player.Inventory
 import ru.lazyhat.compukterkraft.common.computer.menu.AbstractComputerMenu
 import ru.lazyhat.compukterkraft.common.ui.program.DslContainerScreen
+import ru.lazyhat.compukterkraft.core.ui.foundation.Color
 import ru.lazyhat.compukterkraft.core.ui.foundation.Modifier
+import ru.lazyhat.compukterkraft.core.ui.foundation.UiAlignment
 import ru.lazyhat.compukterkraft.core.ui.foundation.UiElement
 import ru.lazyhat.compukterkraft.core.ui.foundation.textExpr
 import ru.lazyhat.compukterkraft.core.ui.foundation.ui
-import ru.lazyhat.compukterkraft.core.ui.program.ScreenProgram
 
 class ComputerTerminalScreen<T : AbstractComputerMenu>(
     container: T,
@@ -35,6 +36,11 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
 ) : DslContainerScreen<T>(container, player, title) {
     override fun content(): UiElement =
         ui {
-            text(textExpr { "Some text" })
+            box(Modifier.size(100, 100).offset(50, 50).color(Color.Blue)) {
+                text(
+                    textExpr { "Some text" },
+                    Modifier.align(UiAlignment.Center).color(Color.White),
+                )
+            }
         }
 }

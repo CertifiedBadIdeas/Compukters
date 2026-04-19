@@ -1,5 +1,6 @@
 package ru.lazyhat.compukterkraft.core.ui.program
 
+import ru.lazyhat.compukterkraft.core.ui.foundation.Color
 import ru.lazyhat.compukterkraft.core.ui.foundation.UiElement
 
 class ScreenProgramCompiler {
@@ -50,7 +51,7 @@ class ScreenProgramCompiler {
         when (element) {
             is UiElement.Box -> {
                 if (element.modifier.role == ru.lazyhat.compukterkraft.core.ui.foundation.UiRole.Button) {
-                    renderOps += RenderOp.FillRect(nodeId, 0xFF1D2330.toInt())
+                    renderOps += RenderOp.FillRect(nodeId, element.modifier.color ?: Color.Transparent)
                 }
                 addInteraction(nodeId, element, hitRegions, inputRoutes, focusTargets)
                 element.children.forEachIndexed { index, child ->
@@ -101,7 +102,7 @@ class ScreenProgramCompiler {
             }
 
             is UiElement.Text -> {
-                renderOps += RenderOp.DrawText(nodeId, element.value.evaluate(), element.color)
+                renderOps += RenderOp.DrawText(nodeId, element.value.evaluate(), element.modifier.color ?: Color.Transparent)
             }
 
             is UiElement.TerminalSurface -> {
