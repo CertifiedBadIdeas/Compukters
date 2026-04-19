@@ -132,11 +132,11 @@ class ComputerBlockGameTest {
             with(droppedStack.computerDataTagCopy()!!) {
                 helper.assertTrue(
                     computerID == expectedId,
-                    "Expected creative drop to preserve computer id $expectedId, actual ${computerID}",
+                    "Expected creative drop to preserve computer id $expectedId, actual $computerID",
                 )
                 helper.assertTrue(
                     computerLabel == expectedLabel,
-                    "Expected creative drop to preserve computer label $expectedLabel, actual ${computerLabel}",
+                    "Expected creative drop to preserve computer label $expectedLabel, actual $computerLabel",
                 )
             }
             helper.succeed()

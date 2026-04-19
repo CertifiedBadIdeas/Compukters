@@ -23,6 +23,8 @@ import net.minecraft.core.component.DataComponents
 import net.minecraft.network.chat.Component
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
+import ru.lazyhat.compukterkraft.common.utils.computerFamilyId
+import ru.lazyhat.compukterkraft.common.utils.computerID
 import ru.lazyhat.compukterkraft.common.utils.updateComputerDataTag
 import ru.lazyhat.compukterkraft.common.workbench.test.TestMinecraftBootstrap
 import ru.lazyhat.compukterkraft.core.computer.vm.ComputerWorkspaceHost
