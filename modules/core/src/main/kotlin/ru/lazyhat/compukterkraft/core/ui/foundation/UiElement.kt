@@ -8,6 +8,16 @@ sealed interface UiElement {
         val children: List<UiElement>,
     ) : UiElement
 
+    data class Row(
+        override val modifier: UiModifier = Modifier,
+        val children: List<UiElement>,
+    ) : UiElement
+
+    data class Column(
+        override val modifier: UiModifier = Modifier,
+        val children: List<UiElement>,
+    ) : UiElement
+
     data class Text(
         override val modifier: UiModifier = Modifier,
         val value: UiExpression<String>,
@@ -36,6 +46,20 @@ class UiScope {
         block: UiScope.() -> Unit,
     ) {
         children += UiElement.Box(modifier, UiScope().apply(block).build())
+    }
+
+    fun row(
+        modifier: UiModifier = Modifier,
+        block: UiScope.() -> Unit,
+    ) {
+        children += UiElement.Row(modifier, UiScope().apply(block).build())
+    }
+
+    fun column(
+        modifier: UiModifier = Modifier,
+        block: UiScope.() -> Unit,
+    ) {
+        children += UiElement.Column(modifier, UiScope().apply(block).build())
     }
 
     fun text(
