@@ -4,7 +4,8 @@ import ru.lazyhat.compukterkraft.core.ui.foundation.UiElement
 
 class ScreenProgramCompiler {
     fun compile(root: UiElement): ScreenProgram {
-        val layoutNodes = mutableListOf<LayoutNode>()
+        val resolvedLayout = UiLayoutResolver(rootWidth = 0, rootHeight = 0).resolve(root)
+        val layoutNodes = resolvedLayout.values.toMutableList()
         val renderOps = mutableListOf<RenderOp>()
         val hitRegions = mutableListOf<HitRegion>()
         val inputRoutes = mutableListOf<InputRoute>()
@@ -15,9 +16,7 @@ class ScreenProgramCompiler {
         lower(
             element = root,
             nodeId = "root",
-            parentX = 0,
-            parentY = 0,
-            layoutNodes = layoutNodes,
+            resolvedLayout = resolvedLayout,
             renderOps = renderOps,
             hitRegions = hitRegions,
             inputRoutes = inputRoutes,
@@ -38,9 +37,7 @@ class ScreenProgramCompiler {
     private fun lower(
         element: UiElement,
         nodeId: String,
-        parentX: Int,
-        parentY: Int,
-        layoutNodes: MutableList<LayoutNode>,
+        resolvedLayout: Map<String, LayoutNode>,
         renderOps: MutableList<RenderOp>,
         hitRegions: MutableList<HitRegion>,
         inputRoutes: MutableList<InputRoute>,
@@ -48,14 +45,10 @@ class ScreenProgramCompiler {
         dynamicLayouts: MutableList<DynamicLayoutFragment>,
         dynamicRenders: MutableList<DynamicRenderFragment>,
     ) {
-        val x = parentX + element.modifier.x
-        val y = parentY + element.modifier.y
-        val width = element.modifier.width ?: 0
-        val height = element.modifier.height ?: 0
+        val layoutNode = resolvedLayout.getValue(nodeId)
 
         when (element) {
             is UiElement.Box -> {
-                layoutNodes += LayoutNode(nodeId, x, y, width, height)
                 if (element.modifier.role == ru.lazyhat.compukterkraft.core.ui.foundation.UiRole.Button) {
                     renderOps += RenderOp.FillRect(nodeId, 0xFF1D2330.toInt())
                 }
@@ -64,9 +57,39 @@ class ScreenProgramCompiler {
                     lower(
                         element = child,
                         nodeId = "$nodeId-$index",
-                        parentX = x,
-                        parentY = y,
-                        layoutNodes = layoutNodes,
+                        resolvedLayout = resolvedLayout,
+                        renderOps = renderOps,
+                        hitRegions = hitRegions,
+                        inputRoutes = inputRoutes,
+                        focusTargets = focusTargets,
+                        dynamicLayouts = dynamicLayouts,
+                        dynamicRenders = dynamicRenders,
+                    )
+                }
+            }
+
+            is UiElement.Row -> {
+                element.children.forEachIndexed { index, child ->
+                    lower(
+                        element = child,
+                        nodeId = "$nodeId-$index",
+                        resolvedLayout = resolvedLayout,
+                        renderOps = renderOps,
+                        hitRegions = hitRegions,
+                        inputRoutes = inputRoutes,
+                        focusTargets = focusTargets,
+                        dynamicLayouts = dynamicLayouts,
+                        dynamicRenders = dynamicRenders,
+                    )
+                }
+            }
+
+            is UiElement.Column -> {
+                element.children.forEachIndexed { index, child ->
+                    lower(
+                        element = child,
+                        nodeId = "$nodeId-$index",
+                        resolvedLayout = resolvedLayout,
                         renderOps = renderOps,
                         hitRegions = hitRegions,
                         inputRoutes = inputRoutes,
@@ -78,12 +101,10 @@ class ScreenProgramCompiler {
             }
 
             is UiElement.Text -> {
-                layoutNodes += LayoutNode(nodeId, x, y, element.modifier.width ?: 80, element.modifier.height ?: 9)
                 renderOps += RenderOp.DrawText(nodeId, element.value.evaluate(), element.color)
             }
 
             is UiElement.TerminalSurface -> {
-                layoutNodes += LayoutNode(nodeId, x, y, width, height)
                 renderOps += RenderOp.DrawTerminalSurface(nodeId, element.snapshot.evaluate())
                 val regionId = "$nodeId-region"
                 hitRegions += HitRegion(regionId, nodeId, element.modifier.role, element.modifier.zIndex, element.modifier.focusable)
@@ -101,9 +122,7 @@ class ScreenProgramCompiler {
                         lower(
                             element = child,
                             nodeId = "$nodeId-if-$index",
-                            parentX = x,
-                            parentY = y,
-                            layoutNodes = layoutNodes,
+                            resolvedLayout = resolvedLayout,
                             renderOps = renderOps,
                             hitRegions = hitRegions,
                             inputRoutes = inputRoutes,
