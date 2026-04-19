@@ -31,7 +31,11 @@ class ScreenRuntimeExecutor(
     }
 
     fun mouseClicked(x: Int, y: Int): Boolean {
-        val hitRegion = program.hitTestProgram.regions.firstOrNull() ?: return false
+        val hitRegion =
+            program.hitTestProgram.regions.firstOrNull { region ->
+                val bounds = boundsFor(region.nodeId)
+                x >= bounds.x && y >= bounds.y && x < bounds.x + bounds.width && y < bounds.y + bounds.height
+            } ?: return false
         var consumed = false
 
         if (hitRegion.focusable) {
