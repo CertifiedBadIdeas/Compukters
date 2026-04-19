@@ -98,4 +98,8 @@ class UiScope {
     fun build(): List<UiElement> = children
 }
 
-fun ui(block: UiScope.() -> Unit): UiElement = UiElement.Box(children = UiScope().apply(block).build())
+fun ui(
+    width: Int,
+    height: Int,
+    block: UiScope.() -> Unit,
+): UiElement = UiElement.Box(modifier = Modifier.size(width, height), children = UiScope().apply(block).build())
