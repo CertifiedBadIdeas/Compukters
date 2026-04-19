@@ -21,6 +21,13 @@ abstract class DslContainerScreen<T : AbstractComputerMenu>(
 
     abstract fun content(): UiElement
 
+    override fun renderLabels(
+        graphics: GuiGraphics,
+        mouseX: Int,
+        mouseY: Int,
+    ) {
+    }
+
     override fun renderBg(
         guiGraphics: GuiGraphics,
         partialTick: Float,
