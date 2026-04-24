@@ -77,4 +77,23 @@ abstract class DslContainerScreen<T : AbstractComputerMenu>(
         return (executor != null && executor.keyPressed(keyCode)) ||
             super.keyPressed(keyCode, scanCode, modifiers)
     }
+
+    override fun keyReleased(
+        keyCode: Int,
+        scanCode: Int,
+        modifiers: Int,
+    ): Boolean {
+        val executor = executor
+        return (executor != null && executor.keyReleased(keyCode)) ||
+            super.keyReleased(keyCode, scanCode, modifiers)
+    }
+
+    override fun charTyped(
+        codePoint: Char,
+        modifiers: Int,
+    ): Boolean {
+        val executor = executor
+        return (executor != null && executor.charTyped(codePoint)) ||
+            super.charTyped(codePoint, modifiers)
+    }
 }

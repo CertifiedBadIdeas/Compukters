@@ -33,6 +33,8 @@ sealed interface UiElement {
         override val modifier: Modifier,
         val snapshot: ValueExpression<Any?>,
         val onKey: (Int) -> Boolean = { false },
+        val onKeyReleased: (Int) -> Boolean = { false },
+        val onCharTyped: (Char) -> Boolean = { false },
     ) : UiElement
 
     data class IfNode(
@@ -108,8 +110,10 @@ class UiScope {
         snapshot: ValueExpression<Any?>,
         modifier: Modifier = Modifier,
         onKey: (Int) -> Boolean = { false },
+        onKeyReleased: (Int) -> Boolean = { false },
+        onCharTyped: (Char) -> Boolean = { false },
     ) {
-        children += UiElement.TerminalSurface(modifier, snapshot, onKey)
+        children += UiElement.TerminalSurface(modifier, snapshot, onKey, onKeyReleased, onCharTyped)
     }
 
     @Suppress("FunctionName")

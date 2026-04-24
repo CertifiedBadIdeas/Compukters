@@ -20,7 +20,36 @@ data class ScreenProgram(
     val frames: List<RenderFrame>,
     val hitRegions: List<HitRegion>,
     val focusedNodeId: String? = null,
-    val keyHandler: ((Int) -> Boolean)? = null,
+    val focusRegion: FocusRegion? = null,
+    val keyHandler: FocusHandler? = null,
+)
+
+/**
+ * Focus acquisition bounds for the single focusable element in a screen.
+ *
+ * When a click lands inside this region the runtime sets the screen's focus
+ * flag to `true` (and the click is considered consumed). Clicks outside any
+ * hit region clear the focus flag without being consumed.
+ */
+data class FocusRegion(
+    val nodeId: String,
+    val frameIndex: Int,
+    val x: Int,
+    val y: Int,
+    val width: Int,
+    val height: Int,
+)
+
+/**
+ * Keyboard/char event handlers for the currently focused element.
+ *
+ * All three lambdas return `true` if they consumed the event. They are
+ * invoked only while the runtime's focus flag is `true`.
+ */
+data class FocusHandler(
+    val onKeyPressed: (Int) -> Boolean = { false },
+    val onKeyReleased: (Int) -> Boolean = { false },
+    val onCharTyped: (Char) -> Boolean = { false },
 )
 
 /**

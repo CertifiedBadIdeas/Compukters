@@ -39,7 +39,7 @@ class ScreenRuntimeExecutorTest {
     }
 
     @Test
-    fun focusedTerminalReceivesKeyEventsRegardlessOfMousePosition() {
+    fun focusedTerminalReceivesKeyEventsOnlyAfterClickAcquiresFocus() {
         val program =
             ScreenProgramCompiler().compile(
                 ui {
@@ -53,8 +53,54 @@ class ScreenRuntimeExecutorTest {
 
         val executor = ScreenRuntimeExecutor(program)
 
+        // No click yet — focus is not acquired.
+        assertFalse(executor.isFocused)
+        assertFalse(executor.keyPressed(257))
+
+        // Click inside the terminal region acquires focus.
+        assertTrue(executor.mouseClicked(10, 10))
+        assertTrue(executor.isFocused)
         assertTrue(executor.keyPressed(257))
         assertFalse(executor.keyPressed(258))
+
+        // Click outside any region drops focus again.
+        assertFalse(executor.mouseClicked(500, 500))
+        assertFalse(executor.isFocused)
+        assertFalse(executor.keyPressed(257))
+    }
+
+    @Test
+    fun charTypedAndKeyReleasedRouteThroughFocusHandler() {
+        val events = mutableListOf<String>()
+        val program =
+            ScreenProgramCompiler().compile(
+                ui {
+                    terminalSurface(
+                        snapshot = expr { null },
+                        modifier = Modifier.size(40, 40),
+                        onKey = {
+                            events += "press:$it"
+                            true
+                        },
+                        onKeyReleased = {
+                            events += "release:$it"
+                            true
+                        },
+                        onCharTyped = {
+                            events += "char:$it"
+                            true
+                        },
+                    )
+                },
+            )
+
+        val executor = ScreenRuntimeExecutor(program)
+        executor.mouseClicked(5, 5)
+
+        assertTrue(executor.keyPressed(65))
+        assertTrue(executor.keyReleased(65))
+        assertTrue(executor.charTyped('A'))
+        assertEquals(listOf("press:65", "release:65", "char:A"), events)
     }
 
     @Test

@@ -39,7 +39,8 @@ class ScreenProgramCompilerTest {
         )
         assertEquals("root-0", program.focusedNodeId)
         assertNotNull(program.keyHandler)
-        assertTrue(program.keyHandler!!.invoke(257))
+        assertNotNull(program.focusRegion)
+        assertTrue(program.keyHandler!!.onKeyPressed(257))
     }
 
     @Test
@@ -53,6 +54,7 @@ class ScreenProgramCompilerTest {
 
         assertNull(program.focusedNodeId)
         assertNull(program.keyHandler)
+        assertNull(program.focusRegion)
     }
 
     @Test

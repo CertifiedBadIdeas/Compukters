@@ -68,7 +68,8 @@ class ScreenProgramCompiler(
                 },
             hitRegions = hitRegions.sortedByDescending { it.zIndex },
             focusedNodeId = focus.nodeId,
-            keyHandler = focus.keyHandler,
+            focusRegion = focus.region,
+            keyHandler = focus.handler,
         )
     }
 
@@ -130,7 +131,24 @@ class ScreenProgramCompiler(
 
             is UiElement.TerminalSurface -> {
                 ops += RenderOp.DrawTerminalSurface(node.x, node.y, node.width, node.height, element.snapshot)
-                focus.claim(nodeId, element.onKey)
+                focus.claim(
+                    nodeId = nodeId,
+                    region =
+                        FocusRegion(
+                            nodeId = nodeId,
+                            frameIndex = frameIndex,
+                            x = node.x,
+                            y = node.y,
+                            width = node.width,
+                            height = node.height,
+                        ),
+                    handler =
+                        FocusHandler(
+                            onKeyPressed = element.onKey,
+                            onKeyReleased = element.onKeyReleased,
+                            onCharTyped = element.onCharTyped,
+                        ),
+                )
             }
 
             is UiElement.IfNode -> {
@@ -203,19 +221,23 @@ class ScreenProgramCompiler(
     private class FocusAccumulator {
         var nodeId: String? = null
             private set
-        var keyHandler: ((Int) -> Boolean)? = null
+        var region: FocusRegion? = null
+            private set
+        var handler: FocusHandler? = null
             private set
 
         fun claim(
             nodeId: String,
-            onKey: (Int) -> Boolean,
+            region: FocusRegion,
+            handler: FocusHandler,
         ) {
             check(this.nodeId == null) {
                 "UI DSL: multiple focusable elements are not supported " +
                     "(already focused: '${this.nodeId}', new: '$nodeId')"
             }
             this.nodeId = nodeId
-            this.keyHandler = onKey
+            this.region = region
+            this.handler = handler
         }
     }
 }
