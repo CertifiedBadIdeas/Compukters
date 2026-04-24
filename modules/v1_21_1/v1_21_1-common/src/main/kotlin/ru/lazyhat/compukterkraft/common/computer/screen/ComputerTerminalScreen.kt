@@ -38,14 +38,10 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
     title: Component,
 ) : DslContainerScreen<T>(container, player, title) {
     override fun content(): UiElement =
-        ui(
-            Modifier
-                .size(size)
-                .background(Color.Green),
-        ) {
+        ui {
             box(
                 Modifier
-                    .size(size - 50)
+                    .size(size * 0.5)
                     .align(UiAlignment.Center)
                     .background(Color.Blue),
             ) {
