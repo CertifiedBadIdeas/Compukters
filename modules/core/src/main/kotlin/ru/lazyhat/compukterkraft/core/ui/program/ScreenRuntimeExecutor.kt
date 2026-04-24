@@ -21,6 +21,17 @@ import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Position
 class ScreenRuntimeExecutor(
     private val program: ScreenProgram,
 ) {
+    /**
+     * Whether the focusable element (if any) currently has input focus.
+     *
+     * Toggled by [mouseClicked]: a click inside [ScreenProgram.focusRegion]
+     * sets it to `true`; a click that lands outside every hit/focus region
+     * clears it. When there is no focus region at all, the flag stays `false`
+     * and no key/char events are routed.
+     */
+    var isFocused: Boolean = false
+        private set
+
     fun render(backend: RenderBackend) {
         for (frame in program.frames) {
             if (frame.visible != null && !frame.visible.evaluate()) continue
@@ -60,8 +71,37 @@ class ScreenRuntimeExecutor(
                 return true
             }
         }
+
+        val focus = program.focusRegion
+        if (focus != null) {
+            val frame = program.frames[focus.frameIndex]
+            val frameVisible = frame.visible?.evaluate() ?: true
+            if (frameVisible) {
+                val origin = frame.origin?.evaluate() ?: Position.Zero
+                val fx = focus.x + origin.x
+                val fy = focus.y + origin.y
+                if (x >= fx && y >= fy && x < fx + focus.width && y < fy + focus.height) {
+                    isFocused = true
+                    return true
+                }
+            }
+        }
+        isFocused = false
         return false
     }
 
-    fun keyPressed(keyCode: Int): Boolean = program.keyHandler?.invoke(keyCode) ?: false
+    fun keyPressed(keyCode: Int): Boolean {
+        if (!isFocused) return false
+        return program.keyHandler?.onKeyPressed?.invoke(keyCode) ?: false
+    }
+
+    fun keyReleased(keyCode: Int): Boolean {
+        if (!isFocused) return false
+        return program.keyHandler?.onKeyReleased?.invoke(keyCode) ?: false
+    }
+
+    fun charTyped(ch: Char): Boolean {
+        if (!isFocused) return false
+        return program.keyHandler?.onCharTyped?.invoke(ch) ?: false
+    }
 }
