@@ -1,26 +1,31 @@
 package ru.lazyhat.compukterkraft.core.ui.program
 
+import ru.lazyhat.compukterkraft.core.platform.api.FontMetrics
+import ru.lazyhat.compukterkraft.core.ui.foundation.expr
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Modifier
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.UiAlignment
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.align
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.padding
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.size
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.weight
+import ru.lazyhat.compukterkraft.core.ui.foundation.ui
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import ru.lazyhat.compukterkraft.core.platform.api.FontMetrics
-import ru.lazyhat.compukterkraft.core.ui.foundation.Modifier
-import ru.lazyhat.compukterkraft.core.ui.foundation.UiAlignment
-import ru.lazyhat.compukterkraft.core.ui.foundation.textExpr
-import ru.lazyhat.compukterkraft.core.ui.foundation.ui
 
 class UiLayoutResolverTest {
     private val fontMetrics = FontMetrics { text -> text.length * 6 }
 
     @Test
     fun boxCentersChildInsidePaddedBounds() {
-        val root = ui {
-            box(modifier = Modifier.size(200, 120).padding(10)) {
-                text(
-                    value = textExpr { "Centered" },
-                    modifier = Modifier.size(80, 20).align(UiAlignment.Center),
-                )
+        val root =
+            ui {
+                box(modifier = Modifier.size(200, 120).padding(10)) {
+                    text(
+                        text = expr { "Centered" },
+                        modifier = Modifier.size(80, 20).align(UiAlignment.Center),
+                    )
+                }
             }
-        }
 
         val layout = UiLayoutResolver(rootWidth = 200, rootHeight = 120).resolve(root)
 
@@ -29,13 +34,14 @@ class UiLayoutResolverTest {
 
     @Test
     fun rowDistributesRemainingWidthAcrossWeightedChildren() {
-        val root = ui {
-            row(modifier = Modifier.size(120, 20)) {
-                text(value = textExpr { "A" }, modifier = Modifier.size(20, 20))
-                text(value = textExpr { "B" }, modifier = Modifier.weight(1f).size(0, 20))
-                text(value = textExpr { "C" }, modifier = Modifier.weight(2f).size(0, 20))
+        val root =
+            ui {
+                row(modifier = Modifier.size(120, 20)) {
+                    text(text = expr { "A" }, modifier = Modifier.size(20, 20))
+                    text(text = expr { "B" }, modifier = Modifier.weight(1f).size(0, 20))
+                    text(text = expr { "C" }, modifier = Modifier.weight(2f).size(0, 20))
+                }
             }
-        }
 
         val layout = UiLayoutResolver(rootWidth = 120, rootHeight = 20).resolve(root)
 
@@ -45,14 +51,15 @@ class UiLayoutResolverTest {
 
     @Test
     fun boxIgnoresWeightAndUsesAlignedPlacement() {
-        val root = ui {
-            box(modifier = Modifier.size(100, 100).padding(10)) {
-                text(
-                    value = textExpr { "Weighted" },
-                    modifier = Modifier.size(20, 10).weight(1f).align(UiAlignment.End),
-                )
+        val root =
+            ui {
+                box(modifier = Modifier.size(100, 100).padding(10)) {
+                    text(
+                        text = expr { "Weighted" },
+                        modifier = Modifier.size(20, 10).weight(1f).align(UiAlignment.End),
+                    )
+                }
             }
-        }
 
         val layout = UiLayoutResolver(rootWidth = 100, rootHeight = 100).resolve(root)
 
@@ -61,14 +68,15 @@ class UiLayoutResolverTest {
 
     @Test
     fun centeredTextUsesMeasuredWidthAndDefaultHeight() {
-        val root = ui {
-            box(modifier = Modifier.size(100, 40)) {
-                text(
-                    value = textExpr { "AB" },
-                    modifier = Modifier.align(UiAlignment.Center),
-                )
+        val root =
+            ui {
+                box(modifier = Modifier.size(100, 40)) {
+                    text(
+                        text = expr { "AB" },
+                        modifier = Modifier.align(UiAlignment.Center),
+                    )
+                }
             }
-        }
 
         val layout = UiLayoutResolver(rootWidth = 100, rootHeight = 40, fontMetrics = fontMetrics).resolve(root)
 

@@ -1,9 +1,13 @@
 package ru.lazyhat.compukterkraft.core.ui.program
 
 import ru.lazyhat.compukterkraft.core.platform.api.FontMetrics
-import ru.lazyhat.compukterkraft.core.ui.foundation.Color
 import ru.lazyhat.compukterkraft.core.ui.foundation.UiElement
-import ru.lazyhat.compukterkraft.core.ui.foundation.UiRole
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.BackgroundModifier
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.find
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.findBackground
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.findClickable
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.findZIndex
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.zIndex
 
 class ScreenProgramCompiler(
     private val fontMetrics: FontMetrics? = null,
@@ -14,7 +18,6 @@ class ScreenProgramCompiler(
         val renderOps = mutableListOf<RenderOp>()
         val hitRegions = mutableListOf<HitRegion>()
         val inputRoutes = mutableListOf<InputRoute>()
-        val focusTargets = mutableListOf<FocusTarget>()
         val dynamicLayouts = mutableListOf<DynamicLayoutFragment>()
         val dynamicRenders = mutableListOf<DynamicRenderFragment>()
 
@@ -25,7 +28,6 @@ class ScreenProgramCompiler(
             renderOps = renderOps,
             hitRegions = hitRegions,
             inputRoutes = inputRoutes,
-            focusTargets = focusTargets,
             dynamicLayouts = dynamicLayouts,
             dynamicRenders = dynamicRenders,
         )
@@ -35,7 +37,6 @@ class ScreenProgramCompiler(
             renderProgram = RenderProgram(renderOps, dynamicRenders),
             hitTestProgram = HitTestProgram(hitRegions.sortedByDescending { it.zIndex }),
             inputProgram = InputProgram(inputRoutes),
-            focusProgram = FocusProgram(focusTargets),
         )
     }
 
@@ -46,7 +47,6 @@ class ScreenProgramCompiler(
         renderOps: MutableList<RenderOp>,
         hitRegions: MutableList<HitRegion>,
         inputRoutes: MutableList<InputRoute>,
-        focusTargets: MutableList<FocusTarget>,
         dynamicLayouts: MutableList<DynamicLayoutFragment>,
         dynamicRenders: MutableList<DynamicRenderFragment>,
     ) {
@@ -54,14 +54,14 @@ class ScreenProgramCompiler(
 
         when (element) {
             is UiElement.Box -> {
-                val backgroundColor = resolveBackgroundColor(element)
-                if (
-                    element.modifier.role == UiRole.Button ||
-                    backgroundColor != null
-                ) {
-                    renderOps += RenderOp.FillRect(nodeId, backgroundColor ?: Color.Transparent)
+                val backgroundColor = element.modifier.findBackground()?.color
+
+                if (backgroundColor != null) {
+                    renderOps += RenderOp.FillRect(nodeId, backgroundColor)
                 }
-                addInteraction(nodeId, element, hitRegions, inputRoutes, focusTargets)
+
+                addInteraction(nodeId, element, hitRegions, inputRoutes)
+
                 element.children.forEachIndexed { index, child ->
                     lower(
                         element = child,
@@ -70,7 +70,6 @@ class ScreenProgramCompiler(
                         renderOps = renderOps,
                         hitRegions = hitRegions,
                         inputRoutes = inputRoutes,
-                        focusTargets = focusTargets,
                         dynamicLayouts = dynamicLayouts,
                         dynamicRenders = dynamicRenders,
                     )
@@ -86,7 +85,6 @@ class ScreenProgramCompiler(
                         renderOps = renderOps,
                         hitRegions = hitRegions,
                         inputRoutes = inputRoutes,
-                        focusTargets = focusTargets,
                         dynamicLayouts = dynamicLayouts,
                         dynamicRenders = dynamicRenders,
                     )
@@ -102,7 +100,6 @@ class ScreenProgramCompiler(
                         renderOps = renderOps,
                         hitRegions = hitRegions,
                         inputRoutes = inputRoutes,
-                        focusTargets = focusTargets,
                         dynamicLayouts = dynamicLayouts,
                         dynamicRenders = dynamicRenders,
                     )
@@ -110,17 +107,14 @@ class ScreenProgramCompiler(
             }
 
             is UiElement.Text -> {
-                renderOps += RenderOp.DrawText(nodeId, element.value.evaluate(), resolveTextColor(element))
+                renderOps += RenderOp.DrawText(nodeId, element.value.evaluate(), element.color)
             }
 
             is UiElement.TerminalSurface -> {
                 renderOps += RenderOp.DrawTerminalSurface(nodeId, element.snapshot.evaluate())
                 val regionId = "$nodeId-region"
-                hitRegions += HitRegion(regionId, nodeId, element.modifier.role, element.modifier.zIndex, element.modifier.focusable)
+                hitRegions += HitRegion(regionId, nodeId, element.modifier.findZIndex()?.zIndex ?: 0)
                 inputRoutes += InputRoute(regionId, InputEventType.KeyPressed, "$regionId-key")
-                if (element.modifier.focusable) {
-                    focusTargets += FocusTarget(regionId, element.modifier.role, focusTargets.size)
-                }
             }
 
             is UiElement.IfNode -> {
@@ -135,7 +129,6 @@ class ScreenProgramCompiler(
                             renderOps = renderOps,
                             hitRegions = hitRegions,
                             inputRoutes = inputRoutes,
-                            focusTargets = focusTargets,
                             dynamicLayouts = dynamicLayouts,
                             dynamicRenders = dynamicRenders,
                         )
@@ -150,23 +143,13 @@ class ScreenProgramCompiler(
         element: UiElement,
         hitRegions: MutableList<HitRegion>,
         inputRoutes: MutableList<InputRoute>,
-        focusTargets: MutableList<FocusTarget>,
     ) {
-        if (element.modifier.onClick == null) {
+        if (element.modifier.findClickable() == null) {
             return
         }
 
         val regionId = "$nodeId-region"
-        hitRegions += HitRegion(regionId, nodeId, element.modifier.role, element.modifier.zIndex, element.modifier.focusable)
+        hitRegions += HitRegion(regionId, nodeId, element.modifier.findZIndex()?.zIndex ?: 0)
         inputRoutes += InputRoute(regionId, InputEventType.Click, "$regionId-click")
-        if (element.modifier.focusable) {
-            focusTargets += FocusTarget(regionId, element.modifier.role, focusTargets.size)
-        }
     }
-
-    private fun resolveBackgroundColor(element: UiElement.Box): Color? =
-        element.modifier.backgroundColor ?: element.modifier.color
-
-    private fun resolveTextColor(element: UiElement.Text): Color =
-        element.modifier.textColor ?: element.modifier.color ?: Color.Transparent
 }

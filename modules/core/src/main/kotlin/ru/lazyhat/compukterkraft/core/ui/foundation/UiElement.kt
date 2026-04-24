@@ -1,38 +1,44 @@
 package ru.lazyhat.compukterkraft.core.ui.foundation
 
+import jdk.internal.org.jline.terminal.Size
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Modifier
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.clickable
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.size
+
 sealed interface UiElement {
-    val modifier: UiModifier
+    val modifier: Modifier
 
     data class Box(
-        override val modifier: UiModifier = Modifier,
+        override val modifier: Modifier,
         val children: List<UiElement>,
     ) : UiElement
 
     data class Row(
-        override val modifier: UiModifier = Modifier,
+        override val modifier: Modifier,
         val children: List<UiElement>,
     ) : UiElement
 
     data class Column(
-        override val modifier: UiModifier = Modifier,
+        override val modifier: Modifier,
         val children: List<UiElement>,
     ) : UiElement
 
     data class Text(
-        override val modifier: UiModifier = Modifier,
-        val value: UiExpression<String>,
+        override val modifier: Modifier,
+        val color: Color,
+        val value: ValueExpression<String>,
     ) : UiElement
 
     data class TerminalSurface(
-        override val modifier: UiModifier = Modifier,
-        val snapshot: UiExpression<Any?>,
+        override val modifier: Modifier,
+        val snapshot: ValueExpression<Any?>,
         val onFocus: () -> Unit = {},
         val onKey: (Int) -> Boolean = { false },
     ) : UiElement
 
     data class IfNode(
-        override val modifier: UiModifier = Modifier,
-        val condition: UiExpression<Boolean>,
+        override val modifier: Modifier,
+        val condition: ValueExpression<Boolean>,
         val children: List<UiElement>,
     ) : UiElement
 }
@@ -41,67 +47,74 @@ class UiScope {
     private val children = mutableListOf<UiElement>()
 
     fun box(
-        modifier: UiModifier = Modifier,
-        block: UiScope.() -> Unit,
+        modifier: Modifier = Modifier,
+        block: UiScope.() -> Unit = {},
     ) {
         children += UiElement.Box(modifier, UiScope().apply(block).build())
     }
 
     fun row(
-        modifier: UiModifier = Modifier,
+        modifier: Modifier = Modifier,
         block: UiScope.() -> Unit,
     ) {
         children += UiElement.Row(modifier, UiScope().apply(block).build())
     }
 
     fun column(
-        modifier: UiModifier = Modifier,
+        modifier: Modifier = Modifier,
         block: UiScope.() -> Unit,
     ) {
         children += UiElement.Column(modifier, UiScope().apply(block).build())
     }
 
-    fun text(
-        value: UiExpression<String>,
-        modifier: UiModifier = Modifier,
+    fun button(
+        onClick: () -> Unit,
+        block: UiScope.() -> Unit,
     ) {
-        children += UiElement.Text(modifier, value)
+        button(Modifier, onClick, block)
+    }
+
+    fun button(
+        modifier: Modifier = Modifier,
+        onClick: () -> Unit,
+        block: UiScope.() -> Unit,
+    ) {
+        box(modifier.clickable(onClick), block)
+    }
+
+    fun text(
+        modifier: Modifier = Modifier,
+        color: Color = Color.White,
+        text: ValueExpression<String>,
+    ) {
+        children += UiElement.Text(modifier, color, text)
     }
 
     fun terminalSurface(
-        snapshot: UiExpression<Any?>,
-        modifier: UiModifier = Modifier,
+        snapshot: ValueExpression<Any?>,
+        modifier: Modifier = Modifier,
         onFocus: () -> Unit = {},
         onKey: (Int) -> Boolean = { false },
     ) {
-        children += UiElement.TerminalSurface(modifier.role(UiRole.TerminalSurface), snapshot, onFocus, onKey)
+        children += UiElement.TerminalSurface(modifier, snapshot, onFocus, onKey)
     }
 
     @Suppress("FunctionName")
     fun If(
-        condition: UiExpression<Boolean>,
+        condition: ValueExpression<Boolean>,
         block: UiScope.() -> Unit,
     ) {
-        children += UiElement.IfNode(condition = condition, children = UiScope().apply(block).build())
-    }
-
-    fun button(
-        text: UiExpression<String>,
-        modifier: UiModifier = Modifier,
-        onClick: () -> Unit = {},
-    ) {
-        box(modifier.role(UiRole.Button).focusable().clickable(onClick)) {
-            this.text(value = text, modifier = Modifier.offset(8, 6))
-        }
+        children += UiElement.IfNode(modifier = Modifier, condition = condition, children = UiScope().apply(block).build())
     }
 
     fun build(): List<UiElement> = children
 }
 
 fun ui(
-    width: Int,
-    height: Int,
+    modifier: Modifier = Modifier.size(20, 20),
     block: UiScope.() -> Unit,
-): UiElement = UiElement.Box(modifier = Modifier.size(width, height), children = UiScope().apply(block).build())
-
-fun ui(block: UiScope.() -> Unit): UiElement = UiElement.Box(children = UiScope().apply(block).build())
+): UiElement =
+    UiElement.Box(
+        modifier = modifier,
+        children = UiScope().apply(block).build(),
+    )
