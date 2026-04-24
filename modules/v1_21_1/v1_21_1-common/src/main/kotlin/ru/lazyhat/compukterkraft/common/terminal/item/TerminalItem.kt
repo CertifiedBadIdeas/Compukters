@@ -49,7 +49,6 @@ class TerminalItem(
 ) : Item(properties) {
     override fun useOn(context: UseOnContext): InteractionResult {
         val player = context.player ?: return InteractionResult.PASS
-        if (!player.isShiftKeyDown) return InteractionResult.PASS
 
         val level = context.level
         val pos = context.clickedPos
@@ -80,17 +79,17 @@ class TerminalItem(
         hand: InteractionHand,
     ): InteractionResultHolder<ItemStack> {
         val stack = player.getItemInHand(hand)
-        if (!player.isShiftKeyDown) return InteractionResultHolder.pass(stack)
         if (level.isClientSide) return InteractionResultHolder.sidedSuccess(stack, true)
         val serverPlayer = player as? ServerPlayer ?: return InteractionResultHolder.pass(stack)
 
-        val binding = TransientPairing.get(serverPlayer.uuid) ?: run {
-            serverPlayer.displayClientMessage(
-                Component.translatable("message.compukterkraft.terminal.no_binding"),
-                true,
-            )
-            return InteractionResultHolder.pass(stack)
-        }
+        val binding =
+            TransientPairing.get(serverPlayer.uuid) ?: run {
+                serverPlayer.displayClientMessage(
+                    Component.translatable("message.compukterkraft.terminal.no_binding"),
+                    true,
+                )
+                return InteractionResultHolder.pass(stack)
+            }
         if (binding.dimensionId != level.dimension()) {
             serverPlayer.displayClientMessage(
                 Component.translatable("message.compukterkraft.terminal.wrong_dimension"),
@@ -98,20 +97,22 @@ class TerminalItem(
             )
             return InteractionResultHolder.pass(stack)
         }
-        val be = level.getBlockEntity(binding.blockPos) as? ComputerBlockEntity ?: run {
-            // Block removed between binding and reopening — drop the binding.
-            TransientPairing.clear(serverPlayer.uuid)
-            return InteractionResultHolder.pass(stack)
-        }
+        val be =
+            level.getBlockEntity(binding.blockPos) as? ComputerBlockEntity ?: run {
+                // Block removed between binding and reopening — drop the binding.
+                TransientPairing.clear(serverPlayer.uuid)
+                return InteractionResultHolder.pass(stack)
+            }
         // Task 3.5 — radius enforcement. Cross-dimensional access is already
         // excluded above; here we reject reopens from farther than
         // `TERMINAL_CONNECT_RADIUS_BLOCKS` blocks away.
         val radius = Config.TERMINAL_CONNECT_RADIUS_BLOCKS.toDouble()
-        val distSqr = serverPlayer.distanceToSqr(
-            binding.blockPos.x + 0.5,
-            binding.blockPos.y + 0.5,
-            binding.blockPos.z + 0.5,
-        )
+        val distSqr =
+            serverPlayer.distanceToSqr(
+                binding.blockPos.x + 0.5,
+                binding.blockPos.y + 0.5,
+                binding.blockPos.z + 0.5,
+            )
         if (distSqr > radius * radius) {
             serverPlayer.displayClientMessage(
                 Component.translatable("message.compukterkraft.terminal.out_of_range"),
@@ -128,7 +129,10 @@ class TerminalItem(
         be: ComputerBlockEntity,
     ) {
         val serverComputer = be.getOrCreateServerComputer()
-        val displayStack = be.blockState.block.asItem().defaultInstance
+        val displayStack =
+            be.blockState.block
+                .asItem()
+                .defaultInstance
         ModObjects.openComputerMenu(
             serverPlayer,
             be as AbstractComputerBlockEntity,
