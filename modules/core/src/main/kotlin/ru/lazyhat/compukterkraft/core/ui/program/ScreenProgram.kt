@@ -4,7 +4,6 @@ import ru.lazyhat.compukterkraft.core.ui.foundation.CanvasScope
 import ru.lazyhat.compukterkraft.core.ui.foundation.Color
 import ru.lazyhat.compukterkraft.core.ui.foundation.HoverState
 import ru.lazyhat.compukterkraft.core.ui.foundation.Value
-import ru.lazyhat.compukterkraft.core.ui.foundation.ValueExpression
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Position
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 
@@ -13,7 +12,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
  *
  * The runtime contract is intentionally thin: render/hit-test walk a flat list
  * of [RenderFrame]s with baked, relative coordinates. Dynamic values enter the
- * pipeline only through [ValueExpression]s (e.g. frame origin, visibility,
+ * pipeline only through [Value]s (e.g. frame origin, visibility,
  * op-level text/snapshot).
  *
  * This program is produced once per content by [ScreenProgramCompiler]. It is

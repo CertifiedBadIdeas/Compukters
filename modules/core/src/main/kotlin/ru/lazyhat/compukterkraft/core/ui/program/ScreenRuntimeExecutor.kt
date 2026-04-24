@@ -12,7 +12,7 @@ import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Position
  * 1. Iterates [ScreenProgram.frames] in order.
  * 2. For each frame, evaluates (at most once) `visible` to decide skip/draw
  *    and `origin` to translate the baked relative coordinates of its ops.
- * 3. Evaluates op-level [ru.lazyhat.compukterkraft.core.ui.foundation.ValueExpression]s
+ * 3. Evaluates op-level [ru.lazyhat.compukterkraft.core.ui.foundation.Value]s
  *    (text, snapshots) in place while emitting backend calls.
  *
  * Hit-testing walks [ScreenProgram.hitRegions] in compile-time z-order
@@ -46,7 +46,7 @@ class ScreenRuntimeExecutor(
      * Updates every [ru.lazyhat.compukterkraft.core.ui.foundation.HoverState]
      * bound via `Modifier.hoverable(...)` based on the supplied mouse
      * position. Call this from the host screen before [render] so that
-     * [ValueExpression]s observed during drawing see the current hover flag.
+     * [ru.lazyhat.compukterkraft.core.ui.foundation.Value]s observed during drawing see the current hover flag.
      *
      * Passing `Int.MIN_VALUE` for either coordinate clears all hover states
      * (useful when the cursor is known to be outside the screen).

@@ -4,7 +4,6 @@ import ru.lazyhat.compukterkraft.core.ui.foundation.Color
 import ru.lazyhat.compukterkraft.core.ui.foundation.HoverState
 import ru.lazyhat.compukterkraft.core.ui.foundation.IntSize
 import ru.lazyhat.compukterkraft.core.ui.foundation.Value
-import ru.lazyhat.compukterkraft.core.ui.foundation.ValueExpression
 import ru.lazyhat.compukterkraft.core.ui.foundation.value
 
 data class PaddingModifier(
