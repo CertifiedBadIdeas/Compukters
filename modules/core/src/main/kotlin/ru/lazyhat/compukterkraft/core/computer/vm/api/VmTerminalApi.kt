@@ -51,7 +51,11 @@ class VmTerminalApi(
     }
 
     override suspend fun readLine(prompt: String): String {
-        screenBuffer.setCursorBlink(true)
+        // DECTCEM — emit the cursor-visible VT sequence so every attached client
+        // flips its own `cursorBlink` flag through the VtParser. The server-side
+        // ScreenBuffer is still driven via the broadcaster's internal consumer,
+        // so the legacy snapshot path sees the same transition.
+        stdio.writeString("\u001B[?25h")
         try {
             return TerminalLineReader(
                 receiveEvent = { ctx.receiveEvent() },
@@ -64,7 +68,7 @@ class VmTerminalApi(
                 updateCursor = { _, _ -> },
             ).readLine(prompt)
         } finally {
-            screenBuffer.setCursorBlink(false)
+            stdio.writeString("\u001B[?25l")
         }
     }
 
