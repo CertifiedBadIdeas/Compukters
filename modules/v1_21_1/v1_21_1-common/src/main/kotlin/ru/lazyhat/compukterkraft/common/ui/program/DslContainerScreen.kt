@@ -48,6 +48,15 @@ abstract class DslContainerScreen<T : AbstractComputerMenu>(
         executor = null
     }
 
+    /**
+     * Whether the single focusable element (if any) currently has focus.
+     * Mirrors [ScreenRuntimeExecutor.isFocused] of the latest executor and
+     * returns `false` before the first render or when there is no
+     * focusable element at all.
+     */
+    protected val isDslFocused: Boolean
+        get() = executor?.isFocused == true
+
     override fun init() {
         super.init()
         rebuildExecutor()
