@@ -1,5 +1,26 @@
 # Epic 1 — Stream I/O Abstraction in Runtime (Implementation Plan)
 
+> **Status (post-execution):** Tasks 1–10 completed and shipped as commits
+> `6acc605`, `5a3cb16`, `fe1bf3d`, `df963f0` plus the intermediate
+> `ScreenBufferVtSink` commit. All `./gradlew :core:test :compiler:test` pass.
+>
+> **Tasks 11–12 deferred.** They required `term.ck` to be importable as a
+> user-level module via `import term;`, but the language currently resolves
+> `import` only against `LanguageBuiltins.defaultRuntimeRegistry` (builtin
+> modules registered in Kotlin). `.ck` files can be executed via `process.run`
+> but cannot be imported as libraries. Either:
+>  - **Option A (recommended for Epic 2):** add a second builtin module `term`
+>    implemented in Kotlin that emits VT escapes through `stdio`. Quick,
+>    requires no language change.
+>  - **Option B (Epic 3+):** extend the language with user-level modules
+>    (parse top-level `fun` declarations in a `.ck` file as an importable
+>    module). Larger change, benefits many stdlib use cases.
+>
+> The ROM programs (`bios.ck`, `shell.ck`, `ls.ck`, etc.) already run through
+> the new stream I/O pipeline transparently, because `VmTerminalApi` now
+> emits VT-100 into `stdio` (Task 10). No ROM edits are needed for Epic 1 to
+> deliver its goal.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Introduce a byte-oriented `stdout` stream in the VM runtime and make existing `terminal.*` host calls re-emit VT-100 escape sequences into that stream, with a server-side compat layer that feeds the stream back into the existing `ScreenBuffer`. No user-visible change.

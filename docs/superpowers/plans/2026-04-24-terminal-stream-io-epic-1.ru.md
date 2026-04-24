@@ -1,5 +1,26 @@
 # Эпик 1 — Stream I/O абстракция в рантайме (план реализации)
 
+> **Статус (после исполнения):** Задачи 1–10 выполнены и закоммичены:
+> `6acc605`, `5a3cb16`, `fe1bf3d`, `df963f0` + промежуточный коммит
+> `ScreenBufferVtSink`. `./gradlew :core:test :compiler:test` — зелёный.
+>
+> **Задачи 11–12 отложены.** Они требовали, чтобы `term.ck` был импортируем
+> как user-level модуль через `import term;`, но язык сейчас резолвит
+> `import` только против `LanguageBuiltins.defaultRuntimeRegistry` (builtin
+> модули, зарегистрированные в Kotlin). `.ck`-файлы можно запускать через
+> `process.run`, но не импортировать как библиотеки. Варианты:
+>  - **Вариант A (рекомендуется для Эпика 2):** добавить второй builtin
+>    модуль `term`, реализованный в Kotlin, который эмитит VT-escape'ы
+>    через `stdio`. Быстро, без изменений языка.
+>  - **Вариант B (Эпик 3+):** расширить язык user-level модулями (верхние
+>    `fun` в `.ck`-файле становятся импортируемыми). Крупнее, но закрывает
+>    много stdlib-кейсов.
+>
+> ROM-программы (`bios.ck`, `shell.ck`, `ls.ck` и т.д.) уже сейчас проходят
+> через новый stream I/O pipeline прозрачно, потому что `VmTerminalApi`
+> теперь эмитит VT-100 в `stdio` (Задача 10). Править ROM не нужно, чтобы
+> Эпик 1 достиг своей цели.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Цель:** Ввести байт-ориентированный стрим `stdout` в рантайм VM и заставить существующие host-функции `terminal.*` переизлучать VT-100 escape-последовательности в этот стрим, с серверным compat-слоем, который скармливает стрим обратно в существующий `ScreenBuffer`. Никаких изменений снаружи.
