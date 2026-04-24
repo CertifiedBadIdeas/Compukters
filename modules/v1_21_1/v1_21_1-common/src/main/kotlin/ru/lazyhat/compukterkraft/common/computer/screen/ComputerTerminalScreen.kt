@@ -21,6 +21,7 @@ package ru.lazyhat.compukterkraft.common.computer.screen
 import net.minecraft.network.chat.Component
 import net.minecraft.world.entity.player.Inventory
 import ru.lazyhat.compukterkraft.common.computer.menu.AbstractComputerMenu
+import ru.lazyhat.compukterkraft.common.ui.dsl.size
 import ru.lazyhat.compukterkraft.common.ui.program.DslContainerScreen
 import ru.lazyhat.compukterkraft.core.ui.foundation.Color
 import ru.lazyhat.compukterkraft.core.ui.foundation.UiElement
@@ -37,10 +38,14 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
     title: Component,
 ) : DslContainerScreen<T>(container, player, title) {
     override fun content(): UiElement =
-        ui(Modifier.size(width, height)) {
+        ui(
+            Modifier
+                .size(size)
+                .background(Color.Green),
+        ) {
             box(
                 Modifier
-                    .size(width, height)
+                    .size(size - 50)
                     .align(UiAlignment.Center)
                     .background(Color.Blue),
             ) {
