@@ -181,7 +181,7 @@ class LanguageIdeTest {
     fun completesImportModules() {
         val allModules = ide.complete("test.ck", "import ", 0, 7)
         val moduleLabels = allModules.filter { it.kind == CompletionItemKind.MODULE }.map { it.label }.toSet()
-        assertEquals(setOf("terminal", "filesystem", "system", "events", "process", "strings"), moduleLabels)
+        assertEquals(setOf("terminal", "stdout", "filesystem", "system", "events", "process", "strings"), moduleLabels)
     }
 
     @Test
@@ -197,7 +197,7 @@ class LanguageIdeTest {
         val completions = ide.complete("test.ck", source, 1, 7)
         val moduleLabels = completions.filter { it.kind == CompletionItemKind.MODULE }.map { it.label }.toSet()
         assertFalse(moduleLabels.contains("terminal"), "Should not suggest already-imported terminal")
-        assertEquals(setOf("filesystem", "system", "events", "process", "strings"), moduleLabels)
+        assertEquals(setOf("filesystem", "stdout", "system", "events", "process", "strings"), moduleLabels)
     }
 
     @Test

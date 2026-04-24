@@ -145,6 +145,33 @@ class LanguageRuntimeTest {
     }
 
     @Test
+    fun stdoutWriteReachesRuntimeThroughHostBridge() {
+        val artifact =
+            frontend.compile(
+                "stdout.ck",
+                """
+                import stdout;
+
+                fun main() {
+                    stdout.write("Hi");
+                }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+
+        val runtime = RecordingRuntime()
+        runBlocking {
+            BytecodeComputerProgram(requireNotNull(artifact.module)).run(runtime)
+        }
+
+        assertEquals(listOf("Hi"), runtime.stdioWrites)
+    }
+
+    @Test
     fun exposesShellBuiltinsThroughRuntimeBridge() {
         val artifact =
             frontend.compile(
