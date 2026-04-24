@@ -27,6 +27,16 @@ class CursorTrackerTest {
     }
 
     @Test
+    fun bareLineFeedBehavesAsCrLf() {
+        // Matches ScreenBufferVtSink: LF alone resets X to 0 and advances Y.
+        // Keeps server-side cursor in sync with the client ScreenBuffer so
+        // readLine's backspace arithmetic produces correct CSI H coordinates.
+        val t = feed("abc\n")
+        assertEquals(0, t.cursorX)
+        assertEquals(1, t.cursorY)
+    }
+
+    @Test
     fun csiHSetsAbsolutePositionZeroBased() {
         val t = feed("\u001B[5;3H")
         assertEquals(2, t.cursorX)
