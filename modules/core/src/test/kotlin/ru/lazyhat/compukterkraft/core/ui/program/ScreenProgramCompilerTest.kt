@@ -1,6 +1,5 @@
 package ru.lazyhat.compukterkraft.core.ui.program
 
-import org.junit.jupiter.api.Disabled
 import ru.lazyhat.compukterkraft.core.platform.api.FontMetrics
 import ru.lazyhat.compukterkraft.core.ui.foundation.expr
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Modifier
@@ -12,29 +11,67 @@ import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.size
 import ru.lazyhat.compukterkraft.core.ui.foundation.ui
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ScreenProgramCompilerTest {
     private val fontMetrics = FontMetrics { text -> text.length * 6 }
 
     @Test
-    @Disabled
-    fun terminalSurfaceCompilesFocusAndKeyRouting() {
+    fun terminalSurfaceIsMarkedAsTheSoleFocusedElement() {
         val compiler = ScreenProgramCompiler()
 
-        val program =
+        val compiled =
             compiler.compile(
                 ui {
                     terminalSurface(
-                        snapshot = { "snapshot" },
+                        snapshot = expr { "snapshot" },
                         modifier = Modifier.offset(12, 28).size(96, 48),
                         onKey = { true },
                     )
                 },
             )
 
-        assertTrue(program.renderProgram.staticOps.any { it is RenderOp.DrawTerminalSurface })
-        assertTrue(program.inputProgram.routes.any { it.eventType == InputEventType.KeyPressed })
+        assertTrue(
+            compiled.program.renderProgram.staticOps
+                .any { it is RenderOp.DrawTerminalSurface },
+        )
+        assertEquals("root-0", compiled.program.focusedNodeId)
+        assertNotNull(compiled.keyHandler)
+        assertTrue(compiled.keyHandler!!.invoke(257))
+    }
+
+    @Test
+    fun screensWithoutFocusableElementsHaveNullFocusAndNoKeyHandler() {
+        val compiler = ScreenProgramCompiler()
+
+        val compiled =
+            compiler.compile(
+                ui {
+                    button({}) { text(text = expr { "Click" }) }
+                },
+            )
+
+        assertNull(compiled.program.focusedNodeId)
+        assertNull(compiled.keyHandler)
+    }
+
+    @Test
+    fun multipleFocusableElementsAreRejectedAtCompileTime() {
+        val compiler = ScreenProgramCompiler()
+
+        val error =
+            assertFailsWith<IllegalStateException> {
+                compiler.compile(
+                    ui {
+                        terminalSurface(snapshot = expr { "a" }, onKey = { true })
+                        terminalSurface(snapshot = expr { "b" }, onKey = { true })
+                    },
+                )
+            }
+        assertTrue(error.message!!.contains("multiple focusable elements"))
     }
 
     @Test
@@ -42,7 +79,7 @@ class ScreenProgramCompilerTest {
         var visible = false
         val compiler = ScreenProgramCompiler()
 
-        val program =
+        val compiled =
             compiler.compile(
                 ui {
                     If(expr { visible }) {
@@ -53,62 +90,44 @@ class ScreenProgramCompilerTest {
                 },
             )
 
-        assertEquals(1, program.layoutProgram.dynamicFragments.size)
-        assertEquals(1, program.renderProgram.dynamicFragments.size)
+        assertEquals(1, compiled.program.layoutProgram.dynamicFragments.size)
+        assertEquals(1, compiled.program.renderProgram.dynamicFragments.size)
     }
 
     @Test
-    fun buttonAndTerminalUseStableHandlerIdsAcrossPrograms() {
+    fun buttonClickHandlerIsExtractedAndKeyedByRegion() {
+        var pressed = false
         val compiler = ScreenProgramCompiler()
 
-        val program =
+        val compiled =
             compiler.compile(
                 ui {
-                    button({}) { text(text = expr { "Power" }) }
-                    terminalSurface(snapshot = expr { "snapshot" }, onKey = { true })
+                    button(onClick = { pressed = true }) { text(text = expr { "Power" }) }
                 },
             )
 
         val regionIds =
-            program.hitTestProgram.regions
+            compiled.program.hitTestProgram.regions
                 .map { it.regionId }
                 .toSet()
         val routedIds =
-            program.inputProgram.routes
+            compiled.program.inputProgram.routes
                 .map { it.regionId }
                 .toSet()
-
-        assertTrue(regionIds.isNotEmpty())
         assertEquals(regionIds, routedIds)
-    }
+        assertEquals(1, compiled.clickHandlers.size)
 
-    @Test
-    @Disabled
-    fun terminalScreenSliceCompilesTwoControlButtonsAndOneFocusableTerminal() {
-        val compiler = ScreenProgramCompiler()
-
-        val program =
-            compiler.compile(
-                ui {
-                    button(modifier = Modifier.offset(0, 0), {}) { text(text = expr { "Power" }) }
-                    button(modifier = Modifier.offset(28, 0), {}) { text(text = expr { "Reboot" }) }
-                    terminalSurface(
-                        snapshot = expr { "snapshot" },
-                        modifier = Modifier.offset(0, 28).size(128, 72), // .focusable(),
-                        onKey = { true },
-                    )
-                },
-            )
-
-        assertEquals(3, program.hitTestProgram.regions.size)
-        assertEquals(3, program.inputProgram.routes.size)
+        compiled.clickHandlers.values
+            .single()
+            .invoke()
+        assertTrue(pressed)
     }
 
     @Test
     fun alignedChildBoundsFlowIntoHitRegionsAndRenderLayout() {
         val compiler = ScreenProgramCompiler()
 
-        val program =
+        val compiled =
             compiler.compile(
                 ui {
                     box(modifier = Modifier.size(200, 120).padding(10)) {
@@ -122,11 +141,12 @@ class ScreenProgramCompilerTest {
 
         assertEquals(
             LayoutNode("root-0-0", 60, 50, 80, 20),
-            program.layoutProgram.staticNodes.single { it.nodeId == "root-0-0" },
+            compiled.program.layoutProgram.staticNodes
+                .single { it.nodeId == "root-0-0" },
         )
         assertEquals(
             "root-0-0",
-            program.hitTestProgram.regions
+            compiled.program.hitTestProgram.regions
                 .single()
                 .nodeId,
         )
@@ -136,7 +156,7 @@ class ScreenProgramCompilerTest {
     fun centeredTextUsesMeasuredBoundsInCompiledLayout() {
         val compiler = ScreenProgramCompiler(fontMetrics = fontMetrics)
 
-        val program =
+        val compiled =
             compiler.compile(
                 ui(Modifier.size(100, 40)) {
                     text(
@@ -148,7 +168,8 @@ class ScreenProgramCompilerTest {
 
         assertEquals(
             LayoutNode("root-0", 44, 15, 12, 9),
-            program.layoutProgram.staticNodes.single { it.nodeId == "root-0" },
+            compiled.program.layoutProgram.staticNodes
+                .single { it.nodeId == "root-0" },
         )
     }
 }

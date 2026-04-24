@@ -1,12 +1,15 @@
 package ru.lazyhat.compukterkraft.core.ui.program
 
+/**
+ * Runtime-side counterpart of [CompiledScreen].
+ *
+ * Responsibilities: render via [RenderBackend]; route mouse clicks through the
+ * [HitTestProgram]; forward key events to the single focused element (if any).
+ */
 class ScreenRuntimeExecutor(
-    private val program: ScreenProgram,
-    private val slotProvider: () -> SlotValues,
-    private val clickHandlers: Map<String, () -> Unit>,
-    private val keyHandlers: Map<String, (Int) -> Boolean>,
+    private val compiled: CompiledScreen,
 ) {
-    private var focusedRegionId: String? = null
+    private val program: ScreenProgram get() = compiled.program
 
     fun render(backend: RenderBackend) {
         program.renderProgram.staticOps.forEach { op ->
@@ -42,25 +45,14 @@ class ScreenRuntimeExecutor(
         val route =
             program.inputProgram.routes.firstOrNull {
                 it.regionId == hitRegion.regionId && it.eventType == InputEventType.Click
-            }
+            } ?: return false
 
-        if (route == null) {
-            return false
-        }
-
-        clickHandlers[route.handlerId]?.invoke()
+        val handler = compiled.clickHandlers[route.handlerId] ?: return false
+        handler.invoke()
         return true
     }
 
-    fun keyPressed(keyCode: Int): Boolean {
-        val regionId = focusedRegionId ?: return false // TODO RETURN FOCUS TO PROGRAM, ФОКУС НУЖЕН ДЛЯ ЗАХВАТА КЛАВИШ ОКАЗЫВАЕТСЯ ))))
-        val route =
-            program.inputProgram.routes.firstOrNull {
-                it.regionId == regionId && it.eventType == InputEventType.KeyPressed
-            } ?: return false
-
-        return keyHandlers[route.handlerId]?.invoke(keyCode) ?: false
-    }
+    fun keyPressed(keyCode: Int): Boolean = compiled.keyHandler?.invoke(keyCode) ?: false
 
     private fun boundsFor(nodeId: String): LayoutNode =
         program.layoutProgram.staticNodes.firstOrNull { it.nodeId == nodeId }
