@@ -5,6 +5,7 @@ import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Modifier
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.background
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.size
 import ru.lazyhat.compukterkraft.core.ui.foundation.ui
+import ru.lazyhat.compukterkraft.core.ui.foundation.value
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -34,7 +35,7 @@ class ScreenProgramCompilerColorTest {
             ScreenProgramCompiler().compile(
                 ui {
                     text(
-                        text = { "Hello" },
+                        text = value { "Hello" },
                         color = Color.Green,
                     )
                 },
@@ -46,6 +47,6 @@ class ScreenProgramCompilerColorTest {
                 .filterIsInstance<RenderOp.DrawText>()
                 .single()
         assertEquals(Color.Green, text.color)
-        assertEquals("Hello", text.value.evaluate())
+        assertEquals("Hello", text.value.value)
     }
 }
