@@ -1,0 +1,266 @@
+package ru.lazyhat.compukterkraft.core.ui.program
+
+import ru.lazyhat.compukterkraft.core.ui.foundation.Color
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Modifier
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Position
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.background
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.offset
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.size
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.zIndex
+import ru.lazyhat.compukterkraft.core.ui.foundation.ui
+import ru.lazyhat.compukterkraft.core.ui.foundation.value
+import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
+
+class ScreenRuntimeExecutorTest {
+    private fun emptySnapshot() =
+        ScreenBufferSnapshot(
+            width = 0,
+            height = 0,
+            colour = false,
+            cursorX = 0,
+            cursorY = 0,
+            cursorBlink = false,
+            currentFg = 0,
+            currentBg = 0,
+            chars = CharArray(0),
+            fgColours = ByteArray(0),
+            bgColours = ByteArray(0),
+        )
+
+    @Test
+    fun mouseClickDispatchesTopmostClickableRegion() {
+        val events = mutableListOf<String>()
+        val program =
+            ScreenProgramCompiler().compile(
+                ui {
+                    button(
+                        modifier = Modifier.offset(4, 4).size(20, 20).zIndex(0),
+                        onClick = { events += "behind" },
+                    ) { text(text = value { "Behind" }) }
+                    button(
+                        modifier = Modifier.offset(4, 4).size(20, 20).zIndex(1),
+                        onClick = { events += "front" },
+                    ) { text(text = value { "Front" }) }
+                },
+            )
+
+        val executor = ScreenRuntimeExecutor(program)
+
+        assertTrue(executor.mouseClicked(8, 8))
+        assertEquals(listOf("front"), events)
+    }
+
+    @Test
+    fun focusedTerminalReceivesKeyEventsOnlyAfterClickAcquiresFocus() {
+        val program =
+            ScreenProgramCompiler().compile(
+                ui {
+                    terminalSurface(
+                        snapshot = value { emptySnapshot() },
+                        modifier = Modifier.offset(8, 8).size(80, 32),
+                        onKey = { keyCode -> keyCode == 257 },
+                    )
+                },
+            )
+
+        val executor = ScreenRuntimeExecutor(program)
+
+        // No click yet — focus is not acquired.
+        assertFalse(executor.isFocused)
+        assertFalse(executor.keyPressed(257))
+
+        // Click inside the terminal region acquires focus.
+        assertTrue(executor.mouseClicked(10, 10))
+        assertTrue(executor.isFocused)
+        assertTrue(executor.keyPressed(257))
+        assertFalse(executor.keyPressed(258))
+
+        // Click outside any region drops focus again.
+        assertFalse(executor.mouseClicked(500, 500))
+        assertFalse(executor.isFocused)
+        assertFalse(executor.keyPressed(257))
+    }
+
+    @Test
+    fun charTypedAndKeyReleasedRouteThroughFocusHandler() {
+        val events = mutableListOf<String>()
+        val program =
+            ScreenProgramCompiler().compile(
+                ui {
+                    terminalSurface(
+                        snapshot = value { emptySnapshot() },
+                        modifier = Modifier.size(40, 40),
+                        onKey = {
+                            events += "press:$it"
+                            true
+                        },
+                        onKeyReleased = {
+                            events += "release:$it"
+                            true
+                        },
+                        onCharTyped = {
+                            events += "char:$it"
+                            true
+                        },
+                    )
+                },
+            )
+
+        val executor = ScreenRuntimeExecutor(program)
+        executor.mouseClicked(5, 5)
+
+        assertTrue(executor.keyPressed(65))
+        assertTrue(executor.keyReleased(65))
+        assertTrue(executor.charTyped('A'))
+        assertEquals(listOf("press:65", "release:65", "char:A"), events)
+    }
+
+    @Test
+    fun keyPressedReturnsFalseWhenNoFocusableElementExists() {
+        val program =
+            ScreenProgramCompiler().compile(
+                ui {
+                    button({}) { text(text = value { "Noop" }) }
+                },
+            )
+
+        val executor = ScreenRuntimeExecutor(program)
+
+        assertFalse(executor.keyPressed(257))
+    }
+
+    @Test
+    fun mouseClickIgnoresAreasOutsideAnyRegion() {
+        val events = mutableListOf<String>()
+        val program =
+            ScreenProgramCompiler().compile(
+                ui {
+                    button(
+                        modifier = Modifier.offset(4, 4).size(20, 20),
+                        onClick = { events += "power" },
+                    ) { text(text = value { "Power" }) }
+                },
+            )
+
+        val executor = ScreenRuntimeExecutor(program)
+
+        assertFalse(executor.mouseClicked(100, 100))
+        assertTrue(events.isEmpty())
+    }
+
+    @Test
+    fun hiddenIfFrameDoesNotDispatchClicksToRegionsItOwns() {
+        var shown = false
+        val events = mutableListOf<String>()
+        val program =
+            ScreenProgramCompiler().compile(
+                ui(Modifier.size(100, 100)) {
+                    If(value { shown }) {
+                        button(
+                            modifier = Modifier.offset(4, 4).size(20, 20),
+                            onClick = { events += "hit" },
+                        ) { text(text = value { "Hidden" }) }
+                    }
+                },
+            )
+
+        val executor = ScreenRuntimeExecutor(program)
+        assertFalse(executor.mouseClicked(8, 8))
+        assertTrue(events.isEmpty())
+
+        shown = true
+        assertTrue(executor.mouseClicked(8, 8))
+        assertEquals(listOf("hit"), events)
+    }
+
+    @Test
+    fun overlayOriginTranslatesClickCoordinates() {
+        var anchor = Position(50, 30)
+        val events = mutableListOf<String>()
+        val program =
+            ScreenProgramCompiler().compile(
+                ui(Modifier.size(200, 200)) {
+                    overlay(
+                        modifier = Modifier.size(20, 20),
+                        anchor = value { anchor },
+                    ) {
+                        button(
+                            modifier = Modifier.size(20, 20).background(Color.Red),
+                            onClick = { events += "popup" },
+                        ) { text(text = value { "X" }) }
+                    }
+                },
+            )
+
+        val executor = ScreenRuntimeExecutor(program)
+
+        assertFalse(executor.mouseClicked(0, 0))
+        assertTrue(executor.mouseClicked(55, 35))
+        assertEquals(listOf("popup"), events)
+
+        // Move the overlay; the same screen position now misses while the new
+        // anchor position hits.
+        anchor = Position(100, 100)
+        assertFalse(executor.mouseClicked(55, 35))
+        assertTrue(executor.mouseClicked(105, 105))
+    }
+
+    @Test
+    fun overlayVisibilityGatesRendering() {
+        var shown = true
+        val program =
+            ScreenProgramCompiler().compile(
+                ui(Modifier.size(100, 100)) {
+                    overlay(
+                        modifier = Modifier.size(20, 20),
+                        anchor = value { Position(0, 0) },
+                        visible = value { shown },
+                    ) {
+                        box(modifier = Modifier.size(20, 20).background(Color.Red))
+                    }
+                },
+            )
+
+        val backend = RecordingBackend()
+        ScreenRuntimeExecutor(program).render(backend)
+        assertEquals(1, backend.fillRects.size)
+
+        shown = false
+        val backend2 = RecordingBackend()
+        ScreenRuntimeExecutor(program).render(backend2)
+        assertEquals(0, backend2.fillRects.size)
+    }
+
+    private class RecordingBackend : RenderBackend {
+        val fillRects = mutableListOf<IntArray>()
+
+        override fun fillRect(
+            x: Int,
+            y: Int,
+            width: Int,
+            height: Int,
+            color: Color,
+        ) {
+            fillRects += intArrayOf(x, y, width, height)
+        }
+
+        override fun drawText(
+            x: Int,
+            y: Int,
+            text: String,
+            color: Color,
+        ) {
+        }
+
+        override fun drawTerminalSurface(
+            x: Int,
+            y: Int,
+            snapshot: ScreenBufferSnapshot,
+        ) {
+        }
+    }
+}

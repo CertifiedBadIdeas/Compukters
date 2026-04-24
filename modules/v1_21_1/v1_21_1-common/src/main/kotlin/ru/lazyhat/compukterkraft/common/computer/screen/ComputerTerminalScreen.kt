@@ -18,332 +18,331 @@
  */
 package ru.lazyhat.compukterkraft.common.computer.screen
 
-import net.minecraft.client.gui.GuiGraphics
 import net.minecraft.network.chat.Component
 import net.minecraft.world.entity.player.Inventory
 import ru.lazyhat.compukterkraft.common.computer.input.ClientInputHandler
 import ru.lazyhat.compukterkraft.common.computer.menu.AbstractComputerMenu
 import ru.lazyhat.compukterkraft.common.platform.MinecraftInputProvider
-import ru.lazyhat.compukterkraft.common.ui.render.WorkbenchTerminalRenderer
+import ru.lazyhat.compukterkraft.common.ui.dsl.translatable
+import ru.lazyhat.compukterkraft.common.ui.program.DslContainerScreen
 import ru.lazyhat.compukterkraft.core.computer.input.ComputerControlAction
 import ru.lazyhat.compukterkraft.core.computer.input.ControlInputEvent
-import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchMode
 import ru.lazyhat.compukterkraft.core.gui.TerminalRect
 import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalInputController
-import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalLayout
 import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalMetrics
-import ru.lazyhat.compukterkraft.core.ui.workbench.WorkbenchTerminalInteractionPolicy
+import ru.lazyhat.compukterkraft.core.ui.foundation.CanvasScope
+import ru.lazyhat.compukterkraft.core.ui.foundation.Color
+import ru.lazyhat.compukterkraft.core.ui.foundation.HoverState
+import ru.lazyhat.compukterkraft.core.ui.foundation.IntSize
+import ru.lazyhat.compukterkraft.core.ui.foundation.UiElement
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Modifier
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.background
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.hoverable
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.offset
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.size
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.tooltip
+import ru.lazyhat.compukterkraft.core.ui.foundation.ui
+import ru.lazyhat.compukterkraft.core.ui.foundation.value
 import ru.lazyhat.compukterkraft.core.ui.workbench.WorkbenchTerminalViewState
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 
+/**
+ * Terminal screen authored with the UI DSL. Mirrors the historical
+ * hand-rolled `renderBg`/`render` flow in terms of visual and input
+ * behaviour, but expresses it declaratively:
+ *
+ *  - Dynamic text, visibility branches (powered-off / connecting /
+ *    active) and snapshot contents flow through `ValueExpression`s —
+ *    no recompile is needed per frame.
+ *  - The snapshot's grid dimensions still drive `imageWidth`/
+ *    `imageHeight`; when they change, [DslContainerScreen] auto-
+ *    recompiles the layout (see Epic 3).
+ *  - Power/reboot buttons are `canvas` draw lambdas fed by
+ *    `HoverState` flags so hover chrome and icon color are resolved
+ *    inline, without creating a new draw list on hover.
+ *  - Tooltip text is routed through the new `Modifier.tooltip` hook
+ *    which the runtime forwards to Minecraft's tooltip pipeline.
+ */
 class ComputerTerminalScreen<T : AbstractComputerMenu>(
     container: T,
     player: Inventory,
     title: Component,
-) : ComputerScreen<T>(container, player, title) {
+) : DslContainerScreen<T>(container, player, title) {
     private val inputHandler = ClientInputHandler(container)
     private val terminalInput = WorkbenchTerminalInputController(inputHandler, MinecraftInputProvider)
 
+    private val powerHover = HoverState()
+    private val rebootHover = HoverState()
+
+    // Tracks the snapshot's pixel dimensions (not the mod's `imageWidth`
+    // which is clamped to MIN_IMAGE_WIDTH). A change here means the
+    // baked terminal-surface bounds in the program are now stale even if
+    // `imageWidth`/`imageHeight` did not move, so we explicitly
+    // invalidate the cached executor.
+    private var lastTerminalDimensions = IntSize.Zero
+
     init {
-        val (terminalColumns, terminalRows) = terminalDimensions(container.clientSide.screenSnapshot)
-        imageWidth = WorkbenchTerminalMetrics.imageWidth(terminalColumns, terminalRows)
-        imageHeight = WorkbenchTerminalMetrics.imageHeight(terminalColumns, terminalRows, contentTopInset = COMPUTER_CONTENT_TOP)
+        val (cols, rows) = terminalDimensions(container.clientSide.screenSnapshot)
+        imageWidth = WorkbenchTerminalMetrics.imageWidth(cols)
+        imageHeight = WorkbenchTerminalMetrics.imageHeight(rows, contentTopInset = COMPUTER_CONTENT_TOP)
     }
 
     override fun containerTick() {
         super.containerTick()
-        val terminalState = WorkbenchTerminalViewState.from(menu.isComputerOn, menu.clientSide.screenSnapshot)
-        if (terminalState !is WorkbenchTerminalViewState.Active && terminalInput.focused) {
+        val state = currentTerminalState()
+        if (state !is WorkbenchTerminalViewState.Active && terminalInput.focused) {
             terminalInput.focused = false
         }
-        syncTerminalWindowSize(terminalState)
+        syncTerminalWindowSize(state)
+        terminalDimensions(menu.clientSide.screenSnapshot).also { dims ->
+            if (dims != lastTerminalDimensions) {
+                lastTerminalDimensions = dims
+                invalidate()
+            }
+        }
         terminalInput.update()
     }
 
-    override fun renderBg(
-        graphics: GuiGraphics,
-        partialTicks: Float,
-        mouseX: Int,
-        mouseY: Int,
-    ) {
-        val snapshot = menu.clientSide.screenSnapshot
-        val terminalState = WorkbenchTerminalViewState.from(menu.isComputerOn, snapshot)
-        val focused =
-            WorkbenchTerminalInteractionPolicy.canAcceptInput(
-                WorkbenchMode.TERMINAL,
-                terminalState,
-                terminalInput.focused,
-            )
-        val showFocusHint = WorkbenchTerminalInteractionPolicy.showFocusHint(terminalState, terminalInput.focused)
-
-        WorkbenchTerminalRenderer.render(
-            graphics,
-            minecraft!!.font,
-            leftPos,
-            topPos,
-            imageWidth,
-            imageHeight,
-            terminalLayout(),
-            terminalState,
-            focused,
-            showFocusHint,
-            Component.translatable("gui.compukterkraft.terminal.powered_off").string,
-            Component.translatable("gui.compukterkraft.terminal.connecting").string,
-            statusRightInset = STATUS_TEXT_RIGHT_INSET,
-        )
-
-        renderControlButtons(graphics, mouseX, mouseY)
-    }
-
-    override fun render(
-        graphics: GuiGraphics,
-        mouseX: Int,
-        mouseY: Int,
-        partialTicks: Float,
-    ) {
-        renderBackground(graphics, mouseX, mouseY, partialTicks)
-        super.render(graphics, mouseX, mouseY, partialTicks)
-        renderControlTooltip(graphics, mouseX, mouseY)
-        renderTooltip(graphics, mouseX, mouseY)
-    }
-
-    override fun renderLabels(
-        graphics: GuiGraphics,
-        mouseX: Int,
-        mouseY: Int,
-    ) {
-    }
-
-    override fun keyPressed(
-        key: Int,
-        scancode: Int,
-        modifiers: Int,
-    ): Boolean {
-        val terminalState = WorkbenchTerminalViewState.from(menu.isComputerOn, menu.clientSide.screenSnapshot)
-        if (WorkbenchTerminalInteractionPolicy.canAcceptInput(WorkbenchMode.TERMINAL, terminalState, terminalInput.focused)) {
-            if (terminalInput.keyPressed(key, scancode, modifiers)) {
-                return true
-            }
-        }
-        return super.keyPressed(key, scancode, modifiers)
-    }
-
-    override fun keyReleased(
-        key: Int,
-        scancode: Int,
-        modifiers: Int,
-    ): Boolean {
-        val terminalState = WorkbenchTerminalViewState.from(menu.isComputerOn, menu.clientSide.screenSnapshot)
-        if (WorkbenchTerminalInteractionPolicy.canAcceptInput(WorkbenchMode.TERMINAL, terminalState, terminalInput.focused)) {
-            if (terminalInput.keyReleased(key, scancode)) {
-                return true
-            }
-        }
-        return super.keyReleased(key, scancode, modifiers)
-    }
-
-    override fun charTyped(
-        ch: Char,
-        modifiers: Int,
-    ): Boolean {
-        val terminalState = WorkbenchTerminalViewState.from(menu.isComputerOn, menu.clientSide.screenSnapshot)
-        if (WorkbenchTerminalInteractionPolicy.canAcceptInput(WorkbenchMode.TERMINAL, terminalState, terminalInput.focused)) {
-            return terminalInput.charTyped(ch)
-        }
-        return super.charTyped(ch, modifiers)
-    }
-
     override fun mouseClicked(
-        mouseX: Double,
-        mouseY: Double,
+        x: Double,
+        y: Double,
         button: Int,
     ): Boolean {
-        if (button == 0) {
-            controlButtonAt(mouseX.toInt(), mouseY.toInt())?.let { controlButton ->
-                terminalInput.focused = false
-                inputHandler.accept(ControlInputEvent(controlButton.action))
-                return true
-            }
-        }
-
-        val terminalState = WorkbenchTerminalViewState.from(menu.isComputerOn, menu.clientSide.screenSnapshot)
-        if (terminalState is WorkbenchTerminalViewState.Active) {
-            terminalInput.focused = terminalInput.mouseClicked(terminalLayout().terminalBounds, mouseX, mouseY)
-        } else {
-            terminalInput.focused = false
-        }
-        return terminalInput.focused || super.mouseClicked(mouseX, mouseY, button)
+        val handled = super.mouseClicked(x, y, button)
+        // The DSL owns focus acquisition (clicks inside the terminal
+        // surface acquire, clicks outside clear). We mirror that flag
+        // into the WorkbenchTerminalInputController so its internal
+        // `keysDown` bookkeeping stays consistent and so a click
+        // outside the terminal releases any held keys.
+        terminalInput.focused = isDslFocused
+        return handled
     }
 
-    private fun terminalLayout(): WorkbenchTerminalLayout {
-        val (terminalColumns, terminalRows) = terminalDimensions(menu.clientSide.screenSnapshot)
-        return WorkbenchTerminalMetrics.layout(
-            leftPos,
-            topPos,
-            imageWidth,
-            imageHeight,
-            terminalColumns,
-            terminalRows,
-            contentTopInset = COMPUTER_CONTENT_TOP,
-        )
-    }
+    override fun content(): UiElement {
+        val (cols, rows) = terminalDimensions(menu.clientSide.screenSnapshot)
+        val layout =
+            WorkbenchTerminalMetrics.layout(
+                leftPos = leftPos,
+                topPos = topPos,
+                imageWidth = imageWidth,
+                imageHeight = imageHeight,
+                terminalColumns = cols,
+                terminalRows = rows,
+                contentTopInset = COMPUTER_CONTENT_TOP,
+            )
 
-    private fun syncTerminalWindowSize(terminalState: WorkbenchTerminalViewState) {
-        val (terminalColumns, terminalRows) =
-            when (terminalState) {
-                is WorkbenchTerminalViewState.Active -> terminalDimensions(terminalState.snapshot)
-                WorkbenchTerminalViewState.PoweredOff, WorkbenchTerminalViewState.Connecting -> 0 to 0
+        val rebootBtn = statusButtonBounds(layout.statusBounds, slotFromRight = 0)
+        val powerBtn = statusButtonBounds(layout.statusBounds, slotFromRight = 1)
+
+        val statusRelX = layout.statusBounds.x - leftPos
+        val statusRelY = layout.statusBounds.y - topPos
+        val terminalRelX = layout.terminalBounds.x - leftPos
+        val terminalRelY = layout.terminalBounds.y - topPos
+        val surfaceRelX = layout.terminalSurfaceBounds.x - leftPos
+        val surfaceRelY = layout.terminalSurfaceBounds.y - topPos
+        val powerRelX = powerBtn.x - leftPos
+        val powerRelY = powerBtn.y - topPos
+        val rebootRelX = rebootBtn.x - leftPos
+        val rebootRelY = rebootBtn.y - topPos
+
+        return ui(Modifier.size(imageWidth, imageHeight).background(BACKGROUND)) {
+            text(
+                modifier = Modifier.offset(statusRelX + 12, statusRelY + 6),
+                color = STATUS_TEXT_COLOR,
+                text =
+                    value {
+                        when (currentTerminalState()) {
+                            is WorkbenchTerminalViewState.Active -> {
+                                if (terminalInput.focused) {
+                                    "Input active  |  Ctrl+V paste"
+                                } else {
+                                    "Click terminal to focus input"
+                                }
+                            }
+
+                            WorkbenchTerminalViewState.PoweredOff -> {
+                                Component.translatable("gui.compukterkraft.terminal.powered_off").string
+                            }
+
+                            WorkbenchTerminalViewState.Connecting -> {
+                                Component.translatable("gui.compukterkraft.terminal.connecting").string
+                            }
+                        }
+                    },
+            )
+
+            If(value { currentTerminalState() is WorkbenchTerminalViewState.Active }) {
+                text(
+                    modifier =
+                        Modifier.offset(
+                            statusRelX + layout.statusBounds.width - STATUS_TEXT_RIGHT_INSET,
+                            statusRelY + 6,
+                        ),
+                    color = STATUS_TEXT_COLOR,
+                    text =
+                        value {
+                            val active = currentTerminalState() as? WorkbenchTerminalViewState.Active
+                            active?.let { "${it.snapshot.width} x ${it.snapshot.height}" } ?: ""
+                        },
+                )
+
+                terminalSurface(
+                    snapshot =
+                        value {
+                            (currentTerminalState() as? WorkbenchTerminalViewState.Active)?.snapshot!!
+                        },
+                    modifier =
+                        Modifier
+                            .offset(terminalRelX, terminalRelY)
+                            .size(layout.terminalBounds.width, layout.terminalBounds.height),
+                    onKey = { keyCode ->
+                        terminalInput.focused = true
+                        terminalInput.keyPressed(keyCode, 0, 0)
+                    },
+                    onKeyReleased = { keyCode ->
+                        terminalInput.keyReleased(keyCode, 0)
+                    },
+                    onCharTyped = { ch ->
+                        terminalInput.focused = true
+                        terminalInput.charTyped(ch)
+                    },
+                )
             }
 
-        val nextWidth = WorkbenchTerminalMetrics.imageWidth(terminalColumns, terminalRows)
-        val nextHeight = WorkbenchTerminalMetrics.imageHeight(terminalColumns, terminalRows, contentTopInset = COMPUTER_CONTENT_TOP)
+            If(value { currentTerminalState() !is WorkbenchTerminalViewState.Active }) {
+                text(
+                    modifier = Modifier.offset(surfaceRelX + 12, surfaceRelY + 12),
+                    color = STATUS_TEXT_COLOR,
+                    text =
+                        translatable {
+                            when (currentTerminalState()) {
+                                WorkbenchTerminalViewState.PoweredOff -> "gui.compukterkraft.terminal.powered_off"
+                                WorkbenchTerminalViewState.Connecting -> "gui.compukterkraft.terminal.connecting"
+                                is WorkbenchTerminalViewState.Active -> ""
+                            }
+                        },
+                )
+            }
+
+            button(
+                modifier =
+                    Modifier
+                        .offset(powerRelX, powerRelY)
+                        .size(STATUS_BUTTON_SIZE, STATUS_BUTTON_SIZE)
+                        .hoverable(powerHover)
+                        .tooltip(
+                            translatable {
+                                if (menu.isComputerOn) {
+                                    "gui.compukterkraft.control.shutdown"
+                                } else {
+                                    "gui.compukterkraft.control.turn_on"
+                                }
+                            },
+                        ),
+                onClick = {
+                    terminalInput.focused = false
+                    val action =
+                        if (menu.isComputerOn) ComputerControlAction.SHUTDOWN else ComputerControlAction.TURN_ON
+                    inputHandler.accept(ControlInputEvent(action))
+                },
+            ) {
+                canvas(Modifier.size(STATUS_BUTTON_SIZE, STATUS_BUTTON_SIZE)) {
+                    drawButtonChrome(bg = if (powerHover.isHovered) BUTTON_BG_HOVER else BUTTON_BG, accent = POWER_ACCENT)
+                    drawPowerIcon(BUTTON_ICON)
+                }
+            }
+
+            button(
+                modifier =
+                    Modifier
+                        .offset(rebootRelX, rebootRelY)
+                        .size(STATUS_BUTTON_SIZE, STATUS_BUTTON_SIZE)
+                        .hoverable(rebootHover)
+                        .tooltip(translatable("gui.compukterkraft.control.reboot")),
+                onClick = {
+                    terminalInput.focused = false
+                    inputHandler.accept(ControlInputEvent(ComputerControlAction.REBOOT))
+                },
+            ) {
+                canvas(Modifier.size(STATUS_BUTTON_SIZE, STATUS_BUTTON_SIZE)) {
+                    drawButtonChrome(bg = if (rebootHover.isHovered) BUTTON_BG_HOVER else BUTTON_BG, accent = REBOOT_ACCENT)
+                    drawRebootIcon(BUTTON_ICON)
+                }
+            }
+        }
+    }
+
+    private fun currentTerminalState(): WorkbenchTerminalViewState =
+        WorkbenchTerminalViewState.from(menu.isComputerOn, menu.clientSide.screenSnapshot)
+
+    private fun syncTerminalWindowSize(state: WorkbenchTerminalViewState) {
+        val size =
+            when (state) {
+                is WorkbenchTerminalViewState.Active -> terminalDimensions(state.snapshot)
+                WorkbenchTerminalViewState.PoweredOff, WorkbenchTerminalViewState.Connecting -> IntSize.Zero
+            }
+        val nextWidth = WorkbenchTerminalMetrics.imageWidth(size.width)
+        val nextHeight = WorkbenchTerminalMetrics.imageHeight(size.height, contentTopInset = COMPUTER_CONTENT_TOP)
         if (imageWidth != nextWidth || imageHeight != nextHeight) {
             imageWidth = nextWidth
             imageHeight = nextHeight
             leftPos = (width - imageWidth) / 2
             topPos = (height - imageHeight) / 2
+            // DslContainerScreen detects bounds drift in renderBg and
+            // recompiles the program; no explicit invalidate call needed.
         }
     }
 
-    private fun terminalDimensions(snapshot: ScreenBufferSnapshot?): Pair<Int, Int> =
-        if (snapshot == null) {
-            0 to 0
-        } else {
-            snapshot.width to snapshot.height
-        }
-
-    private fun renderControlButtons(
-        graphics: GuiGraphics,
-        mouseX: Int,
-        mouseY: Int,
-    ) {
-        controlButtons().forEach { button ->
-            val hovered = button.bounds.contains(mouseX, mouseY)
-            val background = if (hovered) BUTTON_BACKGROUND_HOVER else BUTTON_BACKGROUND
-            graphics.fill(
-                button.bounds.x,
-                button.bounds.y,
-                button.bounds.x + button.bounds.width,
-                button.bounds.y + button.bounds.height,
-                background,
-            )
-            graphics.fill(button.bounds.x, button.bounds.y, button.bounds.x + button.bounds.width, button.bounds.y + 1, button.accent)
-            graphics.fill(
-                button.bounds.x,
-                button.bounds.y + button.bounds.height - 1,
-                button.bounds.x + button.bounds.width,
-                button.bounds.y + button.bounds.height,
-                BUTTON_BORDER,
-            )
-            graphics.fill(button.bounds.x, button.bounds.y, button.bounds.x + 1, button.bounds.y + button.bounds.height, BUTTON_BORDER)
-            graphics.fill(
-                button.bounds.x + button.bounds.width - 1,
-                button.bounds.y,
-                button.bounds.x + button.bounds.width,
-                button.bounds.y + button.bounds.height,
-                BUTTON_BORDER,
-            )
-            when (button.kind) {
-                ControlButtonKind.POWER -> renderPowerIcon(graphics, button.bounds.x, button.bounds.y, button.iconColor)
-                ControlButtonKind.REBOOT -> renderRebootIcon(graphics, button.bounds.x, button.bounds.y, button.iconColor)
-            }
-        }
-    }
-
-    private fun renderControlTooltip(
-        graphics: GuiGraphics,
-        mouseX: Int,
-        mouseY: Int,
-    ) {
-        val tooltipKey = controlButtonAt(mouseX, mouseY)?.tooltipKey ?: return
-        graphics.renderTooltip(font, Component.translatable(tooltipKey), mouseX, mouseY)
-    }
-
-    private fun controlButtons(): List<ControlButton> {
-        val statusBounds = terminalLayout().statusBounds
-        val rebootBounds = statusButtonBounds(statusBounds, slotFromRight = 0)
-        val powerBounds = statusButtonBounds(statusBounds, slotFromRight = 1)
-        val powerAction = if (menu.isComputerOn) ComputerControlAction.SHUTDOWN else ComputerControlAction.TURN_ON
-        val powerTooltipKey = if (menu.isComputerOn) "gui.compukterkraft.control.shutdown" else "gui.compukterkraft.control.turn_on"
-
-        return listOf(
-            ControlButton(
-                kind = ControlButtonKind.POWER,
-                action = powerAction,
-                tooltipKey = powerTooltipKey,
-                bounds = powerBounds,
-                accent = POWER_ACCENT,
-                iconColor = BUTTON_ICON,
-            ),
-            ControlButton(
-                kind = ControlButtonKind.REBOOT,
-                action = ComputerControlAction.REBOOT,
-                tooltipKey = "gui.compukterkraft.control.reboot",
-                bounds = rebootBounds,
-                accent = REBOOT_ACCENT,
-                iconColor = BUTTON_ICON,
-            ),
-        )
-    }
-
-    private fun controlButtonAt(
-        mouseX: Int,
-        mouseY: Int,
-    ): ControlButton? = controlButtons().firstOrNull { it.bounds.contains(mouseX, mouseY) }
+    private fun terminalDimensions(snapshot: ScreenBufferSnapshot?): IntSize =
+        snapshot?.run { IntSize(snapshot.width, snapshot.height) } ?: IntSize.Zero
 
     private fun statusButtonBounds(
         statusBounds: TerminalRect,
         slotFromRight: Int,
     ): TerminalRect {
         val x =
-            statusBounds.x + statusBounds.width - STATUS_BUTTON_MARGIN_END - STATUS_BUTTON_SIZE * (slotFromRight + 1) -
+            statusBounds.x + statusBounds.width - STATUS_BUTTON_MARGIN_END -
+                STATUS_BUTTON_SIZE * (slotFromRight + 1) -
                 STATUS_BUTTON_GAP * slotFromRight
         val y = statusBounds.y + (statusBounds.height - STATUS_BUTTON_SIZE) / 2
         return TerminalRect(x, y, STATUS_BUTTON_SIZE, STATUS_BUTTON_SIZE)
     }
 
-    private fun renderPowerIcon(
-        graphics: GuiGraphics,
-        buttonX: Int,
-        buttonY: Int,
-        color: Int,
+    private fun CanvasScope.drawButtonChrome(
+        bg: Color,
+        accent: Color,
     ) {
-        val originX = buttonX + 4
-        val originY = buttonY + 3
-        graphics.fill(originX + 4, originY, originX + 6, originY + 5, color)
-        graphics.fill(originX + 2, originY + 4, originX + 4, originY + 9, color)
-        graphics.fill(originX + 6, originY + 4, originX + 8, originY + 9, color)
-        graphics.fill(originX + 3, originY + 8, originX + 7, originY + 10, color)
+        fillRect(0, 0, STATUS_BUTTON_SIZE, STATUS_BUTTON_SIZE, bg)
+        // Top accent strip.
+        fillRect(0, 0, STATUS_BUTTON_SIZE, 1, accent)
+        // Bottom border.
+        fillRect(0, STATUS_BUTTON_SIZE - 1, STATUS_BUTTON_SIZE, 1, BUTTON_BORDER)
+        // Left border.
+        fillRect(0, 0, 1, STATUS_BUTTON_SIZE, BUTTON_BORDER)
+        // Right border.
+        fillRect(STATUS_BUTTON_SIZE - 1, 0, 1, STATUS_BUTTON_SIZE, BUTTON_BORDER)
     }
 
-    private fun renderRebootIcon(
-        graphics: GuiGraphics,
-        buttonX: Int,
-        buttonY: Int,
-        color: Int,
-    ) {
-        val originX = buttonX + 3
-        val originY = buttonY + 3
-        graphics.fill(originX + 2, originY, originX + 8, originY + 2, color)
-        graphics.fill(originX + 1, originY + 2, originX + 3, originY + 7, color)
-        graphics.fill(originX + 3, originY + 6, originX + 8, originY + 8, color)
-        graphics.fill(originX + 7, originY + 1, originX + 9, originY + 6, color)
-        graphics.fill(originX + 7, originY, originX + 11, originY + 2, color)
-        graphics.fill(originX + 8, originY + 2, originX + 11, originY + 5, color)
+    private fun CanvasScope.drawPowerIcon(color: Color) {
+        // Historical glyph uses origin (buttonX+4, buttonY+3). Canvas
+        // is already button-local so we add the same (4, 3) offset.
+        val ox = 4
+        val oy = 3
+        fillRect(ox + 4, oy + 0, 2, 5, color)
+        fillRect(ox + 2, oy + 4, 2, 5, color)
+        fillRect(ox + 6, oy + 4, 2, 5, color)
+        fillRect(ox + 3, oy + 8, 4, 2, color)
     }
 
-    private data class ControlButton(
-        val kind: ControlButtonKind,
-        val action: ComputerControlAction,
-        val tooltipKey: String,
-        val bounds: TerminalRect,
-        val accent: Int,
-        val iconColor: Int,
-    )
-
-    private enum class ControlButtonKind {
-        POWER,
-        REBOOT,
+    private fun CanvasScope.drawRebootIcon(color: Color) {
+        val ox = 3
+        val oy = 3
+        fillRect(ox + 2, oy + 0, 6, 2, color)
+        fillRect(ox + 1, oy + 2, 2, 5, color)
+        fillRect(ox + 3, oy + 6, 5, 2, color)
+        fillRect(ox + 7, oy + 1, 2, 5, color)
+        fillRect(ox + 7, oy + 0, 4, 2, color)
+        fillRect(ox + 8, oy + 2, 3, 3, color)
     }
 
     private companion object {
@@ -352,11 +351,14 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
         private const val STATUS_BUTTON_GAP = 6
         private const val STATUS_BUTTON_MARGIN_END = 10
         private const val STATUS_TEXT_RIGHT_INSET = 52
-        private const val BUTTON_BACKGROUND = 0xFF1B202A.toInt()
-        private const val BUTTON_BACKGROUND_HOVER = 0xFF222938.toInt()
-        private const val BUTTON_BORDER = 0xFF2C3444.toInt()
-        private const val BUTTON_ICON = 0xFFE6ECF5.toInt()
-        private const val POWER_ACCENT = 0xFF4FA56C.toInt()
-        private const val REBOOT_ACCENT = 0xFFC9894F.toInt()
+
+        private val BACKGROUND = Color.hex(0xFF12151DU)
+        private val STATUS_TEXT_COLOR = Color.hex(0xFF9CA8B8U)
+        private val BUTTON_BG = Color.hex(0xFF1B202AU)
+        private val BUTTON_BG_HOVER = Color.hex(0xFF222938U)
+        private val BUTTON_BORDER = Color.hex(0xFF2C3444U)
+        private val BUTTON_ICON = Color.hex(0xFFE6ECF5U)
+        private val POWER_ACCENT = Color.hex(0xFF4FA56CU)
+        private val REBOOT_ACCENT = Color.hex(0xFFC9894FU)
     }
 }
