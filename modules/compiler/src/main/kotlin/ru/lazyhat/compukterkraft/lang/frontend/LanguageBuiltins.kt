@@ -67,8 +67,9 @@ object LanguageBuiltins {
                     ),
                     BuiltinModule(
                         name = "stdout",
-                        documentation = "Raw byte stream output. Writes are interpreted as a VT-100 subset " +
-                            "by the attached terminal(s).",
+                        documentation =
+                            "Raw byte stream output. Writes are interpreted as a VT-100 subset " +
+                                "by the attached terminal(s).",
                         origin = ModuleOrigin.BASE_VM,
                         functions =
                             listOf(

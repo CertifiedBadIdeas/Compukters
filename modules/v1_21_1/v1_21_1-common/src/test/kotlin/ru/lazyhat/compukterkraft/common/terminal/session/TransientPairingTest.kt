@@ -19,9 +19,9 @@
 package ru.lazyhat.compukterkraft.common.terminal.session
 
 import net.minecraft.core.BlockPos
+import net.minecraft.core.registries.Registries
 import net.minecraft.resources.ResourceKey
 import net.minecraft.resources.ResourceLocation
-import net.minecraft.core.registries.Registries
 import java.util.UUID
 import kotlin.test.AfterTest
 import kotlin.test.Test
