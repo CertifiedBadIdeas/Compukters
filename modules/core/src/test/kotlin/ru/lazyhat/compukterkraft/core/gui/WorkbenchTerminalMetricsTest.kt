@@ -44,8 +44,8 @@ class WorkbenchTerminalMetricsTest {
 
     @Test
     fun defaultComputerTerminalNearlyFillsWorkbenchSurface() {
-        val imageWidth = WorkbenchTerminalMetrics.imageWidth(Config.DEFAULT_COMPUTER_TERM_WIDTH, Config.DEFAULT_COMPUTER_TERM_HEIGHT)
-        val imageHeight = WorkbenchTerminalMetrics.imageHeight(Config.DEFAULT_COMPUTER_TERM_WIDTH, Config.DEFAULT_COMPUTER_TERM_HEIGHT)
+        val imageWidth = WorkbenchTerminalMetrics.imageWidth(Config.DEFAULT_COMPUTER_TERM_WIDTH)
+        val imageHeight = WorkbenchTerminalMetrics.imageHeight(Config.DEFAULT_COMPUTER_TERM_HEIGHT)
         val layout =
             WorkbenchTerminalMetrics.layout(
                 leftPos = 0,

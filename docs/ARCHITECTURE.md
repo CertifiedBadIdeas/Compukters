@@ -248,3 +248,18 @@ Minecraft requires one class per `MenuType`. We can't have separate `ServerCompu
 
 Minimal stateless UI layer. Business logic produces `List<UiNode>` (pure data), `UiRenderer` converts to draw calls. No layout engine, no reactivity, no widget tree — just a thin separation of "what to draw" from "how to draw". Makes the rendering logic testable without Minecraft.
 
+### Screen-First Compiled UI
+
+The repository now also contains a new UI path intended to replace the legacy `UiNode` slice incrementally.
+
+This stack has four layers:
+
+1. `core.ui.foundation` authoring DSL for layout, render intent, semantics, and interaction.
+2. `core.ui.program` compiler output with phased layout, render, hit-test, input, and focus programs.
+3. `core.ui.program.ScreenRuntimeExecutor` as the minimal runtime host for live handler and focus state.
+4. `v1_21_1-common` bridge code that renders compiled ops through `GuiGraphics` and terminal-specific adapters.
+
+The key distinction from the earlier screen-first prototype is that UI structure is compiled into a `ScreenProgram` rather than rebuilt as a live tree every frame. The key distinction from the older render-only architecture is that authoring now starts from one screen-first DSL that includes interaction semantics.
+
+`ComputerTerminalScreen` is the first migration target on this new path. Legacy `core.ui.dsl.UiNode` and `common.ui.dsl.UiRenderer` remain transitional and are still valid for screens that have not yet moved to the compiled stack, especially `WorkbenchEditorScreen`.
+
