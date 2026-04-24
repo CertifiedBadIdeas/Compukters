@@ -1,7 +1,6 @@
 package ru.lazyhat.compukterkraft.core.ui.program
 
 import ru.lazyhat.compukterkraft.core.platform.api.FontMetrics
-import ru.lazyhat.compukterkraft.core.ui.foundation.expr
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Modifier
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.UiAlignment
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.align
@@ -9,6 +8,7 @@ import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.padding
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.size
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.weight
 import ru.lazyhat.compukterkraft.core.ui.foundation.ui
+import ru.lazyhat.compukterkraft.core.ui.foundation.value
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -21,7 +21,7 @@ class UiLayoutResolverTest {
             ui {
                 box(modifier = Modifier.size(200, 120).padding(10)) {
                     text(
-                        text = expr { "Centered" },
+                        text = value { "Centered" },
                         modifier = Modifier.size(80, 20).align(UiAlignment.Center),
                     )
                 }
@@ -37,9 +37,9 @@ class UiLayoutResolverTest {
         val root =
             ui {
                 row(modifier = Modifier.size(120, 20)) {
-                    text(text = expr { "A" }, modifier = Modifier.size(20, 20))
-                    text(text = expr { "B" }, modifier = Modifier.weight(1f).size(0, 20))
-                    text(text = expr { "C" }, modifier = Modifier.weight(2f).size(0, 20))
+                    text(text = value { "A" }, modifier = Modifier.size(20, 20))
+                    text(text = value { "B" }, modifier = Modifier.weight(1f).size(0, 20))
+                    text(text = value { "C" }, modifier = Modifier.weight(2f).size(0, 20))
                 }
             }
 
@@ -55,7 +55,7 @@ class UiLayoutResolverTest {
             ui {
                 box(modifier = Modifier.size(100, 100).padding(10)) {
                     text(
-                        text = expr { "Weighted" },
+                        text = value { "Weighted" },
                         modifier = Modifier.size(20, 10).weight(1f).align(UiAlignment.End),
                     )
                 }
@@ -72,7 +72,7 @@ class UiLayoutResolverTest {
             ui {
                 box(modifier = Modifier.size(100, 40)) {
                     text(
-                        text = expr { "AB" },
+                        text = value { "AB" },
                         modifier = Modifier.align(UiAlignment.Center),
                     )
                 }

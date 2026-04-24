@@ -12,9 +12,8 @@ object TerminalSurfaceBridge {
         graphics: GuiGraphics,
         x: Int,
         y: Int,
-        snapshot: Any?,
+        snapshot: ScreenBufferSnapshot,
     ) {
-        val terminalSnapshot = snapshot as? ScreenBufferSnapshot ?: return
         val renderType = RenderType.text(FixedWidthFontRenderer.FONT)
         val bufferSource = MultiBufferSource.immediate(ByteBufferBuilder(renderType.bufferSize()))
         val emitter = FixedWidthFontRenderer.toVertexConsumer(graphics.pose(), bufferSource.getBuffer(renderType))
@@ -22,7 +21,7 @@ object TerminalSurfaceBridge {
             emitter,
             x.toFloat(),
             y.toFloat(),
-            terminalSnapshot,
+            snapshot,
             0f,
             0f,
             0f,

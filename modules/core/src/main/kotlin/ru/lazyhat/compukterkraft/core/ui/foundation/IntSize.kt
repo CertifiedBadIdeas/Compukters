@@ -45,4 +45,8 @@ data class IntSize(
             width.times(other).toInt(),
             height.times(other).toInt(),
         )
+
+    companion object {
+        val Zero = IntSize(0, 0)
+    }
 }

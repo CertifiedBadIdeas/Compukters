@@ -57,11 +57,11 @@ class ScreenRuntimeExecutor(
     ) {
         for (region in program.hoverRegions) {
             val frame = program.frames[region.frameIndex]
-            if (frame.visible != null && !frame.visible.evaluate()) {
+            if (frame.visible != null && !frame.visible.value) {
                 region.state.isHovered = false
                 continue
             }
-            val origin = frame.origin?.evaluate() ?: Position.Zero
+            val origin = frame.origin?.value ?: Position.Zero
             val rx = region.x + origin.x
             val ry = region.y + origin.y
             region.state.isHovered =
@@ -71,12 +71,12 @@ class ScreenRuntimeExecutor(
         activeTooltip = null
         for (region in program.tooltipRegions) {
             val frame = program.frames[region.frameIndex]
-            if (frame.visible != null && !frame.visible.evaluate()) continue
-            val origin = frame.origin?.evaluate() ?: Position.Zero
+            if (frame.visible != null && !frame.visible.value) continue
+            val origin = frame.origin?.value ?: Position.Zero
             val rx = region.x + origin.x
             val ry = region.y + origin.y
             if (mouseX >= rx && mouseY >= ry && mouseX < rx + region.width && mouseY < ry + region.height) {
-                activeTooltip = region.text.evaluate()
+                activeTooltip = region.text.value
                 break
             }
         }
@@ -84,8 +84,8 @@ class ScreenRuntimeExecutor(
 
     fun render(backend: RenderBackend) {
         for (frame in program.frames) {
-            if (frame.visible != null && !frame.visible.evaluate()) continue
-            val origin = frame.origin?.evaluate() ?: Position.Zero
+            if (frame.visible != null && !frame.visible.value) continue
+            val origin = frame.origin?.value ?: Position.Zero
             val ox = origin.x
             val oy = origin.y
             for (op in frame.ops) {
@@ -95,11 +95,11 @@ class ScreenRuntimeExecutor(
                     }
 
                     is RenderOp.DrawText -> {
-                        backend.drawText(op.x + ox, op.y + oy, op.value.evaluate(), op.color)
+                        backend.drawText(op.x + ox, op.y + oy, op.value.value, op.color)
                     }
 
                     is RenderOp.DrawTerminalSurface -> {
-                        backend.drawTerminalSurface(op.x + ox, op.y + oy, op.snapshot.evaluate())
+                        backend.drawTerminalSurface(op.x + ox, op.y + oy, op.snapshot.value)
                     }
 
                     is RenderOp.DrawCanvas -> {
@@ -153,8 +153,8 @@ class ScreenRuntimeExecutor(
     ): Boolean {
         for (region in program.hitRegions) {
             val frame = program.frames[region.frameIndex]
-            if (frame.visible != null && !frame.visible.evaluate()) continue
-            val origin = frame.origin?.evaluate() ?: Position.Zero
+            if (frame.visible != null && !frame.visible.value) continue
+            val origin = frame.origin?.value ?: Position.Zero
             val rx = region.x + origin.x
             val ry = region.y + origin.y
             if (x >= rx && y >= ry && x < rx + region.width && y < ry + region.height) {
@@ -166,9 +166,9 @@ class ScreenRuntimeExecutor(
         val focus = program.focusRegion
         if (focus != null) {
             val frame = program.frames[focus.frameIndex]
-            val frameVisible = frame.visible?.evaluate() ?: true
+            val frameVisible = frame.visible?.value ?: true
             if (frameVisible) {
-                val origin = frame.origin?.evaluate() ?: Position.Zero
+                val origin = frame.origin?.value ?: Position.Zero
                 val fx = focus.x + origin.x
                 val fy = focus.y + origin.y
                 if (x >= fx && y >= fy && x < fx + focus.width && y < fy + focus.height) {

@@ -50,13 +50,9 @@ object WorkbenchTerminalMetrics {
     private const val DEFAULT_CONTENT_TOP = 34
     private const val STATUS_HEIGHT = 20
 
-    fun imageWidth(
-        terminalColumns: Int,
-        terminalRows: Int,
-    ): Int = max(terminalPixelWidth(terminalColumns) + OUTER_PADDING * 2, MIN_IMAGE_WIDTH)
+    fun imageWidth(terminalColumns: Int): Int = max(terminalPixelWidth(terminalColumns) + OUTER_PADDING * 2, MIN_IMAGE_WIDTH)
 
     fun imageHeight(
-        terminalColumns: Int,
         terminalRows: Int,
         contentTopInset: Int = DEFAULT_CONTENT_TOP,
     ): Int = max(terminalPixelHeight(terminalRows) + STATUS_HEIGHT + contentTopInset + OUTER_PADDING, MIN_IMAGE_HEIGHT)

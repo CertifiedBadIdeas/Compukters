@@ -23,6 +23,7 @@ import net.minecraft.world.entity.player.Inventory
 import ru.lazyhat.compukterkraft.common.computer.input.ClientInputHandler
 import ru.lazyhat.compukterkraft.common.computer.menu.AbstractComputerMenu
 import ru.lazyhat.compukterkraft.common.platform.MinecraftInputProvider
+import ru.lazyhat.compukterkraft.common.ui.dsl.translatable
 import ru.lazyhat.compukterkraft.common.ui.program.DslContainerScreen
 import ru.lazyhat.compukterkraft.core.computer.input.ComputerControlAction
 import ru.lazyhat.compukterkraft.core.computer.input.ControlInputEvent
@@ -32,8 +33,8 @@ import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalMetrics
 import ru.lazyhat.compukterkraft.core.ui.foundation.CanvasScope
 import ru.lazyhat.compukterkraft.core.ui.foundation.Color
 import ru.lazyhat.compukterkraft.core.ui.foundation.HoverState
+import ru.lazyhat.compukterkraft.core.ui.foundation.IntSize
 import ru.lazyhat.compukterkraft.core.ui.foundation.UiElement
-import ru.lazyhat.compukterkraft.core.ui.foundation.expr
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Modifier
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.background
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.hoverable
@@ -41,6 +42,7 @@ import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.offset
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.size
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.tooltip
 import ru.lazyhat.compukterkraft.core.ui.foundation.ui
+import ru.lazyhat.compukterkraft.core.ui.foundation.value
 import ru.lazyhat.compukterkraft.core.ui.workbench.WorkbenchTerminalViewState
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 
@@ -74,8 +76,8 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
 
     init {
         val (cols, rows) = terminalDimensions(container.clientSide.screenSnapshot)
-        imageWidth = WorkbenchTerminalMetrics.imageWidth(cols, rows)
-        imageHeight = WorkbenchTerminalMetrics.imageHeight(cols, rows, contentTopInset = COMPUTER_CONTENT_TOP)
+        imageWidth = WorkbenchTerminalMetrics.imageWidth(cols)
+        imageHeight = WorkbenchTerminalMetrics.imageHeight(rows, contentTopInset = COMPUTER_CONTENT_TOP)
     }
 
     override fun containerTick() {
@@ -135,7 +137,7 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
                 modifier = Modifier.offset(statusRelX + 12, statusRelY + 6),
                 color = STATUS_TEXT_COLOR,
                 text =
-                    expr {
+                    value {
                         when (currentTerminalState()) {
                             is WorkbenchTerminalViewState.Active -> {
                                 if (terminalInput.focused) {
@@ -156,7 +158,7 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
                     },
             )
 
-            If(expr { currentTerminalState() is WorkbenchTerminalViewState.Active }) {
+            If(value { currentTerminalState() is WorkbenchTerminalViewState.Active }) {
                 text(
                     modifier =
                         Modifier.offset(
@@ -165,7 +167,7 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
                         ),
                     color = STATUS_TEXT_COLOR,
                     text =
-                        expr {
+                        value {
                             val active = currentTerminalState() as? WorkbenchTerminalViewState.Active
                             active?.let { "${it.snapshot.width} x ${it.snapshot.height}" } ?: ""
                         },
@@ -173,57 +175,37 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
 
                 terminalSurface(
                     snapshot =
-                        expr {
-                            (currentTerminalState() as? WorkbenchTerminalViewState.Active)?.snapshot
+                        value {
+                            (currentTerminalState() as? WorkbenchTerminalViewState.Active)?.snapshot!!
                         },
                     modifier =
                         Modifier
                             .offset(terminalRelX, terminalRelY)
                             .size(layout.terminalBounds.width, layout.terminalBounds.height),
                     onKey = { keyCode ->
-                        if (currentTerminalState() is WorkbenchTerminalViewState.Active) {
-                            terminalInput.focused = true
-                            terminalInput.keyPressed(keyCode, 0, 0)
-                        } else {
-                            false
-                        }
+                        terminalInput.focused = true
+                        terminalInput.keyPressed(keyCode, 0, 0)
                     },
                     onKeyReleased = { keyCode ->
-                        if (currentTerminalState() is WorkbenchTerminalViewState.Active) {
-                            terminalInput.keyReleased(keyCode, 0)
-                        } else {
-                            false
-                        }
+                        terminalInput.keyReleased(keyCode, 0)
                     },
                     onCharTyped = { ch ->
-                        if (currentTerminalState() is WorkbenchTerminalViewState.Active) {
-                            terminalInput.focused = true
-                            terminalInput.charTyped(ch)
-                        } else {
-                            false
-                        }
+                        terminalInput.focused = true
+                        terminalInput.charTyped(ch)
                     },
                 )
             }
 
-            If(expr { currentTerminalState() !is WorkbenchTerminalViewState.Active }) {
+            If(value { currentTerminalState() !is WorkbenchTerminalViewState.Active }) {
                 text(
                     modifier = Modifier.offset(surfaceRelX + 12, surfaceRelY + 12),
                     color = STATUS_TEXT_COLOR,
                     text =
-                        expr {
+                        translatable {
                             when (currentTerminalState()) {
-                                WorkbenchTerminalViewState.PoweredOff -> {
-                                    Component.translatable("gui.compukterkraft.terminal.powered_off").string
-                                }
-
-                                WorkbenchTerminalViewState.Connecting -> {
-                                    Component.translatable("gui.compukterkraft.terminal.connecting").string
-                                }
-
-                                is WorkbenchTerminalViewState.Active -> {
-                                    ""
-                                }
+                                WorkbenchTerminalViewState.PoweredOff -> "gui.compukterkraft.terminal.powered_off"
+                                WorkbenchTerminalViewState.Connecting -> "gui.compukterkraft.terminal.connecting"
+                                is WorkbenchTerminalViewState.Active -> ""
                             }
                         },
                 )
@@ -236,15 +218,12 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
                         .size(STATUS_BUTTON_SIZE, STATUS_BUTTON_SIZE)
                         .hoverable(powerHover)
                         .tooltip(
-                            expr {
-                                Component
-                                    .translatable(
-                                        if (menu.isComputerOn) {
-                                            "gui.compukterkraft.control.shutdown"
-                                        } else {
-                                            "gui.compukterkraft.control.turn_on"
-                                        },
-                                    ).string
+                            translatable {
+                                if (menu.isComputerOn) {
+                                    "gui.compukterkraft.control.shutdown"
+                                } else {
+                                    "gui.compukterkraft.control.turn_on"
+                                }
                             },
                         ),
                 onClick = {
@@ -266,7 +245,7 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
                         .offset(rebootRelX, rebootRelY)
                         .size(STATUS_BUTTON_SIZE, STATUS_BUTTON_SIZE)
                         .hoverable(rebootHover)
-                        .tooltip(expr { Component.translatable("gui.compukterkraft.control.reboot").string }),
+                        .tooltip(translatable("gui.compukterkraft.control.reboot")),
                 onClick = {
                     terminalInput.focused = false
                     inputHandler.accept(ControlInputEvent(ComputerControlAction.REBOOT))
@@ -284,13 +263,13 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
         WorkbenchTerminalViewState.from(menu.isComputerOn, menu.clientSide.screenSnapshot)
 
     private fun syncTerminalWindowSize(state: WorkbenchTerminalViewState) {
-        val (cols, rows) =
+        val size =
             when (state) {
                 is WorkbenchTerminalViewState.Active -> terminalDimensions(state.snapshot)
-                WorkbenchTerminalViewState.PoweredOff, WorkbenchTerminalViewState.Connecting -> 0 to 0
+                WorkbenchTerminalViewState.PoweredOff, WorkbenchTerminalViewState.Connecting -> IntSize.Zero
             }
-        val nextWidth = WorkbenchTerminalMetrics.imageWidth(cols, rows)
-        val nextHeight = WorkbenchTerminalMetrics.imageHeight(cols, rows, contentTopInset = COMPUTER_CONTENT_TOP)
+        val nextWidth = WorkbenchTerminalMetrics.imageWidth(size.width)
+        val nextHeight = WorkbenchTerminalMetrics.imageHeight(size.height, contentTopInset = COMPUTER_CONTENT_TOP)
         if (imageWidth != nextWidth || imageHeight != nextHeight) {
             imageWidth = nextWidth
             imageHeight = nextHeight
@@ -301,8 +280,8 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
         }
     }
 
-    private fun terminalDimensions(snapshot: ScreenBufferSnapshot?): Pair<Int, Int> =
-        if (snapshot == null) 0 to 0 else snapshot.width to snapshot.height
+    private fun terminalDimensions(snapshot: ScreenBufferSnapshot?): IntSize =
+        snapshot?.run { IntSize(snapshot.width, snapshot.height) } ?: IntSize.Zero
 
     private fun statusButtonBounds(
         statusBounds: TerminalRect,

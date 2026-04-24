@@ -1,6 +1,7 @@
 package ru.lazyhat.compukterkraft.core.ui.program
 
 import ru.lazyhat.compukterkraft.core.ui.foundation.Color
+import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 
 interface RenderBackend {
     fun fillRect(
@@ -21,6 +22,6 @@ interface RenderBackend {
     fun drawTerminalSurface(
         x: Int,
         y: Int,
-        snapshot: Any?,
+        snapshot: ScreenBufferSnapshot,
     )
 }

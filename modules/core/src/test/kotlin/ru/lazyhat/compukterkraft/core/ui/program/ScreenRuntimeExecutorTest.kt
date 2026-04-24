@@ -1,7 +1,6 @@
 package ru.lazyhat.compukterkraft.core.ui.program
 
 import ru.lazyhat.compukterkraft.core.ui.foundation.Color
-import ru.lazyhat.compukterkraft.core.ui.foundation.expr
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Modifier
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Position
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.background
@@ -9,6 +8,7 @@ import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.offset
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.size
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.zIndex
 import ru.lazyhat.compukterkraft.core.ui.foundation.ui
+import ru.lazyhat.compukterkraft.core.ui.foundation.value
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -24,11 +24,11 @@ class ScreenRuntimeExecutorTest {
                     button(
                         modifier = Modifier.offset(4, 4).size(20, 20).zIndex(0),
                         onClick = { events += "behind" },
-                    ) { text(text = expr { "Behind" }) }
+                    ) { text(text = value { "Behind" }) }
                     button(
                         modifier = Modifier.offset(4, 4).size(20, 20).zIndex(1),
                         onClick = { events += "front" },
-                    ) { text(text = expr { "Front" }) }
+                    ) { text(text = value { "Front" }) }
                 },
             )
 
@@ -44,7 +44,7 @@ class ScreenRuntimeExecutorTest {
             ScreenProgramCompiler().compile(
                 ui {
                     terminalSurface(
-                        snapshot = expr { "snapshot" },
+                        snapshot = value { "snapshot" },
                         modifier = Modifier.offset(8, 8).size(80, 32),
                         onKey = { keyCode -> keyCode == 257 },
                     )
@@ -76,7 +76,7 @@ class ScreenRuntimeExecutorTest {
             ScreenProgramCompiler().compile(
                 ui {
                     terminalSurface(
-                        snapshot = expr { null },
+                        snapshot = value { null },
                         modifier = Modifier.size(40, 40),
                         onKey = {
                             events += "press:$it"
@@ -108,7 +108,7 @@ class ScreenRuntimeExecutorTest {
         val program =
             ScreenProgramCompiler().compile(
                 ui {
-                    button({}) { text(text = expr { "Noop" }) }
+                    button({}) { text(text = value { "Noop" }) }
                 },
             )
 
@@ -126,7 +126,7 @@ class ScreenRuntimeExecutorTest {
                     button(
                         modifier = Modifier.offset(4, 4).size(20, 20),
                         onClick = { events += "power" },
-                    ) { text(text = expr { "Power" }) }
+                    ) { text(text = value { "Power" }) }
                 },
             )
 
@@ -143,11 +143,11 @@ class ScreenRuntimeExecutorTest {
         val program =
             ScreenProgramCompiler().compile(
                 ui(Modifier.size(100, 100)) {
-                    If(expr { shown }) {
+                    If(value { shown }) {
                         button(
                             modifier = Modifier.offset(4, 4).size(20, 20),
                             onClick = { events += "hit" },
-                        ) { text(text = expr { "Hidden" }) }
+                        ) { text(text = value { "Hidden" }) }
                     }
                 },
             )
@@ -170,12 +170,12 @@ class ScreenRuntimeExecutorTest {
                 ui(Modifier.size(200, 200)) {
                     overlay(
                         modifier = Modifier.size(20, 20),
-                        anchor = expr { anchor },
+                        anchor = value { anchor },
                     ) {
                         button(
                             modifier = Modifier.size(20, 20).background(Color.Red),
                             onClick = { events += "popup" },
-                        ) { text(text = expr { "X" }) }
+                        ) { text(text = value { "X" }) }
                     }
                 },
             )
@@ -201,8 +201,8 @@ class ScreenRuntimeExecutorTest {
                 ui(Modifier.size(100, 100)) {
                     overlay(
                         modifier = Modifier.size(20, 20),
-                        anchor = expr { Position(0, 0) },
-                        visible = expr { shown },
+                        anchor = value { Position(0, 0) },
+                        visible = value { shown },
                     ) {
                         box(modifier = Modifier.size(20, 20).background(Color.Red))
                     }

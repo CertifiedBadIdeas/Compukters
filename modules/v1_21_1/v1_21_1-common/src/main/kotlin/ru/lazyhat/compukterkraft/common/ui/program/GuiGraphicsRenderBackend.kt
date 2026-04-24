@@ -4,6 +4,7 @@ import net.minecraft.client.gui.Font
 import net.minecraft.client.gui.GuiGraphics
 import ru.lazyhat.compukterkraft.core.ui.foundation.Color
 import ru.lazyhat.compukterkraft.core.ui.program.RenderBackend
+import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 
 class GuiGraphicsRenderBackend(
     private val graphics: GuiGraphics,
@@ -31,7 +32,7 @@ class GuiGraphicsRenderBackend(
     override fun drawTerminalSurface(
         x: Int,
         y: Int,
-        snapshot: Any?,
+        snapshot: ScreenBufferSnapshot,
     ) {
         graphics.fill(x - 1, y - 1, x + 1, y + 1, 0xFF222938.toInt())
         TerminalSurfaceBridge.draw(graphics, x, y, snapshot)

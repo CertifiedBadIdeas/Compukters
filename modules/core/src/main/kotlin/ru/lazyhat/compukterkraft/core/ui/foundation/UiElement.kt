@@ -3,7 +3,7 @@ package ru.lazyhat.compukterkraft.core.ui.foundation
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Modifier
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Position
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.clickable
-import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.size
+import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 
 sealed interface UiElement {
     val modifier: Modifier
@@ -26,12 +26,12 @@ sealed interface UiElement {
     data class Text(
         override val modifier: Modifier,
         val color: Color,
-        val value: ValueExpression<String>,
+        val text: Value<String>,
     ) : UiElement
 
     data class TerminalSurface(
         override val modifier: Modifier,
-        val snapshot: ValueExpression<Any?>,
+        val snapshot: Value<ScreenBufferSnapshot>,
         val onKey: (Int) -> Boolean = { false },
         val onKeyReleased: (Int) -> Boolean = { false },
         val onCharTyped: (Char) -> Boolean = { false },
@@ -51,7 +51,7 @@ sealed interface UiElement {
 
     data class IfNode(
         override val modifier: Modifier,
-        val condition: ValueExpression<Boolean>,
+        val condition: Value<Boolean>,
         val children: List<UiElement>,
     ) : UiElement
 
@@ -65,8 +65,8 @@ sealed interface UiElement {
      */
     data class Overlay(
         override val modifier: Modifier,
-        val anchor: ValueExpression<Position>?,
-        val visible: ValueExpression<Boolean>?,
+        val anchor: Value<Position>?,
+        val visible: Value<Boolean>?,
         val children: List<UiElement>,
     ) : UiElement
 }
@@ -113,13 +113,13 @@ class UiScope {
     fun text(
         modifier: Modifier = Modifier,
         color: Color = Color.White,
-        text: ValueExpression<String>,
+        text: Value<String>,
     ) {
         children += UiElement.Text(modifier, color, text)
     }
 
     fun terminalSurface(
-        snapshot: ValueExpression<Any?>,
+        snapshot: Value<ScreenBufferSnapshot>,
         modifier: Modifier = Modifier,
         onKey: (Int) -> Boolean = { false },
         onKeyReleased: (Int) -> Boolean = { false },
