@@ -129,6 +129,10 @@ class ScreenProgramCompiler(
                 ops += RenderOp.DrawText(node.x, node.y, element.value, element.color)
             }
 
+            is UiElement.Canvas -> {
+                ops += RenderOp.DrawCanvas(node.x, node.y, node.width, node.height, element.onDraw)
+            }
+
             is UiElement.TerminalSurface -> {
                 ops += RenderOp.DrawTerminalSurface(node.x, node.y, node.width, node.height, element.snapshot)
                 focus.claim(

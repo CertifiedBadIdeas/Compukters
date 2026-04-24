@@ -84,7 +84,7 @@ class UiLayoutResolver(
                 }
             }
 
-            is UiElement.Text, is UiElement.TerminalSurface -> {
+            is UiElement.Text, is UiElement.TerminalSurface, is UiElement.Canvas -> {
                 Unit
             }
         }
@@ -139,7 +139,7 @@ class UiLayoutResolver(
                 }
             }
 
-            is UiElement.Text, is UiElement.TerminalSurface, is UiElement.Overlay -> {
+            is UiElement.Text, is UiElement.TerminalSurface, is UiElement.Canvas, is UiElement.Overlay -> {
                 Unit
             }
         }

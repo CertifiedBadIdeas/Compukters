@@ -37,6 +37,18 @@ sealed interface UiElement {
         val onCharTyped: (Char) -> Boolean = { false },
     ) : UiElement
 
+    /**
+     * A fixed-size drawing surface with no children. [onDraw] is invoked each
+     * frame with a [CanvasScope] whose origin is the canvas's top-left.
+     *
+     * The canvas must carry a `size` modifier; its bounds come from the
+     * layout pass, not from anything the draw lambda reports.
+     */
+    data class Canvas(
+        override val modifier: Modifier,
+        val onDraw: CanvasScope.() -> Unit,
+    ) : UiElement
+
     data class IfNode(
         override val modifier: Modifier,
         val condition: ValueExpression<Boolean>,
@@ -114,6 +126,13 @@ class UiScope {
         onCharTyped: (Char) -> Boolean = { false },
     ) {
         children += UiElement.TerminalSurface(modifier, snapshot, onKey, onKeyReleased, onCharTyped)
+    }
+
+    fun canvas(
+        modifier: Modifier = Modifier,
+        onDraw: CanvasScope.() -> Unit,
+    ) {
+        children += UiElement.Canvas(modifier, onDraw)
     }
 
     @Suppress("FunctionName")
