@@ -272,8 +272,8 @@ class BackgroundComputerVm(
                 currentTickProvider = { stateManager.currentTick },
                 labelProvider = labelProvider,
             )
-        val terminalApi = VmTerminalApi(screenBuffer = screenBuffer, ctx = this)
         val stdioApi = VmStdioApi(buffer = screenBuffer)
+        val terminalApi = VmTerminalApi(stdio = stdioApi, screenBuffer = screenBuffer, ctx = this)
         val filesystemApi = VmFileSystemApi(ctx = this)
         val peripheralsApi = VmPeripheralRuntimeApi(peripheralRegistry)
         val processApi =
