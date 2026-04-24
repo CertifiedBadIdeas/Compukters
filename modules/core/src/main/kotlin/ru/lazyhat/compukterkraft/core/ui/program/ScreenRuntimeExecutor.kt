@@ -1,5 +1,7 @@
 package ru.lazyhat.compukterkraft.core.ui.program
 
+import ru.lazyhat.compukterkraft.core.ui.foundation.CanvasScope
+import ru.lazyhat.compukterkraft.core.ui.foundation.Color
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Position
 
 /**
@@ -51,8 +53,49 @@ class ScreenRuntimeExecutor(
                     is RenderOp.DrawTerminalSurface -> {
                         backend.drawTerminalSurface(op.x + ox, op.y + oy, op.snapshot.evaluate())
                     }
+
+                    is RenderOp.DrawCanvas -> {
+                        canvasScope.bind(backend, op.x + ox, op.y + oy, op.width, op.height)
+                        op.onDraw.invoke(canvasScope)
+                    }
                 }
             }
+        }
+    }
+
+    private val canvasScope = OffsetCanvasScope()
+
+    private class OffsetCanvasScope : CanvasScope {
+        private var backend: RenderBackend? = null
+        private var originX: Int = 0
+        private var originY: Int = 0
+        override var width: Int = 0
+            private set
+        override var height: Int = 0
+            private set
+
+        fun bind(
+            backend: RenderBackend,
+            originX: Int,
+            originY: Int,
+            width: Int,
+            height: Int,
+        ) {
+            this.backend = backend
+            this.originX = originX
+            this.originY = originY
+            this.width = width
+            this.height = height
+        }
+
+        override fun fillRect(
+            x: Int,
+            y: Int,
+            width: Int,
+            height: Int,
+            color: Color,
+        ) {
+            backend?.fillRect(originX + x, originY + y, width, height, color)
         }
     }
 

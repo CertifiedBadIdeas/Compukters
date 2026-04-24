@@ -207,4 +207,57 @@ class ScreenProgramCompilerTest {
         assertEquals(0, fill.x)
         assertEquals(0, fill.y)
     }
+
+    @Test
+    fun canvasLowersToDrawCanvasOpAndDrawsRelativeToItsOrigin() {
+        val recordedCalls = mutableListOf<Triple<Int, Int, Color>>()
+        val program =
+            ScreenProgramCompiler().compile(
+                ui {
+                    canvas(modifier = Modifier.offset(30, 40).size(16, 16)) {
+                        // Draw at canvas-local (2, 3) — should end up at absolute (32, 43).
+                        fillRect(2, 3, 4, 5, Color.Red)
+                    }
+                },
+            )
+
+        val op =
+            program.frames[0]
+                .ops
+                .filterIsInstance<RenderOp.DrawCanvas>()
+                .single()
+        assertEquals(30, op.x)
+        assertEquals(40, op.y)
+        assertEquals(16, op.width)
+        assertEquals(16, op.height)
+
+        val executor = ScreenRuntimeExecutor(program)
+        val backend =
+            object : RenderBackend {
+                override fun fillRect(
+                    x: Int,
+                    y: Int,
+                    width: Int,
+                    height: Int,
+                    color: Color,
+                ) {
+                    recordedCalls += Triple(x, y, color)
+                }
+
+                override fun drawText(
+                    x: Int,
+                    y: Int,
+                    text: String,
+                    color: Color,
+                ) {}
+
+                override fun drawTerminalSurface(
+                    x: Int,
+                    y: Int,
+                    snapshot: Any?,
+                ) {}
+            }
+        executor.render(backend)
+        assertEquals(Triple(32, 43, Color.Red), recordedCalls.single())
+    }
 }

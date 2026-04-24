@@ -1,5 +1,6 @@
 package ru.lazyhat.compukterkraft.core.ui.program
 
+import ru.lazyhat.compukterkraft.core.ui.foundation.CanvasScope
 import ru.lazyhat.compukterkraft.core.ui.foundation.Color
 import ru.lazyhat.compukterkraft.core.ui.foundation.ValueExpression
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Position
@@ -95,6 +96,14 @@ sealed interface RenderOp {
         val width: Int,
         val height: Int,
         val snapshot: ValueExpression<Any?>,
+    ) : RenderOp
+
+    data class DrawCanvas(
+        val x: Int,
+        val y: Int,
+        val width: Int,
+        val height: Int,
+        val onDraw: CanvasScope.() -> Unit,
     ) : RenderOp
 }
 
