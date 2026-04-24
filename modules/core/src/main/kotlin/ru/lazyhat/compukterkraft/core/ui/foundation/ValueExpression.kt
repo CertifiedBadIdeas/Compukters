@@ -9,11 +9,11 @@ value class ValueConstant(
     override val value: String,
 ) : Value<String>
 
-private fun interface ValueExpression<T> : Value<T> {
+private class ValueExpression<T>(
+    private val block: () -> T,
+) : Value<T> {
     override val value: T
-        get() = evaluate()
-
-    fun evaluate(): T
+        get() = block()
 }
 
 fun value(string: String): Value<String> = ValueConstant(string)
