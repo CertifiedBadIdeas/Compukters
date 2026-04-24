@@ -21,7 +21,6 @@ package ru.lazyhat.compukterkraft.common.computer.block
 
 import net.minecraft.core.BlockPos
 import net.minecraft.resources.ResourceLocation
-import net.minecraft.server.level.ServerPlayer
 import net.minecraft.stats.Stats
 import net.minecraft.world.InteractionHand
 import net.minecraft.world.InteractionResult
@@ -39,9 +38,7 @@ import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.storage.loot.LootParams
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams
 import net.minecraft.world.phys.BlockHitResult
-import ru.lazyhat.compukterkraft.common.binding.ModObjects
 import ru.lazyhat.compukterkraft.common.computer.context.ServerContext
-import ru.lazyhat.compukterkraft.common.computer.data.ComputerContainerData
 import ru.lazyhat.compukterkraft.common.computer.item.AbstractComputerItem
 import ru.lazyhat.compukterkraft.common.utils.castTicker
 import ru.lazyhat.compukterkraft.common.utils.computerDataTagCopy
@@ -167,20 +164,9 @@ abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
         player: Player,
         hit: BlockHitResult,
     ): InteractionResult {
-        if (!player.isCrouching) {
-            (level.getBlockEntity(pos) as? AbstractComputerBlockEntity)
-                ?.ifServerSide(level)
-                ?.let { computer ->
-                    val serverComputer = computer.getOrCreateServerComputer()
-                    ModObjects.openComputerMenu(
-                        player as ServerPlayer,
-                        computer,
-                        ComputerContainerData(serverComputer, getItem(computer)),
-                    )
-                    return InteractionResult.sidedSuccess(level.isClientSide)
-                }
-        }
-
+        // Epic 3 (task 3.3): `ComputerBlock` is headless — plain RMB no longer opens
+        // a terminal menu. The terminal item is the sole entry point (shift+RMB
+        // with a `TerminalItem` in hand routes through `TerminalItem.useOn`).
         return super.useWithoutItem(state, level, pos, player, hit)
     }
 }

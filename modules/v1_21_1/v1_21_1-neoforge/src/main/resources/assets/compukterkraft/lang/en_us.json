@@ -3,6 +3,7 @@
   "block.compukterkraft.workbench": "Workbench",
   "item.compukterkraft.computer_advanced": "Advanced Computer",
   "item.compukterkraft.workbench": "Workbench",
+  "item.compukterkraft.terminal": "Terminal",
   "itemGroup.compukterkraft": "Compukter Kraft",
   "gui.compukterkraft.terminal.powered_off": "Computer is off. Turn it on first.",
   "gui.compukterkraft.terminal.connecting": "Connecting...",
@@ -13,5 +14,8 @@
   "gui.compukterkraft.tooltip.copy": "Copy to clipboard",
   "commands.compukterkraft.generic.yes": "Y",
   "commands.compukterkraft.generic.no": "N",
-  "commands.compukterkraft.dump.action": "View more info about this computer"
+  "commands.compukterkraft.dump.action": "View more info about this computer",
+  "message.compukterkraft.terminal.no_binding": "No computer bound. Shift+RMB a computer block first.",
+  "message.compukterkraft.terminal.wrong_dimension": "Bound computer is in another dimension.",
+  "message.compukterkraft.terminal.out_of_range": "Bound computer is out of range."
 }

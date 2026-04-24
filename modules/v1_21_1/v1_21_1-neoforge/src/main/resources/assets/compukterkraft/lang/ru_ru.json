@@ -3,6 +3,7 @@
   "block.compukterkraft.workbench": "Верстак",
   "item.compukterkraft.computer_advanced": "Продвинутый компьютер",
   "item.compukterkraft.workbench": "Верстак",
+  "item.compukterkraft.terminal": "Терминал",
   "itemGroup.compukterkraft": "Compukter Kraft",
   "gui.compukterkraft.terminal.powered_off": "Компьютер выключен. Сначала включите его.",
   "gui.compukterkraft.terminal.connecting": "Подключение...",
@@ -13,5 +14,8 @@
   "gui.compukterkraft.tooltip.copy": "Скопировать в буфер обмена",
   "commands.compukterkraft.generic.yes": "Д",
   "commands.compukterkraft.generic.no": "Н",
-  "commands.compukterkraft.dump.action": "Показать больше информации об этом компьютере"
+  "commands.compukterkraft.dump.action": "Показать больше информации об этом компьютере",
+  "message.compukterkraft.terminal.no_binding": "Нет привязанного компьютера. Сначала Shift+ПКМ по блоку компьютера.",
+  "message.compukterkraft.terminal.wrong_dimension": "Привязанный компьютер в другом измерении.",
+  "message.compukterkraft.terminal.out_of_range": "Привязанный компьютер слишком далеко."
 }

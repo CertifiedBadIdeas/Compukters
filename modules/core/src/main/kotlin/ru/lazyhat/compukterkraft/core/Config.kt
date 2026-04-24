@@ -30,4 +30,11 @@ object Config {
 
     const val DEFAULT_COMPUTER_TERM_WIDTH: Int = 77
     const val DEFAULT_COMPUTER_TERM_HEIGHT: Int = 27
+
+    /**
+     * Maximum distance (in blocks) between a player and the target computer
+     * position for a terminal attach to succeed. Cross-dimensional attaches
+     * are always rejected regardless of this value.
+     */
+    const val TERMINAL_CONNECT_RADIUS_BLOCKS: Int = 32
 }
