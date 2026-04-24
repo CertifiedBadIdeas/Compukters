@@ -23,22 +23,21 @@ import ru.lazyhat.compukterkraft.core.computer.vm.TerminalLineReader
 import ru.lazyhat.compukterkraft.core.computer.vm.VmContext
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerStdioApi
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerTerminalApi
-import ru.lazyhat.compukterkraft.lang.runtime.ScreenBuffer
 
 /**
- * Terminal API implementation routed through the [ComputerStdioApi] byte stream.
+ * Terminal API routed entirely through the [ComputerStdioApi] byte stream.
  *
- * Since Epic 1, [write], [printLine], [clear] and [setCursor] no longer mutate
- * [screenBuffer] directly — they emit VT-100 escape sequences via [stdio]. The
- * server-side [VmStdioApi] parses them back into the same ScreenBuffer, so
- * observable behaviour is unchanged.
+ * Every operation emits VT-100 escape sequences; the server-side ScreenBuffer
+ * (consumed internally by the broadcaster to serve the legacy Workbench snapshot
+ * path) and every attached client's [ClientTerminalBuffer] both parse the same
+ * stream, so observable behaviour is consistent across attach sites.
  *
- * [screenBuffer] is retained for [readLine], which still needs direct cursor
- * blink control and positional reads; full removal is tracked for Epic 2.
+ * [cursorProvider] must return the current logical cursor in (x, y) / 0-based
+ * coords. Production wires this to [ComputerStdioBroadcaster.cursor].
  */
 class VmTerminalApi(
     private val stdio: ComputerStdioApi,
-    override val screenBuffer: ScreenBuffer,
+    private val cursorProvider: () -> Pair<Int, Int>,
     private val ctx: VmContext,
 ) : ComputerTerminalApi {
     override fun write(text: String) {
@@ -63,8 +62,8 @@ class VmTerminalApi(
                 write = ::write,
                 printLine = ::printLine,
                 setCursor = ::setCursor,
-                currentCursor = { screenBuffer.cursorX to screenBuffer.cursorY },
-                // no-op: setCursor already updates screenBuffer via stdio
+                currentCursor = cursorProvider,
+                // no-op: setCursor already updates all buffers via stdio
                 updateCursor = { _, _ -> },
             ).readLine(prompt)
         } finally {

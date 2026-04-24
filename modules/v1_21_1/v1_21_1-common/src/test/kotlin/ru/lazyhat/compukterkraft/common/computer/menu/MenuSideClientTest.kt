@@ -19,23 +19,28 @@
 
 package ru.lazyhat.compukterkraft.common.computer.menu
 
-import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
+import ru.lazyhat.compukterkraft.common.computer.client.ClientTerminalBuffer
 import kotlin.test.Test
-import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 
 class MenuSideClientTest {
     @Test
-    fun clientSideCanStartWithoutSnapshotAndLaterReceiveOne() {
-        val client = MenuSide.Client(initialSnapshot = null)
+    fun clientSideAttachAndDetachTerminalBuffer() {
+        val client = MenuSide.Client()
 
-        assertNull(client.screenSnapshot)
+        assertNull(client.terminalBuffer)
 
-        val snapshot = ScreenBufferSnapshot.empty(width = 12, height = 6, colour = true)
-        client.updateScreenSnapshot(snapshot)
+        val buffer = ClientTerminalBuffer(cols = 12, rows = 6, color = true)
+        client.attachTerminalBuffer(buffer)
 
-        assertEquals(snapshot, client.screenSnapshot)
+        assertSame(buffer, client.terminalBuffer)
+        assertNotNull(client.terminalBuffer)
+
+        client.detachTerminalBuffer()
+        assertNull(client.terminalBuffer)
     }
 
     @Test

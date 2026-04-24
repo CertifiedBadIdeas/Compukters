@@ -286,7 +286,7 @@ class BackgroundComputerVm(
                 labelProvider = labelProvider,
             )
         val stdioApi = stdioBroadcaster
-        val terminalApi = VmTerminalApi(stdio = stdioApi, screenBuffer = screenBuffer, ctx = this)
+        val terminalApi = VmTerminalApi(stdio = stdioApi, cursorProvider = stdioBroadcaster::cursor, ctx = this)
         val filesystemApi = VmFileSystemApi(ctx = this)
         val peripheralsApi = VmPeripheralRuntimeApi(peripheralRegistry)
         val processApi =

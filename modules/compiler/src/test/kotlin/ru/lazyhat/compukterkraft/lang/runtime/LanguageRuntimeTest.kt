@@ -637,8 +637,6 @@ private class RecordingRuntime(
 
     override val terminal =
         object : ComputerTerminalApi {
-            override val screenBuffer = ScreenBuffer(51, 19, true)
-
             override fun write(text: String) {
                 lines += text
             }

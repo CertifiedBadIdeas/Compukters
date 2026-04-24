@@ -28,11 +28,6 @@ import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 interface ClientNetworkContext {
     fun handleChatTable(table: TableBuilder)
 
-    fun handleComputerTerminal(
-        containerId: Int,
-        snapshot: ScreenBufferSnapshot,
-    )
-
     fun handleStdoutBytes(
         containerId: Int,
         bytes: ByteArray,
