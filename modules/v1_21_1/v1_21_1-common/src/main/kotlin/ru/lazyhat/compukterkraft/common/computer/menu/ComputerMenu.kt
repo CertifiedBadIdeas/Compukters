@@ -54,4 +54,12 @@ interface ComputerMenu {
      * Set the current terminal screen snapshot. Called on the client when the server syncs.
      */
     fun updateTerminal(snapshot: ScreenBufferSnapshot)
+
+    /**
+     * Apply a chunk of stdout bytes to the client-side
+     * [ClientTerminalBuffer][ru.lazyhat.compukterkraft.common.computer.client.ClientTerminalBuffer].
+     * Called on the client when the server sends
+     * [StdoutBytesClientMessage][ru.lazyhat.compukterkraft.common.computer.network.client.StdoutBytesClientMessage].
+     */
+    fun handleStdoutBytes(bytes: ByteArray)
 }

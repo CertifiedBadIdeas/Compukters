@@ -27,6 +27,7 @@ import net.minecraft.world.inventory.ContainerData
 import net.minecraft.world.inventory.MenuType
 import net.minecraft.world.inventory.SimpleContainerData
 import net.minecraft.world.item.ItemStack
+import ru.lazyhat.compukterkraft.common.computer.client.ClientTerminalBuffer
 import ru.lazyhat.compukterkraft.common.computer.context.ServerComputer
 import ru.lazyhat.compukterkraft.common.computer.data.ComputerContainerData
 import ru.lazyhat.compukterkraft.core.Config
@@ -62,6 +63,31 @@ sealed interface MenuSide {
         /** Update from a network message. */
         fun updateScreenSnapshot(snapshot: ScreenBufferSnapshot) {
             _screenSnapshot.value = snapshot
+        }
+
+        /**
+         * Stream-I/O terminal buffer. `null` until [attachTerminalBuffer] is
+         * called by the open [ComputerTerminalScreen][ru.lazyhat.compukterkraft.common.computer.screen.ComputerTerminalScreen].
+         *
+         * Since Epic 2, terminal rendering prefers this buffer over
+         * [screenSnapshot] when present; the snapshot path is kept for the
+         * Workbench (and for unit tests) until Epic 4.
+         */
+        var terminalBuffer: ClientTerminalBuffer? = null
+            private set
+
+        fun attachTerminalBuffer(buffer: ClientTerminalBuffer) {
+            terminalBuffer = buffer
+        }
+
+        fun detachTerminalBuffer() {
+            terminalBuffer = null
+        }
+
+        fun applyStdoutBytes(bytes: ByteArray) {
+            terminalBuffer?.applyStdoutBytes(bytes)
+            // Side-effect: update snapshot so Workbench-style consumers see the new frame.
+            terminalBuffer?.snapshot()?.let { updateScreenSnapshot(it) }
         }
     }
 }
@@ -118,6 +144,13 @@ abstract class AbstractComputerMenu(
             side as? MenuSide.Client
                 ?: throw UnsupportedOperationException("Cannot update terminal on the server")
         client.updateScreenSnapshot(snapshot)
+    }
+
+    override fun handleStdoutBytes(bytes: ByteArray) {
+        val client =
+            side as? MenuSide.Client
+                ?: throw UnsupportedOperationException("Cannot apply stdout bytes on the server")
+        client.applyStdoutBytes(bytes)
     }
 
     override fun removed(player: Player) {

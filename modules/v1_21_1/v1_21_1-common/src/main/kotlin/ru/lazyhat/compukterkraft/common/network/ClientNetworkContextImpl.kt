@@ -66,6 +66,13 @@ class ClientNetworkContextImpl : ClientNetworkContext {
         updateTerminal(snapshot)
     }
 
+    override fun handleStdoutBytes(
+        containerId: Int,
+        bytes: ByteArray,
+    ) = withCheckedContainerMenu(containerId) {
+        handleStdoutBytes(bytes)
+    }
+
     override fun handleWorkbenchWorkspace(
         containerId: Int,
         remoteState: WorkbenchRemoteState,
