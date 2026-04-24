@@ -11,27 +11,27 @@ import kotlin.test.assertEquals
 class ScreenProgramCompilerColorTest {
     @Test
     fun backgroundColorCompilesBoxToFillRectWithItsOwnColor() {
-        val compiler = ScreenProgramCompiler()
-
-        val compiled =
-            compiler.compile(
+        val program =
+            ScreenProgramCompiler().compile(
                 ui {
                     box(modifier = Modifier.size(40, 20).background(Color.Red)) { }
                 },
             )
 
-        assertEquals(
-            listOf(RenderOp.FillRect("root-0", Color.Red)),
-            compiled.program.renderProgram.staticOps,
-        )
+        val fill =
+            program.frames[0]
+                .ops
+                .filterIsInstance<RenderOp.FillRect>()
+                .single()
+        assertEquals(Color.Red, fill.color)
+        assertEquals(40, fill.width)
+        assertEquals(20, fill.height)
     }
 
     @Test
     fun textColorCompilesTextToDrawTextWithItsOwnColor() {
-        val compiler = ScreenProgramCompiler()
-
-        val compiled =
-            compiler.compile(
+        val program =
+            ScreenProgramCompiler().compile(
                 ui {
                     text(
                         text = { "Hello" },
@@ -40,9 +40,12 @@ class ScreenProgramCompilerColorTest {
                 },
             )
 
-        assertEquals(
-            listOf(RenderOp.DrawText("root-0", "Hello", Color.Green)),
-            compiled.program.renderProgram.staticOps,
-        )
+        val text =
+            program.frames[0]
+                .ops
+                .filterIsInstance<RenderOp.DrawText>()
+                .single()
+        assertEquals(Color.Green, text.color)
+        assertEquals("Hello", text.value.evaluate())
     }
 }

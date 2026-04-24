@@ -1,32 +1,45 @@
 package ru.lazyhat.compukterkraft.core.ui.program
 
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Position
+
 /**
- * Runtime-side counterpart of [CompiledScreen].
+ * Runtime-side counterpart to [ScreenProgram].
  *
- * Responsibilities: render via [RenderBackend]; route mouse clicks through the
- * [HitTestProgram]; forward key events to the single focused element (if any).
+ * Per render tick the executor:
+ *
+ * 1. Iterates [ScreenProgram.frames] in order.
+ * 2. For each frame, evaluates (at most once) `visible` to decide skip/draw
+ *    and `origin` to translate the baked relative coordinates of its ops.
+ * 3. Evaluates op-level [ru.lazyhat.compukterkraft.core.ui.foundation.ValueExpression]s
+ *    (text, snapshots) in place while emitting backend calls.
+ *
+ * Hit-testing walks [ScreenProgram.hitRegions] in compile-time z-order
+ * (descending), evaluating the owning frame's origin/visibility as needed.
+ *
+ * No allocations, no map lookups, no recursion.
  */
 class ScreenRuntimeExecutor(
-    private val compiled: CompiledScreen,
+    private val program: ScreenProgram,
 ) {
-    private val program: ScreenProgram get() = compiled.program
-
     fun render(backend: RenderBackend) {
-        program.renderProgram.staticOps.forEach { op ->
-            when (op) {
-                is RenderOp.FillRect -> {
-                    val bounds = boundsFor(op.nodeId)
-                    backend.fillRect(bounds.x, bounds.y, bounds.width, bounds.height, op.color)
-                }
+        for (frame in program.frames) {
+            if (frame.visible != null && !frame.visible.evaluate()) continue
+            val origin = frame.origin?.evaluate() ?: Position.Zero
+            val ox = origin.x
+            val oy = origin.y
+            for (op in frame.ops) {
+                when (op) {
+                    is RenderOp.FillRect -> {
+                        backend.fillRect(op.x + ox, op.y + oy, op.width, op.height, op.color)
+                    }
 
-                is RenderOp.DrawText -> {
-                    val bounds = boundsFor(op.nodeId)
-                    backend.drawText(bounds.x, bounds.y, op.value, op.color)
-                }
+                    is RenderOp.DrawText -> {
+                        backend.drawText(op.x + ox, op.y + oy, op.value.evaluate(), op.color)
+                    }
 
-                is RenderOp.DrawTerminalSurface -> {
-                    val bounds = boundsFor(op.nodeId)
-                    backend.drawTerminalSurface(bounds.x, bounds.y, op.snapshot)
+                    is RenderOp.DrawTerminalSurface -> {
+                        backend.drawTerminalSurface(op.x + ox, op.y + oy, op.snapshot.evaluate())
+                    }
                 }
             }
         }
@@ -36,25 +49,19 @@ class ScreenRuntimeExecutor(
         x: Int,
         y: Int,
     ): Boolean {
-        val hitRegion =
-            program.hitTestProgram.regions.firstOrNull { region ->
-                val bounds = boundsFor(region.nodeId)
-                x >= bounds.x && y >= bounds.y && x < bounds.x + bounds.width && y < bounds.y + bounds.height
-            } ?: return false
-
-        val route =
-            program.inputProgram.routes.firstOrNull {
-                it.regionId == hitRegion.regionId && it.eventType == InputEventType.Click
-            } ?: return false
-
-        val handler = compiled.clickHandlers[route.handlerId] ?: return false
-        handler.invoke()
-        return true
+        for (region in program.hitRegions) {
+            val frame = program.frames[region.frameIndex]
+            if (frame.visible != null && !frame.visible.evaluate()) continue
+            val origin = frame.origin?.evaluate() ?: Position.Zero
+            val rx = region.x + origin.x
+            val ry = region.y + origin.y
+            if (x >= rx && y >= ry && x < rx + region.width && y < ry + region.height) {
+                region.onClick.invoke()
+                return true
+            }
+        }
+        return false
     }
 
-    fun keyPressed(keyCode: Int): Boolean = compiled.keyHandler?.invoke(keyCode) ?: false
-
-    private fun boundsFor(nodeId: String): LayoutNode =
-        program.layoutProgram.staticNodes.firstOrNull { it.nodeId == nodeId }
-            ?: error("Missing layout bounds for node '$nodeId'")
+    fun keyPressed(keyCode: Int): Boolean = program.keyHandler?.invoke(keyCode) ?: false
 }

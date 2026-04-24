@@ -1,6 +1,7 @@
 package ru.lazyhat.compukterkraft.core.ui.foundation
 
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Modifier
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Position
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.clickable
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.size
 
@@ -37,6 +38,21 @@ sealed interface UiElement {
     data class IfNode(
         override val modifier: Modifier,
         val condition: ValueExpression<Boolean>,
+        val children: List<UiElement>,
+    ) : UiElement
+
+    /**
+     * A detached, floating subtree. Its children are laid out inside their own
+     * coordinate frame starting at `(0, 0)` and sized by this element's size
+     * modifier. At render time the frame is translated by [anchor] (evaluated
+     * each tick) and skipped entirely when [visible] evaluates to `false`.
+     *
+     * Overlays do not take part in their parent's flow layout.
+     */
+    data class Overlay(
+        override val modifier: Modifier,
+        val anchor: ValueExpression<Position>?,
+        val visible: ValueExpression<Boolean>?,
         val children: List<UiElement>,
     ) : UiElement
 }
@@ -102,6 +118,21 @@ class UiScope {
         block: UiScope.() -> Unit,
     ) {
         children += UiElement.IfNode(modifier = Modifier, condition = condition, children = UiScope().apply(block).build())
+    }
+
+    fun overlay(
+        modifier: Modifier = Modifier,
+        anchor: ValueExpression<Position>? = null,
+        visible: ValueExpression<Boolean>? = null,
+        block: UiScope.() -> Unit,
+    ) {
+        children +=
+            UiElement.Overlay(
+                modifier = modifier,
+                anchor = anchor,
+                visible = visible,
+                children = UiScope().apply(block).build(),
+            )
     }
 
     fun build(): List<UiElement> = children
