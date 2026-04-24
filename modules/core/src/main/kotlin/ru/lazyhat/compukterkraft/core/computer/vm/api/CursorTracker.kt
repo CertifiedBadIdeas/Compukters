@@ -54,7 +54,13 @@ class CursorTracker : VtSink {
     }
 
     override fun lineFeed() {
+        // Match ScreenBufferVtSink: LF behaves as CR+LF (move to column 0 of
+        // the next row). This is what the VM's client-side ScreenBuffer does,
+        // so the tracker must follow suit — otherwise readLine's cursor
+        // arithmetic drifts after any printLine and backspace emits CSI H
+        // coordinates that send the cursor into unrelated lines of the log.
         cursorY += 1
+        cursorX = 0
     }
 
     override fun carriageReturn() {
