@@ -333,7 +333,7 @@ class UiLayoutResolver(
             .findSize()
             ?.size
             ?.width ?: when (element) {
-            is UiElement.Text -> fontMetrics?.width(element.value.evaluate()) ?: fallbackWidth
+            is UiElement.Text -> fontMetrics?.width(element.text.value) ?: fallbackWidth
             else -> fallbackWidth
         }
 
@@ -354,7 +354,7 @@ class UiLayoutResolver(
             .findSize()
             ?.size
             ?.width ?: when (element) {
-            is UiElement.Text -> fontMetrics?.width(element.value.evaluate()) ?: 0
+            is UiElement.Text -> fontMetrics?.width(element.text.value) ?: 0
             else -> 0
         }
 

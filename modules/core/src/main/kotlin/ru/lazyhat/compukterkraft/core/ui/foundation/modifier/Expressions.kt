@@ -3,8 +3,9 @@ package ru.lazyhat.compukterkraft.core.ui.foundation.modifier
 import ru.lazyhat.compukterkraft.core.ui.foundation.Color
 import ru.lazyhat.compukterkraft.core.ui.foundation.HoverState
 import ru.lazyhat.compukterkraft.core.ui.foundation.IntSize
+import ru.lazyhat.compukterkraft.core.ui.foundation.Value
 import ru.lazyhat.compukterkraft.core.ui.foundation.ValueExpression
-import ru.lazyhat.compukterkraft.core.ui.foundation.expr
+import ru.lazyhat.compukterkraft.core.ui.foundation.value
 
 data class PaddingModifier(
     val padding: Padding,
@@ -156,11 +157,11 @@ fun Modifier.findHoverable() = find<HoverableModifier>()
 //
 
 data class TooltipModifier(
-    val text: ValueExpression<String>,
+    val text: Value<String>,
 ) : Modifier.Element
 
-fun Modifier.tooltip(text: String) = then(TooltipModifier(expr { text }))
+fun Modifier.tooltip(text: String) = then(TooltipModifier(value { text }))
 
-fun Modifier.tooltip(text: ValueExpression<String>) = then(TooltipModifier(text))
+fun Modifier.tooltip(text: Value<String>) = then(TooltipModifier(text))
 
 fun Modifier.findTooltip() = find<TooltipModifier>()

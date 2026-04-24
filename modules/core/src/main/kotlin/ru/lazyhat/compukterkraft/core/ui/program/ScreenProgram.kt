@@ -3,8 +3,10 @@ package ru.lazyhat.compukterkraft.core.ui.program
 import ru.lazyhat.compukterkraft.core.ui.foundation.CanvasScope
 import ru.lazyhat.compukterkraft.core.ui.foundation.Color
 import ru.lazyhat.compukterkraft.core.ui.foundation.HoverState
+import ru.lazyhat.compukterkraft.core.ui.foundation.Value
 import ru.lazyhat.compukterkraft.core.ui.foundation.ValueExpression
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Position
+import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 
 /**
  * A compiled UI description ready for execution.
@@ -68,8 +70,8 @@ data class FocusHandler(
  * expression is evaluated once per render tick.
  */
 data class RenderFrame(
-    val origin: ValueExpression<Position>? = null,
-    val visible: ValueExpression<Boolean>? = null,
+    val origin: Value<Position>? = null,
+    val visible: Value<Boolean>? = null,
     val ops: List<RenderOp>,
 )
 
@@ -89,7 +91,7 @@ sealed interface RenderOp {
     data class DrawText(
         val x: Int,
         val y: Int,
-        val value: ValueExpression<String>,
+        val value: Value<String>,
         val color: Color,
     ) : RenderOp
 
@@ -98,7 +100,7 @@ sealed interface RenderOp {
         val y: Int,
         val width: Int,
         val height: Int,
-        val snapshot: ValueExpression<Any?>,
+        val snapshot: Value<ScreenBufferSnapshot>,
     ) : RenderOp
 
     data class DrawCanvas(
@@ -157,5 +159,5 @@ data class TooltipRegion(
     val y: Int,
     val width: Int,
     val height: Int,
-    val text: ValueExpression<String>,
+    val text: Value<String>,
 )

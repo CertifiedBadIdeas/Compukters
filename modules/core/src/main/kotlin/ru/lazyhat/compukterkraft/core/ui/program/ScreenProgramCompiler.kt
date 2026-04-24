@@ -2,7 +2,7 @@ package ru.lazyhat.compukterkraft.core.ui.program
 
 import ru.lazyhat.compukterkraft.core.platform.api.FontMetrics
 import ru.lazyhat.compukterkraft.core.ui.foundation.UiElement
-import ru.lazyhat.compukterkraft.core.ui.foundation.ValueExpression
+import ru.lazyhat.compukterkraft.core.ui.foundation.Value
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Position
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.findBackground
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.findClickable
@@ -196,7 +196,7 @@ class ScreenProgramCompiler(
             }
 
             is UiElement.Text -> {
-                ops += RenderOp.DrawText(node.x, node.y, element.value, element.color)
+                ops += RenderOp.DrawText(node.x, node.y, element.text, element.color)
             }
 
             is UiElement.Canvas -> {
@@ -294,8 +294,8 @@ class ScreenProgramCompiler(
     }
 
     private data class FrameDescriptor(
-        val origin: ValueExpression<Position>?,
-        val visible: ValueExpression<Boolean>?,
+        val origin: Value<Position>?,
+        val visible: Value<Boolean>?,
     )
 
     private class FocusAccumulator {

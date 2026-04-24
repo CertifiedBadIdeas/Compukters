@@ -3,7 +3,6 @@ package ru.lazyhat.compukterkraft.core.ui.program
 import ru.lazyhat.compukterkraft.core.platform.api.FontMetrics
 import ru.lazyhat.compukterkraft.core.ui.foundation.Color
 import ru.lazyhat.compukterkraft.core.ui.foundation.HoverState
-import ru.lazyhat.compukterkraft.core.ui.foundation.expr
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Modifier
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.UiAlignment
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.align
@@ -14,6 +13,7 @@ import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.padding
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.size
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.tooltip
 import ru.lazyhat.compukterkraft.core.ui.foundation.ui
+import ru.lazyhat.compukterkraft.core.ui.foundation.value
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -30,7 +30,7 @@ class ScreenProgramCompilerTest {
             ScreenProgramCompiler().compile(
                 ui {
                     terminalSurface(
-                        snapshot = expr { "snapshot" },
+                        snapshot = value { "snapshot" },
                         modifier = Modifier.offset(12, 28).size(96, 48),
                         onKey = { true },
                     )
@@ -51,7 +51,7 @@ class ScreenProgramCompilerTest {
         val program =
             ScreenProgramCompiler().compile(
                 ui {
-                    button({}) { text(text = expr { "Click" }) }
+                    button({}) { text(text = value { "Click" }) }
                 },
             )
 
@@ -66,8 +66,8 @@ class ScreenProgramCompilerTest {
             assertFailsWith<IllegalStateException> {
                 ScreenProgramCompiler().compile(
                     ui {
-                        terminalSurface(snapshot = expr { "a" }, onKey = { true })
-                        terminalSurface(snapshot = expr { "b" }, onKey = { true })
+                        terminalSurface(snapshot = value { "a" }, onKey = { true })
+                        terminalSurface(snapshot = value { "b" }, onKey = { true })
                     },
                 )
             }
@@ -80,7 +80,7 @@ class ScreenProgramCompilerTest {
         val program =
             ScreenProgramCompiler().compile(
                 ui {
-                    If(expr { visible }) {
+                    If(value { visible }) {
                         box(modifier = Modifier.size(10, 10).background(Color.Red))
                     }
                 },
@@ -103,7 +103,7 @@ class ScreenProgramCompilerTest {
         val program =
             ScreenProgramCompiler().compile(
                 ui {
-                    button(onClick = { pressed = true }) { text(text = expr { "Power" }) }
+                    button(onClick = { pressed = true }) { text(text = value { "Power" }) }
                 },
             )
 
@@ -128,7 +128,7 @@ class ScreenProgramCompilerTest {
                                     .align(UiAlignment.Center)
                                     .background(Color.Red),
                             onClick = {},
-                        ) { text(text = expr { "Centered" }) }
+                        ) { text(text = value { "Centered" }) }
                     }
                 },
             )
@@ -158,7 +158,7 @@ class ScreenProgramCompilerTest {
                 ui(Modifier.size(100, 40)) {
                     text(
                         modifier = Modifier.align(UiAlignment.Center),
-                        text = expr { "AB" },
+                        text = value { "AB" },
                     )
                 },
             )
@@ -183,7 +183,7 @@ class ScreenProgramCompilerTest {
                     overlay(
                         modifier = Modifier.size(20, 20),
                         anchor =
-                            expr {
+                            value {
                                 ru.lazyhat.compukterkraft.core.ui.foundation.modifier
                                     .Position(anchorX, anchorY)
                             },
