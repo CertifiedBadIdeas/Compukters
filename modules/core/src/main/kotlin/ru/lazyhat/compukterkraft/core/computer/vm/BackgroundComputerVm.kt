@@ -34,13 +34,15 @@ import kotlinx.coroutines.launch
 import ru.lazyhat.compukterkraft.core.LOGGER
 import ru.lazyhat.compukterkraft.core.computer.runtime.ComputerProgramCompiler
 import ru.lazyhat.compukterkraft.core.computer.runtime.WorkspaceProgramLoader
+import ru.lazyhat.compukterkraft.core.computer.vm.api.ComputerStdioBroadcaster
+import ru.lazyhat.compukterkraft.core.computer.vm.api.ScreenBufferVtSink
 import ru.lazyhat.compukterkraft.core.computer.vm.api.VmFileSystemApi
 import ru.lazyhat.compukterkraft.core.computer.vm.api.VmPeripheralRegistry
 import ru.lazyhat.compukterkraft.core.computer.vm.api.VmPeripheralRuntimeApi
 import ru.lazyhat.compukterkraft.core.computer.vm.api.VmProcessApi
-import ru.lazyhat.compukterkraft.core.computer.vm.api.VmStdioApi
 import ru.lazyhat.compukterkraft.core.computer.vm.api.VmSystemApi
 import ru.lazyhat.compukterkraft.core.computer.vm.api.VmTerminalApi
+import ru.lazyhat.compukterkraft.lang.runtime.vt.VtParser
 import ru.lazyhat.compukterkraft.lang.api.BuiltinModule
 import ru.lazyhat.compukterkraft.lang.api.BuiltinRegistry
 import ru.lazyhat.compukterkraft.lang.frontend.LanguageBuiltins
@@ -101,6 +103,14 @@ class BackgroundComputerVm(
     private val programLoader = WorkspaceProgramLoader(workspace)
     private val pathResolver = VmPathResolver()
     private val screenBuffer = ScreenBuffer(profile.terminalWidth, profile.terminalHeight, profile.colorTerminal)
+    val stdioBroadcaster = ComputerStdioBroadcaster()
+    private val screenBufferFeeder: VtParser = VtParser(ScreenBufferVtSink(screenBuffer))
+    private val screenBufferConsumer = ComputerStdioBroadcaster.Consumer { bytes ->
+        // Keep the server-side ScreenBuffer synced with the VM's byte stream.
+        // Used by the (legacy) snapshot path that still feeds Workbench + backward-compat clients
+        // until Epic 4 moves the buffer entirely to the client side.
+        screenBufferFeeder.feed(String(bytes, Charsets.UTF_8))
+    }
     private val peripheralRegistry = VmPeripheralRegistry()
     private val runtimeRegistryProfile = createRuntimeRegistryProfile()
 
@@ -114,7 +124,10 @@ class BackgroundComputerVm(
             .shareIn(scope, SharingStarted.Eagerly)
 
     private var runner: Job? = null
-    private val runtime: VmRuntime = createRuntime("", "")
+    private val runtime: VmRuntime = run {
+        stdioBroadcaster.addConsumer(screenBufferConsumer)
+        createRuntime("", "")
+    }
 
     // ── ComputerVmHandle ────────────────────────────────────────────
 
@@ -272,7 +285,7 @@ class BackgroundComputerVm(
                 currentTickProvider = { stateManager.currentTick },
                 labelProvider = labelProvider,
             )
-        val stdioApi = VmStdioApi(buffer = screenBuffer)
+        val stdioApi = stdioBroadcaster
         val terminalApi = VmTerminalApi(stdio = stdioApi, screenBuffer = screenBuffer, ctx = this)
         val filesystemApi = VmFileSystemApi(ctx = this)
         val peripheralsApi = VmPeripheralRuntimeApi(peripheralRegistry)
