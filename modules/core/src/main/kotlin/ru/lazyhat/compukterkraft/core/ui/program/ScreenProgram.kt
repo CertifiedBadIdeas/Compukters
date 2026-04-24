@@ -22,6 +22,7 @@ data class ScreenProgram(
     val frames: List<RenderFrame>,
     val hitRegions: List<HitRegion>,
     val hoverRegions: List<HoverRegion> = emptyList(),
+    val tooltipRegions: List<TooltipRegion> = emptyList(),
     val focusedNodeId: String? = null,
     val focusRegion: FocusRegion? = null,
     val keyHandler: FocusHandler? = null,
@@ -142,4 +143,19 @@ data class HoverRegion(
     val width: Int,
     val height: Int,
     val state: HoverState,
+)
+
+/**
+ * A rectangle whose owning element's tooltip should be shown while the
+ * mouse hovers over it. [text] is evaluated lazily once per render tick
+ * (only for the region that actually contains the cursor).
+ */
+data class TooltipRegion(
+    val nodeId: String,
+    val frameIndex: Int,
+    val x: Int,
+    val y: Int,
+    val width: Int,
+    val height: Int,
+    val text: ValueExpression<String>,
 )

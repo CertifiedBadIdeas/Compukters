@@ -35,6 +35,14 @@ class ScreenRuntimeExecutor(
         private set
 
     /**
+     * The tooltip text under the cursor after the most recent [updateMouse]
+     * call, or `null` if the cursor is not over any tooltip region. Host
+     * screens typically render this via their platform tooltip API.
+     */
+    var activeTooltip: String? = null
+        private set
+
+    /**
      * Updates every [ru.lazyhat.compukterkraft.core.ui.foundation.HoverState]
      * bound via `Modifier.hoverable(...)` based on the supplied mouse
      * position. Call this from the host screen before [render] so that
@@ -58,6 +66,19 @@ class ScreenRuntimeExecutor(
             val ry = region.y + origin.y
             region.state.isHovered =
                 mouseX >= rx && mouseY >= ry && mouseX < rx + region.width && mouseY < ry + region.height
+        }
+
+        activeTooltip = null
+        for (region in program.tooltipRegions) {
+            val frame = program.frames[region.frameIndex]
+            if (frame.visible != null && !frame.visible.evaluate()) continue
+            val origin = frame.origin?.evaluate() ?: Position.Zero
+            val rx = region.x + origin.x
+            val ry = region.y + origin.y
+            if (mouseX >= rx && mouseY >= ry && mouseX < rx + region.width && mouseY < ry + region.height) {
+                activeTooltip = region.text.evaluate()
+                break
+            }
         }
     }
 
