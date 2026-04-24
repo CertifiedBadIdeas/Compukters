@@ -9,12 +9,28 @@ import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.size
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.zIndex
 import ru.lazyhat.compukterkraft.core.ui.foundation.ui
 import ru.lazyhat.compukterkraft.core.ui.foundation.value
+import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ScreenRuntimeExecutorTest {
+    private fun emptySnapshot() =
+        ScreenBufferSnapshot(
+            width = 0,
+            height = 0,
+            colour = false,
+            cursorX = 0,
+            cursorY = 0,
+            cursorBlink = false,
+            currentFg = 0,
+            currentBg = 0,
+            chars = CharArray(0),
+            fgColours = ByteArray(0),
+            bgColours = ByteArray(0),
+        )
+
     @Test
     fun mouseClickDispatchesTopmostClickableRegion() {
         val events = mutableListOf<String>()
@@ -44,7 +60,7 @@ class ScreenRuntimeExecutorTest {
             ScreenProgramCompiler().compile(
                 ui {
                     terminalSurface(
-                        snapshot = value { "snapshot" },
+                        snapshot = value { emptySnapshot() },
                         modifier = Modifier.offset(8, 8).size(80, 32),
                         onKey = { keyCode -> keyCode == 257 },
                     )
@@ -76,7 +92,7 @@ class ScreenRuntimeExecutorTest {
             ScreenProgramCompiler().compile(
                 ui {
                     terminalSurface(
-                        snapshot = value { null },
+                        snapshot = value { emptySnapshot() },
                         modifier = Modifier.size(40, 40),
                         onKey = {
                             events += "press:$it"
@@ -243,7 +259,7 @@ class ScreenRuntimeExecutorTest {
         override fun drawTerminalSurface(
             x: Int,
             y: Int,
-            snapshot: Any?,
+            snapshot: ScreenBufferSnapshot,
         ) {
         }
     }

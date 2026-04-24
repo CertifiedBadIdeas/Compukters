@@ -14,6 +14,7 @@ import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.size
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.tooltip
 import ru.lazyhat.compukterkraft.core.ui.foundation.ui
 import ru.lazyhat.compukterkraft.core.ui.foundation.value
+import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -24,13 +25,28 @@ import kotlin.test.assertTrue
 class ScreenProgramCompilerTest {
     private val fontMetrics = FontMetrics { text -> text.length * 6 }
 
+    private fun emptySnapshot() =
+        ScreenBufferSnapshot(
+            width = 0,
+            height = 0,
+            colour = false,
+            cursorX = 0,
+            cursorY = 0,
+            cursorBlink = false,
+            currentFg = 0,
+            currentBg = 0,
+            chars = CharArray(0),
+            fgColours = ByteArray(0),
+            bgColours = ByteArray(0),
+        )
+
     @Test
     fun terminalSurfaceIsMarkedAsTheSoleFocusedElement() {
         val program =
             ScreenProgramCompiler().compile(
                 ui {
                     terminalSurface(
-                        snapshot = value { "snapshot" },
+                        snapshot = value { emptySnapshot() },
                         modifier = Modifier.offset(12, 28).size(96, 48),
                         onKey = { true },
                     )
@@ -43,7 +59,7 @@ class ScreenProgramCompilerTest {
         assertEquals("root-0", program.focusedNodeId)
         assertNotNull(program.keyHandler)
         assertNotNull(program.focusRegion)
-        assertTrue(program.keyHandler!!.onKeyPressed(257))
+        assertTrue(program.keyHandler.onKeyPressed(257))
     }
 
     @Test
@@ -66,8 +82,8 @@ class ScreenProgramCompilerTest {
             assertFailsWith<IllegalStateException> {
                 ScreenProgramCompiler().compile(
                     ui {
-                        terminalSurface(snapshot = value { "a" }, onKey = { true })
-                        terminalSurface(snapshot = value { "b" }, onKey = { true })
+                        terminalSurface(snapshot = value { emptySnapshot() }, onKey = { true })
+                        terminalSurface(snapshot = value { emptySnapshot() }, onKey = { true })
                     },
                 )
             }
@@ -90,9 +106,9 @@ class ScreenProgramCompilerTest {
         assertEquals(2, program.frames.size)
         val ifFrame = program.frames[1]
         assertNotNull(ifFrame.visible)
-        assertEquals(false, ifFrame.visible!!.evaluate())
+        assertEquals(false, ifFrame.visible.value)
         visible = true
-        assertEquals(true, ifFrame.visible!!.evaluate())
+        assertEquals(true, ifFrame.visible.value)
         // Frame carries the FillRect op for the inner box.
         assertTrue(ifFrame.ops.any { it is RenderOp.FillRect })
     }
@@ -170,7 +186,7 @@ class ScreenProgramCompilerTest {
                 .single()
         assertEquals(44, text.x)
         assertEquals(15, text.y)
-        assertEquals("AB", text.value.evaluate())
+        assertEquals("AB", text.value.value)
     }
 
     @Test
@@ -196,11 +212,11 @@ class ScreenProgramCompilerTest {
         assertEquals(2, program.frames.size)
         val overlayFrame = program.frames[1]
         assertNotNull(overlayFrame.origin)
-        assertEquals(0, overlayFrame.origin!!.evaluate().x)
+        assertEquals(0, overlayFrame.origin.value.x)
         anchorX = 42
         anchorY = 17
-        assertEquals(42, overlayFrame.origin!!.evaluate().x)
-        assertEquals(17, overlayFrame.origin!!.evaluate().y)
+        assertEquals(42, overlayFrame.origin.value.x)
+        assertEquals(17, overlayFrame.origin.value.y)
 
         val fill =
             overlayFrame.ops
@@ -257,7 +273,7 @@ class ScreenProgramCompilerTest {
                 override fun drawTerminalSurface(
                     x: Int,
                     y: Int,
-                    snapshot: Any?,
+                    snapshot: ScreenBufferSnapshot,
                 ) {}
             }
         executor.render(backend)

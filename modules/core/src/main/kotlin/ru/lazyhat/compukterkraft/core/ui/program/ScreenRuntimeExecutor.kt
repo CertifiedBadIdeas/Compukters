@@ -35,6 +35,20 @@ class ScreenRuntimeExecutor(
         private set
 
     /**
+     * Restores the focused flag after [ScreenRuntimeExecutor] has been
+     * rebuilt (typically because the containing screen's bounds drifted
+     * and the host recompiled the program). Without this, a layout
+     * recompile between a focus-acquiring click and a subsequent key
+     * press would silently drop focus, preventing the user from typing
+     * into the newly-compiled focus region.
+     */
+    fun restoreFocus(focused: Boolean) {
+        if (program.focusRegion != null) {
+            isFocused = focused
+        }
+    }
+
+    /**
      * The tooltip text under the cursor after the most recent [updateMouse]
      * call, or `null` if the cursor is not over any tooltip region. Host
      * screens typically render this via their platform tooltip API.

@@ -5,7 +5,6 @@ import net.minecraft.network.chat.Component
 import net.minecraft.world.entity.player.Inventory
 import ru.lazyhat.compukterkraft.common.computer.menu.AbstractComputerMenu
 import ru.lazyhat.compukterkraft.common.computer.screen.ComputerScreen
-import ru.lazyhat.compukterkraft.core.platform.api.FontMetrics
 import ru.lazyhat.compukterkraft.core.ui.foundation.UiElement
 import ru.lazyhat.compukterkraft.core.ui.program.ScreenProgramCompiler
 import ru.lazyhat.compukterkraft.core.ui.program.ScreenRuntimeExecutor
@@ -41,7 +40,7 @@ abstract class DslContainerScreen<T : AbstractComputerMenu>(
     /**
      * Discard the cached executor so the next [renderBg] recompiles from
      * scratch. Call this when the *shape* of [content] would differ — most
-     * dynamic content should instead use [ValueExpression]s and not require
+     * dynamic content should instead use [ru.lazyhat.compukterkraft.core.ui.foundation.Value]s and not require
      * a rebuild.
      */
     protected fun invalidate() {
@@ -55,7 +54,7 @@ abstract class DslContainerScreen<T : AbstractComputerMenu>(
      * focusable element at all.
      */
     protected val isDslFocused: Boolean
-        get() = executor?.isFocused == true
+        get() = executor?.isFocused ?: false
 
     override fun init() {
         super.init()
@@ -92,8 +91,9 @@ abstract class DslContainerScreen<T : AbstractComputerMenu>(
     }
 
     private fun rebuildExecutor() {
+        val previousFocused = executor?.isFocused ?: false
         val program =
-            ScreenProgramCompiler(fontMetrics = FontMetrics { text -> font.width(text) })
+            ScreenProgramCompiler(fontMetrics = { text -> font.width(text) })
                 .compile(
                     root = content(),
                     rootX = leftPos,
@@ -101,7 +101,10 @@ abstract class DslContainerScreen<T : AbstractComputerMenu>(
                     rootWidth = imageWidth,
                     rootHeight = imageHeight,
                 )
-        executor = ScreenRuntimeExecutor(program)
+        executor =
+            ScreenRuntimeExecutor(program).also {
+                it.restoreFocus(previousFocused)
+            }
         compiledLeft = leftPos
         compiledTop = topPos
         compiledWidth = imageWidth

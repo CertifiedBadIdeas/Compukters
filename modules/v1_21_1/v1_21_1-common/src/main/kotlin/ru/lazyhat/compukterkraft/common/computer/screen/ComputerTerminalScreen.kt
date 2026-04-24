@@ -74,6 +74,13 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
     private val powerHover = HoverState()
     private val rebootHover = HoverState()
 
+    // Tracks the snapshot's pixel dimensions (not the mod's `imageWidth`
+    // which is clamped to MIN_IMAGE_WIDTH). A change here means the
+    // baked terminal-surface bounds in the program are now stale even if
+    // `imageWidth`/`imageHeight` did not move, so we explicitly
+    // invalidate the cached executor.
+    private var lastTerminalDimensions = IntSize.Zero
+
     init {
         val (cols, rows) = terminalDimensions(container.clientSide.screenSnapshot)
         imageWidth = WorkbenchTerminalMetrics.imageWidth(cols)
@@ -87,6 +94,12 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
             terminalInput.focused = false
         }
         syncTerminalWindowSize(state)
+        terminalDimensions(menu.clientSide.screenSnapshot).also { dims ->
+            if (dims != lastTerminalDimensions) {
+                lastTerminalDimensions = dims
+                invalidate()
+            }
+        }
         terminalInput.update()
     }
 
