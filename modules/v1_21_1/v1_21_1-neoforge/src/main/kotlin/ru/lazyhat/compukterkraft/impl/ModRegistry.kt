@@ -46,6 +46,7 @@ import ru.lazyhat.compukterkraft.common.computer.loot.ConstantLootConditionSeria
 import ru.lazyhat.compukterkraft.common.computer.loot.HasComputerIdLootCondition
 import ru.lazyhat.compukterkraft.common.computer.loot.PlayerCreativeLootCondition
 import ru.lazyhat.compukterkraft.common.computer.menu.ComputerMenuWithoutInventory
+import ru.lazyhat.compukterkraft.common.terminal.item.TerminalItem
 import ru.lazyhat.compukterkraft.common.workbench.block.WorkbenchBlock
 import ru.lazyhat.compukterkraft.common.workbench.block.WorkbenchBlockEntity
 import ru.lazyhat.compukterkraft.common.workbench.data.WorkbenchContainerData
@@ -62,6 +63,7 @@ object ModRegistry {
         const val COMPUTER_ADVANCED = "computer_advanced"
         const val COMPUTER = "computer"
         const val WORKBENCH = "workbench"
+        const val TERMINAL = "terminal"
     }
 
     object Blocks {
@@ -150,6 +152,12 @@ object ModRegistry {
                 Blocks.WORKBENCH,
                 Names.WORKBENCH,
             ) { block, properties -> WorkbenchItem(block, properties) }
+
+        val TERMINAL: DeferredHolder<Item, TerminalItem> =
+            REGISTRY.register(
+                Names.TERMINAL,
+                Supplier { TerminalItem(properties().stacksTo(1)) },
+            )
     }
 
     object LootItemConditionTypes {
@@ -229,6 +237,7 @@ object ModRegistry {
                             .displayItems { _, out ->
                                 out.accept(ItemStack(Items.COMPUTER_ADVANCED.get()))
                                 out.accept(ItemStack(Items.WORKBENCH.get()))
+                                out.accept(ItemStack(Items.TERMINAL.get()))
                             }.build()
                     },
                 )
