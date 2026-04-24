@@ -31,7 +31,6 @@ import net.minecraft.world.entity.player.Player
 import ru.lazyhat.compukterkraft.common.computer.block.checkUsable
 import ru.lazyhat.compukterkraft.common.computer.context.ServerContext
 import ru.lazyhat.compukterkraft.common.computer.menu.ComputerMenu
-import ru.lazyhat.compukterkraft.common.computer.network.client.ComputerTerminalClientMessage
 import ru.lazyhat.compukterkraft.common.computer.network.client.StdoutBytesClientMessage
 import ru.lazyhat.compukterkraft.common.network.ServerNetworking
 import ru.lazyhat.compukterkraft.core.LOGGER
@@ -218,20 +217,11 @@ class ServerComputer(
     private fun syncScreen(handle: ComputerVmHandle) {
         val snapshot = handle.readScreenSnapshot() ?: return
         screenSnapshot.value = snapshot
-        val players = watchingPlayers().takeIf { it.isNotEmpty() } ?: return
-        for (player in players) {
-            ServerNetworking.sendToPlayer(
-                ComputerTerminalClientMessage(player.containerMenu, snapshot),
-                player,
-            )
-        }
+        // Legacy client-bound ComputerTerminalClientMessage broadcast was removed
+        // in Epic 4 — attached clients now receive bytes via StdoutBytesClientMessage
+        // (see [flushTerminalSessions]). Workbench still reads [lastScreenSnapshot]
+        // via its own pipeline.
     }
-
-    private fun watchingPlayers(): List<ServerPlayer> =
-        ServerContext.server.playerList.players.filter { player ->
-            val menu = player.containerMenu
-            menu is ComputerMenu && menu.serverSide.computer.instanceID == instanceID
-        }
 
     // ── Epic 2 terminal sessions ────────────────────────────────────
 

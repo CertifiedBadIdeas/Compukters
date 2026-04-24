@@ -29,11 +29,21 @@ class ClientTerminalBuffer(
     private var buffer: ScreenBuffer = ScreenBuffer(cols, rows, color)
     private var parser: VtParser = VtParser(ScreenBufferVtSink(buffer))
 
+    /**
+     * Becomes `true` after the first non-empty byte chunk has been fed into
+     * this buffer. The terminal screen uses this flag to distinguish the
+     * "Connecting" state (buffer attached, server hasn't flushed yet) from
+     * the "Active" state (at least one frame rendered).
+     */
+    var hasReceivedBytes: Boolean = false
+        private set
+
     val cols: Int get() = buffer.width
     val rows: Int get() = buffer.height
 
     fun applyStdoutBytes(bytes: ByteArray) {
         if (bytes.isEmpty()) return
+        hasReceivedBytes = true
         parser.feed(String(bytes, Charsets.UTF_8))
     }
 

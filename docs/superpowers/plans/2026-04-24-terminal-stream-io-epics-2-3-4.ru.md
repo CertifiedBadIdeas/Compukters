@@ -1,6 +1,6 @@
 # Эпики 2 + 3 + 4 — Терминал определяет размер, Terminal-предмет, чистка (план реализации)
 
-> **Статус (2026-04-24):** Эпик 2 сдан (2.1–2.9). Эпик 3 сдан (3.1, 3.2, 3.3, 3.5; 3.4 фактически ноуп, пока жив снапшот-путь). Эпик 4 частично: задача 4.3 (DECTCEM через VT) сделана; задачи 4.1 (убрать 77×27 из `Config` + переделать `ComputerProfile`), 4.2 (удалить `ComputerTerminalClientMessage`, `ComputerMenuWithoutInventory`, дубликат-синки), а также перенесённые сюда 2.5 (убрать `screenBuffer` из `ComputerTerminalApi`) и 2.10 (снести легаси-клиент-сообщение) **всё ещё не сделаны** — это единый инвазивный cutover, потому что удаление серверного `ScreenBuffer` ломает снапшот-путь Workbench’а, что заставляет и Workbench (3.4) мигрировать на `ClientTerminalBuffer`. Сделать их вместе в отдельной ветке.
+> **Статус (2026-04-24):** Эпик 2 сдан (2.1–2.10). Эпик 3 сдан (3.1, 3.2, 3.3, 3.5; 3.4 пока не сделан — Workbench остаётся на снапшот-пути). Эпик 4 почти сдан: 4.2 (удалить `ComputerTerminalClientMessage` + `MenuSide.Client.screenSnapshot` + `ComputerContainerData.terminalSnapshot`) и 4.3 (DECTCEM через VT) сделаны; 4.1 (убрать 77×27 из `Config` + переделать `ComputerProfile`) и 3.4 (миграция Workbench на байт-поток) остаются и зависят от cutover Workbench — в отдельной ветке.
 
 > **Для агентов:** ОБЯЗАТЕЛЬНЫЙ суб-навык: `superpowers:subagent-driven-development` (рекомендуется) или `superpowers:executing-plans`. Шаги отмечаются чекбоксами `- [ ]`.
 

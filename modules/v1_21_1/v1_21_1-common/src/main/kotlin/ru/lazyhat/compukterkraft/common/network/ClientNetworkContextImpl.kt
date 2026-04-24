@@ -59,13 +59,6 @@ class ClientNetworkContextImpl : ClientNetworkContext {
         ClientTableFormatter(minecraft).display(table)
     }
 
-    override fun handleComputerTerminal(
-        containerId: Int,
-        snapshot: ScreenBufferSnapshot,
-    ) = withCheckedContainerMenu(containerId) {
-        updateTerminal(snapshot)
-    }
-
     override fun handleStdoutBytes(
         containerId: Int,
         bytes: ByteArray,

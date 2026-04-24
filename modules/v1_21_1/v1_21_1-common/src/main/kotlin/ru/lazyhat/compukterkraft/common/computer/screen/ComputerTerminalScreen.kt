@@ -97,7 +97,7 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
     private var announcedRows: Int = DEFAULT_ROWS
 
     init {
-        val (cols, rows) = terminalDimensions(container.clientSide.screenSnapshot)
+        val (cols, rows) = terminalDimensions(container.clientSide.terminalBuffer?.snapshot())
         imageWidth = WorkbenchTerminalMetrics.imageWidth(cols)
         imageHeight = WorkbenchTerminalMetrics.imageHeight(rows, contentTopInset = COMPUTER_CONTENT_TOP)
 
@@ -121,7 +121,7 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
             terminalInput.focused = false
         }
         syncTerminalWindowSize(state)
-        terminalDimensions(menu.clientSide.screenSnapshot).also { dims ->
+        terminalDimensions(menu.clientSide.terminalBuffer?.snapshot()).also { dims ->
             if (dims != lastTerminalDimensions) {
                 lastTerminalDimensions = dims
                 invalidate()
@@ -146,7 +146,7 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
     }
 
     override fun content(): UiElement {
-        val (cols, rows) = terminalDimensions(menu.clientSide.screenSnapshot)
+        val (cols, rows) = terminalDimensions(menu.clientSide.terminalBuffer?.snapshot())
         val layout =
             WorkbenchTerminalMetrics.layout(
                 leftPos = leftPos,
@@ -299,8 +299,11 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
         }
     }
 
-    private fun currentTerminalState(): WorkbenchTerminalViewState =
-        WorkbenchTerminalViewState.from(menu.isComputerOn, menu.clientSide.screenSnapshot)
+    private fun currentTerminalState(): WorkbenchTerminalViewState {
+        val buffer = menu.clientSide.terminalBuffer
+        val snapshot = if (buffer?.hasReceivedBytes == true) buffer.snapshot() else null
+        return WorkbenchTerminalViewState.from(menu.isComputerOn, snapshot)
+    }
 
     private fun syncTerminalWindowSize(state: WorkbenchTerminalViewState) {
         val size =

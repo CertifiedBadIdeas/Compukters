@@ -18,9 +18,6 @@
  */
 package ru.lazyhat.compukterkraft.common.computer.menu
 
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.inventory.AbstractContainerMenu
 import net.minecraft.world.inventory.ContainerData
@@ -32,7 +29,6 @@ import ru.lazyhat.compukterkraft.common.computer.context.ServerComputer
 import ru.lazyhat.compukterkraft.common.computer.data.ComputerContainerData
 import ru.lazyhat.compukterkraft.core.Config
 import ru.lazyhat.compukterkraft.core.block.ComputerFamily
-import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 
 /**
  * Type-safe representation of which side of the network this menu lives on.
@@ -47,31 +43,13 @@ sealed interface MenuSide {
     ) : MenuSide
 
     /**
-     * Client-side state: owns the latest [ScreenBufferSnapshot] as a [StateFlow].
+     * Client-side state: owns the [ClientTerminalBuffer] attached by the
+     * currently-open terminal screen.
      */
-    class Client(
-        initialSnapshot: ScreenBufferSnapshot?,
-    ) : MenuSide {
-        private val _screenSnapshot = MutableStateFlow(initialSnapshot)
-
-        /** Observable screen snapshot — emits whenever the server syncs a new frame. */
-        val screenSnapshotFlow: StateFlow<ScreenBufferSnapshot?> = _screenSnapshot.asStateFlow()
-
-        /** Current screen snapshot (synchronous read). */
-        val screenSnapshot: ScreenBufferSnapshot? get() = _screenSnapshot.value
-
-        /** Update from a network message. */
-        fun updateScreenSnapshot(snapshot: ScreenBufferSnapshot) {
-            _screenSnapshot.value = snapshot
-        }
-
+    class Client : MenuSide {
         /**
          * Stream-I/O terminal buffer. `null` until [attachTerminalBuffer] is
          * called by the open [ComputerTerminalScreen][ru.lazyhat.compukterkraft.common.computer.screen.ComputerTerminalScreen].
-         *
-         * Since Epic 2, terminal rendering prefers this buffer over
-         * [screenSnapshot] when present; the snapshot path is kept for the
-         * Workbench (and for unit tests) until Epic 4.
          */
         var terminalBuffer: ClientTerminalBuffer? = null
             private set
@@ -86,8 +64,6 @@ sealed interface MenuSide {
 
         fun applyStdoutBytes(bytes: ByteArray) {
             terminalBuffer?.applyStdoutBytes(bytes)
-            // Side-effect: update snapshot so Workbench-style consumers see the new frame.
-            terminalBuffer?.snapshot()?.let { updateScreenSnapshot(it) }
         }
     }
 }
@@ -113,14 +89,15 @@ abstract class AbstractComputerMenu(
     /**
      * Type-safe side discriminator.
      * On the server: [MenuSide.Server] — holds the [ServerComputer] + input.
-     * On the client: [MenuSide.Client] — holds the latest [ScreenBufferSnapshot].
+     * On the client: [MenuSide.Client] — holds the [ClientTerminalBuffer]
+     * attached by the open terminal screen.
      */
 
     override val side: MenuSide =
         if (computer != null) {
             MenuSide.Server(computer, ServerInputState(this))
         } else {
-            MenuSide.Client(containerData?.terminalSnapshot)
+            MenuSide.Client()
         }
 
     /** Whether the computer is currently on (synced from server via [ContainerData]). */
@@ -137,13 +114,6 @@ abstract class AbstractComputerMenu(
     override fun stillValid(player: Player): Boolean {
         val server = side as? MenuSide.Server
         return (server == null || server.computer.checkUsable(player)) && canUse(player)
-    }
-
-    override fun updateTerminal(snapshot: ScreenBufferSnapshot) {
-        val client =
-            side as? MenuSide.Client
-                ?: throw UnsupportedOperationException("Cannot update terminal on the server")
-        client.updateScreenSnapshot(snapshot)
     }
 
     override fun handleStdoutBytes(bytes: ByteArray) {

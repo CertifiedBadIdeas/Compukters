@@ -58,9 +58,6 @@ interface ComputerSystemApi {
 }
 
 interface ComputerTerminalApi {
-    /** The underlying screen buffer. Direct access for readLine and other VM-side logic. */
-    val screenBuffer: ScreenBuffer
-
     fun write(text: String)
 
     fun printLine(text: String)

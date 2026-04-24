@@ -21,7 +21,6 @@ package ru.lazyhat.compukterkraft.common.network
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet
 import it.unimi.dsi.fastutil.ints.IntSet
 import net.minecraft.network.FriendlyByteBuf
-import ru.lazyhat.compukterkraft.common.computer.network.client.ComputerTerminalClientMessage
 import ru.lazyhat.compukterkraft.common.computer.network.client.StdoutBytesClientMessage
 import ru.lazyhat.compukterkraft.common.computer.network.server.AttachTerminalServerMessage
 import ru.lazyhat.compukterkraft.common.computer.network.server.ComputerActionServerMessage
@@ -59,8 +58,8 @@ import ru.lazyhat.compukterkraft.common.workbench.network.server.WorkbenchWorksp
  * | ID | Channel              | Class                              | Trigger                                        | State modified on client                      |
  * |----|----------------------|------------------------------------|-------------------------------------------------|-----------------------------------------------|
  * | 10 | `chat_table`         | [ChatTableClientMessage]           | Server sends a formatted table to display in chat | Minecraft chat HUD                            |
- * | 13 | `computer_terminal`  | [ComputerTerminalClientMessage]    | Screen buffer dirty flag set during [ServerComputer.serverTick] | [ComputerMenu.updateTerminal] → client-side [ScreenBufferSnapshot] |
- * | 14 | unused               | —                                  | Reserved for removed computer workspace sync | — |
+ * | 13 | unused               | —                                  | Reserved for removed ComputerTerminalClientMessage (Epic 4)     | —                                             |
+ * | 14 | `stdout_bytes`       | [StdoutBytesClientMessage]         | Server flushes pending VM stdout bytes to attached terminal session | [ClientTerminalBuffer.feed]               |
  * | 15 | `workbench_workspace` | [WorkbenchWorkspaceClientMessage] | Response to a Workbench action or workspace request | [AbstractWorkbenchMenu.updateRemoteState] |
  * | 16 | `workbench_terminal`  | [WorkbenchTerminalClientMessage]  | Target terminal snapshot changed while Workbench is open | [AbstractWorkbenchMenu.updateScreenSnapshot] |
  */
@@ -123,12 +122,6 @@ object NetworkMessages {
             10,
             "chat_table",
             { buf -> ChatTableClientMessage(buf) },
-        )
-    val COMPUTER_TERMINAL: MessageType<ComputerTerminalClientMessage> =
-        registerClientbound(
-            13,
-            "computer_terminal",
-            { buf -> ComputerTerminalClientMessage(buf) },
         )
     val STDOUT_BYTES: MessageType<StdoutBytesClientMessage> =
         registerClientbound(

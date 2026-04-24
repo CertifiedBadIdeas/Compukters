@@ -19,7 +19,6 @@
 package ru.lazyhat.compukterkraft.common.computer.menu
 
 import ru.lazyhat.compukterkraft.core.block.ComputerFamily
-import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 
 /**
  * An instance of [AbstractContainerMenu] which provides a computer. You should implement this if you provide
@@ -27,7 +26,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
  *
  * Server-only and client-only operations are accessed through [side]:
  * - `menu.serverSide.computer` / `menu.serverSide.input` — server-side only
- * - `menu.clientSide.screenSnapshot` — client-side only, nullable until the first terminal sync arrives
+ * - `menu.clientSide.terminalBuffer` — client-side only, nullable until the screen attaches a buffer
  */
 interface ComputerMenu {
     /** Type-safe side discriminator. */
@@ -49,11 +48,6 @@ interface ComputerMenu {
      */
     val clientSide: MenuSide.Client
         get() = side as MenuSide.Client
-
-    /**
-     * Set the current terminal screen snapshot. Called on the client when the server syncs.
-     */
-    fun updateTerminal(snapshot: ScreenBufferSnapshot)
 
     /**
      * Apply a chunk of stdout bytes to the client-side
