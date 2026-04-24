@@ -13,7 +13,7 @@ class ScreenProgramCompilerColorTest {
     fun backgroundColorCompilesBoxToFillRectWithItsOwnColor() {
         val compiler = ScreenProgramCompiler()
 
-        val program =
+        val compiled =
             compiler.compile(
                 ui {
                     box(modifier = Modifier.size(40, 20).background(Color.Red)) { }
@@ -22,7 +22,7 @@ class ScreenProgramCompilerColorTest {
 
         assertEquals(
             listOf(RenderOp.FillRect("root-0", Color.Red)),
-            program.renderProgram.staticOps,
+            compiled.program.renderProgram.staticOps,
         )
     }
 
@@ -30,7 +30,7 @@ class ScreenProgramCompilerColorTest {
     fun textColorCompilesTextToDrawTextWithItsOwnColor() {
         val compiler = ScreenProgramCompiler()
 
-        val program =
+        val compiled =
             compiler.compile(
                 ui {
                     text(
@@ -42,7 +42,7 @@ class ScreenProgramCompilerColorTest {
 
         assertEquals(
             listOf(RenderOp.DrawText("root-0", "Hello", Color.Green)),
-            program.renderProgram.staticOps,
+            compiled.program.renderProgram.staticOps,
         )
     }
 }

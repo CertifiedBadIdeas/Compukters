@@ -2,7 +2,6 @@ package ru.lazyhat.compukterkraft.core.ui.program
 
 enum class InputEventType {
     Click,
-    KeyPressed,
 }
 
 data class InputProgram(

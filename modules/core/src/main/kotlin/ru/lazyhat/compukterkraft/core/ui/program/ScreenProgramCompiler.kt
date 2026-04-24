@@ -2,17 +2,14 @@ package ru.lazyhat.compukterkraft.core.ui.program
 
 import ru.lazyhat.compukterkraft.core.platform.api.FontMetrics
 import ru.lazyhat.compukterkraft.core.ui.foundation.UiElement
-import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.BackgroundModifier
-import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.find
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.findBackground
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.findClickable
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.findZIndex
-import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.zIndex
 
 class ScreenProgramCompiler(
     private val fontMetrics: FontMetrics? = null,
 ) {
-    fun compile(root: UiElement): ScreenProgram {
+    fun compile(root: UiElement): CompiledScreen {
         val resolvedLayout = UiLayoutResolver(rootWidth = 0, rootHeight = 0, fontMetrics = fontMetrics).resolve(root)
         val layoutNodes = resolvedLayout.values.toMutableList()
         val renderOps = mutableListOf<RenderOp>()
@@ -20,6 +17,8 @@ class ScreenProgramCompiler(
         val inputRoutes = mutableListOf<InputRoute>()
         val dynamicLayouts = mutableListOf<DynamicLayoutFragment>()
         val dynamicRenders = mutableListOf<DynamicRenderFragment>()
+        val clickHandlers = mutableMapOf<String, () -> Unit>()
+        val focus = FocusAccumulator()
 
         lower(
             element = root,
@@ -30,13 +29,23 @@ class ScreenProgramCompiler(
             inputRoutes = inputRoutes,
             dynamicLayouts = dynamicLayouts,
             dynamicRenders = dynamicRenders,
+            clickHandlers = clickHandlers,
+            focus = focus,
         )
 
-        return ScreenProgram(
-            layoutProgram = LayoutProgram(layoutNodes, dynamicLayouts),
-            renderProgram = RenderProgram(renderOps, dynamicRenders),
-            hitTestProgram = HitTestProgram(hitRegions.sortedByDescending { it.zIndex }),
-            inputProgram = InputProgram(inputRoutes),
+        val program =
+            ScreenProgram(
+                layoutProgram = LayoutProgram(layoutNodes, dynamicLayouts),
+                renderProgram = RenderProgram(renderOps, dynamicRenders),
+                hitTestProgram = HitTestProgram(hitRegions.sortedByDescending { it.zIndex }),
+                inputProgram = InputProgram(inputRoutes),
+                focusedNodeId = focus.nodeId,
+            )
+
+        return CompiledScreen(
+            program = program,
+            clickHandlers = clickHandlers.toMap(),
+            keyHandler = focus.keyHandler,
         )
     }
 
@@ -49,9 +58,9 @@ class ScreenProgramCompiler(
         inputRoutes: MutableList<InputRoute>,
         dynamicLayouts: MutableList<DynamicLayoutFragment>,
         dynamicRenders: MutableList<DynamicRenderFragment>,
+        clickHandlers: MutableMap<String, () -> Unit>,
+        focus: FocusAccumulator,
     ) {
-        val layoutNode = resolvedLayout.getValue(nodeId)
-
         when (element) {
             is UiElement.Box -> {
                 val backgroundColor = element.modifier.findBackground()?.color
@@ -60,7 +69,7 @@ class ScreenProgramCompiler(
                     renderOps += RenderOp.FillRect(nodeId, backgroundColor)
                 }
 
-                addInteraction(nodeId, element, hitRegions, inputRoutes)
+                addClickInteraction(nodeId, element, hitRegions, inputRoutes, clickHandlers)
 
                 element.children.forEachIndexed { index, child ->
                     lower(
@@ -72,6 +81,8 @@ class ScreenProgramCompiler(
                         inputRoutes = inputRoutes,
                         dynamicLayouts = dynamicLayouts,
                         dynamicRenders = dynamicRenders,
+                        clickHandlers = clickHandlers,
+                        focus = focus,
                     )
                 }
             }
@@ -87,6 +98,8 @@ class ScreenProgramCompiler(
                         inputRoutes = inputRoutes,
                         dynamicLayouts = dynamicLayouts,
                         dynamicRenders = dynamicRenders,
+                        clickHandlers = clickHandlers,
+                        focus = focus,
                     )
                 }
             }
@@ -102,6 +115,8 @@ class ScreenProgramCompiler(
                         inputRoutes = inputRoutes,
                         dynamicLayouts = dynamicLayouts,
                         dynamicRenders = dynamicRenders,
+                        clickHandlers = clickHandlers,
+                        focus = focus,
                     )
                 }
             }
@@ -112,9 +127,7 @@ class ScreenProgramCompiler(
 
             is UiElement.TerminalSurface -> {
                 renderOps += RenderOp.DrawTerminalSurface(nodeId, element.snapshot.evaluate())
-                val regionId = "$nodeId-region"
-                hitRegions += HitRegion(regionId, nodeId, element.modifier.findZIndex()?.zIndex ?: 0)
-                inputRoutes += InputRoute(regionId, InputEventType.KeyPressed, "$regionId-key")
+                focus.claim(nodeId, element.onKey)
             }
 
             is UiElement.IfNode -> {
@@ -131,6 +144,8 @@ class ScreenProgramCompiler(
                             inputRoutes = inputRoutes,
                             dynamicLayouts = dynamicLayouts,
                             dynamicRenders = dynamicRenders,
+                            clickHandlers = clickHandlers,
+                            focus = focus,
                         )
                     }
                 }
@@ -138,18 +153,37 @@ class ScreenProgramCompiler(
         }
     }
 
-    private fun addInteraction(
+    private fun addClickInteraction(
         nodeId: String,
         element: UiElement,
         hitRegions: MutableList<HitRegion>,
         inputRoutes: MutableList<InputRoute>,
+        clickHandlers: MutableMap<String, () -> Unit>,
     ) {
-        if (element.modifier.findClickable() == null) {
-            return
-        }
+        val clickable = element.modifier.findClickable() ?: return
 
         val regionId = "$nodeId-region"
+        val handlerId = "$regionId-click"
         hitRegions += HitRegion(regionId, nodeId, element.modifier.findZIndex()?.zIndex ?: 0)
-        inputRoutes += InputRoute(regionId, InputEventType.Click, "$regionId-click")
+        inputRoutes += InputRoute(regionId, InputEventType.Click, handlerId)
+        clickHandlers[handlerId] = clickable.onClick
+    }
+
+    private class FocusAccumulator {
+        var nodeId: String? = null
+            private set
+        var keyHandler: ((Int) -> Boolean)? = null
+            private set
+
+        fun claim(
+            nodeId: String,
+            onKey: (Int) -> Boolean,
+        ) {
+            check(this.nodeId == null) {
+                "UI DSL: multiple focusable elements are not supported (already focused: '${this.nodeId}', new: '$nodeId')"
+            }
+            this.nodeId = nodeId
+            this.keyHandler = onKey
+        }
     }
 }

@@ -8,6 +8,7 @@ import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.zIndex
 import ru.lazyhat.compukterkraft.core.ui.foundation.ui
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ScreenRuntimeExecutorTest {
@@ -15,7 +16,7 @@ class ScreenRuntimeExecutorTest {
     fun mouseClickDispatchesTopmostClickableRegion() {
         val events = mutableListOf<String>()
         val compiler = ScreenProgramCompiler()
-        val program =
+        val compiled =
             compiler.compile(
                 ui {
                     button(
@@ -29,26 +30,16 @@ class ScreenRuntimeExecutorTest {
                 },
             )
 
-        val executor =
-            ScreenRuntimeExecutor(
-                program = program,
-                slotProvider = { SlotValues() },
-                clickHandlers =
-                    mapOf(
-                        "root-0-region-click" to { events += "behind" },
-                        "root-1-region-click" to { events += "front" },
-                    ),
-                keyHandlers = emptyMap(),
-            )
+        val executor = ScreenRuntimeExecutor(compiled)
 
         assertTrue(executor.mouseClicked(8, 8))
         assertEquals(listOf("front"), events)
     }
 
     @Test
-    fun focusedTerminalReceivesKeyEventsThroughInputProgram() {
+    fun focusedTerminalReceivesKeyEventsRegardlessOfMousePosition() {
         val compiler = ScreenProgramCompiler()
-        val program =
+        val compiled =
             compiler.compile(
                 ui {
                     terminalSurface(
@@ -59,46 +50,44 @@ class ScreenRuntimeExecutorTest {
                 },
             )
 
-        val executor =
-            ScreenRuntimeExecutor(
-                program = program,
-                slotProvider = { SlotValues() },
-                clickHandlers = emptyMap(),
-                keyHandlers = mapOf("root-0-region-key" to { keyCode: Int -> keyCode == 257 }),
-            )
+        val executor = ScreenRuntimeExecutor(compiled)
 
-        assertTrue(executor.mouseClicked(10, 10))
         assertTrue(executor.keyPressed(257))
+        assertFalse(executor.keyPressed(258))
     }
 
     @Test
-    fun mouseClickTargetsOnlyRegionUnderCursor() {
+    fun keyPressedReturnsFalseWhenNoFocusableElementExists() {
+        val compiler = ScreenProgramCompiler()
+        val compiled =
+            compiler.compile(
+                ui {
+                    button({}) { text(text = expr { "Noop" }) }
+                },
+            )
+
+        val executor = ScreenRuntimeExecutor(compiled)
+
+        assertFalse(executor.keyPressed(257))
+    }
+
+    @Test
+    fun mouseClickIgnoresAreasOutsideAnyRegion() {
         val events = mutableListOf<String>()
         val compiler = ScreenProgramCompiler()
-        val program =
+        val compiled =
             compiler.compile(
                 ui {
                     button(
                         modifier = Modifier.offset(4, 4).size(20, 20),
                         onClick = { events += "power" },
                     ) { text(text = expr { "Power" }) }
-
-                    terminalSurface(
-                        snapshot = expr { "snapshot" },
-                        modifier = Modifier.offset(40, 40).size(80, 32),
-                        onKey = { keyCode -> keyCode == 257 },
-                    )
                 },
             )
 
-        val executor =
-            ScreenRuntimeExecutor(
-                program = program,
-                slotProvider = { SlotValues() },
-                clickHandlers = mapOf("root-0-region-click" to { events += "power" }),
-                keyHandlers = mapOf("root-1-region-key" to { keyCode: Int -> keyCode == 257 }),
-            )
+        val executor = ScreenRuntimeExecutor(compiled)
 
-        assertTrue(executor.keyPressed(257))
+        assertFalse(executor.mouseClicked(100, 100))
+        assertTrue(events.isEmpty())
     }
 }

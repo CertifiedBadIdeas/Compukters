@@ -1,6 +1,5 @@
 package ru.lazyhat.compukterkraft.core.ui.foundation
 
-import jdk.internal.org.jline.terminal.Size
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Modifier
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.clickable
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.size
@@ -32,7 +31,6 @@ sealed interface UiElement {
     data class TerminalSurface(
         override val modifier: Modifier,
         val snapshot: ValueExpression<Any?>,
-        val onFocus: () -> Unit = {},
         val onKey: (Int) -> Boolean = { false },
     ) : UiElement
 
@@ -93,10 +91,9 @@ class UiScope {
     fun terminalSurface(
         snapshot: ValueExpression<Any?>,
         modifier: Modifier = Modifier,
-        onFocus: () -> Unit = {},
         onKey: (Int) -> Boolean = { false },
     ) {
-        children += UiElement.TerminalSurface(modifier, snapshot, onFocus, onKey)
+        children += UiElement.TerminalSurface(modifier, snapshot, onKey)
     }
 
     @Suppress("FunctionName")

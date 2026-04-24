@@ -7,9 +7,9 @@ import ru.lazyhat.compukterkraft.common.computer.menu.AbstractComputerMenu
 import ru.lazyhat.compukterkraft.common.computer.screen.ComputerScreen
 import ru.lazyhat.compukterkraft.core.platform.api.FontMetrics
 import ru.lazyhat.compukterkraft.core.ui.foundation.UiElement
+import ru.lazyhat.compukterkraft.core.ui.program.CompiledScreen
 import ru.lazyhat.compukterkraft.core.ui.program.ScreenProgramCompiler
 import ru.lazyhat.compukterkraft.core.ui.program.ScreenRuntimeExecutor
-import ru.lazyhat.compukterkraft.core.ui.program.SlotValues
 
 abstract class DslContainerScreen<T : AbstractComputerMenu>(
     menu: T,
@@ -20,14 +20,9 @@ abstract class DslContainerScreen<T : AbstractComputerMenu>(
         ScreenProgramCompiler(fontMetrics = FontMetrics { text -> font.width(text) })
     }
 
-    abstract fun content(): UiElement
+    private var executor: ScreenRuntimeExecutor? = null
 
-    protected fun renderProgram(
-        graphics: GuiGraphics,
-        executor: ScreenRuntimeExecutor,
-    ) {
-        executor.render(GuiGraphicsRenderBackend(graphics, font))
-    }
+    abstract fun content(): UiElement
 
     override fun renderLabels(
         graphics: GuiGraphics,
@@ -42,20 +37,32 @@ abstract class DslContainerScreen<T : AbstractComputerMenu>(
         mouseX: Int,
         mouseY: Int,
     ) {
-        buildExecutor().render(
-            GuiGraphicsRenderBackend(
-                guiGraphics,
-                font,
-            ),
-        )
+        val rebuilt = rebuildExecutor()
+        rebuilt.render(GuiGraphicsRenderBackend(guiGraphics, font))
     }
 
-    private fun buildExecutor(): ScreenRuntimeExecutor =
-        ScreenRuntimeExecutor(
-            program = compiler.compile(content()),
-            slotProvider = { SlotValues() },
-            clickHandlers = emptyMap(),
-            keyHandlers = emptyMap(),
-            focusHandlers = emptyMap(),
-        )
+    override fun mouseClicked(
+        x: Double,
+        y: Double,
+        button: Int,
+    ): Boolean {
+        val executor = executor
+        return (executor != null && executor.mouseClicked(x.toInt(), y.toInt())) ||
+            super.mouseClicked(x, y, button)
+    }
+
+    override fun keyPressed(
+        keyCode: Int,
+        scanCode: Int,
+        modifiers: Int,
+    ): Boolean {
+        val executor = executor
+        return (executor != null && executor.keyPressed(keyCode)) ||
+            super.keyPressed(keyCode, scanCode, modifiers)
+    }
+
+    private fun rebuildExecutor(): ScreenRuntimeExecutor {
+        val compiled: CompiledScreen = compiler.compile(content())
+        return ScreenRuntimeExecutor(compiled).also { executor = it }
+    }
 }
