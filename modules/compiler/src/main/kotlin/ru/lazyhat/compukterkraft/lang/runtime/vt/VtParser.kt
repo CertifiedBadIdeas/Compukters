@@ -80,7 +80,10 @@ class VtParser(
                 csiBuffer.clear()
                 csiPrivate = false
             }
-            else -> state = State.GROUND
+
+            else -> {
+                state = State.GROUND
+            }
         }
     }
 

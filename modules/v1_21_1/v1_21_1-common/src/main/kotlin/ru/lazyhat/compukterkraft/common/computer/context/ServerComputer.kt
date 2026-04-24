@@ -26,10 +26,8 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import net.minecraft.server.level.ServerLevel
-import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.entity.player.Player
 import ru.lazyhat.compukterkraft.common.computer.block.checkUsable
-import ru.lazyhat.compukterkraft.common.computer.context.ServerContext
 import ru.lazyhat.compukterkraft.common.computer.menu.ComputerMenu
 import ru.lazyhat.compukterkraft.common.computer.network.client.StdoutBytesClientMessage
 import ru.lazyhat.compukterkraft.common.network.ServerNetworking
@@ -230,7 +228,12 @@ class ServerComputer(
 
     // ── Epic 2 terminal sessions ────────────────────────────────────
 
-    fun attachTerminalSession(playerUuid: UUID, containerId: Int, cols: Int, rows: Int) {
+    fun attachTerminalSession(
+        playerUuid: UUID,
+        containerId: Int,
+        cols: Int,
+        rows: Int,
+    ) {
         terminalSessions.compute(playerUuid) { _, existing ->
             if (existing != null) {
                 existing.containerId = containerId
@@ -248,11 +251,15 @@ class ServerComputer(
         }
     }
 
-    private fun bindConsumer(session: TerminalSession, handle: BackgroundComputerVm) {
+    private fun bindConsumer(
+        session: TerminalSession,
+        handle: BackgroundComputerVm,
+    ) {
         if (session.consumer != null) return
-        val consumer = ComputerStdioBroadcaster.Consumer { bytes ->
-            session.pending.add(bytes)
-        }
+        val consumer =
+            ComputerStdioBroadcaster.Consumer { bytes ->
+                session.pending.add(bytes)
+            }
         session.consumer = consumer
         handle.stdioBroadcaster.addConsumer(consumer)
     }
@@ -267,7 +274,11 @@ class ServerComputer(
         }
     }
 
-    fun resizeTerminalSession(playerUuid: UUID, cols: Int, rows: Int) {
+    fun resizeTerminalSession(
+        playerUuid: UUID,
+        cols: Int,
+        rows: Int,
+    ) {
         terminalSessions[playerUuid]?.let {
             it.cols = cols
             it.rows = rows
@@ -288,9 +299,10 @@ class ServerComputer(
         for ((uuid, session) in terminalSessions) {
             val player = server.playerList.getPlayer(uuid)
             val menu = player?.containerMenu
-            val stillOpen = menu is ComputerMenu &&
-                menu.containerId == session.containerId &&
-                menu.serverSide.computer.instanceID == instanceID
+            val stillOpen =
+                menu is ComputerMenu &&
+                    menu.containerId == session.containerId &&
+                    menu.serverSide.computer.instanceID == instanceID
             if (!stillOpen) {
                 toDetach += uuid
                 continue

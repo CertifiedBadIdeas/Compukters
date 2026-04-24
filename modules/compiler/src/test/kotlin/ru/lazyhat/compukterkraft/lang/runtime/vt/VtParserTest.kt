@@ -29,11 +29,17 @@ private class RecordingSink : VtSink {
         events += "print($ch)"
     }
 
-    override fun moveCursor(row: Int?, col: Int?) {
+    override fun moveCursor(
+        row: Int?,
+        col: Int?,
+    ) {
         events += "move($row,$col)"
     }
 
-    override fun cursorRelative(deltaRows: Int, deltaCols: Int) {
+    override fun cursorRelative(
+        deltaRows: Int,
+        deltaCols: Int,
+    ) {
         events += "rel($deltaRows,$deltaCols)"
     }
 
