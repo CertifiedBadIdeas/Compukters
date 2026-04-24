@@ -147,6 +147,11 @@ class ServerComputer(
         val handle = computerManager.getOrCreateVm(instanceID, profile, { label }, logger)
         vmHandle = handle
 
+        // Rebind any already-attached terminal sessions to the new VM's broadcaster.
+        // Consumers on the previous VM (if any) are discarded when the old
+        // BackgroundComputerVm is reaped; here we just create fresh consumers.
+        rebindTerminalConsumers(handle)
+
         handle.boot()
         observeLifecycle(handle)
     }
@@ -226,7 +231,6 @@ class ServerComputer(
     // ── Epic 2 terminal sessions ────────────────────────────────────
 
     fun attachTerminalSession(playerUuid: UUID, containerId: Int, cols: Int, rows: Int) {
-        val handle = vmHandle ?: return
         terminalSessions.compute(playerUuid) { _, existing ->
             if (existing != null) {
                 existing.containerId = containerId
@@ -235,13 +239,31 @@ class ServerComputer(
                 existing
             } else {
                 val session = TerminalSession(playerUuid, containerId, cols, rows)
-                val consumer = ComputerStdioBroadcaster.Consumer { bytes ->
-                    session.pending.add(bytes)
-                }
-                session.consumer = consumer
-                handle.stdioBroadcaster.addConsumer(consumer)
+                // Attach to the currently running VM's broadcaster (if any). If
+                // the computer is off, the consumer is attached later by
+                // [rebindTerminalConsumers] as soon as [turnOn] creates a VM.
+                vmHandle?.let { bindConsumer(session, it) }
                 session
             }
+        }
+    }
+
+    private fun bindConsumer(session: TerminalSession, handle: BackgroundComputerVm) {
+        if (session.consumer != null) return
+        val consumer = ComputerStdioBroadcaster.Consumer { bytes ->
+            session.pending.add(bytes)
+        }
+        session.consumer = consumer
+        handle.stdioBroadcaster.addConsumer(consumer)
+    }
+
+    private fun rebindTerminalConsumers(handle: BackgroundComputerVm) {
+        if (terminalSessions.isEmpty()) return
+        for (session in terminalSessions.values) {
+            // Each session is bound to the previous VM's (now-defunct) broadcaster;
+            // clear the reference so bindConsumer actually does its work.
+            session.consumer = null
+            bindConsumer(session, handle)
         }
     }
 
