@@ -137,7 +137,7 @@ class UiScope {
 
     @Suppress("FunctionName")
     fun If(
-        condition: ValueExpression<Boolean>,
+        condition: Value<Boolean>,
         block: UiScope.() -> Unit,
     ) {
         children += UiElement.IfNode(modifier = Modifier, condition = condition, children = UiScope().apply(block).build())
@@ -145,8 +145,8 @@ class UiScope {
 
     fun overlay(
         modifier: Modifier = Modifier,
-        anchor: ValueExpression<Position>? = null,
-        visible: ValueExpression<Boolean>? = null,
+        anchor: Value<Position>? = null,
+        visible: Value<Boolean>? = null,
         block: UiScope.() -> Unit,
     ) {
         children +=

@@ -6,7 +6,7 @@ package ru.lazyhat.compukterkraft.core.ui.foundation
  *
  * The runtime writes to [isHovered] once per render tick based on the
  * latest mouse position; authors read it from inside
- * [ValueExpression]s or from a canvas draw lambda:
+ * [Value]s or from a canvas draw lambda:
  *
  * ```
  * val buttonHover = HoverState()
