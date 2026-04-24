@@ -33,6 +33,11 @@ interface ClientNetworkContext {
         snapshot: ScreenBufferSnapshot,
     )
 
+    fun handleStdoutBytes(
+        containerId: Int,
+        bytes: ByteArray,
+    )
+
     fun handleWorkbenchWorkspace(
         containerId: Int,
         remoteState: WorkbenchRemoteState,

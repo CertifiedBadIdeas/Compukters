@@ -22,10 +22,13 @@ import it.unimi.dsi.fastutil.ints.IntOpenHashSet
 import it.unimi.dsi.fastutil.ints.IntSet
 import net.minecraft.network.FriendlyByteBuf
 import ru.lazyhat.compukterkraft.common.computer.network.client.ComputerTerminalClientMessage
+import ru.lazyhat.compukterkraft.common.computer.network.client.StdoutBytesClientMessage
+import ru.lazyhat.compukterkraft.common.computer.network.server.AttachTerminalServerMessage
 import ru.lazyhat.compukterkraft.common.computer.network.server.ComputerActionServerMessage
 import ru.lazyhat.compukterkraft.common.computer.network.server.KeyEventServerMessage
 import ru.lazyhat.compukterkraft.common.computer.network.server.MouseEventServerMessage
 import ru.lazyhat.compukterkraft.common.computer.network.server.PasteEventComputerMessage
+import ru.lazyhat.compukterkraft.common.computer.network.server.ResizeTerminalServerMessage
 import ru.lazyhat.compukterkraft.common.network.ClientNetworkContext
 import ru.lazyhat.compukterkraft.common.network.ServerNetworkContext
 import ru.lazyhat.compukterkraft.common.network.text.ChatTableClientMessage
@@ -103,6 +106,18 @@ object NetworkMessages {
             "workbench_input",
             { buf -> WorkbenchInputServerMessage(buf) },
         )
+    val ATTACH_TERMINAL: MessageType<AttachTerminalServerMessage> =
+        registerServerbound(
+            7,
+            "attach_terminal",
+            { buf -> AttachTerminalServerMessage(buf) },
+        )
+    val RESIZE_TERMINAL: MessageType<ResizeTerminalServerMessage> =
+        registerServerbound(
+            8,
+            "resize_terminal",
+            { buf -> ResizeTerminalServerMessage(buf) },
+        )
     val CHAT_TABLE: MessageType<ChatTableClientMessage> =
         registerClientbound(
             10,
@@ -114,6 +129,12 @@ object NetworkMessages {
             13,
             "computer_terminal",
             { buf -> ComputerTerminalClientMessage(buf) },
+        )
+    val STDOUT_BYTES: MessageType<StdoutBytesClientMessage> =
+        registerClientbound(
+            14,
+            "stdout_bytes",
+            { buf -> StdoutBytesClientMessage(buf) },
         )
     val WORKBENCH_WORKSPACE: MessageType<WorkbenchWorkspaceClientMessage> =
         registerClientbound(

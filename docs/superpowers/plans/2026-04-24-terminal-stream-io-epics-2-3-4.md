@@ -1,5 +1,7 @@
 # Epics 2 + 3 + 4 — Client-Driven Terminal, Peripheral Item, Cleanup (Implementation Plan)
 
+> **Status (2026-04-24):** Epic 2 delivered (tasks 2.1–2.9). Tasks 2.5 (remove `screenBuffer` from the API surface) and 2.10 (retire `ComputerTerminalClientMessage`) are intentionally deferred to Epic 4 so the byte-stream path can ship alongside the legacy snapshot path without a big-bang cutover. Dual-path today: `BackgroundComputerVm` owns a `ComputerStdioBroadcaster`, feeds an internal consumer that keeps the server-side `ScreenBuffer` alive for existing Workbench/snapshot consumers, and simultaneously fans out raw bytes to attached clients through `StdoutBytesClientMessage`. Clients run their own `VtParser → ScreenBuffer` via `ClientTerminalBuffer`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Prerequisite:** Epic 1 (`docs/superpowers/plans/2026-04-24-terminal-stream-io-epic-1.md`) is complete. VM emits a VT-100 byte stream via `ComputerStdioApi`; server-side `VmStdioApi` currently feeds it back into a ScreenBuffer. That bridge is the thing Epic 2 replaces.

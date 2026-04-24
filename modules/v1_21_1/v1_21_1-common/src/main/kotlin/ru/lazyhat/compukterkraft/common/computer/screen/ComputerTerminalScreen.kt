@@ -20,11 +20,17 @@ package ru.lazyhat.compukterkraft.common.computer.screen
 
 import net.minecraft.network.chat.Component
 import net.minecraft.world.entity.player.Inventory
+import ru.lazyhat.compukterkraft.common.computer.client.ClientTerminalBuffer
 import ru.lazyhat.compukterkraft.common.computer.input.ClientInputHandler
 import ru.lazyhat.compukterkraft.common.computer.menu.AbstractComputerMenu
+import ru.lazyhat.compukterkraft.common.computer.network.server.AttachTerminalServerMessage
+import ru.lazyhat.compukterkraft.common.computer.network.server.ResizeTerminalServerMessage
+import ru.lazyhat.compukterkraft.common.network.ClientNetworking
 import ru.lazyhat.compukterkraft.common.platform.MinecraftInputProvider
 import ru.lazyhat.compukterkraft.common.ui.dsl.translatable
 import ru.lazyhat.compukterkraft.common.ui.program.DslContainerScreen
+import ru.lazyhat.compukterkraft.core.Config
+import ru.lazyhat.compukterkraft.core.block.ComputerFamily
 import ru.lazyhat.compukterkraft.core.computer.input.ComputerControlAction
 import ru.lazyhat.compukterkraft.core.computer.input.ControlInputEvent
 import ru.lazyhat.compukterkraft.core.gui.TerminalRect
@@ -81,10 +87,31 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
     // invalidate the cached executor.
     private var lastTerminalDimensions = IntSize.Zero
 
+    /**
+     * Columns/rows announced to the server on attach. Epic 2 pragmatic choice:
+     * use the same defaults as the server-side profile so the legacy snapshot
+     * path remains consistent. Epic 4 will let the screen pick true GUI-derived
+     * dimensions once the server-side ScreenBuffer is gone.
+     */
+    private var announcedCols: Int = DEFAULT_COLS
+    private var announcedRows: Int = DEFAULT_ROWS
+
     init {
         val (cols, rows) = terminalDimensions(container.clientSide.screenSnapshot)
         imageWidth = WorkbenchTerminalMetrics.imageWidth(cols)
         imageHeight = WorkbenchTerminalMetrics.imageHeight(rows, contentTopInset = COMPUTER_CONTENT_TOP)
+
+        container.clientSide.attachTerminalBuffer(
+            ClientTerminalBuffer(announcedCols, announcedRows, color = container.family != ComputerFamily.NORMAL),
+        )
+        ClientNetworking.sendToServer(
+            AttachTerminalServerMessage(container, announcedCols, announcedRows),
+        )
+    }
+
+    override fun removed() {
+        super.removed()
+        menu.clientSide.detachTerminalBuffer()
     }
 
     override fun containerTick() {
@@ -291,6 +318,20 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
             // DslContainerScreen detects bounds drift in renderBg and
             // recompiles the program; no explicit invalidate call needed.
         }
+        // Epic 2: keep the byte-stream session dimensions in sync with the
+        // grid we actually render. When the server's snapshot grows or
+        // shrinks (e.g. profile changes, future resize UI) announce the
+        // new size so the broadcaster produces CSI sequences sized for us.
+        if (state is WorkbenchTerminalViewState.Active) {
+            val cols = state.snapshot.width
+            val rows = state.snapshot.height
+            if (cols > 0 && rows > 0 && (cols != announcedCols || rows != announcedRows)) {
+                announcedCols = cols
+                announcedRows = rows
+                menu.clientSide.terminalBuffer?.resizeTo(cols, rows)
+                ClientNetworking.sendToServer(ResizeTerminalServerMessage(menu, cols, rows))
+            }
+        }
     }
 
     private fun terminalDimensions(snapshot: ScreenBufferSnapshot?): IntSize =
@@ -346,6 +387,8 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
     }
 
     private companion object {
+        private val DEFAULT_COLS = Config.DEFAULT_COMPUTER_TERM_WIDTH
+        private val DEFAULT_ROWS = Config.DEFAULT_COMPUTER_TERM_HEIGHT
         private const val COMPUTER_CONTENT_TOP = 8
         private const val STATUS_BUTTON_SIZE = 14
         private const val STATUS_BUTTON_GAP = 6

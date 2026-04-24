@@ -1,5 +1,7 @@
 # Эпики 2 + 3 + 4 — Терминал определяет размер, Terminal-предмет, чистка (план реализации)
 
+> **Статус (2026-04-24):** Эпик 2 сдан (задачи 2.1–2.9). Задачи 2.5 (убрать `screenBuffer` из API) и 2.10 (снести `ComputerTerminalClientMessage`) намеренно перенесены в Эпик 4 — чтобы байтовый поток поехал рядом с легаси-снапшотами без разом-переключения. Текущая двойная дорожка: `BackgroundComputerVm` владеет `ComputerStdioBroadcaster`, кормит внутренний consumer, который продолжает обновлять серверный `ScreenBuffer` для легаси-Workbench/снапшот-потребителей, и параллельно фанаутит сырые байты клиентам через `StdoutBytesClientMessage`. На клиенте живёт свой `VtParser → ScreenBuffer` через `ClientTerminalBuffer`.
+
 > **Для агентов:** ОБЯЗАТЕЛЬНЫЙ суб-навык: `superpowers:subagent-driven-development` (рекомендуется) или `superpowers:executing-plans`. Шаги отмечаются чекбоксами `- [ ]`.
 
 **Предусловие:** Эпик 1 (`docs/superpowers/plans/2026-04-24-terminal-stream-io-epic-1.ru.md`) завершён. VM уже пишет поток VT-100 в `ComputerStdioApi`; серверный `VmStdioApi` пока разбирает его обратно в `ScreenBuffer`. Именно этот мост Эпик 2 и разбирает.
