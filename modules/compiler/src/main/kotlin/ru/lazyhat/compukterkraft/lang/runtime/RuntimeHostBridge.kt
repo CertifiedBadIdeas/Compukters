@@ -31,6 +31,7 @@ internal class RuntimeHostBridge(
             "filesystem" -> invokeFilesystem(functionName, arguments)
             "system" -> invokeSystem(functionName, arguments)
             "terminal" -> invokeTerminal(functionName, arguments)
+            "stdout" -> invokeStdout(functionName, arguments)
             "process" -> invokeProcess(functionName, arguments)
             "strings" -> invokeStrings(functionName, arguments)
             "monitor" -> invokeMonitor(functionName, arguments)
@@ -159,6 +160,21 @@ internal class RuntimeHostBridge(
             }
         }
 
+    private fun invokeStdout(
+        functionName: String,
+        arguments: List<VmValue>,
+    ): VmValue =
+        when (functionName) {
+            "write" -> {
+                runtime.stdio.writeString(arguments[0].asString())
+                VmValue.UnitValue
+            }
+
+            else -> {
+                error("Unknown stdout function $functionName")
+            }
+        }
+
     private suspend fun invokeProcess(
         functionName: String,
         arguments: List<VmValue>,
@@ -218,6 +234,7 @@ internal class RuntimeHostBridge(
                 "filesystem" -> ComputerCapability.FILESYSTEM
                 "system" -> ComputerCapability.SYSTEM
                 "terminal" -> ComputerCapability.TERMINAL
+                "stdout" -> ComputerCapability.TERMINAL
                 "events" -> ComputerCapability.EVENTS
                 "process" -> ComputerCapability.SYSTEM
                 "monitor" -> ComputerCapability.PERIPHERALS

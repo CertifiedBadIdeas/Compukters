@@ -307,6 +307,7 @@ class BackgroundComputerVm(
         val baseModules =
             buildList {
                 defaultRegistry.module("terminal")?.let(::add)
+                defaultRegistry.module("stdout")?.let(::add)
                 defaultRegistry.module("system")?.let(::add)
                 if (ComputerCapability.FILESYSTEM in profile.allowedCapabilities) {
                     defaultRegistry.module("filesystem")?.let(::add)
