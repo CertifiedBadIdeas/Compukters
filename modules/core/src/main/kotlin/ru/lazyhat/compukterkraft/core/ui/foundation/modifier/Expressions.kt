@@ -1,6 +1,7 @@
 package ru.lazyhat.compukterkraft.core.ui.foundation.modifier
 
 import ru.lazyhat.compukterkraft.core.ui.foundation.Color
+import ru.lazyhat.compukterkraft.core.ui.foundation.HoverState
 import ru.lazyhat.compukterkraft.core.ui.foundation.IntSize
 
 data class PaddingModifier(
@@ -137,3 +138,14 @@ data class WeightModifier(
 fun Modifier.weight(weight: Float) = then(WeightModifier(weight))
 
 fun Modifier.findWeight() = find<WeightModifier>()
+
+//
+//
+
+data class HoverableModifier(
+    val state: HoverState,
+) : Modifier.Element
+
+fun Modifier.hoverable(state: HoverState) = then(HoverableModifier(state))
+
+fun Modifier.findHoverable() = find<HoverableModifier>()

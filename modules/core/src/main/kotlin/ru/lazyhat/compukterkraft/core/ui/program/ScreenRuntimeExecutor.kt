@@ -34,6 +34,33 @@ class ScreenRuntimeExecutor(
     var isFocused: Boolean = false
         private set
 
+    /**
+     * Updates every [ru.lazyhat.compukterkraft.core.ui.foundation.HoverState]
+     * bound via `Modifier.hoverable(...)` based on the supplied mouse
+     * position. Call this from the host screen before [render] so that
+     * [ValueExpression]s observed during drawing see the current hover flag.
+     *
+     * Passing `Int.MIN_VALUE` for either coordinate clears all hover states
+     * (useful when the cursor is known to be outside the screen).
+     */
+    fun updateMouse(
+        mouseX: Int,
+        mouseY: Int,
+    ) {
+        for (region in program.hoverRegions) {
+            val frame = program.frames[region.frameIndex]
+            if (frame.visible != null && !frame.visible.evaluate()) {
+                region.state.isHovered = false
+                continue
+            }
+            val origin = frame.origin?.evaluate() ?: Position.Zero
+            val rx = region.x + origin.x
+            val ry = region.y + origin.y
+            region.state.isHovered =
+                mouseX >= rx && mouseY >= ry && mouseX < rx + region.width && mouseY < ry + region.height
+        }
+    }
+
     fun render(backend: RenderBackend) {
         for (frame in program.frames) {
             if (frame.visible != null && !frame.visible.evaluate()) continue

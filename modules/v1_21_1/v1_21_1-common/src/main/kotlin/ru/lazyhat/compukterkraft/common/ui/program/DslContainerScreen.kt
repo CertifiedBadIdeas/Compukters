@@ -75,6 +75,7 @@ abstract class DslContainerScreen<T : AbstractComputerMenu>(
         ) {
             rebuildExecutor()
         }
+        executor?.updateMouse(mouseX, mouseY)
         executor?.render(GuiGraphicsRenderBackend(guiGraphics, font))
     }
 

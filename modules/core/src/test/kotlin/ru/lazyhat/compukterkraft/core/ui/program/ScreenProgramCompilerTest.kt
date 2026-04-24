@@ -2,11 +2,13 @@ package ru.lazyhat.compukterkraft.core.ui.program
 
 import ru.lazyhat.compukterkraft.core.platform.api.FontMetrics
 import ru.lazyhat.compukterkraft.core.ui.foundation.Color
+import ru.lazyhat.compukterkraft.core.ui.foundation.HoverState
 import ru.lazyhat.compukterkraft.core.ui.foundation.expr
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Modifier
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.UiAlignment
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.align
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.background
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.hoverable
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.offset
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.padding
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.size
@@ -259,5 +261,33 @@ class ScreenProgramCompilerTest {
             }
         executor.render(backend)
         assertEquals(Triple(32, 43, Color.Red), recordedCalls.single())
+    }
+
+    @Test
+    fun hoverableModifierFlipsHoverStateBasedOnUpdateMouse() {
+        val state = HoverState()
+        val program =
+            ScreenProgramCompiler().compile(
+                ui {
+                    box(modifier = Modifier.offset(10, 20).size(30, 40).hoverable(state))
+                },
+            )
+
+        val region = program.hoverRegions.single()
+        assertEquals(10, region.x)
+        assertEquals(20, region.y)
+        assertEquals(30, region.width)
+        assertEquals(40, region.height)
+
+        val executor = ScreenRuntimeExecutor(program)
+
+        executor.updateMouse(mouseX = 5, mouseY = 5)
+        assertTrue(!state.isHovered)
+
+        executor.updateMouse(mouseX = 15, mouseY = 30)
+        assertTrue(state.isHovered)
+
+        executor.updateMouse(mouseX = 40, mouseY = 60)
+        assertTrue(!state.isHovered)
     }
 }
