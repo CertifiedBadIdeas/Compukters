@@ -16,6 +16,18 @@ data class IntSize(
             height + other,
         )
 
+    operator fun minus(other: IntSize) =
+        IntSize(
+            width - other.width,
+            height - other.height,
+        )
+
+    operator fun minus(other: Int) =
+        IntSize(
+            width - other,
+            height - other,
+        )
+
     operator fun times(other: Int) =
         IntSize(
             width * other,
