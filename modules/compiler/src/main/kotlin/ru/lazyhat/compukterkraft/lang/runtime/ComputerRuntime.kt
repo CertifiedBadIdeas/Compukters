@@ -27,6 +27,7 @@ interface ComputerRuntime {
     val profile: ComputerProfile
     val system: ComputerSystemApi
     val terminal: ComputerTerminalApi
+    val stdio: ComputerStdioApi
     val filesystem: ComputerFileSystemApi
     val process: ComputerProcessApi
     val redstone: ComputerRedstoneApi

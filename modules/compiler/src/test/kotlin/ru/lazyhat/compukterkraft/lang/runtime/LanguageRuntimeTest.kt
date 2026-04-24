@@ -630,6 +630,15 @@ private class RecordingRuntime(
             ) = Unit
         }
 
+    val stdioWrites: MutableList<String> = mutableListOf()
+
+    override val stdio: ComputerStdioApi =
+        object : ComputerStdioApi {
+            override fun writeString(text: String) {
+                stdioWrites += text
+            }
+        }
+
     override val filesystem: ComputerFileSystemApi =
         object : ComputerFileSystemApi {
             override suspend fun exists(path: String): Boolean = path == "readme.txt" || path == "docs" || path == "tmp"

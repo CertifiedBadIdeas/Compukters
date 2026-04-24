@@ -38,6 +38,7 @@ import ru.lazyhat.compukterkraft.core.computer.vm.api.VmFileSystemApi
 import ru.lazyhat.compukterkraft.core.computer.vm.api.VmPeripheralRegistry
 import ru.lazyhat.compukterkraft.core.computer.vm.api.VmPeripheralRuntimeApi
 import ru.lazyhat.compukterkraft.core.computer.vm.api.VmProcessApi
+import ru.lazyhat.compukterkraft.core.computer.vm.api.VmStdioApi
 import ru.lazyhat.compukterkraft.core.computer.vm.api.VmSystemApi
 import ru.lazyhat.compukterkraft.core.computer.vm.api.VmTerminalApi
 import ru.lazyhat.compukterkraft.lang.api.BuiltinModule
@@ -272,6 +273,7 @@ class BackgroundComputerVm(
                 labelProvider = labelProvider,
             )
         val terminalApi = VmTerminalApi(screenBuffer = screenBuffer, ctx = this)
+        val stdioApi = VmStdioApi(buffer = screenBuffer)
         val filesystemApi = VmFileSystemApi(ctx = this)
         val peripheralsApi = VmPeripheralRuntimeApi(peripheralRegistry)
         val processApi =
@@ -293,6 +295,7 @@ class BackgroundComputerVm(
             runtimeRegistry = runtimeRegistryProfile.baseRegistry,
             systemApi = systemApi,
             terminalApi = terminalApi,
+            stdioApi = stdioApi,
             filesystemApi = filesystemApi,
             processApi = processApi,
             peripheralsApi = peripheralsApi,

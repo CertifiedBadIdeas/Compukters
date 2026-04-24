@@ -26,6 +26,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.ComputerProcessApi
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerProfile
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerRedstoneApi
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerRuntime
+import ru.lazyhat.compukterkraft.lang.runtime.ComputerStdioApi
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerSystemApi
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerTerminalApi
 import ru.lazyhat.compukterkraft.lang.runtime.VmEvent
@@ -37,6 +38,7 @@ class VmRuntime(
     val runtimeRegistry: BuiltinRegistry,
     private val systemApi: ComputerSystemApi,
     private val terminalApi: ComputerTerminalApi,
+    private val stdioApi: ComputerStdioApi,
     private val filesystemApi: ComputerFileSystemApi,
     private val processApi: ComputerProcessApi,
     private val redstoneApi: ComputerRedstoneApi = object : ComputerRedstoneApi {},
@@ -45,6 +47,7 @@ class VmRuntime(
     override val profile: ComputerProfile = initialProfile
     override val system: ComputerSystemApi = systemApi
     override val terminal: ComputerTerminalApi = terminalApi
+    override val stdio: ComputerStdioApi = stdioApi
     override val filesystem: ComputerFileSystemApi = filesystemApi
     override val process: ComputerProcessApi = processApi
     override val redstone: ComputerRedstoneApi = redstoneApi
