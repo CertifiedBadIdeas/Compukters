@@ -77,6 +77,9 @@ abstract class DslContainerScreen<T : AbstractComputerMenu>(
         }
         executor?.updateMouse(mouseX, mouseY)
         executor?.render(GuiGraphicsRenderBackend(guiGraphics, font))
+        executor?.activeTooltip?.let { text ->
+            setTooltipForNextRenderPass(Component.literal(text))
+        }
     }
 
     private fun rebuildExecutor() {

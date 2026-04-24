@@ -12,6 +12,7 @@ import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.hoverable
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.offset
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.padding
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.size
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.tooltip
 import ru.lazyhat.compukterkraft.core.ui.foundation.ui
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -289,5 +290,26 @@ class ScreenProgramCompilerTest {
 
         executor.updateMouse(mouseX = 40, mouseY = 60)
         assertTrue(!state.isHovered)
+    }
+
+    @Test
+    fun tooltipRegionExposesTextOnlyWhenMouseIsInside() {
+        val program =
+            ScreenProgramCompiler().compile(
+                ui {
+                    box(modifier = Modifier.offset(100, 100).size(20, 20).tooltip("Power"))
+                },
+            )
+
+        val executor = ScreenRuntimeExecutor(program)
+
+        executor.updateMouse(mouseX = 0, mouseY = 0)
+        assertNull(executor.activeTooltip)
+
+        executor.updateMouse(mouseX = 110, mouseY = 110)
+        assertEquals("Power", executor.activeTooltip)
+
+        executor.updateMouse(mouseX = 200, mouseY = 200)
+        assertNull(executor.activeTooltip)
     }
 }

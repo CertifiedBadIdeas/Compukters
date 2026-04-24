@@ -8,6 +8,7 @@ import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.findBackground
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.findClickable
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.findHoverable
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.findSize
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.findTooltip
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.findZIndex
 
 /**
@@ -37,6 +38,7 @@ class ScreenProgramCompiler(
         val descriptors = mutableListOf<FrameDescriptor>()
         val hitRegions = mutableListOf<HitRegion>()
         val hoverRegions = mutableListOf<HoverRegion>()
+        val tooltipRegions = mutableListOf<TooltipRegion>()
         val focus = FocusAccumulator()
 
         val rootSize = root.modifier.findSize()?.size
@@ -57,6 +59,7 @@ class ScreenProgramCompiler(
             ops = rootOps,
             hitRegions = hitRegions,
             hoverRegions = hoverRegions,
+            tooltipRegions = tooltipRegions,
             frames = frames,
             descriptors = descriptors,
             focus = focus,
@@ -71,6 +74,7 @@ class ScreenProgramCompiler(
                 },
             hitRegions = hitRegions.sortedByDescending { it.zIndex },
             hoverRegions = hoverRegions.toList(),
+            tooltipRegions = tooltipRegions.toList(),
             focusedNodeId = focus.nodeId,
             focusRegion = focus.region,
             keyHandler = focus.handler,
@@ -84,13 +88,14 @@ class ScreenProgramCompiler(
         ops: MutableList<RenderOp>,
         hitRegions: MutableList<HitRegion>,
         hoverRegions: MutableList<HoverRegion>,
+        tooltipRegions: MutableList<TooltipRegion>,
         frames: MutableList<MutableList<RenderOp>>,
         descriptors: MutableList<FrameDescriptor>,
         focus: FocusAccumulator,
         frameIndex: Int,
     ) {
         if (element is UiElement.Overlay) {
-            lowerOverlay(element, nodeId, layout, hitRegions, hoverRegions, frames, descriptors, focus)
+            lowerOverlay(element, nodeId, layout, hitRegions, hoverRegions, tooltipRegions, frames, descriptors, focus)
             return
         }
 
@@ -105,6 +110,18 @@ class ScreenProgramCompiler(
                     width = node.width,
                     height = node.height,
                     state = hoverable.state,
+                )
+        }
+        element.modifier.findTooltip()?.let { tooltip ->
+            tooltipRegions +=
+                TooltipRegion(
+                    nodeId = nodeId,
+                    frameIndex = frameIndex,
+                    x = node.x,
+                    y = node.y,
+                    width = node.width,
+                    height = node.height,
+                    text = tooltip.text,
                 )
         }
         when (element) {
@@ -126,19 +143,55 @@ class ScreenProgramCompiler(
                         )
                 }
                 element.children.forEachIndexed { index, child ->
-                    lower(child, "$nodeId-$index", layout, ops, hitRegions, hoverRegions, frames, descriptors, focus, frameIndex)
+                    lower(
+                        child,
+                        "$nodeId-$index",
+                        layout,
+                        ops,
+                        hitRegions,
+                        hoverRegions,
+                        tooltipRegions,
+                        frames,
+                        descriptors,
+                        focus,
+                        frameIndex,
+                    )
                 }
             }
 
             is UiElement.Row -> {
                 element.children.forEachIndexed { index, child ->
-                    lower(child, "$nodeId-$index", layout, ops, hitRegions, hoverRegions, frames, descriptors, focus, frameIndex)
+                    lower(
+                        child,
+                        "$nodeId-$index",
+                        layout,
+                        ops,
+                        hitRegions,
+                        hoverRegions,
+                        tooltipRegions,
+                        frames,
+                        descriptors,
+                        focus,
+                        frameIndex,
+                    )
                 }
             }
 
             is UiElement.Column -> {
                 element.children.forEachIndexed { index, child ->
-                    lower(child, "$nodeId-$index", layout, ops, hitRegions, hoverRegions, frames, descriptors, focus, frameIndex)
+                    lower(
+                        child,
+                        "$nodeId-$index",
+                        layout,
+                        ops,
+                        hitRegions,
+                        hoverRegions,
+                        tooltipRegions,
+                        frames,
+                        descriptors,
+                        focus,
+                        frameIndex,
+                    )
                 }
             }
 
@@ -185,6 +238,7 @@ class ScreenProgramCompiler(
                         subOps,
                         hitRegions,
                         hoverRegions,
+                        tooltipRegions,
                         frames,
                         descriptors,
                         focus,
@@ -205,6 +259,7 @@ class ScreenProgramCompiler(
         parentLayout: Map<String, LayoutNode>,
         hitRegions: MutableList<HitRegion>,
         hoverRegions: MutableList<HoverRegion>,
+        tooltipRegions: MutableList<TooltipRegion>,
         frames: MutableList<MutableList<RenderOp>>,
         descriptors: MutableList<FrameDescriptor>,
         focus: FocusAccumulator,
@@ -229,6 +284,7 @@ class ScreenProgramCompiler(
                 subOps,
                 hitRegions,
                 hoverRegions,
+                tooltipRegions,
                 frames,
                 descriptors,
                 focus,
