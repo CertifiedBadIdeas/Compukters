@@ -76,6 +76,10 @@ private class RecordingSink : VtSink {
     override fun backspace() {
         events += "bs"
     }
+
+    override fun setCursorVisible(visible: Boolean) {
+        events += "cursorVisible($visible)"
+    }
 }
 
 class VtParserTest {
@@ -138,5 +142,35 @@ class VtParserTest {
         parser.feed(";5H")
         parser.feed("X")
         assertEquals(listOf("move(3,5)", "print(X)"), sink.events)
+    }
+
+    @Test
+    fun `DECTCEM show cursor emits setCursorVisible(true)`() {
+        val sink = RecordingSink()
+        VtParser(sink).feed("\u001B[?25h")
+        assertEquals(listOf("cursorVisible(true)"), sink.events)
+    }
+
+    @Test
+    fun `DECTCEM hide cursor emits setCursorVisible(false)`() {
+        val sink = RecordingSink()
+        VtParser(sink).feed("\u001B[?25l")
+        assertEquals(listOf("cursorVisible(false)"), sink.events)
+    }
+
+    @Test
+    fun `DECTCEM private mode with unknown param is ignored`() {
+        val sink = RecordingSink()
+        VtParser(sink).feed("\u001B[?7h")
+        assertEquals(emptyList(), sink.events)
+    }
+
+    @Test
+    fun `DECTCEM does not leak into subsequent non-private CSI`() {
+        val sink = RecordingSink()
+        val parser = VtParser(sink)
+        parser.feed("\u001B[?25h")
+        parser.feed("\u001B[2;3H")
+        assertEquals(listOf("cursorVisible(true)", "move(2,3)"), sink.events)
     }
 }

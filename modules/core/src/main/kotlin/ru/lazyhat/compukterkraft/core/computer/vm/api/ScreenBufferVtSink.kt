@@ -119,4 +119,9 @@ class ScreenBufferVtSink(
             buffer.setCursor(buffer.cursorX - 1, buffer.cursorY)
         }
     }
+
+    override fun setCursorVisible(visible: Boolean) {
+        // Maps DECTCEM (CSI ? 25 h/l) to the ScreenBuffer's existing cursor-blink flag.
+        buffer.setCursorBlink(visible)
+    }
 }

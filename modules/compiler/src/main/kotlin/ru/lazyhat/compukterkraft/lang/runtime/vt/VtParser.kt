@@ -45,6 +45,12 @@ class VtParser(
     private var state: State = State.GROUND
     private val csiBuffer: StringBuilder = StringBuilder()
 
+    /**
+     * DEC private-mode flag. Set when the first CSI intermediate char is `?`
+     * (e.g. `CSI ? 25 h`). Consumed and cleared when the CSI terminator fires.
+     */
+    private var csiPrivate: Boolean = false
+
     fun feed(chunk: String) {
         for (ch in chunk) feedChar(ch)
     }
@@ -72,18 +78,34 @@ class VtParser(
             '[' -> {
                 state = State.CSI
                 csiBuffer.clear()
+                csiPrivate = false
             }
             else -> state = State.GROUND
         }
     }
 
     private fun csi(ch: Char) {
+        if (csiBuffer.isEmpty() && !csiPrivate && ch == '?') {
+            csiPrivate = true
+            return
+        }
         if (ch in '0'..'9' || ch == ';') {
             csiBuffer.append(ch)
             return
         }
         val params = parseParams(csiBuffer.toString())
+        val isPrivate = csiPrivate
         state = State.GROUND
+        csiPrivate = false
+        if (isPrivate) {
+            // DEC private mode set/reset. Only DECTCEM (mode 25) is supported.
+            when (ch) {
+                'h' -> if (params.getOrNull(0) == 25) sink.setCursorVisible(true)
+                'l' -> if (params.getOrNull(0) == 25) sink.setCursorVisible(false)
+                else -> Unit // unknown private mode terminator
+            }
+            return
+        }
         when (ch) {
             'H', 'f' -> sink.moveCursor(params.getOrNull(0), params.getOrNull(1))
             'J' -> sink.eraseDisplay(params.getOrNull(0) ?: 0)

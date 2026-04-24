@@ -72,4 +72,15 @@ interface VtSink {
 
     /** Raw `\b`: cursor moves left, no erase. */
     fun backspace()
+
+    /**
+     * DEC private mode 25 (DECTCEM) — cursor visibility toggle.
+     * Emitted for `CSI ? 25 h` (visible = true) and `CSI ? 25 l` (visible = false).
+     * Sinks that don't track cursor visibility can leave the default no-op.
+     */
+    fun setCursorVisible(visible: Boolean) {
+        // Default: ignore. Server-side sinks (CursorTracker) don't render,
+        // so they don't need to react. Client-side sinks map this to the
+        // buffer's cursor-blink state.
+    }
 }
