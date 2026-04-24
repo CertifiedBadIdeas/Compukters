@@ -23,10 +23,12 @@ import net.minecraft.world.entity.player.Inventory
 import ru.lazyhat.compukterkraft.common.computer.menu.AbstractComputerMenu
 import ru.lazyhat.compukterkraft.common.ui.program.DslContainerScreen
 import ru.lazyhat.compukterkraft.core.ui.foundation.Color
-import ru.lazyhat.compukterkraft.core.ui.foundation.Modifier
-import ru.lazyhat.compukterkraft.core.ui.foundation.UiAlignment
 import ru.lazyhat.compukterkraft.core.ui.foundation.UiElement
-import ru.lazyhat.compukterkraft.core.ui.foundation.textExpr
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Modifier
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.UiAlignment
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.align
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.background
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.size
 import ru.lazyhat.compukterkraft.core.ui.foundation.ui
 
 class ComputerTerminalScreen<T : AbstractComputerMenu>(
@@ -35,17 +37,17 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
     title: Component,
 ) : DslContainerScreen<T>(container, player, title) {
     override fun content(): UiElement =
-        ui(width, height) {
+        ui(Modifier.size(width, height)) {
             box(
                 Modifier
-                    .size(width / 3 * 2, height / 3 * 2)
+                    .size(width, height)
                     .align(UiAlignment.Center)
-                    .backgroundColor(Color.Blue),
+                    .background(Color.Blue),
             ) {
                 text(
-                    textExpr { "Some text" },
-                    Modifier.align(UiAlignment.Center).textColor(Color.White),
-                )
+                    Modifier.align(UiAlignment.Center),
+                    Color.White,
+                ) { "Some text" }
             }
         }
 }

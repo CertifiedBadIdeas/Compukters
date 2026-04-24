@@ -5,5 +5,4 @@ data class ScreenProgram(
     val renderProgram: RenderProgram,
     val hitTestProgram: HitTestProgram,
     val inputProgram: InputProgram,
-    val focusProgram: FocusProgram,
 )

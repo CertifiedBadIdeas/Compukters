@@ -1,9 +1,16 @@
 package ru.lazyhat.compukterkraft.core.ui.program
 
 import ru.lazyhat.compukterkraft.core.platform.api.FontMetrics
-import ru.lazyhat.compukterkraft.core.ui.foundation.UiAlignment
 import ru.lazyhat.compukterkraft.core.ui.foundation.UiElement
-import ru.lazyhat.compukterkraft.core.ui.foundation.UiModifier
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Modifier
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Padding
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Position
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.UiAlignment
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.findAlignment
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.findOffset
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.findPadding
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.findSize
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.findWeight
 
 class UiLayoutResolver(
     private val rootWidth: Int,
@@ -29,22 +36,40 @@ class UiLayoutResolver(
     ) {
         val width = forcedWidth ?: explicitOrIntrinsicWidth(element, parentWidth)
         val height = forcedHeight ?: explicitOrIntrinsicHeight(element, parentHeight)
-        val alignedX = alignX(parentX, parentWidth, width, element.modifier.alignment)
-        val alignedY = alignY(parentY, parentHeight, height, element.modifier.alignment)
-        val x = alignedX + element.modifier.x
-        val y = alignedY + element.modifier.y
+
+        val alignment = element.modifier.findAlignment()?.alignment
+        val position = element.modifier.findOffset()?.position ?: Position.Zero
+
+        val alignedX = alignX(parentX, parentWidth, width, alignment)
+        val alignedY = alignY(parentY, parentHeight, height, alignment)
+
+        val x = alignedX + position.x
+        val y = alignedY + position.y
 
         resolved[nodeId] = LayoutNode(nodeId, x, y, width, height)
 
         when (element) {
-            is UiElement.Box -> resolveBoxChildren(element.children, nodeId, x, y, width, height, element.modifier, resolved)
-            is UiElement.Row -> resolveRowChildren(element.children, nodeId, x, y, width, height, element.modifier, resolved)
-            is UiElement.Column -> resolveColumnChildren(element.children, nodeId, x, y, width, height, element.modifier, resolved)
-            is UiElement.IfNode ->
+            is UiElement.Box -> {
+                resolveBoxChildren(element.children, nodeId, x, y, width, height, element.modifier, resolved)
+            }
+
+            is UiElement.Row -> {
+                resolveRowChildren(element.children, nodeId, x, y, width, height, element.modifier, resolved)
+            }
+
+            is UiElement.Column -> {
+                resolveColumnChildren(element.children, nodeId, x, y, width, height, element.modifier, resolved)
+            }
+
+            is UiElement.IfNode -> {
                 element.children.forEachIndexed { index, child ->
                     resolveNode(child, "$nodeId-$index", x, y, width, height, resolved)
                 }
-            is UiElement.Text, is UiElement.TerminalSurface -> Unit
+            }
+
+            is UiElement.Text, is UiElement.TerminalSurface -> {
+                Unit
+            }
         }
     }
 
@@ -55,13 +80,15 @@ class UiLayoutResolver(
         y: Int,
         width: Int,
         height: Int,
-        modifier: UiModifier,
+        modifier: Modifier,
         resolved: MutableMap<String, LayoutNode>,
     ) {
-        val contentX = x + modifier.padding.left
-        val contentY = y + modifier.padding.top
-        val contentWidth = width - modifier.padding.left - modifier.padding.right
-        val contentHeight = height - modifier.padding.top - modifier.padding.bottom
+        val padding = modifier.findPadding()?.padding ?: Padding.Zero
+
+        val contentX = x + padding.left
+        val contentY = y + padding.top
+        val contentWidth = width - padding.left - padding.right
+        val contentHeight = height - padding.top - padding.bottom
 
         children.forEachIndexed { index, child ->
             resolveNode(child, "$nodeId-$index", contentX, contentY, contentWidth, contentHeight, resolved)
@@ -75,23 +102,27 @@ class UiLayoutResolver(
         y: Int,
         width: Int,
         height: Int,
-        modifier: UiModifier,
+        modifier: Modifier,
         resolved: MutableMap<String, LayoutNode>,
     ) {
-        val contentX = x + modifier.padding.left
-        val contentY = y + modifier.padding.top
-        val contentWidth = width - modifier.padding.left - modifier.padding.right
-        val contentHeight = height - modifier.padding.top - modifier.padding.bottom
-        val fixedWidth = children.filter { it.modifier.weight == null }.sumOf { primaryWidthForRow(it) }
-        val totalWeight = children.sumOf { (it.modifier.weight ?: 0f).toDouble() }.toFloat()
+        val padding = modifier.findPadding()?.padding ?: Padding.Zero
+
+        val contentX = x + padding.left
+        val contentY = y + padding.top
+        val contentWidth = width - padding.left - padding.right
+        val contentHeight = height - padding.top - padding.bottom
+
+        val fixedWidth = children.filter { it.modifier.findWeight() == null }.sumOf { primaryWidthForRow(it) }
+        val totalWeight = children.sumOf { (it.modifier.findWeight()?.weight ?: 0f).toDouble() }.toFloat()
+
         val remainingWidth = (contentWidth - fixedWidth).coerceAtLeast(0)
         var cursorX = contentX
         var assignedWeightedWidth = 0
-        val weightedChildren = children.count { it.modifier.weight != null }
+        val weightedChildren = children.count { it.modifier.findWeight() != null }
         var weightedIndex = 0
 
         children.forEachIndexed { index, child ->
-            val childWeight = child.modifier.weight
+            val childWeight = child.modifier.findWeight()?.weight
             val childWidth =
                 if (childWeight != null && totalWeight > 0f) {
                     weightedIndex += 1
@@ -105,10 +136,11 @@ class UiLayoutResolver(
                 } else {
                     primaryWidthForRow(child)
                 }
-            val childHeight = when (child.modifier.alignment) {
-                UiAlignment.Stretch -> contentHeight
-                else -> explicitOrIntrinsicHeight(child, contentHeight)
-            }
+            val childHeight =
+                when (child.modifier.findAlignment()?.alignment) {
+                    UiAlignment.Stretch -> contentHeight
+                    else -> explicitOrIntrinsicHeight(child, contentHeight)
+                }
 
             resolveNode(
                 child,
@@ -132,23 +164,27 @@ class UiLayoutResolver(
         y: Int,
         width: Int,
         height: Int,
-        modifier: UiModifier,
+        modifier: Modifier,
         resolved: MutableMap<String, LayoutNode>,
     ) {
-        val contentX = x + modifier.padding.left
-        val contentY = y + modifier.padding.top
-        val contentWidth = width - modifier.padding.left - modifier.padding.right
-        val contentHeight = height - modifier.padding.top - modifier.padding.bottom
-        val fixedHeight = children.filter { it.modifier.weight == null }.sumOf { primaryHeightForColumn(it) }
-        val totalWeight = children.sumOf { (it.modifier.weight ?: 0f).toDouble() }.toFloat()
+        val padding = modifier.findPadding()?.padding ?: Padding.Zero
+
+        val contentX = x + padding.left
+        val contentY = y + padding.top
+        val contentWidth = width - padding.left - padding.right
+        val contentHeight = height - padding.top - padding.bottom
+
+        val fixedHeight = children.filter { it.modifier.findWeight() == null }.sumOf { primaryHeightForColumn(it) }
+        val totalWeight = children.sumOf { (it.modifier.findWeight()?.weight ?: 0f).toDouble() }.toFloat()
+
         val remainingHeight = (contentHeight - fixedHeight).coerceAtLeast(0)
         var cursorY = contentY
         var assignedWeightedHeight = 0
-        val weightedChildren = children.count { it.modifier.weight != null }
+        val weightedChildren = children.count { it.modifier.findWeight() != null }
         var weightedIndex = 0
 
         children.forEachIndexed { index, child ->
-            val childWeight = child.modifier.weight
+            val childWeight = child.modifier.findWeight()?.weight
             val childHeight =
                 if (childWeight != null && totalWeight > 0f) {
                     weightedIndex += 1
@@ -162,10 +198,11 @@ class UiLayoutResolver(
                 } else {
                     primaryHeightForColumn(child)
                 }
-            val childWidth = when (child.modifier.alignment) {
-                UiAlignment.Stretch -> contentWidth
-                else -> explicitOrIntrinsicWidth(child, contentWidth)
-            }
+            val childWidth =
+                when (child.modifier.findAlignment()?.alignment) {
+                    UiAlignment.Stretch -> contentWidth
+                    else -> explicitOrIntrinsicWidth(child, contentWidth)
+                }
 
             resolveNode(
                 child,
@@ -210,7 +247,10 @@ class UiLayoutResolver(
         element: UiElement,
         fallbackWidth: Int,
     ): Int =
-        element.modifier.width ?: when (element) {
+        element.modifier
+            .findSize()
+            ?.size
+            ?.width ?: when (element) {
             is UiElement.Text -> fontMetrics?.width(element.value.evaluate()) ?: fallbackWidth
             else -> fallbackWidth
         }
@@ -219,19 +259,28 @@ class UiLayoutResolver(
         element: UiElement,
         fallbackHeight: Int,
     ): Int =
-        element.modifier.height ?: when (element) {
+        element.modifier
+            .findSize()
+            ?.size
+            ?.height ?: when (element) {
             is UiElement.Text -> DEFAULT_TEXT_HEIGHT
             else -> fallbackHeight
         }
 
     private fun primaryWidthForRow(element: UiElement): Int =
-        element.modifier.width ?: when (element) {
+        element.modifier
+            .findSize()
+            ?.size
+            ?.width ?: when (element) {
             is UiElement.Text -> fontMetrics?.width(element.value.evaluate()) ?: 0
             else -> 0
         }
 
     private fun primaryHeightForColumn(element: UiElement): Int =
-        element.modifier.height ?: when (element) {
+        element.modifier
+            .findSize()
+            ?.size
+            ?.height ?: when (element) {
             is UiElement.Text -> DEFAULT_TEXT_HEIGHT
             else -> 0
         }

@@ -5,7 +5,6 @@ class ScreenRuntimeExecutor(
     private val slotProvider: () -> SlotValues,
     private val clickHandlers: Map<String, () -> Unit>,
     private val keyHandlers: Map<String, (Int) -> Boolean>,
-    private val focusHandlers: Map<String, () -> Unit> = emptyMap(),
 ) {
     private var focusedRegionId: String? = null
 
@@ -30,26 +29,23 @@ class ScreenRuntimeExecutor(
         }
     }
 
-    fun mouseClicked(x: Int, y: Int): Boolean {
+    fun mouseClicked(
+        x: Int,
+        y: Int,
+    ): Boolean {
         val hitRegion =
             program.hitTestProgram.regions.firstOrNull { region ->
                 val bounds = boundsFor(region.nodeId)
                 x >= bounds.x && y >= bounds.y && x < bounds.x + bounds.width && y < bounds.y + bounds.height
             } ?: return false
-        var consumed = false
 
-        if (hitRegion.focusable) {
-            focusedRegionId = hitRegion.regionId
-            focusHandlers[hitRegion.regionId]?.invoke()
-            consumed = true
-        }
-
-        val route = program.inputProgram.routes.firstOrNull {
-            it.regionId == hitRegion.regionId && it.eventType == InputEventType.Click
-        }
+        val route =
+            program.inputProgram.routes.firstOrNull {
+                it.regionId == hitRegion.regionId && it.eventType == InputEventType.Click
+            }
 
         if (route == null) {
-            return consumed
+            return false
         }
 
         clickHandlers[route.handlerId]?.invoke()
@@ -57,10 +53,11 @@ class ScreenRuntimeExecutor(
     }
 
     fun keyPressed(keyCode: Int): Boolean {
-        val regionId = focusedRegionId ?: return false
-        val route = program.inputProgram.routes.firstOrNull {
-            it.regionId == regionId && it.eventType == InputEventType.KeyPressed
-        } ?: return false
+        val regionId = focusedRegionId ?: return false // TODO RETURN FOCUS TO PROGRAM, ФОКУС НУЖЕН ДЛЯ ЗАХВАТА КЛАВИШ ОКАЗЫВАЕТСЯ ))))
+        val route =
+            program.inputProgram.routes.firstOrNull {
+                it.regionId == regionId && it.eventType == InputEventType.KeyPressed
+            } ?: return false
 
         return keyHandlers[route.handlerId]?.invoke(keyCode) ?: false
     }
