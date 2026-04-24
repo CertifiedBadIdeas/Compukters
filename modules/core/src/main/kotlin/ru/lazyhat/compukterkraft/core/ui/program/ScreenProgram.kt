@@ -2,6 +2,7 @@ package ru.lazyhat.compukterkraft.core.ui.program
 
 import ru.lazyhat.compukterkraft.core.ui.foundation.CanvasScope
 import ru.lazyhat.compukterkraft.core.ui.foundation.Color
+import ru.lazyhat.compukterkraft.core.ui.foundation.HoverState
 import ru.lazyhat.compukterkraft.core.ui.foundation.ValueExpression
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Position
 
@@ -20,6 +21,7 @@ import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Position
 data class ScreenProgram(
     val frames: List<RenderFrame>,
     val hitRegions: List<HitRegion>,
+    val hoverRegions: List<HoverRegion> = emptyList(),
     val focusedNodeId: String? = null,
     val focusRegion: FocusRegion? = null,
     val keyHandler: FocusHandler? = null,
@@ -125,4 +127,19 @@ data class HitRegion(
     val height: Int,
     val zIndex: Int,
     val onClick: () -> Unit,
+)
+
+/**
+ * A rectangle whose [HoverState] flag is updated each render tick based on
+ * mouse position. Coordinates follow the same baked/frame-relative scheme
+ * as [HitRegion].
+ */
+data class HoverRegion(
+    val nodeId: String,
+    val frameIndex: Int,
+    val x: Int,
+    val y: Int,
+    val width: Int,
+    val height: Int,
+    val state: HoverState,
 )

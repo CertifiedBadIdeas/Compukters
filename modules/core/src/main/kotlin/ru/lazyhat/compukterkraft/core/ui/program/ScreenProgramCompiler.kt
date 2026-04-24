@@ -6,6 +6,7 @@ import ru.lazyhat.compukterkraft.core.ui.foundation.ValueExpression
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Position
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.findBackground
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.findClickable
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.findHoverable
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.findSize
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.findZIndex
 
@@ -35,6 +36,7 @@ class ScreenProgramCompiler(
         val frames = mutableListOf<MutableList<RenderOp>>()
         val descriptors = mutableListOf<FrameDescriptor>()
         val hitRegions = mutableListOf<HitRegion>()
+        val hoverRegions = mutableListOf<HoverRegion>()
         val focus = FocusAccumulator()
 
         val rootSize = root.modifier.findSize()?.size
@@ -54,6 +56,7 @@ class ScreenProgramCompiler(
             layout = rootLayout,
             ops = rootOps,
             hitRegions = hitRegions,
+            hoverRegions = hoverRegions,
             frames = frames,
             descriptors = descriptors,
             focus = focus,
@@ -67,6 +70,7 @@ class ScreenProgramCompiler(
                     RenderFrame(origin = descriptor.origin, visible = descriptor.visible, ops = ops.toList())
                 },
             hitRegions = hitRegions.sortedByDescending { it.zIndex },
+            hoverRegions = hoverRegions.toList(),
             focusedNodeId = focus.nodeId,
             focusRegion = focus.region,
             keyHandler = focus.handler,
@@ -79,17 +83,30 @@ class ScreenProgramCompiler(
         layout: Map<String, LayoutNode>,
         ops: MutableList<RenderOp>,
         hitRegions: MutableList<HitRegion>,
+        hoverRegions: MutableList<HoverRegion>,
         frames: MutableList<MutableList<RenderOp>>,
         descriptors: MutableList<FrameDescriptor>,
         focus: FocusAccumulator,
         frameIndex: Int,
     ) {
         if (element is UiElement.Overlay) {
-            lowerOverlay(element, nodeId, layout, hitRegions, frames, descriptors, focus)
+            lowerOverlay(element, nodeId, layout, hitRegions, hoverRegions, frames, descriptors, focus)
             return
         }
 
         val node = layout[nodeId] ?: return
+        element.modifier.findHoverable()?.let { hoverable ->
+            hoverRegions +=
+                HoverRegion(
+                    nodeId = nodeId,
+                    frameIndex = frameIndex,
+                    x = node.x,
+                    y = node.y,
+                    width = node.width,
+                    height = node.height,
+                    state = hoverable.state,
+                )
+        }
         when (element) {
             is UiElement.Box -> {
                 element.modifier.findBackground()?.let { bg ->
@@ -109,19 +126,19 @@ class ScreenProgramCompiler(
                         )
                 }
                 element.children.forEachIndexed { index, child ->
-                    lower(child, "$nodeId-$index", layout, ops, hitRegions, frames, descriptors, focus, frameIndex)
+                    lower(child, "$nodeId-$index", layout, ops, hitRegions, hoverRegions, frames, descriptors, focus, frameIndex)
                 }
             }
 
             is UiElement.Row -> {
                 element.children.forEachIndexed { index, child ->
-                    lower(child, "$nodeId-$index", layout, ops, hitRegions, frames, descriptors, focus, frameIndex)
+                    lower(child, "$nodeId-$index", layout, ops, hitRegions, hoverRegions, frames, descriptors, focus, frameIndex)
                 }
             }
 
             is UiElement.Column -> {
                 element.children.forEachIndexed { index, child ->
-                    lower(child, "$nodeId-$index", layout, ops, hitRegions, frames, descriptors, focus, frameIndex)
+                    lower(child, "$nodeId-$index", layout, ops, hitRegions, hoverRegions, frames, descriptors, focus, frameIndex)
                 }
             }
 
@@ -167,6 +184,7 @@ class ScreenProgramCompiler(
                         layout,
                         subOps,
                         hitRegions,
+                        hoverRegions,
                         frames,
                         descriptors,
                         focus,
@@ -186,6 +204,7 @@ class ScreenProgramCompiler(
         nodeId: String,
         parentLayout: Map<String, LayoutNode>,
         hitRegions: MutableList<HitRegion>,
+        hoverRegions: MutableList<HoverRegion>,
         frames: MutableList<MutableList<RenderOp>>,
         descriptors: MutableList<FrameDescriptor>,
         focus: FocusAccumulator,
@@ -209,6 +228,7 @@ class ScreenProgramCompiler(
                 subLayout,
                 subOps,
                 hitRegions,
+                hoverRegions,
                 frames,
                 descriptors,
                 focus,
