@@ -19,6 +19,8 @@ import ru.lazyhat.compukterkraft.core.ui.foundation.UiScope
 import ru.lazyhat.compukterkraft.core.ui.foundation.Value
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Modifier
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Position
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.UiAlignment
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.align
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.background
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.clickable
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.size
@@ -112,9 +114,9 @@ private fun UiScope.buildToolbar(
         toolbarButton(label = value { "Push" }, onClick = { store.pushToTarget() })
         toolbarButton(label = value { "Run" }, onClick = { store.runTargetProgram() })
         toolbarButton(label = value { "Imports" }, onClick = { store.openImportPicker() })
-        box(modifier = Modifier.weight(1f).size(IntSize(0, TOOLBAR_HEIGHT)))
+        box(modifier = Modifier.weight(2f).size(IntSize(0, TOOLBAR_HEIGHT)))
         toolbarButton(
-            label = value { if (store.state.terminalVisible) "Hide term" else "Terminal" },
+            label = value { if (store.state.terminalVisible) "Hide T" else "Term" },
             highlighted = store.state.terminalVisible,
             onClick = { store.toggleTerminalVisibility() },
         )
@@ -131,7 +133,7 @@ private fun UiScope.buildSidebar(
         // Header — current browser path.
         box(modifier = Modifier.size(IntSize(width, SIDEBAR_HEADER_HEIGHT)).background(BG_HEADER)) {
             text(
-                modifier = Modifier.size(IntSize(width - 8, SIDEBAR_HEADER_HEIGHT)),
+                modifier = Modifier.align(UiAlignment.Center),
                 color = TEXT_DIM,
                 text = value { "/" + store.state.browserPath },
             )
@@ -140,26 +142,34 @@ private fun UiScope.buildSidebar(
             modifier = Modifier.size(IntSize(width, height - SIDEBAR_HEADER_HEIGHT)),
             scrollY = value { 0 },
         ) {
-            if (store.state.browserPath.isNotEmpty()) {
-                sidebarRow(
-                    width = width,
-                    label = value { ".." },
-                    onClick = { store.navigateUp() },
-                )
-            }
-            store.state.entries.forEach { entry ->
-                val displayLabel = if (entry.directory) "${entry.path}/" else entry.path
-                sidebarRow(
-                    width = width,
-                    label = value { displayLabel },
-                    onClick = {
-                        if (entry.directory) {
-                            store.requestListing(entry.path)
-                        } else {
-                            store.requestDocument(entry.path)
-                        }
-                    },
-                )
+            val rowCount =
+                store.state.entries.size + if (store.state.browserPath.isNotEmpty()) 1 else 0
+            val contentHeight = (rowCount * SIDEBAR_ROW_HEIGHT).coerceAtLeast(height - SIDEBAR_HEADER_HEIGHT)
+            // Wrap entries in an explicit column — ScrollArea content uses
+            // box (overlap) layout by default, so without this all rows would
+            // stack on top of each other.
+            column(modifier = Modifier.size(IntSize(width, contentHeight))) {
+                if (store.state.browserPath.isNotEmpty()) {
+                    sidebarRow(
+                        width = width,
+                        label = value { ".." },
+                        onClick = { store.navigateUp() },
+                    )
+                }
+                store.state.entries.forEach { entry ->
+                    val displayLabel = if (entry.directory) "${entry.path}/" else entry.path
+                    sidebarRow(
+                        width = width,
+                        label = value { displayLabel },
+                        onClick = {
+                            if (entry.directory) {
+                                store.requestListing(entry.path)
+                            } else {
+                                store.requestDocument(entry.path)
+                            }
+                        },
+                    )
+                }
             }
         }
     }
@@ -191,7 +201,7 @@ private fun UiScope.buildTerminalPanel(
     column(modifier = Modifier.size(IntSize(width, height)).background(BG_TERMINAL)) {
         box(modifier = Modifier.size(IntSize(width, TERMINAL_HEADER_HEIGHT)).background(BG_HEADER)) {
             text(
-                modifier = Modifier.size(IntSize(width - 8, TERMINAL_HEADER_HEIGHT)),
+                modifier = Modifier.align(UiAlignment.Center),
                 color = TEXT_DIM,
                 text = value { "Terminal" },
             )
@@ -212,7 +222,7 @@ private fun UiScope.buildStatusBar(
 ) {
     row(modifier = Modifier.size(IntSize(width, STATUS_HEIGHT)).background(BG_HEADER)) {
         text(
-            modifier = Modifier.size(IntSize(width / 2, STATUS_HEIGHT)),
+            modifier = Modifier.size(IntSize(width / 2, STATUS_HEIGHT)).align(UiAlignment.Center),
             color = TEXT_LIGHT,
             text =
                 value {
@@ -224,7 +234,7 @@ private fun UiScope.buildStatusBar(
         )
         box(modifier = Modifier.weight(1f).size(IntSize(0, STATUS_HEIGHT)))
         text(
-            modifier = Modifier.size(IntSize(width / 2 - 8, STATUS_HEIGHT)),
+            modifier = Modifier.size(IntSize(width / 2 - 8, STATUS_HEIGHT)).align(UiAlignment.Center),
             color = TEXT_ACCENT,
             text =
                 value {
@@ -300,7 +310,7 @@ private fun UiScope.buildImportPickerOverlay(
         column(modifier = Modifier.size(IntSize(popupWidth, popupHeight)).background(BG_IMPORT_POPUP)) {
             box(modifier = Modifier.size(IntSize(popupWidth, IMPORT_HEADER_HEIGHT)).background(BG_BUTTON)) {
                 text(
-                    modifier = Modifier.size(IntSize(popupWidth - 8, IMPORT_HEADER_HEIGHT)),
+                    modifier = Modifier.align(UiAlignment.Center),
                     color = TEXT_LIGHT,
                     text = value { "Available imports" },
                 )
@@ -328,15 +338,23 @@ private fun UiScope.toolbarButton(
     onClick: () -> Unit,
     highlighted: Boolean = false,
 ) {
+    // Each button claims an equal share of the toolbar via weight(1f) — this
+    // keeps the row from overflowing on narrow viewports (see B2/B5: with
+    // fixed widths, the rightmost "Reboot" button would land off-screen and
+    // become unclickable).
     button(
         modifier =
             Modifier
-                .size(IntSize(TOOLBAR_BUTTON_WIDTH, TOOLBAR_HEIGHT))
+                .weight(1f)
+                .size(IntSize(0, TOOLBAR_HEIGHT))
                 .background(if (highlighted) BG_BUTTON_ACTIVE else BG_BUTTON),
         onClick = onClick,
     ) {
+        // align(Center) vertically centres the intrinsic-height (9px) text
+        // line inside the 22px-tall button; without it the glyph hugs the
+        // top edge.
         text(
-            modifier = Modifier.size(IntSize(TOOLBAR_BUTTON_WIDTH - 4, TOOLBAR_HEIGHT)),
+            modifier = Modifier.align(UiAlignment.Center),
             color = TEXT_LIGHT,
             text = label,
         )
@@ -355,7 +373,7 @@ private fun UiScope.sidebarRow(
                 .clickable(onClick),
     ) {
         text(
-            modifier = Modifier.size(IntSize(width - 6, SIDEBAR_ROW_HEIGHT)),
+            modifier = Modifier.align(UiAlignment.Center),
             color = TEXT_LIGHT,
             text = label,
         )
@@ -376,7 +394,7 @@ private fun UiScope.completionRow(
                 .clickable(onClick),
     ) {
         text(
-            modifier = Modifier.size(IntSize(width - 8, COMPLETION_ROW_HEIGHT)),
+            modifier = Modifier.align(UiAlignment.Center),
             color = TEXT_LIGHT,
             text = value { label },
         )
@@ -400,7 +418,6 @@ private fun completionAnchor(
 // ---------------------------------------------------------------------------
 
 private const val TOOLBAR_HEIGHT = 22
-private const val TOOLBAR_BUTTON_WIDTH = 56
 private const val STATUS_HEIGHT = 14
 private const val SIDEBAR_WIDTH = 140
 private const val SIDEBAR_HEADER_HEIGHT = 14
