@@ -61,7 +61,6 @@ class WorkbenchEditorScreen(
         )
     private val viewModel = WorkbenchEditorViewModel(store)
     private var screenScope: CoroutineScope? = null
-    private var lastShapeSignature: Long = Long.MIN_VALUE
 
     override fun init() {
         imageWidth = width
@@ -98,34 +97,15 @@ class WorkbenchEditorScreen(
         // Keep the Minecraft slots aligned with the DSL inventory panel even
         // when the window is resized at runtime.
         repositionInventorySlots()
-        // Only recompile when the *shape* of the tree would differ. Per-frame
-        // text / cursor / snapshot changes flow through Value<T>s and don't
-        // need a recompile. The signature includes everything the builder
-        // branches on with plain Kotlin (if / forEach / list size).
-        val shape = currentShapeSignature()
-        if (shape != lastShapeSignature) {
-            lastShapeSignature = shape
-            invalidate()
-        }
-    }
-
-    private fun currentShapeSignature(): Long {
-        val s = store.state
-        val ed = s.editor
-        var h = 1L
-        h = 31L * h + imageWidth
-        h = 31L * h + imageHeight
-        h = 31L * h + s.terminalVisible.hashCode()
-        h = 31L * h + s.browserPath.hashCode()
-        h = 31L * h + s.entries.size
-        h = 31L * h + s.entries.hashCode()
-        h = 31L * h + ed.completionItems.size
-        h = 31L * h + ed.selectedCompletion
-        h = 31L * h + ed.importPickerVisible.hashCode()
-        h = 31L * h + ed.importPickerItems.size
-        h = 31L * h + ed.selectedImportPickerIndex
-        h = 31L * h + (s.openDocument?.path?.hashCode() ?: 0)
-        return h
+        // The Workbench has too many structurally-dynamic regions (workspace
+        // listing, completion popup, conditional terminal panel, toolbar
+        // button labels driven by Kotlin `if`s) to track them with a hand-
+        // maintained shape-signature without forgetting one. Recompiling on
+        // every container tick (20 Hz) is cheap relative to the per-frame
+        // render cost, and it keeps every kind of change in sync at most
+        // 50 ms after the underlying state moves — hover/Value<T>/canvas
+        // reactivity covers the intra-tick window at full frame rate.
+        invalidate()
     }
 
     override fun content(): UiElement =
