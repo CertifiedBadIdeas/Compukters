@@ -154,6 +154,18 @@ class ScreenRuntimeExecutor(
                     RenderOp.PopClip -> {
                         backend.popClip()
                     }
+
+                    is RenderOp.DrawCodeEditor -> {
+                        backend.drawCodeEditor(
+                            op.x + ox,
+                            op.y + oy,
+                            op.width,
+                            op.height,
+                            op.viewModel.value,
+                            op.fontWidth,
+                            op.fontHeight,
+                        )
+                    }
                 }
             }
         }
@@ -218,10 +230,16 @@ class ScreenRuntimeExecutor(
                     if (x < cx || y < cy || x >= cx + clip.width || y >= cy + clip.height) continue
                 }
                 region.onClick.invoke()
+                region.onClickAt?.invoke(x - rx, y - ry)
                 if (region.onDragStart != null || region.onDrag != null || region.onDragEnd != null) {
                     activeDragRegion = region
                     region.onDragStart?.invoke(x, y)
                 }
+                // If the clicked region also has a matching focus node,
+                // make it the focused one so subsequent key events route there.
+                program.focusNodes
+                    .firstOrNull { it.nodeId == region.nodeId }
+                    ?.let { focusedNodeId = it.nodeId }
                 return true
             }
         }

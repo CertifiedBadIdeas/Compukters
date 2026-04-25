@@ -1,5 +1,6 @@
 package ru.lazyhat.compukterkraft.core.ui.program
 
+import ru.lazyhat.compukterkraft.core.ui.editor.EditorViewModel
 import ru.lazyhat.compukterkraft.core.ui.foundation.CanvasScope
 import ru.lazyhat.compukterkraft.core.ui.foundation.Color
 import ru.lazyhat.compukterkraft.core.ui.foundation.HoverState
@@ -130,6 +131,23 @@ sealed interface RenderOp {
 
     /** Pops the most recently pushed clip region. */
     object PopClip : RenderOp
+
+    /**
+     * Draws a complete code editor. The backend reads everything it needs
+     * (text, cursor, highlights, diagnostics, scroll) from [viewModel],
+     * which is evaluated once per render tick.
+     *
+     * [fontWidth]/[fontHeight] describe a monospace glyph in pixels.
+     */
+    data class DrawCodeEditor(
+        val x: Int,
+        val y: Int,
+        val width: Int,
+        val height: Int,
+        val viewModel: Value<EditorViewModel>,
+        val fontWidth: Int,
+        val fontHeight: Int,
+    ) : RenderOp
 }
 
 /**
@@ -150,6 +168,7 @@ data class HitRegion(
     val height: Int,
     val zIndex: Int,
     val onClick: () -> Unit,
+    val onClickAt: ((x: Int, y: Int) -> Unit)? = null,
     val clip: HitClip? = null,
     val onDragStart: ((x: Int, y: Int) -> Unit)? = null,
     val onDrag: ((x: Int, y: Int) -> Unit)? = null,
