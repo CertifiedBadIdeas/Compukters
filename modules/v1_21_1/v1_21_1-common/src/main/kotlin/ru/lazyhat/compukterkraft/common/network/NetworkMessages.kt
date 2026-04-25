@@ -31,9 +31,12 @@ import ru.lazyhat.compukterkraft.common.computer.network.server.ResizeTerminalSe
 import ru.lazyhat.compukterkraft.common.network.ClientNetworkContext
 import ru.lazyhat.compukterkraft.common.network.ServerNetworkContext
 import ru.lazyhat.compukterkraft.common.network.text.ChatTableClientMessage
+import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchDocumentSnapshotClientMessage
+import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchOpsClientMessage
 import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchTerminalClientMessage
 import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchWorkspaceClientMessage
 import ru.lazyhat.compukterkraft.common.workbench.network.server.WorkbenchInputServerMessage
+import ru.lazyhat.compukterkraft.common.workbench.network.server.WorkbenchOpsServerMessage
 import ru.lazyhat.compukterkraft.common.workbench.network.server.WorkbenchWorkspaceServerMessage
 
 /**
@@ -105,6 +108,12 @@ object NetworkMessages {
             "workbench_input",
             { buf -> WorkbenchInputServerMessage(buf) },
         )
+    val WORKBENCH_OPS_REQUEST: MessageType<WorkbenchOpsServerMessage> =
+        registerServerbound(
+            9,
+            "workbench_ops_request",
+            { buf -> WorkbenchOpsServerMessage(buf) },
+        )
     val ATTACH_TERMINAL: MessageType<AttachTerminalServerMessage> =
         registerServerbound(
             7,
@@ -140,6 +149,18 @@ object NetworkMessages {
             16,
             "workbench_terminal",
             { buf -> WorkbenchTerminalClientMessage(buf) },
+        )
+    val WORKBENCH_OPS: MessageType<WorkbenchOpsClientMessage> =
+        registerClientbound(
+            17,
+            "workbench_ops",
+            { buf -> WorkbenchOpsClientMessage(buf) },
+        )
+    val WORKBENCH_DOCUMENT_SNAPSHOT: MessageType<WorkbenchDocumentSnapshotClientMessage> =
+        registerClientbound(
+            18,
+            "workbench_document_snapshot",
+            { buf -> WorkbenchDocumentSnapshotClientMessage(buf) },
         )
 
     @Suppress("UNCHECKED_CAST")
