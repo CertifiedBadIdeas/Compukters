@@ -121,10 +121,26 @@ private fun UiScope.buildToolbar(
     width: Int,
 ) {
     row(modifier = Modifier.size(IntSize(width, TOOLBAR_HEIGHT)).background(BG_HEADER)) {
-        toolbarButton(label = value("Save"), onClick = { store.saveDocument() })
-        toolbarButton(label = value("Pull"), onClick = { store.pullFromTarget() })
-        toolbarButton(label = value("Push"), onClick = { store.pushToTarget() })
-        toolbarButton(label = value("Run"), onClick = { store.runTargetProgram() })
+        toolbarButton(
+            label = value("Save"),
+            enabled = value { store.state.editor.dirty },
+            onClick = { store.saveDocument() },
+        )
+        toolbarButton(
+            label = value("Pull"),
+            enabled = value { store.state.actions.canPull },
+            onClick = { store.pullFromTarget() },
+        )
+        toolbarButton(
+            label = value("Push"),
+            enabled = value { store.state.actions.canPush },
+            onClick = { store.pushToTarget() },
+        )
+        toolbarButton(
+            label = value("Run"),
+            enabled = value { store.state.actions.canRun },
+            onClick = { store.runTargetProgram() },
+        )
         toolbarButton(label = value("Imports"), onClick = { store.openImportPicker() })
         box(modifier = Modifier.weight(2f).size(IntSize(0, TOOLBAR_HEIGHT)))
         toolbarButton(
@@ -133,7 +149,11 @@ private fun UiScope.buildToolbar(
             enabled = value { store.state.actions.canAttachTerminal || store.state.terminalVisible },
             onClick = { store.toggleTerminalVisibility() },
         )
-        toolbarButton(label = value("Reboot"), onClick = { store.rebootComputer() })
+        toolbarButton(
+            label = value("Reboot"),
+            enabled = value { store.state.actions.canAttachTerminal },
+            onClick = { store.rebootComputer() },
+        )
     }
 }
 
@@ -364,7 +384,7 @@ private fun UiScope.toolbarButton(
     label: Value<String>,
     onClick: () -> Unit,
     highlighted: Value<Boolean> = value(false),
-    enabled: Value<Boolean> = value(false),
+    enabled: Value<Boolean> = value(true),
 ) {
     // BackgroundModifier bakes a static color into the compiled FillRect; to
     // get a hover/state-aware fill we wire a HoverState through
