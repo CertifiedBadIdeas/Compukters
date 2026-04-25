@@ -7,6 +7,14 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 package ru.lazyhat.compukterkraft.core.computer.workbench.screen
 
@@ -113,19 +121,19 @@ private fun UiScope.buildToolbar(
     width: Int,
 ) {
     row(modifier = Modifier.size(IntSize(width, TOOLBAR_HEIGHT)).background(BG_HEADER)) {
-        toolbarButton(label = value { "Save" }, onClick = { store.saveDocument() })
-        toolbarButton(label = value { "Pull" }, onClick = { store.pullFromTarget() })
-        toolbarButton(label = value { "Push" }, onClick = { store.pushToTarget() })
-        toolbarButton(label = value { "Run" }, onClick = { store.runTargetProgram() })
-        toolbarButton(label = value { "Imports" }, onClick = { store.openImportPicker() })
+        toolbarButton(label = value("Save"), onClick = { store.saveDocument() })
+        toolbarButton(label = value("Pull"), onClick = { store.pullFromTarget() })
+        toolbarButton(label = value("Push"), onClick = { store.pushToTarget() })
+        toolbarButton(label = value("Run"), onClick = { store.runTargetProgram() })
+        toolbarButton(label = value("Imports"), onClick = { store.openImportPicker() })
         box(modifier = Modifier.weight(2f).size(IntSize(0, TOOLBAR_HEIGHT)))
         toolbarButton(
             label = value { if (store.state.terminalVisible) "Hide T" else "Term" },
-            highlighted = { store.state.terminalVisible },
-            enabled = { store.state.actions.canAttachTerminal || store.state.terminalVisible },
+            highlighted = value { store.state.terminalVisible },
+            enabled = value { store.state.actions.canAttachTerminal || store.state.terminalVisible },
             onClick = { store.toggleTerminalVisibility() },
         )
-        toolbarButton(label = value { "Reboot" }, onClick = { store.rebootComputer() })
+        toolbarButton(label = value("Reboot"), onClick = { store.rebootComputer() })
     }
 }
 
@@ -145,7 +153,7 @@ private fun UiScope.buildSidebar(
         }
         scrollArea(
             modifier = Modifier.size(IntSize(width, height - SIDEBAR_HEADER_HEIGHT)),
-            scrollY = value { 0 },
+            scrollY = value(0),
         ) {
             val rowCount =
                 store.state.entries.size + if (store.state.browserPath.isNotEmpty()) 1 else 0
@@ -157,7 +165,7 @@ private fun UiScope.buildSidebar(
                 if (store.state.browserPath.isNotEmpty()) {
                     sidebarRow(
                         width = width,
-                        label = value { ".." },
+                        label = value(".."),
                         selected = false,
                         onClick = { store.navigateUp() },
                     )
@@ -212,7 +220,7 @@ private fun UiScope.buildTerminalPanel(
             text(
                 modifier = Modifier.align(UiAlignment.Center),
                 color = TEXT_DIM,
-                text = value { "Terminal" },
+                text = value("Terminal"),
             )
         }
         terminalSurface(
@@ -247,16 +255,16 @@ private fun UiScope.buildStatusBar(
             color = TEXT_ACCENT,
             text =
                 value {
-                    val ed = store.state.editor
-                    (
-                        ed.hoverInfo?.contents
-                            ?: ed.ideSnapshot
-                                ?.diagnostics
-                                ?.firstOrNull()
-                                ?.message
-                            ?: store.state.target.displayName
-                                .orEmpty()
-                    ).take(96)
+                    store.state.editor
+                        .let { ed ->
+                            ed.hoverInfo?.contents
+                                ?: ed.ideSnapshot
+                                    ?.diagnostics
+                                    ?.firstOrNull()
+                                    ?.message
+                                ?: store.state.target.displayName
+                                    .orEmpty()
+                        }.take(96)
                 },
         )
     }
@@ -331,7 +339,7 @@ private fun UiScope.buildImportPickerOverlay(
                 text(
                     modifier = Modifier.align(UiAlignment.Center),
                     color = TEXT_LIGHT,
-                    text = value { "Available imports" },
+                    text = value("Available imports"),
                 )
             }
             items.forEachIndexed { idx, item ->
@@ -355,8 +363,8 @@ private fun UiScope.buildImportPickerOverlay(
 private fun UiScope.toolbarButton(
     label: Value<String>,
     onClick: () -> Unit,
-    highlighted: () -> Boolean = { false },
-    enabled: () -> Boolean = { true },
+    highlighted: Value<Boolean> = value(false),
+    enabled: Value<Boolean> = value(false),
 ) {
     // BackgroundModifier bakes a static color into the compiled FillRect; to
     // get a hover/state-aware fill we wire a HoverState through
@@ -372,13 +380,13 @@ private fun UiScope.toolbarButton(
                 .weight(1f)
                 .size(IntSize(0, TOOLBAR_HEIGHT))
                 .hoverable(hover),
-        onClick = { if (enabled()) onClick() },
+        onClick = { if (enabled.value) onClick() },
     ) {
         canvas {
             val color =
                 when {
-                    !enabled() -> BG_BUTTON_DISABLED
-                    highlighted() -> BG_BUTTON_ACTIVE
+                    !enabled.value -> BG_BUTTON_DISABLED
+                    highlighted.value -> BG_BUTTON_ACTIVE
                     hover.isHovered -> BG_BUTTON_HOVER
                     else -> BG_BUTTON
                 }
@@ -440,7 +448,7 @@ private fun UiScope.buildInventoryPanel(
             text(
                 modifier = Modifier.align(UiAlignment.Center),
                 color = TEXT_DIM,
-                text = value { "Target" },
+                text = value("Target"),
             )
         }
         box(modifier = Modifier.size(IntSize(width, INV_TARGET_SECTION_HEIGHT))) {
@@ -459,7 +467,7 @@ private fun UiScope.buildInventoryPanel(
             text(
                 modifier = Modifier.align(UiAlignment.Center),
                 color = TEXT_DIM,
-                text = value { "Inventory" },
+                text = value("Inventory"),
             )
         }
         box(
