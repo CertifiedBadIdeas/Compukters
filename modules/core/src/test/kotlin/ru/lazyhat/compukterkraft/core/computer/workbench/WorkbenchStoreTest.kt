@@ -43,6 +43,9 @@ class WorkbenchStoreTest {
     fun terminalDockStartsHiddenAndCanBeToggled() =
         runTest(UnconfinedTestDispatcher()) {
             val store = WorkbenchStore(FakeWorkspaceGateway(), FakeComputerControlGateway(), FakeWorkbenchIdeFacade())
+            val updates = FakeWorkbenchUpdateSource()
+            store.bind(backgroundScope, updates)
+            updates.push(target = WorkbenchTargetState(connected = true, displayName = "Pocket Computer", familyId = "normal"))
 
             assertFalse(store.state.terminalVisible)
 
@@ -50,6 +53,32 @@ class WorkbenchStoreTest {
             assertTrue(store.state.terminalVisible)
 
             store.toggleTerminalVisibility()
+            assertFalse(store.state.terminalVisible)
+        }
+
+    @Test
+    fun terminalCannotBeOpenedWithoutAttachedComputer() =
+        runTest(UnconfinedTestDispatcher()) {
+            val store = WorkbenchStore(FakeWorkspaceGateway(), FakeComputerControlGateway(), FakeWorkbenchIdeFacade())
+
+            store.toggleTerminalVisibility()
+
+            assertFalse(store.state.terminalVisible)
+        }
+
+    @Test
+    fun terminalAutoHidesWhenComputerIsRemoved() =
+        runTest(UnconfinedTestDispatcher()) {
+            val store = WorkbenchStore(FakeWorkspaceGateway(), FakeComputerControlGateway(), FakeWorkbenchIdeFacade())
+            val updates = FakeWorkbenchUpdateSource()
+            store.bind(backgroundScope, updates)
+            updates.push(target = WorkbenchTargetState(connected = true, displayName = "Pocket Computer", familyId = "normal"))
+
+            store.toggleTerminalVisibility()
+            assertTrue(store.state.terminalVisible)
+
+            updates.push(target = WorkbenchTargetState())
+
             assertFalse(store.state.terminalVisible)
         }
 

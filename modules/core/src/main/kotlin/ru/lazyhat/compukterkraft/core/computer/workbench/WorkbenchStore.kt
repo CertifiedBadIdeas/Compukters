@@ -88,7 +88,11 @@ class WorkbenchStore(
     }
 
     fun toggleTerminalVisibility() {
-        _state.value = state.copy(terminalVisible = !state.terminalVisible)
+        // Hiding is always allowed; showing requires a computer in the slot,
+        // otherwise the terminal would attach to nothing.
+        val nextVisible = !state.terminalVisible
+        if (nextVisible && !state.actions.canAttachTerminal) return
+        _state.value = state.copy(terminalVisible = nextVisible)
     }
 
     fun requestListing(path: String) {
@@ -433,6 +437,9 @@ class WorkbenchStore(
                 target = remoteState.target,
                 sync = remoteState.sync,
                 actions = actionState,
+                // Auto-hide the terminal when the computer is removed; it has
+                // nothing to attach to and would render an empty buffer.
+                terminalVisible = nextState.terminalVisible && actionState.canAttachTerminal,
             )
         if (documentChanged && remoteState.document != null) {
             refreshIde()
