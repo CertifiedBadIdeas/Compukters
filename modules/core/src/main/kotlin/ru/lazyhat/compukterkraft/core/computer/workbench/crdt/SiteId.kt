@@ -45,7 +45,14 @@ value class SiteId(val raw: String) : Comparable<SiteId> {
     companion object {
         const val MAX_LENGTH: Int = 32
 
-        val ServerInit: SiteId = SiteId("s:i")
+        /**
+         * Bootstrap replica used to atomize plain text on file open. Its raw form starts with
+         * `'!'` (ASCII 33) so it lexicographically sorts BEFORE any `p:` (player) or `t:`
+         * (target) site, which means server-init atoms always LOSE the RGA tie-break against
+         * real authors. Concretely: when a player inserts at offset 0 of a freshly atomized
+         * file, their new run is placed before the bootstrap content rather than after it.
+         */
+        val ServerInit: SiteId = SiteId("!:i")
 
         fun player(uuid: UUID): SiteId =
             SiteId("p:" + uuid.toString().replace("-", "").take(8))

@@ -45,6 +45,47 @@ data class CrdtDocument(
         for (run in runs) if (!run.deleted) append(run.text)
     }
 
+    /** Total number of visible (non-tombstoned) characters. */
+    val visibleLength: Int get() = runs.sumOf { it.visibleLength }
+
+    /**
+     * Whether [atomId] addresses a character that exists in the runs list (visible or
+     * tombstoned). Used by [ServerCrdtReplica] to validate op causality.
+     */
+    fun containsAtom(atomId: AtomId): Boolean {
+        for (r in runs) {
+            if (r.id.site != atomId.site) continue
+            val end = r.id.clock + r.text.length
+            if (atomId.clock in r.id.clock until end) return true
+        }
+        return false
+    }
+
+    /**
+     * Map a flat character offset (over visible chars only) to the [AtomId] at that position
+     * and the offset within its run. [charOffset] = 0 returns the first visible atom; the
+     * returned [offsetWithinRun] for an offset at the very end equals the run's text length.
+     */
+    fun atomAtOffset(charOffset: Int): Pair<AtomId, Int>? {
+        require(charOffset >= 0) { "charOffset must be non-negative" }
+        if (runs.isEmpty()) return null
+        var consumed = 0
+        for (r in runs) {
+            if (r.deleted) continue
+            val end = consumed + r.text.length
+            if (charOffset < end) return r.id.copy(clock = r.id.clock + (charOffset - consumed)) to 0
+            consumed = end
+        }
+        if (charOffset == consumed) {
+            // Past the last visible char — return the last visible run's tail anchor.
+            for (i in runs.indices.reversed()) {
+                val r = runs[i]
+                if (!r.deleted) return AtomId(r.id.site, r.id.clock + r.text.length - 1) to 1
+            }
+        }
+        return null
+    }
+
     /**
      * Apply [op] producing a new document. No-op if [op] is a duplicate (its clock falls at or
      * below the highest clock already observed for [Op.author]).
