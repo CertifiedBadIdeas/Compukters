@@ -82,7 +82,7 @@ fun buildWorkbenchUi(
             row(modifier = Modifier.size(IntSize(viewport.width, mainHeight))) {
                 buildSidebar(store, sidebarWidth, mainHeight)
                 buildEditorArea(viewModel, editorWidth, mainHeight)
-                buildInventoryPanel(inventoryWidth, mainHeight)
+                buildInventoryPanel(store, inventoryWidth, mainHeight)
             }
 
             if (terminalVisible) {
@@ -122,6 +122,7 @@ private fun UiScope.buildToolbar(
         toolbarButton(
             label = value { if (store.state.terminalVisible) "Hide T" else "Term" },
             highlighted = store.state.terminalVisible,
+            enabled = store.state.actions.canAttachTerminal || store.state.terminalVisible,
             onClick = { store.toggleTerminalVisibility() },
         )
         toolbarButton(label = value { "Reboot" }, onClick = { store.rebootComputer() })
@@ -355,6 +356,7 @@ private fun UiScope.toolbarButton(
     label: Value<String>,
     onClick: () -> Unit,
     highlighted: Boolean = false,
+    enabled: Boolean = true,
 ) {
     // BackgroundModifier bakes a static color into the compiled FillRect; to
     // get a hover-aware fill we wire a HoverState through `Modifier.hoverable`
@@ -367,23 +369,21 @@ private fun UiScope.toolbarButton(
                 .weight(1f)
                 .size(IntSize(0, TOOLBAR_HEIGHT))
                 .hoverable(hover),
-        onClick = onClick,
+        onClick = { if (enabled) onClick() },
     ) {
         canvas {
             val color =
                 when {
+                    !enabled -> BG_BUTTON_DISABLED
                     highlighted -> BG_BUTTON_ACTIVE
                     hover.isHovered -> BG_BUTTON_HOVER
                     else -> BG_BUTTON
                 }
             fillRect(0, 0, width, height, color)
         }
-        // align(Center) vertically centres the intrinsic-height (9px) text
-        // line inside the 22px-tall button; without it the glyph hugs the
-        // top edge.
         text(
             modifier = Modifier.align(UiAlignment.Center),
-            color = TEXT_LIGHT,
+            color = if (enabled) TEXT_LIGHT else TEXT_DIM,
             text = label,
         )
     }
@@ -423,6 +423,7 @@ private fun UiScope.sidebarRow(
  * [WorkbenchInventoryLayout], guaranteeing both layers stay in sync.
  */
 private fun UiScope.buildInventoryPanel(
+    store: WorkbenchStore,
     width: Int,
     height: Int,
 ) {
@@ -438,12 +439,11 @@ private fun UiScope.buildInventoryPanel(
             canvas {
                 val slotX = (width - WorkbenchInventoryLayout.SLOT_SIZE) / 2
                 val slotY = (INV_TARGET_SECTION_HEIGHT - WorkbenchInventoryLayout.SLOT_SIZE) / 2
-                fillRect(
-                    slotX,
-                    slotY,
-                    WorkbenchInventoryLayout.SLOT_SIZE,
-                    WorkbenchInventoryLayout.SLOT_SIZE,
-                    BG_SLOT,
+                drawSlotCell(
+                    x = slotX,
+                    y = slotY,
+                    size = WorkbenchInventoryLayout.SLOT_SIZE,
+                    border = if (store.state.target.connected) SLOT_BORDER_ACTIVE else SLOT_BORDER,
                 )
             }
         }
@@ -467,32 +467,43 @@ private fun UiScope.buildInventoryPanel(
         ) {
             canvas {
                 val gridStartX = (width - WorkbenchInventoryLayout.SLOT_SIZE * 9) / 2
-                // 3×9 main inventory grid.
                 for (rowIdx in 0 until 3) {
                     for (colIdx in 0 until 9) {
-                        fillRect(
-                            gridStartX + colIdx * WorkbenchInventoryLayout.SLOT_SIZE,
-                            rowIdx * WorkbenchInventoryLayout.SLOT_SIZE,
-                            WorkbenchInventoryLayout.SLOT_SIZE,
-                            WorkbenchInventoryLayout.SLOT_SIZE,
-                            BG_SLOT,
+                        drawSlotCell(
+                            x = gridStartX + colIdx * WorkbenchInventoryLayout.SLOT_SIZE,
+                            y = rowIdx * WorkbenchInventoryLayout.SLOT_SIZE,
+                            size = WorkbenchInventoryLayout.SLOT_SIZE,
+                            border = SLOT_BORDER,
                         )
                     }
                 }
                 val hotbarY =
                     WorkbenchInventoryLayout.SLOT_SIZE * 3 + WorkbenchInventoryLayout.INV_HOTBAR_GAP
                 for (colIdx in 0 until 9) {
-                    fillRect(
-                        gridStartX + colIdx * WorkbenchInventoryLayout.SLOT_SIZE,
-                        hotbarY,
-                        WorkbenchInventoryLayout.SLOT_SIZE,
-                        WorkbenchInventoryLayout.SLOT_SIZE,
-                        BG_SLOT,
+                    drawSlotCell(
+                        x = gridStartX + colIdx * WorkbenchInventoryLayout.SLOT_SIZE,
+                        y = hotbarY,
+                        size = WorkbenchInventoryLayout.SLOT_SIZE,
+                        border = SLOT_BORDER,
                     )
                 }
             }
         }
     }
+}
+
+/**
+ * Paint a single 18×18 slot cell: dark fill plus a 1px border so the slot
+ * grid reads as discrete cells instead of one big dark blob.
+ */
+private fun ru.lazyhat.compukterkraft.core.ui.foundation.CanvasScope.drawSlotCell(
+    x: Int,
+    y: Int,
+    size: Int,
+    border: Color,
+) {
+    fillRect(x, y, size, size, border)
+    fillRect(x + 1, y + 1, size - 2, size - 2, BG_SLOT)
 }
 
 private fun UiScope.completionRow(
@@ -585,8 +596,11 @@ private val BG_TERMINAL = Color.hex(0xFF101823.toInt())
 private val BG_BUTTON = Color.hex(0xFF222938.toInt())
 private val BG_BUTTON_HOVER = Color.hex(0xFF2C3445.toInt())
 private val BG_BUTTON_ACTIVE = Color.hex(0xFF35516B.toInt())
+private val BG_BUTTON_DISABLED = Color.hex(0xFF1A1F2A.toInt())
 private val BG_INVENTORY = Color.hex(0xFF1A2030.toInt())
 private val BG_SLOT = Color.hex(0xFF080A10.toInt())
+private val SLOT_BORDER = Color.hex(0xFF2D3548.toInt())
+private val SLOT_BORDER_ACTIVE = Color.hex(0xFF4A88C7.toInt())
 private val BG_POPUP = Color.hex(0xFF11151E.toInt())
 private val BG_POPUP_BORDER = Color.hex(0xFF4A88C7.toInt())
 private val BG_IMPORT_POPUP = Color.hex(0xFF121721.toInt())

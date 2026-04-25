@@ -38,7 +38,17 @@ class WorkbenchEditorViewModelTest {
     @Test
     fun keyAndCharEventsRouteThroughTheStore() =
         runTest(UnconfinedTestDispatcher()) {
-            val store = makeStoreWithDocument(this, "")
+            val store =
+                makeStoreWithDocument(
+                    this,
+                    "",
+                    target =
+                        ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchTargetState(
+                            connected = true,
+                            displayName = "Pocket Computer",
+                            familyId = "normal",
+                        ),
+                )
             val vm = WorkbenchEditorViewModel(store)
 
             assertTrue(vm.onCharTyped('h', visibleLines = 10))

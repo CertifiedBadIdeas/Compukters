@@ -28,11 +28,12 @@ internal object WorkbenchEditorViewModelTestSupport {
         scope: TestScope,
         text: String,
         path: String = "main.ck",
+        target: WorkbenchTargetState = WorkbenchTargetState(),
     ): WorkbenchStore {
         val store = WorkbenchStore(StubWorkspaceGateway(), StubControlGateway(), StubIdeFacade())
         val updates = StubUpdateSource()
         store.bind(scope.backgroundScope, updates)
-        updates.push(document = ComputerWorkspaceDocument(path, text, 0))
+        updates.push(document = ComputerWorkspaceDocument(path, text, 0), target = target)
         store.toggleMode() // TERMINAL → EDITOR
         return store
     }
