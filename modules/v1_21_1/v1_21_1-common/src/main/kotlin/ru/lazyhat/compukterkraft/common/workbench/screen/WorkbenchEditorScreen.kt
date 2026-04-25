@@ -93,11 +93,7 @@ class WorkbenchEditorScreen(
 
     override fun containerTick() {
         super.containerTick()
-        if (!store.state.terminalVisible) {
-            terminalInput.focused = false
-        }
         syncFullscreenWindowSize()
-        terminalInput.update()
         // Keep the Minecraft slots aligned with the DSL inventory panel even
         // when the window is resized at runtime.
         repositionInventorySlots()
@@ -119,14 +115,12 @@ class WorkbenchEditorScreen(
             viewModel = viewModel,
             terminalSnapshot = { menu.screenSnapshot },
             onTerminalKey = { keyCode ->
-                terminalInput.focused = true
                 terminalInput.keyPressed(keyCode, 0, 0)
             },
             onTerminalKeyReleased = { keyCode ->
                 terminalInput.keyReleased(keyCode, 0)
             },
             onTerminalCharTyped = { ch ->
-                terminalInput.focused = true
                 terminalInput.charTyped(ch)
             },
         )

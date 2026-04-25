@@ -22,6 +22,30 @@ plugins {
     alias(libs.plugins.commonConvention)
 }
 
+val generateLocalizationApi =
+    tasks.register<GenerateLocalizationApiTask>("generateLocalizationApi") {
+        description =
+            "Generates a Kotlin API for accessing localization entries."
+        langFile.set(
+            project(projects.v1211Neoforge.path)
+                .layout
+                .projectDirectory
+                .file("src/main/resources/assets/compukterkraft/lang/en_us.json"),
+        )
+        packageName.set("ru.lazyhat.compukterkraft.common.localization")
+        outputDirectory.set(layout.buildDirectory.dir("generated/sources/localizationApi/kotlin"))
+    }
+
 architectury {
     common("neoforge", "fabric")
+}
+
+kotlin {
+    sourceSets.named("main") {
+        kotlin.srcDir(generateLocalizationApi)
+    }
+}
+
+tasks.named("compileKotlin") {
+    dependsOn(generateLocalizationApi)
 }
