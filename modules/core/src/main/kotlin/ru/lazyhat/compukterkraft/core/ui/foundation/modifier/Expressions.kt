@@ -208,3 +208,39 @@ fun Modifier.focusable(
     )
 
 fun Modifier.findFocusable() = find<FocusableModifier>()
+
+//
+//
+
+/**
+ * Marks the host element as draggable. The lambdas receive the cursor
+ * position in absolute screen coordinates.
+ *
+ * - [onDragStart] fires once on the initial mousedown that starts a drag.
+ * - [onDrag] fires on every subsequent mousedragged event while the mouse
+ *   button is held.
+ * - [onDragEnd] fires on mouseUp.
+ *
+ * A clickable element is just sugar over a draggable element whose drag
+ * delta stays inside the original bounds.
+ */
+data class DraggableModifier(
+    val onDragStart: (x: Int, y: Int) -> Unit,
+    val onDrag: (x: Int, y: Int) -> Unit,
+    val onDragEnd: (x: Int, y: Int) -> Unit,
+) : Modifier.Element
+
+fun Modifier.draggable(
+    onDragStart: (Int, Int) -> Unit = { _, _ -> },
+    onDrag: (Int, Int) -> Unit = { _, _ -> },
+    onDragEnd: (Int, Int) -> Unit = { _, _ -> },
+): Modifier =
+    then(
+        DraggableModifier(
+            onDragStart = onDragStart,
+            onDrag = onDrag,
+            onDragEnd = onDragEnd,
+        ),
+    )
+
+fun Modifier.findDraggable() = find<DraggableModifier>()

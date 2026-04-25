@@ -159,4 +159,28 @@ abstract class DslContainerScreen<T : AbstractComputerMenu>(
         return (executor != null && executor.mouseScrolled(mouseX.toInt(), mouseY.toInt(), scrollY)) ||
             super.mouseScrolled(mouseX, mouseY, scrollX, scrollY)
     }
+
+    override fun mouseDragged(
+        mouseX: Double,
+        mouseY: Double,
+        button: Int,
+        dragX: Double,
+        dragY: Double,
+    ): Boolean {
+        val executor = executor
+        return (executor != null && executor.mouseDragged(mouseX.toInt(), mouseY.toInt())) ||
+            super.mouseDragged(mouseX, mouseY, button, dragX, dragY)
+    }
+
+    override fun mouseReleased(
+        mouseX: Double,
+        mouseY: Double,
+        button: Int,
+    ): Boolean {
+        val executor = executor
+        // Forward to the executor first so any active drag is finalised even
+        // if the parent class would otherwise consume the event.
+        val handled = executor != null && executor.mouseReleased(mouseX.toInt(), mouseY.toInt())
+        return super.mouseReleased(mouseX, mouseY, button) || handled
+    }
 }

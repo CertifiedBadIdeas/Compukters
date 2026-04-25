@@ -151,6 +151,9 @@ data class HitRegion(
     val zIndex: Int,
     val onClick: () -> Unit,
     val clip: HitClip? = null,
+    val onDragStart: ((x: Int, y: Int) -> Unit)? = null,
+    val onDrag: ((x: Int, y: Int) -> Unit)? = null,
+    val onDragEnd: ((x: Int, y: Int) -> Unit)? = null,
 )
 
 /**

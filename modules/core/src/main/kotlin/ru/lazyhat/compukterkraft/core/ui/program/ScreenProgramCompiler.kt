@@ -6,6 +6,7 @@ import ru.lazyhat.compukterkraft.core.ui.foundation.Value
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Position
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.findBackground
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.findClickable
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.findDraggable
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.findFocusable
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.findHoverable
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.findSize
@@ -163,7 +164,9 @@ class ScreenProgramCompiler(
                 element.modifier.findBackground()?.let { bg ->
                     ops += RenderOp.FillRect(node.x, node.y, node.width, node.height, bg.color)
                 }
-                element.modifier.findClickable()?.let { clickable ->
+                val clickable = element.modifier.findClickable()
+                val draggable = element.modifier.findDraggable()
+                if (clickable != null || draggable != null) {
                     hitRegions +=
                         HitRegion(
                             nodeId = nodeId,
@@ -173,7 +176,10 @@ class ScreenProgramCompiler(
                             width = node.width,
                             height = node.height,
                             zIndex = element.modifier.findZIndex()?.zIndex ?: 0,
-                            onClick = clickable.onClick,
+                            onClick = clickable?.onClick ?: {},
+                            onDragStart = draggable?.onDragStart,
+                            onDrag = draggable?.onDrag,
+                            onDragEnd = draggable?.onDragEnd,
                         )
                 }
                 element.children.forEachIndexed { index, child ->

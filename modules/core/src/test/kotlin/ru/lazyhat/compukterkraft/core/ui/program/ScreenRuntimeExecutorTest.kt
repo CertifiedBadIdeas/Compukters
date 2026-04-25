@@ -4,6 +4,7 @@ import ru.lazyhat.compukterkraft.core.ui.foundation.Color
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Modifier
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Position
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.background
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.draggable
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.focusable
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.offset
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.size
@@ -420,6 +421,46 @@ class ScreenRuntimeExecutorTest {
         // Strictly monotonic, ticks must differ.
         assertTrue(seen[0] < seen[1])
         assertTrue(seen[1] < seen[2])
+    }
+
+    @Test
+    fun draggableModifierFiresStartDragAndEndInOrder() {
+        val events = mutableListOf<String>()
+        val program =
+            ScreenProgramCompiler().compile(
+                ui {
+                    box(
+                        modifier =
+                            Modifier
+                                .offset(0, 0)
+                                .size(50, 50)
+                                .draggable(
+                                    onDragStart = { x, y -> events += "start:$x,$y" },
+                                    onDrag = { x, y -> events += "drag:$x,$y" },
+                                    onDragEnd = { x, y -> events += "end:$x,$y" },
+                                ),
+                    )
+                },
+            )
+
+        val executor = ScreenRuntimeExecutor(program)
+
+        // No active drag → drag/release before press do nothing.
+        assertFalse(executor.mouseDragged(10, 10))
+        assertFalse(executor.mouseReleased(10, 10))
+
+        assertTrue(executor.mouseClicked(5, 5))
+        assertTrue(executor.mouseDragged(7, 8))
+        assertTrue(executor.mouseDragged(9, 12))
+        assertTrue(executor.mouseReleased(9, 12))
+
+        // After release the drag is over.
+        assertFalse(executor.mouseDragged(20, 20))
+
+        assertEquals(
+            listOf("start:5,5", "drag:7,8", "drag:9,12", "end:9,12"),
+            events,
+        )
     }
 
     private companion object {
