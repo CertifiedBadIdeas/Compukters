@@ -13,6 +13,7 @@ package ru.lazyhat.compukterkraft.core.computer.workbench.screen
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchStore
 import ru.lazyhat.compukterkraft.core.ui.editor.EditorViewModel
 import ru.lazyhat.compukterkraft.core.ui.foundation.Color
+import ru.lazyhat.compukterkraft.core.ui.foundation.HoverState
 import ru.lazyhat.compukterkraft.core.ui.foundation.IntSize
 import ru.lazyhat.compukterkraft.core.ui.foundation.UiElement
 import ru.lazyhat.compukterkraft.core.ui.foundation.UiScope
@@ -23,6 +24,7 @@ import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.UiAlignment
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.align
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.background
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.clickable
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.hoverable
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.size
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.weight
 import ru.lazyhat.compukterkraft.core.ui.foundation.ui
@@ -69,8 +71,9 @@ fun buildWorkbenchUi(
     val terminalHeight = if (terminalVisible) TERMINAL_PANEL_HEIGHT else 0
     val mainHeight =
         (viewport.height - TOOLBAR_HEIGHT - STATUS_HEIGHT - terminalHeight).coerceAtLeast(0)
-    val sidebarWidth = SIDEBAR_WIDTH.coerceAtMost(viewport.width / 3)
-    val editorWidth = (viewport.width - sidebarWidth).coerceAtLeast(0)
+    val sidebarWidth = SIDEBAR_WIDTH.coerceAtMost(viewport.width / 4)
+    val inventoryWidth = WorkbenchInventoryLayout.PANEL_WIDTH.coerceAtMost(viewport.width / 3)
+    val editorWidth = (viewport.width - sidebarWidth - inventoryWidth).coerceAtLeast(0)
 
     return ui(modifier = Modifier.size(viewport).background(BG_MAIN)) {
         column(modifier = Modifier.size(viewport)) {
@@ -79,6 +82,7 @@ fun buildWorkbenchUi(
             row(modifier = Modifier.size(IntSize(viewport.width, mainHeight))) {
                 buildSidebar(store, sidebarWidth, mainHeight)
                 buildEditorArea(viewModel, editorWidth, mainHeight)
+                buildInventoryPanel(inventoryWidth, mainHeight)
             }
 
             if (terminalVisible) {
@@ -153,14 +157,18 @@ private fun UiScope.buildSidebar(
                     sidebarRow(
                         width = width,
                         label = value { ".." },
+                        selected = false,
                         onClick = { store.navigateUp() },
                     )
                 }
                 store.state.entries.forEach { entry ->
                     val displayLabel = if (entry.directory) "${entry.path}/" else entry.path
+                    val isOpenDocument =
+                        !entry.directory && store.state.openDocument?.path == entry.path
                     sidebarRow(
                         width = width,
                         label = value { displayLabel },
+                        selected = isOpenDocument,
                         onClick = {
                             if (entry.directory) {
                                 store.requestListing(entry.path)
@@ -338,18 +346,28 @@ private fun UiScope.toolbarButton(
     onClick: () -> Unit,
     highlighted: Boolean = false,
 ) {
-    // Each button claims an equal share of the toolbar via weight(1f) — this
-    // keeps the row from overflowing on narrow viewports (see B2/B5: with
-    // fixed widths, the rightmost "Reboot" button would land off-screen and
-    // become unclickable).
+    // BackgroundModifier bakes a static color into the compiled FillRect; to
+    // get a hover-aware fill we wire a HoverState through `Modifier.hoverable`
+    // and paint the background ourselves from a canvas, whose `onDraw` runs
+    // every frame and therefore sees the current `isHovered` flag.
+    val hover = HoverState()
     button(
         modifier =
             Modifier
                 .weight(1f)
                 .size(IntSize(0, TOOLBAR_HEIGHT))
-                .background(if (highlighted) BG_BUTTON_ACTIVE else BG_BUTTON),
+                .hoverable(hover),
         onClick = onClick,
     ) {
+        canvas {
+            val color =
+                when {
+                    highlighted -> BG_BUTTON_ACTIVE
+                    hover.isHovered -> BG_BUTTON_HOVER
+                    else -> BG_BUTTON
+                }
+            fillRect(0, 0, width, height, color)
+        }
         // align(Center) vertically centres the intrinsic-height (9px) text
         // line inside the 22px-tall button; without it the glyph hugs the
         // top edge.
@@ -364,19 +382,106 @@ private fun UiScope.toolbarButton(
 private fun UiScope.sidebarRow(
     width: Int,
     label: Value<String>,
+    selected: Boolean,
     onClick: () -> Unit,
 ) {
     box(
         modifier =
             Modifier
                 .size(IntSize(width, SIDEBAR_ROW_HEIGHT))
+                .background(if (selected) BG_ROW_SELECTED else BG_TRANSPARENT)
                 .clickable(onClick),
     ) {
         text(
             modifier = Modifier.align(UiAlignment.Center),
-            color = TEXT_LIGHT,
+            color = if (selected) TEXT_ACCENT else TEXT_LIGHT,
             text = label,
         )
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Inventory panel
+// ---------------------------------------------------------------------------
+
+/**
+ * Right-hand chrome that hosts the workbench's target slot, the player's
+ * 3×9 main inventory and the 9-slot hotbar. Slot _contents_ are rendered by
+ * `AbstractContainerScreen` — this builder only paints headers, separators
+ * and dark 18×18 squares per slot. The screen relocates the underlying
+ * Minecraft `Slot` instances to the matching pixel positions via
+ * [WorkbenchInventoryLayout], guaranteeing both layers stay in sync.
+ */
+private fun UiScope.buildInventoryPanel(
+    width: Int,
+    height: Int,
+) {
+    column(modifier = Modifier.size(IntSize(width, height)).background(BG_INVENTORY)) {
+        box(modifier = Modifier.size(IntSize(width, SIDEBAR_HEADER_HEIGHT)).background(BG_HEADER)) {
+            text(
+                modifier = Modifier.align(UiAlignment.Center),
+                color = TEXT_DIM,
+                text = value { "Target" },
+            )
+        }
+        box(modifier = Modifier.size(IntSize(width, INV_TARGET_SECTION_HEIGHT))) {
+            canvas {
+                val slotX = (width - WorkbenchInventoryLayout.SLOT_SIZE) / 2
+                val slotY = (INV_TARGET_SECTION_HEIGHT - WorkbenchInventoryLayout.SLOT_SIZE) / 2
+                fillRect(
+                    slotX,
+                    slotY,
+                    WorkbenchInventoryLayout.SLOT_SIZE,
+                    WorkbenchInventoryLayout.SLOT_SIZE,
+                    BG_SLOT,
+                )
+            }
+        }
+        box(modifier = Modifier.size(IntSize(width, SIDEBAR_HEADER_HEIGHT)).background(BG_HEADER)) {
+            text(
+                modifier = Modifier.align(UiAlignment.Center),
+                color = TEXT_DIM,
+                text = value { "Inventory" },
+            )
+        }
+        box(
+            modifier =
+                Modifier.size(
+                    IntSize(
+                        width,
+                        WorkbenchInventoryLayout.SLOT_SIZE * 3 +
+                            WorkbenchInventoryLayout.INV_HOTBAR_GAP +
+                            WorkbenchInventoryLayout.SLOT_SIZE,
+                    ),
+                ),
+        ) {
+            canvas {
+                val gridStartX = (width - WorkbenchInventoryLayout.SLOT_SIZE * 9) / 2
+                // 3×9 main inventory grid.
+                for (rowIdx in 0 until 3) {
+                    for (colIdx in 0 until 9) {
+                        fillRect(
+                            gridStartX + colIdx * WorkbenchInventoryLayout.SLOT_SIZE,
+                            rowIdx * WorkbenchInventoryLayout.SLOT_SIZE,
+                            WorkbenchInventoryLayout.SLOT_SIZE,
+                            WorkbenchInventoryLayout.SLOT_SIZE,
+                            BG_SLOT,
+                        )
+                    }
+                }
+                val hotbarY =
+                    WorkbenchInventoryLayout.SLOT_SIZE * 3 + WorkbenchInventoryLayout.INV_HOTBAR_GAP
+                for (colIdx in 0 until 9) {
+                    fillRect(
+                        gridStartX + colIdx * WorkbenchInventoryLayout.SLOT_SIZE,
+                        hotbarY,
+                        WorkbenchInventoryLayout.SLOT_SIZE,
+                        WorkbenchInventoryLayout.SLOT_SIZE,
+                        BG_SLOT,
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -432,6 +537,7 @@ private const val IMPORT_POPUP_WIDTH = 240
 private const val IMPORT_HEADER_HEIGHT = 14
 private const val MAX_IMPORT_ROWS = 10
 private const val DEFAULT_VISIBLE_EDITOR_LINES = 32
+private const val INV_TARGET_SECTION_HEIGHT = 22
 
 // ---------------------------------------------------------------------------
 // Palette
@@ -443,7 +549,10 @@ private val BG_SIDEBAR = Color.hex(0xFF1D2330.toInt())
 private val BG_EDITOR = Color.hex(0xFF0D1016.toInt())
 private val BG_TERMINAL = Color.hex(0xFF101823.toInt())
 private val BG_BUTTON = Color.hex(0xFF222938.toInt())
+private val BG_BUTTON_HOVER = Color.hex(0xFF2C3445.toInt())
 private val BG_BUTTON_ACTIVE = Color.hex(0xFF35516B.toInt())
+private val BG_INVENTORY = Color.hex(0xFF1A2030.toInt())
+private val BG_SLOT = Color.hex(0xFF080A10.toInt())
 private val BG_POPUP = Color.hex(0xEE11151E.toInt())
 private val BG_IMPORT_POPUP = Color.hex(0xF0121721.toInt())
 private val BG_ROW_SELECTED = Color.hex(0x664883C7)

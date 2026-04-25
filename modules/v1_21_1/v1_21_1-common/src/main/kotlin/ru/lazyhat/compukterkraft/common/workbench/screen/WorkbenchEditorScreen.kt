@@ -30,6 +30,7 @@ import ru.lazyhat.compukterkraft.common.workbench.menu.WorkbenchPositionableSlot
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchMode
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchStore
 import ru.lazyhat.compukterkraft.core.computer.workbench.screen.WorkbenchEditorViewModel
+import ru.lazyhat.compukterkraft.core.computer.workbench.screen.WorkbenchInventoryLayout
 import ru.lazyhat.compukterkraft.core.computer.workbench.screen.buildWorkbenchUi
 import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalInputController
 import ru.lazyhat.compukterkraft.core.ui.foundation.IntSize
@@ -41,8 +42,9 @@ import ru.lazyhat.compukterkraft.core.ui.foundation.UiElement
  * The whole UI tree lives in [buildWorkbenchUi] (in `:core`), driven by a
  * [WorkbenchStore] and a small [WorkbenchEditorViewModel] adapter. This
  * subclass only owns the lifecycle (binding/disposing the store, scoping
- * coroutines) and Minecraft-specific plumbing (full-screen sizing, hiding
- * the inventory slots which the new layout has no room for).
+ * coroutines) and Minecraft-specific plumbing (full-screen sizing,
+ * relocating the menu's slots so the right-hand inventory panel is
+ * functional).
  */
 class WorkbenchEditorScreen(
     container: WorkbenchMenuWithoutInventory,
@@ -76,7 +78,7 @@ class WorkbenchEditorScreen(
             store.toggleMode()
         }
         store.initialize()
-        hideInventorySlots()
+        repositionInventorySlots()
     }
 
     override fun removed() {
@@ -93,6 +95,9 @@ class WorkbenchEditorScreen(
         }
         syncFullscreenWindowSize()
         terminalInput.update()
+        // Keep the Minecraft slots aligned with the DSL inventory panel even
+        // when the window is resized at runtime.
+        repositionInventorySlots()
         // Only recompile when the *shape* of the tree would differ. Per-frame
         // text / cursor / snapshot changes flow through Value<T>s and don't
         // need a recompile. The signature includes everything the builder
@@ -108,6 +113,8 @@ class WorkbenchEditorScreen(
         val s = store.state
         val ed = s.editor
         var h = 1L
+        h = 31L * h + imageWidth
+        h = 31L * h + imageHeight
         h = 31L * h + s.terminalVisible.hashCode()
         h = 31L * h + s.browserPath.hashCode()
         h = 31L * h + s.entries.size
@@ -148,19 +155,50 @@ class WorkbenchEditorScreen(
     }
 
     /**
-     * The workbench menu carries 1 target slot + 36 player inventory slots,
-     * but the new DSL layout has no inventory area. We push the slots far
-     * off-screen so [net.minecraft.client.gui.screens.inventory.AbstractContainerScreen]
-     * does not draw their textures while keeping their interaction logic
-     * intact for shift-clicks driven from elsewhere.
+     * Move the menu's 37 slots (1 target + 27 main inventory + 9 hotbar)
+     * to match the absolute positions painted by the DSL inventory panel.
+     * Coordinates come from [WorkbenchInventoryLayout] so the chrome and
+     * the slots can never drift apart.
      */
-    private fun hideInventorySlots() {
-        menu.slots.forEach { slot ->
-            (slot as? WorkbenchPositionableSlot)?.relocate(OFFSCREEN, OFFSCREEN)
+    private fun repositionInventorySlots() {
+        if (imageWidth <= 0 || imageHeight <= 0) return
+        val layout =
+            WorkbenchInventoryLayout.compute(
+                viewport = IntSize(imageWidth, imageHeight),
+                panelTop = TOOLBAR_HEIGHT,
+            )
+        menu.slots.forEachIndexed { index, slot ->
+            val positionable = slot as? WorkbenchPositionableSlot ?: return@forEachIndexed
+            val (slotX, slotY) =
+                when (index) {
+                    0 -> {
+                        layout.targetSlotX to layout.targetSlotY
+                    }
+
+                    in 1..27 -> {
+                        val zeroBased = index - 1
+                        val rowIdx = zeroBased / 9
+                        val colIdx = zeroBased % 9
+                        (layout.mainGridX + colIdx * WorkbenchInventoryLayout.SLOT_SIZE) to
+                            (layout.mainGridY + rowIdx * WorkbenchInventoryLayout.SLOT_SIZE)
+                    }
+
+                    in 28..36 -> {
+                        val colIdx = index - 28
+                        (layout.hotbarX + colIdx * WorkbenchInventoryLayout.SLOT_SIZE) to layout.hotbarY
+                    }
+
+                    else -> {
+                        return@forEachIndexed
+                    }
+                }
+            positionable.relocate(slotX, slotY)
         }
     }
 
     private companion object {
-        private const val OFFSCREEN = -10_000
+        // Mirrors `TOOLBAR_HEIGHT` in WorkbenchUiBuilder; kept in sync by hand
+        // since the DSL builder treats it as private.
+        private const val TOOLBAR_HEIGHT = 22
     }
 }
