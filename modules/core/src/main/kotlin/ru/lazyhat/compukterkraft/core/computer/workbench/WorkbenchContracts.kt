@@ -123,17 +123,6 @@ interface WorkbenchIdeFacade {
     ): DefinitionTarget?
 }
 
-fun completionDetail(kind: CompletionItemKind): String =
-    when (kind) {
-        CompletionItemKind.KEYWORD -> "kw"
-        CompletionItemKind.MODULE -> "mod"
-        CompletionItemKind.FUNCTION -> "fn"
-        CompletionItemKind.VARIABLE -> "var"
-        CompletionItemKind.PARAMETER -> "arg"
-        CompletionItemKind.TYPE -> "type"
-        CompletionItemKind.FIELD -> "field"
-    }
-
 fun highlightColor(kind: HighlightTokenKind): Int =
     when (kind) {
         HighlightTokenKind.KEYWORD -> 0x8EC5FF
