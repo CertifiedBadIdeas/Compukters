@@ -275,6 +275,7 @@ class WorkbenchStore(
 
                 KeyCodes.KEY_ENTER,
                 KeyCodes.KEY_KP_ENTER,
+                KeyCodes.KEY_TAB,
                 -> {
                     applyImportPickerSelection(visibleEditorLines = visibleEditorLines)
                     return true
@@ -301,6 +302,7 @@ class WorkbenchStore(
 
                 KeyCodes.KEY_ENTER,
                 KeyCodes.KEY_KP_ENTER,
+                KeyCodes.KEY_TAB,
                 -> {
                     applyCompletion()
                     return true

@@ -192,8 +192,8 @@ private fun UiScope.buildEditorArea(
         codeEditor(
             viewModel = value { viewModel },
             modifier = Modifier.size(IntSize(width, height)),
-            fontWidth = 6,
-            fontHeight = 9,
+            fontWidth = EDITOR_FONT_WIDTH,
+            fontHeight = EDITOR_FONT_HEIGHT,
         )
     }
 }
@@ -278,9 +278,15 @@ private fun UiScope.buildCompletionOverlay(
 
     overlay(
         modifier = Modifier.size(IntSize(popupWidth, popupHeight)),
-        anchor = value { completionAnchor(viewport, popupWidth, popupHeight) },
+        anchor = value { completionAnchor(store, viewport, popupWidth, popupHeight) },
     ) {
-        column(modifier = Modifier.size(IntSize(popupWidth, popupHeight)).background(BG_POPUP)) {
+        // 1px border canvas underlay so the popup visually detaches from the
+        // editor it floats over.
+        canvas {
+            fillRect(0, 0, popupWidth, popupHeight, BG_POPUP_BORDER)
+            fillRect(1, 1, popupWidth - 2, popupHeight - 2, BG_POPUP)
+        }
+        column(modifier = Modifier.size(IntSize(popupWidth, popupHeight))) {
             box(modifier = Modifier.size(IntSize(popupWidth, COMPLETION_POPUP_PADDING)))
             items.forEachIndexed { idx, item ->
                 completionRow(
@@ -315,7 +321,11 @@ private fun UiScope.buildImportPickerOverlay(
                 )
             },
     ) {
-        column(modifier = Modifier.size(IntSize(popupWidth, popupHeight)).background(BG_IMPORT_POPUP)) {
+        canvas {
+            fillRect(0, 0, popupWidth, popupHeight, BG_POPUP_BORDER)
+            fillRect(1, 1, popupWidth - 2, popupHeight - 2, BG_IMPORT_POPUP)
+        }
+        column(modifier = Modifier.size(IntSize(popupWidth, popupHeight))) {
             box(modifier = Modifier.size(IntSize(popupWidth, IMPORT_HEADER_HEIGHT)).background(BG_BUTTON)) {
                 text(
                     modifier = Modifier.align(UiAlignment.Center),
@@ -507,14 +517,36 @@ private fun UiScope.completionRow(
 }
 
 private fun completionAnchor(
+    store: WorkbenchStore,
     viewport: IntSize,
     popupWidth: Int,
     popupHeight: Int,
 ): Position {
-    // Cheap, deterministic placement — under the toolbar, indented past the
-    // sidebar so it visually attaches to the editor area.
-    val x = (SIDEBAR_WIDTH + 16).coerceAtMost((viewport.width - popupWidth).coerceAtLeast(0))
-    val y = (TOOLBAR_HEIGHT + 24).coerceAtMost((viewport.height - popupHeight).coerceAtLeast(0))
+    // Anchor just below the current cursor cell so the popup looks attached
+    // to the caret, the way real IDEs render their completion lists. Falls
+    // back to a fixed editor-area corner when no document is open.
+    val ed = store.state.editor
+    val sidebar = SIDEBAR_WIDTH.coerceAtMost(viewport.width / 4)
+    val editorLeft = sidebar
+    val gutter =
+        ru.lazyhat.compukterkraft.core.ui.editor.CodeEditorMetrics.gutterPixelWidth(
+            ru.lazyhat.compukterkraft.core.ui.editor.CodeEditorMetrics
+                .lineCount(ed.text),
+            EDITOR_FONT_WIDTH,
+        )
+    val cursorPxX = editorLeft + gutter + ed.cursorColumn * EDITOR_FONT_WIDTH
+    val cursorPxY = TOOLBAR_HEIGHT + (ed.cursorLine - ed.scrollLine) * EDITOR_FONT_HEIGHT
+
+    // Place the popup just below the caret line by default; if it would
+    // overflow the viewport, flip it above the line instead.
+    val belowY = cursorPxY + EDITOR_FONT_HEIGHT + 2
+    val y =
+        if (belowY + popupHeight <= viewport.height) {
+            belowY
+        } else {
+            (cursorPxY - popupHeight - 2).coerceAtLeast(TOOLBAR_HEIGHT)
+        }
+    val x = cursorPxX.coerceAtMost((viewport.width - popupWidth).coerceAtLeast(editorLeft))
     return Position(x, y)
 }
 
@@ -538,6 +570,8 @@ private const val IMPORT_HEADER_HEIGHT = 14
 private const val MAX_IMPORT_ROWS = 10
 private const val DEFAULT_VISIBLE_EDITOR_LINES = 32
 private const val INV_TARGET_SECTION_HEIGHT = 22
+private const val EDITOR_FONT_WIDTH = 6
+private const val EDITOR_FONT_HEIGHT = 9
 
 // ---------------------------------------------------------------------------
 // Palette
@@ -553,8 +587,9 @@ private val BG_BUTTON_HOVER = Color.hex(0xFF2C3445.toInt())
 private val BG_BUTTON_ACTIVE = Color.hex(0xFF35516B.toInt())
 private val BG_INVENTORY = Color.hex(0xFF1A2030.toInt())
 private val BG_SLOT = Color.hex(0xFF080A10.toInt())
-private val BG_POPUP = Color.hex(0xEE11151E.toInt())
-private val BG_IMPORT_POPUP = Color.hex(0xF0121721.toInt())
+private val BG_POPUP = Color.hex(0xFF11151E.toInt())
+private val BG_POPUP_BORDER = Color.hex(0xFF4A88C7.toInt())
+private val BG_IMPORT_POPUP = Color.hex(0xFF121721.toInt())
 private val BG_ROW_SELECTED = Color.hex(0x664883C7)
 private val BG_TRANSPARENT = Color.hex(0x00000000)
 
