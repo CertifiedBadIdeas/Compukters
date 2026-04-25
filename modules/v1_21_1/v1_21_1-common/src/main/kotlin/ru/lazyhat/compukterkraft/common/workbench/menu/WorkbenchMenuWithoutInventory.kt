@@ -19,6 +19,7 @@
 
 package ru.lazyhat.compukterkraft.common.workbench.menu
 
+import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.Container
 import net.minecraft.world.SimpleContainer
 import net.minecraft.world.entity.player.Inventory
@@ -26,8 +27,10 @@ import net.minecraft.world.entity.player.Player
 import net.minecraft.world.inventory.MenuType
 import net.minecraft.world.inventory.Slot
 import net.minecraft.world.item.ItemStack
+import ru.lazyhat.compukterkraft.common.network.ServerNetworking
 import ru.lazyhat.compukterkraft.common.workbench.context.ServerWorkbench
 import ru.lazyhat.compukterkraft.common.workbench.data.WorkbenchContainerData
+import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchWorkspaceClientMessage
 
 class WorkbenchMenuWithoutInventory(
     menuType: MenuType<*>,
@@ -37,6 +40,7 @@ class WorkbenchMenuWithoutInventory(
     serverWorkbench: ServerWorkbench? = null,
     private val onTargetStackChanged: ((ItemStack) -> Unit)? = null,
 ) : AbstractWorkbenchMenu(menuType, containerId, containerData, serverWorkbench) {
+    private val ownerPlayer: Player = playerInventory.player
     private val targetContainer =
         SimpleContainer(1).apply {
             setItem(0, containerData.displayStack.copy())
@@ -91,6 +95,19 @@ class WorkbenchMenuWithoutInventory(
         serverWorkbench?.setTarget(stack)
         onTargetStackChanged?.invoke(stack)
         refreshFromServerWorkbench()
+        // The slot mutation only updates the server-side `_workspaceStateFlow`;
+        // without an explicit packet the client menu (and therefore the
+        // Workbench IDE screen) wouldn't see `target.connected` flip until
+        // the next user-driven action. Push the fresh state to the owning
+        // player so toolbar gating, inventory frame and Term button react
+        // immediately when the computer is inserted/removed.
+        val player = ownerPlayer
+        if (serverWorkbench != null && player is ServerPlayer) {
+            ServerNetworking.sendToPlayer(
+                WorkbenchWorkspaceClientMessage(containerId, workspaceStateFlow.value),
+                player,
+            )
+        }
     }
 }
 

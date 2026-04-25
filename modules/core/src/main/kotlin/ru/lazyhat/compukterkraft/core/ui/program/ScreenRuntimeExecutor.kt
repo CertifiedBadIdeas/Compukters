@@ -229,17 +229,24 @@ class ScreenRuntimeExecutor(
                     val cy = clip.y + clipOrigin.y
                     if (x < cx || y < cy || x >= cx + clip.width || y >= cy + clip.height) continue
                 }
+                // Update focus *before* running the click handler. The
+                // handler may synchronously mutate state that triggers a
+                // host-side `invalidate()` (e.g. via a StateFlow collector
+                // dispatched on the main thread), which captures
+                // `focusedNodeId` for restoration on the next rebuild. If
+                // we set focus *after* `onClick`, that capture would see the
+                // stale (pre-click) focus and the new focus assignment would
+                // land on an executor instance that is about to be discarded
+                // — typing right after the click would then have no effect.
+                program.focusNodes
+                    .firstOrNull { it.nodeId == region.nodeId }
+                    ?.let { focusedNodeId = it.nodeId }
                 region.onClick.invoke()
                 region.onClickAt?.invoke(x - rx, y - ry)
                 if (region.onDragStart != null || region.onDrag != null || region.onDragEnd != null) {
                     activeDragRegion = region
                     region.onDragStart?.invoke(x, y)
                 }
-                // If the clicked region also has a matching focus node,
-                // make it the focused one so subsequent key events route there.
-                program.focusNodes
-                    .firstOrNull { it.nodeId == region.nodeId }
-                    ?.let { focusedNodeId = it.nodeId }
                 return true
             }
         }
