@@ -31,10 +31,17 @@ import ru.lazyhat.compukterkraft.core.computer.input.InputEvent
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchRemoteState
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchSyncState
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchTargetState
+import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.CrdtApplyResult
+import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.CrdtDocument
+import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.Op
+import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.ServerCrdtReplica
+import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.SiteId
+import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.TextRun
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceDocument
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceEntry
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
+import java.util.concurrent.ConcurrentHashMap
 
 class ServerWorkbench(
     val workspaceId: Int,
@@ -44,6 +51,14 @@ class ServerWorkbench(
     private var targetDescriptor: TargetDescriptor = initialTarget
     private var syncState: WorkbenchSyncState = WorkbenchSyncState()
     private var runtimeBridge: WorkbenchTargetRuntimeBridge = WorkbenchTargetRuntimeBridge.None
+
+    /**
+     * Active CRDT replicas, keyed by document path within this authoring workspace. Each
+     * replica is lazy-bootstrapped from disk on the first [openSession] for that path. The
+     * map is mutation-safe because Minecraft network handlers can run on the server thread
+     * while the menu is being closed concurrently.
+     */
+    private val replicas: ConcurrentHashMap<String, ServerCrdtReplica> = ConcurrentHashMap()
 
     fun setTarget(stack: ItemStack) {
         targetDescriptor = extractTargetDescriptor(stack)
@@ -93,6 +108,7 @@ class ServerWorkbench(
 
     fun runTargetProgram() {
         if (targetDescriptor.computerId == null) return
+        materializeOpenSessions()
         runtimeBridge.runTargetProgram(targetDescriptor)
     }
 
@@ -130,6 +146,62 @@ class ServerWorkbench(
             sync = syncState,
         )
     }
+
+    /**
+     * Open a CRDT collaboration session for [path] and return the snapshot the client needs to
+     * rebuild its local replica. If a replica already exists (another client opened it), this
+     * just re-emits the current snapshot — both replicas converge anyway.
+     *
+     * Returns `null` only when the file does not exist and we cannot create one (e.g. invalid
+     * path); the caller should treat that as a no-op and skip sending the snapshot message.
+     */
+    fun openSession(path: String): SessionSnapshot? {
+        val initialText = workspace.readDocument(workspaceId, path)?.text ?: return null
+        val replica = replicas.computeIfAbsent(path) {
+            ServerCrdtReplica(CrdtDocument.fromText(initialText, SiteId.ServerInit))
+        }
+        return SessionSnapshot(
+            path = path,
+            runs = replica.document.runs.toList(),
+            versionVector = replica.versionVector(),
+        )
+    }
+
+    /**
+     * Apply a batch of [ops] coming from [sender] to the replica at [path]. If no session is
+     * open at [path] the call returns `null` so the caller can re-snapshot.
+     */
+    fun applyOps(path: String, ops: List<Op>, sender: SiteId): OpsApplyResult? {
+        val replica = replicas[path] ?: return null
+        val result: CrdtApplyResult = replica.apply(ops)
+        return OpsApplyResult(
+            ackedClock = result.ackedClockBySite[sender] ?: -1,
+            rejectedAny = result.rejected.isNotEmpty(),
+        )
+    }
+
+    /**
+     * Flatten every open replica back to the workspace on disk. Called before [runTargetProgram]
+     * (so the runtime sees up-to-date source) and on menu close (so unflushed edits survive).
+     */
+    fun materializeOpenSessions() {
+        replicas.forEach { (path, replica) ->
+            workspace.writeDocument(workspaceId, path, replica.flatten())
+        }
+    }
+
+    /** Snapshot of an opened CRDT session, used to seed the wire snapshot message. */
+    data class SessionSnapshot(
+        val path: String,
+        val runs: List<TextRun>,
+        val versionVector: Map<SiteId, Int>,
+    )
+
+    /** Result of applying a batch of remote ops to a server-side replica. */
+    data class OpsApplyResult(
+        val ackedClock: Int,
+        val rejectedAny: Boolean,
+    )
 
     data class TargetDescriptor(
         val computerId: Int? = null,

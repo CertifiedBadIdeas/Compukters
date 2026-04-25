@@ -27,9 +27,13 @@ import net.minecraft.world.inventory.AbstractContainerMenu
 import net.minecraft.world.inventory.MenuType
 import ru.lazyhat.compukterkraft.common.workbench.context.ServerWorkbench
 import ru.lazyhat.compukterkraft.common.workbench.data.WorkbenchContainerData
+import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchDocumentSnapshotClientMessage
+import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchOpsClientMessage
 import ru.lazyhat.compukterkraft.common.workbench.network.server.WorkbenchWorkspaceServerMessage
 import ru.lazyhat.compukterkraft.core.computer.input.InputEvent
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchRemoteState
+import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.Op
+import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.SiteId
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 
 abstract class AbstractWorkbenchMenu(
@@ -119,8 +123,48 @@ abstract class AbstractWorkbenchMenu(
     }
 
     override fun removed(player: Player) {
+        // Materialize any open CRDT sessions back to disk so unflushed edits survive when the
+        // player closes the workbench. The replicas die with the menu; this is the last
+        // chance to persist them.
+        serverWorkbench?.materializeOpenSessions()
         super.removed(player)
     }
 
     override fun stillValid(player: Player): Boolean = true
+
+    /**
+     * Open a CRDT session for [path] and produce the wire snapshot the client needs to
+     * rebuild its replica. Returns `null` when the document does not exist or no
+     * [serverWorkbench] is bound (client-side menu).
+     */
+    fun openWorkbenchSession(path: String): WorkbenchDocumentSnapshotClientMessage? {
+        val workbench = serverWorkbench ?: return null
+        val snapshot = workbench.openSession(path) ?: return null
+        return WorkbenchDocumentSnapshotClientMessage(
+            containerId = containerId,
+            path = snapshot.path,
+            runs = snapshot.runs,
+            versionVector = snapshot.versionVector,
+        )
+    }
+
+    /**
+     * Apply [ops] from [sender] to the open session at [path]; produce the per-sender ack the
+     * server replies with. If no session is open at [path] (the client never sent READ /
+     * the menu was reopened), returns `null` so the caller can re-open and re-snapshot.
+     */
+    fun handleOpsRequest(
+        path: String,
+        ops: List<Op>,
+        sender: SiteId,
+    ): WorkbenchOpsClientMessage? {
+        val workbench = serverWorkbench ?: return null
+        val result = workbench.applyOps(path, ops, sender) ?: return null
+        return WorkbenchOpsClientMessage(
+            containerId = containerId,
+            path = path,
+            ops = emptyList(), // Phase 1: no peer-broadcast yet; Phase 2 fans out to other clients
+            ackedClock = result.ackedClock,
+        )
+    }
 }
