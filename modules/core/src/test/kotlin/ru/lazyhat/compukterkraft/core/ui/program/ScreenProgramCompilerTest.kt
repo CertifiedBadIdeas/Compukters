@@ -7,6 +7,7 @@ import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Modifier
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.UiAlignment
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.align
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.background
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.focusable
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.hoverable
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.offset
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.padding
@@ -17,7 +18,6 @@ import ru.lazyhat.compukterkraft.core.ui.foundation.value
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -41,7 +41,7 @@ class ScreenProgramCompilerTest {
         )
 
     @Test
-    fun terminalSurfaceIsMarkedAsTheSoleFocusedElement() {
+    fun terminalSurfaceIsCollectedAsAFocusNode() {
         val program =
             ScreenProgramCompiler().compile(
                 ui {
@@ -56,14 +56,17 @@ class ScreenProgramCompilerTest {
         assertTrue(
             program.frames[0].ops.any { it is RenderOp.DrawTerminalSurface },
         )
-        assertEquals("root-0", program.focusedNodeId)
-        assertNotNull(program.keyHandler)
-        assertNotNull(program.focusRegion)
-        assertTrue(program.keyHandler.onKeyPressed(257))
+        val node = program.focusNodes.single()
+        assertEquals("root-0", node.nodeId)
+        assertEquals(12, node.x)
+        assertEquals(28, node.y)
+        assertEquals(96, node.width)
+        assertEquals(48, node.height)
+        assertTrue(node.handler.onKeyPressed(257))
     }
 
     @Test
-    fun screensWithoutFocusableElementsHaveNullFocusAndNoKeyHandler() {
+    fun screensWithoutFocusableElementsHaveEmptyFocusNodeList() {
         val program =
             ScreenProgramCompiler().compile(
                 ui {
@@ -71,23 +74,42 @@ class ScreenProgramCompilerTest {
                 },
             )
 
-        assertNull(program.focusedNodeId)
-        assertNull(program.keyHandler)
-        assertNull(program.focusRegion)
+        assertTrue(program.focusNodes.isEmpty())
     }
 
     @Test
-    fun multipleFocusableElementsAreRejectedAtCompileTime() {
-        val error =
-            assertFailsWith<IllegalStateException> {
-                ScreenProgramCompiler().compile(
-                    ui {
-                        terminalSurface(snapshot = value { emptySnapshot() }, onKey = { true })
-                        terminalSurface(snapshot = value { emptySnapshot() }, onKey = { true })
-                    },
-                )
-            }
-        assertTrue(error.message!!.contains("multiple focusable elements"))
+    fun multipleFocusableElementsAreCollectedIntoFocusNodes() {
+        val program =
+            ScreenProgramCompiler().compile(
+                ui {
+                    terminalSurface(snapshot = value { emptySnapshot() }, onKey = { true })
+                    box(modifier = Modifier.size(20, 20).focusable(id = "editor", tabOrder = 1))
+                },
+            )
+
+        assertEquals(2, program.focusNodes.size)
+        assertEquals(0, program.focusNodes[0].tabOrder)
+        assertEquals("editor", program.focusNodes[1].nodeId)
+        assertEquals(1, program.focusNodes[1].tabOrder)
+    }
+
+    @Test
+    fun focusableModifierOnTerminalSurfaceTakesPrecedenceOverImplicitClaim() {
+        // When TerminalSurface already carries an explicit Modifier.focusable,
+        // the compiler must not also auto-claim a second FocusNode for it.
+        val program =
+            ScreenProgramCompiler().compile(
+                ui {
+                    terminalSurface(
+                        snapshot = value { emptySnapshot() },
+                        modifier = Modifier.size(40, 40).focusable(id = "explicit"),
+                        onKey = { true },
+                    )
+                },
+            )
+
+        assertEquals(1, program.focusNodes.size)
+        assertEquals("explicit", program.focusNodes.single().nodeId)
     }
 
     @Test

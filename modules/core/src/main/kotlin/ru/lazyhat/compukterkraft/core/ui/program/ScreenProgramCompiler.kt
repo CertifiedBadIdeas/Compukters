@@ -6,6 +6,7 @@ import ru.lazyhat.compukterkraft.core.ui.foundation.Value
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Position
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.findBackground
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.findClickable
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.findFocusable
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.findHoverable
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.findSize
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.findTooltip
@@ -39,7 +40,7 @@ class ScreenProgramCompiler(
         val hitRegions = mutableListOf<HitRegion>()
         val hoverRegions = mutableListOf<HoverRegion>()
         val tooltipRegions = mutableListOf<TooltipRegion>()
-        val focus = FocusAccumulator()
+        val focusNodes = mutableListOf<FocusNode>()
 
         val rootSize = root.modifier.findSize()?.size
         val effectiveRootWidth = if (rootWidth > 0) rootWidth else rootSize?.width ?: 0
@@ -62,7 +63,7 @@ class ScreenProgramCompiler(
             tooltipRegions = tooltipRegions,
             frames = frames,
             descriptors = descriptors,
-            focus = focus,
+            focusNodes = focusNodes,
             frameIndex = 0,
         )
 
@@ -75,9 +76,7 @@ class ScreenProgramCompiler(
             hitRegions = hitRegions.sortedByDescending { it.zIndex },
             hoverRegions = hoverRegions.toList(),
             tooltipRegions = tooltipRegions.toList(),
-            focusedNodeId = focus.nodeId,
-            focusRegion = focus.region,
-            keyHandler = focus.handler,
+            focusNodes = focusNodes.toList(),
         )
     }
 
@@ -91,15 +90,45 @@ class ScreenProgramCompiler(
         tooltipRegions: MutableList<TooltipRegion>,
         frames: MutableList<MutableList<RenderOp>>,
         descriptors: MutableList<FrameDescriptor>,
-        focus: FocusAccumulator,
+        focusNodes: MutableList<FocusNode>,
         frameIndex: Int,
     ) {
         if (element is UiElement.Overlay) {
-            lowerOverlay(element, nodeId, layout, hitRegions, hoverRegions, tooltipRegions, frames, descriptors, focus)
+            lowerOverlay(
+                element,
+                nodeId,
+                layout,
+                hitRegions,
+                hoverRegions,
+                tooltipRegions,
+                frames,
+                descriptors,
+                focusNodes,
+            )
             return
         }
 
         val node = layout[nodeId] ?: return
+
+        // Modifier-based focus claim works on any element (Box, Text, Canvas, ...).
+        element.modifier.findFocusable()?.let { f ->
+            focusNodes +=
+                FocusNode(
+                    nodeId = f.id,
+                    frameIndex = frameIndex,
+                    x = node.x,
+                    y = node.y,
+                    width = node.width,
+                    height = node.height,
+                    tabOrder = f.tabOrder,
+                    handler =
+                        FocusHandler(
+                            onKeyPressed = f.onKeyPressed,
+                            onKeyReleased = f.onKeyReleased,
+                            onCharTyped = f.onCharTyped,
+                        ),
+                )
+        }
         element.modifier.findHoverable()?.let { hoverable ->
             hoverRegions +=
                 HoverRegion(
@@ -153,7 +182,7 @@ class ScreenProgramCompiler(
                         tooltipRegions,
                         frames,
                         descriptors,
-                        focus,
+                        focusNodes,
                         frameIndex,
                     )
                 }
@@ -171,7 +200,7 @@ class ScreenProgramCompiler(
                         tooltipRegions,
                         frames,
                         descriptors,
-                        focus,
+                        focusNodes,
                         frameIndex,
                     )
                 }
@@ -189,7 +218,7 @@ class ScreenProgramCompiler(
                         tooltipRegions,
                         frames,
                         descriptors,
-                        focus,
+                        focusNodes,
                         frameIndex,
                     )
                 }
@@ -205,24 +234,26 @@ class ScreenProgramCompiler(
 
             is UiElement.TerminalSurface -> {
                 ops += RenderOp.DrawTerminalSurface(node.x, node.y, node.width, node.height, element.snapshot)
-                focus.claim(
-                    nodeId = nodeId,
-                    region =
-                        FocusRegion(
+                // Auto-claim focus only if the element doesn't already carry an explicit
+                // `Modifier.focusable(...)` (which would have been collected above).
+                if (element.modifier.findFocusable() == null) {
+                    focusNodes +=
+                        FocusNode(
                             nodeId = nodeId,
                             frameIndex = frameIndex,
                             x = node.x,
                             y = node.y,
                             width = node.width,
                             height = node.height,
-                        ),
-                    handler =
-                        FocusHandler(
-                            onKeyPressed = element.onKey,
-                            onKeyReleased = element.onKeyReleased,
-                            onCharTyped = element.onCharTyped,
-                        ),
-                )
+                            tabOrder = 0,
+                            handler =
+                                FocusHandler(
+                                    onKeyPressed = element.onKey,
+                                    onKeyReleased = element.onKeyReleased,
+                                    onCharTyped = element.onCharTyped,
+                                ),
+                        )
+                }
             }
 
             is UiElement.IfNode -> {
@@ -241,7 +272,7 @@ class ScreenProgramCompiler(
                         tooltipRegions,
                         frames,
                         descriptors,
-                        focus,
+                        focusNodes,
                         subFrameIndex,
                     )
                 }
@@ -262,7 +293,7 @@ class ScreenProgramCompiler(
         tooltipRegions: MutableList<TooltipRegion>,
         frames: MutableList<MutableList<RenderOp>>,
         descriptors: MutableList<FrameDescriptor>,
-        focus: FocusAccumulator,
+        focusNodes: MutableList<FocusNode>,
     ) {
         val size = element.modifier.findSize()?.size
         val overlayWidth = size?.width ?: parentLayout["root"]?.width ?: 0
@@ -287,7 +318,7 @@ class ScreenProgramCompiler(
                 tooltipRegions,
                 frames,
                 descriptors,
-                focus,
+                focusNodes,
                 subFrameIndex,
             )
         }
@@ -297,27 +328,4 @@ class ScreenProgramCompiler(
         val origin: Value<Position>?,
         val visible: Value<Boolean>?,
     )
-
-    private class FocusAccumulator {
-        var nodeId: String? = null
-            private set
-        var region: FocusRegion? = null
-            private set
-        var handler: FocusHandler? = null
-            private set
-
-        fun claim(
-            nodeId: String,
-            region: FocusRegion,
-            handler: FocusHandler,
-        ) {
-            check(this.nodeId == null) {
-                "UI DSL: multiple focusable elements are not supported " +
-                    "(already focused: '${this.nodeId}', new: '$nodeId')"
-            }
-            this.nodeId = nodeId
-            this.region = region
-            this.handler = handler
-        }
-    }
 }

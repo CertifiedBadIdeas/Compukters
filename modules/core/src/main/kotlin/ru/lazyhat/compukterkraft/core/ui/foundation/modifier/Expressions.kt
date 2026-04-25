@@ -164,3 +164,47 @@ fun Modifier.tooltip(text: String) = then(TooltipModifier(value { text }))
 fun Modifier.tooltip(text: Value<String>) = then(TooltipModifier(text))
 
 fun Modifier.findTooltip() = find<TooltipModifier>()
+
+//
+//
+
+/**
+ * Marks the host element as a keyboard-focus target.
+ *
+ *  - [id] is the stable identifier the runtime uses to track which node
+ *    currently owns focus across recompiles.
+ *  - [tabOrder] determines Tab/Shift+Tab navigation: nodes are visited in
+ *    ascending [tabOrder]. Nodes with the same value are visited in
+ *    compile-time order. Nodes with a negative [tabOrder] are skipped by
+ *    Tab cycling but can still acquire focus via mouse click.
+ *  - [onKeyPressed]/[onKeyReleased]/[onCharTyped] return `true` to consume
+ *    the event. If [onKeyPressed] returns `false` and the key is Tab, the
+ *    runtime advances focus to the next/previous focusable node before
+ *    returning.
+ */
+data class FocusableModifier(
+    val id: String,
+    val tabOrder: Int,
+    val onKeyPressed: (keyCode: Int) -> Boolean,
+    val onKeyReleased: (keyCode: Int) -> Boolean,
+    val onCharTyped: (ch: Char) -> Boolean,
+) : Modifier.Element
+
+fun Modifier.focusable(
+    id: String,
+    tabOrder: Int = 0,
+    onKeyPressed: (Int) -> Boolean = { false },
+    onKeyReleased: (Int) -> Boolean = { false },
+    onCharTyped: (Char) -> Boolean = { false },
+): Modifier =
+    then(
+        FocusableModifier(
+            id = id,
+            tabOrder = tabOrder,
+            onKeyPressed = onKeyPressed,
+            onKeyReleased = onKeyReleased,
+            onCharTyped = onCharTyped,
+        ),
+    )
+
+fun Modifier.findFocusable() = find<FocusableModifier>()

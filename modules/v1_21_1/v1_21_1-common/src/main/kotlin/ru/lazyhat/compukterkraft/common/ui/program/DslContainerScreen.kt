@@ -48,10 +48,9 @@ abstract class DslContainerScreen<T : AbstractComputerMenu>(
     }
 
     /**
-     * Whether the single focusable element (if any) currently has focus.
-     * Mirrors [ScreenRuntimeExecutor.isFocused] of the latest executor and
-     * returns `false` before the first render or when there is no
-     * focusable element at all.
+     * Whether any focusable element currently has focus. Mirrors
+     * [ScreenRuntimeExecutor.isFocused] of the latest executor and returns
+     * `false` before the first render or when there is no focusable element.
      */
     protected val isDslFocused: Boolean
         get() = executor?.isFocused ?: false
@@ -91,7 +90,7 @@ abstract class DslContainerScreen<T : AbstractComputerMenu>(
     }
 
     private fun rebuildExecutor() {
-        val previousFocused = executor?.isFocused ?: false
+        val previousFocused = executor?.focusedNodeId
         val program =
             ScreenProgramCompiler(fontMetrics = { text -> font.width(text) })
                 .compile(
@@ -127,7 +126,7 @@ abstract class DslContainerScreen<T : AbstractComputerMenu>(
         modifiers: Int,
     ): Boolean {
         val executor = executor
-        return (executor != null && executor.keyPressed(keyCode)) ||
+        return (executor != null && executor.keyPressed(keyCode, modifiers)) ||
             super.keyPressed(keyCode, scanCode, modifiers)
     }
 
