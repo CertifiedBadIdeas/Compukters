@@ -7,9 +7,18 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 package ru.lazyhat.compukterkraft.core.computer.workbench.screen
 
+import ru.lazyhat.compukterkraft.core.computer.workbench.screen.WorkbenchInventoryLayout.Companion.SLOT_SIZE
 import ru.lazyhat.compukterkraft.core.ui.foundation.IntSize
 
 /**
@@ -52,6 +61,7 @@ data class WorkbenchInventoryLayout(
         const val SECTION_HEADER_HEIGHT: Int = 14
         const val TARGET_SECTION_HEIGHT: Int = SLOT_SIZE + 4
         const val INV_HOTBAR_GAP: Int = 4
+        const val BORDER_WIDTH: Int = 1 // Slots x/y need to be padded with border width.
 
         /**
          * Total panel height = header + target + header + 3*slot + gap + slot.
@@ -72,10 +82,11 @@ data class WorkbenchInventoryLayout(
             panelTop: Int,
         ): WorkbenchInventoryLayout {
             val panelLeft = (viewport.width - PANEL_WIDTH).coerceAtLeast(0)
-            val gridX = panelLeft + PANEL_PADDING
-            val targetX = panelLeft + (PANEL_WIDTH - SLOT_SIZE) / 2
-            val targetY = panelTop + SECTION_HEADER_HEIGHT + 2
-            val mainGridY = panelTop + SECTION_HEADER_HEIGHT + TARGET_SECTION_HEIGHT + SECTION_HEADER_HEIGHT
+            val gridX = panelLeft + PANEL_PADDING + BORDER_WIDTH
+            val targetX = panelLeft + (PANEL_WIDTH - SLOT_SIZE) / 2 + BORDER_WIDTH
+            val targetY = panelTop + SECTION_HEADER_HEIGHT + 2 + BORDER_WIDTH
+            val mainGridY =
+                panelTop + SECTION_HEADER_HEIGHT + TARGET_SECTION_HEIGHT + SECTION_HEADER_HEIGHT + BORDER_WIDTH
             val hotbarY = mainGridY + SLOT_SIZE * 3 + INV_HOTBAR_GAP
             return WorkbenchInventoryLayout(
                 panelLeft = panelLeft,
