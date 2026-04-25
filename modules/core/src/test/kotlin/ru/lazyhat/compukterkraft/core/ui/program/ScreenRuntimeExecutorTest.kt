@@ -8,6 +8,7 @@ import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.focusable
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.offset
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.size
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.zIndex
+import ru.lazyhat.compukterkraft.core.ui.foundation.tickValue
 import ru.lazyhat.compukterkraft.core.ui.foundation.ui
 import ru.lazyhat.compukterkraft.core.ui.foundation.value
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
@@ -390,6 +391,35 @@ class ScreenRuntimeExecutorTest {
         // Restoring an unknown id clears focus.
         executor.restoreFocus("missing")
         assertEquals(null, executor.focusedNodeId)
+    }
+
+    @Test
+    fun tickValueIncrementsBetweenRendersAndIsObservedByValueExpressions() {
+        val seen = mutableListOf<Int>()
+        val program =
+            ScreenProgramCompiler().compile(
+                ui {
+                    text(
+                        modifier = Modifier.size(40, 8),
+                        text =
+                            tickValue { tick ->
+                                seen += tick
+                                "tick=$tick"
+                            },
+                    )
+                },
+            )
+
+        val executor = ScreenRuntimeExecutor(program)
+        val backend = RecordingBackend()
+        executor.render(backend)
+        executor.render(backend)
+        executor.render(backend)
+
+        assertEquals(3, seen.size)
+        // Strictly monotonic, ticks must differ.
+        assertTrue(seen[0] < seen[1])
+        assertTrue(seen[1] < seen[2])
     }
 
     private companion object {

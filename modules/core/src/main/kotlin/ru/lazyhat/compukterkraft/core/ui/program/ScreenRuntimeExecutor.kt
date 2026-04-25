@@ -2,6 +2,7 @@ package ru.lazyhat.compukterkraft.core.ui.program
 
 import ru.lazyhat.compukterkraft.core.ui.foundation.CanvasScope
 import ru.lazyhat.compukterkraft.core.ui.foundation.Color
+import ru.lazyhat.compukterkraft.core.ui.foundation.TickContext
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Position
 
 /**
@@ -68,6 +69,13 @@ class ScreenRuntimeExecutor(
         private set
 
     /**
+     * Monotonic counter incremented just before every [render] call. The
+     * value is also published into [TickContext] so [tickValue] expressions
+     * see the same tick the runtime is rendering.
+     */
+    private var tickCounter: Int = 0
+
+    /**
      * Updates every [ru.lazyhat.compukterkraft.core.ui.foundation.HoverState]
      * bound via `Modifier.hoverable(...)` based on the supplied mouse
      * position. Call this from the host screen before [render] so that
@@ -108,6 +116,7 @@ class ScreenRuntimeExecutor(
     }
 
     fun render(backend: RenderBackend) {
+        TickContext.current = ++tickCounter
         for (frame in program.frames) {
             if (frame.visible != null && !frame.visible.value) continue
             val origin = frame.origin?.value ?: Position.Zero
