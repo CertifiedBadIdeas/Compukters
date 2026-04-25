@@ -51,11 +51,22 @@ abstract class DslContainerScreen<T : AbstractContainerMenu>(
      * a rebuild.
      */
     protected fun invalidate() {
-        // Capture focus *before* dropping the executor; otherwise the next
-        // rebuild would read it back as null and silently lose keyboard focus
-        // on every tick that calls invalidate() (e.g. WorkbenchEditorScreen).
-        lastFocusedNodeId = executor?.focusedNodeId
-        executor = null
+        // Rebuild eagerly rather than nulling out the executor. Input events
+        // (charTyped, keyPressed, mouseClicked) arrive between renderBg
+        // calls; if we left the executor null until the next render, every
+        // event delivered in that window would fall through to super and
+        // be lost. The most visible symptom was: the first key after
+        // focusing the editor typed correctly, then state mutation
+        // triggered invalidate(), and every subsequent key in the same
+        // input batch went nowhere because the executor was null.
+        // rebuildExecutor() preserves focus via lastFocusedNodeId, so this
+        // is safe.
+        if (compiledWidth == Int.MIN_VALUE) {
+            // init() hasn't run yet; nothing to rebuild against.
+            executor = null
+            return
+        }
+        rebuildExecutor()
     }
 
     /**
