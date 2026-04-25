@@ -264,125 +264,136 @@ class ScreenRuntimeExecutorTest {
         ) {
         }
 
-        @Test
-        fun modifierFocusableAcquiresFocusOnClickAndReceivesKeyEvents() {
-            val keys = mutableListOf<Int>()
-            val program =
-                ScreenProgramCompiler().compile(
-                    ui {
-                        box(
-                            modifier =
-                                Modifier
-                                    .offset(8, 8)
-                                    .size(40, 40)
-                                    .focusable(
-                                        id = "editor",
-                                        onKeyPressed = {
-                                            keys += it
-                                            true
-                                        },
-                                    ),
-                        )
-                    },
-                )
-
-            val executor = ScreenRuntimeExecutor(program)
-            assertFalse(executor.isFocused)
-            assertTrue(executor.mouseClicked(10, 10))
-            assertEquals("editor", executor.focusedNodeId)
-            assertTrue(executor.keyPressed(65))
-            assertEquals(listOf(65), keys)
+        override fun pushClip(
+            x: Int,
+            y: Int,
+            width: Int,
+            height: Int,
+        ) {
         }
 
-        @Test
-        fun tabCyclesFocusForwardThroughTabbableNodes() {
-            val program =
-                ScreenProgramCompiler().compile(
-                    ui {
-                        box(modifier = Modifier.offset(0, 0).size(20, 20).focusable(id = "first", tabOrder = 1))
-                        box(modifier = Modifier.offset(30, 0).size(20, 20).focusable(id = "second", tabOrder = 2))
-                        box(modifier = Modifier.offset(60, 0).size(20, 20).focusable(id = "third", tabOrder = 3))
-                    },
-                )
-
-            val executor = ScreenRuntimeExecutor(program)
-            executor.mouseClicked(5, 5)
-            assertEquals("first", executor.focusedNodeId)
-
-            // Plain Tab → next.
-            assertTrue(executor.keyPressed(KEY_TAB))
-            assertEquals("second", executor.focusedNodeId)
-            assertTrue(executor.keyPressed(KEY_TAB))
-            assertEquals("third", executor.focusedNodeId)
-            // Wraps around.
-            assertTrue(executor.keyPressed(KEY_TAB))
-            assertEquals("first", executor.focusedNodeId)
-
-            // Shift+Tab → previous.
-            assertTrue(executor.keyPressed(KEY_TAB, MOD_SHIFT))
-            assertEquals("third", executor.focusedNodeId)
+        override fun popClip() {
         }
+    }
 
-        @Test
-        fun tabIsConsumedByFocusedNodeFirstAndDoesNotCycleWhenHandlerReturnsTrue() {
-            val program =
-                ScreenProgramCompiler().compile(
-                    ui {
-                        box(modifier = Modifier.offset(0, 0).size(20, 20).focusable(id = "greedy", onKeyPressed = { true }))
-                        box(modifier = Modifier.offset(30, 0).size(20, 20).focusable(id = "other"))
-                    },
-                )
+    @Test
+    fun modifierFocusableAcquiresFocusOnClickAndReceivesKeyEvents() {
+        val keys = mutableListOf<Int>()
+        val program =
+            ScreenProgramCompiler().compile(
+                ui {
+                    box(
+                        modifier =
+                            Modifier
+                                .offset(8, 8)
+                                .size(40, 40)
+                                .focusable(
+                                    id = "editor",
+                                    onKeyPressed = {
+                                        keys += it
+                                        true
+                                    },
+                                ),
+                    )
+                },
+            )
 
-            val executor = ScreenRuntimeExecutor(program)
-            executor.mouseClicked(5, 5)
-            assertEquals("greedy", executor.focusedNodeId)
-            assertTrue(executor.keyPressed(KEY_TAB))
-            assertEquals("greedy", executor.focusedNodeId)
-        }
+        val executor = ScreenRuntimeExecutor(program)
+        assertFalse(executor.isFocused)
+        assertTrue(executor.mouseClicked(10, 10))
+        assertEquals("editor", executor.focusedNodeId)
+        assertTrue(executor.keyPressed(65))
+        assertEquals(listOf(65), keys)
+    }
 
-        @Test
-        fun negativeTabOrderNodesAreSkippedByCycling() {
-            val program =
-                ScreenProgramCompiler().compile(
-                    ui {
-                        box(modifier = Modifier.offset(0, 0).size(20, 20).focusable(id = "tabbable", tabOrder = 0))
-                        box(modifier = Modifier.offset(30, 0).size(20, 20).focusable(id = "skipme", tabOrder = -1))
-                    },
-                )
+    @Test
+    fun tabCyclesFocusForwardThroughTabbableNodes() {
+        val program =
+            ScreenProgramCompiler().compile(
+                ui {
+                    box(modifier = Modifier.offset(0, 0).size(20, 20).focusable(id = "first", tabOrder = 1))
+                    box(modifier = Modifier.offset(30, 0).size(20, 20).focusable(id = "second", tabOrder = 2))
+                    box(modifier = Modifier.offset(60, 0).size(20, 20).focusable(id = "third", tabOrder = 3))
+                },
+            )
 
-            val executor = ScreenRuntimeExecutor(program)
-            executor.mouseClicked(5, 5)
-            assertEquals("tabbable", executor.focusedNodeId)
-            // Only one tabbable node; Tab wraps to itself but the executor still
-            // reports the cycle as handled.
-            assertTrue(executor.keyPressed(KEY_TAB))
-            assertEquals("tabbable", executor.focusedNodeId)
-            // The skipped node can still be focused with the mouse.
-            executor.mouseClicked(35, 5)
-            assertEquals("skipme", executor.focusedNodeId)
-        }
+        val executor = ScreenRuntimeExecutor(program)
+        executor.mouseClicked(5, 5)
+        assertEquals("first", executor.focusedNodeId)
 
-        @Test
-        fun restoreFocusAfterRecompileMatchesByNodeId() {
-            val program =
-                ScreenProgramCompiler().compile(
-                    ui {
-                        box(modifier = Modifier.size(20, 20).focusable(id = "stable"))
-                    },
-                )
+        // Plain Tab → next.
+        assertTrue(executor.keyPressed(KEY_TAB))
+        assertEquals("second", executor.focusedNodeId)
+        assertTrue(executor.keyPressed(KEY_TAB))
+        assertEquals("third", executor.focusedNodeId)
+        // Wraps around.
+        assertTrue(executor.keyPressed(KEY_TAB))
+        assertEquals("first", executor.focusedNodeId)
 
-            val executor = ScreenRuntimeExecutor(program)
-            executor.restoreFocus("stable")
-            assertEquals("stable", executor.focusedNodeId)
+        // Shift+Tab → previous.
+        assertTrue(executor.keyPressed(KEY_TAB, MOD_SHIFT))
+        assertEquals("third", executor.focusedNodeId)
+    }
 
-            // Restoring an unknown id clears focus.
-            executor.restoreFocus("missing")
-            assertEquals(null, executor.focusedNodeId)
-        }
+    @Test
+    fun tabIsConsumedByFocusedNodeFirstAndDoesNotCycleWhenHandlerReturnsTrue() {
+        val program =
+            ScreenProgramCompiler().compile(
+                ui {
+                    box(modifier = Modifier.offset(0, 0).size(20, 20).focusable(id = "greedy", onKeyPressed = { true }))
+                    box(modifier = Modifier.offset(30, 0).size(20, 20).focusable(id = "other"))
+                },
+            )
 
-        private companion object {
-            const val KEY_TAB = 258
-            const val MOD_SHIFT = 0x0001
-        }
+        val executor = ScreenRuntimeExecutor(program)
+        executor.mouseClicked(5, 5)
+        assertEquals("greedy", executor.focusedNodeId)
+        assertTrue(executor.keyPressed(KEY_TAB))
+        assertEquals("greedy", executor.focusedNodeId)
+    }
+
+    @Test
+    fun negativeTabOrderNodesAreSkippedByCycling() {
+        val program =
+            ScreenProgramCompiler().compile(
+                ui {
+                    box(modifier = Modifier.offset(0, 0).size(20, 20).focusable(id = "tabbable", tabOrder = 0))
+                    box(modifier = Modifier.offset(30, 0).size(20, 20).focusable(id = "skipme", tabOrder = -1))
+                },
+            )
+
+        val executor = ScreenRuntimeExecutor(program)
+        executor.mouseClicked(5, 5)
+        assertEquals("tabbable", executor.focusedNodeId)
+        // Only one tabbable node; Tab cycle has nothing to switch to and
+        // returns false, allowing the host to handle Tab itself.
+        assertFalse(executor.keyPressed(KEY_TAB))
+        assertEquals("tabbable", executor.focusedNodeId)
+        // The skipped node can still be focused with the mouse.
+        executor.mouseClicked(35, 5)
+        assertEquals("skipme", executor.focusedNodeId)
+    }
+
+    @Test
+    fun restoreFocusAfterRecompileMatchesByNodeId() {
+        val program =
+            ScreenProgramCompiler().compile(
+                ui {
+                    box(modifier = Modifier.size(20, 20).focusable(id = "stable"))
+                },
+            )
+
+        val executor = ScreenRuntimeExecutor(program)
+        executor.restoreFocus("stable")
+        assertEquals("stable", executor.focusedNodeId)
+
+        // Restoring an unknown id clears focus.
+        executor.restoreFocus("missing")
+        assertEquals(null, executor.focusedNodeId)
+    }
+
+    private companion object {
+        const val KEY_TAB = 258
+        const val MOD_SHIFT = 0x0001
     }
 }

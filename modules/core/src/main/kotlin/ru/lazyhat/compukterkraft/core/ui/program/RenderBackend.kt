@@ -24,4 +24,19 @@ interface RenderBackend {
         y: Int,
         snapshot: ScreenBufferSnapshot,
     )
+
+    /**
+     * Pushes a rectangular clip region onto an internal clip stack. Subsequent
+     * draw calls are restricted to the intersection of all currently pushed
+     * clips. Implementations are expected to support arbitrary nesting.
+     */
+    fun pushClip(
+        x: Int,
+        y: Int,
+        width: Int,
+        height: Int,
+    )
+
+    /** Pops the most recently pushed clip region. */
+    fun popClip()
 }

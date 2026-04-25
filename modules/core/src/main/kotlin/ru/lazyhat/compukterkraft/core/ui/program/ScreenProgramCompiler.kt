@@ -41,6 +41,7 @@ class ScreenProgramCompiler(
         val hoverRegions = mutableListOf<HoverRegion>()
         val tooltipRegions = mutableListOf<TooltipRegion>()
         val focusNodes = mutableListOf<FocusNode>()
+        val scrollRegions = mutableListOf<ScrollRegion>()
 
         val rootSize = root.modifier.findSize()?.size
         val effectiveRootWidth = if (rootWidth > 0) rootWidth else rootSize?.width ?: 0
@@ -64,6 +65,7 @@ class ScreenProgramCompiler(
             frames = frames,
             descriptors = descriptors,
             focusNodes = focusNodes,
+            scrollRegions = scrollRegions,
             frameIndex = 0,
         )
 
@@ -77,6 +79,7 @@ class ScreenProgramCompiler(
             hoverRegions = hoverRegions.toList(),
             tooltipRegions = tooltipRegions.toList(),
             focusNodes = focusNodes.toList(),
+            scrollRegions = scrollRegions.toList(),
         )
     }
 
@@ -91,6 +94,7 @@ class ScreenProgramCompiler(
         frames: MutableList<MutableList<RenderOp>>,
         descriptors: MutableList<FrameDescriptor>,
         focusNodes: MutableList<FocusNode>,
+        scrollRegions: MutableList<ScrollRegion>,
         frameIndex: Int,
     ) {
         if (element is UiElement.Overlay) {
@@ -104,6 +108,7 @@ class ScreenProgramCompiler(
                 frames,
                 descriptors,
                 focusNodes,
+                scrollRegions,
             )
             return
         }
@@ -183,6 +188,7 @@ class ScreenProgramCompiler(
                         frames,
                         descriptors,
                         focusNodes,
+                        scrollRegions,
                         frameIndex,
                     )
                 }
@@ -201,6 +207,7 @@ class ScreenProgramCompiler(
                         frames,
                         descriptors,
                         focusNodes,
+                        scrollRegions,
                         frameIndex,
                     )
                 }
@@ -219,6 +226,7 @@ class ScreenProgramCompiler(
                         frames,
                         descriptors,
                         focusNodes,
+                        scrollRegions,
                         frameIndex,
                     )
                 }
@@ -273,6 +281,7 @@ class ScreenProgramCompiler(
                         frames,
                         descriptors,
                         focusNodes,
+                        scrollRegions,
                         subFrameIndex,
                     )
                 }
@@ -280,6 +289,23 @@ class ScreenProgramCompiler(
 
             is UiElement.Overlay -> {
                 error("unreachable: Overlay handled before the layout-node guard")
+            }
+
+            is UiElement.ScrollArea -> {
+                lowerScrollArea(
+                    element,
+                    nodeId,
+                    node,
+                    ops,
+                    hitRegions,
+                    hoverRegions,
+                    tooltipRegions,
+                    frames,
+                    descriptors,
+                    focusNodes,
+                    scrollRegions,
+                    parentFrameIndex = frameIndex,
+                )
             }
         }
     }
@@ -294,6 +320,7 @@ class ScreenProgramCompiler(
         frames: MutableList<MutableList<RenderOp>>,
         descriptors: MutableList<FrameDescriptor>,
         focusNodes: MutableList<FocusNode>,
+        scrollRegions: MutableList<ScrollRegion>,
     ) {
         val size = element.modifier.findSize()?.size
         val overlayWidth = size?.width ?: parentLayout["root"]?.width ?: 0
@@ -319,6 +346,7 @@ class ScreenProgramCompiler(
                 frames,
                 descriptors,
                 focusNodes,
+                scrollRegions,
                 subFrameIndex,
             )
         }
@@ -328,4 +356,92 @@ class ScreenProgramCompiler(
         val origin: Value<Position>?,
         val visible: Value<Boolean>?,
     )
+
+    private fun lowerScrollArea(
+        element: UiElement.ScrollArea,
+        nodeId: String,
+        outer: LayoutNode,
+        parentOps: MutableList<RenderOp>,
+        hitRegions: MutableList<HitRegion>,
+        hoverRegions: MutableList<HoverRegion>,
+        tooltipRegions: MutableList<TooltipRegion>,
+        frames: MutableList<MutableList<RenderOp>>,
+        descriptors: MutableList<FrameDescriptor>,
+        focusNodes: MutableList<FocusNode>,
+        scrollRegions: MutableList<ScrollRegion>,
+        parentFrameIndex: Int,
+    ) {
+        // Optional background fill on the viewport itself.
+        element.modifier.findBackground()?.let { bg ->
+            parentOps += RenderOp.FillRect(outer.x, outer.y, outer.width, outer.height, bg.color)
+        }
+
+        // Push the viewport clip in the *parent* frame so the sub-frame's
+        // translated draw calls are masked to the visible rectangle.
+        parentOps += RenderOp.PushClip(outer.x, outer.y, outer.width, outer.height)
+
+        // Resolve children's static layout in their own coordinate space (origin 0,0).
+        val subLayout =
+            UiLayoutResolver(outer.width, outer.height, fontMetrics)
+                .resolve(element, rootNodeId = nodeId, rootX = 0, rootY = 0)
+
+        // Sub-frame whose dynamic origin is (outer.x - scrollX, outer.y - scrollY).
+        val subOps = mutableListOf<RenderOp>()
+        val subFrameIndex = frames.size
+        frames += subOps
+        val scrollX = element.scrollX
+        val scrollY = element.scrollY
+        val originX = outer.x
+        val originY = outer.y
+        val origin =
+            ru.lazyhat.compukterkraft.core.ui.foundation.value {
+                Position(originX - scrollX.value, originY - scrollY.value)
+            }
+        descriptors += FrameDescriptor(origin = origin, visible = null)
+
+        // Hit-region clip stamped onto every region collected inside the sub-tree.
+        val hitClip =
+            HitClip(
+                frameIndex = parentFrameIndex,
+                x = outer.x,
+                y = outer.y,
+                width = outer.width,
+                height = outer.height,
+            )
+
+        val hitRegionsBefore = hitRegions.size
+        element.children.forEachIndexed { index, child ->
+            lower(
+                child,
+                "$nodeId-$index",
+                subLayout,
+                subOps,
+                hitRegions,
+                hoverRegions,
+                tooltipRegions,
+                frames,
+                descriptors,
+                focusNodes,
+                scrollRegions,
+                subFrameIndex,
+            )
+        }
+        for (i in hitRegionsBefore until hitRegions.size) {
+            hitRegions[i] = hitRegions[i].copy(clip = hitClip)
+        }
+
+        // Register the scroll handler for wheel events landing on the viewport.
+        scrollRegions +=
+            ScrollRegion(
+                nodeId = nodeId,
+                frameIndex = parentFrameIndex,
+                x = outer.x,
+                y = outer.y,
+                width = outer.width,
+                height = outer.height,
+                onScroll = element.onScroll,
+            )
+
+        parentOps += RenderOp.PopClip
+    }
 }

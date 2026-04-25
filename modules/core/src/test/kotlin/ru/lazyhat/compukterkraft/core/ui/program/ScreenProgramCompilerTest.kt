@@ -297,6 +297,15 @@ class ScreenProgramCompilerTest {
                     y: Int,
                     snapshot: ScreenBufferSnapshot,
                 ) {}
+
+                override fun pushClip(
+                    x: Int,
+                    y: Int,
+                    width: Int,
+                    height: Int,
+                ) {}
+
+                override fun popClip() {}
             }
         executor.render(backend)
         assertEquals(Triple(32, 43, Color.Red), recordedCalls.single())
@@ -350,4 +359,103 @@ class ScreenProgramCompilerTest {
         executor.updateMouse(mouseX = 200, mouseY = 200)
         assertNull(executor.activeTooltip)
     }
+
+    @Test
+    fun scrollAreaEmitsPushClipPopClipAndSubFrameWithDynamicOrigin() {
+        val scroll = MutableStateInt(0)
+        val program =
+            ScreenProgramCompiler().compile(
+                ui {
+                    scrollArea(
+                        modifier = Modifier.offset(10, 20).size(50, 40),
+                        scrollY = value { scroll.value },
+                    ) {
+                        box(modifier = Modifier.size(50, 200).background(Color.White))
+                    }
+                },
+            )
+
+        // Parent frame should have one PushClip and one PopClip wrapping the
+        // sub-frame's draw ops.
+        val parentOps = program.frames[0].ops
+        val pushIndex = parentOps.indexOfFirst { it is RenderOp.PushClip }
+        val popIndex = parentOps.indexOfFirst { it is RenderOp.PopClip }
+        assertTrue(pushIndex >= 0)
+        assertTrue(popIndex > pushIndex)
+        val push = parentOps[pushIndex] as RenderOp.PushClip
+        assertEquals(10, push.x)
+        assertEquals(20, push.y)
+        assertEquals(50, push.width)
+        assertEquals(40, push.height)
+
+        // Sub-frame origin should follow scroll: starts at (10, 20), then scrolls.
+        val subFrame = program.frames[1]
+        val origin0 = subFrame.origin?.value
+        assertNotNull(origin0)
+        assertEquals(10, origin0.x)
+        assertEquals(20, origin0.y)
+
+        scroll.value = 30
+        val origin1 = subFrame.origin?.value
+        assertNotNull(origin1)
+        assertEquals(10, origin1.x)
+        assertEquals(-10, origin1.y)
+    }
+
+    @Test
+    fun scrollAreaStampsClipOntoChildHitRegions() {
+        val program =
+            ScreenProgramCompiler().compile(
+                ui {
+                    scrollArea(
+                        modifier = Modifier.offset(10, 20).size(50, 40),
+                    ) {
+                        button(
+                            modifier = Modifier.offset(0, 100).size(50, 20),
+                            onClick = {},
+                        ) {}
+                    }
+                },
+            )
+
+        assertEquals(1, program.hitRegions.size)
+        val hit = program.hitRegions[0]
+        val clip = hit.clip
+        assertNotNull(clip)
+        assertEquals(10, clip.x)
+        assertEquals(20, clip.y)
+        assertEquals(50, clip.width)
+        assertEquals(40, clip.height)
+    }
+
+    @Test
+    fun scrollAreaRegistersOnScrollHandler() {
+        var totalDelta = 0.0
+        val program =
+            ScreenProgramCompiler().compile(
+                ui {
+                    scrollArea(
+                        modifier = Modifier.offset(0, 0).size(100, 100),
+                        onScroll = { delta ->
+                            totalDelta += delta
+                            true
+                        },
+                    ) {}
+                },
+            )
+
+        assertEquals(1, program.scrollRegions.size)
+        val region = program.scrollRegions[0]
+        assertEquals(0, region.x)
+        assertEquals(100, region.width)
+
+        assertTrue(region.onScroll(2.5))
+        assertEquals(2.5, totalDelta)
+    }
+
+    private class MutableStateInt(
+        var value: Int,
+    )
+
+    private fun mutableStateOf(initial: Int): MutableStateInt = MutableStateInt(initial)
 }

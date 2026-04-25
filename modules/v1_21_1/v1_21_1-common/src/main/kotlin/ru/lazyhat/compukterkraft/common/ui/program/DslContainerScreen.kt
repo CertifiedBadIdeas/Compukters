@@ -148,4 +148,15 @@ abstract class DslContainerScreen<T : AbstractComputerMenu>(
         return (executor != null && executor.charTyped(codePoint)) ||
             super.charTyped(codePoint, modifiers)
     }
+
+    override fun mouseScrolled(
+        mouseX: Double,
+        mouseY: Double,
+        scrollX: Double,
+        scrollY: Double,
+    ): Boolean {
+        val executor = executor
+        return (executor != null && executor.mouseScrolled(mouseX.toInt(), mouseY.toInt(), scrollY)) ||
+            super.mouseScrolled(mouseX, mouseY, scrollX, scrollY)
+    }
 }
