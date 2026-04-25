@@ -20,7 +20,6 @@ package ru.lazyhat.compukterkraft.core.gui
 
 import ru.lazyhat.compukterkraft.core.computer.input.InputEventSink
 import ru.lazyhat.compukterkraft.core.computer.input.KeyInputEvent
-import ru.lazyhat.compukterkraft.core.computer.input.MouseInputEvent
 import ru.lazyhat.compukterkraft.core.computer.input.PasteInputEvent
 import ru.lazyhat.compukterkraft.core.input.KeyCodes
 import ru.lazyhat.compukterkraft.core.platform.api.PlatformInputProvider
@@ -33,19 +32,7 @@ class WorkbenchTerminalInputController(
 ) {
     private val keysDown = BitSet(256)
 
-    var focused: Boolean = false
-        set(value) {
-            field = value
-            if (!value) {
-                releaseState()
-            }
-        }
-
-    fun update() = Unit
-
     fun charTyped(ch: Char): Boolean {
-        if (!focused) return false
-
         val terminalChar = StringUtil.unicodeToTerminal(ch.code)
         if (StringUtil.isTypableChar(terminalChar)) {
             computer.accept(KeyInputEvent.Character(terminalChar.toByte()))
@@ -58,7 +45,7 @@ class WorkbenchTerminalInputController(
         scancode: Int,
         modifiers: Int,
     ): Boolean {
-        if (!focused || key == KeyCodes.KEY_ESCAPE) return false
+        if (key == KeyCodes.KEY_ESCAPE) return false
         if (inputProvider.isPasteShortcut(key)) {
             paste()
             return true
@@ -77,8 +64,6 @@ class WorkbenchTerminalInputController(
         key: Int,
         scancode: Int,
     ): Boolean {
-        if (!focused) return false
-
         if (key >= 0) {
             val actualKey = KeyConverter.physicalToActual(key, scancode, inputProvider)
             if (keysDown.get(actualKey)) {
@@ -89,42 +74,10 @@ class WorkbenchTerminalInputController(
         return true
     }
 
-    fun mouseClicked(
-        bounds: TerminalRect,
-        mouseX: Double,
-        mouseY: Double,
-    ): Boolean {
-        focused = bounds.contains(mouseX.toInt(), mouseY.toInt())
-        return focused
-    }
-
-    fun mouseScrolled(
-        bounds: TerminalRect,
-        mouseX: Double,
-        mouseY: Double,
-        delta: Double,
-    ): Boolean {
-        if (!focused || !bounds.contains(mouseX.toInt(), mouseY.toInt())) return false
-        val cellX = ((mouseX.toInt() - bounds.x) / TerminalFontConstants.FONT_WIDTH) + 1
-        val cellY = ((mouseY.toInt() - bounds.y) / TerminalFontConstants.FONT_HEIGHT) + 1
-        val direction = if (delta > 0) 1 else -1
-        computer.accept(MouseInputEvent.Scroll(direction, cellX, cellY))
-        return true
-    }
-
     private fun paste() {
         val clipboard = StringUtil.getClipboardString(inputProvider.getClipboardString())
         if (clipboard.remaining() > 0) {
             computer.accept(PasteInputEvent(clipboard))
         }
-    }
-
-    private fun releaseState() {
-        for (key in 0..<keysDown.size()) {
-            if (keysDown.get(key)) {
-                computer.accept(KeyInputEvent.Up(key))
-            }
-        }
-        keysDown.clear()
     }
 }

@@ -25,6 +25,7 @@ import ru.lazyhat.compukterkraft.common.computer.input.ClientInputHandler
 import ru.lazyhat.compukterkraft.common.computer.menu.AbstractComputerMenu
 import ru.lazyhat.compukterkraft.common.computer.network.server.AttachTerminalServerMessage
 import ru.lazyhat.compukterkraft.common.computer.network.server.ResizeTerminalServerMessage
+import ru.lazyhat.compukterkraft.common.localization.CompukterKeys
 import ru.lazyhat.compukterkraft.common.network.ClientNetworking
 import ru.lazyhat.compukterkraft.common.platform.MinecraftInputProvider
 import ru.lazyhat.compukterkraft.common.ui.dsl.translatable
@@ -117,9 +118,6 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
     override fun containerTick() {
         super.containerTick()
         val state = currentTerminalState()
-        if (state !is WorkbenchTerminalViewState.Active && terminalInput.focused) {
-            terminalInput.focused = false
-        }
         syncTerminalWindowSize(state)
         terminalDimensions(menu.clientSide.terminalBuffer?.snapshot()).also { dims ->
             if (dims != lastTerminalDimensions) {
@@ -127,7 +125,6 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
                 invalidate()
             }
         }
-        terminalInput.update()
     }
 
     override fun mouseClicked(
@@ -141,7 +138,6 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
         // into the WorkbenchTerminalInputController so its internal
         // `keysDown` bookkeeping stays consistent and so a click
         // outside the terminal releases any held keys.
-        terminalInput.focused = isDslFocused
         return handled
     }
 
@@ -179,21 +175,9 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
                 text =
                     value {
                         when (currentTerminalState()) {
-                            is WorkbenchTerminalViewState.Active -> {
-                                if (terminalInput.focused) {
-                                    "Input active  |  Ctrl+V paste"
-                                } else {
-                                    "Click terminal to focus input"
-                                }
-                            }
-
-                            WorkbenchTerminalViewState.PoweredOff -> {
-                                Component.translatable("gui.compukterkraft.terminal.powered_off").string
-                            }
-
-                            WorkbenchTerminalViewState.Connecting -> {
-                                Component.translatable("gui.compukterkraft.terminal.connecting").string
-                            }
+                            is WorkbenchTerminalViewState.Active -> CompukterKeys.Gui.Terminal.FOCUSED
+                            WorkbenchTerminalViewState.PoweredOff -> CompukterKeys.Gui.Terminal.POWERED_OFF
+                            WorkbenchTerminalViewState.Connecting -> CompukterKeys.Gui.Terminal.CONNECTING
                         }
                     },
             )
@@ -223,14 +207,12 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
                             .offset(terminalRelX, terminalRelY)
                             .size(layout.terminalBounds.width, layout.terminalBounds.height),
                     onKey = { keyCode ->
-                        terminalInput.focused = true
                         terminalInput.keyPressed(keyCode, 0, 0)
                     },
                     onKeyReleased = { keyCode ->
                         terminalInput.keyReleased(keyCode, 0)
                     },
                     onCharTyped = { ch ->
-                        terminalInput.focused = true
                         terminalInput.charTyped(ch)
                     },
                 )
@@ -267,7 +249,6 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
                             },
                         ),
                 onClick = {
-                    terminalInput.focused = false
                     val action =
                         if (menu.isComputerOn) ComputerControlAction.SHUTDOWN else ComputerControlAction.TURN_ON
                     inputHandler.accept(ControlInputEvent(action))
@@ -287,7 +268,6 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
                         .hoverable(rebootHover)
                         .tooltip(translatable("gui.compukterkraft.control.reboot")),
                 onClick = {
-                    terminalInput.focused = false
                     inputHandler.accept(ControlInputEvent(ComputerControlAction.REBOOT))
                 },
             ) {
