@@ -24,9 +24,12 @@ import ru.lazyhat.compukterkraft.common.network.MessageType
 import ru.lazyhat.compukterkraft.common.network.NetworkMessage
 import ru.lazyhat.compukterkraft.common.network.NetworkMessages
 import ru.lazyhat.compukterkraft.common.network.ServerNetworkContext
+import ru.lazyhat.compukterkraft.common.network.ServerNetworking
+import ru.lazyhat.compukterkraft.common.workbench.menu.AbstractWorkbenchMenu
 import ru.lazyhat.compukterkraft.common.workbench.network.readOps
 import ru.lazyhat.compukterkraft.common.workbench.network.writeOps
 import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.Op
+import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.SiteId
 
 /**
  * Client → server: a batch of CRDT ops produced by the local editor for a single document.
@@ -63,7 +66,13 @@ class WorkbenchOpsServerMessage : NetworkMessage<ServerNetworkContext> {
     }
 
     override fun handle(context: ServerNetworkContext) {
-        TODO("Task 7: route to AbstractWorkbenchMenu / ServerWorkbench.handleOps")
+        val player = context.sender()
+        val menu = player.containerMenu
+        if (menu.containerId != containerId || menu !is AbstractWorkbenchMenu) return
+
+        val sender = SiteId.player(player.uuid)
+        val reply = menu.handleOpsRequest(path, ops, sender) ?: return
+        ServerNetworking.sendToPlayer(reply, player)
     }
 
     override fun type(): MessageType<WorkbenchOpsServerMessage> = NetworkMessages.WORKBENCH_OPS_REQUEST

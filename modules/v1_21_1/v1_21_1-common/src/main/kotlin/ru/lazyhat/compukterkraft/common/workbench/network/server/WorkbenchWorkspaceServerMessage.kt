@@ -68,6 +68,14 @@ class WorkbenchWorkspaceServerMessage : NetworkMessage<ServerNetworkContext> {
 
         val remoteState = menu.handleWorkspaceAction(action, path, text) ?: return
         ServerNetworking.sendToPlayer(WorkbenchWorkspaceClientMessage(containerId, remoteState), player)
+
+        // READ doubles as "open CRDT session for this path" — emit the document snapshot so
+        // the client can rebuild its local replica. Other actions don't open new sessions.
+        if (action == Action.READ && path.isNotEmpty()) {
+            menu.openWorkbenchSession(path)?.let { snapshot ->
+                ServerNetworking.sendToPlayer(snapshot, player)
+            }
+        }
     }
 
     override fun type(): MessageType<WorkbenchWorkspaceServerMessage> = NetworkMessages.WORKBENCH_WORKSPACE_REQUEST
