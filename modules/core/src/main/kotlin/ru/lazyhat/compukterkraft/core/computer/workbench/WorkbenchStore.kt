@@ -79,14 +79,6 @@ class WorkbenchStore(
         requestListing("")
     }
 
-    fun toggleMode() {
-        val nextMode = if (state.mode == WorkbenchMode.TERMINAL) WorkbenchMode.EDITOR else WorkbenchMode.TERMINAL
-        _state.value = state.copy(mode = nextMode)
-        if (nextMode == WorkbenchMode.EDITOR) {
-            requestListing(state.browserPath)
-        }
-    }
-
     fun toggleTerminalVisibility() {
         // Hiding is always allowed; showing requires a computer in the slot,
         // otherwise the terminal would attach to nothing.
@@ -238,9 +230,6 @@ class WorkbenchStore(
             toggleTerminalVisibility()
             return true
         }
-        if (state.mode != WorkbenchMode.EDITOR) {
-            return false
-        }
 
         if ((modifiers and KeyCodes.MOD_CONTROL) != 0) {
             when (key) {
@@ -362,9 +351,6 @@ class WorkbenchStore(
         ch: Char,
         visibleEditorLines: Int,
     ): Boolean {
-        if (state.mode != WorkbenchMode.EDITOR) {
-            return false
-        }
         if (state.editor.importPickerVisible) {
             return true
         }

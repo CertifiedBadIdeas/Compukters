@@ -7,6 +7,14 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 package ru.lazyhat.compukterkraft.common.workbench.screen
 
@@ -27,7 +35,6 @@ import ru.lazyhat.compukterkraft.common.ui.program.DslContainerScreen
 import ru.lazyhat.compukterkraft.common.workbench.input.WorkbenchClientInputHandler
 import ru.lazyhat.compukterkraft.common.workbench.menu.WorkbenchMenuWithoutInventory
 import ru.lazyhat.compukterkraft.common.workbench.menu.WorkbenchPositionableSlot
-import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchMode
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchStore
 import ru.lazyhat.compukterkraft.core.computer.workbench.screen.WorkbenchEditorViewModel
 import ru.lazyhat.compukterkraft.core.computer.workbench.screen.WorkbenchInventoryLayout
@@ -73,9 +80,6 @@ class WorkbenchEditorScreen(
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.minecraft)
         screenScope = scope
         store.bind(scope, MenuWorkspaceUpdateSource(menu.workspaceStateFlow))
-        if (store.state.mode != WorkbenchMode.EDITOR) {
-            store.toggleMode()
-        }
         store.initialize()
         repositionInventorySlots()
     }
