@@ -27,7 +27,7 @@ import ru.lazyhat.compukterkraft.common.network.ServerNetworkContext
 
 /**
  * Client → server: "open a terminal session on this computer, my screen is
- * [cols] × [rows]". Sent by [ComputerTerminalScreen][ru.lazyhat.compukterkraft.common.computer.screen.ComputerTerminalScreen]
+ * [cols] × [rows]". Sent by [ComputerTerminalScreen][ru.lazyhat.compukterkraft.common.terminal.screen.ComputerTerminalScreen]
  * when the UI opens.
  *
  * The server creates (or refreshes) a per-player consumer on the computer's

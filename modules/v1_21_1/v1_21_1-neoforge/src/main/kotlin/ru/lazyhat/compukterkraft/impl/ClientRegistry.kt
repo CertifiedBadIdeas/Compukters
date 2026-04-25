@@ -20,7 +20,7 @@
 package ru.lazyhat.compukterkraft.impl
 
 import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent
-import ru.lazyhat.compukterkraft.common.computer.screen.ComputerTerminalScreen
+import ru.lazyhat.compukterkraft.common.terminal.screen.ComputerTerminalScreen
 import ru.lazyhat.compukterkraft.common.workbench.screen.WorkbenchEditorScreen
 import ru.lazyhat.compukterkraft.core.LOGGER
 

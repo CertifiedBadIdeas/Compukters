@@ -49,7 +49,7 @@ sealed interface MenuSide {
     class Client : MenuSide {
         /**
          * Stream-I/O terminal buffer. `null` until [attachTerminalBuffer] is
-         * called by the open [ComputerTerminalScreen][ru.lazyhat.compukterkraft.common.computer.screen.ComputerTerminalScreen].
+         * called by the open [ComputerTerminalScreen][ru.lazyhat.compukterkraft.common.terminal.screen.ComputerTerminalScreen].
          */
         var terminalBuffer: ClientTerminalBuffer? = null
             private set

@@ -16,7 +16,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-package ru.lazyhat.compukterkraft.common.computer.screen
+package ru.lazyhat.compukterkraft.common.terminal.screen
 
 import net.minecraft.network.chat.Component
 import net.minecraft.world.entity.player.Inventory
