@@ -84,7 +84,6 @@ class WorkbenchStoreTest {
                     document = ComputerWorkspaceDocument("startup.ck", "fun main() {}", 1),
                 ),
             )
-            store.toggleMode()
 
             store.moveCursorTo(0, 13, visibleEditorLines = 20)
             store.keyPressed(GLFW.GLFW_KEY_ENTER, modifiers = 0, visibleEditorLines = 20)

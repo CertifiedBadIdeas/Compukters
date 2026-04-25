@@ -102,7 +102,6 @@ class WorkbenchStoreTest {
 
             store.bind(backgroundScope, updates)
             updates.push(document = ComputerWorkspaceDocument("main.ck", "", 0))
-            store.toggleMode()
 
             store.charTyped('w', visibleEditorLines = 20)
 
@@ -122,7 +121,6 @@ class WorkbenchStoreTest {
 
             store.bind(backgroundScope, updates)
             updates.push(document = ComputerWorkspaceDocument("main.ck", "import", 0))
-            store.toggleMode()
             store.moveCursorTo(0, 6, visibleEditorLines = 20)
 
             store.charTyped(' ', visibleEditorLines = 20)
@@ -143,7 +141,6 @@ class WorkbenchStoreTest {
 
             store.bind(backgroundScope, updates)
             updates.push(document = ComputerWorkspaceDocument("main.ck", "terminal", 0))
-            store.toggleMode()
             store.moveCursorTo(0, 8, visibleEditorLines = 20)
 
             store.charTyped('.', visibleEditorLines = 20)
@@ -160,7 +157,6 @@ class WorkbenchStoreTest {
 
             store.bind(backgroundScope, updates)
             updates.push(document = ComputerWorkspaceDocument("main.ck", "", 0))
-            store.toggleMode()
 
             store.openImportPicker()
 
@@ -176,7 +172,6 @@ class WorkbenchStoreTest {
 
             store.bind(backgroundScope, updates)
             updates.push(document = ComputerWorkspaceDocument("main.ck", "", 0))
-            store.toggleMode()
 
             store.openImportPicker()
 
@@ -197,7 +192,6 @@ class WorkbenchStoreTest {
 
             store.bind(backgroundScope, updates)
             updates.push(document = ComputerWorkspaceDocument("main.ck", "fun main() {}", 0))
-            store.toggleMode()
 
             store.openImportPicker()
             store.applyImportPickerSelection(0, visibleEditorLines = 20)
@@ -218,7 +212,6 @@ class WorkbenchStoreTest {
 
             store.bind(backgroundScope, updates)
             updates.push(document = ComputerWorkspaceDocument("main.ck", "", 0))
-            store.toggleMode()
 
             store.keyPressed(KeyCodes.KEY_A, KeyCodes.MOD_CONTROL, visibleEditorLines = 20)
 
@@ -242,7 +235,6 @@ class WorkbenchStoreTest {
 
             store.bind(backgroundScope, updates)
             updates.push(document = ComputerWorkspaceDocument("main.ck", "fun main() {}", 0))
-            store.toggleMode()
             store.openImportPicker()
 
             store.keyPressed(KeyCodes.KEY_DOWN, modifiers = 0, visibleEditorLines = 20)
@@ -264,7 +256,6 @@ class WorkbenchStoreTest {
 
             store.bind(backgroundScope, updates)
             updates.push(document = ComputerWorkspaceDocument("main.ck", "fun main() {}", 0))
-            store.toggleMode()
 
             assertTrue(!store.state.target.connected)
             assertTrue(!store.state.actions.canPull)
@@ -334,7 +325,6 @@ class WorkbenchStoreTest {
 
             store.bind(backgroundScope, updates)
             updates.push(document = ComputerWorkspaceDocument("main.ck", "fun main() {}", 0))
-            store.toggleMode()
 
             assertFalse(store.keyPressed(KeyCodes.KEY_ESCAPE, modifiers = 0, visibleEditorLines = 20))
         }
@@ -347,7 +337,6 @@ class WorkbenchStoreTest {
 
             store.bind(backgroundScope, updates)
             updates.push(document = ComputerWorkspaceDocument("main.ck", "", 0))
-            store.toggleMode()
 
             assertTrue(store.keyPressed(69, modifiers = 0, visibleEditorLines = 20))
         }
