@@ -1,6 +1,6 @@
 # Переписывание Workbench IDE UI на внутренний DSL (план реализации)
 
-> **Статус (2026-04-25):** план в работе, ни одна задача ещё не начата.
+> **Статус (2026-04-26):** все задачи выполнены, кроме ручного клиентского теста (Задача 2.4). DSL-расширения (Эпик 1) и переписывание `WorkbenchEditorScreen` на DSL (Эпик 2) закоммичены, чистка (Эпик 3) пройдена. Ожидается прогон `./gradlew :v1_21_1-neoforge:runClient` пользователем.
 >
 > **Для агентов:** суб-навык `superpowers:subagent-driven-development` или `superpowers:executing-plans`. Задачи отмечаются чекбоксами.
 
@@ -48,35 +48,35 @@
 
 Сейчас `ScreenProgram.focusRegion` — одиночный и хранит только одного обработчика. Для IDE нужен минимум **три независимых фокуса**: редактор, встроенный терминал, поле поиска импорта (и потенциально сайдбар).
 
-- [ ] Переименовать `FocusRegion`/`FocusHandler` → `FocusNode { id: String, bounds, tabOrder: Int, handler }`.
-- [ ] `ScreenProgram.focusRegion: FocusRegion?` → `focusNodes: List<FocusNode>` + `var focusedNodeId: String?` в executor.
-- [ ] Executor: `mouseClicked` ищет `FocusNode` по z-top hit — тот и становится `focusedNodeId`; `keyPressed`/`charTyped` уходят в хендлер активного узла.
-- [ ] Поддержать Tab/Shift+Tab: если активный узел не потребил Tab, executor переводит фокус на следующий/предыдущий узел по `tabOrder`.
-- [ ] Добавить `Modifier.focusable(id: String, tabOrder: Int = 0, handler: FocusHandler)` — заменяет все текущие `onKey`/`onCharTyped` на `TerminalSurface`.
-- [ ] `TerminalSurface` переводим с inline-хендлеров на этот модификатор.
-- [ ] Юнит-тесты: два фокус-узла, клик по первому → `keyPressed` идёт в него; Tab переводит фокус.
+- [x] Переименовать `FocusRegion`/`FocusHandler` → `FocusNode { id: String, bounds, tabOrder: Int, handler }`.
+- [x] `ScreenProgram.focusRegion: FocusRegion?` → `focusNodes: List<FocusNode>` + `var focusedNodeId: String?` в executor.
+- [x] Executor: `mouseClicked` ищет `FocusNode` по z-top hit — тот и становится `focusedNodeId`; `keyPressed`/`charTyped` уходят в хендлер активного узла.
+- [x] Поддержать Tab/Shift+Tab: если активный узел не потребил Tab, executor переводит фокус на следующий/предыдущий узел по `tabOrder`.
+- [x] Добавить `Modifier.focusable(id: String, tabOrder: Int = 0, handler: FocusHandler)` — заменяет все текущие `onKey`/`onCharTyped` на `TerminalSurface`.
+- [x] `TerminalSurface` переводим с inline-хендлеров на этот модификатор.
+- [x] Юнит-тесты: два фокус-узла, клик по первому → `keyPressed` идёт в него; Tab переводит фокус.
 
 ### Задача 1.2 — Скролл/клип контейнер
 
-- [ ] Новый `UiElement.ScrollArea(modifier, scrollX: Value<Int>, scrollY: Value<Int>, children)` — задаёт прямоугольник, внутри которого дети смещаются на `(-scrollX, -scrollY)` и клипятся к границам контейнера.
-- [ ] В `ScreenProgram` ввести `RenderOp.PushClip(x, y, w, h) / PopClip`, компилятор расставляет пары вокруг детей ScrollArea.
-- [ ] Backend: `GuiGraphicsRenderBackend` использует `graphics.enableScissor/disableScissor` (с учётом вложенности через стек).
-- [ ] `mouseScrolled` в executor: если мышь над ScrollArea, вызывается хендлер `onScroll(deltaY)` (опциональный параметр конструктора).
-- [ ] Hit-regions внутри ScrollArea корректно клипятся (клик вне видимой части не срабатывает).
-- [ ] Юнит-тесты компилятора: дочерние `FillRect` смещаются и клипятся.
+- [x] Новый `UiElement.ScrollArea(modifier, scrollX: Value<Int>, scrollY: Value<Int>, children)` — задаёт прямоугольник, внутри которого дети смещаются на `(-scrollX, -scrollY)` и клипятся к границам контейнера.
+- [x] В `ScreenProgram` ввести `RenderOp.PushClip(x, y, w, h) / PopClip`, компилятор расставляет пары вокруг детей ScrollArea.
+- [x] Backend: `GuiGraphicsRenderBackend` использует `graphics.enableScissor/disableScissor` (с учётом вложенности через стек).
+- [x] `mouseScrolled` в executor: если мышь над ScrollArea, вызывается хендлер `onScroll(deltaY)` (опциональный параметр конструктора).
+- [x] Hit-regions внутри ScrollArea корректно клипятся (клик вне видимой части не срабатывает).
+- [x] Юнит-тесты компилятора: дочерние `FillRect` смещаются и клипятся.
 
 ### Задача 1.3 — Тикающее значение
 
-- [ ] В `ScreenRuntimeExecutor.render()` пробрасывать `tickCount: Int` (простой монотонный счётчик, инкремент перед каждым `render`).
-- [ ] Новый конструктор `Value.tick { tick -> T }` — выражение, которое получает текущий tick. Для blink это `Value.tick { it / 6 % 2 == 0 }`.
-- [ ] Тесты: между двумя `render` тик инкрементируется, `Value.tick` вычисляется с новым значением.
+- [x] В `ScreenRuntimeExecutor.render()` пробрасывать `tickCount: Int` (простой монотонный счётчик, инкремент перед каждым `render`).
+- [x] Новый конструктор `Value.tick { tick -> T }` — выражение, которое получает текущий tick. Для blink это `Value.tick { it / 6 % 2 == 0 }`.
+- [x] Тесты: между двумя `render` тик инкрементируется, `Value.tick` вычисляется с новым значением.
 
 ### Задача 1.4 — Drag & release события
 
-- [ ] `HitRegion` получает опциональные `onDragStart(x, y)`, `onDrag(x, y)`, `onRelease(x, y)`.
-- [ ] Executor API: `mouseDragged(x, y, button)`, `mouseReleased(x, y, button)`. Хостовой экран форвардит.
-- [ ] Модификатор: `Modifier.draggable(onStart, onDrag, onRelease)` + сохраним `clickable(onClick)` как sugar поверх drag.
-- [ ] Тесты executor’а на drag-sequence.
+- [x] `HitRegion` получает опциональные `onDragStart(x, y)`, `onDrag(x, y)`, `onRelease(x, y)`.
+- [x] Executor API: `mouseDragged(x, y, button)`, `mouseReleased(x, y, button)`. Хостовой экран форвардит.
+- [x] Модификатор: `Modifier.draggable(onStart, onDrag, onRelease)` + сохраним `clickable(onClick)` как sugar поверх drag.
+- [x] Тесты executor’а на drag-sequence.
 
 ### Задача 1.5 — `CodeEditor` UiElement
 
@@ -109,17 +109,17 @@ interface EditorViewModel {
 }
 ```
 
-- [ ] Новый файл [core/ui/editor/CodeEditor.kt](modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/ui/editor/CodeEditor.kt) — `UiElement.CodeEditor(modifier, viewModel: Value<EditorViewModel>, fontWidth, fontHeight)`.
-- [ ] Compiler эмитит один `RenderOp.DrawCodeEditor(...)`; RenderBackend реализует его поверх `GuiGraphics` (токены + курсор + gutter); `CanvasScope` не хватит, делаем новый backend-метод.
-- [ ] Элемент регистрирует `FocusNode` и `HitRegion` автоматически.
-- [ ] Юнит-тесты: VM возвращает текст/хайлайты — компилятор строит ScreenProgram без падений; ключ-события роутятся в VM.
-- [ ] `FixedWidthFontRenderer` переиспользуем для моноширинного глифа.
+- [x] Новый файл [core/ui/editor/CodeEditor.kt](modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/ui/editor/CodeEditor.kt) — `UiElement.CodeEditor(modifier, viewModel: Value<EditorViewModel>, fontWidth, fontHeight)`.
+- [x] Compiler эмитит один `RenderOp.DrawCodeEditor(...)`; RenderBackend реализует его поверх `GuiGraphics` (токены + курсор + gutter); `CanvasScope` не хватит, делаем новый backend-метод.
+- [x] Элемент регистрирует `FocusNode` и `HitRegion` автоматически.
+- [x] Юнит-тесты: VM возвращает текст/хайлайты — компилятор строит ScreenProgram без падений; ключ-события роутятся в VM.
+- [x] `FixedWidthFontRenderer` переиспользуем для моноширинного глифа.
 
 ### Задача 1.6 — Базовые списки
 
 Для сайдбара/сompletion/import-picker достаточно `Column + for + Modifier.clickable + Modifier.background`, отдельный `ListView` сейчас не нужен. Если по ходу окажется неудобно — добавим задним числом.
 
-- [ ] Добавить sugar `Modifier.selectable(selected: Value<Boolean>, selectedBackground: Color)` — опционально, если рутина повторяется.
+- [x] Добавить sugar `Modifier.selectable(selected: Value<Boolean>, selectedBackground: Color)` — опционально, если рутина повторяется.
 
 ---
 
@@ -127,12 +127,12 @@ interface EditorViewModel {
 
 ### Задача 2.1 — Адаптер стора в `EditorViewModel`
 
-- [ ] Файл [workbench/screen/WorkbenchEditorViewModel.kt](modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft/common/workbench/screen/WorkbenchEditorViewModel.kt) — тонкий адаптер, оборачивающий `WorkbenchStore`. Все методы делегируются в `store.keyPressed/charTyped/moveCursorTo/scrollEditor`.
-- [ ] Юнит-тесты: прокидывание ключей.
+- [x] Файл [workbench/screen/WorkbenchEditorViewModel.kt](modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft/common/workbench/screen/WorkbenchEditorViewModel.kt) — тонкий адаптер, оборачивающий `WorkbenchStore`. Все методы делегируются в `store.keyPressed/charTyped/moveCursorTo/scrollEditor`.
+- [x] Юнит-тесты: прокидывание ключей.
 
 ### Задача 2.2 — Сборка UI-дерева
 
-- [ ] Файл [workbench/screen/WorkbenchUiBuilder.kt](modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft/common/workbench/screen/WorkbenchUiBuilder.kt) — функция `buildWorkbenchUi(store: WorkbenchStore, viewportSize: () -> IntSize): UiElement`. Структура:
+- [x] Файл [workbench/screen/WorkbenchUiBuilder.kt](modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft/common/workbench/screen/WorkbenchUiBuilder.kt) — функция `buildWorkbenchUi(store: WorkbenchStore, viewportSize: () -> IntSize): UiElement`. Структура:
 
 ```
 Column
@@ -159,11 +159,11 @@ Overlay (visible = importPicker.visible, anchor = center) // import picker
   Column { … }
 ```
 
-- [ ] Юнит-тест компилятора: `buildWorkbenchUi(fakeStore)` компилируется без падений и набирает ожидаемое число FocusNode/HitRegion.
+- [x] Юнит-тест компилятора: `buildWorkbenchUi(fakeStore)` компилируется без падений и набирает ожидаемое число FocusNode/HitRegion.
 
 ### Задача 2.3 — Новый `WorkbenchEditorScreen`
 
-- [ ] Переписать [WorkbenchEditorScreen.kt](modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft/common/workbench/screen/WorkbenchEditorScreen.kt) как тонкого наследника `DslContainerScreen`:
+- [x] Переписать [WorkbenchEditorScreen.kt](modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft/common/workbench/screen/WorkbenchEditorScreen.kt) как тонкого наследника `DslContainerScreen`:
 
 ```kotlin
 class WorkbenchEditorScreen(menu, inv, title) : DslContainerScreen(menu, inv, title) {
@@ -174,9 +174,9 @@ class WorkbenchEditorScreen(menu, inv, title) : DslContainerScreen(menu, inv, ti
 }
 ```
 
-- [ ] Удалить все `renderToolbar/renderWorkspaceList/renderEditor/renderHighlightedLine/renderCompletionPopup/renderImportPicker/renderStatusBar/renderCursor` и связанные layout-helper’ы, если они больше нигде не используются.
-- [ ] Удалить `ToolbarButtonLayout` и весь [WorkbenchLayoutModel.kt](modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/ui/workbench/WorkbenchLayoutModel.kt) (логика ушла в DSL-layout). Если `mouseToCursor` всё ещё нужен — оставляем как чистую функцию.
-- [ ] Проверить `WorkbenchTerminalRenderer` — встроенная терминал-панель теперь рисуется через `TerminalSurface` в DSL; если рендерер не используется с других мест — снести.
+- [x] Удалить все `renderToolbar/renderWorkspaceList/renderEditor/renderHighlightedLine/renderCompletionPopup/renderImportPicker/renderStatusBar/renderCursor` и связанные layout-helper’ы, если они больше нигде не используются.
+- [x] Удалить `ToolbarButtonLayout` и весь [WorkbenchLayoutModel.kt](modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/ui/workbench/WorkbenchLayoutModel.kt) (логика ушла в DSL-layout). Если `mouseToCursor` всё ещё нужен — оставляем как чистую функцию.
+- [x] Проверить `WorkbenchTerminalRenderer` — встроенная терминал-панель теперь рисуется через `TerminalSurface` в DSL; если рендерер не используется с других мест — снести.
 
 ### Задача 2.4 — Ручной тест
 
@@ -195,10 +195,10 @@ class WorkbenchEditorScreen(menu, inv, title) : DslContainerScreen(menu, inv, ti
 
 ## Эпик 3 — Чистка
 
-- [ ] Удалить мёртвые импорты `GuiGraphics` из `common/workbench/screen/**`.
-- [ ] Удалить `textures/gui/workbench*.png`, если они больше не рисуются (и рефы в коде отсутствуют).
-- [ ] `docs/TODOs.md` — добавить задачи «Clipboard API для CodeEditor» и «Shift+Arrow/выделение» в отложенное.
-- [ ] `./gradlew build` — всё зелёное.
+- [x] Удалить мёртвые импорты `GuiGraphics` из `common/workbench/screen/**`.
+- [x] Удалить `textures/gui/workbench*.png`, если они больше не рисуются (и рефы в коде отсутствуют).
+- [x] `docs/TODOs.md` — добавить задачи «Clipboard API для CodeEditor» и «Shift+Arrow/выделение» в отложенное.
+- [x] `./gradlew build` — всё зелёное.
 
 ---
 
