@@ -120,8 +120,10 @@ class WorkbenchEditorScreen(
         h = 31L * h + s.entries.size
         h = 31L * h + s.entries.hashCode()
         h = 31L * h + ed.completionItems.size
+        h = 31L * h + ed.selectedCompletion
         h = 31L * h + ed.importPickerVisible.hashCode()
         h = 31L * h + ed.importPickerItems.size
+        h = 31L * h + ed.selectedImportPickerIndex
         h = 31L * h + (s.openDocument?.path?.hashCode() ?: 0)
         return h
     }

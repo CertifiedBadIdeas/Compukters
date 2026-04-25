@@ -306,7 +306,7 @@ class ScreenRuntimeExecutor(
         modifiers: Int = 0,
     ): Boolean {
         val handler = focusedHandler() ?: return false
-        if (handler.onKeyPressed.invoke(keyCode)) return true
+        if (handler.onKeyPressed.invoke(keyCode, modifiers)) return true
         if (keyCode == KEY_TAB) {
             return cycleFocus(forward = (modifiers and MOD_SHIFT) == 0)
         }

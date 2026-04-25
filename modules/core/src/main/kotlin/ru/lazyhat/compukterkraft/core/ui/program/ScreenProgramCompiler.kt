@@ -129,7 +129,7 @@ class ScreenProgramCompiler(
                     tabOrder = f.tabOrder,
                     handler =
                         FocusHandler(
-                            onKeyPressed = f.onKeyPressed,
+                            onKeyPressed = { key, _ -> f.onKeyPressed(key) },
                             onKeyReleased = f.onKeyReleased,
                             onCharTyped = f.onCharTyped,
                         ),
@@ -262,7 +262,7 @@ class ScreenProgramCompiler(
                             tabOrder = 0,
                             handler =
                                 FocusHandler(
-                                    onKeyPressed = element.onKey,
+                                    onKeyPressed = { key, _ -> element.onKey(key) },
                                     onKeyReleased = element.onKeyReleased,
                                     onCharTyped = element.onCharTyped,
                                 ),
@@ -502,8 +502,8 @@ class ScreenProgramCompiler(
                 tabOrder = element.modifier.findFocusable()?.tabOrder ?: 0,
                 handler =
                     FocusHandler(
-                        onKeyPressed = { key ->
-                            viewModel.value.onKeyPressed(key, modifiers = 0, visibleLines = height / fontHeight)
+                        onKeyPressed = { key, mods ->
+                            viewModel.value.onKeyPressed(key, modifiers = mods, visibleLines = height / fontHeight)
                         },
                         onCharTyped = { ch ->
                             viewModel.value.onCharTyped(ch, visibleLines = height / fontHeight)
@@ -539,8 +539,8 @@ class ScreenProgramCompiler(
                                     .lineCount(vm.text),
                                 fontWidth,
                             )
-                    val column = ((localX - gutter).coerceAtLeast(0)) / fontWidth
                     val line = vm.scrollLine + (localY / fontHeight)
+                    val column = pixelToColumnAtLine(vm.text, line, (localX - gutter).coerceAtLeast(0), fontWidth)
                     vm.onMouseClickAt(line, column)
                 },
             )
@@ -564,5 +564,37 @@ class ScreenProgramCompiler(
                     lines != 0
                 },
             )
+    }
+
+    /**
+     * Find the column on [line] of [text] whose rendered start-position is
+     * closest to [localX] pixels from the line's left edge. Uses the
+     * compiler's [fontMetrics] when available so variable-width MC fonts
+     * map clicks accurately; falls back to a fixed-width division (using
+     * [fontWidth]) if no metrics are available.
+     */
+    private fun pixelToColumnAtLine(
+        text: String,
+        line: Int,
+        localX: Int,
+        fontWidth: Int,
+    ): Int {
+        val lineText =
+            text
+                .split('\n')
+                .getOrNull(line)
+                .orEmpty()
+        val metrics = fontMetrics ?: return localX / fontWidth.coerceAtLeast(1)
+        if (lineText.isEmpty()) return 0
+        // Walk character by character; pick the column where the click
+        // sits past the *midpoint* of the glyph at column n-1.
+        var prevWidth = 0
+        for (col in 1..lineText.length) {
+            val w = metrics.width(lineText.substring(0, col))
+            val midpoint = (prevWidth + w) / 2
+            if (localX < midpoint) return col - 1
+            prevWidth = w
+        }
+        return lineText.length
     }
 }
