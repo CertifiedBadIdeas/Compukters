@@ -1,5 +1,6 @@
 package ru.lazyhat.compukterkraft.core.ui.program
 
+import ru.lazyhat.compukterkraft.core.ui.editor.EditorViewModel
 import ru.lazyhat.compukterkraft.core.ui.foundation.Color
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 
@@ -39,4 +40,20 @@ interface RenderBackend {
 
     /** Pops the most recently pushed clip region. */
     fun popClip()
+
+    /**
+     * Draws a code editor at `(x, y)` with the given [width]/[height]. The
+     * backend renders text, gutter, cursor, highlights and diagnostics from
+     * [viewModel], using [fontWidth]/[fontHeight] as the monospace glyph
+     * size.
+     */
+    fun drawCodeEditor(
+        x: Int,
+        y: Int,
+        width: Int,
+        height: Int,
+        viewModel: EditorViewModel,
+        fontWidth: Int,
+        fontHeight: Int,
+    )
 }

@@ -276,6 +276,17 @@ class ScreenRuntimeExecutorTest {
 
         override fun popClip() {
         }
+
+        override fun drawCodeEditor(
+            x: Int,
+            y: Int,
+            width: Int,
+            height: Int,
+            viewModel: ru.lazyhat.compukterkraft.core.ui.editor.EditorViewModel,
+            fontWidth: Int,
+            fontHeight: Int,
+        ) {
+        }
     }
 
     @Test

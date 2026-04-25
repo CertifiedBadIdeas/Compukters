@@ -1,5 +1,6 @@
 package ru.lazyhat.compukterkraft.core.ui.foundation
 
+import ru.lazyhat.compukterkraft.core.ui.editor.EditorViewModel
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Modifier
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Position
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.clickable
@@ -90,6 +91,25 @@ sealed interface UiElement {
         val scrollY: Value<Int>,
         val onScroll: (Double) -> Boolean = { false },
         val children: List<UiElement>,
+    ) : UiElement
+
+    /**
+     * A first-class code editor element. The editor reads its visible state
+     * (text, cursor, highlights, diagnostics, scroll) from the supplied
+     * [viewModel] and delegates input back through it.
+     *
+     * The editor automatically claims a focus node and a hit region; the
+     * host does not need to wire `Modifier.focusable` or `clickable`.
+     *
+     * [fontWidth] and [fontHeight] describe a single monospace glyph in
+     * pixels and are used both for layout (visible-lines / columns) and
+     * for click → (line, column) translation.
+     */
+    data class CodeEditor(
+        override val modifier: Modifier,
+        val viewModel: Value<EditorViewModel>,
+        val fontWidth: Int,
+        val fontHeight: Int,
     ) : UiElement
 }
 
@@ -194,6 +214,21 @@ class UiScope {
                 scrollY = scrollY,
                 onScroll = onScroll,
                 children = UiScope().apply(block).build(),
+            )
+    }
+
+    fun codeEditor(
+        viewModel: Value<EditorViewModel>,
+        modifier: Modifier = Modifier,
+        fontWidth: Int = 6,
+        fontHeight: Int = 9,
+    ) {
+        children +=
+            UiElement.CodeEditor(
+                modifier = modifier,
+                viewModel = viewModel,
+                fontWidth = fontWidth,
+                fontHeight = fontHeight,
             )
     }
 

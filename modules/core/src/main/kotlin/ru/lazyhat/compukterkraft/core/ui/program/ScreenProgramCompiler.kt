@@ -270,6 +270,19 @@ class ScreenProgramCompiler(
                 }
             }
 
+            is UiElement.CodeEditor -> {
+                lowerCodeEditor(
+                    element,
+                    nodeId,
+                    node,
+                    frameIndex,
+                    ops,
+                    hitRegions,
+                    focusNodes,
+                    scrollRegions,
+                )
+            }
+
             is UiElement.IfNode -> {
                 val subOps = mutableListOf<RenderOp>()
                 val subFrameIndex = frames.size
@@ -449,5 +462,107 @@ class ScreenProgramCompiler(
             )
 
         parentOps += RenderOp.PopClip
+    }
+
+    private fun lowerCodeEditor(
+        element: UiElement.CodeEditor,
+        nodeId: String,
+        node: LayoutNode,
+        frameIndex: Int,
+        ops: MutableList<RenderOp>,
+        hitRegions: MutableList<HitRegion>,
+        focusNodes: MutableList<FocusNode>,
+        scrollRegions: MutableList<ScrollRegion>,
+    ) {
+        ops +=
+            RenderOp.DrawCodeEditor(
+                x = node.x,
+                y = node.y,
+                width = node.width,
+                height = node.height,
+                viewModel = element.viewModel,
+                fontWidth = element.fontWidth,
+                fontHeight = element.fontHeight,
+            )
+
+        val viewModel = element.viewModel
+        val fontWidth = element.fontWidth
+        val fontHeight = element.fontHeight
+        val width = node.width
+        val height = node.height
+
+        focusNodes +=
+            FocusNode(
+                nodeId = nodeId,
+                frameIndex = frameIndex,
+                x = node.x,
+                y = node.y,
+                width = width,
+                height = height,
+                tabOrder = element.modifier.findFocusable()?.tabOrder ?: 0,
+                handler =
+                    FocusHandler(
+                        onKeyPressed = { key ->
+                            viewModel.value.onKeyPressed(key, modifiers = 0, visibleLines = height / fontHeight)
+                        },
+                        onCharTyped = { ch ->
+                            viewModel.value.onCharTyped(ch, visibleLines = height / fontHeight)
+                        },
+                    ),
+            )
+
+        // Hit region: a click translates pixel coordinates to (line, column),
+        // forwards to the view-model and lets the executor focus this node.
+        // The hit-region's onClick receives no coordinates, so the runtime
+        // executor calls the view-model directly via mouseClicked routing.
+        // Until that routing is wired up, we forward a "best effort" click
+        // pinning at (scrollLine, 0) so focusing alone works correctly.
+        hitRegions +=
+            HitRegion(
+                nodeId = nodeId,
+                frameIndex = frameIndex,
+                x = node.x,
+                y = node.y,
+                width = width,
+                height = height,
+                zIndex = element.modifier.findZIndex()?.zIndex ?: 0,
+                onClick = {
+                    val vm = viewModel.value
+                    vm.onMouseClickAt(vm.scrollLine, 0)
+                },
+                onClickAt = { localX, localY ->
+                    val vm = viewModel.value
+                    val gutter =
+                        ru.lazyhat.compukterkraft.core.ui.editor.CodeEditorMetrics
+                            .gutterPixelWidth(
+                                ru.lazyhat.compukterkraft.core.ui.editor.CodeEditorMetrics
+                                    .lineCount(vm.text),
+                                fontWidth,
+                            )
+                    val column = ((localX - gutter).coerceAtLeast(0)) / fontWidth
+                    val line = vm.scrollLine + (localY / fontHeight)
+                    vm.onMouseClickAt(line, column)
+                },
+            )
+
+        scrollRegions +=
+            ScrollRegion(
+                nodeId = nodeId,
+                frameIndex = frameIndex,
+                x = node.x,
+                y = node.y,
+                width = width,
+                height = height,
+                onScroll = { delta ->
+                    val lines =
+                        when {
+                            delta > 0.0 -> -1
+                            delta < 0.0 -> 1
+                            else -> 0
+                        }
+                    if (lines != 0) viewModel.value.onScroll(lines)
+                    lines != 0
+                },
+            )
     }
 }
