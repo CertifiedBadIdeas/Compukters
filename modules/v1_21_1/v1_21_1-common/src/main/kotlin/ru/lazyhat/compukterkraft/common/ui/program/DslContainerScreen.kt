@@ -77,6 +77,25 @@ abstract class DslContainerScreen<T : AbstractContainerMenu>(
     protected val isDslFocused: Boolean
         get() = executor?.isFocused ?: false
 
+    /**
+     * Focus the first focusable element produced by the current program.
+     * Does nothing if the executor hasn't been built yet, if there are no
+     * focusable elements, or if focus is already held by some node. Useful
+     * for screens that have a single sensible focus target (e.g. a
+     * terminal surface) and want it to receive keys without requiring the
+     * user to click first.
+     *
+     * Returns `true` if focus was newly acquired, `false` otherwise.
+     */
+    protected fun focusFirstNodeIfUnfocused(): Boolean {
+        val ex = executor ?: return false
+        if (ex.isFocused) return false
+        val first = ex.firstFocusableNodeId() ?: return false
+        ex.restoreFocus(first)
+        lastFocusedNodeId = first
+        return true
+    }
+
     override fun init() {
         super.init()
         rebuildExecutor()
