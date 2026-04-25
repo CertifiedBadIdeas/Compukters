@@ -121,8 +121,8 @@ private fun UiScope.buildToolbar(
         box(modifier = Modifier.weight(2f).size(IntSize(0, TOOLBAR_HEIGHT)))
         toolbarButton(
             label = value { if (store.state.terminalVisible) "Hide T" else "Term" },
-            highlighted = store.state.terminalVisible,
-            enabled = store.state.actions.canAttachTerminal || store.state.terminalVisible,
+            highlighted = { store.state.terminalVisible },
+            enabled = { store.state.actions.canAttachTerminal || store.state.terminalVisible },
             onClick = { store.toggleTerminalVisibility() },
         )
         toolbarButton(label = value { "Reboot" }, onClick = { store.rebootComputer() })
@@ -355,13 +355,16 @@ private fun UiScope.buildImportPickerOverlay(
 private fun UiScope.toolbarButton(
     label: Value<String>,
     onClick: () -> Unit,
-    highlighted: Boolean = false,
-    enabled: Boolean = true,
+    highlighted: () -> Boolean = { false },
+    enabled: () -> Boolean = { true },
 ) {
     // BackgroundModifier bakes a static color into the compiled FillRect; to
-    // get a hover-aware fill we wire a HoverState through `Modifier.hoverable`
-    // and paint the background ourselves from a canvas, whose `onDraw` runs
-    // every frame and therefore sees the current `isHovered` flag.
+    // get a hover/state-aware fill we wire a HoverState through
+    // `Modifier.hoverable` and paint the background ourselves from a canvas,
+    // whose `onDraw` runs every frame and therefore re-evaluates the
+    // `highlighted`/`enabled` lambdas alongside `isHovered`. This is what
+    // lets the Term button visually flip between dim/active without forcing
+    // a screen rebuild every time the target slot's contents change.
     val hover = HoverState()
     button(
         modifier =
@@ -369,21 +372,26 @@ private fun UiScope.toolbarButton(
                 .weight(1f)
                 .size(IntSize(0, TOOLBAR_HEIGHT))
                 .hoverable(hover),
-        onClick = { if (enabled) onClick() },
+        onClick = { if (enabled()) onClick() },
     ) {
         canvas {
             val color =
                 when {
-                    !enabled -> BG_BUTTON_DISABLED
-                    highlighted -> BG_BUTTON_ACTIVE
+                    !enabled() -> BG_BUTTON_DISABLED
+                    highlighted() -> BG_BUTTON_ACTIVE
                     hover.isHovered -> BG_BUTTON_HOVER
                     else -> BG_BUTTON
                 }
             fillRect(0, 0, width, height, color)
         }
+        // The DSL bakes text colour into the compiled DrawText op, so we
+        // can't make it state-reactive without widening UiElement.Text.
+        // The visible state difference is carried by the canvas background
+        // instead (BG_BUTTON_DISABLED is dark enough that TEXT_LIGHT reads
+        // as dimmed against it).
         text(
             modifier = Modifier.align(UiAlignment.Center),
-            color = if (enabled) TEXT_LIGHT else TEXT_DIM,
+            color = TEXT_LIGHT,
             text = label,
         )
     }
