@@ -1,10 +1,10 @@
 package ru.lazyhat.compukterkraft.common.ui.program
 
 import net.minecraft.client.gui.GuiGraphics
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
 import net.minecraft.network.chat.Component
 import net.minecraft.world.entity.player.Inventory
-import ru.lazyhat.compukterkraft.common.computer.menu.AbstractComputerMenu
-import ru.lazyhat.compukterkraft.common.computer.screen.ComputerScreen
+import net.minecraft.world.inventory.AbstractContainerMenu
 import ru.lazyhat.compukterkraft.core.ui.foundation.UiElement
 import ru.lazyhat.compukterkraft.core.ui.program.ScreenProgramCompiler
 import ru.lazyhat.compukterkraft.core.ui.program.ScreenRuntimeExecutor
@@ -24,11 +24,11 @@ import ru.lazyhat.compukterkraft.core.ui.program.ScreenRuntimeExecutor
  * shape of [content] itself would differ (rare: most dynamic values should
  * live inside `ValueExpression`s that are evaluated each frame).
  */
-abstract class DslContainerScreen<T : AbstractComputerMenu>(
+abstract class DslContainerScreen<T : AbstractContainerMenu>(
     menu: T,
     inventory: Inventory,
     title: Component,
-) : ComputerScreen<T>(menu, inventory, title) {
+) : AbstractContainerScreen<T>(menu, inventory, title) {
     private var executor: ScreenRuntimeExecutor? = null
     private var compiledLeft: Int = Int.MIN_VALUE
     private var compiledTop: Int = Int.MIN_VALUE

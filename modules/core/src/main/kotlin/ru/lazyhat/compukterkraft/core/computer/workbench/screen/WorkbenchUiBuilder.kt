@@ -46,6 +46,9 @@ fun buildWorkbenchUi(
     viewport: IntSize,
     viewModel: EditorViewModel,
     terminalSnapshot: () -> ScreenBufferSnapshot? = { null },
+    onTerminalKey: (Int) -> Boolean = { false },
+    onTerminalKeyReleased: (Int) -> Boolean = { false },
+    onTerminalCharTyped: (Char) -> Boolean = { false },
 ): UiElement {
     val toolbarHeight = 24
     val statusHeight = 14
@@ -141,6 +144,9 @@ fun buildWorkbenchUi(
                                 value {
                                     terminalSnapshot() ?: EMPTY_TERMINAL_SNAPSHOT
                                 },
+                            onKey = onTerminalKey,
+                            onKeyReleased = onTerminalKeyReleased,
+                            onCharTyped = onTerminalCharTyped,
                         )
                     }
                 }
