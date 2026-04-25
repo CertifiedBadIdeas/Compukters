@@ -58,7 +58,7 @@ data class FocusNode(
  * return `true` if they consumed the event.
  */
 data class FocusHandler(
-    val onKeyPressed: (Int) -> Boolean = { false },
+    val onKeyPressed: (key: Int, modifiers: Int) -> Boolean = { _, _ -> false },
     val onKeyReleased: (Int) -> Boolean = { false },
     val onCharTyped: (Char) -> Boolean = { false },
 )

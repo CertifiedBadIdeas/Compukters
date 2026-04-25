@@ -62,7 +62,7 @@ class ScreenProgramCompilerTest {
         assertEquals(28, node.y)
         assertEquals(96, node.width)
         assertEquals(48, node.height)
-        assertTrue(node.handler.onKeyPressed(257))
+        assertTrue(node.handler.onKeyPressed(257, 0))
     }
 
     @Test
