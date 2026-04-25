@@ -392,14 +392,12 @@ private fun UiScope.toolbarButton(
                 }
             fillRect(0, 0, width, height, color)
         }
-        // The DSL bakes text colour into the compiled DrawText op, so we
-        // can't make it state-reactive without widening UiElement.Text.
-        // The visible state difference is carried by the canvas background
-        // instead (BG_BUTTON_DISABLED is dark enough that TEXT_LIGHT reads
-        // as dimmed against it).
+        // Background fill is painted from a per-frame canvas onDraw, and
+        // text colour now flows through Value<Color>, so both react to
+        // `enabled`/`highlighted` without a screen rebuild.
         text(
             modifier = Modifier.align(UiAlignment.Center),
-            color = TEXT_LIGHT,
+            color = value { if (enabled.value) TEXT_LIGHT else TEXT_DIM },
             text = label,
         )
     }

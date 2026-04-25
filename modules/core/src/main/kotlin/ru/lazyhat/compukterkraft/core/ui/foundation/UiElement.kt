@@ -26,7 +26,7 @@ sealed interface UiElement {
 
     data class Text(
         override val modifier: Modifier,
-        val color: Color,
+        val color: Value<Color>,
         val text: Value<String>,
     ) : UiElement
 
@@ -156,6 +156,19 @@ class UiScope {
         modifier: Modifier = Modifier,
         color: Color = Color.White,
         text: Value<String>,
+    ) {
+        children += UiElement.Text(modifier, value(color), text)
+    }
+
+    /**
+     * Variant that accepts a reactive [color]. The runtime re-reads the color
+     * every frame, so callers can drive it from a [Value] without forcing a
+     * screen rebuild (handy for things like disabled-button dimming).
+     */
+    fun text(
+        color: Value<Color>,
+        text: Value<String>,
+        modifier: Modifier = Modifier,
     ) {
         children += UiElement.Text(modifier, color, text)
     }

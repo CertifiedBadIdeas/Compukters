@@ -22,6 +22,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.launch
 import net.minecraft.network.chat.Component
 import net.minecraft.world.entity.player.Inventory
 import ru.lazyhat.compukterkraft.common.infrastructure.coroutines.minecraft
@@ -82,6 +84,16 @@ class WorkbenchEditorScreen(
         store.bind(scope, MenuWorkspaceUpdateSource(menu.workspaceStateFlow))
         store.initialize()
         repositionInventorySlots()
+        // Reactive invalidate: only rebuild the executor when the store's
+        // state actually changes. StateFlow drops equal values, so an idle
+        // workbench triggers zero rebuilds. The first emission is the
+        // initial state already baked into the executor by `super.init()`,
+        // hence `drop(1)`. Anything that needs faster-than-state cadence
+        // (cursor blink, mouse hover, terminal snapshot) flows through
+        // Value<T>s and is read every render frame regardless.
+        scope.launch {
+            store.stateFlow.drop(1).collect { invalidate() }
+        }
     }
 
     override fun removed() {
@@ -97,15 +109,6 @@ class WorkbenchEditorScreen(
         // Keep the Minecraft slots aligned with the DSL inventory panel even
         // when the window is resized at runtime.
         repositionInventorySlots()
-        // The Workbench has too many structurally-dynamic regions (workspace
-        // listing, completion popup, conditional terminal panel, toolbar
-        // button labels driven by Kotlin `if`s) to track them with a hand-
-        // maintained shape-signature without forgetting one. Recompiling on
-        // every container tick (20 Hz) is cheap relative to the per-frame
-        // render cost, and it keeps every kind of change in sync at most
-        // 50 ms after the underlying state moves — hover/Value<T>/canvas
-        // reactivity covers the intra-tick window at full frame rate.
-        invalidate()
     }
 
     override fun content(): UiElement =

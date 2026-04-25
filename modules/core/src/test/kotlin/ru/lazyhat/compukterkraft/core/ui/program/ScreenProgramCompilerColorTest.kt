@@ -46,7 +46,7 @@ class ScreenProgramCompilerColorTest {
                 .ops
                 .filterIsInstance<RenderOp.DrawText>()
                 .single()
-        assertEquals(Color.Green, text.color)
+        assertEquals(Color.Green, text.color.value)
         assertEquals("Hello", text.value.value)
     }
 }
