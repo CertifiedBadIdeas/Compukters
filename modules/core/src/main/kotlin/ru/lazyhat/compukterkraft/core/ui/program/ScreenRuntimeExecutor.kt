@@ -135,7 +135,7 @@ class ScreenRuntimeExecutor(
                     }
 
                     is RenderOp.DrawText -> {
-                        backend.drawText(op.x + ox, op.y + oy, op.value.value, op.color)
+                        backend.drawText(op.x + ox, op.y + oy, op.value.value, op.color.value)
                     }
 
                     is RenderOp.DrawTerminalSurface -> {

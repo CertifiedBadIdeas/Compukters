@@ -97,7 +97,7 @@ sealed interface RenderOp {
         val x: Int,
         val y: Int,
         val value: Value<String>,
-        val color: Color,
+        val color: Value<Color>,
     ) : RenderOp
 
     data class DrawTerminalSurface(
