@@ -76,6 +76,12 @@ class ScreenRuntimeExecutor(
     private var tickCounter: Int = 0
 
     /**
+     * The hit region currently being dragged, set by [mouseClicked] when the
+     * pressed region carries any drag handler and cleared by [mouseReleased].
+     */
+    private var activeDragRegion: HitRegion? = null
+
+    /**
      * Updates every [ru.lazyhat.compukterkraft.core.ui.foundation.HoverState]
      * bound via `Modifier.hoverable(...)` based on the supplied mouse
      * position. Call this from the host screen before [render] so that
@@ -212,6 +218,10 @@ class ScreenRuntimeExecutor(
                     if (x < cx || y < cy || x >= cx + clip.width || y >= cy + clip.height) continue
                 }
                 region.onClick.invoke()
+                if (region.onDragStart != null || region.onDrag != null || region.onDragEnd != null) {
+                    activeDragRegion = region
+                    region.onDragStart?.invoke(x, y)
+                }
                 return true
             }
         }
@@ -229,6 +239,25 @@ class ScreenRuntimeExecutor(
         }
         focusedNodeId = null
         return false
+    }
+
+    fun mouseDragged(
+        x: Int,
+        y: Int,
+    ): Boolean {
+        val region = activeDragRegion ?: return false
+        region.onDrag?.invoke(x, y)
+        return true
+    }
+
+    fun mouseReleased(
+        x: Int,
+        y: Int,
+    ): Boolean {
+        val region = activeDragRegion ?: return false
+        region.onDragEnd?.invoke(x, y)
+        activeDragRegion = null
+        return true
     }
 
     fun mouseScrolled(
