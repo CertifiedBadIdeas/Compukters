@@ -29,6 +29,7 @@ kotlin = "2.3.20"
 coroutines = "1.10.2"
 kotlin-logging = "8.0.01"
 slf4j = "2.0.17"
+kotlinx-collections-immutable = "0.3.8"
 
 # 1.21.1
 minecraft-v1211 = "1.21.1"
@@ -44,6 +45,7 @@ kotlin-stdlib = { module = "org.jetbrains.kotlin:kotlin-stdlib", version.ref = "
 
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm", version.ref = "coroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
+kotlinx-collections-immutable = { module = "org.jetbrains.kotlinx:kotlinx-collections-immutable-jvm", version.ref = "kotlinx-collections-immutable" }
 
 # 1.21.1
 minecraft-v1211 = { module = "net.minecraft:minecraft", version.ref = "minecraft-v1211" }

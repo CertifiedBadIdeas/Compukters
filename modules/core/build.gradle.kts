@@ -24,6 +24,7 @@ plugins {
 dependencies {
     implementation(projects.compiler)
     implementation(libs.kotlinx.coroutines.core)
+    implementation(libs.kotlinx.collections.immutable)
     implementation(libs.kotlin.stdlib)
     implementation(libs.kotlin.logging)
     implementation(libs.slf4j.api)
