@@ -25,6 +25,7 @@ data class ScreenProgram(
     val hoverRegions: List<HoverRegion> = emptyList(),
     val tooltipRegions: List<TooltipRegion> = emptyList(),
     val focusNodes: List<FocusNode> = emptyList(),
+    val scrollRegions: List<ScrollRegion> = emptyList(),
 )
 
 /**
@@ -113,6 +114,22 @@ sealed interface RenderOp {
         val height: Int,
         val onDraw: CanvasScope.() -> Unit,
     ) : RenderOp
+
+    /**
+     * Pushes a rectangular clip region onto the backend's clip stack.
+     * Subsequent draw ops within the same frame are restricted to the
+     * intersection of all currently pushed clips. Coordinates follow the
+     * same baked/frame-relative scheme as other ops.
+     */
+    data class PushClip(
+        val x: Int,
+        val y: Int,
+        val width: Int,
+        val height: Int,
+    ) : RenderOp
+
+    /** Pops the most recently pushed clip region. */
+    object PopClip : RenderOp
 }
 
 /**
@@ -133,6 +150,21 @@ data class HitRegion(
     val height: Int,
     val zIndex: Int,
     val onClick: () -> Unit,
+    val clip: HitClip? = null,
+)
+
+/**
+ * A rectangular bound, expressed in the coordinate space of the frame
+ * referenced by [frameIndex] (i.e. the bounds of a parent ScrollArea), used
+ * to mask hit-tests so that clicks landing on parts of a region clipped out
+ * of the visible viewport are ignored.
+ */
+data class HitClip(
+    val frameIndex: Int,
+    val x: Int,
+    val y: Int,
+    val width: Int,
+    val height: Int,
 )
 
 /**
@@ -163,4 +195,19 @@ data class TooltipRegion(
     val width: Int,
     val height: Int,
     val text: Value<String>,
+)
+
+/**
+ * A rectangle that absorbs mouse-wheel events. Coordinates follow the same
+ * baked/frame-relative scheme as other regions; [onScroll] receives the
+ * vertical wheel delta and returns `true` if the event was consumed.
+ */
+data class ScrollRegion(
+    val nodeId: String,
+    val frameIndex: Int,
+    val x: Int,
+    val y: Int,
+    val width: Int,
+    val height: Int,
+    val onScroll: (Double) -> Boolean,
 )

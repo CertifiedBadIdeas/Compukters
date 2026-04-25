@@ -69,6 +69,28 @@ sealed interface UiElement {
         val visible: Value<Boolean>?,
         val children: List<UiElement>,
     ) : UiElement
+
+    /**
+     * A clipped, scrollable container. Children are laid out as if the area
+     * had its full content size, then translated by `(-scrollX, -scrollY)`
+     * each frame and clipped to the area's outer rectangle.
+     *
+     * The `modifier` must carry a fixed `size` (the viewport size). Content
+     * is laid out using the same width/height — for now the DSL does not
+     * require an "intrinsic content size" larger than the viewport; users
+     * supply children that overflow naturally and rely on `scrollX/scrollY`
+     * to bring the desired part into view.
+     *
+     * [onScroll] receives the wheel delta when the cursor is inside the
+     * viewport. Returning `true` consumes the event.
+     */
+    data class ScrollArea(
+        override val modifier: Modifier,
+        val scrollX: Value<Int>,
+        val scrollY: Value<Int>,
+        val onScroll: (Double) -> Boolean = { false },
+        val children: List<UiElement>,
+    ) : UiElement
 }
 
 class UiScope {
@@ -154,6 +176,23 @@ class UiScope {
                 modifier = modifier,
                 anchor = anchor,
                 visible = visible,
+                children = UiScope().apply(block).build(),
+            )
+    }
+
+    fun scrollArea(
+        modifier: Modifier = Modifier,
+        scrollX: Value<Int> = value { 0 },
+        scrollY: Value<Int> = value { 0 },
+        onScroll: (Double) -> Boolean = { false },
+        block: UiScope.() -> Unit,
+    ) {
+        children +=
+            UiElement.ScrollArea(
+                modifier = modifier,
+                scrollX = scrollX,
+                scrollY = scrollY,
+                onScroll = onScroll,
                 children = UiScope().apply(block).build(),
             )
     }

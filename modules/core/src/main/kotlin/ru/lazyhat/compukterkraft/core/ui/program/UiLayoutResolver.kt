@@ -87,6 +87,11 @@ class UiLayoutResolver(
             is UiElement.Text, is UiElement.TerminalSurface, is UiElement.Canvas -> {
                 Unit
             }
+
+            is UiElement.ScrollArea -> {
+                // Children live in a sub-frame and are resolved separately by the compiler.
+                resolveBoxChildren(element.children, nodeId, x, y, width, height, element.modifier, resolved)
+            }
         }
     }
 
@@ -140,6 +145,11 @@ class UiLayoutResolver(
             }
 
             is UiElement.Text, is UiElement.TerminalSurface, is UiElement.Canvas, is UiElement.Overlay -> {
+                Unit
+            }
+
+            is UiElement.ScrollArea -> {
+                // ScrollArea owns its own frame; children are laid out by a sub-resolver.
                 Unit
             }
         }

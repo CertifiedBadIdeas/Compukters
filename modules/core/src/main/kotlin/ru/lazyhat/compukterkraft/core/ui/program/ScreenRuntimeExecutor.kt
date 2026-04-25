@@ -131,6 +131,14 @@ class ScreenRuntimeExecutor(
                         canvasScope.bind(backend, op.x + ox, op.y + oy, op.width, op.height)
                         op.onDraw.invoke(canvasScope)
                     }
+
+                    is RenderOp.PushClip -> {
+                        backend.pushClip(op.x + ox, op.y + oy, op.width, op.height)
+                    }
+
+                    RenderOp.PopClip -> {
+                        backend.popClip()
+                    }
                 }
             }
         }
@@ -183,6 +191,17 @@ class ScreenRuntimeExecutor(
             val rx = region.x + origin.x
             val ry = region.y + origin.y
             if (x >= rx && y >= ry && x < rx + region.width && y < ry + region.height) {
+                // Honour any clip rectangle (e.g. ScrollArea viewport) to
+                // ignore clicks on parts of the region scrolled out of view.
+                val clip = region.clip
+                if (clip != null) {
+                    val clipFrame = program.frames[clip.frameIndex]
+                    if (clipFrame.visible != null && !clipFrame.visible.value) continue
+                    val clipOrigin = clipFrame.origin?.value ?: Position.Zero
+                    val cx = clip.x + clipOrigin.x
+                    val cy = clip.y + clipOrigin.y
+                    if (x < cx || y < cy || x >= cx + clip.width || y >= cy + clip.height) continue
+                }
                 region.onClick.invoke()
                 return true
             }
@@ -200,6 +219,24 @@ class ScreenRuntimeExecutor(
             }
         }
         focusedNodeId = null
+        return false
+    }
+
+    fun mouseScrolled(
+        x: Int,
+        y: Int,
+        deltaY: Double,
+    ): Boolean {
+        for (region in program.scrollRegions) {
+            val frame = program.frames[region.frameIndex]
+            if (frame.visible != null && !frame.visible.value) continue
+            val origin = frame.origin?.value ?: Position.Zero
+            val rx = region.x + origin.x
+            val ry = region.y + origin.y
+            if (x >= rx && y >= ry && x < rx + region.width && y < ry + region.height) {
+                if (region.onScroll(deltaY)) return true
+            }
+        }
         return false
     }
 
