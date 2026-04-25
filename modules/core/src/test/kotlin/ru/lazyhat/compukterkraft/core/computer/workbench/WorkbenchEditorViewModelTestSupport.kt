@@ -1,0 +1,124 @@
+/*
+ * The Compukter Kraft Developers
+ *
+ * Copyright (C) 2026 Vsevolod Petrov (lazyhat)
+ */
+package ru.lazyhat.compukterkraft.core.computer.workbench
+
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.test.TestScope
+import ru.lazyhat.compukterkraft.lang.api.SourceLocation
+import ru.lazyhat.compukterkraft.lang.api.SourceRange
+import ru.lazyhat.compukterkraft.lang.runtime.CompletionItem
+import ru.lazyhat.compukterkraft.lang.runtime.ComputerIdeSnapshot
+import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceDocument
+import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceEntry
+import ru.lazyhat.compukterkraft.lang.runtime.DefinitionTarget
+import ru.lazyhat.compukterkraft.lang.runtime.HoverInfo
+
+/**
+ * Tiny test fixture that builds a fully-bound [WorkbenchStore] in EDITOR
+ * mode with a single document loaded. Reused by tests that exercise the
+ * store from the outside (e.g. the editor view-model adapter) and don't
+ * want to re-derive the full Fake* gateway boilerplate.
+ */
+internal object WorkbenchEditorViewModelTestSupport {
+    fun makeStoreWithDocument(
+        scope: TestScope,
+        text: String,
+        path: String = "main.ck",
+    ): WorkbenchStore {
+        val store = WorkbenchStore(StubWorkspaceGateway(), StubControlGateway(), StubIdeFacade())
+        val updates = StubUpdateSource()
+        store.bind(scope.backgroundScope, updates)
+        updates.push(document = ComputerWorkspaceDocument(path, text, 0))
+        store.toggleMode() // TERMINAL → EDITOR
+        return store
+    }
+
+    private class StubUpdateSource : WorkbenchUpdateSource {
+        private val flow = MutableStateFlow(WorkbenchRemoteState())
+        override val stateFlow: StateFlow<WorkbenchRemoteState> = flow
+
+        fun push(
+            entries: List<ComputerWorkspaceEntry> = emptyList(),
+            document: ComputerWorkspaceDocument? = null,
+            target: WorkbenchTargetState = WorkbenchTargetState(),
+        ) {
+            flow.value = WorkbenchRemoteState(entries = entries, document = document, target = target)
+        }
+    }
+
+    private class StubWorkspaceGateway : WorkspaceGateway {
+        override fun list(path: String) {}
+
+        override fun read(path: String) {}
+
+        override fun write(
+            path: String,
+            text: String,
+        ) {}
+    }
+
+    private class StubControlGateway : ComputerControlGateway {
+        override fun reboot() {}
+
+        override fun pullFromTarget() {}
+
+        override fun pushToTarget() {}
+
+        override fun runTargetProgram() {}
+
+        override fun attachTargetTerminal() {}
+    }
+
+    private class StubIdeFacade : WorkbenchIdeFacade {
+        override fun analyze(
+            path: String,
+            source: String,
+        ): ComputerIdeSnapshot =
+            ComputerIdeSnapshot(
+                document = ComputerWorkspaceDocument(path, source, 0),
+                diagnostics = emptyList(),
+                highlights = emptyList(),
+            )
+
+        override fun complete(
+            path: String,
+            source: String,
+            line: Int,
+            column: Int,
+        ): List<CompletionItem> = emptyList()
+
+        override fun completeFromLastAnalysis(
+            path: String,
+            source: String,
+            line: Int,
+            column: Int,
+        ): List<CompletionItem> = emptyList()
+
+        override fun availableImports(
+            path: String,
+            source: String,
+        ): List<CompletionItem> = emptyList()
+
+        override fun hover(
+            path: String,
+            source: String,
+            line: Int,
+            column: Int,
+        ): HoverInfo? = null
+
+        override fun definition(
+            path: String,
+            source: String,
+            line: Int,
+            column: Int,
+        ): DefinitionTarget =
+            DefinitionTarget(
+                path = path,
+                range = SourceRange(SourceLocation(0, 0, 0), SourceLocation(0, 0, 0)),
+            )
+    }
+}
