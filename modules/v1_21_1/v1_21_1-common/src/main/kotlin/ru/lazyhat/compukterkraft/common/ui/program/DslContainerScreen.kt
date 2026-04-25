@@ -35,6 +35,13 @@ abstract class DslContainerScreen<T : AbstractContainerMenu>(
     private var compiledWidth: Int = Int.MIN_VALUE
     private var compiledHeight: Int = Int.MIN_VALUE
 
+    /**
+     * The focused node id last seen on the previous executor. Captured
+     * eagerly by [invalidate] so a recompile can restore focus even though
+     * the cached executor itself is dropped.
+     */
+    private var lastFocusedNodeId: String? = null
+
     abstract fun content(): UiElement
 
     /**
@@ -44,6 +51,10 @@ abstract class DslContainerScreen<T : AbstractContainerMenu>(
      * a rebuild.
      */
     protected fun invalidate() {
+        // Capture focus *before* dropping the executor; otherwise the next
+        // rebuild would read it back as null and silently lose keyboard focus
+        // on every tick that calls invalidate() (e.g. WorkbenchEditorScreen).
+        lastFocusedNodeId = executor?.focusedNodeId
         executor = null
     }
 
@@ -90,7 +101,7 @@ abstract class DslContainerScreen<T : AbstractContainerMenu>(
     }
 
     private fun rebuildExecutor() {
-        val previousFocused = executor?.focusedNodeId
+        val previousFocused = executor?.focusedNodeId ?: lastFocusedNodeId
         val program =
             ScreenProgramCompiler(fontMetrics = { text -> font.width(text) })
                 .compile(
@@ -104,6 +115,7 @@ abstract class DslContainerScreen<T : AbstractContainerMenu>(
             ScreenRuntimeExecutor(program).also {
                 it.restoreFocus(previousFocused)
             }
+        lastFocusedNodeId = previousFocused
         compiledLeft = leftPos
         compiledTop = topPos
         compiledWidth = imageWidth
