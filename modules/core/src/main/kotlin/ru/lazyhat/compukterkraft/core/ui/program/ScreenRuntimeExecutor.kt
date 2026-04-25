@@ -24,28 +24,39 @@ class ScreenRuntimeExecutor(
     private val program: ScreenProgram,
 ) {
     /**
-     * Whether the focusable element (if any) currently has input focus.
+     * Identifier of the focus node that currently owns keyboard focus, or
+     * `null` if no node is focused.
      *
-     * Toggled by [mouseClicked]: a click inside [ScreenProgram.focusRegion]
-     * sets it to `true`; a click that lands outside every hit/focus region
-     * clears it. When there is no focus region at all, the flag stays `false`
-     * and no key/char events are routed.
+     *  - Set by [mouseClicked] when a click lands inside a focus node.
+     *  - Cleared by [mouseClicked] when a click lands outside every focus
+     *    node (and outside every hit region).
+     *  - Updated by [keyPressed] when Tab/Shift+Tab cycles focus.
+     *  - Restored by [restoreFocus] after the program is recompiled.
      */
-    var isFocused: Boolean = false
+    var focusedNodeId: String? = null
         private set
 
     /**
-     * Restores the focused flag after [ScreenRuntimeExecutor] has been
-     * rebuilt (typically because the containing screen's bounds drifted
-     * and the host recompiled the program). Without this, a layout
-     * recompile between a focus-acquiring click and a subsequent key
-     * press would silently drop focus, preventing the user from typing
-     * into the newly-compiled focus region.
+     * Convenience flag mirroring "is *anything* focused right now". Kept for
+     * call sites that only care whether the DSL is currently absorbing
+     * keyboard input.
      */
-    fun restoreFocus(focused: Boolean) {
-        if (program.focusRegion != null) {
-            isFocused = focused
-        }
+    val isFocused: Boolean
+        get() = focusedNodeId != null
+
+    /**
+     * Restores the focused node identifier after the executor has been
+     * rebuilt because of a layout-driven recompile. The id is matched against
+     * the new program's focus nodes; if no node with that id exists, focus
+     * is cleared.
+     */
+    fun restoreFocus(nodeId: String?) {
+        focusedNodeId =
+            if (nodeId != null && program.focusNodes.any { it.nodeId == nodeId }) {
+                nodeId
+            } else {
+                null
+            }
     }
 
     /**
@@ -177,36 +188,78 @@ class ScreenRuntimeExecutor(
             }
         }
 
-        val focus = program.focusRegion
-        if (focus != null) {
+        for (focus in program.focusNodes) {
             val frame = program.frames[focus.frameIndex]
-            val frameVisible = frame.visible?.value ?: true
-            if (frameVisible) {
-                val origin = frame.origin?.value ?: Position.Zero
-                val fx = focus.x + origin.x
-                val fy = focus.y + origin.y
-                if (x >= fx && y >= fy && x < fx + focus.width && y < fy + focus.height) {
-                    isFocused = true
-                    return true
-                }
+            if (frame.visible != null && !frame.visible.value) continue
+            val origin = frame.origin?.value ?: Position.Zero
+            val fx = focus.x + origin.x
+            val fy = focus.y + origin.y
+            if (x >= fx && y >= fy && x < fx + focus.width && y < fy + focus.height) {
+                focusedNodeId = focus.nodeId
+                return true
             }
         }
-        isFocused = false
+        focusedNodeId = null
         return false
     }
 
-    fun keyPressed(keyCode: Int): Boolean {
-        if (!isFocused) return false
-        return program.keyHandler?.onKeyPressed?.invoke(keyCode) ?: false
+    private fun focusedHandler(): FocusHandler? {
+        val id = focusedNodeId ?: return null
+        return program.focusNodes.firstOrNull { it.nodeId == id }?.handler
+    }
+
+    fun keyPressed(
+        keyCode: Int,
+        modifiers: Int = 0,
+    ): Boolean {
+        val handler = focusedHandler() ?: return false
+        if (handler.onKeyPressed.invoke(keyCode)) return true
+        if (keyCode == KEY_TAB) {
+            return cycleFocus(forward = (modifiers and MOD_SHIFT) == 0)
+        }
+        return false
     }
 
     fun keyReleased(keyCode: Int): Boolean {
-        if (!isFocused) return false
-        return program.keyHandler?.onKeyReleased?.invoke(keyCode) ?: false
+        val handler = focusedHandler() ?: return false
+        return handler.onKeyReleased.invoke(keyCode)
     }
 
     fun charTyped(ch: Char): Boolean {
-        if (!isFocused) return false
-        return program.keyHandler?.onCharTyped?.invoke(ch) ?: false
+        val handler = focusedHandler() ?: return false
+        return handler.onCharTyped.invoke(ch)
+    }
+
+    /**
+     * Advances keyboard focus to the next (or previous) focusable node by
+     * compile-time tab order. Negative [FocusNode.tabOrder] values opt out
+     * of cycling. Returns `true` if focus was moved.
+     */
+    private fun cycleFocus(forward: Boolean): Boolean {
+        val tabbable =
+            program.focusNodes
+                .asSequence()
+                .filter { it.tabOrder >= 0 }
+                .filter {
+                    val frame = program.frames[it.frameIndex]
+                    frame.visible?.value ?: true
+                }.toList()
+                .let { list ->
+                    val sorted = list.sortedBy { it.tabOrder }
+                    if (forward) sorted else sorted.asReversed()
+                }
+        if (tabbable.isEmpty()) return false
+        val currentIndex = tabbable.indexOfFirst { it.nodeId == focusedNodeId }
+        val next = tabbable[(currentIndex + 1).mod(tabbable.size)]
+        if (next.nodeId == focusedNodeId) return false
+        focusedNodeId = next.nodeId
+        return true
+    }
+
+    private companion object {
+        // GLFW key/modifier constants. Re-declared here to keep the runtime
+        // independent of the GLFW dependency.
+        const val KEY_TAB = 258
+        const val MOD_SHIFT = 0x0001
     }
 }

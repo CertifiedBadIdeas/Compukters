@@ -24,32 +24,36 @@ data class ScreenProgram(
     val hitRegions: List<HitRegion>,
     val hoverRegions: List<HoverRegion> = emptyList(),
     val tooltipRegions: List<TooltipRegion> = emptyList(),
-    val focusedNodeId: String? = null,
-    val focusRegion: FocusRegion? = null,
-    val keyHandler: FocusHandler? = null,
+    val focusNodes: List<FocusNode> = emptyList(),
 )
 
 /**
- * Focus acquisition bounds for the single focusable element in a screen.
+ * A keyboard-focus target produced by a `Modifier.focusable(...)` or by an
+ * element that auto-claims focus (e.g. [ru.lazyhat.compukterkraft.core.ui.foundation.UiElement.TerminalSurface]).
  *
- * When a click lands inside this region the runtime sets the screen's focus
- * flag to `true` (and the click is considered consumed). Clicks outside any
- * hit region clear the focus flag without being consumed.
+ *  - [nodeId] is stable across recompiles and is what the runtime stores
+ *    to remember which node currently owns focus.
+ *  - [tabOrder] drives Tab/Shift+Tab cycling: nodes are visited in
+ *    ascending order; nodes with the same order are visited in
+ *    compile-time order; nodes with negative order are skipped by
+ *    cycling but can still acquire focus via mouse click.
+ *  - [frameIndex] + bounds + [handler] follow the same baked relative
+ *    coordinate scheme as [HitRegion].
  */
-data class FocusRegion(
+data class FocusNode(
     val nodeId: String,
     val frameIndex: Int,
     val x: Int,
     val y: Int,
     val width: Int,
     val height: Int,
+    val tabOrder: Int,
+    val handler: FocusHandler,
 )
 
 /**
- * Keyboard/char event handlers for the currently focused element.
- *
- * All three lambdas return `true` if they consumed the event. They are
- * invoked only while the runtime's focus flag is `true`.
+ * Keyboard/char event handlers for a focused element. All three lambdas
+ * return `true` if they consumed the event.
  */
 data class FocusHandler(
     val onKeyPressed: (Int) -> Boolean = { false },
