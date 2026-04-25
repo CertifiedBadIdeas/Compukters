@@ -125,6 +125,10 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
                 invalidate()
             }
         }
+        // The terminal surface only enters the tree once the computer
+        // reaches the Active state; focus it as soon as it appears so the
+        // player never has to click to start typing.
+        focusFirstNodeIfUnfocused()
     }
 
     override fun mouseClicked(
@@ -133,12 +137,20 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
         button: Int,
     ): Boolean {
         val handled = super.mouseClicked(x, y, button)
-        // The DSL owns focus acquisition (clicks inside the terminal
-        // surface acquire, clicks outside clear). We mirror that flag
-        // into the WorkbenchTerminalInputController so its internal
-        // `keysDown` bookkeeping stays consistent and so a click
-        // outside the terminal releases any held keys.
+        // The portable terminal screen has exactly one sensible keyboard
+        // target — the terminal surface itself — and we don't want the
+        // player to have to click on it before typing. Re-acquire focus
+        // after every click so power/reboot button clicks (or clicks on
+        // empty chrome) don't strand the terminal without focus.
+        focusFirstNodeIfUnfocused()
         return handled
+    }
+
+    override fun init() {
+        super.init()
+        // After the executor has been built for the first time, plant
+        // focus on the terminal surface so the user can type immediately.
+        focusFirstNodeIfUnfocused()
     }
 
     override fun content(): UiElement {

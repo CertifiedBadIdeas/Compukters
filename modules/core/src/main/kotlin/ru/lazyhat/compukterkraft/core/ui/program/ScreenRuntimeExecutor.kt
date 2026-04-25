@@ -61,6 +61,18 @@ class ScreenRuntimeExecutor(
     }
 
     /**
+     * The first focusable node id in compile order (lowest tab order
+     * preferred), or `null` if the program declares no focusables. Useful
+     * for hosts that want a sensible default focus when the user hasn't
+     * clicked yet.
+     */
+    fun firstFocusableNodeId(): String? =
+        program.focusNodes
+            .filter { it.tabOrder >= 0 }
+            .minByOrNull { it.tabOrder }
+            ?.nodeId
+
+    /**
      * The tooltip text under the cursor after the most recent [updateMouse]
      * call, or `null` if the cursor is not over any tooltip region. Host
      * screens typically render this via their platform tooltip API.
