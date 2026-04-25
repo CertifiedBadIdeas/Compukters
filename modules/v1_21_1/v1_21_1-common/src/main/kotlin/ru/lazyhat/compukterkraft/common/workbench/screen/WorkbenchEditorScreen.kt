@@ -59,6 +59,7 @@ class WorkbenchEditorScreen(
         )
     private val viewModel = WorkbenchEditorViewModel(store)
     private var screenScope: CoroutineScope? = null
+    private var lastShapeSignature: Long = Long.MIN_VALUE
 
     override fun init() {
         imageWidth = width
@@ -92,10 +93,30 @@ class WorkbenchEditorScreen(
         }
         syncFullscreenWindowSize()
         terminalInput.update()
-        // Snapshot/state changes routinely alter the workspace listing,
-        // open document or completion popup; force a recompile so the
-        // new structure is reflected in the program.
-        invalidate()
+        // Only recompile when the *shape* of the tree would differ. Per-frame
+        // text / cursor / snapshot changes flow through Value<T>s and don't
+        // need a recompile. The signature includes everything the builder
+        // branches on with plain Kotlin (if / forEach / list size).
+        val shape = currentShapeSignature()
+        if (shape != lastShapeSignature) {
+            lastShapeSignature = shape
+            invalidate()
+        }
+    }
+
+    private fun currentShapeSignature(): Long {
+        val s = store.state
+        val ed = s.editor
+        var h = 1L
+        h = 31L * h + s.terminalVisible.hashCode()
+        h = 31L * h + s.browserPath.hashCode()
+        h = 31L * h + s.entries.size
+        h = 31L * h + s.entries.hashCode()
+        h = 31L * h + ed.completionItems.size
+        h = 31L * h + ed.importPickerVisible.hashCode()
+        h = 31L * h + ed.importPickerItems.size
+        h = 31L * h + (s.openDocument?.path?.hashCode() ?: 0)
+        return h
     }
 
     override fun content(): UiElement =

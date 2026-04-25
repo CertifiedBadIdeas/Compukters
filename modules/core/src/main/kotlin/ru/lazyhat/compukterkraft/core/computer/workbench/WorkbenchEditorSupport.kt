@@ -42,7 +42,15 @@ internal fun EditorState.withCursor(
     line: Int,
     column: Int,
     visibleEditorLines: Int,
-): EditorState = copy(cursorLine = line, cursorColumn = column).keepCursorVisible(visibleEditorLines)
+): EditorState {
+    // Mouse-driven clicks can land below the last text line or past the
+    // end-of-line; clamp here so callers (and downstream insertText /
+    // deleteForward) can index `lines()` safely.
+    val docLines = lines()
+    val safeLine = line.coerceIn(0, docLines.lastIndex)
+    val safeColumn = column.coerceIn(0, docLines[safeLine].length)
+    return copy(cursorLine = safeLine, cursorColumn = safeColumn).keepCursorVisible(visibleEditorLines)
+}
 
 internal fun EditorState.moveCursorHorizontal(
     delta: Int,
