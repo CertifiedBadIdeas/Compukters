@@ -56,6 +56,41 @@ fun git(
     require(process.waitFor() == 0) { "git ${args.toList()} failed" }
 }
 
+fun gitCapture(
+    projectDir: File,
+    vararg args: String,
+): String {
+    val process =
+        ProcessBuilder("git", *args)
+            .directory(projectDir)
+            .redirectErrorStream(true)
+            .start()
+    val output =
+        process.inputStream
+            .bufferedReader()
+            .readText()
+            .trim()
+    require(process.waitFor() == 0) { "git ${args.toList()} failed: $output" }
+    return output
+}
+
+/** Highest stable release tag (vX.Y.Z without -BetaN/-RCN) sorted by semver. */
+fun latestStableReleaseTag(projectDir: File): String {
+    val stableTagRegex = Regex("""^v\d+\.\d+\.\d+$""")
+    val tag =
+        gitCapture(projectDir, "tag", "--list", "v*", "--sort=-v:refname")
+            .lineSequence()
+            .map(String::trim)
+            .filter(String::isNotEmpty)
+            .firstOrNull(stableTagRegex::matches)
+            ?: error("No stable release tag found (vX.Y.Z). Run :release first.")
+    return tag
+}
+
+fun currentBranch(projectDir: File): String = gitCapture(projectDir, "rev-parse", "--abbrev-ref", "HEAD")
+
+fun fixBranchName(v: SemVer): String = "fix/${v.major}.${v.minor}.x"
+
 fun doVersionBump(
     project: Project,
     nextVersion: String,
@@ -78,15 +113,70 @@ tasks.register("currentVersion") {
 
 tasks.register("release") {
     group = "release"
-    description = "Tag current version (${project.version} -> v${project.version})"
+    description = "Tag current version (${project.version} -> v${project.version}) and bump minor"
     doLast {
         val currentVersion = project.version.toString()
         parseVersion(currentVersion)
+        val branch = currentBranch(projectDir)
+        require(!branch.startsWith("fix/")) {
+            "':release' is for the main line. You are on '$branch' — use ':releaseFix' instead."
+        }
         git(projectDir, "tag", "v$currentVersion")
         println("Tagged v$currentVersion")
         println("Run 'git push --tags' to publish.")
     }
     finalizedBy("bumpMinor")
+}
+
+tasks.register("startFixBranch") {
+    group = "release"
+    description = "Create fix/X.Y.x branch from the latest stable release tag and bump patch"
+    doLast {
+        val latestTag = latestStableReleaseTag(projectDir) // e.g. "v0.2.0"
+        val baseline = parseVersion(latestTag.removePrefix("v"))
+        val branch = fixBranchName(baseline)
+
+        val branchExists = gitCapture(projectDir, "branch", "--list", branch).isNotBlank()
+        require(!branchExists) {
+            "Branch '$branch' already exists. Check it out and run ':bumpPatch' / ':releaseFix' there."
+        }
+        val statusOutput = gitCapture(projectDir, "status", "--porcelain")
+        require(statusOutput.isEmpty()) {
+            "Working tree has uncommitted changes — commit/stash them before starting a fix branch:\n$statusOutput"
+        }
+
+        // Branch off the tag, switch onto it, then bump patch on the new branch.
+        git(projectDir, "checkout", "-b", branch, latestTag)
+        val nextVersion = "${baseline.major}.${baseline.minor}.${baseline.patch + 1}"
+        doVersionBump(project, nextVersion)
+        println("Started fix branch '$branch' at $nextVersion (baseline: $latestTag)")
+    }
+}
+
+tasks.register("releaseFix") {
+    group = "release"
+    description = "Tag current fix version on the active fix/X.Y.x branch and bump patch"
+    doLast {
+        val currentVersion = project.version.toString()
+        val sv = parseVersion(currentVersion)
+        require(sv.label == null) {
+            "':releaseFix' refuses labeled versions ($currentVersion). Use ':promote' first."
+        }
+        require(sv.patch > 0) {
+            "':releaseFix' expected patch > 0, got $currentVersion. " +
+                "Use ':release' on main, or ':startFixBranch' to start a fix line."
+        }
+        val branch = currentBranch(projectDir)
+        val expectedBranch = fixBranchName(sv)
+        require(branch == expectedBranch) {
+            "':releaseFix' must run on '$expectedBranch' (current: '$branch'). " +
+                "Use ':startFixBranch' first or check out the right branch."
+        }
+        git(projectDir, "tag", "v$currentVersion")
+        println("Tagged v$currentVersion on $branch")
+        println("Run 'git push --tags' to publish.")
+    }
+    finalizedBy("bumpPatch")
 }
 
 tasks.register("bumpPatch") {
