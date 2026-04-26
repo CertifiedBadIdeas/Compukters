@@ -215,6 +215,47 @@ class ServerWorkbenchTest {
         assertEquals(0, result.ackedClock)
     }
 
+    @Test
+    fun snapshotAfterTargetSwitchExposesNewComputerFiles() {
+        // Regression: switching the bound computer in the workbench used to keep showing
+        // the previous computer's file in the IDE editor until the user manually toggled
+        // file selection. Root cause: the menu refreshed snapshot() with the cached old
+        // document path. With the fix, the menu calls snapshot(null) on a target change so
+        // ServerWorkbench picks the first file of the NEW computer's workspace.
+        TestMinecraftBootstrap.ensureInitialized()
+        val workspace = ComputerWorkspaceHost(createTempDirectory("server-workbench-target-switch"))
+        // Two computers, each with its own file at the same path.
+        workspace.writeDocument(11, "shell.ck", "old-content")
+        workspace.writeDocument(22, "boot.ck", "new-content")
+
+        val workbench = ServerWorkbench(workspaceId = 999, workspace = workspace)
+        val first =
+            ItemStack(Items.STONE).apply {
+                updateComputerDataTag {
+                    computerID = 11
+                    computerFamilyId = "advanced"
+                }
+            }
+        val second =
+            ItemStack(Items.STONE).apply {
+                updateComputerDataTag {
+                    computerID = 22
+                    computerFamilyId = "advanced"
+                }
+            }
+
+        workbench.setTarget(first)
+        val before = workbench.snapshot(null)
+        assertEquals("shell.ck", before.document?.path)
+        assertEquals("old-content", before.document?.text)
+
+        workbench.setTarget(second)
+        // Caller (menu) passes null on computer change — must surface NEW computer's file.
+        val after = workbench.snapshot(null)
+        assertEquals("boot.ck", after.document?.path)
+        assertEquals("new-content", after.document?.text)
+    }
+
     private class FakeRuntimeBridge : WorkbenchTargetRuntimeBridge {
         val calls = mutableListOf<String>()
         private val snapshot = ScreenBuffer(16, 8, true).forceSnapshot()
