@@ -1,11 +1,11 @@
-import process;
-import terminal;
+import process
+import terminal
 
 fun main() {
-    val path: String = process.currentDirectory();
+    val path: String = process.currentDirectory()
     if (path == "") {
-        terminal.printLine("/");
+        terminal.printLine("/")
     } else {
-        terminal.printLine("/" + path);
+        terminal.printLine("/" + path)
     }
 }
