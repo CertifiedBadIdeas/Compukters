@@ -37,7 +37,7 @@ val generateLocalizationApi =
     }
 
 architectury {
-    common("neoforge", "fabric")
+    common("neoforge")
 }
 
 kotlin {
