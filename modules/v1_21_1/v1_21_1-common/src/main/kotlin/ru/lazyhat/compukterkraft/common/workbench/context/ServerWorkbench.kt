@@ -173,12 +173,21 @@ class ServerWorkbench(
     /**
      * Apply a batch of [ops] coming from [sender] to the replica at [path]. If no session is
      * open at [path] the call returns `null` so the caller can re-snapshot.
+     *
+     * The acked clock returned is the highest clock among all ops the server actually applied
+     * in this batch — regardless of [sender]. Since one network request always carries ops from
+     * one player only, max-applied-clock is exactly what that client's outbox needs to advance
+     * `lastAckedClock`. Keying by [sender] used to be brittle: a mismatch between the client's
+     * `siteIdProvider` and the server's `SiteId.player(player.uuid)` would silently leave the
+     * outbox in `Syncing -> Stale`. Sender is still passed through for future per-author audit
+     * (rejection diagnostics, multi-author batches in Phase 2).
      */
     fun applyOps(path: String, ops: List<Op>, sender: SiteId): OpsApplyResult? {
         val replica = replicas[path] ?: return null
         val result: CrdtApplyResult = replica.apply(ops)
+        val ackedClock = result.ackedClockBySite.values.maxOrNull() ?: -1
         return OpsApplyResult(
-            ackedClock = result.ackedClockBySite[sender] ?: -1,
+            ackedClock = ackedClock,
             rejectedAny = result.rejected.isNotEmpty(),
         )
     }
