@@ -151,12 +151,38 @@ class WorkbenchStore(
     }
 
     fun rebootComputer() {
-        controlGateway.reboot()
+        // Flush pending edits first — otherwise unsent ops would lose the race against
+        // the reboot (the rebooted target would re-read pre-edit text). Mirror flushAndRun
+        // semantics: drain outbox on bindScope, then issue REBOOT.
+        val scope = bindScope
+        if (scope == null) {
+            controlGateway.reboot()
+            return
+        }
+        scope.launch {
+            outbox?.let { ob ->
+                ob.flushNow()
+                withTimeoutOrNull(3_000L) {
+                    ob.status.first { it == SyncStatus.Idle }
+                }
+            }
+            controlGateway.reboot()
+        }
     }
 
     fun runTargetProgram() {
         if (!state.actions.canRun) return
-        controlGateway.runTargetProgram()
+        // Spec: RUN must drain the outbox before the server materializes & launches.
+        // We run async on bindScope so the UI thread doesn't block; the suspending
+        // [flushAndRun] handles the timeout + RUN dispatch internally.
+        val scope = bindScope
+        if (scope == null) {
+            // No bound scope (defensive) — fall back to a direct dispatch so the button
+            // still works in headless contexts that never bound a scope.
+            controlGateway.runTargetProgram()
+            return
+        }
+        scope.launch { flushAndRun() }
     }
 
     fun attachTargetTerminal() {

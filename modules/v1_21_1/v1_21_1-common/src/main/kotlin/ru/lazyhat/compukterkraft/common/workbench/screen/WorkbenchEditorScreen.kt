@@ -24,6 +24,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
+import net.minecraft.client.Minecraft
 import net.minecraft.network.chat.Component
 import net.minecraft.world.entity.player.Inventory
 import ru.lazyhat.compukterkraft.common.infrastructure.coroutines.minecraft
@@ -39,6 +40,7 @@ import ru.lazyhat.compukterkraft.common.workbench.input.WorkbenchClientInputHand
 import ru.lazyhat.compukterkraft.common.workbench.menu.WorkbenchMenuWithoutInventory
 import ru.lazyhat.compukterkraft.common.workbench.menu.WorkbenchPositionableSlot
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchStore
+import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.SiteId
 import ru.lazyhat.compukterkraft.core.computer.workbench.screen.WorkbenchEditorViewModel
 import ru.lazyhat.compukterkraft.core.computer.workbench.screen.WorkbenchInventoryLayout
 import ru.lazyhat.compukterkraft.core.computer.workbench.screen.buildWorkbenchUi
@@ -69,6 +71,14 @@ class WorkbenchEditorScreen(
             controlGateway = NetworkWorkbenchControlGateway(container),
             ideFacade = LanguageWorkbenchIdeFacade(WorkbenchTargetCatalogSource(container.workspaceStateFlow.value.target)),
             opsGateway = NetworkWorkbenchOpsGateway(container),
+            siteIdProvider = {
+                // Use the local player's UUID so the server's ack
+                // (`SiteId.player(player.uuid)`) addresses our outbox.
+                // Fallback only protects test/edge cases — in normal play
+                // the screen exists exclusively while the client is in-game.
+                val uuid = Minecraft.getInstance().player?.uuid ?: java.util.UUID.randomUUID()
+                SiteId.player(uuid)
+            },
         )
     private val viewModel = WorkbenchEditorViewModel(store)
     private var screenScope: CoroutineScope? = null
