@@ -170,6 +170,43 @@ class ServerWorkbenchTest {
         assertEquals(4, result.ackedClock, "ack must reflect the highest applied clock, not the sender match")
     }
 
+    @Test
+    fun snapshotEagerlyOpensCrdtSessionForResolvedDocument() {
+        // Regression: when the menu is first opened, refreshFromServerWorkbench() calls
+        // ServerWorkbench.snapshot(null), which auto-picks the first non-directory file as
+        // the displayed document. The client unconditionally bootstraps a local CRDT replica
+        // from `document.text`. If the server doesn't have a matching CRDT session, the
+        // first ops batch the user types is dropped (handleOpsRequest returns null because
+        // replicas[path] is empty) and the outbox stalls in Syncing -> Stale forever.
+        //
+        // The fix: snapshot() opens a CRDT session for the resolved document path so the
+        // server-side invariant "if a document is surfaced to the client, a session is open
+        // for it" always holds.
+        val workspace = ComputerWorkspaceHost(createTempDirectory("server-workbench-snapshot-opens"))
+        val workbench = ServerWorkbench(workspaceId = 200, workspace = workspace)
+        workbench.write("bios.ck", "print(\"hello\")")
+
+        // Auto-resolve path (mimics initial menu open).
+        val state = workbench.snapshot(null)
+        val document = state.document
+        assertNotNull(document)
+        assertEquals("bios.ck", document.path)
+
+        // The session must already be open — applyOps for that path must succeed.
+        val author = ru.lazyhat.compukterkraft.core.computer.workbench.crdt.SiteId("p:client01")
+        val ops = listOf(
+            ru.lazyhat.compukterkraft.core.computer.workbench.crdt.Op.Insert(
+                author = author,
+                clock = 0,
+                leftId = null,
+                text = "X",
+            ),
+        )
+        val result = workbench.applyOps("bios.ck", ops, author)
+        assertNotNull(result, "snapshot() must eagerly open CRDT session so first ops are not dropped")
+        assertEquals(0, result.ackedClock)
+    }
+
     private class FakeRuntimeBridge : WorkbenchTargetRuntimeBridge {
         val calls = mutableListOf<String>()
         private val snapshot = ScreenBuffer(16, 8, true).forceSnapshot()

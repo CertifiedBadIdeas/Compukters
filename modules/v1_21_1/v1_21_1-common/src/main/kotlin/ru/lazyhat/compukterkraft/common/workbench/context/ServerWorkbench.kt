@@ -143,9 +143,19 @@ class ServerWorkbench(
     fun snapshot(openDocumentPath: String? = null): WorkbenchRemoteState {
         val entries = listEntries()
         val documentPath = openDocumentPath ?: entries.firstOrNull { !it.directory }?.path
+        val document = documentPath?.let(::read)
+        // Whenever we surface a document to the client (initial menu open, LIST, READ, RUN,
+        // REBOOT...), eagerly open a CRDT session for it. The client unconditionally
+        // bootstraps a local replica from `document.text`; if the server doesn't have a
+        // matching session, the first ops batch the user types is dropped (handleOpsRequest
+        // returns null, no ack is sent, outbox stalls in Syncing -> Stale). `openSession` is
+        // idempotent (`computeIfAbsent`) so repeat calls are cheap.
+        if (document != null) {
+            openSession(document.path)
+        }
         return WorkbenchRemoteState(
             entries = entries,
-            document = documentPath?.let(::read),
+            document = document,
             target = targetState(),
         )
     }
