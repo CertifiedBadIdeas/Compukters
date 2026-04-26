@@ -10,7 +10,6 @@
   "compukterkraft.gui.terminal.connecting": "Connecting...",
   "compukterkraft.gui.terminal.focused": "Input active  |  Ctrl+V paste",
   "compukterkraft.gui.terminal.powered_off": "Computer is off. Turn it on first.",
-  "compukterkraft.gui.terminal.unfocused": "Input active  |  Ctrl+V paste",
   "compukterkraft.gui.tooltip.computer_id": "Computer ID: %s",
   "compukterkraft.gui.tooltip.copy": "Copy to clipboard",
   "compukterkraft.item.computer_advanced": "Advanced Computer",
