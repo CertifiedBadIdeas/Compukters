@@ -95,9 +95,25 @@ fun doVersionBump(
     project: Project,
     nextVersion: String,
 ) {
-    val currentVersion = project.version.toString()
     val propsFile = project.file("gradle.properties")
-    propsFile.writeText(propsFile.readText().replace("version = $currentVersion", "version = $nextVersion"))
+    val original = propsFile.readText()
+    // Read the current version from the FILE, not from project.version. The in-memory
+    // project.version is captured at Gradle configuration time and goes stale whenever a
+    // task changes HEAD before bumping (e.g. ':startFixBranch' checks out the release tag
+    // and gradle.properties on disk now reflects the tag's older version). Using the
+    // in-memory value would produce a no-op String.replace, leaving 'git add' empty and
+    // 'git commit' to fail with "nothing to commit".
+    val versionLineRegex = Regex("""(?m)^version\s*=\s*(\S+)\s*$""")
+    val match =
+        versionLineRegex.find(original)
+            ?: error("Could not find 'version = ...' line in ${propsFile.relativeTo(project.rootDir)}")
+    val currentVersion = match.groupValues[1]
+    if (currentVersion == nextVersion) {
+        println("Version already at $nextVersion — nothing to bump.")
+        return
+    }
+    val updated = original.replaceRange(match.range, "version = $nextVersion")
+    propsFile.writeText(updated)
     git(project.projectDir, "add", "gradle.properties")
     git(project.projectDir, "commit", "-m", "chore: bump version to $nextVersion")
     println("Version bumped: $currentVersion -> $nextVersion")
@@ -146,9 +162,18 @@ tasks.register("startFixBranch") {
         }
 
         // Branch off the tag, switch onto it, then bump patch on the new branch.
+        val originalBranch = currentBranch(projectDir)
         git(projectDir, "checkout", "-b", branch, latestTag)
         val nextVersion = "${baseline.major}.${baseline.minor}.${baseline.patch + 1}"
-        doVersionBump(project, nextVersion)
+        try {
+            doVersionBump(project, nextVersion)
+        } catch (t: Throwable) {
+            // Roll back: drop the half-created fix branch and return to the original branch
+            // so the user is not stranded on a detached / partially-set-up branch.
+            runCatching { git(projectDir, "checkout", originalBranch) }
+            runCatching { git(projectDir, "branch", "-D", branch) }
+            throw t
+        }
         println("Started fix branch '$branch' at $nextVersion (baseline: $latestTag)")
     }
 }
