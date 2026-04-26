@@ -30,7 +30,7 @@ class LocalizationApiGeneratorTest {
                 packageName = "ru.lazyhat.compukterkraft.common.ui.dsl",
             ).generate(
                 mapOf(
-                    "compukterkraft.gui.terminal.connecting" to "Connecting...",
+                    "gui.compukterkraft.terminal.connecting" to "Connecting...",
                 ),
             )
 
@@ -40,14 +40,14 @@ class LocalizationApiGeneratorTest {
 
         assertTrue(keys.contains("object CompukterKeys"))
         assertTrue(keys.contains("object Gui"))
-        assertTrue(keys.contains("const val CONNECTING = \"compukterkraft.gui.terminal.connecting\""))
+        assertTrue(keys.contains("const val CONNECTING = \"gui.compukterkraft.terminal.connecting\""))
 
         assertTrue(values.contains("object CompukterTranslatable"))
         assertTrue(values.contains("val connecting: Value<String>"))
         assertTrue(values.contains("translatable(CompukterKeys.Gui.Terminal.CONNECTING)"))
 
         assertTrue(components.contains("object CompukterComponents"))
-        assertTrue(components.contains("val connecting: Component"))
+        assertTrue(components.contains("val connecting: MutableComponent"))
         assertTrue(components.contains("Component.translatable(CompukterKeys.Gui.Terminal.CONNECTING)"))
     }
 
@@ -58,7 +58,7 @@ class LocalizationApiGeneratorTest {
                 packageName = "ru.lazyhat.compukterkraft.common.ui.dsl",
             ).generate(
                 mapOf(
-                    "compukterkraft.gui.tooltip.computer_id" to "Computer ID: %s",
+                    "gui.compukterkraft.tooltip.computer_id" to "Computer ID: %s",
                 ),
             )
 
@@ -66,7 +66,7 @@ class LocalizationApiGeneratorTest {
         val components = rendered.getValue("CompukterComponents.kt")
 
         assertFalse(values.contains("computerId"))
-        assertTrue(components.contains("fun computerId(vararg args: Any): Component"))
+        assertTrue(components.contains("fun computerId(vararg args: Any): MutableComponent"))
         assertTrue(components.contains("Component.translatable(CompukterKeys.Gui.Tooltip.COMPUTER_ID, *args)"))
     }
 
@@ -95,8 +95,8 @@ class LocalizationApiGeneratorTest {
                     packageName = "ru.lazyhat.compukterkraft.common.ui.dsl",
                 ).generate(
                     mapOf(
-                        "compukterkraft.gui.terminal.foo-bar" to "A",
-                        "compukterkraft.gui.terminal.foo_bar" to "B",
+                        "gui.compukterkraft.terminal.foo-bar" to "A",
+                        "gui.compukterkraft.terminal.foo_bar" to "B",
                     ),
                 )
             }

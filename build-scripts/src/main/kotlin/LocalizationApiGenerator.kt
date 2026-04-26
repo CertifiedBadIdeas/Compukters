@@ -181,13 +181,8 @@ class LocalizationApiGenerator(
         key
             .split('.')
             .dropLast(1)
-            .let { segments ->
-                if (segments.firstOrNull() == "compukterkraft") {
-                    segments.drop(1)
-                } else {
-                    segments
-                }
-            }.map(::pascalCase)
+            .filterNot { it == "compukterkraft" }
+            .map(::pascalCase)
 
     private fun constantNameFor(key: String): String = key.substringAfterLast('.').uppercase().replace('-', '_')
 
