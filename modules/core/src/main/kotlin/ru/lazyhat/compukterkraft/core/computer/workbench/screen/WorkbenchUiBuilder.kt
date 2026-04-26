@@ -19,6 +19,7 @@
 package ru.lazyhat.compukterkraft.core.computer.workbench.screen
 
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchStore
+import ru.lazyhat.compukterkraft.core.computer.workbench.sync.SyncStatus
 import ru.lazyhat.compukterkraft.core.ui.editor.EditorViewModel
 import ru.lazyhat.compukterkraft.core.ui.foundation.Color
 import ru.lazyhat.compukterkraft.core.ui.foundation.HoverState
@@ -250,8 +251,8 @@ private fun UiScope.buildStatusBar(
                 value {
                     val ed = store.state.editor
                     val path = store.state.openDocument?.path ?: "No file opened"
-                    val prefix = if (ed.pendingOpCount > 0) "* " else ""
-                    "$prefix$path  L${ed.cursorLine + 1}:C${ed.cursorColumn + 1}"
+                    val indicator = syncIndicator(ed.syncStatus, ed.pendingOpCount)
+                    "$indicator $path  L${ed.cursorLine + 1}:C${ed.cursorColumn + 1}"
                 },
         )
         box(modifier = Modifier.weight(1f).size(IntSize(0, STATUS_HEIGHT)))
@@ -644,3 +645,16 @@ private val EMPTY_TERMINAL_SNAPSHOT =
         fgColours = ByteArray(0),
         bgColours = ByteArray(0),
     )
+
+/**
+ * Compact textual sync-state badge for the status bar. Uses ASCII glyphs that render reliably
+ * in the Minecraft default font: `OK` (Idle), `..N` (Pending with queued count), `<>` (Syncing),
+ * ` wc -l modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/computer/workbench/screen/WorkbenchUiBuilder.kt && tail -5 modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/computer/workbench/screen/WorkbenchUiBuilder.kt` (Stale).
+ */
+private fun syncIndicator(status: SyncStatus, pending: Int): String =
+    when (status) {
+        SyncStatus.Idle -> "[OK]"
+        SyncStatus.Pending -> "[..${if (pending > 0) pending else ""}]"
+        SyncStatus.Syncing -> "[<>${if (pending > 0) pending else ""}]"
+        SyncStatus.Stale -> "[!!]"
+    }
