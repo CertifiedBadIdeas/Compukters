@@ -92,9 +92,21 @@ class WorkbenchMenuWithoutInventory(
 
     private fun syncTargetStack() {
         val stack = targetContainer.getItem(0).copy()
+        val previousComputerId = serverWorkbench?.targetDescriptor()?.computerId
         serverWorkbench?.setTarget(stack)
+        val computerChanged = previousComputerId != serverWorkbench?.targetDescriptor()?.computerId
         onTargetStackChanged?.invoke(stack)
-        refreshFromServerWorkbench()
+        // When the bound computer changes, the previously open document path belongs to the
+        // OLD computer's workspace. Forcing `null` here makes ServerWorkbench.snapshot() fall
+        // back to the first file of the NEW computer instead of trying to read the stale
+        // path — which would otherwise leave the IDE editor showing the previous content
+        // until the user manually re-selects a file (see issue: file refreshes only after
+        // toggling selection).
+        if (computerChanged) {
+            refreshFromServerWorkbench(null)
+        } else {
+            refreshFromServerWorkbench()
+        }
         // The slot mutation only updates the server-side `_workspaceStateFlow`;
         // without an explicit packet the client menu (and therefore the
         // Workbench IDE screen) wouldn't see `target.connected` flip until
