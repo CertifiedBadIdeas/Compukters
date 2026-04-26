@@ -195,11 +195,23 @@ class ServerWorkbench(
     fun applyOps(path: String, ops: List<Op>, sender: SiteId): OpsApplyResult? {
         val replica = replicas[path] ?: return null
         val result: CrdtApplyResult = replica.apply(ops)
-        val ackedClock = result.ackedClockBySite.values.maxOrNull() ?: -1
+        // Prefer max applied clock. If nothing applied (every op rejected, e.g. duplicate
+        // (siteId,clock) after a desync), fall back to the highest clock the client SENT in
+        // this batch. Without this fallback the client outbox would never see lastAckedClock
+        // catch up to lastSentMaxClock and would slide to Stale forever, even though the
+        // server already saw the batch and there is nothing left to retry.
+        val ackedClock = result.ackedClockBySite.values.maxOrNull()
+            ?: ops.maxOfOrNull { highestClockOf(it) }
+            ?: -1
         return OpsApplyResult(
             ackedClock = ackedClock,
             rejectedAny = result.rejected.isNotEmpty(),
         )
+    }
+
+    private fun highestClockOf(op: Op): Int = when (op) {
+        is Op.Insert -> op.clock + op.text.length - 1
+        is Op.Delete -> op.clock
     }
 
     /**

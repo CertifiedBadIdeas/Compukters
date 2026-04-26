@@ -464,14 +464,31 @@ class WorkbenchStore(
     }
 
     private fun mergeRemoteState(remoteState: WorkbenchRemoteState) {
-        val documentChanged = remoteState.document != state.openDocument
+        // When a CRDT replica is bound for the same path, the local replica is the authority
+        // for `text` — the wire `document.text` is whatever the server last read from disk and
+        // is generally STALE relative to in-flight ops (we only materialize replicas back to
+        // disk on RUN/REBOOT/menu-close, not on every workspace action). Treating the wire
+        // text as authoritative would call `bootstrapReplica` here, blow away the live replica,
+        // and leave the server holding ops at (siteId, clock) values the new client replica
+        // would then re-issue — server rejects the duplicates, ackedClock collapses to -1,
+        // outbox slides to Stale. This is exactly the mid-session freeze the user reported
+        // when clicking Term while typing.
+        //
+        // So: compare path/target/entries (those are server-authoritative) but keep the local
+        // replica + editor.text intact whenever a session is open at the same path.
+        val activeSessionPath = outboxPath?.takeIf { replica != null }
+        val documentPathChanged = remoteState.document?.path != state.openDocument?.path
+        val keepLocalText = activeSessionPath != null &&
+            remoteState.document?.path == activeSessionPath
+        val documentChanged = if (keepLocalText) documentPathChanged else remoteState.document != state.openDocument
+
         var nextState = state
 
         if (remoteState.entries != state.entries) {
             nextState = nextState.copy(entries = remoteState.entries)
         }
 
-        if (remoteState.document != state.openDocument) {
+        if (documentChanged) {
             nextState =
                 nextState.copy(
                     openDocument = remoteState.document,
@@ -490,6 +507,14 @@ class WorkbenchStore(
                 replica = null
                 outbox = null
                 outboxPath = null
+            }
+        } else if (keepLocalText && remoteState.document != null) {
+            // Path unchanged, replica live — keep local editor text but refresh metadata
+            // (version etc.) so any non-text fields stay in sync. We keep the locally edited
+            // text by reusing the current editor.text.
+            val merged = remoteState.document.copy(text = state.openDocument?.text ?: state.editor.text)
+            if (merged != state.openDocument) {
+                nextState = nextState.copy(openDocument = merged)
             }
         }
 
