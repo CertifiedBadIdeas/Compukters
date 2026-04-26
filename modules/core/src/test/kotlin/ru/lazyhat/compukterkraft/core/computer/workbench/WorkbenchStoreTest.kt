@@ -259,8 +259,6 @@ class WorkbenchStoreTest {
             updates.push(document = ComputerWorkspaceDocument("main.ck", "fun main() {}", 0))
 
             assertTrue(!store.state.target.connected)
-            assertTrue(!store.state.actions.canPull)
-            assertTrue(!store.state.actions.canPush)
             assertTrue(!store.state.actions.canRun)
             assertTrue(!store.state.actions.canAttachTerminal)
         }
@@ -279,8 +277,6 @@ class WorkbenchStoreTest {
             )
 
             assertTrue(store.state.target.connected)
-            assertTrue(store.state.actions.canPull)
-            assertTrue(store.state.actions.canPush)
             assertTrue(store.state.actions.canRun)
             assertTrue(store.state.actions.canAttachTerminal)
         }

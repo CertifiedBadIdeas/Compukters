@@ -100,54 +100,6 @@ class ServerWorkbenchTest {
     }
 
     @Test
-    fun writeMarksLocalWorkspaceDirtyUntilPushOrPull() {
-        val root = createTempDirectory("server-workbench-sync")
-        val workspace = ComputerWorkspaceHost(root)
-        val workbench =
-            ServerWorkbench(
-                workspaceId = 17,
-                workspace = workspace,
-                initialTarget = ServerWorkbench.TargetDescriptor(computerId = 5, displayName = "Pocket Dev", familyId = "advanced"),
-            )
-
-        workbench.write("main.ck", "print(1)")
-        assertTrue(workbench.snapshot("main.ck").sync.dirtyLocal)
-
-        workbench.pushToTarget()
-        assertFalse(workbench.snapshot("main.ck").sync.dirtyLocal)
-
-        workbench.write("main.ck", "print(2)")
-        workbench.pullFromTarget()
-        assertFalse(workbench.snapshot("main.ck").sync.dirtyLocal)
-    }
-
-    @Test
-    fun pullAndPushMirrorWorkspaceByTargetComputerId() {
-        val root = createTempDirectory("server-workbench-mirror")
-        val workspace = ComputerWorkspaceHost(root)
-        val workbench =
-            ServerWorkbench(
-                workspaceId = 17,
-                workspace = workspace,
-                initialTarget = ServerWorkbench.TargetDescriptor(computerId = 5, displayName = "Pocket Dev", familyId = "advanced"),
-            )
-
-        workspace.writeDocument(5, "main.ck", "print(1)")
-        workspace.writeDocument(5, "nested/program.ck", "print(2)")
-
-        workbench.pullFromTarget()
-
-        assertEquals("print(1)", workspace.readDocument(17, "main.ck")?.text)
-        assertEquals("print(2)", workspace.readDocument(17, "nested/program.ck")?.text)
-
-        workbench.write("main.ck", "print(3)")
-        workbench.pushToTarget()
-
-        assertEquals("print(3)", workspace.readDocument(5, "main.ck")?.text)
-        assertEquals("print(2)", workspace.readDocument(5, "nested/program.ck")?.text)
-    }
-
-    @Test
     fun runAndAttachDelegateToRuntimeBridge() {
         val workbench =
             ServerWorkbench(

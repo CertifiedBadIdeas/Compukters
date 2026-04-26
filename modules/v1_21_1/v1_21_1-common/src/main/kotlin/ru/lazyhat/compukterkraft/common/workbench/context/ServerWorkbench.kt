@@ -29,7 +29,6 @@ import ru.lazyhat.compukterkraft.core.block.ComputerFamily
 import ru.lazyhat.compukterkraft.core.computer.ComputerEvents
 import ru.lazyhat.compukterkraft.core.computer.input.InputEvent
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchRemoteState
-import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchSyncState
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchTargetState
 import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.CrdtApplyResult
 import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.CrdtDocument
@@ -49,7 +48,6 @@ class ServerWorkbench(
     initialTarget: TargetDescriptor = TargetDescriptor(),
 ) : ComputerEvents.Receiver {
     private var targetDescriptor: TargetDescriptor = initialTarget
-    private var syncState: WorkbenchSyncState = WorkbenchSyncState()
     private var runtimeBridge: WorkbenchTargetRuntimeBridge = WorkbenchTargetRuntimeBridge.None
 
     /**
@@ -70,7 +68,6 @@ class ServerWorkbench(
 
     fun clearTarget() {
         targetDescriptor = TargetDescriptor()
-        syncState = WorkbenchSyncState()
     }
 
     fun bindRuntimeBridge(runtimeBridge: WorkbenchTargetRuntimeBridge) {
@@ -88,23 +85,7 @@ class ServerWorkbench(
     fun write(
         path: String,
         text: String,
-    ): ComputerWorkspaceDocument {
-        val document = workspace.writeDocument(workspaceId, path, text)
-        syncState = syncState.copy(dirtyLocal = true)
-        return document
-    }
-
-    fun pullFromTarget() {
-        val targetComputerId = targetDescriptor.computerId ?: return
-        mirrorWorkspace(sourceWorkspaceId = targetComputerId, destinationWorkspaceId = workspaceId)
-        syncState = WorkbenchSyncState()
-    }
-
-    fun pushToTarget() {
-        val targetComputerId = targetDescriptor.computerId ?: return
-        mirrorWorkspace(sourceWorkspaceId = workspaceId, destinationWorkspaceId = targetComputerId)
-        syncState = WorkbenchSyncState()
-    }
+    ): ComputerWorkspaceDocument = workspace.writeDocument(workspaceId, path, text)
 
     fun runTargetProgram() {
         if (targetDescriptor.computerId == null) return
@@ -143,7 +124,6 @@ class ServerWorkbench(
             entries = entries,
             document = documentPath?.let(::read),
             target = targetState(),
-            sync = syncState,
         )
     }
 
@@ -218,51 +198,6 @@ class ServerWorkbench(
                     familyId = familyId,
                 )
             }
-    }
-
-    private fun mirrorWorkspace(
-        sourceWorkspaceId: Int,
-        destinationWorkspaceId: Int,
-    ) {
-        val sourceEntries = collectEntries(sourceWorkspaceId)
-        val destinationEntries = collectEntries(destinationWorkspaceId)
-
-        val sourcePaths = sourceEntries.mapTo(linkedSetOf(), ComputerWorkspaceEntry::path)
-        destinationEntries
-            .filter { it.path !in sourcePaths }
-            .sortedByDescending { it.path.count { ch -> ch == '/' } }
-            .forEach { entry ->
-                workspace.deleteDocument(destinationWorkspaceId, entry.path)
-            }
-
-        sourceEntries
-            .filter(ComputerWorkspaceEntry::directory)
-            .sortedBy { it.path.count { ch -> ch == '/' } }
-            .forEach { entry ->
-                workspace.makeDirectory(destinationWorkspaceId, entry.path)
-            }
-
-        sourceEntries
-            .filterNot(ComputerWorkspaceEntry::directory)
-            .forEach { entry ->
-                val document = workspace.readDocument(sourceWorkspaceId, entry.path) ?: return@forEach
-                workspace.writeDocument(destinationWorkspaceId, entry.path, document.text)
-            }
-    }
-
-    private fun collectEntries(
-        computerId: Int,
-        path: String = "",
-    ): List<ComputerWorkspaceEntry> {
-        val entries = workspace.list(computerId, path)
-        return buildList {
-            for (entry in entries) {
-                add(entry)
-                if (entry.directory) {
-                    addAll(collectEntries(computerId, entry.path))
-                }
-            }
-        }
     }
 
     companion object {

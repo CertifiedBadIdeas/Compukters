@@ -33,32 +33,27 @@ class WorkbenchWorkspaceServerMessage : NetworkMessage<ServerNetworkContext> {
     private val containerId: Int
     private val action: Action
     private val path: String
-    private val text: String
 
     constructor(
         menu: AbstractContainerMenu,
         action: Action,
         path: String = "",
-        text: String = "",
     ) {
         containerId = menu.containerId
         this.action = action
         this.path = path
-        this.text = text
     }
 
     constructor(buf: FriendlyByteBuf) {
         containerId = buf.readVarInt()
         action = buf.readEnum(Action::class.java)
         path = buf.readUtf()
-        text = buf.readUtf(Short.MAX_VALUE.toInt())
     }
 
     override fun write(buf: FriendlyByteBuf) {
         buf.writeVarInt(containerId)
         buf.writeEnum(action)
         buf.writeUtf(path)
-        buf.writeUtf(text, Short.MAX_VALUE.toInt())
     }
 
     override fun handle(context: ServerNetworkContext) {
@@ -66,7 +61,7 @@ class WorkbenchWorkspaceServerMessage : NetworkMessage<ServerNetworkContext> {
         val menu = player.containerMenu
         if (menu.containerId != containerId || menu !is AbstractWorkbenchMenu) return
 
-        val remoteState = menu.handleWorkspaceAction(action, path, text) ?: return
+        val remoteState = menu.handleWorkspaceAction(action, path) ?: return
         ServerNetworking.sendToPlayer(WorkbenchWorkspaceClientMessage(containerId, remoteState), player)
 
         // READ doubles as "open CRDT session for this path" — emit the document snapshot so
@@ -83,9 +78,6 @@ class WorkbenchWorkspaceServerMessage : NetworkMessage<ServerNetworkContext> {
     enum class Action {
         LIST,
         READ,
-        WRITE,
-        PULL,
-        PUSH,
         RUN,
         REBOOT,
         ATTACH_TERMINAL,
