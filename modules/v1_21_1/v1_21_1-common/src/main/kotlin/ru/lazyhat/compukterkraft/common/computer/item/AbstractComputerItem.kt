@@ -25,6 +25,7 @@ import net.minecraft.world.item.BlockItem
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.TooltipFlag
 import net.minecraft.world.level.block.Block
+import ru.lazyhat.compukterkraft.common.localization.CompukterComponents
 import ru.lazyhat.compukterkraft.common.utils.computerDataTagCopy
 import ru.lazyhat.compukterkraft.common.utils.computerID
 import ru.lazyhat.compukterkraft.common.utils.computerLabelByHoverName
@@ -41,7 +42,11 @@ abstract class AbstractComputerItem(
     ) {
         if (options.isAdvanced || stack.computerLabelByHoverName == null) {
             stack.computerDataTagCopy()?.computerID?.let {
-                list.add(Component.translatable("gui.compukterkraft.tooltip.computer_id", it).withStyle(ChatFormatting.GRAY))
+                list.add(
+                    CompukterComponents.Gui.Tooltip
+                        .computerId(it)
+                        .withStyle(ChatFormatting.GRAY),
+                )
             }
         }
     }

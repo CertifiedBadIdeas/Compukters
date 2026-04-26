@@ -180,7 +180,7 @@ class BackgroundComputerVm(
 
     override fun stop(reason: VmStopReason) {
         scope.launch {
-            LOGGER.info { "ComputerID: $computerId stop requested, reason: $reason" }
+            LOGGER.debug { "ComputerID: $computerId stop requested, reason: $reason" }
             stopInternal(reason)
         }
     }
@@ -239,17 +239,17 @@ class BackgroundComputerVm(
         errorMessage: String? = null,
     ) {
         if (stateManager.isStopped) {
-            LOGGER.info { "ComputerID: $computerId already stopped, ignoring stop request (reason: $reason, error: $errorMessage)" }
+            LOGGER.debug { "ComputerID: $computerId already stopped, ignoring stop request (reason: $reason, error: $errorMessage)" }
             return
         }
 
-        LOGGER.info { "ComputerID: $computerId stopped with reason: $reason, error: $errorMessage" }
+        LOGGER.debug { "ComputerID: $computerId stopped with reason: $reason, error: $errorMessage" }
 
         stateManager.stopVm(reason, errorMessage)
         runner?.cancel()
         runner = null
 
-        LOGGER.info { "ComputerID: $computerId stop lock request ended (reason: $reason, error: $errorMessage)" }
+        LOGGER.debug { "ComputerID: $computerId stop lock request ended (reason: $reason, error: $errorMessage)" }
     }
 
     private suspend fun awaitSlicePermit() {

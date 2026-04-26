@@ -37,7 +37,7 @@ class NetworkComputerInputGateway(
     private val menu: AbstractContainerMenu,
 ) : ComputerInputGateway {
     override fun send(event: InputEvent) {
-        LOGGER.info { "Sending input event to server: $event" }
+        LOGGER.debug { "Sending input event to server: $event" }
         when (event) {
             is ControlInputEvent -> {
                 ClientNetworking.sendToServer(

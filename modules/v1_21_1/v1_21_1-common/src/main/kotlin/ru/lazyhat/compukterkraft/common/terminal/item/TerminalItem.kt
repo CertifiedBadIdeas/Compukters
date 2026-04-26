@@ -18,7 +18,6 @@
  */
 package ru.lazyhat.compukterkraft.common.terminal.item
 
-import net.minecraft.network.chat.Component
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.InteractionHand
 import net.minecraft.world.InteractionResult
@@ -33,6 +32,7 @@ import ru.lazyhat.compukterkraft.common.computer.block.AbstractComputerBlock
 import ru.lazyhat.compukterkraft.common.computer.block.AbstractComputerBlockEntity
 import ru.lazyhat.compukterkraft.common.computer.block.ComputerBlockEntity
 import ru.lazyhat.compukterkraft.common.computer.data.ComputerContainerData
+import ru.lazyhat.compukterkraft.common.localization.CompukterComponents
 import ru.lazyhat.compukterkraft.common.terminal.session.TransientPairing
 import ru.lazyhat.compukterkraft.core.Config
 
@@ -85,14 +85,14 @@ class TerminalItem(
         val binding =
             TransientPairing.get(serverPlayer.uuid) ?: run {
                 serverPlayer.displayClientMessage(
-                    Component.translatable("message.compukterkraft.terminal.no_binding"),
+                    CompukterComponents.Message.Terminal.noBinding,
                     true,
                 )
                 return InteractionResultHolder.pass(stack)
             }
         if (binding.dimensionId != level.dimension()) {
             serverPlayer.displayClientMessage(
-                Component.translatable("message.compukterkraft.terminal.wrong_dimension"),
+                CompukterComponents.Message.Terminal.wrongDimension,
                 true,
             )
             return InteractionResultHolder.pass(stack)
@@ -115,7 +115,7 @@ class TerminalItem(
             )
         if (distSqr > radius * radius) {
             serverPlayer.displayClientMessage(
-                Component.translatable("message.compukterkraft.terminal.out_of_range"),
+                CompukterComponents.Message.Terminal.outOfRange,
                 true,
             )
             return InteractionResultHolder.pass(stack)

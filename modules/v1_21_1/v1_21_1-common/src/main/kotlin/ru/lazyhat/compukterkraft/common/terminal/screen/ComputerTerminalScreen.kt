@@ -26,6 +26,7 @@ import ru.lazyhat.compukterkraft.common.computer.menu.AbstractComputerMenu
 import ru.lazyhat.compukterkraft.common.computer.network.server.AttachTerminalServerMessage
 import ru.lazyhat.compukterkraft.common.computer.network.server.ResizeTerminalServerMessage
 import ru.lazyhat.compukterkraft.common.localization.CompukterKeys
+import ru.lazyhat.compukterkraft.common.localization.CompukterTranslatable
 import ru.lazyhat.compukterkraft.common.network.ClientNetworking
 import ru.lazyhat.compukterkraft.common.platform.MinecraftInputProvider
 import ru.lazyhat.compukterkraft.common.ui.dsl.translatable
@@ -237,8 +238,8 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
                     text =
                         translatable {
                             when (currentTerminalState()) {
-                                WorkbenchTerminalViewState.PoweredOff -> "gui.compukterkraft.terminal.powered_off"
-                                WorkbenchTerminalViewState.Connecting -> "gui.compukterkraft.terminal.connecting"
+                                WorkbenchTerminalViewState.PoweredOff -> CompukterKeys.Gui.Terminal.POWERED_OFF
+                                WorkbenchTerminalViewState.Connecting -> CompukterKeys.Gui.Terminal.CONNECTING
                                 is WorkbenchTerminalViewState.Active -> ""
                             }
                         },
@@ -254,9 +255,9 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
                         .tooltip(
                             translatable {
                                 if (menu.isComputerOn) {
-                                    "gui.compukterkraft.control.shutdown"
+                                    CompukterKeys.Gui.Control.SHUTDOWN
                                 } else {
-                                    "gui.compukterkraft.control.turn_on"
+                                    CompukterKeys.Gui.Control.TURN_ON
                                 }
                             },
                         ),
@@ -278,7 +279,7 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
                         .offset(rebootRelX, rebootRelY)
                         .size(STATUS_BUTTON_SIZE, STATUS_BUTTON_SIZE)
                         .hoverable(rebootHover)
-                        .tooltip(translatable("gui.compukterkraft.control.reboot")),
+                        .tooltip(CompukterTranslatable.Gui.Control.reboot),
                 onClick = {
                     inputHandler.accept(ControlInputEvent(ComputerControlAction.REBOOT))
                 },

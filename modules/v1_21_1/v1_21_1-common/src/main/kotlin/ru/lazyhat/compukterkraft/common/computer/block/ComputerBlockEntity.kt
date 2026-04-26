@@ -73,6 +73,6 @@ open class ComputerBlockEntity(
             playerInventory,
             getOrCreateServerComputer(),
         ).also {
-            LOGGER.info { "ComputerID: ${it.serverSide.computer.instanceID} createMenu" }
+            LOGGER.debug { "ComputerID: ${it.serverSide.computer.instanceID} createMenu" }
         }
 }

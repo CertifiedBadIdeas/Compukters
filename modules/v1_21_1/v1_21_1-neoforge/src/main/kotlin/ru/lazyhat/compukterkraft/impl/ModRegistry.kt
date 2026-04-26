@@ -200,7 +200,7 @@ object ModRegistry {
                             playerInventory,
                             ComputerContainerData(data),
                         ).also {
-                            LOGGER.info { "ClientRegistry: ComputerMenuWithoutInventory from buffer created" }
+                            LOGGER.debug { "ClientRegistry: ComputerMenuWithoutInventory from buffer created" }
                         }
                     }
                 },

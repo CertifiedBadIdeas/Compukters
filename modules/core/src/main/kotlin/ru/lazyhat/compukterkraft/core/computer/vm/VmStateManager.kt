@@ -62,7 +62,7 @@ class VmLifecycleState {
         reason: VmStopReason,
         error: String? = null,
     ) {
-        LOGGER.info { "Stopping VM: reason=$reason, error=$error" }
+        LOGGER.debug { "Stopping VM: reason=$reason, error=$error" }
         lock.withLock {
             _state.value = if (error != null) VmState.Crashed(error) else VmState.Stopped(reason)
         }

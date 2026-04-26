@@ -26,6 +26,7 @@ import net.minecraft.network.chat.HoverEvent
 import net.minecraft.network.chat.MutableComponent
 import net.minecraft.network.chat.Style
 import ru.lazyhat.compukterkraft.common.computer.context.ServerComputer
+import ru.lazyhat.compukterkraft.common.localization.CompukterComponents
 
 /**
  * Various helpers for building chat messages.
@@ -93,7 +94,7 @@ object ChatHelpers {
             { s: Style? ->
                 s!!
                     .withClickEvent(ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, text))
-                    .withHoverEvent(HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.translatable("gui.compukterkraft.tooltip.copy")))
+                    .withHoverEvent(HoverEvent(HoverEvent.Action.SHOW_TEXT, CompukterComponents.Gui.Tooltip.copy))
             },
         )
 
@@ -106,6 +107,6 @@ object ChatHelpers {
         link(
             text("#" + computer.instanceID),
             makeComputerCommand("dump", computer),
-            Component.translatable("commands.compukterkraft.dump.action"),
+            CompukterComponents.Commands.Dump.action,
         )
 }
