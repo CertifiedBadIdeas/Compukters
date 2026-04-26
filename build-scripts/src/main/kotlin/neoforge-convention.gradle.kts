@@ -46,10 +46,12 @@ dependencies {
     add("neoForge", versionLibrary("neoforge"))
     modImplementation(versionLibrary("architectury-neoforge"))
 
+    implementation(project(":compiler"))
+    shadowBundle(project(path = ":compiler")) { isTransitive = false }
+
     implementation(project(":core"))
     shadowBundle(project(":core")) { isTransitive = false }
 
-    neoForgeImplementation(project(":compiler"))
     neoForgeImplementation(libs.findLibrary("kotlinx-coroutines-core").get())
     neoForgeImplementation(libs.findLibrary("kotlinx-collections-immutable").get())
     neoForgeImplementation(libs.findLibrary("kotlin-stdlib").get())
