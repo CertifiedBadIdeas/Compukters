@@ -80,9 +80,7 @@ class WorkbenchOpsClientMessage : NetworkMessage<ClientNetworkContext> {
             ackedClock == other.ackedClock
     }
 
-    override fun hashCode(): Int =
-        (((containerId * 31) + path.hashCode()) * 31 + ops.hashCode()) * 31 + ackedClock
+    override fun hashCode(): Int = (((containerId * 31) + path.hashCode()) * 31 + ops.hashCode()) * 31 + ackedClock
 
-    override fun toString(): String =
-        "WorkbenchOpsClientMessage(containerId=$containerId, path='$path', ops=$ops, ackedClock=$ackedClock)"
+    override fun toString(): String = "WorkbenchOpsClientMessage(containerId=$containerId, path='$path', ops=$ops, ackedClock=$ackedClock)"
 }

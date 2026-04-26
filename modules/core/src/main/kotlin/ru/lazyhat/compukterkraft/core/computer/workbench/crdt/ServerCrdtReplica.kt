@@ -40,7 +40,9 @@ data class CrdtApplyResult(
  * Not thread-safe — concurrency is contained at the [ServerWorkbench] level via per-session
  * synchronization.
  */
-class ServerCrdtReplica(initial: CrdtDocument) {
+class ServerCrdtReplica(
+    initial: CrdtDocument,
+) {
     var document: CrdtDocument = initial
         private set
 
@@ -55,19 +57,21 @@ class ServerCrdtReplica(initial: CrdtDocument) {
             }
             document = document.apply(op)
             applied.add(op)
-            val highest = when (op) {
-                is Op.Insert -> op.clock + op.text.length - 1
-                is Op.Delete -> op.clock
-            }
+            val highest =
+                when (op) {
+                    is Op.Insert -> op.clock + op.text.length - 1
+                    is Op.Delete -> op.clock
+                }
             ackedClockBySite.merge(op.author, highest) { a, b -> maxOf(a, b) }
         }
         return CrdtApplyResult(applied, rejected, ackedClockBySite)
     }
 
-    private fun isCausallyValid(op: Op): Boolean = when (op) {
-        is Op.Insert -> op.leftId == null || document.containsAtom(op.leftId)
-        is Op.Delete -> document.containsAtom(op.targetId)
-    }
+    private fun isCausallyValid(op: Op): Boolean =
+        when (op) {
+            is Op.Insert -> op.leftId == null || document.containsAtom(op.leftId)
+            is Op.Delete -> document.containsAtom(op.targetId)
+        }
 
     fun flatten(): String = document.flatten()
 

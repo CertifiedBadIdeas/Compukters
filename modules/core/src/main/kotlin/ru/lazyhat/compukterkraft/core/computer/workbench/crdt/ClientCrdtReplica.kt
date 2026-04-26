@@ -47,20 +47,28 @@ class ClientCrdtReplica(
      * Build an [Op.Insert] for inserting [text] at [charOffset] in the visible document. Does
      * NOT apply the op — call [applyLocal] separately.
      */
-    fun produceInsert(charOffset: Int, text: String): Op.Insert {
-        val leftId = if (charOffset == 0) {
-            null
-        } else {
-            document.atomAtOffset(charOffset - 1)?.first
-                ?: error("produceInsert: offset $charOffset out of bounds (visible length ${document.visibleLength})")
-        }
+    fun produceInsert(
+        charOffset: Int,
+        text: String,
+    ): Op.Insert {
+        val leftId =
+            if (charOffset == 0) {
+                null
+            } else {
+                document.atomAtOffset(charOffset - 1)?.first
+                    ?: error("produceInsert: offset $charOffset out of bounds (visible length ${document.visibleLength})")
+            }
         return Op.Insert(siteId, nextClock, leftId, text)
     }
 
     /** Build an [Op.Delete] removing [length] characters starting at [charOffset]. */
-    fun produceDelete(charOffset: Int, length: Int): Op.Delete {
-        val target = document.atomAtOffset(charOffset)?.first
-            ?: error("produceDelete: offset $charOffset out of bounds (visible length ${document.visibleLength})")
+    fun produceDelete(
+        charOffset: Int,
+        length: Int,
+    ): Op.Delete {
+        val target =
+            document.atomAtOffset(charOffset)?.first
+                ?: error("produceDelete: offset $charOffset out of bounds (visible length ${document.visibleLength})")
         return Op.Delete(siteId, nextClock, target, length)
     }
 
@@ -68,10 +76,11 @@ class ClientCrdtReplica(
     fun applyLocal(op: Op) {
         require(op.author == siteId) { "applyLocal: op author ${op.author} != replica site $siteId" }
         document = document.apply(op)
-        nextClock = when (op) {
-            is Op.Insert -> op.clock + op.text.length
-            is Op.Delete -> op.clock + 1
-        }
+        nextClock =
+            when (op) {
+                is Op.Insert -> op.clock + op.text.length
+                is Op.Delete -> op.clock + 1
+            }
     }
 
     /** Apply a remote op: updates [document] only, [nextClock] is untouched. */

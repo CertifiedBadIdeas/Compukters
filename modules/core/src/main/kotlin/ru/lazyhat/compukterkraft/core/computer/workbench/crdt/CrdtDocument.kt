@@ -41,9 +41,10 @@ data class CrdtDocument(
     val clockBySite: PersistentMap<SiteId, Int>,
 ) {
     /** Concatenates non-tombstoned runs in order. */
-    fun flatten(): String = buildString {
-        for (run in runs) if (!run.deleted) append(run.text)
-    }
+    fun flatten(): String =
+        buildString {
+            for (run in runs) if (!run.deleted) append(run.text)
+        }
 
     /** Total number of visible (non-tombstoned) characters. */
     val visibleLength: Int get() = runs.sumOf { it.visibleLength }
@@ -130,18 +131,20 @@ data class CrdtDocument(
                 i++
             } else {
                 // Tombstone the first `remaining` characters of this run, keep the tail alive.
-                val leftHalf = TextRun(
-                    id = r.id,
-                    leftId = r.leftId,
-                    text = r.text.substring(0, remaining),
-                    deleted = true,
-                )
-                val rightHalf = TextRun(
-                    id = AtomId(r.id.site, r.id.clock + remaining),
-                    leftId = AtomId(r.id.site, r.id.clock + remaining - 1),
-                    text = r.text.substring(remaining),
-                    deleted = false,
-                )
+                val leftHalf =
+                    TextRun(
+                        id = r.id,
+                        leftId = r.leftId,
+                        text = r.text.substring(0, remaining),
+                        deleted = true,
+                    )
+                val rightHalf =
+                    TextRun(
+                        id = AtomId(r.id.site, r.id.clock + remaining),
+                        leftId = AtomId(r.id.site, r.id.clock + remaining - 1),
+                        text = r.text.substring(remaining),
+                        deleted = false,
+                    )
                 working = working.set(i, leftHalf).add(i + 1, rightHalf)
                 remaining = 0
             }
@@ -182,20 +185,22 @@ data class CrdtDocument(
         leftId: AtomId?,
     ): Pair<PersistentList<TextRun>, Int> {
         if (leftId == null) return runs to -1
-        val containingIndex = findRunContaining(runs, leftId)
-            ?: error("Insert references unknown leftId=$leftId; replica state diverged")
+        val containingIndex =
+            findRunContaining(runs, leftId)
+                ?: error("Insert references unknown leftId=$leftId; replica state diverged")
         val r = runs[containingIndex]
         val baseClock = r.id.clock
         val offset = leftId.clock - baseClock
         if (offset == r.text.length - 1) return runs to containingIndex
 
         val leftHalf = r.copy(text = r.text.substring(0, offset + 1))
-        val rightHalf = TextRun(
-            id = AtomId(r.id.site, baseClock + offset + 1),
-            leftId = AtomId(r.id.site, baseClock + offset),
-            text = r.text.substring(offset + 1),
-            deleted = r.deleted,
-        )
+        val rightHalf =
+            TextRun(
+                id = AtomId(r.id.site, baseClock + offset + 1),
+                leftId = AtomId(r.id.site, baseClock + offset),
+                text = r.text.substring(offset + 1),
+                deleted = r.deleted,
+            )
         return runs.set(containingIndex, leftHalf).add(containingIndex + 1, rightHalf) to containingIndex
     }
 
@@ -208,24 +213,29 @@ data class CrdtDocument(
         runs: PersistentList<TextRun>,
         targetId: AtomId,
     ): Pair<PersistentList<TextRun>, Int> {
-        val containingIndex = findRunContaining(runs, targetId)
-            ?: error("Delete references unknown targetId=$targetId; replica state diverged")
+        val containingIndex =
+            findRunContaining(runs, targetId)
+                ?: error("Delete references unknown targetId=$targetId; replica state diverged")
         val r = runs[containingIndex]
         val baseClock = r.id.clock
         val offset = targetId.clock - baseClock
         if (offset == 0) return runs to containingIndex
 
         val leftHalf = r.copy(text = r.text.substring(0, offset))
-        val rightHalf = TextRun(
-            id = AtomId(r.id.site, baseClock + offset),
-            leftId = AtomId(r.id.site, baseClock + offset - 1),
-            text = r.text.substring(offset),
-            deleted = r.deleted,
-        )
+        val rightHalf =
+            TextRun(
+                id = AtomId(r.id.site, baseClock + offset),
+                leftId = AtomId(r.id.site, baseClock + offset - 1),
+                text = r.text.substring(offset),
+                deleted = r.deleted,
+            )
         return runs.set(containingIndex, leftHalf).add(containingIndex + 1, rightHalf) to (containingIndex + 1)
     }
 
-    private fun findRunContaining(runs: PersistentList<TextRun>, atomId: AtomId): Int? {
+    private fun findRunContaining(
+        runs: PersistentList<TextRun>,
+        atomId: AtomId,
+    ): Int? {
         for (i in runs.indices) {
             val r = runs[i]
             if (r.id.site != atomId.site) continue
@@ -240,7 +250,10 @@ data class CrdtDocument(
         fun empty(): CrdtDocument = CrdtDocument(persistentListOf(), persistentMapOf())
 
         /** Atomize plain text into a single run authored by [site]. Empty text → empty document. */
-        fun fromText(text: String, site: SiteId): CrdtDocument {
+        fun fromText(
+            text: String,
+            site: SiteId,
+        ): CrdtDocument {
             if (text.isEmpty()) return empty()
             return empty().apply(Op.Insert(site, clock = 0, leftId = null, text = text))
         }

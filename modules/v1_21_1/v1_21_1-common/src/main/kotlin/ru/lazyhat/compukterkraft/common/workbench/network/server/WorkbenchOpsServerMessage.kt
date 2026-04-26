@@ -85,6 +85,5 @@ class WorkbenchOpsServerMessage : NetworkMessage<ServerNetworkContext> {
 
     override fun hashCode(): Int = (containerId * 31 + path.hashCode()) * 31 + ops.hashCode()
 
-    override fun toString(): String =
-        "WorkbenchOpsServerMessage(containerId=$containerId, path='$path', ops=$ops)"
+    override fun toString(): String = "WorkbenchOpsServerMessage(containerId=$containerId, path='$path', ops=$ops)"
 }

@@ -84,10 +84,11 @@ class OpOutbox(
      * before issuing RUN.
      */
     suspend fun flushNow() {
-        val running = synchronized(this) {
-            flushLocked()
-            sendJob
-        }
+        val running =
+            synchronized(this) {
+                flushLocked()
+                sendJob
+            }
         running?.join()
     }
 
@@ -104,10 +105,11 @@ class OpOutbox(
 
     private fun scheduleDebounceLocked() {
         debounceJob?.cancel()
-        debounceJob = scope.launch(start = CoroutineStart.UNDISPATCHED) {
-            delay(debounceMs)
-            synchronized(this@OpOutbox) { flushLocked() }
-        }
+        debounceJob =
+            scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                delay(debounceMs)
+                synchronized(this@OpOutbox) { flushLocked() }
+            }
     }
 
     private fun flushLocked() {
@@ -127,30 +129,40 @@ class OpOutbox(
 
     private fun scheduleStaleLocked() {
         staleJob?.cancel()
-        staleJob = scope.launch(start = CoroutineStart.UNDISPATCHED) {
-            delay(staleAfterMs)
-            synchronized(this@OpOutbox) {
-                if (lastAckedClock < lastSentMaxClock) {
-                    _status.value = SyncStatus.Stale
+        staleJob =
+            scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                delay(staleAfterMs)
+                synchronized(this@OpOutbox) {
+                    if (lastAckedClock < lastSentMaxClock) {
+                        _status.value = SyncStatus.Stale
+                    }
                 }
             }
-        }
     }
 
     private fun updateStateLocked() {
         _pendingCount.value = queued.size
-        _status.value = when {
-            queued.isNotEmpty() -> SyncStatus.Pending
-            lastSentMaxClock > lastAckedClock ->
-                if (_status.value == SyncStatus.Stale) SyncStatus.Stale else SyncStatus.Syncing
-            else -> SyncStatus.Idle
-        }
+        _status.value =
+            when {
+                queued.isNotEmpty() -> {
+                    SyncStatus.Pending
+                }
+
+                lastSentMaxClock > lastAckedClock -> {
+                    if (_status.value == SyncStatus.Stale) SyncStatus.Stale else SyncStatus.Syncing
+                }
+
+                else -> {
+                    SyncStatus.Idle
+                }
+            }
     }
 
-    private fun highestClockOf(op: Op): Int = when (op) {
-        is Op.Insert -> op.clock + op.text.length - 1
-        is Op.Delete -> op.clock
-    }
+    private fun highestClockOf(op: Op): Int =
+        when (op) {
+            is Op.Insert -> op.clock + op.text.length - 1
+            is Op.Delete -> op.clock
+        }
 
     companion object {
         const val DEFAULT_DEBOUNCE_MS: Long = 50

@@ -257,9 +257,10 @@ class WorkbenchStore(
         val deletedLength = cursorFlat - prefixFlat
         if (deletedLength > 0) applyLocalEdit(LocalEdit.Delete(prefixFlat, deletedLength))
         if (textToInsert.isNotEmpty()) applyLocalEdit(LocalEdit.Insert(prefixFlat, textToInsert))
-        _state.value = state.copy(
-            editor = state.editor.copy(completionItems = emptyList(), selectedCompletion = 0),
-        )
+        _state.value =
+            state.copy(
+                editor = state.editor.copy(completionItems = emptyList(), selectedCompletion = 0),
+            )
         refreshIde()
     }
 
@@ -372,13 +373,21 @@ class WorkbenchStore(
 
         val nextEditor =
             when (key) {
-                KeyCodes.KEY_LEFT -> state.editor.moveCursorHorizontal(-1, visibleEditorLines)
+                KeyCodes.KEY_LEFT -> {
+                    state.editor.moveCursorHorizontal(-1, visibleEditorLines)
+                }
 
-                KeyCodes.KEY_RIGHT -> state.editor.moveCursorHorizontal(1, visibleEditorLines)
+                KeyCodes.KEY_RIGHT -> {
+                    state.editor.moveCursorHorizontal(1, visibleEditorLines)
+                }
 
-                KeyCodes.KEY_UP -> state.editor.moveCursorVertical(-1, visibleEditorLines)
+                KeyCodes.KEY_UP -> {
+                    state.editor.moveCursorVertical(-1, visibleEditorLines)
+                }
 
-                KeyCodes.KEY_DOWN -> state.editor.moveCursorVertical(1, visibleEditorLines)
+                KeyCodes.KEY_DOWN -> {
+                    state.editor.moveCursorVertical(1, visibleEditorLines)
+                }
 
                 KeyCodes.KEY_BACKSPACE -> {
                     deleteBackwardThroughCrdt(visibleEditorLines)
@@ -402,13 +411,21 @@ class WorkbenchStore(
                     return true
                 }
 
-                KeyCodes.KEY_PAGE_UP -> state.editor.scrollBy(-visibleEditorLines)
+                KeyCodes.KEY_PAGE_UP -> {
+                    state.editor.scrollBy(-visibleEditorLines)
+                }
 
-                KeyCodes.KEY_PAGE_DOWN -> state.editor.scrollBy(visibleEditorLines)
+                KeyCodes.KEY_PAGE_DOWN -> {
+                    state.editor.scrollBy(visibleEditorLines)
+                }
 
-                KeyCodes.KEY_F12 -> navigateToDefinition(visibleEditorLines)
+                KeyCodes.KEY_F12 -> {
+                    navigateToDefinition(visibleEditorLines)
+                }
 
-                else -> return false
+                else -> {
+                    return false
+                }
             }
 
         _state.value = state.copy(editor = nextEditor)
@@ -478,8 +495,9 @@ class WorkbenchStore(
         // replica + editor.text intact whenever a session is open at the same path.
         val activeSessionPath = outboxPath?.takeIf { replica != null }
         val documentPathChanged = remoteState.document?.path != state.openDocument?.path
-        val keepLocalText = activeSessionPath != null &&
-            remoteState.document?.path == activeSessionPath
+        val keepLocalText =
+            activeSessionPath != null &&
+                remoteState.document?.path == activeSessionPath
         val documentChanged = if (keepLocalText) documentPathChanged else remoteState.document != state.openDocument
 
         var nextState = state
@@ -593,36 +611,46 @@ class WorkbenchStore(
         val rep = replica ?: return
         val ed = state.editor
         val cursorFlatBefore = SourceTextSupport.offsetAt(ed.text, ed.cursorLine, ed.cursorColumn)
-        val op: Op = when (edit) {
-            is LocalEdit.Insert -> {
-                if (edit.text.isEmpty()) return
-                rep.produceInsert(edit.offset, edit.text)
+        val op: Op =
+            when (edit) {
+                is LocalEdit.Insert -> {
+                    if (edit.text.isEmpty()) return
+                    rep.produceInsert(edit.offset, edit.text)
+                }
+
+                is LocalEdit.Delete -> {
+                    if (edit.length <= 0) return
+                    rep.produceDelete(edit.offset, edit.length)
+                }
             }
-            is LocalEdit.Delete -> {
-                if (edit.length <= 0) return
-                rep.produceDelete(edit.offset, edit.length)
-            }
-        }
         rep.applyLocal(op)
         outbox?.enqueue(op)
 
         val newText = rep.document.flatten()
-        val newCursorFlat = when (edit) {
-            is LocalEdit.Insert -> if (edit.offset <= cursorFlatBefore) cursorFlatBefore + edit.text.length else cursorFlatBefore
-            is LocalEdit.Delete -> when {
-                edit.offset + edit.length <= cursorFlatBefore -> cursorFlatBefore - edit.length
-                edit.offset >= cursorFlatBefore -> cursorFlatBefore
-                else -> edit.offset
+        val newCursorFlat =
+            when (edit) {
+                is LocalEdit.Insert -> {
+                    if (edit.offset <= cursorFlatBefore) cursorFlatBefore + edit.text.length else cursorFlatBefore
+                }
+
+                is LocalEdit.Delete -> {
+                    when {
+                        edit.offset + edit.length <= cursorFlatBefore -> cursorFlatBefore - edit.length
+                        edit.offset >= cursorFlatBefore -> cursorFlatBefore
+                        else -> edit.offset
+                    }
+                }
             }
-        }
         val (newLine, newCol) = lineColumnAt(newText, newCursorFlat)
-        _state.value = state.copy(
-            editor = state.editor.copy(
-                text = newText,
-                cursorLine = newLine,
-                cursorColumn = newCol,
-            ),
-        )
+        _state.value =
+            state.copy(
+                editor =
+                    state.editor.copy(
+                        text = newText,
+                        cursorLine = newLine,
+                        cursorColumn = newCol,
+                    ),
+            )
         refreshIde()
     }
 
@@ -642,13 +670,15 @@ class WorkbenchStore(
         }
         val newText = rep.document.flatten()
         val (newLine, newCol) = lineColumnAt(newText, cursorFlat.coerceIn(0, newText.length))
-        _state.value = state.copy(
-            editor = state.editor.copy(
-                text = newText,
-                cursorLine = newLine,
-                cursorColumn = newCol,
-            ),
-        )
+        _state.value =
+            state.copy(
+                editor =
+                    state.editor.copy(
+                        text = newText,
+                        cursorLine = newLine,
+                        cursorColumn = newCol,
+                    ),
+            )
         refreshIde()
     }
 
@@ -689,16 +719,18 @@ class WorkbenchStore(
         outboxPath = path
         outbox = createOutbox(path)
         val text = document.flatten()
-        _state.value = state.copy(
-            openDocument = open.copy(text = text),
-            editor = state.editor.copy(
-                text = text,
-                cursorLine = 0,
-                cursorColumn = 0,
-                pendingOpCount = 0,
-                syncStatus = SyncStatus.Idle,
-            ),
-        )
+        _state.value =
+            state.copy(
+                openDocument = open.copy(text = text),
+                editor =
+                    state.editor.copy(
+                        text = text,
+                        cursorLine = 0,
+                        cursorColumn = 0,
+                        pendingOpCount = 0,
+                        syncStatus = SyncStatus.Idle,
+                    ),
+            )
         refreshIde()
     }
 
@@ -720,20 +752,23 @@ class WorkbenchStore(
         val scope = bindScope ?: return null
         statusCollectJob?.cancel()
         pendingCollectJob?.cancel()
-        val ob = OpOutbox(
-            scope = scope,
-            send = { batch -> opsGateway.sendOps(path, batch) },
-        )
-        statusCollectJob = scope.launch {
-            ob.status.collect { status ->
-                _state.value = state.copy(editor = state.editor.copy(syncStatus = status))
+        val ob =
+            OpOutbox(
+                scope = scope,
+                send = { batch -> opsGateway.sendOps(path, batch) },
+            )
+        statusCollectJob =
+            scope.launch {
+                ob.status.collect { status ->
+                    _state.value = state.copy(editor = state.editor.copy(syncStatus = status))
+                }
             }
-        }
-        pendingCollectJob = scope.launch {
-            ob.pendingCount.collect { count ->
-                _state.value = state.copy(editor = state.editor.copy(pendingOpCount = count))
+        pendingCollectJob =
+            scope.launch {
+                ob.pendingCount.collect { count ->
+                    _state.value = state.copy(editor = state.editor.copy(pendingOpCount = count))
+                }
             }
-        }
         return ob
     }
 
@@ -778,7 +813,10 @@ class WorkbenchStore(
         _state.value = state.copy(editor = state.editor.keepCursorVisible(visibleEditorLines))
     }
 
-    private fun lineColumnAt(text: String, offset: Int): Pair<Int, Int> {
+    private fun lineColumnAt(
+        text: String,
+        offset: Int,
+    ): Pair<Int, Int> {
         var line = 0
         var col = 0
         val end = offset.coerceAtMost(text.length)
@@ -798,23 +836,28 @@ class WorkbenchStore(
         @Suppress("UNUSED_PARAMETER") after: String,
         cursorFlat: Int,
         op: Op,
-    ): Int = when (op) {
-        is Op.Insert -> {
-            // Locate the first inserted char's flat offset in `after` by scanning the new
-            // visible string. The insert atom shows up immediately to the right of leftId.
-            val insertOffset = leftAtomVisibleOffset(op.leftId, before)
-            if (insertOffset <= cursorFlat) cursorFlat + op.text.length else cursorFlat
-        }
-        is Op.Delete -> {
-            val targetOffset = visibleOffsetOfAtom(op.targetId, before)
-            if (targetOffset == -1) cursorFlat
-            else when {
-                targetOffset + op.length <= cursorFlat -> cursorFlat - op.length
-                targetOffset >= cursorFlat -> cursorFlat
-                else -> targetOffset
+    ): Int =
+        when (op) {
+            is Op.Insert -> {
+                // Locate the first inserted char's flat offset in `after` by scanning the new
+                // visible string. The insert atom shows up immediately to the right of leftId.
+                val insertOffset = leftAtomVisibleOffset(op.leftId, before)
+                if (insertOffset <= cursorFlat) cursorFlat + op.text.length else cursorFlat
+            }
+
+            is Op.Delete -> {
+                val targetOffset = visibleOffsetOfAtom(op.targetId, before)
+                if (targetOffset == -1) {
+                    cursorFlat
+                } else {
+                    when {
+                        targetOffset + op.length <= cursorFlat -> cursorFlat - op.length
+                        targetOffset >= cursorFlat -> cursorFlat
+                        else -> targetOffset
+                    }
+                }
             }
         }
-    }
 
     private fun leftAtomVisibleOffset(
         leftId: ru.lazyhat.compukterkraft.core.computer.workbench.crdt.AtomId?,
@@ -856,7 +899,10 @@ class WorkbenchStore(
         return -1
     }
 
-    private fun identifierStart(line: String, column: Int): Int {
+    private fun identifierStart(
+        line: String,
+        column: Int,
+    ): Int {
         var i = column
         while (i > 0) {
             val ch = line[i - 1]

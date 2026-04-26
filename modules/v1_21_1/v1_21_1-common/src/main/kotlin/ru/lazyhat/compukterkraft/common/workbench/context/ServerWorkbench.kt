@@ -170,9 +170,10 @@ class ServerWorkbench(
      */
     fun openSession(path: String): SessionSnapshot? {
         val initialText = workspace.readDocument(effectiveWorkspaceId, path)?.text ?: return null
-        val replica = replicas.computeIfAbsent(path) {
-            ServerCrdtReplica(CrdtDocument.fromText(initialText, SiteId.ServerInit))
-        }
+        val replica =
+            replicas.computeIfAbsent(path) {
+                ServerCrdtReplica(CrdtDocument.fromText(initialText, SiteId.ServerInit))
+            }
         return SessionSnapshot(
             path = path,
             runs = replica.document.runs.toList(),
@@ -192,7 +193,11 @@ class ServerWorkbench(
      * outbox in `Syncing -> Stale`. Sender is still passed through for future per-author audit
      * (rejection diagnostics, multi-author batches in Phase 2).
      */
-    fun applyOps(path: String, ops: List<Op>, sender: SiteId): OpsApplyResult? {
+    fun applyOps(
+        path: String,
+        ops: List<Op>,
+        sender: SiteId,
+    ): OpsApplyResult? {
         val replica = replicas[path] ?: return null
         val result: CrdtApplyResult = replica.apply(ops)
         // Prefer max applied clock. If nothing applied (every op rejected, e.g. duplicate
@@ -200,19 +205,21 @@ class ServerWorkbench(
         // this batch. Without this fallback the client outbox would never see lastAckedClock
         // catch up to lastSentMaxClock and would slide to Stale forever, even though the
         // server already saw the batch and there is nothing left to retry.
-        val ackedClock = result.ackedClockBySite.values.maxOrNull()
-            ?: ops.maxOfOrNull { highestClockOf(it) }
-            ?: -1
+        val ackedClock =
+            result.ackedClockBySite.values.maxOrNull()
+                ?: ops.maxOfOrNull { highestClockOf(it) }
+                ?: -1
         return OpsApplyResult(
             ackedClock = ackedClock,
             rejectedAny = result.rejected.isNotEmpty(),
         )
     }
 
-    private fun highestClockOf(op: Op): Int = when (op) {
-        is Op.Insert -> op.clock + op.text.length - 1
-        is Op.Delete -> op.clock
-    }
+    private fun highestClockOf(op: Op): Int =
+        when (op) {
+            is Op.Insert -> op.clock + op.text.length - 1
+            is Op.Delete -> op.clock
+        }
 
     /**
      * Flatten every open replica back to the workspace on disk. Called before [runTargetProgram]

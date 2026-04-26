@@ -152,16 +152,21 @@ class ServerWorkbenchTest {
         workbench.write("main.ck", "")
         workbench.openSession("main.ck")
 
-        val author = ru.lazyhat.compukterkraft.core.computer.workbench.crdt.SiteId("p:client01")
-        val sender = ru.lazyhat.compukterkraft.core.computer.workbench.crdt.SiteId("p:server02") // intentionally DIFFERENT
-        val ops = listOf(
-            ru.lazyhat.compukterkraft.core.computer.workbench.crdt.Op.Insert(
-                author = author,
-                clock = 0,
-                leftId = null,
-                text = "hello",
-            ),
-        )
+        val author =
+            ru.lazyhat.compukterkraft.core.computer.workbench.crdt
+                .SiteId("p:client01")
+        val sender =
+            ru.lazyhat.compukterkraft.core.computer.workbench.crdt
+                .SiteId("p:server02") // intentionally DIFFERENT
+        val ops =
+            listOf(
+                ru.lazyhat.compukterkraft.core.computer.workbench.crdt.Op.Insert(
+                    author = author,
+                    clock = 0,
+                    leftId = null,
+                    text = "hello",
+                ),
+            )
 
         val result = workbench.applyOps("main.ck", ops, sender)
 
@@ -193,15 +198,18 @@ class ServerWorkbenchTest {
         assertEquals("bios.ck", document.path)
 
         // The session must already be open — applyOps for that path must succeed.
-        val author = ru.lazyhat.compukterkraft.core.computer.workbench.crdt.SiteId("p:client01")
-        val ops = listOf(
-            ru.lazyhat.compukterkraft.core.computer.workbench.crdt.Op.Insert(
-                author = author,
-                clock = 0,
-                leftId = null,
-                text = "X",
-            ),
-        )
+        val author =
+            ru.lazyhat.compukterkraft.core.computer.workbench.crdt
+                .SiteId("p:client01")
+        val ops =
+            listOf(
+                ru.lazyhat.compukterkraft.core.computer.workbench.crdt.Op.Insert(
+                    author = author,
+                    clock = 0,
+                    leftId = null,
+                    text = "X",
+                ),
+            )
         val result = workbench.applyOps("bios.ck", ops, author)
         assertNotNull(result, "snapshot() must eagerly open CRDT session so first ops are not dropped")
         assertEquals(0, result.ackedClock)

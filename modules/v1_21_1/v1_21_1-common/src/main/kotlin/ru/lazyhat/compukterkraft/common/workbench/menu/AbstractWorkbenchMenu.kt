@@ -19,6 +19,8 @@
 
 package ru.lazyhat.compukterkraft.common.workbench.menu
 
+import kotlinx.collections.immutable.toPersistentList
+import kotlinx.collections.immutable.toPersistentMap
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -38,8 +40,6 @@ import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.Op
 import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.SiteId
 import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.TextRun
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
-import kotlinx.collections.immutable.toPersistentList
-import kotlinx.collections.immutable.toPersistentMap
 
 abstract class AbstractWorkbenchMenu(
     menuType: MenuType<*>,

@@ -327,17 +327,24 @@ class WorkbenchStoreTest {
     fun applyLocalEditAddsToOutbox() =
         runTest(UnconfinedTestDispatcher()) {
             val opsGateway = FakeWorkbenchOpsGateway()
-            val store = WorkbenchStore(
-                FakeWorkspaceGateway(),
-                FakeComputerControlGateway(),
-                FakeWorkbenchIdeFacade(),
-                opsGateway,
-            ) { ru.lazyhat.compukterkraft.core.computer.workbench.crdt.SiteId("p:test01") }
+            val store =
+                WorkbenchStore(
+                    FakeWorkspaceGateway(),
+                    FakeComputerControlGateway(),
+                    FakeWorkbenchIdeFacade(),
+                    opsGateway,
+                ) {
+                    ru.lazyhat.compukterkraft.core.computer.workbench.crdt
+                        .SiteId("p:test01")
+                }
             val updates = FakeWorkbenchUpdateSource()
             store.bind(backgroundScope, updates)
             updates.push(document = ComputerWorkspaceDocument("main.ck", "", 0))
 
-            store.applyLocalEdit(ru.lazyhat.compukterkraft.core.computer.workbench.LocalEdit.Insert(0, "ab"))
+            store.applyLocalEdit(
+                ru.lazyhat.compukterkraft.core.computer.workbench.LocalEdit
+                    .Insert(0, "ab"),
+            )
 
             assertEquals("ab", store.state.editor.text)
             // Wait past the debounce window so the outbox flushes the batch.
@@ -352,17 +359,24 @@ class WorkbenchStoreTest {
     fun applyAckClearsPendingCount() =
         runTest(UnconfinedTestDispatcher()) {
             val opsGateway = FakeWorkbenchOpsGateway()
-            val store = WorkbenchStore(
-                FakeWorkspaceGateway(),
-                FakeComputerControlGateway(),
-                FakeWorkbenchIdeFacade(),
-                opsGateway,
-            ) { ru.lazyhat.compukterkraft.core.computer.workbench.crdt.SiteId("p:test02") }
+            val store =
+                WorkbenchStore(
+                    FakeWorkspaceGateway(),
+                    FakeComputerControlGateway(),
+                    FakeWorkbenchIdeFacade(),
+                    opsGateway,
+                ) {
+                    ru.lazyhat.compukterkraft.core.computer.workbench.crdt
+                        .SiteId("p:test02")
+                }
             val updates = FakeWorkbenchUpdateSource()
             store.bind(backgroundScope, updates)
             updates.push(document = ComputerWorkspaceDocument("main.ck", "", 0))
 
-            store.applyLocalEdit(ru.lazyhat.compukterkraft.core.computer.workbench.LocalEdit.Insert(0, "x"))
+            store.applyLocalEdit(
+                ru.lazyhat.compukterkraft.core.computer.workbench.LocalEdit
+                    .Insert(0, "x"),
+            )
             testScheduler.advanceTimeBy(80)
             testScheduler.runCurrent()
             // Insert of 1 char at clock 0 → highest clock acked is 0.
@@ -379,25 +393,36 @@ class WorkbenchStoreTest {
     @Test
     fun applyRemoteOpsUpdatesEditorText() =
         runTest(UnconfinedTestDispatcher()) {
-            val store = WorkbenchStore(
-                FakeWorkspaceGateway(),
-                FakeComputerControlGateway(),
-                FakeWorkbenchIdeFacade(),
-                FakeWorkbenchOpsGateway(),
-            ) { ru.lazyhat.compukterkraft.core.computer.workbench.crdt.SiteId("p:test03") }
+            val store =
+                WorkbenchStore(
+                    FakeWorkspaceGateway(),
+                    FakeComputerControlGateway(),
+                    FakeWorkbenchIdeFacade(),
+                    FakeWorkbenchOpsGateway(),
+                ) {
+                    ru.lazyhat.compukterkraft.core.computer.workbench.crdt
+                        .SiteId("p:test03")
+                }
             val updates = FakeWorkbenchUpdateSource()
             store.bind(backgroundScope, updates)
             updates.push(document = ComputerWorkspaceDocument("main.ck", "hello", 0))
 
             // Bootstrap atomized "hello" with site=ServerInit at clock 0..4. Last visible
             // atom = (ServerInit, 4). Append "!" via remote op.
-            val lastAtom = store.replica!!.document.atomAtOffset(4)!!.first
-            val remoteOp = ru.lazyhat.compukterkraft.core.computer.workbench.crdt.Op.Insert(
-                author = ru.lazyhat.compukterkraft.core.computer.workbench.crdt.SiteId("p:other1"),
-                clock = 0,
-                leftId = lastAtom,
-                text = "!",
-            )
+            val lastAtom =
+                store.replica!!
+                    .document
+                    .atomAtOffset(4)!!
+                    .first
+            val remoteOp =
+                ru.lazyhat.compukterkraft.core.computer.workbench.crdt.Op.Insert(
+                    author =
+                        ru.lazyhat.compukterkraft.core.computer.workbench.crdt
+                            .SiteId("p:other1"),
+                    clock = 0,
+                    leftId = lastAtom,
+                    text = "!",
+                )
 
             store.applyRemoteOps(listOf(remoteOp))
 
@@ -409,12 +434,16 @@ class WorkbenchStoreTest {
         runTest(UnconfinedTestDispatcher()) {
             val opsGateway = FakeWorkbenchOpsGateway()
             val controlGateway = FakeComputerControlGateway()
-            val store = WorkbenchStore(
-                FakeWorkspaceGateway(),
-                controlGateway,
-                FakeWorkbenchIdeFacade(),
-                opsGateway,
-            ) { ru.lazyhat.compukterkraft.core.computer.workbench.crdt.SiteId("p:test04") }
+            val store =
+                WorkbenchStore(
+                    FakeWorkspaceGateway(),
+                    controlGateway,
+                    FakeWorkbenchIdeFacade(),
+                    opsGateway,
+                ) {
+                    ru.lazyhat.compukterkraft.core.computer.workbench.crdt
+                        .SiteId("p:test04")
+                }
             val updates = FakeWorkbenchUpdateSource()
             store.bind(backgroundScope, updates)
             updates.push(
@@ -422,12 +451,16 @@ class WorkbenchStoreTest {
                 target = WorkbenchTargetState(connected = true, displayName = "PC", familyId = "normal"),
             )
 
-            store.applyLocalEdit(ru.lazyhat.compukterkraft.core.computer.workbench.LocalEdit.Insert(0, "x"))
+            store.applyLocalEdit(
+                ru.lazyhat.compukterkraft.core.computer.workbench.LocalEdit
+                    .Insert(0, "x"),
+            )
             // Schedule the ack to arrive while flushAndRun is suspended.
-            val ackJob = backgroundScope.launch {
-                kotlinx.coroutines.delay(20)
-                store.applyAck(0)
-            }
+            val ackJob =
+                backgroundScope.launch {
+                    kotlinx.coroutines.delay(20)
+                    store.applyAck(0)
+                }
             store.flushAndRun(timeoutMs = 1_000)
             ackJob.join()
 
@@ -438,24 +471,31 @@ class WorkbenchStoreTest {
     @Test
     fun cursorMovesWhenRemoteInsertHappensLeft() =
         runTest(UnconfinedTestDispatcher()) {
-            val store = WorkbenchStore(
-                FakeWorkspaceGateway(),
-                FakeComputerControlGateway(),
-                FakeWorkbenchIdeFacade(),
-                FakeWorkbenchOpsGateway(),
-            ) { ru.lazyhat.compukterkraft.core.computer.workbench.crdt.SiteId("p:test05") }
+            val store =
+                WorkbenchStore(
+                    FakeWorkspaceGateway(),
+                    FakeComputerControlGateway(),
+                    FakeWorkbenchIdeFacade(),
+                    FakeWorkbenchOpsGateway(),
+                ) {
+                    ru.lazyhat.compukterkraft.core.computer.workbench.crdt
+                        .SiteId("p:test05")
+                }
             val updates = FakeWorkbenchUpdateSource()
             store.bind(backgroundScope, updates)
             updates.push(document = ComputerWorkspaceDocument("main.ck", "world", 0))
             store.moveCursorTo(0, 5, visibleEditorLines = 20) // at end
 
             // Remote insert at the start of the document (leftId = null).
-            val remoteOp = ru.lazyhat.compukterkraft.core.computer.workbench.crdt.Op.Insert(
-                author = ru.lazyhat.compukterkraft.core.computer.workbench.crdt.SiteId("p:other2"),
-                clock = 0,
-                leftId = null,
-                text = "hi-",
-            )
+            val remoteOp =
+                ru.lazyhat.compukterkraft.core.computer.workbench.crdt.Op.Insert(
+                    author =
+                        ru.lazyhat.compukterkraft.core.computer.workbench.crdt
+                            .SiteId("p:other2"),
+                    clock = 0,
+                    leftId = null,
+                    text = "hi-",
+                )
 
             store.applyRemoteOps(listOf(remoteOp))
 
@@ -484,19 +524,24 @@ class WorkbenchStoreTest {
             // Fix: while a CRDT session is bound to the same path, the local replica owns
             // the text. Stale workspace pushes update entries/target only.
             val opsGateway = FakeWorkbenchOpsGateway()
-            val store = WorkbenchStore(
-                FakeWorkspaceGateway(),
-                FakeComputerControlGateway(),
-                FakeWorkbenchIdeFacade(),
-                opsGateway,
-            ) { ru.lazyhat.compukterkraft.core.computer.workbench.crdt.SiteId("p:test-merge") }
+            val store =
+                WorkbenchStore(
+                    FakeWorkspaceGateway(),
+                    FakeComputerControlGateway(),
+                    FakeWorkbenchIdeFacade(),
+                    opsGateway,
+                ) {
+                    ru.lazyhat.compukterkraft.core.computer.workbench.crdt
+                        .SiteId("p:test-merge")
+                }
             val updates = FakeWorkbenchUpdateSource()
             store.bind(backgroundScope, updates)
             updates.push(document = ComputerWorkspaceDocument("main.ck", "hello", 0))
 
             // User types " world" locally — replica is now ahead of the disk text.
             store.applyLocalEdit(
-                ru.lazyhat.compukterkraft.core.computer.workbench.LocalEdit.Insert(5, " world"),
+                ru.lazyhat.compukterkraft.core.computer.workbench.LocalEdit
+                    .Insert(5, " world"),
             )
             assertEquals("hello world", store.state.editor.text)
             testScheduler.advanceTimeBy(80)
@@ -511,7 +556,8 @@ class WorkbenchStoreTest {
             assertEquals("hello world", store.state.editor.text)
             // The replica must still be live: a new local edit must produce a new batch.
             store.applyLocalEdit(
-                ru.lazyhat.compukterkraft.core.computer.workbench.LocalEdit.Insert(11, "!"),
+                ru.lazyhat.compukterkraft.core.computer.workbench.LocalEdit
+                    .Insert(11, "!"),
             )
             testScheduler.advanceTimeBy(80)
             testScheduler.runCurrent()
@@ -525,17 +571,22 @@ class WorkbenchStoreTest {
     fun openingDifferentDocumentResetsReplica() =
         runTest(UnconfinedTestDispatcher()) {
             val opsGateway = FakeWorkbenchOpsGateway()
-            val store = WorkbenchStore(
-                FakeWorkspaceGateway(),
-                FakeComputerControlGateway(),
-                FakeWorkbenchIdeFacade(),
-                opsGateway,
-            ) { ru.lazyhat.compukterkraft.core.computer.workbench.crdt.SiteId("p:test-switch") }
+            val store =
+                WorkbenchStore(
+                    FakeWorkspaceGateway(),
+                    FakeComputerControlGateway(),
+                    FakeWorkbenchIdeFacade(),
+                    opsGateway,
+                ) {
+                    ru.lazyhat.compukterkraft.core.computer.workbench.crdt
+                        .SiteId("p:test-switch")
+                }
             val updates = FakeWorkbenchUpdateSource()
             store.bind(backgroundScope, updates)
             updates.push(document = ComputerWorkspaceDocument("a.ck", "alpha", 0))
             store.applyLocalEdit(
-                ru.lazyhat.compukterkraft.core.computer.workbench.LocalEdit.Insert(5, "X"),
+                ru.lazyhat.compukterkraft.core.computer.workbench.LocalEdit
+                    .Insert(5, "X"),
             )
 
             // Switch to a different file — must replace text and reset replica.

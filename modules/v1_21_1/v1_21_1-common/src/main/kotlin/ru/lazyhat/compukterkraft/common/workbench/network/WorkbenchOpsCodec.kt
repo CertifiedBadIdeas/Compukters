@@ -40,8 +40,9 @@ import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.TextRun
  * `MAX_TEXT_LENGTH` bounds Insert / TextRun text to keep packets within Minecraft's frame budget.
  * A single Insert that would exceed it must be sliced by the producer before enqueue.
  */
-/** Per-string ceiling for any user-authored text payload on the wire. */
-internal const val MAX_TEXT_LENGTH: Int = 32 * 1024
+
+internal const val MAX_TEXT_LENGTH: Int =
+    32 * 1024 // Per-string ceiling for any user-authored text payload on the wire.
 
 private const val KIND_INSERT: Int = 0
 private const val KIND_DELETE: Int = 1
@@ -64,8 +65,7 @@ internal fun FriendlyByteBuf.writeNullableAtomId(atom: AtomId?) {
     if (atom != null) writeAtomId(atom)
 }
 
-internal fun FriendlyByteBuf.readNullableAtomId(): AtomId? =
-    if (readBoolean()) readAtomId() else null
+internal fun FriendlyByteBuf.readNullableAtomId(): AtomId? = if (readBoolean()) readAtomId() else null
 
 internal fun FriendlyByteBuf.writeOp(op: Op) {
     when (op) {
@@ -76,6 +76,7 @@ internal fun FriendlyByteBuf.writeOp(op: Op) {
             writeNullableAtomId(op.leftId)
             writeUtf(op.text, MAX_TEXT_LENGTH)
         }
+
         is Op.Delete -> {
             writeByte(KIND_DELETE)
             writeSiteId(op.author)
@@ -86,21 +87,30 @@ internal fun FriendlyByteBuf.writeOp(op: Op) {
     }
 }
 
-internal fun FriendlyByteBuf.readOp(): Op = when (val kind = readByte().toInt()) {
-    KIND_INSERT -> Op.Insert(
-        author = readSiteId(),
-        clock = readVarInt(),
-        leftId = readNullableAtomId(),
-        text = readUtf(MAX_TEXT_LENGTH),
-    )
-    KIND_DELETE -> Op.Delete(
-        author = readSiteId(),
-        clock = readVarInt(),
-        targetId = readAtomId(),
-        length = readVarInt(),
-    )
-    else -> error("Unknown Op kind on the wire: $kind")
-}
+internal fun FriendlyByteBuf.readOp(): Op =
+    when (val kind = readByte().toInt()) {
+        KIND_INSERT -> {
+            Op.Insert(
+                author = readSiteId(),
+                clock = readVarInt(),
+                leftId = readNullableAtomId(),
+                text = readUtf(MAX_TEXT_LENGTH),
+            )
+        }
+
+        KIND_DELETE -> {
+            Op.Delete(
+                author = readSiteId(),
+                clock = readVarInt(),
+                targetId = readAtomId(),
+                length = readVarInt(),
+            )
+        }
+
+        else -> {
+            error("Unknown Op kind on the wire: $kind")
+        }
+    }
 
 internal fun FriendlyByteBuf.writeOps(ops: List<Op>) {
     writeVarInt(ops.size)
@@ -134,12 +144,13 @@ internal fun FriendlyByteBuf.writeRun(run: TextRun) {
     writeBoolean(run.deleted)
 }
 
-internal fun FriendlyByteBuf.readRun(): TextRun = TextRun(
-    id = readAtomId(),
-    leftId = readNullableAtomId(),
-    text = readUtf(MAX_TEXT_LENGTH),
-    deleted = readBoolean(),
-)
+internal fun FriendlyByteBuf.readRun(): TextRun =
+    TextRun(
+        id = readAtomId(),
+        leftId = readNullableAtomId(),
+        text = readUtf(MAX_TEXT_LENGTH),
+        deleted = readBoolean(),
+    )
 
 internal fun FriendlyByteBuf.writeRuns(runs: List<TextRun>) {
     writeVarInt(runs.size)

@@ -106,7 +106,12 @@ class WorkbenchSyncIntegrationTest {
 
             assertTrue(flushed, "flushAndRun must succeed within timeout")
             val clientText = store.state.editor.text
-            val serverText = server.openSession(path)!!.runs.filterNot { it.deleted }.joinToString("") { it.text }
+            val serverText =
+                server
+                    .openSession(path)!!
+                    .runs
+                    .filterNot { it.deleted }
+                    .joinToString("") { it.text }
             assertEquals(clientText, serverText, "client and server must converge")
             assertEquals(1, controlGateway.runCount, "RUN must fire exactly once")
             assertEquals(0, store.state.editor.pendingOpCount, "outbox must drain before RUN")
@@ -120,14 +125,19 @@ class WorkbenchSyncIntegrationTest {
      * Synchronous ops gateway: forwards every batch directly to the [server] and feeds the ack
      * back into the bound store, mimicking a zero-latency network.
      */
-    private class DirectOpsGateway(private val server: ServerWorkbench) : WorkbenchOpsGateway {
+    private class DirectOpsGateway(
+        private val server: ServerWorkbench,
+    ) : WorkbenchOpsGateway {
         private var store: WorkbenchStore? = null
 
         fun bindStore(store: WorkbenchStore) {
             this.store = store
         }
 
-        override fun sendOps(path: String, ops: List<Op>) {
+        override fun sendOps(
+            path: String,
+            ops: List<Op>,
+        ) {
             val sender = ops.firstOrNull()?.author ?: return
             val result = server.applyOps(path, ops, sender) ?: return
             store?.applyAck(result.ackedClock)
@@ -140,6 +150,7 @@ class WorkbenchSyncIntegrationTest {
 
     private object NoopWorkspaceGateway : WorkspaceGateway {
         override fun list(path: String) = Unit
+
         override fun read(path: String) = Unit
     }
 
@@ -148,25 +159,57 @@ class WorkbenchSyncIntegrationTest {
             private set
 
         override fun reboot() = Unit
+
         override fun runTargetProgram() {
             runCount += 1
         }
+
         override fun attachTargetTerminal() = Unit
     }
 
     private object NoopIdeFacade : WorkbenchIdeFacade {
-        override fun analyze(path: String, source: String): ComputerIdeSnapshot =
+        override fun analyze(
+            path: String,
+            source: String,
+        ): ComputerIdeSnapshot =
             ComputerIdeSnapshot(
                 document = ComputerWorkspaceDocument(path, source, version = 0),
                 diagnostics = emptyList(),
                 highlights = emptyList(),
             )
 
-        override fun complete(path: String, source: String, line: Int, column: Int): List<CompletionItem> = emptyList()
-        override fun completeFromLastAnalysis(path: String, source: String, line: Int, column: Int): List<CompletionItem> = emptyList()
-        override fun availableImports(path: String, source: String): List<CompletionItem> = emptyList()
-        override fun hover(path: String, source: String, line: Int, column: Int) = null
-        override fun definition(path: String, source: String, line: Int, column: Int) = null
+        override fun complete(
+            path: String,
+            source: String,
+            line: Int,
+            column: Int,
+        ): List<CompletionItem> = emptyList()
+
+        override fun completeFromLastAnalysis(
+            path: String,
+            source: String,
+            line: Int,
+            column: Int,
+        ): List<CompletionItem> = emptyList()
+
+        override fun availableImports(
+            path: String,
+            source: String,
+        ): List<CompletionItem> = emptyList()
+
+        override fun hover(
+            path: String,
+            source: String,
+            line: Int,
+            column: Int,
+        ) = null
+
+        override fun definition(
+            path: String,
+            source: String,
+            line: Int,
+            column: Int,
+        ) = null
     }
 
     private class MutableUpdateSource : WorkbenchUpdateSource {

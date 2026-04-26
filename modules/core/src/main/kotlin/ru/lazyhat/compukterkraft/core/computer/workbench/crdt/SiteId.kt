@@ -33,7 +33,9 @@ import java.util.UUID
  * the wire encoding bounded.
  */
 @JvmInline
-value class SiteId(val raw: String) : Comparable<SiteId> {
+value class SiteId(
+    val raw: String,
+) : Comparable<SiteId> {
     init {
         require(raw.isNotEmpty() && raw.length <= MAX_LENGTH) {
             "SiteId must be 1..$MAX_LENGTH chars, got ${raw.length}: '$raw'"
@@ -54,8 +56,7 @@ value class SiteId(val raw: String) : Comparable<SiteId> {
          */
         val ServerInit: SiteId = SiteId("!:i")
 
-        fun player(uuid: UUID): SiteId =
-            SiteId("p:" + uuid.toString().replace("-", "").take(8))
+        fun player(uuid: UUID): SiteId = SiteId("p:" + uuid.toString().replace("-", "").take(8))
 
         fun target(computerId: Int): SiteId = SiteId("t:$computerId")
     }
