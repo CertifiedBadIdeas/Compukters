@@ -86,6 +86,7 @@ tasks.register("release") {
         println("Tagged v$currentVersion")
         println("Run 'git push --tags' to publish.")
     }
+    finalizedBy("bumpPatch")
 }
 
 tasks.register("bumpPatch") {
