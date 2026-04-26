@@ -21,6 +21,7 @@ package ru.lazyhat.compukterkraft.core.computer.workbench
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import ru.lazyhat.compukterkraft.core.input.KeyCodes
@@ -301,23 +302,6 @@ class WorkbenchStoreTest {
         }
 
     @Test
-    fun pullAndPushActionsDelegateToControlGateway() =
-        runTest(UnconfinedTestDispatcher()) {
-            val ideFacade = FakeWorkbenchIdeFacade()
-            val controlGateway = FakeComputerControlGateway()
-            val store = WorkbenchStore(FakeWorkspaceGateway(), controlGateway, ideFacade)
-            val updates = FakeWorkbenchUpdateSource()
-
-            store.bind(backgroundScope, updates)
-            updates.push(target = WorkbenchTargetState(connected = true, displayName = "Pocket Computer", familyId = "normal"))
-
-            store.pullFromTarget()
-            store.pushToTarget()
-
-            assertEquals(listOf("pull", "push"), controlGateway.calls)
-        }
-
-    @Test
     fun escapeIsNotHandledByEditorStore() =
         runTest(UnconfinedTestDispatcher()) {
             val store = WorkbenchStore(FakeWorkspaceGateway(), FakeComputerControlGateway(), FakeWorkbenchIdeFacade())
@@ -341,6 +325,151 @@ class WorkbenchStoreTest {
             assertTrue(store.keyPressed(69, modifiers = 0, visibleEditorLines = 20))
         }
 
+    // --- Task 8: CRDT sync tests -----------------------------------------------------------
+
+    @Test
+    fun applyLocalEditAddsToOutbox() =
+        runTest(UnconfinedTestDispatcher()) {
+            val opsGateway = FakeWorkbenchOpsGateway()
+            val store = WorkbenchStore(
+                FakeWorkspaceGateway(),
+                FakeComputerControlGateway(),
+                FakeWorkbenchIdeFacade(),
+                opsGateway,
+            ) { ru.lazyhat.compukterkraft.core.computer.workbench.crdt.SiteId("p:test01") }
+            val updates = FakeWorkbenchUpdateSource()
+            store.bind(backgroundScope, updates)
+            updates.push(document = ComputerWorkspaceDocument("main.ck", "", 0))
+
+            store.applyLocalEdit(ru.lazyhat.compukterkraft.core.computer.workbench.LocalEdit.Insert(0, "ab"))
+
+            assertEquals("ab", store.state.editor.text)
+            // Wait past the debounce window so the outbox flushes the batch.
+            testScheduler.advanceTimeBy(80)
+            testScheduler.runCurrent()
+            assertEquals(1, opsGateway.batches.size)
+            assertEquals("main.ck", opsGateway.batches[0].first)
+            assertEquals(1, opsGateway.batches[0].second.size)
+        }
+
+    @Test
+    fun applyAckClearsPendingCount() =
+        runTest(UnconfinedTestDispatcher()) {
+            val opsGateway = FakeWorkbenchOpsGateway()
+            val store = WorkbenchStore(
+                FakeWorkspaceGateway(),
+                FakeComputerControlGateway(),
+                FakeWorkbenchIdeFacade(),
+                opsGateway,
+            ) { ru.lazyhat.compukterkraft.core.computer.workbench.crdt.SiteId("p:test02") }
+            val updates = FakeWorkbenchUpdateSource()
+            store.bind(backgroundScope, updates)
+            updates.push(document = ComputerWorkspaceDocument("main.ck", "", 0))
+
+            store.applyLocalEdit(ru.lazyhat.compukterkraft.core.computer.workbench.LocalEdit.Insert(0, "x"))
+            testScheduler.advanceTimeBy(80)
+            testScheduler.runCurrent()
+            // Insert of 1 char at clock 0 → highest clock acked is 0.
+            store.applyAck(0)
+            testScheduler.runCurrent()
+
+            assertEquals(0, store.state.editor.pendingOpCount)
+            assertEquals(
+                ru.lazyhat.compukterkraft.core.computer.workbench.sync.SyncStatus.Idle,
+                store.state.editor.syncStatus,
+            )
+        }
+
+    @Test
+    fun applyRemoteOpsUpdatesEditorText() =
+        runTest(UnconfinedTestDispatcher()) {
+            val store = WorkbenchStore(
+                FakeWorkspaceGateway(),
+                FakeComputerControlGateway(),
+                FakeWorkbenchIdeFacade(),
+                FakeWorkbenchOpsGateway(),
+            ) { ru.lazyhat.compukterkraft.core.computer.workbench.crdt.SiteId("p:test03") }
+            val updates = FakeWorkbenchUpdateSource()
+            store.bind(backgroundScope, updates)
+            updates.push(document = ComputerWorkspaceDocument("main.ck", "hello", 0))
+
+            // Bootstrap atomized "hello" with site=ServerInit at clock 0..4. Last visible
+            // atom = (ServerInit, 4). Append "!" via remote op.
+            val lastAtom = store.replica!!.document.atomAtOffset(4)!!.first
+            val remoteOp = ru.lazyhat.compukterkraft.core.computer.workbench.crdt.Op.Insert(
+                author = ru.lazyhat.compukterkraft.core.computer.workbench.crdt.SiteId("p:other1"),
+                clock = 0,
+                leftId = lastAtom,
+                text = "!",
+            )
+
+            store.applyRemoteOps(listOf(remoteOp))
+
+            assertEquals("hello!", store.state.editor.text)
+        }
+
+    @Test
+    fun flushAndRunWaitsForSync() =
+        runTest(UnconfinedTestDispatcher()) {
+            val opsGateway = FakeWorkbenchOpsGateway()
+            val controlGateway = FakeComputerControlGateway()
+            val store = WorkbenchStore(
+                FakeWorkspaceGateway(),
+                controlGateway,
+                FakeWorkbenchIdeFacade(),
+                opsGateway,
+            ) { ru.lazyhat.compukterkraft.core.computer.workbench.crdt.SiteId("p:test04") }
+            val updates = FakeWorkbenchUpdateSource()
+            store.bind(backgroundScope, updates)
+            updates.push(
+                document = ComputerWorkspaceDocument("main.ck", "", 0),
+                target = WorkbenchTargetState(connected = true, displayName = "PC", familyId = "normal"),
+            )
+
+            store.applyLocalEdit(ru.lazyhat.compukterkraft.core.computer.workbench.LocalEdit.Insert(0, "x"))
+            // Schedule the ack to arrive while flushAndRun is suspended.
+            val ackJob = backgroundScope.launch {
+                kotlinx.coroutines.delay(20)
+                store.applyAck(0)
+            }
+            store.flushAndRun(timeoutMs = 1_000)
+            ackJob.join()
+
+            assertEquals(listOf("run"), controlGateway.calls)
+            assertTrue(opsGateway.batches.isNotEmpty())
+        }
+
+    @Test
+    fun cursorMovesWhenRemoteInsertHappensLeft() =
+        runTest(UnconfinedTestDispatcher()) {
+            val store = WorkbenchStore(
+                FakeWorkspaceGateway(),
+                FakeComputerControlGateway(),
+                FakeWorkbenchIdeFacade(),
+                FakeWorkbenchOpsGateway(),
+            ) { ru.lazyhat.compukterkraft.core.computer.workbench.crdt.SiteId("p:test05") }
+            val updates = FakeWorkbenchUpdateSource()
+            store.bind(backgroundScope, updates)
+            updates.push(document = ComputerWorkspaceDocument("main.ck", "world", 0))
+            store.moveCursorTo(0, 5, visibleEditorLines = 20) // at end
+
+            // Remote insert at the start of the document (leftId = null).
+            val remoteOp = ru.lazyhat.compukterkraft.core.computer.workbench.crdt.Op.Insert(
+                author = ru.lazyhat.compukterkraft.core.computer.workbench.crdt.SiteId("p:other2"),
+                clock = 0,
+                leftId = null,
+                text = "hi-",
+            )
+
+            store.applyRemoteOps(listOf(remoteOp))
+
+            assertEquals("hi-world", store.state.editor.text)
+            // Cursor was at offset 5 (after "world"); remote inserted "hi-" (3 chars) to its
+            // left, so the new visible offset should be 5 + 3 = 8.
+            assertEquals(0, store.state.editor.cursorLine)
+            assertEquals(8, store.state.editor.cursorColumn)
+        }
+
     private class FakeWorkbenchUpdateSource : WorkbenchUpdateSource {
         private val _stateFlow = MutableStateFlow(WorkbenchRemoteState())
         override val stateFlow: StateFlow<WorkbenchRemoteState> = _stateFlow
@@ -360,12 +489,6 @@ class WorkbenchStoreTest {
 
         override fun read(path: String) {
         }
-
-        override fun write(
-            path: String,
-            text: String,
-        ) {
-        }
     }
 
     private class FakeComputerControlGateway : ComputerControlGateway {
@@ -373,14 +496,6 @@ class WorkbenchStoreTest {
 
         override fun reboot() {
             calls += "reboot"
-        }
-
-        override fun pullFromTarget() {
-            calls += "pull"
-        }
-
-        override fun pushToTarget() {
-            calls += "push"
         }
 
         override fun runTargetProgram() {
@@ -450,5 +565,22 @@ class WorkbenchStoreTest {
                 path = path,
                 range = SourceRange(SourceLocation(0, 0, 0), SourceLocation(0, 0, 0)),
             )
+    }
+
+    private class FakeWorkbenchOpsGateway : WorkbenchOpsGateway {
+        val batches: MutableList<Pair<String, List<ru.lazyhat.compukterkraft.core.computer.workbench.crdt.Op>>> =
+            mutableListOf()
+        val sessionsOpened: MutableList<String> = mutableListOf()
+
+        override fun sendOps(
+            path: String,
+            ops: List<ru.lazyhat.compukterkraft.core.computer.workbench.crdt.Op>,
+        ) {
+            batches += path to ops
+        }
+
+        override fun sessionOpen(path: String) {
+            sessionsOpened += path
+        }
     }
 }

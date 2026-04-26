@@ -122,21 +122,6 @@ private fun UiScope.buildToolbar(
 ) {
     row(modifier = Modifier.size(IntSize(width, TOOLBAR_HEIGHT)).background(BG_HEADER)) {
         toolbarButton(
-            label = value("Save"),
-            enabled = value { store.state.editor.dirty },
-            onClick = { store.saveDocument() },
-        )
-        toolbarButton(
-            label = value("Pull"),
-            enabled = value { store.state.actions.canPull },
-            onClick = { store.pullFromTarget() },
-        )
-        toolbarButton(
-            label = value("Push"),
-            enabled = value { store.state.actions.canPush },
-            onClick = { store.pushToTarget() },
-        )
-        toolbarButton(
             label = value("Run"),
             enabled = value { store.state.actions.canRun },
             onClick = { store.runTargetProgram() },
@@ -265,7 +250,7 @@ private fun UiScope.buildStatusBar(
                 value {
                     val ed = store.state.editor
                     val path = store.state.openDocument?.path ?: "No file opened"
-                    val prefix = if (ed.dirty) "* " else ""
+                    val prefix = if (ed.pendingOpCount > 0) "* " else ""
                     "$prefix$path  L${ed.cursorLine + 1}:C${ed.cursorColumn + 1}"
                 },
         )

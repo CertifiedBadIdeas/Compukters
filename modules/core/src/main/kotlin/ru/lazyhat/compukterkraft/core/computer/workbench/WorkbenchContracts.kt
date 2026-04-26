@@ -60,19 +60,10 @@ interface WorkspaceGateway {
     fun list(path: String)
 
     fun read(path: String)
-
-    fun write(
-        path: String,
-        text: String,
-    )
 }
 
 interface ComputerControlGateway {
     fun reboot()
-
-    fun pullFromTarget()
-
-    fun pushToTarget()
 
     fun runTargetProgram()
 

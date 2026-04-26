@@ -67,19 +67,10 @@ internal object WorkbenchEditorViewModelTestSupport {
         override fun list(path: String) {}
 
         override fun read(path: String) {}
-
-        override fun write(
-            path: String,
-            text: String,
-        ) {}
     }
 
     private class StubControlGateway : ComputerControlGateway {
         override fun reboot() {}
-
-        override fun pullFromTarget() {}
-
-        override fun pushToTarget() {}
 
         override fun runTargetProgram() {}
 

@@ -76,19 +76,27 @@ class NetworkWorkbenchWorkspaceGateway(
             ),
         )
     }
+}
 
-    override fun write(
+class NetworkWorkbenchOpsGateway(
+    private val menu: AbstractWorkbenchMenu,
+) : ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchOpsGateway {
+    override fun sendOps(
         path: String,
-        text: String,
+        ops: List<ru.lazyhat.compukterkraft.core.computer.workbench.crdt.Op>,
     ) {
         ClientNetworking.sendToServer(
-            WorkbenchWorkspaceServerMessage(
-                menu,
-                WorkbenchWorkspaceServerMessage.Action.WRITE,
-                path,
-                text,
+            ru.lazyhat.compukterkraft.common.workbench.network.server.WorkbenchOpsServerMessage(
+                containerId = menu.containerId,
+                path = path,
+                ops = ops,
             ),
         )
+    }
+
+    override fun sessionOpen(path: String) {
+        // The READ action implicitly opens the server session today; the dedicated open
+        // message will be added if/when phase-2 multi-session support lands.
     }
 }
 
@@ -97,12 +105,6 @@ class InputHandlerControlGateway(
 ) : ComputerControlGateway {
     override fun reboot() {
         inputEventSink.accept(ControlInputEvent(ComputerControlAction.REBOOT))
-    }
-
-    override fun pullFromTarget() {
-    }
-
-    override fun pushToTarget() {
     }
 
     override fun runTargetProgram() {
@@ -117,14 +119,6 @@ class NetworkWorkbenchControlGateway(
 ) : ComputerControlGateway {
     override fun reboot() {
         ClientNetworking.sendToServer(WorkbenchWorkspaceServerMessage(menu, WorkbenchWorkspaceServerMessage.Action.REBOOT))
-    }
-
-    override fun pullFromTarget() {
-        ClientNetworking.sendToServer(WorkbenchWorkspaceServerMessage(menu, WorkbenchWorkspaceServerMessage.Action.PULL))
-    }
-
-    override fun pushToTarget() {
-        ClientNetworking.sendToServer(WorkbenchWorkspaceServerMessage(menu, WorkbenchWorkspaceServerMessage.Action.PUSH))
     }
 
     override fun runTargetProgram() {

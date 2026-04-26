@@ -107,7 +107,6 @@ internal fun EditorState.insertText(
             lines.add(cursorLine + 1, after)
             copy(
                 text = lines.joinToString("\n"),
-                dirty = true,
                 cursorLine = cursorLine + 1,
                 cursorColumn = 0,
             )
@@ -115,7 +114,6 @@ internal fun EditorState.insertText(
             lines[cursorLine] = before + insertedText + after
             copy(
                 text = lines.joinToString("\n"),
-                dirty = true,
                 cursorColumn = cursorColumn + insertedText.length,
             )
         }
@@ -144,7 +142,6 @@ internal fun EditorState.deleteBackward(): EditorState {
 
     return copy(
         text = lines.joinToString("\n"),
-        dirty = true,
         cursorLine = nextCursorLine,
         cursorColumn = nextCursorColumn,
     )
@@ -169,7 +166,6 @@ internal fun EditorState.deleteForward(): EditorState {
 
     return copy(
         text = lines.joinToString("\n"),
-        dirty = true,
     )
 }
 
@@ -181,7 +177,6 @@ internal fun EditorState.applyCompletion(item: CompletionItem): EditorState {
     lines[cursorLine] = line.substring(0, prefixStart) + textToInsert + line.substring(cursorColumn)
     return copy(
         text = lines.joinToString("\n"),
-        dirty = true,
         cursorColumn = prefixStart + textToInsert.length,
         completionItems = emptyList(),
         selectedCompletion = 0,

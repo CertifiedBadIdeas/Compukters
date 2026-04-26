@@ -23,9 +23,18 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
+import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.ClientCrdtReplica
+import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.CrdtDocument
+import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.Op
+import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.SiteId
+import ru.lazyhat.compukterkraft.core.computer.workbench.sync.OpOutbox
+import ru.lazyhat.compukterkraft.core.computer.workbench.sync.SyncStatus
 import ru.lazyhat.compukterkraft.core.input.KeyCodes
 import ru.lazyhat.compukterkraft.lang.frontend.SourceTextSupport
+import java.util.UUID
 
 /**
  * Client-side state container for the Workbench authoring GUI.
@@ -35,11 +44,20 @@ import ru.lazyhat.compukterkraft.lang.frontend.SourceTextSupport
  *
  * Remote workspace updates arrive through a [WorkbenchUpdateSource]'s [StateFlow].
  * Call [bind] with a [CoroutineScope] to start reactively collecting remote state changes.
+ *
+ * Text mutations flow through the CRDT replica:
+ * - [applyLocalEdit] turns a [LocalEdit] into an [Op], applies it, and enqueues it on the
+ *   outbox for batched dispatch via [opsGateway].
+ * - [applyRemoteOps] / [applyAck] / [onSnapshot] are called by the network layer when ops or
+ *   snapshots arrive from the server.
+ * - [flushAndRun] drains the outbox before issuing RUN so the server sees the latest text.
  */
 class WorkbenchStore(
     private val workspaceGateway: WorkspaceGateway,
     private val controlGateway: ComputerControlGateway,
     private val ideFacade: WorkbenchIdeFacade,
+    private val opsGateway: WorkbenchOpsGateway = NoOpWorkbenchOpsGateway,
+    private val siteIdProvider: () -> SiteId = { SiteId.player(UUID.randomUUID()) },
 ) {
     private val _state = MutableStateFlow(WorkbenchState())
 
@@ -50,6 +68,23 @@ class WorkbenchStore(
     val state: WorkbenchState get() = _state.value
 
     private var collectJob: Job? = null
+    private var statusCollectJob: Job? = null
+    private var pendingCollectJob: Job? = null
+
+    private val siteId: SiteId = siteIdProvider()
+
+    /** Per-document CRDT replica. Recreated on document open / snapshot. Visible for tests. */
+    internal var replica: ClientCrdtReplica? = null
+        private set
+
+    /** Outbox for the current bind() scope. Visible for tests. */
+    internal var outbox: OpOutbox? = null
+        private set
+
+    /** Path bound to [outbox]'s send callback for the current open document. */
+    private var outboxPath: String? = null
+
+    private var bindScope: CoroutineScope? = null
 
     /**
      * Bind a [WorkbenchUpdateSource] and start reactively collecting its [StateFlow].
@@ -60,6 +95,7 @@ class WorkbenchStore(
         updateSource: WorkbenchUpdateSource,
     ) {
         collectJob?.cancel()
+        bindScope = scope
         // Immediately merge the current value
         mergeRemoteState(updateSource.stateFlow.value)
         collectJob =
@@ -73,6 +109,14 @@ class WorkbenchStore(
     fun dispose() {
         collectJob?.cancel()
         collectJob = null
+        statusCollectJob?.cancel()
+        statusCollectJob = null
+        pendingCollectJob?.cancel()
+        pendingCollectJob = null
+        bindScope = null
+        outbox = null
+        outboxPath = null
+        replica = null
     }
 
     fun initialize() {
@@ -97,13 +141,6 @@ class WorkbenchStore(
         workspaceGateway.read(path)
     }
 
-    fun saveDocument() {
-        val path = state.openDocument?.path ?: return
-        workspaceGateway.write(path, state.editor.text)
-        _state.value = state.copy(editor = state.editor.copy(dirty = false))
-        refreshIde()
-    }
-
     fun refreshWorkspace() {
         requestListing(state.browserPath)
         state.openDocument?.path?.let(::requestDocument)
@@ -115,16 +152,6 @@ class WorkbenchStore(
 
     fun rebootComputer() {
         controlGateway.reboot()
-    }
-
-    fun pullFromTarget() {
-        if (!state.actions.canPull) return
-        controlGateway.pullFromTarget()
-    }
-
-    fun pushToTarget() {
-        if (!state.actions.canPush) return
-        controlGateway.pushToTarget()
     }
 
     fun runTargetProgram() {
@@ -194,7 +221,19 @@ class WorkbenchStore(
 
     fun applyCompletion(index: Int = state.editor.selectedCompletion) {
         val item = state.editor.completionItems.getOrNull(index) ?: return
-        _state.value = state.copy(editor = state.editor.applyCompletion(item))
+        val ed = state.editor
+        val lines = ed.lines()
+        val line = lines.getOrNull(ed.cursorLine) ?: return
+        val identifierStart = identifierStart(line, ed.cursorColumn)
+        val cursorFlat = SourceTextSupport.offsetAt(ed.text, ed.cursorLine, ed.cursorColumn)
+        val prefixFlat = cursorFlat - (ed.cursorColumn - identifierStart)
+        val textToInsert = item.insertText ?: item.label
+        val deletedLength = cursorFlat - prefixFlat
+        if (deletedLength > 0) applyLocalEdit(LocalEdit.Delete(prefixFlat, deletedLength))
+        if (textToInsert.isNotEmpty()) applyLocalEdit(LocalEdit.Insert(prefixFlat, textToInsert))
+        _state.value = state.copy(
+            editor = state.editor.copy(completionItems = emptyList(), selectedCompletion = 0),
+        )
         refreshIde()
     }
 
@@ -204,7 +243,9 @@ class WorkbenchStore(
     ) {
         val item = state.editor.importPickerItems.getOrNull(index) ?: return
         val importText = "import ${item.label};\n"
-        _state.value = state.copy(editor = state.editor.insertText(importText, visibleEditorLines))
+        applyLocalEdit(LocalEdit.Insert(0, importText))
+        // Caret advance applyLocalEdit already handles; ensure visibility.
+        _state.value = state.copy(editor = state.editor.keepCursorVisible(visibleEditorLines))
         refreshIde()
         closeImportPicker()
     }
@@ -235,11 +276,6 @@ class WorkbenchStore(
             when (key) {
                 KeyCodes.KEY_A -> {
                     openImportPicker()
-                    return true
-                }
-
-                KeyCodes.KEY_S -> {
-                    saveDocument()
                     return true
                 }
 
@@ -318,15 +354,27 @@ class WorkbenchStore(
 
                 KeyCodes.KEY_DOWN -> state.editor.moveCursorVertical(1, visibleEditorLines)
 
-                KeyCodes.KEY_BACKSPACE -> state.editor.deleteBackward()
+                KeyCodes.KEY_BACKSPACE -> {
+                    deleteBackwardThroughCrdt(visibleEditorLines)
+                    return true
+                }
 
-                KeyCodes.KEY_DELETE -> state.editor.deleteForward()
+                KeyCodes.KEY_DELETE -> {
+                    deleteForwardThroughCrdt(visibleEditorLines)
+                    return true
+                }
 
                 KeyCodes.KEY_ENTER,
                 KeyCodes.KEY_KP_ENTER,
-                -> state.editor.insertText("\n", visibleEditorLines)
+                -> {
+                    insertTextThroughCrdt("\n", visibleEditorLines)
+                    return true
+                }
 
-                KeyCodes.KEY_TAB -> state.editor.insertText("    ", visibleEditorLines)
+                KeyCodes.KEY_TAB -> {
+                    insertTextThroughCrdt("    ", visibleEditorLines)
+                    return true
+                }
 
                 KeyCodes.KEY_PAGE_UP -> state.editor.scrollBy(-visibleEditorLines)
 
@@ -355,8 +403,7 @@ class WorkbenchStore(
             return true
         }
         if (!Character.isISOControl(ch)) {
-            _state.value = state.copy(editor = state.editor.insertText(ch.toString(), visibleEditorLines))
-            refreshIde()
+            insertTextThroughCrdt(ch.toString(), visibleEditorLines)
             if (shouldOpenCompletionAfterCharTyped(ch)) {
                 openCompletionFromCurrentSnapshot()
             }
@@ -408,6 +455,16 @@ class WorkbenchStore(
                                 EditorState(text = it.text)
                             } ?: EditorState(),
                 )
+            // Bootstrap a CRDT replica from the legacy READ payload so subsequent local
+            // edits flow through the op pipeline. The wire snapshot path will replace this
+            // via [onSnapshot] when the cross-version gateway delivers it.
+            if (remoteState.document != null) {
+                bootstrapReplica(remoteState.document.path, remoteState.document.text)
+            } else {
+                replica = null
+                outbox = null
+                outboxPath = null
+            }
         }
 
         val actionState =
@@ -472,5 +529,292 @@ class WorkbenchStore(
         if (items.isEmpty()) return
         val normalizedIndex = ((index % items.size) + items.size) % items.size
         _state.value = state.copy(editor = state.editor.copy(selectedImportPickerIndex = normalizedIndex))
+    }
+
+    // -------------------------------------------------------------------------------------
+    // CRDT sync API
+    // -------------------------------------------------------------------------------------
+
+    /**
+     * Apply a [LocalEdit] to the editor: produce the corresponding [Op], apply it locally,
+     * enqueue it on the outbox, and recompute the editor text + cursor.
+     *
+     * No-op when the document has not been opened (replica == null).
+     */
+    fun applyLocalEdit(edit: LocalEdit) {
+        val rep = replica ?: return
+        val ed = state.editor
+        val cursorFlatBefore = SourceTextSupport.offsetAt(ed.text, ed.cursorLine, ed.cursorColumn)
+        val op: Op = when (edit) {
+            is LocalEdit.Insert -> {
+                if (edit.text.isEmpty()) return
+                rep.produceInsert(edit.offset, edit.text)
+            }
+            is LocalEdit.Delete -> {
+                if (edit.length <= 0) return
+                rep.produceDelete(edit.offset, edit.length)
+            }
+        }
+        rep.applyLocal(op)
+        outbox?.enqueue(op)
+
+        val newText = rep.document.flatten()
+        val newCursorFlat = when (edit) {
+            is LocalEdit.Insert -> if (edit.offset <= cursorFlatBefore) cursorFlatBefore + edit.text.length else cursorFlatBefore
+            is LocalEdit.Delete -> when {
+                edit.offset + edit.length <= cursorFlatBefore -> cursorFlatBefore - edit.length
+                edit.offset >= cursorFlatBefore -> cursorFlatBefore
+                else -> edit.offset
+            }
+        }
+        val (newLine, newCol) = lineColumnAt(newText, newCursorFlat)
+        _state.value = state.copy(
+            editor = state.editor.copy(
+                text = newText,
+                cursorLine = newLine,
+                cursorColumn = newCol,
+            ),
+        )
+        refreshIde()
+    }
+
+    /**
+     * Apply a batch of remote ops to the local replica and shift the cursor to follow its
+     * visible position when remote inserts/deletes happen to the LEFT of the caret.
+     */
+    fun applyRemoteOps(ops: List<Op>) {
+        val rep = replica ?: return
+        val ed = state.editor
+        var cursorFlat = SourceTextSupport.offsetAt(ed.text, ed.cursorLine, ed.cursorColumn)
+        for (op in ops) {
+            if (op.author == rep.siteId) continue
+            val before = rep.document
+            rep.applyRemote(op)
+            cursorFlat = shiftCursorByOp(before.flatten(), rep.document.flatten(), cursorFlat, op)
+        }
+        val newText = rep.document.flatten()
+        val (newLine, newCol) = lineColumnAt(newText, cursorFlat.coerceIn(0, newText.length))
+        _state.value = state.copy(
+            editor = state.editor.copy(
+                text = newText,
+                cursorLine = newLine,
+                cursorColumn = newCol,
+            ),
+        )
+        refreshIde()
+    }
+
+    /** Acknowledge that the server has applied ops up to and including [ackedClock]. */
+    fun applyAck(ackedClock: Int) {
+        replica?.applyAck(ackedClock)
+        outbox?.onAck(ackedClock)
+    }
+
+    /**
+     * Drain the outbox, wait until [SyncStatus.Idle] (or [timeoutMs] elapses), then issue RUN.
+     * Used by the toolbar's RUN button and the integration test.
+     */
+    suspend fun flushAndRun(timeoutMs: Long = 3_000L): Boolean {
+        if (!state.actions.canRun) return false
+        val ob = outbox
+        if (ob != null) {
+            ob.flushNow()
+            withTimeoutOrNull(timeoutMs) {
+                ob.status.first { it == SyncStatus.Idle }
+            }
+        }
+        controlGateway.runTargetProgram()
+        return true
+    }
+
+    /**
+     * Replace the current replica with one rebuilt from a server-authoritative snapshot. Used
+     * when joining a session or recovering after a rejected op.
+     */
+    fun onSnapshot(
+        path: String,
+        document: CrdtDocument,
+    ) {
+        val open = state.openDocument
+        if (open == null || open.path != path) return
+        replica = ClientCrdtReplica(siteId, document)
+        outboxPath = path
+        outbox = createOutbox(path)
+        val text = document.flatten()
+        _state.value = state.copy(
+            openDocument = open.copy(text = text),
+            editor = state.editor.copy(
+                text = text,
+                cursorLine = 0,
+                cursorColumn = 0,
+                pendingOpCount = 0,
+                syncStatus = SyncStatus.Idle,
+            ),
+        )
+        refreshIde()
+    }
+
+    // -------------------------------------------------------------------------------------
+    // Internals
+    // -------------------------------------------------------------------------------------
+
+    private fun bootstrapReplica(
+        path: String,
+        text: String,
+    ) {
+        val initial = CrdtDocument.fromText(text, SiteId.ServerInit)
+        replica = ClientCrdtReplica(siteId, initial)
+        outboxPath = path
+        outbox = createOutbox(path)
+    }
+
+    private fun createOutbox(path: String): OpOutbox? {
+        val scope = bindScope ?: return null
+        statusCollectJob?.cancel()
+        pendingCollectJob?.cancel()
+        val ob = OpOutbox(
+            scope = scope,
+            send = { batch -> opsGateway.sendOps(path, batch) },
+        )
+        statusCollectJob = scope.launch {
+            ob.status.collect { status ->
+                _state.value = state.copy(editor = state.editor.copy(syncStatus = status))
+            }
+        }
+        pendingCollectJob = scope.launch {
+            ob.pendingCount.collect { count ->
+                _state.value = state.copy(editor = state.editor.copy(pendingOpCount = count))
+            }
+        }
+        return ob
+    }
+
+    private fun insertTextThroughCrdt(
+        insertedText: String,
+        visibleEditorLines: Int,
+    ) {
+        if (replica == null) {
+            _state.value = state.copy(editor = state.editor.insertText(insertedText, visibleEditorLines))
+            refreshIde()
+            return
+        }
+        val ed = state.editor
+        val flat = SourceTextSupport.offsetAt(ed.text, ed.cursorLine, ed.cursorColumn)
+        applyLocalEdit(LocalEdit.Insert(flat, insertedText))
+        _state.value = state.copy(editor = state.editor.keepCursorVisible(visibleEditorLines))
+    }
+
+    private fun deleteBackwardThroughCrdt(visibleEditorLines: Int) {
+        if (replica == null) {
+            _state.value = state.copy(editor = state.editor.deleteBackward().keepCursorVisible(visibleEditorLines))
+            refreshIde()
+            return
+        }
+        val ed = state.editor
+        val flat = SourceTextSupport.offsetAt(ed.text, ed.cursorLine, ed.cursorColumn)
+        if (flat == 0) return
+        applyLocalEdit(LocalEdit.Delete(flat - 1, 1))
+        _state.value = state.copy(editor = state.editor.keepCursorVisible(visibleEditorLines))
+    }
+
+    private fun deleteForwardThroughCrdt(visibleEditorLines: Int) {
+        if (replica == null) {
+            _state.value = state.copy(editor = state.editor.deleteForward().keepCursorVisible(visibleEditorLines))
+            refreshIde()
+            return
+        }
+        val ed = state.editor
+        val flat = SourceTextSupport.offsetAt(ed.text, ed.cursorLine, ed.cursorColumn)
+        if (flat >= ed.text.length) return
+        applyLocalEdit(LocalEdit.Delete(flat, 1))
+        _state.value = state.copy(editor = state.editor.keepCursorVisible(visibleEditorLines))
+    }
+
+    private fun lineColumnAt(text: String, offset: Int): Pair<Int, Int> {
+        var line = 0
+        var col = 0
+        val end = offset.coerceAtMost(text.length)
+        for (i in 0 until end) {
+            if (text[i] == '\n') {
+                line += 1
+                col = 0
+            } else {
+                col += 1
+            }
+        }
+        return line to col
+    }
+
+    private fun shiftCursorByOp(
+        before: String,
+        @Suppress("UNUSED_PARAMETER") after: String,
+        cursorFlat: Int,
+        op: Op,
+    ): Int = when (op) {
+        is Op.Insert -> {
+            // Locate the first inserted char's flat offset in `after` by scanning the new
+            // visible string. The insert atom shows up immediately to the right of leftId.
+            val insertOffset = leftAtomVisibleOffset(op.leftId, before)
+            if (insertOffset <= cursorFlat) cursorFlat + op.text.length else cursorFlat
+        }
+        is Op.Delete -> {
+            val targetOffset = visibleOffsetOfAtom(op.targetId, before)
+            if (targetOffset == -1) cursorFlat
+            else when {
+                targetOffset + op.length <= cursorFlat -> cursorFlat - op.length
+                targetOffset >= cursorFlat -> cursorFlat
+                else -> targetOffset
+            }
+        }
+    }
+
+    private fun leftAtomVisibleOffset(
+        leftId: ru.lazyhat.compukterkraft.core.computer.workbench.crdt.AtomId?,
+        @Suppress("UNUSED_PARAMETER") before: String,
+    ): Int {
+        if (leftId == null) return 0
+        val rep = replica ?: return 0
+        // Insert was already applied to `rep.document` by the time this runs; recover the
+        // visible offset just AFTER leftId in the current document.
+        var consumed = 0
+        for (run in rep.document.runs) {
+            if (run.deleted) continue
+            for (i in run.text.indices) {
+                if (run.id.site == leftId.site && run.id.clock + i == leftId.clock) {
+                    return consumed + i + 1
+                }
+            }
+            consumed += run.text.length
+        }
+        return consumed
+    }
+
+    private fun visibleOffsetOfAtom(
+        atomId: ru.lazyhat.compukterkraft.core.computer.workbench.crdt.AtomId,
+        @Suppress("UNUSED_PARAMETER") before: String,
+    ): Int {
+        // After delete is applied the run is tombstoned; walk the runs counting visible chars
+        // until we reach the run that USED to contain atomId.
+        val rep = replica ?: return -1
+        var consumed = 0
+        for (run in rep.document.runs) {
+            if (run.id.site == atomId.site &&
+                atomId.clock in run.id.clock until (run.id.clock + run.text.length)
+            ) {
+                return consumed + (atomId.clock - run.id.clock)
+            }
+            if (!run.deleted) consumed += run.text.length
+        }
+        return -1
+    }
+
+    private fun identifierStart(line: String, column: Int): Int {
+        var i = column
+        while (i > 0) {
+            val ch = line[i - 1]
+            if (!(ch.isLetterOrDigit() || ch == '_')) break
+            i -= 1
+        }
+        return i
     }
 }

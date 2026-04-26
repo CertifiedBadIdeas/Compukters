@@ -25,6 +25,9 @@ import ru.lazyhat.compukterkraft.common.network.text.ClientTableFormatter
 import ru.lazyhat.compukterkraft.common.network.text.TableBuilder
 import ru.lazyhat.compukterkraft.common.workbench.menu.AbstractWorkbenchMenu
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchRemoteState
+import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.Op
+import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.SiteId
+import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.TextRun
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 
 class ClientNetworkContextImpl : ClientNetworkContext {
@@ -78,5 +81,23 @@ class ClientNetworkContextImpl : ClientNetworkContext {
         snapshot: ScreenBufferSnapshot?,
     ) = withCheckedWorkbenchMenu(containerId) {
         updateScreenSnapshot(snapshot)
+    }
+
+    override fun handleWorkbenchOps(
+        containerId: Int,
+        path: String,
+        ops: List<Op>,
+        ackedClock: Int,
+    ) = withCheckedWorkbenchMenu(containerId) {
+        applyOpsAck(path, ops, ackedClock)
+    }
+
+    override fun handleWorkbenchDocumentSnapshot(
+        containerId: Int,
+        path: String,
+        runs: List<TextRun>,
+        versionVector: Map<SiteId, Int>,
+    ) = withCheckedWorkbenchMenu(containerId) {
+        applyDocumentSnapshot(path, runs, versionVector)
     }
 }
