@@ -8,6 +8,7 @@
   "compukterkraft.gui.control.shutdown": "Выключить",
   "compukterkraft.gui.control.turn_on": "Включить",
   "compukterkraft.gui.terminal.connecting": "Подключение...",
+  "compukterkraft.gui.terminal.focused": "Ввод активен  |  Ctrl+V для вставки",
   "compukterkraft.gui.terminal.powered_off": "Компьютер выключен. Сначала включите его.",
   "compukterkraft.gui.tooltip.computer_id": "ID компьютера: %s",
   "compukterkraft.gui.tooltip.copy": "Скопировать в буфер обмена",
