@@ -51,6 +51,15 @@ class ServerWorkbench(
     private var runtimeBridge: WorkbenchTargetRuntimeBridge = WorkbenchTargetRuntimeBridge.None
 
     /**
+     * Workspace the workbench reads from and writes to. When a target computer is paired we
+     * route IO directly into the target's workspace — that way edits land where the target
+     * VM actually loads them, with no separate mirror step. If no computer is paired we fall
+     * back to the workbench's own allocated [workspaceId] (a scratch sandbox).
+     */
+    private val effectiveWorkspaceId: Int
+        get() = targetDescriptor.computerId ?: workspaceId
+
+    /**
      * Active CRDT replicas, keyed by document path within this authoring workspace. Each
      * replica is lazy-bootstrapped from disk on the first [openSession] for that path. The
      * map is mutation-safe because Minecraft network handlers can run on the server thread
@@ -59,15 +68,26 @@ class ServerWorkbench(
     private val replicas: ConcurrentHashMap<String, ServerCrdtReplica> = ConcurrentHashMap()
 
     fun setTarget(stack: ItemStack) {
-        targetDescriptor = extractTargetDescriptor(stack)
+        updateTarget(extractTargetDescriptor(stack))
     }
 
     fun setTarget(descriptor: TargetDescriptor) {
-        targetDescriptor = descriptor
+        updateTarget(descriptor)
     }
 
     fun clearTarget() {
-        targetDescriptor = TargetDescriptor()
+        updateTarget(TargetDescriptor())
+    }
+
+    private fun updateTarget(next: TargetDescriptor) {
+        if (next.computerId != targetDescriptor.computerId) {
+            // Target's workspace changed (or detached) — flush pending replicas back to the
+            // *previous* workspace so unflushed edits survive, then drop them so the next
+            // open re-bootstraps from the new workspace's disk.
+            materializeOpenSessions()
+            replicas.clear()
+        }
+        targetDescriptor = next
     }
 
     fun bindRuntimeBridge(runtimeBridge: WorkbenchTargetRuntimeBridge) {
@@ -78,14 +98,14 @@ class ServerWorkbench(
 
     fun targetState(): WorkbenchTargetState = targetDescriptor.toTargetState()
 
-    fun listEntries(path: String = ""): List<ComputerWorkspaceEntry> = workspace.list(workspaceId, path)
+    fun listEntries(path: String = ""): List<ComputerWorkspaceEntry> = workspace.list(effectiveWorkspaceId, path)
 
-    fun read(path: String): ComputerWorkspaceDocument? = workspace.readDocument(workspaceId, path)
+    fun read(path: String): ComputerWorkspaceDocument? = workspace.readDocument(effectiveWorkspaceId, path)
 
     fun write(
         path: String,
         text: String,
-    ): ComputerWorkspaceDocument = workspace.writeDocument(workspaceId, path, text)
+    ): ComputerWorkspaceDocument = workspace.writeDocument(effectiveWorkspaceId, path, text)
 
     fun runTargetProgram() {
         if (targetDescriptor.computerId == null) return
@@ -95,6 +115,9 @@ class ServerWorkbench(
 
     fun rebootTarget() {
         if (targetDescriptor.computerId == null) return
+        // Flush in-flight CRDT replicas to disk so the rebooted target sees the latest source.
+        // Without this a fresh shell.ck reboot would re-read the pre-edit text.
+        materializeOpenSessions()
         runtimeBridge.rebootTarget(targetDescriptor)
     }
 
@@ -136,7 +159,7 @@ class ServerWorkbench(
      * path); the caller should treat that as a no-op and skip sending the snapshot message.
      */
     fun openSession(path: String): SessionSnapshot? {
-        val initialText = workspace.readDocument(workspaceId, path)?.text ?: return null
+        val initialText = workspace.readDocument(effectiveWorkspaceId, path)?.text ?: return null
         val replica = replicas.computeIfAbsent(path) {
             ServerCrdtReplica(CrdtDocument.fromText(initialText, SiteId.ServerInit))
         }
@@ -166,7 +189,7 @@ class ServerWorkbench(
      */
     fun materializeOpenSessions() {
         replicas.forEach { (path, replica) ->
-            workspace.writeDocument(workspaceId, path, replica.flatten())
+            workspace.writeDocument(effectiveWorkspaceId, path, replica.flatten())
         }
     }
 
