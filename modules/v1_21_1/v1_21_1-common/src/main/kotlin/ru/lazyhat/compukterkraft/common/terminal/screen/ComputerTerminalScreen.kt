@@ -186,7 +186,7 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
                 modifier = Modifier.offset(statusRelX + 12, statusRelY + 6),
                 color = STATUS_TEXT_COLOR,
                 text =
-                    value {
+                    translatable {
                         when (currentTerminalState()) {
                             is WorkbenchTerminalViewState.Active -> CompukterKeys.Gui.Terminal.FOCUSED
                             WorkbenchTerminalViewState.PoweredOff -> CompukterKeys.Gui.Terminal.POWERED_OFF

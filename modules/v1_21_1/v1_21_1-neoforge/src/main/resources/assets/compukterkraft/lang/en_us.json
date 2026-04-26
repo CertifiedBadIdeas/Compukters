@@ -5,7 +5,7 @@
   "commands.compukterkraft.generic.no": "N",
   "commands.compukterkraft.generic.yes": "Y",
   "gui.compukterkraft.control.reboot": "Reboot",
-  "gui.compukterkraft.control.shutdown": "Shut down",
+  "gui.compukterkraft.control.shutdown": "Shutdown",
   "gui.compukterkraft.control.turn_on": "Turn on",
   "gui.compukterkraft.terminal.connecting": "Connecting...",
   "gui.compukterkraft.terminal.focused": "Input active  |  Ctrl+V paste",
