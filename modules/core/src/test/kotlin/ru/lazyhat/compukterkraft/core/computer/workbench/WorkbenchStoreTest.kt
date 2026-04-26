@@ -466,6 +466,84 @@ class WorkbenchStoreTest {
             assertEquals(8, store.state.editor.cursorColumn)
         }
 
+    @Test
+    fun staleWorkspacePushDoesNotResetActiveCrdtSession() =
+        runTest(UnconfinedTestDispatcher()) {
+            // Regression: when a CRDT session is open and the user has typed locally, the
+            // server can still push a WorkbenchWorkspaceClientMessage whose `document.text`
+            // is whatever the server last read from disk — i.e. STALE, because in-flight ops
+            // haven't been materialized yet. This happens on every action reply (LIST, READ,
+            // ATTACH_TERMINAL, target stack swap, ...). Previously mergeRemoteState would
+            // see `document.text != openDocument.text`, call bootstrapReplica, blow away the
+            // live replica + editor text, and the server-side replica (which already had the
+            // user's ops applied) would then start rejecting fresh ops because they collided
+            // on (siteId, clock). User-visible symptom: typing freezes, indicator goes
+            // [<>] -> [!!] Stale, going back to the freeze position briefly shows [OK]
+            // before re-typing repeats the rejection.
+            //
+            // Fix: while a CRDT session is bound to the same path, the local replica owns
+            // the text. Stale workspace pushes update entries/target only.
+            val opsGateway = FakeWorkbenchOpsGateway()
+            val store = WorkbenchStore(
+                FakeWorkspaceGateway(),
+                FakeComputerControlGateway(),
+                FakeWorkbenchIdeFacade(),
+                opsGateway,
+            ) { ru.lazyhat.compukterkraft.core.computer.workbench.crdt.SiteId("p:test-merge") }
+            val updates = FakeWorkbenchUpdateSource()
+            store.bind(backgroundScope, updates)
+            updates.push(document = ComputerWorkspaceDocument("main.ck", "hello", 0))
+
+            // User types " world" locally — replica is now ahead of the disk text.
+            store.applyLocalEdit(
+                ru.lazyhat.compukterkraft.core.computer.workbench.LocalEdit.Insert(5, " world"),
+            )
+            assertEquals("hello world", store.state.editor.text)
+            testScheduler.advanceTimeBy(80)
+            testScheduler.runCurrent()
+            val sentBatchesBefore = opsGateway.batches.size
+
+            // Server pushes the stale snapshot (e.g. ATTACH_TERMINAL reply: server read
+            // `main.ck` from disk, in-flight ops not yet materialized).
+            updates.push(document = ComputerWorkspaceDocument("main.ck", "hello", 0))
+
+            // Editor must keep the locally-edited text.
+            assertEquals("hello world", store.state.editor.text)
+            // The replica must still be live: a new local edit must produce a new batch.
+            store.applyLocalEdit(
+                ru.lazyhat.compukterkraft.core.computer.workbench.LocalEdit.Insert(11, "!"),
+            )
+            testScheduler.advanceTimeBy(80)
+            testScheduler.runCurrent()
+            assertTrue(
+                opsGateway.batches.size > sentBatchesBefore,
+                "follow-up edit after stale workspace push must still flow through outbox",
+            )
+        }
+
+    @Test
+    fun openingDifferentDocumentResetsReplica() =
+        runTest(UnconfinedTestDispatcher()) {
+            val opsGateway = FakeWorkbenchOpsGateway()
+            val store = WorkbenchStore(
+                FakeWorkspaceGateway(),
+                FakeComputerControlGateway(),
+                FakeWorkbenchIdeFacade(),
+                opsGateway,
+            ) { ru.lazyhat.compukterkraft.core.computer.workbench.crdt.SiteId("p:test-switch") }
+            val updates = FakeWorkbenchUpdateSource()
+            store.bind(backgroundScope, updates)
+            updates.push(document = ComputerWorkspaceDocument("a.ck", "alpha", 0))
+            store.applyLocalEdit(
+                ru.lazyhat.compukterkraft.core.computer.workbench.LocalEdit.Insert(5, "X"),
+            )
+
+            // Switch to a different file — must replace text and reset replica.
+            updates.push(document = ComputerWorkspaceDocument("b.ck", "beta", 0))
+            assertEquals("beta", store.state.editor.text)
+            assertEquals("b.ck", store.state.openDocument?.path)
+        }
+
     private class FakeWorkbenchUpdateSource : WorkbenchUpdateSource {
         private val _stateFlow = MutableStateFlow(WorkbenchRemoteState())
         override val stateFlow: StateFlow<WorkbenchRemoteState> = _stateFlow
