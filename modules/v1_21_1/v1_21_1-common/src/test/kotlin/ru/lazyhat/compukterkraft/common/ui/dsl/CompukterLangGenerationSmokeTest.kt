@@ -31,7 +31,7 @@ class CompukterLangGenerationSmokeTest {
     @Test
     fun generatedLocalizationApisAreAvailableToCommonCode() {
         assertEquals(
-            "compukterkraft.gui.terminal.connecting",
+            "gui.compukterkraft.terminal.connecting",
             CompukterKeys.Gui.Terminal.CONNECTING,
         )
         assertTrue(
