@@ -40,7 +40,7 @@ class WorkbenchMenuWithoutInventory(
     serverWorkbench: ServerWorkbench? = null,
     private val onTargetStackChanged: ((ItemStack) -> Unit)? = null,
 ) : AbstractWorkbenchMenu(menuType, containerId, containerData, serverWorkbench) {
-    private val ownerPlayer: Player = playerInventory.player
+    private val ownerPlayer: Player? = playerInventory.player
     private val targetContainer =
         SimpleContainer(1).apply {
             setItem(0, containerData.displayStack.copy())
