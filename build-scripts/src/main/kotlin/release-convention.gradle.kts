@@ -17,16 +17,24 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-data class SemVer(val major: Int, val minor: Int, val patch: Int, val label: String? = null, val labelNum: Int? = null) {
+data class SemVer(
+    val major: Int,
+    val minor: Int,
+    val patch: Int,
+    val label: String? = null,
+    val labelNum: Int? = null,
+) {
     val base get() = "$major.$minor.$patch"
+
     override fun toString(): String = if (label != null) "$base-$label.$labelNum" else base
 }
 
-val versionRegex = Regex("""^(\d+)\.(\d+)\.(\d+)(?:-(beta|rc)\.(\d+))?$""")
+val versionRegex = Regex("""^(\d+)\.(\d+)\.(\d+)(?:-(Beta|RC)(\d+))?$""")
 
 fun parseVersion(v: String): SemVer {
-    val match = versionRegex.matchEntire(v)
-        ?: error("Invalid version format: '$v'. Expected 'X.Y.Z' or 'X.Y.Z-beta.N' or 'X.Y.Z-rc.N'.")
+    val match =
+        versionRegex.matchEntire(v)
+            ?: error("Invalid version format: '$v'. Expected 'X.Y.Z' or 'X.Y.Z-BetaN' or 'X.Y.Z-RCN'.")
     return SemVer(
         major = match.groupValues[1].toInt(),
         minor = match.groupValues[2].toInt(),
@@ -36,15 +44,22 @@ fun parseVersion(v: String): SemVer {
     )
 }
 
-fun git(projectDir: File, vararg args: String) {
-    val process = ProcessBuilder("git", *args)
-        .directory(projectDir)
-        .inheritIO()
-        .start()
+fun git(
+    projectDir: File,
+    vararg args: String,
+) {
+    val process =
+        ProcessBuilder("git", *args)
+            .directory(projectDir)
+            .inheritIO()
+            .start()
     require(process.waitFor() == 0) { "git ${args.toList()} failed" }
 }
 
-fun doVersionBump(project: Project, nextVersion: String) {
+fun doVersionBump(
+    project: Project,
+    nextVersion: String,
+) {
     val currentVersion = project.version.toString()
     val propsFile = project.file("gradle.properties")
     propsFile.writeText(propsFile.readText().replace("version = $currentVersion", "version = $nextVersion"))
@@ -101,39 +116,57 @@ tasks.register("bumpMajor") {
 }
 
 tasks.register("bumpBeta") {
-    val next = when (v.label) {
-        null -> "${v.base}-beta.1"
-        "beta" -> "${v.base}-beta.${v.labelNum!! + 1}"
-        else -> null
-    }
+    val next =
+        when (v.label) {
+            null -> "${v.base}-Beta1"
+            "Beta" -> "${v.base}-Beta${v.labelNum!! + 1}"
+            else -> null
+        }
     group = "release"
-    description = if (next != null) "Add/increment beta (${project.version} -> $next)" else "Add/increment beta (unavailable: current label is '${v.label}')"
+    description =
+        if (next !=
+            null
+        ) {
+            "Add/increment Beta (${project.version} -> $next)"
+        } else {
+            "Add/increment Beta (unavailable: current label is '${v.label}')"
+        }
     doLast {
         val v = parseVersion(project.version.toString())
-        val next = when (v.label) {
-            null -> "${v.base}-beta.1"
-            "beta" -> "${v.base}-beta.${v.labelNum!! + 1}"
-            else -> error("Cannot bump beta: current label is '${v.label}'. Use promote first.")
-        }
+        val next =
+            when (v.label) {
+                null -> "${v.base}-Beta1"
+                "Beta" -> "${v.base}-Beta${v.labelNum!! + 1}"
+                else -> error("Cannot bump Beta: current label is '${v.label}'. Use promote first.")
+            }
         doVersionBump(project, next)
     }
 }
 
 tasks.register("bumpRC") {
-    val next = when (v.label) {
-        null, "beta" -> "${v.base}-rc.1"
-        "rc" -> "${v.base}-rc.${v.labelNum!! + 1}"
-        else -> null
-    }
+    val next =
+        when (v.label) {
+            null, "Beta" -> "${v.base}-RC1"
+            "RC" -> "${v.base}-RC${v.labelNum!! + 1}"
+            else -> null
+        }
     group = "release"
-    description = if (next != null) "Add/increment rc (${project.version} -> $next)" else "Add/increment rc (unavailable: unexpected label '${v.label}')"
+    description =
+        if (next !=
+            null
+        ) {
+            "Add/increment RC (${project.version} -> $next)"
+        } else {
+            "Add/increment RC (unavailable: unexpected label '${v.label}')"
+        }
     doLast {
         val v = parseVersion(project.version.toString())
-        val next = when (v.label) {
-            null, "beta" -> "${v.base}-rc.1"
-            "rc" -> "${v.base}-rc.${v.labelNum!! + 1}"
-            else -> error("Cannot bump rc: unexpected label '${v.label}'.")
-        }
+        val next =
+            when (v.label) {
+                null, "Beta" -> "${v.base}-RC1"
+                "RC" -> "${v.base}-RC${v.labelNum!! + 1}"
+                else -> error("Cannot bump RC: unexpected label '${v.label}'.")
+            }
         doVersionBump(project, next)
     }
 }
