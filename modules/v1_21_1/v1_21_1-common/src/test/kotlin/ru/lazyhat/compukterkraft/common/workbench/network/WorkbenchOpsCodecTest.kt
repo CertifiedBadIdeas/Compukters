@@ -34,7 +34,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class WorkbenchOpsCodecTest {
-
     @BeforeTest
     fun setUp() {
         TestMinecraftBootstrap.ensureInitialized()
@@ -46,25 +45,27 @@ class WorkbenchOpsCodecTest {
 
     @Test
     fun opsServerMessageRoundTripCarriesInsertAndDelete() {
-        val msg = WorkbenchOpsServerMessage(
-            containerId = 7,
-            path = "main.lua",
-            ops = listOf(
-                Op.Insert(playerSite, clock = 1, leftId = null, text = "hello"),
-                Op.Insert(
-                    playerSite,
-                    clock = 6,
-                    leftId = AtomId(SiteId.ServerInit, 0),
-                    text = "X",
-                ),
-                Op.Delete(
-                    playerSite,
-                    clock = 7,
-                    targetId = AtomId(SiteId.ServerInit, 1),
-                    length = 3,
-                ),
-            ),
-        )
+        val msg =
+            WorkbenchOpsServerMessage(
+                containerId = 7,
+                path = "main.lua",
+                ops =
+                    listOf(
+                        Op.Insert(playerSite, clock = 1, leftId = null, text = "hello"),
+                        Op.Insert(
+                            playerSite,
+                            clock = 6,
+                            leftId = AtomId(SiteId.ServerInit, 0),
+                            text = "X",
+                        ),
+                        Op.Delete(
+                            playerSite,
+                            clock = 7,
+                            targetId = AtomId(SiteId.ServerInit, 1),
+                            length = 3,
+                        ),
+                    ),
+            )
         val buf = freshBuf()
         msg.write(buf)
 
@@ -75,14 +76,16 @@ class WorkbenchOpsCodecTest {
 
     @Test
     fun opsClientMessageRoundTripCarriesAck() {
-        val msg = WorkbenchOpsClientMessage(
-            containerId = 42,
-            path = "lib/util.lua",
-            ops = listOf(
-                Op.Insert(SiteId.player(java.util.UUID(9L, 9L)), 0, null, "world"),
-            ),
-            ackedClock = 12,
-        )
+        val msg =
+            WorkbenchOpsClientMessage(
+                containerId = 42,
+                path = "lib/util.lua",
+                ops =
+                    listOf(
+                        Op.Insert(SiteId.player(java.util.UUID(9L, 9L)), 0, null, "world"),
+                    ),
+                ackedClock = 12,
+            )
         val buf = freshBuf()
         msg.write(buf)
 
@@ -93,12 +96,13 @@ class WorkbenchOpsCodecTest {
 
     @Test
     fun opsClientMessageHandlesEmptyOpsList() {
-        val msg = WorkbenchOpsClientMessage(
-            containerId = 1,
-            path = "x",
-            ops = emptyList(),
-            ackedClock = 0,
-        )
+        val msg =
+            WorkbenchOpsClientMessage(
+                containerId = 1,
+                path = "x",
+                ops = emptyList(),
+                ackedClock = 0,
+            )
         val buf = freshBuf()
         msg.write(buf)
 
@@ -110,16 +114,18 @@ class WorkbenchOpsCodecTest {
     fun snapshotMessageRoundTripWithMixedAuthorsAndTombstones() {
         val a = SiteId.ServerInit
         val b = playerSite
-        val msg = WorkbenchDocumentSnapshotClientMessage(
-            containerId = 3,
-            path = "doc.lua",
-            runs = listOf(
-                TextRun(id = AtomId(a, 0), leftId = null, text = "abc", deleted = false),
-                TextRun(id = AtomId(b, 4), leftId = AtomId(a, 2), text = "X", deleted = true),
-                TextRun(id = AtomId(a, 3), leftId = AtomId(a, 2), text = "de", deleted = false),
-            ),
-            versionVector = mapOf(a to 5, b to 4),
-        )
+        val msg =
+            WorkbenchDocumentSnapshotClientMessage(
+                containerId = 3,
+                path = "doc.lua",
+                runs =
+                    listOf(
+                        TextRun(id = AtomId(a, 0), leftId = null, text = "abc", deleted = false),
+                        TextRun(id = AtomId(b, 4), leftId = AtomId(a, 2), text = "X", deleted = true),
+                        TextRun(id = AtomId(a, 3), leftId = AtomId(a, 2), text = "de", deleted = false),
+                    ),
+                versionVector = mapOf(a to 5, b to 4),
+            )
         val buf = freshBuf()
         msg.write(buf)
 
@@ -130,12 +136,13 @@ class WorkbenchOpsCodecTest {
 
     @Test
     fun snapshotMessageRoundTripEmpty() {
-        val msg = WorkbenchDocumentSnapshotClientMessage(
-            containerId = 0,
-            path = "",
-            runs = emptyList(),
-            versionVector = emptyMap(),
-        )
+        val msg =
+            WorkbenchDocumentSnapshotClientMessage(
+                containerId = 0,
+                path = "",
+                runs = emptyList(),
+                versionVector = emptyMap(),
+            )
         val buf = freshBuf()
         msg.write(buf)
         assertEquals(msg, WorkbenchDocumentSnapshotClientMessage(buf))

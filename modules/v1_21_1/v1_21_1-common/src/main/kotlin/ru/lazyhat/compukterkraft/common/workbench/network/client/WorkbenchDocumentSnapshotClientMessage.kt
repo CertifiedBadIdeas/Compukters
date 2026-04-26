@@ -74,8 +74,7 @@ class WorkbenchDocumentSnapshotClientMessage : NetworkMessage<ClientNetworkConte
         context.handleWorkbenchDocumentSnapshot(containerId, path, runs, versionVector)
     }
 
-    override fun type(): MessageType<WorkbenchDocumentSnapshotClientMessage> =
-        NetworkMessages.WORKBENCH_DOCUMENT_SNAPSHOT
+    override fun type(): MessageType<WorkbenchDocumentSnapshotClientMessage> = NetworkMessages.WORKBENCH_DOCUMENT_SNAPSHOT
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -86,8 +85,7 @@ class WorkbenchDocumentSnapshotClientMessage : NetworkMessage<ClientNetworkConte
             versionVector == other.versionVector
     }
 
-    override fun hashCode(): Int =
-        (((containerId * 31) + path.hashCode()) * 31 + runs.hashCode()) * 31 + versionVector.hashCode()
+    override fun hashCode(): Int = (((containerId * 31) + path.hashCode()) * 31 + runs.hashCode()) * 31 + versionVector.hashCode()
 
     override fun toString(): String =
         "WorkbenchDocumentSnapshotClientMessage(containerId=$containerId, path='$path', " +

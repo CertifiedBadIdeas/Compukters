@@ -42,10 +42,11 @@ class ServerCrdtReplicaTest {
     @Test
     fun applyMultipleOpsAdvancesAcksToHighestClock() {
         val replica = ServerCrdtReplica(CrdtDocument.empty())
-        val ops = listOf(
-            Op.Insert(playerA, clock = 0, leftId = null, text = "ab"),     // clocks 0,1
-            Op.Insert(playerA, clock = 2, leftId = AtomId(playerA, 1), text = "c"), // clock 2
-        )
+        val ops =
+            listOf(
+                Op.Insert(playerA, clock = 0, leftId = null, text = "ab"), // clocks 0,1
+                Op.Insert(playerA, clock = 2, leftId = AtomId(playerA, 1), text = "c"), // clock 2
+            )
         val result = replica.apply(ops)
         assertEquals(2, result.applied.size)
         assertEquals(2, result.ackedClockBySite[playerA])
@@ -86,7 +87,7 @@ class ServerCrdtReplicaTest {
     fun versionVectorReflectsHighestClockPerSite() {
         val replica = ServerCrdtReplica(CrdtDocument.empty())
         replica.apply(listOf(Op.Insert(playerA, 0, null, "abc"))) // clocks 0..2
-        replica.apply(listOf(Op.Insert(playerB, 0, null, "X")))   // clock 0
+        replica.apply(listOf(Op.Insert(playerB, 0, null, "X"))) // clock 0
         val vv = replica.versionVector()
         assertEquals(2, vv[playerA])
         assertEquals(0, vv[playerB])

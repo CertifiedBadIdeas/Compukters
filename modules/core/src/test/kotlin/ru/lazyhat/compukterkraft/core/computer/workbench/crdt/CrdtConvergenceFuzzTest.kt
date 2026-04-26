@@ -72,7 +72,11 @@ class CrdtConvergenceFuzzTest {
         }
     }
 
-    private fun generateInsertsAtStart(site: SiteId, count: Int, seed: Long): List<Op> {
+    private fun generateInsertsAtStart(
+        site: SiteId,
+        count: Int,
+        seed: Long,
+    ): List<Op> {
         val random = Random(seed)
         var clock = 0
         return List(count) {
@@ -89,7 +93,11 @@ class CrdtConvergenceFuzzTest {
      * earliest-still-alive atom). Doesn't aim for realism — only that every op is causally
      * valid at the moment it's applied in the author's own stream.
      */
-    private fun generateInsertsAndDeletes(site: SiteId, count: Int, seed: Long): List<Op> {
+    private fun generateInsertsAndDeletes(
+        site: SiteId,
+        count: Int,
+        seed: Long,
+    ): List<Op> {
         val random = Random(seed)
         val ops = mutableListOf<Op>()
         var clock = 0

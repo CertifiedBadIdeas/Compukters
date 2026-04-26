@@ -651,7 +651,10 @@ private val EMPTY_TERMINAL_SNAPSHOT =
  * in the Minecraft default font: `OK` (Idle), `..N` (Pending with queued count), `<>` (Syncing),
  * ` wc -l modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/computer/workbench/screen/WorkbenchUiBuilder.kt && tail -5 modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/computer/workbench/screen/WorkbenchUiBuilder.kt` (Stale).
  */
-private fun syncIndicator(status: SyncStatus, pending: Int): String =
+private fun syncIndicator(
+    status: SyncStatus,
+    pending: Int,
+): String =
     when (status) {
         SyncStatus.Idle -> "[OK]"
         SyncStatus.Pending -> "[..${if (pending > 0) pending else ""}]"
