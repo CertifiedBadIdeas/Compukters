@@ -137,6 +137,39 @@ class ServerWorkbenchTest {
         assertEquals(listOf("reboot:5"), bridge.calls)
     }
 
+    @Test
+    fun applyOpsAcksHighestAppliedClockRegardlessOfSenderMatch() {
+        // Regression: previously applyOps looked up `result.ackedClockBySite[sender]` keyed
+        // by the request sender. If the client's siteId disagreed with the server-derived
+        // sender (e.g. siteIdProvider used random UUID while server used player.uuid), the
+        // lookup returned -1 and the client outbox stalled in Syncing -> Stale forever.
+        //
+        // The fix: the server returns max(applied clocks) — every batch carries ops from one
+        // player, so max-applied-clock is the right ack for that client regardless of sender
+        // identity.
+        val workspace = ComputerWorkspaceHost(createTempDirectory("server-workbench-ack"))
+        val workbench = ServerWorkbench(workspaceId = 100, workspace = workspace)
+        workbench.write("main.ck", "")
+        workbench.openSession("main.ck")
+
+        val author = ru.lazyhat.compukterkraft.core.computer.workbench.crdt.SiteId("p:client01")
+        val sender = ru.lazyhat.compukterkraft.core.computer.workbench.crdt.SiteId("p:server02") // intentionally DIFFERENT
+        val ops = listOf(
+            ru.lazyhat.compukterkraft.core.computer.workbench.crdt.Op.Insert(
+                author = author,
+                clock = 0,
+                leftId = null,
+                text = "hello",
+            ),
+        )
+
+        val result = workbench.applyOps("main.ck", ops, sender)
+
+        assertNotNull(result)
+        // "hello" -> highest = clock(0) + length(5) - 1 = 4
+        assertEquals(4, result.ackedClock, "ack must reflect the highest applied clock, not the sender match")
+    }
+
     private class FakeRuntimeBridge : WorkbenchTargetRuntimeBridge {
         val calls = mutableListOf<String>()
         private val snapshot = ScreenBuffer(16, 8, true).forceSnapshot()
