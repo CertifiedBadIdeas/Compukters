@@ -141,6 +141,16 @@ class ServerWorkbench(
     }
 
     fun snapshot(openDocumentPath: String? = null): WorkbenchRemoteState {
+        // No computer bound — IDE must show an empty workspace. Without this guard the
+        // workbench's own scratch sandbox (effectiveWorkspaceId == workspaceId) leaks into
+        // the UI when the slot is empty.
+        if (targetDescriptor.computerId == null) {
+            return WorkbenchRemoteState(
+                entries = emptyList(),
+                document = null,
+                target = targetState(),
+            )
+        }
         val entries = listEntries()
         val documentPath = openDocumentPath ?: entries.firstOrNull { !it.directory }?.path
         val document = documentPath?.let(::read)

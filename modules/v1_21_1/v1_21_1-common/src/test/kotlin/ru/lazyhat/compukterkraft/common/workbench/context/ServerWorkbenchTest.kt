@@ -187,8 +187,18 @@ class ServerWorkbenchTest {
         // The fix: snapshot() opens a CRDT session for the resolved document path so the
         // server-side invariant "if a document is surfaced to the client, a session is open
         // for it" always holds.
+        TestMinecraftBootstrap.ensureInitialized()
         val workspace = ComputerWorkspaceHost(createTempDirectory("server-workbench-snapshot-opens"))
         val workbench = ServerWorkbench(workspaceId = 200, workspace = workspace)
+        // Bind a target — without one snapshot() returns empty (files are computer-bound).
+        workbench.setTarget(
+            ItemStack(Items.STONE).apply {
+                updateComputerDataTag {
+                    computerID = 42
+                    computerFamilyId = "advanced"
+                }
+            },
+        )
         workbench.write("bios.ck", "print(\"hello\")")
 
         // Auto-resolve path (mimics initial menu open).
@@ -254,6 +264,39 @@ class ServerWorkbenchTest {
         val after = workbench.snapshot(null)
         assertEquals("boot.ck", after.document?.path)
         assertEquals("new-content", after.document?.text)
+    }
+
+    @Test
+    fun snapshotWithoutBoundComputerReturnsEmptyWorkspace() {
+        // Files are bound to the computer's workspace. When no computer is in the workbench
+        // slot the IDE must show an empty file list — even if the workbench's own scratch
+        // sandbox (workspaceId) happens to contain leftover files. Otherwise the user sees
+        // unrelated files appear out of nowhere when they remove a computer.
+        TestMinecraftBootstrap.ensureInitialized()
+        val workspace = ComputerWorkspaceHost(createTempDirectory("server-workbench-empty-target"))
+        // Pre-seed the workbench's own scratch workspace AND a computer's workspace.
+        workspace.writeDocument(999, "scratch.ck", "leftover")
+        workspace.writeDocument(33, "shell.ck", "computer-only-file")
+
+        val workbench = ServerWorkbench(workspaceId = 999, workspace = workspace)
+        val computerStack =
+            ItemStack(Items.STONE).apply {
+                updateComputerDataTag {
+                    computerID = 33
+                    computerFamilyId = "advanced"
+                }
+            }
+
+        // With computer: shows computer's files.
+        workbench.setTarget(computerStack)
+        assertEquals("shell.ck", workbench.snapshot(null).document?.path)
+
+        // Without computer: empty regardless of scratch contents.
+        workbench.clearTarget()
+        val cleared = workbench.snapshot(null)
+        assertEquals(emptyList(), cleared.entries)
+        assertEquals(null, cleared.document)
+        assertFalse(cleared.target.connected)
     }
 
     private class FakeRuntimeBridge : WorkbenchTargetRuntimeBridge {
