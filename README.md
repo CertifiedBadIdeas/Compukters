@@ -1,9 +1,8 @@
 # Compukter Kraft
 
-Mod, ispired by ComputerCraft.
-But with one difference: Programming language is not a Lua. I Hate Lua.
+Computers in Minecraft, programmed in a tiny statically-typed language. With a real IDE inside.
 
-devlog: https://t.me/lazyhatdev
+devlog(in russian): https://t.me/lazyhatdev
 
 Modrinth: https://modrinth.com/mod/compukterkraft
 CurseForge: To Be Created
