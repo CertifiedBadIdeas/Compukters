@@ -63,7 +63,6 @@ loom {
         maybeCreate("main").apply {
             sourceSet("main", project(projects.v1211Common.path))
             sourceSet("main", project(projects.core.path))
-            sourceSet("main", project(projects.v1211CreateNeoforge.path))
             sourceSet(gameTest.name)
         }
     }
@@ -72,11 +71,6 @@ loom {
 dependencies {
     common(project(path = projects.v1211Common.path, configuration = "namedElements")) { isTransitive = false }
     shadowBundle(project(path = projects.v1211Common.path, configuration = "transformProductionNeoForge"))
-
-    common(project(path = projects.v1211CreateNeoforge.path, configuration = "namedElements")) { isTransitive = false }
-    shadowBundle(project(path = projects.v1211CreateNeoforge.path, configuration = "namedElements")) {
-        isTransitive = false
-    }
 
     add(gameTest.implementationConfigurationName, sourceSets.main.get().output)
     add(gameTest.implementationConfigurationName, project(path = projects.v1211Common.path, configuration = "namedElements"))
