@@ -66,7 +66,7 @@ class WorkbenchOpsClientMessage : NetworkMessage<ClientNetworkContext> {
     }
 
     override fun handle(context: ClientNetworkContext) {
-        TODO("Task 8: route to ClientNetworkContext.handleWorkbenchOps")
+        context.handleWorkbenchOps(containerId, path, ops, ackedClock)
     }
 
     override fun type(): MessageType<WorkbenchOpsClientMessage> = NetworkMessages.WORKBENCH_OPS

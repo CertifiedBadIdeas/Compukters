@@ -30,6 +30,7 @@ import ru.lazyhat.compukterkraft.common.infrastructure.coroutines.minecraft
 import ru.lazyhat.compukterkraft.common.infrastructure.workbench.LanguageWorkbenchIdeFacade
 import ru.lazyhat.compukterkraft.common.infrastructure.workbench.MenuWorkspaceUpdateSource
 import ru.lazyhat.compukterkraft.common.infrastructure.workbench.NetworkWorkbenchControlGateway
+import ru.lazyhat.compukterkraft.common.infrastructure.workbench.NetworkWorkbenchOpsGateway
 import ru.lazyhat.compukterkraft.common.infrastructure.workbench.NetworkWorkbenchWorkspaceGateway
 import ru.lazyhat.compukterkraft.common.infrastructure.workbench.WorkbenchTargetCatalogSource
 import ru.lazyhat.compukterkraft.common.platform.MinecraftInputProvider
@@ -67,6 +68,7 @@ class WorkbenchEditorScreen(
             workspaceGateway = NetworkWorkbenchWorkspaceGateway(container),
             controlGateway = NetworkWorkbenchControlGateway(container),
             ideFacade = LanguageWorkbenchIdeFacade(WorkbenchTargetCatalogSource(container.workspaceStateFlow.value.target)),
+            opsGateway = NetworkWorkbenchOpsGateway(container),
         )
     private val viewModel = WorkbenchEditorViewModel(store)
     private var screenScope: CoroutineScope? = null
@@ -83,6 +85,7 @@ class WorkbenchEditorScreen(
         screenScope = scope
         store.bind(scope, MenuWorkspaceUpdateSource(menu.workspaceStateFlow))
         store.initialize()
+        menu.workbenchStore = store
         repositionInventorySlots()
         // Reactive invalidate: only rebuild the executor when the store's
         // state actually changes. StateFlow drops equal values, so an idle
@@ -97,6 +100,7 @@ class WorkbenchEditorScreen(
     }
 
     override fun removed() {
+        menu.workbenchStore = null
         store.dispose()
         screenScope?.cancel()
         screenScope = null

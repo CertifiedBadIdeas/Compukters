@@ -72,35 +72,6 @@ class WorkbenchStoreTest {
         }
 
     @Test
-    fun writesDocumentThroughGateway() =
-        runTest(UnconfinedTestDispatcher()) {
-            val workspaceGateway = FakeWorkspaceGateway()
-            val store = WorkbenchStore(workspaceGateway, FakeComputerControlGateway(), FakeWorkbenchIdeFacade())
-            val updates = FakeWorkbenchUpdateSource()
-
-            store.bind(backgroundScope, updates)
-            updates.push(
-                WorkbenchRemoteState(
-                    document = ComputerWorkspaceDocument("startup.ck", "fun main() {}", 1),
-                ),
-            )
-
-            store.moveCursorTo(0, 13, visibleEditorLines = 20)
-            store.keyPressed(GLFW.GLFW_KEY_ENTER, modifiers = 0, visibleEditorLines = 20)
-            store.charTyped('/', visibleEditorLines = 20)
-            store.charTyped('/', visibleEditorLines = 20)
-            store.charTyped(' ', visibleEditorLines = 20)
-            store.charTyped('o', visibleEditorLines = 20)
-            store.charTyped('k', visibleEditorLines = 20)
-            assertTrue(store.state.editor.dirty)
-
-            store.saveDocument()
-
-            assertEquals("startup.ck" to "fun main() {}\n// ok", workspaceGateway.writeRequests.single())
-            assertFalse(store.state.editor.dirty)
-        }
-
-    @Test
     fun appliesCompletionFromStoreState() =
         runTest(UnconfinedTestDispatcher()) {
             val workspaceGateway = FakeWorkspaceGateway()
@@ -134,7 +105,6 @@ class WorkbenchStoreTest {
     private class FakeWorkspaceGateway : WorkspaceGateway {
         val listRequests = mutableListOf<String>()
         val readRequests = mutableListOf<String>()
-        val writeRequests = mutableListOf<Pair<String, String>>()
 
         override fun list(path: String) {
             listRequests += path
@@ -143,23 +113,10 @@ class WorkbenchStoreTest {
         override fun read(path: String) {
             readRequests += path
         }
-
-        override fun write(
-            path: String,
-            text: String,
-        ) {
-            writeRequests += path to text
-        }
     }
 
     private class FakeComputerControlGateway : ComputerControlGateway {
         override fun reboot() {
-        }
-
-        override fun pullFromTarget() {
-        }
-
-        override fun pushToTarget() {
         }
 
         override fun runTargetProgram() {

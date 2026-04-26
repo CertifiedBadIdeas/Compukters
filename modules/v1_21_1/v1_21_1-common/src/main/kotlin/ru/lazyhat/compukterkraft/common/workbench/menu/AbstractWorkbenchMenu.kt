@@ -32,9 +32,14 @@ import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchOpsCli
 import ru.lazyhat.compukterkraft.common.workbench.network.server.WorkbenchWorkspaceServerMessage
 import ru.lazyhat.compukterkraft.core.computer.input.InputEvent
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchRemoteState
+import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchStore
+import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.CrdtDocument
 import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.Op
 import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.SiteId
+import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.TextRun
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
+import kotlinx.collections.immutable.toPersistentList
+import kotlinx.collections.immutable.toPersistentMap
 
 abstract class AbstractWorkbenchMenu(
     menuType: MenuType<*>,
@@ -48,6 +53,13 @@ abstract class AbstractWorkbenchMenu(
     val workspaceStateFlow: StateFlow<WorkbenchRemoteState> = _workspaceStateFlow.asStateFlow()
 
     val screenSnapshot: ScreenBufferSnapshot? get() = _screenSnapshot.value
+
+    /**
+     * The client-side editor store registers itself here so server→client CRDT messages
+     * (ops/acks/snapshots) can be routed to the right replica. Server-side menus leave this
+     * `null`. Cleared on screen close to avoid leaks.
+     */
+    var workbenchStore: WorkbenchStore? = null
 
     init {
         refreshFromServerWorkbench()
@@ -166,5 +178,33 @@ abstract class AbstractWorkbenchMenu(
             ops = emptyList(), // Phase 1: no peer-broadcast yet; Phase 2 fans out to other clients
             ackedClock = result.ackedClock,
         )
+    }
+
+    /**
+     * Route a server-bound ops/ack reply to the registered client [workbenchStore]. Silently
+     * drops when no store is bound (e.g. snapshot arrived before screen finished initializing).
+     */
+    fun applyOpsAck(
+        path: String,
+        ops: List<Op>,
+        ackedClock: Int,
+    ) {
+        val store = workbenchStore ?: return
+        if (ops.isNotEmpty()) store.applyRemoteOps(ops)
+        store.applyAck(ackedClock)
+    }
+
+    /**
+     * Rebuild the client replica from a server snapshot. Called when a session opens or after
+     * a desync recovery.
+     */
+    fun applyDocumentSnapshot(
+        path: String,
+        runs: List<TextRun>,
+        versionVector: Map<SiteId, Int>,
+    ) {
+        val store = workbenchStore ?: return
+        val document = CrdtDocument(runs.toPersistentList(), versionVector.toPersistentMap())
+        store.onSnapshot(path, document)
     }
 }

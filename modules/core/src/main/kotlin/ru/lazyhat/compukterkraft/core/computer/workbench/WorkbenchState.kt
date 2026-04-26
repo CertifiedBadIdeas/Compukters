@@ -18,6 +18,7 @@
  */
 package ru.lazyhat.compukterkraft.core.computer.workbench
 
+import ru.lazyhat.compukterkraft.core.computer.workbench.sync.SyncStatus
 import ru.lazyhat.compukterkraft.lang.runtime.CompletionItem
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerIdeSnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceDocument
@@ -38,10 +39,11 @@ data class WorkbenchActionState(
 
 data class EditorState(
     val text: String = "",
-    val dirty: Boolean = false,
     val scrollLine: Int = 0,
     val cursorLine: Int = 0,
     val cursorColumn: Int = 0,
+    val syncStatus: SyncStatus = SyncStatus.Idle,
+    val pendingOpCount: Int = 0,
     val ideSnapshot: ComputerIdeSnapshot? = null,
     val hoverInfo: HoverInfo? = null,
     val completionItems: List<CompletionItem> = emptyList(),
@@ -50,6 +52,13 @@ data class EditorState(
     val importPickerItems: List<CompletionItem> = emptyList(),
     val selectedImportPickerIndex: Int = 0,
 )
+
+/**
+ * Backwards-compatible "dirty" indicator derived from sync state. Used by the legacy status
+ * bar prefix until Task 9 replaces it with a dedicated sync indicator widget.
+ */
+val EditorState.dirty: Boolean
+    get() = pendingOpCount > 0 || (syncStatus != SyncStatus.Idle && syncStatus != SyncStatus.Stale)
 
 data class WorkbenchState(
     val terminalVisible: Boolean = false,

@@ -71,7 +71,7 @@ class WorkbenchDocumentSnapshotClientMessage : NetworkMessage<ClientNetworkConte
     }
 
     override fun handle(context: ClientNetworkContext) {
-        TODO("Task 8: route to ClientNetworkContext.handleWorkbenchDocumentSnapshot")
+        context.handleWorkbenchDocumentSnapshot(containerId, path, runs, versionVector)
     }
 
     override fun type(): MessageType<WorkbenchDocumentSnapshotClientMessage> =
