@@ -35,7 +35,7 @@ object ClientRegistry {
                 ModRegistry.Menus.WORKBENCH.get(),
                 { container, inventory, title -> WorkbenchEditorScreen(container, inventory, title) },
             )
-            LOGGER.info { "ClientRegistry: terminal-only computer screen successfully registered" }
+            LOGGER.debug { "ClientRegistry: terminal-only computer screen successfully registered" }
         } catch (e: Exception) {
             LOGGER.error { "ClientRegistry: computer screen registration failed: ${e.message}" }
         }

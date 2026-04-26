@@ -101,7 +101,7 @@ class ServerComputer(
     }
 
     init {
-        LOGGER.info { "ComputerID: $instanceID init" }
+        LOGGER.debug { "ComputerID: $instanceID init" }
     }
 
     /**
@@ -132,13 +132,13 @@ class ServerComputer(
     }
 
     fun shutdown() {
-        LOGGER.info { "ComputerID: $instanceID shutdown" }
+        LOGGER.debug { "ComputerID: $instanceID shutdown" }
         vmHandle?.stop(VmStopReason.REQUESTED)
     }
 
     fun turnOn() {
         if (isOn) return
-        LOGGER.info { "ComputerID: $instanceID turnOn" }
+        LOGGER.debug { "ComputerID: $instanceID turnOn" }
         computerManager.ensureWorkspaceInitialized(instanceID)
 
         computerManager.removeVm(instanceID, VmStopReason.CLOSED)
@@ -155,12 +155,12 @@ class ServerComputer(
     }
 
     fun reboot() {
-        LOGGER.info { "ComputerID: $instanceID reboot" }
+        LOGGER.debug { "ComputerID: $instanceID reboot" }
         vmHandle?.stop(VmStopReason.REBOOT) ?: turnOn()
     }
 
     fun close() {
-        LOGGER.info { "ComputerID: $instanceID close" }
+        LOGGER.debug { "ComputerID: $instanceID close" }
         terminalSessions.keys.toList().forEach(::detachTerminalSession)
         computerManager.removeVm(instanceID, VmStopReason.CLOSED)
         vmHandle = null
@@ -189,9 +189,9 @@ class ServerComputer(
 
     private fun observeLifecycle(handle: BackgroundComputerVm) {
         serverScope.launch {
-            LOGGER.info { "ComputerID: $instanceID event listening start" }
+            LOGGER.debug { "ComputerID: $instanceID event listening start" }
             handle.terminalStates.collect { state ->
-                LOGGER.info { "ComputerID: $instanceID VM state: $state" }
+                LOGGER.debug { "ComputerID: $instanceID VM state: $state" }
                 if (state is VmState.Stopped || state is VmState.Crashed) {
                     handleVmStopped(state)
                 }
@@ -204,13 +204,13 @@ class ServerComputer(
             LOGGER.warn { "ComputerID: $instanceID VM crash: ${terminalState.errorMessage}" }
         }
 
-        LOGGER.info { "ComputerID: $instanceID stop handling $terminalState" }
+        LOGGER.debug { "ComputerID: $instanceID stop handling $terminalState" }
 
         computerManager.removeVm(instanceID, VmStopReason.CLOSED)
         vmHandle = null
 
         if (terminalState is VmState.Stopped && terminalState.reason == VmStopReason.REBOOT) {
-            LOGGER.info { "ComputerID: $instanceID turning on because it was rebooted" }
+            LOGGER.debug { "ComputerID: $instanceID turning on because it was rebooted" }
             turnOn()
         }
     }

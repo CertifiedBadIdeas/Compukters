@@ -35,6 +35,7 @@ import net.minecraft.world.level.block.state.BlockState
 import ru.lazyhat.compukterkraft.common.binding.ModObjects
 import ru.lazyhat.compukterkraft.common.computer.context.ServerComputer
 import ru.lazyhat.compukterkraft.common.computer.context.ServerContext
+import ru.lazyhat.compukterkraft.common.localization.CompukterComponents
 import ru.lazyhat.compukterkraft.common.network.ServerNetworking
 import ru.lazyhat.compukterkraft.common.workbench.context.ServerWorkbench
 import ru.lazyhat.compukterkraft.common.workbench.context.WorkbenchTargetRuntimeBridge
@@ -76,7 +77,7 @@ class WorkbenchBlockEntity(
         )
     }
 
-    override fun getDisplayName(): Component = Component.translatable("block.compukterkraft.workbench")
+    override fun getDisplayName(): Component = CompukterComponents.Block.workbench
 
     fun openFor(player: Player) {
         val serverPlayer = player as? ServerPlayer ?: return

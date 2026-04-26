@@ -103,6 +103,7 @@ class LocalizationApiGenerator(
         buildString {
             appendLine("package $packageName")
             appendLine()
+            appendLine("import net.minecraft.network.chat.MutableComponent")
             appendLine("import net.minecraft.network.chat.Component")
             appendLine()
             append(
@@ -114,7 +115,7 @@ class LocalizationApiGenerator(
                     renderEntry = { entry, entryIndent ->
                         if (canGenerateValueHelper(entry.value)) {
                             listOf(
-                                "${entryIndent}val ${entry.propertyName}: Component",
+                                "${entryIndent}val ${entry.propertyName}: MutableComponent",
                                 "$entryIndent    get() = Component.translatable(CompukterKeys.${
                                     entry.objectPath.joinToString(
                                         ".",
@@ -123,7 +124,7 @@ class LocalizationApiGenerator(
                             )
                         } else {
                             listOf(
-                                "${entryIndent}fun ${entry.propertyName}(vararg args: Any): Component = Component.translatable(CompukterKeys.${
+                                "${entryIndent}fun ${entry.propertyName}(vararg args: Any): MutableComponent = Component.translatable(CompukterKeys.${
                                     entry.objectPath.joinToString(
                                         ".",
                                     )

@@ -37,7 +37,7 @@ object ForgeClientHooks {
     @SubscribeEvent
     @JvmStatic
     fun onClientSetup(event: FMLClientSetupEvent) {
-        LOGGER.info { "Initializing client... with $MOD_NAME!" }
+        LOGGER.debug { "Initializing client... with $MOD_NAME!" }
     }
 
     @SubscribeEvent

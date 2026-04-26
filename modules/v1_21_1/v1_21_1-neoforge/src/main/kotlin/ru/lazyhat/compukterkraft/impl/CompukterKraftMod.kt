@@ -41,7 +41,7 @@ class CompukterKraftMod(
     dist: Dist,
 ) {
     init {
-        LOGGER.info { "$MOD_ID has started!" }
+        LOGGER.debug { "$MOD_ID has started!" }
 
         ModRegistry.register(modEventBus)
         ModObjects.computerBlockEntityType = {
