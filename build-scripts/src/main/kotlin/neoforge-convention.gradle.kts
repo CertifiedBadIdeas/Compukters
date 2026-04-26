@@ -39,7 +39,6 @@ val shadowBundle: Configuration by configurations.creating
 configurations {
     compileClasspath { extendsFrom(common) }
     runtimeClasspath { extendsFrom(common) }
-    named("developmentNeoForge") { extendsFrom(common) }
 }
 
 dependencies {
