@@ -61,10 +61,16 @@ fun doVersionBump(
     nextVersion: String,
 ) {
     val currentVersion = project.version.toString()
+
+    git(project.projectDir, "tag", currentVersion)
+
     val propsFile = project.file("gradle.properties")
+
     propsFile.writeText(propsFile.readText().replace("version = $currentVersion", "version = $nextVersion"))
+
     git(project.projectDir, "add", "gradle.properties")
     git(project.projectDir, "commit", "-m", "chore: bump version to $nextVersion")
+
     println("Version bumped: $currentVersion -> $nextVersion")
 }
 
