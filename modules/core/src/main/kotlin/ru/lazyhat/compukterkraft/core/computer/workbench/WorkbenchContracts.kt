@@ -35,16 +35,10 @@ data class WorkbenchTargetState(
     val familyId: String? = null,
 )
 
-data class WorkbenchSyncState(
-    val dirtyLocal: Boolean = false,
-    val dirtyRemote: Boolean = false,
-)
-
 data class WorkbenchRemoteState(
     val entries: List<ComputerWorkspaceEntry> = emptyList(),
     val document: ComputerWorkspaceDocument? = null,
     val target: WorkbenchTargetState = WorkbenchTargetState(),
-    val sync: WorkbenchSyncState = WorkbenchSyncState(),
 )
 
 /**

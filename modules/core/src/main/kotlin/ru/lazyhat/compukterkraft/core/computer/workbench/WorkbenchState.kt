@@ -31,8 +31,6 @@ enum class WorkbenchMode {
 }
 
 data class WorkbenchActionState(
-    val canPull: Boolean = false,
-    val canPush: Boolean = false,
     val canRun: Boolean = false,
     val canAttachTerminal: Boolean = false,
 )
@@ -67,6 +65,5 @@ data class WorkbenchState(
     val openDocument: ComputerWorkspaceDocument? = null,
     val editor: EditorState = EditorState(),
     val target: WorkbenchTargetState = WorkbenchTargetState(),
-    val sync: WorkbenchSyncState = WorkbenchSyncState(),
     val actions: WorkbenchActionState = WorkbenchActionState(),
 )

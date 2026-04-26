@@ -90,7 +90,6 @@ abstract class AbstractWorkbenchMenu(
     fun handleWorkspaceAction(
         action: WorkbenchWorkspaceServerMessage.Action,
         path: String,
-        text: String,
     ): WorkbenchRemoteState? {
         val workbench = serverWorkbench ?: return null
         return when (action) {
@@ -100,21 +99,6 @@ abstract class AbstractWorkbenchMenu(
 
             WorkbenchWorkspaceServerMessage.Action.READ -> {
                 workbench.snapshot(path)
-            }
-
-            WorkbenchWorkspaceServerMessage.Action.WRITE -> {
-                workbench.write(path, text)
-                workbench.snapshot(path)
-            }
-
-            WorkbenchWorkspaceServerMessage.Action.PULL -> {
-                workbench.pullFromTarget()
-                workbench.snapshot(_workspaceStateFlow.value.document?.path)
-            }
-
-            WorkbenchWorkspaceServerMessage.Action.PUSH -> {
-                workbench.pushToTarget()
-                workbench.snapshot(_workspaceStateFlow.value.document?.path)
             }
 
             WorkbenchWorkspaceServerMessage.Action.RUN -> {

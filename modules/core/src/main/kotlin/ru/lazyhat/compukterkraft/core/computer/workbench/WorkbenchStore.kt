@@ -469,8 +469,6 @@ class WorkbenchStore(
 
         val actionState =
             WorkbenchActionState(
-                canPull = remoteState.target.connected,
-                canPush = remoteState.target.connected,
                 canRun = remoteState.target.connected,
                 canAttachTerminal = remoteState.target.connected,
             )
@@ -478,7 +476,6 @@ class WorkbenchStore(
         _state.value =
             nextState.copy(
                 target = remoteState.target,
-                sync = remoteState.sync,
                 actions = actionState,
                 // Auto-hide the terminal when the computer is removed; it has
                 // nothing to attach to and would render an empty buffer.

@@ -90,34 +90,6 @@ class WorkbenchMenuSmokeTest {
     }
 
     @Test
-    fun handlesWriteActionAgainstServerWorkbenchSession() {
-        TestMinecraftBootstrap.ensureInitialized()
-
-        val workbench =
-            ServerWorkbench(
-                workspaceId = 21,
-                workspace = ComputerWorkspaceHost(createTempDirectory("workbench-menu-session")),
-                initialTarget = ServerWorkbench.TargetDescriptor(computerId = 8, displayName = "Pocket Dev", familyId = "advanced"),
-            )
-
-        val menu =
-            WorkbenchMenuWithoutInventory(
-                MenuType.GENERIC_9x1,
-                3,
-                TestInventoryFactory.create(),
-                WorkbenchContainerData.from(workbench.targetState()),
-                workbench,
-            )
-
-        val remoteState = menu.handleWorkspaceAction(WorkbenchWorkspaceServerMessage.Action.WRITE, "main.ck", "fun main() {}")
-
-        assertNotNull(remoteState)
-        assertEquals("fun main() {}", remoteState.document?.text)
-        assertTrue(remoteState.sync.dirtyLocal)
-        assertEquals("advanced", remoteState.target.familyId)
-    }
-
-    @Test
     fun handlesRebootActionAgainstServerWorkbenchSession() {
         TestMinecraftBootstrap.ensureInitialized()
 
@@ -137,7 +109,7 @@ class WorkbenchMenuSmokeTest {
                 workbench,
             )
 
-        val remoteState = menu.handleWorkspaceAction(WorkbenchWorkspaceServerMessage.Action.REBOOT, "", "")
+        val remoteState = menu.handleWorkspaceAction(WorkbenchWorkspaceServerMessage.Action.REBOOT, "")
 
         assertNotNull(remoteState)
         assertTrue(remoteState.target.connected)

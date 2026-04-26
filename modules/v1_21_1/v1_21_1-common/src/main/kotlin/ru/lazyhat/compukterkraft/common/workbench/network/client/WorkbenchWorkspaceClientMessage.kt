@@ -25,7 +25,6 @@ import ru.lazyhat.compukterkraft.common.network.MessageType
 import ru.lazyhat.compukterkraft.common.network.NetworkMessage
 import ru.lazyhat.compukterkraft.common.network.NetworkMessages
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchRemoteState
-import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchSyncState
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchTargetState
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceDocument
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceEntry
@@ -73,9 +72,7 @@ class WorkbenchWorkspaceClientMessage : NetworkMessage<ClientNetworkContext> {
                 familyId = if (buf.readBoolean()) buf.readUtf() else null,
             )
 
-        val sync = WorkbenchSyncState(dirtyLocal = buf.readBoolean(), dirtyRemote = buf.readBoolean())
-
-        remoteState = WorkbenchRemoteState(entries = entries, document = document, target = target, sync = sync)
+        remoteState = WorkbenchRemoteState(entries = entries, document = document, target = target)
     }
 
     override fun write(buf: FriendlyByteBuf) {
@@ -101,9 +98,6 @@ class WorkbenchWorkspaceClientMessage : NetworkMessage<ClientNetworkContext> {
         remoteState.target.displayName?.let(buf::writeUtf)
         buf.writeBoolean(remoteState.target.familyId != null)
         remoteState.target.familyId?.let(buf::writeUtf)
-
-        buf.writeBoolean(remoteState.sync.dirtyLocal)
-        buf.writeBoolean(remoteState.sync.dirtyRemote)
     }
 
     override fun handle(context: ClientNetworkContext) {
