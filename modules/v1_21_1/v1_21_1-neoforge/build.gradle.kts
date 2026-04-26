@@ -70,8 +70,13 @@ loom {
 }
 
 dependencies {
-    implementation(project(path = projects.v1211Common.path, configuration = "namedElements"))
-    implementation(project(path = projects.v1211CreateNeoforge.path, configuration = "namedElements"))
+    common(project(path = projects.v1211Common.path, configuration = "namedElements")) { isTransitive = false }
+    shadowBundle(project(path = projects.v1211Common.path, configuration = "transformProductionNeoForge"))
+
+    common(project(path = projects.v1211CreateNeoforge.path, configuration = "namedElements")) { isTransitive = false }
+    shadowBundle(project(path = projects.v1211CreateNeoforge.path, configuration = "namedElements")) {
+        isTransitive = false
+    }
 
     add(gameTest.implementationConfigurationName, sourceSets.main.get().output)
     add(gameTest.implementationConfigurationName, project(path = projects.v1211Common.path, configuration = "namedElements"))
