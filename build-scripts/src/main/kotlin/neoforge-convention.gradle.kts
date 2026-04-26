@@ -21,6 +21,7 @@ plugins {
     id("kotlin-convention")
     id("dev.architectury.loom")
     id("architectury-plugin")
+    id("com.gradleup.shadow")
 }
 
 val libs = libsCatalog()
@@ -29,6 +30,16 @@ setLoaderKind(LoaderKind.NEOFORGE)
 
 architectury {
     platformSetupLoomIde()
+    neoForge()
+}
+
+val common: Configuration by configurations.creating
+val shadowBundle: Configuration by configurations.creating
+
+configurations {
+    compileClasspath { extendsFrom(common) }
+    runtimeClasspath { extendsFrom(common) }
+    named("developmentNeoForge") { extendsFrom(common) }
 }
 
 dependencies {
@@ -36,12 +47,23 @@ dependencies {
     modImplementation(versionLibrary("architectury-neoforge"))
 
     implementation(project(":core"))
+    shadowBundle(project(":core")) { isTransitive = false }
 
     neoForgeImplementation(project(":compiler"))
     neoForgeImplementation(libs.findLibrary("kotlinx-coroutines-core").get())
     neoForgeImplementation(libs.findLibrary("kotlinx-collections-immutable").get())
     neoForgeImplementation(libs.findLibrary("kotlin-stdlib").get())
     neoForgeImplementation(libs.findLibrary("kotlin-logging").get())
+}
+
+tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar") {
+    configurations = listOf(shadowBundle)
+    archiveClassifier.set("dev-shadow")
+}
+
+tasks.named<net.fabricmc.loom.task.RemapJarTask>("remapJar") {
+    inputFile.set(tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar").flatMap { it.archiveFile })
+    dependsOn(tasks.named("shadowJar"))
 }
 
 fun <T : ModuleDependency> DependencyHandler.neoForgeImplementation(dependency: Provider<T>) {
