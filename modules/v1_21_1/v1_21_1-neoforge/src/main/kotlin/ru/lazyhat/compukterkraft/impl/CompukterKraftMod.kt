@@ -33,7 +33,6 @@ import ru.lazyhat.compukterkraft.common.workbench.data.WorkbenchContainerData
 import ru.lazyhat.compukterkraft.core.LOGGER
 import ru.lazyhat.compukterkraft.core.MOD_ID
 import ru.lazyhat.compukterkraft.core.MOD_NAME
-import ru.lazyhat.compukterkraft.impl.create.CreateCompatBootstrap
 import ru.lazyhat.compukterkraft.impl.platform.NetworkHandler
 
 @Mod(MOD_ID)
@@ -83,14 +82,14 @@ class CompukterKraftMod(
         ServerNetworking.playerSender = NetworkHandler::sendToPlayer
         ClientNetworking.serverSender = NetworkHandler::sendToServer
 
-        CreateCompatBootstrap.initializeIfPresent(
-            isCreateLoaded = {
-                net.neoforged.fml.ModList
-                    .get()
-                    .isLoaded("create")
-            },
-            register = { LOGGER.info { "Create mod detected — compat layer active" } },
-        )
+//        CreateCompatBootstrap.initializeIfPresent(
+//            isCreateLoaded = {
+//                net.neoforged.fml.ModList
+//                    .get()
+//                    .isLoaded("create")
+//            },
+//            register = { LOGGER.info { "Create mod detected — compat layer active" } },
+//        )
 
         if (dist != Dist.CLIENT) {
             modEventBus.addListener(::onServerSetup)
