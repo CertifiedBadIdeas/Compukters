@@ -22,6 +22,8 @@
 
 import de.fayard.refreshVersions.core.internal.InternalRefreshVersionsApi
 
+rootProject.name = "Compukter-Kraft"
+
 pluginManagement {
     repositories {
         mavenCentral()
@@ -41,6 +43,7 @@ plugins {
 }
 
 includeBuild("build-scripts")
+val modAddonsDir = rootDir.resolve("mod-addons")
 val modulesDir = rootDir.resolve("modules")
 
 fun include(
@@ -58,8 +61,8 @@ include("core", modulesDir)
 
 val v1_21_1Dir = modulesDir.resolve("v1_21_1")
 include("v1_21_1-common", v1_21_1Dir)
-include("v1_21_1-create-neoforge", v1_21_1Dir)
 include("v1_21_1-neoforge", v1_21_1Dir)
 // include("v1_21_1-fabric", v1_21_1Dir)
 
-rootProject.name = "Compukter-Kraft"
+// Addons
+include("v1_21_1-create-neoforge", modAddonsDir)

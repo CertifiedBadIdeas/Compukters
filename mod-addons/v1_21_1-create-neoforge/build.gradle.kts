@@ -24,11 +24,23 @@ plugins {
     alias(libs.plugins.neoforgeConvention)
 }
 
+repositories {
+    maven("https://maven.createmod.net") // Create, Ponder, Flywheel
+    maven("https://maven.ithundxr.dev/snapshots") // Registrate
+}
+
+dependencies {
+    implementation("com.simibubi.create:create-${property("minecraft_version")}:${property("create_version")}:slim") { isTransitive = false }
+    implementation("net.createmod.ponder:ponder-neoforge:${property("ponder_version")}+mc${property("minecraft_version")}")
+    compileOnly("dev.engine-room.flywheel:flywheel-neoforge-api-${property("minecraft_version")}:${property("flywheel_version")}")
+    runtimeOnly("dev.engine-room.flywheel:flywheel-neoforge-${property("minecraft_version")}:${property("flywheel_version")}")
+    implementation("com.tterrag.registrate:Registrate:${property("registrate_version")}")
+}
+
 dependencies {
     implementation(project(path = projects.v1211Common.path, configuration = "namedElements"))
     implementation(projects.core)
+    implementation(projects.compiler)
 
     testImplementation(kotlin("test"))
-
-    modCompileOnly(versionLibrary("create-neoforge"))
 }
