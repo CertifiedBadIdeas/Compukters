@@ -36,6 +36,10 @@ setBuildContext(
     javaVersion = 21,
 )
 
+// Common (Architectury) module: archive version = "<mc>-<modVersion>".
+// Loader-specific conventions override this with "<mc>-<loader>-<modVersion>".
+version = computeModVersion()
+
 kotlin {
     jvmToolchain(21)
 }

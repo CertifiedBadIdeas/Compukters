@@ -27,6 +27,9 @@ val libs = libsCatalog()
 
 setLoaderKind(LoaderKind.FABRIC)
 
+// Loader-leaf archive version = "<mc>-<loader>-<modVersion>".
+version = computeModArchiveVersion()
+
 architectury {
     platformSetupLoomIde()
     fabric()

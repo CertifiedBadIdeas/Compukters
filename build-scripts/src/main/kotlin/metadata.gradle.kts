@@ -21,7 +21,10 @@ plugins {
     id("kotlin-convention")
 }
 
-val modVersion = computeModVersion()
+// project.version is already set by the loader-specific convention plugin
+// (e.g. neoforge-convention -> computeModArchiveVersion). Reuse it here so the
+// mod_version placeholder in mods.toml / fabric.mod.json matches the jar version.
+val modVersion = project.version.toString()
 
 val modProperties =
     readVersionedModProperties()
@@ -31,7 +34,6 @@ val modProperties =
         }.toMap()
 
 base.archivesName = modProperties.getValue("mod_id").replace(" ", "")
-version = modVersion
 
 val generateModMetadata =
     tasks.register("generateModMetadata", ProcessResources::class) {

@@ -59,6 +59,7 @@ repositories {
 }
 
 group = readAllModProperties().getValue("common_mod_group_id")
+version = rootProject.version
 
 kotlin {
     jvmToolchain(17)
