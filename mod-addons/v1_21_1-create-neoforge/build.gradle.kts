@@ -30,14 +30,15 @@ repositories {
 }
 
 dependencies {
-    implementation("com.simibubi.create:create-${property("minecraft_version")}:${property("create_version")}:slim") { isTransitive = false }
-    implementation("net.createmod.ponder:ponder-neoforge:${property("ponder_version")}+mc${property("minecraft_version")}")
-    compileOnly("dev.engine-room.flywheel:flywheel-neoforge-api-${property("minecraft_version")}:${property("flywheel_version")}")
-    runtimeOnly("dev.engine-room.flywheel:flywheel-neoforge-${property("minecraft_version")}:${property("flywheel_version")}")
-    implementation("com.tterrag.registrate:Registrate:${property("registrate_version")}")
-}
+    // Create + ecosystem are compile-time only: the addon must NOT bundle them in the final mod jar,
+    // and they must NOT be hard runtime dependencies. Activation happens through the guarded
+    // CreateCompatBootstrap, so all com.simibubi.create.* imports stay class-loaded behind that gate.
+    modCompileOnly("com.simibubi.create:create-${property("minecraft_version")}:${property("create_version")}:slim") { isTransitive = false }
+    modCompileOnly("net.createmod.ponder:ponder-neoforge:${property("ponder_version")}+mc${property("minecraft_version")}")
+    modCompileOnly("dev.engine-room.flywheel:flywheel-neoforge-api-${property("minecraft_version")}:${property("flywheel_version")}")
+    modRuntimeOnly("dev.engine-room.flywheel:flywheel-neoforge-${property("minecraft_version")}:${property("flywheel_version")}")
+    modCompileOnly("com.tterrag.registrate:Registrate:${property("registrate_version")}")
 
-dependencies {
     implementation(project(path = projects.v1211Common.path, configuration = "namedElements"))
     implementation(projects.core)
     implementation(projects.compiler)

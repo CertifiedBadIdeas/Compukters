@@ -64,6 +64,10 @@ loom {
             sourceSet("main", project(projects.v1211Common.path))
             sourceSet("main", project(projects.core.path))
             sourceSet("main", project(":compiler"))
+            // Addons live in mod-addons/ but ship inside the same mod jar — register their source
+            // sets here so dev runs treat their classes as part of the main mod, and so loom
+            // applies the right remapping during runs.
+            sourceSet("main", project(":v1_21_1-create-neoforge"))
             sourceSet(gameTest.name)
         }
     }
@@ -72,6 +76,14 @@ loom {
 dependencies {
     common(project(path = projects.v1211Common.path, configuration = "namedElements")) { isTransitive = false }
     shadowBundle(project(path = projects.v1211Common.path, configuration = "transformProductionNeoForge"))
+
+    // Bundle the Create addon classes into the leaf jar. The addon module compiles against Create
+    // via modCompileOnly, so its compiled output never carries Create dependencies — only the
+    // hand-written guarded glue code. We mark the project dependency non-transitive so that the
+    // addon's modCompileOnly/modRuntimeOnly Create-ecosystem libraries (Flywheel, Ponder, …) do
+    // not leak into the leaf's classpath and force leaf consumers to add Create's Maven mirrors.
+    implementation(project(":v1_21_1-create-neoforge")) { isTransitive = false }
+    shadowBundle(project(":v1_21_1-create-neoforge")) { isTransitive = false }
 
     add(gameTest.implementationConfigurationName, sourceSets.main.get().output)
     add(gameTest.implementationConfigurationName, project(path = projects.v1211Common.path, configuration = "namedElements"))

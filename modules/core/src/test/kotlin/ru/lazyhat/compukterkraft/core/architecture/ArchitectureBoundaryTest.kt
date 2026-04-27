@@ -28,6 +28,7 @@ import kotlin.test.assertTrue
 
 class ArchitectureBoundaryTest {
     private val forbiddenMinecraftImportPattern = Regex("""^\s*import\s+net\.minecraft\.""")
+    private val forbiddenCreateImportPattern = Regex("""^\s*import\s+com\.simibubi\.create\.""")
 
     @Test
     fun containsForbiddenMinecraftImportMatchesKotlinImportStatements() {
@@ -77,6 +78,34 @@ class ArchitectureBoundaryTest {
     }
 
     private fun containsForbiddenMinecraftImport(line: String): Boolean = forbiddenMinecraftImportPattern.containsMatchIn(line)
+
+    private fun containsForbiddenCreateImport(line: String): Boolean = forbiddenCreateImportPattern.containsMatchIn(line)
+
+    @Test
+    fun coreAndCommonSourcesDoNotImportCreatePackages() {
+        val repoRoot = findRepoRoot()
+        val scannedRoots =
+            listOf(
+                repoRoot.resolve("modules/core/src/main/kotlin"),
+                repoRoot.resolve("modules/v1_21_1/v1_21_1-common/src/main/kotlin"),
+                repoRoot.resolve("modules/v1_21_1/v1_21_1-neoforge/src/main/kotlin"),
+                repoRoot.resolve("modules/v1_21_1/v1_21_1-fabric/src/main/kotlin"),
+            ).filter { Files.isDirectory(it) }
+
+        assertTrue(scannedRoots.isNotEmpty(), "Expected at least one scannable source root for Create boundary check.")
+
+        val offenders =
+            scannedRoots.flatMap { root ->
+                kotlinFilesUnder(root).filter { file ->
+                    Files.readAllLines(file).any(::containsForbiddenCreateImport)
+                }
+            }
+
+        assertTrue(
+            offenders.isEmpty(),
+            "Only mod-addons/v1_21_1-create-neoforge may import com.simibubi.create.* — offenders: ${offenders.joinToString()}",
+        )
+    }
 
     // Some test runners can omit a usable codeSource location, so user.dir remains the fallback.
     private fun testClassLocationPathOrNull(): Path? =

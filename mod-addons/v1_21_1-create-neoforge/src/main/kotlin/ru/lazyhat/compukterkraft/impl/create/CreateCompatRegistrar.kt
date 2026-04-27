@@ -19,13 +19,20 @@
 
 package ru.lazyhat.compukterkraft.impl.create
 
-object CreateCompatBootstrap {
-    fun initializeIfPresent(
-        isCreateLoaded: () -> Boolean,
-        register: () -> Unit = CreateCompatRegistrar::register,
-    ): Boolean {
-        if (!isCreateLoaded()) return false
-        register()
-        return true
+import ru.lazyhat.compukterkraft.common.peripheral.BlockPeripheralRegistry
+import ru.lazyhat.compukterkraft.core.LOGGER
+
+/**
+ * Single entry point for activating Create-specific behavior. Called only after
+ * [CreateCompatBootstrap] has confirmed Create is loaded, so anything that touches
+ * `com.simibubi.create.*` is safe to reference directly inside this module from here on.
+ *
+ * Right now we only register a no-op [CreateBlockPeripheralProvider] to prove the SPI wiring;
+ * concrete Create block detection lands in a follow-up that may freely import Create classes.
+ */
+object CreateCompatRegistrar {
+    fun register() {
+        BlockPeripheralRegistry.register(CreateBlockPeripheralProvider)
+        LOGGER.info { "Create compatibility enabled" }
     }
 }

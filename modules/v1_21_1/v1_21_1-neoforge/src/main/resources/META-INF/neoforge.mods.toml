@@ -26,3 +26,12 @@ mandatory=true
 versionRange="${minecraft_version_range}"
 ordering="NONE"
 side="BOTH"
+
+# Optional Create integration. The mod must load with or without Create installed; activation
+# happens through CreateCompatBootstrap.initializeIfPresent guarded by ModList.isLoaded.
+[[dependencies.${mod_id}]]
+modId="create"
+type="optional"
+versionRange="[6.0,)"
+ordering="AFTER"
+side="BOTH"

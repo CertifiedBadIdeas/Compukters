@@ -23,6 +23,7 @@ import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.SimpleMenuProvider
 import net.neoforged.api.distmarker.Dist
 import net.neoforged.bus.api.IEventBus
+import net.neoforged.fml.ModList
 import net.neoforged.fml.common.Mod
 import net.neoforged.fml.event.lifecycle.FMLDedicatedServerSetupEvent
 import ru.lazyhat.compukterkraft.common.binding.ModObjects
@@ -33,6 +34,7 @@ import ru.lazyhat.compukterkraft.common.workbench.data.WorkbenchContainerData
 import ru.lazyhat.compukterkraft.core.LOGGER
 import ru.lazyhat.compukterkraft.core.MOD_ID
 import ru.lazyhat.compukterkraft.core.MOD_NAME
+import ru.lazyhat.compukterkraft.impl.create.CreateCompatBootstrap
 import ru.lazyhat.compukterkraft.impl.platform.NetworkHandler
 
 @Mod(MOD_ID)
@@ -81,6 +83,17 @@ class CompukterKraftMod(
         NetworkHandler.setup(modEventBus)
         ServerNetworking.playerSender = NetworkHandler::sendToPlayer
         ClientNetworking.serverSender = NetworkHandler::sendToServer
+
+        // Optional Create integration. The bootstrap is a no-op when Create is absent and never
+        // touches com.simibubi.create.* classes until isCreateLoaded() returns true, so the mod
+        // stays loadable without Create as required by the architecture spec.
+        val createActivated =
+            CreateCompatBootstrap.initializeIfPresent(
+                isCreateLoaded = { ModList.get().isLoaded("create") },
+            )
+        if (createActivated) {
+            LOGGER.info { "Create compatibility activated" }
+        }
 
         if (dist != Dist.CLIENT) {
             modEventBus.addListener(::onServerSetup)

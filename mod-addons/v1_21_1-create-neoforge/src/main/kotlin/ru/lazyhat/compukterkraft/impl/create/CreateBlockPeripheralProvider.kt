@@ -14,18 +14,18 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ * along with this program.  If not, see <https://www.gnu.org/licenses/\>.
  */
 
 package ru.lazyhat.compukterkraft.impl.create
 
-object CreateCompatBootstrap {
-    fun initializeIfPresent(
-        isCreateLoaded: () -> Boolean,
-        register: () -> Unit = CreateCompatRegistrar::register,
-    ): Boolean {
-        if (!isCreateLoaded()) return false
-        register()
-        return true
-    }
+import ru.lazyhat.compukterkraft.common.peripheral.BlockPeripheralContext
+import ru.lazyhat.compukterkraft.common.peripheral.BlockPeripheralDescriptor
+import ru.lazyhat.compukterkraft.common.peripheral.BlockPeripheralProvider
+
+/**
+ * Stub provider that proves the addon -> common -> core wiring without yet referencing Create.
+ */
+object CreateBlockPeripheralProvider : BlockPeripheralProvider {
+    override fun provide(context: BlockPeripheralContext): BlockPeripheralDescriptor? = null
 }
