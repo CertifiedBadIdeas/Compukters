@@ -32,10 +32,11 @@ data class BuildContext(
     val javaVersion: Int,
 )
 
-enum class LoaderKind {
-    FABRIC,
-    FORGE,
-    NEOFORGE,
+enum class LoaderKind(
+    val lowercase: String,
+) {
+    FABRIC("fabric"),
+    NEOFORGE("neoforge"),
 }
 
 private const val BUILD_CONTEXT_KEY = "ck.buildContext"
@@ -94,6 +95,8 @@ fun Project.readVersionedModProperties(): Map<String, String> =
                     .filterKeys { it.startsWith("common") }
                     .mapKeys { it.key.substringAfter("common_") }
         }
+
+fun Project.computeModArchiveVersion(): String = "${buildContext().minecraftVersion}-${loaderKind().lowercase}-${rootProject.version}"
 
 fun Project.computeModVersion(): String = "${buildContext().minecraftVersion}-${rootProject.version}"
 
