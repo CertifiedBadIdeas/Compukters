@@ -27,8 +27,7 @@ val generateLocalizationApi =
         description =
             "Generates a Kotlin API for accessing localization entries."
         langFile.set(
-            project(projects.v1211Neoforge.path)
-                .layout
+           layout
                 .projectDirectory
                 .file("src/main/resources/assets/compukterkraft/lang/en_us.json"),
         )
