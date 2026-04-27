@@ -28,6 +28,9 @@ val libs = libsCatalog()
 
 setLoaderKind(LoaderKind.NEOFORGE)
 
+// Loader-leaf archive version = "<mc>-<loader>-<modVersion>".
+version = computeModArchiveVersion()
+
 architectury {
     platformSetupLoomIde()
     neoForge()
