@@ -82,6 +82,15 @@ class CompukterKraftMod(
         ServerNetworking.playerSender = NetworkHandler::sendToPlayer
         ClientNetworking.serverSender = NetworkHandler::sendToServer
 
+//        CreateCompatBootstrap.initializeIfPresent(
+//            isCreateLoaded = {
+//                net.neoforged.fml.ModList
+//                    .get()
+//                    .isLoaded("create")
+//            },
+//            register = { LOGGER.info { "Create mod detected — compat layer active" } },
+//        )
+
         if (dist != Dist.CLIENT) {
             modEventBus.addListener(::onServerSetup)
         }
