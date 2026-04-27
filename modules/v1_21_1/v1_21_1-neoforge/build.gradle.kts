@@ -75,4 +75,5 @@ dependencies {
 
     add(gameTest.implementationConfigurationName, sourceSets.main.get().output)
     add(gameTest.implementationConfigurationName, project(path = projects.v1211Common.path, configuration = "namedElements"))
+    add(gameTest.implementationConfigurationName, project(path = projects.v1211CreateNeoforge.path, configuration = "namedElements"))
 }
