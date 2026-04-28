@@ -1,5 +1,7 @@
 # Compukter Kraft
 
+![Mod logo (Ai generated)](logo_1.webp)
+
 Computers in Minecraft, programmed in a tiny statically-typed language. With a real IDE inside.
 
 devlog(in russian): https://t.me/lazyhatdev
