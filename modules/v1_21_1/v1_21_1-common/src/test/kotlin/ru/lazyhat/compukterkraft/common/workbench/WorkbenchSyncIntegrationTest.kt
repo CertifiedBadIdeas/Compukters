@@ -146,6 +146,14 @@ class WorkbenchSyncIntegrationTest {
         override fun sessionOpen(path: String) {
             server.openSession(path)
         }
+
+        override fun sendCursor(
+            path: String,
+            cursor: ru.lazyhat.compukterkraft.core.computer.workbench.crdt.CursorAnchor?,
+        ) {
+            // The integration test is concerned with op apply/ack only; cursor relay is
+            // exercised separately. Drop on the floor.
+        }
     }
 
     private object NoopWorkspaceGateway : WorkspaceGateway {

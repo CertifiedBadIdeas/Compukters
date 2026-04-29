@@ -595,6 +595,49 @@ class WorkbenchStoreTest {
             assertEquals("b.ck", store.state.openDocument?.path)
         }
 
+    @Test
+    fun cursorMovementsAreReportedThroughOpsGateway() =
+        runTest(UnconfinedTestDispatcher()) {
+            val opsGateway = FakeWorkbenchOpsGateway()
+            val store =
+                WorkbenchStore(
+                    FakeWorkspaceGateway(),
+                    FakeComputerControlGateway(),
+                    FakeWorkbenchIdeFacade(),
+                    opsGateway,
+                ) {
+                    ru.lazyhat.compukterkraft.core.computer.workbench.crdt
+                        .SiteId("p:cursor-test")
+                }
+            val updates = FakeWorkbenchUpdateSource()
+            store.bind(backgroundScope, updates)
+            updates.push(document = ComputerWorkspaceDocument("foo.ck", "hello\nworld", 0))
+
+            // Opening the document already reported the initial caret at (0,0).
+            val initial = opsGateway.cursors.size
+            assertTrue(initial >= 1, "opening a file must report the initial caret to the server")
+            assertEquals("foo.ck", opsGateway.cursors.first().first)
+
+            store.moveCursorTo(line = 1, column = 3, visibleEditorLines = 20)
+            assertTrue(
+                opsGateway.cursors.size > initial,
+                "moveCursorTo must publish the new caret via the gateway",
+            )
+            val (path, anchor) = opsGateway.cursors.last()
+            assertEquals("foo.ck", path)
+            // The anchor must be a real CRDT pointer (not the leftmost fallback) — we have
+            // a live replica at this point.
+            assertTrue(
+                anchor != null && anchor.atomId != null,
+                "post-snapshot cursor reports must carry a CRDT atom anchor",
+            )
+
+            // Re-emitting the same line/col must NOT cause a duplicate report.
+            val before = opsGateway.cursors.size
+            store.moveCursorTo(line = 1, column = 3, visibleEditorLines = 20)
+            assertEquals(before, opsGateway.cursors.size, "same caret must be deduplicated")
+        }
+
     private class FakeWorkbenchUpdateSource : WorkbenchUpdateSource {
         private val _stateFlow = MutableStateFlow(WorkbenchRemoteState())
         override val stateFlow: StateFlow<WorkbenchRemoteState> = _stateFlow
@@ -696,6 +739,9 @@ class WorkbenchStoreTest {
         val batches: MutableList<Pair<String, List<ru.lazyhat.compukterkraft.core.computer.workbench.crdt.Op>>> =
             mutableListOf()
         val sessionsOpened: MutableList<String> = mutableListOf()
+        val cursors:
+            MutableList<Pair<String, ru.lazyhat.compukterkraft.core.computer.workbench.crdt.CursorAnchor?>> =
+            mutableListOf()
 
         override fun sendOps(
             path: String,
@@ -706,6 +752,13 @@ class WorkbenchStoreTest {
 
         override fun sessionOpen(path: String) {
             sessionsOpened += path
+        }
+
+        override fun sendCursor(
+            path: String,
+            cursor: ru.lazyhat.compukterkraft.core.computer.workbench.crdt.CursorAnchor?,
+        ) {
+            cursors += path to cursor
         }
     }
 }

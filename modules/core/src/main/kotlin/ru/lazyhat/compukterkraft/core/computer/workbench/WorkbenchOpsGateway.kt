@@ -18,6 +18,7 @@
  */
 package ru.lazyhat.compukterkraft.core.computer.workbench
 
+import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.CursorAnchor
 import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.Op
 
 /**
@@ -28,6 +29,8 @@ import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.Op
  * - [sessionOpen] notifies the server that the editor is now actively viewing [path]; the
  *   server replies with a `WorkbenchDocumentSnapshotClientMessage` (handled separately and fed
  *   back into the store via [WorkbenchStore.onSnapshot]).
+ * - [sendCursor] reports a caret position to the server so other collaborators viewing the
+ *   same document can render it. `cursor == null` clears the local caret (e.g. on file close).
  *
  * Replaces the legacy `WorkspaceGateway.write` / `ComputerControlGateway.pullFromTarget` /
  * `pushToTarget` save/sync trio.
@@ -39,6 +42,11 @@ interface WorkbenchOpsGateway {
     )
 
     fun sessionOpen(path: String)
+
+    fun sendCursor(
+        path: String,
+        cursor: CursorAnchor?,
+    )
 }
 
 /**
@@ -53,5 +61,11 @@ object NoOpWorkbenchOpsGateway : WorkbenchOpsGateway {
     }
 
     override fun sessionOpen(path: String) {
+    }
+
+    override fun sendCursor(
+        path: String,
+        cursor: CursorAnchor?,
+    ) {
     }
 }
