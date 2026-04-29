@@ -101,6 +101,29 @@ class ClientCrdtReplica(
     }
 
     /**
+     * Inverse of [cursorAtOffset]: walk the document and resolve [cursor] to the matching
+     * flat visible offset. Returns:
+     * - `0` for a `(null, 0)` left-edge anchor.
+     * - The visible offset just past the (possibly tombstoned) anchor's owning atom otherwise.
+     * - `null` when the anchor's site/clock is unknown to this replica (e.g. ops still in
+     *   flight) — callers should hide the caret in that case rather than render it at zero.
+     */
+    fun offsetOfCursor(cursor: CursorAnchor): Int? {
+        val atomId = cursor.atomId ?: return 0
+        var consumed = 0
+        for (run in document.runs) {
+            if (run.id.site == atomId.site &&
+                atomId.clock in run.id.clock until (run.id.clock + run.text.length)
+            ) {
+                val within = (atomId.clock - run.id.clock) + cursor.offsetWithinRun
+                return if (run.deleted) consumed else consumed + within.coerceAtMost(run.text.length)
+            }
+            if (!run.deleted) consumed += run.text.length
+        }
+        return null
+    }
+
+    /**
      * If [cursor]'s anchor was tombstoned by a remote delete, snap to the next visible run on
      * its right. Returns the original anchor unchanged when the run is still visible. Falls
      * back to a `(null, 0)` start-of-doc anchor if nothing visible remains to the right.

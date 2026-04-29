@@ -70,12 +70,32 @@ class WorkbenchStore(
     /** Current workbench state (synchronous read). */
     val state: WorkbenchState get() = _state.value
 
+    private val _presences = MutableStateFlow<List<EditorPresence>>(emptyList())
+
+    /**
+     * Live workbench-wide collaborator list. Drives the per-file editor count badge in the
+     * file tree. Populated by the host via [bindCollaboration]; empty when running headless.
+     */
+    val presences: StateFlow<List<EditorPresence>> = _presences.asStateFlow()
+
+    private val _remoteCursors = MutableStateFlow<Map<SiteId, RemoteCursor>>(emptyMap())
+
+    /**
+     * Live caret positions of remote collaborators, keyed by [SiteId]. Drives the in-editor
+     * caret overlay; entries pointing at files other than the current one are kept (for the
+     * tree count), the editor filters by path itself.
+     */
+    val remoteCursors: StateFlow<Map<SiteId, RemoteCursor>> = _remoteCursors.asStateFlow()
+
     private var collectJob: Job? = null
     private var statusCollectJob: Job? = null
     private var pendingCollectJob: Job? = null
     private var cursorReportJob: Job? = null
+    private var presenceCollectJob: Job? = null
+    private var remoteCursorCollectJob: Job? = null
 
-    private val siteId: SiteId = siteIdProvider()
+    /** This client's stable [SiteId]. Exposed so UI can filter "self" out of remote feeds. */
+    val siteId: SiteId = siteIdProvider()
 
     /** Per-document CRDT replica. Recreated on document open / snapshot. Visible for tests. */
     internal var replica: ClientCrdtReplica? = null
@@ -89,6 +109,7 @@ class WorkbenchStore(
     private var outboxPath: String? = null
 
     private var bindScope: CoroutineScope? = null
+
 
     /**
      * Bind a [WorkbenchUpdateSource] and start reactively collecting its [StateFlow].
@@ -137,14 +158,46 @@ class WorkbenchStore(
         pendingCollectJob = null
         cursorReportJob?.cancel()
         cursorReportJob = null
+        presenceCollectJob?.cancel()
+        presenceCollectJob = null
+        remoteCursorCollectJob?.cancel()
+        remoteCursorCollectJob = null
         bindScope = null
         outbox = null
         outboxPath = null
         replica = null
+        _presences.value = emptyList()
+        _remoteCursors.value = emptyMap()
     }
 
     fun initialize() {
         requestListing("")
+    }
+
+    /**
+     * Wire workbench-wide collaboration feeds (presence list, remote carets) into the store.
+     * Hosts that have a server-side menu binding the [StateFlow]s they own (e.g. the
+     * Minecraft client) call this from [bind]. Headless tests can ignore it. Subsequent calls
+     * replace the previous subscriptions.
+     */
+    fun bindCollaboration(
+        scope: CoroutineScope,
+        presencesFlow: StateFlow<List<EditorPresence>>,
+        remoteCursorsFlow: StateFlow<Map<SiteId, RemoteCursor>>,
+    ) {
+        presenceCollectJob?.cancel()
+        remoteCursorCollectJob?.cancel()
+        // Seed synchronously so the very first frame after binding sees the current state.
+        _presences.value = presencesFlow.value
+        _remoteCursors.value = remoteCursorsFlow.value
+        presenceCollectJob =
+            scope.launch {
+                presencesFlow.collect { _presences.value = it }
+            }
+        remoteCursorCollectJob =
+            scope.launch {
+                remoteCursorsFlow.collect { _remoteCursors.value = it }
+            }
     }
 
     fun toggleTerminalVisibility() {

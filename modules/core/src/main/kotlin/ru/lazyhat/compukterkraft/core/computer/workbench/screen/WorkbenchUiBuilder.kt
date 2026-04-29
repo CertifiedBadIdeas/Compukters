@@ -110,6 +110,7 @@ fun buildWorkbenchUi(
 
         buildCompletionOverlay(store, viewport)
         buildImportPickerOverlay(store, viewport)
+        buildRemoteCaretsOverlay(store, viewport, sidebarWidth, mainHeight)
     }
 }
 
@@ -173,6 +174,7 @@ private fun UiScope.buildSidebar(
                         width = width,
                         label = value(".."),
                         selected = false,
+                        editorCount = 0,
                         onClick = { store.navigateUp() },
                     )
                 }
@@ -180,10 +182,23 @@ private fun UiScope.buildSidebar(
                     val displayLabel = if (entry.directory) "${entry.path}/" else entry.path
                     val isOpenDocument =
                         !entry.directory && store.state.openDocument?.path == entry.path
+                    // Tree-level collaboration indicator: number of OTHER editors currently
+                    // viewing this exact path. Excludes directories (presence is per-file)
+                    // and excludes our own site so we don't "see" ourselves in the badge.
+                    val ownSite = store.siteId
+                    val collaboratorCount =
+                        if (entry.directory) {
+                            0
+                        } else {
+                            store.presences.value.count { p ->
+                                p.path == entry.path && p.siteId != ownSite
+                            }
+                        }
                     sidebarRow(
                         width = width,
                         label = value { displayLabel },
                         selected = isOpenDocument,
+                        editorCount = collaboratorCount,
                         onClick = {
                             if (entry.directory) {
                                 store.requestListing(entry.path)
@@ -362,6 +377,81 @@ private fun UiScope.buildImportPickerOverlay(
     }
 }
 
+/**
+ * Per-frame overlay that paints a thin colored caret for every remote
+ * collaborator whose cursor lives inside the currently open document. We
+ * resolve each [CursorAnchor] against the local replica so the bar tracks
+ * peer movement even after concurrent edits shifted absolute offsets.
+ *
+ * The overlay covers the whole viewport but draws nothing outside the
+ * editor's visible line window, which keeps it from leaking into the
+ * sidebar / toolbar / status / inventory frames.
+ */
+private fun UiScope.buildRemoteCaretsOverlay(
+    store: WorkbenchStore,
+    viewport: IntSize,
+    sidebarWidth: Int,
+    mainHeight: Int,
+) {
+    overlay(
+        modifier = Modifier.size(viewport),
+        anchor = value { Position(0, 0) },
+    ) {
+        canvas(modifier = Modifier.size(viewport)) {
+            val openPath = store.state.openDocument?.path ?: return@canvas
+            val rep = store.replica ?: return@canvas
+            val text = store.state.editor.text
+            val scrollLine = store.state.editor.scrollLine
+            val visibleLines = (mainHeight / EDITOR_FONT_HEIGHT).coerceAtLeast(0)
+            if (visibleLines == 0) return@canvas
+            val gutter =
+                ru.lazyhat.compukterkraft.core.ui.editor.CodeEditorMetrics.gutterPixelWidth(
+                    ru.lazyhat.compukterkraft.core.ui.editor.CodeEditorMetrics.lineCount(text),
+                    EDITOR_FONT_WIDTH,
+                )
+            for ((siteId, remote) in store.remoteCursors.value) {
+                if (siteId == store.siteId) continue
+                if (remote.path != openPath) continue
+                val flat = rep.offsetOfCursor(remote.cursor) ?: continue
+                val (line, column) = lineColumnAtOffset(text, flat.coerceIn(0, text.length))
+                if (line < scrollLine) continue
+                if (line - scrollLine >= visibleLines) continue
+                val x = sidebarWidth + gutter + column * EDITOR_FONT_WIDTH
+                val y = TOOLBAR_HEIGHT + (line - scrollLine) * EDITOR_FONT_HEIGHT
+                fillRect(x, y, REMOTE_CARET_WIDTH, EDITOR_FONT_HEIGHT, peerColor(siteId))
+            }
+        }
+    }
+}
+
+private fun lineColumnAtOffset(text: String, offset: Int): Pair<Int, Int> {
+    var line = 0
+    var lineStart = 0
+    for (i in 0 until offset) {
+        if (text[i] == '\n') {
+            line++
+            lineStart = i + 1
+        }
+    }
+    return line to (offset - lineStart)
+}
+
+private fun peerColor(siteId: ru.lazyhat.compukterkraft.core.computer.workbench.crdt.SiteId): Color {
+    val raw = siteId.raw
+    val hash = if (raw.isEmpty()) 0 else (raw.hashCode() and 0x7FFFFFFF)
+    return PEER_PALETTE[hash % PEER_PALETTE.size]
+}
+
+private val PEER_PALETTE =
+    listOf(
+        Color.hex(0xFFE06C75.toInt()),
+        Color.hex(0xFF98C379.toInt()),
+        Color.hex(0xFF61AFEF.toInt()),
+        Color.hex(0xFFC678DD.toInt()),
+        Color.hex(0xFFE5C07B.toInt()),
+        Color.hex(0xFF56B6C2.toInt()),
+    )
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -413,6 +503,7 @@ private fun UiScope.sidebarRow(
     width: Int,
     label: Value<String>,
     selected: Boolean,
+    editorCount: Int,
     onClick: () -> Unit,
 ) {
     box(
@@ -427,6 +518,15 @@ private fun UiScope.sidebarRow(
             color = if (selected) TEXT_ACCENT else TEXT_LIGHT,
             text = label,
         )
+        if (editorCount > 0) {
+            // Right-aligned compact count badge ("·N"); excluded ourselves above so any
+            // positive value here means at least one peer is editing this file.
+            text(
+                modifier = Modifier.align(UiAlignment.End),
+                color = TEXT_ACCENT,
+                text = value { "·$editorCount" },
+            )
+        }
     }
 }
 
@@ -603,6 +703,7 @@ private const val DEFAULT_VISIBLE_EDITOR_LINES = 32
 private const val INV_TARGET_SECTION_HEIGHT = 22
 private const val EDITOR_FONT_WIDTH = 6
 private const val EDITOR_FONT_HEIGHT = 9
+private const val REMOTE_CARET_WIDTH = 1
 
 // ---------------------------------------------------------------------------
 // Palette

@@ -38,6 +38,7 @@ import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchPresen
 import ru.lazyhat.compukterkraft.common.workbench.network.server.WorkbenchWorkspaceServerMessage
 import ru.lazyhat.compukterkraft.core.computer.input.InputEvent
 import ru.lazyhat.compukterkraft.core.computer.workbench.EditorPresence
+import ru.lazyhat.compukterkraft.core.computer.workbench.RemoteCursor
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchRemoteState
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchStore
 import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.CrdtDocument
@@ -392,13 +393,4 @@ abstract class AbstractWorkbenchMenu(
          */
         const val NO_ACK_SENTINEL: Int = Int.MIN_VALUE
     }
-
-    /**
-     * A peer caret tracked client-side. [path] lets the editor decide whether to render this
-     * cursor on the currently open file or skip it; [cursor] is the live anchor.
-     */
-    data class RemoteCursor(
-        val path: String,
-        val cursor: CursorAnchor,
-    )
 }
