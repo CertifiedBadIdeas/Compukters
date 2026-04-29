@@ -54,7 +54,7 @@ fun RunConfigSettings.applyShared() {
     ideConfigGenerated(true)
 }
 
-private val DEV_CLIENT_USERNAMES = listOf("DevA", "DevB")
+private val DEV_CLIENT_USERNAMES = listOf("DevA", "DevB", "DevC")
 
 val loom = extensions.getByType<LoomGradleExtensionAPI>()
 val runs = loom.runs
@@ -76,6 +76,18 @@ runs.register("client2") {
     runDir("run/client2")
     applyShared()
     programArgs("--username", DEV_CLIENT_USERNAMES[1])
+}
+
+// Second client instance for local multiplayer testing of the
+// workbench's CRDT sync. Reuses the main mod classpath, so any
+// change picked up by `runClient` is also picked up here on
+// restart — no jar build / sideload needed.
+runs.register("client3") {
+    client()
+    configName = "Minecraft Client 3"
+    runDir("run/client3")
+    applyShared()
+    programArgs("--username", DEV_CLIENT_USERNAMES[2])
 }
 
 // One-shot dev server: same as `server` but with a separate run dir whose
@@ -187,7 +199,7 @@ private val DEV_CLIENT_SERVERS =
         DevServerEntry(name = "Compukter Kraft (dev)", ip = "localhost"),
     )
 
-private val CLIENT_RUN_DIRS = listOf("run/client", "run/client2")
+private val CLIENT_RUN_DIRS = listOf("run/client", "run/client2", "run/client3")
 
 val prepareClientDev =
     tasks.register("prepareClientDev") {
@@ -208,7 +220,7 @@ val prepareClientDev =
         }
     }
 
-tasks.matching { it.name == "runClient" || it.name == "runClient2" }.configureEach {
+tasks.matching { it.name == "runClient" || it.name == "runClient2" || it.name == "runClient3" }.configureEach {
     dependsOn(prepareClientDev)
 }
 
