@@ -44,13 +44,13 @@ tasks.configureEach {
 }
 
 loom {
+    // Generic client / client2 / server runs are declared in the
+    // `loom-runs-convention` precompiled script plugin (build-scripts).
+    // Only neoforge-specific runs live here.
     runs {
-        named("client") {
-            property("kotlinx.coroutines.debug", "off")
-        }
-
         register("gameTestServer") {
             server()
+            runDir("run/gameTestServer")
             property("neoforge.enableGameTest", "true")
             property("neoforge.enabledGameTestNamespaces", "compukterkraft,minecraft")
             property("neoforge.gameTestServer", "true")

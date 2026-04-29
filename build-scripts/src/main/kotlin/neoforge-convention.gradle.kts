@@ -20,6 +20,7 @@
 plugins {
     id("kotlin-convention")
     id("dev.architectury.loom")
+    id("loom-runs-convention")
     id("architectury-plugin")
     id("com.gradleup.shadow")
 }
