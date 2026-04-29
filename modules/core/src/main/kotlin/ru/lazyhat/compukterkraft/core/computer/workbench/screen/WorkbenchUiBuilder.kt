@@ -409,6 +409,7 @@ private fun UiScope.buildRemoteCaretsOverlay(
                     ru.lazyhat.compukterkraft.core.ui.editor.CodeEditorMetrics.lineCount(text),
                     EDITOR_FONT_WIDTH,
                 )
+            val lines = text.split('\n')
             for ((siteId, remote) in store.remoteCursors.value) {
                 if (siteId == store.siteId) continue
                 if (remote.path != openPath) continue
@@ -416,7 +417,15 @@ private fun UiScope.buildRemoteCaretsOverlay(
                 val (line, column) = lineColumnAtOffset(text, flat.coerceIn(0, text.length))
                 if (line < scrollLine) continue
                 if (line - scrollLine >= visibleLines) continue
-                val x = sidebarWidth + gutter + column * EDITOR_FONT_WIDTH
+                val lineText = lines.getOrNull(line) ?: ""
+                val x =
+                    remoteCaretPixelX(
+                        textLine = lineText,
+                        column = column,
+                        leftPad = sidebarWidth,
+                        gutter = gutter,
+                        measure = ::measureText,
+                    )
                 val y = TOOLBAR_HEIGHT + (line - scrollLine) * EDITOR_FONT_HEIGHT
                 fillRect(x, y, REMOTE_CARET_WIDTH, EDITOR_FONT_HEIGHT, peerColor(siteId))
             }

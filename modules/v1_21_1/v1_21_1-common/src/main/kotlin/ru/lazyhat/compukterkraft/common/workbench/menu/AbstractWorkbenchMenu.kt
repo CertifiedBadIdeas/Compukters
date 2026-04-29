@@ -38,6 +38,7 @@ import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchPresen
 import ru.lazyhat.compukterkraft.common.workbench.network.server.WorkbenchWorkspaceServerMessage
 import ru.lazyhat.compukterkraft.core.computer.input.InputEvent
 import ru.lazyhat.compukterkraft.core.computer.workbench.EditorPresence
+import ru.lazyhat.compukterkraft.core.computer.workbench.screen.presencesForRecipient
 import ru.lazyhat.compukterkraft.core.computer.workbench.RemoteCursor
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchRemoteState
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchStore
@@ -272,8 +273,10 @@ abstract class AbstractWorkbenchMenu(
      */
     override fun onPresenceChanged(presences: List<EditorPresence>) {
         val player = ownerPlayer ?: return
+        val ownSite = SiteId.player(player.uuid)
+        val filtered = presencesForRecipient(presences, ownSite)
         ServerNetworking.sendToPlayer(
-            WorkbenchPresenceClientMessage(containerId, presences),
+            WorkbenchPresenceClientMessage(containerId, filtered),
             player,
         )
     }

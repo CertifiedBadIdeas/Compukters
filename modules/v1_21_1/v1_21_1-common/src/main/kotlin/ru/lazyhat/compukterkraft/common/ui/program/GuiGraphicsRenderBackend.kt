@@ -192,4 +192,6 @@ class GuiGraphicsRenderBackend(
             popClip()
         }
     }
+
+    override fun measureText(text: String): Int = font.width(text)
 }

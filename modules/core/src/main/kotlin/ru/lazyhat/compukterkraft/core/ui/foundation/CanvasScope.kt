@@ -20,4 +20,12 @@ interface CanvasScope {
         height: Int,
         color: Color,
     )
+
+    /**
+     * Measure the rendered pixel width of [text] under the platform's font metrics. Used by
+     * canvas-drawn overlays that need to align with text rendered by other elements (e.g.
+     * remote-collaborator carets above a code editor). Implementations that lack a real font
+     * fall back to a fixed-width approximation.
+     */
+    fun measureText(text: String): Int
 }

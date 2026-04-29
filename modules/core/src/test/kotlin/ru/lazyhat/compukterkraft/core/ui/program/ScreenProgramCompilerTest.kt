@@ -316,6 +316,8 @@ class ScreenProgramCompilerTest {
                     fontWidth: Int,
                     fontHeight: Int,
                 ) {}
+
+                override fun measureText(text: String): Int = text.length * 6
             }
         executor.render(backend)
         assertEquals(Triple(32, 43, Color.Red), recordedCalls.single())
