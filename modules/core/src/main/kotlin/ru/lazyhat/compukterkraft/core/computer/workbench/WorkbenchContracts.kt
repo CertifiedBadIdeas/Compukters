@@ -21,7 +21,6 @@ package ru.lazyhat.compukterkraft.core.computer.workbench
 import kotlinx.coroutines.flow.StateFlow
 import ru.lazyhat.compukterkraft.lang.api.BuiltinRegistry
 import ru.lazyhat.compukterkraft.lang.runtime.CompletionItem
-import ru.lazyhat.compukterkraft.lang.runtime.CompletionItemKind
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerIdeSnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceDocument
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceEntry
@@ -86,11 +85,6 @@ interface WorkbenchIdeFacade {
         source: String,
         line: Int,
         column: Int,
-    ): List<CompletionItem>
-
-    fun availableImports(
-        path: String,
-        source: String,
     ): List<CompletionItem>
 
     fun hover(

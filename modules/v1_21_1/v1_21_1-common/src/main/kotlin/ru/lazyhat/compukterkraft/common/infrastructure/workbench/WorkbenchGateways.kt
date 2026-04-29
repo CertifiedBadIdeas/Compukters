@@ -40,7 +40,6 @@ import ru.lazyhat.compukterkraft.lang.frontend.LanguageBuiltins
 import ru.lazyhat.compukterkraft.lang.frontend.LanguageFrontend
 import ru.lazyhat.compukterkraft.lang.frontend.LanguageIde
 import ru.lazyhat.compukterkraft.lang.runtime.CompletionItem
-import ru.lazyhat.compukterkraft.lang.runtime.CompletionItemKind
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerCapability
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerIdeSnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceDocument
@@ -228,17 +227,6 @@ class LanguageWorkbenchIdeFacade(
             return ide.completeFromAnalysis(cached, source, line, column)
         }
         return ide.complete(path, source, line, column)
-    }
-
-    override fun availableImports(
-        path: String,
-        source: String,
-    ): List<CompletionItem> {
-        val probeSource = if (source.contains("import ")) source else "$source\nimport "
-        val probeLine = probeSource.lines().lastIndex
-        val probeColumn = probeSource.lines().last().length
-        return completeFromLastAnalysis(path, probeSource, probeLine, probeColumn)
-            .filter { it.kind == CompletionItemKind.MODULE }
     }
 
     override fun hover(

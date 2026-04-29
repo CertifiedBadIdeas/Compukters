@@ -46,9 +46,6 @@ data class EditorState(
     val hoverInfo: HoverInfo? = null,
     val completionItems: List<CompletionItem> = emptyList(),
     val selectedCompletion: Int = 0,
-    val importPickerVisible: Boolean = false,
-    val importPickerItems: List<CompletionItem> = emptyList(),
-    val selectedImportPickerIndex: Int = 0,
 )
 
 /**

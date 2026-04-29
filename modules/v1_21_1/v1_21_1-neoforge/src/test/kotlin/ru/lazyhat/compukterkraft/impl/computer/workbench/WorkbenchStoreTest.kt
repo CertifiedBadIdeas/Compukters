@@ -23,7 +23,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
-import org.lwjgl.glfw.GLFW
 import ru.lazyhat.compukterkraft.core.computer.workbench.ComputerControlGateway
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchIdeFacade
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchRemoteState
@@ -41,7 +40,6 @@ import ru.lazyhat.compukterkraft.lang.runtime.DefinitionTarget
 import ru.lazyhat.compukterkraft.lang.runtime.HoverInfo
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -157,11 +155,6 @@ class WorkbenchStoreTest {
             line: Int,
             column: Int,
         ): List<CompletionItem> = complete(path, source, line, column)
-
-        override fun availableImports(
-            path: String,
-            source: String,
-        ): List<CompletionItem> = emptyList()
 
         override fun hover(
             path: String,
