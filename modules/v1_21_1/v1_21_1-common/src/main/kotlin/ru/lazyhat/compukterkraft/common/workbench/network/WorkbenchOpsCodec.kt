@@ -20,7 +20,9 @@
 package ru.lazyhat.compukterkraft.common.workbench.network
 
 import net.minecraft.network.FriendlyByteBuf
+import ru.lazyhat.compukterkraft.core.computer.workbench.EditorPresence
 import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.AtomId
+import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.CursorAnchor
 import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.Op
 import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.SiteId
 import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.TextRun
@@ -160,4 +162,59 @@ internal fun FriendlyByteBuf.writeRuns(runs: List<TextRun>) {
 internal fun FriendlyByteBuf.readRuns(): List<TextRun> {
     val n = readVarInt()
     return List(n) { readRun() }
+}
+
+internal fun FriendlyByteBuf.writeCursorAnchor(cursor: CursorAnchor) {
+    writeNullableAtomId(cursor.atomId)
+    writeVarInt(cursor.offsetWithinRun)
+}
+
+internal fun FriendlyByteBuf.readCursorAnchor(): CursorAnchor =
+    CursorAnchor(
+        atomId = readNullableAtomId(),
+        offsetWithinRun = readVarInt(),
+    )
+
+internal fun FriendlyByteBuf.writeNullableCursorAnchor(cursor: CursorAnchor?) {
+    writeBoolean(cursor != null)
+    if (cursor != null) writeCursorAnchor(cursor)
+}
+
+internal fun FriendlyByteBuf.readNullableCursorAnchor(): CursorAnchor? = if (readBoolean()) readCursorAnchor() else null
+
+/**
+ * Per-presence display name ceiling. Minecraft profile names are 16 chars max; we add slack
+ * for future "alias" use cases (e.g. localized command-block names). Generous but bounded.
+ */
+private const val MAX_DISPLAY_NAME_LENGTH: Int = 64
+
+/**
+ * Per-presence path ceiling. Workspace paths are bounded by the same limits as
+ * [ComputerWorkspaceEntry] uses today; 256 is comfortable for any realistic nesting.
+ */
+private const val MAX_PRESENCE_PATH_LENGTH: Int = 256
+
+internal fun FriendlyByteBuf.writePresence(presence: EditorPresence) {
+    writeSiteId(presence.siteId)
+    writeUtf(presence.displayName, MAX_DISPLAY_NAME_LENGTH)
+    writeUtf(presence.path, MAX_PRESENCE_PATH_LENGTH)
+    writeNullableCursorAnchor(presence.cursor)
+}
+
+internal fun FriendlyByteBuf.readPresence(): EditorPresence =
+    EditorPresence(
+        siteId = readSiteId(),
+        displayName = readUtf(MAX_DISPLAY_NAME_LENGTH),
+        path = readUtf(MAX_PRESENCE_PATH_LENGTH),
+        cursor = readNullableCursorAnchor(),
+    )
+
+internal fun FriendlyByteBuf.writePresences(presences: List<EditorPresence>) {
+    writeVarInt(presences.size)
+    presences.forEach { writePresence(it) }
+}
+
+internal fun FriendlyByteBuf.readPresences(): List<EditorPresence> {
+    val n = readVarInt()
+    return List(n) { readPresence() }
 }

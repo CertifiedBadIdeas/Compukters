@@ -28,6 +28,10 @@ import ru.lazyhat.compukterkraft.common.utils.computerID
 import ru.lazyhat.compukterkraft.common.utils.updateComputerDataTag
 import ru.lazyhat.compukterkraft.common.workbench.test.TestMinecraftBootstrap
 import ru.lazyhat.compukterkraft.core.computer.vm.ComputerWorkspaceHost
+import ru.lazyhat.compukterkraft.core.computer.workbench.EditorPresence
+import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.AtomId
+import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.CursorAnchor
+import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.SiteId
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBuffer
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
@@ -362,6 +366,46 @@ class ServerWorkbenchTest {
         workbench.unsubscribeAll(subA)
         assertEquals(listOf(subB), workbench.subscribersOf("shell.ck"))
         assertEquals(emptyList(), workbench.subscribersOf("util.ck"))
+    }
+
+    @Test
+    fun setPresenceBroadcastsSnapshotToAttachedMenus() {
+        val workspace = ComputerWorkspaceHost(createTempDirectory("server-workbench-presence"))
+        val workbench = ServerWorkbench(workspaceId = 101, workspace = workspace)
+
+        val received = mutableListOf<List<EditorPresence>>()
+        val observer = ServerWorkbench.MenuObserver { snapshot -> received += snapshot }
+        workbench.attachMenu(observer)
+        // Attach must replay the (empty) current snapshot so a freshly opened menu starts in
+        // a consistent state.
+        assertEquals(listOf(emptyList()), received)
+        received.clear()
+
+        val alice = EditorPresence(SiteId("p:alice"), "alice", "shell.ck", cursor = null)
+        val bob = EditorPresence(SiteId("p:bob"), "bob", "util.ck", cursor = null)
+
+        assertTrue(workbench.setPresence(alice))
+        assertTrue(workbench.setPresence(bob))
+        assertEquals(2, received.size)
+        assertEquals(setOf(alice), received[0].toSet())
+        assertEquals(setOf(alice, bob), received[1].toSet())
+
+        // Re-setting an identical presence must be a no-op (broadcast skipped).
+        assertFalse(workbench.setPresence(alice))
+        assertEquals(2, received.size)
+
+        // Cursor change for an existing site counts as a real change.
+        val aliceWithCursor = alice.copy(cursor = CursorAnchor(AtomId(SiteId("p:alice"), 5), 0))
+        assertTrue(workbench.setPresence(aliceWithCursor))
+        assertEquals(setOf(aliceWithCursor, bob), received.last().toSet())
+
+        workbench.removePresence(SiteId("p:bob"))
+        assertEquals(setOf(aliceWithCursor), received.last().toSet())
+
+        workbench.detachMenu(observer)
+        val sizeBeforeQuiet = received.size
+        workbench.setPresence(EditorPresence(SiteId("p:carol"), "carol", "x.ck"))
+        assertEquals(sizeBeforeQuiet, received.size, "detached observer must not receive broadcasts")
     }
 
     private class FakeRuntimeBridge : WorkbenchTargetRuntimeBridge {

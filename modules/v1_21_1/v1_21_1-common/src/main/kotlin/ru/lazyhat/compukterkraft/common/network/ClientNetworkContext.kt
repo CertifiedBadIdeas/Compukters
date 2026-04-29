@@ -59,4 +59,16 @@ interface ClientNetworkContext {
         runs: List<TextRun>,
         versionVector: Map<SiteId, Int>,
     )
+
+    fun handleWorkbenchPresence(
+        containerId: Int,
+        presences: List<ru.lazyhat.compukterkraft.core.computer.workbench.EditorPresence>,
+    )
+
+    fun handleWorkbenchCursor(
+        containerId: Int,
+        path: String,
+        siteId: SiteId,
+        cursor: ru.lazyhat.compukterkraft.core.computer.workbench.crdt.CursorAnchor?,
+    )
 }

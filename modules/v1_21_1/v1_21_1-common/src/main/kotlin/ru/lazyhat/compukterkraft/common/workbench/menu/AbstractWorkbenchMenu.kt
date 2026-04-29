@@ -31,13 +31,17 @@ import net.minecraft.world.inventory.MenuType
 import ru.lazyhat.compukterkraft.common.network.ServerNetworking
 import ru.lazyhat.compukterkraft.common.workbench.context.ServerWorkbench
 import ru.lazyhat.compukterkraft.common.workbench.data.WorkbenchContainerData
+import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchCursorClientMessage
 import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchDocumentSnapshotClientMessage
 import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchOpsClientMessage
+import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchPresenceClientMessage
 import ru.lazyhat.compukterkraft.common.workbench.network.server.WorkbenchWorkspaceServerMessage
 import ru.lazyhat.compukterkraft.core.computer.input.InputEvent
+import ru.lazyhat.compukterkraft.core.computer.workbench.EditorPresence
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchRemoteState
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchStore
 import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.CrdtDocument
+import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.CursorAnchor
 import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.Op
 import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.SiteId
 import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.TextRun
@@ -56,9 +60,12 @@ abstract class AbstractWorkbenchMenu(
      */
     private val ownerPlayer: ServerPlayer? = null,
 ) : AbstractContainerMenu(menuType, containerId),
-    ServerWorkbench.SessionSubscriber {
+    ServerWorkbench.SessionSubscriber,
+    ServerWorkbench.MenuObserver {
     private val _workspaceStateFlow = MutableStateFlow(containerData.toRemoteState())
     private val _screenSnapshot = MutableStateFlow<ScreenBufferSnapshot?>(null)
+    private val _presencesFlow = MutableStateFlow<List<EditorPresence>>(emptyList())
+    private val _remoteCursorsFlow = MutableStateFlow<Map<SiteId, RemoteCursor>>(emptyMap())
 
     /**
      * Paths this menu has opened a CRDT session for. Tracked so [removed] can unsubscribe from
@@ -71,6 +78,16 @@ abstract class AbstractWorkbenchMenu(
 
     val screenSnapshot: ScreenBufferSnapshot? get() = _screenSnapshot.value
 
+    /** Live snapshot of every collaborator on this workbench (client-side feed). */
+    val presencesFlow: StateFlow<List<EditorPresence>> = _presencesFlow.asStateFlow()
+
+    /**
+     * Live caret positions of remote collaborators on the path the local viewer currently has
+     * focused. Keyed by [SiteId]; entries that drop out of the map (peer left the file or
+     * cleared their cursor) trigger an immediate render erase on the editor side.
+     */
+    val remoteCursorsFlow: StateFlow<Map<SiteId, RemoteCursor>> = _remoteCursorsFlow.asStateFlow()
+
     /**
      * The client-side editor store registers itself here so server→client CRDT messages
      * (ops/acks/snapshots) can be routed to the right replica. Server-side menus leave this
@@ -81,6 +98,10 @@ abstract class AbstractWorkbenchMenu(
     init {
         refreshFromServerWorkbench()
         updateScreenSnapshot(serverWorkbench?.currentScreenSnapshot())
+        // Server-side: register for workbench-wide presence broadcasts immediately. The hook
+        // call also primes us with the current snapshot so a freshly opened menu starts with
+        // the existing collaborator list, not an empty one.
+        serverWorkbench?.attachMenu(this)
     }
 
     fun refreshFromServerWorkbench(openDocumentPath: String? = _workspaceStateFlow.value.document?.path) {
@@ -143,9 +164,16 @@ abstract class AbstractWorkbenchMenu(
         // Drop our subscriber registration on every path we joined, otherwise ServerWorkbench
         // would keep relaying ops to a defunct menu (and eventually leak references).
         val workbench = serverWorkbench
-        if (workbench != null && subscribedPaths.isNotEmpty()) {
-            workbench.unsubscribeAll(this)
-            subscribedPaths.clear()
+        if (workbench != null) {
+            if (subscribedPaths.isNotEmpty()) {
+                workbench.unsubscribeAll(this)
+                subscribedPaths.clear()
+            }
+            // Drop presence so other viewers' file trees stop showing this player on a file
+            // they can no longer be editing. Detach the menu observer too so we stop receiving
+            // unused presence broadcasts.
+            ownerPlayer?.let { workbench.removePresence(SiteId.player(it.uuid)) }
+            workbench.detachMenu(this)
         }
         super.removed(player)
     }
@@ -164,6 +192,19 @@ abstract class AbstractWorkbenchMenu(
         // server side, so re-opening (e.g. after target rebind) is safe.
         if (subscribedPaths.add(path)) {
             workbench.subscribe(path, this)
+        }
+        // Update workbench-wide presence so other viewers' file trees can render the new
+        // editor count. Re-opening the same path is a no-op (setPresence diffs against the
+        // previous entry) so calling this from snapshot() / READ doesn't spam broadcasts.
+        ownerPlayer?.let { player ->
+            workbench.setPresence(
+                EditorPresence(
+                    siteId = SiteId.player(player.uuid),
+                    displayName = player.name.string,
+                    path = path,
+                    cursor = null,
+                ),
+            )
         }
         return WorkbenchDocumentSnapshotClientMessage(
             containerId = containerId,
@@ -226,6 +267,58 @@ abstract class AbstractWorkbenchMenu(
     }
 
     /**
+     * Forward the latest workbench-wide presence list to the owning client. Server-only.
+     */
+    override fun onPresenceChanged(presences: List<EditorPresence>) {
+        val player = ownerPlayer ?: return
+        ServerNetworking.sendToPlayer(
+            WorkbenchPresenceClientMessage(containerId, presences),
+            player,
+        )
+    }
+
+    /**
+     * Server-side handler for [WorkbenchCursorServerMessage]. Updates the sender's presence
+     * (which broadcasts the new cursor inside the snapshot) and additionally fans out the
+     * leaner [WorkbenchCursorClientMessage] only to peers viewing the same [path] — they need
+     * the live caret position even between rare presence-snapshot updates.
+     */
+    fun handleCursorUpdate(
+        path: String,
+        cursor: CursorAnchor?,
+    ) {
+        val workbench = serverWorkbench ?: return
+        val player = ownerPlayer ?: return
+        val siteId = SiteId.player(player.uuid)
+        val displayName = player.name.string
+        // Refresh presence so the snapshot stays in sync (file-tree count is unchanged but the
+        // cursor field travels with it). setPresence diffs internally and skips the broadcast
+        // when nothing actually changed (typical for repeated identical cursor moves).
+        workbench.setPresence(
+            EditorPresence(
+                siteId = siteId,
+                displayName = displayName,
+                path = path,
+                cursor = cursor,
+            ),
+        )
+        // Fan out to per-path subscribers (other menus viewing this same file). Skip self.
+        for (peer in workbench.subscribersOf(path)) {
+            if (peer !is AbstractWorkbenchMenu || peer === this) continue
+            val target = peer.ownerPlayer ?: continue
+            ServerNetworking.sendToPlayer(
+                WorkbenchCursorClientMessage(
+                    containerId = peer.containerId,
+                    path = path,
+                    siteId = siteId,
+                    cursor = cursor,
+                ),
+                target,
+            )
+        }
+    }
+
+    /**
      * Route a server-bound ops/ack reply to the registered client [workbenchStore]. Silently
      * drops when no store is bound (e.g. snapshot arrived before screen finished initializing).
      */
@@ -255,6 +348,41 @@ abstract class AbstractWorkbenchMenu(
         store.onSnapshot(path, document)
     }
 
+    /**
+     * Client-side: replace the full presence list with the server's authoritative snapshot.
+     * Filters local site out (we don't render our own caret as "remote").
+     */
+    fun updatePresences(presences: List<EditorPresence>) {
+        _presencesFlow.value = presences
+        // Drop any cached remote cursors whose owning peer no longer appears in the presence
+        // list — they left the workbench, their caret should disappear.
+        val livingSites = presences.mapTo(HashSet()) { it.siteId }
+        val current = _remoteCursorsFlow.value
+        if (current.keys.any { it !in livingSites }) {
+            _remoteCursorsFlow.value = current.filterKeys { it in livingSites }
+        }
+    }
+
+    /**
+     * Client-side: apply a single peer's cursor update for [path]. Updates are stored
+     * regardless of which file the local viewer is currently focused on — the editor decides
+     * whether to render a given entry by matching against the open document path. `cursor`
+     * being `null` removes the entry (peer left the file or has no anchor yet).
+     */
+    fun applyRemoteCursor(
+        path: String,
+        siteId: SiteId,
+        cursor: CursorAnchor?,
+    ) {
+        val current = _remoteCursorsFlow.value
+        _remoteCursorsFlow.value =
+            if (cursor == null) {
+                if (siteId !in current) current else current - siteId
+            } else {
+                current + (siteId to RemoteCursor(path = path, cursor = cursor))
+            }
+    }
+
     companion object {
         /**
          * Wire-level sentinel for [WorkbenchOpsClientMessage.ackedClock] meaning "this message
@@ -264,4 +392,13 @@ abstract class AbstractWorkbenchMenu(
          */
         const val NO_ACK_SENTINEL: Int = Int.MIN_VALUE
     }
+
+    /**
+     * A peer caret tracked client-side. [path] lets the editor decide whether to render this
+     * cursor on the currently open file or skip it; [cursor] is the live anchor.
+     */
+    data class RemoteCursor(
+        val path: String,
+        val cursor: CursorAnchor,
+    )
 }
