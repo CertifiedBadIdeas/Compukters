@@ -28,10 +28,12 @@ import ru.lazyhat.compukterkraft.common.utils.computerID
 import ru.lazyhat.compukterkraft.core.block.ComputerFamily
 import ru.lazyhat.compukterkraft.core.computer.ComputerEvents
 import ru.lazyhat.compukterkraft.core.computer.input.InputEvent
+import ru.lazyhat.compukterkraft.core.computer.workbench.EditorPresence
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchRemoteState
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchTargetState
 import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.CrdtApplyResult
 import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.CrdtDocument
+import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.CursorAnchor
 import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.Op
 import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.ServerCrdtReplica
 import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.SiteId
@@ -74,6 +76,20 @@ class ServerWorkbench(
      * fan-out is concurrent-safe even when subscribers register/unregister mid-broadcast.
      */
     private val subscribers: ConcurrentHashMap<String, MutableSet<SessionSubscriber>> = ConcurrentHashMap()
+
+    /**
+     * Workbench-wide observers. One entry per attached menu — broadcasts here reach every
+     * menu opened against this workbench, regardless of which file each viewer currently has
+     * focused. Used by presence (file-tree editor counts) so all viewers see who is editing
+     * what across the whole workbench, not just the same file.
+     */
+    private val menuObservers: MutableSet<MenuObserver> = java.util.Collections.newSetFromMap(ConcurrentHashMap())
+
+    /**
+     * Latest presence per author (one site = one editor). Updated by [setPresence] and cleared
+     * by [removePresence]. Reads return a snapshot copy so callers may iterate safely.
+     */
+    private val presences: ConcurrentHashMap<SiteId, EditorPresence> = ConcurrentHashMap()
 
     fun setTarget(stack: ItemStack) {
         updateTarget(extractTargetDescriptor(stack))
@@ -270,6 +286,55 @@ class ServerWorkbench(
      */
     fun subscribersOf(path: String): List<SessionSubscriber> = subscribers[path]?.toList().orEmpty()
 
+    /**
+     * Register [observer] for workbench-wide events (currently presence). Triggers an immediate
+     * presence broadcast to [observer] so a freshly attached menu can populate its file tree
+     * without waiting for the next change.
+     */
+    fun attachMenu(observer: MenuObserver) {
+        if (menuObservers.add(observer)) {
+            observer.onPresenceChanged(presencesSnapshot())
+        }
+    }
+
+    /** Remove [observer] from workbench-wide broadcasts. Safe to call when not attached. */
+    fun detachMenu(observer: MenuObserver) {
+        menuObservers.remove(observer)
+    }
+
+    /**
+     * Set or replace the presence for [presence].siteId and broadcast the new snapshot to every
+     * attached menu. Returns `true` when the broadcast actually carried a new value (caller
+     * may use this to skip cursor-only fan-outs that piggyback on presence updates when the
+     * cursor is the only field that changed).
+     */
+    fun setPresence(presence: EditorPresence): Boolean {
+        val previous = presences.put(presence.siteId, presence)
+        if (previous == presence) return false
+        broadcastPresence()
+        return true
+    }
+
+    /** Drop the presence keyed by [siteId] and broadcast. No-op when no entry exists. */
+    fun removePresence(siteId: SiteId) {
+        if (presences.remove(siteId) != null) {
+            broadcastPresence()
+        }
+    }
+
+    /** Defensive snapshot of every active presence on this workbench. */
+    fun presencesSnapshot(): List<EditorPresence> = presences.values.toList()
+
+    /** Look up the current path of [siteId] (`null` if no presence is registered). */
+    fun pathOfPresence(siteId: SiteId): String? = presences[siteId]?.path
+
+    private fun broadcastPresence() {
+        val snapshot = presencesSnapshot()
+        // Iteration is safe — newSetFromMap(ConcurrentHashMap) gives a weakly-consistent view;
+        // observers added mid-broadcast just miss this round and pick up the next one.
+        menuObservers.forEach { it.onPresenceChanged(snapshot) }
+    }
+
     private fun highestClockOf(op: Op): Int =
         when (op) {
             is Op.Insert -> op.clock + op.text.length - 1
@@ -313,6 +378,17 @@ class ServerWorkbench(
             path: String,
             ops: List<Op>,
         )
+    }
+
+    /**
+     * Receives workbench-wide events. Currently presence-only — every attached menu gets the
+     * full presence list whenever any peer joins, leaves, or moves between files. Cursor moves
+     * within a single file go through a leaner channel ([SessionSubscriber] does NOT carry
+     * cursors; cursor relay is wired directly through [AbstractWorkbenchMenu] using
+     * [pathOfPresence] to skip files the recipient isn't currently viewing).
+     */
+    fun interface MenuObserver {
+        fun onPresenceChanged(presences: List<EditorPresence>)
     }
 
     data class TargetDescriptor(

@@ -31,10 +31,13 @@ import ru.lazyhat.compukterkraft.common.computer.network.server.ResizeTerminalSe
 import ru.lazyhat.compukterkraft.common.network.ClientNetworkContext
 import ru.lazyhat.compukterkraft.common.network.ServerNetworkContext
 import ru.lazyhat.compukterkraft.common.network.text.ChatTableClientMessage
+import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchCursorClientMessage
 import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchDocumentSnapshotClientMessage
 import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchOpsClientMessage
+import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchPresenceClientMessage
 import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchTerminalClientMessage
 import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchWorkspaceClientMessage
+import ru.lazyhat.compukterkraft.common.workbench.network.server.WorkbenchCursorServerMessage
 import ru.lazyhat.compukterkraft.common.workbench.network.server.WorkbenchInputServerMessage
 import ru.lazyhat.compukterkraft.common.workbench.network.server.WorkbenchOpsServerMessage
 import ru.lazyhat.compukterkraft.common.workbench.network.server.WorkbenchWorkspaceServerMessage
@@ -114,6 +117,12 @@ object NetworkMessages {
             "workbench_ops_request",
             { buf -> WorkbenchOpsServerMessage(buf) },
         )
+    val WORKBENCH_CURSOR_REQUEST: MessageType<WorkbenchCursorServerMessage> =
+        registerServerbound(
+            19,
+            "workbench_cursor_request",
+            { buf -> WorkbenchCursorServerMessage(buf) },
+        )
     val ATTACH_TERMINAL: MessageType<AttachTerminalServerMessage> =
         registerServerbound(
             7,
@@ -161,6 +170,18 @@ object NetworkMessages {
             18,
             "workbench_document_snapshot",
             { buf -> WorkbenchDocumentSnapshotClientMessage(buf) },
+        )
+    val WORKBENCH_PRESENCE: MessageType<WorkbenchPresenceClientMessage> =
+        registerClientbound(
+            20,
+            "workbench_presence",
+            { buf -> WorkbenchPresenceClientMessage(buf) },
+        )
+    val WORKBENCH_CURSOR: MessageType<WorkbenchCursorClientMessage> =
+        registerClientbound(
+            21,
+            "workbench_cursor",
+            { buf -> WorkbenchCursorClientMessage(buf) },
         )
 
     @Suppress("UNCHECKED_CAST")

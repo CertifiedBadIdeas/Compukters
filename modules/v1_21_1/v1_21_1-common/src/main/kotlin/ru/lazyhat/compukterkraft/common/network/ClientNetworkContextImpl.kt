@@ -24,7 +24,9 @@ import ru.lazyhat.compukterkraft.common.computer.menu.ComputerMenu
 import ru.lazyhat.compukterkraft.common.network.text.ClientTableFormatter
 import ru.lazyhat.compukterkraft.common.network.text.TableBuilder
 import ru.lazyhat.compukterkraft.common.workbench.menu.AbstractWorkbenchMenu
+import ru.lazyhat.compukterkraft.core.computer.workbench.EditorPresence
 import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchRemoteState
+import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.CursorAnchor
 import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.Op
 import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.SiteId
 import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.TextRun
@@ -99,5 +101,21 @@ class ClientNetworkContextImpl : ClientNetworkContext {
         versionVector: Map<SiteId, Int>,
     ) = withCheckedWorkbenchMenu(containerId) {
         applyDocumentSnapshot(path, runs, versionVector)
+    }
+
+    override fun handleWorkbenchPresence(
+        containerId: Int,
+        presences: List<EditorPresence>,
+    ) = withCheckedWorkbenchMenu(containerId) {
+        updatePresences(presences)
+    }
+
+    override fun handleWorkbenchCursor(
+        containerId: Int,
+        path: String,
+        siteId: SiteId,
+        cursor: CursorAnchor?,
+    ) = withCheckedWorkbenchMenu(containerId) {
+        applyRemoteCursor(path, siteId, cursor)
     }
 }
