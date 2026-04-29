@@ -23,11 +23,14 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.ClientCrdtReplica
 import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.CrdtDocument
+import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.CursorAnchor
 import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.Op
 import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.SiteId
 import ru.lazyhat.compukterkraft.core.computer.workbench.sync.OpOutbox
@@ -70,6 +73,7 @@ class WorkbenchStore(
     private var collectJob: Job? = null
     private var statusCollectJob: Job? = null
     private var pendingCollectJob: Job? = null
+    private var cursorReportJob: Job? = null
 
     private val siteId: SiteId = siteIdProvider()
 
@@ -104,6 +108,24 @@ class WorkbenchStore(
                     mergeRemoteState(remote)
                 }
             }
+        // Observe caret/path transitions and ship the resolved CRDT cursor anchor to the
+        // server so other collaborators viewing the same file can render us. Distinct-by the
+        // (path, line, column) triple so plain re-emissions of identical state (e.g. text
+        // updates that don't move the caret) don't spam the wire.
+        cursorReportJob?.cancel()
+        cursorReportJob =
+            scope.launch {
+                _state
+                    .map { st ->
+                        val path = st.openDocument?.path ?: return@map null
+                        Triple(path, st.editor.cursorLine, st.editor.cursorColumn)
+                    }
+                    .distinctUntilChanged()
+                    .collect { triple ->
+                        if (triple == null) return@collect
+                        reportCursor(triple.first, triple.second, triple.third)
+                    }
+            }
     }
 
     fun dispose() {
@@ -113,6 +135,8 @@ class WorkbenchStore(
         statusCollectJob = null
         pendingCollectJob?.cancel()
         pendingCollectJob = null
+        cursorReportJob?.cancel()
+        cursorReportJob = null
         bindScope = null
         outbox = null
         outboxPath = null
@@ -686,6 +710,28 @@ class WorkbenchStore(
     fun applyAck(ackedClock: Int) {
         replica?.applyAck(ackedClock)
         outbox?.onAck(ackedClock)
+    }
+
+    /**
+     * Resolve the caret to a CRDT [CursorAnchor] (so it survives concurrent inserts/deletes)
+     * and ship it to the server via [opsGateway]. Falls back to a leftmost anchor when the
+     * replica is not ready yet — that still gives peers a usable position once the snapshot
+     * arrives. No-op when no document is open.
+     */
+    private fun reportCursor(
+        path: String,
+        line: Int,
+        column: Int,
+    ) {
+        val rep = replica
+        val anchor =
+            if (rep != null) {
+                val flat = SourceTextSupport.offsetAt(rep.document.flatten(), line, column)
+                rep.cursorAtOffset(flat)
+            } else {
+                CursorAnchor(null, 0)
+            }
+        opsGateway.sendCursor(path, anchor)
     }
 
     /**

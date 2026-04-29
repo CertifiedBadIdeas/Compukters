@@ -98,6 +98,19 @@ class NetworkWorkbenchOpsGateway(
         // The READ action implicitly opens the server session today; the dedicated open
         // message will be added if/when phase-2 multi-session support lands.
     }
+
+    override fun sendCursor(
+        path: String,
+        cursor: ru.lazyhat.compukterkraft.core.computer.workbench.crdt.CursorAnchor?,
+    ) {
+        ClientNetworking.sendToServer(
+            ru.lazyhat.compukterkraft.common.workbench.network.server.WorkbenchCursorServerMessage(
+                containerId = menu.containerId,
+                path = path,
+                cursor = cursor,
+            ),
+        )
+    }
 }
 
 class InputHandlerControlGateway(
