@@ -287,6 +287,8 @@ class ScreenRuntimeExecutorTest {
             fontHeight: Int,
         ) {
         }
+
+        override fun measureText(text: String): Int = text.length * 6
     }
 
     @Test

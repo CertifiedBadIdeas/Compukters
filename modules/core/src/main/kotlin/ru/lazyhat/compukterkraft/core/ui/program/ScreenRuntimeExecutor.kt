@@ -217,6 +217,8 @@ class ScreenRuntimeExecutor(
         ) {
             backend?.fillRect(originX + x, originY + y, width, height, color)
         }
+
+        override fun measureText(text: String): Int = backend?.measureText(text) ?: 0
     }
 
     fun mouseClicked(

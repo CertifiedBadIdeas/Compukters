@@ -56,4 +56,12 @@ interface RenderBackend {
         fontWidth: Int,
         fontHeight: Int,
     )
+
+    /**
+     * Returns the rendered width of [text] in pixels. Used by canvas overlays that must align
+     * with text rendered through [drawText] / [drawCodeEditor]. Backends with a real font use
+     * the font's variable-width metrics; in-memory test backends typically return
+     * `text.length * defaultFontWidth`.
+     */
+    fun measureText(text: String): Int
 }
