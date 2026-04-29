@@ -1,5 +1,3 @@
-# Compukter Kraft
-
 ![Mod logo (Ai generated)](logo_1.webp)
 
 **Programmable computers for Minecraft — but with a real, statically-typed
