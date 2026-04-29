@@ -64,13 +64,30 @@ class WorkbenchWorkspaceServerMessage : NetworkMessage<ServerNetworkContext> {
         val remoteState = menu.handleWorkspaceAction(action, path) ?: return
         ServerNetworking.sendToPlayer(WorkbenchWorkspaceClientMessage(containerId, remoteState), player)
 
-        // READ doubles as "open CRDT session for this path" — emit the document snapshot so
-        // the client can rebuild its local replica. Other actions don't open new sessions.
-        if (action == Action.READ && path.isNotEmpty()) {
-            menu.openWorkbenchSession(path)?.let { snapshot ->
+        // Eagerly open a CRDT session for whichever document the workspace response surfaced —
+        // for READ that's the requested path, for LIST it's whatever document the menu had
+        // open previously (e.g. on screen re-open). Without this the client would render the
+        // disk-loaded text from `remoteState.document` (stale relative to peers' in-memory
+        // edits) and would not appear in the per-path subscriber set, so live ops from peers
+        // never reach it. Triggering the session here also broadcasts our presence so other
+        // viewers' file trees light up the per-path collaborator counter immediately.
+        val sessionPath =
+            when {
+                action == Action.READ && path.isNotEmpty() -> path
+                else -> remoteState.document?.path
+            }
+        if (!sessionPath.isNullOrEmpty()) {
+            menu.openWorkbenchSession(sessionPath)?.let { snapshot ->
                 ServerNetworking.sendToPlayer(snapshot, player)
             }
         }
+
+        // Re-send the current presence list to the requester. The synchronous broadcast that
+        // [ServerWorkbench.attachMenu] fires during menu construction races with the client's
+        // containerMenu swap and is silently dropped when it loses; piggybacking on the
+        // workspace response guarantees the freshly opened screen sees who else is editing
+        // before any peer needs to type.
+        menu.resendPresenceToOwner()
     }
 
     override fun type(): MessageType<WorkbenchWorkspaceServerMessage> = NetworkMessages.WORKBENCH_WORKSPACE_REQUEST

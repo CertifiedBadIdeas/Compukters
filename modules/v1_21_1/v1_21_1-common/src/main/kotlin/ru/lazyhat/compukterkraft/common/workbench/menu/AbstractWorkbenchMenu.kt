@@ -282,6 +282,18 @@ abstract class AbstractWorkbenchMenu(
     }
 
     /**
+     * Re-emit the workbench's current presence snapshot to this menu's owner. Used as a
+     * race-free fallback after the client has fully wired its container menu (e.g. when the
+     * workspace request lands), since the synchronous broadcast triggered during menu
+     * construction can arrive before the client's containerMenu swap and be dropped by the
+     * containerId filter.
+     */
+    fun resendPresenceToOwner() {
+        val workbench = serverWorkbench ?: return
+        onPresenceChanged(workbench.presencesSnapshot())
+    }
+
+    /**
      * Server-side handler for [WorkbenchCursorServerMessage]. Updates the sender's presence
      * (which broadcasts the new cursor inside the snapshot) and additionally fans out the
      * leaner [WorkbenchCursorClientMessage] only to peers viewing the same [path] — they need
@@ -362,8 +374,23 @@ abstract class AbstractWorkbenchMenu(
         // list — they left the workbench, their caret should disappear.
         val livingSites = presences.mapTo(HashSet()) { it.siteId }
         val current = _remoteCursorsFlow.value
+        var next = current
         if (current.keys.any { it !in livingSites }) {
-            _remoteCursorsFlow.value = current.filterKeys { it in livingSites }
+            next = current.filterKeys { it in livingSites }
+        }
+        // Seed remote cursors from the presence snapshot. WorkbenchCursorClientMessage only
+        // delivers cursor *deltas*, so a freshly-opened menu would otherwise stay blind to
+        // peer carets until those peers happened to move. The presence list is broadcast on
+        // every change and carries the latest known caret per peer, making it the right place
+        // to (re)hydrate cursors after a screen reopen.
+        for (presence in presences) {
+            val cursor = presence.cursor ?: continue
+            val existing = next[presence.siteId]
+            if (existing?.path == presence.path && existing.cursor == cursor) continue
+            next = next + (presence.siteId to RemoteCursor(path = presence.path, cursor = cursor))
+        }
+        if (next !== current) {
+            _remoteCursorsFlow.value = next
         }
     }
 
