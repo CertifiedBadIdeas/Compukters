@@ -108,6 +108,18 @@ class WorkbenchEditorScreen(
         scope.launch {
             store.stateFlow.drop(1).collect { invalidate() }
         }
+        // Presence/remote-cursor flows live on a separate channel from `state` because they
+        // come from the menu's collaboration broadcasts. The sidebar reads them eagerly
+        // (`store.presences.value.count { ... }`), so without an explicit invalidate the
+        // file-tree badge would only refresh on the next state-bearing change (e.g. clicking
+        // a file). Triggering invalidate here makes peer joins/leaves and remote caret moves
+        // redraw the UI promptly.
+        scope.launch {
+            store.presences.drop(1).collect { invalidate() }
+        }
+        scope.launch {
+            store.remoteCursors.drop(1).collect { invalidate() }
+        }
     }
 
     override fun removed() {

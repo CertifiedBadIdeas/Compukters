@@ -507,6 +507,53 @@ class WorkbenchStoreTest {
         }
 
     @Test
+    fun cursorStaysWhenRemoteInsertHappensExactlyAtCursor() =
+        runTest(UnconfinedTestDispatcher()) {
+            // Regression: when a peer inserts at exactly the local cursor offset (e.g. the
+            // peer pressed Enter right where we were about to type), our caret must stay on
+            // the original character — typing should land BEFORE the peer's newline, not get
+            // teleported to the new line after it.
+            val store =
+                WorkbenchStore(
+                    FakeWorkspaceGateway(),
+                    FakeComputerControlGateway(),
+                    FakeWorkbenchIdeFacade(),
+                    FakeWorkbenchOpsGateway(),
+                ) {
+                    ru.lazyhat.compukterkraft.core.computer.workbench.crdt
+                        .SiteId("p:test06")
+                }
+            val updates = FakeWorkbenchUpdateSource()
+            store.bind(backgroundScope, updates)
+            updates.push(document = ComputerWorkspaceDocument("main.ck", "abc", 0))
+            // Caret at offset 3 — end of "abc".
+            store.moveCursorTo(0, 3, visibleEditorLines = 20)
+
+            // Peer presses Enter at the same offset (their leftId = atom of last 'c').
+            val lastAtom =
+                store.replica!!
+                    .document
+                    .atomAtOffset(2)!!
+                    .first
+            val remoteOp =
+                ru.lazyhat.compukterkraft.core.computer.workbench.crdt.Op.Insert(
+                    author =
+                        ru.lazyhat.compukterkraft.core.computer.workbench.crdt
+                            .SiteId("p:other3"),
+                    clock = 0,
+                    leftId = lastAtom,
+                    text = "\n",
+                )
+
+            store.applyRemoteOps(listOf(remoteOp))
+
+            assertEquals("abc\n", store.state.editor.text)
+            // Caret must remain at end of original line, NOT jump to start of the new one.
+            assertEquals(0, store.state.editor.cursorLine)
+            assertEquals(3, store.state.editor.cursorColumn)
+        }
+
+    @Test
     fun staleWorkspacePushDoesNotResetActiveCrdtSession() =
         runTest(UnconfinedTestDispatcher()) {
             // Regression: when a CRDT session is open and the user has typed locally, the
