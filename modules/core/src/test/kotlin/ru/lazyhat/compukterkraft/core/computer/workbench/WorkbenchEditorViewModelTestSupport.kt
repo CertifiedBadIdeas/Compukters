@@ -102,11 +102,6 @@ internal object WorkbenchEditorViewModelTestSupport {
             column: Int,
         ): List<CompletionItem> = emptyList()
 
-        override fun availableImports(
-            path: String,
-            source: String,
-        ): List<CompletionItem> = emptyList()
-
         override fun hover(
             path: String,
             source: String,

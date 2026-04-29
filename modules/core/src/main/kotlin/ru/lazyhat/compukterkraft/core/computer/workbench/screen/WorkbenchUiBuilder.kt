@@ -109,7 +109,6 @@ fun buildWorkbenchUi(
         }
 
         buildCompletionOverlay(store, viewport)
-        buildImportPickerOverlay(store, viewport)
         buildRemoteCaretsOverlay(store, viewport, sidebarWidth, mainHeight)
     }
 }
@@ -128,7 +127,6 @@ private fun UiScope.buildToolbar(
             enabled = value { store.state.actions.canRun },
             onClick = { store.runTargetProgram() },
         )
-        toolbarButton(label = value("Imports"), onClick = { store.openImportPicker() })
         box(modifier = Modifier.weight(2f).size(IntSize(0, TOOLBAR_HEIGHT)))
         toolbarButton(
             label = value { if (store.state.terminalVisible) "Hide T" else "Term" },
@@ -324,53 +322,6 @@ private fun UiScope.buildCompletionOverlay(
                     label = item.label,
                     selected = idx == store.state.editor.selectedCompletion,
                     onClick = { store.applyCompletion(idx) },
-                )
-            }
-        }
-    }
-}
-
-private fun UiScope.buildImportPickerOverlay(
-    store: WorkbenchStore,
-    viewport: IntSize,
-) {
-    if (!store.state.editor.importPickerVisible) return
-    val items =
-        store.state.editor.importPickerItems
-            .take(MAX_IMPORT_ROWS)
-    val popupWidth = IMPORT_POPUP_WIDTH
-    val popupHeight = items.size * COMPLETION_ROW_HEIGHT + IMPORT_HEADER_HEIGHT
-
-    overlay(
-        modifier = Modifier.size(IntSize(popupWidth, popupHeight)),
-        anchor =
-            value {
-                Position(
-                    x = (viewport.width - popupWidth) / 2,
-                    y = (viewport.height - popupHeight) / 3,
-                )
-            },
-    ) {
-        canvas {
-            fillRect(0, 0, popupWidth, popupHeight, BG_POPUP_BORDER)
-            fillRect(1, 1, popupWidth - 2, popupHeight - 2, BG_IMPORT_POPUP)
-        }
-        column(modifier = Modifier.size(IntSize(popupWidth, popupHeight))) {
-            box(modifier = Modifier.size(IntSize(popupWidth, IMPORT_HEADER_HEIGHT)).background(BG_BUTTON)) {
-                text(
-                    modifier = Modifier.align(UiAlignment.Center),
-                    color = TEXT_LIGHT,
-                    text = value("Available imports"),
-                )
-            }
-            items.forEachIndexed { idx, item ->
-                completionRow(
-                    width = popupWidth,
-                    label = item.label,
-                    selected = idx == store.state.editor.selectedImportPickerIndex,
-                    onClick = {
-                        store.applyImportPickerSelection(idx, visibleEditorLines = DEFAULT_VISIBLE_EDITOR_LINES)
-                    },
                 )
             }
         }
@@ -705,9 +656,6 @@ private const val COMPLETION_POPUP_WIDTH = 200
 private const val COMPLETION_ROW_HEIGHT = 12
 private const val COMPLETION_POPUP_PADDING = 2
 private const val MAX_COMPLETION_ROWS = 8
-private const val IMPORT_POPUP_WIDTH = 240
-private const val IMPORT_HEADER_HEIGHT = 14
-private const val MAX_IMPORT_ROWS = 10
 private const val DEFAULT_VISIBLE_EDITOR_LINES = 32
 private const val INV_TARGET_SECTION_HEIGHT = 22
 private const val EDITOR_FONT_WIDTH = 6
@@ -733,7 +681,6 @@ private val SLOT_BORDER = Color.hex(0xFF2D3548.toInt())
 private val SLOT_BORDER_ACTIVE = Color.hex(0xFF4A88C7.toInt())
 private val BG_POPUP = Color.hex(0xFF11151E.toInt())
 private val BG_POPUP_BORDER = Color.hex(0xFF4A88C7.toInt())
-private val BG_IMPORT_POPUP = Color.hex(0xFF121721.toInt())
 private val BG_ROW_SELECTED = Color.hex(0x664883C7)
 private val BG_TRANSPARENT = Color.hex(0x00000000)
 

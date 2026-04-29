@@ -150,105 +150,6 @@ class WorkbenchStoreTest {
         }
 
     @Test
-    fun importPickerRequestsAvailableImportsFromFacade() =
-        runTest(UnconfinedTestDispatcher()) {
-            val ideFacade = FakeWorkbenchIdeFacade()
-            val store = WorkbenchStore(FakeWorkspaceGateway(), FakeComputerControlGateway(), ideFacade)
-            val updates = FakeWorkbenchUpdateSource()
-
-            store.bind(backgroundScope, updates)
-            updates.push(document = ComputerWorkspaceDocument("main.ck", "", 0))
-
-            store.openImportPicker()
-
-            assertTrue(ideFacade.calls.contains("availableImports"))
-        }
-
-    @Test
-    fun opensImportPickerWithAvailableImports() =
-        runTest(UnconfinedTestDispatcher()) {
-            val ideFacade = FakeWorkbenchIdeFacade()
-            val store = WorkbenchStore(FakeWorkspaceGateway(), FakeComputerControlGateway(), ideFacade)
-            val updates = FakeWorkbenchUpdateSource()
-
-            store.bind(backgroundScope, updates)
-            updates.push(document = ComputerWorkspaceDocument("main.ck", "", 0))
-
-            store.openImportPicker()
-
-            assertTrue(store.state.editor.importPickerVisible)
-            assertEquals(
-                listOf("terminal"),
-                store.state.editor.importPickerItems
-                    .map { it.label },
-            )
-        }
-
-    @Test
-    fun appliesSelectedImportFromPicker() =
-        runTest(UnconfinedTestDispatcher()) {
-            val ideFacade = FakeWorkbenchIdeFacade()
-            val store = WorkbenchStore(FakeWorkspaceGateway(), FakeComputerControlGateway(), ideFacade)
-            val updates = FakeWorkbenchUpdateSource()
-
-            store.bind(backgroundScope, updates)
-            updates.push(document = ComputerWorkspaceDocument("main.ck", "fun main() {}", 0))
-
-            store.openImportPicker()
-            store.applyImportPickerSelection(0, visibleEditorLines = 20)
-
-            assertTrue(
-                store.state.editor.text
-                    .startsWith("import terminal;\n"),
-            )
-            assertTrue(!store.state.editor.importPickerVisible)
-        }
-
-    @Test
-    fun ctrlAOpensImportPicker() =
-        runTest(UnconfinedTestDispatcher()) {
-            val ideFacade = FakeWorkbenchIdeFacade()
-            val store = WorkbenchStore(FakeWorkspaceGateway(), FakeComputerControlGateway(), ideFacade)
-            val updates = FakeWorkbenchUpdateSource()
-
-            store.bind(backgroundScope, updates)
-            updates.push(document = ComputerWorkspaceDocument("main.ck", "", 0))
-
-            store.keyPressed(KeyCodes.KEY_A, KeyCodes.MOD_CONTROL, visibleEditorLines = 20)
-
-            assertTrue(store.state.editor.importPickerVisible)
-            assertTrue(ideFacade.calls.contains("availableImports"))
-        }
-
-    @Test
-    fun enterAppliesSelectedImportWhilePickerIsOpen() =
-        runTest(UnconfinedTestDispatcher()) {
-            val ideFacade =
-                FakeWorkbenchIdeFacade(
-                    availableImports =
-                        listOf(
-                            CompletionItem(label = "terminal", detail = "base", kind = CompletionItemKind.MODULE),
-                            CompletionItem(label = "filesystem", detail = "base", kind = CompletionItemKind.MODULE),
-                        ),
-                )
-            val store = WorkbenchStore(FakeWorkspaceGateway(), FakeComputerControlGateway(), ideFacade)
-            val updates = FakeWorkbenchUpdateSource()
-
-            store.bind(backgroundScope, updates)
-            updates.push(document = ComputerWorkspaceDocument("main.ck", "fun main() {}", 0))
-            store.openImportPicker()
-
-            store.keyPressed(KeyCodes.KEY_DOWN, modifiers = 0, visibleEditorLines = 20)
-            store.keyPressed(KeyCodes.KEY_ENTER, modifiers = 0, visibleEditorLines = 20)
-
-            assertTrue(
-                store.state.editor.text
-                    .startsWith("import filesystem;\n"),
-            )
-            assertTrue(!store.state.editor.importPickerVisible)
-        }
-
-    @Test
     fun disablesTargetActionsWhenNoTargetIsConnected() =
         runTest(UnconfinedTestDispatcher()) {
             val ideFacade = FakeWorkbenchIdeFacade()
@@ -722,10 +623,7 @@ class WorkbenchStoreTest {
         }
     }
 
-    private class FakeWorkbenchIdeFacade(
-        private val availableImports: List<CompletionItem> =
-            listOf(CompletionItem(label = "terminal", detail = "base", kind = CompletionItemKind.MODULE)),
-    ) : WorkbenchIdeFacade {
+    private class FakeWorkbenchIdeFacade : WorkbenchIdeFacade {
         val calls = mutableListOf<String>()
 
         override fun analyze(
@@ -753,14 +651,6 @@ class WorkbenchStoreTest {
         ): List<CompletionItem> {
             calls += "completeFromLastAnalysis:$line:$column"
             return listOf(CompletionItem(label = "while", detail = "keyword", kind = CompletionItemKind.KEYWORD))
-        }
-
-        override fun availableImports(
-            path: String,
-            source: String,
-        ): List<CompletionItem> {
-            calls += "availableImports"
-            return availableImports
         }
 
         override fun hover(

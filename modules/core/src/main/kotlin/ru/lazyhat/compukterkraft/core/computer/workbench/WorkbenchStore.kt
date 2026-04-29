@@ -292,32 +292,6 @@ class WorkbenchStore(
         _state.value = state.copy(editor = state.editor.copy(completionItems = items, selectedCompletion = 0))
     }
 
-    fun openImportPicker() {
-        val document = state.openDocument ?: return
-        val items = ideFacade.availableImports(document.path, state.editor.text)
-        _state.value =
-            state.copy(
-                editor =
-                    state.editor.copy(
-                        importPickerVisible = items.isNotEmpty(),
-                        importPickerItems = items,
-                        selectedImportPickerIndex = 0,
-                    ),
-            )
-    }
-
-    fun closeImportPicker() {
-        _state.value =
-            state.copy(
-                editor =
-                    state.editor.copy(
-                        importPickerVisible = false,
-                        importPickerItems = emptyList(),
-                        selectedImportPickerIndex = 0,
-                    ),
-            )
-    }
-
     fun closeCompletion() {
         _state.value = state.copy(editor = state.editor.copy(completionItems = emptyList(), selectedCompletion = 0))
     }
@@ -339,19 +313,6 @@ class WorkbenchStore(
                 editor = state.editor.copy(completionItems = emptyList(), selectedCompletion = 0),
             )
         refreshIde()
-    }
-
-    fun applyImportPickerSelection(
-        index: Int = state.editor.selectedImportPickerIndex,
-        visibleEditorLines: Int,
-    ) {
-        val item = state.editor.importPickerItems.getOrNull(index) ?: return
-        val importText = "import ${item.label};\n"
-        applyLocalEdit(LocalEdit.Insert(0, importText))
-        // Caret advance applyLocalEdit already handles; ensure visibility.
-        _state.value = state.copy(editor = state.editor.keepCursorVisible(visibleEditorLines))
-        refreshIde()
-        closeImportPicker()
     }
 
     fun moveCursorTo(
@@ -378,11 +339,6 @@ class WorkbenchStore(
 
         if ((modifiers and KeyCodes.MOD_CONTROL) != 0) {
             when (key) {
-                KeyCodes.KEY_A -> {
-                    openImportPicker()
-                    return true
-                }
-
                 KeyCodes.KEY_SPACE -> {
                     openCompletion()
                     return true
@@ -392,33 +348,6 @@ class WorkbenchStore(
 
         if (shouldCapturePrintableKeyDown(key, modifiers)) {
             return true
-        }
-
-        if (state.editor.importPickerVisible) {
-            when (key) {
-                KeyCodes.KEY_UP -> {
-                    selectImportPicker(state.editor.selectedImportPickerIndex - 1)
-                    return true
-                }
-
-                KeyCodes.KEY_DOWN -> {
-                    selectImportPicker(state.editor.selectedImportPickerIndex + 1)
-                    return true
-                }
-
-                KeyCodes.KEY_ENTER,
-                KeyCodes.KEY_KP_ENTER,
-                KeyCodes.KEY_TAB,
-                -> {
-                    applyImportPickerSelection(visibleEditorLines = visibleEditorLines)
-                    return true
-                }
-
-                KeyCodes.KEY_ESCAPE -> {
-                    closeImportPicker()
-                    return true
-                }
-            }
         }
 
         if (state.editor.completionItems.isNotEmpty()) {
@@ -519,9 +448,6 @@ class WorkbenchStore(
         ch: Char,
         visibleEditorLines: Int,
     ): Boolean {
-        if (state.editor.importPickerVisible) {
-            return true
-        }
         if (!Character.isISOControl(ch)) {
             insertTextThroughCrdt(ch.toString(), visibleEditorLines)
             if (shouldOpenCompletionAfterCharTyped(ch)) {
@@ -665,13 +591,6 @@ class WorkbenchStore(
         if (items.isEmpty()) return
         val normalizedIndex = ((index % items.size) + items.size) % items.size
         _state.value = state.copy(editor = state.editor.copy(selectedCompletion = normalizedIndex))
-    }
-
-    private fun selectImportPicker(index: Int) {
-        val items = state.editor.importPickerItems
-        if (items.isEmpty()) return
-        val normalizedIndex = ((index % items.size) + items.size) % items.size
-        _state.value = state.copy(editor = state.editor.copy(selectedImportPickerIndex = normalizedIndex))
     }
 
     // -------------------------------------------------------------------------------------
