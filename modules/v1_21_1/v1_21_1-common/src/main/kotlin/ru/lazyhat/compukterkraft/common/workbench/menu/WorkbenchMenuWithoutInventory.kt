@@ -39,7 +39,16 @@ class WorkbenchMenuWithoutInventory(
     containerData: WorkbenchContainerData,
     serverWorkbench: ServerWorkbench? = null,
     private val onTargetStackChanged: ((ItemStack) -> Unit)? = null,
-) : AbstractWorkbenchMenu(menuType, containerId, containerData, serverWorkbench) {
+) : AbstractWorkbenchMenu(
+        menuType,
+        containerId,
+        containerData,
+        serverWorkbench,
+        // Pull the inventory's player and pass through as the broadcast target. On the
+        // client this resolves to the local player (irrelevant: only servers fan out ops);
+        // on dedicated servers the player provided in the menu provider is a ServerPlayer.
+        ownerPlayer = playerInventory.player as? ServerPlayer,
+    ) {
     private val ownerPlayer: Player? = playerInventory.player
     private val targetContainer =
         SimpleContainer(1).apply {

@@ -24,9 +24,11 @@ import kotlinx.collections.immutable.toPersistentMap
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.inventory.AbstractContainerMenu
 import net.minecraft.world.inventory.MenuType
+import ru.lazyhat.compukterkraft.common.network.ServerNetworking
 import ru.lazyhat.compukterkraft.common.workbench.context.ServerWorkbench
 import ru.lazyhat.compukterkraft.common.workbench.data.WorkbenchContainerData
 import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchDocumentSnapshotClientMessage
@@ -40,15 +42,30 @@ import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.Op
 import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.SiteId
 import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.TextRun
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
+import java.util.concurrent.ConcurrentHashMap
 
 abstract class AbstractWorkbenchMenu(
     menuType: MenuType<*>,
     containerId: Int,
     protected val containerData: WorkbenchContainerData,
     protected val serverWorkbench: ServerWorkbench? = null,
-) : AbstractContainerMenu(menuType, containerId) {
+    /**
+     * Server-side: the player who opened this menu. Used as the destination when fanning out
+     * relayed ops/cursor updates from other collaborators. `null` on client-side menus and on
+     * server-side menus that have no owning player (synthetic / test scenarios).
+     */
+    private val ownerPlayer: ServerPlayer? = null,
+) : AbstractContainerMenu(menuType, containerId),
+    ServerWorkbench.SessionSubscriber {
     private val _workspaceStateFlow = MutableStateFlow(containerData.toRemoteState())
     private val _screenSnapshot = MutableStateFlow<ScreenBufferSnapshot?>(null)
+
+    /**
+     * Paths this menu has opened a CRDT session for. Tracked so [removed] can unsubscribe from
+     * exactly the sessions we registered on — [ServerWorkbench.unsubscribeAll] would also work
+     * but iterating a per-menu set avoids touching unrelated path entries.
+     */
+    private val subscribedPaths: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
     val workspaceStateFlow: StateFlow<WorkbenchRemoteState> = _workspaceStateFlow.asStateFlow()
 
@@ -123,6 +140,13 @@ abstract class AbstractWorkbenchMenu(
         // player closes the workbench. The replicas die with the menu; this is the last
         // chance to persist them.
         serverWorkbench?.materializeOpenSessions()
+        // Drop our subscriber registration on every path we joined, otherwise ServerWorkbench
+        // would keep relaying ops to a defunct menu (and eventually leak references).
+        val workbench = serverWorkbench
+        if (workbench != null && subscribedPaths.isNotEmpty()) {
+            workbench.unsubscribeAll(this)
+            subscribedPaths.clear()
+        }
         super.removed(player)
     }
 
@@ -136,6 +160,11 @@ abstract class AbstractWorkbenchMenu(
     fun openWorkbenchSession(path: String): WorkbenchDocumentSnapshotClientMessage? {
         val workbench = serverWorkbench ?: return null
         val snapshot = workbench.openSession(path) ?: return null
+        // Register for op fan-out from other collaborators on this same path. Idempotent on the
+        // server side, so re-opening (e.g. after target rebind) is safe.
+        if (subscribedPaths.add(path)) {
+            workbench.subscribe(path, this)
+        }
         return WorkbenchDocumentSnapshotClientMessage(
             containerId = containerId,
             path = snapshot.path,
@@ -156,11 +185,43 @@ abstract class AbstractWorkbenchMenu(
     ): WorkbenchOpsClientMessage? {
         val workbench = serverWorkbench ?: return null
         val result = workbench.applyOps(path, ops, sender) ?: return null
+        // Fan out applied ops to every OTHER subscriber on this path so collaborators see
+        // edits immediately. The sender's own client doesn't need its ops back — it already
+        // applied them locally and only needs the ack.
+        if (result.applied.isNotEmpty()) {
+            for (peer in workbench.subscribersOf(path)) {
+                if (peer === this) continue
+                peer.onRemoteOps(path, result.applied)
+            }
+        }
         return WorkbenchOpsClientMessage(
             containerId = containerId,
             path = path,
-            ops = emptyList(), // Phase 1: no peer-broadcast yet; Phase 2 fans out to other clients
+            ops = emptyList(),
             ackedClock = result.ackedClock,
+        )
+    }
+
+    /**
+     * Forward [ops] applied by another collaborator to the owning player. Phase 2: implemented
+     * via [ServerNetworking] so the client store can apply the relayed ops. The relay message
+     * carries `ackedClock = NO_ACK_SENTINEL`, which the client's [applyOpsAck] interprets as
+     * "ops only, no ack to consume".
+     */
+    override fun onRemoteOps(
+        path: String,
+        ops: List<Op>,
+    ) {
+        val player = ownerPlayer ?: return
+        if (ops.isEmpty()) return
+        ServerNetworking.sendToPlayer(
+            WorkbenchOpsClientMessage(
+                containerId = containerId,
+                path = path,
+                ops = ops,
+                ackedClock = NO_ACK_SENTINEL,
+            ),
+            player,
         )
     }
 
@@ -175,7 +236,9 @@ abstract class AbstractWorkbenchMenu(
     ) {
         val store = workbenchStore ?: return
         if (ops.isNotEmpty()) store.applyRemoteOps(ops)
-        store.applyAck(ackedClock)
+        // NO_ACK_SENTINEL marks a relay-only message (peer ops, no ack to consume). The store's
+        // own outbox will get its real ack via the sender-targeted reply.
+        if (ackedClock != NO_ACK_SENTINEL) store.applyAck(ackedClock)
     }
 
     /**
@@ -190,5 +253,15 @@ abstract class AbstractWorkbenchMenu(
         val store = workbenchStore ?: return
         val document = CrdtDocument(runs.toPersistentList(), versionVector.toPersistentMap())
         store.onSnapshot(path, document)
+    }
+
+    companion object {
+        /**
+         * Wire-level sentinel for [WorkbenchOpsClientMessage.ackedClock] meaning "this message
+         * is a peer-broadcast relay, the recipient has no ack to consume from it". Picked as
+         * `Int.MIN_VALUE` because real CRDT clocks start at 0 and only grow, so the sentinel
+         * can never collide with a legitimate ack value.
+         */
+        const val NO_ACK_SENTINEL: Int = Int.MIN_VALUE
     }
 }
