@@ -94,6 +94,7 @@ class WorkbenchEditorScreen(
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.minecraft)
         screenScope = scope
         store.bind(scope, MenuWorkspaceUpdateSource(menu.workspaceStateFlow))
+        store.bindCollaboration(scope, menu.presencesFlow, menu.remoteCursorsFlow)
         store.initialize()
         menu.workbenchStore = store
         repositionInventorySlots()
