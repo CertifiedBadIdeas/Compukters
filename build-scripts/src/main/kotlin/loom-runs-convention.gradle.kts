@@ -78,21 +78,13 @@ runs.register("client2") {
     programArgs("--username", DEV_CLIENT_USERNAMES[1])
 }
 
-// Dedicated server. Equal-depth sibling of the two client dirs.
-runs.named("server") {
-    runDir("run/server")
-    applyShared()
-}
-
 // One-shot dev server: same as `server` but with a separate run dir whose
 // `eula.txt` and `server.properties` are pre-seeded by `prepareServerDev`,
 // so it boots in a single command without manual EULA / world setup. Use
 // for collaborative CRDT testing where two `runClient*` instances connect
 // to `localhost:25565`.
-runs.register("serverDev") {
-    server()
-    configName = "Minecraft Server (dev)"
-    runDir("run/serverDev")
+runs.named("server") {
+    runDir("run/server")
     applyShared()
 }
 
@@ -159,7 +151,7 @@ val prepareServerDev =
         }
     }
 
-tasks.matching { it.name == "runServerDev" }.configureEach {
+tasks.matching { it.name == "runServer" }.configureEach {
     dependsOn(prepareServerDev)
 }
 
