@@ -299,6 +299,71 @@ class ServerWorkbenchTest {
         assertFalse(cleared.target.connected)
     }
 
+    @Test
+    fun applyOpsExposesAppliedOpsForFanOut() {
+        // Phase 2: subscribers (peer menus) need the list of applied ops to relay to other
+        // collaborators. Rejected ops must NOT appear there — relaying a rejected op would
+        // diverge peers from the server replica.
+        val workspace = ComputerWorkspaceHost(createTempDirectory("server-workbench-applied"))
+        val workbench = ServerWorkbench(workspaceId = 100, workspace = workspace)
+        workbench.write("shell.ck", "")
+        workbench.openSession("shell.ck")
+
+        val author =
+            ru.lazyhat.compukterkraft.core.computer.workbench.crdt
+                .SiteId("p:client01")
+        val good =
+            ru.lazyhat.compukterkraft.core.computer.workbench.crdt.Op.Insert(
+                author = author, clock = 0, leftId = null, text = "hi",
+            )
+        // Causally invalid: targets an atom the replica has never seen.
+        val bad =
+            ru.lazyhat.compukterkraft.core.computer.workbench.crdt.Op.Delete(
+                author = author,
+                clock = 1,
+                targetId =
+                    ru.lazyhat.compukterkraft.core.computer.workbench.crdt.AtomId(
+                        ru.lazyhat.compukterkraft.core.computer.workbench.crdt
+                            .SiteId("p:ghost"),
+                        99,
+                    ),
+                length = 1,
+            )
+
+        val result = workbench.applyOps("shell.ck", listOf(good, bad), author)
+        assertNotNull(result)
+        assertEquals(listOf(good), result.applied)
+        assertTrue(result.rejectedAny)
+    }
+
+    @Test
+    fun subscribeAndUnsubscribeAreScopedPerPath() {
+        val workspace = ComputerWorkspaceHost(createTempDirectory("server-workbench-subscribe"))
+        val workbench = ServerWorkbench(workspaceId = 100, workspace = workspace)
+
+        val received = mutableListOf<Pair<String, Int>>()
+        val subA = ServerWorkbench.SessionSubscriber { p, ops -> received += "A" + p to ops.size }
+        val subB = ServerWorkbench.SessionSubscriber { p, ops -> received += "B" + p to ops.size }
+
+        workbench.subscribe("shell.ck", subA)
+        workbench.subscribe("shell.ck", subB)
+        workbench.subscribe("util.ck", subA)
+
+        // Idempotent — duplicate subscribe must not double the subscriber.
+        workbench.subscribe("shell.ck", subA)
+
+        assertEquals(setOf(subA, subB), workbench.subscribersOf("shell.ck").toSet())
+        assertEquals(listOf(subA), workbench.subscribersOf("util.ck"))
+
+        workbench.unsubscribe("shell.ck", subA)
+        assertEquals(listOf(subB), workbench.subscribersOf("shell.ck"))
+        assertEquals(listOf(subA), workbench.subscribersOf("util.ck"), "unsubscribe must be path-scoped")
+
+        workbench.unsubscribeAll(subA)
+        assertEquals(listOf(subB), workbench.subscribersOf("shell.ck"))
+        assertEquals(emptyList(), workbench.subscribersOf("util.ck"))
+    }
+
     private class FakeRuntimeBridge : WorkbenchTargetRuntimeBridge {
         val calls = mutableListOf<String>()
         private val snapshot = ScreenBuffer(16, 8, true).forceSnapshot()

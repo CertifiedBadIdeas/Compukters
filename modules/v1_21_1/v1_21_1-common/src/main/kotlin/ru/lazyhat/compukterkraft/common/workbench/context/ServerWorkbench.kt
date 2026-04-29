@@ -67,6 +67,14 @@ class ServerWorkbench(
      */
     private val replicas: ConcurrentHashMap<String, ServerCrdtReplica> = ConcurrentHashMap()
 
+    /**
+     * Per-path collaboration subscribers. Each open menu registers itself when it opens a
+     * session for [path] and unregisters on [AbstractWorkbenchMenu.removed]. The set values
+     * are wrapped via `Collections.newSetFromMap(ConcurrentHashMap)` so iteration during
+     * fan-out is concurrent-safe even when subscribers register/unregister mid-broadcast.
+     */
+    private val subscribers: ConcurrentHashMap<String, MutableSet<SessionSubscriber>> = ConcurrentHashMap()
+
     fun setTarget(stack: ItemStack) {
         updateTarget(extractTargetDescriptor(stack))
     }
@@ -222,8 +230,45 @@ class ServerWorkbench(
         return OpsApplyResult(
             ackedClock = ackedClock,
             rejectedAny = result.rejected.isNotEmpty(),
+            applied = result.applied,
         )
     }
+
+    /**
+     * Register [subscriber] to receive remote ops applied to [path] by other clients. Idempotent:
+     * subscribing the same instance twice is a no-op. Sessions are independent per-path so a
+     * subscriber may register on multiple paths.
+     */
+    fun subscribe(
+        path: String,
+        subscriber: SessionSubscriber,
+    ) {
+        subscribers
+            .computeIfAbsent(path) { java.util.Collections.newSetFromMap(ConcurrentHashMap()) }
+            .add(subscriber)
+    }
+
+    /** Remove [subscriber] from the [path] session. Safe to call when not subscribed. */
+    fun unsubscribe(
+        path: String,
+        subscriber: SessionSubscriber,
+    ) {
+        subscribers[path]?.remove(subscriber)
+    }
+
+    /**
+     * Drop [subscriber] from every path it was registered on. Called when a menu closes so
+     * one cleanup site handles every session the menu had opened.
+     */
+    fun unsubscribeAll(subscriber: SessionSubscriber) {
+        subscribers.values.forEach { it.remove(subscriber) }
+    }
+
+    /**
+     * Snapshot of subscribers currently watching [path]. The snapshot is a copy — callers may
+     * iterate freely without observing concurrent modifications.
+     */
+    fun subscribersOf(path: String): List<SessionSubscriber> = subscribers[path]?.toList().orEmpty()
 
     private fun highestClockOf(op: Op): Int =
         when (op) {
@@ -252,7 +297,23 @@ class ServerWorkbench(
     data class OpsApplyResult(
         val ackedClock: Int,
         val rejectedAny: Boolean,
+        /**
+         * Ops the replica accepted (in arrival order, with rejects filtered out). The network
+         * layer fans these out to other subscribers of the same session via [subscribersOf].
+         */
+        val applied: List<Op> = emptyList(),
     )
+
+    /**
+     * Receives ops produced by other clients sharing the same `(workbench, path)` session.
+     * Implemented by [AbstractWorkbenchMenu] to forward fanned-out ops to the owning player.
+     */
+    fun interface SessionSubscriber {
+        fun onRemoteOps(
+            path: String,
+            ops: List<Op>,
+        )
+    }
 
     data class TargetDescriptor(
         val computerId: Int? = null,
