@@ -20,9 +20,11 @@
 import net.fabricmc.loom.api.LoomGradleExtensionAPI
 import net.fabricmc.loom.configuration.ide.RunConfigSettings
 import org.gradle.kotlin.dsl.getByType
+import org.gradle.kotlin.dsl.invoke
 import java.io.ByteArrayOutputStream
 import java.io.DataOutputStream
 import java.io.File
+import java.util.UUID
 
 plugins {
     id("dev.architectury.loom")
@@ -52,6 +54,8 @@ fun RunConfigSettings.applyShared() {
     ideConfigGenerated(true)
 }
 
+private val DEV_CLIENT_USERNAMES = listOf("DevA", "DevB")
+
 val loom = extensions.getByType<LoomGradleExtensionAPI>()
 val runs = loom.runs
 
@@ -59,6 +63,7 @@ val runs = loom.runs
 runs.named("client") {
     runDir("run/client")
     applyShared()
+    programArgs("--username", DEV_CLIENT_USERNAMES[0])
 }
 
 // Second client instance for local multiplayer testing of the
@@ -70,6 +75,7 @@ runs.register("client2") {
     configName = "Minecraft Client 2"
     runDir("run/client2")
     applyShared()
+    programArgs("--username", DEV_CLIENT_USERNAMES[1])
 }
 
 // Dedicated server. Equal-depth sibling of the two client dirs.
@@ -101,6 +107,13 @@ private val DEV_SERVER_PROPERTIES =
         "spawn-protection" to "0",
         "enable-command-block" to "true",
         "sync-chunk-writes" to "false",
+        // Creative mode by default + force it on every join so dev clients
+        // always land in /gamemode creative regardless of their own state.
+        "gamemode" to "creative",
+        "force-gamemode" to "true",
+        "allow-flight" to "true",
+        "difficulty" to "peaceful",
+        "op-permission-level" to "4",
     )
 
 val prepareServerDev =
@@ -108,6 +121,7 @@ val prepareServerDev =
         val runDir = layout.projectDirectory.dir("run/serverDev")
         outputs.file(runDir.file("eula.txt"))
         outputs.file(runDir.file("server.properties"))
+        outputs.file(runDir.file("ops.json"))
         doLast {
             val dir = runDir.asFile
             dir.mkdirs()
@@ -137,6 +151,11 @@ val prepareServerDev =
                     existing.toSortedMap().forEach { (k, v) -> appendLine("$k=$v") }
                 },
             )
+            // Op every dev username so all clients have full command access
+            // out of the box. UUIDs are derived the same way the vanilla
+            // server does for offline-mode players: UUIDv3 over the bytes
+            // "OfflinePlayer:<name>".
+            seedOpsJson(dir.resolve("ops.json"))
         }
     }
 
@@ -152,6 +171,8 @@ tasks.matching { it.name == "runServerDev" }.configureEach {
 private val DEV_CLIENT_OPTIONS =
     linkedMapOf(
         "enableVsync" to "false",
+        // GUI scale 3 = ~3x default; matches the user's preferred zoom.
+        "guiScale" to "3",
         "soundCategory_master" to "0.2",
         "soundCategory_music" to "0.0",
         "soundCategory_record" to "0.0",
@@ -260,4 +281,20 @@ private fun DataOutputStream.writeNbtString(name: String, value: String) {
     writeByte(NBT_STRING)
     writeUTF(name)
     writeUTF(value)
+}
+
+private fun seedOpsJson(file: File) {
+    // Generate UUIDs the same way Mojang's offline-mode flow does:
+    // UUIDv3 derived from the bytes "OfflinePlayer:<name>".
+    val entries =
+        DEV_CLIENT_USERNAMES.joinToString(",\n") { name ->
+            val uuid = UUID.nameUUIDFromBytes("OfflinePlayer:$name".toByteArray(Charsets.UTF_8))
+            """  {
+    "uuid": "$uuid",
+    "name": "$name",
+    "level": 4,
+    "bypassesPlayerLimit": false
+  }"""
+        }
+    file.writeText("[\n$entries\n]\n")
 }
