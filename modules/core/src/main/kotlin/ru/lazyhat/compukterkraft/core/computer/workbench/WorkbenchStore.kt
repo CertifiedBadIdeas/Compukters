@@ -941,7 +941,13 @@ class WorkbenchStore(
                 // Locate the first inserted char's flat offset in `after` by scanning the new
                 // visible string. The insert atom shows up immediately to the right of leftId.
                 val insertOffset = leftAtomVisibleOffset(op.leftId, before)
-                if (insertOffset <= cursorFlat) cursorFlat + op.text.length else cursorFlat
+                // Strict inequality: a remote insert at exactly cursorFlat must NOT push our
+                // caret past the new atoms. The peer's text logically appears to the LEFT of
+                // our caret position (we were "about to type here"), so shifting would
+                // teleport us past their newline/word — e.g. typing at end-of-line right
+                // after a peer pressed Enter would suddenly land on the new line. Inserts
+                // strictly to the left of the caret still shift it forward as expected.
+                if (insertOffset < cursorFlat) cursorFlat + op.text.length else cursorFlat
             }
 
             is Op.Delete -> {
