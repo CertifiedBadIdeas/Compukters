@@ -110,7 +110,7 @@ private val DEV_SERVER_PROPERTIES =
 
 val prepareServerDev =
     tasks.register("prepareServerDev") {
-        val runDir = layout.projectDirectory.dir("run/serverDev")
+        val runDir = layout.projectDirectory.dir("run/server")
         outputs.file(runDir.file("eula.txt"))
         outputs.file(runDir.file("server.properties"))
         outputs.file(runDir.file("ops.json"))
