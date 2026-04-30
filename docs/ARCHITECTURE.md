@@ -186,7 +186,7 @@ ServerComputer.close()
 | `ck.core.computer`                 | `ComputerContext` — shared computer context                        |
 | `ck.core.computer.runtime`         | VM lifecycle, `ServerComputer` support                             |
 | `ck.core.computer.input`           | Input dispatch: `ComputerInputDispatcher`, `ServerInputHandler`    |
-| `ck.core.computer.workbench`       | IDE/workbench contracts and state                                  |
+| `ck.core.workbench`                | IDE/workbench contracts and state (Authoring Station, peer of computer) |
 
 ### `v1_x_x-common` modules
 
