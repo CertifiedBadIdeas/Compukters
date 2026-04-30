@@ -107,7 +107,7 @@ These rules are enforced by `ArchitectureBoundaryTest` in `modules/core`.
 ┌──────────────────────────────────────────▼───────────────────────────┐
 │  Server tick thread (main thread)                                    │
 │                                                                      │
-│  ServerComputer.serverTick()                                         │
+│  ServerComputer.serverTick() — implemented by RuntimeDeviceImpl     │
 │    ├─ vmHandle.requestSlice(gameTime)                                │
 │    ├─ vmHandle.drainHostCalls() → HostCallDispatcher.dispatch()      │
 │    │    └─ only filesystem ops remain (terminal writes are direct)   │
@@ -139,26 +139,31 @@ These rules are enforced by `ArchitectureBoundaryTest` in `modules/core`.
 
 ```
 BlockEntity.use()
-  └─ getOrCreateServerComputer()
-    └─ ComputerManager.getOrCreateVm()
-            └─ ServerComputer(instanceID, level, properties)
+  └─ getOrCreateRuntimeDevice()
+    └─ DeviceManager.getOrCreateVm()
+            └─ RuntimeDeviceImpl(deviceId, properties, manager, gameTime, terminalNetwork, stateSink)
+                  ↑ host ports come from BlockEntityRuntimeDeviceHost
 
-ServerComputer.turnOn()
-  ├─ ComputerWorkspaceInitializer.ensureInitialized(id)
-  ├─ ComputerManager.getOrCreateVm(id, profile, callbacks, logger)
-  │    └─ BackgroundComputerVm(id, profile, dispatcher, callbacks, logger, workspace)
+RuntimeDeviceImpl.turnOn()
+  ├─ DeviceWorkspaceInitializer.ensureInitialized(id)
+  ├─ DeviceManager.getOrCreateVm(id, profile, callbacks, logger)
+  │    └─ BackgroundDeviceVm(id, profile, dispatcher, callbacks, logger, workspace)
   │         └─ owns ScreenBuffer(width, height, colour)
-  └─ vmHandle.boot()
-       └─ load boot script → compile → scope.launch { program.run(runtime) }
+  ├─ vmHandle.boot()
+  │    └─ load boot script → compile → scope.launch { program.run(runtime) }
+  └─ stateSink.onPowerStateChanged(true)
 
-ServerComputer.serverTick()  [every game tick, 50ms]
-  ├─ vmHandle.requestSlice()
+RuntimeDeviceImpl.serverTick()  [every game tick, 50ms]
+  ├─ vmHandle.requestSlice(gameTime.gameTime())
   ├─ dispatch host calls (filesystem only)
-  ├─ syncScreen() → readScreenSnapshot() → send to watching players
+  ├─ syncScreen() → readScreenSnapshot() → publish to lastScreenSnapshot
+  ├─ flushTerminalSessions()
+  │    ├─ terminalNetwork.isSessionStillBound(uuid, containerId, deviceId)
+  │    └─ terminalNetwork.sendStdoutBytes(uuid, containerId, bytes)
   └─ check for stop/crash/reboot
 
-ServerComputer.close()
-  └─ ComputerManager.removeVm() → vmHandle.stop()
+RuntimeDeviceImpl.close()
+  └─ DeviceManager.removeVm() → vmHandle.stop()
 ```
 
 ---
@@ -184,7 +189,7 @@ ServerComputer.close()
 | `compukterkraft.core.platform.api`             | Port interfaces: `PlatformBlockRegistrar`, `PlatformMenuRegistrar` |
 | `compukterkraft.core.block`                    | `DeviceFamily` enum (pure Kotlin, no MC deps)                      |
 | `compukterkraft.core.computer`                 | `ComputerContext` — shared computer context                        |
-| `compukterkraft.core.computer.runtime`         | VM lifecycle, `ServerComputer` support                             |
+| `compukterkraft.core.computer.runtime`         | `RuntimeDevice` (umbrella + role interfaces), `RuntimeDeviceImpl`, `DeviceManager`, host ports (`GameTimeSource`, `TerminalNetworkBridge`, `DeviceStateSink`) |
 | `compukterkraft.core.computer.input`           | Input dispatch: `ComputerInputDispatcher`, `ServerInputHandler`    |
 | `compukterkraft.core.workbench`                | IDE/workbench contracts and state (Authoring Station, peer of computer) |
 
@@ -199,7 +204,7 @@ ServerComputer.close()
 | `compukterkraft.common.computer.menu`             | `AbstractComputerMenu`, `ComputerMenu`, `ServerInputState`         |
 | `compukterkraft.common.computer.screen`           | `ComputerScreen`, `ComputerTerminalScreen`                         |
 | `compukterkraft.common.computer.input`            | Computer input binding                                             |
-| `compukterkraft.common.computer.context`          | `ServerContext`, `ComputerManager`, `ComputerIdentitySavedData`    |
+| `compukterkraft.common.computer.context`          | `ServerContext`, `ComputerIdentitySavedData`, `BlockEntityRuntimeDeviceHost` (port adapter) |
 | `compukterkraft.common.computer.data`             | `ComputerContainerData`, `IContainerData`                          |
 | `compukterkraft.common.computer.loot`             | Loot functions and conditions                                      |
 | `compukterkraft.common.computer.network.server`   | Server-bound computer network messages                             |
@@ -229,38 +234,51 @@ ServerComputer.close()
 
 ## Key Classes
 
-### `BackgroundComputerVm`
+### `BackgroundDeviceVm`
 
 The main VM host. Runs the compiled program on a background coroutine dispatcher.
 
 - **Thread model:** One coroutine per computer. The VM coroutine writes to `ScreenBuffer` directly (no HostCall roundtrip for terminal I/O). The server tick thread reads snapshots via `ScreenBuffer.snapshot()`.
 - **Scheduling:** Each tick, the server calls `requestSlice()` which sends a permit through a `Channel`. The VM coroutine suspends at scheduling points when it exhausts its CPU budget.
-- **Lifecycle:** Created by `ComputerManager`, booted by `ServerComputer`, stopped with `stop(reason)`.
+- **Lifecycle:** Created by `DeviceManager`, booted by `RuntimeDeviceImpl`, stopped with `stop(reason)`.
 
-### `ComputerManager`
+### `DeviceManager`
 
-Server-wide singleton that manages all active computers and their VMs.
+Server-wide singleton (held by `ServerContext.deviceManager`) that manages all active runtime devices and their VMs.
 
-- Maintains the registry of active `ServerComputer` instances.
-- Delegates VM-handle lifecycle and shared workspace/IDE access to `ComputerVmSupervisor`.
+- Maintains the registry of active `RuntimeDevice` instances (typed on the interface, not the impl).
+- Delegates VM-handle lifecycle and shared workspace/IDE access to `DeviceVmSupervisor`.
 - Provides `getOrCreateVm()`, `removeVm()`, `ensureWorkspaceInitialized()`, `add()`, and `remove()`.
+
+### `RuntimeDevice` and `RuntimeDeviceImpl`
+
+Platform-neutral runtime-device contract and its canonical implementation, both living in `:core/.../computer/runtime/`.
+
+- `RuntimeDevice` is the umbrella interface composed from five role interfaces: `RuntimeDeviceLifecycle`, `RuntimeDeviceInput` (extends `DeviceEvents.Receiver`), `RuntimeDeviceScreen`, `RuntimeDeviceTerminalSessions`, `RuntimeDeviceMetadata`. Future minimal carriers (e.g. Pocket without terminal sessions) can implement a narrower subset.
+- `RuntimeDeviceImpl` orchestrates the VM lifecycle: each game tick it requests a VM slice, dispatches host calls, syncs the latest screen snapshot, and flushes per-player terminal sessions. Reboot/shutdown/crash state transitions are handled here.
+- All world-side interactions are abstracted via three narrow host ports — `GameTimeSource`, `TerminalNetworkBridge`, `DeviceStateSink` — so the impl has zero Minecraft imports.
+
+### Host ports (`:core/.../computer/runtime/ports/`)
+
+The ports decouple `RuntimeDeviceImpl` from Minecraft:
+
+- **`GameTimeSource`** — `gameTime(): Long`. Replaces `ServerLevel.gameTime`.
+- **`TerminalNetworkBridge`** — `isSessionStillBound(playerUuid, containerId, deviceId)` and `sendStdoutBytes(playerUuid, containerId, bytes)`. Replaces direct `MinecraftServer.playerList` lookups, `ContainerMenu` validity checks, and `ServerNetworking.sendToPlayer(StdoutBytesClientMessage(...))`.
+- **`DeviceStateSink`** — `onPowerStateChanged(isOn)`. Used by the impl to notify the carrier (block entity) so it can update its block state property.
+
+In `:v1_21_1-common`, `BlockEntityRuntimeDeviceHost` implements all three ports against an `AbstractComputerBlockEntity` + `ServerLevel`. The detached-computer path inside `WorkbenchBlockEntity` provides its own no-op terminal/state ports.
 
 ### `ServerComputer`
 
-Server-side representation of one computer instance. Orchestrates the VM lifecycle.
-
-- Each game tick it requests a VM slice, dispatches host calls, and synchronizes the latest screen snapshot.
-- Reads `ScreenBufferSnapshot` and sends it to watching players.
-- Dispatches filesystem HostCalls through `HostCallDispatcher`.
-- Handles reboot/shutdown/crash state transitions.
+The historical name for `RuntimeDeviceImpl`. Renamed in Phase 2b; the class no longer exists under that name.
 
 ### `ScreenBuffer`
-
-Flat character grid (`CharArray` + `ByteArray` colours) owned by `BackgroundComputerVm`.
 
 - **Writer:** VM coroutine calls `write()`, `printLine()`, `clear()`, `setCursor()`, `scroll()`.
 - **Reader:** Server tick thread calls `snapshot()` — atomic dirty-flag check + synchronized copy.
 - **No HostCall roundtrip** for terminal writes — mutable state lives in the VM, read-only access from the server thread.
+
+Flat character grid (`CharArray` + `ByteArray` colours) owned by `BackgroundDeviceVm`.
 
 ### `WorkbenchStore`
 
