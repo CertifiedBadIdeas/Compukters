@@ -19,7 +19,7 @@
 
 package ru.lazyhat.compukterkraft.lang.runtime
 
-enum class ComputerCapability {
+enum class DeviceCapability {
     TERMINAL,
     FILESYSTEM,
     EVENTS,
@@ -29,33 +29,33 @@ enum class ComputerCapability {
     IDE,
 }
 
-data class ComputerCpuResources(
+data class DeviceCpuResources(
     val instructionsPerSlice: Int = 64,
     val wallTimeGuardNanosPerSlice: Long,
 )
 
-data class ComputerMemoryResources(
+data class DeviceMemoryResources(
     val vmRamBytes: Long = Long.MAX_VALUE,
 )
 
-data class ComputerStorageResources(
+data class DeviceStorageResources(
     val programRomBytes: Long = Long.MAX_VALUE,
     val diskBytes: Long = Long.MAX_VALUE,
 )
 
-data class ComputerQueueResources(
+data class DeviceQueueResources(
     val eventQueueSlots: Int,
     val hostCallQueueSlots: Int = eventQueueSlots,
 )
 
-data class ComputerResources(
-    val cpu: ComputerCpuResources,
-    val memory: ComputerMemoryResources = ComputerMemoryResources(),
-    val storage: ComputerStorageResources = ComputerStorageResources(),
-    val queues: ComputerQueueResources,
+data class DeviceResources(
+    val cpu: DeviceCpuResources,
+    val memory: DeviceMemoryResources = DeviceMemoryResources(),
+    val storage: DeviceStorageResources = DeviceStorageResources(),
+    val queues: DeviceQueueResources,
 )
 
-data class ComputerProfile(
+data class DeviceProfile(
     val id: String,
     val displayName: String,
     val cpuBudgetNanosPerSlice: Long,
@@ -63,12 +63,12 @@ data class ComputerProfile(
     val terminalWidth: Int,
     val terminalHeight: Int,
     val colorTerminal: Boolean,
-    val allowedCapabilities: Set<ComputerCapability> = ComputerCapability.entries.toSet(),
-    val bootScriptName: String = ComputerProgramFiles.BIOS_SCRIPT_NAME,
-    val resources: ComputerResources =
-        ComputerResources(
-            cpu = ComputerCpuResources(wallTimeGuardNanosPerSlice = cpuBudgetNanosPerSlice),
-            queues = ComputerQueueResources(eventQueueSlots = maxEventQueueSize),
+    val allowedCapabilities: Set<DeviceCapability> = DeviceCapability.entries.toSet(),
+    val bootScriptName: String = DeviceProgramFiles.BIOS_SCRIPT_NAME,
+    val resources: DeviceResources =
+        DeviceResources(
+            cpu = DeviceCpuResources(wallTimeGuardNanosPerSlice = cpuBudgetNanosPerSlice),
+            queues = DeviceQueueResources(eventQueueSlots = maxEventQueueSize),
         ),
 )
 
@@ -111,7 +111,7 @@ data class VmEvent(
 
 data class VmSnapshot(
     val computerId: Int,
-    val profile: ComputerProfile,
+    val profile: DeviceProfile,
     val state: VmState,
     val currentTick: Long,
     val queuedEvents: Int,
@@ -172,9 +172,9 @@ sealed interface HostResult {
     ) : HostResult
 }
 
-interface ComputerVmHandle : AutoCloseable {
+interface DeviceVmHandle : AutoCloseable {
     val computerId: Int
-    val profile: ComputerProfile
+    val profile: DeviceProfile
 
     fun boot(): Boolean
 
@@ -205,7 +205,7 @@ interface ComputerVmHandle : AutoCloseable {
 }
 
 interface VmSupervisor : AutoCloseable {
-    fun get(computerId: Int): ComputerVmHandle?
+    fun get(computerId: Int): DeviceVmHandle?
 
     fun remove(
         computerId: Int,

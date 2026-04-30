@@ -26,14 +26,14 @@ import ru.lazyhat.compukterkraft.core.computer.vm.BackgroundComputerVm
 import ru.lazyhat.compukterkraft.core.computer.vm.ComputerVmLogger
 import ru.lazyhat.compukterkraft.core.computer.vm.ComputerVmSupervisor
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerIdeHost
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerProfile
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceProfile
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.VmStopReason
 import java.io.Closeable
 
 /**
  * Unified registry that owns both the [ServerComputer] instances and the
- * underlying [ComputerVmHandle] objects.
+ * underlying [DeviceVmHandle] objects.
  *
  * Provides a single entry point for computer and VM lifecycle management.
  */
@@ -66,7 +66,7 @@ class ComputerManager(
 
     fun getOrCreateVm(
         computerId: Int,
-        profile: ComputerProfile,
+        profile: DeviceProfile,
         labelProvider: () -> String?,
         logger: ComputerVmLogger,
     ): BackgroundComputerVm = vmSupervisor.getOrCreate(computerId, profile, labelProvider, logger)

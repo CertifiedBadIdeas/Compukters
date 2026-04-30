@@ -22,11 +22,11 @@ import kotlinx.coroutines.flow.StateFlow
 import ru.lazyhat.compukterkraft.common.network.ClientNetworking
 import ru.lazyhat.compukterkraft.common.workbench.menu.AbstractWorkbenchMenu
 import ru.lazyhat.compukterkraft.common.workbench.network.server.WorkbenchWorkspaceServerMessage
-import ru.lazyhat.compukterkraft.core.block.ComputerFamily
+import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 import ru.lazyhat.compukterkraft.core.computer.input.ComputerControlAction
 import ru.lazyhat.compukterkraft.core.computer.input.ControlInputEvent
 import ru.lazyhat.compukterkraft.core.computer.input.InputEventSink
-import ru.lazyhat.compukterkraft.core.computer.vm.ComputerProfileRegistry
+import ru.lazyhat.compukterkraft.core.computer.vm.DeviceProfileRegistry
 import ru.lazyhat.compukterkraft.core.workbench.TargetControlGateway
 import ru.lazyhat.compukterkraft.core.workbench.IdeRuntimeCatalogSource
 import ru.lazyhat.compukterkraft.core.workbench.WorkbenchIdeFacade
@@ -40,7 +40,7 @@ import ru.lazyhat.compukterkraft.lang.frontend.LanguageBuiltins
 import ru.lazyhat.compukterkraft.lang.frontend.LanguageFrontend
 import ru.lazyhat.compukterkraft.lang.frontend.LanguageIde
 import ru.lazyhat.compukterkraft.lang.runtime.CompletionItem
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerCapability
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceCapability
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerIdeSnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceDocument
 import ru.lazyhat.compukterkraft.lang.runtime.DefinitionTarget
@@ -143,22 +143,22 @@ class NetworkWorkbenchControlGateway(
 }
 
 class ComputerFamilyCatalogSource(
-    private val family: ComputerFamily,
+    private val family: DeviceFamily,
 ) : IdeRuntimeCatalogSource {
     override fun runtimeRegistry(): BuiltinRegistry {
-        val profile = ComputerProfileRegistry.forFamily(family)
+        val profile = DeviceProfileRegistry.forFamily(family)
         val defaultRegistry = LanguageBuiltins.defaultRuntimeRegistry
         val modules =
             buildList {
                 defaultRegistry.module("terminal")?.let(::add)
                 defaultRegistry.module("system")?.let(::add)
-                if (ComputerCapability.FILESYSTEM in profile.allowedCapabilities) {
+                if (DeviceCapability.FILESYSTEM in profile.allowedCapabilities) {
                     defaultRegistry.module("filesystem")?.let(::add)
                 }
-                if (ComputerCapability.EVENTS in profile.allowedCapabilities) {
+                if (DeviceCapability.EVENTS in profile.allowedCapabilities) {
                     defaultRegistry.module("events")?.let(::add)
                 }
-                if (ComputerCapability.SYSTEM in profile.allowedCapabilities) {
+                if (DeviceCapability.SYSTEM in profile.allowedCapabilities) {
                     defaultRegistry.module("process")?.let(::add)
                     defaultRegistry.module("strings")?.let(::add)
                 }
@@ -178,8 +178,8 @@ class WorkbenchTargetCatalogSource(
     override fun runtimeRegistry(): BuiltinRegistry {
         val family =
             targetState.familyId
-                ?.let { familyId -> ComputerFamily.entries.firstOrNull { it.name.equals(familyId, ignoreCase = true) } }
-                ?: ComputerFamily.NORMAL
+                ?.let { familyId -> DeviceFamily.entries.firstOrNull { it.name.equals(familyId, ignoreCase = true) } }
+                ?: DeviceFamily.NORMAL
         return ComputerFamilyCatalogSource(family).runtimeRegistry()
     }
 }

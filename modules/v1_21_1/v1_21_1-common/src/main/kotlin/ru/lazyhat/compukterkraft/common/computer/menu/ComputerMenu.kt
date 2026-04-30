@@ -18,7 +18,7 @@
  */
 package ru.lazyhat.compukterkraft.common.computer.menu
 
-import ru.lazyhat.compukterkraft.core.block.ComputerFamily
+import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 
 /**
  * An instance of [AbstractContainerMenu] which provides a computer. You should implement this if you provide
@@ -33,7 +33,7 @@ interface ComputerMenu {
     val side: MenuSide
 
     /** The computer family. */
-    val family: ComputerFamily
+    val family: DeviceFamily
 
     /**
      * Convenience accessor for the server side.

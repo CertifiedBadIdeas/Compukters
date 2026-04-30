@@ -20,20 +20,20 @@
 package ru.lazyhat.compukterkraft.core.computer.vm
 
 import ru.lazyhat.compukterkraft.core.Config
-import ru.lazyhat.compukterkraft.core.block.ComputerFamily
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerCapability
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerCpuResources
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerMemoryResources
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerProfile
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerQueueResources
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerResources
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerStorageResources
+import ru.lazyhat.compukterkraft.core.block.DeviceFamily
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceCapability
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceCpuResources
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceMemoryResources
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceProfile
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceQueueResources
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceResources
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceStorageResources
 
-object ComputerProfileRegistry {
-    fun forFamily(family: ComputerFamily): ComputerProfile =
+object DeviceProfileRegistry {
+    fun forFamily(family: DeviceFamily): DeviceProfile =
         when (family) {
-            ComputerFamily.NORMAL -> {
-                ComputerProfile(
+            DeviceFamily.NORMAL -> {
+                DeviceProfile(
                     id = "normal",
                     displayName = "Normal Computer",
                     cpuBudgetNanosPerSlice = 1_000_000,
@@ -52,8 +52,8 @@ object ComputerProfileRegistry {
                 )
             }
 
-            ComputerFamily.ADVANCED -> {
-                ComputerProfile(
+            DeviceFamily.ADVANCED -> {
+                DeviceProfile(
                     id = "advanced",
                     displayName = "Advanced Computer",
                     cpuBudgetNanosPerSlice = 2_000_000,
@@ -72,8 +72,8 @@ object ComputerProfileRegistry {
                 )
             }
 
-            ComputerFamily.COMMAND -> {
-                ComputerProfile(
+            DeviceFamily.COMMAND -> {
+                DeviceProfile(
                     id = "command",
                     displayName = "Command Computer",
                     cpuBudgetNanosPerSlice = 4_000_000,
@@ -81,7 +81,7 @@ object ComputerProfileRegistry {
                     terminalWidth = Config.DEFAULT_COMPUTER_TERM_WIDTH,
                     terminalHeight = Config.DEFAULT_COMPUTER_TERM_HEIGHT,
                     colorTerminal = true,
-                    allowedCapabilities = defaultCapabilities() + ComputerCapability.REDSTONE + ComputerCapability.PERIPHERALS,
+                    allowedCapabilities = defaultCapabilities() + DeviceCapability.REDSTONE + DeviceCapability.PERIPHERALS,
                     resources =
                         defaultResources(
                             instructionsPerSlice = 256,
@@ -98,25 +98,25 @@ object ComputerProfileRegistry {
         wallTimeGuardNanosPerSlice: Long,
         eventQueueSlots: Int,
         diskBytes: Long,
-    ): ComputerResources =
-        ComputerResources(
+    ): DeviceResources =
+        DeviceResources(
             cpu =
-                ComputerCpuResources(
+                DeviceCpuResources(
                     instructionsPerSlice = instructionsPerSlice,
                     wallTimeGuardNanosPerSlice = wallTimeGuardNanosPerSlice,
                 ),
-            memory = ComputerMemoryResources(),
-            storage = ComputerStorageResources(diskBytes = diskBytes),
-            queues = ComputerQueueResources(eventQueueSlots = eventQueueSlots, hostCallQueueSlots = eventQueueSlots),
+            memory = DeviceMemoryResources(),
+            storage = DeviceStorageResources(diskBytes = diskBytes),
+            queues = DeviceQueueResources(eventQueueSlots = eventQueueSlots, hostCallQueueSlots = eventQueueSlots),
         )
 
-    private fun defaultCapabilities(): Set<ComputerCapability> =
+    private fun defaultCapabilities(): Set<DeviceCapability> =
         setOf(
-            ComputerCapability.TERMINAL,
-            ComputerCapability.FILESYSTEM,
-            ComputerCapability.EVENTS,
-            ComputerCapability.SYSTEM,
-            ComputerCapability.IDE,
+            DeviceCapability.TERMINAL,
+            DeviceCapability.FILESYSTEM,
+            DeviceCapability.EVENTS,
+            DeviceCapability.SYSTEM,
+            DeviceCapability.IDE,
         )
 
     private const val NORMAL_COMPUTER_EXTRA_HEIGHT: Int = 2

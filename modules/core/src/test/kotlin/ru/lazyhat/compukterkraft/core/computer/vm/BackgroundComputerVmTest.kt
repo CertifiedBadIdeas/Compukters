@@ -26,13 +26,13 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import ru.lazyhat.compukterkraft.core.computer.runtime.test.runtimeProfile
 import ru.lazyhat.compukterkraft.core.computer.runtime.test.runtimeTestWorkspace
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerCapability
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerCpuResources
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerMemoryResources
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerProfile
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerQueueResources
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerResources
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerStorageResources
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceCapability
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceCpuResources
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceMemoryResources
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceProfile
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceQueueResources
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceResources
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceStorageResources
 import ru.lazyhat.compukterkraft.lang.runtime.VmState
 import ru.lazyhat.compukterkraft.lang.runtime.VmStopReason
 import kotlin.io.path.createTempDirectory
@@ -85,7 +85,7 @@ class BackgroundComputerVmTest {
             workspace.writeDocument(1, "bios.ck", "fun main() { }")
 
             val profile =
-                ComputerProfile(
+                DeviceProfile(
                     id = "tiny-rom",
                     displayName = "Tiny ROM",
                     cpuBudgetNanosPerSlice = 1_000_000,
@@ -93,13 +93,13 @@ class BackgroundComputerVmTest {
                     terminalWidth = 16,
                     terminalHeight = 8,
                     colorTerminal = true,
-                    allowedCapabilities = setOf(ComputerCapability.TERMINAL, ComputerCapability.SYSTEM),
+                    allowedCapabilities = setOf(DeviceCapability.TERMINAL, DeviceCapability.SYSTEM),
                     resources =
-                        ComputerResources(
-                            cpu = ComputerCpuResources(wallTimeGuardNanosPerSlice = 1_000_000),
-                            memory = ComputerMemoryResources(),
-                            storage = ComputerStorageResources(programRomBytes = 1, diskBytes = 1024),
-                            queues = ComputerQueueResources(eventQueueSlots = 16, hostCallQueueSlots = 16),
+                        DeviceResources(
+                            cpu = DeviceCpuResources(wallTimeGuardNanosPerSlice = 1_000_000),
+                            memory = DeviceMemoryResources(),
+                            storage = DeviceStorageResources(programRomBytes = 1, diskBytes = 1024),
+                            queues = DeviceQueueResources(eventQueueSlots = 16, hostCallQueueSlots = 16),
                         ),
                 )
 
@@ -144,7 +144,7 @@ class BackgroundComputerVmTest {
             workspace.writeDocument(1, "bios.ck", "import filesystem;\nfun main() {}")
 
             val profile =
-                ComputerProfile(
+                DeviceProfile(
                     id = "terminal-only",
                     displayName = "Terminal Only",
                     cpuBudgetNanosPerSlice = 1_000_000,
@@ -152,13 +152,13 @@ class BackgroundComputerVmTest {
                     terminalWidth = 16,
                     terminalHeight = 8,
                     colorTerminal = true,
-                    allowedCapabilities = setOf(ComputerCapability.TERMINAL, ComputerCapability.SYSTEM),
+                    allowedCapabilities = setOf(DeviceCapability.TERMINAL, DeviceCapability.SYSTEM),
                     resources =
-                        ComputerResources(
-                            cpu = ComputerCpuResources(wallTimeGuardNanosPerSlice = 1_000_000),
-                            memory = ComputerMemoryResources(),
-                            storage = ComputerStorageResources(programRomBytes = 4096, diskBytes = 1024),
-                            queues = ComputerQueueResources(eventQueueSlots = 16, hostCallQueueSlots = 16),
+                        DeviceResources(
+                            cpu = DeviceCpuResources(wallTimeGuardNanosPerSlice = 1_000_000),
+                            memory = DeviceMemoryResources(),
+                            storage = DeviceStorageResources(programRomBytes = 4096, diskBytes = 1024),
+                            queues = DeviceQueueResources(eventQueueSlots = 16, hostCallQueueSlots = 16),
                         ),
                 )
 

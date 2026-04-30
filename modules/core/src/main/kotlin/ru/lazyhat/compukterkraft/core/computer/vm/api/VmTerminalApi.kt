@@ -21,11 +21,11 @@ package ru.lazyhat.compukterkraft.core.computer.vm.api
 
 import ru.lazyhat.compukterkraft.core.computer.vm.TerminalLineReader
 import ru.lazyhat.compukterkraft.core.computer.vm.VmContext
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerStdioApi
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerTerminalApi
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceStdioApi
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceTerminalApi
 
 /**
- * Terminal API routed entirely through the [ComputerStdioApi] byte stream.
+ * Terminal API routed entirely through the [DeviceStdioApi] byte stream.
  *
  * Every operation emits VT-100 escape sequences; the server-side ScreenBuffer
  * (consumed internally by the broadcaster to serve the legacy Workbench snapshot
@@ -36,10 +36,10 @@ import ru.lazyhat.compukterkraft.lang.runtime.ComputerTerminalApi
  * coords. Production wires this to [ComputerStdioBroadcaster.cursor].
  */
 class VmTerminalApi(
-    private val stdio: ComputerStdioApi,
+    private val stdio: DeviceStdioApi,
     private val cursorProvider: () -> Pair<Int, Int>,
     private val ctx: VmContext,
-) : ComputerTerminalApi {
+) : DeviceTerminalApi {
     override fun write(text: String) {
         stdio.writeString(text)
     }

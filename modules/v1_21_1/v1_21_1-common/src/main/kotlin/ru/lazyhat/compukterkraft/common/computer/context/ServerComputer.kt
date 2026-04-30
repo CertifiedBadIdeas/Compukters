@@ -36,10 +36,10 @@ import ru.lazyhat.compukterkraft.core.computer.ComputerEvents
 import ru.lazyhat.compukterkraft.core.computer.ComputerProperties
 import ru.lazyhat.compukterkraft.core.computer.runtime.HostCallDispatcher
 import ru.lazyhat.compukterkraft.core.computer.vm.BackgroundComputerVm
-import ru.lazyhat.compukterkraft.core.computer.vm.ComputerProfileRegistry
+import ru.lazyhat.compukterkraft.core.computer.vm.DeviceProfileRegistry
 import ru.lazyhat.compukterkraft.core.computer.vm.ComputerVmLogger
 import ru.lazyhat.compukterkraft.core.computer.vm.api.ComputerStdioBroadcaster
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerVmHandle
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceVmHandle
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.VmEvent
 import ru.lazyhat.compukterkraft.lang.runtime.VmState
@@ -51,7 +51,7 @@ import java.util.concurrent.ConcurrentLinkedQueue
 /**
  * Server-side representation of a single computer instance.
  *
- * Owns the [ComputerVmHandle] and orchestrates the VM lifecycle:
+ * Owns the [DeviceVmHandle] and orchestrates the VM lifecycle:
  * boot → tick → sync screen → detect stop/crash/reboot.
  *
  * Terminal output is read from the VM's [ScreenBuffer] as an immutable
@@ -63,7 +63,7 @@ class ServerComputer(
     properties: ComputerProperties,
 ) : ComputerEvents.Receiver {
     val family = properties.family
-    private val profile = ComputerProfileRegistry.forFamily(family)
+    private val profile = DeviceProfileRegistry.forFamily(family)
 
     private val logger = ComputerVmLogger { message -> LOGGER.info { message } }
     private var label: String? = properties.label
@@ -217,7 +217,7 @@ class ServerComputer(
 
     // ── Internal ────────────────────────────────────────────────────
 
-    private fun syncScreen(handle: ComputerVmHandle) {
+    private fun syncScreen(handle: DeviceVmHandle) {
         val snapshot = handle.readScreenSnapshot() ?: return
         screenSnapshot.value = snapshot
         // Legacy client-bound ComputerTerminalClientMessage broadcast was removed

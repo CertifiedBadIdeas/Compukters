@@ -16,10 +16,19 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-package ru.lazyhat.compukterkraft.core.block
 
-enum class ComputerFamily {
-    NORMAL,
-    ADVANCED,
-    COMMAND,
+package ru.lazyhat.compukterkraft.lang.runtime
+
+/**
+ * Byte-stream I/O between the VM and attached terminals.
+ *
+ * Epic 1 exposes output only ([writeString]); input and an "attached terminal
+ * count" signal are reserved for Epic 2 (network split).
+ *
+ * Data is a stream of VT-100-style bytes (UTF-16 chars at the Kotlin boundary).
+ * In Epic 1 the server-side implementation pipes bytes through a VtParser into
+ * the existing ScreenBuffer; later epics fan-out to multiple network sessions.
+ */
+interface DeviceStdioApi {
+    fun writeString(text: String)
 }

@@ -19,7 +19,7 @@
 package ru.lazyhat.compukterkraft.lang.runtime
 
 internal class RuntimeHostBridge(
-    private val runtime: ComputerRuntime,
+    private val runtime: DeviceRuntime,
 ) {
     suspend fun invoke(
         moduleName: String,
@@ -231,13 +231,13 @@ internal class RuntimeHostBridge(
     private fun ensureCapability(moduleName: String) {
         val capability =
             when (moduleName) {
-                "filesystem" -> ComputerCapability.FILESYSTEM
-                "system" -> ComputerCapability.SYSTEM
-                "terminal" -> ComputerCapability.TERMINAL
-                "stdout" -> ComputerCapability.TERMINAL
-                "events" -> ComputerCapability.EVENTS
-                "process" -> ComputerCapability.SYSTEM
-                "monitor" -> ComputerCapability.PERIPHERALS
+                "filesystem" -> DeviceCapability.FILESYSTEM
+                "system" -> DeviceCapability.SYSTEM
+                "terminal" -> DeviceCapability.TERMINAL
+                "stdout" -> DeviceCapability.TERMINAL
+                "events" -> DeviceCapability.EVENTS
+                "process" -> DeviceCapability.SYSTEM
+                "monitor" -> DeviceCapability.PERIPHERALS
                 else -> null
             }
         if (capability != null && capability !in runtime.profile.allowedCapabilities) {

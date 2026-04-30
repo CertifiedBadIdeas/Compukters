@@ -89,8 +89,8 @@ sealed interface VmSignal {
 
 class BytecodeComputerProgram(
     private val module: BytecodeModule,
-) : ComputerProgram {
-    override suspend fun run(runtime: ComputerRuntime) {
+) : DeviceProgram {
+    override suspend fun run(runtime: DeviceRuntime) {
         val bridge = RuntimeHostBridge(runtime)
         val vm =
             BytecodeVirtualMachine(

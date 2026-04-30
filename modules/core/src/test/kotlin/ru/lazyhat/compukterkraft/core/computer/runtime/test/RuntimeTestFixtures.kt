@@ -19,13 +19,13 @@
 package ru.lazyhat.compukterkraft.core.computer.runtime.test
 
 import ru.lazyhat.compukterkraft.core.computer.vm.ComputerWorkspaceHost
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerCapability
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerCpuResources
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerMemoryResources
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerProfile
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerQueueResources
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerResources
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerStorageResources
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceCapability
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceCpuResources
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceMemoryResources
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceProfile
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceQueueResources
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceResources
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceStorageResources
 import java.nio.file.Path
 import kotlin.io.path.createDirectories
 import kotlin.io.path.createTempDirectory
@@ -55,16 +55,16 @@ fun runtimeProfile(
     displayName: String = "Test",
     programRomBytes: Long = 4096,
     diskBytes: Long = 1024,
-    allowedCapabilities: Set<ComputerCapability> =
+    allowedCapabilities: Set<DeviceCapability> =
         setOf(
-            ComputerCapability.TERMINAL,
-            ComputerCapability.FILESYSTEM,
-            ComputerCapability.EVENTS,
-            ComputerCapability.SYSTEM,
-            ComputerCapability.IDE,
+            DeviceCapability.TERMINAL,
+            DeviceCapability.FILESYSTEM,
+            DeviceCapability.EVENTS,
+            DeviceCapability.SYSTEM,
+            DeviceCapability.IDE,
         ),
-): ComputerProfile =
-    ComputerProfile(
+): DeviceProfile =
+    DeviceProfile(
         id = id,
         displayName = displayName,
         cpuBudgetNanosPerSlice = 1_000_000,
@@ -74,11 +74,11 @@ fun runtimeProfile(
         colorTerminal = true,
         allowedCapabilities = allowedCapabilities,
         resources =
-            ComputerResources(
-                cpu = ComputerCpuResources(wallTimeGuardNanosPerSlice = 1_000_000),
-                memory = ComputerMemoryResources(),
-                storage = ComputerStorageResources(programRomBytes = programRomBytes, diskBytes = diskBytes),
-                queues = ComputerQueueResources(eventQueueSlots = 16, hostCallQueueSlots = 16),
+            DeviceResources(
+                cpu = DeviceCpuResources(wallTimeGuardNanosPerSlice = 1_000_000),
+                memory = DeviceMemoryResources(),
+                storage = DeviceStorageResources(programRomBytes = programRomBytes, diskBytes = diskBytes),
+                queues = DeviceQueueResources(eventQueueSlots = 16, hostCallQueueSlots = 16),
             ),
     )
 

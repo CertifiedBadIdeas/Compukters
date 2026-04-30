@@ -35,17 +35,17 @@ import ru.lazyhat.compukterkraft.common.utils.computerID
 import ru.lazyhat.compukterkraft.common.utils.computerLabel
 import ru.lazyhat.compukterkraft.common.utils.ifServerSide
 import ru.lazyhat.compukterkraft.common.utils.updateBlock
-import ru.lazyhat.compukterkraft.core.block.ComputerFamily
+import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 
 abstract class AbstractComputerBlockEntity(
     type: BlockEntityType<out AbstractComputerBlockEntity>,
     pos: BlockPos,
     state: BlockState,
-    family: ComputerFamily,
+    family: DeviceFamily,
 ) : BlockEntity(type, pos, state),
     Nameable,
     MenuConstructor {
-    var family: ComputerFamily = family
+    var family: DeviceFamily = family
         private set
     private var _label: String? = null
     private var _computerID: Int? = null
