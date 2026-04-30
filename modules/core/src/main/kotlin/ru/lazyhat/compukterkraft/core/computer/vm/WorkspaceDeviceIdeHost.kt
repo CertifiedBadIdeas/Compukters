@@ -29,7 +29,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.DeviceIdeHost
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceIdeSnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspace
 
-class WorkspaceComputerIdeHost(
+class WorkspaceDeviceIdeHost(
     private val workspace: DeviceWorkspace,
 ) : DeviceIdeHost {
     override fun snapshot(
