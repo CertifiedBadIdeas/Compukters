@@ -25,7 +25,7 @@ import ru.lazyhat.compukterkraft.common.computer.item.ComputerItem
 import ru.lazyhat.compukterkraft.common.utils.computerDataTagCopy
 import ru.lazyhat.compukterkraft.common.utils.computerFamilyId
 import ru.lazyhat.compukterkraft.common.utils.computerID
-import ru.lazyhat.compukterkraft.core.block.ComputerFamily
+import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 import ru.lazyhat.compukterkraft.core.computer.ComputerEvents
 import ru.lazyhat.compukterkraft.core.computer.input.InputEvent
 import ru.lazyhat.compukterkraft.core.workbench.EditorPresence
@@ -419,7 +419,7 @@ class ServerWorkbench(
 
             val familyId =
                 storedFamilyId ?: when (stack.item) {
-                    is ComputerItem -> ComputerFamily.ADVANCED.name.lowercase()
+                    is ComputerItem -> DeviceFamily.ADVANCED.name.lowercase()
                     else -> null
                 }
 

@@ -20,7 +20,7 @@
 package ru.lazyhat.compukterkraft.core.computer.vm
 
 import ru.lazyhat.compukterkraft.core.Config
-import ru.lazyhat.compukterkraft.core.block.ComputerFamily
+import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceCapability
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceCpuResources
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceMemoryResources
@@ -30,9 +30,9 @@ import ru.lazyhat.compukterkraft.lang.runtime.DeviceResources
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceStorageResources
 
 object ComputerProfileRegistry {
-    fun forFamily(family: ComputerFamily): DeviceProfile =
+    fun forFamily(family: DeviceFamily): DeviceProfile =
         when (family) {
-            ComputerFamily.NORMAL -> {
+            DeviceFamily.NORMAL -> {
                 DeviceProfile(
                     id = "normal",
                     displayName = "Normal Computer",
@@ -52,7 +52,7 @@ object ComputerProfileRegistry {
                 )
             }
 
-            ComputerFamily.ADVANCED -> {
+            DeviceFamily.ADVANCED -> {
                 DeviceProfile(
                     id = "advanced",
                     displayName = "Advanced Computer",
@@ -72,7 +72,7 @@ object ComputerProfileRegistry {
                 )
             }
 
-            ComputerFamily.COMMAND -> {
+            DeviceFamily.COMMAND -> {
                 DeviceProfile(
                     id = "command",
                     displayName = "Command Computer",

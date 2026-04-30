@@ -22,7 +22,7 @@ import kotlinx.coroutines.flow.StateFlow
 import ru.lazyhat.compukterkraft.common.network.ClientNetworking
 import ru.lazyhat.compukterkraft.common.workbench.menu.AbstractWorkbenchMenu
 import ru.lazyhat.compukterkraft.common.workbench.network.server.WorkbenchWorkspaceServerMessage
-import ru.lazyhat.compukterkraft.core.block.ComputerFamily
+import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 import ru.lazyhat.compukterkraft.core.computer.input.ComputerControlAction
 import ru.lazyhat.compukterkraft.core.computer.input.ControlInputEvent
 import ru.lazyhat.compukterkraft.core.computer.input.InputEventSink
@@ -143,7 +143,7 @@ class NetworkWorkbenchControlGateway(
 }
 
 class ComputerFamilyCatalogSource(
-    private val family: ComputerFamily,
+    private val family: DeviceFamily,
 ) : IdeRuntimeCatalogSource {
     override fun runtimeRegistry(): BuiltinRegistry {
         val profile = ComputerProfileRegistry.forFamily(family)
@@ -178,8 +178,8 @@ class WorkbenchTargetCatalogSource(
     override fun runtimeRegistry(): BuiltinRegistry {
         val family =
             targetState.familyId
-                ?.let { familyId -> ComputerFamily.entries.firstOrNull { it.name.equals(familyId, ignoreCase = true) } }
-                ?: ComputerFamily.NORMAL
+                ?.let { familyId -> DeviceFamily.entries.firstOrNull { it.name.equals(familyId, ignoreCase = true) } }
+                ?: DeviceFamily.NORMAL
         return ComputerFamilyCatalogSource(family).runtimeRegistry()
     }
 }

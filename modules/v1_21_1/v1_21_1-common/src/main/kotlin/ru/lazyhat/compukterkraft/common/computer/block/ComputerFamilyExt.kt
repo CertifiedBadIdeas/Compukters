@@ -22,7 +22,7 @@ import net.minecraft.network.chat.Component
 import net.minecraft.server.MinecraftServer
 import net.minecraft.world.entity.player.Player
 import ru.lazyhat.compukterkraft.core.Config
-import ru.lazyhat.compukterkraft.core.block.ComputerFamily
+import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 
 /**
  * Check whether computers with this family can be used by the provided player.
@@ -33,10 +33,10 @@ import ru.lazyhat.compukterkraft.core.block.ComputerFamily
  * @param player The player trying to use a computer.
  * @return Whether this computer family can be used.
  */
-fun ComputerFamily.checkUsable(player: Player): Boolean =
+fun DeviceFamily.checkUsable(player: Player): Boolean =
     when (this) {
-        ComputerFamily.NORMAL, ComputerFamily.ADVANCED -> true
-        ComputerFamily.COMMAND -> TODO("Not yet implemented") // checkCommandUsable(player)
+        DeviceFamily.NORMAL, DeviceFamily.ADVANCED -> true
+        DeviceFamily.COMMAND -> TODO("Not yet implemented") // checkCommandUsable(player)
     }
 
 private fun checkCommandUsable(player: Player): Boolean {

@@ -54,7 +54,7 @@ import ru.lazyhat.compukterkraft.common.workbench.item.WorkbenchItem
 import ru.lazyhat.compukterkraft.common.workbench.menu.WorkbenchMenuWithoutInventory
 import ru.lazyhat.compukterkraft.core.LOGGER
 import ru.lazyhat.compukterkraft.core.MOD_ID
-import ru.lazyhat.compukterkraft.core.block.ComputerFamily
+import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 import ru.lazyhat.compukterkraft.impl.computer.block.NeoForgeComputerBlockEntity
 import java.util.function.Supplier
 
@@ -115,7 +115,7 @@ object ModRegistry {
             ofBlock(
                 Blocks.COMPUTER_ADVANCED,
                 Names.COMPUTER_ADVANCED,
-            ) { p, s -> NeoForgeComputerBlockEntity(COMPUTER_ADVANCED.get(), p, s, ComputerFamily.ADVANCED) }
+            ) { p, s -> NeoForgeComputerBlockEntity(COMPUTER_ADVANCED.get(), p, s, DeviceFamily.ADVANCED) }
 
         val WORKBENCH: DeferredHolder<BlockEntityType<*>, BlockEntityType<WorkbenchBlockEntity>> =
             ofBlock(

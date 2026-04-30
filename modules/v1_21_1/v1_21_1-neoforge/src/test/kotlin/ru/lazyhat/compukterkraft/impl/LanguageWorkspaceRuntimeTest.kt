@@ -18,7 +18,7 @@
  */
 package ru.lazyhat.compukterkraft.impl
 
-import ru.lazyhat.compukterkraft.core.block.ComputerFamily
+import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 import ru.lazyhat.compukterkraft.core.computer.vm.ComputerProfileRegistry
 import ru.lazyhat.compukterkraft.core.computer.vm.ComputerWorkspaceHost
 import ru.lazyhat.compukterkraft.core.computer.vm.ComputerWorkspaceInitializer
@@ -36,7 +36,7 @@ import kotlin.test.assertTrue
 class LanguageWorkspaceRuntimeTest {
     @Test
     fun seededBiosCompilesAndDelegatesToShell() {
-        val profile = ComputerProfileRegistry.forFamily(ComputerFamily.ADVANCED)
+        val profile = ComputerProfileRegistry.forFamily(DeviceFamily.ADVANCED)
         val root = createTempDirectory("compukterkraft-language-workspace")
 
         try {

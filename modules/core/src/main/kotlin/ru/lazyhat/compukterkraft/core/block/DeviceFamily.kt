@@ -18,7 +18,7 @@
  */
 package ru.lazyhat.compukterkraft.core.block
 
-enum class ComputerFamily {
+enum class DeviceFamily {
     NORMAL,
     ADVANCED,
     COMMAND,
