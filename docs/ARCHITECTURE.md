@@ -180,13 +180,13 @@ ServerComputer.close()
 
 | Package                            | Responsibility                                                     |
 |------------------------------------|--------------------------------------------------------------------|
-| `ck.core.bootstrap`               | `CommonModBootstrap`, content descriptors, `CommonNetworkProtocol` |
-| `ck.core.platform.api`             | Port interfaces: `PlatformBlockRegistrar`, `PlatformMenuRegistrar` |
-| `ck.core.block`                    | `ComputerFamily` enum (pure Kotlin, no MC deps)                    |
-| `ck.core.computer`                 | `ComputerContext` — shared computer context                        |
-| `ck.core.computer.runtime`         | VM lifecycle, `ServerComputer` support                             |
-| `ck.core.computer.input`           | Input dispatch: `ComputerInputDispatcher`, `ServerInputHandler`    |
-| `ck.core.workbench`                | IDE/workbench contracts and state (Authoring Station, peer of computer) |
+| `compukterkraft.core.bootstrap`               | `CommonModBootstrap`, content descriptors, `CommonNetworkProtocol` |
+| `compukterkraft.core.platform.api`             | Port interfaces: `PlatformBlockRegistrar`, `PlatformMenuRegistrar` |
+| `compukterkraft.core.block`                    | `ComputerFamily` enum (pure Kotlin, no MC deps)                    |
+| `compukterkraft.core.computer`                 | `ComputerContext` — shared computer context                        |
+| `compukterkraft.core.computer.runtime`         | VM lifecycle, `ServerComputer` support                             |
+| `compukterkraft.core.computer.input`           | Input dispatch: `ComputerInputDispatcher`, `ServerInputHandler`    |
+| `compukterkraft.core.workbench`                | IDE/workbench contracts and state (Authoring Station, peer of computer) |
 
 ### `v1_x_x-common` modules
 
@@ -194,36 +194,36 @@ ServerComputer.close()
 
 | Package                               | Responsibility                                                     |
 |---------------------------------------|--------------------------------------------------------------------|
-| `ck.common.computer.block`            | Concrete blocks/block entities, `ComputerState`, `ComputerFamilyExt` |
-| `ck.common.computer.item`             | `AbstractComputerItem`, `ComputerItem`                             |
-| `ck.common.computer.menu`             | `AbstractComputerMenu`, `ComputerMenu`, `ServerInputState`         |
-| `ck.common.computer.screen`           | `ComputerScreen`, `ComputerTerminalScreen`                         |
-| `ck.common.computer.input`            | Computer input binding                                             |
-| `ck.common.computer.context`          | `ServerContext`, `ComputerManager`, `ComputerIdentitySavedData`    |
-| `ck.common.computer.data`             | `ComputerContainerData`, `IContainerData`                          |
-| `ck.common.computer.loot`             | Loot functions and conditions                                      |
-| `ck.common.computer.network.server`   | Server-bound computer network messages                             |
-| `ck.common.computer.network.client`   | Client-bound computer network messages                             |
+| `compukterkraft.common.computer.block`            | Concrete blocks/block entities, `ComputerState`, `ComputerFamilyExt` |
+| `compukterkraft.common.computer.item`             | `AbstractComputerItem`, `ComputerItem`                             |
+| `compukterkraft.common.computer.menu`             | `AbstractComputerMenu`, `ComputerMenu`, `ServerInputState`         |
+| `compukterkraft.common.computer.screen`           | `ComputerScreen`, `ComputerTerminalScreen`                         |
+| `compukterkraft.common.computer.input`            | Computer input binding                                             |
+| `compukterkraft.common.computer.context`          | `ServerContext`, `ComputerManager`, `ComputerIdentitySavedData`    |
+| `compukterkraft.common.computer.data`             | `ComputerContainerData`, `IContainerData`                          |
+| `compukterkraft.common.computer.loot`             | Loot functions and conditions                                      |
+| `compukterkraft.common.computer.network.server`   | Server-bound computer network messages                             |
+| `compukterkraft.common.computer.network.client`   | Client-bound computer network messages                             |
 
 **Shared infrastructure packages:**
 
 | Package                               | Responsibility                                                     |
 |---------------------------------------|--------------------------------------------------------------------|
-| `ck.common.network`                   | `NetworkMessages`, `MessageType`, `ServerNetworking`, `ClientNetworking` |
-| `ck.common.network.text`              | Table formatting utilities                                         |
-| `ck.common.infrastructure`            | Adapters: input gateway, workbench gateways, coroutine dispatcher  |
-| `ck.common.ui`                        | `TerminalState`                                                    |
-| `ck.common.ui.dsl`                    | Minecraft-side `UiRenderer`                                        |
-| `ck.common.ui.render`                 | `FixedWidthFontRenderer`, `WorkbenchTerminalRenderer` (Blaze3D)    |
-| `ck.common.utils`                     | `BlockEntityUtils`, `BufferUtils`, `CommandUtils`, `LevelUtils`    |
+| `compukterkraft.common.network`                   | `NetworkMessages`, `MessageType`, `ServerNetworking`, `ClientNetworking` |
+| `compukterkraft.common.network.text`              | Table formatting utilities                                         |
+| `compukterkraft.common.infrastructure`            | Adapters: input gateway, workbench gateways, coroutine dispatcher  |
+| `compukterkraft.common.ui`                        | `TerminalState`                                                    |
+| `compukterkraft.common.ui.dsl`                    | Minecraft-side `UiRenderer`                                        |
+| `compukterkraft.common.ui.render`                 | `FixedWidthFontRenderer`, `WorkbenchTerminalRenderer` (Blaze3D)    |
+| `compukterkraft.common.utils`                     | `BlockEntityUtils`, `BufferUtils`, `CommandUtils`, `LevelUtils`    |
 
 ### Loader leaf modules
 
 | Package                            | Responsibility                                                     |
 |------------------------------------|--------------------------------------------------------------------|
-| `ck.impl`                              | Mod entry points, `ModRegistry`, `Extensions`, client bootstrap helpers |
-| `ck.impl.computer.block`              | Tiny loader-only shims for API drift (`ForgeComputerBlockEntity`, `NeoForgeComputerBlockEntity`) |
-| `ck.impl.platform`                    | `NetworkHandler` — loader-specific packet registration             |
+| `compukterkraft.impl`                              | Mod entry points, `ModRegistry`, `Extensions`, client bootstrap helpers |
+| `compukterkraft.impl.computer.block`              | Tiny loader-only shims for API drift (`ForgeComputerBlockEntity`, `NeoForgeComputerBlockEntity`) |
+| `compukterkraft.impl.platform`                    | `NetworkHandler` — loader-specific packet registration             |
 
 ---
 

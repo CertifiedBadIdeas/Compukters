@@ -23,12 +23,12 @@
 Create `ModObjects.kt` with the minimal late-bound references:
 
 ```kotlin
-package ck.mod.binding
+package compukterkraft.mod.binding
 
-import ck.mod.block.AbstractComputerBlockEntity
-import ck.mod.block.ComputerBlockEntity
-import ck.mod.data.ComputerContainerData
-import ck.mod.menu.ComputerMenuWithoutInventory
+import compukterkraft.mod.block.AbstractComputerBlockEntity
+import compukterkraft.mod.block.ComputerBlockEntity
+import compukterkraft.mod.data.ComputerContainerData
+import compukterkraft.mod.menu.ComputerMenuWithoutInventory
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.inventory.MenuType
 import net.minecraft.world.level.block.entity.BlockEntityType
@@ -292,7 +292,7 @@ git commit -m "refactor: centralize loot and saved data ownership"
 Create `ComputerBlockBehaviorTest.kt`:
 
 ```kotlin
-package ck.mod.content
+package compukterkraft.mod.content
 
 import kotlin.test.Test
 import kotlin.test.assertFalse
@@ -309,7 +309,7 @@ class ComputerBlockBehaviorTest {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `./gradlew :core:test --tests ck.mod.content.ComputerBlockBehaviorTest`
+Run: `./gradlew :core:test --tests compukterkraft.mod.content.ComputerBlockBehaviorTest`
 Expected: FAIL because the behavior objects do not exist yet.
 
 - [ ] **Step 3: Add the minimal behavior objects**
@@ -317,7 +317,7 @@ Expected: FAIL because the behavior objects do not exist yet.
 Create `ComputerBlockEntityBehavior.kt`:
 
 ```kotlin
-package ck.mod.content
+package compukterkraft.mod.content
 
 object ComputerBlockEntityBehavior {
     fun shouldUpdateState(current: String, next: String): Boolean = current != next
@@ -327,7 +327,7 @@ object ComputerBlockEntityBehavior {
 Create `ComputerBlockBehavior.kt`:
 
 ```kotlin
-package ck.mod.content
+package compukterkraft.mod.content
 
 object ComputerBlockBehavior {
     fun defaultFacing(): String = "north"

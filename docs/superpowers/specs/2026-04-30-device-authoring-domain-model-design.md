@@ -15,7 +15,7 @@ The mod currently has two in-world entity classes related to programming:
 
 The current architecture documents and codebase do not name what these two things have in common, what they don't, or how future devices fit. As a result:
 
-- Workbench code in `modules/core` lives under `ck.core.computer.workbench.*`, signalling that Workbench is a sub-feature of Computer. In `modules/v1_21_1/v1_21_1-common`, the same kind of code lives under `ck.common.workbench.*` as a peer to computer. The two locations contradict each other.
+- Workbench code in `modules/core` lives under `compukterkraft.core.computer.workbench.*`, signalling that Workbench is a sub-feature of Computer. In `modules/v1_21_1/v1_21_1-common`, the same kind of code lives under `compukterkraft.common.workbench.*` as a peer to computer. The two locations contradict each other.
 - Several shared bridge interfaces are named `Computer*` (`ComputerControlGateway`, `ComputerInputGateway`) even though they are used by both Workbench and Computer. The names imply Computer is the primary owner.
 - Laptop is described in `docs/TODOs.md` as a future feature without a clear architectural place. The current code hardcodes block-entity assumptions (`ServerComputer(level: ServerLevel)`, `TransientPairing` keyed by `BlockPos`) that would block portable runtime devices.
 - The mental model "is the IDE a kind of computer?" has no canonical answer in docs, even though the answer affects every future feature decision.
@@ -105,14 +105,14 @@ This section anchors the model to today's codebase. It is not a refactor list; i
 | Concept | Today's location |
 |---|---|
 | Runtime Device — the abstract thing | Implicit; no umbrella interface. Conceptually represented by `ServerComputer` plus `ComputerProfile`/`ComputerFamily`. |
-| Computer (block-based Runtime Device) | `ck.common.computer.*`, `ck.core.computer.*`, `ck.impl.computer.*` |
+| Computer (block-based Runtime Device) | `compukterkraft.common.computer.*`, `compukterkraft.core.computer.*`, `compukterkraft.impl.computer.*` |
 | Authoring Station — the abstract thing | Implicit; no umbrella interface. |
-| Workbench (current Authoring Station) | `ck.common.workbench.*` (peer to computer — correct), `ck.core.computer.workbench.*` (nested under computer — WRONG, see Phase 1) |
+| Workbench (current Authoring Station) | `compukterkraft.common.workbench.*` (peer to computer — correct), `compukterkraft.core.computer.workbench.*` (nested under computer — WRONG, see Phase 1) |
 | Target descriptor | The computer item in the Workbench's target slot, plus `ComputerControlGateway` (to be renamed). |
 | `DeviceProfile`/`DeviceFamily` | Currently `ComputerProfile` (in `compiler`), `ComputerFamily` (in `core`). |
 | Language tooling (shared) | `compiler` module — already correctly placed. |
 | Terminal rendering (shared) | `v1_21_1-common/ui/render` — correctly placed; one type misnamed (`WorkbenchTerminalRenderer`). |
-| Input transport (shared) | `ck.core.computer.input.*` — function is correct, package and type names are Computer-prefixed; should become neutral. |
+| Input transport (shared) | `compukterkraft.core.computer.input.*` — function is correct, package and type names are Computer-prefixed; should become neutral. |
 
 ## Phased Rollout
 

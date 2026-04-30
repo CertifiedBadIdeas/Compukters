@@ -4,7 +4,7 @@
 
 **Goal:** Realign code structure and naming with the Device / Authoring Station domain model from [docs/superpowers/specs/2026-04-30-device-authoring-domain-model-design.md](../specs/2026-04-30-device-authoring-domain-model-design.md). No semantic changes — only package moves, gateway renames, and doc updates.
 
-**Architecture:** Three independent refactors, each isolated to its own commit and verifiable by running the project's test suite. The work is mechanical: move `ck.core.computer.workbench.*` to `ck.core.workbench.*`, rename two cross-category bridge types, and sync two doc files. The `compiler` and `v1_21_1-common`/`fabric`/`neoforge`/`create-neoforge` modules will see import-path updates only.
+**Architecture:** Three independent refactors, each isolated to its own commit and verifiable by running the project's test suite. The work is mechanical: move `compukterkraft.core.computer.workbench.*` to `compukterkraft.core.workbench.*`, rename two cross-category bridge types, and sync two doc files. The `compiler` and `v1_21_1-common`/`fabric`/`neoforge`/`create-neoforge` modules will see import-path updates only.
 
 **Tech Stack:** Kotlin, Gradle (Kotlin DSL), Architectury Loom; tests run via `./gradlew test`.
 
@@ -59,7 +59,7 @@ Destinations mirror under `.../core/workbench/**` (drop the `computer/` segment)
 
 ### Task 5 — Documentation updates
 
-- `docs/ARCHITECTURE.md` — package table referencing `ck.core.computer.workbench`
+- `docs/ARCHITECTURE.md` — package table referencing `compukterkraft.core.computer.workbench`
 - `docs/TODOs.md` — item 8
 
 ---
@@ -80,7 +80,7 @@ If gradle module names differ from the guess above, run `./gradlew projects` onc
 
 ---
 
-## Task 1: Move `ck.core.computer.workbench.*` → `ck.core.workbench.*`
+## Task 1: Move `compukterkraft.core.computer.workbench.*` → `compukterkraft.core.workbench.*`
 
 **Files:**
 - Move: 32 files under `modules/core/src/{main,test}/kotlin/ru/lazyhat/compukterkraft/core/computer/workbench/**`
@@ -382,18 +382,18 @@ Expected: one or more line numbers (originally line 144 in the unchanged spec, b
 Open `docs/ARCHITECTURE.md`. Find the row:
 
 ```
-| `ck.core.computer.workbench`       | IDE/workbench contracts and state                                  |
+| `compukterkraft.core.computer.workbench`       | IDE/workbench contracts and state                                  |
 ```
 
 Replace it with two rows reflecting the new layout (and add a peer-disambiguation note):
 
 ```
-| `ck.core.workbench`                | Authoring Station contracts and state (peer to `ck.core.computer`) |
+| `compukterkraft.core.workbench`                | Authoring Station contracts and state (peer to `compukterkraft.core.computer`) |
 ```
 
-If the surrounding `ck.core.computer` row needs a peer disambiguation too, update its description to clarify it's the Runtime Device side. Use a single, consistent phrasing.
+If the surrounding `compukterkraft.core.computer` row needs a peer disambiguation too, update its description to clarify it's the Runtime Device side. Use a single, consistent phrasing.
 
-- [ ] **Step 3: Verify no remaining `ck.core.computer.workbench` references in `docs/`**
+- [ ] **Step 3: Verify no remaining `compukterkraft.core.computer.workbench` references in `docs/`**
 
 ```bash
 grep -rn --include='*.md' 'ck\.core\.computer\.workbench' docs/
