@@ -23,7 +23,7 @@ import net.minecraft.core.component.DataComponents
 import net.minecraft.network.chat.Component
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.level.block.Block
-import ru.lazyhat.compukterkraft.common.utils.computerFamilyId
+import ru.lazyhat.compukterkraft.common.utils.deviceFamilyId
 import ru.lazyhat.compukterkraft.common.utils.computerID
 import ru.lazyhat.compukterkraft.common.utils.computerLabel
 import ru.lazyhat.compukterkraft.common.utils.updateComputerDataTag
@@ -40,7 +40,7 @@ class ComputerItem(
         ItemStack(this).apply {
             updateComputerDataTag {
                 computerID = id
-                computerFamilyId = DeviceFamily.ADVANCED.name.lowercase()
+                deviceFamilyId = DeviceFamily.ADVANCED.name.lowercase()
                 computerLabel = label
             }
             label?.let { set(DataComponents.CUSTOM_NAME, Component.literal(it)) }

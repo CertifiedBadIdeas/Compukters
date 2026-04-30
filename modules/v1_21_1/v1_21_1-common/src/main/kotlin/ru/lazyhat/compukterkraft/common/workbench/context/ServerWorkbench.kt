@@ -23,7 +23,7 @@ import net.minecraft.world.item.ItemStack
 import ru.lazyhat.compukterkraft.common.computer.item.AbstractComputerItem
 import ru.lazyhat.compukterkraft.common.computer.item.ComputerItem
 import ru.lazyhat.compukterkraft.common.utils.computerDataTagCopy
-import ru.lazyhat.compukterkraft.common.utils.computerFamilyId
+import ru.lazyhat.compukterkraft.common.utils.deviceFamilyId
 import ru.lazyhat.compukterkraft.common.utils.computerID
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 import ru.lazyhat.compukterkraft.core.computer.ComputerEvents
@@ -414,7 +414,7 @@ class ServerWorkbench(
 
             val customData = stack.computerDataTagCopy()
             val computerId = customData?.computerID
-            val storedFamilyId = customData?.computerFamilyId
+            val storedFamilyId = customData?.deviceFamilyId
             if (computerId == null && storedFamilyId == null && stack.item !is AbstractComputerItem) return TargetDescriptor()
 
             val familyId =
