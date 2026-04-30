@@ -59,7 +59,7 @@ class ServerWorkbench(
      * back to the workbench's own allocated [workspaceId] (a scratch sandbox).
      */
     private val effectiveWorkspaceId: Int
-        get() = targetDescriptor.computerId ?: workspaceId
+        get() = targetDescriptor.deviceId ?: workspaceId
 
     /**
      * Active CRDT replicas, keyed by document path within this authoring workspace. Each
@@ -104,7 +104,7 @@ class ServerWorkbench(
     }
 
     private fun updateTarget(next: TargetDescriptor) {
-        if (next.computerId != targetDescriptor.computerId) {
+        if (next.deviceId != targetDescriptor.deviceId) {
             // Target's workspace changed (or detached) — flush pending replicas back to the
             // *previous* workspace so unflushed edits survive, then drop them so the next
             // open re-bootstraps from the new workspace's disk.
@@ -132,13 +132,13 @@ class ServerWorkbench(
     ): DeviceWorkspaceDocument = workspace.writeDocument(effectiveWorkspaceId, path, text)
 
     fun runTargetProgram() {
-        if (targetDescriptor.computerId == null) return
+        if (targetDescriptor.deviceId == null) return
         materializeOpenSessions()
         runtimeBridge.runTargetProgram(targetDescriptor)
     }
 
     fun rebootTarget() {
-        if (targetDescriptor.computerId == null) return
+        if (targetDescriptor.deviceId == null) return
         // Flush in-flight CRDT replicas to disk so the rebooted target sees the latest source.
         // Without this a fresh shell.ck reboot would re-read the pre-edit text.
         materializeOpenSessions()
@@ -146,12 +146,12 @@ class ServerWorkbench(
     }
 
     fun attachTerminal() {
-        if (targetDescriptor.computerId == null) return
+        if (targetDescriptor.deviceId == null) return
         runtimeBridge.attachTerminal(targetDescriptor)
     }
 
     fun handleInput(event: InputEvent) {
-        if (targetDescriptor.computerId == null) return
+        if (targetDescriptor.deviceId == null) return
         ComputerEvents.dispatch(this, event)
     }
 
@@ -168,7 +168,7 @@ class ServerWorkbench(
         // No computer bound — IDE must show an empty workspace. Without this guard the
         // workbench's own scratch sandbox (effectiveWorkspaceId == workspaceId) leaks into
         // the UI when the slot is empty.
-        if (targetDescriptor.computerId == null) {
+        if (targetDescriptor.deviceId == null) {
             return WorkbenchRemoteState(
                 entries = emptyList(),
                 document = null,
@@ -392,16 +392,16 @@ class ServerWorkbench(
     }
 
     data class TargetDescriptor(
-        val computerId: Int? = null,
+        val deviceId: Int? = null,
         val displayName: String? = null,
         val familyId: String? = null,
     ) {
         fun toTargetState(): WorkbenchTargetState =
-            if (familyId == null && displayName == null && computerId == null) {
+            if (familyId == null && displayName == null && deviceId == null) {
                 WorkbenchTargetState()
             } else {
                 WorkbenchTargetState(
-                    connected = computerId != null,
+                    connected = deviceId != null,
                     displayName = displayName,
                     familyId = familyId,
                 )
@@ -413,9 +413,9 @@ class ServerWorkbench(
             if (stack.isEmpty) return TargetDescriptor()
 
             val customData = stack.computerDataTagCopy()
-            val computerId = customData?.computerID
+            val deviceId = customData?.computerID
             val storedFamilyId = customData?.deviceFamilyId
-            if (computerId == null && storedFamilyId == null && stack.item !is AbstractComputerItem) return TargetDescriptor()
+            if (deviceId == null && storedFamilyId == null && stack.item !is AbstractComputerItem) return TargetDescriptor()
 
             val familyId =
                 storedFamilyId ?: when (stack.item) {
@@ -424,7 +424,7 @@ class ServerWorkbench(
                 }
 
             return TargetDescriptor(
-                computerId = computerId,
+                deviceId = deviceId,
                 displayName = stack.hoverName.string.takeIf(String::isNotBlank),
                 familyId = familyId,
             )

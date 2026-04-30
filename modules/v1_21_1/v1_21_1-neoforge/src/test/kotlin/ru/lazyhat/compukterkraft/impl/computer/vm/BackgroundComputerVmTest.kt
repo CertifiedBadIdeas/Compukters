@@ -69,7 +69,7 @@ class BackgroundComputerVmTest {
 
             val vm =
                 BackgroundComputerVm(
-                    computerId = 1,
+                    deviceId = 1,
                     profile = profile,
                     dispatcher = Dispatchers.Default,
                     labelProvider = { null },

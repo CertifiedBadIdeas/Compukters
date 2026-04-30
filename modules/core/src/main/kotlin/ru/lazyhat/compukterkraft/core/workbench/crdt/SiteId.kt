@@ -27,7 +27,7 @@ import java.util.UUID
  * Compact string form so it serializes cheaply over the wire:
  * - `"s:i"` — server-init replica that atomizes the file when first loaded from disk.
  * - `"p:<8charUuid>"` — a player-editor session.
- * - `"t:<computerId>"` — a target computer (Phase 2; reserved).
+ * - `"t:<deviceId>"` — a target computer (Phase 2; reserved).
  *
  * Length is capped at 32 chars; this is more than enough for any of the formats above and keeps
  * the wire encoding bounded.
@@ -58,6 +58,6 @@ value class SiteId(
 
         fun player(uuid: UUID): SiteId = SiteId("p:" + uuid.toString().replace("-", "").take(8))
 
-        fun target(computerId: Int): SiteId = SiteId("t:$computerId")
+        fun target(deviceId: Int): SiteId = SiteId("t:$deviceId")
     }
 }

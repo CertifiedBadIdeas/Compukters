@@ -33,10 +33,10 @@ class WorkspaceDeviceIdeHost(
     private val workspace: DeviceWorkspace,
 ) : DeviceIdeHost {
     override fun snapshot(
-        computerId: Int,
+        deviceId: Int,
         path: String,
     ): DeviceIdeSnapshot? {
-        val document = workspace.readDocument(computerId, path) ?: return null
+        val document = workspace.readDocument(deviceId, path) ?: return null
         val snapshot = LanguageServices.ide.analyze(document.path, document.text)
         return DeviceIdeSnapshot(
             document = document,
@@ -46,10 +46,10 @@ class WorkspaceDeviceIdeHost(
     }
 
     override fun complete(
-        computerId: Int,
+        deviceId: Int,
         request: DeviceCompletionRequest,
     ): DeviceCompletionResponse {
-        val document = workspace.readDocument(computerId, request.path)
+        val document = workspace.readDocument(deviceId, request.path)
         val items =
             if (document == null) {
                 emptyList()
@@ -60,10 +60,10 @@ class WorkspaceDeviceIdeHost(
     }
 
     override fun hover(
-        computerId: Int,
+        deviceId: Int,
         request: DeviceHoverRequest,
     ): DeviceHoverResponse {
-        val document = workspace.readDocument(computerId, request.path)
+        val document = workspace.readDocument(deviceId, request.path)
         val info =
             if (document == null) {
                 null
@@ -74,10 +74,10 @@ class WorkspaceDeviceIdeHost(
     }
 
     override fun definition(
-        computerId: Int,
+        deviceId: Int,
         request: DeviceDefinitionRequest,
     ): DeviceDefinitionResponse {
-        val document = workspace.readDocument(computerId, request.path)
+        val document = workspace.readDocument(deviceId, request.path)
         val target =
             if (document == null) {
                 null

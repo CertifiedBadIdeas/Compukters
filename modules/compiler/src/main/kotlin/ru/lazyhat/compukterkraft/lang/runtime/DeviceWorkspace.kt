@@ -34,33 +34,33 @@ data class DeviceWorkspaceDocument(
 
 interface DeviceWorkspace {
     fun list(
-        computerId: Int,
+        deviceId: Int,
         path: String = "",
     ): List<DeviceWorkspaceEntry>
 
     fun readDocument(
-        computerId: Int,
+        deviceId: Int,
         path: String,
     ): DeviceWorkspaceDocument?
 
     fun isDirectory(
-        computerId: Int,
+        deviceId: Int,
         path: String,
     ): Boolean
 
     fun writeDocument(
-        computerId: Int,
+        deviceId: Int,
         path: String,
         text: String,
     ): DeviceWorkspaceDocument
 
     fun makeDirectory(
-        computerId: Int,
+        deviceId: Int,
         path: String,
     ): Boolean
 
     fun deleteDocument(
-        computerId: Int,
+        deviceId: Int,
         path: String,
     ): Boolean
 }

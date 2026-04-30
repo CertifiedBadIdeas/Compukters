@@ -47,7 +47,7 @@ class ComputerManager(
     val workspace: DeviceWorkspace get() = vmSupervisor.workspace
     val ide: DeviceIdeHost get() = vmSupervisor.ide
 
-    fun ensureWorkspaceInitialized(computerId: Int) = vmSupervisor.ensureWorkspaceInitialized(computerId)
+    fun ensureWorkspaceInitialized(deviceId: Int) = vmSupervisor.ensureWorkspaceInitialized(deviceId)
 
     // ── ServerComputer registry ─────────────────────────────────────
 
@@ -65,16 +65,16 @@ class ComputerManager(
     // ── VM handle management (delegated to supervisor) ──────────────
 
     fun getOrCreateVm(
-        computerId: Int,
+        deviceId: Int,
         profile: DeviceProfile,
         labelProvider: () -> String?,
         logger: ComputerVmLogger,
-    ): BackgroundComputerVm = vmSupervisor.getOrCreate(computerId, profile, labelProvider, logger)
+    ): BackgroundComputerVm = vmSupervisor.getOrCreate(deviceId, profile, labelProvider, logger)
 
     fun removeVm(
-        computerId: Int,
+        deviceId: Int,
         reason: VmStopReason = VmStopReason.CLOSED,
-    ) = vmSupervisor.remove(computerId, reason)
+    ) = vmSupervisor.remove(deviceId, reason)
 
     // ── Lifecycle ───────────────────────────────────────────────────
 

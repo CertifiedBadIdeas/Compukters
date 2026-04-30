@@ -59,7 +59,7 @@ class ServerWorkbenchTest {
         val workbench = ServerWorkbench(workspaceId = 11, workspace = workspace)
         workbench.setTarget(stack)
 
-        assertEquals(73, workbench.targetDescriptor().computerId)
+        assertEquals(73, workbench.targetDescriptor().deviceId)
         assertEquals("Pocket Dev", workbench.targetState().displayName)
         assertEquals("advanced", workbench.targetState().familyId)
         assertTrue(workbench.targetState().connected)
@@ -109,7 +109,7 @@ class ServerWorkbenchTest {
             ServerWorkbench(
                 workspaceId = 17,
                 workspace = DeviceWorkspaceHost(createTempDirectory("server-workbench-runtime")),
-                initialTarget = ServerWorkbench.TargetDescriptor(computerId = 5, displayName = "Pocket Dev", familyId = "advanced"),
+                initialTarget = ServerWorkbench.TargetDescriptor(deviceId = 5, displayName = "Pocket Dev", familyId = "advanced"),
             )
         val bridge = FakeRuntimeBridge()
         workbench.bindRuntimeBridge(bridge)
@@ -131,7 +131,7 @@ class ServerWorkbenchTest {
             ServerWorkbench(
                 workspaceId = 17,
                 workspace = DeviceWorkspaceHost(createTempDirectory("server-workbench-reboot")),
-                initialTarget = ServerWorkbench.TargetDescriptor(computerId = 5, displayName = "Pocket Dev", familyId = "advanced"),
+                initialTarget = ServerWorkbench.TargetDescriptor(deviceId = 5, displayName = "Pocket Dev", familyId = "advanced"),
             )
         val bridge = FakeRuntimeBridge()
         workbench.bindRuntimeBridge(bridge)
@@ -413,15 +413,15 @@ class ServerWorkbenchTest {
         private val snapshot = ScreenBuffer(16, 8, true).forceSnapshot()
 
         override fun rebootTarget(target: ServerWorkbench.TargetDescriptor) {
-            calls += "reboot:${target.computerId}"
+            calls += "reboot:${target.deviceId}"
         }
 
         override fun runTargetProgram(target: ServerWorkbench.TargetDescriptor) {
-            calls += "run:${target.computerId}"
+            calls += "run:${target.deviceId}"
         }
 
         override fun attachTerminal(target: ServerWorkbench.TargetDescriptor) {
-            calls += "attach:${target.computerId}"
+            calls += "attach:${target.deviceId}"
         }
 
         override fun queueEvent(

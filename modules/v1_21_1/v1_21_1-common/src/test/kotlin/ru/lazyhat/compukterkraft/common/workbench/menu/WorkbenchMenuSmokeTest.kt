@@ -97,7 +97,7 @@ class WorkbenchMenuSmokeTest {
             ServerWorkbench(
                 workspaceId = 22,
                 workspace = DeviceWorkspaceHost(createTempDirectory("workbench-menu-reboot")),
-                initialTarget = ServerWorkbench.TargetDescriptor(computerId = 9, displayName = "Pocket Dev", familyId = "advanced"),
+                initialTarget = ServerWorkbench.TargetDescriptor(deviceId = 9, displayName = "Pocket Dev", familyId = "advanced"),
             )
 
         val menu =

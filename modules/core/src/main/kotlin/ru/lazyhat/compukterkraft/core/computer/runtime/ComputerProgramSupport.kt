@@ -46,10 +46,10 @@ class WorkspaceProgramLoader(
     private val workspace: DeviceWorkspace,
 ) {
     fun load(
-        computerId: Int,
+        deviceId: Int,
         path: String,
     ): LoadedComputerProgramSource? {
-        val document = workspace.readDocument(computerId, path) ?: return null
+        val document = workspace.readDocument(deviceId, path) ?: return null
         return LoadedComputerProgramSource(document.path, document.text)
     }
 }
