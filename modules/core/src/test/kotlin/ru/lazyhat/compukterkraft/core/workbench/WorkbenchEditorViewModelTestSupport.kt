@@ -69,7 +69,7 @@ internal object WorkbenchEditorViewModelTestSupport {
         override fun read(path: String) {}
     }
 
-    private class StubControlGateway : ComputerControlGateway {
+    private class StubControlGateway : TargetControlGateway {
         override fun reboot() {}
 
         override fun runTargetProgram() {}

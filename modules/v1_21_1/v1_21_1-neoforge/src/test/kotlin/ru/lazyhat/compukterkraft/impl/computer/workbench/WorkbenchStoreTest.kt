@@ -23,7 +23,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
-import ru.lazyhat.compukterkraft.core.workbench.ComputerControlGateway
+import ru.lazyhat.compukterkraft.core.workbench.TargetControlGateway
 import ru.lazyhat.compukterkraft.core.workbench.WorkbenchIdeFacade
 import ru.lazyhat.compukterkraft.core.workbench.WorkbenchRemoteState
 import ru.lazyhat.compukterkraft.core.workbench.WorkbenchStore
@@ -48,7 +48,7 @@ class WorkbenchStoreTest {
     fun mergesRemoteStateReactively() =
         runTest(UnconfinedTestDispatcher()) {
             val workspaceGateway = FakeWorkspaceGateway()
-            val store = WorkbenchStore(workspaceGateway, FakeComputerControlGateway(), FakeWorkbenchIdeFacade())
+            val store = WorkbenchStore(workspaceGateway, FakeTargetControlGateway(), FakeWorkbenchIdeFacade())
             val updates = FakeWorkbenchUpdateSource()
 
             store.bind(backgroundScope, updates)
@@ -74,7 +74,7 @@ class WorkbenchStoreTest {
         runTest(UnconfinedTestDispatcher()) {
             val workspaceGateway = FakeWorkspaceGateway()
             val ideFacade = FakeWorkbenchIdeFacade()
-            val store = WorkbenchStore(workspaceGateway, FakeComputerControlGateway(), ideFacade)
+            val store = WorkbenchStore(workspaceGateway, FakeTargetControlGateway(), ideFacade)
             val updates = FakeWorkbenchUpdateSource()
 
             store.bind(backgroundScope, updates)
@@ -113,7 +113,7 @@ class WorkbenchStoreTest {
         }
     }
 
-    private class FakeComputerControlGateway : ComputerControlGateway {
+    private class FakeTargetControlGateway : TargetControlGateway {
         override fun reboot() {
         }
 

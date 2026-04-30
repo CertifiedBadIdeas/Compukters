@@ -57,7 +57,7 @@ import java.util.UUID
  */
 class WorkbenchStore(
     private val workspaceGateway: WorkspaceGateway,
-    private val controlGateway: ComputerControlGateway,
+    private val controlGateway: TargetControlGateway,
     private val ideFacade: WorkbenchIdeFacade,
     private val opsGateway: WorkbenchOpsGateway = NoOpWorkbenchOpsGateway,
     private val siteIdProvider: () -> SiteId = { SiteId.player(UUID.randomUUID()) },
