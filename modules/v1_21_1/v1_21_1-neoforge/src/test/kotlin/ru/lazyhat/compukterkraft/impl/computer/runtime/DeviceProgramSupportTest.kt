@@ -36,7 +36,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-class ComputerProgramSupportTest {
+class DeviceProgramSupportTest {
     @Test
     fun loadsDocumentFromWorkspace() {
         val root = createTempDirectory("compukterkraft-program-loader")

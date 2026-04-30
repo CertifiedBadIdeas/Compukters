@@ -18,7 +18,7 @@
  */
 package ru.lazyhat.compukterkraft.impl.computer.input
 
-import ru.lazyhat.compukterkraft.core.computer.ComputerEvents
+import ru.lazyhat.compukterkraft.core.computer.DeviceEvents
 import ru.lazyhat.compukterkraft.core.computer.input.ComputerControlAction
 import ru.lazyhat.compukterkraft.core.computer.input.ControlInputEvent
 import ru.lazyhat.compukterkraft.core.computer.input.KeyInputEvent
@@ -34,12 +34,12 @@ class ComputerInputDispatchTest {
         val receiver = RecordingReceiver()
         val buffer = ByteBuffer.wrap(byteArrayOf(1, 2, 3))
 
-        ComputerEvents.dispatch(receiver, KeyInputEvent.Down(key = 42, repeat = true))
-        ComputerEvents.dispatch(receiver, KeyInputEvent.Up(key = 42))
-        ComputerEvents.dispatch(receiver, KeyInputEvent.Character(7))
-        ComputerEvents.dispatch(receiver, MouseInputEvent.Click(button = 0, x = 5, y = 10))
-        ComputerEvents.dispatch(receiver, MouseInputEvent.Scroll(direction = -1, x = 3, y = 9))
-        ComputerEvents.dispatch(receiver, PasteInputEvent(buffer))
+        DeviceEvents.dispatch(receiver, KeyInputEvent.Down(key = 42, repeat = true))
+        DeviceEvents.dispatch(receiver, KeyInputEvent.Up(key = 42))
+        DeviceEvents.dispatch(receiver, KeyInputEvent.Character(7))
+        DeviceEvents.dispatch(receiver, MouseInputEvent.Click(button = 0, x = 5, y = 10))
+        DeviceEvents.dispatch(receiver, MouseInputEvent.Scroll(direction = -1, x = 3, y = 9))
+        DeviceEvents.dispatch(receiver, PasteInputEvent(buffer))
 
         assertEquals(
             listOf("key", "key_up", "char", "mouse_click", "mouse_scroll", "paste"),
@@ -54,10 +54,10 @@ class ComputerInputDispatchTest {
     fun dispatchesAllControlActions() {
         val receiver = RecordingReceiver()
 
-        ComputerEvents.dispatch(receiver, ControlInputEvent(ComputerControlAction.TERMINATE))
-        ComputerEvents.dispatch(receiver, ControlInputEvent(ComputerControlAction.SHUTDOWN))
-        ComputerEvents.dispatch(receiver, ControlInputEvent(ComputerControlAction.TURN_ON))
-        ComputerEvents.dispatch(receiver, ControlInputEvent(ComputerControlAction.REBOOT))
+        DeviceEvents.dispatch(receiver, ControlInputEvent(ComputerControlAction.TERMINATE))
+        DeviceEvents.dispatch(receiver, ControlInputEvent(ComputerControlAction.SHUTDOWN))
+        DeviceEvents.dispatch(receiver, ControlInputEvent(ComputerControlAction.TURN_ON))
+        DeviceEvents.dispatch(receiver, ControlInputEvent(ComputerControlAction.REBOOT))
 
         assertEquals(
             listOf("terminate", "shutdown", "turn_on", "reboot"),
@@ -65,7 +65,7 @@ class ComputerInputDispatchTest {
         )
     }
 
-    private class RecordingReceiver : ComputerEvents.Receiver {
+    private class RecordingReceiver : DeviceEvents.Receiver {
         val events = mutableListOf<Pair<String, Array<Any>>>()
 
         override fun queueEvent(

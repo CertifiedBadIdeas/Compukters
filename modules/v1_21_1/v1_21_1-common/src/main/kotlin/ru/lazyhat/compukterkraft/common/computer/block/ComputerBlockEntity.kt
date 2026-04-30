@@ -32,7 +32,7 @@ import ru.lazyhat.compukterkraft.common.computer.context.ServerComputer
 import ru.lazyhat.compukterkraft.common.computer.menu.ComputerMenuWithoutInventory
 import ru.lazyhat.compukterkraft.core.LOGGER
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
-import ru.lazyhat.compukterkraft.core.computer.ComputerProperties
+import ru.lazyhat.compukterkraft.core.computer.DeviceProperties
 
 open class ComputerBlockEntity(
     type: BlockEntityType<out ComputerBlockEntity>,
@@ -44,7 +44,7 @@ open class ComputerBlockEntity(
         ServerComputer(
             id,
             level as ServerLevel,
-            ComputerProperties(
+            DeviceProperties(
                 family,
                 label,
             ),

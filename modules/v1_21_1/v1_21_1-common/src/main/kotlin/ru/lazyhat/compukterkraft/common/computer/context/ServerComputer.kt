@@ -32,8 +32,8 @@ import ru.lazyhat.compukterkraft.common.computer.menu.ComputerMenu
 import ru.lazyhat.compukterkraft.common.computer.network.client.StdoutBytesClientMessage
 import ru.lazyhat.compukterkraft.common.network.ServerNetworking
 import ru.lazyhat.compukterkraft.core.LOGGER
-import ru.lazyhat.compukterkraft.core.computer.ComputerEvents
-import ru.lazyhat.compukterkraft.core.computer.ComputerProperties
+import ru.lazyhat.compukterkraft.core.computer.DeviceEvents
+import ru.lazyhat.compukterkraft.core.computer.DeviceProperties
 import ru.lazyhat.compukterkraft.core.computer.runtime.HostCallDispatcher
 import ru.lazyhat.compukterkraft.core.computer.vm.BackgroundDeviceVm
 import ru.lazyhat.compukterkraft.core.computer.vm.DeviceProfileRegistry
@@ -60,8 +60,8 @@ import java.util.concurrent.ConcurrentLinkedQueue
 class ServerComputer(
     val instanceID: Int,
     val level: ServerLevel,
-    properties: ComputerProperties,
-) : ComputerEvents.Receiver {
+    properties: DeviceProperties,
+) : DeviceEvents.Receiver {
     val family = properties.family
     private val profile = DeviceProfileRegistry.forFamily(family)
 
