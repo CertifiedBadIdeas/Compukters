@@ -27,7 +27,7 @@ import ru.lazyhat.compukterkraft.common.utils.deviceFamilyId
 import ru.lazyhat.compukterkraft.common.utils.computerID
 import ru.lazyhat.compukterkraft.common.utils.updateComputerDataTag
 import ru.lazyhat.compukterkraft.common.workbench.test.TestMinecraftBootstrap
-import ru.lazyhat.compukterkraft.core.computer.vm.ComputerWorkspaceHost
+import ru.lazyhat.compukterkraft.core.computer.vm.DeviceWorkspaceHost
 import ru.lazyhat.compukterkraft.core.workbench.EditorPresence
 import ru.lazyhat.compukterkraft.core.workbench.crdt.AtomId
 import ru.lazyhat.compukterkraft.core.workbench.crdt.CursorAnchor
@@ -46,7 +46,7 @@ class ServerWorkbenchTest {
         TestMinecraftBootstrap.ensureInitialized()
 
         val root = createTempDirectory("server-workbench-target")
-        val workspace = ComputerWorkspaceHost(root)
+        val workspace = DeviceWorkspaceHost(root)
         val stack =
             ItemStack(Items.STONE).apply {
                 updateComputerDataTag {
@@ -78,7 +78,7 @@ class ServerWorkbenchTest {
             }
 
         val workbench =
-            ServerWorkbench(workspaceId = 11, workspace = ComputerWorkspaceHost(createTempDirectory("server-workbench-unbound")))
+            ServerWorkbench(workspaceId = 11, workspace = DeviceWorkspaceHost(createTempDirectory("server-workbench-unbound")))
         workbench.setTarget(stack)
 
         assertEquals("Unbound Pocket", workbench.targetState().displayName)
@@ -89,7 +89,7 @@ class ServerWorkbenchTest {
     @Test
     fun keepsAuthoringWorkspaceSeparateByWorkbenchId() {
         val root = createTempDirectory("server-workbench-workspace")
-        val workspace = ComputerWorkspaceHost(root)
+        val workspace = DeviceWorkspaceHost(root)
         val workbench = ServerWorkbench(workspaceId = 41, workspace = workspace)
 
         workbench.write("main.ck", "fun main() {}")
@@ -108,7 +108,7 @@ class ServerWorkbenchTest {
         val workbench =
             ServerWorkbench(
                 workspaceId = 17,
-                workspace = ComputerWorkspaceHost(createTempDirectory("server-workbench-runtime")),
+                workspace = DeviceWorkspaceHost(createTempDirectory("server-workbench-runtime")),
                 initialTarget = ServerWorkbench.TargetDescriptor(computerId = 5, displayName = "Pocket Dev", familyId = "advanced"),
             )
         val bridge = FakeRuntimeBridge()
@@ -130,7 +130,7 @@ class ServerWorkbenchTest {
         val workbench =
             ServerWorkbench(
                 workspaceId = 17,
-                workspace = ComputerWorkspaceHost(createTempDirectory("server-workbench-reboot")),
+                workspace = DeviceWorkspaceHost(createTempDirectory("server-workbench-reboot")),
                 initialTarget = ServerWorkbench.TargetDescriptor(computerId = 5, displayName = "Pocket Dev", familyId = "advanced"),
             )
         val bridge = FakeRuntimeBridge()
@@ -151,7 +151,7 @@ class ServerWorkbenchTest {
         // The fix: the server returns max(applied clocks) — every batch carries ops from one
         // player, so max-applied-clock is the right ack for that client regardless of sender
         // identity.
-        val workspace = ComputerWorkspaceHost(createTempDirectory("server-workbench-ack"))
+        val workspace = DeviceWorkspaceHost(createTempDirectory("server-workbench-ack"))
         val workbench = ServerWorkbench(workspaceId = 100, workspace = workspace)
         workbench.write("main.ck", "")
         workbench.openSession("main.ck")
@@ -192,7 +192,7 @@ class ServerWorkbenchTest {
         // server-side invariant "if a document is surfaced to the client, a session is open
         // for it" always holds.
         TestMinecraftBootstrap.ensureInitialized()
-        val workspace = ComputerWorkspaceHost(createTempDirectory("server-workbench-snapshot-opens"))
+        val workspace = DeviceWorkspaceHost(createTempDirectory("server-workbench-snapshot-opens"))
         val workbench = ServerWorkbench(workspaceId = 200, workspace = workspace)
         // Bind a target — without one snapshot() returns empty (files are computer-bound).
         workbench.setTarget(
@@ -237,7 +237,7 @@ class ServerWorkbenchTest {
         // document path. With the fix, the menu calls snapshot(null) on a target change so
         // ServerWorkbench picks the first file of the NEW computer's workspace.
         TestMinecraftBootstrap.ensureInitialized()
-        val workspace = ComputerWorkspaceHost(createTempDirectory("server-workbench-target-switch"))
+        val workspace = DeviceWorkspaceHost(createTempDirectory("server-workbench-target-switch"))
         // Two computers, each with its own file at the same path.
         workspace.writeDocument(11, "shell.ck", "old-content")
         workspace.writeDocument(22, "boot.ck", "new-content")
@@ -277,7 +277,7 @@ class ServerWorkbenchTest {
         // sandbox (workspaceId) happens to contain leftover files. Otherwise the user sees
         // unrelated files appear out of nowhere when they remove a computer.
         TestMinecraftBootstrap.ensureInitialized()
-        val workspace = ComputerWorkspaceHost(createTempDirectory("server-workbench-empty-target"))
+        val workspace = DeviceWorkspaceHost(createTempDirectory("server-workbench-empty-target"))
         // Pre-seed the workbench's own scratch workspace AND a computer's workspace.
         workspace.writeDocument(999, "scratch.ck", "leftover")
         workspace.writeDocument(33, "shell.ck", "computer-only-file")
@@ -308,7 +308,7 @@ class ServerWorkbenchTest {
         // Phase 2: subscribers (peer menus) need the list of applied ops to relay to other
         // collaborators. Rejected ops must NOT appear there — relaying a rejected op would
         // diverge peers from the server replica.
-        val workspace = ComputerWorkspaceHost(createTempDirectory("server-workbench-applied"))
+        val workspace = DeviceWorkspaceHost(createTempDirectory("server-workbench-applied"))
         val workbench = ServerWorkbench(workspaceId = 100, workspace = workspace)
         workbench.write("shell.ck", "")
         workbench.openSession("shell.ck")
@@ -342,7 +342,7 @@ class ServerWorkbenchTest {
 
     @Test
     fun subscribeAndUnsubscribeAreScopedPerPath() {
-        val workspace = ComputerWorkspaceHost(createTempDirectory("server-workbench-subscribe"))
+        val workspace = DeviceWorkspaceHost(createTempDirectory("server-workbench-subscribe"))
         val workbench = ServerWorkbench(workspaceId = 100, workspace = workspace)
 
         val received = mutableListOf<Pair<String, Int>>()
@@ -370,7 +370,7 @@ class ServerWorkbenchTest {
 
     @Test
     fun setPresenceBroadcastsSnapshotToAttachedMenus() {
-        val workspace = ComputerWorkspaceHost(createTempDirectory("server-workbench-presence"))
+        val workspace = DeviceWorkspaceHost(createTempDirectory("server-workbench-presence"))
         val workbench = ServerWorkbench(workspaceId = 101, workspace = workspace)
 
         val received = mutableListOf<List<EditorPresence>>()

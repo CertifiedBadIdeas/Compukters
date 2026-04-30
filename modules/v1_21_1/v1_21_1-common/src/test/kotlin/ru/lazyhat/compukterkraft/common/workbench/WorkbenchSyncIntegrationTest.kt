@@ -24,7 +24,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 import ru.lazyhat.compukterkraft.common.workbench.context.ServerWorkbench
-import ru.lazyhat.compukterkraft.core.computer.vm.ComputerWorkspaceHost
+import ru.lazyhat.compukterkraft.core.computer.vm.DeviceWorkspaceHost
 import ru.lazyhat.compukterkraft.core.workbench.TargetControlGateway
 import ru.lazyhat.compukterkraft.core.workbench.LocalEdit
 import ru.lazyhat.compukterkraft.core.workbench.WorkbenchIdeFacade
@@ -60,7 +60,7 @@ class WorkbenchSyncIntegrationTest {
     fun clientAndServerConvergeAfterRandomEditsAndFlushAndRun() =
         runTest(StandardTestDispatcher()) {
             val workspaceRoot = createTempDirectory("workbench-sync-integration")
-            val workspace = ComputerWorkspaceHost(workspaceRoot)
+            val workspace = DeviceWorkspaceHost(workspaceRoot)
             val server = ServerWorkbench(workspaceId = 7, workspace = workspace)
             val path = "main.ck"
             server.write(path, "fun main() {}")

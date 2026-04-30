@@ -25,7 +25,7 @@ import ru.lazyhat.compukterkraft.common.workbench.data.WorkbenchContainerData
 import ru.lazyhat.compukterkraft.common.workbench.network.server.WorkbenchWorkspaceServerMessage
 import ru.lazyhat.compukterkraft.common.workbench.test.TestInventoryFactory
 import ru.lazyhat.compukterkraft.common.workbench.test.TestMinecraftBootstrap
-import ru.lazyhat.compukterkraft.core.computer.vm.ComputerWorkspaceHost
+import ru.lazyhat.compukterkraft.core.computer.vm.DeviceWorkspaceHost
 import ru.lazyhat.compukterkraft.core.workbench.WorkbenchTargetState
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBuffer
 import kotlin.io.path.createTempDirectory
@@ -96,7 +96,7 @@ class WorkbenchMenuSmokeTest {
         val workbench =
             ServerWorkbench(
                 workspaceId = 22,
-                workspace = ComputerWorkspaceHost(createTempDirectory("workbench-menu-reboot")),
+                workspace = DeviceWorkspaceHost(createTempDirectory("workbench-menu-reboot")),
                 initialTarget = ServerWorkbench.TargetDescriptor(computerId = 9, displayName = "Pocket Dev", familyId = "advanced"),
             )
 
