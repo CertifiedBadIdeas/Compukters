@@ -21,8 +21,8 @@ package ru.lazyhat.compukterkraft.core.workbench
 import ru.lazyhat.compukterkraft.core.workbench.sync.SyncStatus
 import ru.lazyhat.compukterkraft.lang.runtime.CompletionItem
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerIdeSnapshot
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceDocument
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceEntry
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspaceDocument
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspaceEntry
 import ru.lazyhat.compukterkraft.lang.runtime.HoverInfo
 
 enum class WorkbenchMode {
@@ -58,8 +58,8 @@ val EditorState.dirty: Boolean
 data class WorkbenchState(
     val terminalVisible: Boolean = false,
     val browserPath: String = "",
-    val entries: List<ComputerWorkspaceEntry> = emptyList(),
-    val openDocument: ComputerWorkspaceDocument? = null,
+    val entries: List<DeviceWorkspaceEntry> = emptyList(),
+    val openDocument: DeviceWorkspaceDocument? = null,
     val editor: EditorState = EditorState(),
     val target: WorkbenchTargetState = WorkbenchTargetState(),
     val actions: WorkbenchActionState = WorkbenchActionState(),

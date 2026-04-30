@@ -88,7 +88,7 @@ interface DeviceFileSystemApi {
 
     suspend fun remove(path: String): Boolean
 
-    suspend fun list(path: String = ""): List<ComputerWorkspaceEntry>
+    suspend fun list(path: String = ""): List<DeviceWorkspaceEntry>
 }
 
 interface DeviceProcessApi {

@@ -34,8 +34,8 @@ import ru.lazyhat.compukterkraft.lang.api.SourceRange
 import ru.lazyhat.compukterkraft.lang.runtime.CompletionItem
 import ru.lazyhat.compukterkraft.lang.runtime.CompletionItemKind
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerIdeSnapshot
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceDocument
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceEntry
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspaceDocument
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspaceEntry
 import ru.lazyhat.compukterkraft.lang.runtime.DefinitionTarget
 import ru.lazyhat.compukterkraft.lang.runtime.HoverInfo
 import kotlin.test.Test
@@ -58,8 +58,8 @@ class WorkbenchStoreTest {
 
             updates.push(
                 WorkbenchRemoteState(
-                    entries = listOf(ComputerWorkspaceEntry("rom", directory = true)),
-                    document = ComputerWorkspaceDocument("startup.ck", "fun main() {}", 7),
+                    entries = listOf(DeviceWorkspaceEntry("rom", directory = true)),
+                    document = DeviceWorkspaceDocument("startup.ck", "fun main() {}", 7),
                 ),
             )
 
@@ -80,7 +80,7 @@ class WorkbenchStoreTest {
             store.bind(backgroundScope, updates)
             updates.push(
                 WorkbenchRemoteState(
-                    document = ComputerWorkspaceDocument("main.ck", "pri", 1),
+                    document = DeviceWorkspaceDocument("main.ck", "pri", 1),
                 ),
             )
 
@@ -130,7 +130,7 @@ class WorkbenchStoreTest {
             source: String,
         ): ComputerIdeSnapshot =
             ComputerIdeSnapshot(
-                document = ComputerWorkspaceDocument(path, source, 0),
+                document = DeviceWorkspaceDocument(path, source, 0),
                 diagnostics = emptyList(),
                 highlights = emptyList(),
             )

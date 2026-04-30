@@ -21,7 +21,7 @@ package ru.lazyhat.compukterkraft.core.computer.vm.api
 
 import ru.lazyhat.compukterkraft.core.computer.vm.VmContext
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceFileSystemApi
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceEntry
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspaceEntry
 import ru.lazyhat.compukterkraft.lang.runtime.HostCall
 
 class VmFileSystemApi(
@@ -44,6 +44,6 @@ class VmFileSystemApi(
 
     override suspend fun remove(path: String): Boolean = ctx.awaitHostCall { HostCall.FileRemove(it, ctx.resolvePath(path)) }
 
-    override suspend fun list(path: String): List<ComputerWorkspaceEntry> =
+    override suspend fun list(path: String): List<DeviceWorkspaceEntry> =
         ctx.awaitHostCall { HostCall.FileList(it, ctx.resolvePath(path)) }
 }

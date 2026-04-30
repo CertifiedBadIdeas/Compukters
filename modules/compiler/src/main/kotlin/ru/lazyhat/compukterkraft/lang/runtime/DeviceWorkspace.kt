@@ -21,14 +21,14 @@ package ru.lazyhat.compukterkraft.lang.runtime
 
 import ru.lazyhat.compukterkraft.lang.api.SourceRange
 
-data class ComputerWorkspaceEntry(
+data class DeviceWorkspaceEntry(
     val path: String,
     val directory: Boolean,
     val size: Int = 0,
     val version: Long = 0,
 )
 
-data class ComputerWorkspaceDocument(
+data class DeviceWorkspaceDocument(
     val path: String,
     val text: String,
     val version: Long,
@@ -96,7 +96,7 @@ data class DefinitionTarget(
 )
 
 data class ComputerIdeSnapshot(
-    val document: ComputerWorkspaceDocument,
+    val document: DeviceWorkspaceDocument,
     val diagnostics: List<Diagnostic>,
     val highlights: List<HighlightToken>,
 )
@@ -131,16 +131,16 @@ data class ComputerDefinitionResponse(
     val target: DefinitionTarget?,
 )
 
-interface ComputerWorkspace {
+interface DeviceWorkspace {
     fun list(
         computerId: Int,
         path: String = "",
-    ): List<ComputerWorkspaceEntry>
+    ): List<DeviceWorkspaceEntry>
 
     fun readDocument(
         computerId: Int,
         path: String,
-    ): ComputerWorkspaceDocument?
+    ): DeviceWorkspaceDocument?
 
     fun isDirectory(
         computerId: Int,
@@ -151,7 +151,7 @@ interface ComputerWorkspace {
         computerId: Int,
         path: String,
         text: String,
-    ): ComputerWorkspaceDocument
+    ): DeviceWorkspaceDocument
 
     fun makeDirectory(
         computerId: Int,

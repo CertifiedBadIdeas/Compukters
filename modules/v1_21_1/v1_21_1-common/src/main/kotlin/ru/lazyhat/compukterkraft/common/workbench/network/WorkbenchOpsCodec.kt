@@ -190,7 +190,7 @@ private const val MAX_DISPLAY_NAME_LENGTH: Int = 64
 
 /**
  * Per-presence path ceiling. Workspace paths are bounded by the same limits as
- * [ComputerWorkspaceEntry] uses today; 256 is comfortable for any realistic nesting.
+ * [DeviceWorkspaceEntry] uses today; 256 is comfortable for any realistic nesting.
  */
 private const val MAX_PRESENCE_PATH_LENGTH: Int = 256
 

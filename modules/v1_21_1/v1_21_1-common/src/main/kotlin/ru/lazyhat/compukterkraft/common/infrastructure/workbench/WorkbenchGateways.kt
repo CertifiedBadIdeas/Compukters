@@ -42,7 +42,7 @@ import ru.lazyhat.compukterkraft.lang.frontend.LanguageIde
 import ru.lazyhat.compukterkraft.lang.runtime.CompletionItem
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceCapability
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerIdeSnapshot
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceDocument
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspaceDocument
 import ru.lazyhat.compukterkraft.lang.runtime.DefinitionTarget
 import ru.lazyhat.compukterkraft.lang.runtime.HoverInfo
 
@@ -203,7 +203,7 @@ class LanguageWorkbenchIdeFacade(
             lastAnalysisSource = source
             lastAnalysis = snapshot.analysis
             ComputerIdeSnapshot(
-                ComputerWorkspaceDocument(path = path, text = source, version = 0L),
+                DeviceWorkspaceDocument(path = path, text = source, version = 0L),
                 snapshot.diagnostics,
                 snapshot.highlights,
             )

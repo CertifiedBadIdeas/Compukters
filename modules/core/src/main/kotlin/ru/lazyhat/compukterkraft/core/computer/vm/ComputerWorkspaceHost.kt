@@ -19,9 +19,9 @@
 
 package ru.lazyhat.compukterkraft.core.computer.vm
 
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspace
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceDocument
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceEntry
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspace
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspaceDocument
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspaceEntry
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
@@ -38,13 +38,13 @@ import kotlin.io.path.writeText
 class ComputerWorkspaceHost(
     private val rootPath: Path,
     private val defaultDiskQuotaBytes: Long = Long.MAX_VALUE,
-) : ComputerWorkspace {
+) : DeviceWorkspace {
     private val diskQuotaOverrides = ConcurrentHashMap<Int, Long>()
 
     override fun list(
         computerId: Int,
         path: String,
-    ): List<ComputerWorkspaceEntry> {
+    ): List<DeviceWorkspaceEntry> {
         val target = resolve(computerId, path)
         if (!target.exists()) return emptyList()
 
@@ -67,10 +67,10 @@ class ComputerWorkspaceHost(
     override fun readDocument(
         computerId: Int,
         path: String,
-    ): ComputerWorkspaceDocument? {
+    ): DeviceWorkspaceDocument? {
         val target = resolve(computerId, path)
         if (!target.exists() || target.isDirectory()) return null
-        return ComputerWorkspaceDocument(normalizeDisplayPath(target, computerRoot(computerId)), target.readText(), versionOf(target))
+        return DeviceWorkspaceDocument(normalizeDisplayPath(target, computerRoot(computerId)), target.readText(), versionOf(target))
     }
 
     override fun isDirectory(
@@ -82,12 +82,12 @@ class ComputerWorkspaceHost(
         computerId: Int,
         path: String,
         text: String,
-    ): ComputerWorkspaceDocument {
+    ): DeviceWorkspaceDocument {
         val target = resolve(computerId, path)
         ensureWithinDiskQuota(computerId, target, text.toByteArray(StandardCharsets.UTF_8).size.toLong())
         target.parent?.createDirectories()
         target.writeText(text, StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)
-        return ComputerWorkspaceDocument(normalizeDisplayPath(target, computerRoot(computerId)), text, versionOf(target))
+        return DeviceWorkspaceDocument(normalizeDisplayPath(target, computerRoot(computerId)), text, versionOf(target))
     }
 
     override fun makeDirectory(
@@ -131,8 +131,8 @@ class ComputerWorkspaceHost(
     private fun entryFor(
         path: Path,
         root: Path,
-    ): ComputerWorkspaceEntry =
-        ComputerWorkspaceEntry(
+    ): DeviceWorkspaceEntry =
+        DeviceWorkspaceEntry(
             path = normalizeDisplayPath(path, root),
             directory = path.isDirectory(),
             size = if (path.isDirectory()) 0 else Files.size(path).toInt(),

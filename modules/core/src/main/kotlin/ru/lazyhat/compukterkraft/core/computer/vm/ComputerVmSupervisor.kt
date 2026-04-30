@@ -26,7 +26,7 @@ import ru.lazyhat.compukterkraft.core.platform.api.ServerWorldAccess
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerIdeHost
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceProfile
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceVmHandle
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspace
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.VmStopReason
 import ru.lazyhat.compukterkraft.lang.runtime.VmSupervisor
 import java.io.Closeable
@@ -45,7 +45,7 @@ class ComputerVmSupervisor(
     private val workspaceStore = ComputerWorkspaceHost(rootPath = computersPath, defaultDiskQuotaBytes = Config.computerSpaceLimit.toLong())
     private val ideHost = WorkspaceComputerIdeHost(workspaceStore)
 
-    val workspace: ComputerWorkspace
+    val workspace: DeviceWorkspace
         get() = workspaceStore
 
     val ide: ComputerIdeHost

@@ -30,7 +30,7 @@ import ru.lazyhat.compukterkraft.lang.api.SourceRange
 import ru.lazyhat.compukterkraft.lang.runtime.CompletionItem
 import ru.lazyhat.compukterkraft.lang.runtime.CompletionItemKind
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerIdeSnapshot
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceDocument
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspaceDocument
 import ru.lazyhat.compukterkraft.lang.runtime.DefinitionTarget
 import ru.lazyhat.compukterkraft.lang.runtime.HoverInfo
 import kotlin.test.Test
@@ -102,7 +102,7 @@ class WorkbenchStoreTest {
             val updates = FakeWorkbenchUpdateSource()
 
             store.bind(backgroundScope, updates)
-            updates.push(document = ComputerWorkspaceDocument("main.ck", "", 0))
+            updates.push(document = DeviceWorkspaceDocument("main.ck", "", 0))
 
             store.charTyped('w', visibleEditorLines = 20)
 
@@ -121,7 +121,7 @@ class WorkbenchStoreTest {
             val updates = FakeWorkbenchUpdateSource()
 
             store.bind(backgroundScope, updates)
-            updates.push(document = ComputerWorkspaceDocument("main.ck", "import", 0))
+            updates.push(document = DeviceWorkspaceDocument("main.ck", "import", 0))
             store.moveCursorTo(0, 6, visibleEditorLines = 20)
 
             store.charTyped(' ', visibleEditorLines = 20)
@@ -141,7 +141,7 @@ class WorkbenchStoreTest {
             val updates = FakeWorkbenchUpdateSource()
 
             store.bind(backgroundScope, updates)
-            updates.push(document = ComputerWorkspaceDocument("main.ck", "terminal", 0))
+            updates.push(document = DeviceWorkspaceDocument("main.ck", "terminal", 0))
             store.moveCursorTo(0, 8, visibleEditorLines = 20)
 
             store.charTyped('.', visibleEditorLines = 20)
@@ -157,7 +157,7 @@ class WorkbenchStoreTest {
             val updates = FakeWorkbenchUpdateSource()
 
             store.bind(backgroundScope, updates)
-            updates.push(document = ComputerWorkspaceDocument("main.ck", "fun main() {}", 0))
+            updates.push(document = DeviceWorkspaceDocument("main.ck", "fun main() {}", 0))
 
             assertTrue(!store.state.target.connected)
             assertTrue(!store.state.actions.canRun)
@@ -173,7 +173,7 @@ class WorkbenchStoreTest {
 
             store.bind(backgroundScope, updates)
             updates.push(
-                document = ComputerWorkspaceDocument("main.ck", "fun main() {}", 0),
+                document = DeviceWorkspaceDocument("main.ck", "fun main() {}", 0),
                 target = WorkbenchTargetState(connected = true, displayName = "Pocket Computer", familyId = "normal"),
             )
 
@@ -205,7 +205,7 @@ class WorkbenchStoreTest {
             val updates = FakeWorkbenchUpdateSource()
 
             store.bind(backgroundScope, updates)
-            updates.push(document = ComputerWorkspaceDocument("main.ck", "fun main() {}", 0))
+            updates.push(document = DeviceWorkspaceDocument("main.ck", "fun main() {}", 0))
 
             assertFalse(store.keyPressed(KeyCodes.KEY_ESCAPE, modifiers = 0, visibleEditorLines = 20))
         }
@@ -217,7 +217,7 @@ class WorkbenchStoreTest {
             val updates = FakeWorkbenchUpdateSource()
 
             store.bind(backgroundScope, updates)
-            updates.push(document = ComputerWorkspaceDocument("main.ck", "", 0))
+            updates.push(document = DeviceWorkspaceDocument("main.ck", "", 0))
 
             assertTrue(store.keyPressed(69, modifiers = 0, visibleEditorLines = 20))
         }
@@ -240,7 +240,7 @@ class WorkbenchStoreTest {
                 }
             val updates = FakeWorkbenchUpdateSource()
             store.bind(backgroundScope, updates)
-            updates.push(document = ComputerWorkspaceDocument("main.ck", "", 0))
+            updates.push(document = DeviceWorkspaceDocument("main.ck", "", 0))
 
             store.applyLocalEdit(
                 ru.lazyhat.compukterkraft.core.workbench.LocalEdit
@@ -272,7 +272,7 @@ class WorkbenchStoreTest {
                 }
             val updates = FakeWorkbenchUpdateSource()
             store.bind(backgroundScope, updates)
-            updates.push(document = ComputerWorkspaceDocument("main.ck", "", 0))
+            updates.push(document = DeviceWorkspaceDocument("main.ck", "", 0))
 
             store.applyLocalEdit(
                 ru.lazyhat.compukterkraft.core.workbench.LocalEdit
@@ -306,7 +306,7 @@ class WorkbenchStoreTest {
                 }
             val updates = FakeWorkbenchUpdateSource()
             store.bind(backgroundScope, updates)
-            updates.push(document = ComputerWorkspaceDocument("main.ck", "hello", 0))
+            updates.push(document = DeviceWorkspaceDocument("main.ck", "hello", 0))
 
             // Bootstrap atomized "hello" with site=ServerInit at clock 0..4. Last visible
             // atom = (ServerInit, 4). Append "!" via remote op.
@@ -348,7 +348,7 @@ class WorkbenchStoreTest {
             val updates = FakeWorkbenchUpdateSource()
             store.bind(backgroundScope, updates)
             updates.push(
-                document = ComputerWorkspaceDocument("main.ck", "", 0),
+                document = DeviceWorkspaceDocument("main.ck", "", 0),
                 target = WorkbenchTargetState(connected = true, displayName = "PC", familyId = "normal"),
             )
 
@@ -384,7 +384,7 @@ class WorkbenchStoreTest {
                 }
             val updates = FakeWorkbenchUpdateSource()
             store.bind(backgroundScope, updates)
-            updates.push(document = ComputerWorkspaceDocument("main.ck", "world", 0))
+            updates.push(document = DeviceWorkspaceDocument("main.ck", "world", 0))
             store.moveCursorTo(0, 5, visibleEditorLines = 20) // at end
 
             // Remote insert at the start of the document (leftId = null).
@@ -426,7 +426,7 @@ class WorkbenchStoreTest {
                 }
             val updates = FakeWorkbenchUpdateSource()
             store.bind(backgroundScope, updates)
-            updates.push(document = ComputerWorkspaceDocument("main.ck", "abc", 0))
+            updates.push(document = DeviceWorkspaceDocument("main.ck", "abc", 0))
             // Caret at offset 3 — end of "abc".
             store.moveCursorTo(0, 3, visibleEditorLines = 20)
 
@@ -484,7 +484,7 @@ class WorkbenchStoreTest {
                 }
             val updates = FakeWorkbenchUpdateSource()
             store.bind(backgroundScope, updates)
-            updates.push(document = ComputerWorkspaceDocument("main.ck", "hello", 0))
+            updates.push(document = DeviceWorkspaceDocument("main.ck", "hello", 0))
 
             // User types " world" locally — replica is now ahead of the disk text.
             store.applyLocalEdit(
@@ -498,7 +498,7 @@ class WorkbenchStoreTest {
 
             // Server pushes the stale snapshot (e.g. ATTACH_TERMINAL reply: server read
             // `main.ck` from disk, in-flight ops not yet materialized).
-            updates.push(document = ComputerWorkspaceDocument("main.ck", "hello", 0))
+            updates.push(document = DeviceWorkspaceDocument("main.ck", "hello", 0))
 
             // Editor must keep the locally-edited text.
             assertEquals("hello world", store.state.editor.text)
@@ -531,14 +531,14 @@ class WorkbenchStoreTest {
                 }
             val updates = FakeWorkbenchUpdateSource()
             store.bind(backgroundScope, updates)
-            updates.push(document = ComputerWorkspaceDocument("a.ck", "alpha", 0))
+            updates.push(document = DeviceWorkspaceDocument("a.ck", "alpha", 0))
             store.applyLocalEdit(
                 ru.lazyhat.compukterkraft.core.workbench.LocalEdit
                     .Insert(5, "X"),
             )
 
             // Switch to a different file — must replace text and reset replica.
-            updates.push(document = ComputerWorkspaceDocument("b.ck", "beta", 0))
+            updates.push(document = DeviceWorkspaceDocument("b.ck", "beta", 0))
             assertEquals("beta", store.state.editor.text)
             assertEquals("b.ck", store.state.openDocument?.path)
         }
@@ -559,7 +559,7 @@ class WorkbenchStoreTest {
                 }
             val updates = FakeWorkbenchUpdateSource()
             store.bind(backgroundScope, updates)
-            updates.push(document = ComputerWorkspaceDocument("foo.ck", "hello\nworld", 0))
+            updates.push(document = DeviceWorkspaceDocument("foo.ck", "hello\nworld", 0))
 
             // Opening the document already reported the initial caret at (0,0).
             val initial = opsGateway.cursors.size
@@ -591,8 +591,8 @@ class WorkbenchStoreTest {
         override val stateFlow: StateFlow<WorkbenchRemoteState> = _stateFlow
 
         fun push(
-            entries: List<ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceEntry> = emptyList(),
-            document: ComputerWorkspaceDocument? = null,
+            entries: List<ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspaceEntry> = emptyList(),
+            document: DeviceWorkspaceDocument? = null,
             target: WorkbenchTargetState = WorkbenchTargetState(),
         ) {
             _stateFlow.value = WorkbenchRemoteState(entries = entries, document = document, target = target)
@@ -631,7 +631,7 @@ class WorkbenchStoreTest {
             source: String,
         ): ComputerIdeSnapshot =
             ComputerIdeSnapshot(
-                document = ComputerWorkspaceDocument(path, source, 0),
+                document = DeviceWorkspaceDocument(path, source, 0),
                 diagnostics = emptyList(),
                 highlights = emptyList(),
             )

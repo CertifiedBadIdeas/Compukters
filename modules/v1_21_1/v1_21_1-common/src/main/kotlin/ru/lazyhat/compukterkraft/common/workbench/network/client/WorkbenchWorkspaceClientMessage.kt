@@ -26,8 +26,8 @@ import ru.lazyhat.compukterkraft.common.network.NetworkMessage
 import ru.lazyhat.compukterkraft.common.network.NetworkMessages
 import ru.lazyhat.compukterkraft.core.workbench.WorkbenchRemoteState
 import ru.lazyhat.compukterkraft.core.workbench.WorkbenchTargetState
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceDocument
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceEntry
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspaceDocument
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspaceEntry
 
 class WorkbenchWorkspaceClientMessage : NetworkMessage<ClientNetworkContext> {
     private val containerId: Int
@@ -46,7 +46,7 @@ class WorkbenchWorkspaceClientMessage : NetworkMessage<ClientNetworkContext> {
 
         val entries =
             List(buf.readVarInt()) {
-                ComputerWorkspaceEntry(
+                DeviceWorkspaceEntry(
                     path = buf.readUtf(),
                     directory = buf.readBoolean(),
                     size = buf.readVarInt(),
@@ -58,7 +58,7 @@ class WorkbenchWorkspaceClientMessage : NetworkMessage<ClientNetworkContext> {
             if (!buf.readBoolean()) {
                 null
             } else {
-                ComputerWorkspaceDocument(
+                DeviceWorkspaceDocument(
                     path = buf.readUtf(),
                     text = buf.readUtf(Short.MAX_VALUE.toInt()),
                     version = buf.readVarLong(),
