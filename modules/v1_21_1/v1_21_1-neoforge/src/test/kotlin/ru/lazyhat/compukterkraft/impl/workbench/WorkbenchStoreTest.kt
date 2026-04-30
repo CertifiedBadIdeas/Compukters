@@ -88,7 +88,7 @@ class WorkbenchStoreTest {
             store.openCompletion()
             store.applyCompletion(0)
 
-            assertEquals("printLine", store.state.editor.text)
+            assertEquals("println", store.state.editor.text)
         }
 
     private class FakeWorkbenchUpdateSource : WorkbenchUpdateSource {
@@ -143,7 +143,7 @@ class WorkbenchStoreTest {
         ): List<CompletionItem> =
             listOf(
                 CompletionItem(
-                    label = "printLine",
+                    label = "println",
                     detail = "function",
                     kind = CompletionItemKind.FUNCTION,
                 ),

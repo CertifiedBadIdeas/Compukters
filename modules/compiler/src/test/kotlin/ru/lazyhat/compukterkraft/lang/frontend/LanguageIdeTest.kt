@@ -51,14 +51,14 @@ class LanguageIdeTest {
                 completionCursor.first,
                 completionCursor.second,
             )
-        assertTrue(completion.any { it.label == "printLine" })
+        assertTrue(completion.any { it.label == "println" })
 
         val source =
             """
             import terminal;
 
             fun helper() {
-                terminal.printLine("hi");
+                terminal.println("hi");
             }
 
             fun main() {
@@ -66,10 +66,10 @@ class LanguageIdeTest {
             }
             """.trimIndent()
 
-        val hoverPosition = lineAndColumnOf(source, "printLine")
+        val hoverPosition = lineAndColumnOf(source, "println")
         val hover = ide.hover("test.ck", source, hoverPosition.first, hoverPosition.second)
         assertNotNull(hover)
-        assertTrue(hover.contents.contains("terminal.printLine"))
+        assertTrue(hover.contents.contains("terminal.println"))
 
         val definitionPosition = lineAndColumnOfLast(source, "helper")
         val definition =
@@ -91,7 +91,7 @@ class LanguageIdeTest {
 
             fun main() {
                 val text: Bool = "oops";
-                terminal.printLine("hi");
+                terminal.println("hi");
             }
             """.trimIndent()
 
@@ -140,7 +140,7 @@ class LanguageIdeTest {
 
     @Test
     fun recoversFromIncompleteImport() {
-        val source = "import terminal;\nimport \nfun main() {\n    terminal.printLine(\"hi\");\n}"
+        val source = "import terminal;\nimport \nfun main() {\n    terminal.println(\"hi\");\n}"
         val snapshot = ide.analyze("recovery.ck", source)
         assertTrue(snapshot.diagnostics.isNotEmpty(), "Should have diagnostics for incomplete import")
         // main function should be visible — this requires the AST (parser recovery)

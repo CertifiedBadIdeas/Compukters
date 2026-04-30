@@ -316,7 +316,7 @@ class WorkbenchStore(
         val textToInsert = item.insertText ?: item.label
         val deletedLength = cursorFlat - prefixFlat
         // Suppress the auto-inserted "()" for FUNCTION items when the user is completing
-        // right before an existing "(" (e.g. re-completing a name in `terminal.printLine(`).
+        // right before an existing "(" (e.g. re-completing a name in `terminal.println(`).
         val effectiveInsert =
             if (item.kind == CompletionItemKind.FUNCTION &&
                 textToInsert.endsWith("()") &&

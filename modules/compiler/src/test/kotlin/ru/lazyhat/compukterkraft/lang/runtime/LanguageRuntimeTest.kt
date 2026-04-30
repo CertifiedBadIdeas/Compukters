@@ -46,9 +46,9 @@ class LanguageRuntimeTest {
                 import events;
 
                 fun main() {
-                    terminal.printLine("id=" + system.deviceId());
+                    terminal.println("id=" + system.deviceId());
                     val event: Event = events.pull("boot");
-                    terminal.printLine(event.name);
+                    terminal.println(event.name);
                     sleep(1L);
                     yield();
                 }
@@ -132,10 +132,10 @@ class LanguageRuntimeTest {
                 fun main() {
                     var i: Int = 0;
                     while (i < 3) {
-                        terminal.printLine("i=" + i);
+                        terminal.println("i=" + i);
                         i = i + 1;
                     }
-                    terminal.printLine("done=" + i);
+                    terminal.println("done=" + i);
                 }
                 """.trimIndent(),
             )
@@ -164,13 +164,13 @@ class LanguageRuntimeTest {
                 fun main() {
                     var i: Int = 1;
                     i += 4;
-                    terminal.printLine("plus=" + i);
+                    terminal.println("plus=" + i);
                     i -= 2;
-                    terminal.printLine("minus=" + i);
+                    terminal.println("minus=" + i);
                     i *= 6;
-                    terminal.printLine("star=" + i);
+                    terminal.println("star=" + i);
                     i /= 3;
-                    terminal.printLine("slash=" + i);
+                    terminal.println("slash=" + i);
                 }
                 """.trimIndent(),
             )
@@ -250,23 +250,23 @@ class LanguageRuntimeTest {
                 import strings;
 
                 fun main() {
-                    terminal.printLine(terminal.readLine("> "));
-                    terminal.printLine(filesystem.list());
-                    terminal.printLine(process.currentDirectory());
-                    terminal.printLine(process.argument());
-                    terminal.printLine(strings.beforeSpace("mkdir test"));
-                    terminal.printLine(strings.afterSpace("mkdir test"));
+                    terminal.println(terminal.readln("> "));
+                    terminal.println(filesystem.list());
+                    terminal.println(process.currentDirectory());
+                    terminal.println(process.argument());
+                    terminal.println(strings.beforeSpace("mkdir test"));
+                    terminal.println(strings.afterSpace("mkdir test"));
                     if (filesystem.makeDir("tmp")) {
-                        terminal.printLine("mk");
+                        terminal.println("mk");
                     } else {
-                        terminal.printLine("no");
+                        terminal.println("no");
                     }
                     if (process.changeDirectory("tmp")) {
-                        terminal.printLine("cd");
+                        terminal.println("cd");
                     } else {
-                        terminal.printLine("stay");
+                        terminal.println("stay");
                     }
-                    terminal.printLine(process.currentDirectory());
+                    terminal.println(process.currentDirectory());
                 }
                 """.trimIndent(),
             )
@@ -299,13 +299,13 @@ class LanguageRuntimeTest {
                 fun main() {
                     val x: Int = 2;
                     if (x == 1) {
-                        terminal.printLine("one");
+                        terminal.println("one");
                     } else if (x == 2) {
-                        terminal.printLine("two");
+                        terminal.println("two");
                     } else if (x == 3) {
-                        terminal.printLine("three");
+                        terminal.println("three");
                     } else {
-                        terminal.printLine("other");
+                        terminal.println("other");
                     }
                 }
                 """.trimIndent(),
@@ -335,11 +335,11 @@ class LanguageRuntimeTest {
                 fun main() {
                     val x: Int = 99;
                     if (x == 1) {
-                        terminal.printLine("one");
+                        terminal.println("one");
                     } else if (x == 2) {
-                        terminal.printLine("two");
+                        terminal.println("two");
                     } else {
-                        terminal.printLine("other");
+                        terminal.println("other");
                     }
                 }
                 """.trimIndent(),
@@ -365,16 +365,16 @@ class LanguageRuntimeTest {
                     val x: Int = 2;
                     when(x) {
                         1 -> {
-                            terminal.printLine("one");
+                            terminal.println("one");
                         }
                         2 -> {
-                            terminal.printLine("two");
+                            terminal.println("two");
                         }
                         3 -> {
-                            terminal.printLine("three");
+                            terminal.println("three");
                         }
                         else -> {
-                            terminal.printLine("other");
+                            terminal.println("other");
                         }
                     }
                 }
@@ -401,13 +401,13 @@ class LanguageRuntimeTest {
                     val x: Int = 3;
                     when(x) {
                         1 -> {
-                            terminal.printLine("one");
+                            terminal.println("one");
                         }
                         2, 3 -> {
-                            terminal.printLine("two or three");
+                            terminal.println("two or three");
                         }
                         else -> {
-                            terminal.printLine("other");
+                            terminal.println("other");
                         }
                     }
                 }
@@ -434,13 +434,13 @@ class LanguageRuntimeTest {
                     val x: Int = 99;
                     when(x) {
                         1 -> {
-                            terminal.printLine("one");
+                            terminal.println("one");
                         }
                         2 -> {
-                            terminal.printLine("two");
+                            terminal.println("two");
                         }
                         else -> {
-                            terminal.printLine("other");
+                            terminal.println("other");
                         }
                     }
                 }
@@ -467,13 +467,13 @@ class LanguageRuntimeTest {
                     val x: Int = 5;
                     when {
                         x > 10 -> {
-                            terminal.printLine("big");
+                            terminal.println("big");
                         }
                         x > 0 -> {
-                            terminal.printLine("positive");
+                            terminal.println("positive");
                         }
                         else -> {
-                            terminal.printLine("non-positive");
+                            terminal.println("non-positive");
                         }
                     }
                 }
@@ -500,13 +500,13 @@ class LanguageRuntimeTest {
                     val x: Int = 0;
                     when {
                         x > 10 -> {
-                            terminal.printLine("big");
+                            terminal.println("big");
                         }
                         x > 0 -> {
-                            terminal.printLine("positive");
+                            terminal.println("positive");
                         }
                         else -> {
-                            terminal.printLine("zero or negative");
+                            terminal.println("zero or negative");
                         }
                     }
                 }
@@ -556,9 +556,9 @@ class LanguageRuntimeTest {
 
                 fun main() {
                     if (monitor.exists()) {
-                        terminal.printLine("connected");
+                        terminal.println("connected");
                     } else {
-                        terminal.printLine("missing");
+                        terminal.println("missing");
                     }
                 }
                 """.trimIndent(),
@@ -612,9 +612,9 @@ class LanguageRuntimeTest {
 
                 fun main() {
                     if (monitor.exists()) {
-                        terminal.printLine("connected");
+                        terminal.println("connected");
                     } else {
-                        terminal.printLine("missing");
+                        terminal.println("missing");
                     }
                 }
                 """.trimIndent(),
@@ -708,11 +708,11 @@ private class RecordingRuntime(
                 lines += text
             }
 
-            override fun printLine(text: String) {
+            override fun println(text: String) {
                 lines += text
             }
 
-            override suspend fun readLine(prompt: String): String = "typed"
+            override suspend fun readln(prompt: String): String = "typed"
 
             override fun clear() = Unit
 

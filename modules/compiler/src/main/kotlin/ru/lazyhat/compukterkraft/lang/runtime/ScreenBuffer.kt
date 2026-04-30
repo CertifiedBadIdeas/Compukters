@@ -23,7 +23,7 @@ package ru.lazyhat.compukterkraft.lang.runtime
  * A fixed-size grid of characters with foreground/background colour indices.
  *
  * ## Thread-safety contract
- * - **Writer:** the VM coroutine calls [write], [printLine], [clear], [setCursor], [scroll].
+ * - **Writer:** the VM coroutine calls [write], [println], [clear], [setCursor], [scroll].
  *   All writes happen on a single coroutine — no internal synchronisation is needed for mutations.
  * - **Reader:** the server tick thread calls [snapshot] to obtain an immutable [ScreenBufferSnapshot].
  *   [snapshot] performs a volatile read of [dirty] and, when true, copies the backing arrays under
@@ -93,7 +93,7 @@ class ScreenBuffer(
      * Write [text] then move to the beginning of the next line.
      * If the cursor is already on the last row, the screen scrolls up by one line.
      */
-    fun printLine(text: String) {
+    fun println(text: String) {
         write(text.take(width - cursorX))
         if (cursorY >= height - 1) {
             scroll(1)

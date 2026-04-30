@@ -60,9 +60,9 @@ interface DeviceSystemApi {
 interface DeviceTerminalApi {
     fun write(text: String)
 
-    fun printLine(text: String)
+    fun println(text: String)
 
-    suspend fun readLine(prompt: String = ""): String
+    suspend fun readln(prompt: String = ""): String
 
     fun clear()
 

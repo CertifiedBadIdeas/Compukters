@@ -96,7 +96,7 @@ These rules are enforced by `ArchitectureBoundaryTest` in `modules/core`.
 │                                                                      │
 │  DeviceProgram.run(runtime)                                          │
 │    ├─ runtime.terminal.write("hello")  ──►  ScreenBuffer (direct)    │
-│    ├─ runtime.terminal.readLine()      ──►  suspends on VmEvent      │
+│    ├─ runtime.terminal.readln()      ──►  suspends on VmEvent      │
 │    ├─ runtime.filesystem.readText()    ──►  HostCall → HostResult    │
 │    └─ runtime.system.shutdown()        ──►  HostCall → HostResult    │
 └──────────────────────────────────────────┬───────────────────────────┘
@@ -275,7 +275,7 @@ The historical name for `RuntimeDeviceImpl`. Renamed in Phase 2b; the class no l
 
 ### `ScreenBuffer`
 
-- **Writer:** VM coroutine calls `write()`, `printLine()`, `clear()`, `setCursor()`, `scroll()`.
+- **Writer:** VM coroutine calls `write()`, `println()`, `clear()`, `setCursor()`, `scroll()`.
 - **Reader:** Server tick thread calls `snapshot()` — atomic dirty-flag check + synchronized copy.
 - **No HostCall roundtrip** for terminal writes — mutable state lives in the VM, read-only access from the server thread.
 
@@ -302,7 +302,7 @@ Converts `List<UiNode>` into Minecraft draw calls.
 
 ### Terminal I/O is direct, not via HostCall
 
-Terminal writes (`write`, `printLine`, `clear`, `setCursor`) go directly to `ScreenBuffer` on the VM coroutine thread. Previously they were routed through the HostCall mechanism (VM → suspend → queue → server tick → dispatch → mutate terminal → result → resume), adding 50ms+ latency per call. Since the screen buffer is VM-owned data (not a server resource like the filesystem), direct writes are simpler and faster.
+Terminal writes (`write`, `println`, `clear`, `setCursor`) go directly to `ScreenBuffer` on the VM coroutine thread. Previously they were routed through the HostCall mechanism (VM → suspend → queue → server tick → dispatch → mutate terminal → result → resume), adding 50ms+ latency per call. Since the screen buffer is VM-owned data (not a server resource like the filesystem), direct writes are simpler and faster.
 
 ### MenuSide sealed interface
 

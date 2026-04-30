@@ -136,13 +136,13 @@ internal class RuntimeHostBridge(
                 VmValue.UnitValue
             }
 
-            "printLine" -> {
-                runtime.terminal.printLine(arguments[0].asString())
+            "println" -> {
+                runtime.terminal.println(arguments[0].asString())
                 VmValue.UnitValue
             }
 
-            "readLine" -> {
-                VmValue.StringValue(runtime.terminal.readLine(arguments.singleOrNull()?.asString().orEmpty()))
+            "readln" -> {
+                VmValue.StringValue(runtime.terminal.readln(arguments.singleOrNull()?.asString().orEmpty()))
             }
 
             "clear" -> {

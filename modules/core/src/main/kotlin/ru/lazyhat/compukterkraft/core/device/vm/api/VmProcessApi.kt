@@ -63,7 +63,7 @@ internal class VmProcessApi(
         val program = compiledProgram.program
         if (program == null) {
             val message = compiledProgram.errorMessage.orEmpty()
-            terminal.printLine("Compilation Error: $message")
+            terminal.println("Compilation Error: $message")
             return 1
         }
 
@@ -71,7 +71,7 @@ internal class VmProcessApi(
             program.run(runtimeCreator(workingDirectory, argument))
             0
         } catch (failure: Throwable) {
-            terminal.printLine("Program error: ${failure.message ?: failure.javaClass.simpleName}")
+            terminal.println("Program error: ${failure.message ?: failure.javaClass.simpleName}")
             1
         }
     }

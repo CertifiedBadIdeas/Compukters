@@ -509,7 +509,7 @@ return candidate
 Это значит:
 
 - `write(text)` обновляет буфер сразу;
-- `printLine(text)` обновляет буфер сразу;
+- `println(text)` обновляет буфер сразу;
 - `clear()` очищает буфер сразу;
 - `setCursor(x, y)` двигает курсор сразу.
 
@@ -517,7 +517,7 @@ return candidate
 
 ### 11.2. Чтение строки
 
-`VmTerminalApi.readLine(prompt)`:
+`VmTerminalApi.readln(prompt)`:
 
 1. включает мигание курсора;
 2. создает `TerminalLineReader`;
@@ -805,7 +805,7 @@ stack = []
 Если дальше есть:
 
 ```ck
-terminal.printLine(x);
+terminal.println(x);
 ```
 
 то использование имени `x` компилируется в `Instruction.LoadLocal(slot)`.
@@ -826,9 +826,9 @@ is Instruction.LoadLocal -> {
 
 ```ck
 if (flag) {
-   terminal.printLine("yes");
+   terminal.println("yes");
 } else {
-   terminal.printLine("no");
+   terminal.println("no");
 }
 ```
 
@@ -839,13 +839,13 @@ LoadLocal(flagSlot)
 JumpIfFalse(elseStart)
 
 PushString("yes")
-CallBuiltin("terminal", "printLine", 1)
+CallBuiltin("terminal", "println", 1)
 Pop
 Jump(end)
 
 elseStart:
 PushString("no")
-CallBuiltin("terminal", "printLine", 1)
+CallBuiltin("terminal", "println", 1)
 Pop
 
 end:
@@ -871,7 +871,7 @@ end:
 
 ```ck
 while (i < 3) {
-   terminal.printLine("tick");
+   terminal.println("tick");
 }
 ```
 
@@ -885,7 +885,7 @@ Binary(LESS)
 JumpIfFalse(loopEnd)
 
 PushString("tick")
-CallBuiltin("terminal", "printLine", 1)
+CallBuiltin("terminal", "println", 1)
 Pop
 Jump(loopStart)
 
@@ -1032,8 +1032,8 @@ API маппится через `RuntimeHostBridge` в `compiler/src/main/kotlin
 Доступные функции:
 
 - `terminal.write(text): Unit`
-- `terminal.printLine(text): Unit`
-- `terminal.readLine(prompt = ""): String`
+- `terminal.println(text): Unit`
+- `terminal.readln(prompt = ""): String`
 - `terminal.clear(): Unit`
 - `terminal.setCursor(x, y): Unit`
 
@@ -1103,7 +1103,7 @@ Capability <module> is not allowed for this computer profile.
 ROM-файл `shell.ck` показывает, как предполагается работа системы изнутри:
 
 - shell печатает баннер;
-- читает строку через `terminal.readLine(...)`;
+- читает строку через `terminal.readln(...)`;
 - builtin-команды обрабатывает сам:
   - `help`
   - `cd`

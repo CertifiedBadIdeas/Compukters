@@ -46,7 +46,7 @@ class LanguageFrontendTest {
 
                 fun main() {
                     val point: Point = Point { x: 1, y: 2 };
-                    terminal.printLine("sum=" + sum(point));
+                    terminal.println("sum=" + sum(point));
                 }
                 """.trimIndent(),
             )
@@ -57,7 +57,7 @@ class LanguageFrontendTest {
         )
         assertNotNull(artifact.module)
         assertTrue(artifact.analysis.symbols.any { it.name == "Point" })
-        assertTrue(artifact.analysis.references.any { it.name == "printLine" })
+        assertTrue(artifact.analysis.references.any { it.name == "println" })
     }
 
     @Test
@@ -90,13 +90,13 @@ class LanguageFrontendTest {
                 fun main() {
                     val x: Int = 2;
                     if (x == 1) {
-                        terminal.printLine("one");
+                        terminal.println("one");
                     } else if (x == 2) {
-                        terminal.printLine("two");
+                        terminal.println("two");
                     } else if (x == 3) {
-                        terminal.printLine("three");
+                        terminal.println("three");
                     } else {
-                        terminal.printLine("other");
+                        terminal.println("other");
                     }
                 }
                 """.trimIndent(),
@@ -121,13 +121,13 @@ class LanguageFrontendTest {
                     val x: Int = 2;
                     when(x) {
                         1 -> {
-                            terminal.printLine("one");
+                            terminal.println("one");
                         }
                         2, 3 -> {
-                            terminal.printLine("two or three");
+                            terminal.println("two or three");
                         }
                         else -> {
-                            terminal.printLine("other");
+                            terminal.println("other");
                         }
                     }
                 }
@@ -153,13 +153,13 @@ class LanguageFrontendTest {
                     val x: Int = 5;
                     when {
                         x > 10 -> {
-                            terminal.printLine("big");
+                            terminal.println("big");
                         }
                         x > 0 -> {
-                            terminal.printLine("positive");
+                            terminal.println("positive");
                         }
                         else -> {
-                            terminal.printLine("non-positive");
+                            terminal.println("non-positive");
                         }
                     }
                 }
