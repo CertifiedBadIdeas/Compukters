@@ -5,6 +5,51 @@
 Compukter Kraft is a Minecraft mod that adds programmable computers with a custom language, compiler, and bytecode VM.
 The project is split into multiple Gradle modules across a multi-version, multi-loader architecture:
 
+## Domain Model
+
+The mod has **two orthogonal categories** of programming-related in-world entities. They are not subtypes of each other and never become each other.
+
+### Category 1 — Runtime Devices
+
+Things in the world that **execute** CKL programs. Each Runtime Device has a VM, a `DeviceProfile` (today named `ComputerProfile`), a `DeviceFamily` (today named `ComputerFamily`), a runtime workspace, a terminal, and optional peripherals.
+
+- **Today:** Computer (block).
+- **Planned:** Laptop (portable item), Turtle (entity with inventory and fuel), Pocket Computer.
+
+A Runtime Device intentionally does not provide an in-device program editor. Authoring happens at an Authoring Station, like firmware development for embedded hardware.
+
+### Category 2 — Authoring Stations
+
+Things in the world that **help the player write** CKL programs and are themselves implemented natively (Kotlin), not in CKL. Each Authoring Station has a local development workspace, an IDE engine (parser/type checker/autocomplete from `compiler`), a target descriptor pointing at a Runtime Device, and explicit sync actions (`pull`, `push`, `run`, `attach terminal`).
+
+- **Today:** Workbench (block).
+- **Possible later:** networked / collaborative variants. They stay native.
+
+An Authoring Station is **not** a Runtime Device. It has no VM and does not execute CKL.
+
+### Bridge — Target Descriptor
+
+An Authoring Station holds a **target descriptor** identifying a Runtime Device and exposing its `DeviceProfile`/`DeviceFamily`. Today the descriptor is the computer item inserted into the Workbench's target slot. There is no shared filesystem between the two categories — only the explicit sync actions.
+
+### Shared substrate (used by both categories)
+
+Lives outside both category packages:
+
+- **Language tooling** (`compiler` module): parser, type checker, bytecode VM, `ComputerProfile`/`ComputerFamily` data classes.
+- **Workspace storage abstraction** (`core`): file CRUD instantiated separately by each category with its own root.
+- **Terminal text models and font rendering** (`v1_21_1-common/ui/render`): glyph layout, color tables, fixed-width rendering.
+- **Input transport interfaces** (`core`): wire-level event delivery — interpretation differs per category.
+
+### Naming rules
+
+- Workbench code MUST NOT live under a `computer.*` package (and vice versa). They are peers.
+- Cross-category bridge types use neutral prefixes (`Target*`, `Device*`), never a category-specific prefix.
+- Shared infrastructure types are named for their function, not their consumer.
+
+The full canonical reference for this model is [docs/superpowers/specs/2026-04-30-device-authoring-domain-model-design.md](superpowers/specs/2026-04-30-device-authoring-domain-model-design.md). The phased rollout plan (audit-driven cleanup → Runtime Device umbrella → Laptop) lives there.
+
+## Modules
+
 | Module               | Purpose                                                                     |
 |----------------------|-----------------------------------------------------------------------------|
 | `compiler`           | Language frontend (parser, type checker), bytecode compiler, and VM runtime |
