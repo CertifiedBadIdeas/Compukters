@@ -26,7 +26,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import ru.lazyhat.compukterkraft.core.computer.vm.BackgroundComputerVm
 import ru.lazyhat.compukterkraft.core.computer.vm.ComputerVmLogger
-import ru.lazyhat.compukterkraft.core.computer.vm.ComputerWorkspaceHost
+import ru.lazyhat.compukterkraft.core.computer.vm.DeviceWorkspaceHost
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceCapability
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceCpuResources
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceMemoryResources
@@ -45,7 +45,7 @@ class BackgroundComputerVmTest {
         val root = createTempDirectory("compukterkraft-background-vm")
 
         try {
-            val workspace = ComputerWorkspaceHost(root)
+            val workspace = DeviceWorkspaceHost(root)
             workspace.writeDocument(1, "bios.ck", "fun main() { }")
 
             val profile =

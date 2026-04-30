@@ -20,7 +20,7 @@ package ru.lazyhat.compukterkraft.impl.computer.runtime
 
 import ru.lazyhat.compukterkraft.core.computer.runtime.ComputerProgramCompiler
 import ru.lazyhat.compukterkraft.core.computer.runtime.WorkspaceProgramLoader
-import ru.lazyhat.compukterkraft.core.computer.vm.ComputerWorkspaceHost
+import ru.lazyhat.compukterkraft.core.computer.vm.DeviceWorkspaceHost
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceCpuResources
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceMemoryResources
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceProfile
@@ -41,7 +41,7 @@ class ComputerProgramSupportTest {
     fun loadsDocumentFromWorkspace() {
         val root = createTempDirectory("compukterkraft-program-loader")
         try {
-            val workspace = ComputerWorkspaceHost(rootPath = root)
+            val workspace = DeviceWorkspaceHost(rootPath = root)
             root
                 .resolve("7")
                 .createDirectories()
@@ -63,7 +63,7 @@ class ComputerProgramSupportTest {
     fun returnsNullWhenDocumentIsMissing() {
         val root = createTempDirectory("compukterkraft-program-loader")
         try {
-            val workspace = ComputerWorkspaceHost(rootPath = root)
+            val workspace = DeviceWorkspaceHost(rootPath = root)
             val loader = WorkspaceProgramLoader(workspace)
 
             val program = loader.load(7, "shell.ck")

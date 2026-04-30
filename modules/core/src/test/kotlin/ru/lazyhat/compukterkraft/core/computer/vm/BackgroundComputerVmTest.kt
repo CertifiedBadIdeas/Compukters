@@ -81,7 +81,7 @@ class BackgroundComputerVmTest {
         val root = createTempDirectory("compukterkraft-background-vm")
 
         try {
-            val workspace = ComputerWorkspaceHost(root)
+            val workspace = DeviceWorkspaceHost(root)
             workspace.writeDocument(1, "bios.ck", "fun main() { }")
 
             val profile =
@@ -140,7 +140,7 @@ class BackgroundComputerVmTest {
         val root = createTempDirectory("compukterkraft-background-vm")
 
         try {
-            val workspace = ComputerWorkspaceHost(root)
+            val workspace = DeviceWorkspaceHost(root)
             workspace.writeDocument(1, "bios.ck", "import filesystem;\nfun main() {}")
 
             val profile =

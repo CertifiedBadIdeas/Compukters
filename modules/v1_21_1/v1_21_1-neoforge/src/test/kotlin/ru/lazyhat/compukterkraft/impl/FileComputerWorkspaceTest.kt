@@ -18,7 +18,7 @@
  */
 package ru.lazyhat.compukterkraft.impl
 
-import ru.lazyhat.compukterkraft.core.computer.vm.ComputerWorkspaceHost
+import ru.lazyhat.compukterkraft.core.computer.vm.DeviceWorkspaceHost
 import ru.lazyhat.compukterkraft.core.computer.vm.ComputerWorkspaceInitializer
 import java.nio.file.Path
 import kotlin.io.path.createTempDirectory
@@ -55,8 +55,8 @@ class FileComputerWorkspaceTest {
         val worldTwoRoot = createTempDirectory("compukterkraft-world-two")
 
         try {
-            val worldOne = ComputerWorkspaceHost(rootPath = worldOneRoot)
-            val worldTwo = ComputerWorkspaceHost(rootPath = worldTwoRoot)
+            val worldOne = DeviceWorkspaceHost(rootPath = worldOneRoot)
+            val worldTwo = DeviceWorkspaceHost(rootPath = worldTwoRoot)
 
             worldOne.writeDocument(
                 1,
@@ -90,7 +90,7 @@ class FileComputerWorkspaceTest {
         val root = createTempDirectory("compukterkraft-quota")
 
         try {
-            val workspace = ComputerWorkspaceHost(rootPath = root, defaultDiskQuotaBytes = 8)
+            val workspace = DeviceWorkspaceHost(rootPath = root, defaultDiskQuotaBytes = 8)
 
             assertFailsWith<IllegalStateException> {
                 workspace.writeDocument(7, "big.ck", "123456789")
@@ -102,11 +102,11 @@ class FileComputerWorkspaceTest {
         }
     }
 
-    private fun withWorkspace(block: (ComputerWorkspaceHost, Path) -> Unit) {
+    private fun withWorkspace(block: (DeviceWorkspaceHost, Path) -> Unit) {
         val root = createTempDirectory("compukterkraft-workspace")
 
         try {
-            block(ComputerWorkspaceHost(rootPath = root), root)
+            block(DeviceWorkspaceHost(rootPath = root), root)
         } finally {
             root.toFile().deleteRecursively()
         }

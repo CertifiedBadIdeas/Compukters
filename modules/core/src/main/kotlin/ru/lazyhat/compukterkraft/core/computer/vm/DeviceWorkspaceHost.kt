@@ -35,7 +35,7 @@ import kotlin.io.path.readText
 import kotlin.io.path.relativeTo
 import kotlin.io.path.writeText
 
-class ComputerWorkspaceHost(
+class DeviceWorkspaceHost(
     private val rootPath: Path,
     private val defaultDiskQuotaBytes: Long = Long.MAX_VALUE,
 ) : DeviceWorkspace {
