@@ -29,7 +29,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.DeviceQueueResources
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceResources
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceStorageResources
 
-object ComputerProfileRegistry {
+object DeviceProfileRegistry {
     fun forFamily(family: DeviceFamily): DeviceProfile =
         when (family) {
             DeviceFamily.NORMAL -> {
