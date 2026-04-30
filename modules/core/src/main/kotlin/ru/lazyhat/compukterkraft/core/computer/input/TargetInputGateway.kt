@@ -31,6 +31,6 @@ fun interface InputEventSink {
 /**
  * Client-side gateway that sends [InputEvent]s to the server over the network.
  */
-interface ComputerInputGateway {
+interface TargetInputGateway {
     fun send(event: InputEvent)
 }
