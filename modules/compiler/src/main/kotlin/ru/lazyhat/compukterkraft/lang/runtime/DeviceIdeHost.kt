@@ -120,22 +120,22 @@ data class DeviceDefinitionResponse(
 
 interface DeviceIdeHost {
     fun snapshot(
-        computerId: Int,
+        deviceId: Int,
         path: String,
     ): DeviceIdeSnapshot?
 
     fun complete(
-        computerId: Int,
+        deviceId: Int,
         request: DeviceCompletionRequest,
     ): DeviceCompletionResponse
 
     fun hover(
-        computerId: Int,
+        deviceId: Int,
         request: DeviceHoverRequest,
     ): DeviceHoverResponse
 
     fun definition(
-        computerId: Int,
+        deviceId: Int,
         request: DeviceDefinitionRequest,
     ): DeviceDefinitionResponse
 }

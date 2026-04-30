@@ -41,7 +41,7 @@ interface DeviceRuntime {
 }
 
 interface DeviceSystemApi {
-    val computerId: Int
+    val deviceId: Int
     val label: String?
     val currentTick: Long
 

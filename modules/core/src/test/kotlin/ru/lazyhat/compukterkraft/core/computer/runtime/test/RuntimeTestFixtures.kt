@@ -36,11 +36,11 @@ class RuntimeTestWorkspace(
     val host: DeviceWorkspaceHost,
 ) {
     fun writeProgram(
-        computerId: Int,
+        deviceId: Int,
         path: String,
         source: String,
     ) {
-        val computerRoot = root.resolve(computerId.toString()).createDirectories()
+        val computerRoot = root.resolve(deviceId.toString()).createDirectories()
         val file = computerRoot.resolve(path.trimStart('/')).normalize()
         require(file.startsWith(computerRoot)) {
             "Program path must stay inside the test workspace: $path"

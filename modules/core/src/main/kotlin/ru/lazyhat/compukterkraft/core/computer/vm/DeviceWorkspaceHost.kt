@@ -42,14 +42,14 @@ class DeviceWorkspaceHost(
     private val diskQuotaOverrides = ConcurrentHashMap<Int, Long>()
 
     override fun list(
-        computerId: Int,
+        deviceId: Int,
         path: String,
     ): List<DeviceWorkspaceEntry> {
-        val target = resolve(computerId, path)
+        val target = resolve(deviceId, path)
         if (!target.exists()) return emptyList()
 
         if (!target.isDirectory()) {
-            return listOf(entryFor(target, computerRoot(computerId)))
+            return listOf(entryFor(target, computerRoot(deviceId)))
         }
 
         Files.createDirectories(target)
@@ -59,69 +59,69 @@ class DeviceWorkspaceHost(
             .use { stream ->
                 stream
                     .sorted(compareBy(Path::name))
-                    .map { entryFor(it, computerRoot(computerId)) }
+                    .map { entryFor(it, computerRoot(deviceId)) }
                     .toList()
             }
     }
 
     override fun readDocument(
-        computerId: Int,
+        deviceId: Int,
         path: String,
     ): DeviceWorkspaceDocument? {
-        val target = resolve(computerId, path)
+        val target = resolve(deviceId, path)
         if (!target.exists() || target.isDirectory()) return null
-        return DeviceWorkspaceDocument(normalizeDisplayPath(target, computerRoot(computerId)), target.readText(), versionOf(target))
+        return DeviceWorkspaceDocument(normalizeDisplayPath(target, computerRoot(deviceId)), target.readText(), versionOf(target))
     }
 
     override fun isDirectory(
-        computerId: Int,
+        deviceId: Int,
         path: String,
-    ): Boolean = resolve(computerId, path).isDirectory()
+    ): Boolean = resolve(deviceId, path).isDirectory()
 
     override fun writeDocument(
-        computerId: Int,
+        deviceId: Int,
         path: String,
         text: String,
     ): DeviceWorkspaceDocument {
-        val target = resolve(computerId, path)
-        ensureWithinDiskQuota(computerId, target, text.toByteArray(StandardCharsets.UTF_8).size.toLong())
+        val target = resolve(deviceId, path)
+        ensureWithinDiskQuota(deviceId, target, text.toByteArray(StandardCharsets.UTF_8).size.toLong())
         target.parent?.createDirectories()
         target.writeText(text, StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)
-        return DeviceWorkspaceDocument(normalizeDisplayPath(target, computerRoot(computerId)), text, versionOf(target))
+        return DeviceWorkspaceDocument(normalizeDisplayPath(target, computerRoot(deviceId)), text, versionOf(target))
     }
 
     override fun makeDirectory(
-        computerId: Int,
+        deviceId: Int,
         path: String,
     ): Boolean {
-        val target = resolve(computerId, path)
+        val target = resolve(deviceId, path)
         if (target.exists()) return target.isDirectory()
         target.createDirectories()
         return true
     }
 
     override fun deleteDocument(
-        computerId: Int,
+        deviceId: Int,
         path: String,
     ): Boolean {
-        val target = resolve(computerId, path)
+        val target = resolve(deviceId, path)
         return Files.deleteIfExists(target)
     }
 
     fun setDiskQuota(
-        computerId: Int,
+        deviceId: Int,
         diskQuotaBytes: Long,
     ) {
-        diskQuotaOverrides[computerId] = diskQuotaBytes
+        diskQuotaOverrides[deviceId] = diskQuotaBytes
     }
 
-    fun computerRoot(computerId: Int): Path = rootPath.resolve(computerId.toString()).normalize()
+    fun computerRoot(deviceId: Int): Path = rootPath.resolve(deviceId.toString()).normalize()
 
     private fun resolve(
-        computerId: Int,
+        deviceId: Int,
         path: String,
     ): Path {
-        val root = computerRoot(computerId)
+        val root = computerRoot(deviceId)
         root.createDirectories()
         val candidate = root.resolve(path.trimStart('/')).normalize()
         require(candidate.startsWith(root)) { "Path escapes computer workspace: $path" }
@@ -147,21 +147,21 @@ class DeviceWorkspaceHost(
     private fun versionOf(path: Path): Long = Files.getLastModifiedTime(path).toMillis()
 
     private fun ensureWithinDiskQuota(
-        computerId: Int,
+        deviceId: Int,
         target: Path,
         newSizeBytes: Long,
     ) {
-        val quota = diskQuotaOverrides[computerId] ?: defaultDiskQuotaBytes
+        val quota = diskQuotaOverrides[deviceId] ?: defaultDiskQuotaBytes
         if (quota == Long.MAX_VALUE) return
 
         val existingSize = if (target.exists() && !target.isDirectory()) Files.size(target) else 0L
-        val usedBytes = currentDiskUsage(computerId)
+        val usedBytes = currentDiskUsage(deviceId)
         val nextUsage = usedBytes - existingSize + newSizeBytes
         check(nextUsage <= quota) { "Disk quota exceeded: $nextUsage > $quota" }
     }
 
-    private fun currentDiskUsage(computerId: Int): Long {
-        val root = computerRoot(computerId)
+    private fun currentDiskUsage(deviceId: Int): Long {
+        val root = computerRoot(deviceId)
         if (!root.exists()) return 0L
 
         return Files

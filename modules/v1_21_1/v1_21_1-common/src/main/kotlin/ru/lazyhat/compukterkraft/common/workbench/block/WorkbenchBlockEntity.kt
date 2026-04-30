@@ -91,12 +91,12 @@ class WorkbenchBlockEntity(
     fun setTargetStack(stack: ItemStack) {
         val singleStack = if (stack.isEmpty) ItemStack.EMPTY else stack.copy().also { it.count = 1 }
         val descriptor = ServerWorkbench.extractTargetDescriptor(singleStack)
-        if (descriptor.computerId != targetComputerId) {
+        if (descriptor.deviceId != targetComputerId) {
             releaseDetachedTargetComputer()
             lastSyncedSnapshot = null
         }
         targetStack = singleStack
-        targetComputerId = descriptor.computerId
+        targetComputerId = descriptor.deviceId
         targetDisplayName = descriptor.displayName
         targetFamilyId = descriptor.familyId
         serverWorkbench?.setTarget(descriptor)
@@ -121,7 +121,7 @@ class WorkbenchBlockEntity(
                 workspace = ServerContext.computerManager.workspace,
                 initialTarget =
                     ServerWorkbench.TargetDescriptor(
-                        computerId = targetComputerId,
+                        deviceId = targetComputerId,
                         displayName = targetDisplayName,
                         familyId = targetFamilyId,
                     ),
@@ -136,7 +136,7 @@ class WorkbenchBlockEntity(
 
         val workbench = serverWorkbench ?: return
         val targetDescriptor = workbench.targetDescriptor()
-        val targetId = targetDescriptor.computerId
+        val targetId = targetDescriptor.deviceId
 
         if (targetId == null) {
             releaseDetachedTargetComputer()
@@ -191,7 +191,7 @@ class WorkbenchBlockEntity(
     }
 
     private fun resolveTargetComputer(createDetached: Boolean): ServerComputer? {
-        val targetId = getOrCreateServerWorkbench().targetDescriptor().computerId ?: return null
+        val targetId = getOrCreateServerWorkbench().targetDescriptor().deviceId ?: return null
         val liveComputer = ServerContext.computerManager.get(targetId)
         if (liveComputer != null) {
             releaseDetachedTargetComputer()

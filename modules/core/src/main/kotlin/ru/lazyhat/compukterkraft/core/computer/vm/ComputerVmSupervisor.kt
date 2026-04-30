@@ -51,20 +51,20 @@ class ComputerVmSupervisor(
     val ide: DeviceIdeHost
         get() = ideHost
 
-    fun ensureWorkspaceInitialized(computerId: Int) {
-        workspaceInitializer.ensureInitialized(computerId)
+    fun ensureWorkspaceInitialized(deviceId: Int) {
+        workspaceInitializer.ensureInitialized(deviceId)
     }
 
     fun getOrCreate(
-        computerId: Int,
+        deviceId: Int,
         profile: DeviceProfile,
         labelProvider: () -> String?,
         logger: ComputerVmLogger,
     ): BackgroundComputerVm =
-        handles.computeIfAbsent(computerId) {
-            workspaceStore.setDiskQuota(computerId, profile.resources.storage.diskBytes)
+        handles.computeIfAbsent(deviceId) {
+            workspaceStore.setDiskQuota(deviceId, profile.resources.storage.diskBytes)
             BackgroundComputerVm(
-                computerId = computerId,
+                deviceId = deviceId,
                 profile = profile,
                 dispatcher = dispatcher,
                 labelProvider = labelProvider,
@@ -73,13 +73,13 @@ class ComputerVmSupervisor(
             )
         } as BackgroundComputerVm
 
-    override fun get(computerId: Int): DeviceVmHandle? = handles[computerId]
+    override fun get(deviceId: Int): DeviceVmHandle? = handles[deviceId]
 
     override fun remove(
-        computerId: Int,
+        deviceId: Int,
         reason: VmStopReason,
     ) {
-        handles.remove(computerId)?.stop(reason)
+        handles.remove(deviceId)?.stop(reason)
     }
 
     override fun close() {

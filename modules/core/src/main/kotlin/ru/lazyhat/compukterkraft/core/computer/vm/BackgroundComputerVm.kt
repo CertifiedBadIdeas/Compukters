@@ -87,7 +87,7 @@ private data class RuntimeApiRegistryProfile(
  * stopped with [stop]. On reboot, the old VM is stopped and a new one is created.
  */
 class BackgroundComputerVm(
-    override val computerId: Int,
+    override val deviceId: Int,
     override val profile: DeviceProfile,
     dispatcher: CoroutineDispatcher,
     private val labelProvider: () -> String?,
@@ -142,7 +142,7 @@ class BackgroundComputerVm(
             scope.launch {
                 try {
                     val source =
-                        programLoader.load(computerId, profile.bootScriptName)
+                        programLoader.load(deviceId, profile.bootScriptName)
                             ?: run {
                                 stopInternal(errorMessage = "Missing boot script: ${profile.bootScriptName}")
                                 return@launch
@@ -164,7 +164,7 @@ class BackgroundComputerVm(
                             }
 
                     awaitSlicePermit()
-                    logger.log("VM[$computerId] boot program started")
+                    logger.log("VM[$deviceId] boot program started")
                     program.run(runtime)
                     stopInternal(VmStopReason.REQUESTED)
                 } catch (cancelled: CancellationException) {
@@ -180,7 +180,7 @@ class BackgroundComputerVm(
 
     override fun stop(reason: VmStopReason) {
         scope.launch {
-            LOGGER.debug { "ComputerID: $computerId stop requested, reason: $reason" }
+            LOGGER.debug { "ComputerID: $deviceId stop requested, reason: $reason" }
             stopInternal(reason)
         }
     }
@@ -202,7 +202,7 @@ class BackgroundComputerVm(
 
     override fun snapshot(): VmSnapshot =
         VmSnapshot(
-            computerId = computerId,
+            deviceId = deviceId,
             profile = profile,
             state = stateManager.state,
             currentTick = stateManager.currentTick,
@@ -239,17 +239,17 @@ class BackgroundComputerVm(
         errorMessage: String? = null,
     ) {
         if (stateManager.isStopped) {
-            LOGGER.debug { "ComputerID: $computerId already stopped, ignoring stop request (reason: $reason, error: $errorMessage)" }
+            LOGGER.debug { "ComputerID: $deviceId already stopped, ignoring stop request (reason: $reason, error: $errorMessage)" }
             return
         }
 
-        LOGGER.debug { "ComputerID: $computerId stopped with reason: $reason, error: $errorMessage" }
+        LOGGER.debug { "ComputerID: $deviceId stopped with reason: $reason, error: $errorMessage" }
 
         stateManager.stopVm(reason, errorMessage)
         runner?.cancel()
         runner = null
 
-        LOGGER.debug { "ComputerID: $computerId stop lock request ended (reason: $reason, error: $errorMessage)" }
+        LOGGER.debug { "ComputerID: $deviceId stop lock request ended (reason: $reason, error: $errorMessage)" }
     }
 
     private suspend fun awaitSlicePermit() {
@@ -283,7 +283,7 @@ class BackgroundComputerVm(
         val systemApi =
             VmSystemApi(
                 ctx = this,
-                computerId = computerId,
+                deviceId = deviceId,
                 currentTickProvider = { stateManager.currentTick },
                 labelProvider = labelProvider,
             )
@@ -295,7 +295,7 @@ class BackgroundComputerVm(
             VmProcessApi(
                 ctx = this,
                 initialArgument = argument,
-                computerId = computerId,
+                deviceId = deviceId,
                 pathResolver = pathResolver,
                 filesystemApi = filesystemApi,
                 programLoader = programLoader,

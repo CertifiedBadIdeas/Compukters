@@ -29,8 +29,8 @@ import kotlin.io.path.writeText
 class ComputerWorkspaceInitializer(
     private val rootPath: Path,
 ) {
-    fun ensureInitialized(computerId: Int): Path {
-        val root = rootPath.resolve(computerId.toString()).normalize()
+    fun ensureInitialized(deviceId: Int): Path {
+        val root = rootPath.resolve(deviceId.toString()).normalize()
         if (root.exists()) return root
         root.createDirectories()
         cloneRomTo(root)
