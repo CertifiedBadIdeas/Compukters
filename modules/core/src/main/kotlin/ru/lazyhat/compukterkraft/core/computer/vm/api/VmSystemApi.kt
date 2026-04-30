@@ -20,7 +20,7 @@
 package ru.lazyhat.compukterkraft.core.computer.vm.api
 
 import ru.lazyhat.compukterkraft.core.computer.vm.VmContext
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerSystemApi
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceSystemApi
 import ru.lazyhat.compukterkraft.lang.runtime.VmEvent
 import ru.lazyhat.compukterkraft.lang.runtime.VmStopReason
 
@@ -29,7 +29,7 @@ class VmSystemApi(
     override val computerId: Int,
     private val currentTickProvider: () -> Long,
     private val labelProvider: () -> String?,
-) : ComputerSystemApi {
+) : DeviceSystemApi {
     override val label: String? get() = labelProvider()
     override val currentTick: Long get() = currentTickProvider()
 

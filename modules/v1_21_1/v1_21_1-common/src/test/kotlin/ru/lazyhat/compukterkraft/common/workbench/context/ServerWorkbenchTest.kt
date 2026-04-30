@@ -23,7 +23,7 @@ import net.minecraft.core.component.DataComponents
 import net.minecraft.network.chat.Component
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
-import ru.lazyhat.compukterkraft.common.utils.computerFamilyId
+import ru.lazyhat.compukterkraft.common.utils.deviceFamilyId
 import ru.lazyhat.compukterkraft.common.utils.computerID
 import ru.lazyhat.compukterkraft.common.utils.updateComputerDataTag
 import ru.lazyhat.compukterkraft.common.workbench.test.TestMinecraftBootstrap
@@ -51,7 +51,7 @@ class ServerWorkbenchTest {
             ItemStack(Items.STONE).apply {
                 updateComputerDataTag {
                     computerID = 73
-                    computerFamilyId = "advanced"
+                    deviceFamilyId = "advanced"
                 }
                 set(DataComponents.CUSTOM_NAME, Component.literal("Pocket Dev"))
             }
@@ -72,7 +72,7 @@ class ServerWorkbenchTest {
         val stack =
             ItemStack(Items.STONE).apply {
                 updateComputerDataTag {
-                    computerFamilyId = "advanced"
+                    deviceFamilyId = "advanced"
                 }
                 set(DataComponents.CUSTOM_NAME, Component.literal("Unbound Pocket"))
             }
@@ -199,7 +199,7 @@ class ServerWorkbenchTest {
             ItemStack(Items.STONE).apply {
                 updateComputerDataTag {
                     computerID = 42
-                    computerFamilyId = "advanced"
+                    deviceFamilyId = "advanced"
                 }
             },
         )
@@ -247,14 +247,14 @@ class ServerWorkbenchTest {
             ItemStack(Items.STONE).apply {
                 updateComputerDataTag {
                     computerID = 11
-                    computerFamilyId = "advanced"
+                    deviceFamilyId = "advanced"
                 }
             }
         val second =
             ItemStack(Items.STONE).apply {
                 updateComputerDataTag {
                     computerID = 22
-                    computerFamilyId = "advanced"
+                    deviceFamilyId = "advanced"
                 }
             }
 
@@ -287,7 +287,7 @@ class ServerWorkbenchTest {
             ItemStack(Items.STONE).apply {
                 updateComputerDataTag {
                     computerID = 33
-                    computerFamilyId = "advanced"
+                    deviceFamilyId = "advanced"
                 }
             }
 

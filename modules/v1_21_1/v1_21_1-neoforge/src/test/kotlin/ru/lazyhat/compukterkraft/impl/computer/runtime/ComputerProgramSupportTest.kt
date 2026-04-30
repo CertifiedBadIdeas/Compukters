@@ -21,12 +21,12 @@ package ru.lazyhat.compukterkraft.impl.computer.runtime
 import ru.lazyhat.compukterkraft.core.computer.runtime.ComputerProgramCompiler
 import ru.lazyhat.compukterkraft.core.computer.runtime.WorkspaceProgramLoader
 import ru.lazyhat.compukterkraft.core.computer.vm.ComputerWorkspaceHost
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerCpuResources
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerMemoryResources
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerProfile
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerQueueResources
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerResources
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerStorageResources
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceCpuResources
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceMemoryResources
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceProfile
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceQueueResources
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceResources
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceStorageResources
 import kotlin.io.path.createDirectories
 import kotlin.io.path.createTempDirectory
 import kotlin.io.path.writeText
@@ -85,7 +85,7 @@ class ComputerProgramSupportTest {
     @Test
     fun rejectsProgramWhenCompiledBytecodeExceedsRomLimit() {
         val profile =
-            ComputerProfile(
+            DeviceProfile(
                 id = "test",
                 displayName = "Test",
                 cpuBudgetNanosPerSlice = 1_000_000,
@@ -94,11 +94,11 @@ class ComputerProgramSupportTest {
                 terminalHeight = 8,
                 colorTerminal = true,
                 resources =
-                    ComputerResources(
-                        cpu = ComputerCpuResources(wallTimeGuardNanosPerSlice = 1_000_000),
-                        memory = ComputerMemoryResources(),
-                        storage = ComputerStorageResources(programRomBytes = 1, diskBytes = 1024),
-                        queues = ComputerQueueResources(eventQueueSlots = 16, hostCallQueueSlots = 16),
+                    DeviceResources(
+                        cpu = DeviceCpuResources(wallTimeGuardNanosPerSlice = 1_000_000),
+                        memory = DeviceMemoryResources(),
+                        storage = DeviceStorageResources(programRomBytes = 1, diskBytes = 1024),
+                        queues = DeviceQueueResources(eventQueueSlots = 16, hostCallQueueSlots = 16),
                     ),
             )
 

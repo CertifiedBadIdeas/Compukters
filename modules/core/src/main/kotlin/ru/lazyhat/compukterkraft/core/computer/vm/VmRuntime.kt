@@ -20,38 +20,38 @@
 package ru.lazyhat.compukterkraft.core.computer.vm
 
 import ru.lazyhat.compukterkraft.lang.api.BuiltinRegistry
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerFileSystemApi
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerPeripheralApi
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerProcessApi
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerProfile
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerRedstoneApi
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerRuntime
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerStdioApi
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerSystemApi
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerTerminalApi
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceFileSystemApi
+import ru.lazyhat.compukterkraft.lang.runtime.DevicePeripheralApi
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceProcessApi
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceProfile
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceRedstoneApi
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceRuntime
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceStdioApi
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceSystemApi
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceTerminalApi
 import ru.lazyhat.compukterkraft.lang.runtime.VmEvent
 import ru.lazyhat.compukterkraft.lang.runtime.VmState
 
 class VmRuntime(
     private val ctx: VmContext,
-    private val initialProfile: ComputerProfile,
+    private val initialProfile: DeviceProfile,
     val runtimeRegistry: BuiltinRegistry,
-    private val systemApi: ComputerSystemApi,
-    private val terminalApi: ComputerTerminalApi,
-    private val stdioApi: ComputerStdioApi,
-    private val filesystemApi: ComputerFileSystemApi,
-    private val processApi: ComputerProcessApi,
-    private val redstoneApi: ComputerRedstoneApi = object : ComputerRedstoneApi {},
-    private val peripheralsApi: ComputerPeripheralApi = object : ComputerPeripheralApi {},
-) : ComputerRuntime {
-    override val profile: ComputerProfile = initialProfile
-    override val system: ComputerSystemApi = systemApi
-    override val terminal: ComputerTerminalApi = terminalApi
-    override val stdio: ComputerStdioApi = stdioApi
-    override val filesystem: ComputerFileSystemApi = filesystemApi
-    override val process: ComputerProcessApi = processApi
-    override val redstone: ComputerRedstoneApi = redstoneApi
-    override val peripherals: ComputerPeripheralApi = peripheralsApi
+    private val systemApi: DeviceSystemApi,
+    private val terminalApi: DeviceTerminalApi,
+    private val stdioApi: DeviceStdioApi,
+    private val filesystemApi: DeviceFileSystemApi,
+    private val processApi: DeviceProcessApi,
+    private val redstoneApi: DeviceRedstoneApi = object : DeviceRedstoneApi {},
+    private val peripheralsApi: DevicePeripheralApi = object : DevicePeripheralApi {},
+) : DeviceRuntime {
+    override val profile: DeviceProfile = initialProfile
+    override val system: DeviceSystemApi = systemApi
+    override val terminal: DeviceTerminalApi = terminalApi
+    override val stdio: DeviceStdioApi = stdioApi
+    override val filesystem: DeviceFileSystemApi = filesystemApi
+    override val process: DeviceProcessApi = processApi
+    override val redstone: DeviceRedstoneApi = redstoneApi
+    override val peripherals: DevicePeripheralApi = peripheralsApi
 
     override suspend fun pullEvent(filter: String?): VmEvent {
         while (true) {

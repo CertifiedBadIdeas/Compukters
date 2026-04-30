@@ -28,7 +28,7 @@ import ru.lazyhat.compukterkraft.common.computer.client.ClientTerminalBuffer
 import ru.lazyhat.compukterkraft.common.computer.context.ServerComputer
 import ru.lazyhat.compukterkraft.common.computer.data.ComputerContainerData
 import ru.lazyhat.compukterkraft.core.Config
-import ru.lazyhat.compukterkraft.core.block.ComputerFamily
+import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 
 /**
  * Type-safe representation of which side of the network this menu lives on.
@@ -72,7 +72,7 @@ abstract class AbstractComputerMenu(
     type: MenuType<out AbstractComputerMenu>,
     id: Int,
     private val canUse: (Player) -> Boolean,
-    override val family: ComputerFamily,
+    override val family: DeviceFamily,
     computer: ServerComputer?,
     containerData: ComputerContainerData?,
 ) : AbstractContainerMenu(type, id),

@@ -31,14 +31,14 @@ import ru.lazyhat.compukterkraft.common.binding.ModObjects
 import ru.lazyhat.compukterkraft.common.computer.context.ServerComputer
 import ru.lazyhat.compukterkraft.common.computer.menu.ComputerMenuWithoutInventory
 import ru.lazyhat.compukterkraft.core.LOGGER
-import ru.lazyhat.compukterkraft.core.block.ComputerFamily
+import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 import ru.lazyhat.compukterkraft.core.computer.ComputerProperties
 
 open class ComputerBlockEntity(
     type: BlockEntityType<out ComputerBlockEntity>,
     pos: BlockPos,
     state: BlockState,
-    family: ComputerFamily,
+    family: DeviceFamily,
 ) : AbstractComputerBlockEntity(type, pos, state, family) {
     override fun createComputer(id: Int): ServerComputer =
         ServerComputer(

@@ -23,13 +23,13 @@ import net.minecraft.core.BlockPos
 import net.minecraft.world.level.block.entity.BlockEntityType
 import net.minecraft.world.level.block.state.BlockState
 import ru.lazyhat.compukterkraft.common.computer.block.ComputerBlockEntity
-import ru.lazyhat.compukterkraft.core.block.ComputerFamily
+import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 
 class NeoForgeComputerBlockEntity(
     type: BlockEntityType<out ComputerBlockEntity>,
     pos: BlockPos,
     state: BlockState,
-    family: ComputerFamily,
+    family: DeviceFamily,
 ) : ComputerBlockEntity(type, pos, state, family) {
     override fun onChunkUnloaded() {
         releaseServerComputer()
