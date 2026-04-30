@@ -26,10 +26,10 @@ import ru.lazyhat.compukterkraft.common.network.NetworkMessage
 import ru.lazyhat.compukterkraft.common.network.NetworkMessages
 import ru.lazyhat.compukterkraft.common.network.ServerNetworkContext
 import ru.lazyhat.compukterkraft.common.workbench.menu.AbstractWorkbenchMenu
-import ru.lazyhat.compukterkraft.core.computer.input.InputEvent
-import ru.lazyhat.compukterkraft.core.computer.input.KeyInputEvent
-import ru.lazyhat.compukterkraft.core.computer.input.MouseInputEvent
-import ru.lazyhat.compukterkraft.core.computer.input.PasteInputEvent
+import ru.lazyhat.compukterkraft.core.device.input.InputEvent
+import ru.lazyhat.compukterkraft.core.device.input.KeyInputEvent
+import ru.lazyhat.compukterkraft.core.device.input.MouseInputEvent
+import ru.lazyhat.compukterkraft.core.device.input.PasteInputEvent
 import ru.lazyhat.compukterkraft.core.utils.StringUtil
 import java.nio.ByteBuffer
 

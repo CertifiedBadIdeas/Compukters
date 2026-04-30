@@ -18,9 +18,9 @@
  */
 package ru.lazyhat.compukterkraft.impl.computer.runtime
 
-import ru.lazyhat.compukterkraft.core.computer.runtime.ComputerProgramCompiler
-import ru.lazyhat.compukterkraft.core.computer.runtime.WorkspaceProgramLoader
-import ru.lazyhat.compukterkraft.core.computer.vm.DeviceWorkspaceHost
+import ru.lazyhat.compukterkraft.core.device.runtime.ComputerProgramCompiler
+import ru.lazyhat.compukterkraft.core.device.runtime.WorkspaceProgramLoader
+import ru.lazyhat.compukterkraft.core.device.vm.DeviceWorkspaceHost
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceCpuResources
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceMemoryResources
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceProfile

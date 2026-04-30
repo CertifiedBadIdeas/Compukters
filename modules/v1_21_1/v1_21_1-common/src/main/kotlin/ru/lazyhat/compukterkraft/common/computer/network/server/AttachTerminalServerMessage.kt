@@ -31,7 +31,7 @@ import ru.lazyhat.compukterkraft.common.network.ServerNetworkContext
  * when the UI opens.
  *
  * The server creates (or refreshes) a per-player consumer on the computer's
- * [ComputerStdioBroadcaster][ru.lazyhat.compukterkraft.core.computer.vm.api.ComputerStdioBroadcaster]
+ * [ComputerStdioBroadcaster][ru.lazyhat.compukterkraft.core.device.vm.api.ComputerStdioBroadcaster]
  * and replays the current scrollback so the client boots with a consistent view.
  */
 class AttachTerminalServerMessage : ComputerServerMessage {

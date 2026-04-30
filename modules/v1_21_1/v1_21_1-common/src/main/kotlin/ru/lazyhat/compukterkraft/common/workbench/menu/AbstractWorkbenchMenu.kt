@@ -36,7 +36,7 @@ import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchDocume
 import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchOpsClientMessage
 import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchPresenceClientMessage
 import ru.lazyhat.compukterkraft.common.workbench.network.server.WorkbenchWorkspaceServerMessage
-import ru.lazyhat.compukterkraft.core.computer.input.InputEvent
+import ru.lazyhat.compukterkraft.core.device.input.InputEvent
 import ru.lazyhat.compukterkraft.core.workbench.EditorPresence
 import ru.lazyhat.compukterkraft.core.workbench.screen.presencesForRecipient
 import ru.lazyhat.compukterkraft.core.workbench.RemoteCursor

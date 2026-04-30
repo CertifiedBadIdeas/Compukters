@@ -18,9 +18,9 @@
  */
 package ru.lazyhat.compukterkraft.core.gui
 
-import ru.lazyhat.compukterkraft.core.computer.input.InputEventSink
-import ru.lazyhat.compukterkraft.core.computer.input.KeyInputEvent
-import ru.lazyhat.compukterkraft.core.computer.input.PasteInputEvent
+import ru.lazyhat.compukterkraft.core.device.input.InputEventSink
+import ru.lazyhat.compukterkraft.core.device.input.KeyInputEvent
+import ru.lazyhat.compukterkraft.core.device.input.PasteInputEvent
 import ru.lazyhat.compukterkraft.core.input.KeyCodes
 import ru.lazyhat.compukterkraft.core.platform.api.PlatformInputProvider
 import ru.lazyhat.compukterkraft.core.utils.StringUtil

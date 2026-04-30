@@ -18,8 +18,8 @@
  */
 package ru.lazyhat.compukterkraft.impl
 
-import ru.lazyhat.compukterkraft.core.computer.vm.DeviceWorkspaceHost
-import ru.lazyhat.compukterkraft.core.computer.vm.DeviceWorkspaceInitializer
+import ru.lazyhat.compukterkraft.core.device.vm.DeviceWorkspaceHost
+import ru.lazyhat.compukterkraft.core.device.vm.DeviceWorkspaceInitializer
 import java.nio.file.Path
 import kotlin.io.path.createTempDirectory
 import kotlin.io.path.exists

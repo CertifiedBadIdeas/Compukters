@@ -24,7 +24,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 import ru.lazyhat.compukterkraft.common.workbench.context.ServerWorkbench
-import ru.lazyhat.compukterkraft.core.computer.vm.DeviceWorkspaceHost
+import ru.lazyhat.compukterkraft.core.device.vm.DeviceWorkspaceHost
 import ru.lazyhat.compukterkraft.core.workbench.TargetControlGateway
 import ru.lazyhat.compukterkraft.core.workbench.LocalEdit
 import ru.lazyhat.compukterkraft.core.workbench.WorkbenchIdeFacade

@@ -21,11 +21,11 @@ package ru.lazyhat.compukterkraft.common.workbench.input
 import net.minecraft.world.inventory.AbstractContainerMenu
 import ru.lazyhat.compukterkraft.common.network.ClientNetworking
 import ru.lazyhat.compukterkraft.common.workbench.network.server.WorkbenchInputServerMessage
-import ru.lazyhat.compukterkraft.core.computer.input.TargetInputGateway
-import ru.lazyhat.compukterkraft.core.computer.input.InputEvent
-import ru.lazyhat.compukterkraft.core.computer.input.KeyInputEvent
-import ru.lazyhat.compukterkraft.core.computer.input.MouseInputEvent
-import ru.lazyhat.compukterkraft.core.computer.input.PasteInputEvent
+import ru.lazyhat.compukterkraft.core.device.input.TargetInputGateway
+import ru.lazyhat.compukterkraft.core.device.input.InputEvent
+import ru.lazyhat.compukterkraft.core.device.input.KeyInputEvent
+import ru.lazyhat.compukterkraft.core.device.input.MouseInputEvent
+import ru.lazyhat.compukterkraft.core.device.input.PasteInputEvent
 
 class NetworkWorkbenchInputGateway(
     private val menu: AbstractContainerMenu,

@@ -188,9 +188,10 @@ RuntimeDeviceImpl.close()
 | `compukterkraft.core.bootstrap`               | `CommonModBootstrap`, content descriptors, `CommonNetworkProtocol` |
 | `compukterkraft.core.platform.api`             | Port interfaces: `PlatformBlockRegistrar`, `PlatformMenuRegistrar` |
 | `compukterkraft.core.block`                    | `DeviceFamily` enum (pure Kotlin, no MC deps)                      |
-| `compukterkraft.core.computer`                 | `ComputerContext` — shared computer context                        |
-| `compukterkraft.core.computer.runtime`         | `RuntimeDevice` (umbrella + role interfaces), `RuntimeDeviceImpl`, `DeviceManager`, host ports (`GameTimeSource`, `TerminalNetworkBridge`, `DeviceStateSink`) |
-| `compukterkraft.core.computer.input`           | Input dispatch: `ComputerInputDispatcher`, `ServerInputHandler`    |
+| `compukterkraft.core.device`                 | `DeviceEvents`, `DeviceProperties` — shared device context                        |
+| `compukterkraft.core.device.runtime`         | `RuntimeDevice` (umbrella + role interfaces), `RuntimeDeviceImpl`, `DeviceManager`, host ports (`GameTimeSource`, `TerminalNetworkBridge`, `DeviceStateSink`) |
+| `compukterkraft.core.device.input`           | Input dispatch: `ComputerInputDispatcher`, `ServerInputHandler`    |
+| `compukterkraft.core.device.vm`              | Background VM host: `BackgroundDeviceVm`, `DeviceVmSupervisor`, `DeviceProfileRegistry`, `vm/api/*` |
 | `compukterkraft.core.workbench`                | IDE/workbench contracts and state (Authoring Station, peer of computer) |
 
 ### `v1_x_x-common` modules

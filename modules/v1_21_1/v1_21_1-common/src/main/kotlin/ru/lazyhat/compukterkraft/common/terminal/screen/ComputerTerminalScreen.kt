@@ -33,8 +33,8 @@ import ru.lazyhat.compukterkraft.common.ui.dsl.translatable
 import ru.lazyhat.compukterkraft.common.ui.program.DslContainerScreen
 import ru.lazyhat.compukterkraft.core.Config
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
-import ru.lazyhat.compukterkraft.core.computer.input.ComputerControlAction
-import ru.lazyhat.compukterkraft.core.computer.input.ControlInputEvent
+import ru.lazyhat.compukterkraft.core.device.input.ComputerControlAction
+import ru.lazyhat.compukterkraft.core.device.input.ControlInputEvent
 import ru.lazyhat.compukterkraft.core.gui.TerminalRect
 import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalInputController
 import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalMetrics

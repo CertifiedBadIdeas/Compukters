@@ -23,7 +23,7 @@ import ru.lazyhat.compukterkraft.common.computer.menu.ComputerMenu
 import ru.lazyhat.compukterkraft.common.network.MessageType
 import ru.lazyhat.compukterkraft.common.network.NetworkMessages
 import ru.lazyhat.compukterkraft.common.network.ServerNetworkContext
-import ru.lazyhat.compukterkraft.core.computer.input.KeyInputEvent
+import ru.lazyhat.compukterkraft.core.device.input.KeyInputEvent
 
 class KeyEventServerMessage : ComputerServerMessage {
     private val type: Action

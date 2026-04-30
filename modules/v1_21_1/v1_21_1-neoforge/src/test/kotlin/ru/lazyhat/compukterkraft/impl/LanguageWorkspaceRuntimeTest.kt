@@ -19,9 +19,9 @@
 package ru.lazyhat.compukterkraft.impl
 
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
-import ru.lazyhat.compukterkraft.core.computer.vm.DeviceProfileRegistry
-import ru.lazyhat.compukterkraft.core.computer.vm.DeviceWorkspaceHost
-import ru.lazyhat.compukterkraft.core.computer.vm.DeviceWorkspaceInitializer
+import ru.lazyhat.compukterkraft.core.device.vm.DeviceProfileRegistry
+import ru.lazyhat.compukterkraft.core.device.vm.DeviceWorkspaceHost
+import ru.lazyhat.compukterkraft.core.device.vm.DeviceWorkspaceInitializer
 import ru.lazyhat.compukterkraft.core.language.LanguageServices
 import ru.lazyhat.compukterkraft.lang.frontend.FrontendSeverity
 import ru.lazyhat.compukterkraft.lang.runtime.BytecodeVirtualMachine

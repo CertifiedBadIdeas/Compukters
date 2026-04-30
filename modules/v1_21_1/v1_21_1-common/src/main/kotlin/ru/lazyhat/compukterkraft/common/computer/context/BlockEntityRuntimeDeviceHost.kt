@@ -24,9 +24,9 @@ import ru.lazyhat.compukterkraft.common.computer.block.AbstractComputerBlockEnti
 import ru.lazyhat.compukterkraft.common.computer.menu.ComputerMenu
 import ru.lazyhat.compukterkraft.common.computer.network.client.StdoutBytesClientMessage
 import ru.lazyhat.compukterkraft.common.network.ServerNetworking
-import ru.lazyhat.compukterkraft.core.computer.runtime.ports.DeviceStateSink
-import ru.lazyhat.compukterkraft.core.computer.runtime.ports.GameTimeSource
-import ru.lazyhat.compukterkraft.core.computer.runtime.ports.TerminalNetworkBridge
+import ru.lazyhat.compukterkraft.core.device.runtime.ports.DeviceStateSink
+import ru.lazyhat.compukterkraft.core.device.runtime.ports.GameTimeSource
+import ru.lazyhat.compukterkraft.core.device.runtime.ports.TerminalNetworkBridge
 import java.util.UUID
 
 /**
