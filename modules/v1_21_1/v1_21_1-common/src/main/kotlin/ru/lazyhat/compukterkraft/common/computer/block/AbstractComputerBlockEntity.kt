@@ -35,7 +35,7 @@ import ru.lazyhat.compukterkraft.common.utils.computerLabel
 import ru.lazyhat.compukterkraft.common.utils.ifServerSide
 import ru.lazyhat.compukterkraft.common.utils.updateBlock
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
-import ru.lazyhat.compukterkraft.core.computer.runtime.RuntimeDevice
+import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDevice
 
 abstract class AbstractComputerBlockEntity(
     type: BlockEntityType<out AbstractComputerBlockEntity>,
@@ -79,7 +79,7 @@ abstract class AbstractComputerBlockEntity(
 
     abstract fun updateBlockState(newState: ComputerState)
 
-    /** Adapter for [ru.lazyhat.compukterkraft.core.computer.runtime.ports.DeviceStateSink]. */
+    /** Adapter for [ru.lazyhat.compukterkraft.core.device.runtime.ports.DeviceStateSink]. */
     internal fun updateBlockState(isOn: Boolean) {
         updateBlockState(if (isOn) ComputerState.ON else ComputerState.OFF)
     }

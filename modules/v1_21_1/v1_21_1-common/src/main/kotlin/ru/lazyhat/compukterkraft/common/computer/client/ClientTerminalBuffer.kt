@@ -18,7 +18,7 @@
  */
 package ru.lazyhat.compukterkraft.common.computer.client
 
-import ru.lazyhat.compukterkraft.core.computer.vm.api.ScreenBufferVtSink
+import ru.lazyhat.compukterkraft.core.device.vm.api.ScreenBufferVtSink
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBuffer
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.vt.VtParser

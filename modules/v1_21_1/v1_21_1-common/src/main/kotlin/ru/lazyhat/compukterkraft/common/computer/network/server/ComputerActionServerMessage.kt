@@ -23,8 +23,8 @@ import ru.lazyhat.compukterkraft.common.computer.menu.ComputerMenu
 import ru.lazyhat.compukterkraft.common.network.MessageType
 import ru.lazyhat.compukterkraft.common.network.NetworkMessages
 import ru.lazyhat.compukterkraft.common.network.ServerNetworkContext
-import ru.lazyhat.compukterkraft.core.computer.input.ComputerControlAction
-import ru.lazyhat.compukterkraft.core.computer.input.ControlInputEvent
+import ru.lazyhat.compukterkraft.core.device.input.ComputerControlAction
+import ru.lazyhat.compukterkraft.core.device.input.ControlInputEvent
 
 class ComputerActionServerMessage : ComputerServerMessage {
     private val action: Action

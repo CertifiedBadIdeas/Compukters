@@ -33,9 +33,9 @@ import ru.lazyhat.compukterkraft.common.computer.context.ServerContext
 import ru.lazyhat.compukterkraft.common.computer.menu.ComputerMenuWithoutInventory
 import ru.lazyhat.compukterkraft.core.LOGGER
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
-import ru.lazyhat.compukterkraft.core.computer.DeviceProperties
-import ru.lazyhat.compukterkraft.core.computer.runtime.RuntimeDevice
-import ru.lazyhat.compukterkraft.core.computer.runtime.RuntimeDeviceImpl
+import ru.lazyhat.compukterkraft.core.device.DeviceProperties
+import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDevice
+import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDeviceImpl
 
 open class ComputerBlockEntity(
     type: BlockEntityType<out ComputerBlockEntity>,

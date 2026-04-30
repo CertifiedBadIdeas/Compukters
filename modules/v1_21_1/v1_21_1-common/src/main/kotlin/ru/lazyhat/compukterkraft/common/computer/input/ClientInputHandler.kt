@@ -20,9 +20,9 @@ package ru.lazyhat.compukterkraft.common.computer.input
 
 import net.minecraft.world.inventory.AbstractContainerMenu
 import ru.lazyhat.compukterkraft.common.computer.input.NetworkComputerInputGateway
-import ru.lazyhat.compukterkraft.core.computer.input.TargetInputGateway
-import ru.lazyhat.compukterkraft.core.computer.input.InputEvent
-import ru.lazyhat.compukterkraft.core.computer.input.InputEventSink
+import ru.lazyhat.compukterkraft.core.device.input.TargetInputGateway
+import ru.lazyhat.compukterkraft.core.device.input.InputEvent
+import ru.lazyhat.compukterkraft.core.device.input.InputEventSink
 
 /**
  * Client-side [InputEventSink] that forwards all input to the server via [TargetInputGateway].

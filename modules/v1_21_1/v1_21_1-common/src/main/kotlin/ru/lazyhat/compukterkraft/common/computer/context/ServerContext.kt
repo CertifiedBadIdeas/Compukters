@@ -21,8 +21,8 @@ package ru.lazyhat.compukterkraft.common.computer.context
 
 import net.minecraft.server.MinecraftServer
 import net.minecraft.world.level.storage.LevelResource
-import ru.lazyhat.compukterkraft.core.computer.runtime.DeviceManager
-import ru.lazyhat.compukterkraft.core.computer.vm.DeviceVmSupervisor
+import ru.lazyhat.compukterkraft.core.device.runtime.DeviceManager
+import ru.lazyhat.compukterkraft.core.device.vm.DeviceVmSupervisor
 
 class ServerContext(
     val server: MinecraftServer,

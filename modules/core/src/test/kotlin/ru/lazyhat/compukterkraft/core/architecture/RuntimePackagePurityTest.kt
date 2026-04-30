@@ -26,8 +26,8 @@ import kotlin.test.assertTrue
 import kotlin.test.fail
 
 /**
- * The `ru.lazyhat.compukterkraft.core.computer.runtime` package is the home of
- * [ru.lazyhat.compukterkraft.core.computer.runtime.RuntimeDevice] and its
+ * The `ru.lazyhat.compukterkraft.core.device.runtime` package is the home of
+ * [ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDevice] and its
  * canonical implementation. It must remain platform-neutral: no Minecraft
  * imports and no cross-module dependencies on `:v1_21_1-common` /
  * loader-leaf modules.
@@ -48,7 +48,7 @@ class RuntimePackagePurityTest {
     fun runtimePackageContainsNoPlatformOrCarrierImports() {
         val runtimeRoot =
             findRepoRoot()
-                .resolve("modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/computer/runtime")
+                .resolve("modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/runtime")
         assertTrue(
             Files.isDirectory(runtimeRoot),
             "Expected runtime package directory at $runtimeRoot.",

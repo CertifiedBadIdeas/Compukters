@@ -24,9 +24,9 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
-import ru.lazyhat.compukterkraft.core.computer.vm.BackgroundDeviceVm
-import ru.lazyhat.compukterkraft.core.computer.vm.DeviceVmLogger
-import ru.lazyhat.compukterkraft.core.computer.vm.DeviceWorkspaceHost
+import ru.lazyhat.compukterkraft.core.device.vm.BackgroundDeviceVm
+import ru.lazyhat.compukterkraft.core.device.vm.DeviceVmLogger
+import ru.lazyhat.compukterkraft.core.device.vm.DeviceWorkspaceHost
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceCapability
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceCpuResources
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceMemoryResources

@@ -27,7 +27,7 @@ import ru.lazyhat.compukterkraft.common.utils.deviceFamilyId
 import ru.lazyhat.compukterkraft.common.utils.computerID
 import ru.lazyhat.compukterkraft.common.utils.updateComputerDataTag
 import ru.lazyhat.compukterkraft.common.workbench.test.TestMinecraftBootstrap
-import ru.lazyhat.compukterkraft.core.computer.vm.DeviceWorkspaceHost
+import ru.lazyhat.compukterkraft.core.device.vm.DeviceWorkspaceHost
 import ru.lazyhat.compukterkraft.core.workbench.EditorPresence
 import ru.lazyhat.compukterkraft.core.workbench.crdt.AtomId
 import ru.lazyhat.compukterkraft.core.workbench.crdt.CursorAnchor
@@ -117,7 +117,7 @@ class ServerWorkbenchTest {
         workbench.runTargetProgram()
         workbench.attachTerminal()
         workbench.handleInput(
-            ru.lazyhat.compukterkraft.core.computer.input.KeyInputEvent
+            ru.lazyhat.compukterkraft.core.device.input.KeyInputEvent
                 .Down(28, repeat = false),
         )
 

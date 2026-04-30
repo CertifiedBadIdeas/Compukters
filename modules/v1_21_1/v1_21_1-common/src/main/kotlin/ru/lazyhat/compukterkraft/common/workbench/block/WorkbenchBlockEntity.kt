@@ -43,12 +43,12 @@ import ru.lazyhat.compukterkraft.common.workbench.menu.AbstractWorkbenchMenu
 import ru.lazyhat.compukterkraft.common.workbench.menu.WorkbenchMenuWithoutInventory
 import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchTerminalClientMessage
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
-import ru.lazyhat.compukterkraft.core.computer.DeviceProperties
-import ru.lazyhat.compukterkraft.core.computer.runtime.RuntimeDevice
-import ru.lazyhat.compukterkraft.core.computer.runtime.RuntimeDeviceImpl
-import ru.lazyhat.compukterkraft.core.computer.runtime.ports.DeviceStateSink
-import ru.lazyhat.compukterkraft.core.computer.runtime.ports.GameTimeSource
-import ru.lazyhat.compukterkraft.core.computer.runtime.ports.TerminalNetworkBridge
+import ru.lazyhat.compukterkraft.core.device.DeviceProperties
+import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDevice
+import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDeviceImpl
+import ru.lazyhat.compukterkraft.core.device.runtime.ports.DeviceStateSink
+import ru.lazyhat.compukterkraft.core.device.runtime.ports.GameTimeSource
+import ru.lazyhat.compukterkraft.core.device.runtime.ports.TerminalNetworkBridge
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 import java.util.UUID
 

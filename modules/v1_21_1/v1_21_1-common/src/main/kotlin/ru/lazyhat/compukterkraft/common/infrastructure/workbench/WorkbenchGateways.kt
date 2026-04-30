@@ -23,10 +23,10 @@ import ru.lazyhat.compukterkraft.common.network.ClientNetworking
 import ru.lazyhat.compukterkraft.common.workbench.menu.AbstractWorkbenchMenu
 import ru.lazyhat.compukterkraft.common.workbench.network.server.WorkbenchWorkspaceServerMessage
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
-import ru.lazyhat.compukterkraft.core.computer.input.ComputerControlAction
-import ru.lazyhat.compukterkraft.core.computer.input.ControlInputEvent
-import ru.lazyhat.compukterkraft.core.computer.input.InputEventSink
-import ru.lazyhat.compukterkraft.core.computer.vm.DeviceProfileRegistry
+import ru.lazyhat.compukterkraft.core.device.input.ComputerControlAction
+import ru.lazyhat.compukterkraft.core.device.input.ControlInputEvent
+import ru.lazyhat.compukterkraft.core.device.input.InputEventSink
+import ru.lazyhat.compukterkraft.core.device.vm.DeviceProfileRegistry
 import ru.lazyhat.compukterkraft.core.workbench.TargetControlGateway
 import ru.lazyhat.compukterkraft.core.workbench.IdeRuntimeCatalogSource
 import ru.lazyhat.compukterkraft.core.workbench.WorkbenchIdeFacade
