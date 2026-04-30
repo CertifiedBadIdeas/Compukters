@@ -43,7 +43,7 @@ class ComputerVmSupervisor(
     private val computersPath = serverWorldAccess.getWorldSavePath().resolve(MOD_ID).resolve("computers")
     private val workspaceInitializer = ComputerWorkspaceInitializer(computersPath)
     private val workspaceStore = DeviceWorkspaceHost(rootPath = computersPath, defaultDiskQuotaBytes = Config.computerSpaceLimit.toLong())
-    private val ideHost = WorkspaceComputerIdeHost(workspaceStore)
+    private val ideHost = WorkspaceDeviceIdeHost(workspaceStore)
 
     val workspace: DeviceWorkspace
         get() = workspaceStore
