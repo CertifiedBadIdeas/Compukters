@@ -578,7 +578,7 @@ git commit -m "refactor: remove computer workspace packet path"
 In `docs/ARCHITECTURE.md`, make these content changes:
 
 ```md
-| `ck.common.computer.screen`           | `ComputerScreen`, `ComputerTerminalScreen`                         |
+| `compukterkraft.common.computer.screen`           | `ComputerScreen`, `ComputerTerminalScreen`                         |
 
 ### `WorkbenchStore`
 

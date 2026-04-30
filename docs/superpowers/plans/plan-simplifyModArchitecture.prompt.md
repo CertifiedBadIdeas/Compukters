@@ -52,7 +52,7 @@ VM владеет `ScreenBuffer` — плоский `CharArray` + `ByteArray` (�
 
 ---
 
-## Step 3. Декларативный UI-слой (`ck.mod.ui.dsl`)
+## Step 3. Декларативный UI-слой (`compukterkraft.mod.ui.dsl`)
 
 ### Что сейчас
 
@@ -125,7 +125,7 @@ override fun renderBg(graphics, ...) {
 
 ### Что предлагается
 
-Объединить в `ck.mod.ui.render.TerminalRenderer`, который принимает `ScreenBufferSnapshot` (из Step 1) вместо `Terminal`-класса. Выделить в отдельный пакет `ck.mod.ui.render`, чтобы весь Blaze3D-код был в одном месте.
+Объединить в `compukterkraft.mod.ui.render.TerminalRenderer`, который принимает `ScreenBufferSnapshot` (из Step 1) вместо `Terminal`-класса. Выделить в отдельный пакет `compukterkraft.mod.ui.render`, чтобы весь Blaze3D-код был в одном месте.
 
 ### Обоснование: правильно ли это?
 

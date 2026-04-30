@@ -4,7 +4,7 @@
 
 **Цель:** Привести структуру кода и нейминг в соответствие с доменной моделью Device / Authoring Station из [docs/superpowers/specs/2026-04-30-device-authoring-domain-model-design.ru.md](../specs/2026-04-30-device-authoring-domain-model-design.ru.md). Семантических изменений нет — только перенос пакетов, переименование gateway-типов и правки документации.
 
-**Архитектура:** Три независимых рефакторинга, каждый изолирован в свой коммит и проверяется прогоном тестового набора проекта. Работа механическая: перенос `ck.core.computer.workbench.*` в `ck.core.workbench.*`, переименование двух cross-category bridge-типов и синхронизация двух doc-файлов. Модули `compiler` и `v1_21_1-common`/`fabric`/`neoforge`/`create-neoforge` затрагиваются только обновлением путей импортов.
+**Архитектура:** Три независимых рефакторинга, каждый изолирован в свой коммит и проверяется прогоном тестового набора проекта. Работа механическая: перенос `compukterkraft.core.computer.workbench.*` в `compukterkraft.core.workbench.*`, переименование двух cross-category bridge-типов и синхронизация двух doc-файлов. Модули `compiler` и `v1_21_1-common`/`fabric`/`neoforge`/`create-neoforge` затрагиваются только обновлением путей импортов.
 
 **Tech stack:** Kotlin, Gradle (Kotlin DSL), Architectury Loom; тесты прогоняются через `./gradlew test`.
 
@@ -59,7 +59,7 @@
 
 ### Задача 5 — Правки документации
 
-- `docs/ARCHITECTURE.md` — таблица пакетов со ссылкой `ck.core.computer.workbench`
+- `docs/ARCHITECTURE.md` — таблица пакетов со ссылкой `compukterkraft.core.computer.workbench`
 - `docs/TODOs.md` — пункт 8
 
 ---
@@ -80,7 +80,7 @@
 
 ---
 
-## Задача 1: перенос `ck.core.computer.workbench.*` → `ck.core.workbench.*`
+## Задача 1: перенос `compukterkraft.core.computer.workbench.*` → `compukterkraft.core.workbench.*`
 
 **Файлы:**
 - Перенос: 32 файла под `modules/core/src/{main,test}/kotlin/ru/lazyhat/compukterkraft/core/computer/workbench/**`
@@ -382,18 +382,18 @@ grep -n 'ck\.core\.computer\.workbench' docs/ARCHITECTURE.md
 Открыть `docs/ARCHITECTURE.md`. Найти строку:
 
 ```
-| `ck.core.computer.workbench`       | IDE/workbench contracts and state                                  |
+| `compukterkraft.core.computer.workbench`       | IDE/workbench contracts and state                                  |
 ```
 
 Заменить на запись, отражающую новую структуру (с peer-уточнением):
 
 ```
-| `ck.core.workbench`                | Authoring Station contracts and state (peer to `ck.core.computer`) |
+| `compukterkraft.core.workbench`                | Authoring Station contracts and state (peer to `compukterkraft.core.computer`) |
 ```
 
-Если соседняя строка `ck.core.computer` тоже нуждается в peer-уточнении — обновить её описание, явно отметив, что это сторона Runtime Device. Использовать единое последовательное формулирование.
+Если соседняя строка `compukterkraft.core.computer` тоже нуждается в peer-уточнении — обновить её описание, явно отметив, что это сторона Runtime Device. Использовать единое последовательное формулирование.
 
-- [ ] **Шаг 3: убедиться, что больше нет ссылок на `ck.core.computer.workbench` в `docs/`**
+- [ ] **Шаг 3: убедиться, что больше нет ссылок на `compukterkraft.core.computer.workbench` в `docs/`**
 
 ```bash
 grep -rn --include='*.md' 'ck\.core\.computer\.workbench' docs/

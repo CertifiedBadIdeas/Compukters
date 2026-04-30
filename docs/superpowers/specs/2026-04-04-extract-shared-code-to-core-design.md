@@ -21,7 +21,7 @@ Create focused interfaces in `core` for the few Minecraft-specific concepts used
 Concrete object with stable GLFW key code constants. Values are identical across all MC versions.
 
 ```kotlin
-// core: ck.mod.input.KeyCodes
+// core: compukterkraft.mod.input.KeyCodes
 object KeyCodes {
     const val KEY_ENTER = 257
     const val KEY_KP_ENTER = 335
@@ -49,7 +49,7 @@ object KeyCodes {
 Abstracts `net.minecraft.client.gui.Font.width(String): Int`.
 
 ```kotlin
-// core: ck.mod.platform.api.FontMetrics
+// core: compukterkraft.mod.platform.api.FontMetrics
 fun interface FontMetrics {
     fun width(text: String): Int
 }
@@ -63,7 +63,7 @@ Implementation: one-line wrapper in common delegating to MC Font.
 Abstracts `MinecraftServer.getWorldPath(LevelResource.ROOT)`.
 
 ```kotlin
-// core: ck.mod.platform.api.ServerWorldAccess
+// core: compukterkraft.mod.platform.api.ServerWorldAccess
 fun interface ServerWorldAccess {
     fun getWorldSavePath(): Path
 }
@@ -77,7 +77,7 @@ Implementation: `{ server.getWorldPath(LevelResource.ROOT) }` in common.
 Abstracts clipboard, paste detection, and physical key name resolution.
 
 ```kotlin
-// core: ck.mod.platform.api.PlatformInputProvider
+// core: compukterkraft.mod.platform.api.PlatformInputProvider
 interface PlatformInputProvider {
     fun getClipboardString(): String
     fun isPasteShortcut(keyCode: Int): Boolean
@@ -96,14 +96,14 @@ Both enums move to core as pure enums.
 `ComputerFamily.checkUsable(player, server)` — the only MC-dependent method — becomes an extension function in common:
 
 ```kotlin
-// common: ck.mod.block.ComputerFamilyExt.kt
+// common: compukterkraft.mod.block.ComputerFamilyExt.kt
 fun ComputerFamily.checkUsable(player: Player): Boolean { ... }
 ```
 
 `ComputerState` implements `StringRepresentable` only in common via an adapter:
 
 ```kotlin
-// common: ck.mod.block.ComputerStateAdapter.kt
+// common: compukterkraft.mod.block.ComputerStateAdapter.kt
 class ComputerStateStringRepresentable(val state: ComputerState) : StringRepresentable { ... }
 ```
 
