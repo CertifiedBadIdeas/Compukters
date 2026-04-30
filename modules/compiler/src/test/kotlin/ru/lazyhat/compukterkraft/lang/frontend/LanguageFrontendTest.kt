@@ -367,4 +367,46 @@ class LanguageFrontendTest {
             artifact.analysis.diagnostics.joinToString { it.message },
         )
     }
+
+    @Test
+    fun compilesCompoundAssignmentToVar() {
+        val artifact =
+            frontend.compile(
+                "compound.ck",
+                """
+                fun main() {
+                    var i: Int = 0;
+                    i += 1;
+                    i -= 2;
+                    i *= 3;
+                    i /= 4;
+                }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+    }
+
+    @Test
+    fun rejectsCompoundAssignmentToVal() {
+        val artifact =
+            frontend.compile(
+                "compound_val.ck",
+                """
+                fun main() {
+                    val i: Int = 0;
+                    i += 1;
+                }
+                """.trimIndent(),
+            )
+
+        assertEquals(null, artifact.module)
+        assertTrue(
+            artifact.analysis.diagnostics.any { it.message.contains("Cannot reassign") },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+    }
 }
