@@ -25,7 +25,7 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 import ru.lazyhat.compukterkraft.common.workbench.context.ServerWorkbench
 import ru.lazyhat.compukterkraft.core.computer.vm.ComputerWorkspaceHost
-import ru.lazyhat.compukterkraft.core.workbench.ComputerControlGateway
+import ru.lazyhat.compukterkraft.core.workbench.TargetControlGateway
 import ru.lazyhat.compukterkraft.core.workbench.LocalEdit
 import ru.lazyhat.compukterkraft.core.workbench.WorkbenchIdeFacade
 import ru.lazyhat.compukterkraft.core.workbench.WorkbenchOpsGateway
@@ -162,7 +162,7 @@ class WorkbenchSyncIntegrationTest {
         override fun read(path: String) = Unit
     }
 
-    private class RecordingControlGateway : ComputerControlGateway {
+    private class RecordingControlGateway : TargetControlGateway {
         var runCount = 0
             private set
 

@@ -32,7 +32,7 @@ import ru.lazyhat.compukterkraft.core.workbench.crdt.Op
  * - [sendCursor] reports a caret position to the server so other collaborators viewing the
  *   same document can render it. `cursor == null` clears the local caret (e.g. on file close).
  *
- * Replaces the legacy `WorkspaceGateway.write` / `ComputerControlGateway.pullFromTarget` /
+ * Replaces the legacy `WorkspaceGateway.write` / `TargetControlGateway.pullFromTarget` /
  * `pushToTarget` save/sync trio.
  */
 interface WorkbenchOpsGateway {

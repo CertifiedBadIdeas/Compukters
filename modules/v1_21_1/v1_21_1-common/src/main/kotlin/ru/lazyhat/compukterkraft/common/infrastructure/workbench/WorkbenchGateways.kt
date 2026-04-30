@@ -27,7 +27,7 @@ import ru.lazyhat.compukterkraft.core.computer.input.ComputerControlAction
 import ru.lazyhat.compukterkraft.core.computer.input.ControlInputEvent
 import ru.lazyhat.compukterkraft.core.computer.input.InputEventSink
 import ru.lazyhat.compukterkraft.core.computer.vm.ComputerProfileRegistry
-import ru.lazyhat.compukterkraft.core.workbench.ComputerControlGateway
+import ru.lazyhat.compukterkraft.core.workbench.TargetControlGateway
 import ru.lazyhat.compukterkraft.core.workbench.IdeRuntimeCatalogSource
 import ru.lazyhat.compukterkraft.core.workbench.WorkbenchIdeFacade
 import ru.lazyhat.compukterkraft.core.workbench.WorkbenchRemoteState
@@ -114,7 +114,7 @@ class NetworkWorkbenchOpsGateway(
 
 class InputHandlerControlGateway(
     private val inputEventSink: InputEventSink,
-) : ComputerControlGateway {
+) : TargetControlGateway {
     override fun reboot() {
         inputEventSink.accept(ControlInputEvent(ComputerControlAction.REBOOT))
     }
@@ -128,7 +128,7 @@ class InputHandlerControlGateway(
 
 class NetworkWorkbenchControlGateway(
     private val menu: AbstractWorkbenchMenu,
-) : ComputerControlGateway {
+) : TargetControlGateway {
     override fun reboot() {
         ClientNetworking.sendToServer(WorkbenchWorkspaceServerMessage(menu, WorkbenchWorkspaceServerMessage.Action.REBOOT))
     }

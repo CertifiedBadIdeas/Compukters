@@ -55,7 +55,7 @@ interface WorkspaceGateway {
     fun read(path: String)
 }
 
-interface ComputerControlGateway {
+interface TargetControlGateway {
     fun reboot()
 
     fun runTargetProgram()

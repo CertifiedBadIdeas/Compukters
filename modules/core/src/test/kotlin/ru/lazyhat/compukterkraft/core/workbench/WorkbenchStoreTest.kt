@@ -43,7 +43,7 @@ class WorkbenchStoreTest {
     @Test
     fun terminalDockStartsHiddenAndCanBeToggled() =
         runTest(UnconfinedTestDispatcher()) {
-            val store = WorkbenchStore(FakeWorkspaceGateway(), FakeComputerControlGateway(), FakeWorkbenchIdeFacade())
+            val store = WorkbenchStore(FakeWorkspaceGateway(), FakeTargetControlGateway(), FakeWorkbenchIdeFacade())
             val updates = FakeWorkbenchUpdateSource()
             store.bind(backgroundScope, updates)
             updates.push(target = WorkbenchTargetState(connected = true, displayName = "Pocket Computer", familyId = "normal"))
@@ -60,7 +60,7 @@ class WorkbenchStoreTest {
     @Test
     fun terminalCannotBeOpenedWithoutAttachedComputer() =
         runTest(UnconfinedTestDispatcher()) {
-            val store = WorkbenchStore(FakeWorkspaceGateway(), FakeComputerControlGateway(), FakeWorkbenchIdeFacade())
+            val store = WorkbenchStore(FakeWorkspaceGateway(), FakeTargetControlGateway(), FakeWorkbenchIdeFacade())
 
             store.toggleTerminalVisibility()
 
@@ -70,7 +70,7 @@ class WorkbenchStoreTest {
     @Test
     fun terminalAutoHidesWhenComputerIsRemoved() =
         runTest(UnconfinedTestDispatcher()) {
-            val store = WorkbenchStore(FakeWorkspaceGateway(), FakeComputerControlGateway(), FakeWorkbenchIdeFacade())
+            val store = WorkbenchStore(FakeWorkspaceGateway(), FakeTargetControlGateway(), FakeWorkbenchIdeFacade())
             val updates = FakeWorkbenchUpdateSource()
             store.bind(backgroundScope, updates)
             updates.push(target = WorkbenchTargetState(connected = true, displayName = "Pocket Computer", familyId = "normal"))
@@ -86,7 +86,7 @@ class WorkbenchStoreTest {
     @Test
     fun rebootDelegatesToControlGateway() =
         runTest(UnconfinedTestDispatcher()) {
-            val controlGateway = FakeComputerControlGateway()
+            val controlGateway = FakeTargetControlGateway()
             val store = WorkbenchStore(FakeWorkspaceGateway(), controlGateway, FakeWorkbenchIdeFacade())
 
             store.rebootComputer()
@@ -98,7 +98,7 @@ class WorkbenchStoreTest {
     fun opensCompletionWhenTypingIdentifierPrefix() =
         runTest(UnconfinedTestDispatcher()) {
             val ideFacade = FakeWorkbenchIdeFacade()
-            val store = WorkbenchStore(FakeWorkspaceGateway(), FakeComputerControlGateway(), ideFacade)
+            val store = WorkbenchStore(FakeWorkspaceGateway(), FakeTargetControlGateway(), ideFacade)
             val updates = FakeWorkbenchUpdateSource()
 
             store.bind(backgroundScope, updates)
@@ -117,7 +117,7 @@ class WorkbenchStoreTest {
     fun doesNotOpenCompletionAfterImportSpace() =
         runTest(UnconfinedTestDispatcher()) {
             val ideFacade = FakeWorkbenchIdeFacade()
-            val store = WorkbenchStore(FakeWorkspaceGateway(), FakeComputerControlGateway(), ideFacade)
+            val store = WorkbenchStore(FakeWorkspaceGateway(), FakeTargetControlGateway(), ideFacade)
             val updates = FakeWorkbenchUpdateSource()
 
             store.bind(backgroundScope, updates)
@@ -137,7 +137,7 @@ class WorkbenchStoreTest {
     fun keepsDotTriggerWorking() =
         runTest(UnconfinedTestDispatcher()) {
             val ideFacade = FakeWorkbenchIdeFacade()
-            val store = WorkbenchStore(FakeWorkspaceGateway(), FakeComputerControlGateway(), ideFacade)
+            val store = WorkbenchStore(FakeWorkspaceGateway(), FakeTargetControlGateway(), ideFacade)
             val updates = FakeWorkbenchUpdateSource()
 
             store.bind(backgroundScope, updates)
@@ -153,7 +153,7 @@ class WorkbenchStoreTest {
     fun disablesTargetActionsWhenNoTargetIsConnected() =
         runTest(UnconfinedTestDispatcher()) {
             val ideFacade = FakeWorkbenchIdeFacade()
-            val store = WorkbenchStore(FakeWorkspaceGateway(), FakeComputerControlGateway(), ideFacade)
+            val store = WorkbenchStore(FakeWorkspaceGateway(), FakeTargetControlGateway(), ideFacade)
             val updates = FakeWorkbenchUpdateSource()
 
             store.bind(backgroundScope, updates)
@@ -168,7 +168,7 @@ class WorkbenchStoreTest {
     fun enablesTargetActionsWhenTargetDescriptorArrives() =
         runTest(UnconfinedTestDispatcher()) {
             val ideFacade = FakeWorkbenchIdeFacade()
-            val store = WorkbenchStore(FakeWorkspaceGateway(), FakeComputerControlGateway(), ideFacade)
+            val store = WorkbenchStore(FakeWorkspaceGateway(), FakeTargetControlGateway(), ideFacade)
             val updates = FakeWorkbenchUpdateSource()
 
             store.bind(backgroundScope, updates)
@@ -186,7 +186,7 @@ class WorkbenchStoreTest {
     fun runActionDelegatesToControlGateway() =
         runTest(UnconfinedTestDispatcher()) {
             val ideFacade = FakeWorkbenchIdeFacade()
-            val controlGateway = FakeComputerControlGateway()
+            val controlGateway = FakeTargetControlGateway()
             val store = WorkbenchStore(FakeWorkspaceGateway(), controlGateway, ideFacade)
             val updates = FakeWorkbenchUpdateSource()
 
@@ -201,7 +201,7 @@ class WorkbenchStoreTest {
     @Test
     fun escapeIsNotHandledByEditorStore() =
         runTest(UnconfinedTestDispatcher()) {
-            val store = WorkbenchStore(FakeWorkspaceGateway(), FakeComputerControlGateway(), FakeWorkbenchIdeFacade())
+            val store = WorkbenchStore(FakeWorkspaceGateway(), FakeTargetControlGateway(), FakeWorkbenchIdeFacade())
             val updates = FakeWorkbenchUpdateSource()
 
             store.bind(backgroundScope, updates)
@@ -213,7 +213,7 @@ class WorkbenchStoreTest {
     @Test
     fun capturesPrintableKeyDownBeforeCharTypedInEditorMode() =
         runTest(UnconfinedTestDispatcher()) {
-            val store = WorkbenchStore(FakeWorkspaceGateway(), FakeComputerControlGateway(), FakeWorkbenchIdeFacade())
+            val store = WorkbenchStore(FakeWorkspaceGateway(), FakeTargetControlGateway(), FakeWorkbenchIdeFacade())
             val updates = FakeWorkbenchUpdateSource()
 
             store.bind(backgroundScope, updates)
@@ -231,7 +231,7 @@ class WorkbenchStoreTest {
             val store =
                 WorkbenchStore(
                     FakeWorkspaceGateway(),
-                    FakeComputerControlGateway(),
+                    FakeTargetControlGateway(),
                     FakeWorkbenchIdeFacade(),
                     opsGateway,
                 ) {
@@ -263,7 +263,7 @@ class WorkbenchStoreTest {
             val store =
                 WorkbenchStore(
                     FakeWorkspaceGateway(),
-                    FakeComputerControlGateway(),
+                    FakeTargetControlGateway(),
                     FakeWorkbenchIdeFacade(),
                     opsGateway,
                 ) {
@@ -297,7 +297,7 @@ class WorkbenchStoreTest {
             val store =
                 WorkbenchStore(
                     FakeWorkspaceGateway(),
-                    FakeComputerControlGateway(),
+                    FakeTargetControlGateway(),
                     FakeWorkbenchIdeFacade(),
                     FakeWorkbenchOpsGateway(),
                 ) {
@@ -334,7 +334,7 @@ class WorkbenchStoreTest {
     fun flushAndRunWaitsForSync() =
         runTest(UnconfinedTestDispatcher()) {
             val opsGateway = FakeWorkbenchOpsGateway()
-            val controlGateway = FakeComputerControlGateway()
+            val controlGateway = FakeTargetControlGateway()
             val store =
                 WorkbenchStore(
                     FakeWorkspaceGateway(),
@@ -375,7 +375,7 @@ class WorkbenchStoreTest {
             val store =
                 WorkbenchStore(
                     FakeWorkspaceGateway(),
-                    FakeComputerControlGateway(),
+                    FakeTargetControlGateway(),
                     FakeWorkbenchIdeFacade(),
                     FakeWorkbenchOpsGateway(),
                 ) {
@@ -417,7 +417,7 @@ class WorkbenchStoreTest {
             val store =
                 WorkbenchStore(
                     FakeWorkspaceGateway(),
-                    FakeComputerControlGateway(),
+                    FakeTargetControlGateway(),
                     FakeWorkbenchIdeFacade(),
                     FakeWorkbenchOpsGateway(),
                 ) {
@@ -475,7 +475,7 @@ class WorkbenchStoreTest {
             val store =
                 WorkbenchStore(
                     FakeWorkspaceGateway(),
-                    FakeComputerControlGateway(),
+                    FakeTargetControlGateway(),
                     FakeWorkbenchIdeFacade(),
                     opsGateway,
                 ) {
@@ -522,7 +522,7 @@ class WorkbenchStoreTest {
             val store =
                 WorkbenchStore(
                     FakeWorkspaceGateway(),
-                    FakeComputerControlGateway(),
+                    FakeTargetControlGateway(),
                     FakeWorkbenchIdeFacade(),
                     opsGateway,
                 ) {
@@ -550,7 +550,7 @@ class WorkbenchStoreTest {
             val store =
                 WorkbenchStore(
                     FakeWorkspaceGateway(),
-                    FakeComputerControlGateway(),
+                    FakeTargetControlGateway(),
                     FakeWorkbenchIdeFacade(),
                     opsGateway,
                 ) {
@@ -607,7 +607,7 @@ class WorkbenchStoreTest {
         }
     }
 
-    private class FakeComputerControlGateway : ComputerControlGateway {
+    private class FakeTargetControlGateway : TargetControlGateway {
         val calls = mutableListOf<String>()
 
         override fun reboot() {
