@@ -44,14 +44,14 @@ object LanguageBuiltins {
                                     "Writes text without advancing the cursor.",
                                 ),
                                 BuiltinFunction(
-                                    "printLine",
+                                    "println",
                                     listOf("String"),
                                     "Unit",
                                     "Writes text and moves to the next line.",
                                 ),
-                                BuiltinFunction("readLine", emptyList(), "String", "Reads a line from terminal input."),
+                                BuiltinFunction("readln", emptyList(), "String", "Reads a line from terminal input."),
                                 BuiltinFunction(
-                                    "readLine",
+                                    "readln",
                                     listOf("String"),
                                     "String",
                                     "Prints a prompt and reads a line from terminal input.",

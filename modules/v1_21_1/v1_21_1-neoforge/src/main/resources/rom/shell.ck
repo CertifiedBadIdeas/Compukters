@@ -19,31 +19,31 @@ fun commandArgument(line: String): String {
 }
 
 fun printHelp() {
-    terminal.printLine("Builtins: help cd pwd reboot shutdown")
-    terminal.printLine("Programs: ls mkdir rmdir")
+    terminal.println("Builtins: help cd pwd reboot shutdown")
+    terminal.println("Programs: ls mkdir rmdir")
 }
 
 fun runExternal(command: String, argument: String) {
     if (process.run(command + ".ck", argument) != 0) {
-        terminal.printLine("Unknown command: " + command)
+        terminal.println("Unknown command: " + command)
     }
 }
 
 fun handleCd(argument: String) {
     if (strings.isBlank(argument)) {
-        terminal.printLine(displayPath(process.currentDirectory()))
+        terminal.println(displayPath(process.currentDirectory()))
         return
     }
     if (!process.changeDirectory(argument)) {
-        terminal.printLine("Directory not found: " + argument)
+        terminal.println("Directory not found: " + argument)
     }
 }
 
 fun main() {
-    terminal.printLine("Compukter Kraft shell")
-    terminal.printLine("Type `help` for commands.")
+    terminal.println("Compukter Kraft shell")
+    terminal.println("Type `help` for commands.")
     while true {
-        val line: String = terminal.readLine(displayPath(process.currentDirectory()) + " > ")
+        val line: String = terminal.readln(displayPath(process.currentDirectory()) + " > ")
         val trimmed: String = strings.trim(line)
         if (strings.isBlank(trimmed)) {
             yield()

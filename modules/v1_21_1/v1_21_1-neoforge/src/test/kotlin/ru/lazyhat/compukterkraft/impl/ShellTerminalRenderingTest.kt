@@ -62,7 +62,7 @@ class ShellTerminalRenderingTest {
 
         buffer.write("/ > ")
         buffer.write("42")
-        buffer.printLine("")
+        buffer.println("")
 
         val snap = buffer.forceSnapshot()
         val line0 = (0 until 12).map { snap.charAt(it, 0) }.joinToString("")
@@ -77,8 +77,8 @@ class ShellTerminalRenderingTest {
     fun scrollsWhenPrintingPastLastLine() {
         val buffer = ScreenBuffer(12, 2, true)
 
-        buffer.printLine("top")
-        buffer.printLine("bottom")
+        buffer.println("top")
+        buffer.println("bottom")
 
         val snap = buffer.forceSnapshot()
         val line0 = (0 until 12).map { snap.charAt(it, 0) }.joinToString("")

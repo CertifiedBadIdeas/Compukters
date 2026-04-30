@@ -24,7 +24,7 @@ Statements:
 - `when(subject) { value -> { ... } else -> { ... } }`
 - `when { condition -> { ... } else -> { ... } }`
 - `return expr;`
-- expression statements such as `terminal.printLine("ok");`
+- expression statements such as `terminal.println("ok");`
 
 ### `when` statement
 
@@ -34,9 +34,9 @@ With subject (compared via `==`):
 
 ```
 when(x) {
-    1 -> { terminal.printLine("one"); }
-    2, 3 -> { terminal.printLine("two or three"); }
-    else -> { terminal.printLine("other"); }
+    1 -> { terminal.println("one"); }
+    2, 3 -> { terminal.println("two or three"); }
+    else -> { terminal.println("other"); }
 }
 ```
 
@@ -44,9 +44,9 @@ Without subject (each branch is a `Bool` condition):
 
 ```
 when {
-    x > 10 -> { terminal.printLine("big"); }
-    x > 0 -> { terminal.printLine("positive"); }
-    else -> { terminal.printLine("non-positive"); }
+    x > 10 -> { terminal.println("big"); }
+    x > 0 -> { terminal.println("positive"); }
+    else -> { terminal.println("non-positive"); }
 }
 ```
 
@@ -76,7 +76,7 @@ User-defined struct types are declared with `struct`.
 `terminal`
 
 - `write(text: String): Unit`
-- `printLine(text: String): Unit`
+- `println(text: String): Unit`
 - `clear(): Unit`
 - `setCursor(x: Int, y: Int): Unit`
 

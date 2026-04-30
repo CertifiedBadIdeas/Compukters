@@ -85,12 +85,12 @@ internal class TerminalLineReader(
     private val receiveEvent: suspend () -> VmEvent,
     private val deferEvent: (VmEvent) -> Unit,
     private val write: suspend (String) -> Unit,
-    private val printLine: suspend (String) -> Unit,
+    private val println: suspend (String) -> Unit,
     private val setCursor: suspend (Int, Int) -> Unit,
     private val currentCursor: () -> Pair<Int, Int>,
     private val updateCursor: (Int, Int) -> Unit,
 ) {
-    suspend fun readLine(prompt: String = ""): String {
+    suspend fun readln(prompt: String = ""): String {
         if (prompt.isNotEmpty()) {
             write(prompt)
         }
@@ -121,7 +121,7 @@ internal class TerminalLineReader(
                             KEY_ENTER,
                             KEY_KP_ENTER,
                             -> {
-                                printLine("")
+                                println("")
                                 return line.toString()
                             }
 

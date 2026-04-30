@@ -29,8 +29,8 @@ Inspired by ComputerCraft. With one big difference: the language is not Lua.
     }
 
     fun main() {
-        terminal.printLine(greet("world"))
-        terminal.printLine("Computer #" + system.computerId())
+        terminal.println(greet("world"))
+        terminal.println("Computer #" + system.computerId())
     }
 
 Types are checked at compile time. Errors show up in the editor before you ever

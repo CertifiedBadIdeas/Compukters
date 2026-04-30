@@ -31,8 +31,8 @@ class DeviceProgramSupportTest {
     @Test
     fun fixtureWritesProgramIntoIsolatedWorkspace() {
         runtimeTestWorkspace("fixture") { workspace ->
-            workspace.writeProgram(7, "boot.ck", "fun main() { terminal.printLine(\"first\"); }")
-            workspace.writeProgram(8, "boot.ck", "fun main() { terminal.printLine(\"second\"); }")
+            workspace.writeProgram(7, "boot.ck", "fun main() { terminal.println(\"first\"); }")
+            workspace.writeProgram(8, "boot.ck", "fun main() { terminal.println(\"second\"); }")
 
             val loader = WorkspaceProgramLoader(workspace.host)
 
@@ -41,8 +41,8 @@ class DeviceProgramSupportTest {
 
             assertNotNull(first)
             assertNotNull(second)
-            assertEquals("fun main() { terminal.printLine(\"first\"); }", first.source)
-            assertEquals("fun main() { terminal.printLine(\"second\"); }", second.source)
+            assertEquals("fun main() { terminal.println(\"first\"); }", first.source)
+            assertEquals("fun main() { terminal.println(\"second\"); }", second.source)
         }
     }
 

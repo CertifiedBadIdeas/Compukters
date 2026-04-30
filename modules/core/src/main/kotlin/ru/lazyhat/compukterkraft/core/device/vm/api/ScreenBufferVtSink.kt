@@ -66,7 +66,7 @@ class ScreenBufferVtSink(
 
     override fun eraseLine(mode: Int) {
         // Modes 0 ("to end of line") and 2 ("whole line"): pragmatic common case
-        // used by shell readLine redraws. Mode 1 is YAGNI.
+        // used by shell readln redraws. Mode 1 is YAGNI.
         if (mode == 0 || mode == 2) {
             val savedX = buffer.cursorX
             val y = buffer.cursorY
@@ -100,7 +100,7 @@ class ScreenBufferVtSink(
     }
 
     override fun lineFeed() {
-        // Match the legacy VmTerminalApi.printLine behavior: move to column 0 of
+        // Match the legacy VmTerminalApi.println behavior: move to column 0 of
         // next row, scrolling if on the last line.
         if (buffer.cursorY >= buffer.height - 1) {
             buffer.scroll(1)

@@ -44,12 +44,12 @@ class VmTerminalApi(
         stdio.writeString(text)
     }
 
-    override fun printLine(text: String) {
+    override fun println(text: String) {
         stdio.writeString(text)
         stdio.writeString("\n")
     }
 
-    override suspend fun readLine(prompt: String): String {
+    override suspend fun readln(prompt: String): String {
         // DECTCEM — emit the cursor-visible VT sequence so every attached client
         // flips its own `cursorBlink` flag through the VtParser. The server-side
         // ScreenBuffer is still driven via the broadcaster's internal consumer,
@@ -60,12 +60,12 @@ class VmTerminalApi(
                 receiveEvent = { ctx.receiveEvent() },
                 deferEvent = ctx::deferEvent,
                 write = ::write,
-                printLine = ::printLine,
+                println = ::println,
                 setCursor = ::setCursor,
                 currentCursor = cursorProvider,
                 // no-op: setCursor already updates all buffers via stdio
                 updateCursor = { _, _ -> },
-            ).readLine(prompt)
+            ).readln(prompt)
         } finally {
             stdio.writeString("\u001B[?25l")
         }

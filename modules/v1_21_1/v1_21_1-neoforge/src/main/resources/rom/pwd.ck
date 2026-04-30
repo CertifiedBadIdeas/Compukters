@@ -4,8 +4,8 @@ import terminal
 fun main() {
     val path: String = process.currentDirectory()
     if (path == "") {
-        terminal.printLine("/")
+        terminal.println("/")
     } else {
-        terminal.printLine("/" + path)
+        terminal.println("/" + path)
     }
 }
