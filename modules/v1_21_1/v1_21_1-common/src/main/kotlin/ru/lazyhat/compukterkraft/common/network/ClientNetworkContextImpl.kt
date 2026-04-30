@@ -24,12 +24,12 @@ import ru.lazyhat.compukterkraft.common.computer.menu.ComputerMenu
 import ru.lazyhat.compukterkraft.common.network.text.ClientTableFormatter
 import ru.lazyhat.compukterkraft.common.network.text.TableBuilder
 import ru.lazyhat.compukterkraft.common.workbench.menu.AbstractWorkbenchMenu
-import ru.lazyhat.compukterkraft.core.computer.workbench.EditorPresence
-import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchRemoteState
-import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.CursorAnchor
-import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.Op
-import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.SiteId
-import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.TextRun
+import ru.lazyhat.compukterkraft.core.workbench.EditorPresence
+import ru.lazyhat.compukterkraft.core.workbench.WorkbenchRemoteState
+import ru.lazyhat.compukterkraft.core.workbench.crdt.CursorAnchor
+import ru.lazyhat.compukterkraft.core.workbench.crdt.Op
+import ru.lazyhat.compukterkraft.core.workbench.crdt.SiteId
+import ru.lazyhat.compukterkraft.core.workbench.crdt.TextRun
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 
 class ClientNetworkContextImpl : ClientNetworkContext {

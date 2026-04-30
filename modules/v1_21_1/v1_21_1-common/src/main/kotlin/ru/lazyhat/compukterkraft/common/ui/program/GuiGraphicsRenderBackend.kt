@@ -2,7 +2,7 @@ package ru.lazyhat.compukterkraft.common.ui.program
 
 import net.minecraft.client.gui.Font
 import net.minecraft.client.gui.GuiGraphics
-import ru.lazyhat.compukterkraft.core.computer.workbench.highlightColor
+import ru.lazyhat.compukterkraft.core.workbench.highlightColor
 import ru.lazyhat.compukterkraft.core.ui.editor.CodeEditorMetrics
 import ru.lazyhat.compukterkraft.core.ui.editor.EditorViewModel
 import ru.lazyhat.compukterkraft.core.ui.foundation.Color

@@ -28,8 +28,8 @@ import ru.lazyhat.compukterkraft.common.network.ServerNetworking
 import ru.lazyhat.compukterkraft.common.workbench.menu.AbstractWorkbenchMenu
 import ru.lazyhat.compukterkraft.common.workbench.network.readOps
 import ru.lazyhat.compukterkraft.common.workbench.network.writeOps
-import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.Op
-import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.SiteId
+import ru.lazyhat.compukterkraft.core.workbench.crdt.Op
+import ru.lazyhat.compukterkraft.core.workbench.crdt.SiteId
 
 /**
  * Client → server: a batch of CRDT ops produced by the local editor for a single document.

@@ -39,11 +39,11 @@ import ru.lazyhat.compukterkraft.common.ui.program.DslContainerScreen
 import ru.lazyhat.compukterkraft.common.workbench.input.WorkbenchClientInputHandler
 import ru.lazyhat.compukterkraft.common.workbench.menu.WorkbenchMenuWithoutInventory
 import ru.lazyhat.compukterkraft.common.workbench.menu.WorkbenchPositionableSlot
-import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchStore
-import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.SiteId
-import ru.lazyhat.compukterkraft.core.computer.workbench.screen.WorkbenchEditorViewModel
-import ru.lazyhat.compukterkraft.core.computer.workbench.screen.WorkbenchInventoryLayout
-import ru.lazyhat.compukterkraft.core.computer.workbench.screen.buildWorkbenchUi
+import ru.lazyhat.compukterkraft.core.workbench.WorkbenchStore
+import ru.lazyhat.compukterkraft.core.workbench.crdt.SiteId
+import ru.lazyhat.compukterkraft.core.workbench.screen.WorkbenchEditorViewModel
+import ru.lazyhat.compukterkraft.core.workbench.screen.WorkbenchInventoryLayout
+import ru.lazyhat.compukterkraft.core.workbench.screen.buildWorkbenchUi
 import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalInputController
 import ru.lazyhat.compukterkraft.core.ui.foundation.IntSize
 import ru.lazyhat.compukterkraft.core.ui.foundation.UiElement

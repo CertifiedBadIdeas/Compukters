@@ -20,12 +20,12 @@
 package ru.lazyhat.compukterkraft.common.workbench.network
 
 import net.minecraft.network.FriendlyByteBuf
-import ru.lazyhat.compukterkraft.core.computer.workbench.EditorPresence
-import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.AtomId
-import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.CursorAnchor
-import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.Op
-import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.SiteId
-import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.TextRun
+import ru.lazyhat.compukterkraft.core.workbench.EditorPresence
+import ru.lazyhat.compukterkraft.core.workbench.crdt.AtomId
+import ru.lazyhat.compukterkraft.core.workbench.crdt.CursorAnchor
+import ru.lazyhat.compukterkraft.core.workbench.crdt.Op
+import ru.lazyhat.compukterkraft.core.workbench.crdt.SiteId
+import ru.lazyhat.compukterkraft.core.workbench.crdt.TextRun
 
 /**
  * Wire-format helpers shared by every workbench-CRDT network message.
