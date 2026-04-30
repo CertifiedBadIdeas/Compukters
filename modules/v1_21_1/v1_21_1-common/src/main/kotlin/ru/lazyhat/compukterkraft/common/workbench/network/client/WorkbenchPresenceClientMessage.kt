@@ -26,7 +26,7 @@ import ru.lazyhat.compukterkraft.common.network.NetworkMessage
 import ru.lazyhat.compukterkraft.common.network.NetworkMessages
 import ru.lazyhat.compukterkraft.common.workbench.network.readPresences
 import ru.lazyhat.compukterkraft.common.workbench.network.writePresences
-import ru.lazyhat.compukterkraft.core.computer.workbench.EditorPresence
+import ru.lazyhat.compukterkraft.core.workbench.EditorPresence
 
 /**
  * Server → client: full snapshot of every collaborator currently editing on this workbench.

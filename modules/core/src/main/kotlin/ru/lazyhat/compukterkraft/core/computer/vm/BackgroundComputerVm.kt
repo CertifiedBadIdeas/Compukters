@@ -83,7 +83,7 @@ private data class RuntimeApiRegistryProfile(
  *   [readScreenSnapshot], and [snapshot]. These are the cross-thread entry points.
  *
  * ## Lifecycle
- * Created by [ComputerManager][ck.mod.context.ComputerManager], started with [boot],
+ * Created by [ComputerManager][compukterkraft.mod.context.ComputerManager], started with [boot],
  * stopped with [stop]. On reboot, the old VM is stopped and a new one is created.
  */
 class BackgroundComputerVm(

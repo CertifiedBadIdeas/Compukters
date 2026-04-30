@@ -25,17 +25,17 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 import ru.lazyhat.compukterkraft.common.workbench.context.ServerWorkbench
 import ru.lazyhat.compukterkraft.core.computer.vm.ComputerWorkspaceHost
-import ru.lazyhat.compukterkraft.core.computer.workbench.ComputerControlGateway
-import ru.lazyhat.compukterkraft.core.computer.workbench.LocalEdit
-import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchIdeFacade
-import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchOpsGateway
-import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchRemoteState
-import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchStore
-import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchTargetState
-import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchUpdateSource
-import ru.lazyhat.compukterkraft.core.computer.workbench.WorkspaceGateway
-import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.Op
-import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.SiteId
+import ru.lazyhat.compukterkraft.core.workbench.TargetControlGateway
+import ru.lazyhat.compukterkraft.core.workbench.LocalEdit
+import ru.lazyhat.compukterkraft.core.workbench.WorkbenchIdeFacade
+import ru.lazyhat.compukterkraft.core.workbench.WorkbenchOpsGateway
+import ru.lazyhat.compukterkraft.core.workbench.WorkbenchRemoteState
+import ru.lazyhat.compukterkraft.core.workbench.WorkbenchStore
+import ru.lazyhat.compukterkraft.core.workbench.WorkbenchTargetState
+import ru.lazyhat.compukterkraft.core.workbench.WorkbenchUpdateSource
+import ru.lazyhat.compukterkraft.core.workbench.WorkspaceGateway
+import ru.lazyhat.compukterkraft.core.workbench.crdt.Op
+import ru.lazyhat.compukterkraft.core.workbench.crdt.SiteId
 import ru.lazyhat.compukterkraft.lang.runtime.CompletionItem
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerIdeSnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceDocument
@@ -149,7 +149,7 @@ class WorkbenchSyncIntegrationTest {
 
         override fun sendCursor(
             path: String,
-            cursor: ru.lazyhat.compukterkraft.core.computer.workbench.crdt.CursorAnchor?,
+            cursor: ru.lazyhat.compukterkraft.core.workbench.crdt.CursorAnchor?,
         ) {
             // The integration test is concerned with op apply/ack only; cursor relay is
             // exercised separately. Drop on the floor.
@@ -162,7 +162,7 @@ class WorkbenchSyncIntegrationTest {
         override fun read(path: String) = Unit
     }
 
-    private class RecordingControlGateway : ComputerControlGateway {
+    private class RecordingControlGateway : TargetControlGateway {
         var runCount = 0
             private set
 

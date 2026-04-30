@@ -82,7 +82,7 @@
 - [ ] **Step 1: Write the failing bootstrap contract test**
 
 ```kotlin
-package ck.mod.bootstrap
+package compukterkraft.mod.bootstrap
 
 object CommonContentDescriptors {
     const val COMPUTER_ADVANCED_BLOCK = "computer_advanced"
@@ -91,7 +91,7 @@ object CommonContentDescriptors {
 ```
 
 ```kotlin
-package ck.mod.bootstrap
+package compukterkraft.mod.bootstrap
 
 object CommonNetworkProtocol {
     val serverboundChannels = listOf(
@@ -111,12 +111,12 @@ object CommonNetworkProtocol {
 ```
 
 ```kotlin
-package ck.mod.bootstrap
+package compukterkraft.mod.bootstrap
 
-import ck.mod.platform.api.PlatformBlockRegistrar
-import ck.mod.platform.api.PlatformClientHooks
-import ck.mod.platform.api.PlatformMenuRegistrar
-import ck.mod.platform.api.PlatformNetworkRegistrar
+import compukterkraft.mod.platform.api.PlatformBlockRegistrar
+import compukterkraft.mod.platform.api.PlatformClientHooks
+import compukterkraft.mod.platform.api.PlatformMenuRegistrar
+import compukterkraft.mod.platform.api.PlatformNetworkRegistrar
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -178,13 +178,13 @@ class CommonModBootstrapTest {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `./gradlew :mod:test --tests ck.mod.bootstrap.CommonModBootstrapTest`
+Run: `./gradlew :mod:test --tests compukterkraft.mod.bootstrap.CommonModBootstrapTest`
 Expected: FAIL with unresolved references for `CommonModBootstrap` and `Platform*Registrar`.
 
 - [ ] **Step 3: Add the minimal platform contracts and common bootstrap**
 
 ```kotlin
-package ck.mod.platform.api
+package compukterkraft.mod.platform.api
 
 interface PlatformBlockRegistrar {
     fun registerBlock(name: String)
@@ -205,14 +205,14 @@ interface PlatformClientHooks {
 ```
 
 ```kotlin
-package ck.mod.bootstrap
+package compukterkraft.mod.bootstrap
 
-import ck.mod.ModRegistry
-import ck.mod.network.NetworkMessages
-import ck.mod.platform.api.PlatformBlockRegistrar
-import ck.mod.platform.api.PlatformClientHooks
-import ck.mod.platform.api.PlatformMenuRegistrar
-import ck.mod.platform.api.PlatformNetworkRegistrar
+import compukterkraft.mod.ModRegistry
+import compukterkraft.mod.network.NetworkMessages
+import compukterkraft.mod.platform.api.PlatformBlockRegistrar
+import compukterkraft.mod.platform.api.PlatformClientHooks
+import compukterkraft.mod.platform.api.PlatformMenuRegistrar
+import compukterkraft.mod.platform.api.PlatformNetworkRegistrar
 
 object CommonModBootstrap {
     fun registerCommon(
@@ -234,7 +234,7 @@ object CommonModBootstrap {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `./gradlew :mod:test --tests ck.mod.bootstrap.CommonModBootstrapTest`
+Run: `./gradlew :mod:test --tests compukterkraft.mod.bootstrap.CommonModBootstrapTest`
 Expected: PASS and one executed test.
 
 - [ ] **Step 5: Commit**
@@ -305,9 +305,9 @@ dependencies {
 ```
 
 ```kotlin
-package ck.mod
+package compukterkraft.mod
 
-import ck.mod.bootstrap.CommonModBootstrap
+import compukterkraft.mod.bootstrap.CommonModBootstrap
 
 object CommonEntrypoints {
     fun bootstrap() = CommonModBootstrap
@@ -316,7 +316,7 @@ object CommonEntrypoints {
 
 - [ ] **Step 4: Run the moved tests**
 
-Run: `./gradlew :core:test --tests ck.mod.application.input.ComputerInputDispatchTest --tests ck.mod.computer.vm.BackgroundComputerVmTest`
+Run: `./gradlew :core:test --tests compukterkraft.mod.application.input.ComputerInputDispatchTest --tests compukterkraft.mod.computer.vm.BackgroundComputerVmTest`
 Expected: PASS and the moved tests execute from the `core` module.
 
 - [ ] **Step 5: Run the old runtime module tests as a safety check**
@@ -358,10 +358,10 @@ Expected: FAIL because the module does not yet exist.
 - [ ] **Step 3: Move the Forge-specific bootstrap and implement the platform ports there**
 
 ```kotlin
-package ck.mod.forge1201
+package compukterkraft.mod.forge1201
 
-import ck.mod.MOD_ID
-import ck.mod.bootstrap.CommonModBootstrap
+import compukterkraft.mod.MOD_ID
+import compukterkraft.mod.bootstrap.CommonModBootstrap
 import net.minecraftforge.fml.common.Mod
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext
 
@@ -379,9 +379,9 @@ class CompukterKraftForgeMod(context: FMLJavaModLoadingContext) {
 ```
 
 ```kotlin
-package ck.mod.forge1201
+package compukterkraft.mod.forge1201
 
-import ck.mod.platform.api.PlatformNetworkRegistrar
+import compukterkraft.mod.platform.api.PlatformNetworkRegistrar
 import net.minecraftforge.network.NetworkDirection
 
 object Forge1201NetworkChannel : PlatformNetworkRegistrar {
@@ -441,9 +441,9 @@ Expected: FAIL because the module is missing.
 - [ ] **Step 3: Add the Fabric runtime leaf and call the same common bootstrap**
 
 ```kotlin
-package ck.mod.fabric1201
+package compukterkraft.mod.fabric1201
 
-import ck.mod.bootstrap.CommonModBootstrap
+import compukterkraft.mod.bootstrap.CommonModBootstrap
 import net.fabricmc.api.ModInitializer
 
 object CompukterKraftFabric1201 : ModInitializer {
@@ -466,7 +466,7 @@ object CompukterKraftFabric1201 : ModInitializer {
   "name": "Compukter Kraft",
   "entrypoints": {
     "main": [
-      "ck.mod.fabric1201.CompukterKraftFabric1201"
+      "compukterkraft.mod.fabric1201.CompukterKraftFabric1201"
     ]
   }
 }
@@ -530,9 +530,9 @@ Expected: a diff summary file exists with the changed 1.21.1 runtime files.
 - [ ] **Step 3: Create the 1.21.1 target modules and port only classified runtime glue**
 
 ```kotlin
-package ck.mod.neoforge1211
+package compukterkraft.mod.neoforge1211
 
-import ck.mod.bootstrap.CommonModBootstrap
+import compukterkraft.mod.bootstrap.CommonModBootstrap
 import net.neoforged.fml.common.Mod
 
 @Mod("compukterkraft")
@@ -549,9 +549,9 @@ class CompukterKraftNeoForge1211 {
 ```
 
 ```kotlin
-package ck.mod.fabric1211
+package compukterkraft.mod.fabric1211
 
-import ck.mod.bootstrap.CommonModBootstrap
+import compukterkraft.mod.bootstrap.CommonModBootstrap
 import net.fabricmc.api.ModInitializer
 
 object CompukterKraftFabric1211 : ModInitializer {

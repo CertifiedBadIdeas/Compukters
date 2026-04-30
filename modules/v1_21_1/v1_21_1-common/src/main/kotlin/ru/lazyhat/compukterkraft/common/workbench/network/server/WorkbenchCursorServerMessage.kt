@@ -27,7 +27,7 @@ import ru.lazyhat.compukterkraft.common.network.ServerNetworkContext
 import ru.lazyhat.compukterkraft.common.workbench.menu.AbstractWorkbenchMenu
 import ru.lazyhat.compukterkraft.common.workbench.network.readNullableCursorAnchor
 import ru.lazyhat.compukterkraft.common.workbench.network.writeNullableCursorAnchor
-import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.CursorAnchor
+import ru.lazyhat.compukterkraft.core.workbench.crdt.CursorAnchor
 
 /**
  * Client → server: the local editor's caret moved on [path]. The server updates the player's

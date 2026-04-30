@@ -28,8 +28,8 @@ import ru.lazyhat.compukterkraft.common.workbench.network.readRuns
 import ru.lazyhat.compukterkraft.common.workbench.network.readVersionVector
 import ru.lazyhat.compukterkraft.common.workbench.network.writeRuns
 import ru.lazyhat.compukterkraft.common.workbench.network.writeVersionVector
-import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.SiteId
-import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.TextRun
+import ru.lazyhat.compukterkraft.core.workbench.crdt.SiteId
+import ru.lazyhat.compukterkraft.core.workbench.crdt.TextRun
 
 /**
  * Server → client: full document snapshot delivered when a workbench session opens (or
