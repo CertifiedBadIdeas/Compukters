@@ -39,7 +39,7 @@ sealed interface MenuSide {
      * Server-side state: owns [RuntimeDevice] and [ServerInputState].
      */
     class Server(
-        val computer: RuntimeDevice,
+        val device: RuntimeDevice,
         val input: ServerInputState<out AbstractComputerMenu>,
     ) : MenuSide
 
@@ -114,7 +114,7 @@ abstract class AbstractComputerMenu(
 
     override fun stillValid(player: Player): Boolean {
         val server = side as? MenuSide.Server
-        return (server == null || server.computer.family.checkUsable(player)) && canUse(player)
+        return (server == null || server.device.family.checkUsable(player)) && canUse(player)
     }
 
     override fun handleStdoutBytes(bytes: ByteArray) {

@@ -27,7 +27,7 @@ import ru.lazyhat.compukterkraft.core.utils.StringUtil
 import java.util.BitSet
 
 class WorkbenchTerminalInputController(
-    private val computer: InputEventSink,
+    private val inputSink: InputEventSink,
     private val inputProvider: PlatformInputProvider,
 ) {
     private val keysDown = BitSet(256)
@@ -35,7 +35,7 @@ class WorkbenchTerminalInputController(
     fun charTyped(ch: Char): Boolean {
         val terminalChar = StringUtil.unicodeToTerminal(ch.code)
         if (StringUtil.isTypableChar(terminalChar)) {
-            computer.accept(KeyInputEvent.Character(terminalChar.toByte()))
+            inputSink.accept(KeyInputEvent.Character(terminalChar.toByte()))
         }
         return true
     }
@@ -55,7 +55,7 @@ class WorkbenchTerminalInputController(
             val actualKey = KeyConverter.physicalToActual(key, scancode, inputProvider)
             val repeat = keysDown.get(actualKey)
             keysDown.set(actualKey)
-            computer.accept(KeyInputEvent.Down(actualKey, repeat))
+            inputSink.accept(KeyInputEvent.Down(actualKey, repeat))
         }
         return true
     }
@@ -68,7 +68,7 @@ class WorkbenchTerminalInputController(
             val actualKey = KeyConverter.physicalToActual(key, scancode, inputProvider)
             if (keysDown.get(actualKey)) {
                 keysDown.set(actualKey, false)
-                computer.accept(KeyInputEvent.Up(actualKey))
+                inputSink.accept(KeyInputEvent.Up(actualKey))
             }
         }
         return true
@@ -77,7 +77,7 @@ class WorkbenchTerminalInputController(
     private fun paste() {
         val clipboard = StringUtil.getClipboardString(inputProvider.getClipboardString())
         if (clipboard.remaining() > 0) {
-            computer.accept(PasteInputEvent(clipboard))
+            inputSink.accept(PasteInputEvent(clipboard))
         }
     }
 }

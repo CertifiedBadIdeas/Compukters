@@ -50,7 +50,7 @@ class ResizeTerminalServerMessage : ComputerServerMessage {
         context: ServerNetworkContext,
         container: ComputerMenu,
     ) {
-        container.serverSide.computer.resizeTerminalSession(
+        container.serverSide.device.resizeTerminalSession(
             playerUuid = context.sender().uuid,
             cols = cols,
             rows = rows,

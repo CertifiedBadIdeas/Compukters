@@ -52,7 +52,7 @@ class BlockEntityRuntimeDeviceHost(
                 val menu = player.containerMenu
                 return menu is ComputerMenu &&
                     menu.containerId == containerId &&
-                    menu.serverSide.computer.deviceId == deviceId
+                    menu.serverSide.device.deviceId == deviceId
             }
 
             override fun sendStdoutBytes(

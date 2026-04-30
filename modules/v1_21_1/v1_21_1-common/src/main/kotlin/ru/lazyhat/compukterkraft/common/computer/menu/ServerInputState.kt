@@ -52,27 +52,27 @@ class ServerInputState<T>(
     private var lastMouseDown = -1
 
     override fun accept(event: InputEvent) {
-        val computer = owner.serverSide.computer
+        val device = owner.serverSide.device
         when (event) {
             is KeyInputEvent.Down -> {
                 keysDown.add(event.key)
-                DeviceEvents.dispatch(computer, event)
+                DeviceEvents.dispatch(device, event)
             }
 
             is KeyInputEvent.Up -> {
                 keysDown.remove(event.key)
-                DeviceEvents.dispatch(computer, event)
+                DeviceEvents.dispatch(device, event)
             }
 
             is KeyInputEvent.Character -> {
                 if (StringUtil.isTypableChar(event.value)) {
-                    DeviceEvents.dispatch(computer, event)
+                    DeviceEvents.dispatch(device, event)
                 }
             }
 
             is PasteInputEvent -> {
                 if (event.contents != null && event.contents.remaining() > 0 && isValidClipboard(event.contents)) {
-                    DeviceEvents.dispatch(computer, event)
+                    DeviceEvents.dispatch(device, event)
                 }
             }
 
@@ -80,46 +80,46 @@ class ServerInputState<T>(
                 lastMouseX = event.x
                 lastMouseY = event.y
                 lastMouseDown = event.button
-                DeviceEvents.dispatch(computer, event)
+                DeviceEvents.dispatch(device, event)
             }
 
             is MouseInputEvent.Up -> {
                 lastMouseX = event.x
                 lastMouseY = event.y
                 lastMouseDown = -1
-                DeviceEvents.dispatch(computer, event)
+                DeviceEvents.dispatch(device, event)
             }
 
             is MouseInputEvent.Drag -> {
                 lastMouseX = event.x
                 lastMouseY = event.y
                 lastMouseDown = event.button
-                DeviceEvents.dispatch(computer, event)
+                DeviceEvents.dispatch(device, event)
             }
 
             is MouseInputEvent.Scroll -> {
                 lastMouseX = event.x
                 lastMouseY = event.y
-                DeviceEvents.dispatch(computer, event)
+                DeviceEvents.dispatch(device, event)
             }
 
             is ControlInputEvent -> {
                 when (event.action) {
-                    ComputerControlAction.TERMINATE -> computer.queueEvent("terminate")
-                    ComputerControlAction.SHUTDOWN -> computer.shutdown()
-                    ComputerControlAction.TURN_ON -> computer.turnOn()
-                    ComputerControlAction.REBOOT -> computer.reboot()
+                    ComputerControlAction.TERMINATE -> device.queueEvent("terminate")
+                    ComputerControlAction.SHUTDOWN -> device.shutdown()
+                    ComputerControlAction.TURN_ON -> device.turnOn()
+                    ComputerControlAction.REBOOT -> device.reboot()
                 }
             }
         }
     }
 
     fun close() {
-        val computer: RuntimeDevice = owner.serverSide.computer
+        val device: RuntimeDevice = owner.serverSide.device
         val keys = keysDown.iterator()
-        while (keys.hasNext()) DeviceEvents.dispatch(computer, KeyInputEvent.Up(keys.nextInt()))
+        while (keys.hasNext()) DeviceEvents.dispatch(device, KeyInputEvent.Up(keys.nextInt()))
 
-        if (lastMouseDown != -1) DeviceEvents.dispatch(computer, MouseInputEvent.Up(lastMouseDown, lastMouseX, lastMouseY))
+        if (lastMouseDown != -1) DeviceEvents.dispatch(device, MouseInputEvent.Up(lastMouseDown, lastMouseX, lastMouseY))
 
         keysDown.clear()
         lastMouseDown = -1

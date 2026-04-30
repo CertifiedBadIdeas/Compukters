@@ -128,7 +128,7 @@ class TerminalItem(
         serverPlayer: ServerPlayer,
         be: ComputerBlockEntity,
     ) {
-        val serverComputer = be.getOrCreateRuntimeDevice()
+        val device = be.getOrCreateRuntimeDevice()
         val displayStack =
             be.blockState.block
                 .asItem()
@@ -136,7 +136,7 @@ class TerminalItem(
         ModObjects.openComputerMenu(
             serverPlayer,
             be as AbstractComputerBlockEntity,
-            ComputerContainerData(serverComputer, displayStack),
+            ComputerContainerData(device, displayStack),
         )
     }
 }
