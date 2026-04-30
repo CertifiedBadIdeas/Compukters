@@ -40,7 +40,7 @@ import ru.lazyhat.compukterkraft.lang.frontend.LanguageBuiltins
 import ru.lazyhat.compukterkraft.lang.frontend.LanguageFrontend
 import ru.lazyhat.compukterkraft.lang.frontend.LanguageIde
 import ru.lazyhat.compukterkraft.lang.runtime.CompletionItem
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerCapability
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceCapability
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerIdeSnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceDocument
 import ru.lazyhat.compukterkraft.lang.runtime.DefinitionTarget
@@ -152,13 +152,13 @@ class ComputerFamilyCatalogSource(
             buildList {
                 defaultRegistry.module("terminal")?.let(::add)
                 defaultRegistry.module("system")?.let(::add)
-                if (ComputerCapability.FILESYSTEM in profile.allowedCapabilities) {
+                if (DeviceCapability.FILESYSTEM in profile.allowedCapabilities) {
                     defaultRegistry.module("filesystem")?.let(::add)
                 }
-                if (ComputerCapability.EVENTS in profile.allowedCapabilities) {
+                if (DeviceCapability.EVENTS in profile.allowedCapabilities) {
                     defaultRegistry.module("events")?.let(::add)
                 }
-                if (ComputerCapability.SYSTEM in profile.allowedCapabilities) {
+                if (DeviceCapability.SYSTEM in profile.allowedCapabilities) {
                     defaultRegistry.module("process")?.let(::add)
                     defaultRegistry.module("strings")?.let(::add)
                 }

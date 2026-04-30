@@ -580,7 +580,7 @@ private class RecordingRuntime(
     var yieldCalls = 0
 
     override val profile =
-        ComputerProfile(
+        DeviceProfile(
             id = "test",
             displayName = "Test Computer",
             cpuBudgetNanosPerSlice = 1_000_000,
@@ -590,27 +590,27 @@ private class RecordingRuntime(
             colorTerminal = true,
             allowedCapabilities =
                 setOf(
-                    ComputerCapability.TERMINAL,
-                    ComputerCapability.FILESYSTEM,
-                    ComputerCapability.SYSTEM,
-                    ComputerCapability.EVENTS,
-                    ComputerCapability.PERIPHERALS,
+                    DeviceCapability.TERMINAL,
+                    DeviceCapability.FILESYSTEM,
+                    DeviceCapability.SYSTEM,
+                    DeviceCapability.EVENTS,
+                    DeviceCapability.PERIPHERALS,
                 ),
             resources =
-                ComputerResources(
+                DeviceResources(
                     cpu =
-                        ComputerCpuResources(
+                        DeviceCpuResources(
                             instructionsPerSlice = instructionsPerSlice,
                             wallTimeGuardNanosPerSlice = 1_000_000,
                         ),
-                    memory = ComputerMemoryResources(vmRamBytes = vmRamBytes),
+                    memory = DeviceMemoryResources(vmRamBytes = vmRamBytes),
                     storage =
-                        ComputerStorageResources(
+                        DeviceStorageResources(
                             programRomBytes = 64 * 1024,
                             diskBytes = 256 * 1024,
                         ),
                     queues =
-                        ComputerQueueResources(
+                        DeviceQueueResources(
                             eventQueueSlots = 16,
                             hostCallQueueSlots = 16,
                         ),
