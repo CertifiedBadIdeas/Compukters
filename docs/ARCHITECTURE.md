@@ -11,7 +11,7 @@ The mod has **two orthogonal categories** of programming-related in-world entiti
 
 ### Category 1 — Runtime Devices
 
-Things in the world that **execute** CKL programs. Each Runtime Device has a VM, a `DeviceProfile` (today named `ComputerProfile`), a `DeviceFamily` (today named `ComputerFamily`), a runtime workspace, a terminal, and optional peripherals.
+Things in the world that **execute** CKL programs. Each Runtime Device has a VM, a `DeviceProfile`, a `DeviceFamily`, a runtime workspace, a terminal, and optional peripherals.
 
 - **Today:** Computer (block).
 - **Planned:** Laptop (portable item), Turtle (entity with inventory and fuel), Pocket Computer.
@@ -35,7 +35,7 @@ An Authoring Station holds a **target descriptor** identifying a Runtime Device 
 
 Lives outside both category packages:
 
-- **Language tooling** (`compiler` module): parser, type checker, bytecode VM, `ComputerProfile`/`ComputerFamily` data classes.
+- **Language tooling** (`compiler` module): parser, type checker, bytecode VM, `DeviceProfile`/`DeviceFamily` data classes.
 - **Workspace storage abstraction** (`core`): file CRUD instantiated separately by each category with its own root.
 - **Terminal text models and font rendering** (`v1_21_1-common/ui/render`): glyph layout, color tables, fixed-width rendering.
 - **Input transport interfaces** (`core`): wire-level event delivery — interpretation differs per category.
@@ -94,7 +94,7 @@ These rules are enforced by `ArchitectureBoundaryTest` in `modules/core`.
 ┌──────────────────────────────────────────────────────────────────────┐
 │  VM coroutine (background thread)                                    │
 │                                                                      │
-│  ComputerProgram.run(runtime)                                        │
+│  DeviceProgram.run(runtime)                                          │
 │    ├─ runtime.terminal.write("hello")  ──►  ScreenBuffer (direct)    │
 │    ├─ runtime.terminal.readLine()      ──►  suspends on VmEvent      │
 │    ├─ runtime.filesystem.readText()    ──►  HostCall → HostResult    │
@@ -173,8 +173,8 @@ ServerComputer.close()
 | `ru.lazyhat.compukterkraft.lang.frontend`         | Parser, type checker, code generator, IDE support            |
 | `ru.lazyhat.compukterkraft.lang.runtime`          | VM runtime: `BytecodeVirtualMachine`, `RuntimeHostBridge`    |
 |                            | Data types: `ScreenBuffer`, `ScreenBufferSnapshot`           |
-|                            | Interfaces: `ComputerRuntime`, `ComputerTerminalApi`         |
-|                            | Models: `ComputerProfile`, `VmSnapshot`, `HostCall`          |
+|                            | Interfaces: `DeviceRuntime`, `DeviceTerminalApi`             |
+|                            | Models: `DeviceProfile`, `VmSnapshot`, `HostCall`            |
 
 ### `core` module
 
@@ -182,7 +182,7 @@ ServerComputer.close()
 |------------------------------------|--------------------------------------------------------------------|
 | `compukterkraft.core.bootstrap`               | `CommonModBootstrap`, content descriptors, `CommonNetworkProtocol` |
 | `compukterkraft.core.platform.api`             | Port interfaces: `PlatformBlockRegistrar`, `PlatformMenuRegistrar` |
-| `compukterkraft.core.block`                    | `ComputerFamily` enum (pure Kotlin, no MC deps)                    |
+| `compukterkraft.core.block`                    | `DeviceFamily` enum (pure Kotlin, no MC deps)                      |
 | `compukterkraft.core.computer`                 | `ComputerContext` — shared computer context                        |
 | `compukterkraft.core.computer.runtime`         | VM lifecycle, `ServerComputer` support                             |
 | `compukterkraft.core.computer.input`           | Input dispatch: `ComputerInputDispatcher`, `ServerInputHandler`    |
