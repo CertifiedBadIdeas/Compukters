@@ -73,7 +73,7 @@ private data class RuntimeApiRegistryProfile(
 /**
  * The main VM host for a single computer instance.
  *
- * Runs a compiled [ComputerProgram] on a background coroutine [dispatcher]. Owns a [ScreenBuffer]
+ * Runs a compiled [DeviceProgram] on a background coroutine [dispatcher]. Owns a [ScreenBuffer]
  * that the VM coroutine writes to directly (no HostCall roundtrip for terminal I/O).
  *
  * ## Thread model

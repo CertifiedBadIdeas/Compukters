@@ -64,7 +64,7 @@ data class DeviceProfile(
     val terminalHeight: Int,
     val colorTerminal: Boolean,
     val allowedCapabilities: Set<DeviceCapability> = DeviceCapability.entries.toSet(),
-    val bootScriptName: String = ComputerProgramFiles.BIOS_SCRIPT_NAME,
+    val bootScriptName: String = DeviceProgramFiles.BIOS_SCRIPT_NAME,
     val resources: DeviceResources =
         DeviceResources(
             cpu = DeviceCpuResources(wallTimeGuardNanosPerSlice = cpuBudgetNanosPerSlice),

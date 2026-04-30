@@ -23,10 +23,10 @@ import ru.lazyhat.compukterkraft.core.computer.runtime.ComputerProgramCompiler
 import ru.lazyhat.compukterkraft.core.computer.runtime.WorkspaceProgramLoader
 import ru.lazyhat.compukterkraft.core.computer.vm.VmContext
 import ru.lazyhat.compukterkraft.core.computer.vm.VmPathResolver
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerProcessApi
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceProcessApi
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceProfile
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerRuntime
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerTerminalApi
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceRuntime
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceTerminalApi
 
 internal class VmProcessApi(
     private val ctx: VmContext,
@@ -36,9 +36,9 @@ internal class VmProcessApi(
     private val filesystemApi: VmFileSystemApi,
     private val programLoader: WorkspaceProgramLoader,
     private val profile: DeviceProfile,
-    private val runtimeCreator: (String, String) -> ComputerRuntime,
-    private val terminal: ComputerTerminalApi,
-) : ComputerProcessApi {
+    private val runtimeCreator: (String, String) -> DeviceRuntime,
+    private val terminal: DeviceTerminalApi,
+) : DeviceProcessApi {
     override val argument: String = initialArgument
     override val workingDirectory: String get() = pathResolver.workingDirectory
 

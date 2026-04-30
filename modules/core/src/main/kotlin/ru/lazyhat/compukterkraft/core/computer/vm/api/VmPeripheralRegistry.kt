@@ -19,7 +19,7 @@
 
 package ru.lazyhat.compukterkraft.core.computer.vm.api
 
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerPeripheralApi
+import ru.lazyhat.compukterkraft.lang.runtime.DevicePeripheralApi
 
 data class VmPeripheralDevice(
     val id: String,
@@ -46,6 +46,6 @@ class VmPeripheralRegistry {
 
 class VmPeripheralRuntimeApi(
     private val registry: VmPeripheralRegistry,
-) : ComputerPeripheralApi {
+) : DevicePeripheralApi {
     override fun monitorExists(): Boolean = registry.hasDevice("monitor")
 }

@@ -572,7 +572,7 @@ private class RecordingRuntime(
     private val instructionsPerSlice: Int = 64,
     private val vmRamBytes: Long = 64 * 1024,
     private val monitorConnected: Boolean = false,
-) : ComputerRuntime {
+) : DeviceRuntime {
     val lines = mutableListOf<String>()
     val eventFilters = mutableListOf<String?>()
     val createdDirectories = mutableListOf<String>()
@@ -618,7 +618,7 @@ private class RecordingRuntime(
         )
 
     override val system =
-        object : ComputerSystemApi {
+        object : DeviceSystemApi {
             override val computerId: Int = 7
             override val label: String? = "Test"
             override val currentTick: Long = 42L
@@ -636,7 +636,7 @@ private class RecordingRuntime(
         }
 
     override val terminal =
-        object : ComputerTerminalApi {
+        object : DeviceTerminalApi {
             override fun write(text: String) {
                 lines += text
             }
@@ -664,8 +664,8 @@ private class RecordingRuntime(
             }
         }
 
-    override val filesystem: ComputerFileSystemApi =
-        object : ComputerFileSystemApi {
+    override val filesystem: DeviceFileSystemApi =
+        object : DeviceFileSystemApi {
             override suspend fun exists(path: String): Boolean = path == "readme.txt" || path == "docs" || path == "tmp"
 
             override suspend fun isDirectory(path: String): Boolean = path == "docs" || path == "tmp"
@@ -692,7 +692,7 @@ private class RecordingRuntime(
         }
 
     override val process =
-        object : ComputerProcessApi {
+        object : DeviceProcessApi {
             private var currentDirectory = ""
 
             override val workingDirectory: String
@@ -712,9 +712,9 @@ private class RecordingRuntime(
             ): Int = 0
         }
 
-    override val redstone: ComputerRedstoneApi = object : ComputerRedstoneApi {}
-    override val peripherals: ComputerPeripheralApi =
-        object : ComputerPeripheralApi {
+    override val redstone: DeviceRedstoneApi = object : DeviceRedstoneApi {}
+    override val peripherals: DevicePeripheralApi =
+        object : DevicePeripheralApi {
             override fun monitorExists(): Boolean = monitorConnected
         }
 

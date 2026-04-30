@@ -19,19 +19,19 @@
 
 package ru.lazyhat.compukterkraft.lang.runtime
 
-interface ComputerProgram {
-    suspend fun run(runtime: ComputerRuntime)
+interface DeviceProgram {
+    suspend fun run(runtime: DeviceRuntime)
 }
 
-interface ComputerRuntime {
+interface DeviceRuntime {
     val profile: DeviceProfile
-    val system: ComputerSystemApi
-    val terminal: ComputerTerminalApi
+    val system: DeviceSystemApi
+    val terminal: DeviceTerminalApi
     val stdio: ComputerStdioApi
-    val filesystem: ComputerFileSystemApi
-    val process: ComputerProcessApi
-    val redstone: ComputerRedstoneApi
-    val peripherals: ComputerPeripheralApi
+    val filesystem: DeviceFileSystemApi
+    val process: DeviceProcessApi
+    val redstone: DeviceRedstoneApi
+    val peripherals: DevicePeripheralApi
 
     suspend fun pullEvent(filter: String? = null): VmEvent
 
@@ -40,7 +40,7 @@ interface ComputerRuntime {
     suspend fun yield()
 }
 
-interface ComputerSystemApi {
+interface DeviceSystemApi {
     val computerId: Int
     val label: String?
     val currentTick: Long
@@ -57,7 +57,7 @@ interface ComputerSystemApi {
     fun log(message: String)
 }
 
-interface ComputerTerminalApi {
+interface DeviceTerminalApi {
     fun write(text: String)
 
     fun printLine(text: String)
@@ -72,7 +72,7 @@ interface ComputerTerminalApi {
     )
 }
 
-interface ComputerFileSystemApi {
+interface DeviceFileSystemApi {
     suspend fun exists(path: String): Boolean
 
     suspend fun isDirectory(path: String): Boolean
@@ -91,7 +91,7 @@ interface ComputerFileSystemApi {
     suspend fun list(path: String = ""): List<ComputerWorkspaceEntry>
 }
 
-interface ComputerProcessApi {
+interface DeviceProcessApi {
     val workingDirectory: String
     val argument: String
 
@@ -105,13 +105,13 @@ interface ComputerProcessApi {
     ): Int
 }
 
-interface ComputerRedstoneApi
+interface DeviceRedstoneApi
 
-interface ComputerPeripheralApi {
+interface DevicePeripheralApi {
     fun monitorExists(): Boolean = false
 }
 
-object ComputerProgramFiles {
+object DeviceProgramFiles {
     const val FILE_EXTENSION = ".ck"
     const val BIOS_SCRIPT_NAME = "bios.ck"
 }
