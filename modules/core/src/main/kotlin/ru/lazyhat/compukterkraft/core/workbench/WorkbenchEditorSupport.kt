@@ -222,3 +222,86 @@ private fun String.findIdentifierStart(start: Int): Int {
     }
     return index
 }
+
+internal fun isWordChar(ch: Char): Boolean = ch.isLetterOrDigit() || ch == '_'
+
+/**
+ * Returns the offset of the previous word boundary at or before [offset]. Mimics the common
+ * IDE behaviour of Ctrl+Left / Ctrl+Backspace: skip a run of trailing whitespace (but not
+ * across a newline), then skip one run of word- or non-word characters.
+ */
+internal fun previousWordBoundary(
+    text: String,
+    offset: Int,
+): Int {
+    if (offset <= 0) return 0
+    var i = offset
+    // Skip trailing spaces/tabs but not newlines (line break should stop the jump).
+    while (i > 0) {
+        val ch = text[i - 1]
+        if (ch == ' ' || ch == '\t') i -= 1 else break
+    }
+    if (i == 0) return 0
+    val prev = text[i - 1]
+    if (prev == '\n') return i - 1
+    if (isWordChar(prev)) {
+        while (i > 0 && isWordChar(text[i - 1])) i -= 1
+    } else {
+        while (i > 0) {
+            val ch = text[i - 1]
+            if (ch == '\n' || ch == ' ' || ch == '\t' || isWordChar(ch)) break
+            i -= 1
+        }
+    }
+    return i
+}
+
+/**
+ * Returns the offset of the next word boundary at or after [offset]. Mirror of
+ * [previousWordBoundary] for Ctrl+Right / Ctrl+Delete.
+ */
+internal fun nextWordBoundary(
+    text: String,
+    offset: Int,
+): Int {
+    if (offset >= text.length) return text.length
+    var i = offset
+    val first = text[i]
+    if (first == '\n') return i + 1
+    if (isWordChar(first)) {
+        while (i < text.length && isWordChar(text[i])) i += 1
+    } else if (first == ' ' || first == '\t') {
+        // Skip whitespace run and then the following word/punct run.
+        while (i < text.length && (text[i] == ' ' || text[i] == '\t')) i += 1
+        return i
+    } else {
+        while (i < text.length) {
+            val ch = text[i]
+            if (ch == '\n' || ch == ' ' || ch == '\t' || isWordChar(ch)) break
+            i += 1
+        }
+    }
+    // Trailing whitespace consumption so a single Ctrl+Right hops straight to the next word.
+    while (i < text.length && (text[i] == ' ' || text[i] == '\t')) i += 1
+    return i
+}
+
+/**
+ * Compute the indentation that should be reproduced on the next line when Enter is pressed
+ * at [cursorLine] / [cursorColumn]. The indent is the leading whitespace of the current line
+ * up to the caret. If the caret-prefix ends with `{`, an additional 4 spaces are added so
+ * blocks open at one nested level.
+ */
+internal fun computeNewlineIndent(
+    text: String,
+    cursorLine: Int,
+    cursorColumn: Int,
+): String {
+    val lines = if (text.isEmpty()) listOf("") else text.split('\n')
+    val line = lines.getOrElse(cursorLine) { return "" }
+    val prefix = line.substring(0, cursorColumn.coerceAtMost(line.length))
+    val indentLen = prefix.indexOfFirst { it != ' ' && it != '\t' }.let { if (it < 0) prefix.length else it }
+    val baseIndent = prefix.substring(0, indentLen)
+    val opensBlock = prefix.trimEnd().endsWith("{")
+    return if (opensBlock) "$baseIndent    " else baseIndent
+}

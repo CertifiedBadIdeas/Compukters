@@ -69,6 +69,12 @@ data class CompletionItem(
     val kind: CompletionItemKind,
     val documentation: String? = null,
     val insertText: String? = null,
+    /**
+     * Caret offset inside [insertText] after the completion is applied. `null` means "place
+     * caret at the end of the inserted text". Used for function completions to put the
+     * caret between the auto-inserted `()`.
+     */
+    val cursorOffset: Int? = null,
 )
 
 data class HoverInfo(

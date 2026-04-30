@@ -55,21 +55,31 @@ internal object IdePresentationSupport {
             }
     }
 
-    fun completionItem(symbol: SymbolInfo): CompletionItem =
-        CompletionItem(
+    fun completionItem(symbol: SymbolInfo): CompletionItem {
+        val kind =
+            when (symbol.kind) {
+                SymbolKind.MODULE -> CompletionItemKind.MODULE
+                SymbolKind.FUNCTION, SymbolKind.BUILTIN_FUNCTION -> CompletionItemKind.FUNCTION
+                SymbolKind.VARIABLE -> CompletionItemKind.VARIABLE
+                SymbolKind.PARAMETER -> CompletionItemKind.PARAMETER
+                SymbolKind.RECORD, SymbolKind.BUILTIN_TYPE -> CompletionItemKind.TYPE
+                SymbolKind.FIELD -> CompletionItemKind.FIELD
+            }
+        val (insertText, cursorOffset) =
+            if (kind == CompletionItemKind.FUNCTION) {
+                "${symbol.name}()" to symbol.name.length + 1
+            } else {
+                null to null
+            }
+        return CompletionItem(
             label = symbol.name,
             detail = symbol.detail,
-            kind =
-                when (symbol.kind) {
-                    SymbolKind.MODULE -> CompletionItemKind.MODULE
-                    SymbolKind.FUNCTION, SymbolKind.BUILTIN_FUNCTION -> CompletionItemKind.FUNCTION
-                    SymbolKind.VARIABLE -> CompletionItemKind.VARIABLE
-                    SymbolKind.PARAMETER -> CompletionItemKind.PARAMETER
-                    SymbolKind.RECORD, SymbolKind.BUILTIN_TYPE -> CompletionItemKind.TYPE
-                    SymbolKind.FIELD -> CompletionItemKind.FIELD
-                },
+            kind = kind,
             documentation = symbol.documentation,
+            insertText = insertText,
+            cursorOffset = cursorOffset,
         )
+    }
 
     private fun highlightKindForSymbol(kind: SymbolKind): HighlightTokenKind =
         when (kind) {

@@ -39,5 +39,7 @@ object KeyCodes {
     const val KEY_S = 83
     const val KEY_SPACE = 32
     const val KEY_A = 65
+    const val KEY_D = 68
+    const val KEY_Z = 90
     const val MOD_CONTROL = 2
 }
