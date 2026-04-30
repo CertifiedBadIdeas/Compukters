@@ -24,12 +24,12 @@ import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-class ComputerProfileRegistryTest {
+class DeviceProfileRegistryTest {
     @Test
     fun normalComputerUsesTallerTerminalThanOtherFamilies() {
-        val normal = ComputerProfileRegistry.forFamily(DeviceFamily.NORMAL)
-        val advanced = ComputerProfileRegistry.forFamily(DeviceFamily.ADVANCED)
-        val command = ComputerProfileRegistry.forFamily(DeviceFamily.COMMAND)
+        val normal = DeviceProfileRegistry.forFamily(DeviceFamily.NORMAL)
+        val advanced = DeviceProfileRegistry.forFamily(DeviceFamily.ADVANCED)
+        val command = DeviceProfileRegistry.forFamily(DeviceFamily.COMMAND)
 
         assertEquals(Config.DEFAULT_COMPUTER_TERM_HEIGHT, normal.terminalHeight)
         assertEquals(Config.DEFAULT_COMPUTER_TERM_HEIGHT, advanced.terminalHeight)

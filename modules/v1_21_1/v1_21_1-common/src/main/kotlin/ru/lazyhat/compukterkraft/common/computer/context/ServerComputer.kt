@@ -36,7 +36,7 @@ import ru.lazyhat.compukterkraft.core.computer.ComputerEvents
 import ru.lazyhat.compukterkraft.core.computer.ComputerProperties
 import ru.lazyhat.compukterkraft.core.computer.runtime.HostCallDispatcher
 import ru.lazyhat.compukterkraft.core.computer.vm.BackgroundComputerVm
-import ru.lazyhat.compukterkraft.core.computer.vm.ComputerProfileRegistry
+import ru.lazyhat.compukterkraft.core.computer.vm.DeviceProfileRegistry
 import ru.lazyhat.compukterkraft.core.computer.vm.ComputerVmLogger
 import ru.lazyhat.compukterkraft.core.computer.vm.api.ComputerStdioBroadcaster
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceVmHandle
@@ -63,7 +63,7 @@ class ServerComputer(
     properties: ComputerProperties,
 ) : ComputerEvents.Receiver {
     val family = properties.family
-    private val profile = ComputerProfileRegistry.forFamily(family)
+    private val profile = DeviceProfileRegistry.forFamily(family)
 
     private val logger = ComputerVmLogger { message -> LOGGER.info { message } }
     private var label: String? = properties.label

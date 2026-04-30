@@ -26,7 +26,7 @@ import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 import ru.lazyhat.compukterkraft.core.computer.input.ComputerControlAction
 import ru.lazyhat.compukterkraft.core.computer.input.ControlInputEvent
 import ru.lazyhat.compukterkraft.core.computer.input.InputEventSink
-import ru.lazyhat.compukterkraft.core.computer.vm.ComputerProfileRegistry
+import ru.lazyhat.compukterkraft.core.computer.vm.DeviceProfileRegistry
 import ru.lazyhat.compukterkraft.core.workbench.TargetControlGateway
 import ru.lazyhat.compukterkraft.core.workbench.IdeRuntimeCatalogSource
 import ru.lazyhat.compukterkraft.core.workbench.WorkbenchIdeFacade
@@ -146,7 +146,7 @@ class ComputerFamilyCatalogSource(
     private val family: DeviceFamily,
 ) : IdeRuntimeCatalogSource {
     override fun runtimeRegistry(): BuiltinRegistry {
-        val profile = ComputerProfileRegistry.forFamily(family)
+        val profile = DeviceProfileRegistry.forFamily(family)
         val defaultRegistry = LanguageBuiltins.defaultRuntimeRegistry
         val modules =
             buildList {
