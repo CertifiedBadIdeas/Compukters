@@ -56,7 +56,7 @@ object DeviceProfileRegistry {
                 DeviceProfile(
                     id = "advanced",
                     displayName = "Advanced Computer",
-                    cpuBudgetNanosPerSlice = 2_000_000,
+                    cpuBudgetNanosPerSlice = 10_000,
                     maxEventQueueSize = 128,
                     terminalWidth = Config.DEFAULT_COMPUTER_TERM_WIDTH,
                     terminalHeight = Config.DEFAULT_COMPUTER_TERM_HEIGHT,
@@ -65,7 +65,7 @@ object DeviceProfileRegistry {
                     resources =
                         defaultResources(
                             instructionsPerSlice = 128,
-                            wallTimeGuardNanosPerSlice = 2_000_000,
+                            wallTimeGuardNanosPerSlice = 10_000,
                             eventQueueSlots = 128,
                             diskBytes = Config.computerSpaceLimit.toLong(),
                         ),

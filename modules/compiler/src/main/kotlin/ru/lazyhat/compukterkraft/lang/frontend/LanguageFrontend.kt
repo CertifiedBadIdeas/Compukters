@@ -2071,9 +2071,31 @@ internal class Parser(
 
             TokenKind.NUMBER -> {
                 if (token.text.endsWith("L")) {
-                    LiteralExpression(LongLiteralValue(token.text.dropLast(1).toLong()), token.range)
+                    val raw = token.text.dropLast(1)
+                    val value = raw.toLongOrNull()
+                    if (value == null) {
+                        diagnostics +=
+                            FrontendDiagnostic(
+                                "Long literal `${token.text}` is out of range.",
+                                token.range,
+                            )
+                        return null
+                    }
+                    LiteralExpression(LongLiteralValue(value), token.range)
                 } else {
-                    LiteralExpression(IntLiteralValue(token.text.toInt()), token.range)
+                    val value = token.text.toIntOrNull()
+                    if (value == null) {
+                        val asLong = token.text.toLongOrNull()
+                        val hint =
+                            if (asLong != null) {
+                                "Integer literal `${token.text}` exceeds Int range; append `L` to make it a Long (e.g. `${token.text}L`)."
+                            } else {
+                                "Integer literal `${token.text}` is out of range."
+                            }
+                        diagnostics += FrontendDiagnostic(hint, token.range)
+                        return null
+                    }
+                    LiteralExpression(IntLiteralValue(value), token.range)
                 }
             }
 

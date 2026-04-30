@@ -409,4 +409,44 @@ class LanguageFrontendTest {
             artifact.analysis.diagnostics.joinToString { it.message },
         )
     }
+
+    @Test
+    fun reportsIntLiteralOutOfRangeWithLongSuggestion() {
+        val artifact =
+            frontend.compile(
+                "overflow.ck",
+                """
+                fun main() {
+                    val n: Int = 2342343243;
+                }
+                """.trimIndent(),
+            )
+
+        assertEquals(null, artifact.module)
+        assertTrue(
+            artifact.analysis.diagnostics.any {
+                it.message.contains("exceeds Int range") && it.message.contains("2342343243L")
+            },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+    }
+
+    @Test
+    fun reportsLongLiteralOutOfRange() {
+        val artifact =
+            frontend.compile(
+                "longoverflow.ck",
+                """
+                fun main() {
+                    val n: Long = 99999999999999999999L;
+                }
+                """.trimIndent(),
+            )
+
+        assertEquals(null, artifact.module)
+        assertTrue(
+            artifact.analysis.diagnostics.any { it.message.contains("Long literal") && it.message.contains("out of range") },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+    }
 }
