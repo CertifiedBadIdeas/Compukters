@@ -32,7 +32,7 @@ class NeoForgeComputerBlockEntity(
     family: DeviceFamily,
 ) : ComputerBlockEntity(type, pos, state, family) {
     override fun onChunkUnloaded() {
-        releaseServerComputer()
+        releaseRuntimeDevice()
         super.onChunkUnloaded()
     }
 }

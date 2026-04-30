@@ -21,13 +21,14 @@ package ru.lazyhat.compukterkraft.common.computer.context
 
 import net.minecraft.server.MinecraftServer
 import net.minecraft.world.level.storage.LevelResource
+import ru.lazyhat.compukterkraft.core.computer.runtime.DeviceManager
 import ru.lazyhat.compukterkraft.core.computer.vm.DeviceVmSupervisor
 
 class ServerContext(
     val server: MinecraftServer,
 ) {
     val vmSupervisor = DeviceVmSupervisor { server.getWorldPath(LevelResource.ROOT) }
-    val computerManager = ComputerManager(vmSupervisor)
+    val deviceManager = DeviceManager(vmSupervisor)
 
     companion object {
         private var current: ServerContext? = null
@@ -38,13 +39,13 @@ class ServerContext(
         val vmSupervisor
             get() = context().vmSupervisor
 
-        val computerManager
-            get() = context().computerManager
+        val deviceManager
+            get() = context().deviceManager
 
         val server
             get() = context().server
 
-        fun allocateComputerId(): Int = ComputerIdentitySavedData.get(server).allocateComputerId()
+        fun allocateDeviceId(): Int = ComputerIdentitySavedData.get(server).allocateComputerId()
 
         fun create(server: MinecraftServer) {
             check(current == null) { "ServerContext is already initialized" }
@@ -52,7 +53,7 @@ class ServerContext(
         }
 
         fun close() {
-            current?.computerManager?.close()
+            current?.deviceManager?.close()
             current = null
         }
 
