@@ -19,26 +19,26 @@
 package ru.lazyhat.compukterkraft.core.computer.vm
 
 import ru.lazyhat.compukterkraft.core.language.LanguageServices
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerCompletionRequest
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerCompletionResponse
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerDefinitionRequest
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerDefinitionResponse
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerHoverRequest
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerHoverResponse
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerIdeHost
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerIdeSnapshot
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceCompletionRequest
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceCompletionResponse
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceDefinitionRequest
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceDefinitionResponse
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceHoverRequest
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceHoverResponse
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceIdeHost
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceIdeSnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspace
 
 class WorkspaceComputerIdeHost(
     private val workspace: DeviceWorkspace,
-) : ComputerIdeHost {
+) : DeviceIdeHost {
     override fun snapshot(
         computerId: Int,
         path: String,
-    ): ComputerIdeSnapshot? {
+    ): DeviceIdeSnapshot? {
         val document = workspace.readDocument(computerId, path) ?: return null
         val snapshot = LanguageServices.ide.analyze(document.path, document.text)
-        return ComputerIdeSnapshot(
+        return DeviceIdeSnapshot(
             document = document,
             diagnostics = snapshot.diagnostics,
             highlights = snapshot.highlights,
@@ -47,8 +47,8 @@ class WorkspaceComputerIdeHost(
 
     override fun complete(
         computerId: Int,
-        request: ComputerCompletionRequest,
-    ): ComputerCompletionResponse {
+        request: DeviceCompletionRequest,
+    ): DeviceCompletionResponse {
         val document = workspace.readDocument(computerId, request.path)
         val items =
             if (document == null) {
@@ -56,13 +56,13 @@ class WorkspaceComputerIdeHost(
             } else {
                 LanguageServices.ide.complete(document.path, document.text, request.line, request.column)
             }
-        return ComputerCompletionResponse(items)
+        return DeviceCompletionResponse(items)
     }
 
     override fun hover(
         computerId: Int,
-        request: ComputerHoverRequest,
-    ): ComputerHoverResponse {
+        request: DeviceHoverRequest,
+    ): DeviceHoverResponse {
         val document = workspace.readDocument(computerId, request.path)
         val info =
             if (document == null) {
@@ -70,13 +70,13 @@ class WorkspaceComputerIdeHost(
             } else {
                 LanguageServices.ide.hover(document.path, document.text, request.line, request.column)
             }
-        return ComputerHoverResponse(info)
+        return DeviceHoverResponse(info)
     }
 
     override fun definition(
         computerId: Int,
-        request: ComputerDefinitionRequest,
-    ): ComputerDefinitionResponse {
+        request: DeviceDefinitionRequest,
+    ): DeviceDefinitionResponse {
         val document = workspace.readDocument(computerId, request.path)
         val target =
             if (document == null) {
@@ -84,6 +84,6 @@ class WorkspaceComputerIdeHost(
             } else {
                 LanguageServices.ide.definition(document.path, document.text, request.line, request.column)
             }
-        return ComputerDefinitionResponse(target)
+        return DeviceDefinitionResponse(target)
     }
 }

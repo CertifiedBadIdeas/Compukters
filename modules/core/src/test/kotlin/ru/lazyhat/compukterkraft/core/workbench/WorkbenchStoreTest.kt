@@ -29,7 +29,7 @@ import ru.lazyhat.compukterkraft.lang.api.SourceLocation
 import ru.lazyhat.compukterkraft.lang.api.SourceRange
 import ru.lazyhat.compukterkraft.lang.runtime.CompletionItem
 import ru.lazyhat.compukterkraft.lang.runtime.CompletionItemKind
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerIdeSnapshot
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceIdeSnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspaceDocument
 import ru.lazyhat.compukterkraft.lang.runtime.DefinitionTarget
 import ru.lazyhat.compukterkraft.lang.runtime.HoverInfo
@@ -629,8 +629,8 @@ class WorkbenchStoreTest {
         override fun analyze(
             path: String,
             source: String,
-        ): ComputerIdeSnapshot =
-            ComputerIdeSnapshot(
+        ): DeviceIdeSnapshot =
+            DeviceIdeSnapshot(
                 document = DeviceWorkspaceDocument(path, source, 0),
                 diagnostics = emptyList(),
                 highlights = emptyList(),

@@ -37,7 +37,7 @@ import ru.lazyhat.compukterkraft.core.workbench.WorkspaceGateway
 import ru.lazyhat.compukterkraft.core.workbench.crdt.Op
 import ru.lazyhat.compukterkraft.core.workbench.crdt.SiteId
 import ru.lazyhat.compukterkraft.lang.runtime.CompletionItem
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerIdeSnapshot
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceIdeSnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspaceDocument
 import kotlin.io.path.createTempDirectory
 import kotlin.random.Random
@@ -179,8 +179,8 @@ class WorkbenchSyncIntegrationTest {
         override fun analyze(
             path: String,
             source: String,
-        ): ComputerIdeSnapshot =
-            ComputerIdeSnapshot(
+        ): DeviceIdeSnapshot =
+            DeviceIdeSnapshot(
                 document = DeviceWorkspaceDocument(path, source, version = 0),
                 diagnostics = emptyList(),
                 highlights = emptyList(),

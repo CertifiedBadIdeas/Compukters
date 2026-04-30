@@ -41,7 +41,7 @@ import ru.lazyhat.compukterkraft.lang.frontend.LanguageFrontend
 import ru.lazyhat.compukterkraft.lang.frontend.LanguageIde
 import ru.lazyhat.compukterkraft.lang.runtime.CompletionItem
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceCapability
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerIdeSnapshot
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceIdeSnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspaceDocument
 import ru.lazyhat.compukterkraft.lang.runtime.DefinitionTarget
 import ru.lazyhat.compukterkraft.lang.runtime.HoverInfo
@@ -197,12 +197,12 @@ class LanguageWorkbenchIdeFacade(
     override fun analyze(
         path: String,
         source: String,
-    ): ComputerIdeSnapshot =
+    ): DeviceIdeSnapshot =
         ide.analyze(path, source).let { snapshot ->
             lastAnalysisPath = path
             lastAnalysisSource = source
             lastAnalysis = snapshot.analysis
-            ComputerIdeSnapshot(
+            DeviceIdeSnapshot(
                 DeviceWorkspaceDocument(path = path, text = source, version = 0L),
                 snapshot.diagnostics,
                 snapshot.highlights,
