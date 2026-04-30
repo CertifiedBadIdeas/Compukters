@@ -20,7 +20,7 @@ fun commandArgument(line: String): String {
 
 fun printHelp() {
     terminal.println("Builtins: help cd pwd reboot shutdown")
-    terminal.println("Programs: ls mkdir rmdir")
+    terminal.println("Programs: ls mkdir rmdir nano")
 }
 
 fun runExternal(command: String, argument: String) {
