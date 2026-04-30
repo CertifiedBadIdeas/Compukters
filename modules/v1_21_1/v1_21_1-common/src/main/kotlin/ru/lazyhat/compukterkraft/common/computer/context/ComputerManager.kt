@@ -22,9 +22,9 @@ package ru.lazyhat.compukterkraft.common.computer.context
 import it.unimi.dsi.fastutil.ints.Int2ObjectMap
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap
 import ru.lazyhat.compukterkraft.common.computer.context.ServerComputer
-import ru.lazyhat.compukterkraft.core.computer.vm.BackgroundComputerVm
-import ru.lazyhat.compukterkraft.core.computer.vm.ComputerVmLogger
-import ru.lazyhat.compukterkraft.core.computer.vm.ComputerVmSupervisor
+import ru.lazyhat.compukterkraft.core.computer.vm.BackgroundDeviceVm
+import ru.lazyhat.compukterkraft.core.computer.vm.DeviceVmLogger
+import ru.lazyhat.compukterkraft.core.computer.vm.DeviceVmSupervisor
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceIdeHost
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceProfile
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspace
@@ -38,7 +38,7 @@ import java.io.Closeable
  * Provides a single entry point for computer and VM lifecycle management.
  */
 class ComputerManager(
-    private val vmSupervisor: ComputerVmSupervisor,
+    private val vmSupervisor: DeviceVmSupervisor,
 ) : Closeable {
     private val computers: Int2ObjectMap<ServerComputer> = Int2ObjectOpenHashMap()
 
@@ -68,8 +68,8 @@ class ComputerManager(
         deviceId: Int,
         profile: DeviceProfile,
         labelProvider: () -> String?,
-        logger: ComputerVmLogger,
-    ): BackgroundComputerVm = vmSupervisor.getOrCreate(deviceId, profile, labelProvider, logger)
+        logger: DeviceVmLogger,
+    ): BackgroundDeviceVm = vmSupervisor.getOrCreate(deviceId, profile, labelProvider, logger)
 
     fun removeVm(
         deviceId: Int,

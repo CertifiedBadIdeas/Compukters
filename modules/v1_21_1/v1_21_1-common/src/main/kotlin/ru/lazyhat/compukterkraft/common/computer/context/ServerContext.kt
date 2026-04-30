@@ -21,12 +21,12 @@ package ru.lazyhat.compukterkraft.common.computer.context
 
 import net.minecraft.server.MinecraftServer
 import net.minecraft.world.level.storage.LevelResource
-import ru.lazyhat.compukterkraft.core.computer.vm.ComputerVmSupervisor
+import ru.lazyhat.compukterkraft.core.computer.vm.DeviceVmSupervisor
 
 class ServerContext(
     val server: MinecraftServer,
 ) {
-    val vmSupervisor = ComputerVmSupervisor { server.getWorldPath(LevelResource.ROOT) }
+    val vmSupervisor = DeviceVmSupervisor { server.getWorldPath(LevelResource.ROOT) }
     val computerManager = ComputerManager(vmSupervisor)
 
     companion object {
