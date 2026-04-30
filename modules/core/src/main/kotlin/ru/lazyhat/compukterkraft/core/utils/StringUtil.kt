@@ -82,7 +82,7 @@ object StringUtil {
         }
 
     /**
-     * Check if a character is capable of being input and passed to a "char" event via [ComputerEvents.dispatch].
+     * Check if a character is capable of being input and passed to a "char" event via [DeviceEvents.dispatch].
      *
      * @param chr The character to check.
      * @return Whether this character can be typed.
@@ -90,7 +90,7 @@ object StringUtil {
     fun isTypableChar(chr: Byte): Boolean = isTypableChar(chr.toInt() and 0xFF)
 
     /**
-     * Check if a character is capable of being input and passed to a "char" event via [ComputerEvents.dispatch].
+     * Check if a character is capable of being input and passed to a "char" event via [DeviceEvents.dispatch].
      *
      * @param chr The character to check.
      * @return Whether this character can be typed.

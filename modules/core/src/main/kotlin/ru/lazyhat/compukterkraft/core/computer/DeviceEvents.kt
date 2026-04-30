@@ -28,7 +28,7 @@ import ru.lazyhat.compukterkraft.core.computer.input.PasteInputEvent
 /**
  * Built-in events that can be queued on a computer.
  */
-object ComputerEvents {
+object DeviceEvents {
     /**
      * Dispatch a unified [InputEvent] to the receiver, converting it to the appropriate
      * VM event name and arguments.

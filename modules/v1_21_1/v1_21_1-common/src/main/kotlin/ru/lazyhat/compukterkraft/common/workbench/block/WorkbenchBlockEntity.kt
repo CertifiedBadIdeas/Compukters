@@ -44,7 +44,7 @@ import ru.lazyhat.compukterkraft.common.workbench.menu.AbstractWorkbenchMenu
 import ru.lazyhat.compukterkraft.common.workbench.menu.WorkbenchMenuWithoutInventory
 import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchTerminalClientMessage
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
-import ru.lazyhat.compukterkraft.core.computer.ComputerProperties
+import ru.lazyhat.compukterkraft.core.computer.DeviceProperties
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 
 class WorkbenchBlockEntity(
@@ -208,7 +208,7 @@ class WorkbenchBlockEntity(
         return ServerComputer(
             instanceID = targetId,
             level = serverLevel,
-            properties = ComputerProperties(resolveTargetFamily(targetFamilyId), targetDisplayName),
+            properties = DeviceProperties(resolveTargetFamily(targetFamilyId), targetDisplayName),
         ).also {
             detachedTargetComputer = it
         }
