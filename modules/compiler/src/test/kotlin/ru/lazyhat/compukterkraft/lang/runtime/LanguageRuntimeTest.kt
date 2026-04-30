@@ -657,8 +657,8 @@ private class RecordingRuntime(
 
     val stdioWrites: MutableList<String> = mutableListOf()
 
-    override val stdio: ComputerStdioApi =
-        object : ComputerStdioApi {
+    override val stdio: DeviceStdioApi =
+        object : DeviceStdioApi {
             override fun writeString(text: String) {
                 stdioWrites += text
             }

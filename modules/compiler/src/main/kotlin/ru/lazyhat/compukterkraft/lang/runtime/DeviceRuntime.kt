@@ -27,7 +27,7 @@ interface DeviceRuntime {
     val profile: DeviceProfile
     val system: DeviceSystemApi
     val terminal: DeviceTerminalApi
-    val stdio: ComputerStdioApi
+    val stdio: DeviceStdioApi
     val filesystem: DeviceFileSystemApi
     val process: DeviceProcessApi
     val redstone: DeviceRedstoneApi

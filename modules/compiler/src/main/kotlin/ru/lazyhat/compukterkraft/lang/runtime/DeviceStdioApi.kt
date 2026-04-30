@@ -29,6 +29,6 @@ package ru.lazyhat.compukterkraft.lang.runtime
  * In Epic 1 the server-side implementation pipes bytes through a VtParser into
  * the existing ScreenBuffer; later epics fan-out to multiple network sessions.
  */
-interface ComputerStdioApi {
+interface DeviceStdioApi {
     fun writeString(text: String)
 }
