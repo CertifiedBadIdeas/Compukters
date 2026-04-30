@@ -37,6 +37,7 @@ import ru.lazyhat.compukterkraft.core.workbench.sync.OpOutbox
 import ru.lazyhat.compukterkraft.core.workbench.sync.SyncStatus
 import ru.lazyhat.compukterkraft.core.input.KeyCodes
 import ru.lazyhat.compukterkraft.lang.frontend.SourceTextSupport
+import ru.lazyhat.compukterkraft.lang.runtime.CompletionItemKind
 import java.util.UUID
 
 /**
@@ -109,6 +110,14 @@ class WorkbenchStore(
     private var outboxPath: String? = null
 
     private var bindScope: CoroutineScope? = null
+
+    /**
+     * Per-document undo stack. Each entry captures one applied [LocalEdit] together with
+     * the text that was deleted (for inserts: empty; for deletes: the gone text). Capped at
+     * [MAX_UNDO_ENTRIES] to bound memory. Cleared whenever a different document is opened
+     * or the replica is reset.
+     */
+    private val undoStack: ArrayDeque<UndoEntry> = ArrayDeque()
 
 
     /**
@@ -306,11 +315,39 @@ class WorkbenchStore(
         val prefixFlat = cursorFlat - (ed.cursorColumn - identifierStart)
         val textToInsert = item.insertText ?: item.label
         val deletedLength = cursorFlat - prefixFlat
+        // Suppress the auto-inserted "()" for FUNCTION items when the user is completing
+        // right before an existing "(" (e.g. re-completing a name in `terminal.printLine(`).
+        val effectiveInsert =
+            if (item.kind == CompletionItemKind.FUNCTION &&
+                textToInsert.endsWith("()") &&
+                ed.text.getOrNull(cursorFlat) == '('
+            ) {
+                textToInsert.dropLast(2)
+            } else {
+                textToInsert
+            }
+        val effectiveCursorOffset =
+            if (effectiveInsert === textToInsert) {
+                item.cursorOffset ?: textToInsert.length
+            } else {
+                // We dropped the trailing "()" — ignore the original cursor hint.
+                effectiveInsert.length
+            }
         if (deletedLength > 0) applyLocalEdit(LocalEdit.Delete(prefixFlat, deletedLength))
-        if (textToInsert.isNotEmpty()) applyLocalEdit(LocalEdit.Insert(prefixFlat, textToInsert))
+        if (effectiveInsert.isNotEmpty()) applyLocalEdit(LocalEdit.Insert(prefixFlat, effectiveInsert))
+        // Reposition the caret if the completion specifies a custom offset (e.g. between
+        // the auto-inserted parens of a function call).
+        val finalCursorFlat = (prefixFlat + effectiveCursorOffset).coerceIn(0, state.editor.text.length)
+        val (finalLine, finalCol) = lineColumnAt(state.editor.text, finalCursorFlat)
         _state.value =
             state.copy(
-                editor = state.editor.copy(completionItems = emptyList(), selectedCompletion = 0),
+                editor =
+                    state.editor.copy(
+                        cursorLine = finalLine,
+                        cursorColumn = finalCol,
+                        completionItems = emptyList(),
+                        selectedCompletion = 0,
+                    ),
             )
         refreshIde()
     }
@@ -341,6 +378,40 @@ class WorkbenchStore(
             when (key) {
                 KeyCodes.KEY_SPACE -> {
                     openCompletion()
+                    return true
+                }
+
+                KeyCodes.KEY_Z -> {
+                    closeCompletion()
+                    undo()
+                    return true
+                }
+
+                KeyCodes.KEY_D -> {
+                    closeCompletion()
+                    duplicateCurrentLine(visibleEditorLines)
+                    return true
+                }
+
+                KeyCodes.KEY_BACKSPACE -> {
+                    closeCompletion()
+                    deleteWordBackwardThroughCrdt(visibleEditorLines)
+                    return true
+                }
+
+                KeyCodes.KEY_DELETE -> {
+                    closeCompletion()
+                    deleteWordForwardThroughCrdt(visibleEditorLines)
+                    return true
+                }
+
+                KeyCodes.KEY_LEFT -> {
+                    moveCursorByWord(-1, visibleEditorLines)
+                    return true
+                }
+
+                KeyCodes.KEY_RIGHT -> {
+                    moveCursorByWord(1, visibleEditorLines)
                     return true
                 }
             }
@@ -408,7 +479,9 @@ class WorkbenchStore(
                 KeyCodes.KEY_ENTER,
                 KeyCodes.KEY_KP_ENTER,
                 -> {
-                    insertTextThroughCrdt("\n", visibleEditorLines)
+                    val ed = state.editor
+                    val indent = computeNewlineIndent(ed.text, ed.cursorLine, ed.cursorColumn)
+                    insertTextThroughCrdt("\n$indent", visibleEditorLines)
                     return true
                 }
 
@@ -528,6 +601,7 @@ class WorkbenchStore(
                 replica = null
                 outbox = null
                 outboxPath = null
+                clearUndoStack()
             }
         } else if (keepLocalText && remoteState.document != null) {
             // Path unchanged, replica live — keep local editor text but refresh metadata
@@ -602,11 +676,27 @@ class WorkbenchStore(
      * enqueue it on the outbox, and recompute the editor text + cursor.
      *
      * No-op when the document has not been opened (replica == null).
+     *
+     * When [recordUndo] is true (the default for user-initiated edits), the edit is pushed
+     * onto [undoStack] together with the text it deleted, so a subsequent Ctrl+Z can build
+     * the inverse edit. Pass `false` for edits emitted *by* the undo machinery itself.
      */
-    fun applyLocalEdit(edit: LocalEdit) {
+    fun applyLocalEdit(
+        edit: LocalEdit,
+        recordUndo: Boolean = true,
+    ) {
         val rep = replica ?: return
         val ed = state.editor
         val cursorFlatBefore = SourceTextSupport.offsetAt(ed.text, ed.cursorLine, ed.cursorColumn)
+        val deletedTextForUndo: String =
+            when (edit) {
+                is LocalEdit.Insert -> ""
+                is LocalEdit.Delete -> {
+                    val end = (edit.offset + edit.length).coerceAtMost(ed.text.length)
+                    val start = edit.offset.coerceAtLeast(0).coerceAtMost(end)
+                    ed.text.substring(start, end)
+                }
+            }
         val op: Op =
             when (edit) {
                 is LocalEdit.Insert -> {
@@ -621,6 +711,7 @@ class WorkbenchStore(
             }
         rep.applyLocal(op)
         outbox?.enqueue(op)
+        if (recordUndo) pushUndoEntry(edit, deletedTextForUndo, cursorFlatBefore)
 
         val newText = rep.document.flatten()
         val newCursorFlat =
@@ -764,6 +855,7 @@ class WorkbenchStore(
         replica = ClientCrdtReplica(siteId, initial)
         outboxPath = path
         outbox = createOutbox(path)
+        clearUndoStack()
     }
 
     private fun createOutbox(path: String): OpOutbox? {
@@ -829,6 +921,92 @@ class WorkbenchStore(
         if (flat >= ed.text.length) return
         applyLocalEdit(LocalEdit.Delete(flat, 1))
         _state.value = state.copy(editor = state.editor.keepCursorVisible(visibleEditorLines))
+    }
+
+    private fun deleteWordBackwardThroughCrdt(visibleEditorLines: Int) {
+        val ed = state.editor
+        val flat = SourceTextSupport.offsetAt(ed.text, ed.cursorLine, ed.cursorColumn)
+        if (flat == 0) return
+        val target = previousWordBoundary(ed.text, flat)
+        val length = flat - target
+        if (length <= 0) return
+        if (replica == null) {
+            // Replica-less path: fall back to repeated single-char deletes (rare; pre-bind).
+            var nextEditor = state.editor
+            repeat(length) { nextEditor = nextEditor.deleteBackward() }
+            _state.value = state.copy(editor = nextEditor.keepCursorVisible(visibleEditorLines))
+            refreshIde()
+            return
+        }
+        applyLocalEdit(LocalEdit.Delete(target, length))
+        _state.value = state.copy(editor = state.editor.keepCursorVisible(visibleEditorLines))
+    }
+
+    private fun deleteWordForwardThroughCrdt(visibleEditorLines: Int) {
+        val ed = state.editor
+        val flat = SourceTextSupport.offsetAt(ed.text, ed.cursorLine, ed.cursorColumn)
+        if (flat >= ed.text.length) return
+        val target = nextWordBoundary(ed.text, flat)
+        val length = target - flat
+        if (length <= 0) return
+        if (replica == null) {
+            var nextEditor = state.editor
+            repeat(length) { nextEditor = nextEditor.deleteForward() }
+            _state.value = state.copy(editor = nextEditor.keepCursorVisible(visibleEditorLines))
+            refreshIde()
+            return
+        }
+        applyLocalEdit(LocalEdit.Delete(flat, length))
+        _state.value = state.copy(editor = state.editor.keepCursorVisible(visibleEditorLines))
+    }
+
+    private fun moveCursorByWord(
+        direction: Int,
+        visibleEditorLines: Int,
+    ) {
+        val ed = state.editor
+        val flat = SourceTextSupport.offsetAt(ed.text, ed.cursorLine, ed.cursorColumn)
+        val target =
+            if (direction < 0) {
+                previousWordBoundary(ed.text, flat)
+            } else {
+                nextWordBoundary(ed.text, flat)
+            }
+        val (line, col) = lineColumnAt(ed.text, target)
+        _state.value = state.copy(editor = state.editor.withCursor(line, col, visibleEditorLines))
+    }
+
+    /**
+     * Duplicate the line containing the caret. The new line is inserted directly below the
+     * source line and the caret moves down one line preserving the column. Mirrors VSCode /
+     * IntelliJ Ctrl+D semantics.
+     */
+    private fun duplicateCurrentLine(visibleEditorLines: Int) {
+        val ed = state.editor
+        val text = ed.text
+        val cursorFlat = SourceTextSupport.offsetAt(text, ed.cursorLine, ed.cursorColumn)
+        val lineStart = text.lastIndexOf('\n', cursorFlat - 1).let { if (it < 0) 0 else it + 1 }
+        val lineEnd = text.indexOf('\n', cursorFlat).let { if (it < 0) text.length else it }
+        val lineContent = text.substring(lineStart, lineEnd)
+        val insertOffset = lineEnd
+        val insertText = "\n$lineContent"
+        if (replica == null) {
+            // Pre-bind: emit a regular insert via the EditorState helper which already
+            // handles cursor + scroll. We synthesize a temporary cursor at lineEnd first.
+            val prepared =
+                state.editor.copy(cursorLine = lineColumnAt(text, lineEnd).first, cursorColumn = lineColumnAt(text, lineEnd).second)
+            _state.value = state.copy(editor = prepared.insertText(insertText, visibleEditorLines))
+            refreshIde()
+            return
+        }
+        applyLocalEdit(LocalEdit.Insert(insertOffset, insertText))
+        // Place caret on the duplicated line at the same column.
+        val newCursorFlat = insertOffset + 1 + (cursorFlat - lineStart)
+        val (newLine, newCol) = lineColumnAt(state.editor.text, newCursorFlat.coerceIn(0, state.editor.text.length))
+        _state.value =
+            state.copy(
+                editor = state.editor.copy(cursorLine = newLine, cursorColumn = newCol).keepCursorVisible(visibleEditorLines),
+            )
     }
 
     private fun lineColumnAt(
@@ -934,5 +1112,100 @@ class WorkbenchStore(
             i -= 1
         }
         return i
+    }
+
+    /**
+     * Push an [UndoEntry] for an edit that was just applied. Consecutive single-character
+     * inserts of word/space characters are coalesced into the most recent entry so that one
+     * Ctrl+Z undoes a "burst" of typing rather than each individual key press.
+     */
+    private fun pushUndoEntry(
+        edit: LocalEdit,
+        deletedText: String,
+        cursorFlatBefore: Int,
+    ) {
+        val entry = UndoEntry(edit, deletedText, cursorFlatBefore)
+        val last = undoStack.lastOrNull()
+        val merged = last?.let { tryMerge(it, entry) }
+        if (merged != null) {
+            undoStack.removeLast()
+            undoStack.addLast(merged)
+        } else {
+            undoStack.addLast(entry)
+            while (undoStack.size > MAX_UNDO_ENTRIES) undoStack.removeFirst()
+        }
+    }
+
+    private fun tryMerge(
+        prev: UndoEntry,
+        next: UndoEntry,
+    ): UndoEntry? {
+        val prevEdit = prev.edit
+        val nextEdit = next.edit
+        // Coalesce only adjacent single-char insertions of "wordy" content. Newlines and
+        // larger inserts (paste, completion) start a fresh undo group.
+        if (prevEdit is LocalEdit.Insert &&
+            nextEdit is LocalEdit.Insert &&
+            nextEdit.text.length == 1 &&
+            prevEdit.offset + prevEdit.text.length == nextEdit.offset &&
+            !nextEdit.text.contains('\n') &&
+            !prevEdit.text.contains('\n')
+        ) {
+            return prev.copy(edit = LocalEdit.Insert(prevEdit.offset, prevEdit.text + nextEdit.text))
+        }
+        // Coalesce contiguous single-char backspaces deleting "to the left" of the previous
+        // delete. Same group as long as the run still grows leftward.
+        if (prevEdit is LocalEdit.Delete &&
+            nextEdit is LocalEdit.Delete &&
+            nextEdit.length == 1 &&
+            nextEdit.offset + nextEdit.length == prevEdit.offset
+        ) {
+            return prev.copy(
+                edit = LocalEdit.Delete(nextEdit.offset, prevEdit.length + nextEdit.length),
+                deletedText = next.deletedText + prev.deletedText,
+                cursorFlatBefore = next.cursorFlatBefore,
+            )
+        }
+        return null
+    }
+
+    /**
+     * Pop the most recent [UndoEntry] and apply its inverse to revert the change. Restores
+     * the caret to where it was before the original edit.
+     */
+    fun undo() {
+        val entry = undoStack.removeLastOrNull() ?: return
+        val inverse: LocalEdit =
+            when (val original = entry.edit) {
+                is LocalEdit.Insert -> LocalEdit.Delete(original.offset, original.text.length)
+                is LocalEdit.Delete -> LocalEdit.Insert(original.offset, entry.deletedText)
+            }
+        applyLocalEdit(inverse, recordUndo = false)
+        // Restore the pre-edit caret.
+        val text = state.editor.text
+        val (line, col) = lineColumnAt(text, entry.cursorFlatBefore.coerceIn(0, text.length))
+        _state.value =
+            state.copy(
+                editor =
+                    state.editor.copy(
+                        cursorLine = line,
+                        cursorColumn = col,
+                    ),
+            )
+    }
+
+    /** Discard the current undo history. Called when the open document changes. */
+    private fun clearUndoStack() {
+        undoStack.clear()
+    }
+
+    private data class UndoEntry(
+        val edit: LocalEdit,
+        val deletedText: String,
+        val cursorFlatBefore: Int,
+    )
+
+    private companion object {
+        const val MAX_UNDO_ENTRIES = 500
     }
 }
