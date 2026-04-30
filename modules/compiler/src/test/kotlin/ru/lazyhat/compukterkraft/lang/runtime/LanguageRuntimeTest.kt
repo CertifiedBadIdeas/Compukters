@@ -122,6 +122,38 @@ class LanguageRuntimeTest {
     }
 
     @Test
+    fun whileLoopWithMutationIncrementsCounter() {
+        val artifact =
+            frontend.compile(
+                "loop.ck",
+                """
+                import terminal;
+
+                fun main() {
+                    var i: Int = 0;
+                    while (i < 3) {
+                        terminal.printLine("i=" + i);
+                        i = i + 1;
+                    }
+                    terminal.printLine("done=" + i);
+                }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+
+        val runtime = RecordingRuntime()
+        runBlocking {
+            BytecodeComputerProgram(requireNotNull(artifact.module)).run(runtime)
+        }
+
+        assertEquals(listOf("i=0", "i=1", "i=2", "done=3"), runtime.lines)
+    }
+
+    @Test
     fun snapshotRoundTripRestoresExecutionState() {
         val artifact =
             frontend.compile(

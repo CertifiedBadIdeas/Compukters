@@ -63,6 +63,13 @@ data class VariableDeclarationStatement(
     override val range: ru.lazyhat.compukterkraft.lang.api.SourceRange,
 ) : ru.lazyhat.compukterkraft.lang.api.Statement
 
+data class AssignmentStatement(
+    val name: String,
+    val nameRange: ru.lazyhat.compukterkraft.lang.api.SourceRange,
+    val expression: ru.lazyhat.compukterkraft.lang.api.Expression,
+    override val range: ru.lazyhat.compukterkraft.lang.api.SourceRange,
+) : ru.lazyhat.compukterkraft.lang.api.Statement
+
 data class IfStatement(
     val condition: ru.lazyhat.compukterkraft.lang.api.Expression,
     val thenBranch: ru.lazyhat.compukterkraft.lang.api.BlockStatement,

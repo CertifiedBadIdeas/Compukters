@@ -16,6 +16,7 @@ Statements:
 
 - `val name = expr;`
 - `var counter: Int = 0;`
+- `name = expr;` (reassign a `var`; `val` cannot be reassigned)
 - `if (condition) { ... } else { ... }`
 - `if (condition) { ... } else if (condition) { ... } else { ... }`
 - `while condition { ... }`
