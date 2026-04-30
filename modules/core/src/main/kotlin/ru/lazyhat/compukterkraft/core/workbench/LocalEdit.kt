@@ -16,20 +16,22 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
+package ru.lazyhat.compukterkraft.core.workbench
 
-package ru.lazyhat.compukterkraft.core.ui.workbench
+/**
+ * High-level local edit issued by the UI/keyboard layer. Translated by [WorkbenchStore] into
+ * a CRDT [Op] before being applied locally and enqueued in the outbox.
+ */
+sealed interface LocalEdit {
+    /** Insert [text] at the visible character offset [offset]. */
+    data class Insert(
+        val offset: Int,
+        val text: String,
+    ) : LocalEdit
 
-import ru.lazyhat.compukterkraft.core.workbench.WorkbenchMode
-
-object WorkbenchTerminalInteractionPolicy {
-    fun showFocusHint(
-        terminalState: WorkbenchTerminalViewState,
-        focused: Boolean,
-    ): Boolean = terminalState is WorkbenchTerminalViewState.Active && !focused
-
-    fun canAcceptInput(
-        mode: WorkbenchMode,
-        terminalState: WorkbenchTerminalViewState,
-        focused: Boolean,
-    ): Boolean = mode == WorkbenchMode.TERMINAL && terminalState is WorkbenchTerminalViewState.Active && focused
+    /** Delete [length] visible characters starting at [offset]. */
+    data class Delete(
+        val offset: Int,
+        val length: Int,
+    ) : LocalEdit
 }

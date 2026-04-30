@@ -28,10 +28,10 @@ import ru.lazyhat.compukterkraft.common.utils.computerID
 import ru.lazyhat.compukterkraft.common.utils.updateComputerDataTag
 import ru.lazyhat.compukterkraft.common.workbench.test.TestMinecraftBootstrap
 import ru.lazyhat.compukterkraft.core.computer.vm.ComputerWorkspaceHost
-import ru.lazyhat.compukterkraft.core.computer.workbench.EditorPresence
-import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.AtomId
-import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.CursorAnchor
-import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.SiteId
+import ru.lazyhat.compukterkraft.core.workbench.EditorPresence
+import ru.lazyhat.compukterkraft.core.workbench.crdt.AtomId
+import ru.lazyhat.compukterkraft.core.workbench.crdt.CursorAnchor
+import ru.lazyhat.compukterkraft.core.workbench.crdt.SiteId
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBuffer
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
@@ -157,14 +157,14 @@ class ServerWorkbenchTest {
         workbench.openSession("main.ck")
 
         val author =
-            ru.lazyhat.compukterkraft.core.computer.workbench.crdt
+            ru.lazyhat.compukterkraft.core.workbench.crdt
                 .SiteId("p:client01")
         val sender =
-            ru.lazyhat.compukterkraft.core.computer.workbench.crdt
+            ru.lazyhat.compukterkraft.core.workbench.crdt
                 .SiteId("p:server02") // intentionally DIFFERENT
         val ops =
             listOf(
-                ru.lazyhat.compukterkraft.core.computer.workbench.crdt.Op.Insert(
+                ru.lazyhat.compukterkraft.core.workbench.crdt.Op.Insert(
                     author = author,
                     clock = 0,
                     leftId = null,
@@ -213,11 +213,11 @@ class ServerWorkbenchTest {
 
         // The session must already be open — applyOps for that path must succeed.
         val author =
-            ru.lazyhat.compukterkraft.core.computer.workbench.crdt
+            ru.lazyhat.compukterkraft.core.workbench.crdt
                 .SiteId("p:client01")
         val ops =
             listOf(
-                ru.lazyhat.compukterkraft.core.computer.workbench.crdt.Op.Insert(
+                ru.lazyhat.compukterkraft.core.workbench.crdt.Op.Insert(
                     author = author,
                     clock = 0,
                     leftId = null,
@@ -314,20 +314,20 @@ class ServerWorkbenchTest {
         workbench.openSession("shell.ck")
 
         val author =
-            ru.lazyhat.compukterkraft.core.computer.workbench.crdt
+            ru.lazyhat.compukterkraft.core.workbench.crdt
                 .SiteId("p:client01")
         val good =
-            ru.lazyhat.compukterkraft.core.computer.workbench.crdt.Op.Insert(
+            ru.lazyhat.compukterkraft.core.workbench.crdt.Op.Insert(
                 author = author, clock = 0, leftId = null, text = "hi",
             )
         // Causally invalid: targets an atom the replica has never seen.
         val bad =
-            ru.lazyhat.compukterkraft.core.computer.workbench.crdt.Op.Delete(
+            ru.lazyhat.compukterkraft.core.workbench.crdt.Op.Delete(
                 author = author,
                 clock = 1,
                 targetId =
-                    ru.lazyhat.compukterkraft.core.computer.workbench.crdt.AtomId(
-                        ru.lazyhat.compukterkraft.core.computer.workbench.crdt
+                    ru.lazyhat.compukterkraft.core.workbench.crdt.AtomId(
+                        ru.lazyhat.compukterkraft.core.workbench.crdt
                             .SiteId("p:ghost"),
                         99,
                     ),

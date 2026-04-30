@@ -27,13 +27,13 @@ import ru.lazyhat.compukterkraft.core.computer.input.ComputerControlAction
 import ru.lazyhat.compukterkraft.core.computer.input.ControlInputEvent
 import ru.lazyhat.compukterkraft.core.computer.input.InputEventSink
 import ru.lazyhat.compukterkraft.core.computer.vm.ComputerProfileRegistry
-import ru.lazyhat.compukterkraft.core.computer.workbench.ComputerControlGateway
-import ru.lazyhat.compukterkraft.core.computer.workbench.IdeRuntimeCatalogSource
-import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchIdeFacade
-import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchRemoteState
-import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchTargetState
-import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchUpdateSource
-import ru.lazyhat.compukterkraft.core.computer.workbench.WorkspaceGateway
+import ru.lazyhat.compukterkraft.core.workbench.ComputerControlGateway
+import ru.lazyhat.compukterkraft.core.workbench.IdeRuntimeCatalogSource
+import ru.lazyhat.compukterkraft.core.workbench.WorkbenchIdeFacade
+import ru.lazyhat.compukterkraft.core.workbench.WorkbenchRemoteState
+import ru.lazyhat.compukterkraft.core.workbench.WorkbenchTargetState
+import ru.lazyhat.compukterkraft.core.workbench.WorkbenchUpdateSource
+import ru.lazyhat.compukterkraft.core.workbench.WorkspaceGateway
 import ru.lazyhat.compukterkraft.lang.api.BuiltinRegistry
 import ru.lazyhat.compukterkraft.lang.frontend.AnalyzedProgram
 import ru.lazyhat.compukterkraft.lang.frontend.LanguageBuiltins
@@ -79,10 +79,10 @@ class NetworkWorkbenchWorkspaceGateway(
 
 class NetworkWorkbenchOpsGateway(
     private val menu: AbstractWorkbenchMenu,
-) : ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchOpsGateway {
+) : ru.lazyhat.compukterkraft.core.workbench.WorkbenchOpsGateway {
     override fun sendOps(
         path: String,
-        ops: List<ru.lazyhat.compukterkraft.core.computer.workbench.crdt.Op>,
+        ops: List<ru.lazyhat.compukterkraft.core.workbench.crdt.Op>,
     ) {
         ClientNetworking.sendToServer(
             ru.lazyhat.compukterkraft.common.workbench.network.server.WorkbenchOpsServerMessage(
@@ -100,7 +100,7 @@ class NetworkWorkbenchOpsGateway(
 
     override fun sendCursor(
         path: String,
-        cursor: ru.lazyhat.compukterkraft.core.computer.workbench.crdt.CursorAnchor?,
+        cursor: ru.lazyhat.compukterkraft.core.workbench.crdt.CursorAnchor?,
     ) {
         ClientNetworking.sendToServer(
             ru.lazyhat.compukterkraft.common.workbench.network.server.WorkbenchCursorServerMessage(

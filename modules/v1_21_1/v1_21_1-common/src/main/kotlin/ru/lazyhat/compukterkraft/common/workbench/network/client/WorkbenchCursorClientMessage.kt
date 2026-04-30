@@ -28,8 +28,8 @@ import ru.lazyhat.compukterkraft.common.workbench.network.readNullableCursorAnch
 import ru.lazyhat.compukterkraft.common.workbench.network.readSiteId
 import ru.lazyhat.compukterkraft.common.workbench.network.writeNullableCursorAnchor
 import ru.lazyhat.compukterkraft.common.workbench.network.writeSiteId
-import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.CursorAnchor
-import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.SiteId
+import ru.lazyhat.compukterkraft.core.workbench.crdt.CursorAnchor
+import ru.lazyhat.compukterkraft.core.workbench.crdt.SiteId
 
 /**
  * Server → client: a single peer's caret moved on [path]. `cursor == null` clears the

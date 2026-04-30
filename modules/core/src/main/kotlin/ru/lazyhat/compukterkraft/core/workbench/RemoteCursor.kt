@@ -16,20 +16,20 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
+package ru.lazyhat.compukterkraft.core.workbench
 
-package ru.lazyhat.compukterkraft.core.ui.workbench
+import ru.lazyhat.compukterkraft.core.workbench.crdt.CursorAnchor
 
-import ru.lazyhat.compukterkraft.core.workbench.WorkbenchMode
-
-object WorkbenchTerminalInteractionPolicy {
-    fun showFocusHint(
-        terminalState: WorkbenchTerminalViewState,
-        focused: Boolean,
-    ): Boolean = terminalState is WorkbenchTerminalViewState.Active && !focused
-
-    fun canAcceptInput(
-        mode: WorkbenchMode,
-        terminalState: WorkbenchTerminalViewState,
-        focused: Boolean,
-    ): Boolean = mode == WorkbenchMode.TERMINAL && terminalState is WorkbenchTerminalViewState.Active && focused
-}
+/**
+ * A remote collaborator's caret tracked client-side.
+ *
+ * [path] lets the editor decide whether to render this cursor on the currently open file or
+ * skip it (caret on a different file is still useful for the file-tree presence count, but
+ * not for the in-editor overlay). [cursor] is the live CRDT anchor — it survives concurrent
+ * inserts/deletes by other authors because it points at a stable atom rather than a flat
+ * offset.
+ */
+data class RemoteCursor(
+    val path: String,
+    val cursor: CursorAnchor,
+)

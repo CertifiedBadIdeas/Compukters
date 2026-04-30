@@ -17,19 +17,15 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package ru.lazyhat.compukterkraft.core.ui.workbench
+package ru.lazyhat.compukterkraft.core.workbench.sync
 
-import ru.lazyhat.compukterkraft.core.workbench.WorkbenchMode
-
-object WorkbenchTerminalInteractionPolicy {
-    fun showFocusHint(
-        terminalState: WorkbenchTerminalViewState,
-        focused: Boolean,
-    ): Boolean = terminalState is WorkbenchTerminalViewState.Active && !focused
-
-    fun canAcceptInput(
-        mode: WorkbenchMode,
-        terminalState: WorkbenchTerminalViewState,
-        focused: Boolean,
-    ): Boolean = mode == WorkbenchMode.TERMINAL && terminalState is WorkbenchTerminalViewState.Active && focused
-}
+/**
+ * Reactive sync state surfaced to the UI as the editor's sync status indicator.
+ *
+ * - [Idle]     — no unacked ops; pending count == 0; last ack received.
+ * - [Pending]  — local edits queued in the outbox, debounce timer ticking.
+ * - [Syncing]  — ops sent to server, awaiting ack within the stale-timeout window.
+ * - [Stale]    — server has not acked within `staleAfterMs`; editor remains usable, transitions
+ *   back to [Idle] on next ack.
+ */
+enum class SyncStatus { Idle, Pending, Syncing, Stale }

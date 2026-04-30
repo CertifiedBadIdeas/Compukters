@@ -17,19 +17,25 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package ru.lazyhat.compukterkraft.core.ui.workbench
+package ru.lazyhat.compukterkraft.core.workbench.crdt
 
-import ru.lazyhat.compukterkraft.core.workbench.WorkbenchMode
+/**
+ * Globally-unique identifier of a CRDT atom (a [TextRun] or a logical position).
+ *
+ * Total ordering is by `(site, clock)` lex order; this is also the tie-break used when two
+ * inserts share the same `leftId`. The site coming later in the order wins (its run is placed
+ * closer to `leftId`).
+ */
+data class AtomId(
+    val site: SiteId,
+    val clock: Int,
+) : Comparable<AtomId> {
+    init {
+        require(clock >= 0) { "clock must be non-negative, got $clock" }
+    }
 
-object WorkbenchTerminalInteractionPolicy {
-    fun showFocusHint(
-        terminalState: WorkbenchTerminalViewState,
-        focused: Boolean,
-    ): Boolean = terminalState is WorkbenchTerminalViewState.Active && !focused
-
-    fun canAcceptInput(
-        mode: WorkbenchMode,
-        terminalState: WorkbenchTerminalViewState,
-        focused: Boolean,
-    ): Boolean = mode == WorkbenchMode.TERMINAL && terminalState is WorkbenchTerminalViewState.Active && focused
+    override fun compareTo(other: AtomId): Int {
+        val c = site.compareTo(other.site)
+        return if (c != 0) c else clock.compareTo(other.clock)
+    }
 }

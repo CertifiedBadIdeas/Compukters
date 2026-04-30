@@ -26,7 +26,7 @@ import ru.lazyhat.compukterkraft.common.network.NetworkMessage
 import ru.lazyhat.compukterkraft.common.network.NetworkMessages
 import ru.lazyhat.compukterkraft.common.workbench.network.readOps
 import ru.lazyhat.compukterkraft.common.workbench.network.writeOps
-import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.Op
+import ru.lazyhat.compukterkraft.core.workbench.crdt.Op
 
 /**
  * Server → client: ack for the local site's last applied clock plus any concurrent ops from

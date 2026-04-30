@@ -25,10 +25,10 @@ import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchDocume
 import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchOpsClientMessage
 import ru.lazyhat.compukterkraft.common.workbench.network.server.WorkbenchOpsServerMessage
 import ru.lazyhat.compukterkraft.common.workbench.test.TestMinecraftBootstrap
-import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.AtomId
-import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.Op
-import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.SiteId
-import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.TextRun
+import ru.lazyhat.compukterkraft.core.workbench.crdt.AtomId
+import ru.lazyhat.compukterkraft.core.workbench.crdt.Op
+import ru.lazyhat.compukterkraft.core.workbench.crdt.SiteId
+import ru.lazyhat.compukterkraft.core.workbench.crdt.TextRun
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
