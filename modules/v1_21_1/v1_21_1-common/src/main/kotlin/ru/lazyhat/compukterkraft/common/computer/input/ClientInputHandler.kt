@@ -20,17 +20,17 @@ package ru.lazyhat.compukterkraft.common.computer.input
 
 import net.minecraft.world.inventory.AbstractContainerMenu
 import ru.lazyhat.compukterkraft.common.computer.input.NetworkComputerInputGateway
-import ru.lazyhat.compukterkraft.core.computer.input.ComputerInputGateway
+import ru.lazyhat.compukterkraft.core.computer.input.TargetInputGateway
 import ru.lazyhat.compukterkraft.core.computer.input.InputEvent
 import ru.lazyhat.compukterkraft.core.computer.input.InputEventSink
 
 /**
- * Client-side [InputEventSink] that forwards all input to the server via [ComputerInputGateway].
+ * Client-side [InputEventSink] that forwards all input to the server via [TargetInputGateway].
  */
 class ClientInputHandler(
     menu: AbstractContainerMenu,
 ) : InputEventSink {
-    private val gateway: ComputerInputGateway = NetworkComputerInputGateway(menu)
+    private val gateway: TargetInputGateway = NetworkComputerInputGateway(menu)
 
     override fun accept(event: InputEvent) = gateway.send(event)
 }

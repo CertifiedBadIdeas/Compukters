@@ -26,7 +26,7 @@ import ru.lazyhat.compukterkraft.common.computer.network.server.PasteEventComput
 import ru.lazyhat.compukterkraft.common.network.ClientNetworking
 import ru.lazyhat.compukterkraft.core.LOGGER
 import ru.lazyhat.compukterkraft.core.computer.input.ComputerControlAction
-import ru.lazyhat.compukterkraft.core.computer.input.ComputerInputGateway
+import ru.lazyhat.compukterkraft.core.computer.input.TargetInputGateway
 import ru.lazyhat.compukterkraft.core.computer.input.ControlInputEvent
 import ru.lazyhat.compukterkraft.core.computer.input.InputEvent
 import ru.lazyhat.compukterkraft.core.computer.input.KeyInputEvent
@@ -35,7 +35,7 @@ import ru.lazyhat.compukterkraft.core.computer.input.PasteInputEvent
 
 class NetworkComputerInputGateway(
     private val menu: AbstractContainerMenu,
-) : ComputerInputGateway {
+) : TargetInputGateway {
     override fun send(event: InputEvent) {
         LOGGER.debug { "Sending input event to server: $event" }
         when (event) {

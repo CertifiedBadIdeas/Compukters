@@ -20,14 +20,14 @@ package ru.lazyhat.compukterkraft.common.workbench.input
 
 import net.minecraft.world.inventory.AbstractContainerMenu
 import ru.lazyhat.compukterkraft.common.workbench.input.NetworkWorkbenchInputGateway
-import ru.lazyhat.compukterkraft.core.computer.input.ComputerInputGateway
+import ru.lazyhat.compukterkraft.core.computer.input.TargetInputGateway
 import ru.lazyhat.compukterkraft.core.computer.input.InputEvent
 import ru.lazyhat.compukterkraft.core.computer.input.InputEventSink
 
 class WorkbenchClientInputHandler(
     menu: AbstractContainerMenu,
 ) : InputEventSink {
-    private val gateway: ComputerInputGateway = NetworkWorkbenchInputGateway(menu)
+    private val gateway: TargetInputGateway = NetworkWorkbenchInputGateway(menu)
 
     override fun accept(event: InputEvent) = gateway.send(event)
 }
