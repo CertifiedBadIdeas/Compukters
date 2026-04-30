@@ -1,11 +1,11 @@
 package ru.lazyhat.compukterkraft.core.computer.vm.api
 
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerStdioApi
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceStdioApi
 import ru.lazyhat.compukterkraft.lang.runtime.vt.VtParser
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
- * Server-side [ComputerStdioApi] that fans out the VM's byte stream to any
+ * Server-side [DeviceStdioApi] that fans out the VM's byte stream to any
  * number of attached [Consumer]s and keeps a rolling [ScrollbackRing] so a
  * late joiner receives the recent history.
  *
@@ -20,7 +20,7 @@ import java.util.concurrent.CopyOnWriteArrayList
  */
 class ComputerStdioBroadcaster(
     scrollbackBytes: Int = 64 * 1024,
-) : ComputerStdioApi {
+) : DeviceStdioApi {
     /**
      * Receiver of broadcast byte chunks. Implementations typically buffer
      * bytes for delivery on the next server tick.
