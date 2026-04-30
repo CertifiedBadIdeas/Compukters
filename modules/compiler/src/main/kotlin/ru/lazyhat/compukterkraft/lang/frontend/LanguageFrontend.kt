@@ -1332,20 +1332,30 @@ internal class Lexer(
                 }
 
                 '+' -> {
-                    addToken(TokenKind.PLUS, "+", start)
+                    if (match('=')) {
+                        addToken(TokenKind.PLUS_EQUAL, "+=", start)
+                    } else {
+                        addToken(TokenKind.PLUS, "+", start)
+                    }
                 }
 
                 '-' -> {
                     if (!isAtEnd() && peek() == '>') {
                         advance()
                         addToken(TokenKind.ARROW, "->", start)
+                    } else if (match('=')) {
+                        addToken(TokenKind.MINUS_EQUAL, "-=", start)
                     } else {
                         addToken(TokenKind.MINUS, "-", start)
                     }
                 }
 
                 '*' -> {
-                    addToken(TokenKind.STAR, "*", start)
+                    if (match('=')) {
+                        addToken(TokenKind.STAR_EQUAL, "*=", start)
+                    } else {
+                        addToken(TokenKind.STAR, "*", start)
+                    }
                 }
 
                 '/' -> {
@@ -1353,6 +1363,8 @@ internal class Lexer(
                         while (!isAtEnd() && peek() != '\n') advance()
                     } else if (match('*')) {
                         lexBlockComment(start)
+                    } else if (match('=')) {
+                        addToken(TokenKind.SLASH_EQUAL, "/=", start)
                     } else {
                         addToken(TokenKind.SLASH, "/", start)
                     }
@@ -1687,7 +1699,7 @@ internal class Parser(
             }
 
             else -> {
-                if (check(TokenKind.IDENTIFIER) && peekAhead(1)?.kind == TokenKind.EQUAL) {
+                if (check(TokenKind.IDENTIFIER) && peekAhead(1)?.kind in COMPOUND_ASSIGN_KINDS) {
                     parseAssignment()
                 } else {
                     val expression = parseExpression() ?: return null
@@ -1700,9 +1712,25 @@ internal class Parser(
 
     private fun parseAssignment(): AssignmentStatement? {
         val nameTok = consume(TokenKind.IDENTIFIER, "Expected variable name.") ?: return null
-        consume(TokenKind.EQUAL, "Expected `=` in assignment.") ?: return null
-        val value = parseExpression() ?: return null
+        val opTok = advance()
+        val rhs = parseExpression() ?: return null
         consumeOptional(TokenKind.SEMICOLON)
+        val value: Expression =
+            when (opTok.kind) {
+                TokenKind.EQUAL -> rhs
+                TokenKind.PLUS_EQUAL -> compoundDesugar(nameTok, BinaryOperator.ADD, rhs)
+                TokenKind.MINUS_EQUAL -> compoundDesugar(nameTok, BinaryOperator.SUBTRACT, rhs)
+                TokenKind.STAR_EQUAL -> compoundDesugar(nameTok, BinaryOperator.MULTIPLY, rhs)
+                TokenKind.SLASH_EQUAL -> compoundDesugar(nameTok, BinaryOperator.DIVIDE, rhs)
+                else -> {
+                    diagnostics +=
+                        FrontendDiagnostic(
+                            "Expected `=`, `+=`, `-=`, `*=` or `/=` in assignment.",
+                            opTok.range,
+                        )
+                    return null
+                }
+            }
         return AssignmentStatement(
             name = nameTok.text,
             nameRange = nameTok.range,
@@ -1710,6 +1738,18 @@ internal class Parser(
             range = SourceRange(nameTok.range.start, value.range.end),
         )
     }
+
+    private fun compoundDesugar(
+        nameTok: Token,
+        operator: BinaryOperator,
+        rhs: Expression,
+    ): Expression =
+        BinaryExpression(
+            left = NameExpression(nameTok.text, nameTok.range),
+            operator = operator,
+            right = rhs,
+            range = SourceRange(nameTok.range.start, rhs.range.end),
+        )
 
     private fun parseVariable(mutable: Boolean): VariableDeclarationStatement? {
         val name = consume(TokenKind.IDENTIFIER, "Expected variable name.") ?: return null
@@ -2108,4 +2148,15 @@ internal class Parser(
     private fun peek(): Token = tokens[index]
 
     private fun isAtEnd(): Boolean = index >= tokens.size || tokens[index].kind == TokenKind.EOF
+
+    private companion object {
+        val COMPOUND_ASSIGN_KINDS =
+            setOf(
+                TokenKind.EQUAL,
+                TokenKind.PLUS_EQUAL,
+                TokenKind.MINUS_EQUAL,
+                TokenKind.STAR_EQUAL,
+                TokenKind.SLASH_EQUAL,
+            )
+    }
 }

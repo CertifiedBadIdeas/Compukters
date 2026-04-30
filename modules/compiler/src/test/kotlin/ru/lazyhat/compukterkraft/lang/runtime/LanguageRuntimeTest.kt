@@ -154,6 +154,41 @@ class LanguageRuntimeTest {
     }
 
     @Test
+    fun compoundAssignmentOperatorsMutateLocal() {
+        val artifact =
+            frontend.compile(
+                "compound.ck",
+                """
+                import terminal;
+
+                fun main() {
+                    var i: Int = 1;
+                    i += 4;
+                    terminal.printLine("plus=" + i);
+                    i -= 2;
+                    terminal.printLine("minus=" + i);
+                    i *= 6;
+                    terminal.printLine("star=" + i);
+                    i /= 3;
+                    terminal.printLine("slash=" + i);
+                }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+
+        val runtime = RecordingRuntime()
+        runBlocking {
+            BytecodeComputerProgram(requireNotNull(artifact.module)).run(runtime)
+        }
+
+        assertEquals(listOf("plus=5", "minus=3", "star=18", "slash=6"), runtime.lines)
+    }
+
+    @Test
     fun snapshotRoundTripRestoresExecutionState() {
         val artifact =
             frontend.compile(
