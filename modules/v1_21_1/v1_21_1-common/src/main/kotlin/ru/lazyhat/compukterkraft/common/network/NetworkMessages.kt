@@ -51,7 +51,7 @@ import ru.lazyhat.compukterkraft.common.workbench.network.server.WorkbenchWorksp
  *
  * | ID | Channel                      | Class                              | Trigger                                           | State modified on server                     |
  * |----|------------------------------|------------------------------------|----------------------------------------------------|----------------------------------------------|
- * | 0  | `computer_action`            | [ComputerActionServerMessage]      | Player clicks Turn On / Shutdown / Reboot / Terminate button | [ServerComputer] lifecycle (turnOn/shutdown/reboot) |
+ * | 0  | `computer_action`            | [ComputerActionServerMessage]      | Player clicks Turn On / Shutdown / Reboot / Terminate button | [RuntimeDevice] lifecycle (turnOn/shutdown/reboot) |
  * | 1  | `key_event`                  | [KeyEventServerMessage]            | Player presses/releases a key while computer GUI is open | VM event queue (`key` / `key_up`)            |
  * | 2  | `mouse_event`                | [MouseEventServerMessage]          | Player clicks/drags/scrolls inside the terminal area | VM event queue (`mouse_click` / `mouse_up` / `mouse_drag` / `mouse_scroll`) |
  * | 3  | `paste_event`                | [PasteEventComputerMessage]        | Player pastes text (Ctrl+V)                        | VM event queue (`paste`)                     |

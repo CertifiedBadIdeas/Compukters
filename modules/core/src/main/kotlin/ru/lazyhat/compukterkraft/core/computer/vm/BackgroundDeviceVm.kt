@@ -61,7 +61,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.vt.VtParser
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.yield as coroutineYield
 
-fun interface ComputerVmLogger {
+fun interface DeviceVmLogger {
     fun log(message: String)
 }
 
@@ -86,12 +86,12 @@ private data class RuntimeApiRegistryProfile(
  * Created by [ComputerManager][compukterkraft.mod.context.ComputerManager], started with [boot],
  * stopped with [stop]. On reboot, the old VM is stopped and a new one is created.
  */
-class BackgroundComputerVm(
+class BackgroundDeviceVm(
     override val deviceId: Int,
     override val profile: DeviceProfile,
     dispatcher: CoroutineDispatcher,
     private val labelProvider: () -> String?,
-    private val logger: ComputerVmLogger,
+    private val logger: DeviceVmLogger,
     workspace: DeviceWorkspace,
 ) : DeviceVmHandle,
     VmContext {

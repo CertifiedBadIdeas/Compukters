@@ -28,11 +28,14 @@ import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.entity.BlockEntityType
 import net.minecraft.world.level.block.state.BlockState
 import ru.lazyhat.compukterkraft.common.binding.ModObjects
-import ru.lazyhat.compukterkraft.common.computer.context.ServerComputer
+import ru.lazyhat.compukterkraft.common.computer.context.BlockEntityRuntimeDeviceHost
+import ru.lazyhat.compukterkraft.common.computer.context.ServerContext
 import ru.lazyhat.compukterkraft.common.computer.menu.ComputerMenuWithoutInventory
 import ru.lazyhat.compukterkraft.core.LOGGER
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
-import ru.lazyhat.compukterkraft.core.computer.ComputerProperties
+import ru.lazyhat.compukterkraft.core.computer.DeviceProperties
+import ru.lazyhat.compukterkraft.core.computer.runtime.RuntimeDevice
+import ru.lazyhat.compukterkraft.core.computer.runtime.RuntimeDeviceImpl
 
 open class ComputerBlockEntity(
     type: BlockEntityType<out ComputerBlockEntity>,
@@ -40,15 +43,18 @@ open class ComputerBlockEntity(
     state: BlockState,
     family: DeviceFamily,
 ) : AbstractComputerBlockEntity(type, pos, state, family) {
-    override fun createComputer(id: Int): ServerComputer =
-        ServerComputer(
-            id,
-            level as ServerLevel,
-            ComputerProperties(
-                family,
-                label,
-            ),
+    override fun createComputer(id: Int): RuntimeDevice {
+        val serverLevel = level as ServerLevel
+        val host = BlockEntityRuntimeDeviceHost(serverLevel, this)
+        return RuntimeDeviceImpl(
+            deviceId = id,
+            properties = DeviceProperties(family, label),
+            manager = ServerContext.deviceManager,
+            gameTime = host.gameTime,
+            terminalNetwork = host.terminalNetwork,
+            stateSink = host.stateSink,
         )
+    }
 
     override fun updateBlockState(newState: ComputerState) {
         blockState
@@ -71,8 +77,8 @@ open class ComputerBlockEntity(
             ModObjects.computerMenuType(),
             containerId,
             playerInventory,
-            getOrCreateServerComputer(),
+            getOrCreateRuntimeDevice(),
         ).also {
-            LOGGER.debug { "ComputerID: ${it.serverSide.computer.instanceID} createMenu" }
+            LOGGER.debug { "DeviceID: ${it.serverSide.computer.deviceId} createMenu" }
         }
 }

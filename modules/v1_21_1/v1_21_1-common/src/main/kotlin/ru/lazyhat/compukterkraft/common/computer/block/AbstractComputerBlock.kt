@@ -93,9 +93,9 @@ abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
                     }
 
                 val resolvedComputerId =
-                    tile.computerID ?: ServerContext.allocateComputerId().also { tile.computerID = it }
+                    tile.computerID ?: ServerContext.allocateDeviceId().also { tile.computerID = it }
 
-                ServerContext.computerManager.ensureWorkspaceInitialized(resolvedComputerId)
+                ServerContext.deviceManager.ensureWorkspaceInitialized(resolvedComputerId)
             }
     }
 

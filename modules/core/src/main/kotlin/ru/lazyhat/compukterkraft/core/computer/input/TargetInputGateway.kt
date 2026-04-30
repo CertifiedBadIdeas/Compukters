@@ -22,7 +22,7 @@ package ru.lazyhat.compukterkraft.core.computer.input
  * Accepts [InputEvent]s and forwards them towards a computer.
  *
  * On the client side, the implementation serializes events into network packets.
- * On the server side, the implementation dispatches events to [ComputerEvents].
+ * On the server side, the implementation dispatches events to [DeviceEvents].
  */
 fun interface InputEventSink {
     fun accept(event: InputEvent)
