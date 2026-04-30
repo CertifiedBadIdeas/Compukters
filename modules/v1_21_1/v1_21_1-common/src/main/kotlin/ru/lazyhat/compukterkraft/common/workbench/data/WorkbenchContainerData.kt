@@ -22,8 +22,8 @@ package ru.lazyhat.compukterkraft.common.workbench.data
 import net.minecraft.network.RegistryFriendlyByteBuf
 import net.minecraft.world.item.ItemStack
 import ru.lazyhat.compukterkraft.common.computer.data.IContainerData
-import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchRemoteState
-import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchTargetState
+import ru.lazyhat.compukterkraft.core.workbench.WorkbenchRemoteState
+import ru.lazyhat.compukterkraft.core.workbench.WorkbenchTargetState
 
 class WorkbenchContainerData private constructor(
     val targetConnected: Boolean,

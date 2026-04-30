@@ -24,8 +24,8 @@ import ru.lazyhat.compukterkraft.common.network.ClientNetworkContext
 import ru.lazyhat.compukterkraft.common.network.MessageType
 import ru.lazyhat.compukterkraft.common.network.NetworkMessage
 import ru.lazyhat.compukterkraft.common.network.NetworkMessages
-import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchRemoteState
-import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchTargetState
+import ru.lazyhat.compukterkraft.core.workbench.WorkbenchRemoteState
+import ru.lazyhat.compukterkraft.core.workbench.WorkbenchTargetState
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceDocument
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceEntry
 

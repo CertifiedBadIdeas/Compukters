@@ -41,13 +41,13 @@ class CommonModBootstrapTest {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `./gradlew :core:test --tests ck.mod.bootstrap.CommonModBootstrapTest`
+Run: `./gradlew :core:test --tests compukterkraft.mod.bootstrap.CommonModBootstrapTest`
 Expected: FAIL because descriptor types do not exist yet and registrars still accept `String`.
 
 - [ ] **Step 3: Add minimal descriptor model and port changes**
 
 ```kotlin
-package ck.mod.bootstrap
+package compukterkraft.mod.bootstrap
 
 enum class CommonBlockDescriptor(
     val id: String,
@@ -63,9 +63,9 @@ enum class CommonMenuDescriptor(
 ```
 
 ```kotlin
-package ck.mod.platform.api
+package compukterkraft.mod.platform.api
 
-import ck.mod.bootstrap.CommonBlockDescriptor
+import compukterkraft.mod.bootstrap.CommonBlockDescriptor
 
 interface PlatformBlockRegistrar {
     fun registerBlock(descriptor: CommonBlockDescriptor)
@@ -73,9 +73,9 @@ interface PlatformBlockRegistrar {
 ```
 
 ```kotlin
-package ck.mod.platform.api
+package compukterkraft.mod.platform.api
 
-import ck.mod.bootstrap.CommonMenuDescriptor
+import compukterkraft.mod.bootstrap.CommonMenuDescriptor
 
 interface PlatformMenuRegistrar {
     fun registerMenu(descriptor: CommonMenuDescriptor)
@@ -104,7 +104,7 @@ object CommonModBootstrap {
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `./gradlew :core:test --tests ck.mod.bootstrap.CommonModBootstrapTest`
+Run: `./gradlew :core:test --tests compukterkraft.mod.bootstrap.CommonModBootstrapTest`
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
@@ -148,13 +148,13 @@ class CommonContentRegistryTest {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `./gradlew :v1_21_1-common:test --tests ck.mod.content.CommonContentRegistryTest`
+Run: `./gradlew :v1_21_1-common:test --tests compukterkraft.mod.content.CommonContentRegistryTest`
 Expected: FAIL because `CommonContentRegistry` does not exist yet.
 
 - [ ] **Step 3: Introduce a version-common content registry facade**
 
 ```kotlin
-package ck.mod.content
+package compukterkraft.mod.content
 
 object CommonContentRegistry {
     fun registerAll(registry: VersionContentRegistry) {
@@ -243,13 +243,13 @@ class ComputerBlockBehaviorTest {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `./gradlew :core:test --tests ck.mod.content.ComputerBlockBehaviorTest`
+Run: `./gradlew :core:test --tests compukterkraft.mod.content.ComputerBlockBehaviorTest`
 Expected: FAIL because behavior model does not exist yet.
 
 - [ ] **Step 3: Add behavior objects in `core`**
 
 ```kotlin
-package ck.mod.content
+package compukterkraft.mod.content
 
 object ComputerBlockBehavior {
     fun defaultState(): ComputerBlockStateModel =
@@ -261,7 +261,7 @@ object ComputerBlockBehavior {
 ```
 
 ```kotlin
-package ck.mod.content
+package compukterkraft.mod.content
 
 object ComputerBlockEntityBehavior {
     fun shouldUpdateState(current: ComputerPowerState, next: ComputerPowerState): Boolean = current != next
@@ -296,7 +296,7 @@ class ComputerBlockEntity(...) : AbstractComputerBlockEntity(type, pos, state, f
 
 - [ ] **Step 5: Run tests and compile verification**
 
-Run: `./gradlew :core:test --tests ck.mod.content.ComputerBlockBehaviorTest :v1_21_1-common:compileKotlin`
+Run: `./gradlew :core:test --tests compukterkraft.mod.content.ComputerBlockBehaviorTest :v1_21_1-common:compileKotlin`
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
@@ -323,7 +323,7 @@ git commit -m "refactor: extract shared computer block behavior"
 - [ ] **Step 1: Write the failing compile target by moving one runtime class declaration**
 
 ```kotlin
-package ck.mod.runtime
+package compukterkraft.mod.runtime
 
 object CommonServerContext
 ```
@@ -412,7 +412,7 @@ class NetworkMessageCatalogTest {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `./gradlew :v1_21_1-common:test --tests ck.mod.network.NetworkMessageCatalogTest`
+Run: `./gradlew :v1_21_1-common:test --tests compukterkraft.mod.network.NetworkMessageCatalogTest`
 Expected: FAIL if message catalog still lives only in leaf modules.
 
 - [ ] **Step 3: Move protocol model classes into version-common**
@@ -449,7 +449,7 @@ object NetworkHandler {
 
 - [ ] **Step 5: Run network tests and compile verification**
 
-Run: `./gradlew :v1_21_1-common:test --tests ck.mod.network.NetworkMessageCatalogTest :v1_21_1-neoforge:test --tests ck.mod.platform.NetworkHandlerPayloadIdTest`
+Run: `./gradlew :v1_21_1-common:test --tests compukterkraft.mod.network.NetworkMessageCatalogTest :v1_21_1-neoforge:test --tests compukterkraft.mod.platform.NetworkHandlerPayloadIdTest`
 Expected: PASS.
 
 - [ ] **Step 6: Commit**

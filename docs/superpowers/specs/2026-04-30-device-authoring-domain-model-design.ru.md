@@ -15,7 +15,7 @@
 
 Текущая архитектура и кодбаза не называют, что у них общего, что нет, и как впишутся будущие устройства. В результате:
 
-- Код Workbench в `modules/core` лежит под `ck.core.computer.workbench.*`, что сигнализирует, что Workbench — это подфича Computer. В `modules/v1_21_1/v1_21_1-common` тот же код лежит под `ck.common.workbench.*` как peer к computer. Эти два места противоречат друг другу.
+- Код Workbench в `modules/core` лежит под `compukterkraft.core.computer.workbench.*`, что сигнализирует, что Workbench — это подфича Computer. В `modules/v1_21_1/v1_21_1-common` тот же код лежит под `compukterkraft.common.workbench.*` как peer к computer. Эти два места противоречат друг другу.
 - Несколько shared bridge-интерфейсов названы `Computer*` (`ComputerControlGateway`, `ComputerInputGateway`), хотя используются и Workbench, и Computer. Имена подразумевают, что Computer — главный владелец.
 - В `docs/TODOs.md` Laptop описан как будущая фича без чёткого архитектурного места. Текущий код жёстко завязан на block-entity (`ServerComputer(level: ServerLevel)`, `TransientPairing` по `BlockPos`), что заблокирует портативные runtime-устройства.
 - На вопрос «является ли IDE разновидностью компьютера?» в доках нет канонического ответа, хотя ответ влияет на каждое решение по будущим фичам.
@@ -105,14 +105,14 @@ Runtime Device **не обязан** предоставлять встроенн
 | Концепт | Сегодняшнее место |
 |---|---|
 | Runtime Device — абстрактная сущность | Неявно; нет umbrella-интерфейса. Концептуально представлено `ServerComputer` плюс `ComputerProfile`/`ComputerFamily`. |
-| Computer (block-based Runtime Device) | `ck.common.computer.*`, `ck.core.computer.*`, `ck.impl.computer.*` |
+| Computer (block-based Runtime Device) | `compukterkraft.common.computer.*`, `compukterkraft.core.computer.*`, `compukterkraft.impl.computer.*` |
 | Authoring Station — абстрактная сущность | Неявно; нет umbrella-интерфейса. |
-| Workbench (текущая Authoring Station) | `ck.common.workbench.*` (peer к computer — правильно), `ck.core.computer.workbench.*` (вложен в computer — НЕПРАВИЛЬНО, см. Фазу 1) |
+| Workbench (текущая Authoring Station) | `compukterkraft.common.workbench.*` (peer к computer — правильно), `compukterkraft.core.computer.workbench.*` (вложен в computer — НЕПРАВИЛЬНО, см. Фазу 1) |
 | Target descriptor | Предмет компьютера в target-слоте Workbench плюс `ComputerControlGateway` (требует переименования). |
 | `DeviceProfile`/`DeviceFamily` | Сейчас `ComputerProfile` (в `compiler`), `ComputerFamily` (в `core`). |
 | Language tooling (shared) | Модуль `compiler` — уже на правильном месте. |
 | Terminal rendering (shared) | `v1_21_1-common/ui/render` — на правильном месте; одно имя неудачное (`WorkbenchTerminalRenderer`). |
-| Input transport (shared) | `ck.core.computer.input.*` — функция верная, имена пакета и типов с Computer-префиксом; должны стать нейтральными. |
+| Input transport (shared) | `compukterkraft.core.computer.input.*` — функция верная, имена пакета и типов с Computer-префиксом; должны стать нейтральными. |
 
 ## Фазы внедрения
 

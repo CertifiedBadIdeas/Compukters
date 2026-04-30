@@ -19,10 +19,10 @@
 package ru.lazyhat.compukterkraft.common.network
 
 import ru.lazyhat.compukterkraft.common.network.text.TableBuilder
-import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchRemoteState
-import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.Op
-import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.SiteId
-import ru.lazyhat.compukterkraft.core.computer.workbench.crdt.TextRun
+import ru.lazyhat.compukterkraft.core.workbench.WorkbenchRemoteState
+import ru.lazyhat.compukterkraft.core.workbench.crdt.Op
+import ru.lazyhat.compukterkraft.core.workbench.crdt.SiteId
+import ru.lazyhat.compukterkraft.core.workbench.crdt.TextRun
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 
 /**
@@ -62,13 +62,13 @@ interface ClientNetworkContext {
 
     fun handleWorkbenchPresence(
         containerId: Int,
-        presences: List<ru.lazyhat.compukterkraft.core.computer.workbench.EditorPresence>,
+        presences: List<ru.lazyhat.compukterkraft.core.workbench.EditorPresence>,
     )
 
     fun handleWorkbenchCursor(
         containerId: Int,
         path: String,
         siteId: SiteId,
-        cursor: ru.lazyhat.compukterkraft.core.computer.workbench.crdt.CursorAnchor?,
+        cursor: ru.lazyhat.compukterkraft.core.workbench.crdt.CursorAnchor?,
     )
 }

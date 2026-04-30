@@ -26,7 +26,7 @@ import ru.lazyhat.compukterkraft.common.workbench.network.server.WorkbenchWorksp
 import ru.lazyhat.compukterkraft.common.workbench.test.TestInventoryFactory
 import ru.lazyhat.compukterkraft.common.workbench.test.TestMinecraftBootstrap
 import ru.lazyhat.compukterkraft.core.computer.vm.ComputerWorkspaceHost
-import ru.lazyhat.compukterkraft.core.computer.workbench.WorkbenchTargetState
+import ru.lazyhat.compukterkraft.core.workbench.WorkbenchTargetState
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBuffer
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
