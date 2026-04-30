@@ -26,7 +26,7 @@ import ru.lazyhat.compukterkraft.core.computer.input.MouseInputEvent
 import ru.lazyhat.compukterkraft.core.computer.input.PasteInputEvent
 
 /**
- * Built-in events that can be queued on a computer.
+ * Built-in events that can be queued on a runtime device.
  */
 object DeviceEvents {
     /**
@@ -93,7 +93,7 @@ object DeviceEvents {
     }
 
     /**
-     * An object that can receive computer events.
+     * An object that can receive runtime device events.
      */
     fun interface Receiver {
         fun queueEvent(

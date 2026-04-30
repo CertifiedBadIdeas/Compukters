@@ -59,7 +59,7 @@ class AttachTerminalServerMessage : ComputerServerMessage {
         container: ComputerMenu,
     ) {
         val player = context.sender()
-        container.serverSide.computer.attachTerminalSession(
+        container.serverSide.device.attachTerminalSession(
             playerUuid = player.uuid,
             containerId = targetContainerId,
             cols = cols,

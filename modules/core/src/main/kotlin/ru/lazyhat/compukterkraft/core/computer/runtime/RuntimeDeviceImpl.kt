@@ -92,7 +92,7 @@ class RuntimeDeviceImpl(
      * Epic 2 terminal sessions — one per attached player. A session is created
      * by [AttachTerminalServerMessage][ru.lazyhat.compukterkraft.common.computer.network.server.AttachTerminalServerMessage]
      * and torn down in [serverTick] when the player's open menu no longer
-     * references this computer.
+     * references this device.
      */
     private data class TerminalSession(
         val playerUuid: UUID,
@@ -248,7 +248,7 @@ class RuntimeDeviceImpl(
             } else {
                 val session = TerminalSession(playerUuid, containerId, cols, rows)
                 // Attach to the currently running VM's broadcaster (if any). If
-                // the computer is off, the consumer is attached later by
+                // the device is off, the consumer is attached later by
                 // [rebindTerminalConsumers] as soon as [turnOn] creates a VM.
                 vmHandle?.let { bindConsumer(session, it) }
                 session

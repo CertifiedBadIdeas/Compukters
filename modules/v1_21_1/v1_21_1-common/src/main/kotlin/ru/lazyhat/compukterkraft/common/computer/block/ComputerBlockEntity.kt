@@ -79,6 +79,6 @@ open class ComputerBlockEntity(
             playerInventory,
             getOrCreateRuntimeDevice(),
         ).also {
-            LOGGER.debug { "DeviceID: ${it.serverSide.computer.deviceId} createMenu" }
+            LOGGER.debug { "DeviceID: ${it.serverSide.device.deviceId} createMenu" }
         }
 }

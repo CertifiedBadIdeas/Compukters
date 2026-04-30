@@ -71,9 +71,9 @@ private data class RuntimeApiRegistryProfile(
 )
 
 /**
- * The main VM host for a single computer instance.
+ * The main VM host for a single runtime device instance.
  *
- * Runs a compiled [DeviceProgram] on a background coroutine [dispatcher]. Owns a [ScreenBuffer]
+ * Runs a compiled program on a background coroutine [dispatcher]. Owns a [ScreenBuffer]
  * that the VM coroutine writes to directly (no HostCall roundtrip for terminal I/O).
  *
  * ## Thread model
@@ -83,8 +83,8 @@ private data class RuntimeApiRegistryProfile(
  *   [readScreenSnapshot], and [snapshot]. These are the cross-thread entry points.
  *
  * ## Lifecycle
- * Created by [ComputerManager][compukterkraft.mod.context.ComputerManager], started with [boot],
- * stopped with [stop]. On reboot, the old VM is stopped and a new one is created.
+ * Created by `DeviceManager`, started with [boot], stopped with [stop]. On reboot, the old VM
+ * is stopped and a new one is created.
  */
 class BackgroundDeviceVm(
     override val deviceId: Int,
@@ -180,7 +180,7 @@ class BackgroundDeviceVm(
 
     override fun stop(reason: VmStopReason) {
         scope.launch {
-            LOGGER.debug { "ComputerID: $deviceId stop requested, reason: $reason" }
+            LOGGER.debug { "DeviceID: $deviceId stop requested, reason: $reason" }
             stopInternal(reason)
         }
     }
@@ -239,17 +239,17 @@ class BackgroundDeviceVm(
         errorMessage: String? = null,
     ) {
         if (stateManager.isStopped) {
-            LOGGER.debug { "ComputerID: $deviceId already stopped, ignoring stop request (reason: $reason, error: $errorMessage)" }
+            LOGGER.debug { "DeviceID: $deviceId already stopped, ignoring stop request (reason: $reason, error: $errorMessage)" }
             return
         }
 
-        LOGGER.debug { "ComputerID: $deviceId stopped with reason: $reason, error: $errorMessage" }
+        LOGGER.debug { "DeviceID: $deviceId stopped with reason: $reason, error: $errorMessage" }
 
         stateManager.stopVm(reason, errorMessage)
         runner?.cancel()
         runner = null
 
-        LOGGER.debug { "ComputerID: $deviceId stop lock request ended (reason: $reason, error: $errorMessage)" }
+        LOGGER.debug { "DeviceID: $deviceId stop lock request ended (reason: $reason, error: $errorMessage)" }
     }
 
     private suspend fun awaitSlicePermit() {

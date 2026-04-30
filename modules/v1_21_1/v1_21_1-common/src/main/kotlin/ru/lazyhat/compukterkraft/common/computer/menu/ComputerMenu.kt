@@ -25,7 +25,7 @@ import ru.lazyhat.compukterkraft.core.block.DeviceFamily
  * custom computer GUIs.
  *
  * Server-only and client-only operations are accessed through [side]:
- * - `menu.serverSide.computer` / `menu.serverSide.input` — server-side only
+ * - `menu.serverSide.device` / `menu.serverSide.input` — server-side only
  * - `menu.clientSide.terminalBuffer` — client-side only, nullable until the screen attaches a buffer
  */
 interface ComputerMenu {
