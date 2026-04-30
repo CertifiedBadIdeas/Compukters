@@ -19,6 +19,7 @@
 
 package ru.lazyhat.compukterkraft.lang.frontend
 
+import ru.lazyhat.compukterkraft.lang.api.AssignmentStatement
 import ru.lazyhat.compukterkraft.lang.api.BinaryExpression
 import ru.lazyhat.compukterkraft.lang.api.BinaryOperator
 import ru.lazyhat.compukterkraft.lang.api.BlockStatement
@@ -101,6 +102,7 @@ internal sealed interface Binding {
 internal data class VariableBinding(
     override val symbol: SymbolInfo,
     val type: TypeRef,
+    val mutable: Boolean = false,
 ) : Binding
 
 internal data class FunctionBinding(
@@ -317,7 +319,7 @@ internal class SemanticAnalyzer(
             symbols += symbol
             scope.define(
                 parameter.name,
-                VariableBinding(symbol, type),
+                VariableBinding(symbol, type, mutable = false),
             )
         }
         analyzeBlock(declaration.body, scope, declaration.range, binding.returnType)
@@ -387,8 +389,12 @@ internal class SemanticAnalyzer(
                 symbols += symbol
                 scope.define(
                     statement.name,
-                    VariableBinding(symbol, declaredType),
+                    VariableBinding(symbol, declaredType, mutable = statement.mutable),
                 )
+            }
+
+            is AssignmentStatement -> {
+                analyzeAssignment(statement, scope)
             }
 
             is WhileStatement -> {
@@ -498,6 +504,43 @@ internal class SemanticAnalyzer(
                 )
             }
         }
+
+    private fun analyzeAssignment(
+        statement: AssignmentStatement,
+        scope: Scope,
+    ) {
+        val binding = scope.resolve(statement.name)
+        if (binding == null) {
+            diagnostics +=
+                FrontendDiagnostic(
+                    "Unknown variable `${statement.name}`.",
+                    statement.nameRange,
+                )
+            analyzeExpression(statement.expression, scope)
+            return
+        }
+        references +=
+            ReferenceInfo(
+                statement.name,
+                statement.nameRange,
+                binding.symbol,
+                binding.type.displayName,
+            )
+        if (!binding.mutable) {
+            diagnostics +=
+                FrontendDiagnostic(
+                    "Cannot reassign `val` `${statement.name}`. Declare it with `var` to allow mutation.",
+                    statement.nameRange,
+                )
+        }
+        val valueType = analyzeExpression(statement.expression, scope)
+        expectAssignable(
+            valueType,
+            binding.type,
+            statement.expression.range,
+            "Assignment type mismatch.",
+        )
+    }
 
     private fun analyzeName(
         expression: NameExpression,
@@ -1082,6 +1125,12 @@ internal class BytecodeCompiler(
                 is WhenStatement -> {
                     compileWhen(statement)
                 }
+
+                is AssignmentStatement -> {
+                    compileExpression(statement.expression)
+                    val slot = resolveLocalSlot(statement.name)
+                    instructions += Instruction.StoreLocal(slot)
+                }
             }
         }
 
@@ -1638,12 +1687,29 @@ internal class Parser(
             }
 
             else -> {
-                val expression = parseExpression() ?: return null
-                val range = expression.range
-                consumeOptional(TokenKind.SEMICOLON)
-                ExpressionStatement(expression, range)
+                if (check(TokenKind.IDENTIFIER) && peekAhead(1)?.kind == TokenKind.EQUAL) {
+                    parseAssignment()
+                } else {
+                    val expression = parseExpression() ?: return null
+                    val range = expression.range
+                    consumeOptional(TokenKind.SEMICOLON)
+                    ExpressionStatement(expression, range)
+                }
             }
         }
+
+    private fun parseAssignment(): AssignmentStatement? {
+        val nameTok = consume(TokenKind.IDENTIFIER, "Expected variable name.") ?: return null
+        consume(TokenKind.EQUAL, "Expected `=` in assignment.") ?: return null
+        val value = parseExpression() ?: return null
+        consumeOptional(TokenKind.SEMICOLON)
+        return AssignmentStatement(
+            name = nameTok.text,
+            nameRange = nameTok.range,
+            expression = value,
+            range = SourceRange(nameTok.range.start, value.range.end),
+        )
+    }
 
     private fun parseVariable(mutable: Boolean): VariableDeclarationStatement? {
         val name = consume(TokenKind.IDENTIFIER, "Expected variable name.") ?: return null
@@ -2028,6 +2094,12 @@ internal class Parser(
         }
 
     private fun check(kind: TokenKind): Boolean = !isAtEnd() && peek().kind == kind
+
+    private fun peekAhead(offset: Int): Token? {
+        val target = index + offset
+        if (target < 0 || target >= tokens.size) return null
+        return tokens[target]
+    }
 
     private fun advance(): Token = tokens[index++]
 

@@ -286,4 +286,85 @@ class LanguageFrontendTest {
             artifact.analysis.diagnostics.joinToString { it.message },
         )
     }
+
+    @Test
+    fun compilesAssignmentToVar() {
+        val artifact =
+            frontend.compile(
+                "assign.ck",
+                """
+                fun main() {
+                    var i: Int = 0;
+                    while (i < 3) {
+                        i = i + 1;
+                    }
+                }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+        assertNotNull(artifact.module)
+    }
+
+    @Test
+    fun rejectsAssignmentToVal() {
+        val artifact =
+            frontend.compile(
+                "assign_val.ck",
+                """
+                fun main() {
+                    val i: Int = 0;
+                    i = 1;
+                }
+                """.trimIndent(),
+            )
+
+        assertEquals(null, artifact.module)
+        assertTrue(
+            artifact.analysis.diagnostics.any { it.message.contains("Cannot reassign") },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+    }
+
+    @Test
+    fun rejectsAssignmentToUnknownVariable() {
+        val artifact =
+            frontend.compile(
+                "assign_unknown.ck",
+                """
+                fun main() {
+                    nope = 1;
+                }
+                """.trimIndent(),
+            )
+
+        assertEquals(null, artifact.module)
+        assertTrue(
+            artifact.analysis.diagnostics.any { it.message.contains("Unknown variable") },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+    }
+
+    @Test
+    fun rejectsAssignmentTypeMismatch() {
+        val artifact =
+            frontend.compile(
+                "assign_type.ck",
+                """
+                fun main() {
+                    var i: Int = 0;
+                    i = "hello";
+                }
+                """.trimIndent(),
+            )
+
+        assertEquals(null, artifact.module)
+        assertTrue(
+            artifact.analysis.diagnostics.any { it.message.contains("Assignment type mismatch") },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+    }
 }
