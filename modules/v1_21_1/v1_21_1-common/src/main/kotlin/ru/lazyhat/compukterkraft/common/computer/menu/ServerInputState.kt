@@ -21,8 +21,8 @@ package ru.lazyhat.compukterkraft.common.computer.menu
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet
 import it.unimi.dsi.fastutil.ints.IntSet
 import net.minecraft.world.inventory.AbstractContainerMenu
-import ru.lazyhat.compukterkraft.common.computer.context.ServerComputer
-import ru.lazyhat.compukterkraft.core.computer.ComputerEvents
+import ru.lazyhat.compukterkraft.core.computer.runtime.RuntimeDevice
+import ru.lazyhat.compukterkraft.core.computer.DeviceEvents
 import ru.lazyhat.compukterkraft.core.computer.input.ComputerControlAction
 import ru.lazyhat.compukterkraft.core.computer.input.ControlInputEvent
 import ru.lazyhat.compukterkraft.core.computer.input.InputEvent
@@ -56,23 +56,23 @@ class ServerInputState<T>(
         when (event) {
             is KeyInputEvent.Down -> {
                 keysDown.add(event.key)
-                ComputerEvents.dispatch(computer, event)
+                DeviceEvents.dispatch(computer, event)
             }
 
             is KeyInputEvent.Up -> {
                 keysDown.remove(event.key)
-                ComputerEvents.dispatch(computer, event)
+                DeviceEvents.dispatch(computer, event)
             }
 
             is KeyInputEvent.Character -> {
                 if (StringUtil.isTypableChar(event.value)) {
-                    ComputerEvents.dispatch(computer, event)
+                    DeviceEvents.dispatch(computer, event)
                 }
             }
 
             is PasteInputEvent -> {
                 if (event.contents != null && event.contents.remaining() > 0 && isValidClipboard(event.contents)) {
-                    ComputerEvents.dispatch(computer, event)
+                    DeviceEvents.dispatch(computer, event)
                 }
             }
 
@@ -80,27 +80,27 @@ class ServerInputState<T>(
                 lastMouseX = event.x
                 lastMouseY = event.y
                 lastMouseDown = event.button
-                ComputerEvents.dispatch(computer, event)
+                DeviceEvents.dispatch(computer, event)
             }
 
             is MouseInputEvent.Up -> {
                 lastMouseX = event.x
                 lastMouseY = event.y
                 lastMouseDown = -1
-                ComputerEvents.dispatch(computer, event)
+                DeviceEvents.dispatch(computer, event)
             }
 
             is MouseInputEvent.Drag -> {
                 lastMouseX = event.x
                 lastMouseY = event.y
                 lastMouseDown = event.button
-                ComputerEvents.dispatch(computer, event)
+                DeviceEvents.dispatch(computer, event)
             }
 
             is MouseInputEvent.Scroll -> {
                 lastMouseX = event.x
                 lastMouseY = event.y
-                ComputerEvents.dispatch(computer, event)
+                DeviceEvents.dispatch(computer, event)
             }
 
             is ControlInputEvent -> {
@@ -115,11 +115,11 @@ class ServerInputState<T>(
     }
 
     fun close() {
-        val computer: ServerComputer = owner.serverSide.computer
+        val computer: RuntimeDevice = owner.serverSide.computer
         val keys = keysDown.iterator()
-        while (keys.hasNext()) ComputerEvents.dispatch(computer, KeyInputEvent.Up(keys.nextInt()))
+        while (keys.hasNext()) DeviceEvents.dispatch(computer, KeyInputEvent.Up(keys.nextInt()))
 
-        if (lastMouseDown != -1) ComputerEvents.dispatch(computer, MouseInputEvent.Up(lastMouseDown, lastMouseX, lastMouseY))
+        if (lastMouseDown != -1) DeviceEvents.dispatch(computer, MouseInputEvent.Up(lastMouseDown, lastMouseX, lastMouseY))
 
         keysDown.clear()
         lastMouseDown = -1

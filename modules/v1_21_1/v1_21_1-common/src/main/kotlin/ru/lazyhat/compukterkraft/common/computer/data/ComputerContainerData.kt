@@ -21,7 +21,7 @@ package ru.lazyhat.compukterkraft.common.computer.data
 
 import net.minecraft.network.RegistryFriendlyByteBuf
 import net.minecraft.world.item.ItemStack
-import ru.lazyhat.compukterkraft.common.computer.context.ServerComputer
+import ru.lazyhat.compukterkraft.core.computer.runtime.RuntimeDevice
 import ru.lazyhat.compukterkraft.core.Config
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 
@@ -42,7 +42,7 @@ class ComputerContainerData private constructor(
         buffer.writeInt(uploadMaxSize)
     }
 
-    constructor(computer: ServerComputer, displayStack: ItemStack) : this(
+    constructor(computer: RuntimeDevice, displayStack: ItemStack) : this(
         computer.family,
         displayStack,
         Config.uploadMaxSize,

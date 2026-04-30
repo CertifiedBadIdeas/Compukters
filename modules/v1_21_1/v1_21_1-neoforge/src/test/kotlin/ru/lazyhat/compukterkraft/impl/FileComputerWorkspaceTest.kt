@@ -19,7 +19,7 @@
 package ru.lazyhat.compukterkraft.impl
 
 import ru.lazyhat.compukterkraft.core.computer.vm.DeviceWorkspaceHost
-import ru.lazyhat.compukterkraft.core.computer.vm.ComputerWorkspaceInitializer
+import ru.lazyhat.compukterkraft.core.computer.vm.DeviceWorkspaceInitializer
 import java.nio.file.Path
 import kotlin.io.path.createTempDirectory
 import kotlin.io.path.exists
@@ -118,7 +118,7 @@ class ComputerWorkspaceInitializerTest {
     fun clonesAllRomScriptsIntoNewWorkspace() {
         val root = createTempDirectory("compukterkraft-init")
         try {
-            val initializer = ComputerWorkspaceInitializer(root)
+            val initializer = DeviceWorkspaceInitializer(root)
             initializer.ensureInitialized(1)
 
             val computerDir = root.resolve("1")
@@ -138,7 +138,7 @@ class ComputerWorkspaceInitializerTest {
     fun doesNotTouchExistingWorkspace() {
         val root = createTempDirectory("compukterkraft-init")
         try {
-            val initializer = ComputerWorkspaceInitializer(root)
+            val initializer = DeviceWorkspaceInitializer(root)
             initializer.ensureInitialized(2)
 
             val computerDir = root.resolve("2")

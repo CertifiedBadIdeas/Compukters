@@ -24,8 +24,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
-import ru.lazyhat.compukterkraft.core.computer.vm.BackgroundComputerVm
-import ru.lazyhat.compukterkraft.core.computer.vm.ComputerVmLogger
+import ru.lazyhat.compukterkraft.core.computer.vm.BackgroundDeviceVm
+import ru.lazyhat.compukterkraft.core.computer.vm.DeviceVmLogger
 import ru.lazyhat.compukterkraft.core.computer.vm.DeviceWorkspaceHost
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceCapability
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceCpuResources
@@ -39,7 +39,7 @@ import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
-class BackgroundComputerVmTest {
+class BackgroundDeviceVmTest {
     @Test
     fun surfacesRomLimitFailureAsCrashedState() {
         val root = createTempDirectory("compukterkraft-background-vm")
@@ -68,12 +68,12 @@ class BackgroundComputerVmTest {
                 )
 
             val vm =
-                BackgroundComputerVm(
+                BackgroundDeviceVm(
                     deviceId = 1,
                     profile = profile,
                     dispatcher = Dispatchers.Default,
                     labelProvider = { null },
-                    logger = ComputerVmLogger { },
+                    logger = DeviceVmLogger { },
                     workspace = workspace,
                 )
 

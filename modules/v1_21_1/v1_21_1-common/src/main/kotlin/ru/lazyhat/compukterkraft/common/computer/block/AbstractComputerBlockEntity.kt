@@ -29,13 +29,13 @@ import net.minecraft.world.inventory.MenuConstructor
 import net.minecraft.world.level.block.entity.BlockEntity
 import net.minecraft.world.level.block.entity.BlockEntityType
 import net.minecraft.world.level.block.state.BlockState
-import ru.lazyhat.compukterkraft.common.computer.context.ServerComputer
 import ru.lazyhat.compukterkraft.common.computer.context.ServerContext
 import ru.lazyhat.compukterkraft.common.utils.computerID
 import ru.lazyhat.compukterkraft.common.utils.computerLabel
 import ru.lazyhat.compukterkraft.common.utils.ifServerSide
 import ru.lazyhat.compukterkraft.common.utils.updateBlock
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
+import ru.lazyhat.compukterkraft.core.computer.runtime.RuntimeDevice
 
 abstract class AbstractComputerBlockEntity(
     type: BlockEntityType<out AbstractComputerBlockEntity>,
@@ -59,8 +59,8 @@ abstract class AbstractComputerBlockEntity(
                 ?.let {
                     _label = value
                     _computerID
-                        ?.let(ServerContext.computerManager::get)
-                        ?.updateLabel(value)
+                        ?.let(ServerContext.deviceManager::get)
+                        ?.let { device -> device.label = value }
                     updateBlock()
                 }
         }
@@ -79,31 +79,36 @@ abstract class AbstractComputerBlockEntity(
 
     abstract fun updateBlockState(newState: ComputerState)
 
-    abstract fun createComputer(id: Int): ServerComputer
+    /** Adapter for [ru.lazyhat.compukterkraft.core.computer.runtime.ports.DeviceStateSink]. */
+    internal fun updateBlockState(isOn: Boolean) {
+        updateBlockState(if (isOn) ComputerState.ON else ComputerState.OFF)
+    }
+
+    abstract fun createComputer(id: Int): RuntimeDevice
 
     fun serverTick() {
         if (level?.isClientSide ?: true) return
         if (_computerID == null) return
-        val computer = getOrCreateServerComputer()
-        computer.serverTick()
-        updateBlockState(if (computer.isOn) ComputerState.ON else ComputerState.OFF)
+        val device = getOrCreateRuntimeDevice()
+        device.serverTick()
+        updateBlockState(if (device.isOn) ComputerState.ON else ComputerState.OFF)
     }
 
-    fun getOrCreateServerComputer(): ServerComputer {
-        level as? ServerLevel ?: error("[SERVER_LEVEL_GET] Cannot access server computer on the client.")
-        val resolvedComputerId =
-            _computerID ?: ServerContext.allocateComputerId().also { allocatedComputerId ->
-                computerID = allocatedComputerId
-                ServerContext.computerManager.ensureWorkspaceInitialized(allocatedComputerId)
+    fun getOrCreateRuntimeDevice(): RuntimeDevice {
+        level as? ServerLevel ?: error("[SERVER_LEVEL_GET] Cannot access server device on the client.")
+        val resolvedDeviceId =
+            _computerID ?: ServerContext.allocateDeviceId().also { allocatedDeviceId ->
+                computerID = allocatedDeviceId
+                ServerContext.deviceManager.ensureWorkspaceInitialized(allocatedDeviceId)
             }
 
         return _computerID
             ?.let {
-                ServerContext.computerManager.get(it)
+                ServerContext.deviceManager.get(it)
             }
             ?: run {
-                createComputer(resolvedComputerId).also {
-                    ServerContext.computerManager.add(it)
+                createComputer(resolvedDeviceId).also {
+                    ServerContext.deviceManager.add(it)
                 }
             }
     }
@@ -129,7 +134,7 @@ abstract class AbstractComputerBlockEntity(
     }
 
     override fun setRemoved() {
-        releaseServerComputer()
+        releaseRuntimeDevice()
         super.setRemoved()
     }
 
@@ -139,11 +144,11 @@ abstract class AbstractComputerBlockEntity(
 
     override fun getCustomName(): Component? = _label?.takeIf { it.isEmpty() }?.let { Component.literal(it) }
 
-    protected fun releaseServerComputer() {
+    protected fun releaseRuntimeDevice() {
         ifServerSide(level) {
             _computerID
                 .takeIf { ServerContext.isInitialized }
-                ?.let(ServerContext.computerManager::remove)
+                ?.let(ServerContext.deviceManager::remove)
                 ?.close()
         }
     }

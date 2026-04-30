@@ -21,7 +21,7 @@ package ru.lazyhat.compukterkraft.impl
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 import ru.lazyhat.compukterkraft.core.computer.vm.DeviceProfileRegistry
 import ru.lazyhat.compukterkraft.core.computer.vm.DeviceWorkspaceHost
-import ru.lazyhat.compukterkraft.core.computer.vm.ComputerWorkspaceInitializer
+import ru.lazyhat.compukterkraft.core.computer.vm.DeviceWorkspaceInitializer
 import ru.lazyhat.compukterkraft.core.language.LanguageServices
 import ru.lazyhat.compukterkraft.lang.frontend.FrontendSeverity
 import ru.lazyhat.compukterkraft.lang.runtime.BytecodeVirtualMachine
@@ -40,7 +40,7 @@ class LanguageWorkspaceRuntimeTest {
         val root = createTempDirectory("compukterkraft-language-workspace")
 
         try {
-            val initializer = ComputerWorkspaceInitializer(root)
+            val initializer = DeviceWorkspaceInitializer(root)
             initializer.ensureInitialized(1)
             val workspace = DeviceWorkspaceHost(rootPath = root)
 

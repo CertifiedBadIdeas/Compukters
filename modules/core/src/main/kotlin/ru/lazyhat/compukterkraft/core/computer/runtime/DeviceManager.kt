@@ -17,14 +17,11 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package ru.lazyhat.compukterkraft.common.computer.context
+package ru.lazyhat.compukterkraft.core.computer.runtime
 
-import it.unimi.dsi.fastutil.ints.Int2ObjectMap
-import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap
-import ru.lazyhat.compukterkraft.common.computer.context.ServerComputer
-import ru.lazyhat.compukterkraft.core.computer.vm.BackgroundComputerVm
-import ru.lazyhat.compukterkraft.core.computer.vm.ComputerVmLogger
-import ru.lazyhat.compukterkraft.core.computer.vm.ComputerVmSupervisor
+import ru.lazyhat.compukterkraft.core.computer.vm.BackgroundDeviceVm
+import ru.lazyhat.compukterkraft.core.computer.vm.DeviceVmLogger
+import ru.lazyhat.compukterkraft.core.computer.vm.DeviceVmSupervisor
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceIdeHost
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceProfile
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspace
@@ -32,15 +29,15 @@ import ru.lazyhat.compukterkraft.lang.runtime.VmStopReason
 import java.io.Closeable
 
 /**
- * Unified registry that owns both the [ServerComputer] instances and the
- * underlying [DeviceVmHandle] objects.
+ * Unified registry that owns both the [RuntimeDevice] instances and the
+ * underlying VM handles managed by [DeviceVmSupervisor].
  *
- * Provides a single entry point for computer and VM lifecycle management.
+ * Provides a single entry point for runtime-device and VM lifecycle management.
  */
-class ComputerManager(
-    private val vmSupervisor: ComputerVmSupervisor,
+class DeviceManager(
+    private val vmSupervisor: DeviceVmSupervisor,
 ) : Closeable {
-    private val computers: Int2ObjectMap<ServerComputer> = Int2ObjectOpenHashMap()
+    private val devices: MutableMap<Int, RuntimeDevice> = HashMap()
 
     // ── Workspace / IDE access (delegated to supervisor) ────────────
 
@@ -49,18 +46,18 @@ class ComputerManager(
 
     fun ensureWorkspaceInitialized(deviceId: Int) = vmSupervisor.ensureWorkspaceInitialized(deviceId)
 
-    // ── ServerComputer registry ─────────────────────────────────────
+    // ── RuntimeDevice registry ──────────────────────────────────────
 
-    fun get(instanceId: Int): ServerComputer? = computers[instanceId]
+    fun get(deviceId: Int): RuntimeDevice? = devices[deviceId]
 
-    fun add(serverComputer: ServerComputer) {
-        check(!computers.containsKey(serverComputer.instanceID)) {
-            "Computer with ${serverComputer.instanceID} already exists!"
+    fun add(device: RuntimeDevice) {
+        check(!devices.containsKey(device.deviceId)) {
+            "Device with ${device.deviceId} already exists!"
         }
-        computers.put(serverComputer.instanceID, serverComputer)
+        devices.put(device.deviceId, device)
     }
 
-    fun remove(instanceId: Int): ServerComputer? = computers.remove(instanceId)
+    fun remove(deviceId: Int): RuntimeDevice? = devices.remove(deviceId)
 
     // ── VM handle management (delegated to supervisor) ──────────────
 
@@ -68,8 +65,8 @@ class ComputerManager(
         deviceId: Int,
         profile: DeviceProfile,
         labelProvider: () -> String?,
-        logger: ComputerVmLogger,
-    ): BackgroundComputerVm = vmSupervisor.getOrCreate(deviceId, profile, labelProvider, logger)
+        logger: DeviceVmLogger,
+    ): BackgroundDeviceVm = vmSupervisor.getOrCreate(deviceId, profile, labelProvider, logger)
 
     fun removeVm(
         deviceId: Int,
@@ -79,8 +76,8 @@ class ComputerManager(
     // ── Lifecycle ───────────────────────────────────────────────────
 
     override fun close() {
-        computers.values.forEach { it.close() }
-        computers.clear()
+        devices.values.forEach { it.close() }
+        devices.clear()
         vmSupervisor.close()
     }
 }

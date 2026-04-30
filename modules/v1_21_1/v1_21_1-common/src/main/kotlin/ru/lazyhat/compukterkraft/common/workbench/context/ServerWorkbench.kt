@@ -26,7 +26,7 @@ import ru.lazyhat.compukterkraft.common.utils.computerDataTagCopy
 import ru.lazyhat.compukterkraft.common.utils.deviceFamilyId
 import ru.lazyhat.compukterkraft.common.utils.computerID
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
-import ru.lazyhat.compukterkraft.core.computer.ComputerEvents
+import ru.lazyhat.compukterkraft.core.computer.DeviceEvents
 import ru.lazyhat.compukterkraft.core.computer.input.InputEvent
 import ru.lazyhat.compukterkraft.core.workbench.EditorPresence
 import ru.lazyhat.compukterkraft.core.workbench.WorkbenchRemoteState
@@ -48,7 +48,7 @@ class ServerWorkbench(
     val workspaceId: Int,
     private val workspace: DeviceWorkspace,
     initialTarget: TargetDescriptor = TargetDescriptor(),
-) : ComputerEvents.Receiver {
+) : DeviceEvents.Receiver {
     private var targetDescriptor: TargetDescriptor = initialTarget
     private var runtimeBridge: WorkbenchTargetRuntimeBridge = WorkbenchTargetRuntimeBridge.None
 
@@ -152,7 +152,7 @@ class ServerWorkbench(
 
     fun handleInput(event: InputEvent) {
         if (targetDescriptor.deviceId == null) return
-        ComputerEvents.dispatch(this, event)
+        DeviceEvents.dispatch(this, event)
     }
 
     fun currentScreenSnapshot(): ScreenBufferSnapshot? = runtimeBridge.currentScreenSnapshot(targetDescriptor)

@@ -26,7 +26,7 @@ import kotlin.io.path.createDirectories
 import kotlin.io.path.exists
 import kotlin.io.path.writeText
 
-class ComputerWorkspaceInitializer(
+class DeviceWorkspaceInitializer(
     private val rootPath: Path,
 ) {
     fun ensureInitialized(deviceId: Int): Path {
@@ -38,7 +38,7 @@ class ComputerWorkspaceInitializer(
     }
 
     private fun cloneRomTo(targetDir: Path) {
-        val classLoader = ComputerWorkspaceInitializer::class.java.classLoader
+        val classLoader = DeviceWorkspaceInitializer::class.java.classLoader
         val romIndex =
             classLoader
                 .getResourceAsStream("rom/rom.index")

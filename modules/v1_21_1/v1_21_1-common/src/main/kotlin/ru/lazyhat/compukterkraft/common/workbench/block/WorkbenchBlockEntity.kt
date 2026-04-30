@@ -33,7 +33,6 @@ import net.minecraft.world.item.ItemStack
 import net.minecraft.world.level.block.entity.BlockEntity
 import net.minecraft.world.level.block.state.BlockState
 import ru.lazyhat.compukterkraft.common.binding.ModObjects
-import ru.lazyhat.compukterkraft.common.computer.context.ServerComputer
 import ru.lazyhat.compukterkraft.common.computer.context.ServerContext
 import ru.lazyhat.compukterkraft.common.localization.CompukterComponents
 import ru.lazyhat.compukterkraft.common.network.ServerNetworking
@@ -44,8 +43,14 @@ import ru.lazyhat.compukterkraft.common.workbench.menu.AbstractWorkbenchMenu
 import ru.lazyhat.compukterkraft.common.workbench.menu.WorkbenchMenuWithoutInventory
 import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchTerminalClientMessage
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
-import ru.lazyhat.compukterkraft.core.computer.ComputerProperties
+import ru.lazyhat.compukterkraft.core.computer.DeviceProperties
+import ru.lazyhat.compukterkraft.core.computer.runtime.RuntimeDevice
+import ru.lazyhat.compukterkraft.core.computer.runtime.RuntimeDeviceImpl
+import ru.lazyhat.compukterkraft.core.computer.runtime.ports.DeviceStateSink
+import ru.lazyhat.compukterkraft.core.computer.runtime.ports.GameTimeSource
+import ru.lazyhat.compukterkraft.core.computer.runtime.ports.TerminalNetworkBridge
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
+import java.util.UUID
 
 class WorkbenchBlockEntity(
     pos: BlockPos,
@@ -58,7 +63,7 @@ class WorkbenchBlockEntity(
     private var targetDisplayName: String? = null
     private var targetFamilyId: String? = null
     private var serverWorkbench: ServerWorkbench? = null
-    private var detachedTargetComputer: ServerComputer? = null
+    private var detachedTargetComputer: RuntimeDevice? = null
     private var lastSyncedSnapshot: ScreenBufferSnapshot? = null
 
     override fun createMenu(
@@ -109,16 +114,16 @@ class WorkbenchBlockEntity(
         check(level?.isClientSide == false) { "Cannot access server workbench on the client." }
 
         val resolvedWorkspaceId =
-            workspaceId ?: ServerContext.allocateComputerId().also { allocatedWorkspaceId ->
+            workspaceId ?: ServerContext.allocateDeviceId().also { allocatedWorkspaceId ->
                 workspaceId = allocatedWorkspaceId
-                ServerContext.computerManager.ensureWorkspaceInitialized(allocatedWorkspaceId)
+                ServerContext.deviceManager.ensureWorkspaceInitialized(allocatedWorkspaceId)
                 setChanged()
             }
 
         return serverWorkbench
             ?: ServerWorkbench(
                 workspaceId = resolvedWorkspaceId,
-                workspace = ServerContext.computerManager.workspace,
+                workspace = ServerContext.deviceManager.workspace,
                 initialTarget =
                     ServerWorkbench.TargetDescriptor(
                         deviceId = targetComputerId,
@@ -144,7 +149,7 @@ class WorkbenchBlockEntity(
             return
         }
 
-        val liveComputer = ServerContext.computerManager.get(targetId)
+        val liveComputer = ServerContext.deviceManager.get(targetId)
         if (liveComputer != null) {
             releaseDetachedTargetComputer()
             syncTargetSnapshot(liveComputer.lastScreenSnapshot)
@@ -190,25 +195,33 @@ class WorkbenchBlockEntity(
         super.setRemoved()
     }
 
-    private fun resolveTargetComputer(createDetached: Boolean): ServerComputer? {
+    private fun resolveTargetComputer(createDetached: Boolean): RuntimeDevice? {
         val targetId = getOrCreateServerWorkbench().targetDescriptor().deviceId ?: return null
-        val liveComputer = ServerContext.computerManager.get(targetId)
+        val liveComputer = ServerContext.deviceManager.get(targetId)
         if (liveComputer != null) {
             releaseDetachedTargetComputer()
             return liveComputer
         }
 
-        val existingDetached = detachedTargetComputer?.takeIf { it.instanceID == targetId }
+        val existingDetached = detachedTargetComputer?.takeIf { it.deviceId == targetId }
         if (existingDetached != null || !createDetached) {
             return existingDetached
         }
 
         val serverLevel = level as? ServerLevel ?: return null
-        ServerContext.computerManager.ensureWorkspaceInitialized(targetId)
-        return ServerComputer(
-            instanceID = targetId,
-            level = serverLevel,
-            properties = ComputerProperties(resolveTargetFamily(targetFamilyId), targetDisplayName),
+        ServerContext.deviceManager.ensureWorkspaceInitialized(targetId)
+        val noOpTerminalNetwork =
+            object : TerminalNetworkBridge {
+                override fun isSessionStillBound(playerUuid: UUID, containerId: Int, deviceId: Int): Boolean = false
+                override fun sendStdoutBytes(playerUuid: UUID, containerId: Int, bytes: ByteArray) {}
+            }
+        return RuntimeDeviceImpl(
+            deviceId = targetId,
+            properties = DeviceProperties(resolveTargetFamily(targetFamilyId), targetDisplayName),
+            manager = ServerContext.deviceManager,
+            gameTime = GameTimeSource { serverLevel.gameTime },
+            terminalNetwork = noOpTerminalNetwork,
+            stateSink = DeviceStateSink { /* detached: no block state to update */ },
         ).also {
             detachedTargetComputer = it
         }

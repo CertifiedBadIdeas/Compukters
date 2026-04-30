@@ -33,7 +33,7 @@ import java.io.Closeable
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 
-class ComputerVmSupervisor(
+class DeviceVmSupervisor(
     serverWorldAccess: ServerWorldAccess,
 ) : VmSupervisor,
     Closeable {
@@ -41,7 +41,7 @@ class ComputerVmSupervisor(
     private val dispatcher = executor.asCoroutineDispatcher()
     private val handles = ConcurrentHashMap<Int, DeviceVmHandle>()
     private val computersPath = serverWorldAccess.getWorldSavePath().resolve(MOD_ID).resolve("computers")
-    private val workspaceInitializer = ComputerWorkspaceInitializer(computersPath)
+    private val workspaceInitializer = DeviceWorkspaceInitializer(computersPath)
     private val workspaceStore = DeviceWorkspaceHost(rootPath = computersPath, defaultDiskQuotaBytes = Config.computerSpaceLimit.toLong())
     private val ideHost = WorkspaceDeviceIdeHost(workspaceStore)
 
@@ -59,11 +59,11 @@ class ComputerVmSupervisor(
         deviceId: Int,
         profile: DeviceProfile,
         labelProvider: () -> String?,
-        logger: ComputerVmLogger,
-    ): BackgroundComputerVm =
+        logger: DeviceVmLogger,
+    ): BackgroundDeviceVm =
         handles.computeIfAbsent(deviceId) {
             workspaceStore.setDiskQuota(deviceId, profile.resources.storage.diskBytes)
-            BackgroundComputerVm(
+            BackgroundDeviceVm(
                 deviceId = deviceId,
                 profile = profile,
                 dispatcher = dispatcher,
@@ -71,7 +71,7 @@ class ComputerVmSupervisor(
                 logger = logger,
                 workspace = workspaceStore,
             )
-        } as BackgroundComputerVm
+        } as BackgroundDeviceVm
 
     override fun get(deviceId: Int): DeviceVmHandle? = handles[deviceId]
 

@@ -17,7 +17,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package ru.lazyhat.compukterkraft.common.computer.context
+package ru.lazyhat.compukterkraft.core.computer.runtime
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -25,19 +25,16 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
-import net.minecraft.server.level.ServerLevel
-import net.minecraft.world.entity.player.Player
-import ru.lazyhat.compukterkraft.common.computer.block.checkUsable
-import ru.lazyhat.compukterkraft.common.computer.menu.ComputerMenu
-import ru.lazyhat.compukterkraft.common.computer.network.client.StdoutBytesClientMessage
-import ru.lazyhat.compukterkraft.common.network.ServerNetworking
 import ru.lazyhat.compukterkraft.core.LOGGER
-import ru.lazyhat.compukterkraft.core.computer.ComputerEvents
-import ru.lazyhat.compukterkraft.core.computer.ComputerProperties
-import ru.lazyhat.compukterkraft.core.computer.runtime.HostCallDispatcher
-import ru.lazyhat.compukterkraft.core.computer.vm.BackgroundComputerVm
+import ru.lazyhat.compukterkraft.core.block.DeviceFamily
+import ru.lazyhat.compukterkraft.core.computer.DeviceEvents
+import ru.lazyhat.compukterkraft.core.computer.DeviceProperties
+import ru.lazyhat.compukterkraft.core.computer.runtime.ports.DeviceStateSink
+import ru.lazyhat.compukterkraft.core.computer.runtime.ports.GameTimeSource
+import ru.lazyhat.compukterkraft.core.computer.runtime.ports.TerminalNetworkBridge
+import ru.lazyhat.compukterkraft.core.computer.vm.BackgroundDeviceVm
 import ru.lazyhat.compukterkraft.core.computer.vm.DeviceProfileRegistry
-import ru.lazyhat.compukterkraft.core.computer.vm.ComputerVmLogger
+import ru.lazyhat.compukterkraft.core.computer.vm.DeviceVmLogger
 import ru.lazyhat.compukterkraft.core.computer.vm.api.ComputerStdioBroadcaster
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceVmHandle
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
@@ -49,33 +46,47 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 
 /**
- * Server-side representation of a single computer instance.
+ * Platform-neutral runtime device implementation.
  *
  * Owns the [DeviceVmHandle] and orchestrates the VM lifecycle:
  * boot → tick → sync screen → detect stop/crash/reboot.
  *
- * Terminal output is read from the VM's [ScreenBuffer] as an immutable
- * [ScreenBufferSnapshot] each tick and forwarded to watching players.
+ * All world-side interactions are abstracted via narrow host ports
+ * ([GameTimeSource], [TerminalNetworkBridge], [DeviceStateSink]) so this
+ * class can live in `:core` without depending on Minecraft types.
+ *
+ * Terminal output is read from the VM's screen buffer as an immutable
+ * [ScreenBufferSnapshot] each tick and forwarded to attached terminal
+ * sessions via [TerminalNetworkBridge].
  */
-class ServerComputer(
-    val instanceID: Int,
-    val level: ServerLevel,
-    properties: ComputerProperties,
-) : ComputerEvents.Receiver {
-    val family = properties.family
+class RuntimeDeviceImpl(
+    override val deviceId: Int,
+    properties: DeviceProperties,
+    private val manager: DeviceManager,
+    private val gameTime: GameTimeSource,
+    private val terminalNetwork: TerminalNetworkBridge,
+    private val stateSink: DeviceStateSink,
+) : RuntimeDevice, DeviceEvents.Receiver {
+    override val family: DeviceFamily = properties.family
     private val profile = DeviceProfileRegistry.forFamily(family)
 
-    private val logger = ComputerVmLogger { message -> LOGGER.info { message } }
-    private var label: String? = properties.label
+    private val logger = DeviceVmLogger { message -> LOGGER.info { message } }
 
-    private var vmHandle: BackgroundComputerVm? = null
+    private var labelBacking: String? = properties.label
+    override var label: String?
+        get() = labelBacking
+        set(value) {
+            labelBacking = value
+        }
+
+    private var vmHandle: BackgroundDeviceVm? = null
 
     private val serverScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     private val screenSnapshot = MutableStateFlow<ScreenBufferSnapshot?>(null)
 
     /** Current screen snapshot (synchronous read). */
-    val lastScreenSnapshot: ScreenBufferSnapshot? get() = screenSnapshot.value
+    override val lastScreenSnapshot: ScreenBufferSnapshot? get() = screenSnapshot.value
 
     /**
      * Epic 2 terminal sessions — one per attached player. A session is created
@@ -94,31 +105,23 @@ class ServerComputer(
 
     private val terminalSessions = ConcurrentHashMap<UUID, TerminalSession>()
 
-    private val computerManager get() = ServerContext.computerManager
-
     private val hostCallDispatcher by lazy {
-        HostCallDispatcher(instanceID, computerManager.workspace)
+        HostCallDispatcher(deviceId, manager.workspace)
     }
 
     init {
-        LOGGER.debug { "ComputerID: $instanceID init" }
+        LOGGER.debug { "DeviceID: $deviceId init" }
     }
 
     /**
      * Whether the VM is currently running.
      * Derived from the VM handle snapshot — no separate boolean to keep in sync.
      */
-    val isOn: Boolean
+    override val isOn: Boolean
         get() {
             val handle = vmHandle ?: return false
             return handle.snapshot().state.isActive
         }
-
-    fun checkUsable(player: Player) = family.checkUsable(player)
-
-    fun updateLabel(value: String?) {
-        label = value
-    }
 
     override fun queueEvent(
         event: String,
@@ -127,50 +130,51 @@ class ServerComputer(
         if (!isOn) return
         val accepted = vmHandle?.enqueueEvent(VmEvent(event, arguments.toList())) == true
         if (!accepted) {
-            LOGGER.warn { "ComputerID: $instanceID dropped event $event" }
+            LOGGER.warn { "DeviceID: $deviceId dropped event $event" }
         }
     }
 
-    fun shutdown() {
-        LOGGER.debug { "ComputerID: $instanceID shutdown" }
+    override fun shutdown() {
+        LOGGER.debug { "DeviceID: $deviceId shutdown" }
         vmHandle?.stop(VmStopReason.REQUESTED)
     }
 
-    fun turnOn() {
+    override fun turnOn() {
         if (isOn) return
-        LOGGER.debug { "ComputerID: $instanceID turnOn" }
-        computerManager.ensureWorkspaceInitialized(instanceID)
+        LOGGER.debug { "DeviceID: $deviceId turnOn" }
+        manager.ensureWorkspaceInitialized(deviceId)
 
-        computerManager.removeVm(instanceID, VmStopReason.CLOSED)
-        val handle = computerManager.getOrCreateVm(instanceID, profile, { label }, logger)
+        manager.removeVm(deviceId, VmStopReason.CLOSED)
+        val handle = manager.getOrCreateVm(deviceId, profile, { labelBacking }, logger)
         vmHandle = handle
 
         // Rebind any already-attached terminal sessions to the new VM's broadcaster.
         // Consumers on the previous VM (if any) are discarded when the old
-        // BackgroundComputerVm is reaped; here we just create fresh consumers.
+        // BackgroundDeviceVm is reaped; here we just create fresh consumers.
         rebindTerminalConsumers(handle)
 
         handle.boot()
         observeLifecycle(handle)
+        stateSink.onPowerStateChanged(true)
     }
 
-    fun reboot() {
-        LOGGER.debug { "ComputerID: $instanceID reboot" }
+    override fun reboot() {
+        LOGGER.debug { "DeviceID: $deviceId reboot" }
         vmHandle?.stop(VmStopReason.REBOOT) ?: turnOn()
     }
 
-    fun close() {
-        LOGGER.debug { "ComputerID: $instanceID close" }
+    override fun close() {
+        LOGGER.debug { "DeviceID: $deviceId close" }
         terminalSessions.keys.toList().forEach(::detachTerminalSession)
-        computerManager.removeVm(instanceID, VmStopReason.CLOSED)
+        manager.removeVm(deviceId, VmStopReason.CLOSED)
         vmHandle = null
         serverScope.cancel()
     }
 
-    fun serverTick() {
+    override fun serverTick() {
         val handle = vmHandle ?: return
 
-        handle.requestSlice(level.gameTime)
+        handle.requestSlice(gameTime.gameTime())
 
         // Dispatch filesystem host calls
         val results = handle.drainHostCalls().map(hostCallDispatcher::dispatch)
@@ -187,11 +191,11 @@ class ServerComputer(
 
     // ── Lifecycle observation ────────────────────────────────────────
 
-    private fun observeLifecycle(handle: BackgroundComputerVm) {
+    private fun observeLifecycle(handle: BackgroundDeviceVm) {
         serverScope.launch {
-            LOGGER.debug { "ComputerID: $instanceID event listening start" }
+            LOGGER.debug { "DeviceID: $deviceId event listening start" }
             handle.terminalStates.collect { state ->
-                LOGGER.debug { "ComputerID: $instanceID VM state: $state" }
+                LOGGER.debug { "DeviceID: $deviceId VM state: $state" }
                 if (state is VmState.Stopped || state is VmState.Crashed) {
                     handleVmStopped(state)
                 }
@@ -201,16 +205,17 @@ class ServerComputer(
 
     private fun handleVmStopped(terminalState: VmState) {
         if (terminalState is VmState.Crashed && terminalState.errorMessage != null) {
-            LOGGER.warn { "ComputerID: $instanceID VM crash: ${terminalState.errorMessage}" }
+            LOGGER.warn { "DeviceID: $deviceId VM crash: ${terminalState.errorMessage}" }
         }
 
-        LOGGER.debug { "ComputerID: $instanceID stop handling $terminalState" }
+        LOGGER.debug { "DeviceID: $deviceId stop handling $terminalState" }
 
-        computerManager.removeVm(instanceID, VmStopReason.CLOSED)
+        manager.removeVm(deviceId, VmStopReason.CLOSED)
         vmHandle = null
+        stateSink.onPowerStateChanged(false)
 
         if (terminalState is VmState.Stopped && terminalState.reason == VmStopReason.REBOOT) {
-            LOGGER.debug { "ComputerID: $instanceID turning on because it was rebooted" }
+            LOGGER.debug { "DeviceID: $deviceId turning on because it was rebooted" }
             turnOn()
         }
     }
@@ -228,7 +233,7 @@ class ServerComputer(
 
     // ── Epic 2 terminal sessions ────────────────────────────────────
 
-    fun attachTerminalSession(
+    override fun attachTerminalSession(
         playerUuid: UUID,
         containerId: Int,
         cols: Int,
@@ -253,7 +258,7 @@ class ServerComputer(
 
     private fun bindConsumer(
         session: TerminalSession,
-        handle: BackgroundComputerVm,
+        handle: BackgroundDeviceVm,
     ) {
         if (session.consumer != null) return
         val consumer =
@@ -264,7 +269,7 @@ class ServerComputer(
         handle.stdioBroadcaster.addConsumer(consumer)
     }
 
-    private fun rebindTerminalConsumers(handle: BackgroundComputerVm) {
+    private fun rebindTerminalConsumers(handle: BackgroundDeviceVm) {
         if (terminalSessions.isEmpty()) return
         for (session in terminalSessions.values) {
             // Each session is bound to the previous VM's (now-defunct) broadcaster;
@@ -274,7 +279,7 @@ class ServerComputer(
         }
     }
 
-    fun resizeTerminalSession(
+    override fun resizeTerminalSession(
         playerUuid: UUID,
         cols: Int,
         rows: Int,
@@ -285,7 +290,7 @@ class ServerComputer(
         }
     }
 
-    private fun detachTerminalSession(playerUuid: UUID) {
+    override fun detachTerminalSession(playerUuid: UUID) {
         val handle = vmHandle
         val session = terminalSessions.remove(playerUuid) ?: return
         session.consumer?.let { c -> handle?.stdioBroadcaster?.removeConsumer(c) }
@@ -293,17 +298,10 @@ class ServerComputer(
 
     private fun flushTerminalSessions() {
         if (terminalSessions.isEmpty()) return
-        val server = ServerContext.server
         val toDetach = mutableListOf<UUID>()
 
         for ((uuid, session) in terminalSessions) {
-            val player = server.playerList.getPlayer(uuid)
-            val menu = player?.containerMenu
-            val stillOpen =
-                menu is ComputerMenu &&
-                    menu.containerId == session.containerId &&
-                    menu.serverSide.computer.instanceID == instanceID
-            if (!stillOpen) {
+            if (!terminalNetwork.isSessionStillBound(uuid, session.containerId, deviceId)) {
                 toDetach += uuid
                 continue
             }
@@ -320,10 +318,7 @@ class ServerComputer(
                 System.arraycopy(next, 0, merged, acc.size, next.size)
                 acc = merged
             }
-            ServerNetworking.sendToPlayer(
-                StdoutBytesClientMessage(session.containerId, acc),
-                player,
-            )
+            terminalNetwork.sendStdoutBytes(uuid, session.containerId, acc)
         }
 
         toDetach.forEach(::detachTerminalSession)
