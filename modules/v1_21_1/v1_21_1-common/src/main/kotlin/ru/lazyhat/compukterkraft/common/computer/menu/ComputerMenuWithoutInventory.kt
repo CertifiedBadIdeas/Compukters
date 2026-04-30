@@ -24,7 +24,7 @@ import net.minecraft.world.entity.player.Player
 import net.minecraft.world.inventory.MenuType
 import net.minecraft.world.inventory.Slot
 import net.minecraft.world.item.ItemStack
-import ru.lazyhat.compukterkraft.common.computer.context.ServerComputer
+import ru.lazyhat.compukterkraft.core.computer.runtime.RuntimeDevice
 import ru.lazyhat.compukterkraft.common.computer.data.ComputerContainerData
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 
@@ -33,7 +33,7 @@ class ComputerMenuWithoutInventory(
     containerId: Int,
     playerInventory: Inventory,
     family: DeviceFamily,
-    computer: ServerComputer?,
+    computer: RuntimeDevice?,
     menuData: ComputerContainerData?,
 ) : AbstractComputerMenu(
         menuType,
@@ -67,7 +67,7 @@ class ComputerMenuWithoutInventory(
         menuType: MenuType<out AbstractComputerMenu>,
         containerId: Int,
         playerInventory: Inventory,
-        computer: ServerComputer,
+        computer: RuntimeDevice,
     ) : this(
         menuType,
         containerId,

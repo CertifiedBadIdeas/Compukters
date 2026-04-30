@@ -47,6 +47,6 @@ object ComputerGameTestEnvironment {
     ): Boolean {
         val computer = level.getBlockEntity(pos) as? ComputerBlockEntity ?: return false
         val id = computer.computerID ?: return false
-        return ServerContext.computerManager.get(id) != null
+        return ServerContext.deviceManager.get(id) != null
     }
 }

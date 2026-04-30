@@ -25,7 +25,7 @@ import net.minecraft.network.chat.Component
 import net.minecraft.network.chat.HoverEvent
 import net.minecraft.network.chat.MutableComponent
 import net.minecraft.network.chat.Style
-import ru.lazyhat.compukterkraft.common.computer.context.ServerComputer
+import ru.lazyhat.compukterkraft.core.computer.runtime.RuntimeDevice
 import ru.lazyhat.compukterkraft.common.localization.CompukterComponents
 
 /**
@@ -100,12 +100,12 @@ object ChatHelpers {
 
     fun makeComputerCommand(
         command: String?,
-        computer: ServerComputer,
-    ): String = String.format("/compukterkraft %s @c[instance=%s]", command, computer.instanceID)
+        computer: RuntimeDevice,
+    ): String = String.format("/compukterkraft %s @c[instance=%s]", command, computer.deviceId)
 
-    fun makeComputerDumpCommand(computer: ServerComputer): Component =
+    fun makeComputerDumpCommand(computer: RuntimeDevice): Component =
         link(
-            text("#" + computer.instanceID),
+            text("#" + computer.deviceId),
             makeComputerCommand("dump", computer),
             CompukterComponents.Commands.Dump.action,
         )

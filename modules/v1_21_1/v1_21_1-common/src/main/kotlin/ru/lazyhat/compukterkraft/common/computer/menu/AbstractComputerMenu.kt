@@ -25,7 +25,8 @@ import net.minecraft.world.inventory.MenuType
 import net.minecraft.world.inventory.SimpleContainerData
 import net.minecraft.world.item.ItemStack
 import ru.lazyhat.compukterkraft.common.computer.client.ClientTerminalBuffer
-import ru.lazyhat.compukterkraft.common.computer.context.ServerComputer
+import ru.lazyhat.compukterkraft.common.computer.block.checkUsable
+import ru.lazyhat.compukterkraft.core.computer.runtime.RuntimeDevice
 import ru.lazyhat.compukterkraft.common.computer.data.ComputerContainerData
 import ru.lazyhat.compukterkraft.core.Config
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
@@ -35,10 +36,10 @@ import ru.lazyhat.compukterkraft.core.block.DeviceFamily
  */
 sealed interface MenuSide {
     /**
-     * Server-side state: owns [ServerComputer] and [ServerInputState].
+     * Server-side state: owns [RuntimeDevice] and [ServerInputState].
      */
     class Server(
-        val computer: ServerComputer,
+        val computer: RuntimeDevice,
         val input: ServerInputState<out AbstractComputerMenu>,
     ) : MenuSide
 
@@ -73,7 +74,7 @@ abstract class AbstractComputerMenu(
     id: Int,
     private val canUse: (Player) -> Boolean,
     override val family: DeviceFamily,
-    computer: ServerComputer?,
+    computer: RuntimeDevice?,
     containerData: ComputerContainerData?,
 ) : AbstractContainerMenu(type, id),
     ComputerMenu {
@@ -88,7 +89,7 @@ abstract class AbstractComputerMenu(
 
     /**
      * Type-safe side discriminator.
-     * On the server: [MenuSide.Server] — holds the [ServerComputer] + input.
+     * On the server: [MenuSide.Server] — holds the [RuntimeDevice] + input.
      * On the client: [MenuSide.Client] — holds the [ClientTerminalBuffer]
      * attached by the open terminal screen.
      */
@@ -113,7 +114,7 @@ abstract class AbstractComputerMenu(
 
     override fun stillValid(player: Player): Boolean {
         val server = side as? MenuSide.Server
-        return (server == null || server.computer.checkUsable(player)) && canUse(player)
+        return (server == null || server.computer.family.checkUsable(player)) && canUse(player)
     }
 
     override fun handleStdoutBytes(bytes: ByteArray) {

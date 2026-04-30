@@ -2,6 +2,7 @@ package ru.lazyhat.compukterkraft.core.computer.runtime
 
 import java.util.UUID
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
+import ru.lazyhat.compukterkraft.core.computer.DeviceEvents
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 
 /** Lifecycle role: turn on/off, tick, query state. */
@@ -15,10 +16,9 @@ interface RuntimeDeviceLifecycle {
     fun close()
 }
 
-/** Input role: accept VM events. */
-interface RuntimeDeviceInput {
-    fun queueEvent(event: String, arguments: Array<Any>)
-}
+/** Input role: accept VM events. Re-uses [DeviceEvents.Receiver] so that
+ *  device implementations can plug into the existing event-dispatch pipeline. */
+interface RuntimeDeviceInput : DeviceEvents.Receiver
 
 /** Screen role: read latest screen snapshot (used by workbench / legacy clients). */
 interface RuntimeDeviceScreen {
@@ -32,11 +32,11 @@ interface RuntimeDeviceTerminalSessions {
     fun detachTerminalSession(playerUuid: UUID)
 }
 
-/** Metadata role: family/label, access checks. */
+/** Metadata role: family/label. Access checks belong to the carrier
+ *  (e.g. the BlockEntity), not to the runtime device itself. */
 interface RuntimeDeviceMetadata {
     val family: DeviceFamily
     var label: String?
-    fun checkUsable(player: PlayerHandle): Boolean
 }
 
 /** Umbrella: every present-day runtime device implements every role. Future minimal

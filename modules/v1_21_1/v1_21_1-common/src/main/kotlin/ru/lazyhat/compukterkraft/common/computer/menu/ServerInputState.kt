@@ -21,7 +21,7 @@ package ru.lazyhat.compukterkraft.common.computer.menu
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet
 import it.unimi.dsi.fastutil.ints.IntSet
 import net.minecraft.world.inventory.AbstractContainerMenu
-import ru.lazyhat.compukterkraft.common.computer.context.ServerComputer
+import ru.lazyhat.compukterkraft.core.computer.runtime.RuntimeDevice
 import ru.lazyhat.compukterkraft.core.computer.DeviceEvents
 import ru.lazyhat.compukterkraft.core.computer.input.ComputerControlAction
 import ru.lazyhat.compukterkraft.core.computer.input.ControlInputEvent
@@ -115,7 +115,7 @@ class ServerInputState<T>(
     }
 
     fun close() {
-        val computer: ServerComputer = owner.serverSide.computer
+        val computer: RuntimeDevice = owner.serverSide.computer
         val keys = keysDown.iterator()
         while (keys.hasNext()) DeviceEvents.dispatch(computer, KeyInputEvent.Up(keys.nextInt()))
 

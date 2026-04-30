@@ -65,7 +65,7 @@ class TerminalItem(
         TransientPairing.set(
             serverPlayer.uuid,
             TransientPairing.Binding(
-                instanceId = be.getOrCreateServerComputer().instanceID,
+                instanceId = be.getOrCreateRuntimeDevice().deviceId,
                 blockPos = pos.immutable(),
                 dimensionId = level.dimension(),
             ),
@@ -128,7 +128,7 @@ class TerminalItem(
         serverPlayer: ServerPlayer,
         be: ComputerBlockEntity,
     ) {
-        val serverComputer = be.getOrCreateServerComputer()
+        val serverComputer = be.getOrCreateRuntimeDevice()
         val displayStack =
             be.blockState.block
                 .asItem()

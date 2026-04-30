@@ -29,7 +29,7 @@ import ru.lazyhat.compukterkraft.core.utils.StringUtil
 import java.nio.ByteBuffer
 
 /**
- * Paste a string on a [ServerComputer].
+ * Paste a string on a [RuntimeDevice].
  *
  * @see ServerInputHandler.accept
  */
