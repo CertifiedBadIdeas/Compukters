@@ -173,7 +173,7 @@ ServerComputer.close()
 | `ru.lazyhat.compukterkraft.lang.frontend`         | Parser, type checker, code generator, IDE support            |
 | `ru.lazyhat.compukterkraft.lang.runtime`          | VM runtime: `BytecodeVirtualMachine`, `RuntimeHostBridge`    |
 |                            | Data types: `ScreenBuffer`, `ScreenBufferSnapshot`           |
-|                            | Interfaces: `DeviceRuntime`, `DeviceTerminalApi`             |
+|                            | Interfaces: `DeviceRuntime`, `DeviceTerminalApi`, `DeviceWorkspace`, `DeviceIdeHost` |
 |                            | Models: `DeviceProfile`, `VmSnapshot`, `HostCall`            |
 
 ### `core` module
