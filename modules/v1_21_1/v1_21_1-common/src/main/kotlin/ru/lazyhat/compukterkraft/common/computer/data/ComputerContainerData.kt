@@ -23,15 +23,15 @@ import net.minecraft.network.RegistryFriendlyByteBuf
 import net.minecraft.world.item.ItemStack
 import ru.lazyhat.compukterkraft.common.computer.context.ServerComputer
 import ru.lazyhat.compukterkraft.core.Config
-import ru.lazyhat.compukterkraft.core.block.ComputerFamily
+import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 
 class ComputerContainerData private constructor(
-    val family: ComputerFamily,
+    val family: DeviceFamily,
     val displayStack: ItemStack,
     val uploadMaxSize: Int,
 ) : IContainerData {
     constructor(buffer: RegistryFriendlyByteBuf) : this(
-        buffer.readEnum(ComputerFamily::class.java),
+        buffer.readEnum(DeviceFamily::class.java),
         ItemStack.OPTIONAL_STREAM_CODEC.decode(buffer),
         buffer.readInt(),
     )

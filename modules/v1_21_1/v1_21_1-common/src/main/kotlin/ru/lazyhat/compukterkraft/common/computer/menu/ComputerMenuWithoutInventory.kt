@@ -26,13 +26,13 @@ import net.minecraft.world.inventory.Slot
 import net.minecraft.world.item.ItemStack
 import ru.lazyhat.compukterkraft.common.computer.context.ServerComputer
 import ru.lazyhat.compukterkraft.common.computer.data.ComputerContainerData
-import ru.lazyhat.compukterkraft.core.block.ComputerFamily
+import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 
 class ComputerMenuWithoutInventory(
     menuType: MenuType<out AbstractComputerMenu>,
     containerId: Int,
     playerInventory: Inventory,
-    family: ComputerFamily,
+    family: DeviceFamily,
     computer: ServerComputer?,
     menuData: ComputerContainerData?,
 ) : AbstractComputerMenu(

@@ -19,9 +19,9 @@
 
 package ru.lazyhat.compukterkraft.core.computer
 
-import ru.lazyhat.compukterkraft.core.block.ComputerFamily
+import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 
 data class ComputerProperties(
-    val family: ComputerFamily,
+    val family: DeviceFamily,
     val label: String?,
 )

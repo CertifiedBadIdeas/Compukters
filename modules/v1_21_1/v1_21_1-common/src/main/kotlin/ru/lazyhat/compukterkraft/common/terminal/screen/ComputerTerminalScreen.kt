@@ -32,7 +32,7 @@ import ru.lazyhat.compukterkraft.common.platform.MinecraftInputProvider
 import ru.lazyhat.compukterkraft.common.ui.dsl.translatable
 import ru.lazyhat.compukterkraft.common.ui.program.DslContainerScreen
 import ru.lazyhat.compukterkraft.core.Config
-import ru.lazyhat.compukterkraft.core.block.ComputerFamily
+import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 import ru.lazyhat.compukterkraft.core.computer.input.ComputerControlAction
 import ru.lazyhat.compukterkraft.core.computer.input.ControlInputEvent
 import ru.lazyhat.compukterkraft.core.gui.TerminalRect
@@ -104,7 +104,7 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
         imageHeight = WorkbenchTerminalMetrics.imageHeight(rows, contentTopInset = COMPUTER_CONTENT_TOP)
 
         container.clientSide.attachTerminalBuffer(
-            ClientTerminalBuffer(announcedCols, announcedRows, color = container.family != ComputerFamily.NORMAL),
+            ClientTerminalBuffer(announcedCols, announcedRows, color = container.family != DeviceFamily.NORMAL),
         )
         ClientNetworking.sendToServer(
             AttachTerminalServerMessage(container, announcedCols, announcedRows),

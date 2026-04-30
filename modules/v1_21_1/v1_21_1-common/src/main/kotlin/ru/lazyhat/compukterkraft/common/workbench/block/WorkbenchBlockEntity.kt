@@ -43,7 +43,7 @@ import ru.lazyhat.compukterkraft.common.workbench.data.WorkbenchContainerData
 import ru.lazyhat.compukterkraft.common.workbench.menu.AbstractWorkbenchMenu
 import ru.lazyhat.compukterkraft.common.workbench.menu.WorkbenchMenuWithoutInventory
 import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchTerminalClientMessage
-import ru.lazyhat.compukterkraft.core.block.ComputerFamily
+import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 import ru.lazyhat.compukterkraft.core.computer.ComputerProperties
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 
@@ -237,10 +237,10 @@ class WorkbenchBlockEntity(
         detachedTargetComputer = null
     }
 
-    private fun resolveTargetFamily(familyId: String?): ComputerFamily =
+    private fun resolveTargetFamily(familyId: String?): DeviceFamily =
         familyId
-            ?.let { id -> ComputerFamily.entries.firstOrNull { it.name.equals(id, ignoreCase = true) } }
-            ?: ComputerFamily.NORMAL
+            ?.let { id -> DeviceFamily.entries.firstOrNull { it.name.equals(id, ignoreCase = true) } }
+            ?: DeviceFamily.NORMAL
 
     private inner class RuntimeBridge : WorkbenchTargetRuntimeBridge {
         override fun rebootTarget(target: ServerWorkbench.TargetDescriptor) {
