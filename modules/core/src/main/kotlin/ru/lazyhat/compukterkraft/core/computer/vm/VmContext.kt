@@ -26,7 +26,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.VmStopReason
 
 /**
  * Bundles all VM-internal services that API classes need.
- * Implemented by [BackgroundComputerVm] — replaces the ~15 lambdas
+ * Implemented by [BackgroundDeviceVm] — replaces the ~15 lambdas
  * that were previously threaded through every API constructor.
  */
 interface VmContext {

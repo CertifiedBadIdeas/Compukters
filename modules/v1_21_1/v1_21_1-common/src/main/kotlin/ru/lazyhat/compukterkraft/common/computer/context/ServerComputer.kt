@@ -35,9 +35,9 @@ import ru.lazyhat.compukterkraft.core.LOGGER
 import ru.lazyhat.compukterkraft.core.computer.ComputerEvents
 import ru.lazyhat.compukterkraft.core.computer.ComputerProperties
 import ru.lazyhat.compukterkraft.core.computer.runtime.HostCallDispatcher
-import ru.lazyhat.compukterkraft.core.computer.vm.BackgroundComputerVm
+import ru.lazyhat.compukterkraft.core.computer.vm.BackgroundDeviceVm
 import ru.lazyhat.compukterkraft.core.computer.vm.DeviceProfileRegistry
-import ru.lazyhat.compukterkraft.core.computer.vm.ComputerVmLogger
+import ru.lazyhat.compukterkraft.core.computer.vm.DeviceVmLogger
 import ru.lazyhat.compukterkraft.core.computer.vm.api.ComputerStdioBroadcaster
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceVmHandle
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
@@ -65,10 +65,10 @@ class ServerComputer(
     val family = properties.family
     private val profile = DeviceProfileRegistry.forFamily(family)
 
-    private val logger = ComputerVmLogger { message -> LOGGER.info { message } }
+    private val logger = DeviceVmLogger { message -> LOGGER.info { message } }
     private var label: String? = properties.label
 
-    private var vmHandle: BackgroundComputerVm? = null
+    private var vmHandle: BackgroundDeviceVm? = null
 
     private val serverScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -147,7 +147,7 @@ class ServerComputer(
 
         // Rebind any already-attached terminal sessions to the new VM's broadcaster.
         // Consumers on the previous VM (if any) are discarded when the old
-        // BackgroundComputerVm is reaped; here we just create fresh consumers.
+        // BackgroundDeviceVm is reaped; here we just create fresh consumers.
         rebindTerminalConsumers(handle)
 
         handle.boot()
@@ -187,7 +187,7 @@ class ServerComputer(
 
     // ── Lifecycle observation ────────────────────────────────────────
 
-    private fun observeLifecycle(handle: BackgroundComputerVm) {
+    private fun observeLifecycle(handle: BackgroundDeviceVm) {
         serverScope.launch {
             LOGGER.debug { "ComputerID: $instanceID event listening start" }
             handle.terminalStates.collect { state ->
@@ -253,7 +253,7 @@ class ServerComputer(
 
     private fun bindConsumer(
         session: TerminalSession,
-        handle: BackgroundComputerVm,
+        handle: BackgroundDeviceVm,
     ) {
         if (session.consumer != null) return
         val consumer =
@@ -264,7 +264,7 @@ class ServerComputer(
         handle.stdioBroadcaster.addConsumer(consumer)
     }
 
-    private fun rebindTerminalConsumers(handle: BackgroundComputerVm) {
+    private fun rebindTerminalConsumers(handle: BackgroundDeviceVm) {
         if (terminalSessions.isEmpty()) return
         for (session in terminalSessions.values) {
             // Each session is bound to the previous VM's (now-defunct) broadcaster;

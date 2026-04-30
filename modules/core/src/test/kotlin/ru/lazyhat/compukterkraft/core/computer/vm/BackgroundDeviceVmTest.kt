@@ -40,19 +40,19 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-class BackgroundComputerVmTest {
+class BackgroundDeviceVmTest {
     @Test
     fun bootCompletesWhenVmRegistrySupportsImportedModule() {
         runtimeTestWorkspace("compukterkraft-background-vm-success") { workspace ->
             workspace.writeProgram(1, "bios.ck", "import filesystem;\nfun main() {}")
 
             val vm =
-                BackgroundComputerVm(
+                BackgroundDeviceVm(
                     deviceId = 1,
                     profile = runtimeProfile(),
                     dispatcher = Dispatchers.Default,
                     labelProvider = { null },
-                    logger = ComputerVmLogger { },
+                    logger = DeviceVmLogger { },
                     workspace = workspace.host,
                 )
 
@@ -104,12 +104,12 @@ class BackgroundComputerVmTest {
                 )
 
             val vm =
-                BackgroundComputerVm(
+                BackgroundDeviceVm(
                     deviceId = 1,
                     profile = profile,
                     dispatcher = Dispatchers.Default,
                     labelProvider = { null },
-                    logger = ComputerVmLogger { },
+                    logger = DeviceVmLogger { },
                     workspace = workspace,
                 )
 
@@ -163,12 +163,12 @@ class BackgroundComputerVmTest {
                 )
 
             val vm =
-                BackgroundComputerVm(
+                BackgroundDeviceVm(
                     deviceId = 1,
                     profile = profile,
                     dispatcher = Dispatchers.Default,
                     labelProvider = { null },
-                    logger = ComputerVmLogger { },
+                    logger = DeviceVmLogger { },
                     workspace = workspace,
                 )
 
