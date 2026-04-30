@@ -29,7 +29,7 @@ import ru.lazyhat.compukterkraft.lang.frontend.LanguageBuiltins
 import ru.lazyhat.compukterkraft.lang.frontend.LanguageFrontend
 import ru.lazyhat.compukterkraft.lang.runtime.BytecodeComputerProgram
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceProfile
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerProgram
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceProgram
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspace
 
 data class LoadedComputerProgramSource(
@@ -38,7 +38,7 @@ data class LoadedComputerProgramSource(
 )
 
 data class CompiledComputerProgram(
-    val program: ComputerProgram?,
+    val program: DeviceProgram?,
     val errorMessage: String? = null,
 )
 

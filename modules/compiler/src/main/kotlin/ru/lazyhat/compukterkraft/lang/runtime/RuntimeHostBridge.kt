@@ -19,7 +19,7 @@
 package ru.lazyhat.compukterkraft.lang.runtime
 
 internal class RuntimeHostBridge(
-    private val runtime: ComputerRuntime,
+    private val runtime: DeviceRuntime,
 ) {
     suspend fun invoke(
         moduleName: String,

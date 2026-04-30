@@ -20,13 +20,13 @@
 package ru.lazyhat.compukterkraft.core.computer.vm.api
 
 import ru.lazyhat.compukterkraft.core.computer.vm.VmContext
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerFileSystemApi
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceFileSystemApi
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceEntry
 import ru.lazyhat.compukterkraft.lang.runtime.HostCall
 
 class VmFileSystemApi(
     private val ctx: VmContext,
-) : ComputerFileSystemApi {
+) : DeviceFileSystemApi {
     override suspend fun exists(path: String): Boolean = ctx.awaitHostCall { HostCall.FileExists(it, ctx.resolvePath(path)) }
 
     override suspend fun isDirectory(path: String): Boolean = ctx.awaitHostCall { HostCall.FileIsDirectory(it, ctx.resolvePath(path)) }

@@ -22,7 +22,7 @@ package ru.lazyhat.compukterkraft.core.computer.vm.api
 import ru.lazyhat.compukterkraft.core.computer.vm.TerminalLineReader
 import ru.lazyhat.compukterkraft.core.computer.vm.VmContext
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerStdioApi
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerTerminalApi
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceTerminalApi
 
 /**
  * Terminal API routed entirely through the [ComputerStdioApi] byte stream.
@@ -39,7 +39,7 @@ class VmTerminalApi(
     private val stdio: ComputerStdioApi,
     private val cursorProvider: () -> Pair<Int, Int>,
     private val ctx: VmContext,
-) : ComputerTerminalApi {
+) : DeviceTerminalApi {
     override fun write(text: String) {
         stdio.writeString(text)
     }
