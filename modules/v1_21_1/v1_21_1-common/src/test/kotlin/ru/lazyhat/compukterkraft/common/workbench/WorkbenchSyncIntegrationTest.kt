@@ -38,7 +38,7 @@ import ru.lazyhat.compukterkraft.core.workbench.crdt.Op
 import ru.lazyhat.compukterkraft.core.workbench.crdt.SiteId
 import ru.lazyhat.compukterkraft.lang.runtime.CompletionItem
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerIdeSnapshot
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceDocument
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspaceDocument
 import kotlin.io.path.createTempDirectory
 import kotlin.random.Random
 import kotlin.test.Test
@@ -79,7 +79,7 @@ class WorkbenchSyncIntegrationTest {
             val updates = MutableUpdateSource()
             updates.push(
                 WorkbenchRemoteState(
-                    document = ComputerWorkspaceDocument(path, "fun main() {}", version = 1),
+                    document = DeviceWorkspaceDocument(path, "fun main() {}", version = 1),
                     target = WorkbenchTargetState(connected = true, displayName = "Pocket Dev", familyId = "advanced"),
                 ),
             )
@@ -181,7 +181,7 @@ class WorkbenchSyncIntegrationTest {
             source: String,
         ): ComputerIdeSnapshot =
             ComputerIdeSnapshot(
-                document = ComputerWorkspaceDocument(path, source, version = 0),
+                document = DeviceWorkspaceDocument(path, source, version = 0),
                 diagnostics = emptyList(),
                 highlights = emptyList(),
             )

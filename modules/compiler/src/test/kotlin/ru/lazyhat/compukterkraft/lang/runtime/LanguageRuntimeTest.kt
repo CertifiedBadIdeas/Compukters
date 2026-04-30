@@ -684,10 +684,10 @@ private class RecordingRuntime(
 
             override suspend fun remove(path: String): Boolean = true
 
-            override suspend fun list(path: String): List<ComputerWorkspaceEntry> =
+            override suspend fun list(path: String): List<DeviceWorkspaceEntry> =
                 listOf(
-                    ComputerWorkspaceEntry("docs", directory = true),
-                    ComputerWorkspaceEntry("readme.txt", directory = false),
+                    DeviceWorkspaceEntry("docs", directory = true),
+                    DeviceWorkspaceEntry("readme.txt", directory = false),
                 )
         }
 

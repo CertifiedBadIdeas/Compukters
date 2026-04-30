@@ -38,15 +38,15 @@ import ru.lazyhat.compukterkraft.core.workbench.crdt.Op
 import ru.lazyhat.compukterkraft.core.workbench.crdt.ServerCrdtReplica
 import ru.lazyhat.compukterkraft.core.workbench.crdt.SiteId
 import ru.lazyhat.compukterkraft.core.workbench.crdt.TextRun
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspace
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceDocument
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceEntry
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspace
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspaceDocument
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspaceEntry
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 import java.util.concurrent.ConcurrentHashMap
 
 class ServerWorkbench(
     val workspaceId: Int,
-    private val workspace: ComputerWorkspace,
+    private val workspace: DeviceWorkspace,
     initialTarget: TargetDescriptor = TargetDescriptor(),
 ) : ComputerEvents.Receiver {
     private var targetDescriptor: TargetDescriptor = initialTarget
@@ -122,14 +122,14 @@ class ServerWorkbench(
 
     fun targetState(): WorkbenchTargetState = targetDescriptor.toTargetState()
 
-    fun listEntries(path: String = ""): List<ComputerWorkspaceEntry> = workspace.list(effectiveWorkspaceId, path)
+    fun listEntries(path: String = ""): List<DeviceWorkspaceEntry> = workspace.list(effectiveWorkspaceId, path)
 
-    fun read(path: String): ComputerWorkspaceDocument? = workspace.readDocument(effectiveWorkspaceId, path)
+    fun read(path: String): DeviceWorkspaceDocument? = workspace.readDocument(effectiveWorkspaceId, path)
 
     fun write(
         path: String,
         text: String,
-    ): ComputerWorkspaceDocument = workspace.writeDocument(effectiveWorkspaceId, path, text)
+    ): DeviceWorkspaceDocument = workspace.writeDocument(effectiveWorkspaceId, path, text)
 
     fun runTargetProgram() {
         if (targetDescriptor.computerId == null) return

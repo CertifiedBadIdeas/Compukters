@@ -18,7 +18,7 @@
  */
 package ru.lazyhat.compukterkraft.core.computer.runtime
 
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspace
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.HostCall
 import ru.lazyhat.compukterkraft.lang.runtime.HostResult
 
@@ -30,7 +30,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.HostResult
  */
 class HostCallDispatcher(
     private val computerId: Int,
-    private val workspace: ComputerWorkspace,
+    private val workspace: DeviceWorkspace,
 ) {
     fun dispatch(call: HostCall): HostResult =
         try {

@@ -27,10 +27,10 @@ import ru.lazyhat.compukterkraft.lang.runtime.ComputerHoverRequest
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerHoverResponse
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerIdeHost
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerIdeSnapshot
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspace
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspace
 
 class WorkspaceComputerIdeHost(
-    private val workspace: ComputerWorkspace,
+    private val workspace: DeviceWorkspace,
 ) : ComputerIdeHost {
     override fun snapshot(
         computerId: Int,
