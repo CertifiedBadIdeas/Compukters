@@ -24,7 +24,7 @@ import ru.lazyhat.compukterkraft.core.computer.runtime.WorkspaceProgramLoader
 import ru.lazyhat.compukterkraft.core.computer.vm.VmContext
 import ru.lazyhat.compukterkraft.core.computer.vm.VmPathResolver
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerProcessApi
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerProfile
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceProfile
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerRuntime
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerTerminalApi
 
@@ -35,7 +35,7 @@ internal class VmProcessApi(
     private val pathResolver: VmPathResolver,
     private val filesystemApi: VmFileSystemApi,
     private val programLoader: WorkspaceProgramLoader,
-    private val profile: ComputerProfile,
+    private val profile: DeviceProfile,
     private val runtimeCreator: (String, String) -> ComputerRuntime,
     private val terminal: ComputerTerminalApi,
 ) : ComputerProcessApi {

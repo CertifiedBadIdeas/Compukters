@@ -45,9 +45,9 @@ import ru.lazyhat.compukterkraft.core.computer.vm.api.VmTerminalApi
 import ru.lazyhat.compukterkraft.lang.api.BuiltinModule
 import ru.lazyhat.compukterkraft.lang.api.BuiltinRegistry
 import ru.lazyhat.compukterkraft.lang.frontend.LanguageBuiltins
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerCapability
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerProfile
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerVmHandle
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceCapability
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceProfile
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceVmHandle
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.HostCall
 import ru.lazyhat.compukterkraft.lang.runtime.HostResult
@@ -88,12 +88,12 @@ private data class RuntimeApiRegistryProfile(
  */
 class BackgroundComputerVm(
     override val computerId: Int,
-    override val profile: ComputerProfile,
+    override val profile: DeviceProfile,
     dispatcher: CoroutineDispatcher,
     private val labelProvider: () -> String?,
     private val logger: ComputerVmLogger,
     workspace: ComputerWorkspace,
-) : ComputerVmHandle,
+) : DeviceVmHandle,
     VmContext {
     private val scope = CoroutineScope(SupervisorJob() + dispatcher)
     private val slicePermits = Channel<Unit>(capacity = 1)
@@ -131,7 +131,7 @@ class BackgroundComputerVm(
             createRuntime("", "")
         }
 
-    // ── ComputerVmHandle ────────────────────────────────────────────
+    // ── DeviceVmHandle ────────────────────────────────────────────
 
     override fun boot(): Boolean {
         if (runner?.isActive == true) return false
@@ -324,13 +324,13 @@ class BackgroundComputerVm(
                 defaultRegistry.module("terminal")?.let(::add)
                 defaultRegistry.module("stdout")?.let(::add)
                 defaultRegistry.module("system")?.let(::add)
-                if (ComputerCapability.FILESYSTEM in profile.allowedCapabilities) {
+                if (DeviceCapability.FILESYSTEM in profile.allowedCapabilities) {
                     defaultRegistry.module("filesystem")?.let(::add)
                 }
-                if (ComputerCapability.EVENTS in profile.allowedCapabilities) {
+                if (DeviceCapability.EVENTS in profile.allowedCapabilities) {
                     defaultRegistry.module("events")?.let(::add)
                 }
-                if (ComputerCapability.SYSTEM in profile.allowedCapabilities) {
+                if (DeviceCapability.SYSTEM in profile.allowedCapabilities) {
                     defaultRegistry.module("process")?.let(::add)
                     defaultRegistry.module("strings")?.let(::add)
                 }

@@ -24,8 +24,8 @@ import ru.lazyhat.compukterkraft.core.Config
 import ru.lazyhat.compukterkraft.core.MOD_ID
 import ru.lazyhat.compukterkraft.core.platform.api.ServerWorldAccess
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerIdeHost
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerProfile
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerVmHandle
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceProfile
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceVmHandle
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.VmStopReason
 import ru.lazyhat.compukterkraft.lang.runtime.VmSupervisor
@@ -39,7 +39,7 @@ class ComputerVmSupervisor(
     Closeable {
     private val executor = Executors.newFixedThreadPool(2)
     private val dispatcher = executor.asCoroutineDispatcher()
-    private val handles = ConcurrentHashMap<Int, ComputerVmHandle>()
+    private val handles = ConcurrentHashMap<Int, DeviceVmHandle>()
     private val computersPath = serverWorldAccess.getWorldSavePath().resolve(MOD_ID).resolve("computers")
     private val workspaceInitializer = ComputerWorkspaceInitializer(computersPath)
     private val workspaceStore = ComputerWorkspaceHost(rootPath = computersPath, defaultDiskQuotaBytes = Config.computerSpaceLimit.toLong())
@@ -57,7 +57,7 @@ class ComputerVmSupervisor(
 
     fun getOrCreate(
         computerId: Int,
-        profile: ComputerProfile,
+        profile: DeviceProfile,
         labelProvider: () -> String?,
         logger: ComputerVmLogger,
     ): BackgroundComputerVm =
@@ -73,7 +73,7 @@ class ComputerVmSupervisor(
             )
         } as BackgroundComputerVm
 
-    override fun get(computerId: Int): ComputerVmHandle? = handles[computerId]
+    override fun get(computerId: Int): DeviceVmHandle? = handles[computerId]
 
     override fun remove(
         computerId: Int,

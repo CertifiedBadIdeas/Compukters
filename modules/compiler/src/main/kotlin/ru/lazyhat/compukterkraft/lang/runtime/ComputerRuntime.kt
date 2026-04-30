@@ -24,7 +24,7 @@ interface ComputerProgram {
 }
 
 interface ComputerRuntime {
-    val profile: ComputerProfile
+    val profile: DeviceProfile
     val system: ComputerSystemApi
     val terminal: ComputerTerminalApi
     val stdio: ComputerStdioApi

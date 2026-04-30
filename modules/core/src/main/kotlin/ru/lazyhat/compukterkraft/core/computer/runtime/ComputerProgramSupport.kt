@@ -28,7 +28,7 @@ import ru.lazyhat.compukterkraft.lang.frontend.FrontendSeverity
 import ru.lazyhat.compukterkraft.lang.frontend.LanguageBuiltins
 import ru.lazyhat.compukterkraft.lang.frontend.LanguageFrontend
 import ru.lazyhat.compukterkraft.lang.runtime.BytecodeComputerProgram
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerProfile
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceProfile
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerProgram
 import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspace
 
@@ -58,7 +58,7 @@ object ComputerProgramCompiler {
     fun compile(
         path: String,
         source: String,
-        profile: ComputerProfile? = null,
+        profile: DeviceProfile? = null,
         runtimeRegistry: BuiltinRegistry = LanguageBuiltins.defaultRuntimeRegistry,
     ): CompiledComputerProgram {
         val artifact = LanguageFrontend(runtimeRegistry).compile(path, source)
