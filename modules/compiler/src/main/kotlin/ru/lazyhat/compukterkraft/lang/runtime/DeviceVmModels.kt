@@ -110,7 +110,7 @@ data class VmEvent(
 )
 
 data class VmSnapshot(
-    val computerId: Int,
+    val deviceId: Int,
     val profile: DeviceProfile,
     val state: VmState,
     val currentTick: Long,
@@ -173,7 +173,7 @@ sealed interface HostResult {
 }
 
 interface DeviceVmHandle : AutoCloseable {
-    val computerId: Int
+    val deviceId: Int
     val profile: DeviceProfile
 
     fun boot(): Boolean
@@ -205,10 +205,10 @@ interface DeviceVmHandle : AutoCloseable {
 }
 
 interface VmSupervisor : AutoCloseable {
-    fun get(computerId: Int): DeviceVmHandle?
+    fun get(deviceId: Int): DeviceVmHandle?
 
     fun remove(
-        computerId: Int,
+        deviceId: Int,
         reason: VmStopReason = VmStopReason.CLOSED,
     )
 }

@@ -30,7 +30,7 @@ import ru.lazyhat.compukterkraft.lang.frontend.LanguageFrontend
 import ru.lazyhat.compukterkraft.lang.runtime.BytecodeComputerProgram
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceProfile
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceProgram
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspace
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspace
 
 data class LoadedComputerProgramSource(
     val path: String,
@@ -43,13 +43,13 @@ data class CompiledComputerProgram(
 )
 
 class WorkspaceProgramLoader(
-    private val workspace: ComputerWorkspace,
+    private val workspace: DeviceWorkspace,
 ) {
     fun load(
-        computerId: Int,
+        deviceId: Int,
         path: String,
     ): LoadedComputerProgramSource? {
-        val document = workspace.readDocument(computerId, path) ?: return null
+        val document = workspace.readDocument(deviceId, path) ?: return null
         return LoadedComputerProgramSource(document.path, document.text)
     }
 }

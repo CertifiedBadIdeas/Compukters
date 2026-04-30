@@ -41,7 +41,7 @@ interface DeviceRuntime {
 }
 
 interface DeviceSystemApi {
-    val computerId: Int
+    val deviceId: Int
     val label: String?
     val currentTick: Long
 
@@ -88,7 +88,7 @@ interface DeviceFileSystemApi {
 
     suspend fun remove(path: String): Boolean
 
-    suspend fun list(path: String = ""): List<ComputerWorkspaceEntry>
+    suspend fun list(path: String = ""): List<DeviceWorkspaceEntry>
 }
 
 interface DeviceProcessApi {

@@ -18,7 +18,7 @@
  */
 package ru.lazyhat.compukterkraft.core.computer.runtime
 
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspace
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.HostCall
 import ru.lazyhat.compukterkraft.lang.runtime.HostResult
 
@@ -29,8 +29,8 @@ import ru.lazyhat.compukterkraft.lang.runtime.HostResult
  * to its [ScreenBuffer]. Only filesystem operations remain.
  */
 class HostCallDispatcher(
-    private val computerId: Int,
-    private val workspace: ComputerWorkspace,
+    private val deviceId: Int,
+    private val workspace: DeviceWorkspace,
 ) {
     fun dispatch(call: HostCall): HostResult =
         try {
@@ -38,33 +38,33 @@ class HostCallDispatcher(
                 is HostCall.FileExists -> {
                     HostResult.Success(
                         call.id,
-                        workspace.readDocument(computerId, call.path) != null || workspace.isDirectory(computerId, call.path),
+                        workspace.readDocument(deviceId, call.path) != null || workspace.isDirectory(deviceId, call.path),
                     )
                 }
 
                 is HostCall.FileIsDirectory -> {
-                    HostResult.Success(call.id, workspace.isDirectory(computerId, call.path))
+                    HostResult.Success(call.id, workspace.isDirectory(deviceId, call.path))
                 }
 
                 is HostCall.FileReadText -> {
-                    HostResult.Success(call.id, workspace.readDocument(computerId, call.path)?.text)
+                    HostResult.Success(call.id, workspace.readDocument(deviceId, call.path)?.text)
                 }
 
                 is HostCall.FileWriteText -> {
-                    workspace.writeDocument(computerId, call.path, call.text)
+                    workspace.writeDocument(deviceId, call.path, call.text)
                     HostResult.Success(call.id)
                 }
 
                 is HostCall.FileMakeDirectory -> {
-                    HostResult.Success(call.id, workspace.makeDirectory(computerId, call.path))
+                    HostResult.Success(call.id, workspace.makeDirectory(deviceId, call.path))
                 }
 
                 is HostCall.FileRemove -> {
-                    HostResult.Success(call.id, workspace.deleteDocument(computerId, call.path))
+                    HostResult.Success(call.id, workspace.deleteDocument(deviceId, call.path))
                 }
 
                 is HostCall.FileList -> {
-                    HostResult.Success(call.id, workspace.list(computerId, call.path))
+                    HostResult.Success(call.id, workspace.list(deviceId, call.path))
                 }
             }
         } catch (failure: Throwable) {

@@ -46,7 +46,7 @@ class LanguageRuntimeTest {
                 import events;
 
                 fun main() {
-                    terminal.printLine("id=" + system.computerId());
+                    terminal.printLine("id=" + system.deviceId());
                     val event: Event = events.pull("boot");
                     terminal.printLine(event.name);
                     sleep(1L);
@@ -619,7 +619,7 @@ private class RecordingRuntime(
 
     override val system =
         object : DeviceSystemApi {
-            override val computerId: Int = 7
+            override val deviceId: Int = 7
             override val label: String? = "Test"
             override val currentTick: Long = 42L
 
@@ -684,10 +684,10 @@ private class RecordingRuntime(
 
             override suspend fun remove(path: String): Boolean = true
 
-            override suspend fun list(path: String): List<ComputerWorkspaceEntry> =
+            override suspend fun list(path: String): List<DeviceWorkspaceEntry> =
                 listOf(
-                    ComputerWorkspaceEntry("docs", directory = true),
-                    ComputerWorkspaceEntry("readme.txt", directory = false),
+                    DeviceWorkspaceEntry("docs", directory = true),
+                    DeviceWorkspaceEntry("readme.txt", directory = false),
                 )
         }
 

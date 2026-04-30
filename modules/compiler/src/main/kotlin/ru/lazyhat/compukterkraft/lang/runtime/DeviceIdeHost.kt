@@ -21,19 +21,6 @@ package ru.lazyhat.compukterkraft.lang.runtime
 
 import ru.lazyhat.compukterkraft.lang.api.SourceRange
 
-data class ComputerWorkspaceEntry(
-    val path: String,
-    val directory: Boolean,
-    val size: Int = 0,
-    val version: Long = 0,
-)
-
-data class ComputerWorkspaceDocument(
-    val path: String,
-    val text: String,
-    val version: Long,
-)
-
 enum class IdeDiagnosticSeverity {
     INFO,
     WARNING,
@@ -95,93 +82,60 @@ data class DefinitionTarget(
     val range: SourceRange,
 )
 
-data class ComputerIdeSnapshot(
-    val document: ComputerWorkspaceDocument,
+data class DeviceIdeSnapshot(
+    val document: DeviceWorkspaceDocument,
     val diagnostics: List<Diagnostic>,
     val highlights: List<HighlightToken>,
 )
 
-data class ComputerCompletionRequest(
+data class DeviceCompletionRequest(
     val path: String,
     val line: Int,
     val column: Int,
 )
 
-data class ComputerCompletionResponse(
+data class DeviceCompletionResponse(
     val items: List<CompletionItem>,
 )
 
-data class ComputerHoverRequest(
+data class DeviceHoverRequest(
     val path: String,
     val line: Int,
     val column: Int,
 )
 
-data class ComputerHoverResponse(
+data class DeviceHoverResponse(
     val info: HoverInfo?,
 )
 
-data class ComputerDefinitionRequest(
+data class DeviceDefinitionRequest(
     val path: String,
     val line: Int,
     val column: Int,
 )
 
-data class ComputerDefinitionResponse(
+data class DeviceDefinitionResponse(
     val target: DefinitionTarget?,
 )
 
-interface ComputerWorkspace {
-    fun list(
-        computerId: Int,
-        path: String = "",
-    ): List<ComputerWorkspaceEntry>
-
-    fun readDocument(
-        computerId: Int,
-        path: String,
-    ): ComputerWorkspaceDocument?
-
-    fun isDirectory(
-        computerId: Int,
-        path: String,
-    ): Boolean
-
-    fun writeDocument(
-        computerId: Int,
-        path: String,
-        text: String,
-    ): ComputerWorkspaceDocument
-
-    fun makeDirectory(
-        computerId: Int,
-        path: String,
-    ): Boolean
-
-    fun deleteDocument(
-        computerId: Int,
-        path: String,
-    ): Boolean
-}
-
-interface ComputerIdeHost {
+interface DeviceIdeHost {
     fun snapshot(
-        computerId: Int,
+        deviceId: Int,
         path: String,
-    ): ComputerIdeSnapshot?
+    ): DeviceIdeSnapshot?
 
     fun complete(
-        computerId: Int,
-        request: ComputerCompletionRequest,
-    ): ComputerCompletionResponse
+        deviceId: Int,
+        request: DeviceCompletionRequest,
+    ): DeviceCompletionResponse
 
     fun hover(
-        computerId: Int,
-        request: ComputerHoverRequest,
-    ): ComputerHoverResponse
+        deviceId: Int,
+        request: DeviceHoverRequest,
+    ): DeviceHoverResponse
 
     fun definition(
-        computerId: Int,
-        request: ComputerDefinitionRequest,
-    ): ComputerDefinitionResponse
+        deviceId: Int,
+        request: DeviceDefinitionRequest,
+    ): DeviceDefinitionResponse
 }

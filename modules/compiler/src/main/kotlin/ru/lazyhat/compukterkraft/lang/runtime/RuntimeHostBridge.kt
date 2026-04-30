@@ -90,8 +90,8 @@ internal class RuntimeHostBridge(
         arguments: List<VmValue>,
     ): VmValue =
         when (functionName) {
-            "computerId" -> {
-                VmValue.IntValue(runtime.system.computerId)
+            "deviceId" -> {
+                VmValue.IntValue(runtime.system.deviceId)
             }
 
             "currentTick" -> {

@@ -26,7 +26,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.VmStopReason
 
 class VmSystemApi(
     private val ctx: VmContext,
-    override val computerId: Int,
+    override val deviceId: Int,
     private val currentTickProvider: () -> Long,
     private val labelProvider: () -> String?,
 ) : DeviceSystemApi {
@@ -49,6 +49,6 @@ class VmSystemApi(
     }
 
     override fun log(message: String) {
-        ctx.log("VM[$computerId] $message")
+        ctx.log("VM[$deviceId] $message")
     }
 }

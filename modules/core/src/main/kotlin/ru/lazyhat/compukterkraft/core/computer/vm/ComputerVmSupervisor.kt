@@ -23,10 +23,10 @@ import kotlinx.coroutines.asCoroutineDispatcher
 import ru.lazyhat.compukterkraft.core.Config
 import ru.lazyhat.compukterkraft.core.MOD_ID
 import ru.lazyhat.compukterkraft.core.platform.api.ServerWorldAccess
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerIdeHost
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceIdeHost
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceProfile
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceVmHandle
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspace
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.VmStopReason
 import ru.lazyhat.compukterkraft.lang.runtime.VmSupervisor
 import java.io.Closeable
@@ -42,29 +42,29 @@ class ComputerVmSupervisor(
     private val handles = ConcurrentHashMap<Int, DeviceVmHandle>()
     private val computersPath = serverWorldAccess.getWorldSavePath().resolve(MOD_ID).resolve("computers")
     private val workspaceInitializer = ComputerWorkspaceInitializer(computersPath)
-    private val workspaceStore = ComputerWorkspaceHost(rootPath = computersPath, defaultDiskQuotaBytes = Config.computerSpaceLimit.toLong())
-    private val ideHost = WorkspaceComputerIdeHost(workspaceStore)
+    private val workspaceStore = DeviceWorkspaceHost(rootPath = computersPath, defaultDiskQuotaBytes = Config.computerSpaceLimit.toLong())
+    private val ideHost = WorkspaceDeviceIdeHost(workspaceStore)
 
-    val workspace: ComputerWorkspace
+    val workspace: DeviceWorkspace
         get() = workspaceStore
 
-    val ide: ComputerIdeHost
+    val ide: DeviceIdeHost
         get() = ideHost
 
-    fun ensureWorkspaceInitialized(computerId: Int) {
-        workspaceInitializer.ensureInitialized(computerId)
+    fun ensureWorkspaceInitialized(deviceId: Int) {
+        workspaceInitializer.ensureInitialized(deviceId)
     }
 
     fun getOrCreate(
-        computerId: Int,
+        deviceId: Int,
         profile: DeviceProfile,
         labelProvider: () -> String?,
         logger: ComputerVmLogger,
     ): BackgroundComputerVm =
-        handles.computeIfAbsent(computerId) {
-            workspaceStore.setDiskQuota(computerId, profile.resources.storage.diskBytes)
+        handles.computeIfAbsent(deviceId) {
+            workspaceStore.setDiskQuota(deviceId, profile.resources.storage.diskBytes)
             BackgroundComputerVm(
-                computerId = computerId,
+                deviceId = deviceId,
                 profile = profile,
                 dispatcher = dispatcher,
                 labelProvider = labelProvider,
@@ -73,13 +73,13 @@ class ComputerVmSupervisor(
             )
         } as BackgroundComputerVm
 
-    override fun get(computerId: Int): DeviceVmHandle? = handles[computerId]
+    override fun get(deviceId: Int): DeviceVmHandle? = handles[deviceId]
 
     override fun remove(
-        computerId: Int,
+        deviceId: Int,
         reason: VmStopReason,
     ) {
-        handles.remove(computerId)?.stop(reason)
+        handles.remove(deviceId)?.stop(reason)
     }
 
     override fun close() {

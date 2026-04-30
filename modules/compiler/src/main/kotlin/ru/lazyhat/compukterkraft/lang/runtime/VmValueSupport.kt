@@ -18,7 +18,7 @@
  */
 package ru.lazyhat.compukterkraft.lang.runtime
 
-internal fun formatWorkspaceListing(entries: List<ComputerWorkspaceEntry>): String =
+internal fun formatWorkspaceListing(entries: List<DeviceWorkspaceEntry>): String =
     entries.joinToString(" ") { entry ->
         val name = entry.path.substringAfterLast('/').ifEmpty { entry.path }
         if (entry.directory) "$name/" else name

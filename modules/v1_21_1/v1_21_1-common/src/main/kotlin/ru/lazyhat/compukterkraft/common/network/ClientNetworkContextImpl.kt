@@ -37,13 +37,13 @@ class ClientNetworkContextImpl : ClientNetworkContext {
         get() = Minecraft.getInstance()
 
     private inline fun withCheckedContainerMenu(
-        computerId: Int,
+        deviceId: Int,
         block: ComputerMenu.() -> Unit,
     ) {
         minecraft
             .player
             ?.containerMenu
-            ?.takeIf { it.containerId == computerId }
+            ?.takeIf { it.containerId == deviceId }
             ?.let { it as? ComputerMenu }
             ?.run(block)
     }

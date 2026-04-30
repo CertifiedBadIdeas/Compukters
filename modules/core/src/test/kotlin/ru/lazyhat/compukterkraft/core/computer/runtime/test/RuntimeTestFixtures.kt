@@ -18,7 +18,7 @@
  */
 package ru.lazyhat.compukterkraft.core.computer.runtime.test
 
-import ru.lazyhat.compukterkraft.core.computer.vm.ComputerWorkspaceHost
+import ru.lazyhat.compukterkraft.core.computer.vm.DeviceWorkspaceHost
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceCapability
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceCpuResources
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceMemoryResources
@@ -33,14 +33,14 @@ import kotlin.io.path.writeText
 
 class RuntimeTestWorkspace(
     val root: Path,
-    val host: ComputerWorkspaceHost,
+    val host: DeviceWorkspaceHost,
 ) {
     fun writeProgram(
-        computerId: Int,
+        deviceId: Int,
         path: String,
         source: String,
     ) {
-        val computerRoot = root.resolve(computerId.toString()).createDirectories()
+        val computerRoot = root.resolve(deviceId.toString()).createDirectories()
         val file = computerRoot.resolve(path.trimStart('/')).normalize()
         require(file.startsWith(computerRoot)) {
             "Program path must stay inside the test workspace: $path"
@@ -88,7 +88,7 @@ inline fun runtimeTestWorkspace(
 ) {
     val root = createTempDirectory("compukterkraft-$name")
     try {
-        block(RuntimeTestWorkspace(root = root, host = ComputerWorkspaceHost(rootPath = root)))
+        block(RuntimeTestWorkspace(root = root, host = DeviceWorkspaceHost(rootPath = root)))
     } finally {
         root.toFile().deleteRecursively()
     }

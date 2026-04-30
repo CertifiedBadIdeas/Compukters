@@ -143,7 +143,7 @@ object LanguageBuiltins {
                         origin = ModuleOrigin.BASE_VM,
                         functions =
                             listOf(
-                                BuiltinFunction("computerId", emptyList(), "Int", "Returns the current computer id."),
+                                BuiltinFunction("deviceId", emptyList(), "Int", "Returns the current computer id."),
                                 BuiltinFunction("currentTick", emptyList(), "Long", "Returns the current server tick."),
                                 BuiltinFunction(
                                     "label",
