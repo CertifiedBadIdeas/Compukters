@@ -25,7 +25,7 @@ import ru.lazyhat.compukterkraft.common.computer.context.ServerComputer
 import ru.lazyhat.compukterkraft.core.computer.vm.BackgroundComputerVm
 import ru.lazyhat.compukterkraft.core.computer.vm.ComputerVmLogger
 import ru.lazyhat.compukterkraft.core.computer.vm.ComputerVmSupervisor
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerIdeHost
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceIdeHost
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceProfile
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.VmStopReason
@@ -45,7 +45,7 @@ class ComputerManager(
     // ── Workspace / IDE access (delegated to supervisor) ────────────
 
     val workspace: DeviceWorkspace get() = vmSupervisor.workspace
-    val ide: ComputerIdeHost get() = vmSupervisor.ide
+    val ide: DeviceIdeHost get() = vmSupervisor.ide
 
     fun ensureWorkspaceInitialized(computerId: Int) = vmSupervisor.ensureWorkspaceInitialized(computerId)
 

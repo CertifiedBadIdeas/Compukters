@@ -23,7 +23,7 @@ import kotlinx.coroutines.asCoroutineDispatcher
 import ru.lazyhat.compukterkraft.core.Config
 import ru.lazyhat.compukterkraft.core.MOD_ID
 import ru.lazyhat.compukterkraft.core.platform.api.ServerWorldAccess
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerIdeHost
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceIdeHost
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceProfile
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceVmHandle
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspace
@@ -48,7 +48,7 @@ class ComputerVmSupervisor(
     val workspace: DeviceWorkspace
         get() = workspaceStore
 
-    val ide: ComputerIdeHost
+    val ide: DeviceIdeHost
         get() = ideHost
 
     fun ensureWorkspaceInitialized(computerId: Int) {
