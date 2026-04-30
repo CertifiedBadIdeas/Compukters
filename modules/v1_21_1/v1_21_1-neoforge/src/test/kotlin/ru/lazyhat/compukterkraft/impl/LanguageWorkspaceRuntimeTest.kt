@@ -20,7 +20,7 @@ package ru.lazyhat.compukterkraft.impl
 
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 import ru.lazyhat.compukterkraft.core.computer.vm.DeviceProfileRegistry
-import ru.lazyhat.compukterkraft.core.computer.vm.ComputerWorkspaceHost
+import ru.lazyhat.compukterkraft.core.computer.vm.DeviceWorkspaceHost
 import ru.lazyhat.compukterkraft.core.computer.vm.ComputerWorkspaceInitializer
 import ru.lazyhat.compukterkraft.core.language.LanguageServices
 import ru.lazyhat.compukterkraft.lang.frontend.FrontendSeverity
@@ -42,7 +42,7 @@ class LanguageWorkspaceRuntimeTest {
         try {
             val initializer = ComputerWorkspaceInitializer(root)
             initializer.ensureInitialized(1)
-            val workspace = ComputerWorkspaceHost(rootPath = root)
+            val workspace = DeviceWorkspaceHost(rootPath = root)
 
             val bootScript = workspace.readDocument(1, profile.bootScriptName)
             assertNotNull(bootScript)

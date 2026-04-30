@@ -21,9 +21,9 @@ package ru.lazyhat.compukterkraft.core.workbench
 import kotlinx.coroutines.flow.StateFlow
 import ru.lazyhat.compukterkraft.lang.api.BuiltinRegistry
 import ru.lazyhat.compukterkraft.lang.runtime.CompletionItem
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerIdeSnapshot
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceDocument
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceEntry
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceIdeSnapshot
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspaceDocument
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspaceEntry
 import ru.lazyhat.compukterkraft.lang.runtime.DefinitionTarget
 import ru.lazyhat.compukterkraft.lang.runtime.HighlightTokenKind
 import ru.lazyhat.compukterkraft.lang.runtime.HoverInfo
@@ -35,8 +35,8 @@ data class WorkbenchTargetState(
 )
 
 data class WorkbenchRemoteState(
-    val entries: List<ComputerWorkspaceEntry> = emptyList(),
-    val document: ComputerWorkspaceDocument? = null,
+    val entries: List<DeviceWorkspaceEntry> = emptyList(),
+    val document: DeviceWorkspaceDocument? = null,
     val target: WorkbenchTargetState = WorkbenchTargetState(),
 )
 
@@ -71,7 +71,7 @@ interface WorkbenchIdeFacade {
     fun analyze(
         path: String,
         source: String,
-    ): ComputerIdeSnapshot
+    ): DeviceIdeSnapshot
 
     fun complete(
         path: String,

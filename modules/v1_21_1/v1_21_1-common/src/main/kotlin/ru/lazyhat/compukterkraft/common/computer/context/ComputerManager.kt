@@ -25,9 +25,9 @@ import ru.lazyhat.compukterkraft.common.computer.context.ServerComputer
 import ru.lazyhat.compukterkraft.core.computer.vm.BackgroundComputerVm
 import ru.lazyhat.compukterkraft.core.computer.vm.ComputerVmLogger
 import ru.lazyhat.compukterkraft.core.computer.vm.ComputerVmSupervisor
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerIdeHost
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceIdeHost
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceProfile
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspace
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.VmStopReason
 import java.io.Closeable
 
@@ -44,10 +44,10 @@ class ComputerManager(
 
     // ── Workspace / IDE access (delegated to supervisor) ────────────
 
-    val workspace: ComputerWorkspace get() = vmSupervisor.workspace
-    val ide: ComputerIdeHost get() = vmSupervisor.ide
+    val workspace: DeviceWorkspace get() = vmSupervisor.workspace
+    val ide: DeviceIdeHost get() = vmSupervisor.ide
 
-    fun ensureWorkspaceInitialized(computerId: Int) = vmSupervisor.ensureWorkspaceInitialized(computerId)
+    fun ensureWorkspaceInitialized(deviceId: Int) = vmSupervisor.ensureWorkspaceInitialized(deviceId)
 
     // ── ServerComputer registry ─────────────────────────────────────
 
@@ -65,16 +65,16 @@ class ComputerManager(
     // ── VM handle management (delegated to supervisor) ──────────────
 
     fun getOrCreateVm(
-        computerId: Int,
+        deviceId: Int,
         profile: DeviceProfile,
         labelProvider: () -> String?,
         logger: ComputerVmLogger,
-    ): BackgroundComputerVm = vmSupervisor.getOrCreate(computerId, profile, labelProvider, logger)
+    ): BackgroundComputerVm = vmSupervisor.getOrCreate(deviceId, profile, labelProvider, logger)
 
     fun removeVm(
-        computerId: Int,
+        deviceId: Int,
         reason: VmStopReason = VmStopReason.CLOSED,
-    ) = vmSupervisor.remove(computerId, reason)
+    ) = vmSupervisor.remove(deviceId, reason)
 
     // ── Lifecycle ───────────────────────────────────────────────────
 

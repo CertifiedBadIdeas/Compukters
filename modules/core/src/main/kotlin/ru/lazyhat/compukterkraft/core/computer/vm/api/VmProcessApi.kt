@@ -31,7 +31,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.DeviceTerminalApi
 internal class VmProcessApi(
     private val ctx: VmContext,
     private val initialArgument: String,
-    private val computerId: Int,
+    private val deviceId: Int,
     private val pathResolver: VmPathResolver,
     private val filesystemApi: VmFileSystemApi,
     private val programLoader: WorkspaceProgramLoader,
@@ -55,8 +55,8 @@ internal class VmProcessApi(
     ): Int {
         val resolved = path
         val programSource =
-            programLoader.load(computerId, resolved) ?: run {
-                ctx.log("VM[$computerId] missing program: $resolved")
+            programLoader.load(deviceId, resolved) ?: run {
+                ctx.log("VM[$deviceId] missing program: $resolved")
                 return 1
             }
         val compiledProgram = ComputerProgramCompiler.compile(programSource.path, programSource.source, profile)

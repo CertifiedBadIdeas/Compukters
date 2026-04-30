@@ -24,7 +24,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 import ru.lazyhat.compukterkraft.common.workbench.context.ServerWorkbench
-import ru.lazyhat.compukterkraft.core.computer.vm.ComputerWorkspaceHost
+import ru.lazyhat.compukterkraft.core.computer.vm.DeviceWorkspaceHost
 import ru.lazyhat.compukterkraft.core.workbench.TargetControlGateway
 import ru.lazyhat.compukterkraft.core.workbench.LocalEdit
 import ru.lazyhat.compukterkraft.core.workbench.WorkbenchIdeFacade
@@ -37,8 +37,8 @@ import ru.lazyhat.compukterkraft.core.workbench.WorkspaceGateway
 import ru.lazyhat.compukterkraft.core.workbench.crdt.Op
 import ru.lazyhat.compukterkraft.core.workbench.crdt.SiteId
 import ru.lazyhat.compukterkraft.lang.runtime.CompletionItem
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerIdeSnapshot
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceDocument
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceIdeSnapshot
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspaceDocument
 import kotlin.io.path.createTempDirectory
 import kotlin.random.Random
 import kotlin.test.Test
@@ -60,7 +60,7 @@ class WorkbenchSyncIntegrationTest {
     fun clientAndServerConvergeAfterRandomEditsAndFlushAndRun() =
         runTest(StandardTestDispatcher()) {
             val workspaceRoot = createTempDirectory("workbench-sync-integration")
-            val workspace = ComputerWorkspaceHost(workspaceRoot)
+            val workspace = DeviceWorkspaceHost(workspaceRoot)
             val server = ServerWorkbench(workspaceId = 7, workspace = workspace)
             val path = "main.ck"
             server.write(path, "fun main() {}")
@@ -79,7 +79,7 @@ class WorkbenchSyncIntegrationTest {
             val updates = MutableUpdateSource()
             updates.push(
                 WorkbenchRemoteState(
-                    document = ComputerWorkspaceDocument(path, "fun main() {}", version = 1),
+                    document = DeviceWorkspaceDocument(path, "fun main() {}", version = 1),
                     target = WorkbenchTargetState(connected = true, displayName = "Pocket Dev", familyId = "advanced"),
                 ),
             )
@@ -179,9 +179,9 @@ class WorkbenchSyncIntegrationTest {
         override fun analyze(
             path: String,
             source: String,
-        ): ComputerIdeSnapshot =
-            ComputerIdeSnapshot(
-                document = ComputerWorkspaceDocument(path, source, version = 0),
+        ): DeviceIdeSnapshot =
+            DeviceIdeSnapshot(
+                document = DeviceWorkspaceDocument(path, source, version = 0),
                 diagnostics = emptyList(),
                 highlights = emptyList(),
             )

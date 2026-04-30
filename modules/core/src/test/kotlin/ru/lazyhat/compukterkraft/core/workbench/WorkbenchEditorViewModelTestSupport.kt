@@ -24,9 +24,9 @@ import kotlinx.coroutines.test.TestScope
 import ru.lazyhat.compukterkraft.lang.api.SourceLocation
 import ru.lazyhat.compukterkraft.lang.api.SourceRange
 import ru.lazyhat.compukterkraft.lang.runtime.CompletionItem
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerIdeSnapshot
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceDocument
-import ru.lazyhat.compukterkraft.lang.runtime.ComputerWorkspaceEntry
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceIdeSnapshot
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspaceDocument
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspaceEntry
 import ru.lazyhat.compukterkraft.lang.runtime.DefinitionTarget
 import ru.lazyhat.compukterkraft.lang.runtime.HoverInfo
 
@@ -46,7 +46,7 @@ internal object WorkbenchEditorViewModelTestSupport {
         val store = WorkbenchStore(StubWorkspaceGateway(), StubControlGateway(), StubIdeFacade())
         val updates = StubUpdateSource()
         store.bind(scope.backgroundScope, updates)
-        updates.push(document = ComputerWorkspaceDocument(path, text, 0), target = target)
+        updates.push(document = DeviceWorkspaceDocument(path, text, 0), target = target)
         return store
     }
 
@@ -55,8 +55,8 @@ internal object WorkbenchEditorViewModelTestSupport {
         override val stateFlow: StateFlow<WorkbenchRemoteState> = flow
 
         fun push(
-            entries: List<ComputerWorkspaceEntry> = emptyList(),
-            document: ComputerWorkspaceDocument? = null,
+            entries: List<DeviceWorkspaceEntry> = emptyList(),
+            document: DeviceWorkspaceDocument? = null,
             target: WorkbenchTargetState = WorkbenchTargetState(),
         ) {
             flow.value = WorkbenchRemoteState(entries = entries, document = document, target = target)
@@ -81,9 +81,9 @@ internal object WorkbenchEditorViewModelTestSupport {
         override fun analyze(
             path: String,
             source: String,
-        ): ComputerIdeSnapshot =
-            ComputerIdeSnapshot(
-                document = ComputerWorkspaceDocument(path, source, 0),
+        ): DeviceIdeSnapshot =
+            DeviceIdeSnapshot(
+                document = DeviceWorkspaceDocument(path, source, 0),
                 diagnostics = emptyList(),
                 highlights = emptyList(),
             )

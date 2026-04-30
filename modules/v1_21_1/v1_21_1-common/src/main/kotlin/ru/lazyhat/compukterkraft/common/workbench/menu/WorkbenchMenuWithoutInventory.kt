@@ -60,7 +60,7 @@ class WorkbenchMenuWithoutInventory(
             object : WorkbenchPositionableSlot(targetContainer, 0, 12, 7) {
                 override fun mayPlace(stack: ItemStack): Boolean {
                     val descriptor = ServerWorkbench.extractTargetDescriptor(stack)
-                    return descriptor.computerId != null || descriptor.familyId != null
+                    return descriptor.deviceId != null || descriptor.familyId != null
                 }
 
                 override fun mayPickup(player: Player): Boolean = true
@@ -101,9 +101,9 @@ class WorkbenchMenuWithoutInventory(
 
     private fun syncTargetStack() {
         val stack = targetContainer.getItem(0).copy()
-        val previousComputerId = serverWorkbench?.targetDescriptor()?.computerId
+        val previousComputerId = serverWorkbench?.targetDescriptor()?.deviceId
         serverWorkbench?.setTarget(stack)
-        val computerChanged = previousComputerId != serverWorkbench?.targetDescriptor()?.computerId
+        val computerChanged = previousComputerId != serverWorkbench?.targetDescriptor()?.deviceId
         onTargetStackChanged?.invoke(stack)
         // When the bound computer changes, the previously open document path belongs to the
         // OLD computer's workspace. Forcing `null` here makes ServerWorkbench.snapshot() fall

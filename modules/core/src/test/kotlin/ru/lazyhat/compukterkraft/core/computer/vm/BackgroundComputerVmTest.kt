@@ -48,7 +48,7 @@ class BackgroundComputerVmTest {
 
             val vm =
                 BackgroundComputerVm(
-                    computerId = 1,
+                    deviceId = 1,
                     profile = runtimeProfile(),
                     dispatcher = Dispatchers.Default,
                     labelProvider = { null },
@@ -81,7 +81,7 @@ class BackgroundComputerVmTest {
         val root = createTempDirectory("compukterkraft-background-vm")
 
         try {
-            val workspace = ComputerWorkspaceHost(root)
+            val workspace = DeviceWorkspaceHost(root)
             workspace.writeDocument(1, "bios.ck", "fun main() { }")
 
             val profile =
@@ -105,7 +105,7 @@ class BackgroundComputerVmTest {
 
             val vm =
                 BackgroundComputerVm(
-                    computerId = 1,
+                    deviceId = 1,
                     profile = profile,
                     dispatcher = Dispatchers.Default,
                     labelProvider = { null },
@@ -140,7 +140,7 @@ class BackgroundComputerVmTest {
         val root = createTempDirectory("compukterkraft-background-vm")
 
         try {
-            val workspace = ComputerWorkspaceHost(root)
+            val workspace = DeviceWorkspaceHost(root)
             workspace.writeDocument(1, "bios.ck", "import filesystem;\nfun main() {}")
 
             val profile =
@@ -164,7 +164,7 @@ class BackgroundComputerVmTest {
 
             val vm =
                 BackgroundComputerVm(
-                    computerId = 1,
+                    deviceId = 1,
                     profile = profile,
                     dispatcher = Dispatchers.Default,
                     labelProvider = { null },
