@@ -189,11 +189,13 @@ internal data class ModuleExports(
     val canonical: String,
     val functions: Map<String, FunctionDeclaration>,
     val structs: Map<String, StructDeclaration>,
+    val classes: Map<String, ClassDeclaration>,
 ) {
     constructor(canonical: String, program: Program) : this(
         canonical = canonical,
         functions = program.declarations.filterIsInstance<FunctionDeclaration>().associateBy { it.name },
         structs = program.declarations.filterIsInstance<StructDeclaration>().associateBy { it.name },
+        classes = program.declarations.filterIsInstance<ClassDeclaration>().associateBy { it.name },
     )
 }
 
@@ -364,7 +366,7 @@ internal class SemanticAnalyzer(
                 diagnostics += FrontendDiagnostic("Namespace `${source.name}` has no member `${item.name}`.", item.range)
                 return@forEach
             }
-            if (importedModules.containsKey(item.name) || importAliases.containsKey(item.name) || userFunctionsByName.containsKey(item.name) || userRecordsByName.containsKey(item.name)) {
+            if (importedModules.containsKey(item.name) || importAliases.containsKey(item.name) || userFunctionsByName.containsKey(item.name) || userRecordsByName.containsKey(item.name) || userClassesByName.containsKey(item.name)) {
                 diagnostics += FrontendDiagnostic("Redeclaration of `${item.name}`.", item.range)
                 return@forEach
             }
@@ -397,7 +399,7 @@ internal class SemanticAnalyzer(
     ) {
         val alias = mode.alias
         val range = mode.aliasRange
-        if (importedModules.containsKey(alias) || importAliases.containsKey(alias) || userFunctionsByName.containsKey(alias) || userRecordsByName.containsKey(alias)) {
+        if (importedModules.containsKey(alias) || importAliases.containsKey(alias) || userFunctionsByName.containsKey(alias) || userRecordsByName.containsKey(alias) || userClassesByName.containsKey(alias)) {
             diagnostics += FrontendDiagnostic("Redeclaration of `$alias`.", range)
             return
         }
@@ -425,12 +427,14 @@ internal class SemanticAnalyzer(
             }
             val struct = exports.structs[item.name]
             val function = exports.functions[item.name]
-            if (struct == null && function == null) {
+            val klass = exports.classes[item.name]
+            if (struct == null && function == null && klass == null) {
                 diagnostics += FrontendDiagnostic("File `${source.path}` has no export `${item.name}`.", item.range)
                 return@forEach
             }
             if (struct != null) registerSelectedRecord(item, struct, exports)
             if (function != null) registerSelectedFunction(item, function, exports)
+            if (klass != null) registerSelectedClass(item, klass, exports)
         }
     }
 
@@ -439,7 +443,7 @@ internal class SemanticAnalyzer(
         struct: StructDeclaration,
         exports: ModuleExports,
     ) {
-        if (importedModules.containsKey(item.name) || importAliases.containsKey(item.name) || typeNames.containsKey(item.name) || userRecordsByName.containsKey(item.name)) {
+        if (importedModules.containsKey(item.name) || importAliases.containsKey(item.name) || typeNames.containsKey(item.name) || userRecordsByName.containsKey(item.name) || userClassesByName.containsKey(item.name)) {
             diagnostics += FrontendDiagnostic("Redeclaration of `${item.name}`.", item.range)
             return
         }
@@ -454,12 +458,28 @@ internal class SemanticAnalyzer(
         function: FunctionDeclaration,
         exports: ModuleExports,
     ) {
-        if (importedModules.containsKey(item.name) || importAliases.containsKey(item.name) || userFunctionsByName.containsKey(item.name) || userRecordsByName.containsKey(item.name)) {
+        if (importedModules.containsKey(item.name) || importAliases.containsKey(item.name) || userFunctionsByName.containsKey(item.name) || userRecordsByName.containsKey(item.name) || userClassesByName.containsKey(item.name)) {
             diagnostics += FrontendDiagnostic("Redeclaration of `${item.name}`.", item.range)
             return
         }
         val binding = functionBindingForExport(item.name, function, exports, qualifier = null, item.range)
         userFunctionsByName[item.name] = binding
+        symbols += binding.symbol
+    }
+
+    private fun registerSelectedClass(
+        item: ImportItem,
+        klass: ClassDeclaration,
+        exports: ModuleExports,
+    ) {
+        if (importedModules.containsKey(item.name) || importAliases.containsKey(item.name) || typeNames.containsKey(item.name) || userRecordsByName.containsKey(item.name) || userClassesByName.containsKey(item.name)) {
+            diagnostics += FrontendDiagnostic("Redeclaration of `${item.name}`.", item.range)
+            return
+        }
+        val binding = classBindingForExport(item.name, klass, exports, qualifier = null, item.range)
+        typeNames[item.name] = TypeRef(item.name)
+        userClassesByName[item.name] = binding
+        classBindings[klass] = binding
         symbols += binding.symbol
     }
 
@@ -505,13 +525,75 @@ internal class SemanticAnalyzer(
         return RecordBinding(symbol, struct, fields)
     }
 
+        private fun classBindingForExport(
+            visibleName: String,
+            klass: ClassDeclaration,
+            exports: ModuleExports,
+            qualifier: String?,
+            range: SourceRange,
+        ): ClassBinding {
+            val fields = linkedMapOf<String, ClassFieldBinding>()
+            klass.constructorParameters.forEach { parameter ->
+                val mutability = parameter.fieldMutability ?: return@forEach
+                val type = exportTypeRef(parameter.type, exports, qualifier)
+                val symbol =
+                    SymbolInfo(
+                        name = parameter.name,
+                        kind = SymbolKind.FIELD,
+                        range = parameter.range,
+                        detail = "$visibleName.${parameter.name}: ${type.displayName}",
+                    )
+                fields[parameter.name] = ClassFieldBinding(parameter.name, type, mutability == FieldMutability.VAR, symbol)
+            }
+            klass.members.filterIsInstance<ClassFieldDeclaration>().forEach { field ->
+                val type = field.type?.let { exportTypeRef(it, exports, qualifier) } ?: TypeRef("Unit")
+                val symbol =
+                    SymbolInfo(
+                        name = field.name,
+                        kind = SymbolKind.FIELD,
+                        range = field.range,
+                        detail = "$visibleName.${field.name}: ${type.displayName}",
+                    )
+                fields[field.name] = ClassFieldBinding(field.name, type, field.mutable, symbol)
+            }
+
+            fun methodBinding(member: ClassMethodDeclaration): ClassMethodBinding {
+                val function = member.function
+                val parameterTypes = function.parameters.map { exportTypeRef(it.type, exports, qualifier) }
+                val returnType = function.returnType?.let { exportTypeRef(it, exports, qualifier) } ?: TypeRef("Unit")
+                val symbol =
+                    SymbolInfo(
+                        name = function.name,
+                        kind = SymbolKind.METHOD,
+                        range = function.range,
+                        detail = "fun $visibleName.${function.name}(${parameterTypes.joinToString { it.displayName }}) : ${returnType.displayName}",
+                    )
+                return ClassMethodBinding(function.name, function, parameterTypes, returnType, member.static, symbol)
+            }
+
+            val instanceMethods = linkedMapOf<String, ClassMethodBinding>()
+            val staticMethods = linkedMapOf<String, ClassMethodBinding>()
+            klass.members.filterIsInstance<ClassMethodDeclaration>().forEach { member ->
+                val binding = methodBinding(member)
+                if (member.static) staticMethods[binding.name] = binding else instanceMethods[binding.name] = binding
+            }
+            val symbol =
+                SymbolInfo(
+                    name = visibleName,
+                    kind = SymbolKind.CLASS,
+                    range = range,
+                    detail = "class $visibleName",
+                )
+            return ClassBinding(symbol, klass, klass.constructorParameters, fields, instanceMethods, staticMethods)
+        }
+
     private fun exportTypeRef(
         syntax: TypeSyntax,
         exports: ModuleExports,
         qualifier: String?,
     ): TypeRef {
         val typeName =
-            if (syntax.qualifier == null && exports.structs.containsKey(syntax.name) && qualifier != null) {
+            if (syntax.qualifier == null && (exports.structs.containsKey(syntax.name) || exports.classes.containsKey(syntax.name)) && qualifier != null) {
                 "$qualifier::${syntax.name}"
             } else {
                 syntax.displayName.removeSuffix("?")
