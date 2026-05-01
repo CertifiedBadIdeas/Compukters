@@ -37,6 +37,7 @@ import ru.lazyhat.compukterkraft.core.workbench.WorkspaceGateway
 import ru.lazyhat.compukterkraft.lang.api.BuiltinRegistry
 import ru.lazyhat.compukterkraft.lang.frontend.AnalyzedProgram
 import ru.lazyhat.compukterkraft.lang.frontend.EmptySourceIndex
+import ru.lazyhat.compukterkraft.lang.frontend.FormatResult
 import ru.lazyhat.compukterkraft.lang.frontend.LanguageBuiltins
 import ru.lazyhat.compukterkraft.lang.frontend.LanguageFrontend
 import ru.lazyhat.compukterkraft.lang.frontend.LanguageIde
@@ -245,4 +246,14 @@ class LanguageWorkbenchIdeFacade(
         line: Int,
         column: Int,
     ): DefinitionTarget? = ide.definition(path, source, line, column)
+
+    override fun formatDocument(
+        path: String,
+        source: String,
+    ): FormatResult = ide.formatDocument(path, source)
+
+    override fun cleanupDocument(
+        path: String,
+        source: String,
+    ): FormatResult = ide.cleanupDocument(path, source)
 }

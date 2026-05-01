@@ -34,6 +34,7 @@ class LanguageIde(
     private val registry: ru.lazyhat.compukterkraft.lang.api.BuiltinRegistry = frontend.registry,
     private val parser: ParserFacade = DefaultParserFacade(),
     private val sourceIndex: SourceIndex = EmptySourceIndex,
+    private val formatter: LanguageFormatter = LanguageFormatter(parser),
 ) : IdeFacade {
     override fun analyze(
         name: String,
@@ -301,6 +302,16 @@ class LanguageIde(
                 ?.range ?: return null
         return DefinitionTarget(path = name, range = targetRange)
     }
+
+    override fun formatDocument(
+        name: String,
+        source: String,
+    ): FormatResult = formatter.formatDocument(name, source)
+
+    override fun cleanupDocument(
+        name: String,
+        source: String,
+    ): FormatResult = formatter.cleanupDocument(name, source, sourceIndex as? SourceLoader ?: NoOpSourceLoader)
 
     data class IdeSnapshot(
         val diagnostics: List<Diagnostic>,

@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.test.TestScope
 import ru.lazyhat.compukterkraft.lang.api.SourceLocation
 import ru.lazyhat.compukterkraft.lang.api.SourceRange
+import ru.lazyhat.compukterkraft.lang.frontend.FormatResult
 import ru.lazyhat.compukterkraft.lang.runtime.CompletionItem
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceIdeSnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspaceDocument
@@ -119,5 +120,15 @@ internal object WorkbenchEditorViewModelTestSupport {
                 path = path,
                 range = SourceRange(SourceLocation(0, 0, 0), SourceLocation(0, 0, 0)),
             )
+
+        override fun formatDocument(
+            path: String,
+            source: String,
+        ): FormatResult = FormatResult(emptyList())
+
+        override fun cleanupDocument(
+            path: String,
+            source: String,
+        ): FormatResult = FormatResult(emptyList())
     }
 }
