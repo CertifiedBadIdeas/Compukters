@@ -44,6 +44,32 @@ class UserFileImportsTest {
     }
 
     @Test
+    fun selectiveImportCanImportClass() {
+        val loader =
+            MapSourceLoader(
+                mapOf(
+                    "main.ck" to
+                        """
+                        import "model.ck" { Counter };
+                        fun main() {
+                            val counter: Counter = Counter(value = 2);
+                            terminal::println("value=" + counter.value);
+                        }
+                        """.trimIndent(),
+                    "model.ck" to "class Counter(var value: Int) {}",
+                ),
+            )
+
+        val artifact = frontend.compile("main.ck", loader.read("main.ck")!!, loader)
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+        assertNotNull(artifact.module)
+    }
+
+    @Test
     fun rejectsFlatFileImport() {
         val loader = MapSourceLoader(mapOf("math.ck" to "fun add(): Int { return 1; }"))
 
