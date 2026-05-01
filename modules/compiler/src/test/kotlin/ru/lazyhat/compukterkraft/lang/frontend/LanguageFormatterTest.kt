@@ -166,6 +166,46 @@ class LanguageFormatterTest {
         assertTrue(formatted.contains("/* call comment */"), formatted)
     }
 
+    @Test
+    fun formatSortsAndMergesSelectiveImports() {
+        val source =
+            """
+            import "z.ck" { Zebra };
+            import terminal { write, println };
+            import "a.ck" { Beta };
+            import "a.ck" { Alpha };
+            fun main() { println("hi"); }
+            """.trimIndent()
+
+        val expected =
+            """
+            import "a.ck" { Alpha, Beta };
+            import "z.ck" { Zebra };
+            import terminal { println, write };
+
+            fun main() {
+                println("hi");
+            }
+            """.trimIndent() + "\n"
+
+        val formatted = applySingleEdit(source, formatter.formatDocument("main.ck", source))
+
+        assertEquals(expected, formatted)
+    }
+
+    @Test
+    fun formatDoesNotRemoveUnusedImports() {
+        val source =
+            """
+            import terminal { clear, println };
+            fun main() { println("hi"); }
+            """.trimIndent()
+
+        val formatted = applySingleEdit(source, formatter.formatDocument("main.ck", source))
+
+        assertTrue(formatted.contains("clear"), formatted)
+    }
+
     private fun applySingleEdit(
         source: String,
         result: FormatResult,
