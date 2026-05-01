@@ -194,4 +194,59 @@ class UserFileImportsTest {
             artifact.analysis.diagnostics.joinToString { it.message },
         )
     }
+
+    @Test
+    fun importGraphCycleDoesNotInfinitelyRecurse() {
+        val loader =
+            MapSourceLoader(
+                mapOf(
+                    "a.ck" to """import "b.ck"; fun aFn(): Int { return 1; }""",
+                    "b.ck" to """import "a.ck"; fun bFn(): Int { return 2; }""",
+                    "main.ck" to
+                        """
+                        import "a.ck";
+                        import "b.ck";
+                        fun main() {
+                            terminal::println("a=" + aFn() + " b=" + bFn());
+                        }
+                        """.trimIndent(),
+                ),
+            )
+
+        val artifact = frontend.compile("main.ck", loader.read("main.ck")!!, loader)
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+        assertNotNull(artifact.module)
+    }
+
+    @Test
+    fun diamondImportCompilesOncePerFile() {
+        val loader =
+            MapSourceLoader(
+                mapOf(
+                    "leaf.ck" to "fun leaf(): Int { return 9; }",
+                    "left.ck" to """import "leaf.ck" as l; fun left(): Int { return l::leaf(); }""",
+                    "right.ck" to """import "leaf.ck" as l; fun right(): Int { return l::leaf(); }""",
+                    "main.ck" to
+                        """
+                        import "left.ck";
+                        import "right.ck";
+                        fun main() {
+                            terminal::println("sum=" + (left() + right()));
+                        }
+                        """.trimIndent(),
+                ),
+            )
+
+        val artifact = frontend.compile("main.ck", loader.read("main.ck")!!, loader)
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+        assertNotNull(artifact.module)
+    }
 }
