@@ -196,6 +196,22 @@ val v: m::Vec2 = m::Vec2(x = 1, y = 2);
 val w: m::Vec2 = m::add(v, v);
 ```
 
+## Formatting and cleanup
+
+The CKL IDE API exposes parser-based document formatting and cleanup.
+
+Format Document:
+
+- renders source in the canonical CKL style with four-space indentation;
+- keeps line and block comments;
+- sorts imports by source and merges duplicate selective import groups;
+- sorts names inside selective import groups;
+- does not remove unused imports.
+
+Cleanup Document runs the same formatter and additionally removes unused names from selective import groups when the source parses and analyses without errors. If syntax or semantic errors are present, cleanup returns no edits.
+
+Both actions return no edits for invalid or incomplete source instead of attempting a partial rewrite.
+
 `terminal`
 
 - `write(text: String): Unit`
