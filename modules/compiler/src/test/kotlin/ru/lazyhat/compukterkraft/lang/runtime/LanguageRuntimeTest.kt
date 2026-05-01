@@ -238,6 +238,36 @@ class LanguageRuntimeTest {
     }
 
     @Test
+    fun classInitAndStaticMethodsRun() {
+        val artifact =
+            frontend.compile(
+                "class_init_static.ck",
+                """
+                class Counter(var value: Int) {
+                    init { this.value = this.value + 1; }
+                    fun current(): Int { return this.value; }
+                    static fun zero(): Counter { return Counter(value = 0); }
+                }
+                fun main() {
+                    val counter: Counter = Counter.zero();
+                    terminal::println("value=" + counter.current());
+                }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+        val runtime = RecordingRuntime()
+        runBlocking {
+            BytecodeComputerProgram(requireNotNull(artifact.module)).run(runtime)
+        }
+
+        assertEquals(listOf("value=1"), runtime.lines)
+    }
+
+    @Test
     fun snapshotRoundTripRestoresExecutionState() {
         val artifact =
             frontend.compile(
