@@ -336,11 +336,12 @@ class WorkbenchStore(
                 _state.value =
                     state.copy(
                         editor =
-                            state.editor.copy(
-                                text = nextText,
-                                cursorLine = line,
-                                cursorColumn = column,
-                            ).keepCursorVisible(visibleEditorLines),
+                            state.editor
+                                .copy(
+                                    text = nextText,
+                                    cursorLine = line,
+                                    cursorColumn = column,
+                                ).keepCursorVisible(visibleEditorLines),
                     )
                 refreshIde()
             } else {
