@@ -732,6 +732,13 @@ internal class SemanticAnalyzer(
                     diagnostics += FrontendDiagnostic("Redeclaration of field `${field.name}`.", field.range)
                     return@forEach
                 }
+                if (field.type == null && field.initializer == null) {
+                    diagnostics +=
+                        FrontendDiagnostic(
+                            "Field `${field.name}` requires a type or initializer.",
+                            field.range,
+                        )
+                }
                 val fieldType = field.type?.let { resolveType(it, it.range) } ?: TypeRef("Unit")
                 val fieldSymbol =
                     SymbolInfo(
@@ -846,10 +853,18 @@ internal class SemanticAnalyzer(
             when (member) {
                 is ClassFieldDeclaration -> {
                     withClassContext(binding, staticMethod = false, construction = true) {
-                        val expected = binding.fields[member.name]?.type
-                        val actual = analyzeExpression(member.initializer, constructorScope)
-                        if (expected != null) {
-                            expectAssignable(actual, expected, member.initializer.range, "Field initializer type mismatch.")
+                        val initializer = member.initializer
+                        if (initializer != null) {
+                            val expected = binding.fields[member.name]?.type
+                            val actual = analyzeExpression(initializer, constructorScope)
+                            if (expected != null) {
+                                expectAssignable(
+                                    actual,
+                                    expected,
+                                    initializer.range,
+                                    "Field initializer type mismatch.",
+                                )
+                            }
                         }
                     }
                 }
@@ -2352,11 +2367,20 @@ internal class BytecodeCompiler(
             classBinding: ClassBinding,
         ) {
             val namedArguments = expression.arguments.filterIsInstance<NamedCallArgument>().associateBy { it.name }
+            val constructorParameterSlots = mutableMapOf<String, Int>()
+            classBinding.constructorParameters.forEach { parameter ->
+                val argument = namedArguments[parameter.name] ?: return@forEach
+                compileExpression(argument.expression)
+                val slot = locals.size
+                locals += BytecodeLocal("\$${parameter.name}", parameter.type.name)
+                instructions += Instruction.StoreLocal(slot)
+                constructorParameterSlots[parameter.name] = slot
+            }
             val fieldNames = mutableListOf<String>()
             classBinding.constructorParameters.forEach { parameter ->
                 if (parameter.fieldMutability != null) {
-                    namedArguments[parameter.name]?.let { argument ->
-                        compileExpression(argument.expression)
+                    constructorParameterSlots[parameter.name]?.let { slot ->
+                        instructions += Instruction.LoadLocal(slot)
                         fieldNames += parameter.name
                     }
                 }
@@ -2366,15 +2390,18 @@ internal class BytecodeCompiler(
                 val objectSlot = locals.size
                 locals += BytecodeLocal("\$${classBinding.symbol.name}", classBinding.symbol.name)
                 instructions += Instruction.StoreLocal(objectSlot)
+                scopes.addLast(constructorParameterSlots.toMutableMap())
                 val previousThisSlot = temporaryThisSlot
                 temporaryThisSlot = objectSlot
                 classBinding.declaration.members.forEach { member ->
                     when (member) {
                         is ClassFieldDeclaration -> {
-                            instructions += Instruction.LoadLocal(objectSlot)
-                            compileExpression(member.initializer)
-                            instructions += Instruction.SetField(member.name)
-                            instructions += Instruction.Pop
+                            member.initializer?.let { initializer ->
+                                instructions += Instruction.LoadLocal(objectSlot)
+                                compileExpression(initializer)
+                                instructions += Instruction.SetField(member.name)
+                                instructions += Instruction.Pop
+                            }
                         }
 
                         is ClassInitBlock -> {
@@ -2387,6 +2414,7 @@ internal class BytecodeCompiler(
                     }
                 }
                 temporaryThisSlot = previousThisSlot
+                scopes.removeLast()
                 instructions += Instruction.LoadLocal(objectSlot)
             }
         }
@@ -2970,15 +2998,20 @@ internal class Parser(
     ): ClassFieldDeclaration? {
         val name = consume(TokenKind.IDENTIFIER, "Expected field name.") ?: return null
         val type = if (match(TokenKind.COLON)) parseType() else null
-        consume(TokenKind.EQUAL, "Expected `=` in field declaration.") ?: return null
-        val initializer = parseExpression() ?: return null
+        val initializer =
+            if (match(TokenKind.EQUAL)) {
+                parseExpression() ?: return null
+            } else {
+                null
+            }
         consumeOptional(TokenKind.SEMICOLON)
+        val end = initializer?.range?.end ?: type?.range?.end ?: name.range.end
         return ClassFieldDeclaration(
             name = name.text,
             type = type,
             mutable = mutable,
             initializer = initializer,
-            range = SourceRange(start.range.start, initializer.range.end),
+            range = SourceRange(start.range.start, end),
         )
     }
 

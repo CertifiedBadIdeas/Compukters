@@ -49,7 +49,7 @@ data class ClassFieldDeclaration(
     val name: String,
     val type: TypeSyntax?,
     val mutable: Boolean,
-    val initializer: Expression,
+    val initializer: Expression?,
     override val range: SourceRange,
 ) : ClassMemberDeclaration
 

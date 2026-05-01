@@ -268,6 +268,76 @@ class LanguageRuntimeTest {
     }
 
     @Test
+    fun classFieldInitializersCanReadPlainConstructorParameters() {
+        val artifact =
+            frontend.compile(
+                "class_plain_constructor_parameter.ck",
+                """
+                class SomeClass(constK: Int) {
+                    val k: Int = constK;
+
+                    fun instancePlus2(): Int {
+                        return this.k + 2;
+                    }
+                }
+
+                fun main() {
+                    val instance: SomeClass = SomeClass(constK = 22);
+                    terminal::println("INSTANCE " + instance.instancePlus2());
+                }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+        val runtime = RecordingRuntime()
+        runBlocking {
+            BytecodeComputerProgram(requireNotNull(artifact.module)).run(runtime)
+        }
+
+        assertEquals(listOf("INSTANCE 24"), runtime.lines)
+    }
+
+    @Test
+    fun classFieldsCanBeInitializedInInitBlocks() {
+        val artifact =
+            frontend.compile(
+                "class_init_field.ck",
+                """
+                class SomeClass(constK: Int) {
+                    val k: Int;
+
+                    init {
+                        this.k = constK;
+                    }
+
+                    fun current(): Int {
+                        return this.k;
+                    }
+                }
+
+                fun main() {
+                    val instance: SomeClass = SomeClass(constK = 22);
+                    terminal::println("k=" + instance.current());
+                }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+        val runtime = RecordingRuntime()
+        runBlocking {
+            BytecodeComputerProgram(requireNotNull(artifact.module)).run(runtime)
+        }
+
+        assertEquals(listOf("k=22"), runtime.lines)
+    }
+
+    @Test
     fun snapshotRoundTripRestoresExecutionState() {
         val artifact =
             frontend.compile(
