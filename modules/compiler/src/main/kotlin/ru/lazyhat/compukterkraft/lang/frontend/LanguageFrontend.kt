@@ -782,6 +782,14 @@ internal class SemanticAnalyzer(
         expression: RecordConstructionExpression,
         scope: Scope,
     ): TypeRef {
+        if (expression.qualifier != null) {
+            diagnostics +=
+                FrontendDiagnostic(
+                    "Qualified record construction is not yet supported.",
+                    expression.range,
+                )
+            return TypeRef(expression.typeName)
+        }
         val record = userRecordsByName[expression.typeName]
         if (record == null) {
             diagnostics +=
@@ -919,6 +927,15 @@ internal class SemanticAnalyzer(
         syntax: TypeSyntax,
         range: SourceRange,
     ): TypeRef? {
+        if (syntax.qualifier != null) {
+            diagnostics +=
+                FrontendDiagnostic(
+                    "Qualified types are not yet supported. " +
+                        "User-file imports introducing namespaces will land in the next version.",
+                    syntax.range,
+                )
+            return TypeRef(syntax.name, nullable = syntax.nullable)
+        }
         val type =
             typeNames[syntax.name] ?: run {
                 diagnostics +=
