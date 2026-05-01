@@ -20,6 +20,7 @@ package ru.lazyhat.compukterkraft.core.device.runtime
 
 import ru.lazyhat.compukterkraft.core.language.LanguageServices
 import ru.lazyhat.compukterkraft.lang.api.BuiltinRegistry
+import ru.lazyhat.compukterkraft.lang.api.BytecodeClass
 import ru.lazyhat.compukterkraft.lang.api.BytecodeFunction
 import ru.lazyhat.compukterkraft.lang.api.BytecodeModule
 import ru.lazyhat.compukterkraft.lang.api.BytecodeRecord
@@ -94,7 +95,8 @@ private fun BytecodeModule.estimatedRomBytes(): Long =
     name.length.toLong() +
         16L +
         functions.sumOf(BytecodeFunction::estimatedRomBytes) +
-        records.sumOf(BytecodeRecord::estimatedRomBytes)
+        records.sumOf(BytecodeRecord::estimatedRomBytes) +
+        classes.sumOf(BytecodeClass::estimatedRomBytes)
 
 private fun BytecodeFunction.estimatedRomBytes(): Long =
     name.length.toLong() +
@@ -107,11 +109,22 @@ private fun BytecodeFunction.estimatedRomBytes(): Long =
 private fun BytecodeRecord.estimatedRomBytes(): Long =
     name.length.toLong() + 8L + fields.sumOf { it.name.length.toLong() + it.typeName.length }
 
+private fun BytecodeClass.estimatedRomBytes(): Long =
+    name.length.toLong() +
+        12L +
+        fields.sumOf { it.name.length.toLong() + it.typeName.length + 1L } +
+        instanceMethods.entries.sumOf { it.key.length.toLong() + 4L } +
+        staticMethods.entries.sumOf { it.key.length.toLong() + 4L } +
+        if (initFunctionIndex != null) 4L else 0L
+
 private fun Instruction.estimatedRomBytes(): Long =
     when (this) {
         is Instruction.Binary -> 4L
         is Instruction.CallBuiltin -> 12L + functionName.length + (moduleName?.length ?: 0)
         is Instruction.CallFunction -> 8L
+        is Instruction.CallMethod -> 8L + methodName.length
+        is Instruction.CallStaticMethod -> 12L + className.length + methodName.length
+        is Instruction.ConstructClass -> 8L + className.length + fieldNames.sumOf(String::length)
         is Instruction.ConstructRecord -> 8L + typeName.length + fieldNames.sumOf(String::length)
         is Instruction.GetField -> 4L + fieldName.length
         is Instruction.Jump -> 4L
@@ -126,6 +139,7 @@ private fun Instruction.estimatedRomBytes(): Long =
         is Instruction.PushString -> 8L + value.length
         Instruction.PushUnit -> 2L
         Instruction.Return -> 2L
+        is Instruction.SetField -> 4L + fieldName.length
         is Instruction.StoreLocal -> 4L
         is Instruction.Unary -> 4L
     }

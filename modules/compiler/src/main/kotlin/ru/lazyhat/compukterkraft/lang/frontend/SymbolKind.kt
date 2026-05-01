@@ -25,7 +25,9 @@ enum class SymbolKind {
     VARIABLE,
     PARAMETER,
     RECORD,
+    CLASS,
     FIELD,
+    METHOD,
     BUILTIN_FUNCTION,
     BUILTIN_TYPE,
 }

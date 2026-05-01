@@ -19,14 +19,15 @@
 
 package ru.lazyhat.compukterkraft.lang.frontend
 
+import ru.lazyhat.compukterkraft.lang.api.ClassDeclaration
+import ru.lazyhat.compukterkraft.lang.api.FunctionDeclaration
+import ru.lazyhat.compukterkraft.lang.api.StructDeclaration
 import ru.lazyhat.compukterkraft.lang.runtime.CompletionItem
 import ru.lazyhat.compukterkraft.lang.runtime.CompletionItemKind
 import ru.lazyhat.compukterkraft.lang.runtime.DefinitionTarget
 import ru.lazyhat.compukterkraft.lang.runtime.Diagnostic
 import ru.lazyhat.compukterkraft.lang.runtime.HighlightToken
 import ru.lazyhat.compukterkraft.lang.runtime.HoverInfo
-import ru.lazyhat.compukterkraft.lang.api.FunctionDeclaration
-import ru.lazyhat.compukterkraft.lang.api.StructDeclaration
 
 class LanguageIde(
     private val frontend: LanguageFrontend = LanguageFrontend(),
@@ -70,9 +71,10 @@ class LanguageIde(
         val prefix = SourceTextSupport.identifierPrefix(source, offset)
         val modulePrefix = SourceTextSupport.moduleMemberPrefix(source, offset)
         return if (modulePrefix != null) {
-            analysis
-                .moduleMembers(modulePrefix.first)
-                .asSequence()
+            buildList {
+                addAll(analysis.moduleMembers(modulePrefix.first))
+                addAll(classMemberSymbols(analysis, source, offset, modulePrefix.first))
+            }.asSequence()
                 .filter { it.name.startsWith(modulePrefix.second) }
                 .map(IdePresentationSupport::completionItem)
                 .distinctBy { it.kind to it.label }
@@ -160,6 +162,7 @@ class LanguageIde(
                 parsed.program.declarations.asSequence().mapNotNull { declaration ->
                     val name =
                         when (declaration) {
+                            is ClassDeclaration -> declaration.name
                             is FunctionDeclaration -> declaration.name
                             is StructDeclaration -> declaration.name
                         }
@@ -168,21 +171,96 @@ class LanguageIde(
                         label = name,
                         detail =
                             when (declaration) {
+                                is ClassDeclaration -> "class $name"
                                 is FunctionDeclaration -> "fun $name"
                                 is StructDeclaration -> "struct $name"
                             },
                         kind =
                             when (declaration) {
+                                is ClassDeclaration -> CompletionItemKind.TYPE
                                 is FunctionDeclaration -> CompletionItemKind.FUNCTION
                                 is StructDeclaration -> CompletionItemKind.TYPE
                             },
-                        insertText = if (declaration is FunctionDeclaration) "$name()" else null,
+                        insertText =
+                            when (declaration) {
+                                is ClassDeclaration -> "$name("
+                                is FunctionDeclaration -> "$name()"
+                                is StructDeclaration -> null
+                            },
                         cursorOffset = if (declaration is FunctionDeclaration) "$name(".length else null,
                         sourceNamespace = path,
                         additionalTextEdits = listOf(SourceTextSupport.importGroupEdit(ImportGroupEditRequest(source, "\"$path\"", name))),
                     )
                 }
             }.toList()
+
+    private fun classMemberSymbols(
+        analysis: AnalyzedProgram,
+        source: String,
+        offset: Int,
+        receiverName: String,
+    ): List<SymbolInfo> {
+        val semantic = analysis.semantic ?: return incompleteThisMemberSymbols(source, offset, receiverName)
+        val classBinding =
+            if (receiverName == "this") {
+                semantic.classBindings.values.firstOrNull { it.declaration.range.contains(offset) }
+                    ?: semantic.classBindings.values
+                        .filter { it.declaration.range.start.offset <= offset }
+                        .maxByOrNull { it.declaration.range.start.offset }
+            } else {
+                val visibleSymbols = analysis.visibleSymbolsAt(offset)
+                visibleSymbols.firstOrNull { it.name == receiverName && it.kind == SymbolKind.CLASS }?.let { classSymbol ->
+                    semantic.classBindings.values.firstOrNull { it.symbol.name == classSymbol.name }
+                } ?: visibleSymbols
+                    .firstOrNull { it.name == receiverName && (it.kind == SymbolKind.VARIABLE || it.kind == SymbolKind.PARAMETER) }
+                    ?.let { receiverSymbol ->
+                        val receiverType = receiverSymbol.detail.substringAfter(':', "").trim().removeSuffix("?")
+                        semantic.classBindings.values.firstOrNull { it.symbol.name == receiverType }
+                    } ?: declaredReceiverType(source, offset, receiverName)?.let { receiverType ->
+                    semantic.classBindings.values.firstOrNull { it.symbol.name == receiverType }
+                    }
+            } ?: return incompleteThisMemberSymbols(source, offset, receiverName)
+        val staticReceiver = analysis.visibleSymbolsAt(offset).any { it.name == receiverName && it.kind == SymbolKind.CLASS }
+        return if (receiverName == "this" || !staticReceiver) {
+            classBinding.fields.values.map { it.symbol } + classBinding.instanceMethods.values.map { it.symbol }
+        } else {
+            classBinding.staticMethods.values.map { it.symbol }
+        }
+    }
+
+    private fun incompleteThisMemberSymbols(
+        source: String,
+        offset: Int,
+        receiverName: String,
+    ): List<SymbolInfo> {
+        if (receiverName != "this") return emptyList()
+        val classHeader = Regex("class\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\(([^)]*)\\)").findAll(source.take(offset)).lastOrNull() ?: return emptyList()
+        val className = classHeader.groupValues[1]
+        val parameters = classHeader.groupValues[2]
+        return parameters
+            .split(',')
+            .mapNotNull { parameter ->
+                val match = Regex("\\b(?:val|var)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*:\\s*([^,]+)").find(parameter.trim()) ?: return@mapNotNull null
+                val fieldName = match.groupValues[1]
+                val fieldType = match.groupValues[2].trim()
+                SymbolInfo(
+                    name = fieldName,
+                    kind = SymbolKind.FIELD,
+                    range = null,
+                    detail = "$className.$fieldName: $fieldType",
+                )
+            }
+    }
+
+    private fun declaredReceiverType(
+        source: String,
+        offset: Int,
+        receiverName: String,
+    ): String? {
+        val escapedName = Regex.escape(receiverName)
+        val match = Regex("\\b(?:val|var)\\s+$escapedName\\s*:\\s*([A-Za-z_][A-Za-z0-9_:]*\\??)").findAll(source.take(offset)).lastOrNull()
+        return match?.groupValues?.get(1)?.removeSuffix("?")
+    }
 
     override fun hover(
         name: String,

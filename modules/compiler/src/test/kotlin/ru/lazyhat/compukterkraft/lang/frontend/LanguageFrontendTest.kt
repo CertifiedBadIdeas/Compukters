@@ -36,6 +36,36 @@ class LanguageFrontendTest {
     }
 
     @Test
+    fun lexesClassKeywords() {
+        val tokens = Lexer("class Counter(var value: Int) { init {} static fun zero(): Int { return 0; } }").lex()
+
+        assertTrue(tokens.any { it.kind == TokenKind.CLASS }, tokens.joinToString { "${it.kind}:${it.text}" })
+        assertTrue(tokens.any { it.kind == TokenKind.INIT }, tokens.joinToString { "${it.kind}:${it.text}" })
+        assertTrue(tokens.any { it.kind == TokenKind.STATIC }, tokens.joinToString { "${it.kind}:${it.text}" })
+    }
+
+    @Test
+    fun parsesBasicClassDeclaration() {
+        val artifact =
+            frontend.compile(
+                "class_parse.ck",
+                """
+                class Counter(var value: Int) {
+                    init { this.value = value; }
+                    fun current(): Int { return this.value; }
+                    static fun zero(): Counter { return Counter(value = 0); }
+                }
+                fun main() {}
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR && it.message.contains("Expected a top-level declaration") },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+    }
+
+    @Test
     fun parsesScopeCallToBuiltin() {
         val artifact =
             frontend.compile(
@@ -141,7 +171,7 @@ class LanguageFrontendTest {
                 }
 
                 fun main() {
-                    val point: Point = Point { x: 1, y: 2 };
+                    val point: Point = Point(x = 1, y = 2);
                     terminal::println("sum=" + sum(point));
                 }
                 """.trimIndent(),
@@ -154,6 +184,148 @@ class LanguageFrontendTest {
         assertNotNull(artifact.module)
         assertTrue(artifact.analysis.symbols.any { it.name == "Point" })
         assertTrue(artifact.analysis.references.any { it.name == "println" })
+    }
+
+    @Test
+    fun compilesStructCallStyleConstruction() {
+        val artifact =
+            frontend.compile(
+                "struct_call.ck",
+                """
+                struct Point { x: Int, y: Int }
+                fun main() {
+                    val point: Point = Point(x = 1, y = 2);
+                    terminal::println("x=" + point.x);
+                }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+        assertNotNull(artifact.module)
+    }
+
+    @Test
+    fun rejectsOldRecordConstructionSyntax() {
+        val artifact =
+            frontend.compile(
+                "old_record.ck",
+                """
+                struct Point { x: Int, y: Int }
+                fun main() { val point: Point = Point { x: 1, y: 2 }; }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.any { it.severity == FrontendSeverity.ERROR && it.message.contains("Old record construction syntax") },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+        assertEquals(null, artifact.module)
+    }
+
+    @Test
+    fun compilesClassConstructorCall() {
+        val artifact =
+            frontend.compile(
+                "class_ctor.ck",
+                """
+                class Counter(var value: Int) {}
+                fun main() {
+                    val counter: Counter = Counter(value = 3);
+                    terminal::println("value=" + counter.value);
+                }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+        assertNotNull(artifact.module)
+        assertTrue(artifact.analysis.symbols.any { it.name == "Counter" && it.detail.contains("class Counter") })
+    }
+
+    @Test
+    fun reportsClassConstructorArgumentErrors() {
+        val artifact =
+            frontend.compile(
+                "class_ctor_errors.ck",
+                """
+                class Counter(var value: Int) {}
+                fun main() { val counter: Counter = Counter(missing = 3); }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.any { it.message.contains("Unknown constructor parameter `missing`") },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+        assertTrue(
+            artifact.analysis.diagnostics.any { it.message.contains("Missing constructor argument `value`") },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+        assertEquals(null, artifact.module)
+    }
+
+    @Test
+    fun analyzesThisAndInitAssignments() {
+        val artifact =
+            frontend.compile(
+                "this_init.ck",
+                """
+                class Counter(var value: Int) {
+                    init { this.value = value + 1; }
+                    fun current(): Int { return this.value; }
+                }
+                fun main() { val counter: Counter = Counter(value = 1); }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+    }
+
+    @Test
+    fun rejectsAssignmentToValField() {
+        val artifact =
+            frontend.compile(
+                "val_field.ck",
+                """
+                class Holder(val value: Int) {
+                    fun bad(): Unit { this.value = 2; }
+                }
+                fun main() {}
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.any { it.message.contains("Cannot assign to val field `value`") },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+        assertEquals(null, artifact.module)
+    }
+
+    @Test
+    fun rejectsThisInStaticMethod() {
+        val artifact =
+            frontend.compile(
+                "static_this.ck",
+                """
+                class Holder(var value: Int) {
+                    static fun bad(): Int { return this.value; }
+                }
+                fun main() {}
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.any { it.message.contains("Static method cannot access `this`") },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
     }
 
     @Test
