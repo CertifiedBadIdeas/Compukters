@@ -77,7 +77,8 @@ class UserFileImportsTest {
 
         assertTrue(
             artifact.analysis.diagnostics.any {
-                it.severity == FrontendSeverity.ERROR && it.message.contains("Use `import \"math.ck\" { name }` or `import \"math.ck\" as alias`")
+                it.severity == FrontendSeverity.ERROR &&
+                    it.message.contains("Use `import \"math.ck\" { name }` or `import \"math.ck\" as alias`")
             },
             artifact.analysis.diagnostics.joinToString { it.message },
         )
@@ -111,7 +112,8 @@ class UserFileImportsTest {
 
         assertTrue(
             artifact.analysis.diagnostics.any {
-                it.severity == FrontendSeverity.ERROR && (it.message.contains("Unknown function `clear`") || it.message.contains("Expression is not callable"))
+                it.severity == FrontendSeverity.ERROR &&
+                    (it.message.contains("Unknown function `clear`") || it.message.contains("Expression is not callable"))
             },
             artifact.analysis.diagnostics.joinToString { it.message },
         )
@@ -143,7 +145,8 @@ class UserFileImportsTest {
 
         assertTrue(
             artifact.analysis.diagnostics.any {
-                it.severity == FrontendSeverity.ERROR && (it.message.contains("Unknown function `hidden`") || it.message.contains("Expression is not callable"))
+                it.severity == FrontendSeverity.ERROR &&
+                    (it.message.contains("Unknown function `hidden`") || it.message.contains("Expression is not callable"))
             },
             artifact.analysis.diagnostics.joinToString { it.message },
         )

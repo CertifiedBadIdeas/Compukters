@@ -18,8 +18,6 @@
  */
 package ru.lazyhat.compukterkraft.core.workbench.screen
 
-import ru.lazyhat.compukterkraft.core.workbench.WorkbenchStore
-import ru.lazyhat.compukterkraft.core.workbench.sync.SyncStatus
 import ru.lazyhat.compukterkraft.core.ui.editor.EditorViewModel
 import ru.lazyhat.compukterkraft.core.ui.foundation.Color
 import ru.lazyhat.compukterkraft.core.ui.foundation.HoverState
@@ -38,6 +36,8 @@ import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.size
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.weight
 import ru.lazyhat.compukterkraft.core.ui.foundation.ui
 import ru.lazyhat.compukterkraft.core.ui.foundation.value
+import ru.lazyhat.compukterkraft.core.workbench.WorkbenchStore
+import ru.lazyhat.compukterkraft.core.workbench.sync.SyncStatus
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 
 /**
@@ -358,7 +358,8 @@ private fun UiScope.buildRemoteCaretsOverlay(
             if (visibleLines == 0) return@canvas
             val gutter =
                 ru.lazyhat.compukterkraft.core.ui.editor.CodeEditorMetrics.gutterPixelWidth(
-                    ru.lazyhat.compukterkraft.core.ui.editor.CodeEditorMetrics.lineCount(text),
+                    ru.lazyhat.compukterkraft.core.ui.editor.CodeEditorMetrics
+                        .lineCount(text),
                     EDITOR_FONT_WIDTH,
                 )
             val lines = text.split('\n')
@@ -385,7 +386,10 @@ private fun UiScope.buildRemoteCaretsOverlay(
     }
 }
 
-private fun lineColumnAtOffset(text: String, offset: Int): Pair<Int, Int> {
+private fun lineColumnAtOffset(
+    text: String,
+    offset: Int,
+): Pair<Int, Int> {
     var line = 0
     var lineStart = 0
     for (i in 0 until offset) {

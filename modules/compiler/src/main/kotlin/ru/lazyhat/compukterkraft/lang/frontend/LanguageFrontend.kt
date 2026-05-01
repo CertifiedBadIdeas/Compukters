@@ -55,10 +55,10 @@ import ru.lazyhat.compukterkraft.lang.api.IntLiteralValue
 import ru.lazyhat.compukterkraft.lang.api.LegacyRecordConstructionExpression
 import ru.lazyhat.compukterkraft.lang.api.LiteralExpression
 import ru.lazyhat.compukterkraft.lang.api.LongLiteralValue
-import ru.lazyhat.compukterkraft.lang.api.MemberAssignmentStatement
 import ru.lazyhat.compukterkraft.lang.api.MemberAccessExpression
-import ru.lazyhat.compukterkraft.lang.api.NamedCallArgument
+import ru.lazyhat.compukterkraft.lang.api.MemberAssignmentStatement
 import ru.lazyhat.compukterkraft.lang.api.NameExpression
+import ru.lazyhat.compukterkraft.lang.api.NamedCallArgument
 import ru.lazyhat.compukterkraft.lang.api.NullLiteralValue
 import ru.lazyhat.compukterkraft.lang.api.ParameterDeclaration
 import ru.lazyhat.compukterkraft.lang.api.PositionalCallArgument
@@ -74,9 +74,9 @@ import ru.lazyhat.compukterkraft.lang.api.SourceRange
 import ru.lazyhat.compukterkraft.lang.api.Statement
 import ru.lazyhat.compukterkraft.lang.api.StringLiteralValue
 import ru.lazyhat.compukterkraft.lang.api.StructDeclaration
+import ru.lazyhat.compukterkraft.lang.api.ThisExpression
 import ru.lazyhat.compukterkraft.lang.api.Token
 import ru.lazyhat.compukterkraft.lang.api.TokenKind
-import ru.lazyhat.compukterkraft.lang.api.ThisExpression
 import ru.lazyhat.compukterkraft.lang.api.TopLevelDeclaration
 import ru.lazyhat.compukterkraft.lang.api.TypeSyntax
 import ru.lazyhat.compukterkraft.lang.api.UnaryExpression
@@ -366,7 +366,12 @@ internal class SemanticAnalyzer(
                 diagnostics += FrontendDiagnostic("Namespace `${source.name}` has no member `${item.name}`.", item.range)
                 return@forEach
             }
-            if (importedModules.containsKey(item.name) || importAliases.containsKey(item.name) || userFunctionsByName.containsKey(item.name) || userRecordsByName.containsKey(item.name) || userClassesByName.containsKey(item.name)) {
+            if (importedModules.containsKey(
+                    item.name,
+                ) || importAliases.containsKey(item.name) || userFunctionsByName.containsKey(item.name) ||
+                userRecordsByName.containsKey(item.name) ||
+                userClassesByName.containsKey(item.name)
+            ) {
                 diagnostics += FrontendDiagnostic("Redeclaration of `${item.name}`.", item.range)
                 return@forEach
             }
@@ -377,7 +382,11 @@ internal class SemanticAnalyzer(
                     name = item.name,
                     kind = SymbolKind.BUILTIN_FUNCTION,
                     range = item.range,
-                    detail = "${source.name}::${function.name}(${parameterTypes.joinToString { it.displayName }}): ${returnType.displayName}",
+                    detail = "${source.name}::${function.name}(${
+                        parameterTypes.joinToString {
+                            it.displayName
+                        }
+                    }): ${returnType.displayName}",
                     documentation = function.documentation,
                 )
             symbols += symbol
@@ -399,7 +408,13 @@ internal class SemanticAnalyzer(
     ) {
         val alias = mode.alias
         val range = mode.aliasRange
-        if (importedModules.containsKey(alias) || importAliases.containsKey(alias) || userFunctionsByName.containsKey(alias) || userRecordsByName.containsKey(alias) || userClassesByName.containsKey(alias)) {
+        if (importedModules.containsKey(alias) || importAliases.containsKey(alias) ||
+            userFunctionsByName.containsKey(
+                alias,
+            ) ||
+            userRecordsByName.containsKey(alias) ||
+            userClassesByName.containsKey(alias)
+        ) {
             diagnostics += FrontendDiagnostic("Redeclaration of `$alias`.", range)
             return
         }
@@ -443,7 +458,10 @@ internal class SemanticAnalyzer(
         struct: StructDeclaration,
         exports: ModuleExports,
     ) {
-        if (importedModules.containsKey(item.name) || importAliases.containsKey(item.name) || typeNames.containsKey(item.name) || userRecordsByName.containsKey(item.name) || userClassesByName.containsKey(item.name)) {
+        if (importedModules.containsKey(item.name) || importAliases.containsKey(item.name) || typeNames.containsKey(item.name) ||
+            userRecordsByName.containsKey(item.name) ||
+            userClassesByName.containsKey(item.name)
+        ) {
             diagnostics += FrontendDiagnostic("Redeclaration of `${item.name}`.", item.range)
             return
         }
@@ -458,7 +476,13 @@ internal class SemanticAnalyzer(
         function: FunctionDeclaration,
         exports: ModuleExports,
     ) {
-        if (importedModules.containsKey(item.name) || importAliases.containsKey(item.name) || userFunctionsByName.containsKey(item.name) || userRecordsByName.containsKey(item.name) || userClassesByName.containsKey(item.name)) {
+        if (importedModules.containsKey(item.name) || importAliases.containsKey(item.name) ||
+            userFunctionsByName.containsKey(
+                item.name,
+            ) ||
+            userRecordsByName.containsKey(item.name) ||
+            userClassesByName.containsKey(item.name)
+        ) {
             diagnostics += FrontendDiagnostic("Redeclaration of `${item.name}`.", item.range)
             return
         }
@@ -472,7 +496,10 @@ internal class SemanticAnalyzer(
         klass: ClassDeclaration,
         exports: ModuleExports,
     ) {
-        if (importedModules.containsKey(item.name) || importAliases.containsKey(item.name) || typeNames.containsKey(item.name) || userRecordsByName.containsKey(item.name) || userClassesByName.containsKey(item.name)) {
+        if (importedModules.containsKey(item.name) || importAliases.containsKey(item.name) || typeNames.containsKey(item.name) ||
+            userRecordsByName.containsKey(item.name) ||
+            userClassesByName.containsKey(item.name)
+        ) {
             diagnostics += FrontendDiagnostic("Redeclaration of `${item.name}`.", item.range)
             return
         }
@@ -525,67 +552,71 @@ internal class SemanticAnalyzer(
         return RecordBinding(symbol, struct, fields)
     }
 
-        private fun classBindingForExport(
-            visibleName: String,
-            klass: ClassDeclaration,
-            exports: ModuleExports,
-            qualifier: String?,
-            range: SourceRange,
-        ): ClassBinding {
-            val fields = linkedMapOf<String, ClassFieldBinding>()
-            klass.constructorParameters.forEach { parameter ->
-                val mutability = parameter.fieldMutability ?: return@forEach
-                val type = exportTypeRef(parameter.type, exports, qualifier)
-                val symbol =
-                    SymbolInfo(
-                        name = parameter.name,
-                        kind = SymbolKind.FIELD,
-                        range = parameter.range,
-                        detail = "$visibleName.${parameter.name}: ${type.displayName}",
-                    )
-                fields[parameter.name] = ClassFieldBinding(parameter.name, type, mutability == FieldMutability.VAR, symbol)
-            }
-            klass.members.filterIsInstance<ClassFieldDeclaration>().forEach { field ->
-                val type = field.type?.let { exportTypeRef(it, exports, qualifier) } ?: TypeRef("Unit")
-                val symbol =
-                    SymbolInfo(
-                        name = field.name,
-                        kind = SymbolKind.FIELD,
-                        range = field.range,
-                        detail = "$visibleName.${field.name}: ${type.displayName}",
-                    )
-                fields[field.name] = ClassFieldBinding(field.name, type, field.mutable, symbol)
-            }
-
-            fun methodBinding(member: ClassMethodDeclaration): ClassMethodBinding {
-                val function = member.function
-                val parameterTypes = function.parameters.map { exportTypeRef(it.type, exports, qualifier) }
-                val returnType = function.returnType?.let { exportTypeRef(it, exports, qualifier) } ?: TypeRef("Unit")
-                val symbol =
-                    SymbolInfo(
-                        name = function.name,
-                        kind = SymbolKind.METHOD,
-                        range = function.range,
-                        detail = "fun $visibleName.${function.name}(${parameterTypes.joinToString { it.displayName }}) : ${returnType.displayName}",
-                    )
-                return ClassMethodBinding(function.name, function, parameterTypes, returnType, member.static, symbol)
-            }
-
-            val instanceMethods = linkedMapOf<String, ClassMethodBinding>()
-            val staticMethods = linkedMapOf<String, ClassMethodBinding>()
-            klass.members.filterIsInstance<ClassMethodDeclaration>().forEach { member ->
-                val binding = methodBinding(member)
-                if (member.static) staticMethods[binding.name] = binding else instanceMethods[binding.name] = binding
-            }
+    private fun classBindingForExport(
+        visibleName: String,
+        klass: ClassDeclaration,
+        exports: ModuleExports,
+        qualifier: String?,
+        range: SourceRange,
+    ): ClassBinding {
+        val fields = linkedMapOf<String, ClassFieldBinding>()
+        klass.constructorParameters.forEach { parameter ->
+            val mutability = parameter.fieldMutability ?: return@forEach
+            val type = exportTypeRef(parameter.type, exports, qualifier)
             val symbol =
                 SymbolInfo(
-                    name = visibleName,
-                    kind = SymbolKind.CLASS,
-                    range = range,
-                    detail = "class $visibleName",
+                    name = parameter.name,
+                    kind = SymbolKind.FIELD,
+                    range = parameter.range,
+                    detail = "$visibleName.${parameter.name}: ${type.displayName}",
                 )
-            return ClassBinding(symbol, klass, klass.constructorParameters, fields, instanceMethods, staticMethods)
+            fields[parameter.name] = ClassFieldBinding(parameter.name, type, mutability == FieldMutability.VAR, symbol)
         }
+        klass.members.filterIsInstance<ClassFieldDeclaration>().forEach { field ->
+            val type = field.type?.let { exportTypeRef(it, exports, qualifier) } ?: TypeRef("Unit")
+            val symbol =
+                SymbolInfo(
+                    name = field.name,
+                    kind = SymbolKind.FIELD,
+                    range = field.range,
+                    detail = "$visibleName.${field.name}: ${type.displayName}",
+                )
+            fields[field.name] = ClassFieldBinding(field.name, type, field.mutable, symbol)
+        }
+
+        fun methodBinding(member: ClassMethodDeclaration): ClassMethodBinding {
+            val function = member.function
+            val parameterTypes = function.parameters.map { exportTypeRef(it.type, exports, qualifier) }
+            val returnType = function.returnType?.let { exportTypeRef(it, exports, qualifier) } ?: TypeRef("Unit")
+            val symbol =
+                SymbolInfo(
+                    name = function.name,
+                    kind = SymbolKind.METHOD,
+                    range = function.range,
+                    detail = "fun $visibleName.${function.name}(${
+                        parameterTypes.joinToString {
+                            it.displayName
+                        }
+                    }) : ${returnType.displayName}",
+                )
+            return ClassMethodBinding(function.name, function, parameterTypes, returnType, member.static, symbol)
+        }
+
+        val instanceMethods = linkedMapOf<String, ClassMethodBinding>()
+        val staticMethods = linkedMapOf<String, ClassMethodBinding>()
+        klass.members.filterIsInstance<ClassMethodDeclaration>().forEach { member ->
+            val binding = methodBinding(member)
+            if (member.static) staticMethods[binding.name] = binding else instanceMethods[binding.name] = binding
+        }
+        val symbol =
+            SymbolInfo(
+                name = visibleName,
+                kind = SymbolKind.CLASS,
+                range = range,
+                detail = "class $visibleName",
+            )
+        return ClassBinding(symbol, klass, klass.constructorParameters, fields, instanceMethods, staticMethods)
+    }
 
     private fun exportTypeRef(
         syntax: TypeSyntax,
@@ -593,7 +624,14 @@ internal class SemanticAnalyzer(
         qualifier: String?,
     ): TypeRef {
         val typeName =
-            if (syntax.qualifier == null && (exports.structs.containsKey(syntax.name) || exports.classes.containsKey(syntax.name)) && qualifier != null) {
+            if (syntax.qualifier == null && (
+                    exports.structs.containsKey(syntax.name) ||
+                        exports.classes.containsKey(
+                            syntax.name,
+                        )
+                ) &&
+                qualifier != null
+            ) {
                 "$qualifier::${syntax.name}"
             } else {
                 syntax.displayName.removeSuffix("?")
@@ -721,7 +759,11 @@ internal class SemanticAnalyzer(
                         name = function.name,
                         kind = SymbolKind.METHOD,
                         range = function.range,
-                        detail = "fun ${declaration.name}.${function.name}(${parameterTypes.joinToString { it.displayName }}) : ${returnType.displayName}",
+                        detail = "fun ${declaration.name}.${function.name}(${
+                            parameterTypes.joinToString {
+                                it.displayName
+                            }
+                        }) : ${returnType.displayName}",
                     )
                 symbols += methodSymbol
                 return ClassMethodBinding(function.name, function, parameterTypes, returnType, member.static, methodSymbol)
@@ -811,11 +853,13 @@ internal class SemanticAnalyzer(
                         }
                     }
                 }
+
                 is ClassInitBlock -> {
                     withClassContext(binding, staticMethod = false, construction = true) {
                         analyzeBlock(member.body, constructorScope, declaration.range, TypeRef("Unit"))
                     }
                 }
+
                 is ClassMethodDeclaration -> {
                     analyzeClassMethod(binding, member)
                 }
@@ -1339,13 +1383,13 @@ internal class SemanticAnalyzer(
                 )
             return TypeRef("Unit")
         }
-            expression.arguments.filterIsInstance<NamedCallArgument>().forEach { argument ->
-                diagnostics +=
-                    FrontendDiagnostic(
-                        "Named arguments are only supported for constructors.",
-                        argument.range,
-                    )
-            }
+        expression.arguments.filterIsInstance<NamedCallArgument>().forEach { argument ->
+            diagnostics +=
+                FrontendDiagnostic(
+                    "Named arguments are only supported for constructors.",
+                    argument.range,
+                )
+        }
         if (binding.parameterTypes.size != expression.arguments.size) {
             diagnostics +=
                 FrontendDiagnostic(
@@ -1466,78 +1510,84 @@ internal class SemanticAnalyzer(
         return TypeRef(binding.symbol.name)
     }
 
-        private fun analyzeRecordConstructorCall(
-            expression: CallExpression,
-            scope: Scope,
-        ): TypeRef? {
-            val namedArguments = expression.arguments.filterIsInstance<NamedCallArgument>()
-            if (namedArguments.isEmpty()) return null
-            if (namedArguments.size != expression.arguments.size) {
-                diagnostics +=
-                    FrontendDiagnostic(
-                        "Constructor arguments must be named.",
-                        expression.range,
-                    )
-                expression.arguments.forEach { analyzeExpression(it.expression, scope) }
-                return TypeRef("Unit")
-            }
-            val binding =
-                when (val callee = expression.callee) {
-                    is NameExpression -> userRecordsByName[callee.name]
-                    is ScopeAccessExpression -> {
-                        val alias = importAliases[callee.qualifier] ?: return null
-                        val struct = alias.exports.structs[callee.name]
-                        if (struct == null) return null
-                        recordBindingForExport(
-                            visibleName = "${callee.qualifier}::${callee.name}",
-                            struct = struct,
-                            exports = alias.exports,
-                            qualifier = callee.qualifier,
-                            range = callee.range,
-                        ).also { userRecordsByName[it.symbol.name] = it }
-                    }
-                    else -> return null
-                } ?: return null
-
-            val seen = mutableSetOf<String>()
-            namedArguments.forEach { argument ->
-                if (!seen.add(argument.name)) {
-                    diagnostics +=
-                        FrontendDiagnostic(
-                            "Duplicate constructor argument `${argument.name}`.",
-                            argument.nameRange,
-                        )
-                }
-                val expected = binding.fields[argument.name]
-                if (expected == null) {
-                    diagnostics +=
-                        FrontendDiagnostic(
-                            "Unknown constructor parameter `${argument.name}` for struct `${binding.symbol.name}`.",
-                            argument.nameRange,
-                        )
-                    analyzeExpression(argument.expression, scope)
-                } else {
-                    val actual = analyzeExpression(argument.expression, scope)
-                    expectAssignable(actual, expected, argument.expression.range, "Struct field type mismatch.")
-                }
-            }
-            binding.fields.keys.filterNot(seen::contains).forEach { missing ->
-                diagnostics +=
-                    FrontendDiagnostic(
-                        "Missing constructor argument `$missing` for struct `${binding.symbol.name}`.",
-                        expression.range,
-                    )
-            }
-            recordConstructorBindings[expression] = binding
-            references +=
-                ReferenceInfo(
-                    binding.symbol.name,
-                    expression.callee.range,
-                    binding.symbol,
-                    binding.symbol.name,
+    private fun analyzeRecordConstructorCall(
+        expression: CallExpression,
+        scope: Scope,
+    ): TypeRef? {
+        val namedArguments = expression.arguments.filterIsInstance<NamedCallArgument>()
+        if (namedArguments.isEmpty()) return null
+        if (namedArguments.size != expression.arguments.size) {
+            diagnostics +=
+                FrontendDiagnostic(
+                    "Constructor arguments must be named.",
+                    expression.range,
                 )
-            return TypeRef(binding.symbol.name)
+            expression.arguments.forEach { analyzeExpression(it.expression, scope) }
+            return TypeRef("Unit")
         }
+        val binding =
+            when (val callee = expression.callee) {
+                is NameExpression -> {
+                    userRecordsByName[callee.name]
+                }
+
+                is ScopeAccessExpression -> {
+                    val alias = importAliases[callee.qualifier] ?: return null
+                    val struct = alias.exports.structs[callee.name]
+                    if (struct == null) return null
+                    recordBindingForExport(
+                        visibleName = "${callee.qualifier}::${callee.name}",
+                        struct = struct,
+                        exports = alias.exports,
+                        qualifier = callee.qualifier,
+                        range = callee.range,
+                    ).also { userRecordsByName[it.symbol.name] = it }
+                }
+
+                else -> {
+                    return null
+                }
+            } ?: return null
+
+        val seen = mutableSetOf<String>()
+        namedArguments.forEach { argument ->
+            if (!seen.add(argument.name)) {
+                diagnostics +=
+                    FrontendDiagnostic(
+                        "Duplicate constructor argument `${argument.name}`.",
+                        argument.nameRange,
+                    )
+            }
+            val expected = binding.fields[argument.name]
+            if (expected == null) {
+                diagnostics +=
+                    FrontendDiagnostic(
+                        "Unknown constructor parameter `${argument.name}` for struct `${binding.symbol.name}`.",
+                        argument.nameRange,
+                    )
+                analyzeExpression(argument.expression, scope)
+            } else {
+                val actual = analyzeExpression(argument.expression, scope)
+                expectAssignable(actual, expected, argument.expression.range, "Struct field type mismatch.")
+            }
+        }
+        binding.fields.keys.filterNot(seen::contains).forEach { missing ->
+            diagnostics +=
+                FrontendDiagnostic(
+                    "Missing constructor argument `$missing` for struct `${binding.symbol.name}`.",
+                    expression.range,
+                )
+        }
+        recordConstructorBindings[expression] = binding
+        references +=
+            ReferenceInfo(
+                binding.symbol.name,
+                expression.callee.range,
+                binding.symbol,
+                binding.symbol.name,
+            )
+        return TypeRef(binding.symbol.name)
+    }
 
     private fun analyzeScopeCall(
         expression: ScopeAccessExpression,
@@ -1632,13 +1682,14 @@ internal class SemanticAnalyzer(
                         )
                     return TypeRef("Unit")
                 }
-                val binding = recordBindingForExport(
-                    visibleName = "${expression.qualifier}::${expression.typeName}",
-                    struct = struct,
-                    exports = alias.exports,
-                    qualifier = expression.qualifier,
-                    range = expression.range,
-                )
+                val binding =
+                    recordBindingForExport(
+                        visibleName = "${expression.qualifier}::${expression.typeName}",
+                        struct = struct,
+                        exports = alias.exports,
+                        qualifier = expression.qualifier,
+                        range = expression.range,
+                    )
                 userRecordsByName[binding.symbol.name] = binding
                 expression.fields.forEach { field ->
                     val expected = binding.fields[field.name]
@@ -1905,6 +1956,7 @@ internal class BytecodeCompiler(
     allSemantics: List<SemanticResult> = listOf(semantic),
 ) {
     private val semantics = allSemantics.distinctBy { it.program }
+
     private data class FunctionTarget(
         val semantic: SemanticResult,
         val declaration: FunctionDeclaration,
@@ -1915,14 +1967,22 @@ internal class BytecodeCompiler(
 
     private val functionTargets =
         semantics.flatMap { result ->
-            val topLevel = result.program.declarations.filterIsInstance<FunctionDeclaration>().map { declaration ->
-                FunctionTarget(result, declaration, returnType = result.functionBindings[declaration]?.returnType)
-            }
-            val methods = result.classBindings.values.flatMap { owner ->
-                (owner.instanceMethods.values + owner.staticMethods.values).map { method ->
-                    FunctionTarget(result, method.function, ownerClass = owner, static = method.static, returnType = method.returnType)
+            val topLevel =
+                result.program.declarations.filterIsInstance<FunctionDeclaration>().map { declaration ->
+                    FunctionTarget(result, declaration, returnType = result.functionBindings[declaration]?.returnType)
                 }
-            }
+            val methods =
+                result.classBindings.values.flatMap { owner ->
+                    (owner.instanceMethods.values + owner.staticMethods.values).map { method ->
+                        FunctionTarget(
+                            result,
+                            method.function,
+                            ownerClass = owner,
+                            static = method.static,
+                            returnType = method.returnType,
+                        )
+                    }
+                }
             topLevel + methods
         }
     private val functionIndices =
@@ -1982,16 +2042,20 @@ internal class BytecodeCompiler(
                 if (target.ownerClass != null && !target.static) {
                     add(BytecodeLocal("this", target.ownerClass.symbol.name))
                 }
-                addAll(declaration.parameters.map { parameter ->
-                    BytecodeLocal(parameter.name, parameter.type.displayName.removeSuffix("?"))
-                })
+                addAll(
+                    declaration.parameters.map { parameter ->
+                        BytecodeLocal(parameter.name, parameter.type.displayName.removeSuffix("?"))
+                    },
+                )
             }
         val compiler = FunctionCompiler(semantic, declaration, parameters, hasThis = target.ownerClass != null && !target.static)
         compiler.compileBlock(declaration.body)
         compiler.instructions += Instruction.PushUnit
         compiler.instructions += Instruction.Return
         return BytecodeFunction(
-            name = target.ownerClass?.let { "${it.symbol.name}.${if (target.static) "static." else ""}${declaration.name}" } ?: mangle(semantic.sourceName, declaration.name),
+            name =
+                target.ownerClass?.let { "${it.symbol.name}.${if (target.static) "static." else ""}${declaration.name}" }
+                    ?: mangle(semantic.sourceName, declaration.name),
             parameters = parameters,
             locals = compiler.locals,
             returnType = target.returnType?.name ?: "Unit",
@@ -2312,8 +2376,14 @@ internal class BytecodeCompiler(
                             instructions += Instruction.SetField(member.name)
                             instructions += Instruction.Pop
                         }
-                        is ClassInitBlock -> compileBlock(member.body)
-                        is ClassMethodDeclaration -> Unit
+
+                        is ClassInitBlock -> {
+                            compileBlock(member.body)
+                        }
+
+                        is ClassMethodDeclaration -> {
+                            Unit
+                        }
                     }
                 }
                 temporaryThisSlot = previousThisSlot
@@ -2718,10 +2788,12 @@ internal class Parser(
                     }
                     ImportSource.FilePath(path, pathToken.range)
                 }
+
                 check(TokenKind.IDENTIFIER) -> {
                     val nameToken = advance()
                     ImportSource.BuiltinNamespace(nameToken.text, nameToken.range)
                 }
+
                 else -> {
                     diagnostics += FrontendDiagnostic("Expected import source.", peek().range)
                     return null
@@ -2733,16 +2805,26 @@ internal class Parser(
                     val aliasToken = consume(TokenKind.IDENTIFIER, "Expected alias name after `as`.") ?: return null
                     ImportMode.Namespace(aliasToken.text, aliasToken.range)
                 }
-                match(TokenKind.LBRACE) -> parseSelectiveImportMode()
-                else ->
+
+                match(TokenKind.LBRACE) -> {
+                    parseSelectiveImportMode()
+                }
+
+                else -> {
                     ImportMode.Invalid(
                         message =
                             when (source) {
-                                is ImportSource.FilePath -> "Use `import \"${source.path}\" { name }` or `import \"${source.path}\" as alias`."
-                                is ImportSource.BuiltinNamespace -> "Use `import ${source.name} { name }`."
+                                is ImportSource.FilePath -> {
+                                    "Use `import \"${source.path}\" { name }` or `import \"${source.path}\" as alias`."
+                                }
+
+                                is ImportSource.BuiltinNamespace -> {
+                                    "Use `import ${source.name} { name }`."
+                                }
                             },
                         range = source.range,
                     )
+                }
             }
         val end = consumeOptional(TokenKind.SEMICOLON) ?: previous()
         return ImportDeclaration(
@@ -2965,11 +3047,26 @@ internal class Parser(
         consumeOptional(TokenKind.SEMICOLON)
         val value: Expression =
             when (opTok.kind) {
-                TokenKind.EQUAL -> rhs
-                TokenKind.PLUS_EQUAL -> compoundDesugar(nameTok, BinaryOperator.ADD, rhs)
-                TokenKind.MINUS_EQUAL -> compoundDesugar(nameTok, BinaryOperator.SUBTRACT, rhs)
-                TokenKind.STAR_EQUAL -> compoundDesugar(nameTok, BinaryOperator.MULTIPLY, rhs)
-                TokenKind.SLASH_EQUAL -> compoundDesugar(nameTok, BinaryOperator.DIVIDE, rhs)
+                TokenKind.EQUAL -> {
+                    rhs
+                }
+
+                TokenKind.PLUS_EQUAL -> {
+                    compoundDesugar(nameTok, BinaryOperator.ADD, rhs)
+                }
+
+                TokenKind.MINUS_EQUAL -> {
+                    compoundDesugar(nameTok, BinaryOperator.SUBTRACT, rhs)
+                }
+
+                TokenKind.STAR_EQUAL -> {
+                    compoundDesugar(nameTok, BinaryOperator.MULTIPLY, rhs)
+                }
+
+                TokenKind.SLASH_EQUAL -> {
+                    compoundDesugar(nameTok, BinaryOperator.DIVIDE, rhs)
+                }
+
                 else -> {
                     diagnostics +=
                         FrontendDiagnostic(
@@ -2990,8 +3087,14 @@ internal class Parser(
     private fun parseMemberAssignment(): MemberAssignmentStatement? {
         val receiver =
             when {
-                match(TokenKind.THIS) -> ThisExpression(previous().range)
-                match(TokenKind.IDENTIFIER) -> NameExpression(previous().text, previous().range)
+                match(TokenKind.THIS) -> {
+                    ThisExpression(previous().range)
+                }
+
+                match(TokenKind.IDENTIFIER) -> {
+                    NameExpression(previous().text, previous().range)
+                }
+
                 else -> {
                     diagnostics += FrontendDiagnostic("Expected assignment receiver.", peek().range)
                     return null
@@ -3004,11 +3107,26 @@ internal class Parser(
         consumeOptional(TokenKind.SEMICOLON)
         val value: Expression =
             when (opTok.kind) {
-                TokenKind.EQUAL -> rhs
-                TokenKind.PLUS_EQUAL -> compoundMemberDesugar(receiver, field, BinaryOperator.ADD, rhs)
-                TokenKind.MINUS_EQUAL -> compoundMemberDesugar(receiver, field, BinaryOperator.SUBTRACT, rhs)
-                TokenKind.STAR_EQUAL -> compoundMemberDesugar(receiver, field, BinaryOperator.MULTIPLY, rhs)
-                TokenKind.SLASH_EQUAL -> compoundMemberDesugar(receiver, field, BinaryOperator.DIVIDE, rhs)
+                TokenKind.EQUAL -> {
+                    rhs
+                }
+
+                TokenKind.PLUS_EQUAL -> {
+                    compoundMemberDesugar(receiver, field, BinaryOperator.ADD, rhs)
+                }
+
+                TokenKind.MINUS_EQUAL -> {
+                    compoundMemberDesugar(receiver, field, BinaryOperator.SUBTRACT, rhs)
+                }
+
+                TokenKind.STAR_EQUAL -> {
+                    compoundMemberDesugar(receiver, field, BinaryOperator.MULTIPLY, rhs)
+                }
+
+                TokenKind.SLASH_EQUAL -> {
+                    compoundMemberDesugar(receiver, field, BinaryOperator.DIVIDE, rhs)
+                }
+
                 else -> {
                     diagnostics +=
                         FrontendDiagnostic(

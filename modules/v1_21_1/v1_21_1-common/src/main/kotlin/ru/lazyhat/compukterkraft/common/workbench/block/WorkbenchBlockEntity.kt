@@ -212,8 +212,18 @@ class WorkbenchBlockEntity(
         ServerContext.deviceManager.ensureWorkspaceInitialized(targetId)
         val noOpTerminalNetwork =
             object : TerminalNetworkBridge {
-                override fun isSessionStillBound(playerUuid: UUID, containerId: Int, deviceId: Int): Boolean = false
-                override fun sendStdoutBytes(playerUuid: UUID, containerId: Int, bytes: ByteArray) {}
+                override fun isSessionStillBound(
+                    playerUuid: UUID,
+                    containerId: Int,
+                    deviceId: Int,
+                ): Boolean = false
+
+                override fun sendStdoutBytes(
+                    playerUuid: UUID,
+                    containerId: Int,
+                    bytes: ByteArray,
+                ) {
+                }
             }
         return RuntimeDeviceImpl(
             deviceId = targetId,

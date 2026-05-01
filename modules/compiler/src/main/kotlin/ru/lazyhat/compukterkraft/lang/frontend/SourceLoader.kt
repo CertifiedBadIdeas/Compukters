@@ -26,7 +26,10 @@ package ru.lazyhat.compukterkraft.lang.frontend
  * de-duplication key, or null when the source cannot be resolved.
  */
 interface SourceLoader {
-    fun resolve(from: String, importPath: String): String?
+    fun resolve(
+        from: String,
+        importPath: String,
+    ): String?
 
     fun read(canonical: String): String?
 }
@@ -62,7 +65,10 @@ class MapSourceLoader(
         var i = 0
         while (i < parts.size) {
             when (parts[i]) {
-                "", "." -> parts.removeAt(i)
+                "", "." -> {
+                    parts.removeAt(i)
+                }
+
                 ".." -> {
                     if (i > 0) {
                         parts.removeAt(i)
@@ -72,7 +78,10 @@ class MapSourceLoader(
                         parts.removeAt(i)
                     }
                 }
-                else -> i += 1
+
+                else -> {
+                    i += 1
+                }
             }
         }
         return parts.joinToString("/")

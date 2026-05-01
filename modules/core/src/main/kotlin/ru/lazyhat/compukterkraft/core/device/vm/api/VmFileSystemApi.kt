@@ -44,6 +44,5 @@ class VmFileSystemApi(
 
     override suspend fun remove(path: String): Boolean = ctx.awaitHostCall { HostCall.FileRemove(it, ctx.resolvePath(path)) }
 
-    override suspend fun list(path: String): List<DeviceWorkspaceEntry> =
-        ctx.awaitHostCall { HostCall.FileList(it, ctx.resolvePath(path)) }
+    override suspend fun list(path: String): List<DeviceWorkspaceEntry> = ctx.awaitHostCall { HostCall.FileList(it, ctx.resolvePath(path)) }
 }

@@ -18,8 +18,8 @@
  */
 package ru.lazyhat.compukterkraft.common.infrastructure.workbench
 
-import ru.lazyhat.compukterkraft.lang.api.BuiltinRegistry
 import ru.lazyhat.compukterkraft.core.workbench.IdeRuntimeCatalogSource
+import ru.lazyhat.compukterkraft.lang.api.BuiltinRegistry
 import ru.lazyhat.compukterkraft.lang.frontend.LanguageFrontend
 import ru.lazyhat.compukterkraft.lang.frontend.MapSourceLoader
 import kotlin.test.Test

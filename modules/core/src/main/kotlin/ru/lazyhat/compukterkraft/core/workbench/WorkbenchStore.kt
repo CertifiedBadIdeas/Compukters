@@ -28,6 +28,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import ru.lazyhat.compukterkraft.core.input.KeyCodes
+import ru.lazyhat.compukterkraft.core.workbench.WorkbenchStore.Companion.MAX_UNDO_ENTRIES
 import ru.lazyhat.compukterkraft.core.workbench.crdt.ClientCrdtReplica
 import ru.lazyhat.compukterkraft.core.workbench.crdt.CrdtDocument
 import ru.lazyhat.compukterkraft.core.workbench.crdt.CursorAnchor
@@ -35,7 +37,6 @@ import ru.lazyhat.compukterkraft.core.workbench.crdt.Op
 import ru.lazyhat.compukterkraft.core.workbench.crdt.SiteId
 import ru.lazyhat.compukterkraft.core.workbench.sync.OpOutbox
 import ru.lazyhat.compukterkraft.core.workbench.sync.SyncStatus
-import ru.lazyhat.compukterkraft.core.input.KeyCodes
 import ru.lazyhat.compukterkraft.lang.frontend.SourceTextSupport
 import ru.lazyhat.compukterkraft.lang.runtime.CompletionItemKind
 import java.util.UUID
@@ -119,7 +120,6 @@ class WorkbenchStore(
      */
     private val undoStack: ArrayDeque<UndoEntry> = ArrayDeque()
 
-
     /**
      * Bind a [WorkbenchUpdateSource] and start reactively collecting its [StateFlow].
      * Remote changes are merged into local state as soon as they arrive.
@@ -149,8 +149,7 @@ class WorkbenchStore(
                     .map { st ->
                         val path = st.openDocument?.path ?: return@map null
                         Triple(path, st.editor.cursorLine, st.editor.cursorColumn)
-                    }
-                    .distinctUntilChanged()
+                    }.distinctUntilChanged()
                     .collect { triple ->
                         if (triple == null) return@collect
                         reportCursor(triple.first, triple.second, triple.third)
@@ -704,7 +703,10 @@ class WorkbenchStore(
         val cursorFlatBefore = SourceTextSupport.offsetAt(ed.text, ed.cursorLine, ed.cursorColumn)
         val deletedTextForUndo: String =
             when (edit) {
-                is LocalEdit.Insert -> ""
+                is LocalEdit.Insert -> {
+                    ""
+                }
+
                 is LocalEdit.Delete -> {
                     val end = (edit.offset + edit.length).coerceAtMost(ed.text.length)
                     val start = edit.offset.coerceAtLeast(0).coerceAtMost(end)

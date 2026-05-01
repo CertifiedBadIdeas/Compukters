@@ -28,17 +28,24 @@ class RomScriptCompileTest {
     fun everyRomScriptCompilesCleanly() {
         val cl = RomScriptCompileTest::class.java.classLoader
         val index =
-            cl.getResourceAsStream("rom/rom.index")
+            cl
+                .getResourceAsStream("rom/rom.index")
                 ?.bufferedReader()
                 ?.readText()
                 ?: fail("rom/rom.index missing from classpath")
 
-        val files = index.lineSequence().map { it.trim() }.filter { it.isNotEmpty() }.toList()
+        val files =
+            index
+                .lineSequence()
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .toList()
         assertNotNull(files.firstOrNull(), "rom.index is empty")
 
         for (path in files) {
             val source =
-                cl.getResourceAsStream("rom/$path")
+                cl
+                    .getResourceAsStream("rom/$path")
                     ?.bufferedReader()
                     ?.readText()
                     ?: fail("rom/$path missing from classpath")

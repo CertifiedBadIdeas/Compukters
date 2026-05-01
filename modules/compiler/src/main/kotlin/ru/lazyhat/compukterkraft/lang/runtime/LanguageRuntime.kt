@@ -231,15 +231,23 @@ class BytecodeVirtualMachine(
                     val receiver = frame.pop()
                     val objectRef = receiver as? VmValue.ObjectRef ?: error("Method receiver is not an object.")
                     val objectState = heap[objectRef.id] ?: error("Object #${objectRef.id} is missing.")
-                    val classInfo = module.classes.firstOrNull { it.name == objectState.className } ?: error("Class ${objectState.className} is missing.")
-                    val functionIndex = classInfo.instanceMethods[instruction.methodName] ?: error("Class ${objectState.className} has no method ${instruction.methodName}.")
+                    val classInfo =
+                        module.classes.firstOrNull { it.name == objectState.className }
+                            ?: error("Class ${objectState.className} is missing.")
+                    val functionIndex =
+                        classInfo.instanceMethods[instruction.methodName]
+                            ?: error("Class ${objectState.className} has no method ${instruction.methodName}.")
                     frames += createFrame(functionIndex, listOf(receiver) + args)
                 }
 
                 is Instruction.CallStaticMethod -> {
                     val args = frame.popMany(instruction.argumentCount)
-                    val classInfo = module.classes.firstOrNull { it.name == instruction.className } ?: error("Class ${instruction.className} is missing.")
-                    val functionIndex = classInfo.staticMethods[instruction.methodName] ?: error("Class ${instruction.className} has no static method ${instruction.methodName}.")
+                    val classInfo =
+                        module.classes.firstOrNull { it.name == instruction.className }
+                            ?: error("Class ${instruction.className} is missing.")
+                    val functionIndex =
+                        classInfo.staticMethods[instruction.methodName]
+                            ?: error("Class ${instruction.className} has no static method ${instruction.methodName}.")
                     frames += createFrame(functionIndex, args)
                 }
 
@@ -251,7 +259,14 @@ class BytecodeVirtualMachine(
                 is Instruction.ConstructClass -> {
                     val values = frame.popMany(instruction.fieldNames.size)
                     val id = nextObjectId++
-                    heap[id] = VmObject(instruction.className, instruction.fieldNames.zip(values).toMap().toMutableMap())
+                    heap[id] =
+                        VmObject(
+                            instruction.className,
+                            instruction.fieldNames
+                                .zip(values)
+                                .toMap()
+                                .toMutableMap(),
+                        )
                     frame.stack += VmValue.ObjectRef(id)
                 }
 

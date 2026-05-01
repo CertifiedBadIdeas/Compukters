@@ -143,7 +143,16 @@ class LanguageIde(
                     insertText = "${function.name}()",
                     cursorOffset = "${function.name}(".length,
                     sourceNamespace = module.name,
-                    additionalTextEdits = listOf(SourceTextSupport.importGroupEdit(ImportGroupEditRequest(source, module.name, function.name))),
+                    additionalTextEdits =
+                        listOf(
+                            SourceTextSupport.importGroupEdit(
+                                ImportGroupEditRequest(
+                                    source,
+                                    module.name,
+                                    function.name,
+                                ),
+                            ),
+                        ),
                 )
             }.toList()
 
@@ -215,11 +224,15 @@ class LanguageIde(
                 } ?: visibleSymbols
                     .firstOrNull { it.name == receiverName && (it.kind == SymbolKind.VARIABLE || it.kind == SymbolKind.PARAMETER) }
                     ?.let { receiverSymbol ->
-                        val receiverType = receiverSymbol.detail.substringAfter(':', "").trim().removeSuffix("?")
+                        val receiverType =
+                            receiverSymbol.detail
+                                .substringAfter(':', "")
+                                .trim()
+                                .removeSuffix("?")
                         semantic.classBindings.values.firstOrNull { it.symbol.name == receiverType }
                     } ?: declaredReceiverType(source, offset, receiverName)?.let { receiverType ->
                     semantic.classBindings.values.firstOrNull { it.symbol.name == receiverType }
-                    }
+                }
             } ?: return incompleteThisMemberSymbols(source, offset, receiverName)
         val staticReceiver = analysis.visibleSymbolsAt(offset).any { it.name == receiverName && it.kind == SymbolKind.CLASS }
         return if (receiverName == "this" || !staticReceiver) {
@@ -235,13 +248,17 @@ class LanguageIde(
         receiverName: String,
     ): List<SymbolInfo> {
         if (receiverName != "this") return emptyList()
-        val classHeader = Regex("class\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\(([^)]*)\\)").findAll(source.take(offset)).lastOrNull() ?: return emptyList()
+        val classHeader =
+            Regex("class\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\(([^)]*)\\)").findAll(source.take(offset)).lastOrNull()
+                ?: return emptyList()
         val className = classHeader.groupValues[1]
         val parameters = classHeader.groupValues[2]
         return parameters
             .split(',')
             .mapNotNull { parameter ->
-                val match = Regex("\\b(?:val|var)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*:\\s*([^,]+)").find(parameter.trim()) ?: return@mapNotNull null
+                val match =
+                    Regex("\\b(?:val|var)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*:\\s*([^,]+)").find(parameter.trim())
+                        ?: return@mapNotNull null
                 val fieldName = match.groupValues[1]
                 val fieldType = match.groupValues[2].trim()
                 SymbolInfo(

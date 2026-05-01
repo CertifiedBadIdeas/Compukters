@@ -27,8 +27,8 @@ import ru.lazyhat.compukterkraft.core.device.input.ComputerControlAction
 import ru.lazyhat.compukterkraft.core.device.input.ControlInputEvent
 import ru.lazyhat.compukterkraft.core.device.input.InputEventSink
 import ru.lazyhat.compukterkraft.core.device.vm.DeviceProfileRegistry
-import ru.lazyhat.compukterkraft.core.workbench.TargetControlGateway
 import ru.lazyhat.compukterkraft.core.workbench.IdeRuntimeCatalogSource
+import ru.lazyhat.compukterkraft.core.workbench.TargetControlGateway
 import ru.lazyhat.compukterkraft.core.workbench.WorkbenchIdeFacade
 import ru.lazyhat.compukterkraft.core.workbench.WorkbenchRemoteState
 import ru.lazyhat.compukterkraft.core.workbench.WorkbenchTargetState
@@ -43,10 +43,10 @@ import ru.lazyhat.compukterkraft.lang.frontend.LanguageFrontend
 import ru.lazyhat.compukterkraft.lang.frontend.LanguageIde
 import ru.lazyhat.compukterkraft.lang.frontend.SourceIndex
 import ru.lazyhat.compukterkraft.lang.runtime.CompletionItem
+import ru.lazyhat.compukterkraft.lang.runtime.DefinitionTarget
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceCapability
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceIdeSnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspaceDocument
-import ru.lazyhat.compukterkraft.lang.runtime.DefinitionTarget
 import ru.lazyhat.compukterkraft.lang.runtime.HoverInfo
 
 /** Adapts menu-owned Workbench remote state to the [WorkbenchUpdateSource] interface. */

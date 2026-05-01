@@ -1,6 +1,11 @@
 {
     "chat.agent.maxRequests": 5000,
     "chat.tools.terminal.autoApprove": {
-        "./gradlew": true
+      "./gradlew": true,
+      "builtin": true,
+      "true": true,
+      "git add": true,
+      "git commit": true,
+      "printf": true
     }
 }

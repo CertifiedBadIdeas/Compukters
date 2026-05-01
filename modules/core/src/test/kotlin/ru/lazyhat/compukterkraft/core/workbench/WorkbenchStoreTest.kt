@@ -29,9 +29,9 @@ import ru.lazyhat.compukterkraft.lang.api.SourceLocation
 import ru.lazyhat.compukterkraft.lang.api.SourceRange
 import ru.lazyhat.compukterkraft.lang.runtime.CompletionItem
 import ru.lazyhat.compukterkraft.lang.runtime.CompletionItemKind
+import ru.lazyhat.compukterkraft.lang.runtime.DefinitionTarget
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceIdeSnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspaceDocument
-import ru.lazyhat.compukterkraft.lang.runtime.DefinitionTarget
 import ru.lazyhat.compukterkraft.lang.runtime.HoverInfo
 import ru.lazyhat.compukterkraft.lang.runtime.TextEdit
 import kotlin.test.Test
@@ -657,7 +657,8 @@ class WorkbenchStoreTest {
 
     private class FakeWorkbenchIdeFacade : WorkbenchIdeFacade {
         val calls = mutableListOf<String>()
-        var nextManualCompletions: List<CompletionItem> = listOf(CompletionItem(label = "manual", detail = "", kind = CompletionItemKind.KEYWORD))
+        var nextManualCompletions: List<CompletionItem> =
+            listOf(CompletionItem(label = "manual", detail = "", kind = CompletionItemKind.KEYWORD))
 
         override fun analyze(
             path: String,
@@ -707,12 +708,16 @@ class WorkbenchStoreTest {
         override fun formatDocument(
             path: String,
             source: String,
-        ): ru.lazyhat.compukterkraft.lang.frontend.FormatResult = ru.lazyhat.compukterkraft.lang.frontend.FormatResult(emptyList())
+        ): ru.lazyhat.compukterkraft.lang.frontend.FormatResult =
+            ru.lazyhat.compukterkraft.lang.frontend
+                .FormatResult(emptyList())
 
         override fun cleanupDocument(
             path: String,
             source: String,
-        ): ru.lazyhat.compukterkraft.lang.frontend.FormatResult = ru.lazyhat.compukterkraft.lang.frontend.FormatResult(emptyList())
+        ): ru.lazyhat.compukterkraft.lang.frontend.FormatResult =
+            ru.lazyhat.compukterkraft.lang.frontend
+                .FormatResult(emptyList())
     }
 
     private class FakeWorkbenchOpsGateway : WorkbenchOpsGateway {

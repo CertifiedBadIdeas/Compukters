@@ -81,9 +81,7 @@ class WorkbenchCursorClientMessage : NetworkMessage<ClientNetworkContext> {
             cursor == other.cursor
     }
 
-    override fun hashCode(): Int =
-        ((containerId * 31 + path.hashCode()) * 31 + siteId.hashCode()) * 31 + (cursor?.hashCode() ?: 0)
+    override fun hashCode(): Int = ((containerId * 31 + path.hashCode()) * 31 + siteId.hashCode()) * 31 + (cursor?.hashCode() ?: 0)
 
-    override fun toString(): String =
-        "WorkbenchCursorClientMessage(containerId=$containerId, path='$path', siteId=$siteId, cursor=$cursor)"
+    override fun toString(): String = "WorkbenchCursorClientMessage(containerId=$containerId, path='$path', siteId=$siteId, cursor=$cursor)"
 }

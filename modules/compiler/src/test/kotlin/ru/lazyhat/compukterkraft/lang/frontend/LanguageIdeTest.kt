@@ -131,7 +131,10 @@ class LanguageIdeTest {
         val items = ide.complete("main.ck", source, cursor.first, cursor.second)
         val println = items.single { it.label == "println" && it.sourceNamespace == "terminal" }
 
-        assertEquals(listOf(TextEdit("import terminal { ".length, "import terminal { clear".length, "clear, println")), println.additionalTextEdits)
+        assertEquals(
+            listOf(TextEdit("import terminal { ".length, "import terminal { clear".length, "clear, println")),
+            println.additionalTextEdits,
+        )
     }
 
     @Test
