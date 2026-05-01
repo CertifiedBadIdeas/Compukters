@@ -180,8 +180,8 @@ class LanguageIdeTest {
         val prefix3 = SourceTextSupport.importPrefix("terminal.", 9)
         assertNull(prefix3)
 
-        // "import terminal;\nimport sy" — second import
-        val prefix4 = SourceTextSupport.importPrefix("import terminal;\nimport sy", 26)
+        // "import alpha;\nimport sy" — second import
+        val prefix4 = SourceTextSupport.importPrefix("import alpha;\nimport sy", 23)
         assertEquals("sy", prefix4)
     }
 

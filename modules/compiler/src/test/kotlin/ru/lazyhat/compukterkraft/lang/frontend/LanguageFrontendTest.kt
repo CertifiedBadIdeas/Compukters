@@ -76,7 +76,7 @@ class LanguageFrontendTest {
             frontend.compile(
                 "import.ck",
                 """
-                import terminal;
+                import legacy;
                 fun main() { terminal::println("ok"); }
                 """.trimIndent(),
             )

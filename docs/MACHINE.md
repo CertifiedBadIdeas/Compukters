@@ -152,10 +152,8 @@ Background coroutine
 ROM-файл `mod/src/main/resources/rom/bios.ck` очень простой:
 
 ```ck
-import process;
-
 fun main() {
-    process.run("shell.ck");
+   process::run("shell.ck");
 }
 ```
 
@@ -163,7 +161,7 @@ fun main() {
 
 1. VM поднимается.
 2. Компилируется `bios.ck`.
-3. `bios.ck` вызывает `process.run("shell.ck")`.
+3. `bios.ck` вызывает `process::run("shell.ck")`.
 4. Запускается shell.
 
 Это поведение дополнительно подтверждается тестом `LanguageWorkspaceRuntimeTest`, который проверяет, что первый сигнал из `bios.ck` это `HostCall("process", "run", ["shell.ck"])`.

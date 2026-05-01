@@ -94,7 +94,7 @@ terminal::println("hi");
 val id: Int = system::deviceId();
 ```
 
-The old `import terminal;` / `terminal.println(...)` style is no longer valid. User-file imports are coming in a future version.
+The old builtin-import / dot-call style is no longer valid. User-file imports are coming in a future version.
 
 `terminal`
 
