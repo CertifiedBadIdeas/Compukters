@@ -107,6 +107,25 @@ class LanguageFrontendTest {
     }
 
     @Test
+    fun rejectsQualifiedTypesUntilUserImportsLand() {
+        val artifact =
+            frontend.compile(
+                "qual.ck",
+                """
+                fun main() { val v: m::Foo = null; }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.any {
+                it.severity == FrontendSeverity.ERROR &&
+                    it.message.contains("Qualified types are not yet supported")
+            },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+    }
+
+    @Test
     fun compilesRecordsFunctionsAndBuiltins() {
         val artifact =
             frontend.compile(
