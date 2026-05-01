@@ -95,6 +95,20 @@ class LanguageIdeTest {
         assertTrue(snapshot.highlights.any { it.kind == HighlightTokenKind.FUNCTION })
     }
 
+    @Test
+    fun completesBuiltinMembersAfterDoubleColon() {
+        val source =
+            """
+            fun main() { terminal:: }
+            """.trimIndent()
+        val column = source.indexOf("terminal::") + "terminal::".length
+
+        val items = ide.complete("main.ck", source, line = 0, column = column)
+
+        assertTrue(items.any { it.label == "println" }, items.joinToString { it.label })
+        assertTrue(items.any { it.label == "write" }, items.joinToString { it.label })
+    }
+
     private fun lineAndColumnOf(
         source: String,
         needle: String,

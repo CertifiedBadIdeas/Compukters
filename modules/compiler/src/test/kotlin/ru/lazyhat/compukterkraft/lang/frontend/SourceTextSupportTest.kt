@@ -38,6 +38,7 @@ class SourceTextSupportTest {
     fun rejectsNonIdentifierContexts() {
         assertFalse(SourceTextSupport.shouldAutoTriggerIdentifierCompletion("123", 3))
         assertFalse(SourceTextSupport.shouldAutoTriggerIdentifierCompletion("terminal.", 9))
+        assertFalse(SourceTextSupport.shouldAutoTriggerIdentifierCompletion("terminal::", 10))
         assertFalse(SourceTextSupport.shouldAutoTriggerIdentifierCompletion("", 0))
     }
 }
