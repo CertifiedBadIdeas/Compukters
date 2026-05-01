@@ -320,6 +320,7 @@ private fun UiScope.buildCompletionOverlay(
                 completionRow(
                     width = popupWidth,
                     label = item.label,
+                    source = item.sourceNamespace,
                     selected = idx == store.state.editor.selectedCompletion,
                     onClick = { store.applyCompletion(idx) },
                 )
@@ -589,6 +590,7 @@ private fun ru.lazyhat.compukterkraft.core.ui.foundation.CanvasScope.drawSlotCel
 private fun UiScope.completionRow(
     width: Int,
     label: String,
+    source: String?,
     selected: Boolean,
     onClick: () -> Unit,
 ) {
@@ -600,10 +602,17 @@ private fun UiScope.completionRow(
                 .clickable(onClick),
     ) {
         text(
-            modifier = Modifier.align(UiAlignment.Center),
+            modifier = Modifier.align(UiAlignment.Start),
             color = TEXT_LIGHT,
             text = value { label },
         )
+        if (!source.isNullOrBlank()) {
+            text(
+                modifier = Modifier.align(UiAlignment.End),
+                color = TEXT_DIM,
+                text = value { source },
+            )
+        }
     }
 }
 

@@ -75,6 +75,14 @@ data class CompletionItem(
      * caret between the auto-inserted `()`.
      */
     val cursorOffset: Int? = null,
+    val sourceNamespace: String? = null,
+    val additionalTextEdits: List<TextEdit> = emptyList(),
+)
+
+data class TextEdit(
+    val startOffset: Int,
+    val endOffset: Int,
+    val replacement: String,
 )
 
 data class HoverInfo(

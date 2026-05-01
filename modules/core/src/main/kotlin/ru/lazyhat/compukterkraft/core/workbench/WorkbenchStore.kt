@@ -333,11 +333,25 @@ class WorkbenchStore(
                 // We dropped the trailing "()" — ignore the original cursor hint.
                 effectiveInsert.length
             }
-        if (deletedLength > 0) applyLocalEdit(LocalEdit.Delete(prefixFlat, deletedLength))
-        if (effectiveInsert.isNotEmpty()) applyLocalEdit(LocalEdit.Insert(prefixFlat, effectiveInsert))
+        val additionalEdits = item.additionalTextEdits.sortedByDescending { it.startOffset }
+        additionalEdits.forEach { edit ->
+            if (edit.endOffset > edit.startOffset) {
+                applyLocalEdit(LocalEdit.Delete(edit.startOffset, edit.endOffset - edit.startOffset))
+            }
+            if (edit.replacement.isNotEmpty()) {
+                applyLocalEdit(LocalEdit.Insert(edit.startOffset, edit.replacement))
+            }
+        }
+        val prefixShift =
+            additionalEdits
+                .filter { it.startOffset <= prefixFlat }
+                .sumOf { it.replacement.length - (it.endOffset - it.startOffset) }
+        val shiftedPrefixFlat = prefixFlat + prefixShift
+        if (deletedLength > 0) applyLocalEdit(LocalEdit.Delete(shiftedPrefixFlat, deletedLength))
+        if (effectiveInsert.isNotEmpty()) applyLocalEdit(LocalEdit.Insert(shiftedPrefixFlat, effectiveInsert))
         // Reposition the caret if the completion specifies a custom offset (e.g. between
         // the auto-inserted parens of a function call).
-        val finalCursorFlat = (prefixFlat + effectiveCursorOffset).coerceIn(0, state.editor.text.length)
+        val finalCursorFlat = (shiftedPrefixFlat + effectiveCursorOffset).coerceIn(0, state.editor.text.length)
         val (finalLine, finalCol) = lineColumnAt(state.editor.text, finalCursorFlat)
         _state.value =
             state.copy(
