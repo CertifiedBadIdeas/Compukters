@@ -212,6 +212,8 @@ Cleanup Document runs the same formatter and additionally removes unused names f
 
 Both actions return no edits for invalid or incomplete source instead of attempting a partial rewrite.
 
+In the Workbench editor, Format can be triggered from the toolbar or with `Ctrl+Alt+F`; Cleanup can be triggered from the toolbar or with `Ctrl+Alt+L`.
+
 `terminal`
 
 - `write(text: String): Unit`
