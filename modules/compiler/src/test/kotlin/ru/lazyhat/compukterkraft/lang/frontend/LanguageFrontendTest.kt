@@ -83,7 +83,7 @@ class LanguageFrontendTest {
         val errors = artifact.analysis.diagnostics.filter { it.severity == FrontendSeverity.ERROR }
 
         assertTrue(
-            errors.any { it.message.contains("Expected file path string after `import`") },
+            errors.any { it.message.contains("Use `import legacy { name }`") },
             errors.joinToString { it.message },
         )
         assertEquals(null, artifact.module)
