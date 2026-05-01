@@ -177,6 +177,26 @@ class LanguageIdeTest {
         assertTrue(items.any { it.label == "value" }, items.joinToString { it.label })
     }
 
+    @Test
+    fun completesMembersAfterInstanceVariableDot() {
+        val source =
+            """
+            class Counter(var value: Int) {
+                fun current(): Int { return this.value; }
+            }
+            fun main() {
+                val counter: Counter = Counter(value = 1);
+                terminal::println(counter.)
+            }
+            """.trimIndent()
+        val cursor = lineAndColumnOf(source, "counter.)") + "counter.".length
+
+        val items = ide.complete("counter.ck", source, cursor.first, cursor.second)
+
+        assertTrue(items.any { it.label == "value" }, items.joinToString { it.label })
+        assertTrue(items.any { it.label == "current" }, items.joinToString { it.label })
+    }
+
     private fun lineAndColumnOf(
         source: String,
         needle: String,
