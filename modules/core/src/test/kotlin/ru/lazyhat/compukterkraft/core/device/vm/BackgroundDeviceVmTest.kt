@@ -42,9 +42,9 @@ import kotlin.test.assertTrue
 
 class BackgroundDeviceVmTest {
     @Test
-    fun bootCompletesWhenVmRegistrySupportsImportedModule() {
+    fun bootCompletesWhenVmRegistrySupportsAmbientModule() {
         runtimeTestWorkspace("compukterkraft-background-vm-success") { workspace ->
-            workspace.writeProgram(1, "bios.ck", "import filesystem;\nfun main() {}")
+            workspace.writeProgram(1, "bios.ck", "fun main() { if (false) { filesystem::list(); } }")
 
             val vm =
                 BackgroundDeviceVm(
@@ -136,12 +136,12 @@ class BackgroundDeviceVmTest {
     }
 
     @Test
-    fun bootRejectsOptionalPeripheralModuleWhenVmRegistryDoesNotExposeIt() {
+    fun bootRejectsAmbientModuleWhenVmRegistryDoesNotExposeIt() {
         val root = createTempDirectory("compukterkraft-background-vm")
 
         try {
             val workspace = DeviceWorkspaceHost(root)
-            workspace.writeDocument(1, "bios.ck", "import filesystem;\nfun main() {}")
+            workspace.writeDocument(1, "bios.ck", "fun main() { if (false) { filesystem::list(); } }")
 
             val profile =
                 DeviceProfile(
@@ -188,7 +188,7 @@ class BackgroundDeviceVmTest {
                 }
 
             assertTrue(terminalState is VmState.Crashed)
-            assertTrue(terminalState.errorMessage?.contains("not supported by this VM") == true)
+            assertTrue(terminalState.errorMessage?.contains("Unknown namespace `filesystem`") == true)
         } finally {
             root.toFile().deleteRecursively()
         }
