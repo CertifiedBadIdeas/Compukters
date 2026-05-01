@@ -599,7 +599,7 @@ class LanguageRuntimeTest {
     }
 }
 
-private class RecordingRuntime(
+internal class RecordingRuntime(
     private val argument: String = "",
     private val instructionsPerSlice: Int = 64,
     private val vmRamBytes: Long = 64 * 1024,
