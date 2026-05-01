@@ -270,6 +270,65 @@ class LanguageFrontendTest {
     }
 
     @Test
+    fun analyzesThisAndInitAssignments() {
+        val artifact =
+            frontend.compile(
+                "this_init.ck",
+                """
+                class Counter(var value: Int) {
+                    init { this.value = value + 1; }
+                    fun current(): Int { return this.value; }
+                }
+                fun main() { val counter: Counter = Counter(value = 1); }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+    }
+
+    @Test
+    fun rejectsAssignmentToValField() {
+        val artifact =
+            frontend.compile(
+                "val_field.ck",
+                """
+                class Holder(val value: Int) {
+                    fun bad(): Unit { this.value = 2; }
+                }
+                fun main() {}
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.any { it.message.contains("Cannot assign to val field `value`") },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+        assertEquals(null, artifact.module)
+    }
+
+    @Test
+    fun rejectsThisInStaticMethod() {
+        val artifact =
+            frontend.compile(
+                "static_this.ck",
+                """
+                class Holder(var value: Int) {
+                    static fun bad(): Int { return this.value; }
+                }
+                fun main() {}
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.any { it.message.contains("Static method cannot access `this`") },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+    }
+
+    @Test
     fun reportsTypeMismatchDiagnostics() {
         val artifact =
             frontend.compile(
