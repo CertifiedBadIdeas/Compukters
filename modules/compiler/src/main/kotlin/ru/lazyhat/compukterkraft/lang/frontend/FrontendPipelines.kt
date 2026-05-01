@@ -21,15 +21,28 @@ package ru.lazyhat.compukterkraft.lang.frontend
 import ru.lazyhat.compukterkraft.lang.api.BuiltinRegistry
 import ru.lazyhat.compukterkraft.lang.api.ImportSource
 import ru.lazyhat.compukterkraft.lang.api.Program
+import ru.lazyhat.compukterkraft.lang.api.SourceRange
 import ru.lazyhat.compukterkraft.lang.api.Token
 import ru.lazyhat.compukterkraft.lang.runtime.CompletionItem
 import ru.lazyhat.compukterkraft.lang.runtime.DefinitionTarget
 import ru.lazyhat.compukterkraft.lang.runtime.HoverInfo
 
+enum class CommentKind {
+    LINE,
+    BLOCK,
+}
+
+data class CommentTrivia(
+    val kind: CommentKind,
+    val text: String,
+    val range: SourceRange,
+)
+
 data class ParsedSource(
     val name: String,
     val source: String,
     val tokens: List<Token>,
+    val comments: List<CommentTrivia>,
     val syntaxDiagnostics: List<FrontendDiagnostic>,
     val program: Program,
 )
@@ -111,6 +124,7 @@ internal class DefaultParserFacade : ParserFacade {
             name = name,
             source = source,
             tokens = tokens,
+            comments = lexer.comments,
             syntaxDiagnostics = lexer.diagnostics + parser.diagnostics,
             program = program,
         )
