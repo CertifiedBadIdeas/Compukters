@@ -33,6 +33,7 @@ Canonical style:
 
 - 4 spaces per indentation level.
 - Imports are printed before top-level declarations.
+- Imports are sorted and duplicate selective import groups from the same source are merged.
 - Blank line between import block and declarations.
 - Blank line between top-level declarations.
 - Spaces around binary operators.
@@ -41,16 +42,15 @@ Canonical style:
 - Constructor calls remain named call-style, for example `Vec2(x = 1, y = 2)`.
 - The formatter is idempotent: formatting formatted source produces no further edits.
 
+Format Document does not remove unused imports. Removal is reserved for Cleanup Document because it needs semantic proof.
+
 ### Cleanup Document
 
 Cleanup uses the formatter plus import organization.
 
 It should:
 
-- Move all imports to the start of the file.
-- Sort imports by source text.
-- Sort selective import items inside `{ ... }`.
-- Merge duplicate selective imports from the same source.
+- Keep the same import sorting and merging behavior as Format Document.
 - Remove unused selective import items when analysis proves they are unused.
 - Remove an unused namespace alias only when analysis proves the alias is unused.
 - Preserve imports when analysis is ambiguous or contains errors.
@@ -104,6 +104,7 @@ Responsibilities:
 - parse input through `ParserFacade`,
 - reject invalid input,
 - render AST to canonical CKL source,
+- organize imports by sorting sources, sorting selective items, and merging duplicate selective groups,
 - preserve comments using comment trivia,
 - return `TextEdit` results instead of mutating files.
 
@@ -195,10 +196,15 @@ Formatter tests:
 - preserves leading, trailing, inline, and block comments,
 - is idempotent.
 
-Cleanup tests:
+Formatter import tests:
 
 - sorts imports,
+- sorts selective import items,
 - merges duplicate selective imports,
+- keeps used and unused imports because Format Document does not remove them.
+
+Cleanup tests:
+
 - removes unused selected items,
 - preserves used function, struct, and class imports,
 - preserves imports when semantic analysis has errors,
