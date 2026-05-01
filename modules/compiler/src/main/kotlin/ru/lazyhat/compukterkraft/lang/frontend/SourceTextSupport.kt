@@ -18,6 +18,14 @@
  */
 package ru.lazyhat.compukterkraft.lang.frontend
 
+import ru.lazyhat.compukterkraft.lang.runtime.TextEdit
+
+data class ImportGroupEditRequest(
+    val sourceText: String,
+    val sourceSyntax: String,
+    val importedName: String,
+)
+
 object SourceTextSupport {
     private val identifierPrefixRegex = Regex("""[A-Za-z_][A-Za-z0-9_]*$""")
     private val moduleMemberRegex = Regex("""([A-Za-z_][A-Za-z0-9_]*)(?:\.|::)([A-Za-z0-9_]*)$""")
@@ -79,5 +87,30 @@ object SourceTextSupport {
             }
         }
         return source.length
+    }
+
+    fun importGroupEdit(request: ImportGroupEditRequest): TextEdit {
+        val escaped = Regex.escape(request.sourceSyntax)
+        val regex = Regex("(?m)^import\\s+$escaped\\s*\\{([^}]*)}\\s*;")
+        val match = regex.find(request.sourceText)
+        if (match == null) {
+            return TextEdit(0, 0, "import ${request.sourceSyntax} { ${request.importedName} };\n")
+        }
+        val group = match.groups[1] ?: return TextEdit(0, 0, "import ${request.sourceSyntax} { ${request.importedName} };\n")
+        val names =
+            group.value
+                .split(',')
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .toMutableList()
+        if (request.importedName !in names) names += request.importedName
+        names.sort()
+        val leadingWhitespace = group.value.takeWhile { it.isWhitespace() }.length
+        val trailingWhitespace = group.value.takeLastWhile { it.isWhitespace() }.length
+        return TextEdit(
+            group.range.first + leadingWhitespace,
+            group.range.last + 1 - trailingWhitespace,
+            names.joinToString(", "),
+        )
     }
 }
