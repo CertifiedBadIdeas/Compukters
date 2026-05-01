@@ -27,10 +27,13 @@ import ru.lazyhat.compukterkraft.lang.api.Instruction
 import ru.lazyhat.compukterkraft.lang.frontend.FrontendSeverity
 import ru.lazyhat.compukterkraft.lang.frontend.LanguageBuiltins
 import ru.lazyhat.compukterkraft.lang.frontend.LanguageFrontend
+import ru.lazyhat.compukterkraft.lang.frontend.NoOpSourceLoader
+import ru.lazyhat.compukterkraft.lang.frontend.SourceLoader
 import ru.lazyhat.compukterkraft.lang.runtime.BytecodeComputerProgram
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceProfile
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceProgram
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspace
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspaceSourceLoader
 
 data class LoadedComputerProgramSource(
     val path: String,
@@ -52,6 +55,8 @@ class WorkspaceProgramLoader(
         val document = workspace.readDocument(deviceId, path) ?: return null
         return LoadedComputerProgramSource(document.path, document.text)
     }
+
+    fun sourceLoader(deviceId: Int): SourceLoader = DeviceWorkspaceSourceLoader(workspace, deviceId)
 }
 
 object ComputerProgramCompiler {
@@ -60,8 +65,9 @@ object ComputerProgramCompiler {
         source: String,
         profile: DeviceProfile? = null,
         runtimeRegistry: BuiltinRegistry = LanguageBuiltins.defaultRuntimeRegistry,
+        sourceLoader: SourceLoader = NoOpSourceLoader,
     ): CompiledComputerProgram {
-        val artifact = LanguageFrontend(runtimeRegistry).compile(path, source)
+        val artifact = LanguageFrontend(runtimeRegistry).compile(path, source, sourceLoader)
         val module = artifact.module
         val errorMessage =
             artifact.analysis.diagnostics
