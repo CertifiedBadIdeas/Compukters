@@ -41,14 +41,10 @@ class LanguageRuntimeTest {
             frontend.compile(
                 "runtime.ck",
                 """
-                import terminal;
-                import system;
-                import events;
-
                 fun main() {
-                    terminal.println("id=" + system.deviceId());
-                    val event: Event = events.pull("boot");
-                    terminal.println(event.name);
+                    terminal::println("id=" + system::deviceId());
+                    val event: Event = events::pull("boot");
+                    terminal::println(event.name);
                     sleep(1L);
                     yield();
                 }
@@ -127,15 +123,13 @@ class LanguageRuntimeTest {
             frontend.compile(
                 "loop.ck",
                 """
-                import terminal;
-
                 fun main() {
                     var i: Int = 0;
                     while (i < 3) {
-                        terminal.println("i=" + i);
+                        terminal::println("i=" + i);
                         i = i + 1;
                     }
-                    terminal.println("done=" + i);
+                    terminal::println("done=" + i);
                 }
                 """.trimIndent(),
             )
@@ -159,18 +153,16 @@ class LanguageRuntimeTest {
             frontend.compile(
                 "compound.ck",
                 """
-                import terminal;
-
                 fun main() {
                     var i: Int = 1;
                     i += 4;
-                    terminal.println("plus=" + i);
+                    terminal::println("plus=" + i);
                     i -= 2;
-                    terminal.println("minus=" + i);
+                    terminal::println("minus=" + i);
                     i *= 6;
-                    terminal.println("star=" + i);
+                    terminal::println("star=" + i);
                     i /= 3;
-                    terminal.println("slash=" + i);
+                    terminal::println("slash=" + i);
                 }
                 """.trimIndent(),
             )
@@ -217,10 +209,8 @@ class LanguageRuntimeTest {
             frontend.compile(
                 "stdout.ck",
                 """
-                import stdout;
-
                 fun main() {
-                    stdout.write("Hi");
+                    stdout::write("Hi");
                 }
                 """.trimIndent(),
             )
@@ -244,29 +234,24 @@ class LanguageRuntimeTest {
             frontend.compile(
                 "shell.ck",
                 """
-                import terminal;
-                import filesystem;
-                import process;
-                import strings;
-
                 fun main() {
-                    terminal.println(terminal.readln("> "));
-                    terminal.println(filesystem.list());
-                    terminal.println(process.currentDirectory());
-                    terminal.println(process.argument());
-                    terminal.println(strings.beforeSpace("mkdir test"));
-                    terminal.println(strings.afterSpace("mkdir test"));
-                    if (filesystem.makeDir("tmp")) {
-                        terminal.println("mk");
+                    terminal::println(terminal::readln("> "));
+                    terminal::println(filesystem::list());
+                    terminal::println(process::currentDirectory());
+                    terminal::println(process::argument());
+                    terminal::println(strings::beforeSpace("mkdir test"));
+                    terminal::println(strings::afterSpace("mkdir test"));
+                    if (filesystem::makeDir("tmp")) {
+                        terminal::println("mk");
                     } else {
-                        terminal.println("no");
+                        terminal::println("no");
                     }
-                    if (process.changeDirectory("tmp")) {
-                        terminal.println("cd");
+                    if (process::changeDirectory("tmp")) {
+                        terminal::println("cd");
                     } else {
-                        terminal.println("stay");
+                        terminal::println("stay");
                     }
-                    terminal.println(process.currentDirectory());
+                    terminal::println(process::currentDirectory());
                 }
                 """.trimIndent(),
             )
@@ -294,18 +279,16 @@ class LanguageRuntimeTest {
             frontend.compile(
                 "elseif.ck",
                 """
-                import terminal;
-
                 fun main() {
                     val x: Int = 2;
                     if (x == 1) {
-                        terminal.println("one");
+                        terminal::println("one");
                     } else if (x == 2) {
-                        terminal.println("two");
+                        terminal::println("two");
                     } else if (x == 3) {
-                        terminal.println("three");
+                        terminal::println("three");
                     } else {
-                        terminal.println("other");
+                        terminal::println("other");
                     }
                 }
                 """.trimIndent(),
@@ -330,16 +313,14 @@ class LanguageRuntimeTest {
             frontend.compile(
                 "elseif_else.ck",
                 """
-                import terminal;
-
                 fun main() {
                     val x: Int = 99;
                     if (x == 1) {
-                        terminal.println("one");
+                        terminal::println("one");
                     } else if (x == 2) {
-                        terminal.println("two");
+                        terminal::println("two");
                     } else {
-                        terminal.println("other");
+                        terminal::println("other");
                     }
                 }
                 """.trimIndent(),
@@ -359,22 +340,20 @@ class LanguageRuntimeTest {
             frontend.compile(
                 "when_subject.ck",
                 """
-                import terminal;
-
                 fun main() {
                     val x: Int = 2;
                     when(x) {
                         1 -> {
-                            terminal.println("one");
+                            terminal::println("one");
                         }
                         2 -> {
-                            terminal.println("two");
+                            terminal::println("two");
                         }
                         3 -> {
-                            terminal.println("three");
+                            terminal::println("three");
                         }
                         else -> {
-                            terminal.println("other");
+                            terminal::println("other");
                         }
                     }
                 }
@@ -395,19 +374,17 @@ class LanguageRuntimeTest {
             frontend.compile(
                 "when_multi.ck",
                 """
-                import terminal;
-
                 fun main() {
                     val x: Int = 3;
                     when(x) {
                         1 -> {
-                            terminal.println("one");
+                            terminal::println("one");
                         }
                         2, 3 -> {
-                            terminal.println("two or three");
+                            terminal::println("two or three");
                         }
                         else -> {
-                            terminal.println("other");
+                            terminal::println("other");
                         }
                     }
                 }
@@ -428,19 +405,17 @@ class LanguageRuntimeTest {
             frontend.compile(
                 "when_else.ck",
                 """
-                import terminal;
-
                 fun main() {
                     val x: Int = 99;
                     when(x) {
                         1 -> {
-                            terminal.println("one");
+                            terminal::println("one");
                         }
                         2 -> {
-                            terminal.println("two");
+                            terminal::println("two");
                         }
                         else -> {
-                            terminal.println("other");
+                            terminal::println("other");
                         }
                     }
                 }
@@ -461,19 +436,17 @@ class LanguageRuntimeTest {
             frontend.compile(
                 "when_no_subject.ck",
                 """
-                import terminal;
-
                 fun main() {
                     val x: Int = 5;
                     when {
                         x > 10 -> {
-                            terminal.println("big");
+                            terminal::println("big");
                         }
                         x > 0 -> {
-                            terminal.println("positive");
+                            terminal::println("positive");
                         }
                         else -> {
-                            terminal.println("non-positive");
+                            terminal::println("non-positive");
                         }
                     }
                 }
@@ -494,19 +467,17 @@ class LanguageRuntimeTest {
             frontend.compile(
                 "when_no_subject_else.ck",
                 """
-                import terminal;
-
                 fun main() {
                     val x: Int = 0;
                     when {
                         x > 10 -> {
-                            terminal.println("big");
+                            terminal::println("big");
                         }
                         x > 0 -> {
-                            terminal.println("positive");
+                            terminal::println("positive");
                         }
                         else -> {
-                            terminal.println("zero or negative");
+                            terminal::println("zero or negative");
                         }
                     }
                 }
@@ -551,14 +522,11 @@ class LanguageRuntimeTest {
             frontend.compile(
                 "monitor.ck",
                 """
-                import terminal;
-                import monitor;
-
                 fun main() {
-                    if (monitor.exists()) {
-                        terminal.println("connected");
+                    if (monitor::exists()) {
+                        terminal::println("connected");
                     } else {
-                        terminal.println("missing");
+                        terminal::println("missing");
                     }
                 }
                 """.trimIndent(),
@@ -607,14 +575,11 @@ class LanguageRuntimeTest {
             frontend.compile(
                 "monitor_connected.ck",
                 """
-                import terminal;
-                import monitor;
-
                 fun main() {
-                    if (monitor.exists()) {
-                        terminal.println("connected");
+                    if (monitor::exists()) {
+                        terminal::println("connected");
                     } else {
-                        terminal.println("missing");
+                        terminal::println("missing");
                     }
                 }
                 """.trimIndent(),

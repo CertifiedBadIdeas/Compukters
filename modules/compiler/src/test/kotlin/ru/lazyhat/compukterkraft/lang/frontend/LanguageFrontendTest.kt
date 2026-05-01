@@ -131,8 +131,6 @@ class LanguageFrontendTest {
             frontend.compile(
                 "test.ck",
                 """
-                import terminal;
-
                 struct Point {
                     x: Int,
                     y: Int
@@ -144,7 +142,7 @@ class LanguageFrontendTest {
 
                 fun main() {
                     val point: Point = Point { x: 1, y: 2 };
-                    terminal.println("sum=" + sum(point));
+                    terminal::println("sum=" + sum(point));
                 }
                 """.trimIndent(),
             )
@@ -183,18 +181,16 @@ class LanguageFrontendTest {
             frontend.compile(
                 "elseif.ck",
                 """
-                import terminal;
-
                 fun main() {
                     val x: Int = 2;
                     if (x == 1) {
-                        terminal.println("one");
+                        terminal::println("one");
                     } else if (x == 2) {
-                        terminal.println("two");
+                        terminal::println("two");
                     } else if (x == 3) {
-                        terminal.println("three");
+                        terminal::println("three");
                     } else {
-                        terminal.println("other");
+                        terminal::println("other");
                     }
                 }
                 """.trimIndent(),
@@ -213,19 +209,17 @@ class LanguageFrontendTest {
             frontend.compile(
                 "when_subject.ck",
                 """
-                import terminal;
-
                 fun main() {
                     val x: Int = 2;
                     when(x) {
                         1 -> {
-                            terminal.println("one");
+                            terminal::println("one");
                         }
                         2, 3 -> {
-                            terminal.println("two or three");
+                            terminal::println("two or three");
                         }
                         else -> {
-                            terminal.println("other");
+                            terminal::println("other");
                         }
                     }
                 }
@@ -245,19 +239,17 @@ class LanguageFrontendTest {
             frontend.compile(
                 "when_no_subject.ck",
                 """
-                import terminal;
-
                 fun main() {
                     val x: Int = 5;
                     when {
                         x > 10 -> {
-                            terminal.println("big");
+                            terminal::println("big");
                         }
                         x > 0 -> {
-                            terminal.println("positive");
+                            terminal::println("positive");
                         }
                         else -> {
-                            terminal.println("non-positive");
+                            terminal::println("non-positive");
                         }
                     }
                 }

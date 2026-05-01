@@ -61,19 +61,7 @@ class LanguageIde(
         val offset = SourceTextSupport.offsetAt(source, line, column)
         val importPrefix = SourceTextSupport.importPrefix(source, offset)
         if (importPrefix != null) {
-            val alreadyImported = analysis.importedModuleNames
-            return registry.modules
-                .asSequence()
-                .filter { it.name.startsWith(importPrefix) }
-                .filter { it.name !in alreadyImported }
-                .map {
-                    CompletionItem(
-                        label = it.name,
-                        detail = it.documentation,
-                        kind = CompletionItemKind.MODULE,
-                        documentation = it.documentation,
-                    )
-                }.toList()
+            return emptyList()
         }
         val prefix = SourceTextSupport.identifierPrefix(source, offset)
         val modulePrefix = SourceTextSupport.moduleMemberPrefix(source, offset)
