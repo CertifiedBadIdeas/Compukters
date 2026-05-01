@@ -79,6 +79,12 @@ data class FormatResult(
         get() = edits.isNotEmpty()
 }
 
+
+private data class NormalizedImport(
+    val sourceText: String,
+    val suffix: String,
+    val firstOffset: Int,
+)
 class LanguageFormatter(
     private val parser: ParserFacade = DefaultParserFacade(),
 ) {
@@ -119,10 +125,10 @@ class LanguageFormatter(
     private fun renderCanonical(parsed: ParsedSource): String {
         val writer = CklWriter()
         val comments = CommentPlanner(parsed.comments)
-        val imports = parsed.program.imports.sortedWith(compareBy({ it.source.displayText() }, { it.range.start.offset }))
+        val imports = normalizeImports(parsed.program.imports)
         imports.forEachIndexed { index, declaration ->
             if (index > 0) writer.line()
-            renderLeadingComments(writer, comments.takeBefore(declaration.range.start.offset))
+            renderLeadingComments(writer, comments.takeBefore(declaration.firstOffset))
             writer.write(renderImport(declaration))
         }
         if (imports.isNotEmpty() && parsed.program.declarations.isNotEmpty()) writer.blankLine()
@@ -139,15 +145,46 @@ class LanguageFormatter(
         return writer.result()
     }
 
-    private fun renderImport(declaration: ImportDeclaration): String {
-        val source = declaration.source.displayText()
-        val mode = declaration.mode
-        return when (mode) {
-            is ImportMode.Invalid -> "import $source;"
-            is ImportMode.Namespace -> "import $source as ${mode.alias};"
-            is ImportMode.Selective -> "import $source { ${mode.items.joinToString(", ") { it.name }} };"
+    private fun normalizeImports(imports: List<ImportDeclaration>): List<NormalizedImport> {
+        val selective = linkedMapOf<String, MutableList<ImportDeclaration>>()
+        val standalone = mutableListOf<NormalizedImport>()
+        imports.forEach { declaration ->
+            when (declaration.mode) {
+                is ImportMode.Selective -> selective.getOrPut(declaration.source.displayText()) { mutableListOf() } += declaration
+                is ImportMode.Namespace ->
+                    standalone +=
+                        NormalizedImport(
+                            sourceText = declaration.source.displayText(),
+                            suffix = " as ${declaration.mode.alias}",
+                            firstOffset = declaration.range.start.offset,
+                        )
+                is ImportMode.Invalid ->
+                    standalone +=
+                        NormalizedImport(
+                            sourceText = declaration.source.displayText(),
+                            suffix = "",
+                            firstOffset = declaration.range.start.offset,
+                        )
+            }
         }
+        val merged =
+            selective.map { (sourceText, declarations) ->
+                val items =
+                    declarations
+                        .flatMap { (it.mode as ImportMode.Selective).items }
+                        .map { it.name }
+                        .distinct()
+                        .sorted()
+                NormalizedImport(
+                    sourceText = sourceText,
+                    suffix = " { ${items.joinToString(", ")} }",
+                    firstOffset = declarations.minOf { it.range.start.offset },
+                )
+            }
+        return (merged + standalone).sortedWith(compareBy({ it.sourceText }, { it.suffix }, { it.firstOffset }))
     }
+
+    private fun renderImport(declaration: NormalizedImport): String = "import ${declaration.sourceText}${declaration.suffix};"
 
     private fun renderTopLevel(
         writer: CklWriter,
