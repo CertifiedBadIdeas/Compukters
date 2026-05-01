@@ -169,4 +169,29 @@ class UserFileImportsTest {
             artifact.analysis.diagnostics.joinToString { it.message },
         )
     }
+
+    @Test
+    fun importsAreNotTransitive() {
+        val loader =
+            MapSourceLoader(
+                mapOf(
+                    "deep.ck" to "fun deep(): Int { return 7; }",
+                    "mid.ck" to """import "deep.ck"; fun mid(): Int { return deep(); }""",
+                    "main.ck" to
+                        """
+                        import "mid.ck";
+                        fun main() { val z: Int = deep(); }
+                        """.trimIndent(),
+                ),
+            )
+
+        val artifact = frontend.compile("main.ck", loader.read("main.ck")!!, loader)
+
+        assertTrue(
+            artifact.analysis.diagnostics.any {
+                it.severity == FrontendSeverity.ERROR && it.message.contains("Expression is not callable")
+            },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+    }
 }
