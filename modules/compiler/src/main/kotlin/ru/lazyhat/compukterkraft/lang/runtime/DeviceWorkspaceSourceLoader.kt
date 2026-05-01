@@ -18,12 +18,14 @@
  */
 package ru.lazyhat.compukterkraft.lang.runtime
 
+import ru.lazyhat.compukterkraft.lang.frontend.SourceIndex
 import ru.lazyhat.compukterkraft.lang.frontend.SourceLoader
 
 class DeviceWorkspaceSourceLoader(
     private val workspace: DeviceWorkspace,
     private val deviceId: Int,
-) : SourceLoader {
+) : SourceLoader,
+    SourceIndex {
     override fun resolve(
         from: String,
         importPath: String,
@@ -35,6 +37,22 @@ class DeviceWorkspaceSourceLoader(
     }
 
     override fun read(canonical: String): String? = workspace.readDocument(deviceId, canonical)?.text
+
+    override fun listSources(): List<String> = collectCkFiles("").sorted()
+
+    override fun readIndexedSource(canonical: String): String? = read(canonical)
+
+    private fun collectCkFiles(path: String): List<String> =
+        workspace
+            .list(deviceId, path)
+            .flatMap { entry ->
+                val normalised = normalise(entry.path) ?: return@flatMap emptyList()
+                when {
+                    entry.directory -> collectCkFiles(normalised)
+                    normalised.endsWith(".ck") -> listOf(normalised)
+                    else -> emptyList()
+                }
+            }
 
     private fun normalise(path: String): String? {
         val parts = path.split('/').toMutableList()
