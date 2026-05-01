@@ -35,6 +35,7 @@ enum class TokenKind {
     WHEN,
     RETURN,
     IMPORT,
+    AS,
     STRUCT,
     COLON,
     COLON_COLON,

@@ -109,6 +109,7 @@ internal object IdePresentationSupport {
             TokenKind.WHEN,
             TokenKind.RETURN,
             TokenKind.IMPORT,
+            TokenKind.AS,
             TokenKind.STRUCT,
             -> HighlightTokenKind.KEYWORD
 

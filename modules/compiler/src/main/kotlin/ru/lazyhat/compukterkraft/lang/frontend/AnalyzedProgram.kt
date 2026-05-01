@@ -44,7 +44,7 @@ class AnalyzedProgram(
         }
 
     val importedModuleNames: Set<String>
-        get() = program.imports.map { it.moduleName }.toSet()
+        get() = emptySet()
 
     fun symbolAt(offset: Int): SymbolInfo? =
         references.firstOrNull { it.range.contains(offset) }?.target

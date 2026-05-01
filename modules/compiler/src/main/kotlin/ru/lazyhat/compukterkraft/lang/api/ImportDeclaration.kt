@@ -20,6 +20,9 @@
 package ru.lazyhat.compukterkraft.lang.api
 
 data class ImportDeclaration(
-    val moduleName: String,
+    val path: String,
+    val pathRange: ru.lazyhat.compukterkraft.lang.api.SourceRange,
+    val alias: String?,
+    val aliasRange: ru.lazyhat.compukterkraft.lang.api.SourceRange?,
     val range: ru.lazyhat.compukterkraft.lang.api.SourceRange,
 )

@@ -169,6 +169,7 @@ internal class SemanticAnalyzer(
             }.toMutableMap()
 
     private val importedModules = mutableMapOf<String, ModuleBinding>()
+    private val pendingImports = mutableListOf<ImportDeclaration>()
     private val userFunctionsByName = mutableMapOf<String, FunctionBinding>()
     private val userRecordsByName = mutableMapOf<String, RecordBinding>()
 
@@ -212,7 +213,18 @@ internal class SemanticAnalyzer(
     }
 
     private fun registerImports(imports: List<ImportDeclaration>) {
-        // Imports are rejected during parsing in Plan A. Built-in modules are ambient.
+        val seen = mutableSetOf<String>()
+        imports.forEach { declaration ->
+            if (!seen.add(declaration.path)) {
+                diagnostics +=
+                    FrontendDiagnostic(
+                        "Duplicate import of `${declaration.path}`.",
+                        declaration.range,
+                    )
+                return@forEach
+            }
+            pendingImports += declaration
+        }
     }
 
     private fun registerTopLevel(declarations: List<TopLevelDeclaration>) {
@@ -1541,6 +1553,7 @@ internal class Lexer(
                 "when" -> TokenKind.WHEN
                 "return" -> TokenKind.RETURN
                 "import" -> TokenKind.IMPORT
+                "as" -> TokenKind.AS
                 "struct" -> TokenKind.STRUCT
                 "true" -> TokenKind.TRUE
                 "false" -> TokenKind.FALSE
@@ -1649,22 +1662,34 @@ internal class Parser(
 
     private fun parseImport(): ImportDeclaration? {
         val keyword = previous()
-        while (!isAtEnd() && !check(TokenKind.SEMICOLON) && !check(TokenKind.FUN) && !check(TokenKind.STRUCT) && !check(TokenKind.IMPORT)) {
-            advance()
+        val pathToken =
+            consume(
+                TokenKind.STRING,
+                "Expected file path string after `import` (e.g. `import \"lib/math.ck\";`).",
+            ) ?: return null
+        val path = pathToken.text
+        if (!path.endsWith(".ck")) {
+            diagnostics +=
+                FrontendDiagnostic(
+                    "Import path must end with `.ck` (got `$path`).",
+                    pathToken.range,
+                )
         }
-        val end =
-            if (check(TokenKind.SEMICOLON)) {
-                advance().range.end
-            } else {
-                previous().range.end
-            }
-        diagnostics +=
-            FrontendDiagnostic(
-                "Built-in modules are available without `import`. " +
-                    "User-file imports are not yet supported in this version.",
-                SourceRange(keyword.range.start, end),
-            )
-        return null
+        var aliasName: String? = null
+        var aliasRange: SourceRange? = null
+        if (match(TokenKind.AS)) {
+            val aliasToken = consume(TokenKind.IDENTIFIER, "Expected alias name after `as`.") ?: return null
+            aliasName = aliasToken.text
+            aliasRange = aliasToken.range
+        }
+        val end = consumeOptional(TokenKind.SEMICOLON) ?: previous()
+        return ImportDeclaration(
+            path = path,
+            pathRange = pathToken.range,
+            alias = aliasName,
+            aliasRange = aliasRange,
+            range = SourceRange(keyword.range.start, end.range.end),
+        )
     }
 
     private fun parseFunction(): FunctionDeclaration? {
@@ -2236,9 +2261,7 @@ internal class Parser(
         return null
     }
 
-    private fun consumeOptional(kind: TokenKind) {
-        if (check(kind)) advance()
-    }
+    private fun consumeOptional(kind: TokenKind): Token? = if (check(kind)) advance() else null
 
     private fun match(kind: TokenKind): Boolean =
         if (check(kind)) {
