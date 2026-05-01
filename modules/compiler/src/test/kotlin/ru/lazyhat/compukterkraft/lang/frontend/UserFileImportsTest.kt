@@ -57,4 +57,116 @@ class UserFileImportsTest {
         )
         assertNotNull(artifact.module)
     }
+
+    @Test
+    fun flatImportsFromDifferentFilesShareNoNamesByMangling() {
+        val loader =
+            MapSourceLoader(
+                mapOf(
+                    "a.ck" to "fun helper(): Int { return 1; }",
+                    "b.ck" to "fun helper(): Int { return 2; }",
+                    "main.ck" to
+                        """
+                        import "a.ck" as a;
+                        import "b.ck" as b;
+                        fun main() {
+                            terminal::println("a=" + a::helper());
+                            terminal::println("b=" + b::helper());
+                        }
+                        """.trimIndent(),
+                ),
+            )
+
+        val artifact = frontend.compile("main.ck", loader.read("main.ck")!!, loader)
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+        assertNotNull(artifact.module)
+    }
+
+    @Test
+    fun aliasCollidesWithBuiltinModule() {
+        val loader = MapSourceLoader(mapOf("foo.ck" to "fun x(): Int { return 0; }"))
+
+        val artifact = frontend.compile("main.ck", """import "foo.ck" as terminal; fun main() { }""", loader)
+
+        assertTrue(
+            artifact.analysis.diagnostics.any {
+                it.severity == FrontendSeverity.ERROR && it.message.contains("Redeclaration")
+            },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+    }
+
+    @Test
+    fun flatImportsClashOnSameName() {
+        val loader =
+            MapSourceLoader(
+                mapOf(
+                    "a.ck" to "fun shared(): Int { return 1; }",
+                    "b.ck" to "fun shared(): Int { return 2; }",
+                    "main.ck" to
+                        """
+                        import "a.ck";
+                        import "b.ck";
+                        fun main() {}
+                        """.trimIndent(),
+                ),
+            )
+
+        val artifact = frontend.compile("main.ck", loader.read("main.ck")!!, loader)
+
+        assertTrue(
+            artifact.analysis.diagnostics.any {
+                it.severity == FrontendSeverity.ERROR && it.message.contains("Redeclaration")
+            },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+    }
+
+    @Test
+    fun flatImportClashesWithLocalFunction() {
+        val loader = MapSourceLoader(mapOf("a.ck" to "fun util(): Int { return 1; }"))
+
+        val artifact =
+            frontend.compile(
+                "main.ck",
+                """
+                import "a.ck";
+                fun util(): Int { return 0; }
+                fun main() {}
+                """.trimIndent(),
+                loader,
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.any {
+                it.severity == FrontendSeverity.ERROR && it.message.contains("Redeclaration")
+            },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+    }
+
+    @Test
+    fun duplicateImportPathDiagnostic() {
+        val loader = MapSourceLoader(mapOf("x.ck" to "fun a(): Int { return 0; }"))
+
+        val artifact =
+            frontend.compile(
+                "main.ck",
+                """
+                import "x.ck";
+                import "x.ck" as x;
+                fun main() {}
+                """.trimIndent(),
+                loader,
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.any { it.message.contains("Duplicate import") },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+    }
 }
