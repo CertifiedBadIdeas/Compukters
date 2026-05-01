@@ -6,8 +6,6 @@
 
 Top-level declarations:
 
-- `import terminal;`
-- `import system;`
 - `struct Vec2 { x: Int, y: Int }`
 - `fun main() { ... }`
 - `fun add(x: Int, y: Int): Int { return x + y; }`
@@ -24,7 +22,7 @@ Statements:
 - `when(subject) { value -> { ... } else -> { ... } }`
 - `when { condition -> { ... } else -> { ... } }`
 - `return expr;`
-- expression statements such as `terminal.println("ok");`
+- expression statements such as `terminal::println("ok");`
 
 ### `when` statement
 
@@ -34,9 +32,9 @@ With subject (compared via `==`):
 
 ```
 when(x) {
-    1 -> { terminal.println("one"); }
-    2, 3 -> { terminal.println("two or three"); }
-    else -> { terminal.println("other"); }
+    1 -> { terminal::println("one"); }
+    2, 3 -> { terminal::println("two or three"); }
+    else -> { terminal::println("other"); }
 }
 ```
 
@@ -44,10 +42,23 @@ Without subject (each branch is a `Bool` condition):
 
 ```
 when {
-    x > 10 -> { terminal.println("big"); }
-    x > 0 -> { terminal.println("positive"); }
-    else -> { terminal.println("non-positive"); }
+    x > 10 -> { terminal::println("big"); }
+    x > 0 -> { terminal::println("positive"); }
+    else -> { terminal::println("non-positive"); }
 }
+```
+
+## Operators
+
+- `::` resolves a name inside a namespace. Today this is used for built-in modules; user-file import aliases will use the same operator in a future version.
+- `.` accesses fields of struct values.
+
+Examples:
+
+```
+terminal::println("hi");
+val id: Int = system::computerId();
+val name: String = event.name;
 ```
 
 Expressions:
@@ -55,7 +66,8 @@ Expressions:
 - literals: `42`, `42L`, `"text"`, `true`, `false`, `null`
 - arithmetic and logic: `+ - * / == != < <= > >= && || !`
 - member access: `event.name`
-- function calls: `main()`, `terminal.write("hi")`
+- namespace calls: `terminal::write("hi")`
+- function calls: `main()`, `helper()`
 - struct construction: `Vec2 { x: 1, y: 2 }`
 
 ## Types
@@ -73,6 +85,17 @@ User-defined struct types are declared with `struct`.
 
 ## Builtin Modules
 
+### Built-in Modules Are Ambient
+
+Built-in modules (`terminal`, `system`, `filesystem`, `events`, `process`, `strings`, `stdout`) are always available — there is no `import` needed. Access their members with `::`:
+
+```
+terminal::println("hi");
+val id: Int = system::deviceId();
+```
+
+The old `import terminal;` / `terminal.println(...)` style is no longer valid. User-file imports are coming in a future version.
+
 `terminal`
 
 - `write(text: String): Unit`
@@ -88,7 +111,7 @@ User-defined struct types are declared with `struct`.
 
 `system`
 
-- `computerId(): Int`
+- `deviceId(): Int`
 - `currentTick(): Long`
 - `label(): String`
 - `profileName(): String`
@@ -100,6 +123,25 @@ User-defined struct types are declared with `struct`.
 
 - `pull(): Event`
 - `pull(filter: String): Event`
+
+`process`
+
+- `argument(): String`
+- `currentDirectory(): String`
+- `changeDirectory(path: String): Bool`
+- `run(path: String): Int`
+- `run(path: String, argument: String): Int`
+
+`strings`
+
+- `trim(text: String): String`
+- `isBlank(text: String): Bool`
+- `beforeSpace(text: String): String`
+- `afterSpace(text: String): String`
+
+`stdout`
+
+- `write(text: String): Unit`
 
 Global intrinsics:
 
