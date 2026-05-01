@@ -18,8 +18,8 @@
  */
 package ru.lazyhat.compukterkraft.core.workbench.screen
 
-import ru.lazyhat.compukterkraft.core.workbench.screen.WorkbenchInventoryLayout.Companion.SLOT_SIZE
 import ru.lazyhat.compukterkraft.core.ui.foundation.IntSize
+import ru.lazyhat.compukterkraft.core.workbench.screen.WorkbenchInventoryLayout.Companion.SLOT_SIZE
 
 /**
  * Single source of truth for the placement of the Workbench's right-hand

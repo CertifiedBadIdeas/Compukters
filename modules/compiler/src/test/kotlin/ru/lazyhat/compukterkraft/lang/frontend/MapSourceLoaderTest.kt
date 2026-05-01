@@ -43,7 +43,10 @@ class MapSourceLoaderTest {
 
     @Test
     fun resolvesCurrentDirectory() {
-        assertEquals("lib/io/print.ck", loader.resolve("lib/io/print.ck", "./print.ck"))
+        assertEquals(
+            "lib/io/print.ck",
+            loader.resolve("lib/io/print.ck", "./print.ck"),
+        )
     }
 
     @Test

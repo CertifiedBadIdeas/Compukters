@@ -20,14 +20,14 @@ package ru.lazyhat.compukterkraft.core.workbench
 
 import kotlinx.coroutines.flow.StateFlow
 import ru.lazyhat.compukterkraft.lang.api.BuiltinRegistry
+import ru.lazyhat.compukterkraft.lang.frontend.FormatResult
 import ru.lazyhat.compukterkraft.lang.runtime.CompletionItem
+import ru.lazyhat.compukterkraft.lang.runtime.DefinitionTarget
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceIdeSnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspaceDocument
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspaceEntry
-import ru.lazyhat.compukterkraft.lang.runtime.DefinitionTarget
 import ru.lazyhat.compukterkraft.lang.runtime.HighlightTokenKind
 import ru.lazyhat.compukterkraft.lang.runtime.HoverInfo
-import ru.lazyhat.compukterkraft.lang.frontend.FormatResult
 
 data class WorkbenchTargetState(
     val connected: Boolean = false,

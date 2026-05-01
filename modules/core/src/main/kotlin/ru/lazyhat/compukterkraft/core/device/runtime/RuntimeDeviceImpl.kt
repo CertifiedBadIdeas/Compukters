@@ -66,7 +66,8 @@ class RuntimeDeviceImpl(
     private val gameTime: GameTimeSource,
     private val terminalNetwork: TerminalNetworkBridge,
     private val stateSink: DeviceStateSink,
-) : RuntimeDevice, DeviceEvents.Receiver {
+) : RuntimeDevice,
+    DeviceEvents.Receiver {
     override val family: DeviceFamily = properties.family
     private val profile = DeviceProfileRegistry.forFamily(family)
 

@@ -25,8 +25,8 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 import ru.lazyhat.compukterkraft.common.workbench.context.ServerWorkbench
 import ru.lazyhat.compukterkraft.core.device.vm.DeviceWorkspaceHost
-import ru.lazyhat.compukterkraft.core.workbench.TargetControlGateway
 import ru.lazyhat.compukterkraft.core.workbench.LocalEdit
+import ru.lazyhat.compukterkraft.core.workbench.TargetControlGateway
 import ru.lazyhat.compukterkraft.core.workbench.WorkbenchIdeFacade
 import ru.lazyhat.compukterkraft.core.workbench.WorkbenchOpsGateway
 import ru.lazyhat.compukterkraft.core.workbench.WorkbenchRemoteState
@@ -217,12 +217,16 @@ class WorkbenchSyncIntegrationTest {
         override fun formatDocument(
             path: String,
             source: String,
-        ): ru.lazyhat.compukterkraft.lang.frontend.FormatResult = ru.lazyhat.compukterkraft.lang.frontend.FormatResult(emptyList())
+        ): ru.lazyhat.compukterkraft.lang.frontend.FormatResult =
+            ru.lazyhat.compukterkraft.lang.frontend
+                .FormatResult(emptyList())
 
         override fun cleanupDocument(
             path: String,
             source: String,
-        ): ru.lazyhat.compukterkraft.lang.frontend.FormatResult = ru.lazyhat.compukterkraft.lang.frontend.FormatResult(emptyList())
+        ): ru.lazyhat.compukterkraft.lang.frontend.FormatResult =
+            ru.lazyhat.compukterkraft.lang.frontend
+                .FormatResult(emptyList())
     }
 
     private class MutableUpdateSource : WorkbenchUpdateSource {

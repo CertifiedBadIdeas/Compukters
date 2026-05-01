@@ -38,7 +38,6 @@ import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchPresen
 import ru.lazyhat.compukterkraft.common.workbench.network.server.WorkbenchWorkspaceServerMessage
 import ru.lazyhat.compukterkraft.core.device.input.InputEvent
 import ru.lazyhat.compukterkraft.core.workbench.EditorPresence
-import ru.lazyhat.compukterkraft.core.workbench.screen.presencesForRecipient
 import ru.lazyhat.compukterkraft.core.workbench.RemoteCursor
 import ru.lazyhat.compukterkraft.core.workbench.WorkbenchRemoteState
 import ru.lazyhat.compukterkraft.core.workbench.WorkbenchStore
@@ -47,6 +46,7 @@ import ru.lazyhat.compukterkraft.core.workbench.crdt.CursorAnchor
 import ru.lazyhat.compukterkraft.core.workbench.crdt.Op
 import ru.lazyhat.compukterkraft.core.workbench.crdt.SiteId
 import ru.lazyhat.compukterkraft.core.workbench.crdt.TextRun
+import ru.lazyhat.compukterkraft.core.workbench.screen.presencesForRecipient
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 import java.util.concurrent.ConcurrentHashMap
 

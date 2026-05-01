@@ -19,10 +19,9 @@
 package ru.lazyhat.compukterkraft.common.workbench.input
 
 import net.minecraft.world.inventory.AbstractContainerMenu
-import ru.lazyhat.compukterkraft.common.workbench.input.NetworkWorkbenchInputGateway
-import ru.lazyhat.compukterkraft.core.device.input.TargetInputGateway
 import ru.lazyhat.compukterkraft.core.device.input.InputEvent
 import ru.lazyhat.compukterkraft.core.device.input.InputEventSink
+import ru.lazyhat.compukterkraft.core.device.input.TargetInputGateway
 
 class WorkbenchClientInputHandler(
     menu: AbstractContainerMenu,

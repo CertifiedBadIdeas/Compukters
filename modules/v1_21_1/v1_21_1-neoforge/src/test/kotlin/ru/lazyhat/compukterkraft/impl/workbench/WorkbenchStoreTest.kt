@@ -33,10 +33,10 @@ import ru.lazyhat.compukterkraft.lang.api.SourceLocation
 import ru.lazyhat.compukterkraft.lang.api.SourceRange
 import ru.lazyhat.compukterkraft.lang.runtime.CompletionItem
 import ru.lazyhat.compukterkraft.lang.runtime.CompletionItemKind
+import ru.lazyhat.compukterkraft.lang.runtime.DefinitionTarget
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceIdeSnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspaceDocument
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspaceEntry
-import ru.lazyhat.compukterkraft.lang.runtime.DefinitionTarget
 import ru.lazyhat.compukterkraft.lang.runtime.HoverInfo
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -177,11 +177,15 @@ class WorkbenchStoreTest {
         override fun formatDocument(
             path: String,
             source: String,
-        ): ru.lazyhat.compukterkraft.lang.frontend.FormatResult = ru.lazyhat.compukterkraft.lang.frontend.FormatResult(emptyList())
+        ): ru.lazyhat.compukterkraft.lang.frontend.FormatResult =
+            ru.lazyhat.compukterkraft.lang.frontend
+                .FormatResult(emptyList())
 
         override fun cleanupDocument(
             path: String,
             source: String,
-        ): ru.lazyhat.compukterkraft.lang.frontend.FormatResult = ru.lazyhat.compukterkraft.lang.frontend.FormatResult(emptyList())
+        ): ru.lazyhat.compukterkraft.lang.frontend.FormatResult =
+            ru.lazyhat.compukterkraft.lang.frontend
+                .FormatResult(emptyList())
     }
 }

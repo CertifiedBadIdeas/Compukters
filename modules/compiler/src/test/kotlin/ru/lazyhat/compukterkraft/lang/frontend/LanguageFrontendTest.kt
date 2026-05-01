@@ -60,7 +60,10 @@ class LanguageFrontendTest {
             )
 
         assertTrue(
-            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR && it.message.contains("Expected a top-level declaration") },
+            artifact.analysis.diagnostics.none {
+                it.severity == FrontendSeverity.ERROR &&
+                    it.message.contains("Expected a top-level declaration")
+            },
             artifact.analysis.diagnostics.joinToString { it.message },
         )
     }
@@ -219,7 +222,10 @@ class LanguageFrontendTest {
             )
 
         assertTrue(
-            artifact.analysis.diagnostics.any { it.severity == FrontendSeverity.ERROR && it.message.contains("Old record construction syntax") },
+            artifact.analysis.diagnostics.any {
+                it.severity == FrontendSeverity.ERROR &&
+                    it.message.contains("Old record construction syntax")
+            },
             artifact.analysis.diagnostics.joinToString { it.message },
         )
         assertEquals(null, artifact.module)

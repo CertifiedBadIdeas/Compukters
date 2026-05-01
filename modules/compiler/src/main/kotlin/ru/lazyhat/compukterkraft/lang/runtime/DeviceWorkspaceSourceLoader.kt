@@ -59,14 +59,20 @@ class DeviceWorkspaceSourceLoader(
         var i = 0
         while (i < parts.size) {
             when (parts[i]) {
-                "", "." -> parts.removeAt(i)
+                "", "." -> {
+                    parts.removeAt(i)
+                }
+
                 ".." -> {
                     if (i == 0) return null
                     parts.removeAt(i)
                     parts.removeAt(i - 1)
                     i -= 1
                 }
-                else -> i += 1
+
+                else -> {
+                    i += 1
+                }
             }
         }
         return parts.joinToString("/")

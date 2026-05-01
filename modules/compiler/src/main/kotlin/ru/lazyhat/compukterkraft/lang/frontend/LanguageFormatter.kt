@@ -45,8 +45,8 @@ import ru.lazyhat.compukterkraft.lang.api.LiteralExpression
 import ru.lazyhat.compukterkraft.lang.api.LongLiteralValue
 import ru.lazyhat.compukterkraft.lang.api.MemberAccessExpression
 import ru.lazyhat.compukterkraft.lang.api.MemberAssignmentStatement
-import ru.lazyhat.compukterkraft.lang.api.NamedCallArgument
 import ru.lazyhat.compukterkraft.lang.api.NameExpression
+import ru.lazyhat.compukterkraft.lang.api.NamedCallArgument
 import ru.lazyhat.compukterkraft.lang.api.NullLiteralValue
 import ru.lazyhat.compukterkraft.lang.api.PositionalCallArgument
 import ru.lazyhat.compukterkraft.lang.api.RecordConstructionExpression
@@ -56,9 +56,9 @@ import ru.lazyhat.compukterkraft.lang.api.Statement
 import ru.lazyhat.compukterkraft.lang.api.StringLiteralValue
 import ru.lazyhat.compukterkraft.lang.api.StructDeclaration
 import ru.lazyhat.compukterkraft.lang.api.ThisExpression
-import ru.lazyhat.compukterkraft.lang.api.TopLevelDeclaration
 import ru.lazyhat.compukterkraft.lang.api.Token
 import ru.lazyhat.compukterkraft.lang.api.TokenKind
+import ru.lazyhat.compukterkraft.lang.api.TopLevelDeclaration
 import ru.lazyhat.compukterkraft.lang.api.TypeSyntax
 import ru.lazyhat.compukterkraft.lang.api.UnaryExpression
 import ru.lazyhat.compukterkraft.lang.api.UnaryOperator
@@ -86,6 +86,7 @@ private data class NormalizedImport(
     val suffix: String,
     val firstOffset: Int,
 )
+
 class LanguageFormatter(
     private val parser: ParserFacade = DefaultParserFacade(),
 ) {
@@ -173,39 +174,46 @@ class LanguageFormatter(
         val standalone = mutableListOf<NormalizedImport>()
         imports.forEach { declaration ->
             when (declaration.mode) {
-                is ImportMode.Selective -> selective.getOrPut(declaration.source.displayText()) { mutableListOf() } += declaration
-                is ImportMode.Namespace ->
+                is ImportMode.Selective -> {
+                    selective.getOrPut(declaration.source.displayText()) { mutableListOf() } += declaration
+                }
+
+                is ImportMode.Namespace -> {
                     standalone +=
                         NormalizedImport(
                             sourceText = declaration.source.displayText(),
                             suffix = " as ${declaration.mode.alias}",
                             firstOffset = declaration.range.start.offset,
                         )
-                is ImportMode.Invalid ->
+                }
+
+                is ImportMode.Invalid -> {
                     standalone +=
                         NormalizedImport(
                             sourceText = declaration.source.displayText(),
                             suffix = "",
                             firstOffset = declaration.range.start.offset,
                         )
+                }
             }
         }
         val merged =
-            selective.map { (sourceText, declarations) ->
-                val items =
-                    declarations
-                        .flatMap { (it.mode as ImportMode.Selective).items }
-                        .map { it.name }
-                        .distinct()
-                        .filter { usedImportedNames == null || it in usedImportedNames }
-                        .sorted()
-                if (items.isEmpty()) return@map null
-                NormalizedImport(
-                    sourceText = sourceText,
-                    suffix = " { ${items.joinToString(", ")} }",
-                    firstOffset = declarations.minOf { it.range.start.offset },
-                )
-            }.filterNotNull()
+            selective
+                .map { (sourceText, declarations) ->
+                    val items =
+                        declarations
+                            .flatMap { (it.mode as ImportMode.Selective).items }
+                            .map { it.name }
+                            .distinct()
+                            .filter { usedImportedNames == null || it in usedImportedNames }
+                            .sorted()
+                    if (items.isEmpty()) return@map null
+                    NormalizedImport(
+                        sourceText = sourceText,
+                        suffix = " { ${items.joinToString(", ")} }",
+                        firstOffset = declarations.minOf { it.range.start.offset },
+                    )
+                }.filterNotNull()
         return (merged + standalone).sortedWith(compareBy({ it.sourceText }, { it.suffix }, { it.firstOffset }))
     }
 
@@ -221,8 +229,9 @@ class LanguageFormatter(
         return parsed.tokens
             .asSequence()
             .filter { it.kind == TokenKind.IDENTIFIER }
-            .filterNot { token -> importRanges.any { token.range.start.offset >= it.start.offset && token.range.start.offset < it.end.offset } }
-            .map(Token::text)
+            .filterNot { token ->
+                importRanges.any { token.range.start.offset >= it.start.offset && token.range.start.offset < it.end.offset }
+            }.map(Token::text)
             .filter { it in importedNames }
             .toSet()
     }
@@ -267,20 +276,20 @@ class LanguageFormatter(
                 "$prefix${parameter.name}: ${renderType(parameter.type)}"
             }
         writer.write("class ${declaration.name}($parameters)")
-            renderClassBody(writer, declaration.members, comments)
+        renderClassBody(writer, declaration.members, comments)
     }
 
     private fun renderClassBody(
         writer: CklWriter,
         members: List<ClassMemberDeclaration>,
-            comments: CommentPlanner,
+        comments: CommentPlanner,
     ) {
         writer.write(" {")
         writer.line()
         writer.indented {
             members.forEachIndexed { index, member ->
                 if (index > 0) writer.blankLine()
-                    renderLeadingComments(writer, comments.takeBefore(member.range.start.offset))
+                renderLeadingComments(writer, comments.takeBefore(member.range.start.offset))
                 when (member) {
                     is ClassFieldDeclaration -> {
                         writer.write(if (member.mutable) "var " else "val ")
@@ -289,11 +298,15 @@ class LanguageFormatter(
                         writer.write(" = ${renderExpression(member.initializer)};")
                         writer.line()
                     }
+
                     is ClassInitBlock -> {
                         writer.write("init")
                         renderBlock(writer, member.body, comments)
                     }
-                    is ClassMethodDeclaration -> renderFunction(writer, member.function, static = member.static, comments)
+
+                    is ClassMethodDeclaration -> {
+                        renderFunction(writer, member.function, static = member.static, comments)
+                    }
                 }
             }
         }
@@ -343,22 +356,32 @@ class LanguageFormatter(
                 writer.write("${statement.name} = ${renderExpression(statement.expression)};")
                 writer.line()
             }
-            is BlockStatement -> renderBlock(writer, statement, comments)
+
+            is BlockStatement -> {
+                renderBlock(writer, statement, comments)
+            }
+
             is ExpressionStatement -> {
                 writer.write("${renderExpression(statement.expression)};")
                 writer.line()
             }
-            is IfStatement -> renderIf(writer, statement, comments)
+
+            is IfStatement -> {
+                renderIf(writer, statement, comments)
+            }
+
             is MemberAssignmentStatement -> {
                 writer.write("${renderExpression(statement.receiver)}.${statement.memberName} = ${renderExpression(statement.expression)};")
                 writer.line()
             }
+
             is ReturnStatement -> {
                 writer.write("return")
                 statement.expression?.let { writer.write(" ${renderExpression(it)}") }
                 writer.write(";")
                 writer.line()
             }
+
             is VariableDeclarationStatement -> {
                 writer.write(if (statement.mutable) "var " else "val ")
                 writer.write(statement.name)
@@ -366,7 +389,11 @@ class LanguageFormatter(
                 writer.write(" = ${renderExpression(statement.initializer)};")
                 writer.line()
             }
-            is WhenStatement -> renderWhen(writer, statement, comments)
+
+            is WhenStatement -> {
+                renderWhen(writer, statement, comments)
+            }
+
             is WhileStatement -> {
                 writer.write("while ${renderExpression(statement.condition)}")
                 renderBlock(writer, statement.body, comments)
@@ -388,10 +415,12 @@ class LanguageFormatter(
                     renderBlockInline(writer, elseBranch, comments)
                     writer.line()
                 }
+
                 is IfStatement -> {
                     writer.write(" else ")
                     renderIf(writer, elseBranch, comments)
                 }
+
                 else -> {
                     writer.write(" else ")
                     renderStatement(writer, elseBranch, comments)
@@ -447,17 +476,54 @@ class LanguageFormatter(
     ): String {
         val rendered =
             when (expression) {
-                is BinaryExpression -> renderBinary(expression)
-                is CallExpression -> "${renderExpression(expression.callee, PRECEDENCE_CALL)}(${expression.arguments.joinToString(", ") { renderCallArgument(it) }})"
-                is GroupExpression -> "(${renderExpression(expression.expression)})"
-                is LegacyRecordConstructionExpression -> renderLegacyRecordConstruction(expression)
-                is LiteralExpression -> renderLiteral(expression)
-                is MemberAccessExpression -> "${renderExpression(expression.receiver, PRECEDENCE_CALL)}.${expression.memberName}"
-                is NameExpression -> expression.name
-                is RecordConstructionExpression -> renderRecordConstruction(expression)
-                is ScopeAccessExpression -> "${expression.qualifier}::${expression.name}"
-                is ThisExpression -> "this"
-                is UnaryExpression -> renderUnary(expression)
+                is BinaryExpression -> {
+                    renderBinary(expression)
+                }
+
+                is CallExpression -> {
+                    "${
+                        renderExpression(
+                            expression.callee,
+                            PRECEDENCE_CALL,
+                        )
+                    }(${expression.arguments.joinToString(", ") { renderCallArgument(it) }})"
+                }
+
+                is GroupExpression -> {
+                    "(${renderExpression(expression.expression)})"
+                }
+
+                is LegacyRecordConstructionExpression -> {
+                    renderLegacyRecordConstruction(expression)
+                }
+
+                is LiteralExpression -> {
+                    renderLiteral(expression)
+                }
+
+                is MemberAccessExpression -> {
+                    "${renderExpression(expression.receiver, PRECEDENCE_CALL)}.${expression.memberName}"
+                }
+
+                is NameExpression -> {
+                    expression.name
+                }
+
+                is RecordConstructionExpression -> {
+                    renderRecordConstruction(expression)
+                }
+
+                is ScopeAccessExpression -> {
+                    "${expression.qualifier}::${expression.name}"
+                }
+
+                is ThisExpression -> {
+                    "this"
+                }
+
+                is UnaryExpression -> {
+                    renderUnary(expression)
+                }
             }
         return if (expression.precedence() < parentPrecedence) "($rendered)" else rendered
     }
@@ -483,12 +549,20 @@ class LanguageFormatter(
 
     private fun renderRecordConstruction(expression: RecordConstructionExpression): String {
         val qualifier = expression.qualifier?.let { "$it::" }.orEmpty()
-        return "$qualifier${expression.typeName}(${expression.fields.joinToString(", ") { "${it.name} = ${renderExpression(it.expression)}" }})"
+        return "$qualifier${expression.typeName}(${
+            expression.fields.joinToString(
+                ", ",
+            ) { "${it.name} = ${renderExpression(it.expression)}" }
+        })"
     }
 
     private fun renderLegacyRecordConstruction(expression: LegacyRecordConstructionExpression): String {
         val qualifier = expression.qualifier?.let { "$it::" }.orEmpty()
-        return "$qualifier${expression.typeName} { ${expression.fields.joinToString(", ") { "${it.name}: ${renderExpression(it.expression)}" }} }"
+        return "$qualifier${expression.typeName} { ${
+            expression.fields.joinToString(
+                ", ",
+            ) { "${it.name}: ${renderExpression(it.expression)}" }
+        } }"
     }
 
     private fun renderCallArgument(argument: CallArgument): String =
@@ -515,7 +589,9 @@ class LanguageFormatter(
 
 private fun String.ensureTrailingNewline(): String = if (endsWith("\n")) this else "$this\n"
 
-private class CommentPlanner(comments: List<CommentTrivia>) {
+private class CommentPlanner(
+    comments: List<CommentTrivia>,
+) {
     private val pending = comments.sortedBy { it.range.start.offset }.toMutableList()
 
     fun takeBefore(offset: Int): List<CommentTrivia> {

@@ -25,8 +25,8 @@ import net.minecraft.network.chat.Component
 import net.minecraft.network.chat.HoverEvent
 import net.minecraft.network.chat.MutableComponent
 import net.minecraft.network.chat.Style
-import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDevice
 import ru.lazyhat.compukterkraft.common.localization.CompukterComponents
+import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDevice
 
 /**
  * Various helpers for building chat messages.

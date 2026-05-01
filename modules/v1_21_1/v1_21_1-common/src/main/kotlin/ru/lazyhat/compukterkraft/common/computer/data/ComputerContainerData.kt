@@ -21,9 +21,9 @@ package ru.lazyhat.compukterkraft.common.computer.data
 
 import net.minecraft.network.RegistryFriendlyByteBuf
 import net.minecraft.world.item.ItemStack
-import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDevice
 import ru.lazyhat.compukterkraft.core.Config
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
+import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDevice
 
 class ComputerContainerData private constructor(
     val family: DeviceFamily,

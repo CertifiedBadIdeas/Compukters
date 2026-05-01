@@ -1,18 +1,42 @@
+/*
+ * The Compukter Kraft Developers
+ *
+ * Copyright (C) 2026 Vsevolod Petrov (lazyhat)
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package ru.lazyhat.compukterkraft.core.device.runtime
 
-import java.util.UUID
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 import ru.lazyhat.compukterkraft.core.device.DeviceEvents
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
+import java.util.UUID
 
 /** Lifecycle role: turn on/off, tick, query state. */
 interface RuntimeDeviceLifecycle {
     val deviceId: Int
     val isOn: Boolean
+
     fun turnOn()
+
     fun shutdown()
+
     fun reboot()
+
     fun serverTick()
+
     fun close()
 }
 
@@ -27,8 +51,19 @@ interface RuntimeDeviceScreen {
 
 /** Terminal-session role: per-player byte-stream attachments. */
 interface RuntimeDeviceTerminalSessions {
-    fun attachTerminalSession(playerUuid: UUID, containerId: Int, cols: Int, rows: Int)
-    fun resizeTerminalSession(playerUuid: UUID, cols: Int, rows: Int)
+    fun attachTerminalSession(
+        playerUuid: UUID,
+        containerId: Int,
+        cols: Int,
+        rows: Int,
+    )
+
+    fun resizeTerminalSession(
+        playerUuid: UUID,
+        cols: Int,
+        rows: Int,
+    )
+
     fun detachTerminalSession(playerUuid: UUID)
 }
 

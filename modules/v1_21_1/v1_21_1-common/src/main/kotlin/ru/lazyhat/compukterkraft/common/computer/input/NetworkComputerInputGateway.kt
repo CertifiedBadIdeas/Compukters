@@ -26,12 +26,12 @@ import ru.lazyhat.compukterkraft.common.computer.network.server.PasteEventComput
 import ru.lazyhat.compukterkraft.common.network.ClientNetworking
 import ru.lazyhat.compukterkraft.core.LOGGER
 import ru.lazyhat.compukterkraft.core.device.input.ComputerControlAction
-import ru.lazyhat.compukterkraft.core.device.input.TargetInputGateway
 import ru.lazyhat.compukterkraft.core.device.input.ControlInputEvent
 import ru.lazyhat.compukterkraft.core.device.input.InputEvent
 import ru.lazyhat.compukterkraft.core.device.input.KeyInputEvent
 import ru.lazyhat.compukterkraft.core.device.input.MouseInputEvent
 import ru.lazyhat.compukterkraft.core.device.input.PasteInputEvent
+import ru.lazyhat.compukterkraft.core.device.input.TargetInputGateway
 
 class NetworkComputerInputGateway(
     private val menu: AbstractContainerMenu,

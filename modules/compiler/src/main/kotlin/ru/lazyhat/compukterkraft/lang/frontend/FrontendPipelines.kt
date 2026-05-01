@@ -210,7 +210,10 @@ internal class DefaultCompilerFacade(
         val parsed = linkedMapOf<String, ParsedSource>()
         val importDiagnostics = linkedMapOf<String, MutableList<FrontendDiagnostic>>()
 
-        fun parse(canonical: String, source: String) {
+        fun parse(
+            canonical: String,
+            source: String,
+        ) {
             if (parsed.containsKey(canonical)) return
             val current = parser.parse(canonical, source)
             parsed[canonical] = current
