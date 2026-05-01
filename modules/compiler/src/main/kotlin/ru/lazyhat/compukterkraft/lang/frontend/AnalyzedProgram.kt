@@ -88,7 +88,7 @@ class AnalyzedProgram(
                     name = it.name,
                     kind = SymbolKind.BUILTIN_FUNCTION,
                     range = null,
-                    detail = "$moduleName.${it.name}(${it.parameterTypes.joinToString()}) : ${it.returnType}",
+                    detail = "$moduleName::${it.name}(${it.parameterTypes.joinToString()}) : ${it.returnType}",
                     documentation = it.documentation,
                 )
             }.orEmpty()

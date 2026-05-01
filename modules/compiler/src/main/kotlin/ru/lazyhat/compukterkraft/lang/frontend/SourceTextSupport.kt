@@ -20,7 +20,7 @@ package ru.lazyhat.compukterkraft.lang.frontend
 
 object SourceTextSupport {
     private val identifierPrefixRegex = Regex("""[A-Za-z_][A-Za-z0-9_]*$""")
-    private val moduleMemberRegex = Regex("""([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z0-9_]*)$""")
+    private val moduleMemberRegex = Regex("""([A-Za-z_][A-Za-z0-9_]*)(?:\.|::)([A-Za-z0-9_]*)$""")
     private val importPrefixRegex = Regex("""import\s+(\w*)$""")
 
     fun importPrefix(

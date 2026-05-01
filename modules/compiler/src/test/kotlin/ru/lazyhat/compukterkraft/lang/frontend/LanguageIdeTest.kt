@@ -37,13 +37,11 @@ class LanguageIdeTest {
     fun providesCompletionHoverAndDefinition() {
         val completionSource =
             """
-            import terminal;
-
             fun main() {
-                terminal.
+                terminal::
             }
             """.trimIndent()
-        val completionCursor = lineAndColumnOf(completionSource, "terminal.") + 9
+        val completionCursor = lineAndColumnOf(completionSource, "terminal::") + 10
         val completion =
             ide.complete(
                 "completion.ck",
@@ -55,10 +53,8 @@ class LanguageIdeTest {
 
         val source =
             """
-            import terminal;
-
             fun helper() {
-                terminal.println("hi");
+                terminal::println("hi");
             }
 
             fun main() {
@@ -69,7 +65,7 @@ class LanguageIdeTest {
         val hoverPosition = lineAndColumnOf(source, "println")
         val hover = ide.hover("test.ck", source, hoverPosition.first, hoverPosition.second)
         assertNotNull(hover)
-        assertTrue(hover.contents.contains("terminal.println"))
+        assertTrue(hover.contents.contains("terminal::println"))
 
         val definitionPosition = lineAndColumnOfLast(source, "helper")
         val definition =
@@ -87,11 +83,9 @@ class LanguageIdeTest {
     fun producesDiagnosticsAndHighlights() {
         val source =
             """
-            import terminal;
-
             fun main() {
                 val text: Bool = "oops";
-                terminal.println("hi");
+                terminal::println("hi");
             }
             """.trimIndent()
 
@@ -140,7 +134,7 @@ class LanguageIdeTest {
 
     @Test
     fun recoversFromIncompleteImport() {
-        val source = "import terminal;\nimport \nfun main() {\n    terminal.println(\"hi\");\n}"
+        val source = "import \nfun main() {\n    terminal::println(\"hi\");\n}"
         val snapshot = ide.analyze("recovery.ck", source)
         assertTrue(snapshot.diagnostics.isNotEmpty(), "Should have diagnostics for incomplete import")
         // main function should be visible — this requires the AST (parser recovery)
@@ -150,11 +144,11 @@ class LanguageIdeTest {
 
     @Test
     fun recoversFromGarbageToken() {
-        val source = "import terminal;\n123\nfun main() {}"
+        val source = "123\nfun main() {}"
         val snapshot = ide.analyze("garbage.ck", source)
         assertTrue(snapshot.diagnostics.isNotEmpty(), "Should have diagnostics for garbage tokens")
         // main function should be visible — this requires the AST (parser recovery)
-        val completions = ide.complete("garbage.ck", source, 2, 0)
+        val completions = ide.complete("garbage.ck", source, 1, 0)
         assertTrue(completions.any { it.label == "main" }, "Should see main function after recovery")
     }
 
@@ -178,26 +172,25 @@ class LanguageIdeTest {
     }
 
     @Test
-    fun completesImportModules() {
-        val allModules = ide.complete("test.ck", "import ", 0, 7)
+    fun completesAmbientModulesAsVisibleSymbols() {
+        val allModules = ide.complete("test.ck", "", 0, 0)
         val moduleLabels = allModules.filter { it.kind == CompletionItemKind.MODULE }.map { it.label }.toSet()
         assertEquals(setOf("terminal", "stdout", "filesystem", "system", "events", "process", "strings"), moduleLabels)
     }
 
     @Test
-    fun completesImportModulesWithPrefix() {
-        val filtered = ide.complete("test.ck", "import te", 0, 9)
+    fun completesAmbientModulesWithPrefix() {
+        val filtered = ide.complete("test.ck", "te", 0, 2)
         val moduleLabels = filtered.filter { it.kind == CompletionItemKind.MODULE }.map { it.label }
         assertEquals(listOf("terminal"), moduleLabels)
     }
 
     @Test
-    fun completesImportModulesExcludingAlreadyImported() {
-        val source = "import terminal;\nimport "
-        val completions = ide.complete("test.ck", source, 1, 7)
+    fun doesNotCompleteBuiltinModulesInImportContext() {
+        val source = "import "
+        val completions = ide.complete("test.ck", source, 0, 7)
         val moduleLabels = completions.filter { it.kind == CompletionItemKind.MODULE }.map { it.label }.toSet()
-        assertFalse(moduleLabels.contains("terminal"), "Should not suggest already-imported terminal")
-        assertEquals(setOf("filesystem", "stdout", "system", "events", "process", "strings"), moduleLabels)
+        assertTrue(moduleLabels.isEmpty(), "Should not suggest built-in modules for import")
     }
 
     @Test
@@ -232,8 +225,8 @@ class LanguageIdeTest {
             )
         val ide = LanguageIde(LanguageFrontend(terminalOnly))
 
-        val snapshot = ide.analyze("test.ck", "import filesystem;\nfun main() {}")
-        assertTrue(snapshot.diagnostics.any { it.message.contains("not supported by this VM") })
+        val snapshot = ide.analyze("test.ck", "fun main() { filesystem::list(); }")
+        assertTrue(snapshot.diagnostics.any { it.message.contains("Unknown namespace") })
     }
 
     @Test
@@ -246,7 +239,7 @@ class LanguageIdeTest {
             )
         val ide = LanguageIde(LanguageFrontend(terminalOnly))
 
-        val items = ide.complete("test.ck", "import ", 0, 7)
-        assertEquals(listOf("terminal"), items.map { it.label })
+        val items = ide.complete("test.ck", "", 0, 0)
+        assertEquals(listOf("terminal"), items.filter { it.kind == CompletionItemKind.MODULE }.map { it.label })
     }
 }
