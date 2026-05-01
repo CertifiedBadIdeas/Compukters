@@ -37,6 +37,9 @@ import ru.lazyhat.compukterkraft.lang.api.FunctionDeclaration
 import ru.lazyhat.compukterkraft.lang.api.GroupExpression
 import ru.lazyhat.compukterkraft.lang.api.IfStatement
 import ru.lazyhat.compukterkraft.lang.api.ImportDeclaration
+import ru.lazyhat.compukterkraft.lang.api.ImportItem
+import ru.lazyhat.compukterkraft.lang.api.ImportMode
+import ru.lazyhat.compukterkraft.lang.api.ImportSource
 import ru.lazyhat.compukterkraft.lang.api.Instruction
 import ru.lazyhat.compukterkraft.lang.api.IntLiteralValue
 import ru.lazyhat.compukterkraft.lang.api.LiteralExpression
@@ -243,34 +246,100 @@ internal class SemanticAnalyzer(
     private fun registerImports(imports: List<ImportDeclaration>) {
         val seen = mutableSetOf<String>()
         imports.forEach { declaration ->
-            val canonical = resolveImport(declaration.path)
-            if (canonical == null) {
-                return@forEach
-            }
-            if (!seen.add(canonical)) {
-                diagnostics +=
-                    FrontendDiagnostic(
-                        "Duplicate import of `${declaration.path}`.",
-                        declaration.range,
-                    )
-                return@forEach
-            }
-            val exports = lookupExports(canonical) ?: return@forEach
-            pendingImports += declaration
-            if (declaration.alias != null) {
-                registerImportAlias(declaration, exports)
-            } else {
-                registerFlatImport(declaration, exports)
+            when (val source = declaration.source) {
+                is ImportSource.BuiltinNamespace -> registerBuiltinImport(declaration, source)
+                is ImportSource.FilePath -> registerFileImport(declaration, source, seen)
             }
         }
     }
 
-    private fun registerImportAlias(
+    private fun registerBuiltinImport(
         declaration: ImportDeclaration,
+        source: ImportSource.BuiltinNamespace,
+    ) {
+        when (val mode = declaration.mode) {
+            is ImportMode.Invalid -> diagnostics += FrontendDiagnostic(mode.message, mode.range)
+            is ImportMode.Namespace -> diagnostics += FrontendDiagnostic("Use `import ${source.name} { name }`.", mode.aliasRange)
+            is ImportMode.Selective -> registerBuiltinSelectiveImport(source, mode)
+        }
+    }
+
+    private fun registerFileImport(
+        declaration: ImportDeclaration,
+        source: ImportSource.FilePath,
+        seen: MutableSet<String>,
+    ) {
+        if (declaration.mode is ImportMode.Invalid) {
+            diagnostics += FrontendDiagnostic(declaration.mode.message, declaration.mode.range)
+            return
+        }
+        val canonical = resolveImport(source.path) ?: return
+        if (!seen.add(canonical)) {
+            diagnostics += FrontendDiagnostic("Duplicate import of `${source.path}`.", declaration.range)
+            return
+        }
+        val exports = lookupExports(canonical) ?: return
+        pendingImports += declaration
+        when (val mode = declaration.mode) {
+            is ImportMode.Invalid -> Unit
+            is ImportMode.Namespace -> registerImportAlias(source, mode, exports)
+            is ImportMode.Selective -> registerFileSelectiveImport(source, mode, exports)
+        }
+    }
+
+    private fun registerBuiltinSelectiveImport(
+        source: ImportSource.BuiltinNamespace,
+        mode: ImportMode.Selective,
+    ) {
+        val module = registry.module(source.name)
+        if (module == null) {
+            diagnostics += FrontendDiagnostic("Unknown namespace `${source.name}`.", source.range)
+            return
+        }
+        val seenItems = mutableSetOf<String>()
+        mode.items.forEach { item ->
+            if (!seenItems.add(item.name)) {
+                diagnostics += FrontendDiagnostic("Duplicate import of `${item.name}`.", item.range)
+                return@forEach
+            }
+            val function = module.functions.firstOrNull { it.name == item.name }
+            if (function == null) {
+                diagnostics += FrontendDiagnostic("Namespace `${source.name}` has no member `${item.name}`.", item.range)
+                return@forEach
+            }
+            if (importedModules.containsKey(item.name) || importAliases.containsKey(item.name) || userFunctionsByName.containsKey(item.name) || userRecordsByName.containsKey(item.name)) {
+                diagnostics += FrontendDiagnostic("Redeclaration of `${item.name}`.", item.range)
+                return@forEach
+            }
+            val parameterTypes = function.parameterTypes.map { TypeRef(it) }
+            val returnType = TypeRef(function.returnType)
+            val symbol =
+                SymbolInfo(
+                    name = item.name,
+                    kind = SymbolKind.BUILTIN_FUNCTION,
+                    range = item.range,
+                    detail = "${source.name}::${function.name}(${parameterTypes.joinToString { it.displayName }}): ${returnType.displayName}",
+                    documentation = function.documentation,
+                )
+            symbols += symbol
+            userFunctionsByName[item.name] =
+                FunctionBinding(
+                    symbol = symbol,
+                    declaration = null,
+                    parameterTypes = parameterTypes,
+                    returnType = returnType,
+                    builtinModuleName = source.name,
+                )
+        }
+    }
+
+    private fun registerImportAlias(
+        source: ImportSource.FilePath,
+        mode: ImportMode.Namespace,
         exports: ModuleExports,
     ) {
-        val alias = declaration.alias ?: return
-        val range = declaration.aliasRange ?: declaration.range
+        val alias = mode.alias
+        val range = mode.aliasRange
         if (importedModules.containsKey(alias) || importAliases.containsKey(alias) || userFunctionsByName.containsKey(alias) || userRecordsByName.containsKey(alias)) {
             diagnostics += FrontendDiagnostic("Redeclaration of `$alias`.", range)
             return
@@ -280,35 +349,61 @@ internal class SemanticAnalyzer(
                 name = alias,
                 kind = SymbolKind.MODULE,
                 range = range,
-                detail = "import ${declaration.path} as $alias",
+                detail = "import ${source.path} as $alias",
             )
         symbols += symbol
         importAliases[alias] = ImportAliasBinding(symbol, exports)
     }
 
-    private fun registerFlatImport(
-        declaration: ImportDeclaration,
+    private fun registerFileSelectiveImport(
+        source: ImportSource.FilePath,
+        mode: ImportMode.Selective,
         exports: ModuleExports,
     ) {
-        exports.structs.values.forEach { struct ->
-            if (importedModules.containsKey(struct.name) || importAliases.containsKey(struct.name) || typeNames.containsKey(struct.name) || userRecordsByName.containsKey(struct.name)) {
-                diagnostics += FrontendDiagnostic("Redeclaration of `${struct.name}`.", declaration.range)
+        val seenItems = mutableSetOf<String>()
+        mode.items.forEach { item ->
+            if (!seenItems.add(item.name)) {
+                diagnostics += FrontendDiagnostic("Duplicate import of `${item.name}`.", item.range)
                 return@forEach
             }
-            val binding = recordBindingForExport(struct.name, struct, exports, qualifier = null, declaration.range)
-            typeNames[struct.name] = TypeRef(struct.name)
-            userRecordsByName[struct.name] = binding
-            symbols += binding.symbol
-        }
-        exports.functions.values.forEach { function ->
-            if (importedModules.containsKey(function.name) || importAliases.containsKey(function.name) || userFunctionsByName.containsKey(function.name) || userRecordsByName.containsKey(function.name)) {
-                diagnostics += FrontendDiagnostic("Redeclaration of `${function.name}`.", declaration.range)
+            val struct = exports.structs[item.name]
+            val function = exports.functions[item.name]
+            if (struct == null && function == null) {
+                diagnostics += FrontendDiagnostic("File `${source.path}` has no export `${item.name}`.", item.range)
                 return@forEach
             }
-            val binding = functionBindingForExport(function.name, function, exports, qualifier = null, declaration.range)
-            userFunctionsByName[function.name] = binding
-            symbols += binding.symbol
+            if (struct != null) registerSelectedRecord(item, struct, exports)
+            if (function != null) registerSelectedFunction(item, function, exports)
         }
+    }
+
+    private fun registerSelectedRecord(
+        item: ImportItem,
+        struct: StructDeclaration,
+        exports: ModuleExports,
+    ) {
+        if (importedModules.containsKey(item.name) || importAliases.containsKey(item.name) || typeNames.containsKey(item.name) || userRecordsByName.containsKey(item.name)) {
+            diagnostics += FrontendDiagnostic("Redeclaration of `${item.name}`.", item.range)
+            return
+        }
+        val binding = recordBindingForExport(item.name, struct, exports, qualifier = null, item.range)
+        typeNames[item.name] = TypeRef(item.name)
+        userRecordsByName[item.name] = binding
+        symbols += binding.symbol
+    }
+
+    private fun registerSelectedFunction(
+        item: ImportItem,
+        function: FunctionDeclaration,
+        exports: ModuleExports,
+    ) {
+        if (importedModules.containsKey(item.name) || importAliases.containsKey(item.name) || userFunctionsByName.containsKey(item.name) || userRecordsByName.containsKey(item.name)) {
+            diagnostics += FrontendDiagnostic("Redeclaration of `${item.name}`.", item.range)
+            return
+        }
+        val binding = functionBindingForExport(item.name, function, exports, qualifier = null, item.range)
+        userFunctionsByName[item.name] = binding
+        symbols += binding.symbol
     }
 
     private fun functionBindingForExport(
@@ -1878,34 +1973,65 @@ internal class Parser(
 
     private fun parseImport(): ImportDeclaration? {
         val keyword = previous()
-        val pathToken =
-            consume(
-                TokenKind.STRING,
-                "Expected file path string after `import` (e.g. `import \"lib/math.ck\";`).",
-            ) ?: return null
-        val path = pathToken.text
-        if (!path.endsWith(".ck")) {
-            diagnostics +=
-                FrontendDiagnostic(
-                    "Import path must end with `.ck` (got `$path`).",
-                    pathToken.range,
-                )
-        }
-        var aliasName: String? = null
-        var aliasRange: SourceRange? = null
-        if (match(TokenKind.AS)) {
-            val aliasToken = consume(TokenKind.IDENTIFIER, "Expected alias name after `as`.") ?: return null
-            aliasName = aliasToken.text
-            aliasRange = aliasToken.range
-        }
+        val source =
+            when {
+                check(TokenKind.STRING) -> {
+                    val pathToken = advance()
+                    val path = pathToken.text
+                    if (!path.endsWith(".ck")) {
+                        diagnostics +=
+                            FrontendDiagnostic(
+                                "Import path must end with `.ck` (got `$path`).",
+                                pathToken.range,
+                            )
+                    }
+                    ImportSource.FilePath(path, pathToken.range)
+                }
+                check(TokenKind.IDENTIFIER) -> {
+                    val nameToken = advance()
+                    ImportSource.BuiltinNamespace(nameToken.text, nameToken.range)
+                }
+                else -> {
+                    diagnostics += FrontendDiagnostic("Expected import source.", peek().range)
+                    return null
+                }
+            }
+        val mode =
+            when {
+                match(TokenKind.AS) -> {
+                    val aliasToken = consume(TokenKind.IDENTIFIER, "Expected alias name after `as`.") ?: return null
+                    ImportMode.Namespace(aliasToken.text, aliasToken.range)
+                }
+                match(TokenKind.LBRACE) -> parseSelectiveImportMode()
+                else ->
+                    ImportMode.Invalid(
+                        message =
+                            when (source) {
+                                is ImportSource.FilePath -> "Use `import \"${source.path}\" { name }` or `import \"${source.path}\" as alias`."
+                                is ImportSource.BuiltinNamespace -> "Use `import ${source.name} { name }`."
+                            },
+                        range = source.range,
+                    )
+            }
         val end = consumeOptional(TokenKind.SEMICOLON) ?: previous()
         return ImportDeclaration(
-            path = path,
-            pathRange = pathToken.range,
-            alias = aliasName,
-            aliasRange = aliasRange,
+            source = source,
+            mode = mode,
             range = SourceRange(keyword.range.start, end.range.end),
         )
+    }
+
+    private fun parseSelectiveImportMode(): ImportMode.Selective {
+        val start = previous().range.start
+        val items = mutableListOf<ImportItem>()
+        if (!check(TokenKind.RBRACE)) {
+            do {
+                val itemToken = consume(TokenKind.IDENTIFIER, "Expected imported name.") ?: break
+                items += ImportItem(itemToken.text, itemToken.range)
+            } while (match(TokenKind.COMMA))
+        }
+        val end = consume(TokenKind.RBRACE, "Expected `}` after import list.")?.range?.end ?: previous().range.end
+        return ImportMode.Selective(items, SourceRange(start, end))
     }
 
     private fun parseFunction(): FunctionDeclaration? {
