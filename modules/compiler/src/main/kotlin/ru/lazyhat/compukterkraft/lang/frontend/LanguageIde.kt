@@ -208,11 +208,20 @@ class LanguageIde(
                         .filter { it.declaration.range.start.offset <= offset }
                         .maxByOrNull { it.declaration.range.start.offset }
             } else {
-                analysis.visibleSymbolsAt(offset).firstOrNull { it.name == receiverName && it.kind == SymbolKind.CLASS }?.let { classSymbol ->
+                val visibleSymbols = analysis.visibleSymbolsAt(offset)
+                visibleSymbols.firstOrNull { it.name == receiverName && it.kind == SymbolKind.CLASS }?.let { classSymbol ->
                     semantic.classBindings.values.firstOrNull { it.symbol.name == classSymbol.name }
-                }
+                } ?: visibleSymbols
+                    .firstOrNull { it.name == receiverName && (it.kind == SymbolKind.VARIABLE || it.kind == SymbolKind.PARAMETER) }
+                    ?.let { receiverSymbol ->
+                        val receiverType = receiverSymbol.detail.substringAfter(':', "").trim().removeSuffix("?")
+                        semantic.classBindings.values.firstOrNull { it.symbol.name == receiverType }
+                    } ?: declaredReceiverType(source, offset, receiverName)?.let { receiverType ->
+                    semantic.classBindings.values.firstOrNull { it.symbol.name == receiverType }
+                    }
             } ?: return incompleteThisMemberSymbols(source, offset, receiverName)
-        return if (receiverName == "this") {
+        val staticReceiver = analysis.visibleSymbolsAt(offset).any { it.name == receiverName && it.kind == SymbolKind.CLASS }
+        return if (receiverName == "this" || !staticReceiver) {
             classBinding.fields.values.map { it.symbol } + classBinding.instanceMethods.values.map { it.symbol }
         } else {
             classBinding.staticMethods.values.map { it.symbol }
@@ -241,6 +250,16 @@ class LanguageIde(
                     detail = "$className.$fieldName: $fieldType",
                 )
             }
+    }
+
+    private fun declaredReceiverType(
+        source: String,
+        offset: Int,
+        receiverName: String,
+    ): String? {
+        val escapedName = Regex.escape(receiverName)
+        val match = Regex("\\b(?:val|var)\\s+$escapedName\\s*:\\s*([A-Za-z_][A-Za-z0-9_:]*\\??)").findAll(source.take(offset)).lastOrNull()
+        return match?.groupValues?.get(1)?.removeSuffix("?")
     }
 
     override fun hover(
