@@ -354,7 +354,7 @@ class LanguageIdeTest {
 
         val result = ide.formatDocument("main.ck", source)
 
-        assertEquals("fun main() {\n    terminal::println(\"hi\");\n}\n", applySingleEdit(source, result.edits))
+        assertEquals("fun main() {\n    terminal::println(\"hi\")\n}\n", applySingleEdit(source, result.edits))
     }
 
     @Test
@@ -372,7 +372,7 @@ class LanguageIdeTest {
         val result = ide.cleanupDocument("main.ck", source)
         val cleaned = applySingleEdit(source, result.edits)
 
-        assertTrue(cleaned.contains("import \"lib.ck\" { add };"), cleaned)
+        assertTrue(cleaned.contains("import \"lib.ck\" { add }"), cleaned)
         assertFalse(cleaned.contains("unused"), cleaned)
     }
 

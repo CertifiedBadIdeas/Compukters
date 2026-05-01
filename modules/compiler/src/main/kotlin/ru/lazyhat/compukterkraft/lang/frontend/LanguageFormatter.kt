@@ -56,8 +56,6 @@ import ru.lazyhat.compukterkraft.lang.api.Statement
 import ru.lazyhat.compukterkraft.lang.api.StringLiteralValue
 import ru.lazyhat.compukterkraft.lang.api.StructDeclaration
 import ru.lazyhat.compukterkraft.lang.api.ThisExpression
-import ru.lazyhat.compukterkraft.lang.api.Token
-import ru.lazyhat.compukterkraft.lang.api.TokenKind
 import ru.lazyhat.compukterkraft.lang.api.TopLevelDeclaration
 import ru.lazyhat.compukterkraft.lang.api.TypeSyntax
 import ru.lazyhat.compukterkraft.lang.api.UnaryExpression
@@ -218,7 +216,6 @@ class LanguageFormatter(
     }
 
     private fun usedImportedNames(parsed: ParsedSource): Set<String> {
-        val importRanges = parsed.program.imports.map { it.range }
         val importedNames =
             parsed.program.imports
                 .asSequence()
@@ -226,17 +223,118 @@ class LanguageFormatter(
                 .flatMap { it.items.asSequence() }
                 .map { it.name }
                 .toSet()
-        return parsed.tokens
-            .asSequence()
-            .filter { it.kind == TokenKind.IDENTIFIER }
-            .filterNot { token ->
-                importRanges.any { token.range.start.offset >= it.start.offset && token.range.start.offset < it.end.offset }
-            }.map(Token::text)
-            .filter { it in importedNames }
-            .toSet()
+        if (importedNames.isEmpty()) return emptySet()
+        val usedNames = mutableSetOf<String>()
+
+        fun mark(name: String) {
+            if (name in importedNames) usedNames += name
+        }
+
+        fun collectType(type: TypeSyntax) {
+            if (type.qualifier == null) mark(type.name)
+        }
+
+        fun collectExpression(expression: Expression) {
+            when (expression) {
+                is BinaryExpression -> {
+                    collectExpression(expression.left)
+                    collectExpression(expression.right)
+                }
+
+                is CallExpression -> {
+                    collectExpression(expression.callee)
+                    expression.arguments.forEach { collectExpression(it.expression) }
+                }
+
+                is GroupExpression -> collectExpression(expression.expression)
+                is LegacyRecordConstructionExpression -> {
+                    if (expression.qualifier == null) mark(expression.typeName)
+                    expression.fields.forEach { collectExpression(it.expression) }
+                }
+
+                is LiteralExpression -> Unit
+                is MemberAccessExpression -> collectExpression(expression.receiver)
+                is NameExpression -> mark(expression.name)
+                is RecordConstructionExpression -> {
+                    if (expression.qualifier == null) mark(expression.typeName)
+                    expression.fields.forEach { collectExpression(it.expression) }
+                }
+
+                is ScopeAccessExpression -> Unit
+                is ThisExpression -> Unit
+                is UnaryExpression -> collectExpression(expression.operand)
+            }
+        }
+
+        fun collectStatement(statement: Statement) {
+            when (statement) {
+                is AssignmentStatement -> collectExpression(statement.expression)
+                is BlockStatement -> statement.statements.forEach(::collectStatement)
+                is ExpressionStatement -> collectExpression(statement.expression)
+                is IfStatement -> {
+                    collectExpression(statement.condition)
+                    collectStatement(statement.thenBranch)
+                    statement.elseBranch?.let(::collectStatement)
+                }
+
+                is MemberAssignmentStatement -> {
+                    collectExpression(statement.receiver)
+                    collectExpression(statement.expression)
+                }
+
+                is ReturnStatement -> statement.expression?.let(::collectExpression)
+                is VariableDeclarationStatement -> {
+                    statement.type?.let(::collectType)
+                    collectExpression(statement.initializer)
+                }
+
+                is WhenStatement -> {
+                    statement.subject?.let(::collectExpression)
+                    statement.branches.forEach { branch ->
+                        branch.values.forEach(::collectExpression)
+                        collectStatement(branch.body)
+                    }
+                    statement.elseBranch?.let(::collectStatement)
+                }
+
+                is WhileStatement -> {
+                    collectExpression(statement.condition)
+                    collectStatement(statement.body)
+                }
+            }
+        }
+
+        fun collectFunction(function: FunctionDeclaration) {
+            function.parameters.forEach { collectType(it.type) }
+            function.returnType?.let(::collectType)
+            collectStatement(function.body)
+        }
+
+        parsed.program.declarations.forEach { declaration ->
+            when (declaration) {
+                is ClassDeclaration -> {
+                    declaration.constructorParameters.forEach { collectType(it.type) }
+                    declaration.members.forEach { member ->
+                        when (member) {
+                            is ClassFieldDeclaration -> {
+                                member.type?.let(::collectType)
+                                collectExpression(member.initializer)
+                            }
+
+                            is ClassInitBlock -> collectStatement(member.body)
+                            is ClassMethodDeclaration -> collectFunction(member.function)
+                        }
+                    }
+                }
+
+                is FunctionDeclaration -> collectFunction(declaration)
+                is StructDeclaration -> declaration.fields.forEach { collectType(it.type) }
+            }
+        }
+        return usedNames
     }
 
-    private fun renderImport(declaration: NormalizedImport): String = "import ${declaration.sourceText}${declaration.suffix};"
+    private fun renderImport(declaration: NormalizedImport): String = "import ${declaration.sourceText}${declaration.suffix}"
 
     private fun renderTopLevel(
         writer: CklWriter,
@@ -295,7 +393,7 @@ class LanguageFormatter(
                         writer.write(if (member.mutable) "var " else "val ")
                         writer.write(member.name)
                         member.type?.let { writer.write(": ${renderType(it)}") }
-                        writer.write(" = ${renderExpression(member.initializer)};")
+                        writer.write(" = ${renderExpression(member.initializer)}")
                         writer.line()
                     }
 
@@ -353,7 +451,7 @@ class LanguageFormatter(
     ) {
         when (statement) {
             is AssignmentStatement -> {
-                writer.write("${statement.name} = ${renderExpression(statement.expression)};")
+                writer.write("${statement.name} = ${renderExpression(statement.expression)}")
                 writer.line()
             }
 
@@ -362,7 +460,7 @@ class LanguageFormatter(
             }
 
             is ExpressionStatement -> {
-                writer.write("${renderExpression(statement.expression)};")
+                writer.write(renderExpression(statement.expression))
                 writer.line()
             }
 
@@ -371,14 +469,13 @@ class LanguageFormatter(
             }
 
             is MemberAssignmentStatement -> {
-                writer.write("${renderExpression(statement.receiver)}.${statement.memberName} = ${renderExpression(statement.expression)};")
+                writer.write("${renderExpression(statement.receiver)}.${statement.memberName} = ${renderExpression(statement.expression)}")
                 writer.line()
             }
 
             is ReturnStatement -> {
                 writer.write("return")
                 statement.expression?.let { writer.write(" ${renderExpression(it)}") }
-                writer.write(";")
                 writer.line()
             }
 
@@ -386,7 +483,7 @@ class LanguageFormatter(
                 writer.write(if (statement.mutable) "var " else "val ")
                 writer.write(statement.name)
                 statement.type?.let { writer.write(": ${renderType(it)}") }
-                writer.write(" = ${renderExpression(statement.initializer)};")
+                writer.write(" = ${renderExpression(statement.initializer)}")
                 writer.line()
             }
 

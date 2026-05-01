@@ -8,24 +8,24 @@ Top-level declarations:
 
 - `struct Vec2 { x: Int, y: Int }`
 - `class Counter(var value: Int) { ... }`
-- `import "lib/math.ck" { add, Vec2 };`
-- `import "lib/math.ck" as math;`
+- `import "lib/math.ck" { add, Vec2 }`
+- `import "lib/math.ck" as math`
 - `fun main() { ... }`
-- `fun add(x: Int, y: Int): Int { return x + y; }`
+- `fun add(x: Int, y: Int): Int { return x + y }`
 
 Statements:
 
-- `val name = expr;`
-- `var counter: Int = 0;`
-- `name = expr;` (reassign a `var`; `val` cannot be reassigned)
-- `name += expr;`, `name -= expr;`, `name *= expr;`, `name /= expr;` (compound, desugars to `name = name <op> expr`)
+- `val name = expr`
+- `var counter: Int = 0`
+- `name = expr` (reassign a `var`; `val` cannot be reassigned)
+- `name += expr`, `name -= expr`, `name *= expr`, `name /= expr` (compound, desugars to `name = name <op> expr`)
 - `if (condition) { ... } else { ... }`
 - `if (condition) { ... } else if (condition) { ... } else { ... }`
 - `while condition { ... }`
 - `when(subject) { value -> { ... } else -> { ... } }`
 - `when { condition -> { ... } else -> { ... } }`
-- `return expr;`
-- expression statements such as `terminal::println("ok");`
+- `return expr`
+- expression statements such as `terminal::println("ok")`
 
 ### `when` statement
 
@@ -35,9 +35,9 @@ With subject (compared via `==`):
 
 ```
 when(x) {
-    1 -> { terminal::println("one"); }
-    2, 3 -> { terminal::println("two or three"); }
-    else -> { terminal::println("other"); }
+    1 -> { terminal::println("one") }
+    2, 3 -> { terminal::println("two or three") }
+    else -> { terminal::println("other") }
 }
 ```
 
@@ -45,9 +45,9 @@ Without subject (each branch is a `Bool` condition):
 
 ```
 when {
-    x > 10 -> { terminal::println("big"); }
-    x > 0 -> { terminal::println("positive"); }
-    else -> { terminal::println("non-positive"); }
+    x > 10 -> { terminal::println("big") }
+    x > 0 -> { terminal::println("positive") }
+    else -> { terminal::println("non-positive") }
 }
 ```
 
@@ -59,9 +59,9 @@ when {
 Examples:
 
 ```
-terminal::println("hi");
-val id: Int = system::computerId();
-val name: String = event.name;
+terminal::println("hi")
+val id: Int = system::computerId()
+val name: String = event.name
 ```
 
 Expressions:
@@ -82,8 +82,8 @@ Structs are value-shaped records with named fields. They are declared with `stru
 struct Vec2 { x: Int, y: Int }
 
 fun main() {
-    val v: Vec2 = Vec2(x = 1, y = 2);
-    terminal::println("x=" + v.x);
+    val v: Vec2 = Vec2(x = 1, y = 2)
+    terminal::println("x=" + v.x)
 }
 ```
 
@@ -96,21 +96,21 @@ Classes are reference objects with public fields, `init` blocks, instance method
 ```ck
 class Counter(var value: Int) {
     init {
-        this.value = this.value + 1;
+        this.value = this.value + 1
     }
 
     fun current(): Int {
-        return this.value;
+        return this.value
     }
 
     static fun zero(): Counter {
-        return Counter(value = 0);
+        return Counter(value = 0)
     }
 }
 
 fun main() {
-    val counter: Counter = Counter.zero();
-    terminal::println("value=" + counter.current());
+    val counter: Counter = Counter.zero()
+    terminal::println("value=" + counter.current())
 }
 ```
 
@@ -145,8 +145,8 @@ User-defined struct types are declared with `struct`. User-defined reference obj
 Built-in modules (`terminal`, `system`, `filesystem`, `events`, `process`, `strings`, `stdout`) are always available — there is no `import` needed. Access their members with `::`:
 
 ```
-terminal::println("hi");
-val id: Int = system::deviceId();
+terminal::println("hi")
+val id: Int = system::deviceId()
 ```
 
 The old builtin-import / dot-call style is no longer valid. Built-ins are ambient; use user-file imports only for `.ck` source files.
@@ -156,12 +156,12 @@ The old builtin-import / dot-call style is no longer valid. Built-ins are ambien
 CKL programs may import selected names from other `.ck` files. The path is interpreted relative to the importing file and must end with `.ck`.
 
 ```ck
-import "lib/math.ck" { add, Vec2 };  // selected names visible directly
-import "lib/math.ck" as m;           // namespace access via `m::name`
-import terminal { println };         // selected built-in member visible directly
+import "lib/math.ck" { add, Vec2 }  // selected names visible directly
+import "lib/math.ck" as m           // namespace access via `m::name`
+import terminal { println }         // selected built-in member visible directly
 ```
 
-`import "lib/math.ck";` is invalid. Use a selective import list or a namespace alias.
+`import "lib/math.ck"` is invalid. Use a selective import list or a namespace alias.
 
 Rules:
 
@@ -176,13 +176,13 @@ Rules:
 Selected names become visible directly in the importing file:
 
 ```ck
-import terminal { println };
-import "math.ck" { add, Vec2, Counter };
+import terminal { println }
+import "math.ck" { add, Vec2, Counter }
 
 fun main() {
-    val v: Vec2 = Vec2(x = 1, y = 2);
-    val counter: Counter = Counter(value = 1);
-    println("x=" + add(v, v).x);
+    val v: Vec2 = Vec2(x = 1, y = 2)
+    val counter: Counter = Counter(value = 1)
+    println("x=" + add(v, v).x)
 }
 ```
 
@@ -191,9 +191,9 @@ fun main() {
 An alias behaves like a built-in module and uses `::`:
 
 ```
-import "math.ck" as m;
-val v: m::Vec2 = m::Vec2(x = 1, y = 2);
-val w: m::Vec2 = m::add(v, v);
+import "math.ck" as m
+val v: m::Vec2 = m::Vec2(x = 1, y = 2)
+val w: m::Vec2 = m::add(v, v)
 ```
 
 ## Formatting and cleanup
@@ -202,17 +202,17 @@ The CKL IDE API exposes parser-based document formatting and cleanup.
 
 Format Document:
 
-- renders source in the canonical CKL style with four-space indentation;
-- keeps line and block comments;
-- sorts imports by source and merges duplicate selective import groups;
-- sorts names inside selective import groups;
+- renders source in the canonical CKL style with four-space indentation and without semicolons.
+- keeps line and block comments.
+- sorts imports by source and merges duplicate selective import groups.
+- sorts names inside selective import groups.
 - does not remove unused imports.
 
 Cleanup Document runs the same formatter and additionally removes unused names from selective import groups when the source parses and analyses without errors. If syntax or semantic errors are present, cleanup returns no edits.
 
 Both actions return no edits for invalid or incomplete source instead of attempting a partial rewrite.
 
-In the Workbench editor, Format can be triggered from the toolbar or with `Ctrl+Alt+F`; Cleanup can be triggered from the toolbar or with `Ctrl+Alt+L`.
+In the Workbench editor, Format can be triggered from the toolbar or with `Ctrl+Alt+F`. Cleanup can be triggered from the toolbar or with `Ctrl+Alt+L`.
 
 `terminal`
 
