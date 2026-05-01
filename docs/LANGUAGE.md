@@ -7,6 +7,8 @@
 Top-level declarations:
 
 - `struct Vec2 { x: Int, y: Int }`
+- `import "lib/math.ck";`
+- `import "lib/math.ck" as math;`
 - `fun main() { ... }`
 - `fun add(x: Int, y: Int): Int { return x + y; }`
 
@@ -50,7 +52,7 @@ when {
 
 ## Operators
 
-- `::` resolves a name inside a namespace. Today this is used for built-in modules; user-file import aliases will use the same operator in a future version.
+- `::` resolves a name inside a namespace. This is used for built-in modules and aliased user-file imports.
 - `.` accesses fields of struct values.
 
 Examples:
@@ -94,7 +96,34 @@ terminal::println("hi");
 val id: Int = system::deviceId();
 ```
 
-The old builtin-import / dot-call style is no longer valid. User-file imports are coming in a future version.
+The old builtin-import / dot-call style is no longer valid. Built-ins are ambient; use user-file imports only for `.ck` source files.
+
+## Imports
+
+CKL programs may import other `.ck` files. The path is interpreted relative to the importing file and must end with `.ck`.
+
+```
+import "lib/math.ck";              // flat: top-level names visible directly
+import "lib/math.ck" as m;         // aliased: access via `m::name`
+```
+
+Rules:
+
+- Each top-level `fun` and `struct` of an imported file is public.
+- Imports are not transitive: importing `a.ck` does not import `a.ck`'s imports.
+- The same file is parsed and analysed at most once per compilation, so import cycles are safe.
+- Importing the same path twice in one file is a `Duplicate import` error.
+- Conflicts between flat-imported names, aliases, local declarations, and built-in module names produce `Redeclaration` diagnostics.
+
+### Aliases as namespaces
+
+An alias behaves like a built-in module and uses `::`:
+
+```
+import "math.ck" as m;
+val v: m::Vec2 = m::Vec2 { x: 1, y: 2 };
+val w: m::Vec2 = m::add(v, v);
+```
 
 `terminal`
 
