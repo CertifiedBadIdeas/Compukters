@@ -2333,6 +2333,9 @@ internal class Lexer(
 ) {
     val diagnostics = mutableListOf<FrontendDiagnostic>()
     private val tokens = mutableListOf<Token>()
+    private val mutableComments = mutableListOf<CommentTrivia>()
+    val comments: List<CommentTrivia>
+        get() = mutableComments.toList()
     private var index = 0
     private var line = 0
     private var column = 0
@@ -2412,7 +2415,7 @@ internal class Lexer(
 
                 '/' -> {
                     if (match('/')) {
-                        while (!isAtEnd() && peek() != '\n') advance()
+                        lexLineComment(start)
                     } else if (match('*')) {
                         lexBlockComment(start)
                     } else if (match('=')) {
@@ -2492,6 +2495,17 @@ internal class Lexer(
         return tokens.toList()
     }
 
+    private fun lexLineComment(start: SourceLocation) {
+        val textStart = index
+        while (!isAtEnd() && peek() != '\n') advance()
+        mutableComments +=
+            CommentTrivia(
+                kind = CommentKind.LINE,
+                text = source.substring(textStart, index),
+                range = SourceRange(start, location()),
+            )
+    }
+
     private fun lexString(start: SourceLocation) {
         val builder = StringBuilder()
         while (!isAtEnd() && peek() != '"') {
@@ -2519,10 +2533,18 @@ internal class Lexer(
     }
 
     private fun lexBlockComment(start: SourceLocation) {
+        val textStart = index
         while (!isAtEnd()) {
             if (peek() == '*' && index + 1 < source.length && source[index + 1] == '/') {
+                val text = source.substring(textStart, index)
                 advance()
                 advance()
+                mutableComments +=
+                    CommentTrivia(
+                        kind = CommentKind.BLOCK,
+                        text = text,
+                        range = SourceRange(start, location()),
+                    )
                 return
             }
             advance()
