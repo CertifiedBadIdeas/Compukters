@@ -329,6 +329,21 @@ data class BytecodeModule(
     val records: List<BytecodeRecord>,
     val entryFunctionIndex: Int,
     val registry: BuiltinRegistry,
+    val classes: List<BytecodeClass> = emptyList(),
+)
+
+data class BytecodeClass(
+    val name: String,
+    val fields: List<BytecodeClassField>,
+    val initFunctionIndex: Int?,
+    val instanceMethods: Map<String, Int>,
+    val staticMethods: Map<String, Int>,
+)
+
+data class BytecodeClassField(
+    val name: String,
+    val typeName: String,
+    val mutable: Boolean,
 )
 
 data class BytecodeFunction(
@@ -408,9 +423,29 @@ sealed interface Instruction {
         val fieldName: String,
     ) : Instruction
 
+    data class SetField(
+        val fieldName: String,
+    ) : Instruction
+
     data class ConstructRecord(
         val typeName: String,
         val fieldNames: List<String>,
+    ) : Instruction
+
+    data class ConstructClass(
+        val className: String,
+        val fieldNames: List<String>,
+    ) : Instruction
+
+    data class CallMethod(
+        val methodName: String,
+        val argumentCount: Int,
+    ) : Instruction
+
+    data class CallStaticMethod(
+        val className: String,
+        val methodName: String,
+        val argumentCount: Int,
     ) : Instruction
 
     data class Binary(

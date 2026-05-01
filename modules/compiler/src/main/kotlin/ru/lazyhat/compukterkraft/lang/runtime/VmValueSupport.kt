@@ -69,6 +69,7 @@ internal fun VmValue.render(): String =
         is VmValue.BoolValue -> value.toString()
         is VmValue.IntValue -> value.toString()
         is VmValue.LongValue -> value.toString()
+        is VmValue.ObjectRef -> "object#${id}"
         is VmValue.RecordValue -> "$typeName${fields.mapValues { it.value.render() }}"
         is VmValue.StringValue -> value
         VmValue.UnitValue -> "unit"
