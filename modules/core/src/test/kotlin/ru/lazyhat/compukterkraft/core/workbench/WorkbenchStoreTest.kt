@@ -33,6 +33,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.DeviceIdeSnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspaceDocument
 import ru.lazyhat.compukterkraft.lang.runtime.DefinitionTarget
 import ru.lazyhat.compukterkraft.lang.runtime.HoverInfo
+import ru.lazyhat.compukterkraft.lang.runtime.TextEdit
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -147,6 +148,37 @@ class WorkbenchStoreTest {
             store.charTyped('.', visibleEditorLines = 20)
 
             assertEquals(listOf("completeFromLastAnalysis:0:9"), ideFacade.calls)
+        }
+
+    @Test
+    fun completionAppliesAdditionalTextEditsBeforeMainInsert() =
+        runTest(UnconfinedTestDispatcher()) {
+            val ideFacade = FakeWorkbenchIdeFacade()
+            ideFacade.nextManualCompletions =
+                listOf(
+                    CompletionItem(
+                        label = "println",
+                        detail = "terminal::println(text: String): Unit",
+                        kind = CompletionItemKind.FUNCTION,
+                        insertText = "println()",
+                        cursorOffset = "println(".length,
+                        sourceNamespace = "terminal",
+                        additionalTextEdits = listOf(TextEdit(0, 0, "import terminal { println };\n")),
+                    ),
+                )
+            val store = WorkbenchStore(FakeWorkspaceGateway(), FakeTargetControlGateway(), ideFacade)
+            val updates = FakeWorkbenchUpdateSource()
+
+            store.bind(backgroundScope, updates)
+            updates.push(document = DeviceWorkspaceDocument("main.ck", "fun main() { pri }", 0))
+            store.moveCursorTo(0, "fun main() { pri".length, visibleEditorLines = 20)
+
+            store.openCompletion()
+            store.applyCompletion()
+
+            assertEquals("import terminal { println };\nfun main() { println() }", store.state.editor.text)
+            assertEquals(1, store.state.editor.cursorLine)
+            assertEquals("fun main() { println(".length, store.state.editor.cursorColumn)
         }
 
     @Test
@@ -625,6 +657,7 @@ class WorkbenchStoreTest {
 
     private class FakeWorkbenchIdeFacade : WorkbenchIdeFacade {
         val calls = mutableListOf<String>()
+        var nextManualCompletions: List<CompletionItem> = listOf(CompletionItem(label = "manual", detail = "", kind = CompletionItemKind.KEYWORD))
 
         override fun analyze(
             path: String,
@@ -641,7 +674,7 @@ class WorkbenchStoreTest {
             source: String,
             line: Int,
             column: Int,
-        ): List<CompletionItem> = listOf(CompletionItem(label = "manual", detail = "", kind = CompletionItemKind.KEYWORD))
+        ): List<CompletionItem> = nextManualCompletions
 
         override fun completeFromLastAnalysis(
             path: String,
