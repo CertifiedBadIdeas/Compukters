@@ -19,6 +19,7 @@
 package ru.lazyhat.compukterkraft.core.device.vm
 
 import ru.lazyhat.compukterkraft.core.language.LanguageServices
+import ru.lazyhat.compukterkraft.lang.frontend.LanguageIde
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceCompletionRequest
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceCompletionResponse
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceDefinitionRequest
@@ -28,6 +29,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.DeviceHoverResponse
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceIdeHost
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceIdeSnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspace
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspaceSourceLoader
 
 class WorkspaceDeviceIdeHost(
     private val workspace: DeviceWorkspace,
@@ -37,7 +39,7 @@ class WorkspaceDeviceIdeHost(
         path: String,
     ): DeviceIdeSnapshot? {
         val document = workspace.readDocument(deviceId, path) ?: return null
-        val snapshot = LanguageServices.ide.analyze(document.path, document.text)
+        val snapshot = ide(deviceId).analyze(document.path, document.text)
         return DeviceIdeSnapshot(
             document = document,
             diagnostics = snapshot.diagnostics,
@@ -54,7 +56,7 @@ class WorkspaceDeviceIdeHost(
             if (document == null) {
                 emptyList()
             } else {
-                LanguageServices.ide.complete(document.path, document.text, request.line, request.column)
+                ide(deviceId).complete(document.path, document.text, request.line, request.column)
             }
         return DeviceCompletionResponse(items)
     }
@@ -68,7 +70,7 @@ class WorkspaceDeviceIdeHost(
             if (document == null) {
                 null
             } else {
-                LanguageServices.ide.hover(document.path, document.text, request.line, request.column)
+                ide(deviceId).hover(document.path, document.text, request.line, request.column)
             }
         return DeviceHoverResponse(info)
     }
@@ -82,8 +84,15 @@ class WorkspaceDeviceIdeHost(
             if (document == null) {
                 null
             } else {
-                LanguageServices.ide.definition(document.path, document.text, request.line, request.column)
+                ide(deviceId).definition(document.path, document.text, request.line, request.column)
             }
         return DeviceDefinitionResponse(target)
     }
+
+    private fun ide(deviceId: Int): LanguageIde =
+        LanguageIde(
+            LanguageServices.frontend,
+            LanguageServices.frontend.registry,
+            sourceIndex = DeviceWorkspaceSourceLoader(workspace, deviceId),
+        )
 }
