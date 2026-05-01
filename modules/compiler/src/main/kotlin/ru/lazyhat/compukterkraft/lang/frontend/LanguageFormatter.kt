@@ -57,6 +57,8 @@ import ru.lazyhat.compukterkraft.lang.api.StringLiteralValue
 import ru.lazyhat.compukterkraft.lang.api.StructDeclaration
 import ru.lazyhat.compukterkraft.lang.api.ThisExpression
 import ru.lazyhat.compukterkraft.lang.api.TopLevelDeclaration
+import ru.lazyhat.compukterkraft.lang.api.Token
+import ru.lazyhat.compukterkraft.lang.api.TokenKind
 import ru.lazyhat.compukterkraft.lang.api.TypeSyntax
 import ru.lazyhat.compukterkraft.lang.api.UnaryExpression
 import ru.lazyhat.compukterkraft.lang.api.UnaryOperator
@@ -78,7 +80,6 @@ data class FormatResult(
     val changed: Boolean
         get() = edits.isNotEmpty()
 }
-
 
 private data class NormalizedImport(
     val sourceText: String,
@@ -108,7 +109,22 @@ class LanguageFormatter(
         name: String,
         source: String,
         loader: SourceLoader = NoOpSourceLoader,
-    ): FormatResult = formatDocument(name, source)
+    ): FormatResult {
+        val parsed = parser.parse(name, source)
+        if (parsed.syntaxDiagnostics.any { it.severity == FrontendSeverity.ERROR }) {
+            return cannotFormat()
+        }
+        val analysis = LanguageFrontend().compile(name, source, loader).analysis
+        if (analysis.diagnostics.any { it.severity == FrontendSeverity.ERROR }) {
+            return FormatResult(emptyList())
+        }
+        val formatted = renderCanonical(parsed, cleanupUnusedImports = true)
+        return if (formatted == source) {
+            FormatResult(emptyList())
+        } else {
+            FormatResult(listOf(TextEdit(0, source.length, formatted)))
+        }
+    }
 
     private fun cannotFormat(): FormatResult =
         FormatResult(
@@ -122,10 +138,14 @@ class LanguageFormatter(
                 ),
         )
 
-    private fun renderCanonical(parsed: ParsedSource): String {
+    private fun renderCanonical(
+        parsed: ParsedSource,
+        cleanupUnusedImports: Boolean = false,
+    ): String {
         val writer = CklWriter()
         val comments = CommentPlanner(parsed.comments)
-        val imports = normalizeImports(parsed.program.imports)
+        val usedImportedNames = if (cleanupUnusedImports) usedImportedNames(parsed) else null
+        val imports = normalizeImports(parsed.program.imports, usedImportedNames)
         imports.forEachIndexed { index, declaration ->
             if (index > 0) writer.line()
             renderLeadingComments(writer, comments.takeBefore(declaration.firstOffset))
@@ -145,7 +165,10 @@ class LanguageFormatter(
         return writer.result()
     }
 
-    private fun normalizeImports(imports: List<ImportDeclaration>): List<NormalizedImport> {
+    private fun normalizeImports(
+        imports: List<ImportDeclaration>,
+        usedImportedNames: Set<String>? = null,
+    ): List<NormalizedImport> {
         val selective = linkedMapOf<String, MutableList<ImportDeclaration>>()
         val standalone = mutableListOf<NormalizedImport>()
         imports.forEach { declaration ->
@@ -174,14 +197,34 @@ class LanguageFormatter(
                         .flatMap { (it.mode as ImportMode.Selective).items }
                         .map { it.name }
                         .distinct()
+                        .filter { usedImportedNames == null || it in usedImportedNames }
                         .sorted()
+                if (items.isEmpty()) return@map null
                 NormalizedImport(
                     sourceText = sourceText,
                     suffix = " { ${items.joinToString(", ")} }",
                     firstOffset = declarations.minOf { it.range.start.offset },
                 )
-            }
+            }.filterNotNull()
         return (merged + standalone).sortedWith(compareBy({ it.sourceText }, { it.suffix }, { it.firstOffset }))
+    }
+
+    private fun usedImportedNames(parsed: ParsedSource): Set<String> {
+        val importRanges = parsed.program.imports.map { it.range }
+        val importedNames =
+            parsed.program.imports
+                .asSequence()
+                .mapNotNull { it.mode as? ImportMode.Selective }
+                .flatMap { it.items.asSequence() }
+                .map { it.name }
+                .toSet()
+        return parsed.tokens
+            .asSequence()
+            .filter { it.kind == TokenKind.IDENTIFIER }
+            .filterNot { token -> importRanges.any { token.range.start.offset >= it.start.offset && token.range.start.offset < it.end.offset } }
+            .map(Token::text)
+            .filter { it in importedNames }
+            .toSet()
     }
 
     private fun renderImport(declaration: NormalizedImport): String = "import ${declaration.sourceText}${declaration.suffix};"

@@ -206,6 +206,72 @@ class LanguageFormatterTest {
         assertTrue(formatted.contains("clear"), formatted)
     }
 
+    @Test
+    fun cleanupRemovesUnusedSelectiveImportItems() {
+        val source =
+            """
+            import terminal { clear, println, write };
+            fun main() { println("hi"); }
+            """.trimIndent()
+
+        val expected =
+            """
+            import terminal { println };
+
+            fun main() {
+                println("hi");
+            }
+            """.trimIndent() + "\n"
+
+        val cleaned = applySingleEdit(source, formatter.cleanupDocument("main.ck", source))
+
+        assertEquals(expected, cleaned)
+    }
+
+    @Test
+    fun cleanupPreservesUsedFunctionStructAndClassImports() {
+        val loader =
+            MapSourceLoader(
+                mapOf(
+                    "main.ck" to
+                        """
+                        import "model.ck" { Counter, Vec2, make };
+                        fun main() {
+                            val v: Vec2 = make();
+                            val c: Counter = Counter(value = v.x);
+                            terminal::println("v=" + c.value);
+                        }
+                        """.trimIndent(),
+                    "model.ck" to
+                        """
+                        struct Vec2 { x: Int, y: Int }
+                        class Counter(var value: Int) {}
+                        fun make(): Vec2 { return Vec2(x = 1, y = 2); }
+                        """.trimIndent(),
+                ),
+            )
+        val source = loader.read("main.ck")!!
+
+        val cleaned = applySingleEdit(source, formatter.cleanupDocument("main.ck", source, loader))
+
+        assertTrue(cleaned.contains("Counter"), cleaned)
+        assertTrue(cleaned.contains("Vec2"), cleaned)
+        assertTrue(cleaned.contains("make"), cleaned)
+    }
+
+    @Test
+    fun cleanupReturnsNoEditsWhenAnalysisHasErrors() {
+        val source =
+            """
+            import terminal { clear, println };
+            fun main() { missing(); }
+            """.trimIndent()
+
+        val result = formatter.cleanupDocument("main.ck", source)
+
+        assertEquals(emptyList(), result.edits)
+    }
+
     private fun applySingleEdit(
         source: String,
         result: FormatResult,
