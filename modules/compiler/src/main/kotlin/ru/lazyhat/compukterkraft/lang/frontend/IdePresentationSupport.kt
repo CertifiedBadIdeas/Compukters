@@ -62,8 +62,9 @@ internal object IdePresentationSupport {
                 SymbolKind.FUNCTION, SymbolKind.BUILTIN_FUNCTION -> CompletionItemKind.FUNCTION
                 SymbolKind.VARIABLE -> CompletionItemKind.VARIABLE
                 SymbolKind.PARAMETER -> CompletionItemKind.PARAMETER
-                SymbolKind.RECORD, SymbolKind.BUILTIN_TYPE -> CompletionItemKind.TYPE
+                SymbolKind.RECORD, SymbolKind.CLASS, SymbolKind.BUILTIN_TYPE -> CompletionItemKind.TYPE
                 SymbolKind.FIELD -> CompletionItemKind.FIELD
+                SymbolKind.METHOD -> CompletionItemKind.FUNCTION
             }
         val (insertText, cursorOffset) =
             if (kind == CompletionItemKind.FUNCTION) {
@@ -84,8 +85,8 @@ internal object IdePresentationSupport {
     private fun highlightKindForSymbol(kind: SymbolKind): HighlightTokenKind =
         when (kind) {
             SymbolKind.MODULE -> HighlightTokenKind.MODULE
-            SymbolKind.FUNCTION, SymbolKind.BUILTIN_FUNCTION -> HighlightTokenKind.FUNCTION
-            SymbolKind.RECORD, SymbolKind.BUILTIN_TYPE -> HighlightTokenKind.TYPE
+            SymbolKind.FUNCTION, SymbolKind.METHOD, SymbolKind.BUILTIN_FUNCTION -> HighlightTokenKind.FUNCTION
+            SymbolKind.RECORD, SymbolKind.CLASS, SymbolKind.BUILTIN_TYPE -> HighlightTokenKind.TYPE
             SymbolKind.FIELD -> HighlightTokenKind.FIELD
             SymbolKind.VARIABLE, SymbolKind.PARAMETER -> HighlightTokenKind.IDENTIFIER
         }

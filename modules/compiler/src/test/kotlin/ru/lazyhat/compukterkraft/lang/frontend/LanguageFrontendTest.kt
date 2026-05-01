@@ -226,6 +226,50 @@ class LanguageFrontendTest {
     }
 
     @Test
+    fun compilesClassConstructorCall() {
+        val artifact =
+            frontend.compile(
+                "class_ctor.ck",
+                """
+                class Counter(var value: Int) {}
+                fun main() {
+                    val counter: Counter = Counter(value = 3);
+                    terminal::println("value=" + counter.value);
+                }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+        assertNotNull(artifact.module)
+        assertTrue(artifact.analysis.symbols.any { it.name == "Counter" && it.detail.contains("class Counter") })
+    }
+
+    @Test
+    fun reportsClassConstructorArgumentErrors() {
+        val artifact =
+            frontend.compile(
+                "class_ctor_errors.ck",
+                """
+                class Counter(var value: Int) {}
+                fun main() { val counter: Counter = Counter(missing = 3); }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.any { it.message.contains("Unknown constructor parameter `missing`") },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+        assertTrue(
+            artifact.analysis.diagnostics.any { it.message.contains("Missing constructor argument `value`") },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+        assertEquals(null, artifact.module)
+    }
+
+    @Test
     fun reportsTypeMismatchDiagnostics() {
         val artifact =
             frontend.compile(
