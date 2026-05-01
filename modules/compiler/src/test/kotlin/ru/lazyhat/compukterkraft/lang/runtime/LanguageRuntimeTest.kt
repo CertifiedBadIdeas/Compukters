@@ -181,6 +181,93 @@ class LanguageRuntimeTest {
     }
 
     @Test
+    fun constructsStructsWithNamedCallSyntax() {
+        val artifact =
+            frontend.compile(
+                "struct_runtime.ck",
+                """
+                struct Point { x: Int, y: Int }
+                fun main() {
+                    val point: Point = Point(x = 4, y = 5);
+                    terminal::println("sum=" + (point.x + point.y));
+                }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+        val runtime = RecordingRuntime()
+        runBlocking {
+            BytecodeComputerProgram(requireNotNull(artifact.module)).run(runtime)
+        }
+
+        assertEquals(listOf("sum=9"), runtime.lines)
+    }
+
+    @Test
+    fun classInstancesHaveReferenceIdentityAndSharedMutation() {
+        val artifact =
+            frontend.compile(
+                "class_identity.ck",
+                """
+                class Counter(var value: Int) {
+                    fun inc(): Unit { this.value = this.value + 1; }
+                    fun current(): Int { return this.value; }
+                }
+                fun main() {
+                    val a: Counter = Counter(value = 1);
+                    val b: Counter = a;
+                    b.inc();
+                    terminal::println("a=" + a.current());
+                }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+        val runtime = RecordingRuntime()
+        runBlocking {
+            BytecodeComputerProgram(requireNotNull(artifact.module)).run(runtime)
+        }
+
+        assertEquals(listOf("a=2"), runtime.lines)
+    }
+
+    @Test
+    fun classInitAndStaticMethodsRun() {
+        val artifact =
+            frontend.compile(
+                "class_init_static.ck",
+                """
+                class Counter(var value: Int) {
+                    init { this.value = this.value + 1; }
+                    fun current(): Int { return this.value; }
+                    static fun zero(): Counter { return Counter(value = 0); }
+                }
+                fun main() {
+                    val counter: Counter = Counter.zero();
+                    terminal::println("value=" + counter.current());
+                }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+        val runtime = RecordingRuntime()
+        runBlocking {
+            BytecodeComputerProgram(requireNotNull(artifact.module)).run(runtime)
+        }
+
+        assertEquals(listOf("value=1"), runtime.lines)
+    }
+
+    @Test
     fun snapshotRoundTripRestoresExecutionState() {
         val artifact =
             frontend.compile(

@@ -147,6 +147,56 @@ class LanguageIdeTest {
         assertEquals(listOf(TextEdit(0, 0, "import \"lib/math.ck\" { add };\n")), add.additionalTextEdits)
     }
 
+    @Test
+    fun suggestsUserFileClassWithPathAndImportEdit() {
+        val loader = MapSourceLoader(mapOf("main.ck" to "fun main() { Cou }", "model.ck" to "class Counter(var value: Int) {}"))
+        val ide = LanguageIde(sourceIndex = loader)
+        val source = loader.read("main.ck")!!
+        val cursor = lineAndColumnOf(source, "Cou") + 3
+
+        val items = ide.complete("main.ck", source, cursor.first, cursor.second)
+        val counter = items.single { it.label == "Counter" && it.sourceNamespace == "model.ck" }
+
+        assertEquals("Counter(", counter.insertText)
+        assertEquals(listOf(TextEdit(0, 0, "import \"model.ck\" { Counter };\n")), counter.additionalTextEdits)
+    }
+
+    @Test
+    fun completesMembersAfterThisDot() {
+        val source =
+            """
+            class Counter(var value: Int) {
+                fun current(): Int { return this. }
+            }
+            fun main() {}
+            """.trimIndent()
+        val cursor = lineAndColumnOf(source, "this.") + 5
+
+        val items = ide.complete("counter.ck", source, cursor.first, cursor.second)
+
+        assertTrue(items.any { it.label == "value" }, items.joinToString { it.label })
+    }
+
+    @Test
+    fun completesMembersAfterInstanceVariableDot() {
+        val source =
+            """
+            class Counter(var value: Int) {
+                fun current(): Int { return this.value; }
+            }
+            fun main() {
+                val counter: Counter = Counter(value = 1);
+                terminal::println(counter.)
+            }
+            """.trimIndent()
+        val cursor = lineAndColumnOf(source, "counter.)") + "counter.".length
+
+        val items = ide.complete("counter.ck", source, cursor.first, cursor.second)
+
+        assertTrue(items.any { it.label == "value" }, items.joinToString { it.label })
+        assertTrue(items.any { it.label == "current" }, items.joinToString { it.label })
+    }
+
     private fun lineAndColumnOf(
         source: String,
         needle: String,

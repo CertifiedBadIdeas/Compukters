@@ -25,6 +25,45 @@ data class StructDeclaration(
     override val range: SourceRange,
 ) : TopLevelDeclaration
 
+data class ClassDeclaration(
+    override val name: String,
+    val constructorParameters: List<ClassConstructorParameter>,
+    val members: List<ClassMemberDeclaration>,
+    override val range: SourceRange,
+) : TopLevelDeclaration
+
+data class ClassConstructorParameter(
+    val name: String,
+    val type: TypeSyntax,
+    val fieldMutability: FieldMutability?,
+    val range: SourceRange,
+)
+
+enum class FieldMutability { VAL, VAR }
+
+sealed interface ClassMemberDeclaration {
+    val range: SourceRange
+}
+
+data class ClassFieldDeclaration(
+    val name: String,
+    val type: TypeSyntax?,
+    val mutable: Boolean,
+    val initializer: Expression,
+    override val range: SourceRange,
+) : ClassMemberDeclaration
+
+data class ClassInitBlock(
+    val body: BlockStatement,
+    override val range: SourceRange,
+) : ClassMemberDeclaration
+
+data class ClassMethodDeclaration(
+    val function: FunctionDeclaration,
+    val static: Boolean,
+    override val range: SourceRange,
+) : ClassMemberDeclaration
+
 data class ParameterDeclaration(
     val name: String,
     val type: TypeSyntax,
@@ -70,6 +109,14 @@ data class VariableDeclarationStatement(
 data class AssignmentStatement(
     val name: String,
     val nameRange: SourceRange,
+    val expression: Expression,
+    override val range: SourceRange,
+) : Statement
+
+data class MemberAssignmentStatement(
+    val receiver: Expression,
+    val memberName: String,
+    val memberRange: SourceRange,
     val expression: Expression,
     override val range: SourceRange,
 ) : Statement
@@ -124,6 +171,10 @@ data class NameExpression(
     override val range: SourceRange,
 ) : Expression
 
+data class ThisExpression(
+    override val range: SourceRange,
+) : Expression
+
 data class MemberAccessExpression(
     val receiver: Expression,
     val memberName: String,
@@ -143,9 +194,26 @@ data class ScopeAccessExpression(
 
 data class CallExpression(
     val callee: Expression,
-    val arguments: List<Expression>,
+    val arguments: List<CallArgument>,
     override val range: SourceRange,
 ) : Expression
+
+sealed interface CallArgument {
+    val expression: Expression
+    val range: SourceRange
+}
+
+data class PositionalCallArgument(
+    override val expression: Expression,
+    override val range: SourceRange,
+) : CallArgument
+
+data class NamedCallArgument(
+    val name: String,
+    val nameRange: SourceRange,
+    override val expression: Expression,
+    override val range: SourceRange,
+) : CallArgument
 
 data class UnaryExpression(
     val operator: UnaryOperator,
@@ -166,6 +234,13 @@ data class GroupExpression(
 ) : Expression
 
 data class RecordConstructionExpression(
+    val typeName: String,
+    val fields: List<RecordFieldInitializer>,
+    override val range: SourceRange,
+    val qualifier: String? = null,
+) : Expression
+
+data class LegacyRecordConstructionExpression(
     val typeName: String,
     val fields: List<RecordFieldInitializer>,
     override val range: SourceRange,
@@ -254,6 +329,21 @@ data class BytecodeModule(
     val records: List<BytecodeRecord>,
     val entryFunctionIndex: Int,
     val registry: BuiltinRegistry,
+    val classes: List<BytecodeClass> = emptyList(),
+)
+
+data class BytecodeClass(
+    val name: String,
+    val fields: List<BytecodeClassField>,
+    val initFunctionIndex: Int?,
+    val instanceMethods: Map<String, Int>,
+    val staticMethods: Map<String, Int>,
+)
+
+data class BytecodeClassField(
+    val name: String,
+    val typeName: String,
+    val mutable: Boolean,
 )
 
 data class BytecodeFunction(
@@ -333,9 +423,29 @@ sealed interface Instruction {
         val fieldName: String,
     ) : Instruction
 
+    data class SetField(
+        val fieldName: String,
+    ) : Instruction
+
     data class ConstructRecord(
         val typeName: String,
         val fieldNames: List<String>,
+    ) : Instruction
+
+    data class ConstructClass(
+        val className: String,
+        val fieldNames: List<String>,
+    ) : Instruction
+
+    data class CallMethod(
+        val methodName: String,
+        val argumentCount: Int,
+    ) : Instruction
+
+    data class CallStaticMethod(
+        val className: String,
+        val methodName: String,
+        val argumentCount: Int,
     ) : Instruction
 
     data class Binary(

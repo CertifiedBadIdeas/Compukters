@@ -7,6 +7,7 @@
 Top-level declarations:
 
 - `struct Vec2 { x: Int, y: Int }`
+- `class Counter(var value: Int) { ... }`
 - `import "lib/math.ck" { add, Vec2 };`
 - `import "lib/math.ck" as math;`
 - `fun main() { ... }`
@@ -53,7 +54,7 @@ when {
 ## Operators
 
 - `::` resolves a name inside a namespace. This is used for built-in modules and aliased user-file imports.
-- `.` accesses fields of struct values.
+- `.` accesses fields and methods of values. Use `this.field` inside class instance methods and `init` blocks.
 
 Examples:
 
@@ -70,7 +71,59 @@ Expressions:
 - member access: `event.name`
 - namespace calls: `terminal::write("hi")`
 - function calls: `main()`, `helper()`
-- struct construction: `Vec2 { x: 1, y: 2 }`
+- struct construction: `Vec2(x = 1, y = 2)`
+- class construction: `Counter(value = 1)`
+
+## Structs
+
+Structs are value-shaped records with named fields. They are declared with `struct` and constructed with the same named call-style syntax as classes:
+
+```ck
+struct Vec2 { x: Int, y: Int }
+
+fun main() {
+    val v: Vec2 = Vec2(x = 1, y = 2);
+    terminal::println("x=" + v.x);
+}
+```
+
+The old record-literal syntax `Vec2 { x: 1, y: 2 }` is invalid.
+
+## Classes
+
+Classes are reference objects with public fields, `init` blocks, instance methods, and static methods.
+
+```ck
+class Counter(var value: Int) {
+    init {
+        this.value = this.value + 1;
+    }
+
+    fun current(): Int {
+        return this.value;
+    }
+
+    static fun zero(): Counter {
+        return Counter(value = 0);
+    }
+}
+
+fun main() {
+    val counter: Counter = Counter.zero();
+    terminal::println("value=" + counter.current());
+}
+```
+
+Rules:
+
+- The primary constructor is declared in parentheses after the class name.
+- Constructor parameters marked with `val` or `var` become fields.
+- Additional public fields can be declared in the class body with `val` or `var`.
+- Constructor calls must use named arguments: `Counter(value = 1)`.
+- `this` is available in instance methods and `init` blocks, but not in `static fun`.
+- `val` fields can only be assigned during construction; `var` fields can be assigned later.
+- Instances have reference identity: two variables can refer to the same object and observe shared mutation.
+- Inheritance, interfaces, generics, and private members are not part of v1.
 
 ## Types
 
@@ -83,7 +136,7 @@ Builtin types:
 - `String`
 - `Event`
 
-User-defined struct types are declared with `struct`.
+User-defined struct types are declared with `struct`. User-defined reference object types are declared with `class`.
 
 ## Builtin Modules
 
@@ -112,7 +165,7 @@ import terminal { println };         // selected built-in member visible directl
 
 Rules:
 
-- Each top-level `fun` and `struct` of an imported file is public.
+- Each top-level `fun`, `struct`, and `class` of an imported file is public.
 - Imports are not transitive: importing `a.ck` does not import `a.ck`'s imports.
 - The same file is parsed and analysed at most once per compilation, so import cycles are safe.
 - Importing the same path twice in one file is a `Duplicate import` error.
@@ -124,10 +177,11 @@ Selected names become visible directly in the importing file:
 
 ```ck
 import terminal { println };
-import "math.ck" { add, Vec2 };
+import "math.ck" { add, Vec2, Counter };
 
 fun main() {
-    val v: Vec2 = Vec2 { x: 1, y: 2 };
+    val v: Vec2 = Vec2(x = 1, y = 2);
+    val counter: Counter = Counter(value = 1);
     println("x=" + add(v, v).x);
 }
 ```
@@ -138,7 +192,7 @@ An alias behaves like a built-in module and uses `::`:
 
 ```
 import "math.ck" as m;
-val v: m::Vec2 = m::Vec2 { x: 1, y: 2 };
+val v: m::Vec2 = m::Vec2(x = 1, y = 2);
 val w: m::Vec2 = m::add(v, v);
 ```
 
