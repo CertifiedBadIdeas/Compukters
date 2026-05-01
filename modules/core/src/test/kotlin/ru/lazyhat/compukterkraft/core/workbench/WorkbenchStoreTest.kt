@@ -231,6 +231,46 @@ class WorkbenchStoreTest {
         }
 
     @Test
+    fun formatOpenDocumentAppliesFacadeEdits() =
+        runTest(UnconfinedTestDispatcher()) {
+            val ideFacade = FakeWorkbenchIdeFacade()
+            ideFacade.nextFormatResult =
+                ru.lazyhat.compukterkraft.lang.frontend.FormatResult(
+                    listOf(TextEdit(0, "fun main(){println();}".length, "fun main() {\n    println();\n}\n")),
+                )
+            val store = WorkbenchStore(FakeWorkspaceGateway(), FakeTargetControlGateway(), ideFacade)
+            val updates = FakeWorkbenchUpdateSource()
+
+            store.bind(backgroundScope, updates)
+            updates.push(document = DeviceWorkspaceDocument("main.ck", "fun main(){println();}", 0))
+
+            store.formatOpenDocument(visibleEditorLines = 20)
+
+            assertEquals("fun main() {\n    println();\n}\n", store.state.editor.text)
+            assertEquals(listOf("formatDocument:main.ck"), ideFacade.calls.filter { it.startsWith("formatDocument") })
+        }
+
+    @Test
+    fun cleanupOpenDocumentAppliesFacadeEdits() =
+        runTest(UnconfinedTestDispatcher()) {
+            val ideFacade = FakeWorkbenchIdeFacade()
+            ideFacade.nextCleanupResult =
+                ru.lazyhat.compukterkraft.lang.frontend.FormatResult(
+                    listOf(TextEdit(0, "import terminal { clear, println };\nfun main(){println();}".length, "import terminal { println };\n\nfun main() {\n    println();\n}\n")),
+                )
+            val store = WorkbenchStore(FakeWorkspaceGateway(), FakeTargetControlGateway(), ideFacade)
+            val updates = FakeWorkbenchUpdateSource()
+
+            store.bind(backgroundScope, updates)
+            updates.push(document = DeviceWorkspaceDocument("main.ck", "import terminal { clear, println };\nfun main(){println();}", 0))
+
+            store.cleanupOpenDocument(visibleEditorLines = 20)
+
+            assertEquals("import terminal { println };\n\nfun main() {\n    println();\n}\n", store.state.editor.text)
+            assertEquals(listOf("cleanupDocument:main.ck"), ideFacade.calls.filter { it.startsWith("cleanupDocument") })
+        }
+
+    @Test
     fun escapeIsNotHandledByEditorStore() =
         runTest(UnconfinedTestDispatcher()) {
             val store = WorkbenchStore(FakeWorkspaceGateway(), FakeTargetControlGateway(), FakeWorkbenchIdeFacade())
@@ -659,6 +699,10 @@ class WorkbenchStoreTest {
         val calls = mutableListOf<String>()
         var nextManualCompletions: List<CompletionItem> =
             listOf(CompletionItem(label = "manual", detail = "", kind = CompletionItemKind.KEYWORD))
+        var nextFormatResult: ru.lazyhat.compukterkraft.lang.frontend.FormatResult =
+            ru.lazyhat.compukterkraft.lang.frontend.FormatResult(emptyList())
+        var nextCleanupResult: ru.lazyhat.compukterkraft.lang.frontend.FormatResult =
+            ru.lazyhat.compukterkraft.lang.frontend.FormatResult(emptyList())
 
         override fun analyze(
             path: String,
@@ -708,16 +752,18 @@ class WorkbenchStoreTest {
         override fun formatDocument(
             path: String,
             source: String,
-        ): ru.lazyhat.compukterkraft.lang.frontend.FormatResult =
-            ru.lazyhat.compukterkraft.lang.frontend
-                .FormatResult(emptyList())
+        ): ru.lazyhat.compukterkraft.lang.frontend.FormatResult {
+            calls += "formatDocument:$path"
+            return nextFormatResult
+        }
 
         override fun cleanupDocument(
             path: String,
             source: String,
-        ): ru.lazyhat.compukterkraft.lang.frontend.FormatResult =
-            ru.lazyhat.compukterkraft.lang.frontend
-                .FormatResult(emptyList())
+        ): ru.lazyhat.compukterkraft.lang.frontend.FormatResult {
+            calls += "cleanupDocument:$path"
+            return nextCleanupResult
+        }
     }
 
     private class FakeWorkbenchOpsGateway : WorkbenchOpsGateway {

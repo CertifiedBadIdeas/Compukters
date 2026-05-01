@@ -275,6 +275,18 @@ class WorkbenchStore(
         controlGateway.attachTargetTerminal()
     }
 
+    fun formatOpenDocument(visibleEditorLines: Int) {
+        val document = state.openDocument ?: return
+        val result = ideFacade.formatDocument(document.path, state.editor.text)
+        applyIdeTextEdits(result.edits, visibleEditorLines)
+    }
+
+    fun cleanupOpenDocument(visibleEditorLines: Int) {
+        val document = state.openDocument ?: return
+        val result = ideFacade.cleanupDocument(document.path, state.editor.text)
+        applyIdeTextEdits(result.edits, visibleEditorLines)
+    }
+
     fun updateHover(
         line: Int,
         column: Int,
@@ -302,6 +314,41 @@ class WorkbenchStore(
 
     fun closeCompletion() {
         _state.value = state.copy(editor = state.editor.copy(completionItems = emptyList(), selectedCompletion = 0))
+    }
+
+    private fun applyIdeTextEdits(
+        edits: List<ru.lazyhat.compukterkraft.lang.runtime.TextEdit>,
+        visibleEditorLines: Int,
+    ) {
+        if (edits.isEmpty()) return
+        closeCompletion()
+        edits.sortedByDescending { it.startOffset }.forEach { edit ->
+            val currentText = state.editor.text
+            val start = edit.startOffset
+            val end = edit.endOffset
+            if (start < 0 || end < start || end > currentText.length) return@forEach
+            if (replica == null) {
+                val before = currentText.substring(0, start)
+                val after = currentText.substring(end)
+                val nextText = before + edit.replacement + after
+                val cursorOffset = (start + edit.replacement.length).coerceIn(0, nextText.length)
+                val (line, column) = lineColumnAt(nextText, cursorOffset)
+                _state.value =
+                    state.copy(
+                        editor =
+                            state.editor.copy(
+                                text = nextText,
+                                cursorLine = line,
+                                cursorColumn = column,
+                            ).keepCursorVisible(visibleEditorLines),
+                    )
+                refreshIde()
+            } else {
+                if (end > start) applyLocalEdit(LocalEdit.Delete(start, end - start))
+                if (edit.replacement.isNotEmpty()) applyLocalEdit(LocalEdit.Insert(start, edit.replacement))
+                _state.value = state.copy(editor = state.editor.keepCursorVisible(visibleEditorLines))
+            }
+        }
     }
 
     fun applyCompletion(index: Int = state.editor.selectedCompletion) {
