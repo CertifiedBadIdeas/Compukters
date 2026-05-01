@@ -213,6 +213,16 @@ class WorkbenchSyncIntegrationTest {
             line: Int,
             column: Int,
         ) = null
+
+        override fun formatDocument(
+            path: String,
+            source: String,
+        ): ru.lazyhat.compukterkraft.lang.frontend.FormatResult = ru.lazyhat.compukterkraft.lang.frontend.FormatResult(emptyList())
+
+        override fun cleanupDocument(
+            path: String,
+            source: String,
+        ): ru.lazyhat.compukterkraft.lang.frontend.FormatResult = ru.lazyhat.compukterkraft.lang.frontend.FormatResult(emptyList())
     }
 
     private class MutableUpdateSource : WorkbenchUpdateSource {

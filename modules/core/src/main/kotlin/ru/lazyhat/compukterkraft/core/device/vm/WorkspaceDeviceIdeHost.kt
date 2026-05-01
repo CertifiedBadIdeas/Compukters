@@ -24,6 +24,8 @@ import ru.lazyhat.compukterkraft.lang.runtime.DeviceCompletionRequest
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceCompletionResponse
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceDefinitionRequest
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceDefinitionResponse
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceFormatRequest
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceFormatResponse
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceHoverRequest
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceHoverResponse
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceIdeHost
@@ -87,6 +89,24 @@ class WorkspaceDeviceIdeHost(
                 ide(deviceId).definition(document.path, document.text, request.line, request.column)
             }
         return DeviceDefinitionResponse(target)
+    }
+
+    override fun formatDocument(
+        deviceId: Int,
+        request: DeviceFormatRequest,
+    ): DeviceFormatResponse {
+        val document = workspace.readDocument(deviceId, request.path)
+        val result = document?.let { ide(deviceId).formatDocument(it.path, it.text) }
+        return DeviceFormatResponse(result?.edits ?: emptyList(), result?.diagnostics ?: emptyList())
+    }
+
+    override fun cleanupDocument(
+        deviceId: Int,
+        request: DeviceFormatRequest,
+    ): DeviceFormatResponse {
+        val document = workspace.readDocument(deviceId, request.path)
+        val result = document?.let { ide(deviceId).cleanupDocument(it.path, it.text) }
+        return DeviceFormatResponse(result?.edits ?: emptyList(), result?.diagnostics ?: emptyList())
     }
 
     private fun ide(deviceId: Int): LanguageIde =

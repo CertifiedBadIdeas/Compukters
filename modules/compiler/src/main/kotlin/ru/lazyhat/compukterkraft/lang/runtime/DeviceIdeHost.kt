@@ -132,6 +132,15 @@ data class DeviceDefinitionResponse(
     val target: DefinitionTarget?,
 )
 
+data class DeviceFormatRequest(
+    val path: String,
+)
+
+data class DeviceFormatResponse(
+    val edits: List<TextEdit>,
+    val diagnostics: List<Diagnostic> = emptyList(),
+)
+
 interface DeviceIdeHost {
     fun snapshot(
         deviceId: Int,
@@ -152,4 +161,14 @@ interface DeviceIdeHost {
         deviceId: Int,
         request: DeviceDefinitionRequest,
     ): DeviceDefinitionResponse
+
+    fun formatDocument(
+        deviceId: Int,
+        request: DeviceFormatRequest,
+    ): DeviceFormatResponse
+
+    fun cleanupDocument(
+        deviceId: Int,
+        request: DeviceFormatRequest,
+    ): DeviceFormatResponse
 }

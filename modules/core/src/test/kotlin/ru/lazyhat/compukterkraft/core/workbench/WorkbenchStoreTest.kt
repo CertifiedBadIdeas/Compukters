@@ -703,6 +703,16 @@ class WorkbenchStoreTest {
                 path = path,
                 range = SourceRange(SourceLocation(0, 0, 0), SourceLocation(0, 0, 0)),
             )
+
+        override fun formatDocument(
+            path: String,
+            source: String,
+        ): ru.lazyhat.compukterkraft.lang.frontend.FormatResult = ru.lazyhat.compukterkraft.lang.frontend.FormatResult(emptyList())
+
+        override fun cleanupDocument(
+            path: String,
+            source: String,
+        ): ru.lazyhat.compukterkraft.lang.frontend.FormatResult = ru.lazyhat.compukterkraft.lang.frontend.FormatResult(emptyList())
     }
 
     private class FakeWorkbenchOpsGateway : WorkbenchOpsGateway {

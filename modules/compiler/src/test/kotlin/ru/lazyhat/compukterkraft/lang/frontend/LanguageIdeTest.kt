@@ -344,4 +344,41 @@ class LanguageIdeTest {
         val items = ide.complete("test.ck", "", 0, 0)
         assertEquals(listOf("terminal"), items.filter { it.kind == CompletionItemKind.MODULE }.map { it.label })
     }
+
+    @Test
+    fun formatsDocumentThroughIdeFacade() {
+        val source = "fun main(){terminal::println(\"hi\");}"
+
+        val result = ide.formatDocument("main.ck", source)
+
+        assertEquals("fun main() {\n    terminal::println(\"hi\");\n}\n", applySingleEdit(source, result.edits))
+    }
+
+    @Test
+    fun cleanupDocumentThroughIdeFacadeUsesSourceIndex() {
+        val loader =
+            MapSourceLoader(
+                mapOf(
+                    "main.ck" to "import \"lib.ck\" { add, unused };\nfun main(){add();}",
+                    "lib.ck" to "fun add() {}\nfun unused() {}",
+                ),
+            )
+        val ide = LanguageIde(sourceIndex = loader)
+        val source = loader.read("main.ck")!!
+
+        val result = ide.cleanupDocument("main.ck", source)
+        val cleaned = applySingleEdit(source, result.edits)
+
+        assertTrue(cleaned.contains("import \"lib.ck\" { add };"), cleaned)
+        assertFalse(cleaned.contains("unused"), cleaned)
+    }
+
+    private fun applySingleEdit(
+        source: String,
+        edits: List<TextEdit>,
+    ): String {
+        assertEquals(1, edits.size)
+        val edit = edits.single()
+        return source.substring(0, edit.startOffset) + edit.replacement + source.substring(edit.endOffset)
+    }
 }

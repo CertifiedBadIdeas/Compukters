@@ -27,6 +27,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspaceEntry
 import ru.lazyhat.compukterkraft.lang.runtime.DefinitionTarget
 import ru.lazyhat.compukterkraft.lang.runtime.HighlightTokenKind
 import ru.lazyhat.compukterkraft.lang.runtime.HoverInfo
+import ru.lazyhat.compukterkraft.lang.frontend.FormatResult
 
 data class WorkbenchTargetState(
     val connected: Boolean = false,
@@ -100,6 +101,16 @@ interface WorkbenchIdeFacade {
         line: Int,
         column: Int,
     ): DefinitionTarget?
+
+    fun formatDocument(
+        path: String,
+        source: String,
+    ): FormatResult
+
+    fun cleanupDocument(
+        path: String,
+        source: String,
+    ): FormatResult
 }
 
 fun highlightColor(kind: HighlightTokenKind): Int =

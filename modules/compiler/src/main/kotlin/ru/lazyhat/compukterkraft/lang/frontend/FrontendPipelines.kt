@@ -107,6 +107,16 @@ interface IdeFacade {
         line: Int,
         column: Int,
     ): DefinitionTarget?
+
+    fun formatDocument(
+        name: String,
+        source: String,
+    ): FormatResult
+
+    fun cleanupDocument(
+        name: String,
+        source: String,
+    ): FormatResult
 }
 
 internal class DefaultParserFacade : ParserFacade {
