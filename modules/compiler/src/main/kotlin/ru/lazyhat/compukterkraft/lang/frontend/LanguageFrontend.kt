@@ -50,6 +50,7 @@ import ru.lazyhat.compukterkraft.lang.api.ImportMode
 import ru.lazyhat.compukterkraft.lang.api.ImportSource
 import ru.lazyhat.compukterkraft.lang.api.Instruction
 import ru.lazyhat.compukterkraft.lang.api.IntLiteralValue
+import ru.lazyhat.compukterkraft.lang.api.LegacyRecordConstructionExpression
 import ru.lazyhat.compukterkraft.lang.api.LiteralExpression
 import ru.lazyhat.compukterkraft.lang.api.LongLiteralValue
 import ru.lazyhat.compukterkraft.lang.api.MemberAccessExpression
@@ -178,6 +179,7 @@ internal data class SemanticResult(
     val localBindings: IdentityHashMap<Expression, Binding>,
     val expressionTypes: IdentityHashMap<Expression, TypeRef>,
     val callBindings: IdentityHashMap<CallExpression, FunctionBinding>,
+    val recordConstructorBindings: IdentityHashMap<CallExpression, RecordBinding>,
     val memberBindings: IdentityHashMap<MemberAccessExpression, Binding>,
     val program: Program,
 )
@@ -196,6 +198,7 @@ internal class SemanticAnalyzer(
     private val localBindings = IdentityHashMap<Expression, Binding>()
     private val expressionTypes = IdentityHashMap<Expression, TypeRef>()
     private val callBindings = IdentityHashMap<CallExpression, FunctionBinding>()
+    private val recordConstructorBindings = IdentityHashMap<CallExpression, RecordBinding>()
     private val memberBindings = IdentityHashMap<MemberAccessExpression, Binding>()
     private val builtinModules = registry.modules.associateBy { it.name }
 
@@ -235,6 +238,7 @@ internal class SemanticAnalyzer(
             localBindings = localBindings,
             expressionTypes = expressionTypes,
             callBindings = callBindings,
+            recordConstructorBindings = recordConstructorBindings,
             memberBindings = memberBindings,
             program = program,
         )
@@ -729,6 +733,10 @@ internal class SemanticAnalyzer(
                     analyzeRecordConstruction(expression, scope)
                 }
 
+                is LegacyRecordConstructionExpression -> {
+                    analyzeLegacyRecordConstruction(expression, scope)
+                }
+
                 is ScopeAccessExpression -> {
                     analyzeScope(expression).second
                 }
@@ -917,6 +925,7 @@ internal class SemanticAnalyzer(
         expression: CallExpression,
         scope: Scope,
     ): TypeRef {
+        analyzeRecordConstructorCall(expression, scope)?.let { return it }
         val binding =
             when (val callee = expression.callee) {
                 is NameExpression -> {
@@ -961,6 +970,13 @@ internal class SemanticAnalyzer(
                 )
             return TypeRef("Unit")
         }
+            expression.arguments.filterIsInstance<NamedCallArgument>().forEach { argument ->
+                diagnostics +=
+                    FrontendDiagnostic(
+                        "Named arguments are only supported for constructors.",
+                        argument.range,
+                    )
+            }
         if (binding.parameterTypes.size != expression.arguments.size) {
             diagnostics +=
                 FrontendDiagnostic(
@@ -983,6 +999,79 @@ internal class SemanticAnalyzer(
             )
         return binding.returnType
     }
+
+        private fun analyzeRecordConstructorCall(
+            expression: CallExpression,
+            scope: Scope,
+        ): TypeRef? {
+            val namedArguments = expression.arguments.filterIsInstance<NamedCallArgument>()
+            if (namedArguments.isEmpty()) return null
+            if (namedArguments.size != expression.arguments.size) {
+                diagnostics +=
+                    FrontendDiagnostic(
+                        "Constructor arguments must be named.",
+                        expression.range,
+                    )
+                expression.arguments.forEach { analyzeExpression(it.expression, scope) }
+                return TypeRef("Unit")
+            }
+            val binding =
+                when (val callee = expression.callee) {
+                    is NameExpression -> userRecordsByName[callee.name]
+                    is ScopeAccessExpression -> {
+                        val alias = importAliases[callee.qualifier] ?: return null
+                        val struct = alias.exports.structs[callee.name]
+                        if (struct == null) return null
+                        recordBindingForExport(
+                            visibleName = "${callee.qualifier}::${callee.name}",
+                            struct = struct,
+                            exports = alias.exports,
+                            qualifier = callee.qualifier,
+                            range = callee.range,
+                        ).also { userRecordsByName[it.symbol.name] = it }
+                    }
+                    else -> return null
+                } ?: return null
+
+            val seen = mutableSetOf<String>()
+            namedArguments.forEach { argument ->
+                if (!seen.add(argument.name)) {
+                    diagnostics +=
+                        FrontendDiagnostic(
+                            "Duplicate constructor argument `${argument.name}`.",
+                            argument.nameRange,
+                        )
+                }
+                val expected = binding.fields[argument.name]
+                if (expected == null) {
+                    diagnostics +=
+                        FrontendDiagnostic(
+                            "Unknown constructor parameter `${argument.name}` for struct `${binding.symbol.name}`.",
+                            argument.nameRange,
+                        )
+                    analyzeExpression(argument.expression, scope)
+                } else {
+                    val actual = analyzeExpression(argument.expression, scope)
+                    expectAssignable(actual, expected, argument.expression.range, "Struct field type mismatch.")
+                }
+            }
+            binding.fields.keys.filterNot(seen::contains).forEach { missing ->
+                diagnostics +=
+                    FrontendDiagnostic(
+                        "Missing constructor argument `$missing` for struct `${binding.symbol.name}`.",
+                        expression.range,
+                    )
+            }
+            recordConstructorBindings[expression] = binding
+            references +=
+                ReferenceInfo(
+                    binding.symbol.name,
+                    expression.callee.range,
+                    binding.symbol,
+                    binding.symbol.name,
+                )
+            return TypeRef(binding.symbol.name)
+        }
 
     private fun analyzeScopeCall(
         expression: ScopeAccessExpression,
@@ -1126,6 +1215,19 @@ internal class SemanticAnalyzer(
             }
         }
         return TypeRef(record.symbol.name)
+    }
+
+    private fun analyzeLegacyRecordConstruction(
+        expression: LegacyRecordConstructionExpression,
+        scope: Scope,
+    ): TypeRef {
+        diagnostics +=
+            FrontendDiagnostic(
+                "Old record construction syntax is no longer valid. Use `${expression.typeName}(x = value)` instead.",
+                expression.range,
+            )
+        expression.fields.forEach { analyzeExpression(it.expression, scope) }
+        return TypeRef("Unit")
     }
 
     private fun analyzeUnary(
@@ -1562,6 +1664,15 @@ internal class BytecodeCompiler(
                 }
 
                 is CallExpression -> {
+                    val recordConstructor = semantic.recordConstructorBindings[expression]
+                    if (recordConstructor != null) {
+                        val namedArguments = expression.arguments.filterIsInstance<NamedCallArgument>().associateBy { it.name }
+                        recordConstructor.fields.keys.forEach { fieldName ->
+                            namedArguments[fieldName]?.let { compileExpression(it.expression) }
+                        }
+                        instructions += Instruction.ConstructRecord(recordConstructor.symbol.name, recordConstructor.fields.keys.toList())
+                        return
+                    }
                     expression.arguments.forEach { compileExpression(it.expression) }
                     val binding = semantic.callBindings[expression]
                     when {
@@ -1629,6 +1740,10 @@ internal class BytecodeCompiler(
                         compileExpression(field.expression)
                     }
                     instructions += Instruction.ConstructRecord(expression.typeName, expression.fields.map { it.name })
+                }
+
+                is LegacyRecordConstructionExpression -> {
+                    instructions += Instruction.PushUnit
                 }
 
                 is ScopeAccessExpression -> {
@@ -2746,7 +2861,7 @@ internal class Parser(
             if (!match(TokenKind.COMMA)) break
         }
         val end = consume(TokenKind.RBRACE, "Expected `}` after struct construction.") ?: return null
-        return RecordConstructionExpression(nameToken.text, fields, SourceRange(nameToken.range.start, end.range.end))
+        return LegacyRecordConstructionExpression(nameToken.text, fields, SourceRange(nameToken.range.start, end.range.end))
     }
 
     private fun parseQualifiedRecordConstruction(scope: ScopeAccessExpression): Expression? {
@@ -2765,7 +2880,7 @@ internal class Parser(
             if (!match(TokenKind.COMMA)) break
         }
         val end = consume(TokenKind.RBRACE, "Expected `}` after record fields.") ?: return null
-        return RecordConstructionExpression(
+        return LegacyRecordConstructionExpression(
             typeName = scope.name,
             fields = fields,
             range = SourceRange(scope.range.start, end.range.end),
