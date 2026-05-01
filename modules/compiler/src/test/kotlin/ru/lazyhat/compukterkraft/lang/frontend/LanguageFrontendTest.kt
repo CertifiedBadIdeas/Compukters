@@ -36,6 +36,41 @@ class LanguageFrontendTest {
     }
 
     @Test
+    fun parsesScopeCallToBuiltin() {
+        val artifact =
+            frontend.compile(
+                "ok.ck",
+                """
+                fun main() { terminal::println("hi"); }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+        assertNotNull(artifact.module)
+    }
+
+    @Test
+    fun rejectsDotForBuiltinModuleAccess() {
+        val artifact =
+            frontend.compile(
+                "dot.ck",
+                """
+                fun main() { terminal.println("hi"); }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.any {
+                it.severity == FrontendSeverity.ERROR && it.message.contains("Use `::` for module access")
+            },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+    }
+
+    @Test
     fun compilesRecordsFunctionsAndBuiltins() {
         val artifact =
             frontend.compile(

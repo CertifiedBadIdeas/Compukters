@@ -173,6 +173,7 @@ internal class SemanticAnalyzer(
     private val userRecordsByName = mutableMapOf<String, RecordBinding>()
 
     fun analyze(program: Program): SemanticResult {
+        registerAmbientBuiltins()
         registerImports(program.imports)
         registerTopLevel(program.declarations)
         for (declaration in program.declarations) {
@@ -193,6 +194,21 @@ internal class SemanticAnalyzer(
             memberBindings = memberBindings,
             program = program,
         )
+    }
+
+    private fun registerAmbientBuiltins() {
+        builtinModules.values.forEach { module ->
+            val symbol =
+                SymbolInfo(
+                    name = module.name,
+                    kind = SymbolKind.MODULE,
+                    range = SourceRange(SourceLocation(0, 0, 0), SourceLocation(0, 0, 0)),
+                    detail = "module ${module.name}",
+                    documentation = module.documentation,
+                )
+            symbols += symbol
+            importedModules[module.name] = ModuleBinding(symbol, module)
+        }
     }
 
     private fun registerImports(imports: List<ImportDeclaration>) {
@@ -476,12 +492,7 @@ internal class SemanticAnalyzer(
                 }
 
                 is ScopeAccessExpression -> {
-                    diagnostics +=
-                        FrontendDiagnostic(
-                            "Unknown namespace `${expression.qualifier}`.",
-                            expression.qualifierRange,
-                        )
-                    TypeRef("Unit")
+                    analyzeScope(expression).second
                 }
 
                 is UnaryExpression -> {
@@ -603,46 +614,13 @@ internal class SemanticAnalyzer(
         scope: Scope,
     ): Pair<Binding, TypeRef> {
         val receiverName = expression.receiver as? NameExpression
-        if (receiverName != null) {
-            val module = importedModules[receiverName.name]
-            if (module != null) {
-                val member =
-                    module.module.functions.firstOrNull { it.name == expression.memberName }
-                        ?: run {
-                            diagnostics +=
-                                FrontendDiagnostic(
-                                    "Module `${module.module.name}` has no member `${expression.memberName}`.",
-                                    expression.range,
-                                )
-                            return module to
-                                TypeRef("Unit")
-                        }
-                val symbol =
-                    SymbolInfo(
-                        name = expression.memberName,
-                        kind = SymbolKind.BUILTIN_FUNCTION,
-                        range = expression.range,
-                        detail = "${module.module.name}.${member.name}(${member.parameterTypes.joinToString()}) : ${member.returnType}",
-                        documentation = member.documentation,
-                    )
-                val binding =
-                    FunctionBinding(
-                        symbol,
-                        null,
-                        member.parameterTypes.map(::TypeRef),
-                        TypeRef(member.returnType),
-                        module.module.name,
-                    )
-                references +=
-                    ReferenceInfo(
-                        expression.memberName,
-                        expression.range,
-                        symbol,
-                        member.returnType,
-                    )
-                return binding to
-                    TypeRef(member.returnType)
-            }
+        if (receiverName != null && importedModules.containsKey(receiverName.name)) {
+            diagnostics +=
+                FrontendDiagnostic(
+                    "Use `::` for module access (try `${receiverName.name}::${expression.memberName}`).",
+                    expression.range,
+                )
+            return errorBinding(expression.range, "invalid module access") to TypeRef("Unit")
         }
         val receiverType = analyzeExpression(expression.receiver, scope)
         val recordBinding = userRecordsByName[receiverType.name]
@@ -721,46 +699,11 @@ internal class SemanticAnalyzer(
                 }
 
                 is MemberAccessExpression -> {
-                    val receiverName = callee.receiver as? NameExpression
-                    val module = receiverName?.let { importedModules[it.name] }
-                    if (module != null) {
-                        val builtin =
-                            module.module.functions.firstOrNull {
-                                it.name == callee.memberName && it.parameterTypes.size == expression.arguments.size
-                            }
-                        if (builtin != null) {
-                            FunctionBinding(
-                                symbol =
-                                    SymbolInfo(
-                                        name = builtin.name,
-                                        kind = SymbolKind.BUILTIN_FUNCTION,
-                                        range = callee.range,
-                                        detail =
-                                            "${module.module.name}.${builtin.name}" +
-                                                "(${builtin.parameterTypes.joinToString()}) : ${builtin.returnType}",
-                                        documentation = builtin.documentation,
-                                    ),
-                                declaration = null,
-                                parameterTypes = builtin.parameterTypes.map(::TypeRef),
-                                returnType =
-                                    TypeRef(builtin.returnType),
-                                builtinModuleName = module.module.name,
-                            )
-                        } else {
-                            diagnostics +=
-                                FrontendDiagnostic(
-                                    "Expected ${
-                                        module.module.functions.count {
-                                            it.name == callee.memberName
-                                        }
-                                    } matching overloads but got ${expression.arguments.size} arguments.",
-                                    expression.range,
-                                )
-                            null
-                        }
-                    } else {
-                        analyzeMember(callee, scope).first as? FunctionBinding
-                    }
+                    analyzeMember(callee, scope).first as? FunctionBinding
+                }
+
+                is ScopeAccessExpression -> {
+                    analyzeScopeCall(callee, expression.arguments.size)
                 }
 
                 else -> {
@@ -796,6 +739,64 @@ internal class SemanticAnalyzer(
                 binding.returnType.displayName,
             )
         return binding.returnType
+    }
+
+    private fun analyzeScopeCall(
+        expression: ScopeAccessExpression,
+        argumentCount: Int,
+    ): FunctionBinding? {
+        val module = importedModules[expression.qualifier]
+        if (module == null) {
+            diagnostics +=
+                FrontendDiagnostic(
+                    "Unknown namespace `${expression.qualifier}`.",
+                    expression.qualifierRange,
+                )
+            return null
+        }
+        val builtin =
+            module.module.functions.firstOrNull {
+                it.name == expression.name && it.parameterTypes.size == argumentCount
+            }
+        if (builtin == null) {
+            diagnostics +=
+                FrontendDiagnostic(
+                    "Namespace `${expression.qualifier}` has no member `${expression.name}` with $argumentCount arguments.",
+                    expression.range,
+                )
+            return null
+        }
+        val symbol =
+            SymbolInfo(
+                name = builtin.name,
+                kind = SymbolKind.BUILTIN_FUNCTION,
+                range = expression.range,
+                detail = "${module.module.name}::${builtin.name}(${builtin.parameterTypes.joinToString()}) : ${builtin.returnType}",
+                documentation = builtin.documentation,
+            )
+        references +=
+            ReferenceInfo(
+                expression.name,
+                expression.range,
+                symbol,
+                builtin.returnType,
+            )
+        return FunctionBinding(
+            symbol = symbol,
+            declaration = null,
+            parameterTypes = builtin.parameterTypes.map(::TypeRef),
+            returnType = TypeRef(builtin.returnType),
+            builtinModuleName = module.module.name,
+        )
+    }
+
+    private fun analyzeScope(expression: ScopeAccessExpression): Pair<Binding, TypeRef> {
+        val binding = analyzeScopeCall(expression, argumentCount = 0)
+        return if (binding != null) {
+            binding to binding.returnType
+        } else {
+            errorBinding(expression.range, "unknown namespace member") to TypeRef("Unit")
+        }
     }
 
     private fun analyzeRecordConstruction(
@@ -973,6 +974,20 @@ internal class SemanticAnalyzer(
         actual == expected ||
             (actual.name == "Int" && expected.name == "Long" && !actual.nullable && !expected.nullable) ||
             (actual.nullable && expected.nullable && actual.name == expected.name)
+
+    private fun errorBinding(
+        range: SourceRange,
+        detail: String,
+    ): VariableBinding =
+        VariableBinding(
+            SymbolInfo(
+                "<error>",
+                SymbolKind.VARIABLE,
+                range,
+                detail,
+            ),
+            TypeRef("Unit"),
+        )
 
     private class Scope(
         private val parent: Scope?,
@@ -1853,9 +1868,20 @@ internal class Parser(
     }
 
     private fun parseType(): TypeSyntax? {
-        val name = consume(TokenKind.IDENTIFIER, "Expected type name.") ?: return null
+        val first = consume(TokenKind.IDENTIFIER, "Expected type name.") ?: return null
+        val (qualifier, name) =
+            if (match(TokenKind.COLON_COLON)) {
+                first.text to (consume(TokenKind.IDENTIFIER, "Expected type name after `::`.") ?: return null)
+            } else {
+                null to first
+            }
         val nullable = match(TokenKind.QUESTION)
-        return TypeSyntax(name.text, nullable, SourceRange(name.range.start, previous().range.end))
+        return TypeSyntax(
+            name = name.text,
+            nullable = nullable,
+            range = SourceRange(first.range.start, previous().range.end),
+            qualifier = qualifier,
+        )
     }
 
     private fun parseExpression(): Expression? = parseOr()
@@ -2118,7 +2144,22 @@ internal class Parser(
             }
 
             TokenKind.IDENTIFIER -> {
-                if (check(TokenKind.LBRACE)) {
+                if (check(TokenKind.COLON_COLON)) {
+                    advance()
+                    val nameToken = consume(TokenKind.IDENTIFIER, "Expected name after `::`.") ?: return null
+                    val scope =
+                        ScopeAccessExpression(
+                            qualifier = token.text,
+                            name = nameToken.text,
+                            qualifierRange = token.range,
+                            range = SourceRange(token.range.start, nameToken.range.end),
+                        )
+                    if (check(TokenKind.LBRACE)) {
+                        parseQualifiedRecordConstruction(scope)
+                    } else {
+                        scope
+                    }
+                } else if (check(TokenKind.LBRACE)) {
                     parseRecordConstruction(token)
                 } else {
                     NameExpression(token.text, token.range)
@@ -2150,6 +2191,30 @@ internal class Parser(
         }
         val end = consume(TokenKind.RBRACE, "Expected `}` after struct construction.") ?: return null
         return RecordConstructionExpression(nameToken.text, fields, SourceRange(nameToken.range.start, end.range.end))
+    }
+
+    private fun parseQualifiedRecordConstruction(scope: ScopeAccessExpression): Expression? {
+        consume(TokenKind.LBRACE, "Expected `{` for record construction.") ?: return null
+        val fields = mutableListOf<RecordFieldInitializer>()
+        while (!check(TokenKind.RBRACE) && !isAtEnd()) {
+            val fieldName = consume(TokenKind.IDENTIFIER, "Expected field name.") ?: return null
+            consume(TokenKind.COLON, "Expected `:` after field name.") ?: return null
+            val value = parseExpression() ?: return null
+            fields +=
+                RecordFieldInitializer(
+                    fieldName.text,
+                    value,
+                    SourceRange(fieldName.range.start, value.range.end),
+                )
+            if (!match(TokenKind.COMMA)) break
+        }
+        val end = consume(TokenKind.RBRACE, "Expected `}` after record fields.") ?: return null
+        return RecordConstructionExpression(
+            typeName = scope.name,
+            fields = fields,
+            range = SourceRange(scope.range.start, end.range.end),
+            qualifier = scope.qualifier,
+        )
     }
 
     private fun consume(
