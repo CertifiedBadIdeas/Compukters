@@ -246,31 +246,60 @@ class LanguageFormatter(
                     expression.arguments.forEach { collectExpression(it.expression) }
                 }
 
-                is GroupExpression -> collectExpression(expression.expression)
+                is GroupExpression -> {
+                    collectExpression(expression.expression)
+                }
+
                 is LegacyRecordConstructionExpression -> {
                     if (expression.qualifier == null) mark(expression.typeName)
                     expression.fields.forEach { collectExpression(it.expression) }
                 }
 
-                is LiteralExpression -> Unit
-                is MemberAccessExpression -> collectExpression(expression.receiver)
-                is NameExpression -> mark(expression.name)
+                is LiteralExpression -> {
+                    Unit
+                }
+
+                is MemberAccessExpression -> {
+                    collectExpression(expression.receiver)
+                }
+
+                is NameExpression -> {
+                    mark(expression.name)
+                }
+
                 is RecordConstructionExpression -> {
                     if (expression.qualifier == null) mark(expression.typeName)
                     expression.fields.forEach { collectExpression(it.expression) }
                 }
 
-                is ScopeAccessExpression -> Unit
-                is ThisExpression -> Unit
-                is UnaryExpression -> collectExpression(expression.operand)
+                is ScopeAccessExpression -> {
+                    Unit
+                }
+
+                is ThisExpression -> {
+                    Unit
+                }
+
+                is UnaryExpression -> {
+                    collectExpression(expression.operand)
+                }
             }
         }
 
         fun collectStatement(statement: Statement) {
             when (statement) {
-                is AssignmentStatement -> collectExpression(statement.expression)
-                is BlockStatement -> statement.statements.forEach(::collectStatement)
-                is ExpressionStatement -> collectExpression(statement.expression)
+                is AssignmentStatement -> {
+                    collectExpression(statement.expression)
+                }
+
+                is BlockStatement -> {
+                    statement.statements.forEach(::collectStatement)
+                }
+
+                is ExpressionStatement -> {
+                    collectExpression(statement.expression)
+                }
+
                 is IfStatement -> {
                     collectExpression(statement.condition)
                     collectStatement(statement.thenBranch)
@@ -282,7 +311,10 @@ class LanguageFormatter(
                     collectExpression(statement.expression)
                 }
 
-                is ReturnStatement -> statement.expression?.let(::collectExpression)
+                is ReturnStatement -> {
+                    statement.expression?.let(::collectExpression)
+                }
+
                 is VariableDeclarationStatement -> {
                     statement.type?.let(::collectType)
                     collectExpression(statement.initializer)
@@ -318,17 +350,27 @@ class LanguageFormatter(
                         when (member) {
                             is ClassFieldDeclaration -> {
                                 member.type?.let(::collectType)
-                                collectExpression(member.initializer)
+                                member.initializer?.let(::collectExpression)
                             }
 
-                            is ClassInitBlock -> collectStatement(member.body)
-                            is ClassMethodDeclaration -> collectFunction(member.function)
+                            is ClassInitBlock -> {
+                                collectStatement(member.body)
+                            }
+
+                            is ClassMethodDeclaration -> {
+                                collectFunction(member.function)
+                            }
                         }
                     }
                 }
 
-                is FunctionDeclaration -> collectFunction(declaration)
-                is StructDeclaration -> declaration.fields.forEach { collectType(it.type) }
+                is FunctionDeclaration -> {
+                    collectFunction(declaration)
+                }
+
+                is StructDeclaration -> {
+                    declaration.fields.forEach { collectType(it.type) }
+                }
             }
         }
         return usedNames
@@ -393,7 +435,7 @@ class LanguageFormatter(
                         writer.write(if (member.mutable) "var " else "val ")
                         writer.write(member.name)
                         member.type?.let { writer.write(": ${renderType(it)}") }
-                        writer.write(" = ${renderExpression(member.initializer)}")
+                        member.initializer?.let { writer.write(" = ${renderExpression(it)}") }
                         writer.line()
                     }
 
