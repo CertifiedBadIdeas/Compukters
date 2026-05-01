@@ -33,6 +33,7 @@ Canonical style:
 
 - 4 пробела на уровень indentation.
 - Imports печатаются перед top-level declarations.
+- Imports сортируются, а duplicate selective import groups из одного source объединяются.
 - Пустая строка между import block и declarations.
 - Пустая строка между top-level declarations.
 - Пробелы вокруг binary operators.
@@ -41,16 +42,15 @@ Canonical style:
 - Constructor calls остаются named call-style, например `Vec2(x = 1, y = 2)`.
 - Formatter идемпотентен: повторное форматирование formatted source не даёт новых edits.
 
+Format Document не удаляет unused imports. Удаление относится к Cleanup Document, потому что требует semantic proof.
+
 ### Cleanup Document
 
 Cleanup использует formatter плюс import organization.
 
 Он должен:
 
-- переносить все imports в начало файла,
-- сортировать imports по source text,
-- сортировать selective import items внутри `{ ... }`,
-- объединять duplicate selective imports из одного source,
+- сохранять то же import sorting и merging поведение, что и Format Document,
 - удалять unused selective import items, когда analysis доказывает, что они не используются,
 - удалять unused namespace alias только когда analysis доказывает, что alias не используется,
 - сохранять imports, если analysis неоднозначен или содержит ошибки.
@@ -104,6 +104,7 @@ Responsibilities:
 - parse input через `ParserFacade`,
 - reject invalid input,
 - render AST в canonical CKL source,
+- organize imports через сортировку sources, сортировку selective items и merging duplicate selective groups,
 - preserve comments через comment trivia,
 - return `TextEdit` results без мутации файлов.
 
@@ -195,10 +196,15 @@ Formatter tests:
 - preserves leading, trailing, inline, and block comments,
 - is idempotent.
 
-Cleanup tests:
+Formatter import tests:
 
 - sorts imports,
+- sorts selective import items,
 - merges duplicate selective imports,
+- keeps used and unused imports because Format Document does not remove them.
+
+Cleanup tests:
+
 - removes unused selected items,
 - preserves used function, struct, and class imports,
 - preserves imports when semantic analysis has errors,
