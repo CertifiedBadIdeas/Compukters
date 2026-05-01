@@ -19,6 +19,7 @@
 
 package ru.lazyhat.compukterkraft.lang.frontend
 
+import ru.lazyhat.compukterkraft.lang.api.TokenKind
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -26,6 +27,13 @@ import kotlin.test.assertTrue
 
 class LanguageFrontendTest {
     private val frontend = LanguageFrontend()
+
+    @Test
+    fun lexesDoubleColonAsScopeOperator() {
+        val tokens = Lexer("fun main() { terminal::println(\"ok\"); }").lex()
+
+        assertTrue(tokens.any { it.kind == TokenKind.COLON_COLON }, tokens.joinToString { "${it.kind}:${it.text}" })
+    }
 
     @Test
     fun compilesRecordsFunctionsAndBuiltins() {

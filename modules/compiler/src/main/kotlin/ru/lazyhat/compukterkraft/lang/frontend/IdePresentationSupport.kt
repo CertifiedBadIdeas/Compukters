@@ -134,6 +134,7 @@ internal object IdePresentationSupport {
             -> HighlightTokenKind.OPERATOR
 
             TokenKind.COLON,
+            TokenKind.COLON_COLON,
             TokenKind.SEMICOLON,
             TokenKind.COMMA,
             TokenKind.DOT,

@@ -37,6 +37,7 @@ enum class TokenKind {
     IMPORT,
     STRUCT,
     COLON,
+    COLON_COLON,
     SEMICOLON,
     COMMA,
     DOT,
