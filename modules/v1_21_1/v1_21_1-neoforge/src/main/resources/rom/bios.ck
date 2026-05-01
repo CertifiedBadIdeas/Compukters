@@ -1,5 +1,3 @@
-import process
-
 fun main() {
-    process.run("shell.ck")
+    process::run("shell.ck")
 }
