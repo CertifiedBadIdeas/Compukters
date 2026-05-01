@@ -154,6 +154,7 @@ class BackgroundDeviceVm(
                             source.source,
                             profile,
                             runtimeRegistryProfile.baseRegistry,
+                            programLoader.sourceLoader(deviceId),
                         )
 
                     val program =

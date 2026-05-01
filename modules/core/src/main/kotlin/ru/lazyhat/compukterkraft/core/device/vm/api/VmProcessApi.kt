@@ -59,7 +59,13 @@ internal class VmProcessApi(
                 ctx.log("VM[$deviceId] missing program: $resolved")
                 return 1
             }
-        val compiledProgram = ComputerProgramCompiler.compile(programSource.path, programSource.source, profile)
+        val compiledProgram =
+            ComputerProgramCompiler.compile(
+                programSource.path,
+                programSource.source,
+                profile,
+                sourceLoader = programLoader.sourceLoader(deviceId),
+            )
         val program = compiledProgram.program
         if (program == null) {
             val message = compiledProgram.errorMessage.orEmpty()
