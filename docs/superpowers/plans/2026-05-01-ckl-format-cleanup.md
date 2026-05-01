@@ -293,11 +293,11 @@ import ru.lazyhat.compukterkraft.lang.runtime.Diagnostic
 import ru.lazyhat.compukterkraft.lang.runtime.IdeDiagnosticSeverity
 import ru.lazyhat.compukterkraft.lang.runtime.TextEdit
 
-internal data class FormatOptions(
+data class FormatOptions(
     val cleanup: Boolean = false,
 )
 
-internal data class FormatResult(
+data class FormatResult(
     val edits: List<TextEdit>,
     val diagnostics: List<Diagnostic> = emptyList(),
 ) {
@@ -305,7 +305,7 @@ internal data class FormatResult(
         get() = edits.isNotEmpty()
 }
 
-internal class LanguageFormatter(
+class LanguageFormatter(
     private val parser: ParserFacade = DefaultParserFacade(),
 ) {
     fun formatDocument(
@@ -960,7 +960,7 @@ In `LanguageFormatter.cleanupDocument`, parse and analyze:
 ```kotlin
 val parsed = parser.parse(name, source)
 if (parsed.syntaxDiagnostics.any { it.severity == FrontendSeverity.ERROR }) return cannotFormat()
-val analysis = LanguageFrontend().analyze(name, source, loader)
+    val analysis = LanguageFrontend().compile(name, source, loader).analysis
 if (analysis.diagnostics.any { it.severity == FrontendSeverity.ERROR }) return FormatResult(emptyList())
 ```
 

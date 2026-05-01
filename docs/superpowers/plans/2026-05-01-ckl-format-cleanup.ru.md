@@ -179,7 +179,7 @@ Expected: compilation fails, `LanguageFormatter` отсутствует.
 
 Добавить `FormatOptions`, `FormatResult`, `LanguageFormatter.formatDocument()`, `cleanupDocument()`, `renderCanonical()`, `ensureTrailingNewline()`.
 
-Минимальная реализация: parse source, если есть `FrontendSeverity.ERROR` — вернуть `FormatResult(emptyList(), listOf(Diagnostic(...)))`; иначе вернуть full-document edit только если `renderCanonical(parsed) != source`.
+Минимальная реализация: parse source, если есть `FrontendSeverity.ERROR` — вернуть `FormatResult(emptyList(), listOf(Diagnostic(...)))`; иначе вернуть full-document edit только если `renderCanonical(parsed) != source`. `FormatOptions`, `FormatResult` и `LanguageFormatter` должны быть public, потому что позже `IdeFacade` будет возвращать `FormatResult` из public API.
 
 - [ ] **Step 4: Targeted tests**
 
@@ -399,7 +399,7 @@ Expected: cleanup removal test fails.
 
 - [ ] **Step 4: Implement cleanup filtering**
 
-В `cleanupDocument`: parse; если syntax errors — cannot format. Analyze через `LanguageFrontend().analyze(name, source, loader)`; если ERROR diagnostics — `FormatResult(emptyList())`. Собрать `referencedSymbols = analysis.references.map { it.target }.toSet()`. Удалить selective items, чьи symbols не referenced. Empty groups удалить. Namespace aliases оставить, если нет надёжного alias-reference check.
+В `cleanupDocument`: parse; если syntax errors — cannot format. Analyze через `LanguageFrontend().compile(name, source, loader).analysis`, потому что public `analyze` overload с `SourceLoader` отсутствует; если ERROR diagnostics — `FormatResult(emptyList())`. Собрать `referencedSymbols = analysis.references.map { it.target }.toSet()`. Удалить selective items, чьи symbols не referenced. Empty groups удалить. Namespace aliases оставить, если нет надёжного alias-reference check.
 
 - [ ] **Step 5: Targeted tests**
 
