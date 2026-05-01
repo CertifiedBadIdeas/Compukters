@@ -39,13 +39,13 @@ class FileComputerWorkspaceTest {
             workspace.writeDocument(
                 7,
                 "test.ck",
-                "import terminal;\nfun main() { terminal.println(\"hello\"); }",
+                "fun main() { terminal::println(\"hello\"); }",
             )
 
             val doc = workspace.readDocument(7, "test.ck")
 
             assertNotNull(doc)
-            assertEquals("import terminal;\nfun main() { terminal.println(\"hello\"); }", doc.text)
+            assertEquals("fun main() { terminal::println(\"hello\"); }", doc.text)
         }
     }
 
@@ -61,7 +61,7 @@ class FileComputerWorkspaceTest {
             worldOne.writeDocument(
                 1,
                 "startup.ck",
-                "import terminal;\nfun main() { terminal.println(\"world one\"); }",
+                "fun main() { terminal::println(\"world one\"); }",
             )
 
             assertNotNull(worldOne.readDocument(1, "startup.ck"))
@@ -79,7 +79,7 @@ class FileComputerWorkspaceTest {
                 workspace.writeDocument(
                     3,
                     "../escape.ck",
-                    "import terminal;\nfun main() { terminal.println(\"nope\"); }",
+                    "fun main() { terminal::println(\"nope\"); }",
                 )
             }
         }
