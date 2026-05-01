@@ -19,14 +19,15 @@
 
 package ru.lazyhat.compukterkraft.lang.frontend
 
+import ru.lazyhat.compukterkraft.lang.api.ClassDeclaration
+import ru.lazyhat.compukterkraft.lang.api.FunctionDeclaration
+import ru.lazyhat.compukterkraft.lang.api.StructDeclaration
 import ru.lazyhat.compukterkraft.lang.runtime.CompletionItem
 import ru.lazyhat.compukterkraft.lang.runtime.CompletionItemKind
 import ru.lazyhat.compukterkraft.lang.runtime.DefinitionTarget
 import ru.lazyhat.compukterkraft.lang.runtime.Diagnostic
 import ru.lazyhat.compukterkraft.lang.runtime.HighlightToken
 import ru.lazyhat.compukterkraft.lang.runtime.HoverInfo
-import ru.lazyhat.compukterkraft.lang.api.FunctionDeclaration
-import ru.lazyhat.compukterkraft.lang.api.StructDeclaration
 
 class LanguageIde(
     private val frontend: LanguageFrontend = LanguageFrontend(),
@@ -160,6 +161,7 @@ class LanguageIde(
                 parsed.program.declarations.asSequence().mapNotNull { declaration ->
                     val name =
                         when (declaration) {
+                            is ClassDeclaration -> return@mapNotNull null
                             is FunctionDeclaration -> declaration.name
                             is StructDeclaration -> declaration.name
                         }
@@ -168,11 +170,13 @@ class LanguageIde(
                         label = name,
                         detail =
                             when (declaration) {
+                                is ClassDeclaration -> return@mapNotNull null
                                 is FunctionDeclaration -> "fun $name"
                                 is StructDeclaration -> "struct $name"
                             },
                         kind =
                             when (declaration) {
+                                is ClassDeclaration -> return@mapNotNull null
                                 is FunctionDeclaration -> CompletionItemKind.FUNCTION
                                 is StructDeclaration -> CompletionItemKind.TYPE
                             },

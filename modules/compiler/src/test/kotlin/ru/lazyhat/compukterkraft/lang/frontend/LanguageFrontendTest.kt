@@ -36,6 +36,36 @@ class LanguageFrontendTest {
     }
 
     @Test
+    fun lexesClassKeywords() {
+        val tokens = Lexer("class Counter(var value: Int) { init {} static fun zero(): Int { return 0; } }").lex()
+
+        assertTrue(tokens.any { it.kind == TokenKind.CLASS }, tokens.joinToString { "${it.kind}:${it.text}" })
+        assertTrue(tokens.any { it.kind == TokenKind.INIT }, tokens.joinToString { "${it.kind}:${it.text}" })
+        assertTrue(tokens.any { it.kind == TokenKind.STATIC }, tokens.joinToString { "${it.kind}:${it.text}" })
+    }
+
+    @Test
+    fun parsesBasicClassDeclaration() {
+        val artifact =
+            frontend.compile(
+                "class_parse.ck",
+                """
+                class Counter(var value: Int) {
+                    init { this.value = value; }
+                    fun current(): Int { return this.value; }
+                    static fun zero(): Counter { return Counter(value = 0); }
+                }
+                fun main() {}
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR && it.message.contains("Expected a top-level declaration") },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+    }
+
+    @Test
     fun parsesScopeCallToBuiltin() {
         val artifact =
             frontend.compile(

@@ -111,6 +111,10 @@ internal object IdePresentationSupport {
             TokenKind.IMPORT,
             TokenKind.AS,
             TokenKind.STRUCT,
+            TokenKind.CLASS,
+            TokenKind.STATIC,
+            TokenKind.INIT,
+            TokenKind.THIS,
             -> HighlightTokenKind.KEYWORD
 
             TokenKind.PLUS,

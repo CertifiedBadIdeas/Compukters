@@ -30,9 +30,17 @@ import ru.lazyhat.compukterkraft.lang.api.BytecodeFunction
 import ru.lazyhat.compukterkraft.lang.api.BytecodeLocal
 import ru.lazyhat.compukterkraft.lang.api.BytecodeModule
 import ru.lazyhat.compukterkraft.lang.api.BytecodeRecord
+import ru.lazyhat.compukterkraft.lang.api.CallArgument
 import ru.lazyhat.compukterkraft.lang.api.CallExpression
+import ru.lazyhat.compukterkraft.lang.api.ClassConstructorParameter
+import ru.lazyhat.compukterkraft.lang.api.ClassDeclaration
+import ru.lazyhat.compukterkraft.lang.api.ClassFieldDeclaration
+import ru.lazyhat.compukterkraft.lang.api.ClassInitBlock
+import ru.lazyhat.compukterkraft.lang.api.ClassMemberDeclaration
+import ru.lazyhat.compukterkraft.lang.api.ClassMethodDeclaration
 import ru.lazyhat.compukterkraft.lang.api.Expression
 import ru.lazyhat.compukterkraft.lang.api.ExpressionStatement
+import ru.lazyhat.compukterkraft.lang.api.FieldMutability
 import ru.lazyhat.compukterkraft.lang.api.FunctionDeclaration
 import ru.lazyhat.compukterkraft.lang.api.GroupExpression
 import ru.lazyhat.compukterkraft.lang.api.IfStatement
@@ -45,9 +53,11 @@ import ru.lazyhat.compukterkraft.lang.api.IntLiteralValue
 import ru.lazyhat.compukterkraft.lang.api.LiteralExpression
 import ru.lazyhat.compukterkraft.lang.api.LongLiteralValue
 import ru.lazyhat.compukterkraft.lang.api.MemberAccessExpression
+import ru.lazyhat.compukterkraft.lang.api.NamedCallArgument
 import ru.lazyhat.compukterkraft.lang.api.NameExpression
 import ru.lazyhat.compukterkraft.lang.api.NullLiteralValue
 import ru.lazyhat.compukterkraft.lang.api.ParameterDeclaration
+import ru.lazyhat.compukterkraft.lang.api.PositionalCallArgument
 import ru.lazyhat.compukterkraft.lang.api.Program
 import ru.lazyhat.compukterkraft.lang.api.RecordConstructionExpression
 import ru.lazyhat.compukterkraft.lang.api.RecordFieldDeclaration
@@ -62,6 +72,7 @@ import ru.lazyhat.compukterkraft.lang.api.StringLiteralValue
 import ru.lazyhat.compukterkraft.lang.api.StructDeclaration
 import ru.lazyhat.compukterkraft.lang.api.Token
 import ru.lazyhat.compukterkraft.lang.api.TokenKind
+import ru.lazyhat.compukterkraft.lang.api.ThisExpression
 import ru.lazyhat.compukterkraft.lang.api.TopLevelDeclaration
 import ru.lazyhat.compukterkraft.lang.api.TypeSyntax
 import ru.lazyhat.compukterkraft.lang.api.UnaryExpression
@@ -209,6 +220,7 @@ internal class SemanticAnalyzer(
         registerTopLevel(program.declarations)
         for (declaration in program.declarations) {
             when (declaration) {
+                is ClassDeclaration -> Unit
                 is FunctionDeclaration -> analyzeFunction(declaration)
                 is StructDeclaration -> Unit
             }
@@ -721,6 +733,11 @@ internal class SemanticAnalyzer(
                     analyzeScope(expression).second
                 }
 
+                is ThisExpression -> {
+                    diagnostics += FrontendDiagnostic("`this` is only available inside classes.", expression.range)
+                    TypeRef("Unit")
+                }
+
                 is UnaryExpression -> {
                     analyzeUnary(expression, scope)
                 }
@@ -952,9 +969,9 @@ internal class SemanticAnalyzer(
                 )
         }
         expression.arguments.forEachIndexed { index, argument ->
-            val actual = analyzeExpression(argument, scope)
+            val actual = analyzeExpression(argument.expression, scope)
             val expected = binding.parameterTypes.getOrNull(index) ?: return@forEachIndexed
-            expectAssignable(actual, expected, argument.range, "Argument type mismatch.")
+            expectAssignable(actual, expected, argument.expression.range, "Argument type mismatch.")
         }
         callBindings[expression] = binding
         references +=
@@ -1545,7 +1562,7 @@ internal class BytecodeCompiler(
                 }
 
                 is CallExpression -> {
-                    expression.arguments.forEach(::compileExpression)
+                    expression.arguments.forEach { compileExpression(it.expression) }
                     val binding = semantic.callBindings[expression]
                     when {
                         binding == null -> {
@@ -1580,6 +1597,10 @@ internal class BytecodeCompiler(
                         is StringLiteralValue -> instructions += Instruction.PushString(value.value)
                         NullLiteralValue -> instructions += Instruction.PushNull
                     }
+                }
+
+                is ThisExpression -> {
+                    instructions += Instruction.PushUnit
                 }
 
                 is MemberAccessExpression -> {
@@ -1866,6 +1887,10 @@ internal class Lexer(
                 "import" -> TokenKind.IMPORT
                 "as" -> TokenKind.AS
                 "struct" -> TokenKind.STRUCT
+                "class" -> TokenKind.CLASS
+                "static" -> TokenKind.STATIC
+                "init" -> TokenKind.INIT
+                "this" -> TokenKind.THIS
                 "true" -> TokenKind.TRUE
                 "false" -> TokenKind.FALSE
                 "null" -> TokenKind.NULL
@@ -1950,6 +1975,11 @@ internal class Parser(
                     if (decl != null) declarations += decl else synchronize()
                 }
 
+                match(TokenKind.CLASS) -> {
+                    val decl = parseClass()
+                    if (decl != null) declarations += decl else synchronize()
+                }
+
                 check(TokenKind.EOF) -> {
                     break
                 }
@@ -1966,7 +1996,7 @@ internal class Parser(
     private fun synchronize() {
         while (!isAtEnd()) {
             if (match(TokenKind.SEMICOLON)) return
-            if (check(TokenKind.FUN) || check(TokenKind.IMPORT) || check(TokenKind.STRUCT)) return
+            if (check(TokenKind.FUN) || check(TokenKind.IMPORT) || check(TokenKind.STRUCT) || check(TokenKind.CLASS)) return
             advance()
         }
     }
@@ -2068,6 +2098,107 @@ internal class Parser(
         return StructDeclaration(name.text, fields, SourceRange(name.range.start, end.range.end))
     }
 
+    private fun parseClass(): ClassDeclaration? {
+        val keyword = previous()
+        val name = consume(TokenKind.IDENTIFIER, "Expected class name.") ?: return null
+        consume(TokenKind.LPAREN, "Expected `(` after class name.") ?: return null
+        val constructorParameters = mutableListOf<ClassConstructorParameter>()
+        if (!check(TokenKind.RPAREN)) {
+            do {
+                constructorParameters += parseClassConstructorParameter() ?: return null
+            } while (match(TokenKind.COMMA))
+        }
+        consume(TokenKind.RPAREN, "Expected `)` after class constructor parameters.") ?: return null
+        consume(TokenKind.LBRACE, "Expected `{` after class constructor.") ?: return null
+        val members = mutableListOf<ClassMemberDeclaration>()
+        while (!check(TokenKind.RBRACE) && !isAtEnd()) {
+            members += parseClassMember() ?: return null
+        }
+        val end = consume(TokenKind.RBRACE, "Expected `}` after class body.") ?: return null
+        return ClassDeclaration(
+            name = name.text,
+            constructorParameters = constructorParameters,
+            members = members,
+            range = SourceRange(keyword.range.start, end.range.end),
+        )
+    }
+
+    private fun parseClassConstructorParameter(): ClassConstructorParameter? {
+        val mutabilityToken =
+            when {
+                check(TokenKind.VAL) -> advance()
+                check(TokenKind.VAR) -> advance()
+                else -> null
+            }
+        val name = consume(TokenKind.IDENTIFIER, "Expected constructor parameter name.") ?: return null
+        consume(TokenKind.COLON, "Expected `:` after constructor parameter name.") ?: return null
+        val type = parseType() ?: return null
+        return ClassConstructorParameter(
+            name = name.text,
+            type = type,
+            fieldMutability =
+                when (mutabilityToken?.kind) {
+                    TokenKind.VAL -> FieldMutability.VAL
+                    TokenKind.VAR -> FieldMutability.VAR
+                    else -> null
+                },
+            range = SourceRange((mutabilityToken ?: name).range.start, type.range.end),
+        )
+    }
+
+    private fun parseClassMember(): ClassMemberDeclaration? =
+        when {
+            match(TokenKind.INIT) -> {
+                val start = previous().range.start
+                val body = parseBlock() ?: return null
+                ClassInitBlock(body, SourceRange(start, body.range.end))
+            }
+
+            match(TokenKind.STATIC) -> {
+                val start = previous().range.start
+                consume(TokenKind.FUN, "Expected `fun` after `static`.") ?: return null
+                val function = parseFunction() ?: return null
+                ClassMethodDeclaration(function, static = true, range = SourceRange(start, function.range.end))
+            }
+
+            match(TokenKind.FUN) -> {
+                val start = previous().range.start
+                val function = parseFunction() ?: return null
+                ClassMethodDeclaration(function, static = false, range = SourceRange(start, function.range.end))
+            }
+
+            match(TokenKind.VAL) -> {
+                parseClassField(mutable = false, start = previous())
+            }
+
+            match(TokenKind.VAR) -> {
+                parseClassField(mutable = true, start = previous())
+            }
+
+            else -> {
+                diagnostics += FrontendDiagnostic("Expected a class member declaration.", peek().range)
+                null
+            }
+        }
+
+    private fun parseClassField(
+        mutable: Boolean,
+        start: Token,
+    ): ClassFieldDeclaration? {
+        val name = consume(TokenKind.IDENTIFIER, "Expected field name.") ?: return null
+        val type = if (match(TokenKind.COLON)) parseType() else null
+        consume(TokenKind.EQUAL, "Expected `=` in field declaration.") ?: return null
+        val initializer = parseExpression() ?: return null
+        consumeOptional(TokenKind.SEMICOLON)
+        return ClassFieldDeclaration(
+            name = name.text,
+            type = type,
+            mutable = mutable,
+            initializer = initializer,
+            range = SourceRange(start.range.start, initializer.range.end),
+        )
+    }
+
     private fun parseBlock(): BlockStatement? {
         val start = consume(TokenKind.LBRACE, "Expected `{`.") ?: return null
         val statements = mutableListOf<Statement>()
@@ -2109,7 +2240,9 @@ internal class Parser(
             }
 
             else -> {
-                if (check(TokenKind.IDENTIFIER) && peekAhead(1)?.kind in COMPOUND_ASSIGN_KINDS) {
+                if (check(TokenKind.THIS) && peekAhead(1)?.kind == TokenKind.DOT && peekAhead(2)?.kind == TokenKind.IDENTIFIER && peekAhead(3)?.kind in COMPOUND_ASSIGN_KINDS) {
+                    parseThisMemberAssignment()
+                } else if (check(TokenKind.IDENTIFIER) && peekAhead(1)?.kind in COMPOUND_ASSIGN_KINDS) {
                     parseAssignment()
                 } else {
                     val expression = parseExpression() ?: return null
@@ -2146,6 +2279,37 @@ internal class Parser(
             nameRange = nameTok.range,
             expression = value,
             range = SourceRange(nameTok.range.start, value.range.end),
+        )
+    }
+
+    private fun parseThisMemberAssignment(): AssignmentStatement? {
+        consume(TokenKind.THIS, "Expected `this`.") ?: return null
+        consume(TokenKind.DOT, "Expected `.` after `this`.") ?: return null
+        val field = consume(TokenKind.IDENTIFIER, "Expected member name after `this`.") ?: return null
+        val opTok = advance()
+        val rhs = parseExpression() ?: return null
+        consumeOptional(TokenKind.SEMICOLON)
+        val value: Expression =
+            when (opTok.kind) {
+                TokenKind.EQUAL -> rhs
+                TokenKind.PLUS_EQUAL -> compoundDesugar(field, BinaryOperator.ADD, rhs)
+                TokenKind.MINUS_EQUAL -> compoundDesugar(field, BinaryOperator.SUBTRACT, rhs)
+                TokenKind.STAR_EQUAL -> compoundDesugar(field, BinaryOperator.MULTIPLY, rhs)
+                TokenKind.SLASH_EQUAL -> compoundDesugar(field, BinaryOperator.DIVIDE, rhs)
+                else -> {
+                    diagnostics +=
+                        FrontendDiagnostic(
+                            "Expected `=`, `+=`, `-=`, `*=` or `/=` in assignment.",
+                            opTok.range,
+                        )
+                    return null
+                }
+            }
+        return AssignmentStatement(
+            name = field.text,
+            nameRange = field.range,
+            expression = value,
+            range = SourceRange(field.range.start, value.range.end),
         )
     }
 
@@ -2441,10 +2605,10 @@ internal class Parser(
             expression =
                 when {
                     match(TokenKind.LPAREN) -> {
-                        val arguments = mutableListOf<Expression>()
+                        val arguments = mutableListOf<CallArgument>()
                         if (!check(TokenKind.RPAREN)) {
                             do {
-                                arguments += parseExpression() ?: return null
+                                arguments += parseCallArgument() ?: return null
                             } while (match(TokenKind.COMMA))
                         }
                         val end = consume(TokenKind.RPAREN, "Expected `)` after arguments.") ?: return null
@@ -2469,6 +2633,17 @@ internal class Parser(
                     }
                 }
         }
+    }
+
+    private fun parseCallArgument(): CallArgument? {
+        if (check(TokenKind.IDENTIFIER) && checkNext(TokenKind.EQUAL)) {
+            val name = advance()
+            advance()
+            val value = parseExpression() ?: return null
+            return NamedCallArgument(name.text, name.range, value, SourceRange(name.range.start, value.range.end))
+        }
+        val value = parseExpression() ?: return null
+        return PositionalCallArgument(value, value.range)
     }
 
     private fun parsePrimary(): Expression? {
@@ -2543,6 +2718,10 @@ internal class Parser(
                 }
             }
 
+            TokenKind.THIS -> {
+                ThisExpression(token.range)
+            }
+
             TokenKind.LPAREN -> {
                 val expression = parseExpression() ?: return null
                 val end = consume(TokenKind.RPAREN, "Expected `)` after expression.") ?: return null
@@ -2614,6 +2793,8 @@ internal class Parser(
         }
 
     private fun check(kind: TokenKind): Boolean = !isAtEnd() && peek().kind == kind
+
+    private fun checkNext(kind: TokenKind): Boolean = peekAhead(1)?.kind == kind
 
     private fun peekAhead(offset: Int): Token? {
         val target = index + offset

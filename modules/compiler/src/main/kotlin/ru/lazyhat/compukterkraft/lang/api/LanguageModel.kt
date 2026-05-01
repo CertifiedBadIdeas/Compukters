@@ -25,6 +25,45 @@ data class StructDeclaration(
     override val range: SourceRange,
 ) : TopLevelDeclaration
 
+data class ClassDeclaration(
+    override val name: String,
+    val constructorParameters: List<ClassConstructorParameter>,
+    val members: List<ClassMemberDeclaration>,
+    override val range: SourceRange,
+) : TopLevelDeclaration
+
+data class ClassConstructorParameter(
+    val name: String,
+    val type: TypeSyntax,
+    val fieldMutability: FieldMutability?,
+    val range: SourceRange,
+)
+
+enum class FieldMutability { VAL, VAR }
+
+sealed interface ClassMemberDeclaration {
+    val range: SourceRange
+}
+
+data class ClassFieldDeclaration(
+    val name: String,
+    val type: TypeSyntax?,
+    val mutable: Boolean,
+    val initializer: Expression,
+    override val range: SourceRange,
+) : ClassMemberDeclaration
+
+data class ClassInitBlock(
+    val body: BlockStatement,
+    override val range: SourceRange,
+) : ClassMemberDeclaration
+
+data class ClassMethodDeclaration(
+    val function: FunctionDeclaration,
+    val static: Boolean,
+    override val range: SourceRange,
+) : ClassMemberDeclaration
+
 data class ParameterDeclaration(
     val name: String,
     val type: TypeSyntax,
@@ -124,6 +163,10 @@ data class NameExpression(
     override val range: SourceRange,
 ) : Expression
 
+data class ThisExpression(
+    override val range: SourceRange,
+) : Expression
+
 data class MemberAccessExpression(
     val receiver: Expression,
     val memberName: String,
@@ -143,9 +186,26 @@ data class ScopeAccessExpression(
 
 data class CallExpression(
     val callee: Expression,
-    val arguments: List<Expression>,
+    val arguments: List<CallArgument>,
     override val range: SourceRange,
 ) : Expression
+
+sealed interface CallArgument {
+    val expression: Expression
+    val range: SourceRange
+}
+
+data class PositionalCallArgument(
+    override val expression: Expression,
+    override val range: SourceRange,
+) : CallArgument
+
+data class NamedCallArgument(
+    val name: String,
+    val nameRange: SourceRange,
+    override val expression: Expression,
+    override val range: SourceRange,
+) : CallArgument
 
 data class UnaryExpression(
     val operator: UnaryOperator,
