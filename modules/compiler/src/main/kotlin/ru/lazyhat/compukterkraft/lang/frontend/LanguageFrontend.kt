@@ -1312,7 +1312,11 @@ internal class Lexer(
                 }
 
                 ':' -> {
-                    addToken(TokenKind.COLON, ":", start)
+                    if (match(':')) {
+                        addToken(TokenKind.COLON_COLON, "::", start)
+                    } else {
+                        addToken(TokenKind.COLON, ":", start)
+                    }
                 }
 
                 ';' -> {
