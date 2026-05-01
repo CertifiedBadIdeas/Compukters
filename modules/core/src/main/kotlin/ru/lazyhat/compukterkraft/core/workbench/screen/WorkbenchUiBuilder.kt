@@ -127,6 +127,16 @@ private fun UiScope.buildToolbar(
             enabled = value { store.state.actions.canRun },
             onClick = { store.runTargetProgram() },
         )
+        toolbarButton(
+            label = value("Format"),
+            enabled = value { store.state.openDocument != null },
+            onClick = { store.formatOpenDocument(visibleEditorLines = 20) },
+        )
+        toolbarButton(
+            label = value("Clean"),
+            enabled = value { store.state.openDocument != null },
+            onClick = { store.cleanupOpenDocument(visibleEditorLines = 20) },
+        )
         box(modifier = Modifier.weight(2f).size(IntSize(0, TOOLBAR_HEIGHT)))
         toolbarButton(
             label = value { if (store.state.terminalVisible) "Hide T" else "Term" },
