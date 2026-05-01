@@ -20,8 +20,8 @@
 package ru.lazyhat.compukterkraft.lang.api
 
 data class SourceRange(
-    val start: ru.lazyhat.compukterkraft.lang.api.SourceLocation,
-    val end: ru.lazyhat.compukterkraft.lang.api.SourceLocation,
+    val start: SourceLocation,
+    val end: SourceLocation,
 ) {
     fun contains(offset: Int): Boolean = offset in start.offset..<end.offset
 }

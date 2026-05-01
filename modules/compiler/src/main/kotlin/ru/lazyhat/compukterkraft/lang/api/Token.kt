@@ -20,7 +20,7 @@
 package ru.lazyhat.compukterkraft.lang.api
 
 data class Token(
-    val kind: ru.lazyhat.compukterkraft.lang.api.TokenKind,
+    val kind: TokenKind,
     val text: String,
-    val range: ru.lazyhat.compukterkraft.lang.api.SourceRange,
+    val range: SourceRange,
 )

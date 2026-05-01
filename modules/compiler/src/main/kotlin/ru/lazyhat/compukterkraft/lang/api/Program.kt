@@ -20,7 +20,7 @@
 package ru.lazyhat.compukterkraft.lang.api
 
 data class Program(
-    val imports: List<ru.lazyhat.compukterkraft.lang.api.ImportDeclaration>,
-    val declarations: List<ru.lazyhat.compukterkraft.lang.api.TopLevelDeclaration>,
-    val range: ru.lazyhat.compukterkraft.lang.api.SourceRange?,
+    val imports: List<ImportDeclaration>,
+    val declarations: List<TopLevelDeclaration>,
+    val range: SourceRange?,
 )
