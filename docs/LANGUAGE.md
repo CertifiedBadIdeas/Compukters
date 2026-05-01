@@ -7,7 +7,7 @@
 Top-level declarations:
 
 - `struct Vec2 { x: Int, y: Int }`
-- `import "lib/math.ck";`
+- `import "lib/math.ck" { add, Vec2 };`
 - `import "lib/math.ck" as math;`
 - `fun main() { ... }`
 - `fun add(x: Int, y: Int): Int { return x + y; }`
@@ -100,12 +100,15 @@ The old builtin-import / dot-call style is no longer valid. Built-ins are ambien
 
 ## Imports
 
-CKL programs may import other `.ck` files. The path is interpreted relative to the importing file and must end with `.ck`.
+CKL programs may import selected names from other `.ck` files. The path is interpreted relative to the importing file and must end with `.ck`.
 
+```ck
+import "lib/math.ck" { add, Vec2 };  // selected names visible directly
+import "lib/math.ck" as m;           // namespace access via `m::name`
+import terminal { println };         // selected built-in member visible directly
 ```
-import "lib/math.ck";              // flat: top-level names visible directly
-import "lib/math.ck" as m;         // aliased: access via `m::name`
-```
+
+`import "lib/math.ck";` is invalid. Use a selective import list or a namespace alias.
 
 Rules:
 
@@ -113,7 +116,21 @@ Rules:
 - Imports are not transitive: importing `a.ck` does not import `a.ck`'s imports.
 - The same file is parsed and analysed at most once per compilation, so import cycles are safe.
 - Importing the same path twice in one file is a `Duplicate import` error.
-- Conflicts between flat-imported names, aliases, local declarations, and built-in module names produce `Redeclaration` diagnostics.
+- Conflicts between selectively imported names, aliases, local declarations, and built-in module names produce `Redeclaration` diagnostics.
+
+### Selective imports
+
+Selected names become visible directly in the importing file:
+
+```ck
+import terminal { println };
+import "math.ck" { add, Vec2 };
+
+fun main() {
+    val v: Vec2 = Vec2 { x: 1, y: 2 };
+    println("x=" + add(v, v).x);
+}
+```
 
 ### Aliases as namespaces
 
