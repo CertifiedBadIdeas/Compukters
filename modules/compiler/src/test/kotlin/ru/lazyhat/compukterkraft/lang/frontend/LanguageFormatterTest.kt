@@ -24,6 +24,7 @@ import kotlin.test.assertTrue
 
 class LanguageFormatterTest {
     private val parser = DefaultParserFacade()
+    private val formatter = LanguageFormatter()
 
     @Test
     fun parserPreservesLineAndBlockCommentsAsTrivia() {
@@ -54,5 +55,23 @@ class LanguageFormatterTest {
         assertTrue(parsed.comments[1].text.contains("import note"))
         assertTrue(parsed.comments[2].text.contains("before main"))
         assertTrue(parsed.comments[3].text.contains("inline body"))
+    }
+
+    @Test
+    fun formatReturnsNoEditsForSyntaxErrors() {
+        val result = formatter.formatDocument("broken.ck", "fun main() { val x = ;")
+
+        assertEquals(emptyList(), result.edits)
+        assertTrue(result.diagnostics.any { it.message.contains("Cannot format source with syntax errors") })
+    }
+
+    @Test
+    fun formatReturnsNoEditsWhenSourceIsAlreadyCanonical() {
+        val source = "fun main() {\n    terminal::println(\"hi\");\n}\n"
+
+        val result = formatter.formatDocument("main.ck", source)
+
+        assertEquals(emptyList(), result.edits)
+        assertEquals(false, result.changed)
     }
 }
