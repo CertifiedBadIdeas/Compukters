@@ -71,7 +71,7 @@ class LanguageFrontendTest {
     }
 
     @Test
-    fun rejectsImportDeclarationsHard() {
+    fun rejectsLegacyImportDeclarationsHard() {
         val artifact =
             frontend.compile(
                 "import.ck",
@@ -83,7 +83,7 @@ class LanguageFrontendTest {
         val errors = artifact.analysis.diagnostics.filter { it.severity == FrontendSeverity.ERROR }
 
         assertTrue(
-            errors.any { it.message.contains("Built-in modules are available without `import`") },
+            errors.any { it.message.contains("Expected file path string after `import`") },
             errors.joinToString { it.message },
         )
         assertEquals(null, artifact.module)

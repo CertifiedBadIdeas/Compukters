@@ -85,7 +85,13 @@ class LanguageFrontend(
     fun compile(
         name: String,
         source: String,
-    ): CompilationArtifact = compiler.compile(name, source)
+    ): CompilationArtifact = compile(name, source, NoOpSourceLoader)
+
+    fun compile(
+        name: String,
+        source: String,
+        loader: SourceLoader,
+    ): CompilationArtifact = compiler.compile(name, source, loader)
 }
 
 internal data class TypeRef(
@@ -125,11 +131,28 @@ internal data class ModuleBinding(
     val module: BuiltinModule,
 ) : Binding
 
+internal data class ImportAliasBinding(
+    override val symbol: SymbolInfo,
+    val exports: ModuleExports,
+) : Binding
+
 internal data class MemberBinding(
     override val symbol: SymbolInfo,
     val ownerType: TypeRef,
     val type: TypeRef,
 ) : Binding
+
+internal data class ModuleExports(
+    val canonical: String,
+    val functions: Map<String, FunctionDeclaration>,
+    val structs: Map<String, StructDeclaration>,
+) {
+    constructor(canonical: String, program: Program) : this(
+        canonical = canonical,
+        functions = program.declarations.filterIsInstance<FunctionDeclaration>().associateBy { it.name },
+        structs = program.declarations.filterIsInstance<StructDeclaration>().associateBy { it.name },
+    )
+}
 
 internal data class SemanticResult(
     val diagnostics: List<FrontendDiagnostic>,
@@ -147,6 +170,8 @@ internal data class SemanticResult(
 internal class SemanticAnalyzer(
     private val registry: BuiltinRegistry,
     private val sourceName: String,
+    private val resolveImport: (String) -> String? = { null },
+    private val lookupExports: (String) -> ModuleExports? = { null },
 ) {
     private val diagnostics = mutableListOf<FrontendDiagnostic>()
     private val symbols = mutableListOf<SymbolInfo>()
@@ -169,6 +194,7 @@ internal class SemanticAnalyzer(
             }.toMutableMap()
 
     private val importedModules = mutableMapOf<String, ModuleBinding>()
+    private val importAliases = mutableMapOf<String, ImportAliasBinding>()
     private val pendingImports = mutableListOf<ImportDeclaration>()
     private val userFunctionsByName = mutableMapOf<String, FunctionBinding>()
     private val userRecordsByName = mutableMapOf<String, RecordBinding>()
@@ -215,7 +241,11 @@ internal class SemanticAnalyzer(
     private fun registerImports(imports: List<ImportDeclaration>) {
         val seen = mutableSetOf<String>()
         imports.forEach { declaration ->
-            if (!seen.add(declaration.path)) {
+            val canonical = resolveImport(declaration.path)
+            if (canonical == null) {
+                return@forEach
+            }
+            if (!seen.add(canonical)) {
                 diagnostics +=
                     FrontendDiagnostic(
                         "Duplicate import of `${declaration.path}`.",
@@ -223,8 +253,116 @@ internal class SemanticAnalyzer(
                     )
                 return@forEach
             }
+            val exports = lookupExports(canonical) ?: return@forEach
             pendingImports += declaration
+            if (declaration.alias != null) {
+                registerImportAlias(declaration, exports)
+            } else {
+                registerFlatImport(declaration, exports)
+            }
         }
+    }
+
+    private fun registerImportAlias(
+        declaration: ImportDeclaration,
+        exports: ModuleExports,
+    ) {
+        val alias = declaration.alias ?: return
+        val range = declaration.aliasRange ?: declaration.range
+        if (importedModules.containsKey(alias) || importAliases.containsKey(alias) || userFunctionsByName.containsKey(alias) || userRecordsByName.containsKey(alias)) {
+            diagnostics += FrontendDiagnostic("Redeclaration of `$alias`.", range)
+            return
+        }
+        val symbol =
+            SymbolInfo(
+                name = alias,
+                kind = SymbolKind.MODULE,
+                range = range,
+                detail = "import ${declaration.path} as $alias",
+            )
+        symbols += symbol
+        importAliases[alias] = ImportAliasBinding(symbol, exports)
+    }
+
+    private fun registerFlatImport(
+        declaration: ImportDeclaration,
+        exports: ModuleExports,
+    ) {
+        exports.structs.values.forEach { struct ->
+            if (importedModules.containsKey(struct.name) || importAliases.containsKey(struct.name) || typeNames.containsKey(struct.name) || userRecordsByName.containsKey(struct.name)) {
+                diagnostics += FrontendDiagnostic("Redeclaration of `${struct.name}`.", declaration.range)
+                return@forEach
+            }
+            val binding = recordBindingForExport(struct.name, struct, exports, qualifier = null, declaration.range)
+            typeNames[struct.name] = TypeRef(struct.name)
+            userRecordsByName[struct.name] = binding
+            symbols += binding.symbol
+        }
+        exports.functions.values.forEach { function ->
+            if (importedModules.containsKey(function.name) || importAliases.containsKey(function.name) || userFunctionsByName.containsKey(function.name) || userRecordsByName.containsKey(function.name)) {
+                diagnostics += FrontendDiagnostic("Redeclaration of `${function.name}`.", declaration.range)
+                return@forEach
+            }
+            val binding = functionBindingForExport(function.name, function, exports, qualifier = null, declaration.range)
+            userFunctionsByName[function.name] = binding
+            symbols += binding.symbol
+        }
+    }
+
+    private fun functionBindingForExport(
+        visibleName: String,
+        function: FunctionDeclaration,
+        exports: ModuleExports,
+        qualifier: String?,
+        range: SourceRange,
+    ): FunctionBinding {
+        val parameterTypes = function.parameters.map { exportTypeRef(it.type, exports, qualifier) }
+        val returnType = function.returnType?.let { exportTypeRef(it, exports, qualifier) } ?: TypeRef("Unit")
+        val symbol =
+            SymbolInfo(
+                name = visibleName,
+                kind = SymbolKind.FUNCTION,
+                range = range,
+                detail = "fun $visibleName(${parameterTypes.joinToString { it.displayName }}) : ${returnType.displayName}",
+            )
+        return FunctionBinding(
+            symbol = symbol,
+            declaration = function,
+            parameterTypes = parameterTypes,
+            returnType = returnType,
+        )
+    }
+
+    private fun recordBindingForExport(
+        visibleName: String,
+        struct: StructDeclaration,
+        exports: ModuleExports,
+        qualifier: String?,
+        range: SourceRange,
+    ): RecordBinding {
+        val fields = struct.fields.associate { it.name to exportTypeRef(it.type, exports, qualifier) }
+        val symbol =
+            SymbolInfo(
+                name = visibleName,
+                kind = SymbolKind.RECORD,
+                range = range,
+                detail = "struct $visibleName",
+            )
+        return RecordBinding(symbol, struct, fields)
+    }
+
+    private fun exportTypeRef(
+        syntax: TypeSyntax,
+        exports: ModuleExports,
+        qualifier: String?,
+    ): TypeRef {
+        val typeName =
+            if (syntax.qualifier == null && exports.structs.containsKey(syntax.name) && qualifier != null) {
+                "$qualifier::${syntax.name}"
+            } else {
+                syntax.displayName.removeSuffix("?")
+            }
+        return TypeRef(typeName, syntax.nullable)
     }
 
     private fun registerTopLevel(declarations: List<TopLevelDeclaration>) {
@@ -232,7 +370,7 @@ internal class SemanticAnalyzer(
             if (typeNames.containsKey(declaration.name)) {
                 diagnostics +=
                     FrontendDiagnostic(
-                        "Type `${declaration.name}` is already defined.",
+                        "Redeclaration of type `${declaration.name}`.",
                         declaration.range,
                     )
                 return@forEach
@@ -274,7 +412,7 @@ internal class SemanticAnalyzer(
             if (userFunctionsByName.containsKey(declaration.name)) {
                 diagnostics +=
                     FrontendDiagnostic(
-                        "Function `${declaration.name}` is already defined.",
+                        "Redeclaration of function `${declaration.name}`.",
                         declaration.range,
                     )
                 return@forEach
@@ -738,6 +876,25 @@ internal class SemanticAnalyzer(
     ): FunctionBinding? {
         val module = importedModules[expression.qualifier]
         if (module == null) {
+            val alias = importAliases[expression.qualifier]
+            if (alias != null) {
+                val function = alias.exports.functions[expression.name]
+                if (function == null) {
+                    diagnostics +=
+                        FrontendDiagnostic(
+                            "Namespace `${expression.qualifier}` has no member `${expression.name}`.",
+                            expression.range,
+                        )
+                    return null
+                }
+                return functionBindingForExport(
+                    visibleName = expression.name,
+                    function = function,
+                    exports = alias.exports,
+                    qualifier = expression.qualifier,
+                    range = expression.range,
+                )
+            }
             diagnostics +=
                 FrontendDiagnostic(
                     "Unknown namespace `${expression.qualifier}`.",
@@ -795,6 +952,36 @@ internal class SemanticAnalyzer(
         scope: Scope,
     ): TypeRef {
         if (expression.qualifier != null) {
+            val alias = importAliases[expression.qualifier]
+            if (alias != null) {
+                val struct = alias.exports.structs[expression.typeName]
+                if (struct == null) {
+                    diagnostics +=
+                        FrontendDiagnostic(
+                            "Namespace `${expression.qualifier}` has no member `${expression.typeName}`.",
+                            expression.range,
+                        )
+                    return TypeRef("Unit")
+                }
+                val binding = recordBindingForExport(
+                    visibleName = "${expression.qualifier}::${expression.typeName}",
+                    struct = struct,
+                    exports = alias.exports,
+                    qualifier = expression.qualifier,
+                    range = expression.range,
+                )
+                userRecordsByName[binding.symbol.name] = binding
+                expression.fields.forEach { field ->
+                    val expected = binding.fields[field.name]
+                    if (expected == null) {
+                        diagnostics += FrontendDiagnostic("Struct `${binding.symbol.name}` has no field `${field.name}`.", field.range)
+                    } else {
+                        val actual = analyzeExpression(field.expression, scope)
+                        expectAssignable(actual, expected, field.range, "Struct field type mismatch.")
+                    }
+                }
+                return TypeRef(binding.symbol.name)
+            }
             diagnostics +=
                 FrontendDiagnostic(
                     "Qualified record construction is not yet supported.",
@@ -940,6 +1127,23 @@ internal class SemanticAnalyzer(
         range: SourceRange,
     ): TypeRef? {
         if (syntax.qualifier != null) {
+            val alias = importAliases[syntax.qualifier]
+            if (alias != null) {
+                val struct = alias.exports.structs[syntax.name]
+                if (struct != null) {
+                    val visibleName = "${syntax.qualifier}::${syntax.name}"
+                    userRecordsByName.getOrPut(visibleName) {
+                        recordBindingForExport(visibleName, struct, alias.exports, syntax.qualifier, syntax.range)
+                    }
+                    return TypeRef(visibleName, nullable = syntax.nullable)
+                }
+                diagnostics +=
+                    FrontendDiagnostic(
+                        "Namespace `${syntax.qualifier}` has no type `${syntax.name}`.",
+                        syntax.range,
+                    )
+                return TypeRef(syntax.name, nullable = syntax.nullable)
+            }
             diagnostics +=
                 FrontendDiagnostic(
                     "Qualified types are not yet supported. " +
@@ -1016,36 +1220,37 @@ internal class SemanticAnalyzer(
 internal class BytecodeCompiler(
     private val registry: BuiltinRegistry,
     private val semantic: SemanticResult,
+    allSemantics: List<SemanticResult> = listOf(semantic),
 ) {
+    private val semantics = allSemantics.distinctBy { it.program }
+    private val functionDeclarations =
+        semantics.flatMap { result ->
+            result.program.declarations.filterIsInstance<FunctionDeclaration>().map { result to it }
+        }
     private val functionIndices =
-        semantic.program.declarations
-            .filterIsInstance<FunctionDeclaration>()
-            .mapIndexed { index, declaration ->
-                declaration to index
-            }.toMap()
+        functionDeclarations.mapIndexed { index, (_, declaration) -> declaration to index }.toMap()
 
     fun compile(name: String): BytecodeModule {
         val functions =
-            semantic.program.declarations
-                .filterIsInstance<FunctionDeclaration>()
-                .map(::compileFunction)
+            functionDeclarations.map { (result, declaration) -> compileFunction(result, declaration) }
         val records =
-            semantic.program.declarations.filterIsInstance<StructDeclaration>().map { declaration ->
-                BytecodeRecord(
-                    name = declaration.name,
-                    fields =
-                        declaration.fields.map { field ->
-                            RecordFieldDefinition(
-                                name = field.name,
-                                typeName = field.type.displayName.removeSuffix("?"),
-                            )
-                        },
-                )
+            semantics.flatMap { result ->
+                result.program.declarations.filterIsInstance<StructDeclaration>().map { declaration ->
+                    BytecodeRecord(
+                        name = declaration.name,
+                        fields =
+                            declaration.fields.map { field ->
+                                RecordFieldDefinition(
+                                    name = field.name,
+                                    typeName = field.type.displayName.removeSuffix("?"),
+                                )
+                            },
+                    )
+                }
             }
         val entryIndex =
-            semantic.program.declarations
-                .filterIsInstance<FunctionDeclaration>()
-                .indexOfFirst { it.name == "main" }
+            functionDeclarations
+                .indexOfFirst { (result, declaration) -> result == semantic && declaration.name == "main" }
         return BytecodeModule(
             name = name,
             functions = functions,
@@ -1055,12 +1260,15 @@ internal class BytecodeCompiler(
         )
     }
 
-    private fun compileFunction(declaration: FunctionDeclaration): BytecodeFunction {
+    private fun compileFunction(
+        semantic: SemanticResult,
+        declaration: FunctionDeclaration,
+    ): BytecodeFunction {
         val parameters =
             declaration.parameters.map { parameter ->
                 BytecodeLocal(parameter.name, parameter.type.displayName.removeSuffix("?"))
             }
-        val compiler = FunctionCompiler(declaration, parameters)
+        val compiler = FunctionCompiler(semantic, declaration, parameters)
         compiler.compileBlock(declaration.body)
         compiler.instructions += Instruction.PushUnit
         compiler.instructions += Instruction.Return
@@ -1075,6 +1283,7 @@ internal class BytecodeCompiler(
     }
 
     private inner class FunctionCompiler(
+        private val semantic: SemanticResult,
         private val declaration: FunctionDeclaration,
         parameters: List<BytecodeLocal>,
     ) {

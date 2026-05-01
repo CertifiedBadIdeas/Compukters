@@ -51,6 +51,12 @@ interface CompilerFacade {
     fun compile(
         name: String,
         source: String,
+    ): CompilationArtifact = compile(name, source, NoOpSourceLoader)
+
+    fun compile(
+        name: String,
+        source: String,
+        loader: SourceLoader,
     ): CompilationArtifact
 }
 
@@ -146,23 +152,91 @@ internal class DefaultCompilerFacade(
     override fun compile(
         name: String,
         source: String,
+        loader: SourceLoader,
     ): CompilationArtifact {
-        val analysis = analyzer.analyze(name, source)
+        val project = analyzeProject(name, source, loader)
+        val analysis = project.getValue(name)
         val semantic = analysis.semantic
         if (semantic == null ||
-            analysis.diagnostics.any { it.severity == FrontendSeverity.ERROR }
+            project.values.any { candidate -> candidate.diagnostics.any { it.severity == FrontendSeverity.ERROR } }
         ) {
             return CompilationArtifact(
                 module = null,
                 analysis = analysis,
+                analyses = project,
             )
         }
 
         return CompilationArtifact(
             module =
-                BytecodeCompiler(registry, semantic)
+                BytecodeCompiler(registry, semantic, project.values.mapNotNull { it.semantic })
                     .compile(name),
             analysis = analysis,
+            analyses = project,
         )
+    }
+
+    private fun analyzeProject(
+        rootName: String,
+        rootSource: String,
+        loader: SourceLoader,
+    ): Map<String, AnalyzedProgram> {
+        val parser = DefaultParserFacade()
+        val parsed = linkedMapOf<String, ParsedSource>()
+        val importDiagnostics = linkedMapOf<String, MutableList<FrontendDiagnostic>>()
+
+        fun parse(canonical: String, source: String) {
+            if (parsed.containsKey(canonical)) return
+            val current = parser.parse(canonical, source)
+            parsed[canonical] = current
+            val diagnostics = mutableListOf<FrontendDiagnostic>()
+            importDiagnostics[canonical] = diagnostics
+            current.program.imports.forEach { declaration ->
+                val resolved = loader.resolve(canonical, declaration.path)
+                if (resolved == null) {
+                    diagnostics +=
+                        FrontendDiagnostic(
+                            "Cannot resolve import `${declaration.path}`.",
+                            declaration.pathRange,
+                        )
+                    return@forEach
+                }
+                if (parsed.containsKey(resolved)) return@forEach
+                val importedSource = loader.read(resolved)
+                if (importedSource == null) {
+                    diagnostics +=
+                        FrontendDiagnostic(
+                            "Failed to read source `${declaration.path}` (resolved to `$resolved`).",
+                            declaration.pathRange,
+                        )
+                    return@forEach
+                }
+                parse(resolved, importedSource)
+            }
+        }
+
+        parse(rootName, rootSource)
+
+        val exports = parsed.mapValues { (canonical, source) -> ModuleExports(canonical, source.program) }
+        return parsed.mapValues { (canonical, source) ->
+            val semantic =
+                SemanticAnalyzer(
+                    registry = registry,
+                    sourceName = canonical,
+                    resolveImport = { path -> loader.resolve(canonical, path) },
+                    lookupExports = { dependency -> exports[dependency] },
+                ).analyze(source.program)
+            AnalyzedProgram(
+                name = source.name,
+                source = source.source,
+                tokens = source.tokens,
+                program = source.program,
+                diagnostics = source.syntaxDiagnostics + (importDiagnostics[canonical] ?: emptyList()) + semantic.diagnostics,
+                symbols = semantic.symbols,
+                references = semantic.references,
+                builtinModules = registry.modules,
+                builtinGlobals = registry.globals,
+            ).rememberSemantic(semantic)
+        }
     }
 }
