@@ -50,6 +50,10 @@ sealed interface VmValue {
         val typeName: String,
         val fields: Map<String, VmValue>,
     ) : VmValue
+
+    data class ObjectRef(
+        val id: Int,
+    ) : VmValue
 }
 
 data class BytecodeVmSnapshot(
@@ -141,6 +145,8 @@ class BytecodeVirtualMachine(
     private var halted: Boolean = snapshot?.halted ?: false
     private var instructionsSinceYield = 0
     private val instructionBudgetPerSlice = instructionBudgetPerSlice.coerceAtLeast(1)
+    private val heap = mutableMapOf<Int, VmObject>()
+    private var nextObjectId = 1
 
     init {
         if (snapshot != null) {
@@ -220,17 +226,53 @@ class BytecodeVirtualMachine(
                     frames += createFrame(instruction.functionIndex, args)
                 }
 
+                is Instruction.CallMethod -> {
+                    val args = frame.popMany(instruction.argumentCount)
+                    val receiver = frame.pop()
+                    val objectRef = receiver as? VmValue.ObjectRef ?: error("Method receiver is not an object.")
+                    val objectState = heap[objectRef.id] ?: error("Object #${objectRef.id} is missing.")
+                    val classInfo = module.classes.firstOrNull { it.name == objectState.className } ?: error("Class ${objectState.className} is missing.")
+                    val functionIndex = classInfo.instanceMethods[instruction.methodName] ?: error("Class ${objectState.className} has no method ${instruction.methodName}.")
+                    frames += createFrame(functionIndex, listOf(receiver) + args)
+                }
+
+                is Instruction.CallStaticMethod -> {
+                    val args = frame.popMany(instruction.argumentCount)
+                    val classInfo = module.classes.firstOrNull { it.name == instruction.className } ?: error("Class ${instruction.className} is missing.")
+                    val functionIndex = classInfo.staticMethods[instruction.methodName] ?: error("Class ${instruction.className} has no static method ${instruction.methodName}.")
+                    frames += createFrame(functionIndex, args)
+                }
+
                 is Instruction.ConstructRecord -> {
                     val values = frame.popMany(instruction.fieldNames.size)
                     frame.stack += VmValue.RecordValue(instruction.typeName, instruction.fieldNames.zip(values).toMap())
                 }
 
+                is Instruction.ConstructClass -> {
+                    val values = frame.popMany(instruction.fieldNames.size)
+                    val id = nextObjectId++
+                    heap[id] = VmObject(instruction.className, instruction.fieldNames.zip(values).toMap().toMutableMap())
+                    frame.stack += VmValue.ObjectRef(id)
+                }
+
                 is Instruction.GetField -> {
                     val receiver = frame.pop()
                     val value =
-                        (receiver as? VmValue.RecordValue)?.fields?.get(instruction.fieldName)
-                            ?: error("Record field ${instruction.fieldName} is missing.")
+                        when (receiver) {
+                            is VmValue.RecordValue -> receiver.fields[instruction.fieldName]
+                            is VmValue.ObjectRef -> heap[receiver.id]?.fields?.get(instruction.fieldName)
+                            else -> null
+                        } ?: error("Field ${instruction.fieldName} is missing.")
                     frame.stack += value
+                }
+
+                is Instruction.SetField -> {
+                    val value = frame.pop()
+                    val receiver = frame.pop()
+                    val objectRef = receiver as? VmValue.ObjectRef ?: error("Field assignment receiver is not an object.")
+                    val objectState = heap[objectRef.id] ?: error("Object #${objectRef.id} is missing.")
+                    objectState.fields[instruction.fieldName] = value
+                    frame.stack += VmValue.UnitValue
                 }
 
                 is Instruction.Jump -> {
@@ -466,6 +508,11 @@ class BytecodeVirtualMachine(
         fun estimatedMemoryBytes(): Long = 16L + locals.sumOf(VmValue::estimatedMemoryBytes) + stack.sumOf(VmValue::estimatedMemoryBytes)
     }
 
+    private data class VmObject(
+        val className: String,
+        val fields: MutableMap<String, VmValue>,
+    )
+
     private companion object {
         const val DEFAULT_INSTRUCTION_BUDGET = 64
     }
@@ -500,5 +547,9 @@ private fun VmValue.estimatedMemoryBytes(): Long =
         is VmValue.RecordValue -> {
             typeName.length.toLong() +
                 fields.entries.sumOf { it.key.length.toLong() + it.value.estimatedMemoryBytes() }
+        }
+
+        is VmValue.ObjectRef -> {
+            4L
         }
     }

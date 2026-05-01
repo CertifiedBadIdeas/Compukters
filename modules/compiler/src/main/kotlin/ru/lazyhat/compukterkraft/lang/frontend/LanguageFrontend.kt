@@ -26,6 +26,8 @@ import ru.lazyhat.compukterkraft.lang.api.BlockStatement
 import ru.lazyhat.compukterkraft.lang.api.BoolLiteralValue
 import ru.lazyhat.compukterkraft.lang.api.BuiltinModule
 import ru.lazyhat.compukterkraft.lang.api.BuiltinRegistry
+import ru.lazyhat.compukterkraft.lang.api.BytecodeClass
+import ru.lazyhat.compukterkraft.lang.api.BytecodeClassField
 import ru.lazyhat.compukterkraft.lang.api.BytecodeFunction
 import ru.lazyhat.compukterkraft.lang.api.BytecodeLocal
 import ru.lazyhat.compukterkraft.lang.api.BytecodeModule
@@ -208,6 +210,7 @@ internal data class SemanticResult(
     val callBindings: IdentityHashMap<CallExpression, FunctionBinding>,
     val recordConstructorBindings: IdentityHashMap<CallExpression, RecordBinding>,
     val classConstructorBindings: IdentityHashMap<CallExpression, ClassBinding>,
+    val methodCallBindings: IdentityHashMap<CallExpression, ClassMethodBinding>,
     val memberBindings: IdentityHashMap<MemberAccessExpression, Binding>,
     val program: Program,
 )
@@ -229,6 +232,7 @@ internal class SemanticAnalyzer(
     private val callBindings = IdentityHashMap<CallExpression, FunctionBinding>()
     private val recordConstructorBindings = IdentityHashMap<CallExpression, RecordBinding>()
     private val classConstructorBindings = IdentityHashMap<CallExpression, ClassBinding>()
+    private val methodCallBindings = IdentityHashMap<CallExpression, ClassMethodBinding>()
     private val memberBindings = IdentityHashMap<MemberAccessExpression, Binding>()
     private val builtinModules = registry.modules.associateBy { it.name }
 
@@ -275,6 +279,7 @@ internal class SemanticAnalyzer(
             callBindings = callBindings,
             recordConstructorBindings = recordConstructorBindings,
             classConstructorBindings = classConstructorBindings,
+            methodCallBindings = methodCallBindings,
             memberBindings = memberBindings,
             program = program,
         )
@@ -1207,6 +1212,7 @@ internal class SemanticAnalyzer(
     ): TypeRef {
         analyzeClassConstructorCall(expression, scope)?.let { return it }
         analyzeRecordConstructorCall(expression, scope)?.let { return it }
+        analyzeClassMethodCall(expression, scope)?.let { return it }
         val binding =
             when (val callee = expression.callee) {
                 is NameExpression -> {
@@ -1279,6 +1285,34 @@ internal class SemanticAnalyzer(
                 binding.returnType.displayName,
             )
         return binding.returnType
+    }
+
+    private fun analyzeClassMethodCall(
+        expression: CallExpression,
+        scope: Scope,
+    ): TypeRef? {
+        val callee = expression.callee as? MemberAccessExpression ?: return null
+        val receiverType = analyzeExpression(callee.receiver, scope)
+        val classBinding = userClassesByName[receiverType.name] ?: return null
+        val method = classBinding.instanceMethods[callee.memberName] ?: return null
+        expression.arguments.filterIsInstance<NamedCallArgument>().forEach { argument ->
+            diagnostics += FrontendDiagnostic("Named arguments are only supported for constructors.", argument.range)
+        }
+        if (method.parameterTypes.size != expression.arguments.size) {
+            diagnostics +=
+                FrontendDiagnostic(
+                    "Expected ${method.parameterTypes.size} arguments but got ${expression.arguments.size}.",
+                    expression.range,
+                )
+        }
+        expression.arguments.forEachIndexed { index, argument ->
+            val actual = analyzeExpression(argument.expression, scope)
+            val expected = method.parameterTypes.getOrNull(index) ?: return@forEachIndexed
+            expectAssignable(actual, expected, argument.expression.range, "Argument type mismatch.")
+        }
+        methodCallBindings[expression] = method
+        references += ReferenceInfo(callee.memberName, callee.range, method.symbol, method.returnType.displayName)
+        return method.returnType
     }
 
     private fun analyzeClassConstructorCall(
@@ -1774,16 +1808,32 @@ internal class BytecodeCompiler(
     allSemantics: List<SemanticResult> = listOf(semantic),
 ) {
     private val semantics = allSemantics.distinctBy { it.program }
-    private val functionDeclarations =
+    private data class FunctionTarget(
+        val semantic: SemanticResult,
+        val declaration: FunctionDeclaration,
+        val ownerClass: ClassBinding? = null,
+        val static: Boolean = false,
+        val returnType: TypeRef? = null,
+    )
+
+    private val functionTargets =
         semantics.flatMap { result ->
-            result.program.declarations.filterIsInstance<FunctionDeclaration>().map { result to it }
+            val topLevel = result.program.declarations.filterIsInstance<FunctionDeclaration>().map { declaration ->
+                FunctionTarget(result, declaration, returnType = result.functionBindings[declaration]?.returnType)
+            }
+            val methods = result.classBindings.values.flatMap { owner ->
+                (owner.instanceMethods.values + owner.staticMethods.values).map { method ->
+                    FunctionTarget(result, method.function, ownerClass = owner, static = method.static, returnType = method.returnType)
+                }
+            }
+            topLevel + methods
         }
     private val functionIndices =
-        functionDeclarations.mapIndexed { index, (_, declaration) -> declaration to index }.toMap()
+        functionTargets.mapIndexed { index, target -> target.declaration to index }.toMap()
 
     fun compile(name: String): BytecodeModule {
         val functions =
-            functionDeclarations.map { (result, declaration) -> compileFunction(result, declaration) }
+            functionTargets.map(::compileFunction)
         val records =
             semantics.flatMap { result ->
                 result.program.declarations.filterIsInstance<StructDeclaration>().map { declaration ->
@@ -1799,35 +1849,55 @@ internal class BytecodeCompiler(
                     )
                 }
             }
+        val classes =
+            semantics.flatMap { result ->
+                result.classBindings.values.map { binding ->
+                    BytecodeClass(
+                        name = binding.symbol.name,
+                        fields =
+                            binding.fields.values.map { field ->
+                                BytecodeClassField(field.name, field.type.name, field.mutable)
+                            },
+                        initFunctionIndex = null,
+                        instanceMethods = binding.instanceMethods.mapValues { (_, method) -> functionIndices[method.function] ?: 0 },
+                        staticMethods = binding.staticMethods.mapValues { (_, method) -> functionIndices[method.function] ?: 0 },
+                    )
+                }
+            }
         val entryIndex =
-            functionDeclarations
-                .indexOfFirst { (result, declaration) -> result == semantic && declaration.name == "main" }
+            functionTargets
+                .indexOfFirst { target -> target.semantic == semantic && target.ownerClass == null && target.declaration.name == "main" }
         return BytecodeModule(
             name = name,
             functions = functions,
             records = records,
             entryFunctionIndex = entryIndex.coerceAtLeast(0),
             registry = registry,
+            classes = classes,
         )
     }
 
-    private fun compileFunction(
-        semantic: SemanticResult,
-        declaration: FunctionDeclaration,
-    ): BytecodeFunction {
+    private fun compileFunction(target: FunctionTarget): BytecodeFunction {
+        val semantic = target.semantic
+        val declaration = target.declaration
         val parameters =
-            declaration.parameters.map { parameter ->
-                BytecodeLocal(parameter.name, parameter.type.displayName.removeSuffix("?"))
+            buildList {
+                if (target.ownerClass != null && !target.static) {
+                    add(BytecodeLocal("this", target.ownerClass.symbol.name))
+                }
+                addAll(declaration.parameters.map { parameter ->
+                    BytecodeLocal(parameter.name, parameter.type.displayName.removeSuffix("?"))
+                })
             }
-        val compiler = FunctionCompiler(semantic, declaration, parameters)
+        val compiler = FunctionCompiler(semantic, declaration, parameters, hasThis = target.ownerClass != null && !target.static)
         compiler.compileBlock(declaration.body)
         compiler.instructions += Instruction.PushUnit
         compiler.instructions += Instruction.Return
         return BytecodeFunction(
-            name = mangle(semantic.sourceName, declaration.name),
+            name = target.ownerClass?.let { "${it.symbol.name}.${if (target.static) "static." else ""}${declaration.name}" } ?: mangle(semantic.sourceName, declaration.name),
             parameters = parameters,
             locals = compiler.locals,
-            returnType = semantic.functionBindings[declaration]?.returnType?.name ?: "Unit",
+            returnType = target.returnType?.name ?: "Unit",
             instructions = compiler.instructions,
             sourceRange = declaration.range,
         )
@@ -1842,6 +1912,7 @@ internal class BytecodeCompiler(
         private val semantic: SemanticResult,
         private val declaration: FunctionDeclaration,
         parameters: List<BytecodeLocal>,
+        private val hasThis: Boolean = false,
     ) {
         val instructions = mutableListOf<Instruction>()
         val locals = parameters.toMutableList()
@@ -1931,8 +2002,9 @@ internal class BytecodeCompiler(
                 }
 
                 is MemberAssignmentStatement -> {
+                    compileExpression(statement.receiver)
                     compileExpression(statement.expression)
-                    instructions += Instruction.Pop
+                    instructions += Instruction.SetField(statement.memberName)
                 }
             }
         }
@@ -2004,8 +2076,27 @@ internal class BytecodeCompiler(
                 }
 
                 is CallExpression -> {
+                    val method = semantic.methodCallBindings[expression]
+                    if (method != null && expression.callee is MemberAccessExpression) {
+                        compileExpression(expression.callee.receiver)
+                        expression.arguments.forEach { compileExpression(it.expression) }
+                        val index = functionIndices[method.function] ?: 0
+                        instructions += Instruction.CallFunction(index, expression.arguments.size + 1)
+                        return
+                    }
                     if (semantic.classConstructorBindings.containsKey(expression)) {
-                        instructions += Instruction.PushUnit
+                        val classBinding = semantic.classConstructorBindings.getValue(expression)
+                        val namedArguments = expression.arguments.filterIsInstance<NamedCallArgument>().associateBy { it.name }
+                        val fieldNames = mutableListOf<String>()
+                        classBinding.constructorParameters.forEach { parameter ->
+                            if (parameter.fieldMutability != null) {
+                                namedArguments[parameter.name]?.let { argument ->
+                                    compileExpression(argument.expression)
+                                    fieldNames += parameter.name
+                                }
+                            }
+                        }
+                        instructions += Instruction.ConstructClass(classBinding.symbol.name, fieldNames)
                         return
                     }
                     val recordConstructor = semantic.recordConstructorBindings[expression]
@@ -2055,7 +2146,11 @@ internal class BytecodeCompiler(
                 }
 
                 is ThisExpression -> {
-                    instructions += Instruction.PushUnit
+                    if (hasThis) {
+                        instructions += Instruction.LoadLocal(0)
+                    } else {
+                        instructions += Instruction.PushUnit
+                    }
                 }
 
                 is MemberAccessExpression -> {
