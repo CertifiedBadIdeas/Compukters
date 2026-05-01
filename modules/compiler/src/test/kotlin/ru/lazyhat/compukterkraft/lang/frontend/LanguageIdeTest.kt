@@ -23,6 +23,7 @@ import ru.lazyhat.compukterkraft.lang.api.BuiltinRegistry
 import ru.lazyhat.compukterkraft.lang.api.ModuleOrigin
 import ru.lazyhat.compukterkraft.lang.runtime.CompletionItemKind
 import ru.lazyhat.compukterkraft.lang.runtime.HighlightTokenKind
+import ru.lazyhat.compukterkraft.lang.runtime.TextEdit
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -107,6 +108,30 @@ class LanguageIdeTest {
 
         assertTrue(items.any { it.label == "println" }, items.joinToString { it.label })
         assertTrue(items.any { it.label == "write" }, items.joinToString { it.label })
+    }
+
+    @Test
+    fun suggestsBuiltinMemberWithNamespaceAndImportEdit() {
+        val source = "fun main() { pri }"
+        val cursor = lineAndColumnOf(source, "pri") + 3
+
+        val items = ide.complete("main.ck", source, cursor.first, cursor.second)
+        val println = items.single { it.label == "println" && it.sourceNamespace == "terminal" }
+
+        assertEquals("println()", println.insertText)
+        assertEquals("println(".length, println.cursorOffset)
+        assertEquals(listOf(TextEdit(0, 0, "import terminal { println };\n")), println.additionalTextEdits)
+    }
+
+    @Test
+    fun updatesExistingBuiltinImportGroupInCompletionEdit() {
+        val source = "import terminal { clear };\nfun main() { pri }"
+        val cursor = lineAndColumnOf(source, "pri") + 3
+
+        val items = ide.complete("main.ck", source, cursor.first, cursor.second)
+        val println = items.single { it.label == "println" && it.sourceNamespace == "terminal" }
+
+        assertEquals(listOf(TextEdit("import terminal { ".length, "import terminal { clear".length, "clear, println")), println.additionalTextEdits)
     }
 
     private fun lineAndColumnOf(

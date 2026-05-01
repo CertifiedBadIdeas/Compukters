@@ -74,15 +74,17 @@ class LanguageIde(
                 .distinctBy { it.kind to it.label }
                 .toList()
         } else {
+            val visibleSymbols = analysis.visibleSymbolsAt(offset)
+            val hiddenNames = visibleSymbols.map { it.name }.toSet()
             buildList {
                 addAll(
-                    analysis
-                        .visibleSymbolsAt(offset)
+                    visibleSymbols
                         .asSequence()
                         .filter { it.name.startsWith(prefix) }
                         .map(IdePresentationSupport::completionItem)
                         .toList(),
                 )
+                addAll(builtinImportableCompletions(source, prefix, hiddenNames))
                 addAll(
                     registry.builtinTypes
                         .asSequence()
@@ -112,6 +114,30 @@ class LanguageIde(
             }.distinctBy { it.kind to it.label }
         }
     }
+
+    private fun builtinImportableCompletions(
+        source: String,
+        prefix: String,
+        hiddenNames: Set<String>,
+    ): List<CompletionItem> =
+        registry.modules
+            .asSequence()
+            .flatMap { module ->
+                module.functions.asSequence().map { function -> module to function }
+            }.filter { (_, function) ->
+                function.name.startsWith(prefix) && function.name !in hiddenNames
+            }.map { (module, function) ->
+                CompletionItem(
+                    label = function.name,
+                    detail = "${module.name}::${function.name}(${function.parameterTypes.joinToString()}): ${function.returnType}",
+                    kind = CompletionItemKind.FUNCTION,
+                    documentation = function.documentation,
+                    insertText = "${function.name}()",
+                    cursorOffset = "${function.name}(".length,
+                    sourceNamespace = module.name,
+                    additionalTextEdits = listOf(SourceTextSupport.importGroupEdit(ImportGroupEditRequest(source, module.name, function.name))),
+                )
+            }.toList()
 
     override fun hover(
         name: String,
