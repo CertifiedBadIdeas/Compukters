@@ -134,6 +134,19 @@ class LanguageIdeTest {
         assertEquals(listOf(TextEdit("import terminal { ".length, "import terminal { clear".length, "clear, println")), println.additionalTextEdits)
     }
 
+    @Test
+    fun suggestsUserFileFunctionWithPathAndImportEdit() {
+        val loader = MapSourceLoader(mapOf("main.ck" to "fun main() { ad }", "lib/math.ck" to "fun add(): Int { return 1; }"))
+        val ide = LanguageIde(sourceIndex = loader)
+        val source = loader.read("main.ck")!!
+        val cursor = lineAndColumnOf(source, "ad") + 2
+
+        val items = ide.complete("main.ck", source, cursor.first, cursor.second)
+        val add = items.single { it.label == "add" && it.sourceNamespace == "lib/math.ck" }
+
+        assertEquals(listOf(TextEdit(0, 0, "import \"lib/math.ck\" { add };\n")), add.additionalTextEdits)
+    }
+
     private fun lineAndColumnOf(
         source: String,
         needle: String,

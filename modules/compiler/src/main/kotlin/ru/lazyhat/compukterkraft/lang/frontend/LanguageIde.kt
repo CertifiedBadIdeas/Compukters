@@ -25,10 +25,14 @@ import ru.lazyhat.compukterkraft.lang.runtime.DefinitionTarget
 import ru.lazyhat.compukterkraft.lang.runtime.Diagnostic
 import ru.lazyhat.compukterkraft.lang.runtime.HighlightToken
 import ru.lazyhat.compukterkraft.lang.runtime.HoverInfo
+import ru.lazyhat.compukterkraft.lang.api.FunctionDeclaration
+import ru.lazyhat.compukterkraft.lang.api.StructDeclaration
 
 class LanguageIde(
     private val frontend: LanguageFrontend = LanguageFrontend(),
     private val registry: ru.lazyhat.compukterkraft.lang.api.BuiltinRegistry = frontend.registry,
+    private val parser: ParserFacade = DefaultParserFacade(),
+    private val sourceIndex: SourceIndex = EmptySourceIndex,
 ) : IdeFacade {
     override fun analyze(
         name: String,
@@ -85,6 +89,7 @@ class LanguageIde(
                         .toList(),
                 )
                 addAll(builtinImportableCompletions(source, prefix, hiddenNames))
+                addAll(userFileImportableCompletions(analysis.name, source, prefix, hiddenNames))
                 addAll(
                     registry.builtinTypes
                         .asSequence()
@@ -137,6 +142,46 @@ class LanguageIde(
                     sourceNamespace = module.name,
                     additionalTextEdits = listOf(SourceTextSupport.importGroupEdit(ImportGroupEditRequest(source, module.name, function.name))),
                 )
+            }.toList()
+
+    private fun userFileImportableCompletions(
+        currentPath: String,
+        source: String,
+        prefix: String,
+        hiddenNames: Set<String>,
+    ): List<CompletionItem> =
+        sourceIndex
+            .listSources()
+            .asSequence()
+            .filter { it != currentPath }
+            .flatMap { path ->
+                val indexedSource = sourceIndex.readIndexedSource(path) ?: return@flatMap emptySequence()
+                val parsed = parser.parse(path, indexedSource)
+                parsed.program.declarations.asSequence().mapNotNull { declaration ->
+                    val name =
+                        when (declaration) {
+                            is FunctionDeclaration -> declaration.name
+                            is StructDeclaration -> declaration.name
+                        }
+                    if (!name.startsWith(prefix) || name in hiddenNames) return@mapNotNull null
+                    CompletionItem(
+                        label = name,
+                        detail =
+                            when (declaration) {
+                                is FunctionDeclaration -> "fun $name"
+                                is StructDeclaration -> "struct $name"
+                            },
+                        kind =
+                            when (declaration) {
+                                is FunctionDeclaration -> CompletionItemKind.FUNCTION
+                                is StructDeclaration -> CompletionItemKind.TYPE
+                            },
+                        insertText = if (declaration is FunctionDeclaration) "$name()" else null,
+                        cursorOffset = if (declaration is FunctionDeclaration) "$name(".length else null,
+                        sourceNamespace = path,
+                        additionalTextEdits = listOf(SourceTextSupport.importGroupEdit(ImportGroupEditRequest(source, "\"$path\"", name))),
+                    )
+                }
             }.toList()
 
     override fun hover(

@@ -31,9 +31,16 @@ interface SourceLoader {
     fun read(canonical: String): String?
 }
 
+interface SourceIndex {
+    fun listSources(): List<String>
+
+    fun readIndexedSource(canonical: String): String?
+}
+
 class MapSourceLoader(
     private val files: Map<String, String>,
-) : SourceLoader {
+) : SourceLoader,
+    SourceIndex {
     override fun resolve(
         from: String,
         importPath: String,
@@ -45,6 +52,10 @@ class MapSourceLoader(
     }
 
     override fun read(canonical: String): String? = files[canonical]
+
+    override fun listSources(): List<String> = files.keys.filter { it.endsWith(".ck") }.sorted()
+
+    override fun readIndexedSource(canonical: String): String? = read(canonical)
 
     private fun normalise(path: String): String {
         val parts = path.split('/').toMutableList()
@@ -75,4 +86,10 @@ object NoOpSourceLoader : SourceLoader {
     ): String? = null
 
     override fun read(canonical: String): String? = null
+}
+
+object EmptySourceIndex : SourceIndex {
+    override fun listSources(): List<String> = emptyList()
+
+    override fun readIndexedSource(canonical: String): String? = null
 }

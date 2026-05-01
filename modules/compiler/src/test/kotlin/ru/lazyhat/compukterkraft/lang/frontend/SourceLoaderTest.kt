@@ -56,4 +56,11 @@ class MapSourceLoaderTest {
         assertEquals("fun main() {}", loader.read("main.ck"))
         assertNull(loader.read("nope.ck"))
     }
+
+    @Test
+    fun mapSourceLoaderListsCkSources() {
+        val loader = MapSourceLoader(mapOf("main.ck" to "", "lib/math.ck" to "", "notes.txt" to ""))
+
+        assertEquals(listOf("lib/math.ck", "main.ck"), loader.listSources().sorted())
+    }
 }
