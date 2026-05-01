@@ -141,6 +141,31 @@ internal data class RecordBinding(
     val fields: Map<String, TypeRef>,
 ) : Binding
 
+internal data class ClassFieldBinding(
+    val name: String,
+    val type: TypeRef,
+    val mutable: Boolean,
+    val symbol: SymbolInfo,
+)
+
+internal data class ClassMethodBinding(
+    val name: String,
+    val function: FunctionDeclaration,
+    val parameterTypes: List<TypeRef>,
+    val returnType: TypeRef,
+    val static: Boolean,
+    val symbol: SymbolInfo,
+)
+
+internal data class ClassBinding(
+    override val symbol: SymbolInfo,
+    val declaration: ClassDeclaration,
+    val constructorParameters: List<ClassConstructorParameter>,
+    val fields: Map<String, ClassFieldBinding>,
+    val instanceMethods: Map<String, ClassMethodBinding>,
+    val staticMethods: Map<String, ClassMethodBinding>,
+) : Binding
+
 internal data class ModuleBinding(
     override val symbol: SymbolInfo,
     val module: BuiltinModule,
@@ -176,10 +201,12 @@ internal data class SemanticResult(
     val references: List<ReferenceInfo>,
     val functionBindings: Map<FunctionDeclaration, FunctionBinding>,
     val recordBindings: Map<StructDeclaration, RecordBinding>,
+    val classBindings: Map<ClassDeclaration, ClassBinding>,
     val localBindings: IdentityHashMap<Expression, Binding>,
     val expressionTypes: IdentityHashMap<Expression, TypeRef>,
     val callBindings: IdentityHashMap<CallExpression, FunctionBinding>,
     val recordConstructorBindings: IdentityHashMap<CallExpression, RecordBinding>,
+    val classConstructorBindings: IdentityHashMap<CallExpression, ClassBinding>,
     val memberBindings: IdentityHashMap<MemberAccessExpression, Binding>,
     val program: Program,
 )
@@ -195,10 +222,12 @@ internal class SemanticAnalyzer(
     private val references = mutableListOf<ReferenceInfo>()
     private val functionBindings = mutableMapOf<FunctionDeclaration, FunctionBinding>()
     private val recordBindings = mutableMapOf<StructDeclaration, RecordBinding>()
+    private val classBindings = mutableMapOf<ClassDeclaration, ClassBinding>()
     private val localBindings = IdentityHashMap<Expression, Binding>()
     private val expressionTypes = IdentityHashMap<Expression, TypeRef>()
     private val callBindings = IdentityHashMap<CallExpression, FunctionBinding>()
     private val recordConstructorBindings = IdentityHashMap<CallExpression, RecordBinding>()
+    private val classConstructorBindings = IdentityHashMap<CallExpression, ClassBinding>()
     private val memberBindings = IdentityHashMap<MemberAccessExpression, Binding>()
     private val builtinModules = registry.modules.associateBy { it.name }
 
@@ -216,6 +245,7 @@ internal class SemanticAnalyzer(
     private val pendingImports = mutableListOf<ImportDeclaration>()
     private val userFunctionsByName = mutableMapOf<String, FunctionBinding>()
     private val userRecordsByName = mutableMapOf<String, RecordBinding>()
+    private val userClassesByName = mutableMapOf<String, ClassBinding>()
 
     fun analyze(program: Program): SemanticResult {
         registerAmbientBuiltins()
@@ -235,10 +265,12 @@ internal class SemanticAnalyzer(
             references = references.toList(),
             functionBindings = functionBindings,
             recordBindings = recordBindings,
+            classBindings = classBindings,
             localBindings = localBindings,
             expressionTypes = expressionTypes,
             callBindings = callBindings,
             recordConstructorBindings = recordConstructorBindings,
+            classConstructorBindings = classConstructorBindings,
             memberBindings = memberBindings,
             program = program,
         )
@@ -521,8 +553,107 @@ internal class SemanticAnalyzer(
             recordBindings[declaration] = binding
             userRecordsByName[declaration.name] = binding
         }
+        declarations.filterIsInstance<ClassDeclaration>().forEach { declaration ->
+            if (typeNames.containsKey(declaration.name) || userFunctionsByName.containsKey(declaration.name)) {
+                diagnostics +=
+                    FrontendDiagnostic(
+                        "Redeclaration of type `${declaration.name}`.",
+                        declaration.range,
+                    )
+                return@forEach
+            }
+            val symbol =
+                SymbolInfo(
+                    name = declaration.name,
+                    kind = SymbolKind.CLASS,
+                    range = declaration.range,
+                    detail = "class ${declaration.name}",
+                )
+            typeNames[declaration.name] = TypeRef(declaration.name)
+            symbols += symbol
+
+            val fields = linkedMapOf<String, ClassFieldBinding>()
+            declaration.constructorParameters.forEach { parameter ->
+                val parameterType = resolveType(parameter.type, parameter.range) ?: TypeRef("Unit")
+                val mutability = parameter.fieldMutability
+                if (mutability != null) {
+                    if (fields.containsKey(parameter.name)) {
+                        diagnostics += FrontendDiagnostic("Redeclaration of field `${parameter.name}`.", parameter.range)
+                    } else {
+                        val fieldSymbol =
+                            SymbolInfo(
+                                name = parameter.name,
+                                kind = SymbolKind.FIELD,
+                                range = parameter.range,
+                                detail = "${declaration.name}.${parameter.name}: ${parameterType.displayName}",
+                            )
+                        symbols += fieldSymbol
+                        fields[parameter.name] =
+                            ClassFieldBinding(
+                                name = parameter.name,
+                                type = parameterType,
+                                mutable = mutability == FieldMutability.VAR,
+                                symbol = fieldSymbol,
+                            )
+                    }
+                }
+            }
+            declaration.members.filterIsInstance<ClassFieldDeclaration>().forEach { field ->
+                if (fields.containsKey(field.name)) {
+                    diagnostics += FrontendDiagnostic("Redeclaration of field `${field.name}`.", field.range)
+                    return@forEach
+                }
+                val fieldType = field.type?.let { resolveType(it, it.range) } ?: TypeRef("Unit")
+                val fieldSymbol =
+                    SymbolInfo(
+                        name = field.name,
+                        kind = SymbolKind.FIELD,
+                        range = field.range,
+                        detail = "${declaration.name}.${field.name}: ${fieldType.displayName}",
+                    )
+                symbols += fieldSymbol
+                fields[field.name] =
+                    ClassFieldBinding(
+                        name = field.name,
+                        type = fieldType,
+                        mutable = field.mutable,
+                        symbol = fieldSymbol,
+                    )
+            }
+
+            fun methodBinding(member: ClassMethodDeclaration): ClassMethodBinding {
+                val function = member.function
+                val parameterTypes = function.parameters.map { resolveType(it.type, it.range) ?: TypeRef("Unit") }
+                val returnType = function.returnType?.let { resolveType(it, it.range) } ?: TypeRef("Unit")
+                val methodSymbol =
+                    SymbolInfo(
+                        name = function.name,
+                        kind = SymbolKind.METHOD,
+                        range = function.range,
+                        detail = "fun ${declaration.name}.${function.name}(${parameterTypes.joinToString { it.displayName }}) : ${returnType.displayName}",
+                    )
+                symbols += methodSymbol
+                return ClassMethodBinding(function.name, function, parameterTypes, returnType, member.static, methodSymbol)
+            }
+
+            val methods = declaration.members.filterIsInstance<ClassMethodDeclaration>()
+            val instanceMethods = linkedMapOf<String, ClassMethodBinding>()
+            val staticMethods = linkedMapOf<String, ClassMethodBinding>()
+            methods.forEach { member ->
+                val target = if (member.static) staticMethods else instanceMethods
+                if (target.containsKey(member.function.name)) {
+                    diagnostics += FrontendDiagnostic("Redeclaration of method `${member.function.name}`.", member.range)
+                } else {
+                    target[member.function.name] = methodBinding(member)
+                }
+            }
+
+            val binding = ClassBinding(symbol, declaration, declaration.constructorParameters, fields, instanceMethods, staticMethods)
+            classBindings[declaration] = binding
+            userClassesByName[declaration.name] = binding
+        }
         declarations.filterIsInstance<FunctionDeclaration>().forEach { declaration ->
-            if (userFunctionsByName.containsKey(declaration.name)) {
+            if (userFunctionsByName.containsKey(declaration.name) || typeNames.containsKey(declaration.name)) {
                 diagnostics +=
                     FrontendDiagnostic(
                         "Redeclaration of function `${declaration.name}`.",
@@ -875,9 +1006,11 @@ internal class SemanticAnalyzer(
         }
         val receiverType = analyzeExpression(expression.receiver, scope)
         val recordBinding = userRecordsByName[receiverType.name]
+        val classBinding = userClassesByName[receiverType.name]
         val builtinType = registry.builtinType(receiverType.name)
         val fieldType =
             recordBinding?.fields?.get(expression.memberName)
+                ?: classBinding?.fields?.get(expression.memberName)?.type
                 ?: builtinType?.fields?.firstOrNull { it.name == expression.memberName }?.let {
                     TypeRef(
                         it.typeName,
@@ -925,6 +1058,7 @@ internal class SemanticAnalyzer(
         expression: CallExpression,
         scope: Scope,
     ): TypeRef {
+        analyzeClassConstructorCall(expression, scope)?.let { return it }
         analyzeRecordConstructorCall(expression, scope)?.let { return it }
         val binding =
             when (val callee = expression.callee) {
@@ -998,6 +1132,60 @@ internal class SemanticAnalyzer(
                 binding.returnType.displayName,
             )
         return binding.returnType
+    }
+
+    private fun analyzeClassConstructorCall(
+        expression: CallExpression,
+        scope: Scope,
+    ): TypeRef? {
+        val callee = expression.callee as? NameExpression ?: return null
+        val binding = userClassesByName[callee.name] ?: return null
+        val namedArguments = expression.arguments.filterIsInstance<NamedCallArgument>()
+        if (namedArguments.size != expression.arguments.size) {
+            diagnostics +=
+                FrontendDiagnostic(
+                    "Constructor arguments must be named.",
+                    expression.range,
+                )
+            expression.arguments.forEach { analyzeExpression(it.expression, scope) }
+            return TypeRef(binding.symbol.name)
+        }
+        val parameters = binding.constructorParameters.associateBy { it.name }
+        val seen = mutableSetOf<String>()
+        namedArguments.forEach { argument ->
+            if (!seen.add(argument.name)) {
+                diagnostics += FrontendDiagnostic("Duplicate constructor argument `${argument.name}`.", argument.nameRange)
+            }
+            val parameter = parameters[argument.name]
+            if (parameter == null) {
+                diagnostics +=
+                    FrontendDiagnostic(
+                        "Unknown constructor parameter `${argument.name}` for class `${binding.symbol.name}`.",
+                        argument.nameRange,
+                    )
+                analyzeExpression(argument.expression, scope)
+            } else {
+                val expected = resolveType(parameter.type, parameter.range) ?: TypeRef("Unit")
+                val actual = analyzeExpression(argument.expression, scope)
+                expectAssignable(actual, expected, argument.expression.range, "Constructor argument type mismatch.")
+            }
+        }
+        parameters.keys.filterNot(seen::contains).forEach { missing ->
+            diagnostics +=
+                FrontendDiagnostic(
+                    "Missing constructor argument `$missing` for class `${binding.symbol.name}`.",
+                    expression.range,
+                )
+        }
+        classConstructorBindings[expression] = binding
+        references +=
+            ReferenceInfo(
+                binding.symbol.name,
+                callee.range,
+                binding.symbol,
+                binding.symbol.name,
+            )
+        return TypeRef(binding.symbol.name)
     }
 
         private fun analyzeRecordConstructorCall(
@@ -1664,6 +1852,10 @@ internal class BytecodeCompiler(
                 }
 
                 is CallExpression -> {
+                    if (semantic.classConstructorBindings.containsKey(expression)) {
+                        instructions += Instruction.PushUnit
+                        return
+                    }
                     val recordConstructor = semantic.recordConstructorBindings[expression]
                     if (recordConstructor != null) {
                         val namedArguments = expression.arguments.filterIsInstance<NamedCallArgument>().associateBy { it.name }
