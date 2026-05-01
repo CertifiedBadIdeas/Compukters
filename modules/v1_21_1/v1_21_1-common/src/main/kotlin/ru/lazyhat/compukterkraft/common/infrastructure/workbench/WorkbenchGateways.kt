@@ -36,9 +36,11 @@ import ru.lazyhat.compukterkraft.core.workbench.WorkbenchUpdateSource
 import ru.lazyhat.compukterkraft.core.workbench.WorkspaceGateway
 import ru.lazyhat.compukterkraft.lang.api.BuiltinRegistry
 import ru.lazyhat.compukterkraft.lang.frontend.AnalyzedProgram
+import ru.lazyhat.compukterkraft.lang.frontend.EmptySourceIndex
 import ru.lazyhat.compukterkraft.lang.frontend.LanguageBuiltins
 import ru.lazyhat.compukterkraft.lang.frontend.LanguageFrontend
 import ru.lazyhat.compukterkraft.lang.frontend.LanguageIde
+import ru.lazyhat.compukterkraft.lang.frontend.SourceIndex
 import ru.lazyhat.compukterkraft.lang.runtime.CompletionItem
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceCapability
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceIdeSnapshot
@@ -186,9 +188,10 @@ class WorkbenchTargetCatalogSource(
 
 class LanguageWorkbenchIdeFacade(
     catalogSource: IdeRuntimeCatalogSource,
+    sourceIndex: SourceIndex = EmptySourceIndex,
 ) : WorkbenchIdeFacade {
     private val registry = catalogSource.runtimeRegistry()
-    private val ide = LanguageIde(LanguageFrontend(registry), registry)
+    private val ide = LanguageIde(LanguageFrontend(registry), registry, sourceIndex = sourceIndex)
 
     private var lastAnalysisPath: String? = null
     private var lastAnalysisSource: String? = null
