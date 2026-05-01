@@ -19,10 +19,44 @@
 
 package ru.lazyhat.compukterkraft.lang.api
 
+sealed interface ImportSource {
+    val range: SourceRange
+
+    data class FilePath(
+        val path: String,
+        override val range: SourceRange,
+    ) : ImportSource
+
+    data class BuiltinNamespace(
+        val name: String,
+        override val range: SourceRange,
+    ) : ImportSource
+}
+
+sealed interface ImportMode {
+    data class Namespace(
+        val alias: String,
+        val aliasRange: SourceRange,
+    ) : ImportMode
+
+    data class Selective(
+        val items: List<ImportItem>,
+        val range: SourceRange,
+    ) : ImportMode
+
+    data class Invalid(
+        val message: String,
+        val range: SourceRange,
+    ) : ImportMode
+}
+
+data class ImportItem(
+    val name: String,
+    val range: SourceRange,
+)
+
 data class ImportDeclaration(
-    val path: String,
-    val pathRange: SourceRange,
-    val alias: String?,
-    val aliasRange: SourceRange?,
+    val source: ImportSource,
+    val mode: ImportMode,
     val range: SourceRange,
 )

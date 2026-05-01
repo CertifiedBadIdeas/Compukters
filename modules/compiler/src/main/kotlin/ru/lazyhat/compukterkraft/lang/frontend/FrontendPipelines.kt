@@ -19,6 +19,7 @@
 package ru.lazyhat.compukterkraft.lang.frontend
 
 import ru.lazyhat.compukterkraft.lang.api.BuiltinRegistry
+import ru.lazyhat.compukterkraft.lang.api.ImportSource
 import ru.lazyhat.compukterkraft.lang.api.Program
 import ru.lazyhat.compukterkraft.lang.api.Token
 import ru.lazyhat.compukterkraft.lang.runtime.CompletionItem
@@ -192,12 +193,13 @@ internal class DefaultCompilerFacade(
             val diagnostics = mutableListOf<FrontendDiagnostic>()
             importDiagnostics[canonical] = diagnostics
             current.program.imports.forEach { declaration ->
-                val resolved = loader.resolve(canonical, declaration.path)
+                val source = declaration.source as? ImportSource.FilePath ?: return@forEach
+                val resolved = loader.resolve(canonical, source.path)
                 if (resolved == null) {
                     diagnostics +=
                         FrontendDiagnostic(
-                            "Cannot resolve import `${declaration.path}`.",
-                            declaration.pathRange,
+                            "Cannot resolve import `${source.path}`.",
+                            source.range,
                         )
                     return@forEach
                 }
@@ -206,8 +208,8 @@ internal class DefaultCompilerFacade(
                 if (importedSource == null) {
                     diagnostics +=
                         FrontendDiagnostic(
-                            "Failed to read source `${declaration.path}` (resolved to `$resolved`).",
-                            declaration.pathRange,
+                            "Failed to read source `${source.path}` (resolved to `$resolved`).",
+                            source.range,
                         )
                     return@forEach
                 }

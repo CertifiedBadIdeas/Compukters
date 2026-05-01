@@ -50,14 +50,14 @@ class UserFileImportsRuntimeTest {
     }
 
     @Test
-    fun flatImportCallsAcrossFiles() {
+    fun selectiveImportCallsAcrossFiles() {
         val loader =
             MapSourceLoader(
                 mapOf(
                     "io.ck" to "fun greet(): Unit { terminal::println(\"hi\"); }",
                     "main.ck" to
                         """
-                        import "io.ck";
+                        import "io.ck" { greet };
                         fun main() { greet(); }
                         """.trimIndent(),
                 ),
