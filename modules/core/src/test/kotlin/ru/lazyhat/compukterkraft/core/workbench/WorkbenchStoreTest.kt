@@ -256,7 +256,13 @@ class WorkbenchStoreTest {
             val ideFacade = FakeWorkbenchIdeFacade()
             ideFacade.nextCleanupResult =
                 ru.lazyhat.compukterkraft.lang.frontend.FormatResult(
-                    listOf(TextEdit(0, "import terminal { clear, println };\nfun main(){println();}".length, "import terminal { println };\n\nfun main() {\n    println();\n}\n")),
+                    listOf(
+                        TextEdit(
+                            0,
+                            "import terminal { clear, println };\nfun main(){println();}".length,
+                            "import terminal { println };\n\nfun main() {\n    println();\n}\n",
+                        ),
+                    ),
                 )
             val store = WorkbenchStore(FakeWorkspaceGateway(), FakeTargetControlGateway(), ideFacade)
             val updates = FakeWorkbenchUpdateSource()
@@ -274,7 +280,9 @@ class WorkbenchStoreTest {
     fun ctrlAltFTriggersFormatDocument() =
         runTest(UnconfinedTestDispatcher()) {
             val ideFacade = FakeWorkbenchIdeFacade()
-            ideFacade.nextFormatResult = ru.lazyhat.compukterkraft.lang.frontend.FormatResult(listOf(TextEdit(0, 1, "formatted")))
+            ideFacade.nextFormatResult =
+                ru.lazyhat.compukterkraft.lang.frontend
+                    .FormatResult(listOf(TextEdit(0, 1, "formatted")))
             val store = WorkbenchStore(FakeWorkspaceGateway(), FakeTargetControlGateway(), ideFacade)
             val updates = FakeWorkbenchUpdateSource()
             store.bind(backgroundScope, updates)
@@ -290,7 +298,9 @@ class WorkbenchStoreTest {
     fun ctrlAltLTriggersCleanupDocument() =
         runTest(UnconfinedTestDispatcher()) {
             val ideFacade = FakeWorkbenchIdeFacade()
-            ideFacade.nextCleanupResult = ru.lazyhat.compukterkraft.lang.frontend.FormatResult(listOf(TextEdit(0, 1, "cleaned")))
+            ideFacade.nextCleanupResult =
+                ru.lazyhat.compukterkraft.lang.frontend
+                    .FormatResult(listOf(TextEdit(0, 1, "cleaned")))
             val store = WorkbenchStore(FakeWorkspaceGateway(), FakeTargetControlGateway(), ideFacade)
             val updates = FakeWorkbenchUpdateSource()
             store.bind(backgroundScope, updates)
@@ -732,9 +742,11 @@ class WorkbenchStoreTest {
         var nextManualCompletions: List<CompletionItem> =
             listOf(CompletionItem(label = "manual", detail = "", kind = CompletionItemKind.KEYWORD))
         var nextFormatResult: ru.lazyhat.compukterkraft.lang.frontend.FormatResult =
-            ru.lazyhat.compukterkraft.lang.frontend.FormatResult(emptyList())
+            ru.lazyhat.compukterkraft.lang.frontend
+                .FormatResult(emptyList())
         var nextCleanupResult: ru.lazyhat.compukterkraft.lang.frontend.FormatResult =
-            ru.lazyhat.compukterkraft.lang.frontend.FormatResult(emptyList())
+            ru.lazyhat.compukterkraft.lang.frontend
+                .FormatResult(emptyList())
 
         override fun analyze(
             path: String,
