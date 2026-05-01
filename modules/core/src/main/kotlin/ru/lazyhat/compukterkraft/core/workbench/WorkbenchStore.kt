@@ -434,6 +434,20 @@ class WorkbenchStore(
             return true
         }
 
+        if ((modifiers and KeyCodes.MOD_CONTROL) != 0 && (modifiers and KeyCodes.MOD_ALT) != 0) {
+            when (key) {
+                KeyCodes.KEY_F -> {
+                    formatOpenDocument(visibleEditorLines)
+                    return true
+                }
+
+                KeyCodes.KEY_L -> {
+                    cleanupOpenDocument(visibleEditorLines)
+                    return true
+                }
+            }
+        }
+
         if ((modifiers and KeyCodes.MOD_CONTROL) != 0) {
             when (key) {
                 KeyCodes.KEY_SPACE -> {

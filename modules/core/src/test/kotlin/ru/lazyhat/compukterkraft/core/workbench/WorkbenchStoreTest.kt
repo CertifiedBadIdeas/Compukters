@@ -271,6 +271,38 @@ class WorkbenchStoreTest {
         }
 
     @Test
+    fun ctrlAltFTriggersFormatDocument() =
+        runTest(UnconfinedTestDispatcher()) {
+            val ideFacade = FakeWorkbenchIdeFacade()
+            ideFacade.nextFormatResult = ru.lazyhat.compukterkraft.lang.frontend.FormatResult(listOf(TextEdit(0, 1, "formatted")))
+            val store = WorkbenchStore(FakeWorkspaceGateway(), FakeTargetControlGateway(), ideFacade)
+            val updates = FakeWorkbenchUpdateSource()
+            store.bind(backgroundScope, updates)
+            updates.push(document = DeviceWorkspaceDocument("main.ck", "x", 0))
+
+            assertTrue(store.keyPressed(KeyCodes.KEY_F, KeyCodes.MOD_CONTROL or KeyCodes.MOD_ALT, visibleEditorLines = 20))
+
+            assertEquals("formatted", store.state.editor.text)
+            assertTrue(ideFacade.calls.contains("formatDocument:main.ck"))
+        }
+
+    @Test
+    fun ctrlAltLTriggersCleanupDocument() =
+        runTest(UnconfinedTestDispatcher()) {
+            val ideFacade = FakeWorkbenchIdeFacade()
+            ideFacade.nextCleanupResult = ru.lazyhat.compukterkraft.lang.frontend.FormatResult(listOf(TextEdit(0, 1, "cleaned")))
+            val store = WorkbenchStore(FakeWorkspaceGateway(), FakeTargetControlGateway(), ideFacade)
+            val updates = FakeWorkbenchUpdateSource()
+            store.bind(backgroundScope, updates)
+            updates.push(document = DeviceWorkspaceDocument("main.ck", "x", 0))
+
+            assertTrue(store.keyPressed(KeyCodes.KEY_L, KeyCodes.MOD_CONTROL or KeyCodes.MOD_ALT, visibleEditorLines = 20))
+
+            assertEquals("cleaned", store.state.editor.text)
+            assertTrue(ideFacade.calls.contains("cleanupDocument:main.ck"))
+        }
+
+    @Test
     fun escapeIsNotHandledByEditorStore() =
         runTest(UnconfinedTestDispatcher()) {
             val store = WorkbenchStore(FakeWorkspaceGateway(), FakeTargetControlGateway(), FakeWorkbenchIdeFacade())
