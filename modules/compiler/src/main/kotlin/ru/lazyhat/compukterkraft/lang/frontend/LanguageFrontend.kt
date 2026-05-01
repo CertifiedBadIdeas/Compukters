@@ -212,28 +212,7 @@ internal class SemanticAnalyzer(
     }
 
     private fun registerImports(imports: List<ImportDeclaration>) {
-        imports.forEach { declaration ->
-            val module = builtinModules[declaration.moduleName]
-            if (module == null) {
-                diagnostics +=
-                    FrontendDiagnostic(
-                        "Runtime module `${declaration.moduleName}` is not supported by this VM.",
-                        declaration.range,
-                    )
-                return@forEach
-            }
-            val symbol =
-                SymbolInfo(
-                    name = declaration.moduleName,
-                    kind = SymbolKind.MODULE,
-                    range = declaration.range,
-                    detail = "module ${declaration.moduleName}",
-                    documentation = module.documentation,
-                )
-            symbols += symbol
-            importedModules[declaration.moduleName] =
-                ModuleBinding(symbol, module)
-        }
+        // Imports are rejected during parsing in Plan A. Built-in modules are ambient.
     }
 
     private fun registerTopLevel(declarations: List<TopLevelDeclaration>) {
@@ -1652,9 +1631,23 @@ internal class Parser(
     }
 
     private fun parseImport(): ImportDeclaration? {
-        val module = consume(TokenKind.IDENTIFIER, "Expected module name after import.") ?: return null
-        consumeOptional(TokenKind.SEMICOLON)
-        return ImportDeclaration(module.text, module.range)
+        val keyword = previous()
+        while (!isAtEnd() && !check(TokenKind.SEMICOLON) && !check(TokenKind.FUN) && !check(TokenKind.STRUCT) && !check(TokenKind.IMPORT)) {
+            advance()
+        }
+        val end =
+            if (check(TokenKind.SEMICOLON)) {
+                advance().range.end
+            } else {
+                previous().range.end
+            }
+        diagnostics +=
+            FrontendDiagnostic(
+                "Built-in modules are available without `import`. " +
+                    "User-file imports are not yet supported in this version.",
+                SourceRange(keyword.range.start, end),
+            )
+        return null
     }
 
     private fun parseFunction(): FunctionDeclaration? {
