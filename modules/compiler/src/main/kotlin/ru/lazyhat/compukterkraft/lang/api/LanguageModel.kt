@@ -41,9 +41,13 @@ data class TypeSyntax(
     val name: String,
     val nullable: Boolean = false,
     val range: ru.lazyhat.compukterkraft.lang.api.SourceRange,
+    val qualifier: String? = null,
 ) {
     val displayName: String
-        get() = if (nullable) "$name?" else name
+        get() {
+            val qualifiedName = qualifier?.let { "$it::$name" } ?: name
+            return if (nullable) "$qualifiedName?" else qualifiedName
+        }
 }
 
 sealed interface Statement {
@@ -126,6 +130,17 @@ data class MemberAccessExpression(
     override val range: ru.lazyhat.compukterkraft.lang.api.SourceRange,
 ) : ru.lazyhat.compukterkraft.lang.api.Expression
 
+/**
+ * Namespace/scope resolution: `qualifier::name`.
+ * The qualifier is a compile-time scope name (for example, a built-in module).
+ */
+data class ScopeAccessExpression(
+    val qualifier: String,
+    val name: String,
+    val qualifierRange: ru.lazyhat.compukterkraft.lang.api.SourceRange,
+    override val range: ru.lazyhat.compukterkraft.lang.api.SourceRange,
+) : ru.lazyhat.compukterkraft.lang.api.Expression
+
 data class CallExpression(
     val callee: ru.lazyhat.compukterkraft.lang.api.Expression,
     val arguments: List<ru.lazyhat.compukterkraft.lang.api.Expression>,
@@ -154,6 +169,7 @@ data class RecordConstructionExpression(
     val typeName: String,
     val fields: List<ru.lazyhat.compukterkraft.lang.api.RecordFieldInitializer>,
     override val range: ru.lazyhat.compukterkraft.lang.api.SourceRange,
+    val qualifier: String? = null,
 ) : ru.lazyhat.compukterkraft.lang.api.Expression
 
 data class RecordFieldInitializer(

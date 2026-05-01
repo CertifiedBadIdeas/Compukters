@@ -51,6 +51,7 @@ import ru.lazyhat.compukterkraft.lang.api.RecordFieldDeclaration
 import ru.lazyhat.compukterkraft.lang.api.RecordFieldDefinition
 import ru.lazyhat.compukterkraft.lang.api.RecordFieldInitializer
 import ru.lazyhat.compukterkraft.lang.api.ReturnStatement
+import ru.lazyhat.compukterkraft.lang.api.ScopeAccessExpression
 import ru.lazyhat.compukterkraft.lang.api.SourceLocation
 import ru.lazyhat.compukterkraft.lang.api.SourceRange
 import ru.lazyhat.compukterkraft.lang.api.Statement
@@ -472,6 +473,15 @@ internal class SemanticAnalyzer(
 
                 is RecordConstructionExpression -> {
                     analyzeRecordConstruction(expression, scope)
+                }
+
+                is ScopeAccessExpression -> {
+                    diagnostics +=
+                        FrontendDiagnostic(
+                            "Unknown namespace `${expression.qualifier}`.",
+                            expression.qualifierRange,
+                        )
+                    TypeRef("Unit")
                 }
 
                 is UnaryExpression -> {
@@ -1264,6 +1274,10 @@ internal class BytecodeCompiler(
                         compileExpression(field.expression)
                     }
                     instructions += Instruction.ConstructRecord(expression.typeName, expression.fields.map { it.name })
+                }
+
+                is ScopeAccessExpression -> {
+                    instructions += Instruction.PushUnit
                 }
 
                 is UnaryExpression -> {
