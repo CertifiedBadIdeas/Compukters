@@ -232,6 +232,13 @@ data class RecordConstructionExpression(
     val qualifier: String? = null,
 ) : Expression
 
+data class LegacyRecordConstructionExpression(
+    val typeName: String,
+    val fields: List<RecordFieldInitializer>,
+    override val range: SourceRange,
+    val qualifier: String? = null,
+) : Expression
+
 data class RecordFieldInitializer(
     val name: String,
     val expression: Expression,

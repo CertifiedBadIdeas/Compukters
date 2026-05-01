@@ -181,6 +181,32 @@ class LanguageRuntimeTest {
     }
 
     @Test
+    fun constructsStructsWithNamedCallSyntax() {
+        val artifact =
+            frontend.compile(
+                "struct_runtime.ck",
+                """
+                struct Point { x: Int, y: Int }
+                fun main() {
+                    val point: Point = Point(x = 4, y = 5);
+                    terminal::println("sum=" + (point.x + point.y));
+                }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+        val runtime = RecordingRuntime()
+        runBlocking {
+            BytecodeComputerProgram(requireNotNull(artifact.module)).run(runtime)
+        }
+
+        assertEquals(listOf("sum=9"), runtime.lines)
+    }
+
+    @Test
     fun snapshotRoundTripRestoresExecutionState() {
         val artifact =
             frontend.compile(

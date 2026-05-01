@@ -171,7 +171,7 @@ class LanguageFrontendTest {
                 }
 
                 fun main() {
-                    val point: Point = Point { x: 1, y: 2 };
+                    val point: Point = Point(x = 1, y = 2);
                     terminal::println("sum=" + sum(point));
                 }
                 """.trimIndent(),
@@ -184,6 +184,45 @@ class LanguageFrontendTest {
         assertNotNull(artifact.module)
         assertTrue(artifact.analysis.symbols.any { it.name == "Point" })
         assertTrue(artifact.analysis.references.any { it.name == "println" })
+    }
+
+    @Test
+    fun compilesStructCallStyleConstruction() {
+        val artifact =
+            frontend.compile(
+                "struct_call.ck",
+                """
+                struct Point { x: Int, y: Int }
+                fun main() {
+                    val point: Point = Point(x = 1, y = 2);
+                    terminal::println("x=" + point.x);
+                }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+        assertNotNull(artifact.module)
+    }
+
+    @Test
+    fun rejectsOldRecordConstructionSyntax() {
+        val artifact =
+            frontend.compile(
+                "old_record.ck",
+                """
+                struct Point { x: Int, y: Int }
+                fun main() { val point: Point = Point { x: 1, y: 2 }; }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.any { it.severity == FrontendSeverity.ERROR && it.message.contains("Old record construction syntax") },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+        assertEquals(null, artifact.module)
     }
 
     @Test
