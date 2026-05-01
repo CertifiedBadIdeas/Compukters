@@ -68,12 +68,45 @@ class LanguageFormatterTest {
 
     @Test
     fun formatReturnsNoEditsWhenSourceIsAlreadyCanonical() {
-        val source = "fun main() {\n    terminal::println(\"hi\");\n}\n"
+        val source = "fun main() {\n    terminal::println(\"hi\")\n}\n"
 
         val result = formatter.formatDocument("main.ck", source)
 
         assertEquals(emptyList(), result.edits)
         assertEquals(false, result.changed)
+    }
+
+    @Test
+    fun formatRemovesStatementAndImportSemicolons() {
+        val source = "import terminal { println };\nfun main(){println(\"hi\");return;}"
+        val expected =
+            """
+            import terminal { println }
+
+            fun main() {
+                println("hi")
+                return
+            }
+            """.trimIndent() + "\n"
+
+        val formatted = applySingleEdit(source, formatter.formatDocument("main.ck", source))
+
+        assertEquals(expected, formatted)
+    }
+
+    @Test
+    fun cleanupRemovesSelectiveImportUsedOnlyThroughFqn() {
+        val source = "import terminal { println };\nfun main(){terminal::println(\"hi\");}"
+        val expected =
+            """
+            fun main() {
+                terminal::println("hi")
+            }
+            """.trimIndent() + "\n"
+
+        val cleaned = applySingleEdit(source, formatter.cleanupDocument("main.ck", source))
+
+        assertEquals(expected, cleaned)
     }
 
     @Test
@@ -88,33 +121,33 @@ class LanguageFormatterTest {
 
         val expected =
             """
-            import terminal { println };
+            import terminal { println }
 
             struct Vec2 { x: Int, y: Int }
 
             class Counter(var value: Int) {
                 init {
-                    this.value = this.value + 1;
+                    this.value = this.value + 1
                 }
 
                 fun current(): Int {
-                    return this.value;
+                    return this.value
                 }
 
                 static fun zero(): Counter {
-                    return Counter(value = 0);
+                    return Counter(value = 0)
                 }
             }
 
             fun main() {
-                val v: Vec2 = Vec2(x = 1, y = 2);
+                val v: Vec2 = Vec2(x = 1, y = 2)
                 if (v.x > 0) {
-                    println("x=" + v.x);
+                    println("x=" + v.x)
                 } else {
-                    println("none");
+                    println("none")
                 }
                 while v.y > 0 {
-                    return;
+                    return
                 }
             }
             """.trimIndent() + "\n"
@@ -128,10 +161,10 @@ class LanguageFormatterTest {
     fun formatIsIdempotent() {
         val source =
             """
-            import terminal { println };
+            import terminal { println }
 
             fun main() {
-                println("hi");
+                println("hi")
             }
             """.trimIndent() + "\n"
 
@@ -179,12 +212,12 @@ class LanguageFormatterTest {
 
         val expected =
             """
-            import "a.ck" { Alpha, Beta };
-            import "z.ck" { Zebra };
-            import terminal { println, write };
+            import "a.ck" { Alpha, Beta }
+            import "z.ck" { Zebra }
+            import terminal { println, write }
 
             fun main() {
-                println("hi");
+                println("hi")
             }
             """.trimIndent() + "\n"
 
@@ -216,10 +249,10 @@ class LanguageFormatterTest {
 
         val expected =
             """
-            import terminal { println };
+            import terminal { println }
 
             fun main() {
-                println("hi");
+                println("hi")
             }
             """.trimIndent() + "\n"
 
