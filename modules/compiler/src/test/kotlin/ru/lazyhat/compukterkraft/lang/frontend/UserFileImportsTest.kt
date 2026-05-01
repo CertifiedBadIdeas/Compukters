@@ -84,6 +84,8 @@ class UserFileImportsTest {
             artifact.analysis.diagnostics.joinToString { it.message },
         )
         assertNotNull(artifact.module)
+        assertTrue(artifact.module.functions.any { it.name == "a.ck#helper" })
+        assertTrue(artifact.module.functions.any { it.name == "b.ck#helper" })
     }
 
     @Test

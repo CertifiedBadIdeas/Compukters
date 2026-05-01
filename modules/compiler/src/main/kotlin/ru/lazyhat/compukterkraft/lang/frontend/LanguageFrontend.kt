@@ -155,6 +155,7 @@ internal data class ModuleExports(
 }
 
 internal data class SemanticResult(
+    val sourceName: String,
     val diagnostics: List<FrontendDiagnostic>,
     val symbols: List<SymbolInfo>,
     val references: List<ReferenceInfo>,
@@ -210,6 +211,7 @@ internal class SemanticAnalyzer(
             }
         }
         return SemanticResult(
+            sourceName = sourceName,
             diagnostics = diagnostics.toList(),
             symbols = symbols.toList(),
             references = references.toList(),
@@ -1237,7 +1239,7 @@ internal class BytecodeCompiler(
             semantics.flatMap { result ->
                 result.program.declarations.filterIsInstance<StructDeclaration>().map { declaration ->
                     BytecodeRecord(
-                        name = declaration.name,
+                        name = mangle(result.sourceName, declaration.name),
                         fields =
                             declaration.fields.map { field ->
                                 RecordFieldDefinition(
@@ -1273,7 +1275,7 @@ internal class BytecodeCompiler(
         compiler.instructions += Instruction.PushUnit
         compiler.instructions += Instruction.Return
         return BytecodeFunction(
-            name = declaration.name,
+            name = mangle(semantic.sourceName, declaration.name),
             parameters = parameters,
             locals = compiler.locals,
             returnType = semantic.functionBindings[declaration]?.returnType?.name ?: "Unit",
@@ -1281,6 +1283,11 @@ internal class BytecodeCompiler(
             sourceRange = declaration.range,
         )
     }
+
+    private fun mangle(
+        canonical: String,
+        name: String,
+    ): String = "$canonical#$name"
 
     private inner class FunctionCompiler(
         private val semantic: SemanticResult,
