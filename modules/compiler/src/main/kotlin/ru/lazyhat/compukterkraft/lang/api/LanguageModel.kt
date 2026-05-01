@@ -21,26 +21,26 @@ package ru.lazyhat.compukterkraft.lang.api
 
 data class StructDeclaration(
     override val name: String,
-    val fields: List<ru.lazyhat.compukterkraft.lang.api.RecordFieldDeclaration>,
-    override val range: ru.lazyhat.compukterkraft.lang.api.SourceRange,
-) : ru.lazyhat.compukterkraft.lang.api.TopLevelDeclaration
+    val fields: List<RecordFieldDeclaration>,
+    override val range: SourceRange,
+) : TopLevelDeclaration
 
 data class ParameterDeclaration(
     val name: String,
-    val type: ru.lazyhat.compukterkraft.lang.api.TypeSyntax,
-    val range: ru.lazyhat.compukterkraft.lang.api.SourceRange,
+    val type: TypeSyntax,
+    val range: SourceRange,
 )
 
 data class RecordFieldDeclaration(
     val name: String,
-    val type: ru.lazyhat.compukterkraft.lang.api.TypeSyntax,
-    val range: ru.lazyhat.compukterkraft.lang.api.SourceRange,
+    val type: TypeSyntax,
+    val range: SourceRange,
 )
 
 data class TypeSyntax(
     val name: String,
     val nullable: Boolean = false,
-    val range: ru.lazyhat.compukterkraft.lang.api.SourceRange,
+    val range: SourceRange,
     val qualifier: String? = null,
 ) {
     val displayName: String
@@ -51,84 +51,84 @@ data class TypeSyntax(
 }
 
 sealed interface Statement {
-    val range: ru.lazyhat.compukterkraft.lang.api.SourceRange
+    val range: SourceRange
 }
 
 data class BlockStatement(
-    val statements: List<ru.lazyhat.compukterkraft.lang.api.Statement>,
-    override val range: ru.lazyhat.compukterkraft.lang.api.SourceRange,
-) : ru.lazyhat.compukterkraft.lang.api.Statement
+    val statements: List<Statement>,
+    override val range: SourceRange,
+) : Statement
 
 data class VariableDeclarationStatement(
     val mutable: Boolean,
     val name: String,
-    val type: ru.lazyhat.compukterkraft.lang.api.TypeSyntax?,
-    val initializer: ru.lazyhat.compukterkraft.lang.api.Expression,
-    override val range: ru.lazyhat.compukterkraft.lang.api.SourceRange,
-) : ru.lazyhat.compukterkraft.lang.api.Statement
+    val type: TypeSyntax?,
+    val initializer: Expression,
+    override val range: SourceRange,
+) : Statement
 
 data class AssignmentStatement(
     val name: String,
-    val nameRange: ru.lazyhat.compukterkraft.lang.api.SourceRange,
-    val expression: ru.lazyhat.compukterkraft.lang.api.Expression,
-    override val range: ru.lazyhat.compukterkraft.lang.api.SourceRange,
-) : ru.lazyhat.compukterkraft.lang.api.Statement
+    val nameRange: SourceRange,
+    val expression: Expression,
+    override val range: SourceRange,
+) : Statement
 
 data class IfStatement(
-    val condition: ru.lazyhat.compukterkraft.lang.api.Expression,
-    val thenBranch: ru.lazyhat.compukterkraft.lang.api.BlockStatement,
-    val elseBranch: ru.lazyhat.compukterkraft.lang.api.Statement?,
-    override val range: ru.lazyhat.compukterkraft.lang.api.SourceRange,
-) : ru.lazyhat.compukterkraft.lang.api.Statement
+    val condition: Expression,
+    val thenBranch: BlockStatement,
+    val elseBranch: Statement?,
+    override val range: SourceRange,
+) : Statement
 
 data class WhileStatement(
-    val condition: ru.lazyhat.compukterkraft.lang.api.Expression,
-    val body: ru.lazyhat.compukterkraft.lang.api.BlockStatement,
-    override val range: ru.lazyhat.compukterkraft.lang.api.SourceRange,
-) : ru.lazyhat.compukterkraft.lang.api.Statement
+    val condition: Expression,
+    val body: BlockStatement,
+    override val range: SourceRange,
+) : Statement
 
 data class ReturnStatement(
-    val expression: ru.lazyhat.compukterkraft.lang.api.Expression?,
-    override val range: ru.lazyhat.compukterkraft.lang.api.SourceRange,
-) : ru.lazyhat.compukterkraft.lang.api.Statement
+    val expression: Expression?,
+    override val range: SourceRange,
+) : Statement
 
 data class ExpressionStatement(
-    val expression: ru.lazyhat.compukterkraft.lang.api.Expression,
-    override val range: ru.lazyhat.compukterkraft.lang.api.SourceRange,
-) : ru.lazyhat.compukterkraft.lang.api.Statement
+    val expression: Expression,
+    override val range: SourceRange,
+) : Statement
 
 data class WhenBranch(
-    val values: List<ru.lazyhat.compukterkraft.lang.api.Expression>,
-    val body: ru.lazyhat.compukterkraft.lang.api.BlockStatement,
-    val range: ru.lazyhat.compukterkraft.lang.api.SourceRange,
+    val values: List<Expression>,
+    val body: BlockStatement,
+    val range: SourceRange,
 )
 
 data class WhenStatement(
-    val subject: ru.lazyhat.compukterkraft.lang.api.Expression?,
-    val branches: List<ru.lazyhat.compukterkraft.lang.api.WhenBranch>,
-    val elseBranch: ru.lazyhat.compukterkraft.lang.api.BlockStatement?,
-    override val range: ru.lazyhat.compukterkraft.lang.api.SourceRange,
-) : ru.lazyhat.compukterkraft.lang.api.Statement
+    val subject: Expression?,
+    val branches: List<WhenBranch>,
+    val elseBranch: BlockStatement?,
+    override val range: SourceRange,
+) : Statement
 
 sealed interface Expression {
-    val range: ru.lazyhat.compukterkraft.lang.api.SourceRange
+    val range: SourceRange
 }
 
 data class LiteralExpression(
-    val value: ru.lazyhat.compukterkraft.lang.api.LiteralValue,
-    override val range: ru.lazyhat.compukterkraft.lang.api.SourceRange,
-) : ru.lazyhat.compukterkraft.lang.api.Expression
+    val value: LiteralValue,
+    override val range: SourceRange,
+) : Expression
 
 data class NameExpression(
     val name: String,
-    override val range: ru.lazyhat.compukterkraft.lang.api.SourceRange,
-) : ru.lazyhat.compukterkraft.lang.api.Expression
+    override val range: SourceRange,
+) : Expression
 
 data class MemberAccessExpression(
-    val receiver: ru.lazyhat.compukterkraft.lang.api.Expression,
+    val receiver: Expression,
     val memberName: String,
-    override val range: ru.lazyhat.compukterkraft.lang.api.SourceRange,
-) : ru.lazyhat.compukterkraft.lang.api.Expression
+    override val range: SourceRange,
+) : Expression
 
 /**
  * Namespace/scope resolution: `qualifier::name`.
@@ -137,66 +137,66 @@ data class MemberAccessExpression(
 data class ScopeAccessExpression(
     val qualifier: String,
     val name: String,
-    val qualifierRange: ru.lazyhat.compukterkraft.lang.api.SourceRange,
-    override val range: ru.lazyhat.compukterkraft.lang.api.SourceRange,
-) : ru.lazyhat.compukterkraft.lang.api.Expression
+    val qualifierRange: SourceRange,
+    override val range: SourceRange,
+) : Expression
 
 data class CallExpression(
-    val callee: ru.lazyhat.compukterkraft.lang.api.Expression,
-    val arguments: List<ru.lazyhat.compukterkraft.lang.api.Expression>,
-    override val range: ru.lazyhat.compukterkraft.lang.api.SourceRange,
-) : ru.lazyhat.compukterkraft.lang.api.Expression
+    val callee: Expression,
+    val arguments: List<Expression>,
+    override val range: SourceRange,
+) : Expression
 
 data class UnaryExpression(
-    val operator: ru.lazyhat.compukterkraft.lang.api.UnaryOperator,
-    val operand: ru.lazyhat.compukterkraft.lang.api.Expression,
-    override val range: ru.lazyhat.compukterkraft.lang.api.SourceRange,
-) : ru.lazyhat.compukterkraft.lang.api.Expression
+    val operator: UnaryOperator,
+    val operand: Expression,
+    override val range: SourceRange,
+) : Expression
 
 data class BinaryExpression(
-    val left: ru.lazyhat.compukterkraft.lang.api.Expression,
-    val operator: ru.lazyhat.compukterkraft.lang.api.BinaryOperator,
-    val right: ru.lazyhat.compukterkraft.lang.api.Expression,
-    override val range: ru.lazyhat.compukterkraft.lang.api.SourceRange,
-) : ru.lazyhat.compukterkraft.lang.api.Expression
+    val left: Expression,
+    val operator: BinaryOperator,
+    val right: Expression,
+    override val range: SourceRange,
+) : Expression
 
 data class GroupExpression(
-    val expression: ru.lazyhat.compukterkraft.lang.api.Expression,
-    override val range: ru.lazyhat.compukterkraft.lang.api.SourceRange,
-) : ru.lazyhat.compukterkraft.lang.api.Expression
+    val expression: Expression,
+    override val range: SourceRange,
+) : Expression
 
 data class RecordConstructionExpression(
     val typeName: String,
-    val fields: List<ru.lazyhat.compukterkraft.lang.api.RecordFieldInitializer>,
-    override val range: ru.lazyhat.compukterkraft.lang.api.SourceRange,
+    val fields: List<RecordFieldInitializer>,
+    override val range: SourceRange,
     val qualifier: String? = null,
-) : ru.lazyhat.compukterkraft.lang.api.Expression
+) : Expression
 
 data class RecordFieldInitializer(
     val name: String,
-    val expression: ru.lazyhat.compukterkraft.lang.api.Expression,
-    val range: ru.lazyhat.compukterkraft.lang.api.SourceRange,
+    val expression: Expression,
+    val range: SourceRange,
 )
 
 sealed interface LiteralValue
 
 data class IntLiteralValue(
     val value: Int,
-) : ru.lazyhat.compukterkraft.lang.api.LiteralValue
+) : LiteralValue
 
 data class LongLiteralValue(
     val value: Long,
-) : ru.lazyhat.compukterkraft.lang.api.LiteralValue
+) : LiteralValue
 
 data class StringLiteralValue(
     val value: String,
-) : ru.lazyhat.compukterkraft.lang.api.LiteralValue
+) : LiteralValue
 
 data class BoolLiteralValue(
     val value: Boolean,
-) : ru.lazyhat.compukterkraft.lang.api.LiteralValue
+) : LiteralValue
 
-data object NullLiteralValue : ru.lazyhat.compukterkraft.lang.api.LiteralValue
+data object NullLiteralValue : LiteralValue
 
 enum class ModuleOrigin {
     BASE_VM,
@@ -204,29 +204,29 @@ enum class ModuleOrigin {
 }
 
 data class BuiltinRegistry(
-    val modules: List<ru.lazyhat.compukterkraft.lang.api.BuiltinModule>,
-    val globals: List<ru.lazyhat.compukterkraft.lang.api.BuiltinFunction>,
-    val builtinTypes: List<ru.lazyhat.compukterkraft.lang.api.BuiltinType>,
+    val modules: List<BuiltinModule>,
+    val globals: List<BuiltinFunction>,
+    val builtinTypes: List<BuiltinType>,
 ) {
-    fun module(name: String): ru.lazyhat.compukterkraft.lang.api.BuiltinModule? = modules.firstOrNull { it.name == name }
+    fun module(name: String): BuiltinModule? = modules.firstOrNull { it.name == name }
 
     fun global(
         name: String,
         argumentCount: Int,
-    ): ru.lazyhat.compukterkraft.lang.api.BuiltinFunction? =
+    ): BuiltinFunction? =
         globals.firstOrNull {
             it.name == name &&
                 it.parameterTypes.size == argumentCount
         }
 
-    fun builtinType(name: String): ru.lazyhat.compukterkraft.lang.api.BuiltinType? = builtinTypes.firstOrNull { it.name == name }
+    fun builtinType(name: String): BuiltinType? = builtinTypes.firstOrNull { it.name == name }
 }
 
 data class BuiltinModule(
     val name: String,
     val documentation: String,
-    val functions: List<ru.lazyhat.compukterkraft.lang.api.BuiltinFunction>,
-    val origin: ru.lazyhat.compukterkraft.lang.api.ModuleOrigin = ru.lazyhat.compukterkraft.lang.api.ModuleOrigin.BASE_VM,
+    val functions: List<BuiltinFunction>,
+    val origin: ModuleOrigin = ModuleOrigin.BASE_VM,
 )
 
 data class BuiltinFunction(
@@ -239,7 +239,7 @@ data class BuiltinFunction(
 data class BuiltinType(
     val name: String,
     val documentation: String,
-    val fields: List<ru.lazyhat.compukterkraft.lang.api.RecordFieldDefinition> = emptyList(),
+    val fields: List<RecordFieldDefinition> = emptyList(),
 )
 
 data class RecordFieldDefinition(
@@ -250,19 +250,19 @@ data class RecordFieldDefinition(
 
 data class BytecodeModule(
     val name: String,
-    val functions: List<ru.lazyhat.compukterkraft.lang.api.BytecodeFunction>,
-    val records: List<ru.lazyhat.compukterkraft.lang.api.BytecodeRecord>,
+    val functions: List<BytecodeFunction>,
+    val records: List<BytecodeRecord>,
     val entryFunctionIndex: Int,
-    val registry: ru.lazyhat.compukterkraft.lang.api.BuiltinRegistry,
+    val registry: BuiltinRegistry,
 )
 
 data class BytecodeFunction(
     val name: String,
-    val parameters: List<ru.lazyhat.compukterkraft.lang.api.BytecodeLocal>,
-    val locals: List<ru.lazyhat.compukterkraft.lang.api.BytecodeLocal>,
+    val parameters: List<BytecodeLocal>,
+    val locals: List<BytecodeLocal>,
     val returnType: String,
-    val instructions: List<ru.lazyhat.compukterkraft.lang.api.Instruction>,
-    val sourceRange: ru.lazyhat.compukterkraft.lang.api.SourceRange?,
+    val instructions: List<Instruction>,
+    val sourceRange: SourceRange?,
 )
 
 data class BytecodeLocal(
@@ -272,7 +272,7 @@ data class BytecodeLocal(
 
 data class BytecodeRecord(
     val name: String,
-    val fields: List<ru.lazyhat.compukterkraft.lang.api.RecordFieldDefinition>,
+    val fields: List<RecordFieldDefinition>,
 )
 
 sealed interface Instruction {
@@ -339,11 +339,11 @@ sealed interface Instruction {
     ) : Instruction
 
     data class Binary(
-        val operator: ru.lazyhat.compukterkraft.lang.api.BinaryOperator,
+        val operator: BinaryOperator,
     ) : Instruction
 
     data class Unary(
-        val operator: ru.lazyhat.compukterkraft.lang.api.UnaryOperator,
+        val operator: UnaryOperator,
     ) : Instruction
 
     data object Return : Instruction

@@ -21,5 +21,5 @@ package ru.lazyhat.compukterkraft.lang.api
 
 sealed interface TopLevelDeclaration {
     val name: String
-    val range: ru.lazyhat.compukterkraft.lang.api.SourceRange
+    val range: SourceRange
 }

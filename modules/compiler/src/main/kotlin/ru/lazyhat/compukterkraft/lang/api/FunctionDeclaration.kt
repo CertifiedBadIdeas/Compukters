@@ -21,8 +21,8 @@ package ru.lazyhat.compukterkraft.lang.api
 
 data class FunctionDeclaration(
     override val name: String,
-    val parameters: List<ru.lazyhat.compukterkraft.lang.api.ParameterDeclaration>,
-    val returnType: ru.lazyhat.compukterkraft.lang.api.TypeSyntax?,
-    val body: ru.lazyhat.compukterkraft.lang.api.BlockStatement,
-    override val range: ru.lazyhat.compukterkraft.lang.api.SourceRange,
-) : ru.lazyhat.compukterkraft.lang.api.TopLevelDeclaration
+    val parameters: List<ParameterDeclaration>,
+    val returnType: TypeSyntax?,
+    val body: BlockStatement,
+    override val range: SourceRange,
+) : TopLevelDeclaration
