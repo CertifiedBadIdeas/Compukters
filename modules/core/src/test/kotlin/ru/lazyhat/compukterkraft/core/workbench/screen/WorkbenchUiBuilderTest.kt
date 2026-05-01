@@ -47,8 +47,8 @@ class WorkbenchUiBuilderTest {
                 )
             val program = ScreenProgramCompiler().compile(tree, rootWidth = 440, rootHeight = 240)
 
-            // Toolbar + sidebar entries → at least the Run/Imports/Term/Reboot buttons exist.
-            assertTrue(program.hitRegions.size >= 4, "expected ≥4 toolbar/sidebar hit regions, got ${program.hitRegions.size}")
+            // Toolbar + sidebar entries → at least Run/Format/Clean/Term/Reboot plus sidebar hit regions exist.
+            assertTrue(program.hitRegions.size >= 6, "expected ≥6 toolbar/sidebar hit regions after adding Format/Clean, got ${program.hitRegions.size}")
             // The CodeEditor element registers a focusable node.
             assertTrue(program.focusNodes.isNotEmpty(), "expected at least one FocusNode (the CodeEditor)")
             // Sidebar ScrollArea + editor scroll → at least one ScrollRegion.
