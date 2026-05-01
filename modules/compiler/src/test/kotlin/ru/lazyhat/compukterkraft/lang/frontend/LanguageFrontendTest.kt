@@ -71,6 +71,42 @@ class LanguageFrontendTest {
     }
 
     @Test
+    fun rejectsImportDeclarationsHard() {
+        val artifact =
+            frontend.compile(
+                "import.ck",
+                """
+                import terminal;
+                fun main() { terminal::println("ok"); }
+                """.trimIndent(),
+            )
+        val errors = artifact.analysis.diagnostics.filter { it.severity == FrontendSeverity.ERROR }
+
+        assertTrue(
+            errors.any { it.message.contains("Built-in modules are available without `import`") },
+            errors.joinToString { it.message },
+        )
+        assertEquals(null, artifact.module)
+    }
+
+    @Test
+    fun ambientBuiltinsWorkWithoutImport() {
+        val artifact =
+            frontend.compile(
+                "ambient.ck",
+                """
+                fun main() { terminal::println("ok"); }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+        assertNotNull(artifact.module)
+    }
+
+    @Test
     fun compilesRecordsFunctionsAndBuiltins() {
         val artifact =
             frontend.compile(
