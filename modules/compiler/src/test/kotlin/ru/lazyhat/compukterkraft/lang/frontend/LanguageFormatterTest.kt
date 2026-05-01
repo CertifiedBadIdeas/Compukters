@@ -143,6 +143,29 @@ class LanguageFormatterTest {
         assertEquals(emptyList(), second.edits)
     }
 
+    @Test
+    fun formatPreservesLeadingInlineAndBlockComments() {
+        val source =
+            """
+            // file comment
+            import terminal { println }; // import comment
+
+            /* main comment */
+            fun main(){
+            // body comment
+            println("hi"); /* call comment */
+            }
+            """.trimIndent()
+
+        val formatted = applySingleEdit(source, formatter.formatDocument("main.ck", source))
+
+        assertTrue(formatted.contains("// file comment"), formatted)
+        assertTrue(formatted.contains("// import comment"), formatted)
+        assertTrue(formatted.contains("/* main comment */"), formatted)
+        assertTrue(formatted.contains("// body comment"), formatted)
+        assertTrue(formatted.contains("/* call comment */"), formatted)
+    }
+
     private fun applySingleEdit(
         source: String,
         result: FormatResult,

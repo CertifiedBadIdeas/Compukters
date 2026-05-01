@@ -118,15 +118,23 @@ class LanguageFormatter(
 
     private fun renderCanonical(parsed: ParsedSource): String {
         val writer = CklWriter()
+        val comments = CommentPlanner(parsed.comments)
         val imports = parsed.program.imports.sortedWith(compareBy({ it.source.displayText() }, { it.range.start.offset }))
         imports.forEachIndexed { index, declaration ->
             if (index > 0) writer.line()
+            renderLeadingComments(writer, comments.takeBefore(declaration.range.start.offset))
             writer.write(renderImport(declaration))
         }
         if (imports.isNotEmpty() && parsed.program.declarations.isNotEmpty()) writer.blankLine()
         parsed.program.declarations.forEachIndexed { index, declaration ->
             if (index > 0) writer.blankLine()
-            renderTopLevel(writer, declaration)
+            renderLeadingComments(writer, comments.takeBefore(declaration.range.start.offset))
+            renderTopLevel(writer, declaration, comments)
+        }
+        val remaining = comments.takeRemaining()
+        if (remaining.isNotEmpty()) {
+            if (imports.isNotEmpty() || parsed.program.declarations.isNotEmpty()) writer.blankLine()
+            renderLeadingComments(writer, remaining)
         }
         return writer.result()
     }
@@ -144,10 +152,11 @@ class LanguageFormatter(
     private fun renderTopLevel(
         writer: CklWriter,
         declaration: TopLevelDeclaration,
+        comments: CommentPlanner,
     ) {
         when (declaration) {
-            is ClassDeclaration -> renderClass(writer, declaration)
-            is FunctionDeclaration -> renderFunction(writer, declaration, static = false)
+            is ClassDeclaration -> renderClass(writer, declaration, comments)
+            is FunctionDeclaration -> renderFunction(writer, declaration, static = false, comments)
             is StructDeclaration -> renderStruct(writer, declaration)
         }
     }
@@ -165,6 +174,7 @@ class LanguageFormatter(
     private fun renderClass(
         writer: CklWriter,
         declaration: ClassDeclaration,
+        comments: CommentPlanner,
     ) {
         val parameters =
             declaration.constructorParameters.joinToString(", ") { parameter ->
@@ -177,18 +187,20 @@ class LanguageFormatter(
                 "$prefix${parameter.name}: ${renderType(parameter.type)}"
             }
         writer.write("class ${declaration.name}($parameters)")
-        renderClassBody(writer, declaration.members)
+            renderClassBody(writer, declaration.members, comments)
     }
 
     private fun renderClassBody(
         writer: CklWriter,
         members: List<ClassMemberDeclaration>,
+            comments: CommentPlanner,
     ) {
         writer.write(" {")
         writer.line()
         writer.indented {
             members.forEachIndexed { index, member ->
                 if (index > 0) writer.blankLine()
+                    renderLeadingComments(writer, comments.takeBefore(member.range.start.offset))
                 when (member) {
                     is ClassFieldDeclaration -> {
                         writer.write(if (member.mutable) "var " else "val ")
@@ -199,9 +211,9 @@ class LanguageFormatter(
                     }
                     is ClassInitBlock -> {
                         writer.write("init")
-                        renderBlock(writer, member.body)
+                        renderBlock(writer, member.body, comments)
                     }
-                    is ClassMethodDeclaration -> renderFunction(writer, member.function, static = member.static)
+                    is ClassMethodDeclaration -> renderFunction(writer, member.function, static = member.static, comments)
                 }
             }
         }
@@ -213,23 +225,29 @@ class LanguageFormatter(
         writer: CklWriter,
         declaration: FunctionDeclaration,
         static: Boolean,
+        comments: CommentPlanner,
     ) {
         if (static) writer.write("static ")
         writer.write("fun ${declaration.name}(")
         writer.write(declaration.parameters.joinToString(", ") { "${it.name}: ${renderType(it.type)}" })
         writer.write(")")
         declaration.returnType?.let { writer.write(": ${renderType(it)}") }
-        renderBlock(writer, declaration.body)
+        renderBlock(writer, declaration.body, comments)
     }
 
     private fun renderBlock(
         writer: CklWriter,
         block: BlockStatement,
+        comments: CommentPlanner,
     ) {
         writer.write(" {")
         writer.line()
         writer.indented {
-            block.statements.forEach { renderStatement(writer, it) }
+            block.statements.forEach { statement ->
+                renderLeadingComments(writer, comments.takeBefore(statement.range.start.offset))
+                renderStatement(writer, statement, comments)
+            }
+            renderLeadingComments(writer, comments.takeBefore(block.range.end.offset))
         }
         writer.write("}")
         writer.line()
@@ -238,18 +256,19 @@ class LanguageFormatter(
     private fun renderStatement(
         writer: CklWriter,
         statement: Statement,
+        comments: CommentPlanner,
     ) {
         when (statement) {
             is AssignmentStatement -> {
                 writer.write("${statement.name} = ${renderExpression(statement.expression)};")
                 writer.line()
             }
-            is BlockStatement -> renderBlock(writer, statement)
+            is BlockStatement -> renderBlock(writer, statement, comments)
             is ExpressionStatement -> {
                 writer.write("${renderExpression(statement.expression)};")
                 writer.line()
             }
-            is IfStatement -> renderIf(writer, statement)
+            is IfStatement -> renderIf(writer, statement, comments)
             is MemberAssignmentStatement -> {
                 writer.write("${renderExpression(statement.receiver)}.${statement.memberName} = ${renderExpression(statement.expression)};")
                 writer.line()
@@ -267,10 +286,10 @@ class LanguageFormatter(
                 writer.write(" = ${renderExpression(statement.initializer)};")
                 writer.line()
             }
-            is WhenStatement -> renderWhen(writer, statement)
+            is WhenStatement -> renderWhen(writer, statement, comments)
             is WhileStatement -> {
                 writer.write("while ${renderExpression(statement.condition)}")
-                renderBlock(writer, statement.body)
+                renderBlock(writer, statement.body, comments)
             }
         }
     }
@@ -278,23 +297,24 @@ class LanguageFormatter(
     private fun renderIf(
         writer: CklWriter,
         statement: IfStatement,
+        comments: CommentPlanner,
     ) {
         writer.write("if (${renderExpression(statement.condition)})")
-        renderBlockInline(writer, statement.thenBranch)
+        renderBlockInline(writer, statement.thenBranch, comments)
         statement.elseBranch?.let { elseBranch ->
             when (elseBranch) {
                 is BlockStatement -> {
                     writer.write(" else")
-                    renderBlockInline(writer, elseBranch)
+                    renderBlockInline(writer, elseBranch, comments)
                     writer.line()
                 }
                 is IfStatement -> {
                     writer.write(" else ")
-                    renderIf(writer, elseBranch)
+                    renderIf(writer, elseBranch, comments)
                 }
                 else -> {
                     writer.write(" else ")
-                    renderStatement(writer, elseBranch)
+                    renderStatement(writer, elseBranch, comments)
                 }
             }
         } ?: writer.line()
@@ -303,11 +323,16 @@ class LanguageFormatter(
     private fun renderBlockInline(
         writer: CklWriter,
         block: BlockStatement,
+        comments: CommentPlanner,
     ) {
         writer.write(" {")
         writer.line()
         writer.indented {
-            block.statements.forEach { renderStatement(writer, it) }
+            block.statements.forEach { statement ->
+                renderLeadingComments(writer, comments.takeBefore(statement.range.start.offset))
+                renderStatement(writer, statement, comments)
+            }
+            renderLeadingComments(writer, comments.takeBefore(block.range.end.offset))
         }
         writer.write("}")
     }
@@ -315,6 +340,7 @@ class LanguageFormatter(
     private fun renderWhen(
         writer: CklWriter,
         statement: WhenStatement,
+        comments: CommentPlanner,
     ) {
         writer.write("when")
         statement.subject?.let { writer.write("(${renderExpression(it)})") }
@@ -324,11 +350,11 @@ class LanguageFormatter(
             statement.branches.forEach { branch ->
                 writer.write(branch.values.joinToString(", ") { renderExpression(it) })
                 writer.write(" ->")
-                renderBlock(writer, branch.body)
+                renderBlock(writer, branch.body, comments)
             }
             statement.elseBranch?.let { elseBranch ->
                 writer.write("else ->")
-                renderBlock(writer, elseBranch)
+                renderBlock(writer, elseBranch, comments)
             }
         }
         writer.write("}")
@@ -392,9 +418,34 @@ class LanguageFormatter(
         }
 
     private fun renderType(type: TypeSyntax): String = type.displayName
+
+    private fun renderLeadingComments(
+        writer: CklWriter,
+        comments: List<CommentTrivia>,
+    ) {
+        comments.forEach { comment ->
+            when (comment.kind) {
+                CommentKind.LINE -> writer.write("//${comment.text}")
+                CommentKind.BLOCK -> writer.write("/*${comment.text}*/")
+            }
+            writer.line()
+        }
+    }
 }
 
 private fun String.ensureTrailingNewline(): String = if (endsWith("\n")) this else "$this\n"
+
+private class CommentPlanner(comments: List<CommentTrivia>) {
+    private val pending = comments.sortedBy { it.range.start.offset }.toMutableList()
+
+    fun takeBefore(offset: Int): List<CommentTrivia> {
+        val result = pending.takeWhile { it.range.start.offset < offset }
+        repeat(result.size) { pending.removeAt(0) }
+        return result
+    }
+
+    fun takeRemaining(): List<CommentTrivia> = pending.toList().also { pending.clear() }
+}
 
 private class CklWriter {
     private val builder = StringBuilder()
