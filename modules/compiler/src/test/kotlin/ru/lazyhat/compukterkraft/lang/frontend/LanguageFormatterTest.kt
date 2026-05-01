@@ -18,6 +18,7 @@
  */
 package ru.lazyhat.compukterkraft.lang.frontend
 
+import ru.lazyhat.compukterkraft.lang.runtime.TextEdit
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -73,5 +74,91 @@ class LanguageFormatterTest {
 
         assertEquals(emptyList(), result.edits)
         assertEquals(false, result.changed)
+    }
+
+    @Test
+    fun formatsFunctionsStructsClassesAndControlFlow() {
+        val source =
+            """
+            import terminal { println };
+            struct Vec2{x:Int,y:Int}
+            class Counter(var value:Int){init{this.value=this.value+1;}fun current():Int{return this.value;}static fun zero():Counter{return Counter(value=0);}}
+            fun main(){val v:Vec2=Vec2(x=1,y=2);if(v.x>0){println("x="+v.x);}else{println("none");}while v.y>0 { return; }}
+            """.trimIndent()
+
+        val expected =
+            """
+            import terminal { println };
+
+            struct Vec2 { x: Int, y: Int }
+
+            class Counter(var value: Int) {
+                init {
+                    this.value = this.value + 1;
+                }
+
+                fun current(): Int {
+                    return this.value;
+                }
+
+                static fun zero(): Counter {
+                    return Counter(value = 0);
+                }
+            }
+
+            fun main() {
+                val v: Vec2 = Vec2(x = 1, y = 2);
+                if (v.x > 0) {
+                    println("x=" + v.x);
+                } else {
+                    println("none");
+                }
+                while v.y > 0 {
+                    return;
+                }
+            }
+            """.trimIndent() + "\n"
+
+        val result = formatter.formatDocument("main.ck", source)
+
+        assertEquals(expected, applySingleEdit(source, result))
+    }
+
+    @Test
+    fun formatIsIdempotent() {
+        val source =
+            """
+            import terminal { println };
+
+            fun main() {
+                println("hi");
+            }
+            """.trimIndent() + "\n"
+
+        val first = formatter.formatDocument("main.ck", source)
+        val once = applyEdits(source, first.edits)
+        val second = formatter.formatDocument("main.ck", once)
+
+        assertEquals(source, once)
+        assertEquals(emptyList(), second.edits)
+    }
+
+    private fun applySingleEdit(
+        source: String,
+        result: FormatResult,
+    ): String {
+        assertEquals(1, result.edits.size)
+        return applyEdits(source, result.edits)
+    }
+
+    private fun applyEdits(
+        source: String,
+        edits: List<TextEdit>,
+    ): String {
+        var current = source
+        edits.sortedByDescending { it.startOffset }.forEach { edit ->
+            current = current.replaceRange(edit.startOffset, edit.endOffset, edit.replacement)
+        }
+        return current
     }
 }
