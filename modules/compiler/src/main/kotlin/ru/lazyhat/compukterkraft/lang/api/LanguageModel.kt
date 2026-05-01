@@ -113,6 +113,14 @@ data class AssignmentStatement(
     override val range: SourceRange,
 ) : Statement
 
+data class MemberAssignmentStatement(
+    val receiver: Expression,
+    val memberName: String,
+    val memberRange: SourceRange,
+    val expression: Expression,
+    override val range: SourceRange,
+) : Statement
+
 data class IfStatement(
     val condition: Expression,
     val thenBranch: BlockStatement,

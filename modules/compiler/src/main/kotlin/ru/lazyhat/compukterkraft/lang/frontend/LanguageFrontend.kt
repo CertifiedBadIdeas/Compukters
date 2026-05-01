@@ -53,6 +53,7 @@ import ru.lazyhat.compukterkraft.lang.api.IntLiteralValue
 import ru.lazyhat.compukterkraft.lang.api.LegacyRecordConstructionExpression
 import ru.lazyhat.compukterkraft.lang.api.LiteralExpression
 import ru.lazyhat.compukterkraft.lang.api.LongLiteralValue
+import ru.lazyhat.compukterkraft.lang.api.MemberAssignmentStatement
 import ru.lazyhat.compukterkraft.lang.api.MemberAccessExpression
 import ru.lazyhat.compukterkraft.lang.api.NamedCallArgument
 import ru.lazyhat.compukterkraft.lang.api.NameExpression
@@ -246,6 +247,9 @@ internal class SemanticAnalyzer(
     private val userFunctionsByName = mutableMapOf<String, FunctionBinding>()
     private val userRecordsByName = mutableMapOf<String, RecordBinding>()
     private val userClassesByName = mutableMapOf<String, ClassBinding>()
+    private var currentClass: ClassBinding? = null
+    private var currentStaticMethod: Boolean = false
+    private var inConstruction: Boolean = false
 
     fun analyze(program: Program): SemanticResult {
         registerAmbientBuiltins()
@@ -253,7 +257,7 @@ internal class SemanticAnalyzer(
         registerTopLevel(program.declarations)
         for (declaration in program.declarations) {
             when (declaration) {
-                is ClassDeclaration -> Unit
+                is ClassDeclaration -> analyzeClass(declaration)
                 is FunctionDeclaration -> analyzeFunction(declaration)
                 is StructDeclaration -> Unit
             }
@@ -693,6 +697,95 @@ internal class SemanticAnalyzer(
         }
     }
 
+    private fun analyzeClass(declaration: ClassDeclaration) {
+        val binding = classBindings[declaration] ?: return
+        val constructorScope = Scope(null)
+        declaration.constructorParameters.forEach { parameter ->
+            val type = resolveType(parameter.type, parameter.range) ?: TypeRef("Unit")
+            val symbol =
+                SymbolInfo(
+                    name = parameter.name,
+                    kind = SymbolKind.PARAMETER,
+                    range = parameter.range,
+                    detail = "${parameter.name}: ${type.displayName}",
+                )
+            symbols += symbol
+            constructorScope.define(parameter.name, VariableBinding(symbol, type, mutable = false))
+        }
+
+        declaration.members.forEach { member ->
+            when (member) {
+                is ClassFieldDeclaration -> {
+                    withClassContext(binding, staticMethod = false, construction = true) {
+                        val expected = binding.fields[member.name]?.type
+                        val actual = analyzeExpression(member.initializer, constructorScope)
+                        if (expected != null) {
+                            expectAssignable(actual, expected, member.initializer.range, "Field initializer type mismatch.")
+                        }
+                    }
+                }
+                is ClassInitBlock -> {
+                    withClassContext(binding, staticMethod = false, construction = true) {
+                        analyzeBlock(member.body, constructorScope, declaration.range, TypeRef("Unit"))
+                    }
+                }
+                is ClassMethodDeclaration -> {
+                    analyzeClassMethod(binding, member)
+                }
+            }
+        }
+    }
+
+    private fun analyzeClassMethod(
+        owner: ClassBinding,
+        member: ClassMethodDeclaration,
+    ) {
+        val methodBinding =
+            if (member.static) {
+                owner.staticMethods[member.function.name]
+            } else {
+                owner.instanceMethods[member.function.name]
+            } ?: return
+        val scope = Scope(null)
+        member.function.parameters.forEachIndexed { index, parameter ->
+            val type = methodBinding.parameterTypes[index]
+            val symbol =
+                SymbolInfo(
+                    name = parameter.name,
+                    kind = SymbolKind.PARAMETER,
+                    range = parameter.range,
+                    detail = "${parameter.name}: ${type.displayName}",
+                    ownerFunctionRange = member.function.range,
+                )
+            symbols += symbol
+            scope.define(parameter.name, VariableBinding(symbol, type, mutable = false))
+        }
+        withClassContext(owner, staticMethod = member.static, construction = false) {
+            analyzeBlock(member.function.body, scope, member.function.range, methodBinding.returnType)
+        }
+    }
+
+    private fun withClassContext(
+        owner: ClassBinding,
+        staticMethod: Boolean,
+        construction: Boolean,
+        action: () -> Unit,
+    ) {
+        val previousClass = currentClass
+        val previousStatic = currentStaticMethod
+        val previousConstruction = inConstruction
+        currentClass = owner
+        currentStaticMethod = staticMethod
+        inConstruction = construction
+        try {
+            action()
+        } finally {
+            currentClass = previousClass
+            currentStaticMethod = previousStatic
+            inConstruction = previousConstruction
+        }
+    }
+
     private fun analyzeFunction(declaration: FunctionDeclaration) {
         val binding = functionBindings[declaration] ?: return
         val scope = Scope(null)
@@ -787,6 +880,10 @@ internal class SemanticAnalyzer(
                 analyzeAssignment(statement, scope)
             }
 
+            is MemberAssignmentStatement -> {
+                analyzeMemberAssignment(statement, scope)
+            }
+
             is WhileStatement -> {
                 val conditionType = analyzeExpression(statement.condition, scope)
                 expectAssignable(
@@ -873,8 +970,7 @@ internal class SemanticAnalyzer(
                 }
 
                 is ThisExpression -> {
-                    diagnostics += FrontendDiagnostic("`this` is only available inside classes.", expression.range)
-                    TypeRef("Unit")
+                    analyzeThis(expression)
                 }
 
                 is UnaryExpression -> {
@@ -943,6 +1039,57 @@ internal class SemanticAnalyzer(
             statement.expression.range,
             "Assignment type mismatch.",
         )
+    }
+
+    private fun analyzeMemberAssignment(
+        statement: MemberAssignmentStatement,
+        scope: Scope,
+    ) {
+        val receiverType = analyzeExpression(statement.receiver, scope)
+        val classBinding = userClassesByName[receiverType.name]
+        if (classBinding == null) {
+            diagnostics +=
+                FrontendDiagnostic(
+                    "Type `${receiverType.displayName}` has no mutable fields.",
+                    statement.memberRange,
+                )
+            analyzeExpression(statement.expression, scope)
+            return
+        }
+        val field = classBinding.fields[statement.memberName]
+        if (field == null) {
+            diagnostics +=
+                FrontendDiagnostic(
+                    "Class `${classBinding.symbol.name}` has no field `${statement.memberName}`.",
+                    statement.memberRange,
+                )
+            analyzeExpression(statement.expression, scope)
+            return
+        }
+        val constructionAssignment = inConstruction && statement.receiver is ThisExpression
+        if (!field.mutable && !constructionAssignment) {
+            diagnostics +=
+                FrontendDiagnostic(
+                    "Cannot assign to val field `${statement.memberName}`.",
+                    statement.memberRange,
+                )
+        }
+        val actual = analyzeExpression(statement.expression, scope)
+        expectAssignable(actual, field.type, statement.expression.range, "Field assignment type mismatch.")
+        references += ReferenceInfo(statement.memberName, statement.memberRange, field.symbol, field.type.displayName)
+    }
+
+    private fun analyzeThis(expression: ThisExpression): TypeRef {
+        val owner = currentClass
+        if (owner == null) {
+            diagnostics += FrontendDiagnostic("`this` is only available inside classes.", expression.range)
+            return TypeRef("Unit")
+        }
+        if (currentStaticMethod) {
+            diagnostics += FrontendDiagnostic("Static method cannot access `this`.", expression.range)
+            return TypeRef(owner.symbol.name)
+        }
+        return TypeRef(owner.symbol.name)
     }
 
     private fun analyzeName(
@@ -1782,6 +1929,11 @@ internal class BytecodeCompiler(
                     val slot = resolveLocalSlot(statement.name)
                     instructions += Instruction.StoreLocal(slot)
                 }
+
+                is MemberAssignmentStatement -> {
+                    compileExpression(statement.expression)
+                    instructions += Instruction.Pop
+                }
             }
         }
 
@@ -2547,8 +2699,12 @@ internal class Parser(
             }
 
             else -> {
-                if (check(TokenKind.THIS) && peekAhead(1)?.kind == TokenKind.DOT && peekAhead(2)?.kind == TokenKind.IDENTIFIER && peekAhead(3)?.kind in COMPOUND_ASSIGN_KINDS) {
-                    parseThisMemberAssignment()
+                if ((check(TokenKind.THIS) || check(TokenKind.IDENTIFIER)) &&
+                    peekAhead(1)?.kind == TokenKind.DOT &&
+                    peekAhead(2)?.kind == TokenKind.IDENTIFIER &&
+                    peekAhead(3)?.kind in COMPOUND_ASSIGN_KINDS
+                ) {
+                    parseMemberAssignment()
                 } else if (check(TokenKind.IDENTIFIER) && peekAhead(1)?.kind in COMPOUND_ASSIGN_KINDS) {
                     parseAssignment()
                 } else {
@@ -2589,8 +2745,16 @@ internal class Parser(
         )
     }
 
-    private fun parseThisMemberAssignment(): AssignmentStatement? {
-        consume(TokenKind.THIS, "Expected `this`.") ?: return null
+    private fun parseMemberAssignment(): MemberAssignmentStatement? {
+        val receiver =
+            when {
+                match(TokenKind.THIS) -> ThisExpression(previous().range)
+                match(TokenKind.IDENTIFIER) -> NameExpression(previous().text, previous().range)
+                else -> {
+                    diagnostics += FrontendDiagnostic("Expected assignment receiver.", peek().range)
+                    return null
+                }
+            }
         consume(TokenKind.DOT, "Expected `.` after `this`.") ?: return null
         val field = consume(TokenKind.IDENTIFIER, "Expected member name after `this`.") ?: return null
         val opTok = advance()
@@ -2599,10 +2763,10 @@ internal class Parser(
         val value: Expression =
             when (opTok.kind) {
                 TokenKind.EQUAL -> rhs
-                TokenKind.PLUS_EQUAL -> compoundDesugar(field, BinaryOperator.ADD, rhs)
-                TokenKind.MINUS_EQUAL -> compoundDesugar(field, BinaryOperator.SUBTRACT, rhs)
-                TokenKind.STAR_EQUAL -> compoundDesugar(field, BinaryOperator.MULTIPLY, rhs)
-                TokenKind.SLASH_EQUAL -> compoundDesugar(field, BinaryOperator.DIVIDE, rhs)
+                TokenKind.PLUS_EQUAL -> compoundMemberDesugar(receiver, field, BinaryOperator.ADD, rhs)
+                TokenKind.MINUS_EQUAL -> compoundMemberDesugar(receiver, field, BinaryOperator.SUBTRACT, rhs)
+                TokenKind.STAR_EQUAL -> compoundMemberDesugar(receiver, field, BinaryOperator.MULTIPLY, rhs)
+                TokenKind.SLASH_EQUAL -> compoundMemberDesugar(receiver, field, BinaryOperator.DIVIDE, rhs)
                 else -> {
                     diagnostics +=
                         FrontendDiagnostic(
@@ -2612,11 +2776,12 @@ internal class Parser(
                     return null
                 }
             }
-        return AssignmentStatement(
-            name = field.text,
-            nameRange = field.range,
+        return MemberAssignmentStatement(
+            receiver = receiver,
+            memberName = field.text,
+            memberRange = field.range,
             expression = value,
-            range = SourceRange(field.range.start, value.range.end),
+            range = SourceRange(receiver.range.start, value.range.end),
         )
     }
 
@@ -2630,6 +2795,19 @@ internal class Parser(
             operator = operator,
             right = rhs,
             range = SourceRange(nameTok.range.start, rhs.range.end),
+        )
+
+    private fun compoundMemberDesugar(
+        receiver: Expression,
+        field: Token,
+        operator: BinaryOperator,
+        rhs: Expression,
+    ): Expression =
+        BinaryExpression(
+            left = MemberAccessExpression(receiver, field.text, SourceRange(receiver.range.start, field.range.end)),
+            operator = operator,
+            right = rhs,
+            range = SourceRange(receiver.range.start, rhs.range.end),
         )
 
     private fun parseVariable(mutable: Boolean): VariableDeclarationStatement? {
