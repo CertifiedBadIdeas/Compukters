@@ -52,7 +52,7 @@ minecraft-v1211 = { module = "net.minecraft:minecraft", version.ref = "minecraft
 parchment-v1211 = "org.parchmentmc.data:parchment-1.21.1:2024.11.17"
 
 architectury-neoforge-v1211 = "dev.architectury:architectury-neoforge:13.0.2"
-neoforge-v1211 = "net.neoforged:neoforge:21.1.222"
+neoforge-v1211 = "net.neoforged:neoforge:21.1.228"
 create-neoforge-v1211 = "maven.modrinth:create:mc1.21.1-6.0.9"
 
 architectury-fabric-v1211 = "dev.architectury:architectury-fabric:13.0.2"
