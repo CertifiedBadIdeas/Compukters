@@ -119,7 +119,7 @@ Rules:
 - The primary constructor is declared in parentheses after the class name.
 - Constructor parameters marked with `val` or `var` become fields.
 - Additional public fields can be declared in the class body with `val` or `var`.
-- Class body fields may omit an initializer when they are assigned during construction in an `init` block.
+- Class body fields may omit an initializer only when they are definitely assigned on every construction path in an `init` block.
 - Constructor calls must use named arguments: `Counter(value = 1)`.
 - `this` is available in instance methods and `init` blocks, but not in `static fun`.
 - `val` fields can only be assigned during construction; `var` fields can be assigned later.

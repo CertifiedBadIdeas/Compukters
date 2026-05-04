@@ -296,6 +296,85 @@ class LanguageFrontendTest {
     }
 
     @Test
+    fun rejectsUninitializedClassBodyField() {
+        val artifact =
+            frontend.compile(
+                "uninitialized_body_field.ck",
+                """
+                class Holder() {
+                    val value: Int;
+
+                    fun current(): Int { return this.value; }
+                }
+                fun main() {}
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.any { it.message.contains("Field `value` must be initialized") },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+        assertEquals(null, artifact.module)
+    }
+
+    @Test
+    fun rejectsConditionallyInitializedClassBodyField() {
+        val artifact =
+            frontend.compile(
+                "conditionally_initialized_body_field.ck",
+                """
+                class Holder(flag: Bool) {
+                    val value: Int;
+
+                    init {
+                        if (flag) {
+                            this.value = 1;
+                        }
+                    }
+
+                    fun current(): Int { return this.value; }
+                }
+                fun main() {}
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.any { it.message.contains("Field `value` must be initialized") },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+        assertEquals(null, artifact.module)
+    }
+
+    @Test
+    fun acceptsClassBodyFieldInitializedInAllIfBranches() {
+        val artifact =
+            frontend.compile(
+                "definitely_initialized_body_field.ck",
+                """
+                class Holder(flag: Bool) {
+                    val value: Int;
+
+                    init {
+                        if (flag) {
+                            this.value = 1;
+                        } else {
+                            this.value = 2;
+                        }
+                    }
+
+                    fun current(): Int { return this.value; }
+                }
+                fun main() {}
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+    }
+
+    @Test
     fun rejectsAssignmentToValField() {
         val artifact =
             frontend.compile(

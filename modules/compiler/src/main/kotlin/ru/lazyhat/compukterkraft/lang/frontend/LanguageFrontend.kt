@@ -880,7 +880,97 @@ internal class SemanticAnalyzer(
                 }
             }
         }
+        checkClassBodyFieldInitialization(declaration)
     }
+
+    private fun checkClassBodyFieldInitialization(declaration: ClassDeclaration) {
+        val bodyFields = declaration.members.filterIsInstance<ClassFieldDeclaration>()
+        val requiredFields = bodyFields.filter { it.initializer == null }.associateBy { it.name }
+        if (requiredFields.isEmpty()) return
+
+        var initialized = bodyFields.filter { it.initializer != null }.mapTo(mutableSetOf()) { it.name }
+        declaration.members.forEach { member ->
+            when (member) {
+                is ClassFieldDeclaration -> {
+                    if (member.initializer != null) initialized += member.name
+                }
+
+                is ClassInitBlock -> {
+                    initialized = definitelyInitializedAfter(member.body, initialized, requiredFields.keys).toMutableSet()
+                }
+
+                is ClassMethodDeclaration -> {
+                    Unit
+                }
+            }
+        }
+
+        requiredFields.values.forEach { field ->
+            if (field.name !in initialized) {
+                diagnostics +=
+                    FrontendDiagnostic(
+                        "Field `${field.name}` must be initialized by an initializer or on every construction path in an init block.",
+                        field.range,
+                    )
+            }
+        }
+    }
+
+    private fun definitelyInitializedAfter(
+        block: BlockStatement,
+        before: Set<String>,
+        candidateFields: Set<String>,
+    ): Set<String> = block.statements.fold(before) { initialized, statement -> definitelyInitializedAfter(statement, initialized, candidateFields) }
+
+    private fun definitelyInitializedAfter(
+        statement: Statement,
+        before: Set<String>,
+        candidateFields: Set<String>,
+    ): Set<String> =
+        when (statement) {
+            is BlockStatement -> definitelyInitializedAfter(statement, before, candidateFields)
+            is MemberAssignmentStatement -> {
+                if (statement.receiver is ThisExpression && statement.memberName in candidateFields) {
+                    before.toMutableSet().also { it += statement.memberName }
+                } else {
+                    before
+                }
+            }
+
+            is IfStatement -> {
+                val elseBranch = statement.elseBranch
+                if (elseBranch == null) {
+                    before
+                } else {
+                    val thenInitialized = definitelyInitializedAfter(statement.thenBranch, before, candidateFields)
+                    val elseInitialized = definitelyInitializedAfter(elseBranch, before, candidateFields)
+                    intersectInitialized(thenInitialized, elseInitialized)
+                }
+            }
+
+            is WhenStatement -> {
+                val elseBranch = statement.elseBranch
+                if (elseBranch == null) {
+                    before
+                } else {
+                    val branchResults = statement.branches.map { definitelyInitializedAfter(it.body, before, candidateFields) }
+                    val elseInitialized = definitelyInitializedAfter(elseBranch, before, candidateFields)
+                    (branchResults + listOf(elseInitialized)).reduce(::intersectInitialized)
+                }
+            }
+
+            is WhileStatement -> before
+            is AssignmentStatement,
+            is ExpressionStatement,
+            is ReturnStatement,
+            is VariableDeclarationStatement,
+            -> before
+        }
+
+    private fun intersectInitialized(
+        left: Set<String>,
+        right: Set<String>,
+    ): Set<String> = left.filterTo(mutableSetOf()) { it in right }
 
     private fun analyzeClassMethod(
         owner: ClassBinding,
