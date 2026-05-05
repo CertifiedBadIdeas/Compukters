@@ -111,6 +111,14 @@ class LanguageIdeTest {
     }
 
     @Test
+    fun completesPubKeyword() {
+        val source = "pu"
+        val items = ide.complete("main.ck", source, line = 0, column = 2)
+
+        assertTrue(items.any { it.label == "pub" && it.kind == CompletionItemKind.KEYWORD }, items.joinToString { it.label })
+    }
+
+    @Test
     fun suggestsBuiltinMemberWithNamespaceAndImportEdit() {
         val source = "fun main() { pri }"
         val cursor = lineAndColumnOf(source, "pri") + 3
@@ -139,7 +147,7 @@ class LanguageIdeTest {
 
     @Test
     fun suggestsUserFileFunctionWithPathAndImportEdit() {
-        val loader = MapSourceLoader(mapOf("main.ck" to "fun main() { ad }", "lib/math.ck" to "fun add(): Int { return 1; }"))
+        val loader = MapSourceLoader(mapOf("main.ck" to "pub fun main() { ad }", "lib/math.ck" to "pub fun add(): Int { return 1; }"))
         val ide = LanguageIde(sourceIndex = loader)
         val source = loader.read("main.ck")!!
         val cursor = lineAndColumnOf(source, "ad") + 2
@@ -152,7 +160,7 @@ class LanguageIdeTest {
 
     @Test
     fun suggestsUserFileClassWithPathAndImportEdit() {
-        val loader = MapSourceLoader(mapOf("main.ck" to "fun main() { Cou }", "model.ck" to "class Counter(var value: Int) {}"))
+        val loader = MapSourceLoader(mapOf("main.ck" to "pub fun main() { Cou }", "model.ck" to "pub class Counter(pub var value: Int) {}"))
         val ide = LanguageIde(sourceIndex = loader)
         val source = loader.read("main.ck")!!
         val cursor = lineAndColumnOf(source, "Cou") + 3
@@ -162,6 +170,25 @@ class LanguageIdeTest {
 
         assertEquals("Counter(", counter.insertText)
         assertEquals(listOf(TextEdit(0, 0, "import \"model.ck\" { Counter };\n")), counter.additionalTextEdits)
+    }
+
+    @Test
+    fun suggestsOnlyPublicUserFileDeclarations() {
+        val loader =
+            MapSourceLoader(
+                mapOf(
+                    "main.ck" to "pub fun main() { h }",
+                    "lib.ck" to "fun hidden(): Int { return 1; } pub fun helper(): Int { return hidden(); }",
+                ),
+            )
+        val ide = LanguageIde(sourceIndex = loader)
+        val source = loader.read("main.ck")!!
+        val cursor = lineAndColumnOf(source, "h }") + 1
+
+        val items = ide.complete("main.ck", source, cursor.first, cursor.second)
+
+        assertTrue(items.any { it.label == "helper" && it.sourceNamespace == "lib.ck" }, items.joinToString { it.label })
+        assertFalse(items.any { it.label == "hidden" && it.sourceNamespace == "lib.ck" }, items.joinToString { it.label })
     }
 
     @Test
@@ -184,10 +211,10 @@ class LanguageIdeTest {
     fun completesMembersAfterInstanceVariableDot() {
         val source =
             """
-            class Counter(var value: Int) {
-                fun current(): Int { return this.value; }
+            pub class Counter(pub var value: Int) {
+                pub fun current(): Int { return this.value; }
             }
-            fun main() {
+            pub fun main() {
                 val counter: Counter = Counter(value = 1);
                 terminal::println(counter.)
             }
@@ -198,6 +225,45 @@ class LanguageIdeTest {
 
         assertTrue(items.any { it.label == "value" }, items.joinToString { it.label })
         assertTrue(items.any { it.label == "current" }, items.joinToString { it.label })
+    }
+
+    @Test
+    fun completesOnlyPublicMembersOutsideClass() {
+        val source =
+            """
+            pub class Counter(var value: Int) {
+                pub fun current(): Int { return this.value; }
+                fun hidden(): Int { return this.value; }
+            }
+            pub fun main() {
+                val counter: Counter = Counter(value = 1);
+                terminal::println(counter.)
+            }
+            """.trimIndent()
+        val cursor = lineAndColumnOf(source, "counter.)") + "counter.".length
+
+        val items = ide.complete("counter.ck", source, cursor.first, cursor.second)
+
+        assertTrue(items.any { it.label == "current" }, items.joinToString { it.label })
+        assertFalse(items.any { it.label == "value" }, items.joinToString { it.label })
+        assertFalse(items.any { it.label == "hidden" }, items.joinToString { it.label })
+    }
+
+    @Test
+    fun completesPrivateMembersAfterThisInsideClass() {
+        val source =
+            """
+            pub class Counter(var value: Int) {
+                fun hidden(): Int { return this. }
+            }
+            pub fun main() {}
+            """.trimIndent()
+        val cursor = lineAndColumnOf(source, "this.") + "this.".length
+
+        val items = ide.complete("counter.ck", source, cursor.first, cursor.second)
+
+        assertTrue(items.any { it.label == "value" }, items.joinToString { it.label })
+        assertTrue(items.any { it.label == "hidden" }, items.joinToString { it.label })
     }
 
     private fun lineAndColumnOf(

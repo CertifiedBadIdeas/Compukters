@@ -61,6 +61,7 @@ import ru.lazyhat.compukterkraft.lang.api.TypeSyntax
 import ru.lazyhat.compukterkraft.lang.api.UnaryExpression
 import ru.lazyhat.compukterkraft.lang.api.UnaryOperator
 import ru.lazyhat.compukterkraft.lang.api.VariableDeclarationStatement
+import ru.lazyhat.compukterkraft.lang.api.Visibility
 import ru.lazyhat.compukterkraft.lang.api.WhenStatement
 import ru.lazyhat.compukterkraft.lang.api.WhileStatement
 import ru.lazyhat.compukterkraft.lang.runtime.Diagnostic
@@ -385,7 +386,7 @@ class LanguageFormatter(
     ) {
         when (declaration) {
             is ClassDeclaration -> renderClass(writer, declaration, comments)
-            is FunctionDeclaration -> renderFunction(writer, declaration, static = false, comments)
+            is FunctionDeclaration -> renderFunction(writer, declaration, static = false, visibility = declaration.visibility, comments)
             is StructDeclaration -> renderStruct(writer, declaration)
         }
     }
@@ -394,6 +395,7 @@ class LanguageFormatter(
         writer: CklWriter,
         declaration: StructDeclaration,
     ) {
+        renderVisibility(writer, declaration.visibility)
         writer.write("struct ${declaration.name} { ")
         writer.write(declaration.fields.joinToString(", ") { "${it.name}: ${renderType(it.type)}" })
         writer.write(" }")
@@ -408,13 +410,19 @@ class LanguageFormatter(
         val parameters =
             declaration.constructorParameters.joinToString(", ") { parameter ->
                 val prefix =
-                    when (parameter.fieldMutability) {
-                        FieldMutability.VAL -> "val "
-                        FieldMutability.VAR -> "var "
-                        null -> ""
+                    buildString {
+                        if (parameter.visibility == Visibility.PUBLIC) append("pub ")
+                        append(
+                            when (parameter.fieldMutability) {
+                                FieldMutability.VAL -> "val "
+                                FieldMutability.VAR -> "var "
+                                null -> ""
+                            },
+                        )
                     }
                 "$prefix${parameter.name}: ${renderType(parameter.type)}"
             }
+        renderVisibility(writer, declaration.visibility)
         writer.write("class ${declaration.name}($parameters)")
         renderClassBody(writer, declaration.members, comments)
     }
@@ -432,6 +440,7 @@ class LanguageFormatter(
                 renderLeadingComments(writer, comments.takeBefore(member.range.start.offset))
                 when (member) {
                     is ClassFieldDeclaration -> {
+                        renderVisibility(writer, member.visibility)
                         writer.write(if (member.mutable) "var " else "val ")
                         writer.write(member.name)
                         member.type?.let { writer.write(": ${renderType(it)}") }
@@ -445,7 +454,7 @@ class LanguageFormatter(
                     }
 
                     is ClassMethodDeclaration -> {
-                        renderFunction(writer, member.function, static = member.static, comments)
+                        renderFunction(writer, member.function, static = member.static, visibility = member.visibility, comments)
                     }
                 }
             }
@@ -458,14 +467,23 @@ class LanguageFormatter(
         writer: CklWriter,
         declaration: FunctionDeclaration,
         static: Boolean,
+        visibility: Visibility,
         comments: CommentPlanner,
     ) {
+        renderVisibility(writer, visibility)
         if (static) writer.write("static ")
         writer.write("fun ${declaration.name}(")
         writer.write(declaration.parameters.joinToString(", ") { "${it.name}: ${renderType(it.type)}" })
         writer.write(")")
         declaration.returnType?.let { writer.write(": ${renderType(it)}") }
         renderBlock(writer, declaration.body, comments)
+    }
+
+    private fun renderVisibility(
+        writer: CklWriter,
+        visibility: Visibility,
+    ) {
+        if (visibility == Visibility.PUBLIC) writer.write("pub ")
     }
 
     private fun renderBlock(
