@@ -24,12 +24,14 @@ import net.minecraft.world.inventory.ContainerData
 import net.minecraft.world.inventory.MenuType
 import net.minecraft.world.inventory.SimpleContainerData
 import net.minecraft.world.item.ItemStack
+import ru.lazyhat.compukterkraft.common.computer.client.ClientDisplayBuffer
 import ru.lazyhat.compukterkraft.common.computer.block.checkUsable
 import ru.lazyhat.compukterkraft.common.computer.client.ClientTerminalBuffer
 import ru.lazyhat.compukterkraft.common.computer.data.ComputerContainerData
 import ru.lazyhat.compukterkraft.core.Config
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDevice
+import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 
 /**
  * Type-safe representation of which side of the network this menu lives on.
@@ -55,6 +57,9 @@ sealed interface MenuSide {
         var terminalBuffer: ClientTerminalBuffer? = null
             private set
 
+        var displayBuffer: ClientDisplayBuffer? = null
+            private set
+
         fun attachTerminalBuffer(buffer: ClientTerminalBuffer) {
             terminalBuffer = buffer
         }
@@ -65,6 +70,18 @@ sealed interface MenuSide {
 
         fun applyStdoutBytes(bytes: ByteArray) {
             terminalBuffer?.applyStdoutBytes(bytes)
+        }
+
+        fun attachDisplayBuffer(buffer: ClientDisplayBuffer) {
+            displayBuffer = buffer
+        }
+
+        fun detachDisplayBuffer() {
+            displayBuffer = null
+        }
+
+        fun applyDisplayFrame(frame: DisplayFrameDelta) {
+            displayBuffer?.apply(frame)
         }
     }
 }
@@ -122,6 +139,13 @@ abstract class AbstractComputerMenu(
             side as? MenuSide.Client
                 ?: throw UnsupportedOperationException("Cannot apply stdout bytes on the server")
         client.applyStdoutBytes(bytes)
+    }
+
+    override fun handleDisplayFrame(frame: DisplayFrameDelta) {
+        val client =
+            side as? MenuSide.Client
+                ?: throw UnsupportedOperationException("Cannot apply display frame on the server")
+        client.applyDisplayFrame(frame)
     }
 
     override fun removed(player: Player) {
