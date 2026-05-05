@@ -1,3 +1,5 @@
+import "stdio.ck" { Stdio, encode, fromArgument, println, readLine, write };
+
 fun displayPath(path: String): String {
     if (path == "") {
         return "/"
@@ -13,32 +15,34 @@ fun commandArgument(line: String): String {
     return strings::afterSpace(strings::trim(line))
 }
 
-fun printHelp() {
-    terminal::println("Builtins: help cd pwd reboot shutdown")
-    terminal::println("Programs: ls mkdir rmdir nano")
+fun printHelp(ctx: Stdio) {
+    println(ctx, "Builtins: help cd pwd reboot shutdown")
+    println(ctx, "Programs: ls mkdir rmdir nano")
 }
 
-fun runExternal(command: String, argument: String) {
-    if (process::run(command + ".ck", argument) != 0) {
-        terminal::println("Unknown command: " + command)
+fun runExternal(ctx: Stdio, command: String, argument: String) {
+    if (process::run(command + ".ck", encode(ctx, argument)) != 0) {
+        println(ctx, "Unknown command: " + command)
     }
 }
 
-fun handleCd(argument: String) {
+fun handleCd(ctx: Stdio, argument: String) {
     if (strings::isBlank(argument)) {
-        terminal::println(displayPath(process::currentDirectory()))
+        println(ctx, displayPath(process::currentDirectory()))
         return
     }
     if (!process::changeDirectory(argument)) {
-        terminal::println("Directory not found: " + argument)
+        println(ctx, "Directory not found: " + argument)
     }
 }
 
 pub fun main() {
-    terminal::println("Compukter Kraft shell")
-    terminal::println("Type `help` for commands.")
+    val ctx: Stdio = fromArgument(process::argument())
+    println(ctx, "Compukter Kraft shell")
+    println(ctx, "Type `help` for commands.")
     while true {
-        val line: String = terminal::readln(displayPath(process::currentDirectory()) + " > ")
+        write(ctx, displayPath(process::currentDirectory()) + " > ")
+        val line: String = readLine(ctx)
         val trimmed: String = strings::trim(line)
         if (strings::isBlank(trimmed)) {
             yield()
@@ -46,17 +50,17 @@ pub fun main() {
             val name: String = commandName(trimmed)
             val argument: String = commandArgument(trimmed)
             if (name == "help") {
-                printHelp()
+                printHelp(ctx)
             } else if (name == "cd") {
-                handleCd(argument)
+                handleCd(ctx, argument)
             } else if (name == "pwd") {
-                runExternal("pwd", argument)
+                runExternal(ctx, "pwd", argument)
             } else if (name == "reboot") {
                 system::reboot()
             } else if (name == "shutdown") {
                 system::shutdown()
             } else {
-                runExternal(name, argument)
+                runExternal(ctx, name, argument)
             }
         }
     }

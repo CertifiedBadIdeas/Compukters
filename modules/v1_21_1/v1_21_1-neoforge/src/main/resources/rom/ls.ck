@@ -1,8 +1,11 @@
+import "stdio.ck" { Stdio, fromArgument, println };
+
 pub fun main() {
-    val target: String = strings::trim(process::argument())
+    val ctx: Stdio = fromArgument(process::argument())
+    val target: String = strings::trim(ctx.argument)
     if (strings::isBlank(target)) {
-        terminal::println(filesystem::list())
+        println(ctx, filesystem::list())
     } else {
-        terminal::println(filesystem::list(target))
+        println(ctx, filesystem::list(target))
     }
 }

@@ -1,10 +1,13 @@
+import "stdio.ck" { Stdio, error, fromArgument };
+
 pub fun main() {
-    val target: String = strings::trim(process::argument())
+    val ctx: Stdio = fromArgument(process::argument())
+    val target: String = strings::trim(ctx.argument)
     if (strings::isBlank(target)) {
-        terminal::println("Usage: mkdir <path>")
+        error(ctx, "Usage: mkdir <path>")
         return
     }
     if (!filesystem::makeDir(target)) {
-        terminal::println("mkdir failed: " + target)
+        error(ctx, "mkdir failed: " + target)
     }
 }

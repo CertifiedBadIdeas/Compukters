@@ -1,4 +1,5 @@
 boot.ck
+stdio.ck
 shell.ck
 ls.ck
 mkdir.ck
