@@ -277,8 +277,6 @@ class BackgroundDeviceVmTest {
                     firmwareLoader = StaticFirmwareLoader("pub fun main() { }"),
                 )
 
-            vm.boot()
-
             val terminalState =
                 runBlocking {
                     val terminalState =
@@ -288,6 +286,8 @@ class BackgroundDeviceVmTest {
                             }
                         }
 
+                    kotlinx.coroutines.yield()
+                    vm.boot()
                     vm.requestSlice(0)
                     terminalState.await()
                 }
