@@ -19,13 +19,10 @@
 
 package ru.lazyhat.compukterkraft.core.device.vm.api
 
-import ru.lazyhat.compukterkraft.core.device.runtime.ComputerProgramCompiler
-import ru.lazyhat.compukterkraft.core.device.runtime.WorkspaceProgramLoader
 import ru.lazyhat.compukterkraft.core.device.vm.VmContext
 import ru.lazyhat.compukterkraft.core.device.vm.VmPathResolver
+import ru.lazyhat.compukterkraft.core.device.vm.VmProcessManager
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceProcessApi
-import ru.lazyhat.compukterkraft.lang.runtime.DeviceProfile
-import ru.lazyhat.compukterkraft.lang.runtime.DeviceRuntime
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceTerminalApi
 
 internal class VmProcessApi(
@@ -34,9 +31,7 @@ internal class VmProcessApi(
     private val deviceId: Int,
     private val pathResolver: VmPathResolver,
     private val filesystemApi: VmFileSystemApi,
-    private val programLoader: WorkspaceProgramLoader,
-    private val profile: DeviceProfile,
-    private val runtimeCreator: (String, String) -> DeviceRuntime,
+    private val processManager: VmProcessManager,
     private val terminal: DeviceTerminalApi,
 ) : DeviceProcessApi {
     override val argument: String = initialArgument
@@ -52,42 +47,12 @@ internal class VmProcessApi(
     override suspend fun run(
         path: String,
         argument: String,
-    ): Int {
-        val resolved = path
-        val programSource =
-            programLoader.load(deviceId, resolved) ?: run {
-                val message = "Program not found: $resolved"
-                ctx.log("VM[$deviceId] $message")
-                terminal.println(message)
-                return 1
-            }
-        val compiledProgram =
-            ComputerProgramCompiler.compile(
-                programSource.path,
-                programSource.source,
-                profile,
-                sourceLoader = programLoader.sourceLoader(deviceId),
-            )
-        val program = compiledProgram.program
-        if (program == null) {
-            val message = compiledProgram.errorMessage.orEmpty().ifEmpty { "Compilation failed." }
-            terminal.println("Compilation Error in ${programSource.path}: $message")
-            return 1
-        }
-
-        return try {
-            program.run(runtimeCreator(workingDirectory, argument))
-            0
-        } catch (failure: Throwable) {
-            terminal.println("Program error in ${programSource.path}: ${failure.message ?: failure.javaClass.simpleName}")
-            1
-        }
-    }
+    ): Int = wait(spawn(path, argument))
 
     override suspend fun spawn(
         path: String,
         argument: String,
-    ): Int = error("process.spawn is not implemented")
+    ): Int = processManager.spawn(path, argument, workingDirectory, terminal)
 
-    override suspend fun wait(pid: Int): Int = error("process.wait is not implemented")
+    override suspend fun wait(pid: Int): Int = processManager.wait(pid)
 }

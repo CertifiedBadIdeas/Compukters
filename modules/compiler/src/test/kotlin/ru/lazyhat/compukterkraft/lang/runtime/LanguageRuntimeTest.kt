@@ -163,6 +163,33 @@ class LanguageRuntimeTest {
     }
 
     @Test
+    fun executesSpawnAndWaitThroughRuntimeBridge() {
+        val artifact =
+            frontend.compile(
+                "spawn.ck",
+                """
+                pub fun main() {
+                    val pid: Int = process::spawn("child.ck", "arg");
+                    terminal::println("pid=" + pid);
+                    terminal::println("code=" + process::wait(pid));
+                }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+
+        val runtime = RecordingRuntime(spawnPid = 11, waitCode = 7)
+        runBlocking {
+            BytecodeComputerProgram(requireNotNull(artifact.module)).run(runtime)
+        }
+
+        assertEquals(listOf("pid=11", "code=7"), runtime.lines)
+    }
+
+    @Test
     fun usesInstructionBudgetFromProfileResources() {
         val artifact =
             frontend.compile(
@@ -857,6 +884,8 @@ internal class RecordingRuntime(
     private val vmRamBytes: Long = 64 * 1024,
     private val monitorConnected: Boolean = false,
     private val queuedEvents: List<VmEvent> = listOf(VmEvent("boot")),
+    private val spawnPid: Int = 1,
+    private val waitCode: Int = 0,
 ) : DeviceRuntime {
     val lines = mutableListOf<String>()
     val eventFilters = mutableListOf<String?>()
@@ -1001,9 +1030,9 @@ internal class RecordingRuntime(
             override suspend fun spawn(
                 path: String,
                 argument: String,
-            ): Int = 1
+            ): Int = spawnPid
 
-            override suspend fun wait(pid: Int): Int = 0
+            override suspend fun wait(pid: Int): Int = waitCode
         }
 
     override val ipc: DeviceIpcApi =
