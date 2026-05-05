@@ -69,6 +69,7 @@ Expressions:
 
 - literals: `42`, `42L`, `"text"`, `true`, `false`, `null`
 - arithmetic and logic: `+ - * / == != < <= > >= && || !`
+- `+` concatenates strings when either side is `String`; non-string values are converted to text for that expression.
 - member access: `event.name`
 - namespace calls: `terminal::write("hi")`
 - function calls: `main()`, `helper()`
