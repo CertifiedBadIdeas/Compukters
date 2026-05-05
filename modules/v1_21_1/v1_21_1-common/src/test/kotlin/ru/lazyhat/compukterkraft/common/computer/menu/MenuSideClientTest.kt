@@ -19,28 +19,26 @@
 
 package ru.lazyhat.compukterkraft.common.computer.menu
 
-import ru.lazyhat.compukterkraft.common.computer.client.ClientTerminalBuffer
+import ru.lazyhat.compukterkraft.common.computer.client.ClientDisplayBuffer
 import kotlin.test.Test
 import kotlin.test.assertFalse
-import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 
 class MenuSideClientTest {
     @Test
-    fun clientSideAttachAndDetachTerminalBuffer() {
+    fun clientSideAttachAndDetachDisplayBuffer() {
         val client = MenuSide.Client()
 
-        assertNull(client.terminalBuffer)
+        assertNull(client.displayBuffer)
 
-        val buffer = ClientTerminalBuffer(cols = 12, rows = 6, color = true)
-        client.attachTerminalBuffer(buffer)
+        val buffer = ClientDisplayBuffer(displayId = 1, width = 64, height = 48)
+        client.attachDisplayBuffer(buffer)
 
-        assertSame(buffer, client.terminalBuffer)
-        assertNotNull(client.terminalBuffer)
+        assertSame(buffer, client.displayBuffer)
 
-        client.detachTerminalBuffer()
-        assertNull(client.terminalBuffer)
+        client.detachDisplayBuffer()
+        assertNull(client.displayBuffer)
     }
 
     @Test

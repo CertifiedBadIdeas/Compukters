@@ -33,11 +33,9 @@ import ru.lazyhat.compukterkraft.core.device.runtime.ports.DeviceStateSink
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.DisplayNetworkBridge
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.GameTimeSource
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.NoopDisplayNetworkBridge
-import ru.lazyhat.compukterkraft.core.device.runtime.ports.TerminalNetworkBridge
 import ru.lazyhat.compukterkraft.core.device.vm.BackgroundDeviceVm
 import ru.lazyhat.compukterkraft.core.device.vm.DeviceProfileRegistry
 import ru.lazyhat.compukterkraft.core.device.vm.DeviceVmLogger
-import ru.lazyhat.compukterkraft.core.device.vm.api.ComputerStdioBroadcaster
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceVmHandle
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.VmEvent
@@ -45,7 +43,6 @@ import ru.lazyhat.compukterkraft.lang.runtime.VmState
 import ru.lazyhat.compukterkraft.lang.runtime.VmStopReason
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.ConcurrentLinkedQueue
 
 /**
  * Platform-neutral runtime device implementation.
@@ -54,19 +51,16 @@ import java.util.concurrent.ConcurrentLinkedQueue
  * boot → tick → sync screen → detect stop/crash/reboot.
  *
  * All world-side interactions are abstracted via narrow host ports
- * ([GameTimeSource], [TerminalNetworkBridge], [DeviceStateSink]) so this
+ * ([GameTimeSource], [DisplayNetworkBridge], [DeviceStateSink]) so this
  * class can live in `:core` without depending on Minecraft types.
  *
- * Terminal output is read from the VM's screen buffer as an immutable
- * [ScreenBufferSnapshot] each tick and forwarded to attached terminal
- * sessions via [TerminalNetworkBridge].
+ * Runtime UI output is sent to attached clients as display frame deltas.
  */
 class RuntimeDeviceImpl(
     override val deviceId: Int,
     properties: DeviceProperties,
     private val manager: DeviceManager,
     private val gameTime: GameTimeSource,
-    private val terminalNetwork: TerminalNetworkBridge,
     private val displayNetwork: DisplayNetworkBridge = NoopDisplayNetworkBridge,
     private val stateSink: DeviceStateSink,
 ) : RuntimeDevice,
@@ -91,23 +85,6 @@ class RuntimeDeviceImpl(
 
     /** Current screen snapshot (synchronous read). */
     override val lastScreenSnapshot: ScreenBufferSnapshot? get() = screenSnapshot.value
-
-    /**
-     * Epic 2 terminal sessions — one per attached player. A session is created
-     * by [AttachTerminalServerMessage][ru.lazyhat.compukterkraft.common.computer.network.server.AttachTerminalServerMessage]
-     * and torn down in [serverTick] when the player's open menu no longer
-     * references this device.
-     */
-    private data class TerminalSession(
-        val playerUuid: UUID,
-        var containerId: Int,
-        var cols: Int,
-        var rows: Int,
-        val pending: ConcurrentLinkedQueue<ByteArray> = ConcurrentLinkedQueue(),
-        var consumer: ComputerStdioBroadcaster.Consumer? = null,
-    )
-
-    private val terminalSessions = ConcurrentHashMap<UUID, TerminalSession>()
 
     private data class DisplaySession(
         val playerUuid: UUID,
@@ -162,10 +139,6 @@ class RuntimeDeviceImpl(
         val handle = manager.getOrCreateVm(deviceId, profile, { labelBacking }, logger)
         vmHandle = handle
 
-        // Rebind any already-attached terminal sessions to the new VM's broadcaster.
-        // Consumers on the previous VM (if any) are discarded when the old
-        // BackgroundDeviceVm is reaped; here we just create fresh consumers.
-        rebindTerminalConsumers(handle)
         reattachDisplaySessions(handle)
 
         handle.boot()
@@ -180,7 +153,6 @@ class RuntimeDeviceImpl(
 
     override fun close() {
         LOGGER.debug { "DeviceID: $deviceId close" }
-        terminalSessions.keys.toList().forEach(::detachTerminalSession)
         displaySessions.keys.toList().forEach { (playerUuid, displayId) -> detachDisplaySession(playerUuid, displayId) }
         manager.removeVm(deviceId, VmStopReason.CLOSED)
         vmHandle = null
@@ -188,11 +160,7 @@ class RuntimeDeviceImpl(
     }
 
     override fun serverTick() {
-        val handle =
-            vmHandle ?: run {
-                flushTerminalSessions()
-                return
-            }
+        val handle = vmHandle ?: return
 
         handle.requestSlice(gameTime.gameTime())
 
@@ -204,9 +172,6 @@ class RuntimeDeviceImpl(
 
         // Sync screen buffer to watching players (legacy snapshot path)
         syncScreen(handle)
-
-        // Flush stdout byte stream to attached terminal sessions (Epic 2)
-        flushTerminalSessions()
 
         flushDisplaySessions(handle)
     }
@@ -232,7 +197,6 @@ class RuntimeDeviceImpl(
 
         LOGGER.debug { "DeviceID: $deviceId stop handling $terminalState" }
 
-        flushTerminalSessions()
         manager.removeVm(deviceId, VmStopReason.CLOSED)
         vmHandle = null
         stateSink.onPowerStateChanged(false)
@@ -248,75 +212,9 @@ class RuntimeDeviceImpl(
     private fun syncScreen(handle: DeviceVmHandle) {
         val snapshot = handle.readScreenSnapshot() ?: return
         screenSnapshot.value = snapshot
-        // Legacy client-bound ComputerTerminalClientMessage broadcast was removed
-        // in Epic 4 — attached clients now receive bytes via StdoutBytesClientMessage
-        // (see [flushTerminalSessions]). Workbench still reads [lastScreenSnapshot]
-        // via its own pipeline.
-    }
-
-    // ── Epic 2 terminal sessions ────────────────────────────────────
-
-    override fun attachTerminalSession(
-        playerUuid: UUID,
-        containerId: Int,
-        cols: Int,
-        rows: Int,
-    ) {
-        terminalSessions.compute(playerUuid) { _, existing ->
-            if (existing != null) {
-                existing.containerId = containerId
-                existing.cols = cols
-                existing.rows = rows
-                existing
-            } else {
-                val session = TerminalSession(playerUuid, containerId, cols, rows)
-                // Attach to the currently running VM's broadcaster (if any). If
-                // the device is off, the consumer is attached later by
-                // [rebindTerminalConsumers] as soon as [turnOn] creates a VM.
-                vmHandle?.let { bindConsumer(session, it) }
-                session
-            }
-        }
-    }
-
-    private fun bindConsumer(
-        session: TerminalSession,
-        handle: BackgroundDeviceVm,
-    ) {
-        if (session.consumer != null) return
-        val consumer =
-            ComputerStdioBroadcaster.Consumer { bytes ->
-                session.pending.add(bytes)
-            }
-        session.consumer = consumer
-        handle.stdioBroadcaster.addConsumer(consumer)
-    }
-
-    private fun rebindTerminalConsumers(handle: BackgroundDeviceVm) {
-        if (terminalSessions.isEmpty()) return
-        for (session in terminalSessions.values) {
-            // Each session is bound to the previous VM's (now-defunct) broadcaster;
-            // clear the reference so bindConsumer actually does its work.
-            session.consumer = null
-            bindConsumer(session, handle)
-        }
-    }
-
-    override fun resizeTerminalSession(
-        playerUuid: UUID,
-        cols: Int,
-        rows: Int,
-    ) {
-        terminalSessions[playerUuid]?.let {
-            it.cols = cols
-            it.rows = rows
-        }
-    }
-
-    override fun detachTerminalSession(playerUuid: UUID) {
-        val handle = vmHandle
-        val session = terminalSessions.remove(playerUuid) ?: return
-        session.consumer?.let { c -> handle?.stdioBroadcaster?.removeConsumer(c) }
+        // Runtime computer clients receive framebuffer deltas through display
+        // sessions. Workbench still reads [lastScreenSnapshot] via its own
+        // authoring pipeline until its live viewer is migrated to display.
     }
 
     override fun attachDisplaySession(
@@ -354,34 +252,6 @@ class RuntimeDeviceImpl(
         for (session in displaySessions.values) {
             handle.attachDisplay(session.displayId, session.width, session.height)
         }
-    }
-
-    private fun flushTerminalSessions() {
-        if (terminalSessions.isEmpty()) return
-        val toDetach = mutableListOf<UUID>()
-
-        for ((uuid, session) in terminalSessions) {
-            if (!terminalNetwork.isSessionStillBound(uuid, session.containerId, deviceId)) {
-                toDetach += uuid
-                continue
-            }
-
-            // Drain pending bytes and send as a single chunk (up to 8 KB per tick per session).
-            var acc: ByteArray = session.pending.poll() ?: continue
-            val cap = 8 * 1024
-            while (acc.size < cap) {
-                val next = session.pending.peek() ?: break
-                if (acc.size + next.size > cap) break
-                session.pending.poll()
-                val merged = ByteArray(acc.size + next.size)
-                System.arraycopy(acc, 0, merged, 0, acc.size)
-                System.arraycopy(next, 0, merged, acc.size, next.size)
-                acc = merged
-            }
-            terminalNetwork.sendStdoutBytes(uuid, session.containerId, acc)
-        }
-
-        toDetach.forEach(::detachTerminalSession)
     }
 
     private fun flushDisplaySessions(handle: BackgroundDeviceVm) {

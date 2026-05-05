@@ -20,65 +20,11 @@
 package ru.lazyhat.compukterkraft.core.device.vm.api
 
 import kotlin.test.Test
-import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 
 class ComputerStdioBroadcasterTest {
-    private class RecordingConsumer : ComputerStdioBroadcaster.Consumer {
-        val chunks = mutableListOf<ByteArray>()
-
-        override fun enqueue(bytes: ByteArray) {
-            chunks += bytes
-        }
-
-        fun flat(): ByteArray = chunks.fold(ByteArray(0)) { acc, arr -> acc + arr }
-    }
-
     @Test
-    fun writeStringAppendsToScrollback() {
-        val b = ComputerStdioBroadcaster(scrollbackBytes = 16)
-        b.writeString("hi")
-        val c = RecordingConsumer()
-        b.addConsumer(c)
-        assertContentEquals("hi".toByteArray(), c.flat())
-    }
-
-    @Test
-    fun lateConsumerReceivesReplayThenNewWrites() {
-        val b = ComputerStdioBroadcaster()
-        b.writeString("old ")
-        val c = RecordingConsumer()
-        b.addConsumer(c)
-        b.writeString("new")
-        assertContentEquals("old new".toByteArray(), c.flat())
-    }
-
-    @Test
-    fun removeConsumerStopsDelivery() {
-        val b = ComputerStdioBroadcaster()
-        val c = RecordingConsumer()
-        b.addConsumer(c)
-        b.writeString("a")
-        b.removeConsumer(c)
-        b.writeString("b")
-        assertContentEquals("a".toByteArray(), c.flat())
-    }
-
-    @Test
-    fun twoConsumersShareSameStream() {
-        val b = ComputerStdioBroadcaster()
-        val c1 = RecordingConsumer()
-        val c2 = RecordingConsumer()
-        b.addConsumer(c1)
-        b.addConsumer(c2)
-        b.writeString("shared")
-        assertContentEquals("shared".toByteArray(), c1.flat())
-        assertContentEquals("shared".toByteArray(), c2.flat())
-    }
-
-    @Test
-    fun cursorTrackerFedByWriteString() {
+    fun writeStringUpdatesCursorOnly() {
         val b = ComputerStdioBroadcaster()
         b.writeString("Hi")
         assertEquals(2 to 0, b.cursor())
@@ -87,11 +33,21 @@ class ComputerStdioBroadcasterTest {
     }
 
     @Test
-    fun emptyWriteIsNoOp() {
+    fun emptyWriteIsNoOpForCursor() {
         val b = ComputerStdioBroadcaster()
-        val c = RecordingConsumer()
-        b.addConsumer(c)
         b.writeString("")
-        assertTrue(c.chunks.isEmpty())
+        assertEquals(0 to 0, b.cursor())
+    }
+
+    @Test
+    fun writeStringNotifiesInternalSinkWithoutFanoutConsumers() {
+        val chunks = mutableListOf<String>()
+        val b = ComputerStdioBroadcaster(onWrite = chunks::add)
+
+        b.writeString("a")
+        b.writeString("")
+        b.writeString("b")
+
+        assertEquals(listOf("a", "b"), chunks)
     }
 }

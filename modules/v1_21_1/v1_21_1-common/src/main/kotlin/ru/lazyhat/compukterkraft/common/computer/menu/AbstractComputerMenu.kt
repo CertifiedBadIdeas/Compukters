@@ -26,7 +26,6 @@ import net.minecraft.world.inventory.SimpleContainerData
 import net.minecraft.world.item.ItemStack
 import ru.lazyhat.compukterkraft.common.computer.block.checkUsable
 import ru.lazyhat.compukterkraft.common.computer.client.ClientDisplayBuffer
-import ru.lazyhat.compukterkraft.common.computer.client.ClientTerminalBuffer
 import ru.lazyhat.compukterkraft.common.computer.data.ComputerContainerData
 import ru.lazyhat.compukterkraft.core.Config
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
@@ -46,31 +45,12 @@ sealed interface MenuSide {
     ) : MenuSide
 
     /**
-     * Client-side state: owns the [ClientTerminalBuffer] attached by the
-     * currently-open terminal screen.
+     * Client-side state: owns the [ClientDisplayBuffer] attached by the
+     * currently-open computer screen.
      */
     class Client : MenuSide {
-        /**
-         * Stream-I/O terminal buffer. `null` until [attachTerminalBuffer] is
-         * called by the open [ComputerTerminalScreen][ru.lazyhat.compukterkraft.common.terminal.screen.ComputerTerminalScreen].
-         */
-        var terminalBuffer: ClientTerminalBuffer? = null
-            private set
-
         var displayBuffer: ClientDisplayBuffer? = null
             private set
-
-        fun attachTerminalBuffer(buffer: ClientTerminalBuffer) {
-            terminalBuffer = buffer
-        }
-
-        fun detachTerminalBuffer() {
-            terminalBuffer = null
-        }
-
-        fun applyStdoutBytes(bytes: ByteArray) {
-            terminalBuffer?.applyStdoutBytes(bytes)
-        }
 
         fun attachDisplayBuffer(buffer: ClientDisplayBuffer) {
             displayBuffer = buffer
@@ -107,8 +87,8 @@ abstract class AbstractComputerMenu(
     /**
      * Type-safe side discriminator.
      * On the server: [MenuSide.Server] — holds the [RuntimeDevice] + input.
-     * On the client: [MenuSide.Client] — holds the [ClientTerminalBuffer]
-     * attached by the open terminal screen.
+    * On the client: [MenuSide.Client] — holds the [ClientDisplayBuffer]
+    * attached by the open computer screen.
      */
 
     override val side: MenuSide =
@@ -132,13 +112,6 @@ abstract class AbstractComputerMenu(
     override fun stillValid(player: Player): Boolean {
         val server = side as? MenuSide.Server
         return (server == null || server.device.family.checkUsable(player)) && canUse(player)
-    }
-
-    override fun handleStdoutBytes(bytes: ByteArray) {
-        val client =
-            side as? MenuSide.Client
-                ?: throw UnsupportedOperationException("Cannot apply stdout bytes on the server")
-        client.applyStdoutBytes(bytes)
     }
 
     override fun handleDisplayFrame(frame: DisplayFrameDelta) {

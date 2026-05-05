@@ -28,9 +28,8 @@ import ru.lazyhat.compukterkraft.lang.runtime.DeviceTerminalApi
  * Terminal API routed entirely through the [DeviceStdioApi] byte stream.
  *
  * Every operation emits VT-100 escape sequences; the server-side ScreenBuffer
- * (consumed internally by the broadcaster to serve the legacy Workbench snapshot
- * path) and every attached client's [ClientTerminalBuffer] both parse the same
- * stream, so observable behaviour is consistent across attach sites.
+ * consumes the stream internally to serve the temporary Workbench snapshot path
+ * while runtime computer clients render from display frames instead.
  *
  * [cursorProvider] must return the current logical cursor in (x, y) / 0-based
  * coords. Production wires this to [ComputerStdioBroadcaster.cursor].

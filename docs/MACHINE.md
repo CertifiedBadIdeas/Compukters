@@ -11,8 +11,8 @@ VM здесь состоит из четырех слоев:
 1. `ServerComputer`
    Серверное представление одного компьютера в мире. Оно отвечает за включение, выключение, тики, доставку событий, обработку host calls и синхронизацию экрана игрокам.
 
-2. `BackgroundComputerVm`
-   Хост одной VM. Запускает программу на фоновой корутине, держит состояние VM, очередь событий, очередь host calls, screen buffer и runtime-объекты.
+2. `BackgroundDeviceVm`
+   Хост одной VM. Запускает программу на фоновой корутине, держит состояние VM, очередь событий, очередь host calls, display registry, временный legacy screen buffer и runtime-объекты.
 
 3. `VmRuntime`
    Реализация `ComputerRuntime`, которую видит исполняемая программа. Через нее язык получает доступ к `system`, `terminal`, `filesystem`, `process`, а также к операциям `pullEvent`, `sleep`, `yield`.
@@ -98,7 +98,8 @@ Background coroutine
 - `hostCallManager = HostCallManager()`
 - `programLoader = WorkspaceProgramLoader(workspace)`
 - `pathResolver = VmPathResolver()`
-- `screenBuffer = ScreenBuffer(profile.terminalWidth, profile.terminalHeight, profile.colorTerminal)`
+- `screenBuffer = ScreenBuffer(profile.terminalWidth, profile.terminalHeight, profile.colorTerminal)` — временный legacy snapshot path для Workbench;
+- `displayRegistry = DisplayRegistry()` — источник runtime UI frames для клиентского Computer screen;
 - `runtime = createRuntime("", "")`
 
 Смысл каждого компонента:
@@ -110,7 +111,8 @@ Background coroutine
 - `hostCallManager` хранит запросы VM к хосту и ожидаемые ответы.
 - `programLoader` читает исходники программ из workspace.
 - `pathResolver` реализует текущую рабочую директорию и нормализацию путей.
-- `screenBuffer` является терминалом VM.
+- `screenBuffer` больше не является client-server runtime UI transport; он остается внутренним legacy snapshot path для Workbench/diagnostics до отдельной миграции.
+- `displayRegistry` хранит display/framebuffer state, из которого `RuntimeDeviceImpl` flush-ит `DisplayFrameDelta` в клиентские display sessions.
 - `runtime` это API-объект, который получает выполняемая программа.
 
 ## 4. Полный жизненный цикл VM
@@ -496,22 +498,21 @@ return candidate
 - `resolve("../shell.ck") -> "rom/shell.ck"`
 - `resolve("/boot/init.ck") -> "boot/init.ck"`
 
-## 11. Как работает терминал
+## 11. Как работает runtime output
 
-### 11.1. Терминал не ходит через host calls
+### 11.1. Runtime UI идет через display frames
 
 Это принципиальный момент.
 
-`VmTerminalApi` пишет напрямую в `ScreenBuffer`, без roundtrip на server thread.
+Видимый runtime UI должен рисоваться через `display::*`: ROM/user code обновляет framebuffer в `DisplayRegistry`, серверный tick flush-ит dirty frames через display sessions, а клиентский Computer screen рендерит `ClientDisplayBuffer`.
 
 Это значит:
 
-- `write(text)` обновляет буфер сразу;
-- `println(text)` обновляет буфер сразу;
-- `clear()` очищает буфер сразу;
-- `setCursor(x, y)` двигает курсор сразу.
+- server-to-client output не идет через stdout byte stream;
+- `terminal`/`stdout` APIs остаются только staged compatibility;
+- legacy terminal writes могут обновлять внутренний `ScreenBuffer` для Workbench snapshots, но не рассылаются клиентам как runtime UI.
 
-Сервер потом читает `readScreenSnapshot()` и рассылает игрокам снимок экрана.
+Сервер для обычного Computer GUI читает display deltas через `snapshotDisplayFrames()` / `flushDisplaySessions()`, а не `readScreenSnapshot()`.
 
 ### 11.2. Чтение строки
 
@@ -531,9 +532,9 @@ return candidate
 - `char` ожидает `ByteArray`;
 - `paste` ожидает `ByteBuffer`.
 
-### 11.3. Экран и его ограничения
+### 11.3. Display и временный legacy ScreenBuffer
 
-Размер терминала задается профилем:
+Размер legacy terminal buffer задается профилем:
 
 - ширина: `Config.DEFAULT_COMPUTER_TERM_WIDTH`
 - высота: `Config.DEFAULT_COMPUTER_TERM_HEIGHT`
@@ -544,13 +545,15 @@ return candidate
 - normal profile работает без цветного терминала;
 - advanced и command profiles работают с цветом.
 
-Физически терминал представлен `ScreenBuffer`, который хранит:
+Физически legacy terminal snapshot представлен `ScreenBuffer`, который хранит:
 
 - символы;
 - foreground color;
 - background color;
 - позицию курсора;
 - dirty state.
+
+Runtime Computer UI физически представлен display/framebuffer state, который затем кодируется в `DisplayFrameDelta`.
 
 ## 12. Как запускаются программы
 
@@ -607,7 +610,8 @@ return candidate
 
 - тот же `computerId`;
 - тот же `profile`;
-- тот же `screenBuffer`;
+- тот же `screenBuffer` для legacy staged compatibility;
+- тот же `displayRegistry`;
 - тот же `workspace`;
 - тот же `VmContext`;
 - текущую рабочую директорию родителя;
@@ -1182,9 +1186,10 @@ ROM-файл `shell.ck` показывает, как предполагаетс�
 
 ## 18. Что стоит понимать как важные нюансы реализации
 
-### 17.1. Терминал и файловая система устроены по-разному
+### 17.1. Runtime display и файловая система устроены по-разному
 
-- терминал работает напрямую через `ScreenBuffer`;
+- runtime UI работает через `DisplayRegistry`/display frame deltas;
+- legacy terminal writes могут обновлять `ScreenBuffer` только как временный internal snapshot path;
 - файловая система ходит через `HostCallManager` и серверный `HostCallDispatcher`.
 
 Это разное поведение и разная стоимость операций.

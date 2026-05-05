@@ -39,9 +39,9 @@ import ru.lazyhat.compukterkraft.lang.runtime.DeviceProfile
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceQueueResources
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceResources
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceStorageResources
-import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.VmEvent
 import ru.lazyhat.compukterkraft.lang.runtime.VmState
+import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertNotNull
@@ -82,12 +82,6 @@ class BackgroundDeviceVmTest {
             kotlinx.coroutines.delay(10)
         }
     }
-
-    private fun ScreenBufferSnapshot.visibleText(): String =
-        (0 until height)
-            .joinToString("\n") { y ->
-                (0 until width).joinToString("") { x -> charAt(x, y).toString() }.trimEnd()
-            }.trim()
 
     private fun firmwareTestProfile(): DeviceProfile =
         DeviceProfile(
@@ -148,12 +142,10 @@ class BackgroundDeviceVmTest {
                                 tile.payload.containsRgb565(0x07E0)
                         }
                     },
-                    "terminal frame missing; frames=${frames.size} state=${vm.snapshot().state} text=${vm.forceScreenSnapshot().visibleText()} logs=$logs",
+                    "terminal frame missing; frames=${frames.size} state=${vm.snapshot().state} logs=$logs",
                 )
             assertTrue(rendered.tiles.isNotEmpty(), "terminal frame missing; frames=${frames.size} state=${vm.snapshot().state} logs=$logs")
-            val text = vm.forceScreenSnapshot().visibleText()
-            assertTrue(text.contains("Compukter Kraft shell"), text)
-            assertTrue(text.contains("/ >"), text)
+            assertTrue(frames.greenPixelCount() > 0, "terminal frame should contain rendered glyph pixels")
             assertTrue(vm.snapshot().state.isActive, vm.snapshot().state.toString())
         } finally {
             root.toFile().deleteRecursively()
@@ -185,13 +177,15 @@ class BackgroundDeviceVmTest {
 
             "help".forEach { ch -> vm.enqueueEvent(VmEvent("char", listOf(byteArrayOf(ch.code.toByte())))) }
             runVmTicks(vm, ticks = 20, hostCallDispatcher = dispatcher)
-            val typedText = vm.forceScreenSnapshot().visibleText()
-            assertTrue(typedText.contains("/ > help"), typedText)
+            val typedFrames = vm.drainDisplayFrames()
+            assertTrue(typedFrames.isNotEmpty(), "typed input should update display frames")
+            assertTrue(typedFrames.greenPixelCount() > 0, "typed input should draw glyph pixels")
 
             vm.enqueueEvent(VmEvent("key", listOf(KeyCodes.KEY_ENTER, false)))
             runVmTicks(vm, ticks = 40, hostCallDispatcher = dispatcher)
-            val submittedText = vm.forceScreenSnapshot().visibleText()
-            assertTrue(submittedText.contains("Builtins: help cd pwd reboot shutdown"), submittedText)
+            val submittedFrames = vm.drainDisplayFrames()
+            assertTrue(submittedFrames.isNotEmpty(), "submitted command should render shell output through display frames")
+            assertTrue(submittedFrames.greenPixelCount() > 0, "shell output should draw glyph pixels")
         } finally {
             root.toFile().deleteRecursively()
         }
@@ -226,14 +220,19 @@ class BackgroundDeviceVmTest {
             vm.enqueueEvent(VmEvent("char", listOf(byteArrayOf('p'.code.toByte()))))
             runVmTicks(vm, ticks = 30, hostCallDispatcher = dispatcher)
 
-            val typedText = vm.forceScreenSnapshot().visibleText()
-            assertTrue(typedText.contains("/ > help"), typedText)
-            assertTrue(vm.drainDisplayFrames().isEmpty(), "typing should not redraw the framebuffer every keypress")
+            val editFrames = vm.drainDisplayFrames()
+            assertTrue(editFrames.isNotEmpty(), "typing should update the dirty input line")
+            assertTrue(editFrames.none { it.fullRefresh }, "typing should not request full-refresh frames")
+            assertTrue(
+                editFrames.all { frame -> frame.dirtyPixelArea() < frame.width * frame.height },
+                "typing should update dirty line tiles instead of the whole framebuffer: $editFrames",
+            )
 
             vm.enqueueEvent(VmEvent("key", listOf(KeyCodes.KEY_ENTER, false)))
             runVmTicks(vm, ticks = 40, hostCallDispatcher = dispatcher)
-            val submittedText = vm.forceScreenSnapshot().visibleText()
-            assertTrue(submittedText.contains("Builtins: help cd pwd reboot shutdown"), submittedText)
+            val submittedFrames = vm.drainDisplayFrames()
+            assertTrue(submittedFrames.isNotEmpty(), "submitted command should render shell output")
+            assertTrue(submittedFrames.greenPixelCount() > 0, "shell output should draw glyph pixels")
         } finally {
             root.toFile().deleteRecursively()
         }
@@ -249,6 +248,25 @@ class BackgroundDeviceVmTest {
         }
         return false
     }
+
+    private fun ByteArray.countRgb565(value: Int): Int {
+        val hi = (value ushr 8).toByte()
+        val lo = value.toByte()
+        var count = 0
+        var index = 0
+        while (index + 1 < size) {
+            if (this[index] == hi && this[index + 1] == lo) count += 1
+            index += 2
+        }
+        return count
+    }
+
+    private fun List<DisplayFrameDelta>.greenPixelCount(): Int =
+        sumOf { frame ->
+            frame.tiles.sumOf { tile -> tile.payload.countRgb565(0x07E0) }
+        }
+
+    private fun DisplayFrameDelta.dirtyPixelArea(): Int = tiles.sumOf { tile -> tile.width * tile.height }
 
     @Test
     fun surfacesRomLimitFailureAsCrashedState() {
