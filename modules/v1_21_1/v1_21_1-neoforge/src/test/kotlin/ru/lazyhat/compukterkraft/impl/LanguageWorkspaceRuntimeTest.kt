@@ -18,8 +18,6 @@
  */
 package ru.lazyhat.compukterkraft.impl
 
-import ru.lazyhat.compukterkraft.core.block.DeviceFamily
-import ru.lazyhat.compukterkraft.core.device.vm.DeviceProfileRegistry
 import ru.lazyhat.compukterkraft.core.device.vm.DeviceWorkspaceHost
 import ru.lazyhat.compukterkraft.core.device.vm.DeviceWorkspaceInitializer
 import ru.lazyhat.compukterkraft.core.language.LanguageServices
@@ -35,8 +33,7 @@ import kotlin.test.assertTrue
 
 class LanguageWorkspaceRuntimeTest {
     @Test
-    fun seededBiosCompilesAndDelegatesToShell() {
-        val profile = DeviceProfileRegistry.forFamily(DeviceFamily.ADVANCED)
+    fun seededBootScriptCompilesAndDelegatesToShell() {
         val root = createTempDirectory("compukterkraft-language-workspace")
 
         try {
@@ -44,7 +41,7 @@ class LanguageWorkspaceRuntimeTest {
             initializer.ensureInitialized(1)
             val workspace = DeviceWorkspaceHost(rootPath = root)
 
-            val bootScript = workspace.readDocument(1, profile.bootScriptName)
+            val bootScript = workspace.readDocument(1, "boot.ck")
             assertNotNull(bootScript)
 
             val artifact = LanguageServices.frontend.compile(bootScript.path, bootScript.text)
