@@ -31,6 +31,7 @@ import ru.lazyhat.compukterkraft.core.device.vm.BackgroundDeviceVm
 import ru.lazyhat.compukterkraft.core.device.vm.DeviceVmLogger
 import ru.lazyhat.compukterkraft.core.device.vm.DeviceWorkspaceHost
 import ru.lazyhat.compukterkraft.core.device.vm.DeviceWorkspaceInitializer
+import ru.lazyhat.compukterkraft.core.input.KeyCodes
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceCapability
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceCpuResources
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceMemoryResources
@@ -39,6 +40,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.DeviceQueueResources
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceResources
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceStorageResources
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
+import ru.lazyhat.compukterkraft.lang.runtime.VmEvent
 import ru.lazyhat.compukterkraft.lang.runtime.VmState
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
@@ -148,6 +150,43 @@ class BackgroundDeviceVmTest {
                 assertTrue(text.contains("Compukter Kraft shell"), text)
                 assertTrue(text.contains("/ >"), text)
             assertTrue(vm.snapshot().state.isActive, vm.snapshot().state.toString())
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun bundledRomTerminalEchoesTypedInputAndSubmitsCommandsToShell() {
+        val root = createTempDirectory("compukterkraft-rom-terminal-input")
+
+        try {
+            DeviceWorkspaceInitializer(root).ensureInitialized(1)
+            val workspace = DeviceWorkspaceHost(root)
+            val vm =
+                BackgroundDeviceVm(
+                    deviceId = 1,
+                    profile = firmwareTestProfile(),
+                    dispatcher = Dispatchers.Default,
+                    labelProvider = { null },
+                    logger = DeviceVmLogger { },
+                    workspace = workspace,
+                    firmwareLoader = ClasspathFirmwareLoader(),
+                )
+
+            vm.attachDisplay(displayId = 9, width = 96, height = 48)
+            assertTrue(vm.boot())
+            val dispatcher = HostCallDispatcher(1, workspace)
+            runVmTicks(vm, ticks = 80, hostCallDispatcher = dispatcher)
+
+            "help".forEach { ch -> vm.enqueueEvent(VmEvent("char", listOf(byteArrayOf(ch.code.toByte())))) }
+            runVmTicks(vm, ticks = 20, hostCallDispatcher = dispatcher)
+            val typedText = vm.forceScreenSnapshot().visibleText()
+            assertTrue(typedText.contains("/ > help"), typedText)
+
+            vm.enqueueEvent(VmEvent("key", listOf(KeyCodes.KEY_ENTER, false)))
+            runVmTicks(vm, ticks = 40, hostCallDispatcher = dispatcher)
+            val submittedText = vm.forceScreenSnapshot().visibleText()
+            assertTrue(submittedText.contains("Builtins: help cd pwd reboot shutdown"), submittedText)
         } finally {
             root.toFile().deleteRecursively()
         }

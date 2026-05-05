@@ -43,22 +43,6 @@ fun render(displayId: Int, text: String) {
     display::present(displayId)
 }
 
-fun updateInputLine(event: Event, line: String, input: Int): String {
-    if (event.name == "char") {
-        return line + events::argString(event, 0)
-    }
-    if (event.name == "paste") {
-        return line + events::argString(event, 0)
-    }
-    if (event.name == "key") {
-        if (events::argInt(event, 0) == 257) {
-            ipc::write(input, line)
-            return ""
-        }
-    }
-    return line
-}
-
 pub fun main() {
     val input: Int = ipc::open()
     val output: Int = ipc::open()
@@ -80,13 +64,21 @@ pub fun main() {
             if (event.name != "") {
                 if (event.name == "display_attach" || event.name == "display_resize") {
                     displayId = display::primary()
-                    render(displayId, screen)
-                } else {
-                    val previous: String = line
-                    line = updateInputLine(event, line, input)
-                    if (previous != "" && line == "") {
-                        screen = screen + previous + "\n"
-                        stdout::write(previous + "\n")
+                    render(displayId, screen + line)
+                } else if (event.name == "char" || event.name == "paste") {
+                    val typed: String = events::argString(event, 0)
+                    if (typed != "") {
+                        line = line + typed
+                        stdout::write(typed)
+                        render(displayId, screen + line)
+                    }
+                } else if (event.name == "key") {
+                    val key: Int = events::argInt(event, 0)
+                    if (key == 257 || key == 335) {
+                        ipc::write(input, line)
+                        screen = screen + line + "\n"
+                        line = ""
+                        stdout::write("\n")
                         render(displayId, screen)
                     }
                 }
