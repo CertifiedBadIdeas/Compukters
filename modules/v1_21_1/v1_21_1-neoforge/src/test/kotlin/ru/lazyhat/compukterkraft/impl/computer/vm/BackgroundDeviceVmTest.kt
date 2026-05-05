@@ -29,6 +29,7 @@ import ru.lazyhat.compukterkraft.core.device.runtime.LoadedFirmwareProgramSource
 import ru.lazyhat.compukterkraft.core.device.vm.BackgroundDeviceVm
 import ru.lazyhat.compukterkraft.core.device.vm.DeviceVmLogger
 import ru.lazyhat.compukterkraft.core.device.vm.DeviceWorkspaceHost
+import ru.lazyhat.compukterkraft.core.device.vm.DeviceWorkspaceInitializer
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceCapability
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceCpuResources
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceMemoryResources
@@ -39,6 +40,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.DeviceStorageResources
 import ru.lazyhat.compukterkraft.lang.runtime.VmState
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class BackgroundDeviceVmTest {
@@ -46,6 +48,87 @@ class BackgroundDeviceVmTest {
         private val source: String,
     ) : FirmwareProgramLoader {
         override fun load(path: String): LoadedFirmwareProgramSource = LoadedFirmwareProgramSource(path, source)
+    }
+
+    private class ClasspathFirmwareLoader : FirmwareProgramLoader {
+        override fun load(path: String): LoadedFirmwareProgramSource {
+            val source =
+                BackgroundDeviceVmTest::class.java.classLoader
+                    .getResourceAsStream("firmware/$path")
+                    ?.bufferedReader()
+                    ?.readText()
+                    ?: error("firmware/$path missing from classpath")
+            return LoadedFirmwareProgramSource(path, source)
+        }
+    }
+
+    private fun runVmTicks(
+        vm: BackgroundDeviceVm,
+        ticks: Int = 16,
+    ) = runBlocking {
+        repeat(ticks) { tick ->
+            vm.requestSlice(tick.toLong())
+            kotlinx.coroutines.delay(10)
+        }
+    }
+
+    private fun firmwareTestProfile(): DeviceProfile =
+        DeviceProfile(
+            id = "rom-terminal-test",
+            displayName = "ROM Terminal Test",
+            cpuBudgetNanosPerSlice = 5_000_000,
+            maxEventQueueSize = 64,
+            terminalWidth = 80,
+            terminalHeight = 16,
+            colorTerminal = true,
+            allowedCapabilities =
+                setOf(
+                    DeviceCapability.TERMINAL,
+                    DeviceCapability.DISPLAY,
+                    DeviceCapability.FILESYSTEM,
+                    DeviceCapability.EVENTS,
+                    DeviceCapability.SYSTEM,
+                    DeviceCapability.IPC,
+                ),
+            resources =
+                DeviceResources(
+                    cpu = DeviceCpuResources(wallTimeGuardNanosPerSlice = 5_000_000),
+                    memory = DeviceMemoryResources(),
+                    storage = DeviceStorageResources(programRomBytes = 128 * 1024, diskBytes = 1024 * 1024),
+                    queues = DeviceQueueResources(eventQueueSlots = 64, hostCallQueueSlots = 64),
+                ),
+        )
+
+    @Test
+    fun bundledFirmwareBootsRomTerminalAndRendersShellOutput() {
+        val root = createTempDirectory("compukterkraft-rom-terminal")
+
+        try {
+            DeviceWorkspaceInitializer(root).ensureInitialized(1)
+            val workspace = DeviceWorkspaceHost(root)
+            val logs = mutableListOf<String>()
+            val vm =
+                BackgroundDeviceVm(
+                    deviceId = 1,
+                    profile = firmwareTestProfile(),
+                    dispatcher = Dispatchers.Default,
+                    labelProvider = { null },
+                    logger = DeviceVmLogger(logs::add),
+                    workspace = workspace,
+                    firmwareLoader = ClasspathFirmwareLoader(),
+                )
+
+            vm.attachDisplay(displayId = 9, width = 96, height = 48)
+            assertTrue(vm.boot())
+            runVmTicks(vm, ticks = 80)
+
+            val frames = vm.drainDisplayFrames()
+            val rendered = assertNotNull(frames.lastOrNull { frame -> frame.tiles.any { tile -> tile.payload.any { it != 0.toByte() } } })
+            assertTrue(rendered.tiles.isNotEmpty(), "frames=${frames.size} state=${vm.snapshot().state} logs=$logs")
+            assertTrue(vm.snapshot().state.isActive, vm.snapshot().state.toString())
+        } finally {
+            root.toFile().deleteRecursively()
+        }
     }
 
     @Test
