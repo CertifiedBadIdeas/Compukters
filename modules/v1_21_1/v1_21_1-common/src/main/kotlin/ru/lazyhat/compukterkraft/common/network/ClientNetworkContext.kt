@@ -24,6 +24,7 @@ import ru.lazyhat.compukterkraft.core.workbench.crdt.Op
 import ru.lazyhat.compukterkraft.core.workbench.crdt.SiteId
 import ru.lazyhat.compukterkraft.core.workbench.crdt.TextRun
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
+import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 
 /**
  * The context under which clientbound packets are evaluated.
@@ -34,6 +35,11 @@ interface ClientNetworkContext {
     fun handleStdoutBytes(
         containerId: Int,
         bytes: ByteArray,
+    )
+
+    fun handleDisplayFrame(
+        containerId: Int,
+        frame: DisplayFrameDelta,
     )
 
     fun handleWorkbenchWorkspace(

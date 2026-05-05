@@ -52,6 +52,7 @@ open class ComputerBlockEntity(
             manager = ServerContext.deviceManager,
             gameTime = host.gameTime,
             terminalNetwork = host.terminalNetwork,
+            displayNetwork = host.displayNetwork,
             stateSink = host.stateSink,
         )
     }

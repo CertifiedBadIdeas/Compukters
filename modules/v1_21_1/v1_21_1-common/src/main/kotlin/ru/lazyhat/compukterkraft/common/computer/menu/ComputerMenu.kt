@@ -19,6 +19,7 @@
 package ru.lazyhat.compukterkraft.common.computer.menu
 
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
+import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 
 /**
  * An instance of [AbstractContainerMenu] which provides a computer. You should implement this if you provide
@@ -56,4 +57,10 @@ interface ComputerMenu {
      * [StdoutBytesClientMessage][ru.lazyhat.compukterkraft.common.computer.network.client.StdoutBytesClientMessage].
      */
     fun handleStdoutBytes(bytes: ByteArray)
+
+    /**
+     * Apply a framebuffer delta to the client-side display buffer.
+     * Task 7 wires this into the actual double buffer; until then this is a no-op.
+     */
+    fun handleDisplayFrame(frame: DisplayFrameDelta) = Unit
 }
