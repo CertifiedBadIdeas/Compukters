@@ -2769,6 +2769,7 @@ internal class Lexer(
                     when (val escaped = advance()) {
                         'n' -> '\n'
                         't' -> '\t'
+                        'b' -> '\b'
                         '"' -> '"'
                         '\\' -> '\\'
                         else -> escaped

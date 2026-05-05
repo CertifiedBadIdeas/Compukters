@@ -42,6 +42,13 @@ class LanguageFrontendTest {
     }
 
     @Test
+    fun lexesBackspaceEscapeInStringLiteral() {
+        val tokens = Lexer("pub fun main() { stdout::write(\"\\b\"); }").lex()
+
+        assertEquals("\b", tokens.single { it.kind == TokenKind.STRING }.text)
+    }
+
+    @Test
     fun lexesClassKeywords() {
         val tokens = Lexer("class Counter(var value: Int) { init {} static fun zero(): Int { return 0; } }").lex()
 
