@@ -211,7 +211,7 @@ class BytecodeVirtualMachine(
                             if (instruction.functionName == "pull") {
                                 VmSignal.WaitEvent(args.singleOrNull()?.asString())
                             } else {
-                                error("Unknown events builtin ${instruction.functionName}")
+                                VmSignal.HostCall(instruction.moduleName, instruction.functionName, args)
                             }
                         }
 

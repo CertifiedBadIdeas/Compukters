@@ -33,6 +33,7 @@ internal class RuntimeHostBridge(
             "terminal" -> invokeTerminal(functionName, arguments)
             "display" -> invokeDisplay(functionName, arguments)
             "stdout" -> invokeStdout(functionName, arguments)
+            "events" -> invokeEvents(functionName, arguments)
             "process" -> invokeProcess(functionName, arguments)
             "strings" -> invokeStrings(functionName, arguments)
             "monitor" -> invokeMonitor(functionName, arguments)
@@ -40,11 +41,18 @@ internal class RuntimeHostBridge(
         }
     }
 
-    fun fromEvent(event: VmEvent): VmValue.RecordValue =
-        VmValue.RecordValue(
+    fun fromEvent(event: VmEvent): VmValue.RecordValue {
+        val (id, argCount) = runtime.events.capture(event.arguments)
+        return VmValue.RecordValue(
             typeName = "Event",
-            fields = mapOf("name" to VmValue.StringValue(event.name)),
+            fields =
+                mapOf(
+                    "name" to VmValue.StringValue(event.name),
+                    "id" to VmValue.IntValue(id),
+                    "argCount" to VmValue.IntValue(argCount),
+                ),
         )
+    }
 
     private suspend fun invokeFilesystem(
         functionName: String,
@@ -176,6 +184,20 @@ internal class RuntimeHostBridge(
             }
         }
 
+    private fun invokeEvents(
+        functionName: String,
+        arguments: List<VmValue>,
+    ): VmValue {
+        val eventId = arguments.firstOrNull()?.eventId() ?: 0
+        return when (functionName) {
+            "argCount" -> VmValue.IntValue(runtime.events.argCount(eventId))
+            "argInt" -> VmValue.IntValue(runtime.events.argInt(eventId, arguments[1].asInt()))
+            "argBool" -> VmValue.BoolValue(runtime.events.argBool(eventId, arguments[1].asInt()))
+            "argString" -> VmValue.StringValue(runtime.events.argString(eventId, arguments[1].asInt()))
+            else -> error("Unknown events function $functionName")
+        }
+    }
+
     private fun invokeDisplay(
         functionName: String,
         arguments: List<VmValue>,
@@ -258,7 +280,20 @@ internal class RuntimeHostBridge(
             "beforeSpace" -> VmValue.StringValue(arguments[0].asString().substringBeforeFirstSpace())
             "afterSpace" -> VmValue.StringValue(arguments[0].asString().substringAfterFirstSpace())
             "isBlank" -> VmValue.BoolValue(arguments[0].asString().isBlank())
+            "toInt" -> VmValue.IntValue(arguments[0].asString().trim().toIntOrNull() ?: 0)
+            "length" -> VmValue.IntValue(arguments[0].asString().length)
+            "charAt" -> {
+                val text = arguments[0].asString()
+                val index = arguments[1].asInt()
+                VmValue.StringValue(if (index in text.indices) text[index].toString() else "")
+            }
             else -> error("Unknown strings function $functionName")
+        }
+
+    private fun VmValue.eventId(): Int =
+        when (this) {
+            is VmValue.RecordValue -> fields["id"]?.asInt() ?: 0
+            else -> 0
         }
 
     private fun invokeMonitor(
