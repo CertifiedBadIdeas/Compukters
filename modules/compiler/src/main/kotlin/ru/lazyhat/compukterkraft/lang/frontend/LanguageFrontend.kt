@@ -82,6 +82,7 @@ import ru.lazyhat.compukterkraft.lang.api.TypeSyntax
 import ru.lazyhat.compukterkraft.lang.api.UnaryExpression
 import ru.lazyhat.compukterkraft.lang.api.UnaryOperator
 import ru.lazyhat.compukterkraft.lang.api.VariableDeclarationStatement
+import ru.lazyhat.compukterkraft.lang.api.Visibility
 import ru.lazyhat.compukterkraft.lang.api.WhenBranch
 import ru.lazyhat.compukterkraft.lang.api.WhenStatement
 import ru.lazyhat.compukterkraft.lang.api.WhileStatement
@@ -2773,6 +2774,7 @@ internal class Lexer(
                 "while" -> TokenKind.WHILE
                 "when" -> TokenKind.WHEN
                 "return" -> TokenKind.RETURN
+                "pub" -> TokenKind.PUB
                 "import" -> TokenKind.IMPORT
                 "as" -> TokenKind.AS
                 "struct" -> TokenKind.STRUCT
@@ -2848,25 +2850,31 @@ internal class Parser(
         val imports = mutableListOf<ImportDeclaration>()
         val declarations = mutableListOf<TopLevelDeclaration>()
         while (!isAtEnd()) {
+            val visibility = parseVisibility()
             when {
-                match(TokenKind.IMPORT) -> {
+                visibility == Visibility.PRIVATE && match(TokenKind.IMPORT) -> {
                     val imp = parseImport()
                     if (imp != null) imports += imp else synchronize()
                 }
 
                 match(TokenKind.FUN) -> {
-                    val decl = parseFunction()
+                    val decl = parseFunction(visibility)
                     if (decl != null) declarations += decl else synchronize()
                 }
 
                 match(TokenKind.STRUCT) -> {
-                    val decl = parseStruct()
+                    val decl = parseStruct(visibility)
                     if (decl != null) declarations += decl else synchronize()
                 }
 
                 match(TokenKind.CLASS) -> {
-                    val decl = parseClass()
+                    val decl = parseClass(visibility)
                     if (decl != null) declarations += decl else synchronize()
+                }
+
+                visibility == Visibility.PUBLIC -> {
+                    diagnostics += FrontendDiagnostic("Unexpected `pub` modifier.", previous().range)
+                    synchronize()
                 }
 
                 check(TokenKind.EOF) -> {
@@ -2882,10 +2890,13 @@ internal class Parser(
         return Program(imports, declarations, declarations.lastOrNull()?.range ?: imports.lastOrNull()?.range)
     }
 
+    private fun parseVisibility(): Visibility =
+        if (match(TokenKind.PUB)) Visibility.PUBLIC else Visibility.PRIVATE
+
     private fun synchronize() {
         while (!isAtEnd()) {
             if (match(TokenKind.SEMICOLON)) return
-            if (check(TokenKind.FUN) || check(TokenKind.IMPORT) || check(TokenKind.STRUCT) || check(TokenKind.CLASS)) return
+            if (check(TokenKind.PUB) || check(TokenKind.FUN) || check(TokenKind.IMPORT) || check(TokenKind.STRUCT) || check(TokenKind.CLASS)) return
             advance()
         }
     }
@@ -2965,7 +2976,7 @@ internal class Parser(
         return ImportMode.Selective(items, SourceRange(start, end))
     }
 
-    private fun parseFunction(): FunctionDeclaration? {
+    private fun parseFunction(visibility: Visibility = Visibility.PRIVATE): FunctionDeclaration? {
         val name = consume(TokenKind.IDENTIFIER, "Expected function name.") ?: return null
         consume(TokenKind.LPAREN, "Expected `(` after function name.") ?: return null
         val parameters = mutableListOf<ParameterDeclaration>()
@@ -2980,10 +2991,10 @@ internal class Parser(
         consume(TokenKind.RPAREN, "Expected `)` after parameters.") ?: return null
         val returnType = if (match(TokenKind.COLON)) parseType() else null
         val body = parseBlock() ?: return null
-        return FunctionDeclaration(name.text, parameters, returnType, body, SourceRange(name.range.start, body.range.end))
+        return FunctionDeclaration(name.text, parameters, returnType, body, visibility, SourceRange(name.range.start, body.range.end))
     }
 
-    private fun parseStruct(): StructDeclaration? {
+    private fun parseStruct(visibility: Visibility): StructDeclaration? {
         val name = consume(TokenKind.IDENTIFIER, "Expected struct name.") ?: return null
         consume(TokenKind.LBRACE, "Expected `{` after struct name.") ?: return null
         val fields = mutableListOf<RecordFieldDeclaration>()
@@ -2996,10 +3007,10 @@ internal class Parser(
             consumeOptional(TokenKind.SEMICOLON)
         }
         val end = consume(TokenKind.RBRACE, "Expected `}` after struct body.") ?: return null
-        return StructDeclaration(name.text, fields, SourceRange(name.range.start, end.range.end))
+        return StructDeclaration(name.text, fields, visibility, SourceRange(name.range.start, end.range.end))
     }
 
-    private fun parseClass(): ClassDeclaration? {
+    private fun parseClass(visibility: Visibility): ClassDeclaration? {
         val keyword = previous()
         val name = consume(TokenKind.IDENTIFIER, "Expected class name.") ?: return null
         consume(TokenKind.LPAREN, "Expected `(` after class name.") ?: return null
@@ -3020,17 +3031,22 @@ internal class Parser(
             name = name.text,
             constructorParameters = constructorParameters,
             members = members,
+            visibility = visibility,
             range = SourceRange(keyword.range.start, end.range.end),
         )
     }
 
     private fun parseClassConstructorParameter(): ClassConstructorParameter? {
+        val visibility = parseVisibility()
         val mutabilityToken =
             when {
                 check(TokenKind.VAL) -> advance()
                 check(TokenKind.VAR) -> advance()
                 else -> null
             }
+        if (visibility == Visibility.PUBLIC && mutabilityToken == null) {
+            diagnostics += FrontendDiagnostic("Unexpected `pub` modifier.", previous().range)
+        }
         val name = consume(TokenKind.IDENTIFIER, "Expected constructor parameter name.") ?: return null
         consume(TokenKind.COLON, "Expected `:` after constructor parameter name.") ?: return null
         val type = parseType() ?: return null
@@ -3043,13 +3059,18 @@ internal class Parser(
                     TokenKind.VAR -> FieldMutability.VAR
                     else -> null
                 },
+            visibility = visibility,
             range = SourceRange((mutabilityToken ?: name).range.start, type.range.end),
         )
     }
 
-    private fun parseClassMember(): ClassMemberDeclaration? =
-        when {
+    private fun parseClassMember(): ClassMemberDeclaration? {
+        val visibility = parseVisibility()
+        return when {
             match(TokenKind.INIT) -> {
+                if (visibility == Visibility.PUBLIC) {
+                    diagnostics += FrontendDiagnostic("Unexpected `pub` modifier.", previous().range)
+                }
                 val start = previous().range.start
                 val body = parseBlock() ?: return null
                 ClassInitBlock(body, SourceRange(start, body.range.end))
@@ -3058,22 +3079,22 @@ internal class Parser(
             match(TokenKind.STATIC) -> {
                 val start = previous().range.start
                 consume(TokenKind.FUN, "Expected `fun` after `static`.") ?: return null
-                val function = parseFunction() ?: return null
-                ClassMethodDeclaration(function, static = true, range = SourceRange(start, function.range.end))
+                val function = parseFunction(visibility) ?: return null
+                ClassMethodDeclaration(function, static = true, visibility = visibility, range = SourceRange(start, function.range.end))
             }
 
             match(TokenKind.FUN) -> {
                 val start = previous().range.start
-                val function = parseFunction() ?: return null
-                ClassMethodDeclaration(function, static = false, range = SourceRange(start, function.range.end))
+                val function = parseFunction(visibility) ?: return null
+                ClassMethodDeclaration(function, static = false, visibility = visibility, range = SourceRange(start, function.range.end))
             }
 
             match(TokenKind.VAL) -> {
-                parseClassField(mutable = false, start = previous())
+                parseClassField(mutable = false, visibility = visibility, start = previous())
             }
 
             match(TokenKind.VAR) -> {
-                parseClassField(mutable = true, start = previous())
+                parseClassField(mutable = true, visibility = visibility, start = previous())
             }
 
             else -> {
@@ -3081,9 +3102,11 @@ internal class Parser(
                 null
             }
         }
+    }
 
     private fun parseClassField(
         mutable: Boolean,
+        visibility: Visibility,
         start: Token,
     ): ClassFieldDeclaration? {
         val name = consume(TokenKind.IDENTIFIER, "Expected field name.") ?: return null
@@ -3100,6 +3123,7 @@ internal class Parser(
             name = name.text,
             type = type,
             mutable = mutable,
+            visibility = visibility,
             initializer = initializer,
             range = SourceRange(start.range.start, end),
         )
