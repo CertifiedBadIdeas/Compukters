@@ -70,6 +70,45 @@ class UserFileImportsTest {
     }
 
     @Test
+    fun selectiveImportCannotImportPrivateFunction() {
+        val loader =
+            MapSourceLoader(
+                mapOf(
+                    "lib.ck" to "fun helper(): Int { return 1; }",
+                    "main.ck" to "import \"lib.ck\" { helper }; pub fun main() {}",
+                ),
+            )
+
+        val artifact = frontend.compile("main.ck", loader.read("main.ck")!!, loader)
+
+        assertTrue(
+            artifact.analysis.diagnostics.any {
+                it.severity == FrontendSeverity.ERROR && it.message.contains("no public export `helper`")
+            },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+    }
+
+    @Test
+    fun publicImportCanCallPrivateHelperInImportedFile() {
+        val loader =
+            MapSourceLoader(
+                mapOf(
+                    "lib.ck" to "fun helper(): Int { return 1; } pub fun api(): Int { return helper(); }",
+                    "main.ck" to "import \"lib.ck\" { api }; pub fun main() { terminal::println(\"v=\" + api()); }",
+                ),
+            )
+
+        val artifact = frontend.compile("main.ck", loader.read("main.ck")!!, loader)
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+        assertNotNull(artifact.module)
+    }
+
+    @Test
     fun rejectsFlatFileImport() {
         val loader = MapSourceLoader(mapOf("math.ck" to "fun add(): Int { return 1; }"))
 

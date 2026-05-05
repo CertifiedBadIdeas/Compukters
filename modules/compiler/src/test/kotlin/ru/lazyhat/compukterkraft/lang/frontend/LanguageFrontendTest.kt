@@ -135,6 +135,28 @@ class LanguageFrontendTest {
     }
 
     @Test
+    fun requiresPublicMainEntryPoint() {
+        val artifact = frontend.compile("main.ck", "fun main() {}")
+
+        assertTrue(
+            artifact.analysis.diagnostics.any { it.severity == FrontendSeverity.ERROR && it.message.contains("pub fun main") },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+        assertEquals(null, artifact.module)
+    }
+
+    @Test
+    fun acceptsPublicMainEntryPoint() {
+        val artifact = frontend.compile("main.ck", "pub fun main() {}")
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+        assertNotNull(artifact.module)
+    }
+
+    @Test
     fun rejectsDotForBuiltinModuleAccess() {
         val artifact =
             frontend.compile(
