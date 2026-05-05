@@ -28,6 +28,7 @@ import kotlin.io.path.writeText
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -123,7 +124,8 @@ class ComputerWorkspaceInitializerTest {
 
             val computerDir = root.resolve("1")
             assertTrue(computerDir.exists())
-            assertTrue(computerDir.resolve("bios.ck").exists())
+            assertTrue(computerDir.resolve("boot.ck").exists())
+            assertFalse(computerDir.resolve("bios.ck").exists())
             assertTrue(computerDir.resolve("shell.ck").exists())
             assertTrue(computerDir.resolve("ls.ck").exists())
             assertTrue(computerDir.resolve("mkdir.ck").exists())
@@ -143,16 +145,15 @@ class ComputerWorkspaceInitializerTest {
             initializer.ensureInitialized(2)
 
             val computerDir = root.resolve("2")
-            val biosFile = computerDir.resolve("bios.ck")
-            val originalContent = biosFile.readText()
+            val bootFile = computerDir.resolve("boot.ck")
 
             // Modify the file
-            biosFile.writeText("custom bios")
+            bootFile.writeText("custom boot")
 
             // Re-initialize — should NOT overwrite
             initializer.ensureInitialized(2)
 
-            assertEquals("custom bios", biosFile.readText())
+            assertEquals("custom boot", bootFile.readText())
         } finally {
             root.toFile().deleteRecursively()
         }
