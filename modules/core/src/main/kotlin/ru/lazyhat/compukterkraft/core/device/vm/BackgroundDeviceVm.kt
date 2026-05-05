@@ -32,7 +32,9 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.launch
 import ru.lazyhat.compukterkraft.core.LOGGER
+import ru.lazyhat.compukterkraft.core.device.runtime.ClasspathFirmwareProgramLoader
 import ru.lazyhat.compukterkraft.core.device.runtime.ComputerProgramCompiler
+import ru.lazyhat.compukterkraft.core.device.runtime.FirmwareProgramLoader
 import ru.lazyhat.compukterkraft.core.device.runtime.WorkspaceProgramLoader
 import ru.lazyhat.compukterkraft.core.device.vm.api.ComputerStdioBroadcaster
 import ru.lazyhat.compukterkraft.core.device.vm.api.ScreenBufferVtSink
@@ -93,6 +95,7 @@ class BackgroundDeviceVm(
     private val labelProvider: () -> String?,
     private val logger: DeviceVmLogger,
     workspace: DeviceWorkspace,
+    private val firmwareLoader: FirmwareProgramLoader = ClasspathFirmwareProgramLoader(),
 ) : DeviceVmHandle,
     VmContext {
     private val scope = CoroutineScope(SupervisorJob() + dispatcher)
@@ -142,9 +145,9 @@ class BackgroundDeviceVm(
             scope.launch {
                 try {
                     val source =
-                        programLoader.load(deviceId, profile.bootScriptName)
+                        firmwareLoader.load(profile.bootScriptName)
                             ?: run {
-                                stopInternal(errorMessage = "Missing boot script: ${profile.bootScriptName}")
+                                stopInternal(errorMessage = "Missing firmware script: ${profile.bootScriptName}")
                                 return@launch
                             }
 
