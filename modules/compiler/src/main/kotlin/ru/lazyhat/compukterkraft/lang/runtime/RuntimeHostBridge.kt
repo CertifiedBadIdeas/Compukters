@@ -34,6 +34,7 @@ internal class RuntimeHostBridge(
             "display" -> invokeDisplay(functionName, arguments)
             "stdout" -> invokeStdout(functionName, arguments)
             "events" -> invokeEvents(functionName, arguments)
+            "ipc" -> invokeIpc(functionName, arguments)
             "process" -> invokeProcess(functionName, arguments)
             "strings" -> invokeStrings(functionName, arguments)
             "monitor" -> invokeMonitor(functionName, arguments)
@@ -198,6 +199,25 @@ internal class RuntimeHostBridge(
         }
     }
 
+    private suspend fun invokeIpc(
+        functionName: String,
+        arguments: List<VmValue>,
+    ): VmValue =
+        when (functionName) {
+            "open" -> VmValue.IntValue(runtime.ipc.open())
+            "write" -> {
+                runtime.ipc.write(arguments[0].asInt(), arguments[1].asString())
+                VmValue.UnitValue
+            }
+            "read" -> VmValue.StringValue(runtime.ipc.read(arguments[0].asInt()))
+            "tryRead" -> VmValue.StringValue(runtime.ipc.tryRead(arguments[0].asInt()))
+            "close" -> {
+                runtime.ipc.close(arguments[0].asInt())
+                VmValue.UnitValue
+            }
+            else -> error("Unknown ipc function $functionName")
+        }
+
     private fun invokeDisplay(
         functionName: String,
         arguments: List<VmValue>,
@@ -314,6 +334,7 @@ internal class RuntimeHostBridge(
                 "stdout" -> DeviceCapability.TERMINAL
                 "display" -> DeviceCapability.DISPLAY
                 "events" -> DeviceCapability.EVENTS
+                "ipc" -> DeviceCapability.IPC
                 "process" -> DeviceCapability.SYSTEM
                 "monitor" -> DeviceCapability.PERIPHERALS
                 else -> null

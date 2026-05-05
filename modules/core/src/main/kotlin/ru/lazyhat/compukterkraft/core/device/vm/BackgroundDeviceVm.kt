@@ -41,6 +41,7 @@ import ru.lazyhat.compukterkraft.core.device.vm.api.ScreenBufferVtSink
 import ru.lazyhat.compukterkraft.core.device.vm.api.VmFileSystemApi
 import ru.lazyhat.compukterkraft.core.device.vm.api.VmDisplayApi
 import ru.lazyhat.compukterkraft.core.device.vm.api.VmEventApi
+import ru.lazyhat.compukterkraft.core.device.vm.api.VmIpcApi
 import ru.lazyhat.compukterkraft.core.device.vm.api.VmPeripheralRegistry
 import ru.lazyhat.compukterkraft.core.device.vm.api.VmPeripheralRuntimeApi
 import ru.lazyhat.compukterkraft.core.device.vm.api.VmProcessApi
@@ -109,6 +110,7 @@ class BackgroundDeviceVm(
     private val stateManager = VmStateManager()
     private val eventManager = EventManager(profile.resources.queues.eventQueueSlots)
     private val eventPayloadStore = EventPayloadStore(profile.resources.queues.eventQueueSlots)
+    private val ipcRegistry = IpcChannelRegistry(profile.resources.queues.ipcChannelBytes)
     private val hostCallManager = HostCallManager(profile.resources.queues.hostCallQueueSlots)
     private val programLoader = WorkspaceProgramLoader(workspace)
     private val pathResolver = VmPathResolver()
@@ -353,6 +355,7 @@ class BackgroundDeviceVm(
             stdioApi = stdioApi,
             filesystemApi = filesystemApi,
             processApi = processApi,
+            ipcApi = VmIpcApi(ipcRegistry),
             eventApi = VmEventApi(eventPayloadStore),
             peripheralsApi = peripheralsApi,
         )
@@ -373,6 +376,9 @@ class BackgroundDeviceVm(
                 }
                 if (DeviceCapability.EVENTS in profile.allowedCapabilities) {
                     defaultRegistry.module("events")?.let(::add)
+                }
+                if (DeviceCapability.IPC in profile.allowedCapabilities) {
+                    defaultRegistry.module("ipc")?.let(::add)
                 }
                 if (DeviceCapability.SYSTEM in profile.allowedCapabilities) {
                     defaultRegistry.module("process")?.let(::add)
