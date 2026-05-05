@@ -54,8 +54,20 @@ class DisplayAttachServerMessage : ComputerServerMessage {
         context: ServerNetworkContext,
         container: ComputerMenu,
     ) {
-        container.serverSide.device.attachDisplaySession(context.sender().uuid, targetContainerId, displayId, width, height)
+        container.serverSide.device.attachDisplaySession(
+            context.sender().uuid,
+            targetContainerId,
+            displayId,
+            sanitizeSize(width),
+            sanitizeSize(height),
+        )
     }
 
     override fun type(): MessageType<DisplayAttachServerMessage> = NetworkMessages.DISPLAY_ATTACH
+
+    private companion object {
+        private const val MAX_ENDPOINT_SIZE = 1024
+
+        fun sanitizeSize(value: Int): Int = value.coerceIn(1, MAX_ENDPOINT_SIZE)
+    }
 }

@@ -108,6 +108,40 @@ class BackgroundDeviceVmTest {
     }
 
     @Test
+    fun displayAttachQueuesVmEvent() {
+        runtimeTestWorkspace("vm-display-attach-event") { workspace ->
+            val vm =
+                BackgroundDeviceVm(
+                    deviceId = 1,
+                    profile = firmwareTestProfile(),
+                    dispatcher = Dispatchers.Default,
+                    labelProvider = { null },
+                    logger = DeviceVmLogger { },
+                    workspace = workspace.host,
+                    firmwareLoader =
+                        StaticFirmwareLoader(
+                            """
+                            pub fun main() {
+                                events::pull("display_attach");
+                                val displayId = display::primary();
+                                display::fillRect(displayId, 0, 0, 1, 1, 63488);
+                                display::present(displayId);
+                            }
+                            """.trimIndent(),
+                        ),
+                )
+
+            assertTrue(vm.boot())
+            runVmTicks(vm, ticks = 2)
+            vm.attachDisplay(displayId = 9, width = 8, height = 8)
+            runVmTicks(vm, ticks = 4)
+
+            val frames = vm.drainDisplayFrames()
+            assertEquals(listOf(1L, 2L), frames.map { it.sequence })
+        }
+    }
+
+    @Test
     fun bootsFirmwareAndRunsUserBootFileFromWorkspace() {
         runtimeTestWorkspace("firmware-runs-user-boot") { workspace ->
             workspace.writeProgram(1, "boot.ck", "pub fun main() { terminal::println(\"from boot\"); }")

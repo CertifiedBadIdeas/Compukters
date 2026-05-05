@@ -54,8 +54,14 @@ class DisplayResizeServerMessage : ComputerServerMessage {
         context: ServerNetworkContext,
         container: ComputerMenu,
     ) {
-        container.serverSide.device.resizeDisplaySession(context.sender().uuid, displayId, width, height)
+        container.serverSide.device.resizeDisplaySession(context.sender().uuid, displayId, sanitizeSize(width), sanitizeSize(height))
     }
 
     override fun type(): MessageType<DisplayResizeServerMessage> = NetworkMessages.DISPLAY_RESIZE
+
+    private companion object {
+        private const val MAX_ENDPOINT_SIZE = 1024
+
+        fun sanitizeSize(value: Int): Int = value.coerceIn(1, MAX_ENDPOINT_SIZE)
+    }
 }

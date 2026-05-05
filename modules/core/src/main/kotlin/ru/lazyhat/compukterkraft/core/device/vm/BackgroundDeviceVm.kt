@@ -229,16 +229,25 @@ class BackgroundDeviceVm(
         width: Int,
         height: Int,
         pixelFormat: DisplayPixelFormat,
-    ): DisplayInfo = displayRegistry.attach(displayId, width, height, pixelFormat)
+    ): DisplayInfo =
+        displayRegistry.attach(displayId, width, height, pixelFormat).also {
+            enqueueEvent(VmEvent("display_attach", listOf(displayId, width, height)))
+        }
 
     override fun resizeDisplay(
         displayId: Int,
         width: Int,
         height: Int,
         pixelFormat: DisplayPixelFormat,
-    ): DisplayInfo = displayRegistry.resize(displayId, width, height, pixelFormat)
+    ): DisplayInfo =
+        displayRegistry.resize(displayId, width, height, pixelFormat).also {
+            enqueueEvent(VmEvent("display_resize", listOf(displayId, width, height)))
+        }
 
-    override fun detachDisplay(displayId: Int) = displayRegistry.detach(displayId)
+    override fun detachDisplay(displayId: Int) {
+        displayRegistry.detach(displayId)
+        enqueueEvent(VmEvent("display_detach", listOf(displayId)))
+    }
 
     override fun drainDisplayFrames(): List<DisplayFrameDelta> = displayRegistry.drainFrames()
 

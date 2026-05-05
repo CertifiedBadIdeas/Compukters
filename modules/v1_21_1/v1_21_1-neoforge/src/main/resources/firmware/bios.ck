@@ -28,6 +28,9 @@ pub fun main() {
 
 
     while true {
-        sleep(20L)
+        val event: Event = events::pull()
+        if (event.name == "display_attach" || event.name == "display_resize") {
+            draw_boot_frame()
+        }
     }
 }
