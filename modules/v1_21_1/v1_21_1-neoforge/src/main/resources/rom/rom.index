@@ -1,4 +1,4 @@
-bios.ck
+boot.ck
 shell.ck
 ls.ck
 mkdir.ck
