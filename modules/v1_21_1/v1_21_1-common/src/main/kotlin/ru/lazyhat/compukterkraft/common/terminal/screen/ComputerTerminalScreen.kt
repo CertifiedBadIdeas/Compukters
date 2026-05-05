@@ -82,7 +82,7 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
 ) : DslContainerScreen<T>(container, player, title) {
     private val inputHandler = ClientInputHandler(container)
     private val terminalInput = WorkbenchTerminalInputController(inputHandler, MinecraftInputProvider)
-    private val displayId: Int = container.containerId
+    private val displayId: Int = (player.player.uuid.hashCode() and 0x3FFFFFFF) + 1
 
     private val powerHover = HoverState()
     private val rebootHover = HoverState()
