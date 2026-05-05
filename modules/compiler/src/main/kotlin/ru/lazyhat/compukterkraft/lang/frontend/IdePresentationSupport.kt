@@ -102,6 +102,7 @@ internal object IdePresentationSupport {
             TokenKind.STRING -> HighlightTokenKind.STRING
 
             TokenKind.FUN,
+            TokenKind.PUB,
             TokenKind.VAL,
             TokenKind.VAR,
             TokenKind.IF,

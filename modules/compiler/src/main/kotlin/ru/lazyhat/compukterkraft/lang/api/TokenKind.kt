@@ -26,6 +26,7 @@ enum class TokenKind {
     TRUE,
     FALSE,
     NULL,
+    PUB,
     FUN,
     VAL,
     VAR,

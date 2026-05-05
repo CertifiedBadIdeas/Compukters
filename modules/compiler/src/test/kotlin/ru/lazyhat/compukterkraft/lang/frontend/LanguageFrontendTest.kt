@@ -19,7 +19,13 @@
 
 package ru.lazyhat.compukterkraft.lang.frontend
 
+import ru.lazyhat.compukterkraft.lang.api.ClassDeclaration
+import ru.lazyhat.compukterkraft.lang.api.ClassFieldDeclaration
+import ru.lazyhat.compukterkraft.lang.api.ClassMethodDeclaration
+import ru.lazyhat.compukterkraft.lang.api.FunctionDeclaration
+import ru.lazyhat.compukterkraft.lang.api.StructDeclaration
 import ru.lazyhat.compukterkraft.lang.api.TokenKind
+import ru.lazyhat.compukterkraft.lang.api.Visibility
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -42,6 +48,49 @@ class LanguageFrontendTest {
         assertTrue(tokens.any { it.kind == TokenKind.CLASS }, tokens.joinToString { "${it.kind}:${it.text}" })
         assertTrue(tokens.any { it.kind == TokenKind.INIT }, tokens.joinToString { "${it.kind}:${it.text}" })
         assertTrue(tokens.any { it.kind == TokenKind.STATIC }, tokens.joinToString { "${it.kind}:${it.text}" })
+    }
+
+    @Test
+    fun lexesPubKeyword() {
+        val tokens = Lexer("pub fun main() {}").lex()
+
+        assertTrue(tokens.any { it.kind == TokenKind.PUB }, tokens.joinToString { "${it.kind}:${it.text}" })
+    }
+
+    @Test
+    fun parsesPubTopLevelDeclarationsAndClassMembers() {
+        val parsed =
+            DefaultParserFacade().parse(
+                "visibility.ck",
+                """
+                pub struct Vec2 { x: Int, y: Int }
+                pub class Counter(pub var value: Int) {
+                    pub val label: String = "counter";
+                    var cached: Int = 0;
+                    pub fun current(): Int { return this.cached; }
+                    pub static fun zero(): Counter { return Counter(value = 0); }
+                }
+                pub fun main() {}
+                fun helper(): Int { return 1; }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            parsed.syntaxDiagnostics.none { it.severity == FrontendSeverity.ERROR },
+            parsed.syntaxDiagnostics.joinToString { it.message },
+        )
+        val struct = parsed.program.declarations.filterIsInstance<StructDeclaration>().single()
+        val klass = parsed.program.declarations.filterIsInstance<ClassDeclaration>().single()
+        val functions = parsed.program.declarations.filterIsInstance<FunctionDeclaration>()
+        assertEquals(Visibility.PUBLIC, struct.visibility)
+        assertEquals(Visibility.PUBLIC, klass.visibility)
+        assertEquals(Visibility.PUBLIC, functions.single { it.name == "main" }.visibility)
+        assertEquals(Visibility.PRIVATE, functions.single { it.name == "helper" }.visibility)
+        assertEquals(Visibility.PUBLIC, klass.constructorParameters.single { it.name == "value" }.visibility)
+        assertEquals(Visibility.PUBLIC, klass.members.filterIsInstance<ClassFieldDeclaration>().single { it.name == "label" }.visibility)
+        assertEquals(Visibility.PRIVATE, klass.members.filterIsInstance<ClassFieldDeclaration>().single { it.name == "cached" }.visibility)
+        assertEquals(Visibility.PUBLIC, klass.members.filterIsInstance<ClassMethodDeclaration>().single { it.function.name == "current" }.visibility)
+        assertEquals(Visibility.PUBLIC, klass.members.filterIsInstance<ClassMethodDeclaration>().single { it.function.name == "zero" }.visibility)
     }
 
     @Test

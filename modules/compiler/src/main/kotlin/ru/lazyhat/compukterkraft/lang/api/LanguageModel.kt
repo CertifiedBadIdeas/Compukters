@@ -19,9 +19,12 @@
 
 package ru.lazyhat.compukterkraft.lang.api
 
+enum class Visibility { PUBLIC, PRIVATE }
+
 data class StructDeclaration(
     override val name: String,
     val fields: List<RecordFieldDeclaration>,
+    val visibility: Visibility = Visibility.PRIVATE,
     override val range: SourceRange,
 ) : TopLevelDeclaration
 
@@ -29,6 +32,7 @@ data class ClassDeclaration(
     override val name: String,
     val constructorParameters: List<ClassConstructorParameter>,
     val members: List<ClassMemberDeclaration>,
+    val visibility: Visibility = Visibility.PRIVATE,
     override val range: SourceRange,
 ) : TopLevelDeclaration
 
@@ -36,6 +40,7 @@ data class ClassConstructorParameter(
     val name: String,
     val type: TypeSyntax,
     val fieldMutability: FieldMutability?,
+    val visibility: Visibility = Visibility.PRIVATE,
     val range: SourceRange,
 )
 
@@ -49,6 +54,7 @@ data class ClassFieldDeclaration(
     val name: String,
     val type: TypeSyntax?,
     val mutable: Boolean,
+    val visibility: Visibility = Visibility.PRIVATE,
     val initializer: Expression?,
     override val range: SourceRange,
 ) : ClassMemberDeclaration
@@ -61,6 +67,7 @@ data class ClassInitBlock(
 data class ClassMethodDeclaration(
     val function: FunctionDeclaration,
     val static: Boolean,
+    val visibility: Visibility = Visibility.PRIVATE,
     override val range: SourceRange,
 ) : ClassMemberDeclaration
 
