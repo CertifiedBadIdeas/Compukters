@@ -2,12 +2,10 @@ package ru.lazyhat.compukterkraft.core.device.vm.api
 
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceStdioApi
 import ru.lazyhat.compukterkraft.lang.runtime.vt.VtParser
-import java.util.concurrent.CopyOnWriteArrayList
 
 /**
- * Server-side [DeviceStdioApi] that fans out the VM's byte stream to any
- * number of attached [Consumer]s and keeps a rolling [ScrollbackRing] so a
- * late joiner receives the recent history.
+ * Server-side [DeviceStdioApi] that keeps legacy VM terminal writes available
+ * to internal runtime diagnostics without broadcasting them to clients.
  *
  * The broadcaster also maintains a [CursorTracker] fed by the same byte stream
  * so that server-side consumers (currently the line reader in
@@ -19,46 +17,18 @@ import java.util.concurrent.CopyOnWriteArrayList
  * intrinsic lock on `this`.
  */
 class ComputerStdioBroadcaster(
-    scrollbackBytes: Int = 64 * 1024,
+    private val onWrite: (String) -> Unit = {},
 ) : DeviceStdioApi {
-    /**
-     * Receiver of broadcast byte chunks. Implementations typically buffer
-     * bytes for delivery on the next server tick.
-     */
-    fun interface Consumer {
-        fun enqueue(bytes: ByteArray)
-    }
-
-    private val ring = ScrollbackRing(scrollbackBytes)
     private val cursorTracker = CursorTracker()
     private val cursorParser = VtParser(cursorTracker)
-    private val consumers = CopyOnWriteArrayList<Consumer>()
 
     override fun writeString(text: String) {
         if (text.isEmpty()) return
-        val bytes = text.toByteArray(Charsets.UTF_8)
         synchronized(this) {
-            ring.append(bytes)
             cursorParser.feed(text)
+            onWrite(text)
         }
-        for (c in consumers) c.enqueue(bytes)
     }
 
     fun cursor(): Pair<Int, Int> = synchronized(this) { cursorTracker.cursorX to cursorTracker.cursorY }
-
-    /**
-     * Registers [consumer] and immediately delivers a replay of all currently
-     * buffered scrollback so the new attachee starts with a consistent view.
-     */
-    fun addConsumer(consumer: Consumer) {
-        val replay = synchronized(this) { ring.snapshotBytes() }
-        if (replay.isNotEmpty()) consumer.enqueue(replay)
-        consumers += consumer
-    }
-
-    fun removeConsumer(consumer: Consumer) {
-        consumers -= consumer
-    }
-
-    fun consumerCount(): Int = consumers.size
 }
