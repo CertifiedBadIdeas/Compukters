@@ -149,6 +149,28 @@ class LanguageFrontendTest {
     }
 
     @Test
+    fun rejectsClassDeclarationWithoutConstructorAndBodySyntax() {
+        val missingConstructor =
+            DefaultParserFacade().parse("missing_constructor.ck", "class Counter\npub fun main() {}")
+        val missingBody = DefaultParserFacade().parse("missing_body.ck", "class Counter()\npub fun main() {}")
+
+        assertTrue(
+            missingConstructor.syntaxDiagnostics.any {
+                it.severity == FrontendSeverity.ERROR &&
+                    it.message.contains("Expected `(` after class name")
+            },
+            missingConstructor.syntaxDiagnostics.joinToString { it.message },
+        )
+        assertTrue(
+            missingBody.syntaxDiagnostics.any {
+                it.severity == FrontendSeverity.ERROR &&
+                    it.message.contains("Expected `{` after class constructor")
+            },
+            missingBody.syntaxDiagnostics.joinToString { it.message },
+        )
+    }
+
+    @Test
     fun parsesScopeCallToBuiltin() {
         val artifact =
             frontend.compile(
