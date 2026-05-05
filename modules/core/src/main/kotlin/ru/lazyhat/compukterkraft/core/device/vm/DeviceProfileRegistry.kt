@@ -117,6 +117,7 @@ object DeviceProfileRegistry {
             DeviceCapability.FILESYSTEM,
             DeviceCapability.EVENTS,
             DeviceCapability.SYSTEM,
+            DeviceCapability.IPC,
             DeviceCapability.IDE,
         )
 

@@ -21,7 +21,9 @@ package ru.lazyhat.compukterkraft.core.device.vm
 
 import ru.lazyhat.compukterkraft.core.Config
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceCapability
 import kotlin.test.Test
+import kotlin.test.assertContains
 import kotlin.test.assertEquals
 
 class DeviceProfileRegistryTest {
@@ -34,5 +36,14 @@ class DeviceProfileRegistryTest {
         assertEquals(Config.DEFAULT_COMPUTER_TERM_HEIGHT, normal.terminalHeight)
         assertEquals(Config.DEFAULT_COMPUTER_TERM_HEIGHT, advanced.terminalHeight)
         assertEquals(Config.DEFAULT_COMPUTER_TERM_HEIGHT, command.terminalHeight)
+    }
+
+    @Test
+    fun allComputerFamiliesAllowIpcForBundledRomTerminal() {
+        DeviceFamily.entries.forEach { family ->
+            val profile = DeviceProfileRegistry.forFamily(family)
+
+            assertContains(profile.allowedCapabilities, DeviceCapability.IPC, "$family must allow IPC for terminal.ck")
+        }
     }
 }

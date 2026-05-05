@@ -18,11 +18,13 @@
  */
 package ru.lazyhat.compukterkraft.common.infrastructure.workbench
 
+import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 import ru.lazyhat.compukterkraft.core.workbench.IdeRuntimeCatalogSource
 import ru.lazyhat.compukterkraft.lang.api.BuiltinRegistry
 import ru.lazyhat.compukterkraft.lang.frontend.LanguageFrontend
 import ru.lazyhat.compukterkraft.lang.frontend.MapSourceLoader
 import kotlin.test.Test
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class LanguageWorkbenchIdeFacadeTest {
@@ -48,6 +50,15 @@ class LanguageWorkbenchIdeFacadeTest {
             items.any { it.label == "add" && it.sourceNamespace == "lib/math.ck" },
             items.joinToString { "${it.label}:${it.sourceNamespace}" },
         )
+    }
+
+    @Test
+    fun computerFamilyCatalogExposesIpcForBundledRomTerminal() {
+        DeviceFamily.entries.forEach { family ->
+            val registry = ComputerFamilyCatalogSource(family).runtimeRegistry()
+
+            assertNotNull(registry.module("ipc"), "$family must expose ipc in the workbench runtime catalog")
+        }
     }
 }
 

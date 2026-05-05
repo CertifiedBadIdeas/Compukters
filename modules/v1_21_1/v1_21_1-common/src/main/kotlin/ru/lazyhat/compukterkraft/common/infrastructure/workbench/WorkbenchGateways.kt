@@ -164,6 +164,9 @@ class ComputerFamilyCatalogSource(
                 if (DeviceCapability.EVENTS in profile.allowedCapabilities) {
                     defaultRegistry.module("events")?.let(::add)
                 }
+                if (DeviceCapability.IPC in profile.allowedCapabilities) {
+                    defaultRegistry.module("ipc")?.let(::add)
+                }
                 if (DeviceCapability.SYSTEM in profile.allowedCapabilities) {
                     defaultRegistry.module("process")?.let(::add)
                     defaultRegistry.module("strings")?.let(::add)
