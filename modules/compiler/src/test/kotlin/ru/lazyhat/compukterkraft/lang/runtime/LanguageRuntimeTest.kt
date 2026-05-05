@@ -106,6 +106,33 @@ class LanguageRuntimeTest {
     }
 
     @Test
+    fun exposesPulledEventPayloadToCkl() {
+        val artifact =
+            frontend.compile(
+                "event-payload.ck",
+                """
+                pub fun main() {
+                    val event: Event = events::pull("char");
+                    terminal::println(event.name + ":" + event.argCount);
+                    terminal::println(events::argString(event, 0));
+                }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+
+        val runtime = RecordingRuntime(queuedEvents = listOf(VmEvent("char", listOf("x".toByteArray()))))
+        runBlocking {
+            BytecodeComputerProgram(requireNotNull(artifact.module)).run(runtime)
+        }
+
+        assertEquals(listOf("char:1", "x"), runtime.lines)
+    }
+
+    @Test
     fun usesInstructionBudgetFromProfileResources() {
         val artifact =
             frontend.compile(
@@ -799,12 +826,14 @@ internal class RecordingRuntime(
     private val instructionsPerSlice: Int = 64,
     private val vmRamBytes: Long = 64 * 1024,
     private val monitorConnected: Boolean = false,
+    private val queuedEvents: List<VmEvent> = listOf(VmEvent("boot")),
 ) : DeviceRuntime {
     val lines = mutableListOf<String>()
     val eventFilters = mutableListOf<String?>()
     val createdDirectories = mutableListOf<String>()
     var sleepCalls = 0
     var yieldCalls = 0
+    private var nextEventIndex = 0
 
     override val profile =
         DeviceProfile(
@@ -965,24 +994,51 @@ internal class RecordingRuntime(
 
     override val events: DeviceEventApi =
         object : DeviceEventApi {
-            override fun capture(arguments: List<Any?>): Pair<Int, Int> = 0 to arguments.size
+            private var nextId = 1
+            private val captured = mutableMapOf<Int, List<Any?>>()
 
-            override fun argCount(eventId: Int): Int = 0
+            override fun capture(arguments: List<Any?>): Pair<Int, Int> {
+                val id = nextId++
+                captured[id] = arguments
+                return id to arguments.size
+            }
+
+            override fun argCount(eventId: Int): Int = captured[eventId]?.size ?: 0
 
             override fun argInt(
                 eventId: Int,
                 index: Int,
-            ): Int = 0
+            ): Int =
+                when (val value = captured[eventId]?.getOrNull(index)) {
+                    is Int -> value
+                    is Long -> value.toInt()
+                    is Boolean -> if (value) 1 else 0
+                    is String -> value.toIntOrNull() ?: 0
+                    else -> 0
+                }
 
             override fun argBool(
                 eventId: Int,
                 index: Int,
-            ): Boolean = false
+            ): Boolean =
+                when (val value = captured[eventId]?.getOrNull(index)) {
+                    is Boolean -> value
+                    is String -> value.equals("true", ignoreCase = true)
+                    else -> false
+                }
 
             override fun argString(
                 eventId: Int,
                 index: Int,
-            ): String = ""
+            ): String =
+                when (val value = captured[eventId]?.getOrNull(index)) {
+                    is String -> value
+                    is ByteArray -> value.toString(Charsets.UTF_8)
+                    is Int -> value.toString()
+                    is Long -> value.toString()
+                    is Boolean -> value.toString()
+                    else -> ""
+                }
         }
 
     override val redstone: DeviceRedstoneApi = object : DeviceRedstoneApi {}
@@ -993,7 +1049,13 @@ internal class RecordingRuntime(
 
     override suspend fun pullEvent(filter: String?): VmEvent {
         eventFilters += filter
-        return VmEvent("boot")
+        while (nextEventIndex < queuedEvents.size) {
+            val event = queuedEvents[nextEventIndex++]
+            if (filter == null || event.name == filter) {
+                return event
+            }
+        }
+        return VmEvent(filter ?: "boot")
     }
 
     override suspend fun sleep(ticks: Long) {

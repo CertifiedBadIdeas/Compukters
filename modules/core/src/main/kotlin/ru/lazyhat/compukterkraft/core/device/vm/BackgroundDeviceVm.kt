@@ -40,6 +40,7 @@ import ru.lazyhat.compukterkraft.core.device.vm.api.ComputerStdioBroadcaster
 import ru.lazyhat.compukterkraft.core.device.vm.api.ScreenBufferVtSink
 import ru.lazyhat.compukterkraft.core.device.vm.api.VmFileSystemApi
 import ru.lazyhat.compukterkraft.core.device.vm.api.VmDisplayApi
+import ru.lazyhat.compukterkraft.core.device.vm.api.VmEventApi
 import ru.lazyhat.compukterkraft.core.device.vm.api.VmPeripheralRegistry
 import ru.lazyhat.compukterkraft.core.device.vm.api.VmPeripheralRuntimeApi
 import ru.lazyhat.compukterkraft.core.device.vm.api.VmProcessApi
@@ -107,6 +108,7 @@ class BackgroundDeviceVm(
     private val slicePermits = Channel<Unit>(capacity = 1)
     private val stateManager = VmStateManager()
     private val eventManager = EventManager(profile.resources.queues.eventQueueSlots)
+    private val eventPayloadStore = EventPayloadStore(profile.resources.queues.eventQueueSlots)
     private val hostCallManager = HostCallManager(profile.resources.queues.hostCallQueueSlots)
     private val programLoader = WorkspaceProgramLoader(workspace)
     private val pathResolver = VmPathResolver()
@@ -351,6 +353,7 @@ class BackgroundDeviceVm(
             stdioApi = stdioApi,
             filesystemApi = filesystemApi,
             processApi = processApi,
+            eventApi = VmEventApi(eventPayloadStore),
             peripheralsApi = peripheralsApi,
         )
     }
