@@ -236,6 +236,48 @@ object LanguageBuiltins {
                                     "Event",
                                     "Waits for an event with the requested name.",
                                 ),
+                                BuiltinFunction(
+                                    "argCount",
+                                    listOf("Event"),
+                                    "Int",
+                                    "Returns the number of low-level event payload arguments.",
+                                ),
+                                BuiltinFunction(
+                                    "argInt",
+                                    listOf("Event", "Int"),
+                                    "Int",
+                                    "Returns an event payload argument as Int or 0 when unavailable.",
+                                ),
+                                BuiltinFunction(
+                                    "argBool",
+                                    listOf("Event", "Int"),
+                                    "Bool",
+                                    "Returns an event payload argument as Bool or false when unavailable.",
+                                ),
+                                BuiltinFunction(
+                                    "argString",
+                                    listOf("Event", "Int"),
+                                    "String",
+                                    "Returns an event payload argument as String or an empty string when unavailable.",
+                                ),
+                            ),
+                    ),
+                    BuiltinModule(
+                        name = "ipc",
+                        documentation = "Low-level in-VM IPC channels.",
+                        origin = ModuleOrigin.BASE_VM,
+                        functions =
+                            listOf(
+                                BuiltinFunction("open", emptyList(), "Int", "Creates an IPC channel."),
+                                BuiltinFunction("write", listOf("Int", "String"), "Unit", "Writes text to a channel."),
+                                BuiltinFunction("read", listOf("Int"), "String", "Blocks until channel text is available."),
+                                BuiltinFunction(
+                                    "tryRead",
+                                    listOf("Int"),
+                                    "String",
+                                    "Returns available channel text or an empty string.",
+                                ),
+                                BuiltinFunction("close", listOf("Int"), "Unit", "Closes a channel."),
                             ),
                     ),
                     BuiltinModule(
@@ -274,6 +316,24 @@ object LanguageBuiltins {
                                     "Int",
                                     "Runs another program with a raw argument string and returns its exit status.",
                                 ),
+                                BuiltinFunction(
+                                    "spawn",
+                                    listOf("String"),
+                                    "Int",
+                                    "Starts another program and returns its process id.",
+                                ),
+                                BuiltinFunction(
+                                    "spawn",
+                                    listOf("String", "String"),
+                                    "Int",
+                                    "Starts another program with a raw argument string and returns its process id.",
+                                ),
+                                BuiltinFunction(
+                                    "wait",
+                                    listOf("Int"),
+                                    "Int",
+                                    "Waits for a child process and returns its exit status.",
+                                ),
                             ),
                     ),
                     BuiltinModule(
@@ -296,6 +356,9 @@ object LanguageBuiltins {
                                     "Returns everything after the first whitespace character.",
                                 ),
                                 BuiltinFunction("isBlank", listOf("String"), "Bool", "Returns true when the string is blank."),
+                                BuiltinFunction("toInt", listOf("String"), "Int", "Parses a decimal integer or returns 0."),
+                                BuiltinFunction("length", listOf("String"), "Int", "Returns the string length in UTF-16 code units."),
+                                BuiltinFunction("charAt", listOf("String", "Int"), "String", "Returns one character or an empty string."),
                             ),
                     ),
                 ),
@@ -324,7 +387,12 @@ object LanguageBuiltins {
                     BuiltinType(
                         name = "Event",
                         documentation = "An event pulled from the runtime queue.",
-                        fields = listOf(RecordFieldDefinition("name", "String", "The event name.")),
+                        fields =
+                            listOf(
+                                RecordFieldDefinition("name", "String", "The event name."),
+                                RecordFieldDefinition("id", "Int", "Runtime-local event payload id."),
+                                RecordFieldDefinition("argCount", "Int", "Number of low-level event payload arguments."),
+                            ),
                     ),
                 ),
         )

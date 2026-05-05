@@ -68,6 +68,44 @@ class LanguageRuntimeTest {
     }
 
     @Test
+    fun compilesIpcSpawnWaitEventPayloadAndStringHelpers() {
+        val artifact =
+            frontend.compile(
+                "surface.ck",
+                """
+                pub fun main() {
+                    val ch: Int = ipc::open();
+                    ipc::write(ch, "42");
+                    val immediate: String = ipc::tryRead(ch);
+                    ipc::write(ch, immediate);
+                    val blocking: String = ipc::read(ch);
+                    ipc::close(ch);
+
+                    val child: Int = process::spawn("child.ck", "1 2 3 arg");
+                    val code: Int = process::wait(child);
+
+                    val event: Event = events::pull("char");
+                    val count: Int = events::argCount(event);
+                    val text: String = events::argString(event, 0);
+                    val key: Int = events::argInt(event, 0);
+                    val repeated: Bool = events::argBool(event, 1);
+
+                    val parsed: Int = strings::toInt("123");
+                    val length: Int = strings::length("abc");
+                    val first: String = strings::charAt("abc", 0);
+
+                    terminal::println(blocking + text + first + code + count + key + parsed + length + repeated);
+                }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+    }
+
+    @Test
     fun usesInstructionBudgetFromProfileResources() {
         val artifact =
             frontend.compile(
@@ -783,6 +821,7 @@ internal class RecordingRuntime(
                     DeviceCapability.FILESYSTEM,
                     DeviceCapability.SYSTEM,
                     DeviceCapability.EVENTS,
+                    DeviceCapability.IPC,
                     DeviceCapability.PERIPHERALS,
                 ),
             resources =
@@ -899,6 +938,51 @@ internal class RecordingRuntime(
                 path: String,
                 argument: String,
             ): Int = 0
+
+            override suspend fun spawn(
+                path: String,
+                argument: String,
+            ): Int = 1
+
+            override suspend fun wait(pid: Int): Int = 0
+        }
+
+    override val ipc: DeviceIpcApi =
+        object : DeviceIpcApi {
+            override suspend fun open(): Int = 1
+
+            override suspend fun write(
+                channelId: Int,
+                text: String,
+            ) = Unit
+
+            override suspend fun read(channelId: Int): String = ""
+
+            override fun tryRead(channelId: Int): String = ""
+
+            override fun close(channelId: Int) = Unit
+        }
+
+    override val events: DeviceEventApi =
+        object : DeviceEventApi {
+            override fun capture(arguments: List<Any?>): Pair<Int, Int> = 0 to arguments.size
+
+            override fun argCount(eventId: Int): Int = 0
+
+            override fun argInt(
+                eventId: Int,
+                index: Int,
+            ): Int = 0
+
+            override fun argBool(
+                eventId: Int,
+                index: Int,
+            ): Boolean = false
+
+            override fun argString(
+                eventId: Int,
+                index: Int,
+            ): String = ""
         }
 
     override val redstone: DeviceRedstoneApi = object : DeviceRedstoneApi {}
