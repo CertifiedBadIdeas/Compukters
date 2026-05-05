@@ -43,6 +43,57 @@ fun render(displayId: Int, text: String) {
     display::present(displayId)
 }
 
+fun columns(displayId: Int): Int {
+    return display::width(displayId) / 6
+}
+
+fun rows(displayId: Int): Int {
+    return display::height(displayId) / 9
+}
+
+fun lineRow(displayId: Int, screen: String): Int {
+    var row: Int = 0
+    var col: Int = 0
+    var i: Int = 0
+    val cols: Int = columns(displayId)
+    while i < strings::length(screen) {
+        val ch: String = strings::charAt(screen, i)
+        if (ch == "\n") {
+            row = row + 1
+            col = 0
+        } else {
+            col = col + 1
+            if (col >= cols) {
+                col = 0
+                row = row + 1
+            }
+        }
+        i = i + 1
+    }
+    return row
+}
+
+fun renderInputLine(displayId: Int, screen: String, line: String) {
+    val cols: Int = columns(displayId)
+    val row: Int = lineRow(displayId, screen)
+    if (row < 0 || row >= rows(displayId)) {
+        return
+    }
+    display::fillRect(displayId, 0, row * 9, cols * 6, 9, 0)
+    var x: Int = 0
+    var i: Int = 0
+    while i < strings::length(line) {
+        if (x >= cols) {
+            display::present(displayId)
+            return
+        }
+        display::fillRect(displayId, x * 6, row * 9, 5, 8, 2016)
+        x = x + 1
+        i = i + 1
+    }
+    display::present(displayId)
+}
+
 fun dropLast(text: String): String {
     var result: String = ""
     var i: Int = 0
@@ -67,7 +118,6 @@ pub fun main() {
         val chunk: String = ipc::tryRead(output) + ipc::tryRead(error)
         if (chunk != "") {
             screen = screen + chunk
-            stdout::write(chunk)
             render(displayId, screen + line)
         } else {
             val event: Event = events::tryPull()
@@ -79,7 +129,7 @@ pub fun main() {
                     val typed: String = events::argString(event, 0)
                     if (typed != "") {
                         line = line + typed
-                        stdout::write(typed)
+                        renderInputLine(displayId, screen, line)
                     }
                 } else if (event.name == "key") {
                     val key: Int = events::argInt(event, 0)
@@ -87,12 +137,11 @@ pub fun main() {
                         ipc::write(input, line)
                         screen = screen + line + "\n"
                         line = ""
-                        stdout::write("\n")
                         render(displayId, screen)
                     } else if (key == 259) {
                         if (line != "") {
                             line = dropLast(line)
-                            stdout::write("\b \b")
+                            renderInputLine(displayId, screen, line)
                         }
                     }
                 }
