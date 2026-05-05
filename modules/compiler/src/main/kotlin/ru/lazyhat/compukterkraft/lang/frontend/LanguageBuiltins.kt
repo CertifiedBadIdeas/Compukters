@@ -82,6 +82,62 @@ object LanguageBuiltins {
                             ),
                     ),
                     BuiltinModule(
+                        name = "display",
+                        documentation = "Framebuffer display operations. The attached display endpoint supplies resolution.",
+                        origin = ModuleOrigin.BASE_VM,
+                        functions =
+                            listOf(
+                                BuiltinFunction(
+                                    "primary",
+                                    emptyList(),
+                                    "Int",
+                                    "Returns the primary display id or -1 when no display is attached.",
+                                ),
+                                BuiltinFunction(
+                                    "isAttached",
+                                    listOf("Int"),
+                                    "Bool",
+                                    "Returns true when the display id is attached.",
+                                ),
+                                BuiltinFunction(
+                                    "width",
+                                    listOf("Int"),
+                                    "Int",
+                                    "Returns display width in pixels or 0 when missing.",
+                                ),
+                                BuiltinFunction(
+                                    "height",
+                                    listOf("Int"),
+                                    "Int",
+                                    "Returns display height in pixels or 0 when missing.",
+                                ),
+                                BuiltinFunction(
+                                    "clear",
+                                    listOf("Int", "Int"),
+                                    "Unit",
+                                    "Clears the display back buffer to an RGB565 color.",
+                                ),
+                                BuiltinFunction(
+                                    "setPixel",
+                                    listOf("Int", "Int", "Int", "Int"),
+                                    "Unit",
+                                    "Writes one RGB565 pixel.",
+                                ),
+                                BuiltinFunction(
+                                    "fillRect",
+                                    listOf("Int", "Int", "Int", "Int", "Int", "Int"),
+                                    "Unit",
+                                    "Fills a rectangle with an RGB565 color.",
+                                ),
+                                BuiltinFunction(
+                                    "present",
+                                    listOf("Int"),
+                                    "Unit",
+                                    "Publishes changed pixels for a display.",
+                                ),
+                            ),
+                    ),
+                    BuiltinModule(
                         name = "filesystem",
                         documentation = "Sandboxed filesystem access through the computer workspace.",
                         origin = ModuleOrigin.BASE_VM,

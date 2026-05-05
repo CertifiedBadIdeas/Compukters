@@ -31,6 +31,7 @@ internal class RuntimeHostBridge(
             "filesystem" -> invokeFilesystem(functionName, arguments)
             "system" -> invokeSystem(functionName, arguments)
             "terminal" -> invokeTerminal(functionName, arguments)
+            "display" -> invokeDisplay(functionName, arguments)
             "stdout" -> invokeStdout(functionName, arguments)
             "process" -> invokeProcess(functionName, arguments)
             "strings" -> invokeStrings(functionName, arguments)
@@ -175,6 +176,47 @@ internal class RuntimeHostBridge(
             }
         }
 
+    private fun invokeDisplay(
+        functionName: String,
+        arguments: List<VmValue>,
+    ): VmValue =
+        when (functionName) {
+            "primary" -> VmValue.IntValue(runtime.display.primary())
+            "isAttached" -> VmValue.BoolValue(runtime.display.isAttached(arguments[0].asInt()))
+            "width" -> VmValue.IntValue(runtime.display.width(arguments[0].asInt()))
+            "height" -> VmValue.IntValue(runtime.display.height(arguments[0].asInt()))
+            "clear" -> {
+                runtime.display.clear(arguments[0].asInt(), arguments[1].asInt())
+                VmValue.UnitValue
+            }
+
+            "setPixel" -> {
+                runtime.display.setPixel(arguments[0].asInt(), arguments[1].asInt(), arguments[2].asInt(), arguments[3].asInt())
+                VmValue.UnitValue
+            }
+
+            "fillRect" -> {
+                runtime.display.fillRect(
+                    arguments[0].asInt(),
+                    arguments[1].asInt(),
+                    arguments[2].asInt(),
+                    arguments[3].asInt(),
+                    arguments[4].asInt(),
+                    arguments[5].asInt(),
+                )
+                VmValue.UnitValue
+            }
+
+            "present" -> {
+                runtime.display.present(arguments[0].asInt())
+                VmValue.UnitValue
+            }
+
+            else -> {
+                error("Unknown display function $functionName")
+            }
+        }
+
     private suspend fun invokeProcess(
         functionName: String,
         arguments: List<VmValue>,
@@ -235,6 +277,7 @@ internal class RuntimeHostBridge(
                 "system" -> DeviceCapability.SYSTEM
                 "terminal" -> DeviceCapability.TERMINAL
                 "stdout" -> DeviceCapability.TERMINAL
+                "display" -> DeviceCapability.DISPLAY
                 "events" -> DeviceCapability.EVENTS
                 "process" -> DeviceCapability.SYSTEM
                 "monitor" -> DeviceCapability.PERIPHERALS

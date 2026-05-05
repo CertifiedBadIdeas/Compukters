@@ -113,6 +113,7 @@ object DeviceProfileRegistry {
     private fun defaultCapabilities(): Set<DeviceCapability> =
         setOf(
             DeviceCapability.TERMINAL,
+            DeviceCapability.DISPLAY,
             DeviceCapability.FILESYSTEM,
             DeviceCapability.EVENTS,
             DeviceCapability.SYSTEM,
