@@ -145,8 +145,9 @@ class ServerWorkbench(
     }
 
     fun attachTerminal() {
-        if (targetDescriptor.deviceId == null) return
-        runtimeBridge.attachTerminal(targetDescriptor)
+        // Runtime stdout terminal attachment is temporarily disabled. A future
+        // live viewer should attach to display sessions instead of snapshots or
+        // stdout byte streams.
     }
 
     fun handleInput(event: InputEvent) {

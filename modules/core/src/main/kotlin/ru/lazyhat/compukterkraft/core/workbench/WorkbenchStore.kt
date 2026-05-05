@@ -691,7 +691,7 @@ class WorkbenchStore(
         val actionState =
             WorkbenchActionState(
                 canRun = remoteState.target.connected,
-                canAttachTerminal = remoteState.target.connected,
+                canAttachTerminal = false,
             )
 
         _state.value =

@@ -42,7 +42,7 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalCoroutinesApi::class)
 class WorkbenchStoreTest {
     @Test
-    fun terminalDockStartsHiddenAndCanBeToggled() =
+    fun terminalDockStaysHiddenWhileAttachTerminalIsDisabled() =
         runTest(UnconfinedTestDispatcher()) {
             val store = WorkbenchStore(FakeWorkspaceGateway(), FakeTargetControlGateway(), FakeWorkbenchIdeFacade())
             val updates = FakeWorkbenchUpdateSource()
@@ -50,9 +50,6 @@ class WorkbenchStoreTest {
             updates.push(target = WorkbenchTargetState(connected = true, displayName = "Pocket Computer", familyId = "normal"))
 
             assertFalse(store.state.terminalVisible)
-
-            store.toggleTerminalVisibility()
-            assertTrue(store.state.terminalVisible)
 
             store.toggleTerminalVisibility()
             assertFalse(store.state.terminalVisible)
@@ -77,7 +74,7 @@ class WorkbenchStoreTest {
             updates.push(target = WorkbenchTargetState(connected = true, displayName = "Pocket Computer", familyId = "normal"))
 
             store.toggleTerminalVisibility()
-            assertTrue(store.state.terminalVisible)
+            assertFalse(store.state.terminalVisible)
 
             updates.push(target = WorkbenchTargetState())
 
@@ -211,7 +208,7 @@ class WorkbenchStoreTest {
 
             assertTrue(store.state.target.connected)
             assertTrue(store.state.actions.canRun)
-            assertTrue(store.state.actions.canAttachTerminal)
+            assertTrue(!store.state.actions.canAttachTerminal)
         }
 
     @Test
