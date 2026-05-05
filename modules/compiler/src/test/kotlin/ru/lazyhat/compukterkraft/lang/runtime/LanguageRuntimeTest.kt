@@ -41,7 +41,7 @@ class LanguageRuntimeTest {
             frontend.compile(
                 "runtime.ck",
                 """
-                fun main() {
+                pub fun main() {
                     terminal::println("id=" + system::deviceId());
                     val event: Event = events::pull("boot");
                     terminal::println(event.name);
@@ -73,7 +73,7 @@ class LanguageRuntimeTest {
             frontend.compile(
                 "budget.ck",
                 """
-                fun main() {
+                pub fun main() {
                     val a: Int = 1;
                     val b: Int = 2;
                     val c: Int = a + b;
@@ -102,7 +102,7 @@ class LanguageRuntimeTest {
             frontend.compile(
                 "memory.ck",
                 """
-                fun main() {
+                pub fun main() {
                     val text: String = "123456789";
                 }
                 """.trimIndent(),
@@ -123,7 +123,7 @@ class LanguageRuntimeTest {
             frontend.compile(
                 "loop.ck",
                 """
-                fun main() {
+                pub fun main() {
                     var i: Int = 0;
                     while (i < 3) {
                         terminal::println("i=" + i);
@@ -153,7 +153,7 @@ class LanguageRuntimeTest {
             frontend.compile(
                 "compound.ck",
                 """
-                fun main() {
+                pub fun main() {
                     var i: Int = 1;
                     i += 4;
                     terminal::println("plus=" + i);
@@ -187,7 +187,7 @@ class LanguageRuntimeTest {
                 "struct_runtime.ck",
                 """
                 struct Point { x: Int, y: Int }
-                fun main() {
+                pub fun main() {
                     val point: Point = Point(x = 4, y = 5);
                     terminal::println("sum=" + (point.x + point.y));
                 }
@@ -213,10 +213,10 @@ class LanguageRuntimeTest {
                 "class_identity.ck",
                 """
                 class Counter(var value: Int) {
-                    fun inc(): Unit { this.value = this.value + 1; }
-                    fun current(): Int { return this.value; }
+                    pub fun inc(): Unit { this.value = this.value + 1; }
+                    pub fun current(): Int { return this.value; }
                 }
-                fun main() {
+                pub fun main() {
                     val a: Counter = Counter(value = 1);
                     val b: Counter = a;
                     b.inc();
@@ -245,10 +245,10 @@ class LanguageRuntimeTest {
                 """
                 class Counter(var value: Int) {
                     init { this.value = this.value + 1; }
-                    fun current(): Int { return this.value; }
-                    static fun zero(): Counter { return Counter(value = 0); }
+                    pub fun current(): Int { return this.value; }
+                    pub static fun zero(): Counter { return Counter(value = 0); }
                 }
-                fun main() {
+                pub fun main() {
                     val counter: Counter = Counter.zero();
                     terminal::println("value=" + counter.current());
                 }
@@ -276,12 +276,12 @@ class LanguageRuntimeTest {
                 class SomeClass(constK: Int) {
                     val k: Int = constK;
 
-                    fun instancePlus2(): Int {
+                    pub fun instancePlus2(): Int {
                         return this.k + 2;
                     }
                 }
 
-                fun main() {
+                pub fun main() {
                     val instance: SomeClass = SomeClass(constK = 22);
                     terminal::println("INSTANCE " + instance.instancePlus2());
                 }
@@ -313,12 +313,12 @@ class LanguageRuntimeTest {
                         this.k = constK;
                     }
 
-                    fun current(): Int {
+                    pub fun current(): Int {
                         return this.k;
                     }
                 }
 
-                fun main() {
+                pub fun main() {
                     val instance: SomeClass = SomeClass(constK = 22);
                     terminal::println("k=" + instance.current());
                 }
@@ -343,7 +343,7 @@ class LanguageRuntimeTest {
             frontend.compile(
                 "snapshot.ck",
                 """
-                fun main() {
+                pub fun main() {
                     yield();
                 }
                 """.trimIndent(),
@@ -366,7 +366,7 @@ class LanguageRuntimeTest {
             frontend.compile(
                 "stdout.ck",
                 """
-                fun main() {
+                pub fun main() {
                     stdout::write("Hi");
                 }
                 """.trimIndent(),
@@ -391,7 +391,7 @@ class LanguageRuntimeTest {
             frontend.compile(
                 "shell.ck",
                 """
-                fun main() {
+                pub fun main() {
                     terminal::println(terminal::readln("> "));
                     terminal::println(filesystem::list());
                     terminal::println(process::currentDirectory());
@@ -436,7 +436,7 @@ class LanguageRuntimeTest {
             frontend.compile(
                 "elseif.ck",
                 """
-                fun main() {
+                pub fun main() {
                     val x: Int = 2;
                     if (x == 1) {
                         terminal::println("one");
@@ -470,7 +470,7 @@ class LanguageRuntimeTest {
             frontend.compile(
                 "elseif_else.ck",
                 """
-                fun main() {
+                pub fun main() {
                     val x: Int = 99;
                     if (x == 1) {
                         terminal::println("one");
@@ -497,7 +497,7 @@ class LanguageRuntimeTest {
             frontend.compile(
                 "when_subject.ck",
                 """
-                fun main() {
+                pub fun main() {
                     val x: Int = 2;
                     when(x) {
                         1 -> {
@@ -531,7 +531,7 @@ class LanguageRuntimeTest {
             frontend.compile(
                 "when_multi.ck",
                 """
-                fun main() {
+                pub fun main() {
                     val x: Int = 3;
                     when(x) {
                         1 -> {
@@ -562,7 +562,7 @@ class LanguageRuntimeTest {
             frontend.compile(
                 "when_else.ck",
                 """
-                fun main() {
+                pub fun main() {
                     val x: Int = 99;
                     when(x) {
                         1 -> {
@@ -593,7 +593,7 @@ class LanguageRuntimeTest {
             frontend.compile(
                 "when_no_subject.ck",
                 """
-                fun main() {
+                pub fun main() {
                     val x: Int = 5;
                     when {
                         x > 10 -> {
@@ -624,7 +624,7 @@ class LanguageRuntimeTest {
             frontend.compile(
                 "when_no_subject_else.ck",
                 """
-                fun main() {
+                pub fun main() {
                     val x: Int = 0;
                     when {
                         x > 10 -> {
@@ -679,7 +679,7 @@ class LanguageRuntimeTest {
             frontend.compile(
                 "monitor.ck",
                 """
-                fun main() {
+                pub fun main() {
                     if (monitor::exists()) {
                         terminal::println("connected");
                     } else {
@@ -732,7 +732,7 @@ class LanguageRuntimeTest {
             frontend.compile(
                 "monitor_connected.ck",
                 """
-                fun main() {
+                pub fun main() {
                     if (monitor::exists()) {
                         terminal::println("connected");
                     } else {

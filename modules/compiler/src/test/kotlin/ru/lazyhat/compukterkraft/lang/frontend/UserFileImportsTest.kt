@@ -30,8 +30,8 @@ class UserFileImportsTest {
         val loader =
             MapSourceLoader(
                 mapOf(
-                    "math.ck" to "fun add(): Int { return 1; } struct Vec2 { x: Int, y: Int }",
-                    "main.ck" to "import \"math.ck\" { add, Vec2 }; fun main() { }",
+                    "math.ck" to "pub fun add(): Int { return 1; } pub struct Vec2 { x: Int, y: Int }",
+                    "main.ck" to "import \"math.ck\" { add, Vec2 }; pub fun main() { }",
                 ),
             )
 
@@ -51,12 +51,12 @@ class UserFileImportsTest {
                     "main.ck" to
                         """
                         import "model.ck" { Counter };
-                        fun main() {
+                        pub fun main() {
                             val counter: Counter = Counter(value = 2);
                             terminal::println("value=" + counter.value);
                         }
                         """.trimIndent(),
-                    "model.ck" to "class Counter(var value: Int) {}",
+                    "model.ck" to "pub class Counter(pub var value: Int) {}",
                 ),
             )
 
@@ -112,7 +112,7 @@ class UserFileImportsTest {
     fun rejectsFlatFileImport() {
         val loader = MapSourceLoader(mapOf("math.ck" to "fun add(): Int { return 1; }"))
 
-        val artifact = frontend.compile("main.ck", "import \"math.ck\"; fun main() { }", loader)
+        val artifact = frontend.compile("main.ck", "import \"math.ck\"; pub fun main() { }", loader)
 
         assertTrue(
             artifact.analysis.diagnostics.any {
@@ -125,7 +125,7 @@ class UserFileImportsTest {
 
     @Test
     fun parsesSelectiveBuiltinImport() {
-        val artifact = frontend.compile("main.ck", "import terminal { println }; fun main() { println(\"hi\"); }")
+        val artifact = frontend.compile("main.ck", "import terminal { println }; pub fun main() { println(\"hi\"); }")
 
         assertTrue(
             artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
@@ -135,7 +135,7 @@ class UserFileImportsTest {
 
     @Test
     fun rejectsBareBuiltinImport() {
-        val artifact = frontend.compile("main.ck", "import terminal; fun main() { terminal::println(\"hi\"); }")
+        val artifact = frontend.compile("main.ck", "import terminal; pub fun main() { terminal::println(\"hi\"); }")
 
         assertTrue(
             artifact.analysis.diagnostics.any {
@@ -147,7 +147,7 @@ class UserFileImportsTest {
 
     @Test
     fun selectiveBuiltinImportDoesNotExposeOtherMembers() {
-        val artifact = frontend.compile("main.ck", "import terminal { println }; fun main() { clear(); }")
+        val artifact = frontend.compile("main.ck", "import terminal { println }; pub fun main() { clear(); }")
 
         assertTrue(
             artifact.analysis.diagnostics.any {
@@ -175,8 +175,8 @@ class UserFileImportsTest {
         val loader =
             MapSourceLoader(
                 mapOf(
-                    "math.ck" to "fun add(): Int { return 1; } fun hidden(): Int { return 2; }",
-                    "main.ck" to "import \"math.ck\" { add }; fun main() { terminal::println(\"v=\" + add()); hidden(); }",
+                    "math.ck" to "pub fun add(): Int { return 1; } fun hidden(): Int { return 2; }",
+                    "main.ck" to "import \"math.ck\" { add }; pub fun main() { terminal::println(\"v=\" + add()); hidden(); }",
                 ),
             )
 
@@ -196,8 +196,8 @@ class UserFileImportsTest {
         val loader =
             MapSourceLoader(
                 mapOf(
-                    "math.ck" to "struct Vec2 { x: Int, y: Int } fun make(): Vec2 { return Vec2(x = 1, y = 2); }",
-                    "main.ck" to "import \"math.ck\" { Vec2, make }; fun main() { val v: Vec2 = make(); terminal::println(\"x=\" + v.x); }",
+                    "math.ck" to "pub struct Vec2 { x: Int, y: Int } pub fun make(): Vec2 { return Vec2(x = 1, y = 2); }",
+                    "main.ck" to "import \"math.ck\" { Vec2, make }; pub fun main() { val v: Vec2 = make(); terminal::println(\"x=\" + v.x); }",
                 ),
             )
 
@@ -216,15 +216,15 @@ class UserFileImportsTest {
                 mapOf(
                     "math.ck" to
                         """
-                        struct Vec2 { x: Int, y: Int }
-                        fun add(a: Vec2, b: Vec2): Vec2 {
+                        pub struct Vec2 { x: Int, y: Int }
+                        pub fun add(a: Vec2, b: Vec2): Vec2 {
                             return Vec2(x = a.x + b.x, y = a.y + b.y);
                         }
                         """.trimIndent(),
                     "main.ck" to
                         """
                         import "math.ck" as m;
-                        fun main() {
+                        pub fun main() {
                             val v: m::Vec2 = m::Vec2(x = 1, y = 2);
                             val w: m::Vec2 = m::add(v, m::Vec2(x = 3, y = 4));
                             terminal::println("x=" + w.x);
@@ -247,13 +247,13 @@ class UserFileImportsTest {
         val loader =
             MapSourceLoader(
                 mapOf(
-                    "a.ck" to "fun helper(): Int { return 1; }",
-                    "b.ck" to "fun helper(): Int { return 2; }",
+                    "a.ck" to "pub fun helper(): Int { return 1; }",
+                    "b.ck" to "pub fun helper(): Int { return 2; }",
                     "main.ck" to
                         """
                         import "a.ck" as a;
                         import "b.ck" as b;
-                        fun main() {
+                        pub fun main() {
                             terminal::println("a=" + a::helper());
                             terminal::println("b=" + b::helper());
                         }
@@ -276,7 +276,7 @@ class UserFileImportsTest {
     fun aliasCollidesWithBuiltinModule() {
         val loader = MapSourceLoader(mapOf("foo.ck" to "fun x(): Int { return 0; }"))
 
-        val artifact = frontend.compile("main.ck", """import "foo.ck" as terminal; fun main() { }""", loader)
+        val artifact = frontend.compile("main.ck", """import "foo.ck" as terminal; pub fun main() { }""", loader)
 
         assertTrue(
             artifact.analysis.diagnostics.any {
@@ -291,13 +291,13 @@ class UserFileImportsTest {
         val loader =
             MapSourceLoader(
                 mapOf(
-                    "a.ck" to "fun shared(): Int { return 1; }",
-                    "b.ck" to "fun shared(): Int { return 2; }",
+                    "a.ck" to "pub fun shared(): Int { return 1; }",
+                    "b.ck" to "pub fun shared(): Int { return 2; }",
                     "main.ck" to
                         """
                         import "a.ck" { shared };
                         import "b.ck" { shared };
-                        fun main() {}
+                        pub fun main() {}
                         """.trimIndent(),
                 ),
             )
@@ -314,7 +314,7 @@ class UserFileImportsTest {
 
     @Test
     fun selectiveImportClashesWithLocalFunction() {
-        val loader = MapSourceLoader(mapOf("a.ck" to "fun util(): Int { return 1; }"))
+        val loader = MapSourceLoader(mapOf("a.ck" to "pub fun util(): Int { return 1; }"))
 
         val artifact =
             frontend.compile(
@@ -322,7 +322,7 @@ class UserFileImportsTest {
                 """
                 import "a.ck" { util };
                 fun util(): Int { return 0; }
-                fun main() {}
+                pub fun main() {}
                 """.trimIndent(),
                 loader,
             )
@@ -345,7 +345,7 @@ class UserFileImportsTest {
                 """
                 import "x.ck" { a };
                 import "x.ck" as x;
-                fun main() {}
+                pub fun main() {}
                 """.trimIndent(),
                 loader,
             )
@@ -361,12 +361,12 @@ class UserFileImportsTest {
         val loader =
             MapSourceLoader(
                 mapOf(
-                    "deep.ck" to "fun deep(): Int { return 7; }",
-                    "mid.ck" to """import "deep.ck" { deep }; fun mid(): Int { return deep(); }""",
+                    "deep.ck" to "pub fun deep(): Int { return 7; }",
+                    "mid.ck" to """import "deep.ck" { deep }; pub fun mid(): Int { return deep(); }""",
                     "main.ck" to
                         """
                         import "mid.ck" { mid };
-                        fun main() { val z: Int = deep(); }
+                        pub fun main() { val z: Int = deep(); }
                         """.trimIndent(),
                 ),
             )
@@ -386,13 +386,13 @@ class UserFileImportsTest {
         val loader =
             MapSourceLoader(
                 mapOf(
-                    "a.ck" to """import "b.ck" { bFn }; fun aFn(): Int { return 1; }""",
-                    "b.ck" to """import "a.ck" { aFn }; fun bFn(): Int { return 2; }""",
+                    "a.ck" to """import "b.ck" { bFn }; pub fun aFn(): Int { return 1; }""",
+                    "b.ck" to """import "a.ck" { aFn }; pub fun bFn(): Int { return 2; }""",
                     "main.ck" to
                         """
                         import "a.ck" { aFn };
                         import "b.ck" { bFn };
-                        fun main() {
+                        pub fun main() {
                             terminal::println("a=" + aFn() + " b=" + bFn());
                         }
                         """.trimIndent(),
@@ -413,14 +413,14 @@ class UserFileImportsTest {
         val loader =
             MapSourceLoader(
                 mapOf(
-                    "leaf.ck" to "fun leaf(): Int { return 9; }",
-                    "left.ck" to """import "leaf.ck" as l; fun left(): Int { return l::leaf(); }""",
-                    "right.ck" to """import "leaf.ck" as l; fun right(): Int { return l::leaf(); }""",
+                    "leaf.ck" to "pub fun leaf(): Int { return 9; }",
+                    "left.ck" to """import "leaf.ck" as l; pub fun left(): Int { return l::leaf(); }""",
+                    "right.ck" to """import "leaf.ck" as l; pub fun right(): Int { return l::leaf(); }""",
                     "main.ck" to
                         """
                         import "left.ck" { left };
                         import "right.ck" { right };
-                        fun main() {
+                        pub fun main() {
                             terminal::println("sum=" + (left() + right()));
                         }
                         """.trimIndent(),

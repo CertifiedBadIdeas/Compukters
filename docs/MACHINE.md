@@ -152,7 +152,7 @@ Background coroutine
 ROM-файл `mod/src/main/resources/rom/bios.ck` очень простой:
 
 ```ck
-fun main() {
+pub fun main() {
    process::run("shell.ck");
 }
 ```
@@ -719,7 +719,7 @@ val resolved = ctx.resolvePath(path)
 Допустим, есть такой код:
 
 ```ck
-fun main() {
+pub fun main() {
    val x = 42;
 }
 ```
@@ -914,7 +914,7 @@ fun add(a: Int, b: Int): Int {
    return a + b;
 }
 
-fun main() {
+pub fun main() {
    val result = add(2, 3);
 }
 ```

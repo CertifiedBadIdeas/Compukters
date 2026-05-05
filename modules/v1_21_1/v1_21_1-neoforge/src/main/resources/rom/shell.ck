@@ -34,7 +34,7 @@ fun handleCd(argument: String) {
     }
 }
 
-fun main() {
+pub fun main() {
     terminal::println("Compukter Kraft shell")
     terminal::println("Type `help` for commands.")
     while true {

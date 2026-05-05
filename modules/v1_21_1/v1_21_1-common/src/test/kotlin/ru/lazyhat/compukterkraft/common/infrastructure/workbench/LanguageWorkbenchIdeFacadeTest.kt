@@ -31,8 +31,8 @@ class LanguageWorkbenchIdeFacadeTest {
         val loader =
             MapSourceLoader(
                 mapOf(
-                    "main.ck" to "fun main() { ad }",
-                    "lib/math.ck" to "fun add(): Int { return 1; }",
+                    "main.ck" to "pub fun main() { ad }",
+                    "lib/math.ck" to "pub fun add(): Int { return 1; }",
                 ),
             )
         val facade =
@@ -42,7 +42,7 @@ class LanguageWorkbenchIdeFacadeTest {
             )
         val source = loader.read("main.ck")!!
 
-        val items = facade.complete("main.ck", source, line = 0, column = "fun main() { ad".length)
+        val items = facade.complete("main.ck", source, line = 0, column = "pub fun main() { ad".length)
 
         assertTrue(
             items.any { it.label == "add" && it.sourceNamespace == "lib/math.ck" },

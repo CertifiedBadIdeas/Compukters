@@ -46,14 +46,14 @@ class DeviceProgramSupportTest {
                 .resolve("7")
                 .createDirectories()
                 .resolve("shell.ck")
-                .writeText("fun main() { }")
+                .writeText("pub fun main() { }")
             val loader = WorkspaceProgramLoader(workspace)
 
             val program = loader.load(7, "shell.ck")
 
             assertNotNull(program)
             assertEquals("shell.ck", program.path)
-            assertEquals("fun main() { }", program.source)
+            assertEquals("pub fun main() { }", program.source)
         } finally {
             root.toFile().deleteRecursively()
         }
@@ -76,7 +76,7 @@ class DeviceProgramSupportTest {
 
     @Test
     fun reportsCompilationErrorsWithoutProducingProgram() {
-        val compiled = ComputerProgramCompiler.compile("broken.ck", "fun main() { val flag: Bool = 42; }")
+        val compiled = ComputerProgramCompiler.compile("broken.ck", "pub fun main() { val flag: Bool = 42; }")
 
         assertNull(compiled.program)
         assertTrue(compiled.errorMessage?.contains("Expected Bool") == true)
@@ -102,7 +102,7 @@ class DeviceProgramSupportTest {
                     ),
             )
 
-        val compiled = ComputerProgramCompiler.compile("tiny.ck", "fun main() { }", profile)
+        val compiled = ComputerProgramCompiler.compile("tiny.ck", "pub fun main() { }", profile)
 
         assertNull(compiled.program)
         assertTrue(compiled.errorMessage?.contains("ROM") == true)

@@ -428,8 +428,8 @@ class LanguageIdeTest {
         val loader =
             MapSourceLoader(
                 mapOf(
-                    "main.ck" to "import \"lib.ck\" { add, unused };\nfun main(){add();}",
-                    "lib.ck" to "fun add() {}\nfun unused() {}",
+                    "main.ck" to "import \"lib.ck\" { add, unused };\npub fun main(){add();}",
+                    "lib.ck" to "pub fun add() {}\npub fun unused() {}",
                 ),
             )
         val ide = LanguageIde(sourceIndex = loader)
