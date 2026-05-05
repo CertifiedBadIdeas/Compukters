@@ -39,6 +39,8 @@ interface DeviceRuntime {
 
     suspend fun pullEvent(filter: String? = null): VmEvent
 
+    suspend fun tryPullEvent(filter: String? = null): VmEvent? = null
+
     suspend fun sleep(ticks: Long)
 
     suspend fun yield()

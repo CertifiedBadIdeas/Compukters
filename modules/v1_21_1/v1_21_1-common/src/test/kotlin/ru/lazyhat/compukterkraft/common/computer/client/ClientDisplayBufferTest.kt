@@ -24,6 +24,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayPixelFormat
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayTile
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ClientDisplayBufferTest {
@@ -43,7 +44,9 @@ class ClientDisplayBufferTest {
                 tiles = listOf(DisplayTile(0, 0, 0, 0, 2, 1, red565 + green565)),
             )
 
+    assertFalse(buffer.hasReceivedFrames)
         assertTrue(buffer.apply(frame))
+    assertTrue(buffer.hasReceivedFrames)
         buffer.swapIfDirty()
 
         assertEquals(listOf(0xFFFF0000.toInt(), 0xFF00FF00.toInt()), buffer.frontArgb().toList())

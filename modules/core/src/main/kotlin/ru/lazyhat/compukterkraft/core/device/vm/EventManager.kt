@@ -52,6 +52,16 @@ class EventManager(
         return event
     }
 
+    fun tryReceiveEvent(): VmEvent? {
+        val deferred = deferredEvents.removeFirstOrNull()
+        if (deferred != null) {
+            return deferred
+        }
+        val event = eventQueue.tryReceive().getOrNull() ?: return null
+        queuedEvents.decrementAndGet()
+        return event
+    }
+
     fun deferEvent(event: VmEvent) {
         deferredEvents.addLast(event)
     }

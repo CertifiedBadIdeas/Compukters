@@ -268,6 +268,8 @@ class BackgroundDeviceVm(
 
     override suspend fun receiveEvent(): VmEvent = eventManager.receiveEvent()
 
+    override fun tryReceiveEvent(): VmEvent? = eventManager.tryReceiveEvent()
+
     override fun deferEvent(event: VmEvent) = eventManager.deferEvent(event)
 
     override fun setState(state: VmState) = stateManager.setState(state)

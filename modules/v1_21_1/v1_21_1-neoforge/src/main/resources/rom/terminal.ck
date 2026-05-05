@@ -68,31 +68,30 @@ pub fun main() {
     var displayId: Int = waitDisplay()
     var screen: String = ""
     var line: String = ""
-    var idle: Int = 0
 
     while true {
         val chunk: String = ipc::tryRead(output) + ipc::tryRead(error)
         if (chunk != "") {
             screen = screen + chunk
+            stdout::write(chunk)
             render(displayId, screen)
-            idle = 0
-        } else if (idle < 5) {
-            idle = idle + 1
-            yield()
         } else {
-            val event: Event = events::pull()
-            idle = 0
-            if (event.name == "display_attach" || event.name == "display_resize") {
-                displayId = display::primary()
-                render(displayId, screen)
-            } else {
-                val previous: String = line
-                line = updateInputLine(event, line, input)
-                if (previous != "" && line == "") {
-                    screen = screen + previous + "\n"
+            val event: Event = events::tryPull()
+            if (event.name != "") {
+                if (event.name == "display_attach" || event.name == "display_resize") {
+                    displayId = display::primary()
                     render(displayId, screen)
+                } else {
+                    val previous: String = line
+                    line = updateInputLine(event, line, input)
+                    if (previous != "" && line == "") {
+                        screen = screen + previous + "\n"
+                        stdout::write(previous + "\n")
+                        render(displayId, screen)
+                    }
                 }
             }
+            yield()
         }
     }
 }

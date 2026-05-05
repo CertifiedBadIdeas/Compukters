@@ -265,6 +265,8 @@ In the Workbench editor, Format can be triggered from the toolbar or with `Ctrl+
 
 - `pull(): Event`
 - `pull(filter: String): Event`
+- `tryPull(): Event`
+- `tryPull(filter: String): Event`
 - `argCount(event: Event): Int`
 - `argInt(event: Event, index: Int): Int`
 - `argBool(event: Event, index: Int): Bool`

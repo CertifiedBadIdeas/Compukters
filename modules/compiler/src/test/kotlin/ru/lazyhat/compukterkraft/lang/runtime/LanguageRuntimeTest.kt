@@ -133,6 +133,34 @@ class LanguageRuntimeTest {
     }
 
     @Test
+    fun exposesNonBlockingEventPullToCkl() {
+        val artifact =
+            frontend.compile(
+                "event-try-pull.ck",
+                """
+                pub fun main() {
+                    val missing: Event = events::tryPull("paste");
+                    terminal::println("missing=" + missing.name);
+                    val event: Event = events::tryPull();
+                    terminal::println(event.name + ":" + events::argString(event, 0));
+                }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+
+        val runtime = RecordingRuntime(queuedEvents = listOf(VmEvent("char", listOf("x"))))
+        runBlocking {
+            BytecodeComputerProgram(requireNotNull(artifact.module)).run(runtime)
+        }
+
+        assertEquals(listOf("missing=", "char:x"), runtime.lines)
+    }
+
+    @Test
     fun executesIpcBuiltinsThroughRuntimeBridge() {
         val artifact =
             frontend.compile(
@@ -893,6 +921,7 @@ internal class RecordingRuntime(
     var sleepCalls = 0
     var yieldCalls = 0
     private var nextEventIndex = 0
+    private val deferredEvents = ArrayDeque<VmEvent>()
 
     override val profile =
         DeviceProfile(
@@ -1123,6 +1152,13 @@ internal class RecordingRuntime(
 
     override suspend fun pullEvent(filter: String?): VmEvent {
         eventFilters += filter
+        val deferred = deferredEvents.removeFirstOrNull()
+        if (deferred != null && (filter == null || deferred.name == filter)) {
+            return deferred
+        }
+        if (deferred != null) {
+            deferredEvents.addLast(deferred)
+        }
         while (nextEventIndex < queuedEvents.size) {
             val event = queuedEvents[nextEventIndex++]
             if (filter == null || event.name == filter) {
@@ -1130,6 +1166,25 @@ internal class RecordingRuntime(
             }
         }
         return VmEvent(filter ?: "boot")
+    }
+
+    override suspend fun tryPullEvent(filter: String?): VmEvent? {
+        eventFilters += filter
+        val deferred = deferredEvents.removeFirstOrNull()
+        if (deferred != null) {
+            if (filter == null || deferred.name == filter) {
+                return deferred
+            }
+            deferredEvents.addLast(deferred)
+            return null
+        }
+        if (nextEventIndex >= queuedEvents.size) return null
+        val event = queuedEvents[nextEventIndex++]
+        if (filter == null || event.name == filter) {
+            return event
+        }
+        deferredEvents.addLast(event)
+        return null
     }
 
     override suspend fun sleep(ticks: Long) {
