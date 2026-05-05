@@ -37,9 +37,11 @@ import ru.lazyhat.compukterkraft.lang.runtime.DeviceResources
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceStorageResources
 import ru.lazyhat.compukterkraft.lang.runtime.VmState
+import ru.lazyhat.compukterkraft.lang.runtime.VmStopReason
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -174,6 +176,75 @@ class BackgroundDeviceVmTest {
             assertTrue(text.contains("from boot"), text)
             assertTrue(text.contains("code=0"), text)
             assertTrue(vm.snapshot().state.isActive, vm.snapshot().state.toString())
+        }
+    }
+
+    @Test
+    fun bootClearsPreviousTerminalOutput() {
+        runtimeTestWorkspace("firmware-boot-clears-terminal") { workspace ->
+            val vm =
+                BackgroundDeviceVm(
+                    deviceId = 1,
+                    profile = firmwareTestProfile(),
+                    dispatcher = Dispatchers.Default,
+                    labelProvider = { null },
+                    logger = DeviceVmLogger { },
+                    workspace = workspace.host,
+                    firmwareLoader =
+                        StaticFirmwareLoader(
+                            """
+                            pub fun main() {
+                                terminal::println("fresh boot")
+                                while true { sleep(20L) }
+                            }
+                            """.trimIndent(),
+                        ),
+                )
+
+            vm.stdioBroadcaster.writeString("stale log line\n")
+            assertTrue(vm.boot())
+            runVmTicks(vm)
+
+            val text = vm.forceScreenSnapshot().visibleText()
+            assertFalse(text.contains("stale log line"), text)
+            assertTrue(text.contains("fresh boot"), text)
+            vm.stop(VmStopReason.REQUESTED)
+        }
+    }
+
+    @Test
+    fun stoppingRunningChildProcessDoesNotPrintCancellationAsProgramError() {
+        runtimeTestWorkspace("firmware-stop-cancels-child-quietly") { workspace ->
+            workspace.writeProgram(1, "boot.ck", "pub fun main() { terminal::println(\"child running\"); while true { sleep(20L) } }")
+            val vm =
+                BackgroundDeviceVm(
+                    deviceId = 1,
+                    profile = firmwareTestProfile(),
+                    dispatcher = Dispatchers.Default,
+                    labelProvider = { null },
+                    logger = DeviceVmLogger { },
+                    workspace = workspace.host,
+                    firmwareLoader =
+                        StaticFirmwareLoader(
+                            """
+                            pub fun main() {
+                                terminal::println("from bios")
+                                process::run("boot.ck")
+                            }
+                            """.trimIndent(),
+                        ),
+                )
+
+            assertTrue(vm.boot())
+            runVmTicks(vm, ticks = 12)
+            assertTrue(vm.forceScreenSnapshot().visibleText().contains("child running"))
+
+            vm.stop(VmStopReason.REQUESTED)
+            runVmTicks(vm, ticks = 4)
+
+            val text = vm.forceScreenSnapshot().visibleText()
+            assertFalse(text.contains("StandaloneCoroutine was cancelled"), text)
+            assertFalse(text.contains("Program error in boot.ck"), text)
         }
     }
 
@@ -422,8 +493,6 @@ class BackgroundDeviceVmTest {
                     firmwareLoader = StaticFirmwareLoader("pub fun main() { if (false) { filesystem::list() } }"),
                 )
 
-            vm.boot()
-
             val terminalState =
                 runBlocking {
                     val terminalState =
@@ -433,6 +502,8 @@ class BackgroundDeviceVmTest {
                             }
                         }
 
+                    kotlinx.coroutines.yield()
+                    vm.boot()
                     vm.requestSlice(0)
                     terminalState.await()
                 }

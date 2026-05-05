@@ -22,6 +22,7 @@ package ru.lazyhat.compukterkraft.core.device.vm
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -107,6 +108,8 @@ internal class VmProcessManager(
         return try {
             program.run(runtimeCreator(workingDirectory, argument))
             0
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (failure: Throwable) {
             terminal.println("Program error in ${programSource.path}: ${failure.message ?: failure.javaClass.simpleName}")
             1
