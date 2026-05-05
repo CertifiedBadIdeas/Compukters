@@ -19,6 +19,10 @@
 
 package ru.lazyhat.compukterkraft.lang.runtime
 
+import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
+import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayInfo
+import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayPixelFormat
+
 enum class DeviceCapability {
     TERMINAL,
     DISPLAY,
@@ -201,6 +205,24 @@ interface DeviceVmHandle : AutoCloseable {
      * Force a screen snapshot regardless of dirty state (e.g. when a new player opens the GUI).
      */
     fun forceScreenSnapshot(): ScreenBufferSnapshot
+
+    fun attachDisplay(
+        displayId: Int,
+        width: Int,
+        height: Int,
+        pixelFormat: DisplayPixelFormat = DisplayPixelFormat.RGB565,
+    ): DisplayInfo = DisplayInfo(displayId, width, height, pixelFormat)
+
+    fun resizeDisplay(
+        displayId: Int,
+        width: Int,
+        height: Int,
+        pixelFormat: DisplayPixelFormat = DisplayPixelFormat.RGB565,
+    ): DisplayInfo = attachDisplay(displayId, width, height, pixelFormat)
+
+    fun detachDisplay(displayId: Int) = Unit
+
+    fun drainDisplayFrames(): List<DisplayFrameDelta> = emptyList()
 
     override fun close() = stop(VmStopReason.CLOSED)
 }

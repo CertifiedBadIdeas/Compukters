@@ -39,6 +39,8 @@ import ru.lazyhat.compukterkraft.lang.runtime.DeviceStorageResources
 import ru.lazyhat.compukterkraft.lang.runtime.VmState
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class BackgroundDeviceVmTest {
@@ -65,6 +67,45 @@ class BackgroundDeviceVmTest {
     }
 
     private fun firmwareTestProfile(): DeviceProfile = runtimeProfile().copy(terminalWidth = 120, terminalHeight = 16)
+
+    @Test
+    fun ownsDisplayRegistryFrames() {
+        runtimeTestWorkspace("vm-display-registry") { workspace ->
+            val vm =
+                BackgroundDeviceVm(
+                    deviceId = 1,
+                    profile = firmwareTestProfile(),
+                    dispatcher = Dispatchers.Default,
+                    labelProvider = { null },
+                    logger = DeviceVmLogger { },
+                    workspace = workspace.host,
+                    firmwareLoader =
+                        StaticFirmwareLoader(
+                            """
+                            pub fun main() {
+                                val displayId = display::primary();
+                                display::fillRect(displayId, 1, 2, 3, 4, 63488);
+                                display::present(displayId);
+                            }
+                            """.trimIndent(),
+                        ),
+                )
+
+            val info = vm.attachDisplay(displayId = 9, width = 40, height = 20)
+
+            assertEquals(9, info.displayId)
+            assertEquals(40, info.width)
+            assertEquals(20, info.height)
+            val initialFrame = assertNotNull(vm.drainDisplayFrames().singleOrNull())
+            assertEquals(9, initialFrame.displayId)
+            assertTrue(vm.boot())
+            runVmTicks(vm)
+            val vmFrame = assertNotNull(vm.drainDisplayFrames().lastOrNull())
+            assertEquals(9, vmFrame.displayId)
+            assertEquals(40, vmFrame.width)
+            assertEquals(20, vmFrame.height)
+        }
+    }
 
     @Test
     fun bootsFirmwareAndRunsUserBootFileFromWorkspace() {

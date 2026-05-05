@@ -39,11 +39,13 @@ import ru.lazyhat.compukterkraft.core.device.runtime.WorkspaceProgramLoader
 import ru.lazyhat.compukterkraft.core.device.vm.api.ComputerStdioBroadcaster
 import ru.lazyhat.compukterkraft.core.device.vm.api.ScreenBufferVtSink
 import ru.lazyhat.compukterkraft.core.device.vm.api.VmFileSystemApi
+import ru.lazyhat.compukterkraft.core.device.vm.api.VmDisplayApi
 import ru.lazyhat.compukterkraft.core.device.vm.api.VmPeripheralRegistry
 import ru.lazyhat.compukterkraft.core.device.vm.api.VmPeripheralRuntimeApi
 import ru.lazyhat.compukterkraft.core.device.vm.api.VmProcessApi
 import ru.lazyhat.compukterkraft.core.device.vm.api.VmSystemApi
 import ru.lazyhat.compukterkraft.core.device.vm.api.VmTerminalApi
+import ru.lazyhat.compukterkraft.core.device.vm.display.DisplayRegistry
 import ru.lazyhat.compukterkraft.lang.api.BuiltinModule
 import ru.lazyhat.compukterkraft.lang.api.BuiltinRegistry
 import ru.lazyhat.compukterkraft.lang.frontend.LanguageBuiltins
@@ -55,6 +57,9 @@ import ru.lazyhat.compukterkraft.lang.runtime.HostCall
 import ru.lazyhat.compukterkraft.lang.runtime.HostResult
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBuffer
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
+import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
+import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayInfo
+import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayPixelFormat
 import ru.lazyhat.compukterkraft.lang.runtime.VmEvent
 import ru.lazyhat.compukterkraft.lang.runtime.VmSnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.VmState
@@ -106,6 +111,7 @@ class BackgroundDeviceVm(
     private val programLoader = WorkspaceProgramLoader(workspace)
     private val pathResolver = VmPathResolver()
     private val screenBuffer = ScreenBuffer(profile.terminalWidth, profile.terminalHeight, profile.colorTerminal)
+    private val displayRegistry = DisplayRegistry()
     val stdioBroadcaster = ComputerStdioBroadcaster()
     private val screenBufferFeeder: VtParser = VtParser(ScreenBufferVtSink(screenBuffer))
     private val screenBufferConsumer =
@@ -218,6 +224,24 @@ class BackgroundDeviceVm(
 
     override fun forceScreenSnapshot(): ScreenBufferSnapshot = screenBuffer.forceSnapshot()
 
+    override fun attachDisplay(
+        displayId: Int,
+        width: Int,
+        height: Int,
+        pixelFormat: DisplayPixelFormat,
+    ): DisplayInfo = displayRegistry.attach(displayId, width, height, pixelFormat)
+
+    override fun resizeDisplay(
+        displayId: Int,
+        width: Int,
+        height: Int,
+        pixelFormat: DisplayPixelFormat,
+    ): DisplayInfo = displayRegistry.resize(displayId, width, height, pixelFormat)
+
+    override fun detachDisplay(displayId: Int) = displayRegistry.detach(displayId)
+
+    override fun drainDisplayFrames(): List<DisplayFrameDelta> = displayRegistry.drainFrames()
+
     // ── VmContext ───────────────────────────────────────────────────
 
     override suspend fun receiveEvent(): VmEvent = eventManager.receiveEvent()
@@ -314,6 +338,7 @@ class BackgroundDeviceVm(
             runtimeRegistry = runtimeRegistryProfile.baseRegistry,
             systemApi = systemApi,
             terminalApi = terminalApi,
+            displayApi = VmDisplayApi(displayRegistry),
             stdioApi = stdioApi,
             filesystemApi = filesystemApi,
             processApi = processApi,
