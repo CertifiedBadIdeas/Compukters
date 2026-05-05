@@ -31,13 +31,18 @@ class DeviceWorkspaceInitializer(
 ) {
     fun ensureInitialized(deviceId: Int): Path {
         val root = rootPath.resolve(deviceId.toString()).normalize()
-        if (root.exists()) return root
-        root.createDirectories()
-        cloneRomTo(root)
+        val isNewWorkspace = !root.exists()
+        if (isNewWorkspace) {
+            root.createDirectories()
+        }
+        cloneRomTo(root, overwriteSupportScripts = !isNewWorkspace)
         return root
     }
 
-    private fun cloneRomTo(targetDir: Path) {
+    private fun cloneRomTo(
+        targetDir: Path,
+        overwriteSupportScripts: Boolean,
+    ) {
         val classLoader = DeviceWorkspaceInitializer::class.java.classLoader
         val romIndex =
             classLoader
@@ -58,7 +63,15 @@ class DeviceWorkspaceInitializer(
             val target = targetDir.resolve(trimmed).normalize()
             if (!target.startsWith(targetDir)) continue
             target.parent?.createDirectories()
-            target.writeText(content, StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW)
+            if (overwriteSupportScripts && trimmed != USER_ENTRYPOINT) {
+                target.writeText(content, StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)
+            } else if (!target.exists()) {
+                target.writeText(content, StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW)
+            }
         }
+    }
+
+    private companion object {
+        const val USER_ENTRYPOINT = "boot.ck"
     }
 }
