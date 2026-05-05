@@ -158,6 +158,7 @@ class BackgroundDeviceVm(
     override fun boot(): Boolean {
         if (runner?.isActive == true) return false
 
+        runtime.terminal.clear()
         stateManager.setState(VmState.Booting)
 
         runner =
