@@ -142,13 +142,18 @@ class BackgroundDeviceVmTest {
             val frames = vm.drainDisplayFrames()
             val rendered =
                 assertNotNull(
-                    frames.lastOrNull { frame -> frame.tiles.any { tile -> tile.payload.containsRgb565(0x0000) && tile.payload.containsRgb565(0x07E0) } },
+                    frames.lastOrNull { frame ->
+                        frame.tiles.any { tile ->
+                            tile.payload.containsRgb565(0x0000) &&
+                                tile.payload.containsRgb565(0x07E0)
+                        }
+                    },
                     "terminal frame missing; frames=${frames.size} state=${vm.snapshot().state} text=${vm.forceScreenSnapshot().visibleText()} logs=$logs",
                 )
             assertTrue(rendered.tiles.isNotEmpty(), "terminal frame missing; frames=${frames.size} state=${vm.snapshot().state} logs=$logs")
-                val text = vm.forceScreenSnapshot().visibleText()
-                assertTrue(text.contains("Compukter Kraft shell"), text)
-                assertTrue(text.contains("/ >"), text)
+            val text = vm.forceScreenSnapshot().visibleText()
+            assertTrue(text.contains("Compukter Kraft shell"), text)
+            assertTrue(text.contains("/ >"), text)
             assertTrue(vm.snapshot().state.isActive, vm.snapshot().state.toString())
         } finally {
             root.toFile().deleteRecursively()

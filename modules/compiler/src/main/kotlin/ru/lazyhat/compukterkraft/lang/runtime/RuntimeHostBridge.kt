@@ -205,18 +205,31 @@ internal class RuntimeHostBridge(
         arguments: List<VmValue>,
     ): VmValue =
         when (functionName) {
-            "open" -> VmValue.IntValue(runtime.ipc.open())
+            "open" -> {
+                VmValue.IntValue(runtime.ipc.open())
+            }
+
             "write" -> {
                 runtime.ipc.write(arguments[0].asInt(), arguments[1].asString())
                 VmValue.UnitValue
             }
-            "read" -> VmValue.StringValue(runtime.ipc.read(arguments[0].asInt()))
-            "tryRead" -> VmValue.StringValue(runtime.ipc.tryRead(arguments[0].asInt()))
+
+            "read" -> {
+                VmValue.StringValue(runtime.ipc.read(arguments[0].asInt()))
+            }
+
+            "tryRead" -> {
+                VmValue.StringValue(runtime.ipc.tryRead(arguments[0].asInt()))
+            }
+
             "close" -> {
                 runtime.ipc.close(arguments[0].asInt())
                 VmValue.UnitValue
             }
-            else -> error("Unknown ipc function $functionName")
+
+            else -> {
+                error("Unknown ipc function $functionName")
+            }
         }
 
     private fun invokeDisplay(
@@ -224,10 +237,22 @@ internal class RuntimeHostBridge(
         arguments: List<VmValue>,
     ): VmValue =
         when (functionName) {
-            "primary" -> VmValue.IntValue(runtime.display.primary())
-            "isAttached" -> VmValue.BoolValue(runtime.display.isAttached(arguments[0].asInt()))
-            "width" -> VmValue.IntValue(runtime.display.width(arguments[0].asInt()))
-            "height" -> VmValue.IntValue(runtime.display.height(arguments[0].asInt()))
+            "primary" -> {
+                VmValue.IntValue(runtime.display.primary())
+            }
+
+            "isAttached" -> {
+                VmValue.BoolValue(runtime.display.isAttached(arguments[0].asInt()))
+            }
+
+            "width" -> {
+                VmValue.IntValue(runtime.display.width(arguments[0].asInt()))
+            }
+
+            "height" -> {
+                VmValue.IntValue(runtime.display.height(arguments[0].asInt()))
+            }
+
             "clear" -> {
                 runtime.display.clear(arguments[0].asInt(), arguments[1].asInt())
                 VmValue.UnitValue
@@ -311,18 +336,39 @@ internal class RuntimeHostBridge(
         arguments: List<VmValue>,
     ): VmValue =
         when (functionName) {
-            "trim" -> VmValue.StringValue(arguments[0].asString().trim())
-            "beforeSpace" -> VmValue.StringValue(arguments[0].asString().substringBeforeFirstSpace())
-            "afterSpace" -> VmValue.StringValue(arguments[0].asString().substringAfterFirstSpace())
-            "isBlank" -> VmValue.BoolValue(arguments[0].asString().isBlank())
-            "toInt" -> VmValue.IntValue(arguments[0].asString().trim().toIntOrNull() ?: 0)
-            "length" -> VmValue.IntValue(arguments[0].asString().length)
+            "trim" -> {
+                VmValue.StringValue(arguments[0].asString().trim())
+            }
+
+            "beforeSpace" -> {
+                VmValue.StringValue(arguments[0].asString().substringBeforeFirstSpace())
+            }
+
+            "afterSpace" -> {
+                VmValue.StringValue(arguments[0].asString().substringAfterFirstSpace())
+            }
+
+            "isBlank" -> {
+                VmValue.BoolValue(arguments[0].asString().isBlank())
+            }
+
+            "toInt" -> {
+                VmValue.IntValue(arguments[0].asString().trim().toIntOrNull() ?: 0)
+            }
+
+            "length" -> {
+                VmValue.IntValue(arguments[0].asString().length)
+            }
+
             "charAt" -> {
                 val text = arguments[0].asString()
                 val index = arguments[1].asInt()
                 VmValue.StringValue(if (index in text.indices) text[index].toString() else "")
             }
-            else -> error("Unknown strings function $functionName")
+
+            else -> {
+                error("Unknown strings function $functionName")
+            }
         }
 
     private fun VmValue.eventId(): Int =

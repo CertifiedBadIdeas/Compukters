@@ -83,14 +83,14 @@ class DisplayRegistry {
         displays[displayId]?.present()?.let(pendingFrames::add)
     }
 
-    fun drainFrames(): List<DisplayFrameDelta> = buildList {
-        while (true) {
-            add(pendingFrames.poll() ?: break)
+    fun drainFrames(): List<DisplayFrameDelta> =
+        buildList {
+            while (true) {
+                add(pendingFrames.poll() ?: break)
+            }
         }
-    }
 
-    private fun info(state: DisplayState): DisplayInfo =
-        DisplayInfo(state.displayId, state.width, state.height, state.pixelFormat)
+    private fun info(state: DisplayState): DisplayInfo = DisplayInfo(state.displayId, state.width, state.height, state.pixelFormat)
 
     companion object {
         const val MIN_SIZE = 1

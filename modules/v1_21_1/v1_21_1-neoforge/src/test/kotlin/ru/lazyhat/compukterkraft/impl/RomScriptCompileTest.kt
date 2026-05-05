@@ -22,8 +22,8 @@ import ru.lazyhat.compukterkraft.core.device.runtime.ComputerProgramCompiler
 import ru.lazyhat.compukterkraft.lang.frontend.MapSourceLoader
 import kotlin.test.Test
 import kotlin.test.assertContains
-import kotlin.test.assertNotNull
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.fail
 
 class RomScriptCompileTest {
