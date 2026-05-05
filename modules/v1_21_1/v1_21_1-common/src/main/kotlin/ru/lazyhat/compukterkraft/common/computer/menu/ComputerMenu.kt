@@ -58,9 +58,6 @@ interface ComputerMenu {
      */
     fun handleStdoutBytes(bytes: ByteArray)
 
-    /**
-     * Apply a framebuffer delta to the client-side display buffer.
-     * Task 7 wires this into the actual double buffer; until then this is a no-op.
-     */
-    fun handleDisplayFrame(frame: DisplayFrameDelta) = Unit
+    /** Apply a framebuffer delta to the client-side display buffer. */
+    fun handleDisplayFrame(frame: DisplayFrameDelta)
 }
