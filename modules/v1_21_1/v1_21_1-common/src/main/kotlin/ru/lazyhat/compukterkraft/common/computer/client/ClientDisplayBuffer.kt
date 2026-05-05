@@ -31,6 +31,8 @@ class ClientDisplayBuffer(
     private val staging = IntArray(width * height) { OPAQUE_BLACK }
     private var expectedSequence: Long = 1
     private var dirty = false
+    var hasReceivedFrames: Boolean = false
+        private set
 
     fun apply(frame: DisplayFrameDelta): Boolean {
         if (frame.displayId != displayId || frame.width != width || frame.height != height) return false
@@ -48,6 +50,7 @@ class ClientDisplayBuffer(
             }
         }
         expectedSequence = frame.sequence + 1
+        hasReceivedFrames = true
         dirty = true
         return true
     }

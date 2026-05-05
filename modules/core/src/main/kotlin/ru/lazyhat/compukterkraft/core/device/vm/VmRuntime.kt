@@ -77,6 +77,21 @@ class VmRuntime(
         }
     }
 
+    override suspend fun tryPullEvent(filter: String?): VmEvent? {
+        val event = ctx.tryReceiveEvent()
+        if (event == null) {
+            ctx.schedulingPoint()
+            return null
+        }
+        if (filter == null || event.name == filter) {
+            ctx.schedulingPoint()
+            return event
+        }
+        ctx.deferEvent(event)
+        ctx.schedulingPoint()
+        return null
+    }
+
     override suspend fun sleep(ticks: Long) {
         val targetTick = system.currentTick + ticks.coerceAtLeast(1)
         ctx.setSleepUntil(targetTick)

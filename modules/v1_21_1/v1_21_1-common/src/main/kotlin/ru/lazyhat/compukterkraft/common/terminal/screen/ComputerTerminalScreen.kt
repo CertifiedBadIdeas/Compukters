@@ -40,6 +40,7 @@ import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 import ru.lazyhat.compukterkraft.core.device.input.ComputerControlAction
 import ru.lazyhat.compukterkraft.core.device.input.ControlInputEvent
 import ru.lazyhat.compukterkraft.core.gui.TerminalRect
+import ru.lazyhat.compukterkraft.core.gui.TerminalFontConstants
 import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalInputController
 import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalMetrics
 import ru.lazyhat.compukterkraft.core.ui.foundation.CanvasScope
@@ -357,9 +358,15 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
         }
     }
 
-    private fun currentDisplayWidth(): Int = (width - 32).coerceAtLeast(64)
+    private fun currentDisplayWidth(): Int {
+        val cols = terminalDimensions(menu.clientSide.terminalBuffer?.snapshot()).width.takeIf { it > 0 } ?: DEFAULT_COLS
+        return (cols * TerminalFontConstants.FONT_WIDTH).coerceAtLeast(64)
+    }
 
-    private fun currentDisplayHeight(): Int = (height - 48).coerceAtLeast(48)
+    private fun currentDisplayHeight(): Int {
+        val rows = terminalDimensions(menu.clientSide.terminalBuffer?.snapshot()).height.takeIf { it > 0 } ?: DEFAULT_ROWS
+        return (rows * TerminalFontConstants.FONT_HEIGHT).coerceAtLeast(48)
+    }
 
     private fun terminalDimensions(snapshot: ScreenBufferSnapshot?): IntSize =
         snapshot?.run { IntSize(snapshot.width, snapshot.height) } ?: IntSize.Zero

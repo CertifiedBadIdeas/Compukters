@@ -33,6 +33,9 @@ interface VmContext {
     /** Suspend until the next event arrives (deferred events first). */
     suspend fun receiveEvent(): VmEvent
 
+    /** Return the next available event without blocking, or null when none is queued. */
+    fun tryReceiveEvent(): VmEvent?
+
     /** Push an event back so it will be returned by the next [receiveEvent]. */
     fun deferEvent(event: VmEvent)
 

@@ -185,12 +185,13 @@ internal class RuntimeHostBridge(
             }
         }
 
-    private fun invokeEvents(
+    private suspend fun invokeEvents(
         functionName: String,
         arguments: List<VmValue>,
     ): VmValue {
         val eventId = arguments.firstOrNull()?.eventId() ?: 0
         return when (functionName) {
+            "tryPull" -> fromEvent(runtime.tryPullEvent(arguments.singleOrNull()?.asString()) ?: VmEvent(""))
             "argCount" -> VmValue.IntValue(runtime.events.argCount(eventId))
             "argInt" -> VmValue.IntValue(runtime.events.argInt(eventId, arguments[1].asInt()))
             "argBool" -> VmValue.BoolValue(runtime.events.argBool(eventId, arguments[1].asInt()))

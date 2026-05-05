@@ -237,6 +237,18 @@ object LanguageBuiltins {
                                     "Waits for an event with the requested name.",
                                 ),
                                 BuiltinFunction(
+                                    "tryPull",
+                                    emptyList(),
+                                    "Event",
+                                    "Returns the next event or an empty-name event when none is available.",
+                                ),
+                                BuiltinFunction(
+                                    "tryPull",
+                                    listOf("String"),
+                                    "Event",
+                                    "Returns a matching event or an empty-name event without blocking.",
+                                ),
+                                BuiltinFunction(
                                     "argCount",
                                     listOf("Event"),
                                     "Int",

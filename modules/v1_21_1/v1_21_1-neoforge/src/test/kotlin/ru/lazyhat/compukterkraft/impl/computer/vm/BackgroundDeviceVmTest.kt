@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import ru.lazyhat.compukterkraft.core.device.runtime.FirmwareProgramLoader
+import ru.lazyhat.compukterkraft.core.device.runtime.HostCallDispatcher
 import ru.lazyhat.compukterkraft.core.device.runtime.LoadedFirmwareProgramSource
 import ru.lazyhat.compukterkraft.core.device.vm.BackgroundDeviceVm
 import ru.lazyhat.compukterkraft.core.device.vm.DeviceVmLogger
@@ -37,6 +38,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.DeviceProfile
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceQueueResources
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceResources
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceStorageResources
+import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.VmState
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
@@ -65,12 +67,25 @@ class BackgroundDeviceVmTest {
     private fun runVmTicks(
         vm: BackgroundDeviceVm,
         ticks: Int = 16,
+        hostCallDispatcher: HostCallDispatcher? = null,
     ) = runBlocking {
         repeat(ticks) { tick ->
             vm.requestSlice(tick.toLong())
+            hostCallDispatcher?.let { dispatcher ->
+                val results = vm.drainHostCalls().map(dispatcher::dispatch)
+                if (results.isNotEmpty()) {
+                    vm.deliverHostResults(results)
+                }
+            }
             kotlinx.coroutines.delay(10)
         }
     }
+
+    private fun ScreenBufferSnapshot.visibleText(): String =
+        (0 until height)
+            .joinToString("\n") { y ->
+                (0 until width).joinToString("") { x -> charAt(x, y).toString() }.trimEnd()
+            }.trim()
 
     private fun firmwareTestProfile(): DeviceProfile =
         DeviceProfile(
@@ -120,15 +135,33 @@ class BackgroundDeviceVmTest {
 
             vm.attachDisplay(displayId = 9, width = 96, height = 48)
             assertTrue(vm.boot())
-            runVmTicks(vm, ticks = 80)
+            runVmTicks(vm, ticks = 80, hostCallDispatcher = HostCallDispatcher(1, workspace))
 
             val frames = vm.drainDisplayFrames()
-            val rendered = assertNotNull(frames.lastOrNull { frame -> frame.tiles.any { tile -> tile.payload.any { it != 0.toByte() } } })
-            assertTrue(rendered.tiles.isNotEmpty(), "frames=${frames.size} state=${vm.snapshot().state} logs=$logs")
+            val rendered =
+                assertNotNull(
+                    frames.lastOrNull { frame -> frame.tiles.any { tile -> tile.payload.containsRgb565(0x0000) && tile.payload.containsRgb565(0x07E0) } },
+                    "terminal frame missing; frames=${frames.size} state=${vm.snapshot().state} text=${vm.forceScreenSnapshot().visibleText()} logs=$logs",
+                )
+            assertTrue(rendered.tiles.isNotEmpty(), "terminal frame missing; frames=${frames.size} state=${vm.snapshot().state} logs=$logs")
+                val text = vm.forceScreenSnapshot().visibleText()
+                assertTrue(text.contains("Compukter Kraft shell"), text)
+                assertTrue(text.contains("/ >"), text)
             assertTrue(vm.snapshot().state.isActive, vm.snapshot().state.toString())
         } finally {
             root.toFile().deleteRecursively()
         }
+    }
+
+    private fun ByteArray.containsRgb565(value: Int): Boolean {
+        val hi = (value ushr 8).toByte()
+        val lo = value.toByte()
+        var index = 0
+        while (index + 1 < size) {
+            if (this[index] == hi && this[index + 1] == lo) return true
+            index += 2
+        }
+        return false
     }
 
     @Test
