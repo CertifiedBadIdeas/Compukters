@@ -22,6 +22,7 @@ package ru.lazyhat.compukterkraft.lang.frontend
 import ru.lazyhat.compukterkraft.lang.api.ClassDeclaration
 import ru.lazyhat.compukterkraft.lang.api.FunctionDeclaration
 import ru.lazyhat.compukterkraft.lang.api.StructDeclaration
+import ru.lazyhat.compukterkraft.lang.api.Visibility
 import ru.lazyhat.compukterkraft.lang.runtime.CompletionItem
 import ru.lazyhat.compukterkraft.lang.runtime.CompletionItemKind
 import ru.lazyhat.compukterkraft.lang.runtime.DefinitionTarget
@@ -176,6 +177,13 @@ class LanguageIde(
                             is FunctionDeclaration -> declaration.name
                             is StructDeclaration -> declaration.name
                         }
+                    val visibility =
+                        when (declaration) {
+                            is ClassDeclaration -> declaration.visibility
+                            is FunctionDeclaration -> declaration.visibility
+                            is StructDeclaration -> declaration.visibility
+                        }
+                    if (visibility != Visibility.PUBLIC) return@mapNotNull null
                     if (!name.startsWith(prefix) || name in hiddenNames) return@mapNotNull null
                     CompletionItem(
                         label = name,
@@ -235,10 +243,12 @@ class LanguageIde(
                 }
             } ?: return incompleteThisMemberSymbols(source, offset, receiverName)
         val staticReceiver = analysis.visibleSymbolsAt(offset).any { it.name == receiverName && it.kind == SymbolKind.CLASS }
+        val canSeePrivate = receiverName == "this" || classBinding.declaration.range.contains(offset)
         return if (receiverName == "this" || !staticReceiver) {
-            classBinding.fields.values.map { it.symbol } + classBinding.instanceMethods.values.map { it.symbol }
+            classBinding.fields.values.filter { canSeePrivate || it.visibility == Visibility.PUBLIC }.map { it.symbol } +
+                classBinding.instanceMethods.values.filter { canSeePrivate || it.visibility == Visibility.PUBLIC }.map { it.symbol }
         } else {
-            classBinding.staticMethods.values.map { it.symbol }
+            classBinding.staticMethods.values.filter { canSeePrivate || it.visibility == Visibility.PUBLIC }.map { it.symbol }
         }
     }
 
@@ -253,7 +263,7 @@ class LanguageIde(
                 ?: return emptyList()
         val className = classHeader.groupValues[1]
         val parameters = classHeader.groupValues[2]
-        return parameters
+        val constructorFields = parameters
             .split(',')
             .mapNotNull { parameter ->
                 val match =
@@ -268,6 +278,17 @@ class LanguageIde(
                     detail = "$className.$fieldName: $fieldType",
                 )
             }
+        val methods =
+            Regex("\\b(?:pub\\s+)?(?:static\\s+)?fun\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\(").findAll(source.take(offset))
+                .map { match ->
+                    SymbolInfo(
+                        name = match.groupValues[1],
+                        kind = SymbolKind.METHOD,
+                        range = null,
+                        detail = "fun $className.${match.groupValues[1]}(...)",
+                    )
+                }.toList()
+        return constructorFields + methods
     }
 
     private fun declaredReceiverType(
@@ -340,6 +361,7 @@ class LanguageIde(
         val KEYWORDS =
             listOf(
                 "fun",
+                "pub",
                 "val",
                 "var",
                 "if",
@@ -357,6 +379,7 @@ class LanguageIde(
         val BODY_KEYWORDS =
             setOf(
                 "fun",
+                "pub",
                 "val",
                 "var",
                 "if",

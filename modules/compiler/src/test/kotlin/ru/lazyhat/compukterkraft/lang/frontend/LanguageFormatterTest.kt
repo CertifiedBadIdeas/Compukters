@@ -158,6 +158,40 @@ class LanguageFormatterTest {
     }
 
     @Test
+    fun formatsPubDeclarationsAndClassMembers() {
+        val source =
+            """
+            pub struct Vec2{x:Int,y:Int}
+            pub class Counter(pub var value:Int){pub val label:String="counter";pub fun current():Int{return this.value;}pub static fun zero():Counter{return Counter(value=0);}}
+            pub fun main(){}
+            """.trimIndent()
+
+        val expected =
+            """
+            pub struct Vec2 { x: Int, y: Int }
+
+            pub class Counter(pub var value: Int) {
+                pub val label: String = "counter"
+
+                pub fun current(): Int {
+                    return this.value
+                }
+
+                pub static fun zero(): Counter {
+                    return Counter(value = 0)
+                }
+            }
+
+            pub fun main() {
+            }
+            """.trimIndent() + "\n"
+
+        val result = formatter.formatDocument("main.ck", source)
+
+        assertEquals(expected, applySingleEdit(source, result))
+    }
+
+    @Test
     fun formatIsIdempotent() {
         val source =
             """
