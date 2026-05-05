@@ -245,10 +245,16 @@ class LanguageIde(
         val staticReceiver = analysis.visibleSymbolsAt(offset).any { it.name == receiverName && it.kind == SymbolKind.CLASS }
         val canSeePrivate = receiverName == "this" || classBinding.declaration.range.contains(offset)
         return if (receiverName == "this" || !staticReceiver) {
-            classBinding.fields.values.filter { canSeePrivate || it.visibility == Visibility.PUBLIC }.map { it.symbol } +
-                classBinding.instanceMethods.values.filter { canSeePrivate || it.visibility == Visibility.PUBLIC }.map { it.symbol }
+            classBinding.fields.values
+                .filter { canSeePrivate || it.visibility == Visibility.PUBLIC }
+                .map { it.symbol } +
+                classBinding.instanceMethods.values
+                    .filter { canSeePrivate || it.visibility == Visibility.PUBLIC }
+                    .map { it.symbol }
         } else {
-            classBinding.staticMethods.values.filter { canSeePrivate || it.visibility == Visibility.PUBLIC }.map { it.symbol }
+            classBinding.staticMethods.values
+                .filter { canSeePrivate || it.visibility == Visibility.PUBLIC }
+                .map { it.symbol }
         }
     }
 
@@ -263,23 +269,25 @@ class LanguageIde(
                 ?: return emptyList()
         val className = classHeader.groupValues[1]
         val parameters = classHeader.groupValues[2]
-        val constructorFields = parameters
-            .split(',')
-            .mapNotNull { parameter ->
-                val match =
-                    Regex("\\b(?:val|var)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*:\\s*([^,]+)").find(parameter.trim())
-                        ?: return@mapNotNull null
-                val fieldName = match.groupValues[1]
-                val fieldType = match.groupValues[2].trim()
-                SymbolInfo(
-                    name = fieldName,
-                    kind = SymbolKind.FIELD,
-                    range = null,
-                    detail = "$className.$fieldName: $fieldType",
-                )
-            }
+        val constructorFields =
+            parameters
+                .split(',')
+                .mapNotNull { parameter ->
+                    val match =
+                        Regex("\\b(?:val|var)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*:\\s*([^,]+)").find(parameter.trim())
+                            ?: return@mapNotNull null
+                    val fieldName = match.groupValues[1]
+                    val fieldType = match.groupValues[2].trim()
+                    SymbolInfo(
+                        name = fieldName,
+                        kind = SymbolKind.FIELD,
+                        range = null,
+                        detail = "$className.$fieldName: $fieldType",
+                    )
+                }
         val methods =
-            Regex("\\b(?:pub\\s+)?(?:static\\s+)?fun\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\(").findAll(source.take(offset))
+            Regex("\\b(?:pub\\s+)?(?:static\\s+)?fun\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\(")
+                .findAll(source.take(offset))
                 .map { match ->
                     SymbolInfo(
                         name = match.groupValues[1],

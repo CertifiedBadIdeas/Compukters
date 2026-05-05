@@ -276,11 +276,27 @@ internal class DefaultCompilerFacade(
     }
 
     private fun entryPointDiagnostics(source: ParsedSource): List<FrontendDiagnostic> {
-        val main = source.program.declarations.filterIsInstance<FunctionDeclaration>().firstOrNull { it.name == "main" }
+        val main =
+            source.program.declarations
+                .filterIsInstance<FunctionDeclaration>()
+                .firstOrNull { it.name == "main" }
         return when {
-            main == null -> listOf(FrontendDiagnostic("Program must declare `pub fun main()`.", source.program.range ?: source.tokens.last().range))
-            main.visibility != Visibility.PUBLIC -> listOf(FrontendDiagnostic("Entry point `main` must be declared as `pub fun main()`.", main.range))
-            else -> emptyList()
+            main == null -> {
+                listOf(
+                    FrontendDiagnostic(
+                        "Program must declare `pub fun main()`.",
+                        source.program.range ?: source.tokens.last().range,
+                    ),
+                )
+            }
+
+            main.visibility != Visibility.PUBLIC -> {
+                listOf(FrontendDiagnostic("Entry point `main` must be declared as `pub fun main()`.", main.range))
+            }
+
+            else -> {
+                emptyList()
+            }
         }
     }
 }

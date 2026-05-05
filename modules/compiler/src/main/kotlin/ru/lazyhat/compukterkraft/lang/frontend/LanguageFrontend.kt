@@ -196,9 +196,22 @@ internal data class ModuleExports(
 ) {
     constructor(canonical: String, program: Program) : this(
         canonical = canonical,
-        functions = program.declarations.filterIsInstance<FunctionDeclaration>().filter { it.visibility == Visibility.PUBLIC }.associateBy { it.name },
-        structs = program.declarations.filterIsInstance<StructDeclaration>().filter { it.visibility == Visibility.PUBLIC }.associateBy { it.name },
-        classes = program.declarations.filterIsInstance<ClassDeclaration>().filter { it.visibility == Visibility.PUBLIC }.associateBy { it.name },
+        functions =
+            program.declarations
+                .filterIsInstance<FunctionDeclaration>()
+                .filter {
+                    it.visibility == Visibility.PUBLIC
+                }.associateBy { it.name },
+        structs =
+            program.declarations
+                .filterIsInstance<StructDeclaration>()
+                .filter { it.visibility == Visibility.PUBLIC }
+                .associateBy { it.name },
+        classes =
+            program.declarations
+                .filterIsInstance<ClassDeclaration>()
+                .filter { it.visibility == Visibility.PUBLIC }
+                .associateBy { it.name },
     )
 }
 
@@ -573,7 +586,8 @@ internal class SemanticAnalyzer(
                     range = parameter.range,
                     detail = "$visibleName.${parameter.name}: ${type.displayName}",
                 )
-            fields[parameter.name] = ClassFieldBinding(parameter.name, type, mutability == FieldMutability.VAR, parameter.visibility, symbol)
+            fields[parameter.name] =
+                ClassFieldBinding(parameter.name, type, mutability == FieldMutability.VAR, parameter.visibility, symbol)
         }
         klass.members.filterIsInstance<ClassFieldDeclaration>().forEach { field ->
             val type = field.type?.let { exportTypeRef(it, exports, qualifier) } ?: TypeRef("Unit")
@@ -778,7 +792,15 @@ internal class SemanticAnalyzer(
                         }) : ${returnType.displayName}",
                     )
                 symbols += methodSymbol
-                return ClassMethodBinding(function.name, function, parameterTypes, returnType, member.static, member.visibility, methodSymbol)
+                return ClassMethodBinding(
+                    function.name,
+                    function,
+                    parameterTypes,
+                    returnType,
+                    member.static,
+                    member.visibility,
+                    methodSymbol,
+                )
             }
 
             val methods = declaration.members.filterIsInstance<ClassMethodDeclaration>()
@@ -925,7 +947,14 @@ internal class SemanticAnalyzer(
         block: BlockStatement,
         before: Set<String>,
         candidateFields: Set<String>,
-    ): Set<String> = block.statements.fold(before) { initialized, statement -> definitelyInitializedAfter(statement, initialized, candidateFields) }
+    ): Set<String> =
+        block.statements.fold(before) { initialized, statement ->
+            definitelyInitializedAfter(
+                statement,
+                initialized,
+                candidateFields,
+            )
+        }
 
     private fun definitelyInitializedAfter(
         statement: Statement,
@@ -933,7 +962,10 @@ internal class SemanticAnalyzer(
         candidateFields: Set<String>,
     ): Set<String> =
         when (statement) {
-            is BlockStatement -> definitelyInitializedAfter(statement, before, candidateFields)
+            is BlockStatement -> {
+                definitelyInitializedAfter(statement, before, candidateFields)
+            }
+
             is MemberAssignmentStatement -> {
                 if (statement.receiver is ThisExpression && statement.memberName in candidateFields) {
                     before.toMutableSet().also { it += statement.memberName }
@@ -964,12 +996,17 @@ internal class SemanticAnalyzer(
                 }
             }
 
-            is WhileStatement -> before
+            is WhileStatement -> {
+                before
+            }
+
             is AssignmentStatement,
             is ExpressionStatement,
             is ReturnStatement,
             is VariableDeclarationStatement,
-            -> before
+            -> {
+                before
+            }
         }
 
     private fun intersectInitialized(
@@ -2918,13 +2955,16 @@ internal class Parser(
         return Program(imports, declarations, declarations.lastOrNull()?.range ?: imports.lastOrNull()?.range)
     }
 
-    private fun parseVisibility(): Visibility =
-        if (match(TokenKind.PUB)) Visibility.PUBLIC else Visibility.PRIVATE
+    private fun parseVisibility(): Visibility = if (match(TokenKind.PUB)) Visibility.PUBLIC else Visibility.PRIVATE
 
     private fun synchronize() {
         while (!isAtEnd()) {
             if (match(TokenKind.SEMICOLON)) return
-            if (check(TokenKind.PUB) || check(TokenKind.FUN) || check(TokenKind.IMPORT) || check(TokenKind.STRUCT) || check(TokenKind.CLASS)) return
+            if (check(TokenKind.PUB) || check(TokenKind.FUN) || check(TokenKind.IMPORT) || check(TokenKind.STRUCT) ||
+                check(TokenKind.CLASS)
+            ) {
+                return
+            }
             advance()
         }
     }

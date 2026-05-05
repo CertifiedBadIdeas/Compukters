@@ -79,18 +79,49 @@ class LanguageFrontendTest {
             parsed.syntaxDiagnostics.none { it.severity == FrontendSeverity.ERROR },
             parsed.syntaxDiagnostics.joinToString { it.message },
         )
-        val struct = parsed.program.declarations.filterIsInstance<StructDeclaration>().single()
-        val klass = parsed.program.declarations.filterIsInstance<ClassDeclaration>().single()
+        val struct =
+            parsed.program.declarations
+                .filterIsInstance<StructDeclaration>()
+                .single()
+        val klass =
+            parsed.program.declarations
+                .filterIsInstance<ClassDeclaration>()
+                .single()
         val functions = parsed.program.declarations.filterIsInstance<FunctionDeclaration>()
         assertEquals(Visibility.PUBLIC, struct.visibility)
         assertEquals(Visibility.PUBLIC, klass.visibility)
         assertEquals(Visibility.PUBLIC, functions.single { it.name == "main" }.visibility)
         assertEquals(Visibility.PRIVATE, functions.single { it.name == "helper" }.visibility)
         assertEquals(Visibility.PUBLIC, klass.constructorParameters.single { it.name == "value" }.visibility)
-        assertEquals(Visibility.PUBLIC, klass.members.filterIsInstance<ClassFieldDeclaration>().single { it.name == "label" }.visibility)
-        assertEquals(Visibility.PRIVATE, klass.members.filterIsInstance<ClassFieldDeclaration>().single { it.name == "cached" }.visibility)
-        assertEquals(Visibility.PUBLIC, klass.members.filterIsInstance<ClassMethodDeclaration>().single { it.function.name == "current" }.visibility)
-        assertEquals(Visibility.PUBLIC, klass.members.filterIsInstance<ClassMethodDeclaration>().single { it.function.name == "zero" }.visibility)
+        assertEquals(
+            Visibility.PUBLIC,
+            klass.members
+                .filterIsInstance<ClassFieldDeclaration>()
+                .single { it.name == "label" }
+                .visibility,
+        )
+        assertEquals(
+            Visibility.PRIVATE,
+            klass.members
+                .filterIsInstance<ClassFieldDeclaration>()
+                .single { it.name == "cached" }
+                .visibility,
+        )
+        assertEquals(
+            Visibility.PUBLIC,
+            klass.members
+                .filterIsInstance<ClassMethodDeclaration>()
+                .single {
+                    it.function.name == "current"
+                }.visibility,
+        )
+        assertEquals(
+            Visibility.PUBLIC,
+            klass.members
+                .filterIsInstance<ClassMethodDeclaration>()
+                .single { it.function.name == "zero" }
+                .visibility,
+        )
     }
 
     @Test
