@@ -58,6 +58,7 @@ fun runtimeProfile(
     allowedCapabilities: Set<DeviceCapability> =
         setOf(
             DeviceCapability.TERMINAL,
+            DeviceCapability.DISPLAY,
             DeviceCapability.FILESYSTEM,
             DeviceCapability.EVENTS,
             DeviceCapability.SYSTEM,
