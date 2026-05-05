@@ -178,6 +178,58 @@ class BackgroundDeviceVmTest {
     }
 
     @Test
+    fun parentCanSpawnChildAndExchangeIpcText() {
+        runtimeTestWorkspace("firmware-spawn-ipc-child") { workspace ->
+            val logs = mutableListOf<String>()
+            workspace.writeProgram(
+                1,
+                "boot.ck",
+                """
+                pub fun main() {
+                    val inputText: String = strings::beforeSpace(process::argument())
+                    val rest1: String = strings::afterSpace(process::argument())
+                    val outputText: String = strings::beforeSpace(rest1)
+                    val input: Int = strings::toInt(inputText)
+                    val output: Int = strings::toInt(outputText)
+                    ipc::write(output, ipc::read(input) + "child-")
+                }
+                """.trimIndent(),
+            )
+            val vm =
+                BackgroundDeviceVm(
+                    deviceId = 1,
+                    profile = firmwareTestProfile(),
+                    dispatcher = Dispatchers.Default,
+                    labelProvider = { null },
+                    logger = DeviceVmLogger(logs::add),
+                    workspace = workspace.host,
+                    firmwareLoader =
+                        StaticFirmwareLoader(
+                            """
+                            pub fun main() {
+                                val childInput: Int = ipc::open()
+                                val childOutput: Int = ipc::open()
+                                val pid: Int = process::spawn("boot.ck", childInput + " " + childOutput + " 0")
+                                ipc::write(childInput, "parent-")
+                                val text: String = ipc::read(childOutput)
+                                val code: Int = process::wait(pid)
+                                terminal::println(text + "code=" + code)
+                                while true { sleep(20L) }
+                            }
+                            """.trimIndent(),
+                        ),
+                )
+
+            vm.boot()
+            runVmTicks(vm, ticks = 40)
+
+            val text = vm.forceScreenSnapshot().visibleText()
+            assertTrue(text.contains("parent-child-code=0"), "text=[$text] state=${vm.snapshot().state} logs=$logs")
+            assertTrue(vm.snapshot().state.isActive, vm.snapshot().state.toString())
+        }
+    }
+
+    @Test
     fun firmwareReportsMissingBootFileAndStaysActive() {
         runtimeTestWorkspace("firmware-missing-boot") { workspace ->
             val vm =

@@ -286,6 +286,20 @@ internal class RuntimeHostBridge(
                 )
             }
 
+            "spawn" -> {
+                VmValue.IntValue(
+                    when (arguments.size) {
+                        1 -> runtime.process.spawn(arguments[0].asString())
+                        2 -> runtime.process.spawn(arguments[0].asString(), arguments[1].asString())
+                        else -> error("Unsupported process.spawn arity ${arguments.size}")
+                    },
+                )
+            }
+
+            "wait" -> {
+                VmValue.IntValue(runtime.process.wait(arguments[0].asInt()))
+            }
+
             else -> {
                 error("Unknown process function $functionName")
             }

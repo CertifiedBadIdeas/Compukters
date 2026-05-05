@@ -114,6 +114,15 @@ class BackgroundDeviceVm(
     private val hostCallManager = HostCallManager(profile.resources.queues.hostCallQueueSlots)
     private val programLoader = WorkspaceProgramLoader(workspace)
     private val pathResolver = VmPathResolver()
+    private val processManager =
+        VmProcessManager(
+            scope = scope,
+            ctx = this,
+            deviceId = deviceId,
+            programLoader = programLoader,
+            profile = profile,
+            runtimeCreator = { wd, arg -> createRuntime(wd, arg) },
+        )
     private val screenBuffer = ScreenBuffer(profile.terminalWidth, profile.terminalHeight, profile.colorTerminal)
     private val displayRegistry = DisplayRegistry()
     val stdioBroadcaster = ComputerStdioBroadcaster()
@@ -287,6 +296,7 @@ class BackgroundDeviceVm(
         LOGGER.debug { "DeviceID: $deviceId stopped with reason: $reason, error: $errorMessage" }
 
         stateManager.stopVm(reason, errorMessage)
+        processManager.cancelAll()
         runner?.cancel()
         runner = null
 
@@ -339,9 +349,7 @@ class BackgroundDeviceVm(
                 deviceId = deviceId,
                 pathResolver = pathResolver,
                 filesystemApi = filesystemApi,
-                programLoader = programLoader,
-                profile = profile,
-                runtimeCreator = { wd, arg -> createRuntime(wd, arg) },
+                processManager = processManager,
                 terminal = terminalApi,
             )
 

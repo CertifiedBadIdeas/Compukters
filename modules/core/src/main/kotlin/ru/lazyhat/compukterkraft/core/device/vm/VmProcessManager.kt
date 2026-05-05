@@ -1,0 +1,120 @@
+/*
+ * The Compukter Kraft Developers
+ *
+ * Copyright (C) 2026 Vsevolod Petrov (lazyhat)
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+package ru.lazyhat.compukterkraft.core.device.vm
+
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import ru.lazyhat.compukterkraft.core.device.runtime.ComputerProgramCompiler
+import ru.lazyhat.compukterkraft.core.device.runtime.WorkspaceProgramLoader
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceProfile
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceRuntime
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceTerminalApi
+
+internal class VmProcessManager(
+    private val scope: CoroutineScope,
+    private val ctx: VmContext,
+    private val deviceId: Int,
+    private val programLoader: WorkspaceProgramLoader,
+    private val profile: DeviceProfile,
+    private val runtimeCreator: (String, String) -> DeviceRuntime,
+) {
+    private val nextPid = AtomicInteger(2)
+    private val processes = ConcurrentHashMap<Int, ProcessHandle>()
+
+    fun spawn(
+        path: String,
+        argument: String,
+        workingDirectory: String,
+        terminal: DeviceTerminalApi,
+    ): Int {
+        val pid = nextPid.getAndIncrement()
+        val exitCode = CompletableDeferred<Int>()
+        val job =
+            scope.launch {
+                val code = execute(path, argument, workingDirectory, terminal)
+                exitCode.complete(code)
+            }
+        job.invokeOnCompletion { failure ->
+            if (failure != null && !exitCode.isCompleted) {
+                exitCode.complete(1)
+            }
+        }
+        processes[pid] = ProcessHandle(job, exitCode)
+        return pid
+    }
+
+    suspend fun wait(pid: Int): Int {
+        val handle = processes[pid] ?: return 1
+        val code = handle.exitCode.await()
+        processes.remove(pid, handle)
+        return code
+    }
+
+    fun cancelAll() {
+        processes.values.forEach { it.job.cancel() }
+        processes.clear()
+    }
+
+    private suspend fun execute(
+        path: String,
+        argument: String,
+        workingDirectory: String,
+        terminal: DeviceTerminalApi,
+    ): Int {
+        val resolved = path
+        val programSource =
+            programLoader.load(deviceId, resolved) ?: run {
+                val message = "Program not found: $resolved"
+                ctx.log("VM[$deviceId] $message")
+                terminal.println(message)
+                return 1
+            }
+        val compiledProgram =
+            ComputerProgramCompiler.compile(
+                programSource.path,
+                programSource.source,
+                profile,
+                sourceLoader = programLoader.sourceLoader(deviceId),
+            )
+        val program = compiledProgram.program
+        if (program == null) {
+            val message = compiledProgram.errorMessage.orEmpty().ifEmpty { "Compilation failed." }
+            terminal.println("Compilation Error in ${programSource.path}: $message")
+            return 1
+        }
+
+        return try {
+            program.run(runtimeCreator(workingDirectory, argument))
+            0
+        } catch (failure: Throwable) {
+            terminal.println("Program error in ${programSource.path}: ${failure.message ?: failure.javaClass.simpleName}")
+            1
+        }
+    }
+
+    private data class ProcessHandle(
+        val job: Job,
+        val exitCode: CompletableDeferred<Int>,
+    )
+}
