@@ -1,4 +1,4 @@
-![Mod logo (Ai generated)](logo_1.webp)
+![Mod logo (Ai generated)](logo_1.png)
 
 **Programmable computers for Minecraft — but with a real, statically-typed
 language and a real IDE, right inside the game.**
