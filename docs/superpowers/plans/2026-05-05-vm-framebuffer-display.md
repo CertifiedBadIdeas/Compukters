@@ -55,6 +55,8 @@ Modify common client integration:
 - `modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft/common/network/ClientNetworkContext.kt` — add `handleDisplayFrame(containerId, delta)`.
 - `modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft/common/network/ClientNetworkContextImpl.kt` — route display frames to the current `ComputerMenu`.
 - `modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/menu/AbstractComputerMenu.kt` — store/apply `ClientDisplayBuffer` on the client side.
+- `modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/block/ComputerBlockEntity.kt` — pass the host display network bridge into `RuntimeDeviceImpl`.
+- `modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft/common/workbench/block/WorkbenchBlockEntity.kt` — pass the host display network bridge into `RuntimeDeviceImpl` for workbench target runtime devices.
 - `modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft/common/terminal/screen/ComputerTerminalScreen.kt` — announce display attach/resize/detach and keep the old terminal surface out of the active display path.
 
 Add tests:
@@ -1214,6 +1216,8 @@ git commit -m "feat: add runtime display sessions"
 - Modify: `modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft/common/network/ClientNetworkContext.kt`
 - Modify: `modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft/common/network/ClientNetworkContextImpl.kt`
 - Modify: `modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/context/BlockEntityRuntimeDeviceHost.kt`
+- Modify: `modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/block/ComputerBlockEntity.kt`
+- Modify: `modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft/common/workbench/block/WorkbenchBlockEntity.kt`
 - Create: `modules/v1_21_1/v1_21_1-common/src/test/kotlin/ru/lazyhat/compukterkraft/common/computer/network/DisplayMessageCodecTest.kt`
 
 - [ ] **Step 1: Write failing frame codec test**
@@ -1456,6 +1460,14 @@ val displayNetwork: DisplayNetworkBridge =
     }
 ```
 
+Then update both `RuntimeDeviceImpl(...)` call sites to pass `host.displayNetwork` after `host.terminalNetwork`:
+
+```kotlin
+terminalNetwork = host.terminalNetwork,
+displayNetwork = host.displayNetwork,
+stateSink = host.stateSink,
+```
+
 - [ ] **Step 8: Run codec test**
 
 Run: `./gradlew :v1_21_1:v1_21_1-common:test --tests "*DisplayMessageCodecTest"`
@@ -1472,6 +1484,8 @@ git add modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft
   modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/network/server/DisplayResizeServerMessage.kt \
   modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/network/server/DisplayDetachServerMessage.kt \
     modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/context/BlockEntityRuntimeDeviceHost.kt \
+    modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/block/ComputerBlockEntity.kt \
+    modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft/common/workbench/block/WorkbenchBlockEntity.kt \
   modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft/common/network/NetworkMessages.kt \
   modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft/common/network/ClientNetworkContext.kt \
   modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft/common/network/ClientNetworkContextImpl.kt \
@@ -1657,6 +1671,8 @@ git commit -m "feat: add client display buffering"
 - Modify: `modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft/common/terminal/screen/ComputerTerminalScreen.kt`
 - Modify: `modules/v1_21_1/v1_21_1-neoforge/src/main/resources/firmware/bios.ck`
 - Modify: `modules/v1_21_1/v1_21_1-neoforge/src/test/kotlin/ru/lazyhat/compukterkraft/impl/RomScriptCompileTest.kt`
+
+This task is Phase 1A. It proves frames reach `ClientDisplayBuffer`. On-screen ARGB texture rendering is intentionally left for the next UI task.
 
 - [ ] **Step 1: Attach display buffer from screen init**
 
