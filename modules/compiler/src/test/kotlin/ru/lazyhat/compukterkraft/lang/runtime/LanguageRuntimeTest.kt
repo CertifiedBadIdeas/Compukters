@@ -133,6 +133,36 @@ class LanguageRuntimeTest {
     }
 
     @Test
+    fun executesIpcBuiltinsThroughRuntimeBridge() {
+        val artifact =
+            frontend.compile(
+                "ipc.ck",
+                """
+                pub fun main() {
+                    val channel: Int = ipc::open();
+                    ipc::write(channel, "hello");
+                    terminal::println(ipc::tryRead(channel));
+                    ipc::write(channel, "again");
+                    terminal::println(ipc::read(channel));
+                    ipc::close(channel);
+                }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+
+        val runtime = RecordingRuntime()
+        runBlocking {
+            BytecodeComputerProgram(requireNotNull(artifact.module)).run(runtime)
+        }
+
+        assertEquals(listOf("hello", "again"), runtime.lines)
+    }
+
+    @Test
     fun usesInstructionBudgetFromProfileResources() {
         val artifact =
             frontend.compile(
@@ -978,18 +1008,33 @@ internal class RecordingRuntime(
 
     override val ipc: DeviceIpcApi =
         object : DeviceIpcApi {
-            override suspend fun open(): Int = 1
+            private var nextId = 1
+            private val channels = mutableMapOf<Int, String>()
+
+            override suspend fun open(): Int {
+                val id = nextId++
+                channels[id] = ""
+                return id
+            }
 
             override suspend fun write(
                 channelId: Int,
                 text: String,
-            ) = Unit
+            ) {
+                channels[channelId] = channels[channelId].orEmpty() + text
+            }
 
-            override suspend fun read(channelId: Int): String = ""
+            override suspend fun read(channelId: Int): String = tryRead(channelId)
 
-            override fun tryRead(channelId: Int): String = ""
+            override fun tryRead(channelId: Int): String {
+                val text = channels[channelId].orEmpty()
+                channels[channelId] = ""
+                return text
+            }
 
-            override fun close(channelId: Int) = Unit
+            override fun close(channelId: Int) {
+                channels.remove(channelId)
+            }
         }
 
     override val events: DeviceEventApi =
