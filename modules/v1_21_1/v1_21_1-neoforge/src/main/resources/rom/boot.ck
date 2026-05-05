@@ -1,3 +1,3 @@
 pub fun main() {
-    process::run("shell.ck")
+    process::run("terminal.ck")
 }
