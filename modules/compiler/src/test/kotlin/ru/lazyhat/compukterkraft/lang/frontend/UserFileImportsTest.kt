@@ -197,7 +197,8 @@ class UserFileImportsTest {
             MapSourceLoader(
                 mapOf(
                     "math.ck" to "pub struct Vec2 { x: Int, y: Int } pub fun make(): Vec2 { return Vec2(x = 1, y = 2); }",
-                    "main.ck" to "import \"math.ck\" { Vec2, make }; pub fun main() { val v: Vec2 = make(); terminal::println(\"x=\" + v.x); }",
+                    "main.ck" to
+                        "import \"math.ck\" { Vec2, make }; pub fun main() { val v: Vec2 = make(); terminal::println(\"x=\" + v.x); }",
                 ),
             )
 
