@@ -22,8 +22,6 @@ import it.unimi.dsi.fastutil.ints.IntOpenHashSet
 import it.unimi.dsi.fastutil.ints.IntSet
 import net.minecraft.network.FriendlyByteBuf
 import ru.lazyhat.compukterkraft.common.computer.network.client.FrameDeltaClientMessage
-import ru.lazyhat.compukterkraft.common.computer.network.client.StdoutBytesClientMessage
-import ru.lazyhat.compukterkraft.common.computer.network.server.AttachTerminalServerMessage
 import ru.lazyhat.compukterkraft.common.computer.network.server.ComputerActionServerMessage
 import ru.lazyhat.compukterkraft.common.computer.network.server.DisplayAttachServerMessage
 import ru.lazyhat.compukterkraft.common.computer.network.server.DisplayDetachServerMessage
@@ -31,7 +29,6 @@ import ru.lazyhat.compukterkraft.common.computer.network.server.DisplayResizeSer
 import ru.lazyhat.compukterkraft.common.computer.network.server.KeyEventServerMessage
 import ru.lazyhat.compukterkraft.common.computer.network.server.MouseEventServerMessage
 import ru.lazyhat.compukterkraft.common.computer.network.server.PasteEventComputerMessage
-import ru.lazyhat.compukterkraft.common.computer.network.server.ResizeTerminalServerMessage
 import ru.lazyhat.compukterkraft.common.network.ClientNetworkContext
 import ru.lazyhat.compukterkraft.common.network.ServerNetworkContext
 import ru.lazyhat.compukterkraft.common.network.text.ChatTableClientMessage
@@ -62,6 +59,8 @@ import ru.lazyhat.compukterkraft.common.workbench.network.server.WorkbenchWorksp
  * | 4  | unused                       | —                                  | Reserved for removed computer workspace requests | — |
  * | 5  | `workbench_workspace_request` | [WorkbenchWorkspaceServerMessage] | Workbench editor requests file, sync, or target actions | Workbench authoring session; triggers clientbound response |
  * | 6  | `workbench_input`            | [WorkbenchInputServerMessage]     | Player sends terminal key/mouse/paste input through the Workbench | Target VM event queue via Workbench runtime bridge |
+ * | 7  | unused                       | —                                  | Reserved for removed attach-terminal packet           | —                                             |
+ * | 8  | unused                       | —                                  | Reserved for removed resize-terminal packet           | —                                             |
  *
  * ### Server → Client (clientbound)
  *
@@ -69,7 +68,7 @@ import ru.lazyhat.compukterkraft.common.workbench.network.server.WorkbenchWorksp
  * |----|----------------------|------------------------------------|-------------------------------------------------|-----------------------------------------------|
  * | 10 | `chat_table`         | [ChatTableClientMessage]           | Server sends a formatted table to display in chat | Minecraft chat HUD                            |
  * | 13 | unused               | —                                  | Reserved for removed ComputerTerminalClientMessage (Epic 4)     | —                                             |
- * | 14 | `stdout_bytes`       | [StdoutBytesClientMessage]         | Server flushes pending VM stdout bytes to attached terminal session | [ClientTerminalBuffer.feed]               |
+ * | 14 | unused               | —                                  | Reserved for removed stdout byte stream packet       | —                                             |
  * | 15 | `workbench_workspace` | [WorkbenchWorkspaceClientMessage] | Response to a Workbench action or workspace request | [AbstractWorkbenchMenu.updateRemoteState] |
  * | 16 | `workbench_terminal`  | [WorkbenchTerminalClientMessage]  | Target terminal snapshot changed while Workbench is open | [AbstractWorkbenchMenu.updateScreenSnapshot] |
  */
@@ -127,29 +126,11 @@ object NetworkMessages {
             "workbench_cursor_request",
             { buf -> WorkbenchCursorServerMessage(buf) },
         )
-    val ATTACH_TERMINAL: MessageType<AttachTerminalServerMessage> =
-        registerServerbound(
-            7,
-            "attach_terminal",
-            { buf -> AttachTerminalServerMessage(buf) },
-        )
-    val RESIZE_TERMINAL: MessageType<ResizeTerminalServerMessage> =
-        registerServerbound(
-            8,
-            "resize_terminal",
-            { buf -> ResizeTerminalServerMessage(buf) },
-        )
     val CHAT_TABLE: MessageType<ChatTableClientMessage> =
         registerClientbound(
             10,
             "chat_table",
             { buf -> ChatTableClientMessage(buf) },
-        )
-    val STDOUT_BYTES: MessageType<StdoutBytesClientMessage> =
-        registerClientbound(
-            14,
-            "stdout_bytes",
-            { buf -> StdoutBytesClientMessage(buf) },
         )
     val WORKBENCH_WORKSPACE: MessageType<WorkbenchWorkspaceClientMessage> =
         registerClientbound(

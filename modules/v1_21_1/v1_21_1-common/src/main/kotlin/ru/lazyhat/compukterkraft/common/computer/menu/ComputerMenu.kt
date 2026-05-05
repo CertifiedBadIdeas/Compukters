@@ -27,7 +27,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
  *
  * Server-only and client-only operations are accessed through [side]:
  * - `menu.serverSide.device` / `menu.serverSide.input` — server-side only
- * - `menu.clientSide.terminalBuffer` — client-side only, nullable until the screen attaches a buffer
+ * - `menu.clientSide.displayBuffer` — client-side only, nullable until the screen attaches a buffer
  */
 interface ComputerMenu {
     /** Type-safe side discriminator. */
@@ -49,14 +49,6 @@ interface ComputerMenu {
      */
     val clientSide: MenuSide.Client
         get() = side as MenuSide.Client
-
-    /**
-     * Apply a chunk of stdout bytes to the client-side
-     * [ClientTerminalBuffer][ru.lazyhat.compukterkraft.common.computer.client.ClientTerminalBuffer].
-     * Called on the client when the server sends
-     * [StdoutBytesClientMessage][ru.lazyhat.compukterkraft.common.computer.network.client.StdoutBytesClientMessage].
-     */
-    fun handleStdoutBytes(bytes: ByteArray)
 
     /** Apply a framebuffer delta to the client-side display buffer. */
     fun handleDisplayFrame(frame: DisplayFrameDelta)

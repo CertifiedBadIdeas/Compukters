@@ -22,7 +22,6 @@ package ru.lazyhat.compukterkraft.core.device.runtime
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 import ru.lazyhat.compukterkraft.core.device.DeviceProperties
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.DisplayNetworkBridge
-import ru.lazyhat.compukterkraft.core.device.runtime.ports.TerminalNetworkBridge
 import ru.lazyhat.compukterkraft.core.device.vm.DeviceVmSupervisor
 import ru.lazyhat.compukterkraft.core.platform.api.ServerWorldAccess
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
@@ -44,7 +43,6 @@ class RuntimeDeviceImplDisplayTest {
                 properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
                 manager = manager,
                 gameTime = { 0L },
-                terminalNetwork = NoopTerminalNetworkBridge,
                 displayNetwork = displayNetwork,
                 stateSink = {},
             )
@@ -90,17 +88,4 @@ class RuntimeDeviceImplDisplayTest {
         }
     }
 
-    private object NoopTerminalNetworkBridge : TerminalNetworkBridge {
-        override fun isSessionStillBound(
-            playerUuid: UUID,
-            containerId: Int,
-            deviceId: Int,
-        ): Boolean = true
-
-        override fun sendStdoutBytes(
-            playerUuid: UUID,
-            containerId: Int,
-            bytes: ByteArray,
-        ) = Unit
-    }
 }

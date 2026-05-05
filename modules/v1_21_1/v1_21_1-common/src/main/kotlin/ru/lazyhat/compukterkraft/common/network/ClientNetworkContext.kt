@@ -32,11 +32,6 @@ import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 interface ClientNetworkContext {
     fun handleChatTable(table: TableBuilder)
 
-    fun handleStdoutBytes(
-        containerId: Int,
-        bytes: ByteArray,
-    )
-
     fun handleDisplayFrame(
         containerId: Int,
         frame: DisplayFrameDelta,

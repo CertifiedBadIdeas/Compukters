@@ -21,14 +21,11 @@ package ru.lazyhat.compukterkraft.common.terminal.screen
 import net.minecraft.network.chat.Component
 import net.minecraft.world.entity.player.Inventory
 import ru.lazyhat.compukterkraft.common.computer.client.ClientDisplayBuffer
-import ru.lazyhat.compukterkraft.common.computer.client.ClientTerminalBuffer
 import ru.lazyhat.compukterkraft.common.computer.input.ClientInputHandler
 import ru.lazyhat.compukterkraft.common.computer.menu.AbstractComputerMenu
-import ru.lazyhat.compukterkraft.common.computer.network.server.AttachTerminalServerMessage
 import ru.lazyhat.compukterkraft.common.computer.network.server.DisplayAttachServerMessage
 import ru.lazyhat.compukterkraft.common.computer.network.server.DisplayDetachServerMessage
 import ru.lazyhat.compukterkraft.common.computer.network.server.DisplayResizeServerMessage
-import ru.lazyhat.compukterkraft.common.computer.network.server.ResizeTerminalServerMessage
 import ru.lazyhat.compukterkraft.common.localization.CompukterKeys
 import ru.lazyhat.compukterkraft.common.localization.CompukterTranslatable
 import ru.lazyhat.compukterkraft.common.network.ClientNetworking
@@ -36,7 +33,6 @@ import ru.lazyhat.compukterkraft.common.platform.MinecraftInputProvider
 import ru.lazyhat.compukterkraft.common.ui.dsl.translatable
 import ru.lazyhat.compukterkraft.common.ui.program.DslContainerScreen
 import ru.lazyhat.compukterkraft.core.Config
-import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 import ru.lazyhat.compukterkraft.core.device.input.ComputerControlAction
 import ru.lazyhat.compukterkraft.core.device.input.ControlInputEvent
 import ru.lazyhat.compukterkraft.core.gui.TerminalFontConstants
@@ -46,18 +42,16 @@ import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalMetrics
 import ru.lazyhat.compukterkraft.core.ui.foundation.CanvasScope
 import ru.lazyhat.compukterkraft.core.ui.foundation.Color
 import ru.lazyhat.compukterkraft.core.ui.foundation.HoverState
-import ru.lazyhat.compukterkraft.core.ui.foundation.IntSize
 import ru.lazyhat.compukterkraft.core.ui.foundation.UiElement
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Modifier
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.background
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.focusable
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.hoverable
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.offset
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.size
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.tooltip
 import ru.lazyhat.compukterkraft.core.ui.foundation.ui
 import ru.lazyhat.compukterkraft.core.ui.foundation.value
-import ru.lazyhat.compukterkraft.core.ui.workbench.WorkbenchTerminalViewState
-import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 
 /**
  * Terminal screen authored with the UI DSL. Mirrors the historical
@@ -88,55 +82,24 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
     private val powerHover = HoverState()
     private val rebootHover = HoverState()
 
-    // Tracks the snapshot's pixel dimensions (not the mod's `imageWidth`
-    // which is clamped to MIN_IMAGE_WIDTH). A change here means the
-    // baked terminal-surface bounds in the program are now stale even if
-    // `imageWidth`/`imageHeight` did not move, so we explicitly
-    // invalidate the cached executor.
-    private var lastTerminalDimensions = IntSize.Zero
-
-    /**
-     * Columns/rows announced to the server on attach. Epic 2 pragmatic choice:
-     * use the same defaults as the server-side profile so the legacy snapshot
-     * path remains consistent. Epic 4 will let the screen pick true GUI-derived
-     * dimensions once the server-side ScreenBuffer is gone.
-     */
-    private var announcedCols: Int = DEFAULT_COLS
-    private var announcedRows: Int = DEFAULT_ROWS
-
     init {
-        val (cols, rows) = terminalDimensions(container.clientSide.terminalBuffer?.snapshot())
+        val cols = DEFAULT_COLS
+        val rows = DEFAULT_ROWS
         imageWidth = WorkbenchTerminalMetrics.imageWidth(cols)
         imageHeight = WorkbenchTerminalMetrics.imageHeight(rows, contentTopInset = COMPUTER_CONTENT_TOP)
-
-        container.clientSide.attachTerminalBuffer(
-            ClientTerminalBuffer(announcedCols, announcedRows, color = container.family != DeviceFamily.NORMAL),
-        )
-        ClientNetworking.sendToServer(
-            AttachTerminalServerMessage(container, announcedCols, announcedRows),
-        )
     }
 
     override fun removed() {
         ClientNetworking.sendToServer(DisplayDetachServerMessage(menu, displayId))
         super.removed()
         menu.clientSide.detachDisplayBuffer()
-        menu.clientSide.detachTerminalBuffer()
     }
 
     override fun containerTick() {
         super.containerTick()
         menu.clientSide.displayBuffer?.swapIfDirty()
         syncDisplayEndpoint()
-        val state = currentTerminalState()
-        syncTerminalWindowSize(state)
-        terminalDimensions(menu.clientSide.terminalBuffer?.snapshot()).also { dims ->
-            if (dims != lastTerminalDimensions) {
-                lastTerminalDimensions = dims
-                invalidate()
-            }
-        }
-        // The terminal surface only enters the tree once the computer
+        // The display surface only enters the tree once the computer
         // reaches the Active state; focus it as soon as it appears so the
         // player never has to click to start typing.
         focusFirstNodeIfUnfocused()
@@ -166,7 +129,8 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
     }
 
     override fun content(): UiElement {
-        val (cols, rows) = terminalDimensions(menu.clientSide.terminalBuffer?.snapshot())
+        val cols = DEFAULT_COLS
+        val rows = DEFAULT_ROWS
         val layout =
             WorkbenchTerminalMetrics.layout(
                 leftPos = leftPos,
@@ -198,15 +162,15 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
                 color = STATUS_TEXT_COLOR,
                 text =
                     translatable {
-                        when (currentTerminalState()) {
-                            is WorkbenchTerminalViewState.Active -> CompukterKeys.Gui.Terminal.FOCUSED
-                            WorkbenchTerminalViewState.PoweredOff -> CompukterKeys.Gui.Terminal.POWERED_OFF
-                            WorkbenchTerminalViewState.Connecting -> CompukterKeys.Gui.Terminal.CONNECTING
+                        when {
+                            !menu.isComputerOn -> CompukterKeys.Gui.Terminal.POWERED_OFF
+                            menu.clientSide.displayBuffer?.hasReceivedFrames == true -> CompukterKeys.Gui.Terminal.FOCUSED
+                            else -> CompukterKeys.Gui.Terminal.CONNECTING
                         }
                     },
             )
 
-            If(value { currentTerminalState() is WorkbenchTerminalViewState.Active }) {
+            If(value { menu.isComputerOn }) {
                 text(
                     modifier =
                         Modifier.offset(
@@ -216,43 +180,34 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
                     color = STATUS_TEXT_COLOR,
                     text =
                         value {
-                            val active = currentTerminalState() as? WorkbenchTerminalViewState.Active
-                            active?.let { "${it.snapshot.width} x ${it.snapshot.height}" } ?: ""
+                            val buffer = menu.clientSide.displayBuffer
+                            buffer?.let { "${it.width} x ${it.height}" } ?: ""
                         },
                 )
 
-                terminalSurface(
-                    snapshot =
-                        value {
-                            (currentTerminalState() as? WorkbenchTerminalViewState.Active)?.snapshot!!
-                        },
+                canvas(
                     modifier =
                         Modifier
                             .offset(terminalRelX, terminalRelY)
-                            .size(layout.terminalBounds.width, layout.terminalBounds.height),
-                    onKey = { keyCode ->
-                        terminalInput.keyPressed(keyCode, 0, 0)
-                    },
-                    onKeyReleased = { keyCode ->
-                        terminalInput.keyReleased(keyCode, 0)
-                    },
-                    onCharTyped = { ch ->
-                        terminalInput.charTyped(ch)
-                    },
-                )
+                            .size(layout.terminalBounds.width, layout.terminalBounds.height)
+                            .focusable(
+                                id = "computer-display",
+                                onKeyPressed = { keyCode -> terminalInput.keyPressed(keyCode, 0, 0) },
+                                onKeyReleased = { keyCode -> terminalInput.keyReleased(keyCode, 0) },
+                                onCharTyped = { ch -> terminalInput.charTyped(ch) },
+                            ),
+                ) {
+                    drawDisplayBuffer(layout.terminalBounds.width, layout.terminalBounds.height)
+                }
             }
 
-            If(value { currentTerminalState() !is WorkbenchTerminalViewState.Active }) {
+            If(value { !menu.isComputerOn }) {
                 text(
                     modifier = Modifier.offset(surfaceRelX + 12, surfaceRelY + 12),
                     color = STATUS_TEXT_COLOR,
                     text =
                         translatable {
-                            when (currentTerminalState()) {
-                                WorkbenchTerminalViewState.PoweredOff -> CompukterKeys.Gui.Terminal.POWERED_OFF
-                                WorkbenchTerminalViewState.Connecting -> CompukterKeys.Gui.Terminal.CONNECTING
-                                is WorkbenchTerminalViewState.Active -> ""
-                            }
+                            CompukterKeys.Gui.Terminal.POWERED_OFF
                         },
                 )
             }
@@ -303,44 +258,6 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
         }
     }
 
-    private fun currentTerminalState(): WorkbenchTerminalViewState {
-        val buffer = menu.clientSide.terminalBuffer
-        val snapshot = if (buffer?.hasReceivedBytes == true) buffer.snapshot() else null
-        return WorkbenchTerminalViewState.from(menu.isComputerOn, snapshot)
-    }
-
-    private fun syncTerminalWindowSize(state: WorkbenchTerminalViewState) {
-        val size =
-            when (state) {
-                is WorkbenchTerminalViewState.Active -> terminalDimensions(state.snapshot)
-                WorkbenchTerminalViewState.PoweredOff, WorkbenchTerminalViewState.Connecting -> IntSize.Zero
-            }
-        val nextWidth = WorkbenchTerminalMetrics.imageWidth(size.width)
-        val nextHeight = WorkbenchTerminalMetrics.imageHeight(size.height, contentTopInset = COMPUTER_CONTENT_TOP)
-        if (imageWidth != nextWidth || imageHeight != nextHeight) {
-            imageWidth = nextWidth
-            imageHeight = nextHeight
-            leftPos = (width - imageWidth) / 2
-            topPos = (height - imageHeight) / 2
-            // DslContainerScreen detects bounds drift in renderBg and
-            // recompiles the program; no explicit invalidate call needed.
-        }
-        // Epic 2: keep the byte-stream session dimensions in sync with the
-        // grid we actually render. When the server's snapshot grows or
-        // shrinks (e.g. profile changes, future resize UI) announce the
-        // new size so the broadcaster produces CSI sequences sized for us.
-        if (state is WorkbenchTerminalViewState.Active) {
-            val cols = state.snapshot.width
-            val rows = state.snapshot.height
-            if (cols > 0 && rows > 0 && (cols != announcedCols || rows != announcedRows)) {
-                announcedCols = cols
-                announcedRows = rows
-                menu.clientSide.terminalBuffer?.resizeTo(cols, rows)
-                ClientNetworking.sendToServer(ResizeTerminalServerMessage(menu, cols, rows))
-            }
-        }
-    }
-
     private fun attachDisplayEndpoint() {
         val displayWidth = currentDisplayWidth()
         val displayHeight = currentDisplayHeight()
@@ -358,18 +275,42 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
         }
     }
 
+    private fun CanvasScope.drawDisplayBuffer(
+        targetWidth: Int,
+        targetHeight: Int,
+    ) {
+        val buffer = menu.clientSide.displayBuffer
+        if (buffer == null || !buffer.hasReceivedFrames) {
+            fillRect(0, 0, targetWidth, targetHeight, DISPLAY_PLACEHOLDER)
+            return
+        }
+
+        val pixels = buffer.frontArgb()
+        val scaleX = targetWidth.toDouble() / buffer.width.toDouble()
+        val scaleY = targetHeight.toDouble() / buffer.height.toDouble()
+        var y = 0
+        while (y < buffer.height) {
+            var x = 0
+            while (x < buffer.width) {
+                val color = Color.hex(pixels[y * buffer.width + x].toUInt())
+                val px = (x * scaleX).toInt()
+                val py = (y * scaleY).toInt()
+                val pw = (((x + 1) * scaleX).toInt() - px).coerceAtLeast(1)
+                val ph = (((y + 1) * scaleY).toInt() - py).coerceAtLeast(1)
+                fillRect(px, py, pw, ph, color)
+                x = x + 1
+            }
+            y = y + 1
+        }
+    }
+
     private fun currentDisplayWidth(): Int {
-        val cols = terminalDimensions(menu.clientSide.terminalBuffer?.snapshot()).width.takeIf { it > 0 } ?: DEFAULT_COLS
-        return (cols * TerminalFontConstants.FONT_WIDTH).coerceAtLeast(64)
+        return (DEFAULT_COLS * TerminalFontConstants.FONT_WIDTH).coerceAtLeast(64)
     }
 
     private fun currentDisplayHeight(): Int {
-        val rows = terminalDimensions(menu.clientSide.terminalBuffer?.snapshot()).height.takeIf { it > 0 } ?: DEFAULT_ROWS
-        return (rows * TerminalFontConstants.FONT_HEIGHT).coerceAtLeast(48)
+        return (DEFAULT_ROWS * TerminalFontConstants.FONT_HEIGHT).coerceAtLeast(48)
     }
-
-    private fun terminalDimensions(snapshot: ScreenBufferSnapshot?): IntSize =
-        snapshot?.run { IntSize(snapshot.width, snapshot.height) } ?: IntSize.Zero
 
     private fun statusButtonBounds(
         statusBounds: TerminalRect,
@@ -430,6 +371,7 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
         private const val STATUS_TEXT_RIGHT_INSET = 52
 
         private val BACKGROUND = Color.hex(0xFF12151DU)
+        private val DISPLAY_PLACEHOLDER = Color.hex(0xFF05070AU)
         private val STATUS_TEXT_COLOR = Color.hex(0xFF9CA8B8U)
         private val BUTTON_BG = Color.hex(0xFF1B202AU)
         private val BUTTON_BG_HOVER = Color.hex(0xFF222938U)

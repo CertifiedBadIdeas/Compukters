@@ -49,9 +49,7 @@ import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDeviceImpl
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.DeviceStateSink
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.GameTimeSource
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.NoopDisplayNetworkBridge
-import ru.lazyhat.compukterkraft.core.device.runtime.ports.TerminalNetworkBridge
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
-import java.util.UUID
 
 class WorkbenchBlockEntity(
     pos: BlockPos,
@@ -211,27 +209,11 @@ class WorkbenchBlockEntity(
 
         val serverLevel = level as? ServerLevel ?: return null
         ServerContext.deviceManager.ensureWorkspaceInitialized(targetId)
-        val noOpTerminalNetwork =
-            object : TerminalNetworkBridge {
-                override fun isSessionStillBound(
-                    playerUuid: UUID,
-                    containerId: Int,
-                    deviceId: Int,
-                ): Boolean = false
-
-                override fun sendStdoutBytes(
-                    playerUuid: UUID,
-                    containerId: Int,
-                    bytes: ByteArray,
-                ) {
-                }
-            }
         return RuntimeDeviceImpl(
             deviceId = targetId,
             properties = DeviceProperties(resolveTargetFamily(targetFamilyId), targetDisplayName),
             manager = ServerContext.deviceManager,
             gameTime = GameTimeSource { serverLevel.gameTime },
-            terminalNetwork = noOpTerminalNetwork,
             displayNetwork = NoopDisplayNetworkBridge,
             stateSink = DeviceStateSink { /* detached: no block state to update */ },
         ).also {
