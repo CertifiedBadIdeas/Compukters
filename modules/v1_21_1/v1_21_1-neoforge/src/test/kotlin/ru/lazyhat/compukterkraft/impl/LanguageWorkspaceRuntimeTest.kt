@@ -33,7 +33,7 @@ import kotlin.test.assertTrue
 
 class LanguageWorkspaceRuntimeTest {
     @Test
-    fun seededBootScriptCompilesAndDelegatesToShell() {
+    fun seededBootScriptCompilesAndDelegatesToTerminal() {
         val root = createTempDirectory("compukterkraft-language-workspace")
 
         try {
@@ -53,7 +53,7 @@ class LanguageWorkspaceRuntimeTest {
             val vm = BytecodeVirtualMachine(requireNotNull(artifact.module))
             val firstSignal = vm.runUntilSignal()
             assertEquals(
-                VmSignal.HostCall("process", "run", listOf(VmValue.StringValue("shell.ck"))),
+                VmSignal.HostCall("process", "run", listOf(VmValue.StringValue("terminal.ck"))),
                 firstSignal,
             )
 
