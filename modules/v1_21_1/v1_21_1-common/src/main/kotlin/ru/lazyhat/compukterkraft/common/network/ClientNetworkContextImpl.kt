@@ -31,6 +31,7 @@ import ru.lazyhat.compukterkraft.core.workbench.crdt.Op
 import ru.lazyhat.compukterkraft.core.workbench.crdt.SiteId
 import ru.lazyhat.compukterkraft.core.workbench.crdt.TextRun
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
+import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 
 class ClientNetworkContextImpl : ClientNetworkContext {
     private val minecraft: Minecraft
@@ -69,6 +70,13 @@ class ClientNetworkContextImpl : ClientNetworkContext {
         bytes: ByteArray,
     ) = withCheckedContainerMenu(containerId) {
         handleStdoutBytes(bytes)
+    }
+
+    override fun handleDisplayFrame(
+        containerId: Int,
+        frame: DisplayFrameDelta,
+    ) = withCheckedContainerMenu(containerId) {
+        handleDisplayFrame(frame)
     }
 
     override fun handleWorkbenchWorkspace(

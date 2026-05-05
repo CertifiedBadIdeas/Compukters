@@ -21,9 +21,13 @@ package ru.lazyhat.compukterkraft.common.network
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet
 import it.unimi.dsi.fastutil.ints.IntSet
 import net.minecraft.network.FriendlyByteBuf
+import ru.lazyhat.compukterkraft.common.computer.network.client.FrameDeltaClientMessage
 import ru.lazyhat.compukterkraft.common.computer.network.client.StdoutBytesClientMessage
 import ru.lazyhat.compukterkraft.common.computer.network.server.AttachTerminalServerMessage
 import ru.lazyhat.compukterkraft.common.computer.network.server.ComputerActionServerMessage
+import ru.lazyhat.compukterkraft.common.computer.network.server.DisplayAttachServerMessage
+import ru.lazyhat.compukterkraft.common.computer.network.server.DisplayDetachServerMessage
+import ru.lazyhat.compukterkraft.common.computer.network.server.DisplayResizeServerMessage
 import ru.lazyhat.compukterkraft.common.computer.network.server.KeyEventServerMessage
 import ru.lazyhat.compukterkraft.common.computer.network.server.MouseEventServerMessage
 import ru.lazyhat.compukterkraft.common.computer.network.server.PasteEventComputerMessage
@@ -182,6 +186,30 @@ object NetworkMessages {
             21,
             "workbench_cursor",
             { buf -> WorkbenchCursorClientMessage(buf) },
+        )
+    val DISPLAY_ATTACH: MessageType<DisplayAttachServerMessage> =
+        registerServerbound(
+            22,
+            "display_attach",
+            { buf -> DisplayAttachServerMessage(buf) },
+        )
+    val DISPLAY_RESIZE: MessageType<DisplayResizeServerMessage> =
+        registerServerbound(
+            23,
+            "display_resize",
+            { buf -> DisplayResizeServerMessage(buf) },
+        )
+    val DISPLAY_DETACH: MessageType<DisplayDetachServerMessage> =
+        registerServerbound(
+            24,
+            "display_detach",
+            { buf -> DisplayDetachServerMessage(buf) },
+        )
+    val FRAME_DELTA: MessageType<FrameDeltaClientMessage> =
+        registerClientbound(
+            25,
+            "frame_delta",
+            { buf -> FrameDeltaClientMessage(buf) },
         )
 
     @Suppress("UNCHECKED_CAST")

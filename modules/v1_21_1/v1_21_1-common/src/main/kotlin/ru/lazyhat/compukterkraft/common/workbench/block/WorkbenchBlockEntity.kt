@@ -48,6 +48,7 @@ import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDevice
 import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDeviceImpl
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.DeviceStateSink
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.GameTimeSource
+import ru.lazyhat.compukterkraft.core.device.runtime.ports.NoopDisplayNetworkBridge
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.TerminalNetworkBridge
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 import java.util.UUID
@@ -231,6 +232,7 @@ class WorkbenchBlockEntity(
             manager = ServerContext.deviceManager,
             gameTime = GameTimeSource { serverLevel.gameTime },
             terminalNetwork = noOpTerminalNetwork,
+            displayNetwork = NoopDisplayNetworkBridge,
             stateSink = DeviceStateSink { /* detached: no block state to update */ },
         ).also {
             detachedTargetComputer = it
