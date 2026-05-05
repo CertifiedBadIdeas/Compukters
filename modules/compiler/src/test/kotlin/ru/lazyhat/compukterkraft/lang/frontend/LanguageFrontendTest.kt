@@ -419,6 +419,48 @@ class LanguageFrontendTest {
     }
 
     @Test
+    fun rejectsExternalAccessToPrivateStaticMethod() {
+        val artifact =
+            frontend.compile(
+                "private_static.ck",
+                """
+                pub class Counter() {
+                    static fun hidden(): Counter { return Counter(); }
+                    pub static fun shown(): Counter { return Counter.hidden(); }
+                }
+                pub fun main() {
+                    val counter: Counter = Counter.hidden();
+                }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.any { it.message.contains("Member `hidden` of class `Counter` is private") },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+    }
+
+    @Test
+    fun rejectsUnexpectedPubOnInitAndPlainConstructorParameter() {
+        val artifact =
+            frontend.compile(
+                "invalid_pub.ck",
+                """
+                pub class Counter(pub value: Int) {
+                    pub init {}
+                }
+                pub fun main() {}
+                """.trimIndent(),
+            )
+
+        val unexpectedPubDiagnostics = artifact.analysis.diagnostics.filter { it.message.contains("Unexpected `pub` modifier") }
+        assertTrue(
+            unexpectedPubDiagnostics.size >= 2,
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+    }
+
+    @Test
     fun rejectsUninitializedClassBodyField() {
         val artifact =
             frontend.compile(
