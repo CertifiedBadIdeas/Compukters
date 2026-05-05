@@ -34,8 +34,8 @@ import ru.lazyhat.compukterkraft.lang.runtime.DeviceMemoryResources
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceProfile
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceQueueResources
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceResources
-import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceStorageResources
+import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.VmState
 import ru.lazyhat.compukterkraft.lang.runtime.VmStopReason
 import kotlin.io.path.createTempDirectory

@@ -38,9 +38,9 @@ import ru.lazyhat.compukterkraft.core.device.runtime.FirmwareProgramLoader
 import ru.lazyhat.compukterkraft.core.device.runtime.WorkspaceProgramLoader
 import ru.lazyhat.compukterkraft.core.device.vm.api.ComputerStdioBroadcaster
 import ru.lazyhat.compukterkraft.core.device.vm.api.ScreenBufferVtSink
-import ru.lazyhat.compukterkraft.core.device.vm.api.VmFileSystemApi
 import ru.lazyhat.compukterkraft.core.device.vm.api.VmDisplayApi
 import ru.lazyhat.compukterkraft.core.device.vm.api.VmEventApi
+import ru.lazyhat.compukterkraft.core.device.vm.api.VmFileSystemApi
 import ru.lazyhat.compukterkraft.core.device.vm.api.VmIpcApi
 import ru.lazyhat.compukterkraft.core.device.vm.api.VmPeripheralRegistry
 import ru.lazyhat.compukterkraft.core.device.vm.api.VmPeripheralRuntimeApi
@@ -59,13 +59,13 @@ import ru.lazyhat.compukterkraft.lang.runtime.HostCall
 import ru.lazyhat.compukterkraft.lang.runtime.HostResult
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBuffer
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
-import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
-import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayInfo
-import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayPixelFormat
 import ru.lazyhat.compukterkraft.lang.runtime.VmEvent
 import ru.lazyhat.compukterkraft.lang.runtime.VmSnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.VmState
 import ru.lazyhat.compukterkraft.lang.runtime.VmStopReason
+import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
+import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayInfo
+import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayPixelFormat
 import ru.lazyhat.compukterkraft.lang.runtime.vt.VtParser
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.yield as coroutineYield

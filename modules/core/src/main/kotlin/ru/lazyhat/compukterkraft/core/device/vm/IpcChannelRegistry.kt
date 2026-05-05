@@ -19,11 +19,11 @@
 
 package ru.lazyhat.compukterkraft.core.device.vm
 
-import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.util.concurrent.atomic.AtomicInteger
 
 internal class IpcChannelRegistry(
     private val maxBufferedBytesPerChannel: Int,

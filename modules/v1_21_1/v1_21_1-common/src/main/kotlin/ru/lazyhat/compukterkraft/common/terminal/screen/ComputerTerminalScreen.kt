@@ -24,10 +24,10 @@ import ru.lazyhat.compukterkraft.common.computer.client.ClientDisplayBuffer
 import ru.lazyhat.compukterkraft.common.computer.client.ClientTerminalBuffer
 import ru.lazyhat.compukterkraft.common.computer.input.ClientInputHandler
 import ru.lazyhat.compukterkraft.common.computer.menu.AbstractComputerMenu
+import ru.lazyhat.compukterkraft.common.computer.network.server.AttachTerminalServerMessage
 import ru.lazyhat.compukterkraft.common.computer.network.server.DisplayAttachServerMessage
 import ru.lazyhat.compukterkraft.common.computer.network.server.DisplayDetachServerMessage
 import ru.lazyhat.compukterkraft.common.computer.network.server.DisplayResizeServerMessage
-import ru.lazyhat.compukterkraft.common.computer.network.server.AttachTerminalServerMessage
 import ru.lazyhat.compukterkraft.common.computer.network.server.ResizeTerminalServerMessage
 import ru.lazyhat.compukterkraft.common.localization.CompukterKeys
 import ru.lazyhat.compukterkraft.common.localization.CompukterTranslatable
@@ -39,8 +39,8 @@ import ru.lazyhat.compukterkraft.core.Config
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 import ru.lazyhat.compukterkraft.core.device.input.ComputerControlAction
 import ru.lazyhat.compukterkraft.core.device.input.ControlInputEvent
-import ru.lazyhat.compukterkraft.core.gui.TerminalRect
 import ru.lazyhat.compukterkraft.core.gui.TerminalFontConstants
+import ru.lazyhat.compukterkraft.core.gui.TerminalRect
 import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalInputController
 import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalMetrics
 import ru.lazyhat.compukterkraft.core.ui.foundation.CanvasScope

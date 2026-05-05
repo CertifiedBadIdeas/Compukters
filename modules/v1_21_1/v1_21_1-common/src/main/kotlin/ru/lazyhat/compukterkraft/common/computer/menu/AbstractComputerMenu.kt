@@ -24,8 +24,8 @@ import net.minecraft.world.inventory.ContainerData
 import net.minecraft.world.inventory.MenuType
 import net.minecraft.world.inventory.SimpleContainerData
 import net.minecraft.world.item.ItemStack
-import ru.lazyhat.compukterkraft.common.computer.client.ClientDisplayBuffer
 import ru.lazyhat.compukterkraft.common.computer.block.checkUsable
+import ru.lazyhat.compukterkraft.common.computer.client.ClientDisplayBuffer
 import ru.lazyhat.compukterkraft.common.computer.client.ClientTerminalBuffer
 import ru.lazyhat.compukterkraft.common.computer.data.ComputerContainerData
 import ru.lazyhat.compukterkraft.core.Config

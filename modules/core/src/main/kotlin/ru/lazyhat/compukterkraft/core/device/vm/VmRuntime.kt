@@ -20,9 +20,9 @@
 package ru.lazyhat.compukterkraft.core.device.vm
 
 import ru.lazyhat.compukterkraft.lang.api.BuiltinRegistry
-import ru.lazyhat.compukterkraft.lang.runtime.DeviceFileSystemApi
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceDisplayApi
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceEventApi
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceFileSystemApi
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceIpcApi
 import ru.lazyhat.compukterkraft.lang.runtime.DevicePeripheralApi
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceProcessApi

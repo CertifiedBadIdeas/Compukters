@@ -54,6 +54,11 @@ class DisplayMessageCodecTest {
         assertEquals(9, restored.frame.displayId)
         assertEquals(12L, restored.frame.sequence)
         assertEquals(DisplayPixelFormat.RGB565, restored.frame.pixelFormat)
-        assertTrue(restored.frame.tiles.single().payload.contentEquals(byteArrayOf(1, 2, 3, 4)))
+        assertTrue(
+            restored.frame.tiles
+                .single()
+                .payload
+                .contentEquals(byteArrayOf(1, 2, 3, 4)),
+        )
     }
 }
