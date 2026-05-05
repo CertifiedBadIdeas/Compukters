@@ -20,9 +20,13 @@ package ru.lazyhat.compukterkraft.common.terminal.screen
 
 import net.minecraft.network.chat.Component
 import net.minecraft.world.entity.player.Inventory
+import ru.lazyhat.compukterkraft.common.computer.client.ClientDisplayBuffer
 import ru.lazyhat.compukterkraft.common.computer.client.ClientTerminalBuffer
 import ru.lazyhat.compukterkraft.common.computer.input.ClientInputHandler
 import ru.lazyhat.compukterkraft.common.computer.menu.AbstractComputerMenu
+import ru.lazyhat.compukterkraft.common.computer.network.server.DisplayAttachServerMessage
+import ru.lazyhat.compukterkraft.common.computer.network.server.DisplayDetachServerMessage
+import ru.lazyhat.compukterkraft.common.computer.network.server.DisplayResizeServerMessage
 import ru.lazyhat.compukterkraft.common.computer.network.server.AttachTerminalServerMessage
 import ru.lazyhat.compukterkraft.common.computer.network.server.ResizeTerminalServerMessage
 import ru.lazyhat.compukterkraft.common.localization.CompukterKeys
@@ -78,6 +82,7 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
 ) : DslContainerScreen<T>(container, player, title) {
     private val inputHandler = ClientInputHandler(container)
     private val terminalInput = WorkbenchTerminalInputController(inputHandler, MinecraftInputProvider)
+    private val displayId: Int = container.containerId
 
     private val powerHover = HoverState()
     private val rebootHover = HoverState()
@@ -112,12 +117,16 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
     }
 
     override fun removed() {
+        ClientNetworking.sendToServer(DisplayDetachServerMessage(menu, displayId))
         super.removed()
+        menu.clientSide.detachDisplayBuffer()
         menu.clientSide.detachTerminalBuffer()
     }
 
     override fun containerTick() {
         super.containerTick()
+        menu.clientSide.displayBuffer?.swapIfDirty()
+        syncDisplayEndpoint()
         val state = currentTerminalState()
         syncTerminalWindowSize(state)
         terminalDimensions(menu.clientSide.terminalBuffer?.snapshot()).also { dims ->
@@ -149,6 +158,7 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
 
     override fun init() {
         super.init()
+        attachDisplayEndpoint()
         // After the executor has been built for the first time, plant
         // focus on the terminal surface so the user can type immediately.
         focusFirstNodeIfUnfocused()
@@ -329,6 +339,27 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
             }
         }
     }
+
+    private fun attachDisplayEndpoint() {
+        val displayWidth = currentDisplayWidth()
+        val displayHeight = currentDisplayHeight()
+        menu.clientSide.attachDisplayBuffer(ClientDisplayBuffer(displayId, displayWidth, displayHeight))
+        ClientNetworking.sendToServer(DisplayAttachServerMessage(menu, displayId, displayWidth, displayHeight))
+    }
+
+    private fun syncDisplayEndpoint() {
+        val displayWidth = currentDisplayWidth()
+        val displayHeight = currentDisplayHeight()
+        val buffer = menu.clientSide.displayBuffer
+        if (buffer == null || buffer.width != displayWidth || buffer.height != displayHeight) {
+            menu.clientSide.attachDisplayBuffer(ClientDisplayBuffer(displayId, displayWidth, displayHeight))
+            ClientNetworking.sendToServer(DisplayResizeServerMessage(menu, displayId, displayWidth, displayHeight))
+        }
+    }
+
+    private fun currentDisplayWidth(): Int = (width - 32).coerceAtLeast(64)
+
+    private fun currentDisplayHeight(): Int = (height - 48).coerceAtLeast(48)
 
     private fun terminalDimensions(snapshot: ScreenBufferSnapshot?): IntSize =
         snapshot?.run { IntSize(snapshot.width, snapshot.height) } ?: IntSize.Zero
