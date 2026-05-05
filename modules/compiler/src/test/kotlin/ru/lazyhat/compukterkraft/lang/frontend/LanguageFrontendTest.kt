@@ -104,7 +104,7 @@ class LanguageFrontendTest {
                     fun current(): Int { return this.value; }
                     static fun zero(): Counter { return Counter(value = 0); }
                 }
-                fun main() {}
+                pub fun main() {}
                 """.trimIndent(),
             )
 
@@ -123,7 +123,7 @@ class LanguageFrontendTest {
             frontend.compile(
                 "ok.ck",
                 """
-                fun main() { terminal::println("hi"); }
+                pub fun main() { terminal::println("hi"); }
                 """.trimIndent(),
             )
 
@@ -162,7 +162,7 @@ class LanguageFrontendTest {
             frontend.compile(
                 "dot.ck",
                 """
-                fun main() { terminal.println("hi"); }
+                pub fun main() { terminal.println("hi"); }
                 """.trimIndent(),
             )
 
@@ -181,7 +181,7 @@ class LanguageFrontendTest {
                 "import.ck",
                 """
                 import legacy;
-                fun main() { terminal::println("ok"); }
+                pub fun main() { terminal::println("ok"); }
                 """.trimIndent(),
             )
         val errors = artifact.analysis.diagnostics.filter { it.severity == FrontendSeverity.ERROR }
@@ -199,7 +199,7 @@ class LanguageFrontendTest {
             frontend.compile(
                 "ambient.ck",
                 """
-                fun main() { terminal::println("ok"); }
+                pub fun main() { terminal::println("ok"); }
                 """.trimIndent(),
             )
 
@@ -216,7 +216,7 @@ class LanguageFrontendTest {
             frontend.compile(
                 "qual.ck",
                 """
-                fun main() { val v: m::Foo = null; }
+                pub fun main() { val v: m::Foo = null; }
                 """.trimIndent(),
             )
 
@@ -244,7 +244,7 @@ class LanguageFrontendTest {
                     return point.x + point.y;
                 }
 
-                fun main() {
+                pub fun main() {
                     val point: Point = Point(x = 1, y = 2);
                     terminal::println("sum=" + sum(point));
                 }
@@ -267,7 +267,7 @@ class LanguageFrontendTest {
                 "struct_call.ck",
                 """
                 struct Point { x: Int, y: Int }
-                fun main() {
+                pub fun main() {
                     val point: Point = Point(x = 1, y = 2);
                     terminal::println("x=" + point.x);
                 }
@@ -288,7 +288,7 @@ class LanguageFrontendTest {
                 "old_record.ck",
                 """
                 struct Point { x: Int, y: Int }
-                fun main() { val point: Point = Point { x: 1, y: 2 }; }
+                pub fun main() { val point: Point = Point { x: 1, y: 2 }; }
                 """.trimIndent(),
             )
 
@@ -308,8 +308,8 @@ class LanguageFrontendTest {
             frontend.compile(
                 "class_ctor.ck",
                 """
-                class Counter(var value: Int) {}
-                fun main() {
+                class Counter(pub var value: Int) {}
+                pub fun main() {
                     val counter: Counter = Counter(value = 3);
                     terminal::println("value=" + counter.value);
                 }
@@ -331,7 +331,7 @@ class LanguageFrontendTest {
                 "class_ctor_errors.ck",
                 """
                 class Counter(var value: Int) {}
-                fun main() { val counter: Counter = Counter(missing = 3); }
+                pub fun main() { val counter: Counter = Counter(missing = 3); }
                 """.trimIndent(),
             )
 
@@ -356,7 +356,7 @@ class LanguageFrontendTest {
                     init { this.value = value + 1; }
                     fun current(): Int { return this.value; }
                 }
-                fun main() { val counter: Counter = Counter(value = 1); }
+                pub fun main() { val counter: Counter = Counter(value = 1); }
                 """.trimIndent(),
             )
 
@@ -429,7 +429,7 @@ class LanguageFrontendTest {
 
                     fun current(): Int { return this.value; }
                 }
-                fun main() {}
+                pub fun main() {}
                 """.trimIndent(),
             )
 
@@ -457,7 +457,7 @@ class LanguageFrontendTest {
 
                     fun current(): Int { return this.value; }
                 }
-                fun main() {}
+                pub fun main() {}
                 """.trimIndent(),
             )
 
@@ -487,7 +487,7 @@ class LanguageFrontendTest {
 
                     fun current(): Int { return this.value; }
                 }
-                fun main() {}
+                pub fun main() {}
                 """.trimIndent(),
             )
 
@@ -506,7 +506,7 @@ class LanguageFrontendTest {
                 class Holder(val value: Int) {
                     fun bad(): Unit { this.value = 2; }
                 }
-                fun main() {}
+                pub fun main() {}
                 """.trimIndent(),
             )
 
@@ -526,7 +526,7 @@ class LanguageFrontendTest {
                 class Holder(var value: Int) {
                     static fun bad(): Int { return this.value; }
                 }
-                fun main() {}
+                pub fun main() {}
                 """.trimIndent(),
             )
 
@@ -542,7 +542,7 @@ class LanguageFrontendTest {
             frontend.compile(
                 "broken.ck",
                 """
-                fun main() {
+                pub fun main() {
                     val flag: Bool = 42;
                 }
                 """.trimIndent(),
@@ -561,7 +561,7 @@ class LanguageFrontendTest {
             frontend.compile(
                 "elseif.ck",
                 """
-                fun main() {
+                pub fun main() {
                     val x: Int = 2;
                     if (x == 1) {
                         terminal::println("one");
@@ -589,7 +589,7 @@ class LanguageFrontendTest {
             frontend.compile(
                 "when_subject.ck",
                 """
-                fun main() {
+                pub fun main() {
                     val x: Int = 2;
                     when(x) {
                         1 -> {
@@ -619,7 +619,7 @@ class LanguageFrontendTest {
             frontend.compile(
                 "when_no_subject.ck",
                 """
-                fun main() {
+                pub fun main() {
                     val x: Int = 5;
                     when {
                         x > 10 -> {
@@ -649,7 +649,7 @@ class LanguageFrontendTest {
             frontend.compile(
                 "when_mismatch.ck",
                 """
-                fun main() {
+                pub fun main() {
                     val x: Int = 1;
                     when(x) {
                         "hello" -> {
@@ -673,7 +673,7 @@ class LanguageFrontendTest {
             frontend.compile(
                 "when_bool.ck",
                 """
-                fun main() {
+                pub fun main() {
                     when {
                         42 -> {
                             val y: Int = 1;
@@ -695,28 +695,28 @@ class LanguageFrontendTest {
         val cases =
             listOf(
                 "else_while.ck" to """
-                fun main() {
+                pub fun main() {
                     if (true) {
                         val x: Int = 1;
                     } else while
                 }
             """,
                 "else_val.ck" to """
-                fun main() {
+                pub fun main() {
                     if (true) {
                         val x: Int = 1;
                     } else val
                 }
             """,
                 "else_return.ck" to """
-                fun main() {
+                pub fun main() {
                     if (true) {
                         val x: Int = 1;
                     } else return
                 }
             """,
                 "else_when.ck" to """
-                fun main() {
+                pub fun main() {
                     if (true) {
                         val x: Int = 1;
                     } else when
@@ -741,7 +741,7 @@ class LanguageFrontendTest {
             frontend.compile(
                 "if_no_parens.ck",
                 """
-                fun main() {
+                pub fun main() {
                     if true {
                         val x: Int = 1;
                     }
@@ -763,7 +763,7 @@ class LanguageFrontendTest {
             frontend.compile(
                 "assign.ck",
                 """
-                fun main() {
+                pub fun main() {
                     var i: Int = 0;
                     while (i < 3) {
                         i = i + 1;
@@ -785,7 +785,7 @@ class LanguageFrontendTest {
             frontend.compile(
                 "assign_val.ck",
                 """
-                fun main() {
+                pub fun main() {
                     val i: Int = 0;
                     i = 1;
                 }
@@ -805,7 +805,7 @@ class LanguageFrontendTest {
             frontend.compile(
                 "assign_unknown.ck",
                 """
-                fun main() {
+                pub fun main() {
                     nope = 1;
                 }
                 """.trimIndent(),
@@ -824,7 +824,7 @@ class LanguageFrontendTest {
             frontend.compile(
                 "assign_type.ck",
                 """
-                fun main() {
+                pub fun main() {
                     var i: Int = 0;
                     i = "hello";
                 }
@@ -844,7 +844,7 @@ class LanguageFrontendTest {
             frontend.compile(
                 "compound.ck",
                 """
-                fun main() {
+                pub fun main() {
                     var i: Int = 0;
                     i += 1;
                     i -= 2;
@@ -866,7 +866,7 @@ class LanguageFrontendTest {
             frontend.compile(
                 "compound_val.ck",
                 """
-                fun main() {
+                pub fun main() {
                     val i: Int = 0;
                     i += 1;
                 }
@@ -886,7 +886,7 @@ class LanguageFrontendTest {
             frontend.compile(
                 "overflow.ck",
                 """
-                fun main() {
+                pub fun main() {
                     val n: Int = 2342343243;
                 }
                 """.trimIndent(),
@@ -907,7 +907,7 @@ class LanguageFrontendTest {
             frontend.compile(
                 "longoverflow.ck",
                 """
-                fun main() {
+                pub fun main() {
                     val n: Long = 99999999999999999999L;
                 }
                 """.trimIndent(),

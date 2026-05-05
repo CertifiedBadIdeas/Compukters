@@ -10,8 +10,9 @@ Top-level declarations:
 - `class Counter(var value: Int) { ... }`
 - `import "lib/math.ck" { add, Vec2 }`
 - `import "lib/math.ck" as math`
-- `fun main() { ... }`
-- `fun add(x: Int, y: Int): Int { return x + y }`
+- `pub fun main() { ... }`
+- `pub fun add(x: Int, y: Int): Int { return x + y }`
+- `pub struct`, `pub class`, `pub val`, `pub var`, and `pub fun` mark library/API surface visible outside the declaring file or class.
 
 Statements:
 
@@ -79,9 +80,9 @@ Expressions:
 Structs are value-shaped records with named fields. They are declared with `struct` and constructed with the same named call-style syntax as classes:
 
 ```ck
-struct Vec2 { x: Int, y: Int }
+pub struct Vec2 { x: Int, y: Int }
 
-fun main() {
+pub fun main() {
     val v: Vec2 = Vec2(x = 1, y = 2)
     terminal::println("x=" + v.x)
 }
@@ -91,24 +92,24 @@ The old record-literal syntax `Vec2 { x: 1, y: 2 }` is invalid.
 
 ## Classes
 
-Classes are reference objects with public fields, `init` blocks, instance methods, and static methods.
+Classes are reference objects with fields, `init` blocks, instance methods, and static methods. Class members are private by default; mark constructor fields, body fields, instance methods, and static methods with `pub` when code outside the class should access them.
 
 ```ck
-class Counter(var value: Int) {
+pub class Counter(pub var value: Int) {
     init {
         this.value = this.value + 1
     }
 
-    fun current(): Int {
+    pub fun current(): Int {
         return this.value
     }
 
-    static fun zero(): Counter {
+    pub static fun zero(): Counter {
         return Counter(value = 0)
     }
 }
 
-fun main() {
+pub fun main() {
     val counter: Counter = Counter.zero()
     terminal::println("value=" + counter.current())
 }
@@ -118,13 +119,25 @@ Rules:
 
 - The primary constructor is declared in parentheses after the class name.
 - Constructor parameters marked with `val` or `var` become fields.
-- Additional public fields can be declared in the class body with `val` or `var`.
+- Additional fields can be declared in the class body with `val` or `var`; use `pub val` or `pub var` to expose them.
 - Class body fields may omit an initializer only when they are definitely assigned on every construction path in an `init` block.
 - Constructor calls must use named arguments: `Counter(value = 1)`.
 - `this` is available in instance methods and `init` blocks, but not in `static fun`.
 - `val` fields can only be assigned during construction; `var` fields can be assigned later.
 - Instances have reference identity: two variables can refer to the same object and observe shared mutation.
-- Inheritance, interfaces, generics, and private members are not part of v1.
+- Inheritance, interfaces, and generics are not part of v1.
+
+## Visibility
+
+Top-level declarations and class members are private by default.
+
+- `pub fun`, `pub struct`, and `pub class` are exported from the file and can be imported from other `.ck` files.
+- Top-level declarations without `pub` can still be used by other declarations in the same file, but cannot be imported.
+- `pub val` and `pub var` expose class fields created from constructor parameters or class-body fields.
+- `pub fun` and `pub static fun` expose instance and static methods.
+- Private class members can be accessed from methods and `init` blocks of the declaring class, but not from external code.
+- `init` blocks do not accept `pub`.
+- Runnable programs must declare `pub fun main()`.
 
 ## Types
 
@@ -166,7 +179,7 @@ import terminal { println }         // selected built-in member visible directly
 
 Rules:
 
-- Each top-level `fun`, `struct`, and `class` of an imported file is public.
+- Only top-level declarations marked `pub` in an imported file are importable.
 - Imports are not transitive: importing `a.ck` does not import `a.ck`'s imports.
 - The same file is parsed and analysed at most once per compilation, so import cycles are safe.
 - Importing the same path twice in one file is a `Duplicate import` error.
@@ -180,7 +193,7 @@ Selected names become visible directly in the importing file:
 import terminal { println }
 import "math.ck" { add, Vec2, Counter }
 
-fun main() {
+pub fun main() {
     val v: Vec2 = Vec2(x = 1, y = 2)
     val counter: Counter = Counter(value = 1)
     println("x=" + add(v, v).x)
@@ -269,7 +282,7 @@ Global intrinsics:
 
 ## Entry Point
 
-Programs start from `fun main()`.
+Programs start from `pub fun main()`.
 
 ## Files
 

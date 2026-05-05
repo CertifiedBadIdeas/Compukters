@@ -44,7 +44,7 @@ class BackgroundDeviceVmTest {
     @Test
     fun bootCompletesWhenVmRegistrySupportsAmbientModule() {
         runtimeTestWorkspace("compukterkraft-background-vm-success") { workspace ->
-            workspace.writeProgram(1, "bios.ck", "fun main() { if (false) { filesystem::list(); } }")
+            workspace.writeProgram(1, "bios.ck", "pub fun main() { if (false) { filesystem::list(); } }")
 
             val vm =
                 BackgroundDeviceVm(
@@ -82,7 +82,7 @@ class BackgroundDeviceVmTest {
 
         try {
             val workspace = DeviceWorkspaceHost(root)
-            workspace.writeDocument(1, "bios.ck", "fun main() { }")
+            workspace.writeDocument(1, "bios.ck", "pub fun main() { }")
 
             val profile =
                 DeviceProfile(
@@ -141,7 +141,7 @@ class BackgroundDeviceVmTest {
 
         try {
             val workspace = DeviceWorkspaceHost(root)
-            workspace.writeDocument(1, "bios.ck", "fun main() { if (false) { filesystem::list(); } }")
+            workspace.writeDocument(1, "bios.ck", "pub fun main() { if (false) { filesystem::list(); } }")
 
             val profile =
                 DeviceProfile(

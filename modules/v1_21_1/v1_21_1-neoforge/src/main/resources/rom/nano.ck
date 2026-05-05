@@ -37,7 +37,7 @@ fun save(path: String, buffer: String) {
     terminal::println("[saved " + path + "]")
 }
 
-fun main() {
+pub fun main() {
     val target: String = strings::trim(process::argument())
     if (strings::isBlank(target)) {
         terminal::println("Usage: nano <file>")

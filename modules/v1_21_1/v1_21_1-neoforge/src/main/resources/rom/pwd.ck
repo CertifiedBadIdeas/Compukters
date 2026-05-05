@@ -1,4 +1,4 @@
-fun main() {
+pub fun main() {
     val path: String = process::currentDirectory()
     if (path == "") {
         terminal::println("/")

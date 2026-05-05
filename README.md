@@ -28,7 +28,7 @@ Inspired by ComputerCraft. With one big difference: the language is not Lua.
         return "Hello, " + name + "!"
     }
 
-    fun main() {
+    pub fun main() {
         terminal.println(greet("world"))
         terminal.println("Computer #" + system.computerId())
     }

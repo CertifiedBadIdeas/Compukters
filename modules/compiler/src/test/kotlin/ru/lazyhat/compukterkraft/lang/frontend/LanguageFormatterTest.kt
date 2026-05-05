@@ -96,10 +96,10 @@ class LanguageFormatterTest {
 
     @Test
     fun cleanupRemovesSelectiveImportUsedOnlyThroughFqn() {
-        val source = "import terminal { println };\nfun main(){terminal::println(\"hi\");}"
+        val source = "import terminal { println };\npub fun main(){terminal::println(\"hi\");}"
         val expected =
             """
-            fun main() {
+            pub fun main() {
                 terminal::println("hi")
             }
             """.trimIndent() + "\n"
@@ -241,7 +241,7 @@ class LanguageFormatterTest {
             import terminal { write, println };
             import "a.ck" { Beta };
             import "a.ck" { Alpha };
-            fun main() { println("hi"); }
+            pub fun main() { println("hi"); }
             """.trimIndent()
 
         val expected =
@@ -250,7 +250,7 @@ class LanguageFormatterTest {
             import "z.ck" { Zebra }
             import terminal { println, write }
 
-            fun main() {
+            pub fun main() {
                 println("hi")
             }
             """.trimIndent() + "\n"
@@ -265,7 +265,7 @@ class LanguageFormatterTest {
         val source =
             """
             import terminal { clear, println };
-            fun main() { println("hi"); }
+            pub fun main() { println("hi"); }
             """.trimIndent()
 
         val formatted = applySingleEdit(source, formatter.formatDocument("main.ck", source))
@@ -278,14 +278,14 @@ class LanguageFormatterTest {
         val source =
             """
             import terminal { clear, println, write };
-            fun main() { println("hi"); }
+            pub fun main() { println("hi"); }
             """.trimIndent()
 
         val expected =
             """
             import terminal { println }
 
-            fun main() {
+            pub fun main() {
                 println("hi")
             }
             """.trimIndent() + "\n"
@@ -303,7 +303,7 @@ class LanguageFormatterTest {
                     "main.ck" to
                         """
                         import "model.ck" { Counter, Vec2, make };
-                        fun main() {
+                        pub fun main() {
                             val v: Vec2 = make();
                             val c: Counter = Counter(value = v.x);
                             terminal::println("v=" + c.value);
@@ -311,9 +311,9 @@ class LanguageFormatterTest {
                         """.trimIndent(),
                     "model.ck" to
                         """
-                        struct Vec2 { x: Int, y: Int }
-                        class Counter(var value: Int) {}
-                        fun make(): Vec2 { return Vec2(x = 1, y = 2); }
+                        pub struct Vec2 { x: Int, y: Int }
+                        pub class Counter(pub var value: Int) {}
+                        pub fun make(): Vec2 { return Vec2(x = 1, y = 2); }
                         """.trimIndent(),
                 ),
             )
@@ -331,7 +331,7 @@ class LanguageFormatterTest {
         val source =
             """
             import terminal { clear, println };
-            fun main() { missing(); }
+            pub fun main() { missing(); }
             """.trimIndent()
 
         val result = formatter.cleanupDocument("main.ck", source)

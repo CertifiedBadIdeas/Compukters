@@ -46,7 +46,7 @@ class BackgroundDeviceVmTest {
 
         try {
             val workspace = DeviceWorkspaceHost(root)
-            workspace.writeDocument(1, "bios.ck", "fun main() { }")
+            workspace.writeDocument(1, "bios.ck", "pub fun main() { }")
 
             val profile =
                 DeviceProfile(

@@ -31,8 +31,8 @@ class DeviceProgramSupportTest {
     @Test
     fun fixtureWritesProgramIntoIsolatedWorkspace() {
         runtimeTestWorkspace("fixture") { workspace ->
-            workspace.writeProgram(7, "boot.ck", "fun main() { terminal.println(\"first\"); }")
-            workspace.writeProgram(8, "boot.ck", "fun main() { terminal.println(\"second\"); }")
+            workspace.writeProgram(7, "boot.ck", "pub fun main() { terminal.println(\"first\"); }")
+            workspace.writeProgram(8, "boot.ck", "pub fun main() { terminal.println(\"second\"); }")
 
             val loader = WorkspaceProgramLoader(workspace.host)
 
@@ -41,36 +41,36 @@ class DeviceProgramSupportTest {
 
             assertNotNull(first)
             assertNotNull(second)
-            assertEquals("fun main() { terminal.println(\"first\"); }", first.source)
-            assertEquals("fun main() { terminal.println(\"second\"); }", second.source)
+            assertEquals("pub fun main() { terminal.println(\"first\"); }", first.source)
+            assertEquals("pub fun main() { terminal.println(\"second\"); }", second.source)
         }
     }
 
     @Test
     fun loadsDocumentFromWorkspace() {
         runtimeTestWorkspace("program-loader") { workspace ->
-            workspace.writeProgram(7, "shell.ck", "fun main() { }")
+            workspace.writeProgram(7, "shell.ck", "pub fun main() { }")
             val loader = WorkspaceProgramLoader(workspace.host)
 
             val program = loader.load(7, "shell.ck")
 
             assertNotNull(program)
             assertEquals("shell.ck", program.path)
-            assertEquals("fun main() { }", program.source)
+            assertEquals("pub fun main() { }", program.source)
         }
     }
 
     @Test
     fun loadsDocumentFromNestedWorkspacePath() {
         runtimeTestWorkspace("program-loader-nested") { workspace ->
-            workspace.writeProgram(7, "lib/shell.ck", "fun main() { }")
+            workspace.writeProgram(7, "lib/shell.ck", "pub fun main() { }")
             val loader = WorkspaceProgramLoader(workspace.host)
 
             val program = loader.load(7, "lib/shell.ck")
 
             assertNotNull(program)
             assertEquals("lib/shell.ck", program.path)
-            assertEquals("fun main() { }", program.source)
+            assertEquals("pub fun main() { }", program.source)
         }
     }
 
@@ -78,7 +78,7 @@ class DeviceProgramSupportTest {
     fun rejectsProgramPathTraversalOutsideWorkspace() {
         runtimeTestWorkspace("program-loader-sandbox") { workspace ->
             assertFailsWith<IllegalArgumentException> {
-                workspace.writeProgram(7, "../shell.ck", "fun main() { }")
+                workspace.writeProgram(7, "../shell.ck", "pub fun main() { }")
             }
         }
     }
@@ -86,14 +86,14 @@ class DeviceProgramSupportTest {
     @Test
     fun normalizesAbsoluteLookingProgramPathInsideWorkspace() {
         runtimeTestWorkspace("program-loader-absolute") { workspace ->
-            workspace.writeProgram(7, "/tmp/shell.ck", "fun main() { }")
+            workspace.writeProgram(7, "/tmp/shell.ck", "pub fun main() { }")
             val loader = WorkspaceProgramLoader(workspace.host)
 
             val program = loader.load(7, "tmp/shell.ck")
 
             assertNotNull(program)
             assertEquals("tmp/shell.ck", program.path)
-            assertEquals("fun main() { }", program.source)
+            assertEquals("pub fun main() { }", program.source)
         }
     }
 
@@ -111,14 +111,14 @@ class DeviceProgramSupportTest {
     @Test
     fun normalizesAbsoluteLookingProgramPathWhenLoadingProgram() {
         runtimeTestWorkspace("program-loader-load-absolute") { workspace ->
-            workspace.writeProgram(7, "tmp/shell.ck", "fun main() { }")
+            workspace.writeProgram(7, "tmp/shell.ck", "pub fun main() { }")
             val loader = WorkspaceProgramLoader(workspace.host)
 
             val program = loader.load(7, "/tmp/shell.ck")
 
             assertNotNull(program)
             assertEquals("tmp/shell.ck", program.path)
-            assertEquals("fun main() { }", program.source)
+            assertEquals("pub fun main() { }", program.source)
         }
     }
 
@@ -135,7 +135,7 @@ class DeviceProgramSupportTest {
 
     @Test
     fun reportsCompilationErrorsWithoutProducingProgram() {
-        val compiled = ComputerProgramCompiler.compile("broken.ck", "fun main() { val flag: Bool = 42; }")
+        val compiled = ComputerProgramCompiler.compile("broken.ck", "pub fun main() { val flag: Bool = 42; }")
 
         assertNull(compiled.program)
         assertTrue(compiled.errorMessage?.contains("Expected Bool") == true)
@@ -145,7 +145,7 @@ class DeviceProgramSupportTest {
     fun rejectsProgramWhenCompiledBytecodeExceedsRomLimit() {
         val profile = runtimeProfile(programRomBytes = 1)
 
-        val compiled = ComputerProgramCompiler.compile("tiny.ck", "fun main() { }", profile)
+        val compiled = ComputerProgramCompiler.compile("tiny.ck", "pub fun main() { }", profile)
 
         assertNull(compiled.program)
         assertTrue(compiled.errorMessage?.contains("ROM") == true)
