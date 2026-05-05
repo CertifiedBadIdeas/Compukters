@@ -67,6 +67,29 @@ interface RuntimeDeviceTerminalSessions {
     fun detachTerminalSession(playerUuid: UUID)
 }
 
+/** Display-session role: per-player framebuffer endpoint attachments. */
+interface RuntimeDeviceDisplaySessions {
+    fun attachDisplaySession(
+        playerUuid: UUID,
+        containerId: Int,
+        displayId: Int,
+        width: Int,
+        height: Int,
+    )
+
+    fun resizeDisplaySession(
+        playerUuid: UUID,
+        displayId: Int,
+        width: Int,
+        height: Int,
+    )
+
+    fun detachDisplaySession(
+        playerUuid: UUID,
+        displayId: Int,
+    )
+}
+
 /** Metadata role: family/label. Access checks belong to the carrier
  *  (e.g. the BlockEntity), not to the runtime device itself. */
 interface RuntimeDeviceMetadata {
@@ -82,4 +105,5 @@ interface RuntimeDevice :
     RuntimeDeviceInput,
     RuntimeDeviceScreen,
     RuntimeDeviceTerminalSessions,
+    RuntimeDeviceDisplaySessions,
     RuntimeDeviceMetadata
