@@ -27,20 +27,28 @@ import kotlin.test.assertNotNull
 import kotlin.test.fail
 
 class RomScriptCompileTest {
+    private fun resourceText(path: String): String =
+        RomScriptCompileTest::class.java.classLoader
+            .getResourceAsStream(path)
+            ?.bufferedReader()
+            ?.readText()
+            ?: fail("$path missing from classpath")
+
     @Test
     fun bundledFirmwareScriptCompilesCleanly() {
-        val source =
-            RomScriptCompileTest::class.java.classLoader
-                .getResourceAsStream("firmware/bios.ck")
-                ?.bufferedReader()
-                ?.readText()
-                ?: fail("firmware/bios.ck missing from classpath")
+        val source = resourceText("firmware/bios.ck")
 
         val compiled = ComputerProgramCompiler.compile("bios.ck", source)
 
         if (compiled.program == null) {
             fail("Firmware script bios.ck failed to compile: ${compiled.errorMessage}")
         }
+    }
+
+    @Test
+    fun bundledRomTerminalDoesNotUseStdoutForVisibleUi() {
+        val source = resourceText("rom/terminal.ck")
+        assertFalse(source.contains("stdout::write"), "rom/terminal.ck must render via display, not stdout")
     }
 
     @Test
