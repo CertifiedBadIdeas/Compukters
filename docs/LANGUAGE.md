@@ -156,7 +156,7 @@ User-defined struct types are declared with `struct`. User-defined reference obj
 
 ### Built-in Modules Are Ambient
 
-Built-in modules (`terminal`, `system`, `filesystem`, `events`, `process`, `strings`, `stdout`) are always available — there is no `import` needed. Access their members with `::`:
+Built-in modules (`terminal`, `display`, `system`, `filesystem`, `events`, `process`, `ipc`, `strings`, `stdout`) are always available — there is no `import` needed. Access their members with `::`:
 
 ```
 terminal::println("hi")
@@ -235,6 +235,15 @@ In the Workbench editor, Format can be triggered from the toolbar or with `Ctrl+
 - `clear(): Unit`
 - `setCursor(x: Int, y: Int): Unit`
 
+`display`
+
+- `primary(): Int`
+- `width(displayId: Int): Int`
+- `height(displayId: Int): Int`
+- `clear(displayId: Int, color: Int): Unit`
+- `fillRect(displayId: Int, x: Int, y: Int, width: Int, height: Int, color: Int): Unit`
+- `present(displayId: Int): Unit`
+
 `filesystem`
 
 - `exists(path: String): Bool`
@@ -255,14 +264,39 @@ In the Workbench editor, Format can be triggered from the toolbar or with `Ctrl+
 
 - `pull(): Event`
 - `pull(filter: String): Event`
+- `argCount(event: Event): Int`
+- `argInt(event: Event, index: Int): Int`
+- `argBool(event: Event, index: Int): Bool`
+- `argString(event: Event, index: Int): String`
+
+`Event` fields:
+
+- `name: String`
+- `id: Int`
+- `argCount: Int`
 
 `process`
 
 - `argument(): String`
 - `currentDirectory(): String`
 - `changeDirectory(path: String): Bool`
+- `spawn(path: String): Int`
+- `spawn(path: String, argument: String): Int`
+- `wait(pid: Int): Int`
 - `run(path: String): Int`
 - `run(path: String, argument: String): Int`
+
+`process::run(path, argument)` is a compatibility helper equivalent to `process::wait(process::spawn(path, argument))`.
+
+`ipc`
+
+- `open(): Int`
+- `write(channelId: Int, text: String): Unit`
+- `read(channelId: Int): String`
+- `tryRead(channelId: Int): String`
+- `close(channelId: Int): Unit`
+
+IPC is a low-level VM-local text channel primitive. The runtime does not attach stdin/stdout/stderr meaning to channels.
 
 `strings`
 
@@ -270,6 +304,9 @@ In the Workbench editor, Format can be triggered from the toolbar or with `Ctrl+
 - `isBlank(text: String): Bool`
 - `beforeSpace(text: String): String`
 - `afterSpace(text: String): String`
+- `toInt(text: String): Int`
+- `length(text: String): Int`
+- `charAt(text: String, index: Int): String`
 
 `stdout`
 
@@ -279,6 +316,18 @@ Global intrinsics:
 
 - `yield(): Unit`
 - `sleep(ticks: Long): Unit`
+
+## ROM stdio convention
+
+Bundled ROM programs that need input/output import `stdio.ck` and receive channel ids through `process::argument()` using this positional format:
+
+```text
+<stdin-channel-id> <stdout-channel-id> <stderr-channel-id> <command-argument>
+```
+
+`terminal.ck` opens these channels, spawns `shell.ck`, translates key/paste events into line input, and renders shell output to the framebuffer with `display::*`. `shell.ck` and command programs use the `stdio.ck` helpers instead of calling legacy `terminal::*` directly.
+
+The positional stdio format is a ROM convention only. Runtime APIs remain generic `ipc`, `events`, and `process` primitives.
 
 ## Entry Point
 
