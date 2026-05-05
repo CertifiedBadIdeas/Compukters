@@ -1,3 +1,5 @@
+import "stdio.ck" { Stdio, error, fromArgument, println, readLine, write };
+
 // Toy line-based "nano". Each line typed at the prompt is appended to the
 // in-memory buffer; commands starting with ':' control the editor.
 //
@@ -9,66 +11,68 @@
 //
 // Anything else is treated as a line of text and appended verbatim.
 
-fun loadInitial(path: String): String {
+fun loadInitial(ctx: Stdio, path: String): String {
     if (!filesystem::exists(path)) {
         return ""
     }
     if (filesystem::isDirectory(path)) {
-        terminal::println("nano: " + path + " is a directory")
+        error(ctx, "nano: " + path + " is a directory")
         return ""
     }
     return filesystem::readText(path)
 }
 
-fun printBuffer(buffer: String) {
+fun printBuffer(ctx: Stdio, buffer: String) {
     if (strings::isBlank(buffer)) {
-        terminal::println("(empty)")
+        println(ctx, "(empty)")
         return
     }
-    terminal::write(buffer)
+    write(ctx, buffer)
     if (buffer != "" && buffer != "\n") {
         // Trailing newline so the cursor lands on a fresh line for the prompt.
-        terminal::write("\n")
+        write(ctx, "\n")
     }
 }
 
-fun save(path: String, buffer: String) {
+fun save(ctx: Stdio, path: String, buffer: String) {
     filesystem::writeText(path, buffer)
-    terminal::println("[saved " + path + "]")
+    println(ctx, "[saved " + path + "]")
 }
 
 pub fun main() {
-    val target: String = strings::trim(process::argument())
+    val ctx: Stdio = fromArgument(process::argument())
+    val target: String = strings::trim(ctx.argument)
     if (strings::isBlank(target)) {
-        terminal::println("Usage: nano <file>")
+        error(ctx, "Usage: nano <file>")
         return
     }
 
-    var buffer: String = loadInitial(target)
+    var buffer: String = loadInitial(ctx, target)
 
-    terminal::println("nano - editing " + target)
-    terminal::println("commands: :w :q :wq :p :c")
+    println(ctx, "nano - editing " + target)
+    println(ctx, "commands: :w :q :wq :p :c")
     if (buffer != "") {
-        terminal::println("---")
-        printBuffer(buffer)
-        terminal::println("---")
+        println(ctx, "---")
+        printBuffer(ctx, buffer)
+        println(ctx, "---")
     }
 
     while true {
-        val line: String = terminal::readln("> ")
+        write(ctx, "> ")
+        val line: String = readLine(ctx)
         if (line == ":q") {
             return
         }
         if (line == ":w") {
-            save(target, buffer)
+            save(ctx, target, buffer)
         } else if (line == ":wq") {
-            save(target, buffer)
+            save(ctx, target, buffer)
             return
         } else if (line == ":p") {
-            printBuffer(buffer)
+            printBuffer(ctx, buffer)
         } else if (line == ":c") {
             buffer = ""
-            terminal::println("[cleared]")
+            println(ctx, "[cleared]")
         } else {
             buffer = buffer + line + "\n"
         }

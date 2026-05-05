@@ -1,8 +1,11 @@
+import "stdio.ck" { Stdio, fromArgument, println };
+
 pub fun main() {
+    val ctx: Stdio = fromArgument(process::argument())
     val path: String = process::currentDirectory()
     if (path == "") {
-        terminal::println("/")
+        println(ctx, "/")
     } else {
-        terminal::println("/" + path)
+        println(ctx, "/" + path)
     }
 }

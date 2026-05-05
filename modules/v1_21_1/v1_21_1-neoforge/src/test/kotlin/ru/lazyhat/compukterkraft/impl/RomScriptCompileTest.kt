@@ -19,8 +19,10 @@
 package ru.lazyhat.compukterkraft.impl
 
 import ru.lazyhat.compukterkraft.core.device.runtime.ComputerProgramCompiler
+import ru.lazyhat.compukterkraft.lang.frontend.MapSourceLoader
 import kotlin.test.Test
 import kotlin.test.assertNotNull
+import kotlin.test.assertFalse
 import kotlin.test.fail
 
 class RomScriptCompileTest {
@@ -58,6 +60,43 @@ class RomScriptCompileTest {
                 .toList()
         assertNotNull(files.firstOrNull(), "rom.index is empty")
 
+        val sources =
+            files.associateWith { path ->
+                cl
+                    .getResourceAsStream("rom/$path")
+                    ?.bufferedReader()
+                    ?.readText()
+                    ?: fail("rom/$path missing from classpath")
+            }
+        val sourceLoader = MapSourceLoader(sources)
+
+        for (path in files) {
+            val source = sources[path] ?: fail("rom/$path missing from source map")
+            val compiled = ComputerProgramCompiler.compile(path, source, sourceLoader = sourceLoader)
+            if (compiled.program == null) {
+                fail("ROM script $path failed to compile: ${compiled.errorMessage}")
+            }
+        }
+    }
+
+    @Test
+    fun romScriptsDoNotUseLegacyTerminalBuiltins() {
+        val cl = RomScriptCompileTest::class.java.classLoader
+        val index =
+            cl
+                .getResourceAsStream("rom/rom.index")
+                ?.bufferedReader()
+                ?.readText()
+                ?: fail("rom/rom.index missing from classpath")
+
+        val files =
+            index
+                .lineSequence()
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .toList()
+        assertNotNull(files.firstOrNull(), "rom.index is empty")
+
         for (path in files) {
             val source =
                 cl
@@ -65,10 +104,7 @@ class RomScriptCompileTest {
                     ?.bufferedReader()
                     ?.readText()
                     ?: fail("rom/$path missing from classpath")
-            val compiled = ComputerProgramCompiler.compile(path, source)
-            if (compiled.program == null) {
-                fail("ROM script $path failed to compile: ${compiled.errorMessage}")
-            }
+            assertFalse(source.contains("terminal::"), "rom/$path still uses legacy terminal builtins")
         }
     }
 }
