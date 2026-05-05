@@ -367,6 +367,58 @@ class LanguageFrontendTest {
     }
 
     @Test
+    fun rejectsExternalAccessToPrivateClassFieldAndMethod() {
+        val artifact =
+            frontend.compile(
+                "private_member.ck",
+                """
+                pub class Counter(var value: Int) {
+                    fun hidden(): Int { return this.value; }
+                    pub fun shown(): Int { return this.hidden(); }
+                }
+                pub fun main() {
+                    val counter: Counter = Counter(value = 1);
+                    terminal::println("v=" + counter.value);
+                    terminal::println("h=" + counter.hidden());
+                }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.any { it.message.contains("Member `value` of class `Counter` is private") },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+        assertTrue(
+            artifact.analysis.diagnostics.any { it.message.contains("Member `hidden` of class `Counter` is private") },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+    }
+
+    @Test
+    fun allowsClassOwnerToAccessPrivateMembers() {
+        val artifact =
+            frontend.compile(
+                "owner_member.ck",
+                """
+                pub class Counter(var value: Int) {
+                    fun hidden(): Int { return this.value; }
+                    pub fun shown(): Int { return this.hidden(); }
+                }
+                pub fun main() {
+                    val counter: Counter = Counter(value = 1);
+                    terminal::println("v=" + counter.shown());
+                }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+        assertNotNull(artifact.module)
+    }
+
+    @Test
     fun rejectsUninitializedClassBodyField() {
         val artifact =
             frontend.compile(
