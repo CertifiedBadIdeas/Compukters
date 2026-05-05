@@ -114,4 +114,5 @@ interface DevicePeripheralApi {
 object DeviceProgramFiles {
     const val FILE_EXTENSION = ".ck"
     const val BIOS_SCRIPT_NAME = "bios.ck"
+    const val BOOT_SCRIPT_NAME = "boot.ck"
 }

@@ -24,6 +24,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import ru.lazyhat.compukterkraft.core.device.runtime.FirmwareProgramLoader
+import ru.lazyhat.compukterkraft.core.device.runtime.LoadedFirmwareProgramSource
 import ru.lazyhat.compukterkraft.core.device.vm.BackgroundDeviceVm
 import ru.lazyhat.compukterkraft.core.device.vm.DeviceVmLogger
 import ru.lazyhat.compukterkraft.core.device.vm.DeviceWorkspaceHost
@@ -40,13 +42,18 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 
 class BackgroundDeviceVmTest {
+    private class StaticFirmwareLoader(
+        private val source: String,
+    ) : FirmwareProgramLoader {
+        override fun load(path: String): LoadedFirmwareProgramSource = LoadedFirmwareProgramSource(path, source)
+    }
+
     @Test
     fun surfacesRomLimitFailureAsCrashedState() {
         val root = createTempDirectory("compukterkraft-background-vm")
 
         try {
             val workspace = DeviceWorkspaceHost(root)
-            workspace.writeDocument(1, "bios.ck", "pub fun main() { }")
 
             val profile =
                 DeviceProfile(
@@ -75,6 +82,7 @@ class BackgroundDeviceVmTest {
                     labelProvider = { null },
                     logger = DeviceVmLogger { },
                     workspace = workspace,
+                    firmwareLoader = StaticFirmwareLoader("pub fun main() { }"),
                 )
 
             vm.boot()

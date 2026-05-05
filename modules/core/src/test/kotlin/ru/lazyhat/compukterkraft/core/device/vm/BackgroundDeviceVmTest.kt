@@ -24,6 +24,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import ru.lazyhat.compukterkraft.core.device.runtime.FirmwareProgramLoader
+import ru.lazyhat.compukterkraft.core.device.runtime.LoadedFirmwareProgramSource
 import ru.lazyhat.compukterkraft.core.device.runtime.test.runtimeProfile
 import ru.lazyhat.compukterkraft.core.device.runtime.test.runtimeTestWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceCapability
@@ -32,20 +34,145 @@ import ru.lazyhat.compukterkraft.lang.runtime.DeviceMemoryResources
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceProfile
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceQueueResources
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceResources
+import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceStorageResources
 import ru.lazyhat.compukterkraft.lang.runtime.VmState
-import ru.lazyhat.compukterkraft.lang.runtime.VmStopReason
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
-import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class BackgroundDeviceVmTest {
-    @Test
-    fun bootCompletesWhenVmRegistrySupportsAmbientModule() {
-        runtimeTestWorkspace("compukterkraft-background-vm-success") { workspace ->
-            workspace.writeProgram(1, "bios.ck", "pub fun main() { if (false) { filesystem::list(); } }")
+    private class StaticFirmwareLoader(
+        private val source: String,
+    ) : FirmwareProgramLoader {
+        override fun load(path: String): LoadedFirmwareProgramSource = LoadedFirmwareProgramSource(path, source)
+    }
 
+    private fun ScreenBufferSnapshot.visibleText(): String =
+        (0 until height)
+            .joinToString("\n") { y ->
+                (0 until width).joinToString("") { x -> charAt(x, y).toString() }.trimEnd()
+            }.trim()
+
+    private fun runVmTicks(
+        vm: BackgroundDeviceVm,
+        ticks: Int = 8,
+    ) = runBlocking {
+        repeat(ticks) { tick ->
+            vm.requestSlice(tick.toLong())
+            kotlinx.coroutines.delay(10)
+        }
+    }
+
+    private fun firmwareTestProfile(): DeviceProfile = runtimeProfile().copy(terminalWidth = 120, terminalHeight = 16)
+
+    @Test
+    fun bootsFirmwareAndRunsUserBootFileFromWorkspace() {
+        runtimeTestWorkspace("firmware-runs-user-boot") { workspace ->
+            workspace.writeProgram(1, "boot.ck", "pub fun main() { terminal::println(\"from boot\"); }")
+            val vm =
+                BackgroundDeviceVm(
+                    deviceId = 1,
+                    profile = firmwareTestProfile(),
+                    dispatcher = Dispatchers.Default,
+                    labelProvider = { null },
+                    logger = DeviceVmLogger { },
+                    workspace = workspace.host,
+                    firmwareLoader =
+                        StaticFirmwareLoader(
+                            """
+                            pub fun main() {
+                                terminal::println("from bios")
+                                val code: Int = process::run("boot.ck")
+                                terminal::println("code=" + code)
+                                while true { sleep(20L) }
+                            }
+                            """.trimIndent(),
+                        ),
+                )
+
+            vm.boot()
+            runVmTicks(vm)
+
+            val text = vm.forceScreenSnapshot().visibleText()
+            assertTrue(text.contains("from bios"), text)
+            assertTrue(text.contains("from boot"), text)
+            assertTrue(text.contains("code=0"), text)
+            assertTrue(vm.snapshot().state.isActive, vm.snapshot().state.toString())
+        }
+    }
+
+    @Test
+    fun firmwareReportsMissingBootFileAndStaysActive() {
+        runtimeTestWorkspace("firmware-missing-boot") { workspace ->
+            val vm =
+                BackgroundDeviceVm(
+                    deviceId = 1,
+                    profile = firmwareTestProfile(),
+                    dispatcher = Dispatchers.Default,
+                    labelProvider = { null },
+                    logger = DeviceVmLogger { },
+                    workspace = workspace.host,
+                    firmwareLoader =
+                        StaticFirmwareLoader(
+                            """
+                            pub fun main() {
+                                val code: Int = process::run("boot.ck")
+                                terminal::println("code=" + code)
+                                while true { sleep(20L) }
+                            }
+                            """.trimIndent(),
+                        ),
+                )
+
+            vm.boot()
+            runVmTicks(vm)
+
+            val text = vm.forceScreenSnapshot().visibleText()
+            assertTrue(text.contains("Program not found: boot.ck"), text)
+            assertTrue(text.contains("code=1"), text)
+            assertTrue(vm.snapshot().state.isActive, vm.snapshot().state.toString())
+        }
+    }
+
+    @Test
+    fun firmwareReportsBootCompileErrorAndStaysActive() {
+        runtimeTestWorkspace("firmware-invalid-boot") { workspace ->
+            workspace.writeProgram(1, "boot.ck", "fun main() {}")
+            val vm =
+                BackgroundDeviceVm(
+                    deviceId = 1,
+                    profile = firmwareTestProfile(),
+                    dispatcher = Dispatchers.Default,
+                    labelProvider = { null },
+                    logger = DeviceVmLogger { },
+                    workspace = workspace.host,
+                    firmwareLoader =
+                        StaticFirmwareLoader(
+                            """
+                            pub fun main() {
+                                val code: Int = process::run("boot.ck")
+                                terminal::println("code=" + code)
+                                while true { sleep(20L) }
+                            }
+                            """.trimIndent(),
+                        ),
+                )
+
+            vm.boot()
+            runVmTicks(vm)
+
+            val text = vm.forceScreenSnapshot().visibleText()
+            assertTrue(text.contains("Compilation Error in boot.ck"), text)
+            assertTrue(text.contains("pub fun main"), text)
+            assertTrue(text.contains("code=1"), text)
+            assertTrue(vm.snapshot().state.isActive, vm.snapshot().state.toString())
+        }
+    }
+
+    @Test
+    fun firmwareCanUseAmbientFilesystemModuleAndStayAlive() {
+        runtimeTestWorkspace("compukterkraft-background-vm-success") { workspace ->
             val vm =
                 BackgroundDeviceVm(
                     deviceId = 1,
@@ -54,25 +181,21 @@ class BackgroundDeviceVmTest {
                     labelProvider = { null },
                     logger = DeviceVmLogger { },
                     workspace = workspace.host,
+                    firmwareLoader =
+                        StaticFirmwareLoader(
+                            """
+                            pub fun main() {
+                                if (false) { filesystem::list() }
+                                while true { sleep(20L) }
+                            }
+                            """.trimIndent(),
+                        ),
                 )
 
             vm.boot()
+            runVmTicks(vm)
 
-            val terminalState =
-                runBlocking {
-                    val deferred =
-                        async {
-                            withTimeout(5_000) {
-                                vm.terminalStates.first()
-                            }
-                        }
-
-                    vm.requestSlice(0)
-                    deferred.await()
-                }
-
-            assertTrue(terminalState is VmState.Stopped)
-            assertEquals(VmStopReason.REQUESTED, terminalState.reason)
+            assertTrue(vm.snapshot().state.isActive, vm.snapshot().state.toString())
         }
     }
 
@@ -82,7 +205,6 @@ class BackgroundDeviceVmTest {
 
         try {
             val workspace = DeviceWorkspaceHost(root)
-            workspace.writeDocument(1, "bios.ck", "pub fun main() { }")
 
             val profile =
                 DeviceProfile(
@@ -111,6 +233,7 @@ class BackgroundDeviceVmTest {
                     labelProvider = { null },
                     logger = DeviceVmLogger { },
                     workspace = workspace,
+                    firmwareLoader = StaticFirmwareLoader("pub fun main() { }"),
                 )
 
             vm.boot()
@@ -141,7 +264,6 @@ class BackgroundDeviceVmTest {
 
         try {
             val workspace = DeviceWorkspaceHost(root)
-            workspace.writeDocument(1, "bios.ck", "pub fun main() { if (false) { filesystem::list(); } }")
 
             val profile =
                 DeviceProfile(
@@ -170,6 +292,7 @@ class BackgroundDeviceVmTest {
                     labelProvider = { null },
                     logger = DeviceVmLogger { },
                     workspace = workspace,
+                    firmwareLoader = StaticFirmwareLoader("pub fun main() { if (false) { filesystem::list() } }"),
                 )
 
             vm.boot()

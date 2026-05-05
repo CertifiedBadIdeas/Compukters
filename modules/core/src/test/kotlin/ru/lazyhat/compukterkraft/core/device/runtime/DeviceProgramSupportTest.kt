@@ -109,6 +109,15 @@ class DeviceProgramSupportTest {
     }
 
     @Test
+    fun firmwareLoaderRejectsPathTraversal() {
+        val loader = ClasspathFirmwareProgramLoader()
+
+        val firmware = loader.load("../bios.ck")
+
+        assertNull(firmware)
+    }
+
+    @Test
     fun normalizesAbsoluteLookingProgramPathWhenLoadingProgram() {
         runtimeTestWorkspace("program-loader-load-absolute") { workspace ->
             workspace.writeProgram(7, "tmp/shell.ck", "pub fun main() { }")
