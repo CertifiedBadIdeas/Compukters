@@ -21,6 +21,7 @@ package ru.lazyhat.compukterkraft.impl
 import ru.lazyhat.compukterkraft.core.device.runtime.ComputerProgramCompiler
 import ru.lazyhat.compukterkraft.lang.frontend.MapSourceLoader
 import kotlin.test.Test
+import kotlin.test.assertContains
 import kotlin.test.assertNotNull
 import kotlin.test.assertFalse
 import kotlin.test.fail
@@ -106,5 +107,25 @@ class RomScriptCompileTest {
                     ?: fail("rom/$path missing from classpath")
             assertFalse(source.contains("terminal::"), "rom/$path still uses legacy terminal builtins")
         }
+    }
+
+    @Test
+    fun bootStartsRomTerminalProgram() {
+        val cl = RomScriptCompileTest::class.java.classLoader
+        val index =
+            cl
+                .getResourceAsStream("rom/rom.index")
+                ?.bufferedReader()
+                ?.readText()
+                ?: fail("rom/rom.index missing from classpath")
+        assertContains(index.lineSequence().map { it.trim() }.toList(), "terminal.ck")
+
+        val boot =
+            cl
+                .getResourceAsStream("rom/boot.ck")
+                ?.bufferedReader()
+                ?.readText()
+                ?: fail("rom/boot.ck missing from classpath")
+        assertContains(boot, "terminal.ck")
     }
 }
