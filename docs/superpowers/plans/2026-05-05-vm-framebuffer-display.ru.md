@@ -55,6 +55,8 @@
 - `modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft/common/network/ClientNetworkContext.kt` — добавить `handleDisplayFrame(containerId, delta)`.
 - `modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft/common/network/ClientNetworkContextImpl.kt` — route display frames to current `ComputerMenu`.
 - `modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/menu/AbstractComputerMenu.kt` — store/apply `ClientDisplayBuffer` на client side.
+- `modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/block/ComputerBlockEntity.kt` — передать host display network bridge в `RuntimeDeviceImpl`.
+- `modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft/common/workbench/block/WorkbenchBlockEntity.kt` — передать host display network bridge в `RuntimeDeviceImpl` для workbench target runtime devices.
 - `modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft/common/terminal/screen/ComputerTerminalScreen.kt` — announce display attach/resize/detach и убрать старую terminal surface из active display path.
 
 Добавить tests:
@@ -359,6 +361,8 @@ git commit -m "feat: add runtime display sessions"
 - Modify: `modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft/common/network/ClientNetworkContext.kt`
 - Modify: `modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft/common/network/ClientNetworkContextImpl.kt`
 - Modify: `modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/context/BlockEntityRuntimeDeviceHost.kt`
+- Modify: `modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/block/ComputerBlockEntity.kt`
+- Modify: `modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft/common/workbench/block/WorkbenchBlockEntity.kt`
 - Create: `modules/v1_21_1/v1_21_1-common/src/test/kotlin/ru/lazyhat/compukterkraft/common/computer/network/DisplayMessageCodecTest.kt`
 
 - [ ] **Step 1: Написать failing frame codec test**
@@ -391,6 +395,8 @@ Expected: `Compilation error` mentioning unresolved `FrameDeltaClientMessage`.
 
 Вставить Kotlin snippet из English plan Task 6 Step 7: `displayNetwork` проверяет текущий `ComputerMenu` и отправляет `FrameDeltaClientMessage(containerId, frame)` через `ServerNetworking.sendToPlayer`.
 
+Затем обновить оба call sites `RuntimeDeviceImpl(...)`, передав `host.displayNetwork` после `host.terminalNetwork`.
+
 - [ ] **Step 8: Запустить codec test**
 
 Run: `./gradlew :v1_21_1:v1_21_1-common:test --tests "*DisplayMessageCodecTest"`
@@ -407,6 +413,8 @@ git add modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft
   modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/network/server/DisplayResizeServerMessage.kt \
   modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/network/server/DisplayDetachServerMessage.kt \
   modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/context/BlockEntityRuntimeDeviceHost.kt \
+  modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/block/ComputerBlockEntity.kt \
+  modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft/common/workbench/block/WorkbenchBlockEntity.kt \
   modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft/common/network/NetworkMessages.kt \
   modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft/common/network/ClientNetworkContext.kt \
   modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft/common/network/ClientNetworkContextImpl.kt \
@@ -468,6 +476,8 @@ git commit -m "feat: add client display buffering"
 - Modify: `modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft/common/terminal/screen/ComputerTerminalScreen.kt`
 - Modify: `modules/v1_21_1/v1_21_1-neoforge/src/main/resources/firmware/bios.ck`
 - Modify: `modules/v1_21_1/v1_21_1-neoforge/src/test/kotlin/ru/lazyhat/compukterkraft/impl/RomScriptCompileTest.kt`
+
+Этот task — Phase 1A. Он доказывает, что frames доходят до `ClientDisplayBuffer`. On-screen ARGB texture rendering намеренно остаётся для следующей UI-задачи.
 
 - [ ] **Step 1: Attach display buffer from screen init**
 
