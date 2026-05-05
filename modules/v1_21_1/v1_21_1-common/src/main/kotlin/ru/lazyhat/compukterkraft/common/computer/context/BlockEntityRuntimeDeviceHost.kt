@@ -23,12 +23,10 @@ import net.minecraft.server.level.ServerLevel
 import ru.lazyhat.compukterkraft.common.computer.block.AbstractComputerBlockEntity
 import ru.lazyhat.compukterkraft.common.computer.menu.ComputerMenu
 import ru.lazyhat.compukterkraft.common.computer.network.client.FrameDeltaClientMessage
-import ru.lazyhat.compukterkraft.common.computer.network.client.StdoutBytesClientMessage
 import ru.lazyhat.compukterkraft.common.network.ServerNetworking
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.DeviceStateSink
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.DisplayNetworkBridge
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.GameTimeSource
-import ru.lazyhat.compukterkraft.core.device.runtime.ports.TerminalNetworkBridge
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 import java.util.UUID
 
@@ -43,33 +41,6 @@ class BlockEntityRuntimeDeviceHost(
     private val blockEntity: AbstractComputerBlockEntity,
 ) {
     val gameTime: GameTimeSource = GameTimeSource { level.gameTime }
-
-    val terminalNetwork: TerminalNetworkBridge =
-        object : TerminalNetworkBridge {
-            override fun isSessionStillBound(
-                playerUuid: UUID,
-                containerId: Int,
-                deviceId: Int,
-            ): Boolean {
-                val player = level.server.playerList.getPlayer(playerUuid) ?: return false
-                val menu = player.containerMenu
-                return menu is ComputerMenu &&
-                    menu.containerId == containerId &&
-                    menu.serverSide.device.deviceId == deviceId
-            }
-
-            override fun sendStdoutBytes(
-                playerUuid: UUID,
-                containerId: Int,
-                bytes: ByteArray,
-            ) {
-                val player = level.server.playerList.getPlayer(playerUuid) ?: return
-                ServerNetworking.sendToPlayer(
-                    StdoutBytesClientMessage(containerId, bytes),
-                    player,
-                )
-            }
-        }
 
     val displayNetwork: DisplayNetworkBridge =
         object : DisplayNetworkBridge {

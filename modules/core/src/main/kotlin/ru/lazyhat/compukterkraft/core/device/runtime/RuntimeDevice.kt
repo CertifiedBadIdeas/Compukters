@@ -49,24 +49,6 @@ interface RuntimeDeviceScreen {
     val lastScreenSnapshot: ScreenBufferSnapshot?
 }
 
-/** Terminal-session role: per-player byte-stream attachments. */
-interface RuntimeDeviceTerminalSessions {
-    fun attachTerminalSession(
-        playerUuid: UUID,
-        containerId: Int,
-        cols: Int,
-        rows: Int,
-    )
-
-    fun resizeTerminalSession(
-        playerUuid: UUID,
-        cols: Int,
-        rows: Int,
-    )
-
-    fun detachTerminalSession(playerUuid: UUID)
-}
-
 /** Display-session role: per-player framebuffer endpoint attachments. */
 interface RuntimeDeviceDisplaySessions {
     fun attachDisplaySession(
@@ -104,6 +86,5 @@ interface RuntimeDevice :
     RuntimeDeviceLifecycle,
     RuntimeDeviceInput,
     RuntimeDeviceScreen,
-    RuntimeDeviceTerminalSessions,
     RuntimeDeviceDisplaySessions,
     RuntimeDeviceMetadata

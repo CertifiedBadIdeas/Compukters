@@ -65,13 +65,6 @@ class ClientNetworkContextImpl : ClientNetworkContext {
         ClientTableFormatter(minecraft).display(table)
     }
 
-    override fun handleStdoutBytes(
-        containerId: Int,
-        bytes: ByteArray,
-    ) = withCheckedContainerMenu(containerId) {
-        handleStdoutBytes(bytes)
-    }
-
     override fun handleDisplayFrame(
         containerId: Int,
         frame: DisplayFrameDelta,

@@ -22,15 +22,34 @@ package ru.lazyhat.compukterkraft.common.computer.network
 import io.netty.buffer.Unpooled
 import net.minecraft.network.FriendlyByteBuf
 import ru.lazyhat.compukterkraft.common.computer.network.client.FrameDeltaClientMessage
+import ru.lazyhat.compukterkraft.common.network.MessageTypeImpl
+import ru.lazyhat.compukterkraft.common.network.NetworkMessages
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayPixelFormat
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayTile
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class DisplayMessageCodecTest {
     private fun freshBuf(): FriendlyByteBuf = FriendlyByteBuf(Unpooled.buffer())
+
+    @Test
+    fun registryDoesNotExposeTerminalStdoutMessages() {
+        val serverboundIds =
+            NetworkMessages.serverbound
+                .map { (it as MessageTypeImpl<*>).id }
+                .toSet()
+        val clientboundIds =
+            NetworkMessages.clientbound
+                .map { (it as MessageTypeImpl<*>).id }
+                .toSet()
+
+        assertFalse(7 in serverboundIds, "attach_terminal id 7 must stay removed")
+        assertFalse(8 in serverboundIds, "resize_terminal id 8 must stay removed")
+        assertFalse(14 in clientboundIds, "stdout_bytes id 14 must stay removed")
+    }
 
     @Test
     fun frameDeltaClientMessageRoundTripsTiles() {

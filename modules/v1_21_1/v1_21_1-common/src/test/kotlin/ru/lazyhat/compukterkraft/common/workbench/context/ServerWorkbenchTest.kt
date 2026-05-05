@@ -115,14 +115,14 @@ class ServerWorkbenchTest {
         workbench.bindRuntimeBridge(bridge)
 
         workbench.runTargetProgram()
-        workbench.attachTerminal()
         workbench.handleInput(
             ru.lazyhat.compukterkraft.core.device.input.KeyInputEvent
                 .Down(28, repeat = false),
         )
 
-        assertEquals(listOf("run:5", "attach:5", "event:key"), bridge.calls)
-        assertNotNull(workbench.currentScreenSnapshot())
+        workbench.attachTerminal()
+
+        assertEquals(listOf("run:5", "event:key"), bridge.calls)
     }
 
     @Test

@@ -125,14 +125,13 @@ class BackgroundDeviceVm(
         )
     private val screenBuffer = ScreenBuffer(profile.terminalWidth, profile.terminalHeight, profile.colorTerminal)
     private val displayRegistry = DisplayRegistry()
-    val stdioBroadcaster = ComputerStdioBroadcaster()
     private val screenBufferFeeder: VtParser = VtParser(ScreenBufferVtSink(screenBuffer))
-    private val screenBufferConsumer =
-        ComputerStdioBroadcaster.Consumer { bytes ->
-            // Keep the server-side ScreenBuffer synced with the VM's byte stream.
-            // Used by the (legacy) snapshot path that still feeds Workbench + backward-compat clients
-            // until Epic 4 moves the buffer entirely to the client side.
-            screenBufferFeeder.feed(String(bytes, Charsets.UTF_8))
+    val stdioBroadcaster =
+        ComputerStdioBroadcaster { text ->
+            // Keep the server-side ScreenBuffer synced with legacy VM terminal writes.
+            // Workbench still reads snapshots from this buffer until its live viewer
+            // is migrated to display sessions.
+            screenBufferFeeder.feed(text)
         }
     private val peripheralRegistry = VmPeripheralRegistry()
     private val runtimeRegistryProfile = createRuntimeRegistryProfile()
@@ -147,11 +146,7 @@ class BackgroundDeviceVm(
             .shareIn(scope, SharingStarted.Eagerly)
 
     private var runner: Job? = null
-    private val runtime: VmRuntime =
-        run {
-            stdioBroadcaster.addConsumer(screenBufferConsumer)
-            createRuntime("", "")
-        }
+    private val runtime: VmRuntime = createRuntime("", "")
 
     // ── DeviceVmHandle ────────────────────────────────────────────
 
