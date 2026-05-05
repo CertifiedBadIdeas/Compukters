@@ -56,7 +56,9 @@ internal class VmProcessApi(
         val resolved = path
         val programSource =
             programLoader.load(deviceId, resolved) ?: run {
-                ctx.log("VM[$deviceId] missing program: $resolved")
+                val message = "Program not found: $resolved"
+                ctx.log("VM[$deviceId] $message")
+                terminal.println(message)
                 return 1
             }
         val compiledProgram =
@@ -68,8 +70,8 @@ internal class VmProcessApi(
             )
         val program = compiledProgram.program
         if (program == null) {
-            val message = compiledProgram.errorMessage.orEmpty()
-            terminal.println("Compilation Error: $message")
+            val message = compiledProgram.errorMessage.orEmpty().ifEmpty { "Compilation failed." }
+            terminal.println("Compilation Error in ${programSource.path}: $message")
             return 1
         }
 
@@ -77,7 +79,7 @@ internal class VmProcessApi(
             program.run(runtimeCreator(workingDirectory, argument))
             0
         } catch (failure: Throwable) {
-            terminal.println("Program error: ${failure.message ?: failure.javaClass.simpleName}")
+            terminal.println("Program error in ${programSource.path}: ${failure.message ?: failure.javaClass.simpleName}")
             1
         }
     }

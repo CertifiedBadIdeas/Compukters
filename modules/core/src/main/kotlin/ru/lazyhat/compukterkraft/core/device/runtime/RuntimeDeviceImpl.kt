@@ -173,7 +173,10 @@ class RuntimeDeviceImpl(
     }
 
     override fun serverTick() {
-        val handle = vmHandle ?: return
+        val handle = vmHandle ?: run {
+            flushTerminalSessions()
+            return
+        }
 
         handle.requestSlice(gameTime.gameTime())
 
@@ -211,6 +214,7 @@ class RuntimeDeviceImpl(
 
         LOGGER.debug { "DeviceID: $deviceId stop handling $terminalState" }
 
+    flushTerminalSessions()
         manager.removeVm(deviceId, VmStopReason.CLOSED)
         vmHandle = null
         stateSink.onPowerStateChanged(false)

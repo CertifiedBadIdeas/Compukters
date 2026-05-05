@@ -25,6 +25,22 @@ import kotlin.test.fail
 
 class RomScriptCompileTest {
     @Test
+    fun bundledFirmwareScriptCompilesCleanly() {
+        val source =
+            RomScriptCompileTest::class.java.classLoader
+                .getResourceAsStream("firmware/bios.ck")
+                ?.bufferedReader()
+                ?.readText()
+                ?: fail("firmware/bios.ck missing from classpath")
+
+        val compiled = ComputerProgramCompiler.compile("bios.ck", source)
+
+        if (compiled.program == null) {
+            fail("Firmware script bios.ck failed to compile: ${compiled.errorMessage}")
+        }
+    }
+
+    @Test
     fun everyRomScriptCompilesCleanly() {
         val cl = RomScriptCompileTest::class.java.classLoader
         val index =
