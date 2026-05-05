@@ -197,6 +197,48 @@ class BackgroundDeviceVmTest {
         }
     }
 
+    @Test
+    fun bundledRomTerminalHandlesBackspaceWithoutFramebufferRedrawPerKeypress() {
+        val root = createTempDirectory("compukterkraft-rom-terminal-backspace")
+
+        try {
+            DeviceWorkspaceInitializer(root).ensureInitialized(1)
+            val workspace = DeviceWorkspaceHost(root)
+            val vm =
+                BackgroundDeviceVm(
+                    deviceId = 1,
+                    profile = firmwareTestProfile(),
+                    dispatcher = Dispatchers.Default,
+                    labelProvider = { null },
+                    logger = DeviceVmLogger { },
+                    workspace = workspace,
+                    firmwareLoader = ClasspathFirmwareLoader(),
+                )
+
+            vm.attachDisplay(displayId = 9, width = 96, height = 48)
+            assertTrue(vm.boot())
+            val dispatcher = HostCallDispatcher(1, workspace)
+            runVmTicks(vm, ticks = 80, hostCallDispatcher = dispatcher)
+            vm.drainDisplayFrames()
+
+            "helx".forEach { ch -> vm.enqueueEvent(VmEvent("char", listOf(byteArrayOf(ch.code.toByte())))) }
+            vm.enqueueEvent(VmEvent("key", listOf(KeyCodes.KEY_BACKSPACE, false)))
+            vm.enqueueEvent(VmEvent("char", listOf(byteArrayOf('p'.code.toByte()))))
+            runVmTicks(vm, ticks = 30, hostCallDispatcher = dispatcher)
+
+            val typedText = vm.forceScreenSnapshot().visibleText()
+            assertTrue(typedText.contains("/ > help"), typedText)
+            assertTrue(vm.drainDisplayFrames().isEmpty(), "typing should not redraw the framebuffer every keypress")
+
+            vm.enqueueEvent(VmEvent("key", listOf(KeyCodes.KEY_ENTER, false)))
+            runVmTicks(vm, ticks = 40, hostCallDispatcher = dispatcher)
+            val submittedText = vm.forceScreenSnapshot().visibleText()
+            assertTrue(submittedText.contains("Builtins: help cd pwd reboot shutdown"), submittedText)
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
     private fun ByteArray.containsRgb565(value: Int): Boolean {
         val hi = (value ushr 8).toByte()
         val lo = value.toByte()

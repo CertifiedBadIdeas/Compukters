@@ -43,6 +43,16 @@ fun render(displayId: Int, text: String) {
     display::present(displayId)
 }
 
+fun dropLast(text: String): String {
+    var result: String = ""
+    var i: Int = 0
+    while i + 1 < strings::length(text) {
+        result = result + strings::charAt(text, i)
+        i = i + 1
+    }
+    return result
+}
+
 pub fun main() {
     val input: Int = ipc::open()
     val output: Int = ipc::open()
@@ -58,7 +68,7 @@ pub fun main() {
         if (chunk != "") {
             screen = screen + chunk
             stdout::write(chunk)
-            render(displayId, screen)
+            render(displayId, screen + line)
         } else {
             val event: Event = events::tryPull()
             if (event.name != "") {
@@ -70,7 +80,6 @@ pub fun main() {
                     if (typed != "") {
                         line = line + typed
                         stdout::write(typed)
-                        render(displayId, screen + line)
                     }
                 } else if (event.name == "key") {
                     val key: Int = events::argInt(event, 0)
@@ -80,6 +89,11 @@ pub fun main() {
                         line = ""
                         stdout::write("\n")
                         render(displayId, screen)
+                    } else if (key == 259) {
+                        if (line != "") {
+                            line = dropLast(line)
+                            stdout::write("\b \b")
+                        }
                     }
                 }
             }
