@@ -149,6 +149,7 @@ internal data class ClassFieldBinding(
     val name: String,
     val type: TypeRef,
     val mutable: Boolean,
+    val visibility: Visibility,
     val symbol: SymbolInfo,
 )
 
@@ -158,6 +159,7 @@ internal data class ClassMethodBinding(
     val parameterTypes: List<TypeRef>,
     val returnType: TypeRef,
     val static: Boolean,
+    val visibility: Visibility,
     val symbol: SymbolInfo,
 )
 
@@ -571,7 +573,7 @@ internal class SemanticAnalyzer(
                     range = parameter.range,
                     detail = "$visibleName.${parameter.name}: ${type.displayName}",
                 )
-            fields[parameter.name] = ClassFieldBinding(parameter.name, type, mutability == FieldMutability.VAR, symbol)
+            fields[parameter.name] = ClassFieldBinding(parameter.name, type, mutability == FieldMutability.VAR, parameter.visibility, symbol)
         }
         klass.members.filterIsInstance<ClassFieldDeclaration>().forEach { field ->
             val type = field.type?.let { exportTypeRef(it, exports, qualifier) } ?: TypeRef("Unit")
@@ -582,7 +584,7 @@ internal class SemanticAnalyzer(
                     range = field.range,
                     detail = "$visibleName.${field.name}: ${type.displayName}",
                 )
-            fields[field.name] = ClassFieldBinding(field.name, type, field.mutable, symbol)
+            fields[field.name] = ClassFieldBinding(field.name, type, field.mutable, field.visibility, symbol)
         }
 
         fun methodBinding(member: ClassMethodDeclaration): ClassMethodBinding {
@@ -600,7 +602,7 @@ internal class SemanticAnalyzer(
                         }
                     }) : ${returnType.displayName}",
                 )
-            return ClassMethodBinding(function.name, function, parameterTypes, returnType, member.static, symbol)
+            return ClassMethodBinding(function.name, function, parameterTypes, returnType, member.static, member.visibility, symbol)
         }
 
         val instanceMethods = linkedMapOf<String, ClassMethodBinding>()
@@ -723,6 +725,7 @@ internal class SemanticAnalyzer(
                                 name = parameter.name,
                                 type = parameterType,
                                 mutable = mutability == FieldMutability.VAR,
+                                visibility = parameter.visibility,
                                 symbol = fieldSymbol,
                             )
                     }
@@ -754,6 +757,7 @@ internal class SemanticAnalyzer(
                         name = field.name,
                         type = fieldType,
                         mutable = field.mutable,
+                        visibility = field.visibility,
                         symbol = fieldSymbol,
                     )
             }
@@ -774,7 +778,7 @@ internal class SemanticAnalyzer(
                         }) : ${returnType.displayName}",
                     )
                 symbols += methodSymbol
-                return ClassMethodBinding(function.name, function, parameterTypes, returnType, member.static, methodSymbol)
+                return ClassMethodBinding(function.name, function, parameterTypes, returnType, member.static, member.visibility, methodSymbol)
             }
 
             val methods = declaration.members.filterIsInstance<ClassMethodDeclaration>()
@@ -1303,6 +1307,9 @@ internal class SemanticAnalyzer(
             analyzeExpression(statement.expression, scope)
             return
         }
+        if (!canAccessClassMember(classBinding, field.visibility)) {
+            diagnostics += privateMemberDiagnostic(classBinding, statement.memberName, statement.memberRange)
+        }
         val constructionAssignment = inConstruction && statement.receiver is ThisExpression
         if (!field.mutable && !constructionAssignment) {
             diagnostics +=
@@ -1392,9 +1399,10 @@ internal class SemanticAnalyzer(
         val recordBinding = userRecordsByName[receiverType.name]
         val classBinding = userClassesByName[receiverType.name]
         val builtinType = registry.builtinType(receiverType.name)
+        val classField = classBinding?.fields?.get(expression.memberName)
         val fieldType =
             recordBinding?.fields?.get(expression.memberName)
-                ?: classBinding?.fields?.get(expression.memberName)?.type
+                ?: classField?.type
                 ?: builtinType?.fields?.firstOrNull { it.name == expression.memberName }?.let {
                     TypeRef(
                         it.typeName,
@@ -1417,8 +1425,11 @@ internal class SemanticAnalyzer(
             ) to
                 TypeRef("Unit")
         }
+        if (classBinding != null && classField != null && !canAccessClassMember(classBinding, classField.visibility)) {
+            diagnostics += privateMemberDiagnostic(classBinding, expression.memberName, expression.range)
+        }
         val symbol =
-            SymbolInfo(
+            classField?.symbol ?: SymbolInfo(
                 name = expression.memberName,
                 kind = SymbolKind.FIELD,
                 range = expression.range,
@@ -1527,15 +1538,32 @@ internal class SemanticAnalyzer(
         val staticClass = (callee.receiver as? NameExpression)?.let { userClassesByName[it.name] }
         if (staticClass != null) {
             val method = staticClass.staticMethods[callee.memberName] ?: return null
+            if (!canAccessClassMember(staticClass, method.visibility)) {
+                diagnostics += privateMemberDiagnostic(staticClass, callee.memberName, callee.range)
+            }
             analyzeClassMethodArguments(expression, method, callee, scope)
             return method.returnType
         }
         val receiverType = analyzeExpression(callee.receiver, scope)
         val classBinding = userClassesByName[receiverType.name] ?: return null
         val method = classBinding.instanceMethods[callee.memberName] ?: return null
+        if (!canAccessClassMember(classBinding, method.visibility)) {
+            diagnostics += privateMemberDiagnostic(classBinding, callee.memberName, callee.range)
+        }
         analyzeClassMethodArguments(expression, method, callee, scope)
         return method.returnType
     }
+
+    private fun canAccessClassMember(
+        owner: ClassBinding,
+        visibility: Visibility,
+    ): Boolean = visibility == Visibility.PUBLIC || currentClass?.declaration == owner.declaration
+
+    private fun privateMemberDiagnostic(
+        owner: ClassBinding,
+        memberName: String,
+        range: SourceRange,
+    ): FrontendDiagnostic = FrontendDiagnostic("Member `$memberName` of class `${owner.symbol.name}` is private.", range)
 
     private fun analyzeClassMethodArguments(
         expression: CallExpression,
