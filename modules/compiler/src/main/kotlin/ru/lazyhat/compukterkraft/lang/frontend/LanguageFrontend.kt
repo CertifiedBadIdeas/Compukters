@@ -194,9 +194,9 @@ internal data class ModuleExports(
 ) {
     constructor(canonical: String, program: Program) : this(
         canonical = canonical,
-        functions = program.declarations.filterIsInstance<FunctionDeclaration>().associateBy { it.name },
-        structs = program.declarations.filterIsInstance<StructDeclaration>().associateBy { it.name },
-        classes = program.declarations.filterIsInstance<ClassDeclaration>().associateBy { it.name },
+        functions = program.declarations.filterIsInstance<FunctionDeclaration>().filter { it.visibility == Visibility.PUBLIC }.associateBy { it.name },
+        structs = program.declarations.filterIsInstance<StructDeclaration>().filter { it.visibility == Visibility.PUBLIC }.associateBy { it.name },
+        classes = program.declarations.filterIsInstance<ClassDeclaration>().filter { it.visibility == Visibility.PUBLIC }.associateBy { it.name },
     )
 }
 
@@ -445,7 +445,7 @@ internal class SemanticAnalyzer(
             val function = exports.functions[item.name]
             val klass = exports.classes[item.name]
             if (struct == null && function == null && klass == null) {
-                diagnostics += FrontendDiagnostic("File `${source.path}` has no export `${item.name}`.", item.range)
+                diagnostics += FrontendDiagnostic("File `${source.path}` has no public export `${item.name}`.", item.range)
                 return@forEach
             }
             if (struct != null) registerSelectedRecord(item, struct, exports)
