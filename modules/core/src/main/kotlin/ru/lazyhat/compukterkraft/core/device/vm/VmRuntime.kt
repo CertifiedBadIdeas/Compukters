@@ -22,6 +22,8 @@ package ru.lazyhat.compukterkraft.core.device.vm
 import ru.lazyhat.compukterkraft.lang.api.BuiltinRegistry
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceFileSystemApi
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceDisplayApi
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceEventApi
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceIpcApi
 import ru.lazyhat.compukterkraft.lang.runtime.DevicePeripheralApi
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceProcessApi
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceProfile
@@ -31,6 +33,8 @@ import ru.lazyhat.compukterkraft.lang.runtime.DeviceStdioApi
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceSystemApi
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceTerminalApi
 import ru.lazyhat.compukterkraft.lang.runtime.NoopDeviceDisplayApi
+import ru.lazyhat.compukterkraft.lang.runtime.NoopDeviceEventApi
+import ru.lazyhat.compukterkraft.lang.runtime.NoopDeviceIpcApi
 import ru.lazyhat.compukterkraft.lang.runtime.VmEvent
 import ru.lazyhat.compukterkraft.lang.runtime.VmState
 
@@ -44,6 +48,8 @@ class VmRuntime(
     private val stdioApi: DeviceStdioApi,
     private val filesystemApi: DeviceFileSystemApi,
     private val processApi: DeviceProcessApi,
+    private val ipcApi: DeviceIpcApi = NoopDeviceIpcApi,
+    private val eventApi: DeviceEventApi = NoopDeviceEventApi,
     private val redstoneApi: DeviceRedstoneApi = object : DeviceRedstoneApi {},
     private val peripheralsApi: DevicePeripheralApi = object : DevicePeripheralApi {},
 ) : DeviceRuntime {
@@ -54,6 +60,8 @@ class VmRuntime(
     override val stdio: DeviceStdioApi = stdioApi
     override val filesystem: DeviceFileSystemApi = filesystemApi
     override val process: DeviceProcessApi = processApi
+    override val ipc: DeviceIpcApi = ipcApi
+    override val events: DeviceEventApi = eventApi
     override val redstone: DeviceRedstoneApi = redstoneApi
     override val peripherals: DevicePeripheralApi = peripheralsApi
 

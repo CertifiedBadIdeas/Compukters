@@ -32,6 +32,8 @@ interface DeviceRuntime {
     val stdio: DeviceStdioApi
     val filesystem: DeviceFileSystemApi
     val process: DeviceProcessApi
+    val ipc: DeviceIpcApi
+    val events: DeviceEventApi
     val redstone: DeviceRedstoneApi
     val peripherals: DevicePeripheralApi
 
@@ -165,12 +167,93 @@ interface DeviceProcessApi {
 
     suspend fun changeDirectory(path: String): Boolean
 
+    suspend fun spawn(path: String): Int = spawn(path, "")
+
+    suspend fun spawn(
+        path: String,
+        argument: String,
+    ): Int
+
+    suspend fun wait(pid: Int): Int
+
     suspend fun run(path: String): Int = run(path, "")
 
     suspend fun run(
         path: String,
         argument: String,
+    ): Int = wait(spawn(path, argument))
+}
+
+interface DeviceIpcApi {
+    suspend fun open(): Int
+
+    suspend fun write(
+        channelId: Int,
+        text: String,
+    )
+
+    suspend fun read(channelId: Int): String
+
+    fun tryRead(channelId: Int): String
+
+    fun close(channelId: Int)
+}
+
+object NoopDeviceIpcApi : DeviceIpcApi {
+    override suspend fun open(): Int = 0
+
+    override suspend fun write(
+        channelId: Int,
+        text: String,
+    ) = Unit
+
+    override suspend fun read(channelId: Int): String = ""
+
+    override fun tryRead(channelId: Int): String = ""
+
+    override fun close(channelId: Int) = Unit
+}
+
+interface DeviceEventApi {
+    fun capture(arguments: List<Any?>): Pair<Int, Int>
+
+    fun argCount(eventId: Int): Int
+
+    fun argInt(
+        eventId: Int,
+        index: Int,
     ): Int
+
+    fun argBool(
+        eventId: Int,
+        index: Int,
+    ): Boolean
+
+    fun argString(
+        eventId: Int,
+        index: Int,
+    ): String
+}
+
+object NoopDeviceEventApi : DeviceEventApi {
+    override fun capture(arguments: List<Any?>): Pair<Int, Int> = 0 to arguments.size
+
+    override fun argCount(eventId: Int): Int = 0
+
+    override fun argInt(
+        eventId: Int,
+        index: Int,
+    ): Int = 0
+
+    override fun argBool(
+        eventId: Int,
+        index: Int,
+    ): Boolean = false
+
+    override fun argString(
+        eventId: Int,
+        index: Int,
+    ): String = ""
 }
 
 interface DeviceRedstoneApi

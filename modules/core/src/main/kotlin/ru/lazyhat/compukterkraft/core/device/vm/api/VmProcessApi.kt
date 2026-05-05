@@ -83,4 +83,11 @@ internal class VmProcessApi(
             1
         }
     }
+
+    override suspend fun spawn(
+        path: String,
+        argument: String,
+    ): Int = error("process.spawn is not implemented")
+
+    override suspend fun wait(pid: Int): Int = error("process.wait is not implemented")
 }

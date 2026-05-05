@@ -29,6 +29,7 @@ enum class DeviceCapability {
     FILESYSTEM,
     EVENTS,
     SYSTEM,
+    IPC,
     REDSTONE,
     PERIPHERALS,
     IDE,
@@ -51,6 +52,7 @@ data class DeviceStorageResources(
 data class DeviceQueueResources(
     val eventQueueSlots: Int,
     val hostCallQueueSlots: Int = eventQueueSlots,
+    val ipcChannelBytes: Int = 16 * 1024,
 )
 
 data class DeviceResources(
