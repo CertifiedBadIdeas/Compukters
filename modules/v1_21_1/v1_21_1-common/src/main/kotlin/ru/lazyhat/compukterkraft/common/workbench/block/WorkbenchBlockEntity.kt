@@ -261,7 +261,8 @@ class WorkbenchBlockEntity(
         }
 
         override fun attachTerminal(target: ServerWorkbench.TargetDescriptor) {
-            syncTargetSnapshot(resolveTargetComputer(createDetached = false)?.lastScreenSnapshot)
+            // Disabled with stdout terminal transport removal. Workbench display
+            // viewing should be reintroduced as a display session observer.
         }
 
         override fun queueEvent(

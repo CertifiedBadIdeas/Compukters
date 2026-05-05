@@ -11,7 +11,7 @@ The mod has **two orthogonal categories** of programming-related in-world entiti
 
 ### Category 1 — Runtime Devices
 
-Things in the world that **execute** CKL programs. Each Runtime Device has a VM, a `DeviceProfile`, a `DeviceFamily`, a runtime workspace, a terminal, and optional peripherals.
+Things in the world that **execute** CKL programs. Each Runtime Device has a VM, a `DeviceProfile`, a `DeviceFamily`, a runtime workspace, display/framebuffer output, an input event queue, and optional peripherals.
 
 - **Today:** Computer (block).
 - **Planned:** Laptop (portable item), Turtle (entity with inventory and fuel), Pocket Computer.
@@ -20,7 +20,7 @@ A Runtime Device intentionally does not provide an in-device program editor. Aut
 
 ### Category 2 — Authoring Stations
 
-Things in the world that **help the player write** CKL programs and are themselves implemented natively (Kotlin), not in CKL. Each Authoring Station has a local development workspace, an IDE engine (parser/type checker/autocomplete from `compiler`), a target descriptor pointing at a Runtime Device, and explicit sync actions (`pull`, `push`, `run`, `attach terminal`).
+Things in the world that **help the player write** CKL programs and are themselves implemented natively (Kotlin), not in CKL. Each Authoring Station has a local development workspace, an IDE engine (parser/type checker/autocomplete from `compiler`), a target descriptor pointing at a Runtime Device, and explicit sync/run actions (`pull`, `push`, `run`). Live terminal attachment is temporarily disabled until it can observe display sessions instead of stdout streams.
 
 - **Today:** Workbench (block).
 - **Possible later:** networked / collaborative variants. They stay native.
@@ -95,14 +95,14 @@ These rules are enforced by `ArchitectureBoundaryTest` in `modules/core`.
 │  VM coroutine (background thread)                                    │
 │                                                                      │
 │  DeviceProgram.run(runtime)                                          │
-│    ├─ runtime.terminal.write("hello")  ──►  ScreenBuffer (direct)    │
-│    ├─ runtime.terminal.readln()      ──►  suspends on VmEvent      │
+│    ├─ events::tryPull()             ──►  VM event queue             │
+│    ├─ display::fillRect()/present()  ──►  DisplayRegistry           │
 │    ├─ runtime.filesystem.readText()    ──►  HostCall → HostResult    │
 │    └─ runtime.system.shutdown()        ──►  HostCall → HostResult    │
 └──────────────────────────────────────────┬───────────────────────────┘
                                            │
-              ScreenBuffer.snapshot()      │  HostCallManager
-              (volatile dirty flag)        │  (concurrent queues)
+              DisplayFrameDelta queue      │  HostCallManager
+              (per display endpoint)       │  (concurrent queues)
                                            │
 ┌──────────────────────────────────────────▼───────────────────────────┐
 │  Server tick thread (main thread)                                    │
@@ -110,28 +110,29 @@ These rules are enforced by `ArchitectureBoundaryTest` in `modules/core`.
 │  ServerComputer.serverTick() — implemented by RuntimeDeviceImpl     │
 │    ├─ vmHandle.requestSlice(gameTime)                                │
 │    ├─ vmHandle.drainHostCalls() → HostCallDispatcher.dispatch()      │
-│    │    └─ only filesystem ops remain (terminal writes are direct)   │
-│    ├─ vmHandle.readScreenSnapshot()                                  │
-│    │    └─ if dirty → ScreenBufferSnapshot → network packet          │
+│    ├─ flushDisplaySessions()                                         │
+│    │    └─ DisplayFrameDelta → FrameDeltaClientMessage               │
 │    └─ check VM state (stopped/crashed/reboot)                        │
 └──────────────────────────────────────────┬───────────────────────────┘
                                            │
-              ComputerTerminalClientMessage │
+              FrameDeltaClientMessage       │
               (FriendlyByteBuf)             │
                                            │
 ┌──────────────────────────────────────────▼───────────────────────────┐
 │  Client (render thread)                                              │
 │                                                                      │
 │  ClientNetworkContextImpl                                            │
-│    └─ ComputerMenu.updateTerminal(snapshot)                          │
-│         └─ MenuSide.Client.screenSnapshot = snapshot                 │
+│    └─ ComputerMenu.handleDisplayFrame(frame)                         │
+│         └─ MenuSide.Client.displayBuffer.apply(frame)                │
 │                                                                      │
 │  ComputerTerminalScreen.renderBg()                                   │
-│    └─ buildTerminalUi(layout, snapshot) → List<UiNode>               │
-│         └─ UiRenderer.render(graphics, font, nodes)                  │
-│              └─ FixedWidthFontRenderer.drawTerminal(snapshot)        │
+│    └─ render ClientDisplayBuffer framebuffer                         │
 └──────────────────────────────────────────────────────────────────────┘
 ```
+
+Runtime computer UI uses display sessions for server-to-client output. The client sends discrete input events (`key`, `key_up`, `char`, `paste`, mouse events) to the VM event queue. The server sends framebuffer deltas through display sessions (`DisplayAttachServerMessage`, `DisplayResizeServerMessage`, `DisplayDetachServerMessage`, `FrameDeltaClientMessage`). There is no runtime stdout byte broadcast in the client-server protocol.
+
+Workbench live attach-terminal over stdout is temporarily removed. Workbench file sync, IDE, and run controls remain available. A future live viewer should attach to display sessions rather than reintroducing stdout transport.
 
 ---
 
@@ -141,25 +142,26 @@ These rules are enforced by `ArchitectureBoundaryTest` in `modules/core`.
 BlockEntity.use()
   └─ getOrCreateRuntimeDevice()
     └─ DeviceManager.getOrCreateVm()
-            └─ RuntimeDeviceImpl(deviceId, properties, manager, gameTime, terminalNetwork, stateSink)
+            └─ RuntimeDeviceImpl(deviceId, properties, manager, gameTime, displayNetwork, stateSink)
                   ↑ host ports come from BlockEntityRuntimeDeviceHost
 
 RuntimeDeviceImpl.turnOn()
   ├─ DeviceWorkspaceInitializer.ensureInitialized(id)
   ├─ DeviceManager.getOrCreateVm(id, profile, callbacks, logger)
   │    └─ BackgroundDeviceVm(id, profile, dispatcher, callbacks, logger, workspace)
-  │         └─ owns ScreenBuffer(width, height, colour)
+  │         ├─ owns DisplayRegistry for runtime UI frames
+  │         └─ owns legacy ScreenBuffer for temporary Workbench snapshots
   ├─ vmHandle.boot()
   │    └─ load boot script → compile → scope.launch { program.run(runtime) }
   └─ stateSink.onPowerStateChanged(true)
 
 RuntimeDeviceImpl.serverTick()  [every game tick, 50ms]
   ├─ vmHandle.requestSlice(gameTime.gameTime())
-  ├─ dispatch host calls (filesystem only)
+  ├─ dispatch host calls
   ├─ syncScreen() → readScreenSnapshot() → publish to lastScreenSnapshot
-  ├─ flushTerminalSessions()
-  │    ├─ terminalNetwork.isSessionStillBound(uuid, containerId, deviceId)
-  │    └─ terminalNetwork.sendStdoutBytes(uuid, containerId, bytes)
+  ├─ flushDisplaySessions()
+  │    ├─ displayNetwork.isDisplaySessionStillBound(uuid, containerId, deviceId, displayId)
+  │    └─ displayNetwork.sendDisplayFrame(uuid, containerId, frame)
   └─ check for stop/crash/reboot
 
 RuntimeDeviceImpl.close()
@@ -189,7 +191,7 @@ RuntimeDeviceImpl.close()
 | `compukterkraft.core.platform.api`             | Port interfaces: `PlatformBlockRegistrar`, `PlatformMenuRegistrar` |
 | `compukterkraft.core.block`                    | `DeviceFamily` enum (pure Kotlin, no MC deps)                      |
 | `compukterkraft.core.device`                 | `DeviceEvents`, `DeviceProperties` — shared device context                        |
-| `compukterkraft.core.device.runtime`         | `RuntimeDevice` (umbrella + role interfaces), `RuntimeDeviceImpl`, `DeviceManager`, host ports (`GameTimeSource`, `TerminalNetworkBridge`, `DeviceStateSink`) |
+| `compukterkraft.core.device.runtime`         | `RuntimeDevice` (umbrella + role interfaces), `RuntimeDeviceImpl`, `DeviceManager`, host ports (`GameTimeSource`, `DisplayNetworkBridge`, `DeviceStateSink`) |
 | `compukterkraft.core.device.input`           | Input dispatch: `ComputerInputDispatcher`, `ServerInputHandler`    |
 | `compukterkraft.core.device.vm`              | Background VM host: `BackgroundDeviceVm`, `DeviceVmSupervisor`, `DeviceProfileRegistry`, `vm/api/*` |
 | `compukterkraft.core.workbench`                | IDE/workbench contracts and state (Authoring Station, peer of computer) |
@@ -239,7 +241,7 @@ RuntimeDeviceImpl.close()
 
 The main VM host. Runs the compiled program on a background coroutine dispatcher.
 
-- **Thread model:** One coroutine per computer. The VM coroutine writes to `ScreenBuffer` directly (no HostCall roundtrip for terminal I/O). The server tick thread reads snapshots via `ScreenBuffer.snapshot()`.
+- **Thread model:** One coroutine per computer. Runtime UI output is written to display/framebuffer state, which the server tick thread drains as frame deltas for attached display sessions. Legacy terminal writes can still feed `ScreenBuffer` internally for temporary Workbench snapshots during staged cleanup.
 - **Scheduling:** Each tick, the server calls `requestSlice()` which sends a permit through a `Channel`. The VM coroutine suspends at scheduling points when it exhausts its CPU budget.
 - **Lifecycle:** Created by `DeviceManager`, booted by `RuntimeDeviceImpl`, stopped with `stop(reason)`.
 
@@ -255,31 +257,32 @@ Server-wide singleton (held by `ServerContext.deviceManager`) that manages all a
 
 Platform-neutral runtime-device contract and its canonical implementation, both living in `:core/.../computer/runtime/`.
 
-- `RuntimeDevice` is the umbrella interface composed from five role interfaces: `RuntimeDeviceLifecycle`, `RuntimeDeviceInput` (extends `DeviceEvents.Receiver`), `RuntimeDeviceScreen`, `RuntimeDeviceTerminalSessions`, `RuntimeDeviceMetadata`. Future minimal carriers (e.g. Pocket without terminal sessions) can implement a narrower subset.
-- `RuntimeDeviceImpl` orchestrates the VM lifecycle: each game tick it requests a VM slice, dispatches host calls, syncs the latest screen snapshot, and flushes per-player terminal sessions. Reboot/shutdown/crash state transitions are handled here.
-- All world-side interactions are abstracted via three narrow host ports — `GameTimeSource`, `TerminalNetworkBridge`, `DeviceStateSink` — so the impl has zero Minecraft imports.
+- `RuntimeDevice` is the umbrella interface composed from five role interfaces: `RuntimeDeviceLifecycle`, `RuntimeDeviceInput` (extends `DeviceEvents.Receiver`), `RuntimeDeviceScreen`, `RuntimeDeviceDisplaySessions`, `RuntimeDeviceMetadata`.
+- `RuntimeDeviceImpl` orchestrates the VM lifecycle: each game tick it requests a VM slice, dispatches host calls, updates the legacy workbench snapshot, and flushes per-player display sessions. Reboot/shutdown/crash state transitions are handled here.
+- All world-side interactions are abstracted via narrow host ports — `GameTimeSource`, `DisplayNetworkBridge`, `DeviceStateSink` — so the impl has zero Minecraft imports.
 
 ### Host ports (`:core/.../computer/runtime/ports/`)
 
 The ports decouple `RuntimeDeviceImpl` from Minecraft:
 
 - **`GameTimeSource`** — `gameTime(): Long`. Replaces `ServerLevel.gameTime`.
-- **`TerminalNetworkBridge`** — `isSessionStillBound(playerUuid, containerId, deviceId)` and `sendStdoutBytes(playerUuid, containerId, bytes)`. Replaces direct `MinecraftServer.playerList` lookups, `ContainerMenu` validity checks, and `ServerNetworking.sendToPlayer(StdoutBytesClientMessage(...))`.
+- **`DisplayNetworkBridge`** — `isDisplaySessionStillBound(playerUuid, containerId, deviceId, displayId)` and `sendDisplayFrame(playerUuid, containerId, frame)`. Replaces direct `MinecraftServer.playerList` lookups, `ContainerMenu` validity checks, and `ServerNetworking.sendToPlayer(FrameDeltaClientMessage(...))`.
 - **`DeviceStateSink`** — `onPowerStateChanged(isOn)`. Used by the impl to notify the carrier (block entity) so it can update its block state property.
 
-In `:v1_21_1-common`, `BlockEntityRuntimeDeviceHost` implements all three ports against an `AbstractComputerBlockEntity` + `ServerLevel`. The detached-computer path inside `WorkbenchBlockEntity` provides its own no-op terminal/state ports.
+In `:v1_21_1-common`, `BlockEntityRuntimeDeviceHost` implements these ports against an `AbstractComputerBlockEntity` + `ServerLevel`. The detached-computer path inside `WorkbenchBlockEntity` provides no-op display/state ports until workbench display viewing exists.
 
 ### `ServerComputer`
 
 The historical name for `RuntimeDeviceImpl`. Renamed in Phase 2b; the class no longer exists under that name.
 
-### `ScreenBuffer`
+### `DisplayRegistry` and legacy `ScreenBuffer`
 
-- **Writer:** VM coroutine calls `write()`, `println()`, `clear()`, `setCursor()`, `scroll()`.
-- **Reader:** Server tick thread calls `snapshot()` — atomic dirty-flag check + synchronized copy.
-- **No HostCall roundtrip** for terminal writes — mutable state lives in the VM, read-only access from the server thread.
+- **Display writer:** VM coroutine / ROM uses `display::*` framebuffer APIs.
+- **Display reader:** Server tick thread calls display snapshot methods and sends `DisplayFrameDelta` through display sessions.
+- **Legacy writer:** VM terminal/stdout compatibility APIs may still feed `ScreenBuffer`.
+- **Legacy reader:** Workbench snapshot paths can call `ScreenBuffer.snapshot()` until the live viewer is migrated to display sessions.
 
-Flat character grid (`CharArray` + `ByteArray` colours) owned by `BackgroundDeviceVm`.
+The flat character grid (`CharArray` + `ByteArray` colours) is no longer the runtime client-server UI transport.
 
 ### `WorkbenchStore`
 
@@ -300,13 +303,13 @@ Converts `List<UiNode>` into Minecraft draw calls.
 
 ## Design Decisions
 
-### Terminal I/O is direct, not via HostCall
+### Runtime UI output is display-only
 
-Terminal writes (`write`, `println`, `clear`, `setCursor`) go directly to `ScreenBuffer` on the VM coroutine thread. Previously they were routed through the HostCall mechanism (VM → suspend → queue → server tick → dispatch → mutate terminal → result → resume), adding 50ms+ latency per call. Since the screen buffer is VM-owned data (not a server resource like the filesystem), direct writes are simpler and faster.
+Runtime UI output is rendered by ROM/user code through display/framebuffer APIs. Terminal/stdout bytes are not broadcast to clients. Legacy terminal writes may still update internal diagnostics or workbench snapshots during the staged cleanup, but they are not part of the runtime client-server UI protocol.
 
 ### MenuSide sealed interface
 
-Minecraft requires one class per `MenuType`. We can't have separate `ServerComputerMenu` / `ClientComputerMenu` classes. Instead, `MenuSide` is a sealed interface with `Server` and `Client` variants. Server-only code accesses `menu.serverSide.computer`, client-only code accesses `menu.clientSide.screenSnapshot`. The `as` cast is concentrated in one place.
+Minecraft requires one class per `MenuType`. We can't have separate `ServerComputerMenu` / `ClientComputerMenu` classes. Instead, `MenuSide` is a sealed interface with `Server` and `Client` variants. Server-only code accesses `menu.serverSide.computer`, client-only code accesses `menu.clientSide.displayBuffer`. The `as` cast is concentrated in one place.
 
 ### Declarative UI (UiNode / UiRenderer)
 

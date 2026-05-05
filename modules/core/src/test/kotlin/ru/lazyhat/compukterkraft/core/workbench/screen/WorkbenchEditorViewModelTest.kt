@@ -65,9 +65,10 @@ class WorkbenchEditorViewModelTest {
             assertEquals("hi", store.state.editor.text)
             assertEquals(2, store.state.editor.cursorColumn)
 
-            // F4 toggles the terminal panel even from the editor adapter.
+            // F4 is handled by the editor adapter, but the terminal panel stays
+            // hidden while Workbench live attach-terminal is disabled.
             assertTrue(vm.onKeyPressed(KeyCodes.KEY_F4, modifiers = 0, visibleLines = 10))
-            assertTrue(store.state.terminalVisible)
+            assertTrue(!store.state.terminalVisible)
         }
 
     @Test
