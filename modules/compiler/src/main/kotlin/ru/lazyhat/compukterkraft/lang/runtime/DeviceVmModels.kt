@@ -21,6 +21,7 @@ package ru.lazyhat.compukterkraft.lang.runtime
 
 enum class DeviceCapability {
     TERMINAL,
+    DISPLAY,
     FILESYSTEM,
     EVENTS,
     SYSTEM,

@@ -27,6 +27,8 @@ interface DeviceRuntime {
     val profile: DeviceProfile
     val system: DeviceSystemApi
     val terminal: DeviceTerminalApi
+    val display: DeviceDisplayApi
+        get() = NoopDeviceDisplayApi
     val stdio: DeviceStdioApi
     val filesystem: DeviceFileSystemApi
     val process: DeviceProcessApi
@@ -70,6 +72,72 @@ interface DeviceTerminalApi {
         x: Int,
         y: Int,
     )
+}
+
+interface DeviceDisplayApi {
+    fun primary(): Int
+
+    fun isAttached(displayId: Int): Boolean
+
+    fun width(displayId: Int): Int
+
+    fun height(displayId: Int): Int
+
+    fun clear(
+        displayId: Int,
+        rgb565: Int,
+    )
+
+    fun setPixel(
+        displayId: Int,
+        x: Int,
+        y: Int,
+        rgb565: Int,
+    )
+
+    fun fillRect(
+        displayId: Int,
+        x: Int,
+        y: Int,
+        width: Int,
+        height: Int,
+        rgb565: Int,
+    )
+
+    fun present(displayId: Int)
+}
+
+object NoopDeviceDisplayApi : DeviceDisplayApi {
+    override fun primary(): Int = -1
+
+    override fun isAttached(displayId: Int): Boolean = false
+
+    override fun width(displayId: Int): Int = 0
+
+    override fun height(displayId: Int): Int = 0
+
+    override fun clear(
+        displayId: Int,
+        rgb565: Int,
+    ) = Unit
+
+    override fun setPixel(
+        displayId: Int,
+        x: Int,
+        y: Int,
+        rgb565: Int,
+    ) = Unit
+
+    override fun fillRect(
+        displayId: Int,
+        x: Int,
+        y: Int,
+        width: Int,
+        height: Int,
+        rgb565: Int,
+    ) = Unit
+
+    override fun present(displayId: Int) = Unit
 }
 
 interface DeviceFileSystemApi {

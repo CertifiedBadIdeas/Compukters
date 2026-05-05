@@ -155,6 +155,9 @@ class ComputerFamilyCatalogSource(
             buildList {
                 defaultRegistry.module("terminal")?.let(::add)
                 defaultRegistry.module("system")?.let(::add)
+                if (DeviceCapability.DISPLAY in profile.allowedCapabilities) {
+                    defaultRegistry.module("display")?.let(::add)
+                }
                 if (DeviceCapability.FILESYSTEM in profile.allowedCapabilities) {
                     defaultRegistry.module("filesystem")?.let(::add)
                 }

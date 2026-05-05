@@ -346,7 +346,7 @@ class LanguageIdeTest {
     fun completesAmbientModulesAsVisibleSymbols() {
         val allModules = ide.complete("test.ck", "", 0, 0)
         val moduleLabels = allModules.filter { it.kind == CompletionItemKind.MODULE }.map { it.label }.toSet()
-        assertEquals(setOf("terminal", "stdout", "filesystem", "system", "events", "process", "strings"), moduleLabels)
+        assertEquals(setOf("terminal", "stdout", "display", "filesystem", "system", "events", "process", "strings"), moduleLabels)
     }
 
     @Test
