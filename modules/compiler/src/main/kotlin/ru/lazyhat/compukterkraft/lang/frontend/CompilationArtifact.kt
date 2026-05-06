@@ -25,4 +25,5 @@ data class CompilationArtifact(
     val module: BytecodeModule?,
     val analysis: ru.lazyhat.compukterkraft.lang.frontend.AnalyzedProgram,
     val analyses: Map<String, ru.lazyhat.compukterkraft.lang.frontend.AnalyzedProgram> = mapOf(analysis.name to analysis),
+    val profiling: CompilerProfilingSnapshot = CompilerProfilingSnapshot(),
 )

@@ -19,6 +19,7 @@
 package ru.lazyhat.compukterkraft.lang.frontend
 
 import ru.lazyhat.compukterkraft.lang.api.BuiltinRegistry
+import ru.lazyhat.compukterkraft.lang.api.BytecodeModule
 import ru.lazyhat.compukterkraft.lang.api.FunctionDeclaration
 import ru.lazyhat.compukterkraft.lang.api.ImportSource
 import ru.lazyhat.compukterkraft.lang.api.Program
@@ -121,17 +122,21 @@ interface IdeFacade {
     ): FormatResult
 }
 
-internal class DefaultParserFacade : ParserFacade {
+internal class DefaultParserFacade(
+    private val metricsCollector: CompilerMetricsCollector = NoOpCompilerMetricsCollector,
+) : ParserFacade {
     override fun parse(
         name: String,
         source: String,
     ): ParsedSource {
+        val started = System.nanoTime()
         val lexer =
             Lexer(source)
         val tokens = lexer.lex()
         val parser =
             Parser(tokens, lexer.diagnostics)
         val program = parser.parseProgram()
+        metricsCollector.recordParse(name, sourceBytes = source.length, tokenCount = tokens.size, nanos = System.nanoTime() - started)
         return ParsedSource(
             name = name,
             source = source,
@@ -145,8 +150,9 @@ internal class DefaultParserFacade : ParserFacade {
 
 internal class DefaultAnalyzerFacade(
     private val registry: BuiltinRegistry,
+    private val metricsCollector: CompilerMetricsCollector = NoOpCompilerMetricsCollector,
     private val parser: ParserFacade =
-        DefaultParserFacade(),
+        DefaultParserFacade(metricsCollector),
 ) : AnalyzerFacade {
     override fun analyze(
         name: String,
@@ -155,10 +161,11 @@ internal class DefaultAnalyzerFacade(
         val parsed = parser.parse(name, source)
         val program = parsed.program
 
+        val started = System.nanoTime()
         val semantic =
             SemanticAnalyzer(registry, name)
                 .analyze(program)
-        return AnalyzedProgram(
+        val analysis = AnalyzedProgram(
             name = parsed.name,
             source = parsed.source,
             tokens = parsed.tokens,
@@ -169,37 +176,73 @@ internal class DefaultAnalyzerFacade(
             builtinModules = registry.modules,
             builtinGlobals = registry.globals,
         ).rememberSemantic(semantic)
+        metricsCollector.recordAnalyze(
+            name,
+            diagnostics = analysis.diagnostics.size,
+            symbols = analysis.symbols.size,
+            references = analysis.references.size,
+            nanos = System.nanoTime() - started,
+        )
+        return analysis
     }
 }
 
 internal class DefaultCompilerFacade(
     private val registry: BuiltinRegistry,
     private val analyzer: AnalyzerFacade,
+    private val metricsCollector: CompilerMetricsCollector = NoOpCompilerMetricsCollector,
 ) : CompilerFacade {
     override fun compile(
         name: String,
         source: String,
         loader: SourceLoader,
     ): CompilationArtifact {
+        val compileStarted = System.nanoTime()
         val project = analyzeProject(name, source, loader)
         val analysis = project.getValue(name)
         val semantic = analysis.semantic
+        val sourceBytes = project.values.sumOf { it.source.length }
+        val diagnostics = project.values.sumOf { candidate -> candidate.diagnostics.size }
         if (semantic == null ||
             project.values.any { candidate -> candidate.diagnostics.any { it.severity == FrontendSeverity.ERROR } }
         ) {
+            metricsCollector.recordCompile(
+                name,
+                sourceCount = project.size,
+                sourceBytes = sourceBytes,
+                diagnostics = diagnostics,
+                nanos = System.nanoTime() - compileStarted,
+            )
             return CompilationArtifact(
                 module = null,
                 analysis = analysis,
                 analyses = project,
+                profiling = metricsCollector.snapshot(),
             )
         }
 
+        val codegenStarted = System.nanoTime()
+        val module =
+            BytecodeCompiler(registry, semantic, project.values.mapNotNull { it.semantic })
+                .compile(name)
+        metricsCollector.recordCodegen(
+            name,
+            functionCount = module.functions.size,
+            instructionCount = module.instructionCount(),
+            nanos = System.nanoTime() - codegenStarted,
+        )
+        metricsCollector.recordCompile(
+            name,
+            sourceCount = project.size,
+            sourceBytes = sourceBytes,
+            diagnostics = diagnostics,
+            nanos = System.nanoTime() - compileStarted,
+        )
         return CompilationArtifact(
-            module =
-                BytecodeCompiler(registry, semantic, project.values.mapNotNull { it.semantic })
-                    .compile(name),
+            module = module,
             analysis = analysis,
             analyses = project,
+            profiling = metricsCollector.snapshot(),
         )
     }
 
@@ -208,7 +251,7 @@ internal class DefaultCompilerFacade(
         rootSource: String,
         loader: SourceLoader,
     ): Map<String, AnalyzedProgram> {
-        val parser = DefaultParserFacade()
+        val parser = DefaultParserFacade(metricsCollector)
         val parsed = linkedMapOf<String, ParsedSource>()
         val importDiagnostics = linkedMapOf<String, MutableList<FrontendDiagnostic>>()
 
@@ -250,6 +293,7 @@ internal class DefaultCompilerFacade(
 
         val exports = parsed.mapValues { (canonical, source) -> ModuleExports(canonical, source.program) }
         return parsed.mapValues { (canonical, source) ->
+            val started = System.nanoTime()
             val semantic =
                 SemanticAnalyzer(
                     registry = registry,
@@ -257,7 +301,7 @@ internal class DefaultCompilerFacade(
                     resolveImport = { path -> loader.resolve(canonical, path) },
                     lookupExports = { dependency -> exports[dependency] },
                 ).analyze(source.program)
-            AnalyzedProgram(
+            val analysis = AnalyzedProgram(
                 name = source.name,
                 source = source.source,
                 tokens = source.tokens,
@@ -272,6 +316,14 @@ internal class DefaultCompilerFacade(
                 builtinModules = registry.modules,
                 builtinGlobals = registry.globals,
             ).rememberSemantic(semantic)
+            metricsCollector.recordAnalyze(
+                canonical,
+                diagnostics = analysis.diagnostics.size,
+                symbols = analysis.symbols.size,
+                references = analysis.references.size,
+                nanos = System.nanoTime() - started,
+            )
+            analysis
         }
     }
 
@@ -300,3 +352,5 @@ internal class DefaultCompilerFacade(
         }
     }
 }
+
+private fun BytecodeModule.instructionCount(): Int = functions.sumOf { it.instructions.size }

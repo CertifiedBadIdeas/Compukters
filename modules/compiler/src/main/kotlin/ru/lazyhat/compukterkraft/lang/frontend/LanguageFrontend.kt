@@ -91,11 +91,12 @@ import java.util.IdentityHashMap
 
 class LanguageFrontend(
     val registry: BuiltinRegistry = LanguageBuiltins.defaultRuntimeRegistry,
+    private val compilerMetricsCollector: CompilerMetricsCollector = NoOpCompilerMetricsCollector,
 ) {
     private val analyzer: AnalyzerFacade =
-        DefaultAnalyzerFacade(registry)
+        DefaultAnalyzerFacade(registry, metricsCollector = compilerMetricsCollector)
     private val compiler: CompilerFacade =
-        DefaultCompilerFacade(registry, analyzer)
+        DefaultCompilerFacade(registry, analyzer, metricsCollector = compilerMetricsCollector)
 
     fun analyze(
         name: String,

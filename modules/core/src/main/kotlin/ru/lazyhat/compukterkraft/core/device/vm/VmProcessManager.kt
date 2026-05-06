@@ -26,6 +26,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import ru.lazyhat.compukterkraft.core.device.runtime.ComputerProgramCompiler
 import ru.lazyhat.compukterkraft.core.device.runtime.WorkspaceProgramLoader
+import ru.lazyhat.compukterkraft.lang.frontend.CompilerMetricsCollector
+import ru.lazyhat.compukterkraft.lang.frontend.NoOpCompilerMetricsCollector
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceProfile
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceRuntime
 import java.util.concurrent.ConcurrentHashMap
@@ -38,6 +40,7 @@ internal class VmProcessManager(
     private val programLoader: WorkspaceProgramLoader,
     private val profile: DeviceProfile,
     private val runtimeCreator: (String, String) -> DeviceRuntime,
+    private val compilerMetricsCollector: CompilerMetricsCollector = NoOpCompilerMetricsCollector,
 ) {
     private val nextPid = AtomicInteger(2)
     private val processes = ConcurrentHashMap<Int, ProcessHandle>()
@@ -101,6 +104,7 @@ internal class VmProcessManager(
                 programSource.source,
                 profile,
                 sourceLoader = programLoader.sourceLoader(deviceId),
+                compilerMetricsCollector = compilerMetricsCollector,
             )
         val program = compiledProgram.program
         if (program == null) {

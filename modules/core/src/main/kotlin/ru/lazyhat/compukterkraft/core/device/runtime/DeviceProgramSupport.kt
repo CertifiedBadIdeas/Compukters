@@ -28,6 +28,8 @@ import ru.lazyhat.compukterkraft.lang.api.Instruction
 import ru.lazyhat.compukterkraft.lang.frontend.FrontendSeverity
 import ru.lazyhat.compukterkraft.lang.frontend.LanguageBuiltins
 import ru.lazyhat.compukterkraft.lang.frontend.LanguageFrontend
+import ru.lazyhat.compukterkraft.lang.frontend.CompilerMetricsCollector
+import ru.lazyhat.compukterkraft.lang.frontend.NoOpCompilerMetricsCollector
 import ru.lazyhat.compukterkraft.lang.frontend.NoOpSourceLoader
 import ru.lazyhat.compukterkraft.lang.frontend.SourceLoader
 import ru.lazyhat.compukterkraft.lang.runtime.BytecodeComputerProgram
@@ -67,8 +69,9 @@ object ComputerProgramCompiler {
         profile: DeviceProfile? = null,
         runtimeRegistry: BuiltinRegistry = LanguageBuiltins.defaultRuntimeRegistry,
         sourceLoader: SourceLoader = NoOpSourceLoader,
+        compilerMetricsCollector: CompilerMetricsCollector = NoOpCompilerMetricsCollector,
     ): CompiledComputerProgram {
-        val artifact = LanguageFrontend(runtimeRegistry).compile(path, source, sourceLoader)
+        val artifact = LanguageFrontend(runtimeRegistry, compilerMetricsCollector).compile(path, source, sourceLoader)
         val module = artifact.module
         val errorMessage =
             artifact.analysis.diagnostics
