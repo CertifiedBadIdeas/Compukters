@@ -86,4 +86,29 @@ class DisplayProfilingTest {
         assertEquals(DisplayOperationMetrics(), snapshot.operations)
         assertEquals(DisplayFrameMetrics(), snapshot.frames)
     }
+
+    @Test
+    fun displayRegistryRecordsOperationsAndDrainedFrames() {
+        val collector = RecordingDisplayMetricsCollector()
+        val registry = DisplayRegistry(metricsCollector = collector)
+
+        registry.attach(displayId = 7, width = 16, height = 16)
+        registry.clear(displayId = 7, rgb565 = 0)
+        registry.fillRect(displayId = 7, x = 0, y = 0, width = 5, height = 7, rgb565 = 0x07E0)
+        registry.present(displayId = 7)
+        val frames = registry.drainFrames()
+
+        val snapshot = collector.snapshot()
+
+        assertEquals(2, frames.size, "attach full-refresh plus present frame")
+        assertEquals(1, snapshot.operations.clearCalls)
+        assertEquals(1, snapshot.operations.fillRectCalls)
+        assertEquals(35, snapshot.operations.fillRectArea)
+        assertEquals(1, snapshot.operations.presentCalls)
+        assertEquals(1, snapshot.operations.presentFrames)
+        assertEquals(2, snapshot.frames.frameCount)
+        assertEquals(1, snapshot.frames.fullRefreshFrames)
+        assertEquals(frames.sumOf { it.tiles.size }.toLong(), snapshot.frames.tileCount)
+        assertEquals(frames.sumOf { frame -> frame.tiles.sumOf { it.payload.size } }.toLong(), snapshot.frames.payloadBytes)
+    }
 }
