@@ -51,4 +51,53 @@ class ClientDisplayBufferTest {
 
         assertEquals(listOf(0xFFFF0000.toInt(), 0xFF00FF00.toInt()), buffer.frontArgb().toList())
     }
+
+    @Test
+    fun publishesDirtyRegionsAndFrontVersionsAfterSwap() {
+        val buffer = ClientDisplayBuffer(displayId = 1, width = 4, height = 2)
+        val red565 = byteArrayOf(0xF8.toByte(), 0x00)
+        val green565 = byteArrayOf(0x07, 0xE0.toByte())
+        val fullPayload = ByteArray(4 * 2 * 2)
+        val fullFrame =
+            DisplayFrameDelta(
+                displayId = 1,
+                sequence = 1,
+                width = 4,
+                height = 2,
+                pixelFormat = DisplayPixelFormat.RGB565,
+                fullRefresh = true,
+                tiles = listOf(DisplayTile(0, 0, 0, 0, 4, 2, fullPayload)),
+            )
+
+        assertTrue(buffer.apply(fullFrame))
+        assertTrue(buffer.swapIfDirty())
+        assertEquals(1L, buffer.frontVersion)
+        assertEquals(listOf(ClientDisplayBuffer.Region(0, 0, 4, 2)), buffer.frontDirtyRegions())
+
+        val partialFrame =
+            DisplayFrameDelta(
+                displayId = 1,
+                sequence = 2,
+                width = 4,
+                height = 2,
+                pixelFormat = DisplayPixelFormat.RGB565,
+                fullRefresh = false,
+                tiles = listOf(DisplayTile(0, 0, 1, 1, 2, 1, red565 + green565)),
+            )
+
+        assertTrue(buffer.apply(partialFrame))
+        assertTrue(buffer.swapIfDirty())
+        assertEquals(2L, buffer.frontVersion)
+        assertEquals(listOf(ClientDisplayBuffer.Region(1, 1, 2, 1)), buffer.frontDirtyRegions())
+
+        val snapshot = buffer.copyFrontSnapshotSince(uploadedVersion = 1)
+        assertEquals(2L, snapshot.version)
+        assertEquals(listOf(ClientDisplayBuffer.Region(1, 1, 2, 1)), snapshot.regions)
+        assertEquals(0xFFFF0000.toInt(), snapshot.pixels[1 + 1 * 4])
+        assertEquals(0xFF00FF00.toInt(), snapshot.pixels[2 + 1 * 4])
+
+        val copied = IntArray(2)
+        buffer.copyFrontArgbRegion(ClientDisplayBuffer.Region(1, 1, 2, 1), copied)
+        assertEquals(listOf(0xFFFF0000.toInt(), 0xFF00FF00.toInt()), copied.toList())
+    }
 }

@@ -18,7 +18,13 @@
  */
 package ru.lazyhat.compukterkraft.common.terminal.screen
 
+import com.mojang.blaze3d.platform.NativeImage
+import net.minecraft.client.Minecraft
+import net.minecraft.client.gui.GuiGraphics
+import net.minecraft.client.renderer.texture.DynamicTexture
 import net.minecraft.network.chat.Component
+import net.minecraft.resources.ResourceLocation
+import net.minecraft.util.FastColor
 import net.minecraft.world.entity.player.Inventory
 import ru.lazyhat.compukterkraft.common.computer.client.ClientDisplayBuffer
 import ru.lazyhat.compukterkraft.common.computer.input.ClientInputHandler
@@ -78,6 +84,7 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
     private val inputHandler = ClientInputHandler(container)
     private val terminalInput = WorkbenchTerminalInputController(inputHandler, MinecraftInputProvider)
     private val displayId: Int = (player.player.uuid.hashCode() and 0x3FFFFFFF) + 1
+    private val displayTexture = DisplayTextureCache(displayId)
 
     private val powerHover = HoverState()
     private val rebootHover = HoverState()
@@ -90,9 +97,20 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
     }
 
     override fun removed() {
+        displayTexture.close()
         ClientNetworking.sendToServer(DisplayDetachServerMessage(menu, displayId))
         super.removed()
         menu.clientSide.detachDisplayBuffer()
+    }
+
+    override fun renderBg(
+        guiGraphics: GuiGraphics,
+        partialTick: Float,
+        mouseX: Int,
+        mouseY: Int,
+    ) {
+        super.renderBg(guiGraphics, partialTick, mouseX, mouseY)
+        drawDisplayTexture(guiGraphics)
     }
 
     override fun containerTick() {
@@ -197,7 +215,7 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
                                 onCharTyped = { ch -> terminalInput.charTyped(ch) },
                             ),
                 ) {
-                    drawDisplayBuffer(layout.terminalBounds.width, layout.terminalBounds.height)
+                    drawDisplayPlaceholder(layout.terminalBounds.width, layout.terminalBounds.height)
                 }
             }
 
@@ -275,34 +293,33 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
         }
     }
 
-    private fun CanvasScope.drawDisplayBuffer(
+    private fun CanvasScope.drawDisplayPlaceholder(
         targetWidth: Int,
         targetHeight: Int,
     ) {
         val buffer = menu.clientSide.displayBuffer
         if (buffer == null || !buffer.hasReceivedFrames) {
             fillRect(0, 0, targetWidth, targetHeight, DISPLAY_PLACEHOLDER)
-            return
-        }
-
-        val pixels = buffer.frontArgb()
-        val scaleX = targetWidth.toDouble() / buffer.width.toDouble()
-        val scaleY = targetHeight.toDouble() / buffer.height.toDouble()
-        var y = 0
-        while (y < buffer.height) {
-            var x = 0
-            while (x < buffer.width) {
-                val color = Color.hex(pixels[y * buffer.width + x].toUInt())
-                val px = (x * scaleX).toInt()
-                val py = (y * scaleY).toInt()
-                val pw = (((x + 1) * scaleX).toInt() - px).coerceAtLeast(1)
-                val ph = (((y + 1) * scaleY).toInt() - py).coerceAtLeast(1)
-                fillRect(px, py, pw, ph, color)
-                x = x + 1
-            }
-            y = y + 1
         }
     }
+
+    private fun drawDisplayTexture(guiGraphics: GuiGraphics) {
+        if (!menu.isComputerOn) return
+        val buffer = menu.clientSide.displayBuffer ?: return
+        if (!buffer.hasReceivedFrames) return
+        displayTexture.draw(guiGraphics, buffer, currentLayout().terminalBounds)
+    }
+
+    private fun currentLayout() =
+        WorkbenchTerminalMetrics.layout(
+            leftPos = leftPos,
+            topPos = topPos,
+            imageWidth = imageWidth,
+            imageHeight = imageHeight,
+            terminalColumns = DEFAULT_COLS,
+            terminalRows = DEFAULT_ROWS,
+            contentTopInset = COMPUTER_CONTENT_TOP,
+        )
 
     private fun currentDisplayWidth(): Int {
         return (DEFAULT_COLS * TerminalFontConstants.FONT_WIDTH).coerceAtLeast(64)
@@ -379,5 +396,95 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
         private val BUTTON_ICON = Color.hex(0xFFE6ECF5U)
         private val POWER_ACCENT = Color.hex(0xFF4FA56CU)
         private val REBOOT_ACCENT = Color.hex(0xFFC9894FU)
+    }
+
+    private class DisplayTextureCache(
+        private val displayId: Int,
+    ) : AutoCloseable {
+        private var image: NativeImage? = null
+        private var texture: DynamicTexture? = null
+        private var location: ResourceLocation? = null
+        private var width: Int = 0
+        private var height: Int = 0
+        private var uploadedVersion: Long = Long.MIN_VALUE
+
+        fun draw(
+            guiGraphics: GuiGraphics,
+            buffer: ClientDisplayBuffer,
+            bounds: TerminalRect,
+        ) {
+            ensureTexture(buffer.width, buffer.height)
+            uploadIfNeeded(buffer)
+            val textureLocation = location ?: return
+            guiGraphics.blit(
+                textureLocation,
+                bounds.x,
+                bounds.y,
+                bounds.width,
+                bounds.height,
+                0f,
+                0f,
+                buffer.width,
+                buffer.height,
+                buffer.width,
+                buffer.height,
+            )
+        }
+
+        private fun ensureTexture(
+            width: Int,
+            height: Int,
+        ) {
+            if (image != null && this.width == width && this.height == height) return
+            close()
+            this.width = width
+            this.height = height
+            val newImage = NativeImage(width, height, false)
+            val newTexture = DynamicTexture(newImage)
+            image = newImage
+            texture = newTexture
+            location = Minecraft.getInstance().textureManager.register("compukterkraft_display_$displayId", newTexture)
+            uploadedVersion = Long.MIN_VALUE
+        }
+
+        private fun uploadIfNeeded(buffer: ClientDisplayBuffer) {
+            val currentImage = image ?: return
+            val currentTexture = texture ?: return
+            if (buffer.frontVersion == uploadedVersion) return
+            val snapshot = buffer.copyFrontSnapshotSince(uploadedVersion)
+            if (snapshot.version == uploadedVersion) return
+            for (region in snapshot.regions) {
+                var row = region.y
+                while (row < region.y + region.height) {
+                    var columnOffset = 0
+                    while (columnOffset < region.width) {
+                        currentImage.setPixelRGBA(
+                            region.x + columnOffset,
+                            row,
+                            FastColor.ABGR32.fromArgb32(
+                                snapshot.pixels[row * buffer.width + region.x + columnOffset],
+                            ),
+                        )
+                        columnOffset = columnOffset + 1
+                    }
+                    row = row + 1
+                }
+            }
+            currentTexture.bind()
+            for (region in snapshot.regions) {
+                currentImage.upload(0, region.x, region.y, region.x, region.y, region.width, region.height, false, false)
+            }
+            uploadedVersion = snapshot.version
+        }
+
+        override fun close() {
+            location?.let { Minecraft.getInstance().textureManager.release(it) }
+            image = null
+            texture = null
+            location = null
+            width = 0
+            height = 0
+            uploadedVersion = Long.MIN_VALUE
+        }
     }
 }
