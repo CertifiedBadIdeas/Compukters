@@ -48,6 +48,21 @@ pub fn encode_error(message: impl AsRef<str>) -> Vec<u8> {
 	writer.finish()
 }
 
+pub fn encode_value(value: &VmValue) -> Vec<u8> {
+	let mut writer = Writer::default();
+	writer.value(value);
+	writer.finish()
+}
+
+pub fn decode_value(bytes: &[u8]) -> Result<VmValue, String> {
+	let mut reader = Reader { bytes, offset: 0 };
+	let value = reader.value()?;
+	if reader.offset != bytes.len() {
+		return Err("trailing bytes after native VM value".to_string());
+	}
+	Ok(value)
+}
+
 #[derive(Default)]
 struct Writer {
 	bytes: Vec<u8>,
@@ -99,6 +114,58 @@ impl Writer {
 				self.u8(VALUE_STRING);
 				self.string(&format!("object#{value}"));
 			}
+		}
+	}
+}
+
+struct Reader<'a> {
+	bytes: &'a [u8],
+	offset: usize,
+}
+
+impl Reader<'_> {
+	fn u8(&mut self) -> Result<u8, String> {
+		let value = self.bytes.get(self.offset).copied().ok_or_else(|| "unexpected end of native VM value".to_string())?;
+		self.offset += 1;
+		Ok(value)
+	}
+
+	fn take(&mut self, count: usize) -> Result<&[u8], String> {
+		let end = self.offset.checked_add(count).ok_or_else(|| "unexpected end of native VM value".to_string())?;
+		let slice = self.bytes.get(self.offset..end).ok_or_else(|| "unexpected end of native VM value".to_string())?;
+		self.offset = end;
+		Ok(slice)
+	}
+
+	fn i32(&mut self) -> Result<i32, String> {
+		let mut bytes = [0u8; 4];
+		bytes.copy_from_slice(self.take(4)?);
+		Ok(i32::from_le_bytes(bytes))
+	}
+
+	fn i64(&mut self) -> Result<i64, String> {
+		let mut bytes = [0u8; 8];
+		bytes.copy_from_slice(self.take(8)?);
+		Ok(i64::from_le_bytes(bytes))
+	}
+
+	fn string(&mut self) -> Result<String, String> {
+		let length = self.i32()?;
+		if length < 0 {
+			return Err(format!("negative native VM string length {length}"));
+		}
+		String::from_utf8(self.take(length as usize)?.to_vec()).map_err(|_| "invalid native VM string utf-8".to_string())
+	}
+
+	fn value(&mut self) -> Result<VmValue, String> {
+		match self.u8()? {
+			VALUE_UNIT => Ok(VmValue::Unit),
+			VALUE_NULL => Ok(VmValue::Null),
+			VALUE_BOOL => Ok(VmValue::Bool(self.u8()? != 0)),
+			VALUE_INT => Ok(VmValue::Int(self.i32()?)),
+			VALUE_LONG => Ok(VmValue::Long(self.i64()?)),
+			VALUE_STRING => Ok(VmValue::String(self.string()?)),
+			other => Err(format!("unknown native VM value tag {other}")),
 		}
 	}
 }
