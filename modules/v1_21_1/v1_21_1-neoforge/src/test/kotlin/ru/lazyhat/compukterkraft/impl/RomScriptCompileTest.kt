@@ -161,12 +161,31 @@ class RomScriptCompileTest {
 
         assertTrue(source.contains("if (ch == \"<\")"), "terminal.ck should define a '<' glyph")
         assertTrue(
-            source.contains("if (ch == \">\") { return \"10000010000010000010001000100010000\" }"),
+            source.contains("if (ch == \">\") { return Glyph5x7(row0 = 16, row1 = 8, row2 = 4, row3 = 2, row4 = 4, row5 = 8, row6 = 16) }"),
             "terminal.ck should use a balanced seven-row '>' glyph",
         )
         assertTrue(
-            source.contains("if (ch == \"<\") { return \"00001000100010001000001000001000001\" }"),
+            source.contains("if (ch == \"<\") { return Glyph5x7(row0 = 1, row1 = 2, row2 = 4, row3 = 8, row4 = 4, row5 = 2, row6 = 1) }"),
             "terminal.ck should use a balanced seven-row '<' glyph",
+        )
+    }
+
+    @Test
+    fun bundledRomTerminalUsesNumericGlyphRows() {
+        val source = resourceText("rom/terminal.ck")
+
+        assertTrue(source.contains("pub struct Glyph5x7"), "terminal.ck should define a numeric 5x7 glyph row struct")
+        assertTrue(source.contains("fun glyphRows(ch: String): Glyph5x7"), "terminal.ck should map characters to numeric glyph rows")
+        assertTrue(source.contains("display::blitMono5x7"), "terminal.ck should render glyphs through the numeric display API")
+        assertFalse(source.contains("fun glyphPattern(ch: String): String"), "terminal.ck should not keep string glyph masks")
+        assertFalse(Regex("return \\\"[01]{35}\\\"").containsMatchIn(source), "terminal.ck should not return 35-character string glyph masks")
+        assertTrue(
+            source.contains("if (ch == \">\") { return Glyph5x7(row0 = 16, row1 = 8, row2 = 4, row3 = 2, row4 = 4, row5 = 8, row6 = 16) }"),
+            "terminal.ck should preserve the balanced '>' glyph as numeric rows",
+        )
+        assertTrue(
+            source.contains("if (ch == \"<\") { return Glyph5x7(row0 = 1, row1 = 2, row2 = 4, row3 = 8, row4 = 4, row5 = 2, row6 = 1) }"),
+            "terminal.ck should preserve the balanced '<' glyph as numeric rows",
         )
     }
 
