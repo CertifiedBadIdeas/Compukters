@@ -1092,7 +1092,7 @@ Create `VmRunnerSelectionTest.kt`:
 package ru.lazyhat.compukterkraft.lang.runtime
 
 import ru.lazyhat.compukterkraft.lang.frontend.LanguageFrontend
-import ru.lazyhat.compukterkraft.lang.runtime.native.NativeVmRunner
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeVmRunner
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -1128,7 +1128,7 @@ Expected: FAIL to compile because `NativeVmRunner` does not exist.
 Create `NativeVmRunner.kt`:
 
 ```kotlin
-package ru.lazyhat.compukterkraft.lang.runtime.native
+package ru.lazyhat.compukterkraft.lang.runtime.blazing
 
 import ru.lazyhat.compukterkraft.lang.api.BytecodeModule
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceRuntime

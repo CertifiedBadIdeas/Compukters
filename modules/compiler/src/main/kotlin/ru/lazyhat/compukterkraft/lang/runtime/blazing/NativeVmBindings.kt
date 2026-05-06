@@ -17,7 +17,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package ru.lazyhat.compukterkraft.lang.runtime.native
+package ru.lazyhat.compukterkraft.lang.runtime.blazing
 
 internal object NativeVmBindings {
     private val lock = Any()

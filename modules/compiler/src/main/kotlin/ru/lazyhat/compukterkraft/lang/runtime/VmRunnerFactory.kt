@@ -19,7 +19,7 @@
 
 package ru.lazyhat.compukterkraft.lang.runtime
 
-import ru.lazyhat.compukterkraft.lang.runtime.native.NativeVmRunner
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeVmRunner
 
 object VmRunnerFactory {
     private const val RUNNER_PROPERTY = "ckl.vm.runner"
