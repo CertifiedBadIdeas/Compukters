@@ -39,10 +39,10 @@ class LanguageIdeTest {
         val completionSource =
             """
             fun main() {
-                terminal::
+                system::
             }
             """.trimIndent()
-        val completionCursor = lineAndColumnOf(completionSource, "terminal::") + 10
+        val completionCursor = lineAndColumnOf(completionSource, "system::") + 8
         val completion =
             ide.complete(
                 "completion.ck",
@@ -50,12 +50,12 @@ class LanguageIdeTest {
                 completionCursor.first,
                 completionCursor.second,
             )
-        assertTrue(completion.any { it.label == "println" })
+        assertTrue(completion.any { it.label == "log" })
 
         val source =
             """
             fun helper() {
-                terminal::println("hi");
+                system::log("hi");
             }
 
             fun main() {
@@ -63,10 +63,10 @@ class LanguageIdeTest {
             }
             """.trimIndent()
 
-        val hoverPosition = lineAndColumnOf(source, "println")
+        val hoverPosition = lineAndColumnOf(source, "log")
         val hover = ide.hover("test.ck", source, hoverPosition.first, hoverPosition.second)
         assertNotNull(hover)
-        assertTrue(hover.contents.contains("terminal::println"))
+        assertTrue(hover.contents.contains("system::log"))
 
         val definitionPosition = lineAndColumnOfLast(source, "helper")
         val definition =
@@ -86,7 +86,7 @@ class LanguageIdeTest {
             """
             fun main() {
                 val text: Bool = "oops";
-                terminal::println("hi");
+                system::log("hi");
             }
             """.trimIndent()
 
@@ -100,14 +100,14 @@ class LanguageIdeTest {
     fun completesBuiltinMembersAfterDoubleColon() {
         val source =
             """
-            fun main() { terminal:: }
+            fun main() { system:: }
             """.trimIndent()
-        val column = source.indexOf("terminal::") + "terminal::".length
+        val column = source.indexOf("system::") + "system::".length
 
         val items = ide.complete("main.ck", source, line = 0, column = column)
 
-        assertTrue(items.any { it.label == "println" }, items.joinToString { it.label })
-        assertTrue(items.any { it.label == "write" }, items.joinToString { it.label })
+        assertTrue(items.any { it.label == "log" }, items.joinToString { it.label })
+        assertTrue(items.any { it.label == "deviceId" }, items.joinToString { it.label })
     }
 
     @Test
@@ -120,28 +120,28 @@ class LanguageIdeTest {
 
     @Test
     fun suggestsBuiltinMemberWithNamespaceAndImportEdit() {
-        val source = "fun main() { pri }"
-        val cursor = lineAndColumnOf(source, "pri") + 3
+        val source = "fun main() { lo }"
+        val cursor = lineAndColumnOf(source, "lo") + 2
 
         val items = ide.complete("main.ck", source, cursor.first, cursor.second)
-        val println = items.single { it.label == "println" && it.sourceNamespace == "terminal" }
+        val log = items.single { it.label == "log" && it.sourceNamespace == "system" }
 
-        assertEquals("println()", println.insertText)
-        assertEquals("println(".length, println.cursorOffset)
-        assertEquals(listOf(TextEdit(0, 0, "import terminal { println };\n")), println.additionalTextEdits)
+        assertEquals("log()", log.insertText)
+        assertEquals("log(".length, log.cursorOffset)
+        assertEquals(listOf(TextEdit(0, 0, "import system { log };\n")), log.additionalTextEdits)
     }
 
     @Test
     fun updatesExistingBuiltinImportGroupInCompletionEdit() {
-        val source = "import terminal { clear };\nfun main() { pri }"
-        val cursor = lineAndColumnOf(source, "pri") + 3
+        val source = "import system { currentTick };\nfun main() { lo }"
+        val cursor = lineAndColumnOf(source, "lo") + 2
 
         val items = ide.complete("main.ck", source, cursor.first, cursor.second)
-        val println = items.single { it.label == "println" && it.sourceNamespace == "terminal" }
+        val log = items.single { it.label == "log" && it.sourceNamespace == "system" }
 
         assertEquals(
-            listOf(TextEdit("import terminal { ".length, "import terminal { clear".length, "clear, println")),
-            println.additionalTextEdits,
+            listOf(TextEdit("import system { ".length, "import system { currentTick".length, "currentTick, log")),
+            log.additionalTextEdits,
         )
     }
 
@@ -216,7 +216,7 @@ class LanguageIdeTest {
             }
             pub fun main() {
                 val counter: Counter = Counter(value = 1);
-                terminal::println(counter.)
+                system::log(counter.)
             }
             """.trimIndent()
         val cursor = lineAndColumnOf(source, "counter.)") + "counter.".length
@@ -237,7 +237,7 @@ class LanguageIdeTest {
             }
             pub fun main() {
                 val counter: Counter = Counter(value = 1);
-                terminal::println(counter.)
+                system::log(counter.)
             }
             """.trimIndent()
         val cursor = lineAndColumnOf(source, "counter.)") + "counter.".length
@@ -346,14 +346,14 @@ class LanguageIdeTest {
     fun completesAmbientModulesAsVisibleSymbols() {
         val allModules = ide.complete("test.ck", "", 0, 0)
         val moduleLabels = allModules.filter { it.kind == CompletionItemKind.MODULE }.map { it.label }.toSet()
-        assertEquals(setOf("terminal", "stdout", "display", "filesystem", "system", "events", "ipc", "process", "strings"), moduleLabels)
+        assertEquals(setOf("display", "filesystem", "system", "events", "ipc", "process", "strings"), moduleLabels)
     }
 
     @Test
     fun completesAmbientModulesWithPrefix() {
-        val filtered = ide.complete("test.ck", "te", 0, 2)
+        val filtered = ide.complete("test.ck", "sy", 0, 2)
         val moduleLabels = filtered.filter { it.kind == CompletionItemKind.MODULE }.map { it.label }
-        assertEquals(listOf("terminal"), moduleLabels)
+        assertEquals(listOf("system"), moduleLabels)
     }
 
     @Test
@@ -382,19 +382,19 @@ class LanguageIdeTest {
     fun defaultRuntimeRegistryExposesBaseModuleMetadata() {
         val registry = LanguageBuiltins.defaultRuntimeRegistry
 
-        assertTrue(registry.modules.any { it.name == "terminal" && it.origin == ModuleOrigin.BASE_VM })
+        assertTrue(registry.modules.any { it.name == "display" && it.origin == ModuleOrigin.BASE_VM })
         assertTrue(registry.modules.none { it.name == "monitor" })
     }
 
     @Test
     fun reportsUnavailableRuntimeModuleForTargetVm() {
-        val terminalOnly =
+        val systemOnly =
             BuiltinRegistry(
-                modules = listOf(requireNotNull(LanguageBuiltins.defaultRuntimeRegistry.module("terminal"))),
+                modules = listOf(requireNotNull(LanguageBuiltins.defaultRuntimeRegistry.module("system"))),
                 globals = LanguageBuiltins.defaultRuntimeRegistry.globals,
                 builtinTypes = LanguageBuiltins.defaultRuntimeRegistry.builtinTypes,
             )
-        val ide = LanguageIde(LanguageFrontend(terminalOnly))
+        val ide = LanguageIde(LanguageFrontend(systemOnly))
 
         val snapshot = ide.analyze("test.ck", "fun main() { filesystem::list(); }")
         assertTrue(snapshot.diagnostics.any { it.message.contains("Unknown namespace") })
@@ -402,16 +402,16 @@ class LanguageIdeTest {
 
     @Test
     fun importCompletionUsesInjectedRuntimeRegistry() {
-        val terminalOnly =
+        val systemOnly =
             BuiltinRegistry(
-                modules = listOf(requireNotNull(LanguageBuiltins.defaultRuntimeRegistry.module("terminal"))),
+                modules = listOf(requireNotNull(LanguageBuiltins.defaultRuntimeRegistry.module("system"))),
                 globals = LanguageBuiltins.defaultRuntimeRegistry.globals,
                 builtinTypes = LanguageBuiltins.defaultRuntimeRegistry.builtinTypes,
             )
-        val ide = LanguageIde(LanguageFrontend(terminalOnly))
+        val ide = LanguageIde(LanguageFrontend(systemOnly))
 
         val items = ide.complete("test.ck", "", 0, 0)
-        assertEquals(listOf("terminal"), items.filter { it.kind == CompletionItemKind.MODULE }.map { it.label })
+        assertEquals(listOf("system"), items.filter { it.kind == CompletionItemKind.MODULE }.map { it.label })
     }
 
     @Test

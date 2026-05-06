@@ -96,11 +96,11 @@ class LanguageFormatterTest {
 
     @Test
     fun cleanupRemovesSelectiveImportUsedOnlyThroughFqn() {
-        val source = "import terminal { println };\npub fun main(){terminal::println(\"hi\");}"
+        val source = "import system { log };\npub fun main(){system::log(\"hi\");}"
         val expected =
             """
             pub fun main() {
-                terminal::println("hi")
+                system::log("hi")
             }
             """.trimIndent() + "\n"
 
@@ -277,16 +277,16 @@ class LanguageFormatterTest {
     fun cleanupRemovesUnusedSelectiveImportItems() {
         val source =
             """
-            import terminal { clear, println, write };
-            pub fun main() { println("hi"); }
+            import system { currentTick, log, reboot };
+            pub fun main() { log("hi"); }
             """.trimIndent()
 
         val expected =
             """
-            import terminal { println }
+            import system { log }
 
             pub fun main() {
-                println("hi")
+                log("hi")
             }
             """.trimIndent() + "\n"
 
@@ -306,7 +306,7 @@ class LanguageFormatterTest {
                         pub fun main() {
                             val v: Vec2 = make();
                             val c: Counter = Counter(value = v.x);
-                            terminal::println("v=" + c.value);
+                            system::log("v=" + c.value);
                         }
                         """.trimIndent(),
                     "model.ck" to

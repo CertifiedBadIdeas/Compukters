@@ -42,9 +42,9 @@ class LanguageRuntimeTest {
                 "runtime.ck",
                 """
                 pub fun main() {
-                    terminal::println("id=" + system::deviceId());
+                    system::log("id=" + system::deviceId());
                     val event: Event = events::pull("boot");
-                    terminal::println(event.name);
+                    system::log(event.name);
                     sleep(1L);
                     yield();
                 }
@@ -94,7 +94,7 @@ class LanguageRuntimeTest {
                     val length: Int = strings::length("abc");
                     val first: String = strings::charAt("abc", 0);
 
-                    terminal::println(blocking + text + first + code + count + key + parsed + length + repeated);
+                    system::log(blocking + text + first + code + count + key + parsed + length + repeated);
                 }
                 """.trimIndent(),
             )
@@ -113,8 +113,8 @@ class LanguageRuntimeTest {
                 """
                 pub fun main() {
                     val event: Event = events::pull("char");
-                    terminal::println(event.name + ":" + event.argCount);
-                    terminal::println(events::argString(event, 0));
+                    system::log(event.name + ":" + event.argCount);
+                    system::log(events::argString(event, 0));
                 }
                 """.trimIndent(),
             )
@@ -140,9 +140,9 @@ class LanguageRuntimeTest {
                 """
                 pub fun main() {
                     val missing: Event = events::tryPull("paste");
-                    terminal::println("missing=" + missing.name);
+                    system::log("missing=" + missing.name);
                     val event: Event = events::tryPull();
-                    terminal::println(event.name + ":" + events::argString(event, 0));
+                    system::log(event.name + ":" + events::argString(event, 0));
                 }
                 """.trimIndent(),
             )
@@ -169,9 +169,9 @@ class LanguageRuntimeTest {
                 pub fun main() {
                     val channel: Int = ipc::open();
                     ipc::write(channel, "hello");
-                    terminal::println(ipc::tryRead(channel));
+                    system::log(ipc::tryRead(channel));
                     ipc::write(channel, "again");
-                    terminal::println(ipc::read(channel));
+                    system::log(ipc::read(channel));
                     ipc::close(channel);
                 }
                 """.trimIndent(),
@@ -198,8 +198,8 @@ class LanguageRuntimeTest {
                 """
                 pub fun main() {
                     val pid: Int = process::spawn("child.ck", "arg");
-                    terminal::println("pid=" + pid);
-                    terminal::println("code=" + process::wait(pid));
+                    system::log("pid=" + pid);
+                    system::log("code=" + process::wait(pid));
                 }
                 """.trimIndent(),
             )
@@ -276,10 +276,10 @@ class LanguageRuntimeTest {
                 pub fun main() {
                     var i: Int = 0;
                     while (i < 3) {
-                        terminal::println("i=" + i);
+                        system::log("i=" + i);
                         i = i + 1;
                     }
-                    terminal::println("done=" + i);
+                    system::log("done=" + i);
                 }
                 """.trimIndent(),
             )
@@ -306,13 +306,13 @@ class LanguageRuntimeTest {
                 pub fun main() {
                     var i: Int = 1;
                     i += 4;
-                    terminal::println("plus=" + i);
+                    system::log("plus=" + i);
                     i -= 2;
-                    terminal::println("minus=" + i);
+                    system::log("minus=" + i);
                     i *= 6;
-                    terminal::println("star=" + i);
+                    system::log("star=" + i);
                     i /= 3;
-                    terminal::println("slash=" + i);
+                    system::log("slash=" + i);
                 }
                 """.trimIndent(),
             )
@@ -339,7 +339,7 @@ class LanguageRuntimeTest {
                 struct Point { x: Int, y: Int }
                 pub fun main() {
                     val point: Point = Point(x = 4, y = 5);
-                    terminal::println("sum=" + (point.x + point.y));
+                    system::log("sum=" + (point.x + point.y));
                 }
                 """.trimIndent(),
             )
@@ -370,7 +370,7 @@ class LanguageRuntimeTest {
                     val a: Counter = Counter(value = 1);
                     val b: Counter = a;
                     b.inc();
-                    terminal::println("a=" + a.current());
+                    system::log("a=" + a.current());
                 }
                 """.trimIndent(),
             )
@@ -400,7 +400,7 @@ class LanguageRuntimeTest {
                 }
                 pub fun main() {
                     val counter: Counter = Counter.zero();
-                    terminal::println("value=" + counter.current());
+                    system::log("value=" + counter.current());
                 }
                 """.trimIndent(),
             )
@@ -433,7 +433,7 @@ class LanguageRuntimeTest {
 
                 pub fun main() {
                     val instance: SomeClass = SomeClass(constK = 22);
-                    terminal::println("INSTANCE " + instance.instancePlus2());
+                    system::log("INSTANCE " + instance.instancePlus2());
                 }
                 """.trimIndent(),
             )
@@ -470,7 +470,7 @@ class LanguageRuntimeTest {
 
                 pub fun main() {
                     val instance: SomeClass = SomeClass(constK = 22);
-                    terminal::println("k=" + instance.current());
+                    system::log("k=" + instance.current());
                 }
                 """.trimIndent(),
             )
@@ -511,7 +511,7 @@ class LanguageRuntimeTest {
     }
 
     @Test
-    fun stdoutWriteReachesRuntimeThroughHostBridge() {
+    fun stdoutBuiltinIsRemovedFromDefaultRuntimeRegistry() {
         val artifact =
             frontend.compile(
                 "stdout.ck",
@@ -523,16 +523,9 @@ class LanguageRuntimeTest {
             )
 
         assertTrue(
-            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.any { it.severity == FrontendSeverity.ERROR && it.message.contains("stdout") },
             artifact.analysis.diagnostics.joinToString { it.message },
         )
-
-        val runtime = RecordingRuntime()
-        runBlocking {
-            BytecodeComputerProgram(requireNotNull(artifact.module)).run(runtime)
-        }
-
-        assertEquals(listOf("Hi"), runtime.stdioWrites)
     }
 
     @Test
@@ -542,23 +535,23 @@ class LanguageRuntimeTest {
                 "shell.ck",
                 """
                 pub fun main() {
-                    terminal::println(terminal::readln("> "));
-                    terminal::println(filesystem::list());
-                    terminal::println(process::currentDirectory());
-                    terminal::println(process::argument());
-                    terminal::println(strings::beforeSpace("mkdir test"));
-                    terminal::println(strings::afterSpace("mkdir test"));
+                    system::log("typed");
+                    system::log(filesystem::list());
+                    system::log(process::currentDirectory());
+                    system::log(process::argument());
+                    system::log(strings::beforeSpace("mkdir test"));
+                    system::log(strings::afterSpace("mkdir test"));
                     if (filesystem::makeDir("tmp")) {
-                        terminal::println("mk");
+                        system::log("mk");
                     } else {
-                        terminal::println("no");
+                        system::log("no");
                     }
                     if (process::changeDirectory("tmp")) {
-                        terminal::println("cd");
+                        system::log("cd");
                     } else {
-                        terminal::println("stay");
+                        system::log("stay");
                     }
-                    terminal::println(process::currentDirectory());
+                    system::log(process::currentDirectory());
                 }
                 """.trimIndent(),
             )
@@ -589,13 +582,13 @@ class LanguageRuntimeTest {
                 pub fun main() {
                     val x: Int = 2;
                     if (x == 1) {
-                        terminal::println("one");
+                        system::log("one");
                     } else if (x == 2) {
-                        terminal::println("two");
+                        system::log("two");
                     } else if (x == 3) {
-                        terminal::println("three");
+                        system::log("three");
                     } else {
-                        terminal::println("other");
+                        system::log("other");
                     }
                 }
                 """.trimIndent(),
@@ -623,11 +616,11 @@ class LanguageRuntimeTest {
                 pub fun main() {
                     val x: Int = 99;
                     if (x == 1) {
-                        terminal::println("one");
+                        system::log("one");
                     } else if (x == 2) {
-                        terminal::println("two");
+                        system::log("two");
                     } else {
-                        terminal::println("other");
+                        system::log("other");
                     }
                 }
                 """.trimIndent(),
@@ -651,16 +644,16 @@ class LanguageRuntimeTest {
                     val x: Int = 2;
                     when(x) {
                         1 -> {
-                            terminal::println("one");
+                            system::log("one");
                         }
                         2 -> {
-                            terminal::println("two");
+                            system::log("two");
                         }
                         3 -> {
-                            terminal::println("three");
+                            system::log("three");
                         }
                         else -> {
-                            terminal::println("other");
+                            system::log("other");
                         }
                     }
                 }
@@ -685,13 +678,13 @@ class LanguageRuntimeTest {
                     val x: Int = 3;
                     when(x) {
                         1 -> {
-                            terminal::println("one");
+                            system::log("one");
                         }
                         2, 3 -> {
-                            terminal::println("two or three");
+                            system::log("two or three");
                         }
                         else -> {
-                            terminal::println("other");
+                            system::log("other");
                         }
                     }
                 }
@@ -716,13 +709,13 @@ class LanguageRuntimeTest {
                     val x: Int = 99;
                     when(x) {
                         1 -> {
-                            terminal::println("one");
+                            system::log("one");
                         }
                         2 -> {
-                            terminal::println("two");
+                            system::log("two");
                         }
                         else -> {
-                            terminal::println("other");
+                            system::log("other");
                         }
                     }
                 }
@@ -747,13 +740,13 @@ class LanguageRuntimeTest {
                     val x: Int = 5;
                     when {
                         x > 10 -> {
-                            terminal::println("big");
+                            system::log("big");
                         }
                         x > 0 -> {
-                            terminal::println("positive");
+                            system::log("positive");
                         }
                         else -> {
-                            terminal::println("non-positive");
+                            system::log("non-positive");
                         }
                     }
                 }
@@ -778,13 +771,13 @@ class LanguageRuntimeTest {
                     val x: Int = 0;
                     when {
                         x > 10 -> {
-                            terminal::println("big");
+                            system::log("big");
                         }
                         x > 0 -> {
-                            terminal::println("positive");
+                            system::log("positive");
                         }
                         else -> {
-                            terminal::println("zero or negative");
+                            system::log("zero or negative");
                         }
                     }
                 }
@@ -831,9 +824,9 @@ class LanguageRuntimeTest {
                 """
                 pub fun main() {
                     if (monitor::exists()) {
-                        terminal::println("connected");
+                        system::log("connected");
                     } else {
-                        terminal::println("missing");
+                        system::log("missing");
                     }
                 }
                 """.trimIndent(),
@@ -884,9 +877,9 @@ class LanguageRuntimeTest {
                 """
                 pub fun main() {
                     if (monitor::exists()) {
-                        terminal::println("connected");
+                        system::log("connected");
                     } else {
-                        terminal::println("missing");
+                        system::log("missing");
                     }
                 }
                 """.trimIndent(),
@@ -977,7 +970,9 @@ internal class RecordingRuntime(
 
             override fun reboot() = Unit
 
-            override fun log(message: String) = Unit
+            override fun log(message: String) {
+                lines += message
+            }
         }
 
     override val terminal =

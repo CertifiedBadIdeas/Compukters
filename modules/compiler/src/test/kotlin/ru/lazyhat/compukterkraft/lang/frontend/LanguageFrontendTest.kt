@@ -29,6 +29,7 @@ import ru.lazyhat.compukterkraft.lang.api.Visibility
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class LanguageFrontendTest {
@@ -183,7 +184,7 @@ class LanguageFrontendTest {
             frontend.compile(
                 "ok.ck",
                 """
-                pub fun main() { terminal::println("hi"); }
+                pub fun main() { system::log("hi"); }
                 """.trimIndent(),
             )
 
@@ -192,6 +193,21 @@ class LanguageFrontendTest {
             artifact.analysis.diagnostics.joinToString { it.message },
         )
         assertNotNull(artifact.module)
+    }
+
+    @Test
+    fun terminalAndStdoutBuiltinsAreRemoved() {
+        assertNull(LanguageBuiltins.defaultRuntimeRegistry.module("terminal"))
+        assertNull(LanguageBuiltins.defaultRuntimeRegistry.module("stdout"))
+    }
+
+    @Test
+    fun terminalAndStdoutCallsAreUnknownModules() {
+        val terminal = frontend.compile("main.ck", "pub fun main() { terminal::println(\"hi\"); }")
+        assertTrue(terminal.analysis.diagnostics.any { it.message.contains("terminal") })
+
+        val stdout = frontend.compile("main.ck", "pub fun main() { stdout::write(\"hi\"); }")
+        assertTrue(stdout.analysis.diagnostics.any { it.message.contains("stdout") })
     }
 
     @Test
@@ -222,7 +238,7 @@ class LanguageFrontendTest {
             frontend.compile(
                 "dot.ck",
                 """
-                pub fun main() { terminal.println("hi"); }
+                pub fun main() { system.log("hi"); }
                 """.trimIndent(),
             )
 
@@ -241,7 +257,7 @@ class LanguageFrontendTest {
                 "import.ck",
                 """
                 import legacy;
-                pub fun main() { terminal::println("ok"); }
+                pub fun main() { system::log("ok"); }
                 """.trimIndent(),
             )
         val errors = artifact.analysis.diagnostics.filter { it.severity == FrontendSeverity.ERROR }
@@ -259,7 +275,7 @@ class LanguageFrontendTest {
             frontend.compile(
                 "ambient.ck",
                 """
-                pub fun main() { terminal::println("ok"); }
+                pub fun main() { system::log("ok"); }
                 """.trimIndent(),
             )
 
@@ -306,7 +322,7 @@ class LanguageFrontendTest {
 
                 pub fun main() {
                     val point: Point = Point(x = 1, y = 2);
-                    terminal::println("sum=" + sum(point));
+                    system::log("sum=" + sum(point));
                 }
                 """.trimIndent(),
             )
@@ -317,7 +333,7 @@ class LanguageFrontendTest {
         )
         assertNotNull(artifact.module)
         assertTrue(artifact.analysis.symbols.any { it.name == "Point" })
-        assertTrue(artifact.analysis.references.any { it.name == "println" })
+        assertTrue(artifact.analysis.references.any { it.name == "log" })
     }
 
     @Test
@@ -329,7 +345,7 @@ class LanguageFrontendTest {
                 struct Point { x: Int, y: Int }
                 pub fun main() {
                     val point: Point = Point(x = 1, y = 2);
-                    terminal::println("x=" + point.x);
+                    system::log("x=" + point.x);
                 }
                 """.trimIndent(),
             )
@@ -371,7 +387,7 @@ class LanguageFrontendTest {
                 class Counter(pub var value: Int) {}
                 pub fun main() {
                     val counter: Counter = Counter(value = 3);
-                    terminal::println("value=" + counter.value);
+                    system::log("value=" + counter.value);
                 }
                 """.trimIndent(),
             )
@@ -438,8 +454,8 @@ class LanguageFrontendTest {
                 }
                 pub fun main() {
                     val counter: Counter = Counter(value = 1);
-                    terminal::println("v=" + counter.value);
-                    terminal::println("h=" + counter.hidden());
+                    system::log("v=" + counter.value);
+                    system::log("h=" + counter.hidden());
                 }
                 """.trimIndent(),
             )
@@ -466,7 +482,7 @@ class LanguageFrontendTest {
                 }
                 pub fun main() {
                     val counter: Counter = Counter(value = 1);
-                    terminal::println("v=" + counter.shown());
+                    system::log("v=" + counter.shown());
                 }
                 """.trimIndent(),
             )
@@ -666,13 +682,13 @@ class LanguageFrontendTest {
                 pub fun main() {
                     val x: Int = 2;
                     if (x == 1) {
-                        terminal::println("one");
+                        system::log("one");
                     } else if (x == 2) {
-                        terminal::println("two");
+                        system::log("two");
                     } else if (x == 3) {
-                        terminal::println("three");
+                        system::log("three");
                     } else {
-                        terminal::println("other");
+                        system::log("other");
                     }
                 }
                 """.trimIndent(),
@@ -695,13 +711,13 @@ class LanguageFrontendTest {
                     val x: Int = 2;
                     when(x) {
                         1 -> {
-                            terminal::println("one");
+                            system::log("one");
                         }
                         2, 3 -> {
-                            terminal::println("two or three");
+                            system::log("two or three");
                         }
                         else -> {
-                            terminal::println("other");
+                            system::log("other");
                         }
                     }
                 }
@@ -725,13 +741,13 @@ class LanguageFrontendTest {
                     val x: Int = 5;
                     when {
                         x > 10 -> {
-                            terminal::println("big");
+                            system::log("big");
                         }
                         x > 0 -> {
-                            terminal::println("positive");
+                            system::log("positive");
                         }
                         else -> {
-                            terminal::println("non-positive");
+                            system::log("non-positive");
                         }
                     }
                 }
