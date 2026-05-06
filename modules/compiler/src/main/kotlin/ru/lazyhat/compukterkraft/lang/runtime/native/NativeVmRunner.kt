@@ -32,18 +32,30 @@ class NativeVmRunner private constructor(
         runtime: DeviceRuntime,
     ) {
         val bytecode = BytecodeAbi.encode(module)
-        error(
-            "Native VM runner is scaffolded but not wired to JNI yet: " +
-                "library=$libraryPath, bytecodeBytes=${bytecode.size}, device=${runtime.system.deviceId}",
-        )
+        when (val signal = NativeVmSignal.decode(NativeVmBindings.runUntilSignal(libraryPath, bytecode, runtime.profile.resources.cpu.instructionsPerSlice))) {
+            is NativeVmSignal.Halt -> return
+            is NativeVmSignal.Error -> error("Native VM failed for device ${runtime.system.deviceId}: ${signal.message}")
+            NativeVmSignal.Pause -> unsupported(signal)
+            NativeVmSignal.Yield -> unsupported(signal)
+            is NativeVmSignal.Sleep -> unsupported(signal)
+            is NativeVmSignal.HostCall -> unsupported(signal)
+        }
     }
+
+    private fun unsupported(signal: NativeVmSignal): Nothing =
+        throw UnsupportedOperationException(
+            "Native VM signal $signal is not supported by the JNI prototype yet; " +
+                "host-call resume and persistent native VM state are not implemented",
+        )
 
     companion object {
         fun isAvailable(libraryPath: String?): Boolean = !libraryPath.isNullOrBlank()
 
+        fun fromLibraryPath(libraryPath: String): NativeVmRunner = NativeVmRunner(libraryPath)
+
         fun fromSystemProperty(): NativeVmRunner? {
             val path = System.getProperty("ckl.vm.native.library")
-            return if (isAvailable(path)) NativeVmRunner(requireNotNull(path)) else null
+            return if (isAvailable(path)) fromLibraryPath(requireNotNull(path)) else null
         }
     }
 }

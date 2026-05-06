@@ -138,7 +138,7 @@ private val Instruction.kind: VmInstructionKind
 
 class BytecodeComputerProgram(
     private val module: BytecodeModule,
-    private val runnerFactory: () -> VmRunner = { KotlinVmRunner },
+    private val runnerFactory: () -> VmRunner = { VmRunnerFactory.fromSystemProperties() },
 ) : DeviceProgram {
     override suspend fun run(runtime: DeviceRuntime) {
         runnerFactory().run(module, runtime)
