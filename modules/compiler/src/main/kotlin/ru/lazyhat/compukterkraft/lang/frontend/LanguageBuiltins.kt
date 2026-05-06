@@ -364,6 +364,9 @@ object LanguageBuiltins {
                     BuiltinType("Int", "32-bit signed integer."),
                     BuiltinType("Long", "64-bit signed integer."),
                     BuiltinType("String", "UTF-8 string."),
+                    BuiltinType("Array", "Mutable fixed-size indexed collection.", typeParameterCount = 1),
+                    BuiltinType("List", "Mutable growable indexed collection.", typeParameterCount = 1),
+                    BuiltinType("Map", "Mutable insertion-ordered key/value collection.", typeParameterCount = 2),
                     BuiltinType(
                         name = "Event",
                         documentation = "An event pulled from the runtime queue.",

@@ -117,9 +117,14 @@ class LanguageFrontend(
 internal data class TypeRef(
     val name: String,
     val nullable: Boolean = false,
+    val arguments: List<TypeRef> = emptyList(),
+    val typeParameter: Boolean = false,
 ) {
     val displayName: String
-        get() = if (nullable) "$name?" else name
+        get() {
+            val argumentList = if (arguments.isEmpty()) "" else arguments.joinToString(", ", "<", ">") { it.displayName }
+            return if (nullable) "$name$argumentList?" else "$name$argumentList"
+        }
 }
 
 internal sealed interface Binding {
@@ -254,6 +259,7 @@ internal class SemanticAnalyzer(
     private val methodCallBindings = IdentityHashMap<CallExpression, ClassMethodBinding>()
     private val memberBindings = IdentityHashMap<MemberAccessExpression, Binding>()
     private val builtinModules = registry.modules.associateBy { it.name }
+    private val typeParameterScopes = ArrayDeque<Set<String>>()
 
     private val typeNames: MutableMap<String, TypeRef> =
         registry.builtinTypes
@@ -273,6 +279,25 @@ internal class SemanticAnalyzer(
     private var currentClass: ClassBinding? = null
     private var currentStaticMethod: Boolean = false
     private var inConstruction: Boolean = false
+
+    private fun <T> withTypeParameters(
+        parameters: List<TypeParameterDeclaration>,
+        action: () -> T,
+    ): T {
+        typeParameterScopes.addLast(parameters.map { it.name }.toSet())
+        try {
+            return action()
+        } finally {
+            typeParameterScopes.removeLast()
+        }
+    }
+
+    private fun <T> withResolvedClassTypeParameters(
+        declaration: ClassDeclaration,
+        action: () -> T,
+    ): T = withTypeParameters(declaration.typeParameters, action)
+
+    private fun isTypeParameter(name: String): Boolean = typeParameterScopes.asReversed().any { name in it }
 
     fun analyze(program: Program): SemanticResult {
         registerAmbientBuiltins()
@@ -641,20 +666,22 @@ internal class SemanticAnalyzer(
         exports: ModuleExports,
         qualifier: String?,
     ): TypeRef {
+        val exportedUserType =
+            syntax.qualifier == null &&
+                qualifier != null &&
+                (exports.structs.containsKey(syntax.name) || exports.classes.containsKey(syntax.name))
         val typeName =
-            if (syntax.qualifier == null && (
-                    exports.structs.containsKey(syntax.name) ||
-                        exports.classes.containsKey(
-                            syntax.name,
-                        )
-                ) &&
-                qualifier != null
-            ) {
+            if (exportedUserType) {
                 "$qualifier::${syntax.name}"
             } else {
-                syntax.displayName.removeSuffix("?")
+                syntax.name
             }
-        return TypeRef(typeName, syntax.nullable)
+        return TypeRef(
+            typeName,
+            syntax.nullable,
+            syntax.arguments.map { exportTypeRef(it, exports, qualifier) },
+            typeParameter = syntax.qualifier == null && !exportedUserType && !typeNames.containsKey(syntax.name),
+        )
     }
 
     private fun registerTopLevel(declarations: List<TopLevelDeclaration>) {
@@ -668,13 +695,17 @@ internal class SemanticAnalyzer(
                 return@forEach
             }
             val fields =
-                declaration.fields.associate { field ->
-                    field.name to
-                        (
-                            resolveType(field.type, field.range) ?: TypeRef(
-                                "Unit",
+                buildMap {
+                    withTypeParameters(declaration.typeParameters) {
+                        declaration.fields.forEach { field ->
+                            put(
+                                field.name,
+                                resolveType(field.type, field.range) ?: TypeRef(
+                                    "Unit",
+                                ),
                             )
-                        )
+                        }
+                    }
                 }
             val symbol =
                 SymbolInfo(
@@ -721,7 +752,7 @@ internal class SemanticAnalyzer(
 
             val fields = linkedMapOf<String, ClassFieldBinding>()
             declaration.constructorParameters.forEach { parameter ->
-                val parameterType = resolveType(parameter.type, parameter.range) ?: TypeRef("Unit")
+                val parameterType = withResolvedClassTypeParameters(declaration) { resolveType(parameter.type, parameter.range) ?: TypeRef("Unit") }
                 val mutability = parameter.fieldMutability
                 if (mutability != null) {
                     if (fields.containsKey(parameter.name)) {
@@ -758,7 +789,7 @@ internal class SemanticAnalyzer(
                             field.range,
                         )
                 }
-                val fieldType = field.type?.let { resolveType(it, it.range) } ?: TypeRef("Unit")
+                val fieldType = withResolvedClassTypeParameters(declaration) { field.type?.let { resolveType(it, it.range) } ?: TypeRef("Unit") }
                 val fieldSymbol =
                     SymbolInfo(
                         name = field.name,
@@ -779,8 +810,18 @@ internal class SemanticAnalyzer(
 
             fun methodBinding(member: ClassMethodDeclaration): ClassMethodBinding {
                 val function = member.function
-                val parameterTypes = function.parameters.map { resolveType(it.type, it.range) ?: TypeRef("Unit") }
-                val returnType = function.returnType?.let { resolveType(it, it.range) } ?: TypeRef("Unit")
+                val parameterTypes =
+                    withResolvedClassTypeParameters(declaration) {
+                        withTypeParameters(function.typeParameters) {
+                            function.parameters.map { resolveType(it.type, it.range) ?: TypeRef("Unit") }
+                        }
+                    }
+                val returnType =
+                    withResolvedClassTypeParameters(declaration) {
+                        withTypeParameters(function.typeParameters) {
+                            function.returnType?.let { resolveType(it, it.range) } ?: TypeRef("Unit")
+                        }
+                    }
                 val methodSymbol =
                     SymbolInfo(
                         name = function.name,
@@ -830,17 +871,21 @@ internal class SemanticAnalyzer(
                 return@forEach
             }
             val parameterTypes =
-                declaration.parameters.map {
-                    resolveType(it.type, it.range)
+                withTypeParameters(declaration.typeParameters) {
+                    declaration.parameters.map {
+                        resolveType(it.type, it.range)
+                            ?: TypeRef(
+                                "Unit",
+                            )
+                    }
+                }
+            val returnType =
+                withTypeParameters(declaration.typeParameters) {
+                    declaration.returnType?.let { resolveType(it, it.range) }
                         ?: TypeRef(
                             "Unit",
                         )
                 }
-            val returnType =
-                declaration.returnType?.let { resolveType(it, it.range) }
-                    ?: TypeRef(
-                        "Unit",
-                    )
             val symbol =
                 SymbolInfo(
                     name = declaration.name,
@@ -2031,6 +2076,7 @@ internal class SemanticAnalyzer(
         syntax: TypeSyntax,
         range: SourceRange,
     ): TypeRef? {
+        val arguments = syntax.arguments.mapNotNull { resolveType(it, it.range) }
         if (syntax.qualifier != null) {
             val alias = importAliases[syntax.qualifier]
             if (alias != null) {
@@ -2040,14 +2086,14 @@ internal class SemanticAnalyzer(
                     userRecordsByName.getOrPut(visibleName) {
                         recordBindingForExport(visibleName, struct, alias.exports, syntax.qualifier, syntax.range)
                     }
-                    return TypeRef(visibleName, nullable = syntax.nullable)
+                    return TypeRef(visibleName, nullable = syntax.nullable, arguments = arguments)
                 }
                 diagnostics +=
                     FrontendDiagnostic(
                         "Namespace `${syntax.qualifier}` has no type `${syntax.name}`.",
                         syntax.range,
                     )
-                return TypeRef(syntax.name, nullable = syntax.nullable)
+                return TypeRef(syntax.name, nullable = syntax.nullable, arguments = arguments)
             }
             diagnostics +=
                 FrontendDiagnostic(
@@ -2055,7 +2101,17 @@ internal class SemanticAnalyzer(
                         "User-file imports introducing namespaces will land in the next version.",
                     syntax.range,
                 )
-            return TypeRef(syntax.name, nullable = syntax.nullable)
+            return TypeRef(syntax.name, nullable = syntax.nullable, arguments = arguments)
+        }
+        if (isTypeParameter(syntax.name)) {
+            if (arguments.isNotEmpty()) {
+                diagnostics +=
+                    FrontendDiagnostic(
+                        "Type parameter `${syntax.name}` cannot have type arguments.",
+                        syntax.range,
+                    )
+            }
+            return TypeRef(syntax.name, nullable = syntax.nullable, typeParameter = true)
         }
         val type =
             typeNames[syntax.name] ?: run {
@@ -2066,7 +2122,16 @@ internal class SemanticAnalyzer(
                     )
                 return null
             }
-        return type.copy(nullable = syntax.nullable)
+            registry.builtinType(syntax.name)?.let { builtinType ->
+                if (builtinType.typeParameterCount != arguments.size) {
+                    diagnostics +=
+                        FrontendDiagnostic(
+                            "Type `${syntax.name}` expects ${builtinType.typeParameterCount} type argument(s), got ${arguments.size}.",
+                            syntax.range,
+                        )
+                }
+            }
+            return type.copy(nullable = syntax.nullable, arguments = arguments)
     }
 
     private fun expectAssignable(
@@ -2090,7 +2155,7 @@ internal class SemanticAnalyzer(
     ): Boolean =
         actual == expected ||
             (actual.name == "Int" && expected.name == "Long" && !actual.nullable && !expected.nullable) ||
-            (actual.nullable && expected.nullable && actual.name == expected.name)
+            (actual.nullable && expected.nullable && actual.name == expected.name && actual.arguments == expected.arguments)
 
     private fun errorBinding(
         range: SourceRange,

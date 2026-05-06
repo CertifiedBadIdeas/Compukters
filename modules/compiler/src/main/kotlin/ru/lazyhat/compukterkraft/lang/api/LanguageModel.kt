@@ -331,6 +331,7 @@ data class BuiltinType(
     val name: String,
     val documentation: String,
     val fields: List<RecordFieldDefinition> = emptyList(),
+    val typeParameterCount: Int = 0,
 )
 
 data class RecordFieldDefinition(
