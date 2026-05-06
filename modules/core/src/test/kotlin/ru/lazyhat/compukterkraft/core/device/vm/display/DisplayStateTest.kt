@@ -96,6 +96,56 @@ class DisplayStateTest {
         assertTrue(payload.containsRgb565(0x001F), "transparent zeros should preserve old pixels")
     }
 
+    @Test
+    fun blitMono5x7DrawsForegroundAndBackground() {
+        val state = DisplayState(displayId = 5, width = 8, height = 9, pixelFormat = DisplayPixelFormat.RGB565)
+
+        state.blitMono5x7(
+            x = 1,
+            y = 1,
+            row0 = 0b01110,
+            row1 = 0b10001,
+            row2 = 0b10001,
+            row3 = 0b11111,
+            row4 = 0b10001,
+            row5 = 0b10001,
+            row6 = 0b10001,
+            foreground = 0x07E0,
+            background = 0x0000,
+        )
+        val frame = assertNotNull(state.present())
+        val payload = frame.tiles.flatMap { it.payload.toList() }.toByteArray()
+
+        assertTrue(payload.containsRgb565(0x07E0), "numeric glyph blit should write foreground pixels")
+        assertTrue(payload.containsRgb565(0x0000), "numeric glyph blit should write background pixels")
+    }
+
+    @Test
+    fun blitMono5x7SupportsTransparentBackground() {
+        val state = DisplayState(displayId = 6, width = 8, height = 9, pixelFormat = DisplayPixelFormat.RGB565)
+        state.fillRect(x = 0, y = 0, width = 8, height = 9, rgb565 = 0x001F)
+        state.present()
+
+        state.blitMono5x7(
+            x = 1,
+            y = 1,
+            row0 = 0b10000,
+            row1 = 0,
+            row2 = 0,
+            row3 = 0,
+            row4 = 0,
+            row5 = 0,
+            row6 = 0,
+            foreground = 0x07E0,
+            background = -1,
+        )
+        val frame = assertNotNull(state.present())
+        val payload = frame.tiles.flatMap { it.payload.toList() }.toByteArray()
+
+        assertTrue(payload.containsRgb565(0x07E0), "foreground should be drawn")
+        assertTrue(payload.containsRgb565(0x001F), "transparent zeros should preserve old pixels")
+    }
+
     private fun ByteArray.containsRgb565(rgb565: Int): Boolean {
         var i = 0
         val hi = (rgb565 ushr 8).toByte()
