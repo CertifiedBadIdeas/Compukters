@@ -112,6 +112,21 @@ interface DeviceDisplayApi {
         background: Int,
     )
 
+    fun blitMono5x7(
+        displayId: Int,
+        x: Int,
+        y: Int,
+        row0: Int,
+        row1: Int,
+        row2: Int,
+        row3: Int,
+        row4: Int,
+        row5: Int,
+        row6: Int,
+        foreground: Int,
+        background: Int,
+    )
+
     fun present(displayId: Int)
 }
 
@@ -162,6 +177,21 @@ object NoopDeviceDisplayApi : DeviceDisplayApi {
         width: Int,
         height: Int,
         mask: String,
+        foreground: Int,
+        background: Int,
+    ) = Unit
+
+    override fun blitMono5x7(
+        displayId: Int,
+        x: Int,
+        y: Int,
+        row0: Int,
+        row1: Int,
+        row2: Int,
+        row3: Int,
+        row4: Int,
+        row5: Int,
+        row6: Int,
         foreground: Int,
         background: Int,
     ) = Unit
