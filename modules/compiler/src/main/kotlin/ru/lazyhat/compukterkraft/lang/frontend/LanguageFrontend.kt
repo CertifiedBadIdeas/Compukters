@@ -2768,6 +2768,7 @@ internal class Lexer(
                 builder.append(
                     when (val escaped = advance()) {
                         'n' -> '\n'
+                        'r' -> '\r'
                         't' -> '\t'
                         'b' -> '\b'
                         '"' -> '"'

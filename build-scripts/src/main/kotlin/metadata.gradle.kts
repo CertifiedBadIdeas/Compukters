@@ -46,11 +46,15 @@ val generateModMetadata =
 
         outputs.dir(intoDir)
 
-        from(from) { exclude { it.name.contains(".png") } }
+        from(from) {
+            exclude { element -> element.name.contains(".png") || element.name.endsWith(".ck") }
+            expand(replaceProperties)
+        }
+        from(from) {
+            include("**/*.ck")
+        }
 
         into(intoDir)
-
-        expand(replaceProperties)
     }
 
 tasks.named<ProcessResources>("processResources") {

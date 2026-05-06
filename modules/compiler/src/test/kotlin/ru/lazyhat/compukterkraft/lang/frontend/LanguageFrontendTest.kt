@@ -50,6 +50,13 @@ class LanguageFrontendTest {
     }
 
     @Test
+    fun lexesCarriageReturnEscapeInStringLiteral() {
+        val tokens = Lexer("pub fun main() { system::log(\"\\r\"); }").lex()
+
+        assertEquals("\r", tokens.single { it.kind == TokenKind.STRING }.text)
+    }
+
+    @Test
     fun lexesClassKeywords() {
         val tokens = Lexer("class Counter(var value: Int) { init {} static fun zero(): Int { return 0; } }").lex()
 

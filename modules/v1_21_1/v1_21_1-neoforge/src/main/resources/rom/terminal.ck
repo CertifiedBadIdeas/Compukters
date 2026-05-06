@@ -61,6 +61,10 @@ fun drawGlyph(displayId: Int, column: Int, row: Int, ch: String, color: Int) {
     display::blitMono(displayId, x, y, 5, 7, glyphPattern(ch), color, -1)
 }
 
+fun clearCell(displayId: Int, column: Int, row: Int) {
+    display::fillRect(displayId, column * 6, row * 9, 6, 9, 0)
+}
+
 fun waitDisplay(): Int {
     var id: Int = display::primary()
     while id == -1 {
@@ -208,6 +212,24 @@ fun appendText(displayId: Int, buffer: TerminalBuffer, text: String): TerminalBu
                 cells = scrollUp(displayId, cells)
                 row = rs - 1
             }
+        } else if (ch == "\r") {
+            if (dirtyRow >= 0) {
+                cells = commitDirtySegment(displayId, cells, dirtyRow, dirtyStartColumn, dirtyText)
+                dirtyRow = 0 - 1
+                dirtyText = ""
+            }
+            col = 0
+        } else if (ch == "\b") {
+            if (dirtyRow >= 0) {
+                cells = commitDirtySegment(displayId, cells, dirtyRow, dirtyStartColumn, dirtyText)
+                dirtyRow = 0 - 1
+                dirtyText = ""
+            }
+            if (col > 0) {
+                col = col - 1
+                cells = replaceRange(cells, row * cols + col, " ")
+                clearCell(displayId, col, row)
+            }
         } else {
             if (row >= rs) {
                 cells = scrollUp(displayId, cells)
@@ -321,7 +343,6 @@ pub fun main() {
                     val key: Int = events::argInt(event, 0)
                     if (key == 257 || key == 335) {
                         ipc::write(input, line)
-                        buffer = appendText(displayId, buffer, line + "\n")
                         line = ""
                     } else if (key == 259) {
                         if (line != "") {

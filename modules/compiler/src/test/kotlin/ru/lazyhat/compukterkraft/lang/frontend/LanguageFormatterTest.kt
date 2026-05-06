@@ -77,6 +77,22 @@ class LanguageFormatterTest {
     }
 
     @Test
+    fun formatEscapesTerminalControlCharactersInStrings() {
+        val source = "pub fun main(){system::log(\"\r\b\");}"
+
+        val formatted = applySingleEdit(source, formatter.formatDocument("main.ck", source))
+
+        assertEquals(
+            """
+            pub fun main() {
+                system::log("\r\b")
+            }
+            """.trimIndent() + "\n",
+            formatted,
+        )
+    }
+
+    @Test
     fun formatRemovesStatementAndImportSemicolons() {
         val source = "import terminal { println };\nfun main(){println(\"hi\");return;}"
         val expected =

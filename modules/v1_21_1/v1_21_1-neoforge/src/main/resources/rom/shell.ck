@@ -49,6 +49,7 @@ pub fun main() {
     while true {
         write(ctx, displayPath(process::currentDirectory()) + " > ")
         val line: String = readLine(ctx)
+        write(ctx, line + "\n")
         val trimmed: String = strings::trim(line)
         if (strings::isBlank(trimmed)) {
             yield()
