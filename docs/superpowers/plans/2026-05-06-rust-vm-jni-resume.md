@@ -484,7 +484,7 @@ fun primitiveRuntimeValuesEncodeForResume() {
 
 - [ ] **Step 2: Verify RED**
 
-Run: `./gradlew :modules:compiler:test --tests '*NativeVmSignalTest'`
+Run: `./gradlew :compiler:test --tests '*NativeVmSignalTest'`
 
 Expected: FAIL because conversion/encoding methods do not exist.
 
@@ -546,7 +546,7 @@ Each method calls `ensureLoaded(libraryPath)` where needed and validates non-zer
 
 - [ ] **Step 4: Verify GREEN**
 
-Run: `./gradlew :modules:compiler:test --tests '*NativeVmSignalTest'`
+Run: `./gradlew :compiler:test --tests '*NativeVmSignalTest'`
 
 Expected: PASS.
 
@@ -597,7 +597,7 @@ Run:
 
 ```bash
 ./gradlew buildRustVmNativeLibrary
-./gradlew :modules:compiler:test --tests '*NativeVmRunnerJniTest' -Dckl.vm.native.library=native/ckl-vm/target/debug/libckl_vm.so
+./gradlew :compiler:test --tests '*NativeVmRunnerJniTest' -Dckl.vm.native.library=native/ckl-vm/target/debug/libckl_vm.so
 ```
 
 Expected: FAIL because `NativeVmRunner` still uses one-shot `runUntilSignal` and rejects `HostCall`.
@@ -646,7 +646,7 @@ Run:
 
 ```bash
 ./gradlew buildRustVmNativeLibrary
-./gradlew :modules:compiler:test --tests '*NativeVmRunnerJniTest' -Dckl.vm.native.library=native/ckl-vm/target/debug/libckl_vm.so
+./gradlew :compiler:test --tests '*NativeVmRunnerJniTest' -Dckl.vm.native.library=native/ckl-vm/target/debug/libckl_vm.so
 ```
 
 Expected: PASS.
@@ -679,7 +679,7 @@ Run:
 
 ```bash
 ./gradlew buildRustVmNativeLibrary
-./gradlew :modules:compiler:test --tests '*NativeVm*' -Dckl.vm.native.library=native/ckl-vm/target/debug/libckl_vm.so
+./gradlew :compiler:test --tests '*NativeVm*' -Dckl.vm.native.library=native/ckl-vm/target/debug/libckl_vm.so
 ```
 
 Expected: PASS.
