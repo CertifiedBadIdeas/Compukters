@@ -38,6 +38,15 @@ class NativeVmRunnerJniTest {
         }
     }
 
+    @Test
+    fun nativeRunnerResumesAfterDisplayPrimaryHostCallWhenLibraryIsConfigured() {
+        val libraryPath = System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+
+        runBlocking {
+            NativeVmRunner.fromLibraryPath(libraryPath).run(displayPrimaryPlusOneModule(), RecordingRuntime())
+        }
+    }
+
     private fun additionModule(): BytecodeModule =
         BytecodeModule(
             name = "native-smoke",
@@ -52,6 +61,32 @@ class NativeVmRunnerJniTest {
                             listOf(
                                 Instruction.PushInt(1),
                                 Instruction.PushInt(2),
+                                Instruction.Binary(BinaryOperator.ADD),
+                                Instruction.Return,
+                            ),
+                        sourceRange = null,
+                    ),
+                ),
+            records = emptyList(),
+            classes = emptyList(),
+            entryFunctionIndex = 0,
+            registry = BuiltinRegistry(modules = emptyList(), globals = emptyList(), builtinTypes = emptyList()),
+        )
+
+    private fun displayPrimaryPlusOneModule(): BytecodeModule =
+        BytecodeModule(
+            name = "native-host-call-smoke",
+            functions =
+                listOf(
+                    BytecodeFunction(
+                        name = "main",
+                        parameters = emptyList(),
+                        locals = emptyList(),
+                        returnType = "Int",
+                        instructions =
+                            listOf(
+                                Instruction.CallBuiltin("display", "primary", 0),
+                                Instruction.PushInt(1),
                                 Instruction.Binary(BinaryOperator.ADD),
                                 Instruction.Return,
                             ),
