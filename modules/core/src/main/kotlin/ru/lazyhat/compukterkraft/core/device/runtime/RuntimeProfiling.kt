@@ -19,6 +19,7 @@
 
 package ru.lazyhat.compukterkraft.core.device.runtime
 
+import ru.lazyhat.compukterkraft.lang.runtime.VmSignalKind
 import java.util.concurrent.atomic.AtomicLong
 
 interface RuntimeMetricsCollector {
@@ -62,6 +63,8 @@ interface RuntimeMetricsCollector {
 
     fun recordVmExecutionWindow(nanos: Long)
 
+    fun recordVmSignal(kind: VmSignalKind)
+
     fun snapshot(): RuntimeProfilingSnapshot
 }
 
@@ -97,7 +100,15 @@ data class RuntimeVmMetrics(
     val waitForSliceSchedulingPoints: Long = 0,
     val executionWindows: Long = 0,
     val executionWindowNanos: Long = 0,
-)
+    val haltSignals: Long = 0,
+    val pauseSignals: Long = 0,
+    val yieldSignals: Long = 0,
+    val sleepSignals: Long = 0,
+    val waitEventSignals: Long = 0,
+    val hostCallSignals: Long = 0,
+) {
+    val averageExecutionWindowNanos: Long get() = if (executionWindows <= 0) 0 else executionWindowNanos / executionWindows
+}
 
 data class RuntimeProfilingSnapshot(
     val tick: RuntimeTickMetrics = RuntimeTickMetrics(),
@@ -116,7 +127,9 @@ data class RuntimeProfilingSnapshot(
             "sleepGated=${vm.sleepGatedSliceRequests}, permitsReceived=${vm.slicePermitsReceived}, " +
             "schedulingPoints=${vm.schedulingPoints}, yieldPoints=${vm.yieldSchedulingPoints}, " +
             "waitPoints=${vm.waitForSliceSchedulingPoints}, executionWindows=${vm.executionWindows}, " +
-            "executionNanos=${vm.executionWindowNanos}"
+            "executionNanos=${vm.executionWindowNanos}, avgExecutionWindowNanos=${vm.averageExecutionWindowNanos}\n" +
+            "signals: halt=${vm.haltSignals}, pause=${vm.pauseSignals}, yield=${vm.yieldSignals}, " +
+            "sleep=${vm.sleepSignals}, waitEvent=${vm.waitEventSignals}, hostCall=${vm.hostCallSignals}"
 }
 
 object NoOpRuntimeMetricsCollector : RuntimeMetricsCollector {
@@ -160,6 +173,8 @@ object NoOpRuntimeMetricsCollector : RuntimeMetricsCollector {
 
     override fun recordVmExecutionWindow(nanos: Long) = Unit
 
+    override fun recordVmSignal(kind: VmSignalKind) = Unit
+
     override fun snapshot(): RuntimeProfilingSnapshot = RuntimeProfilingSnapshot()
 }
 
@@ -192,6 +207,12 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
     private val waitForSliceSchedulingPoints = AtomicLong()
     private val executionWindows = AtomicLong()
     private val executionWindowNanos = AtomicLong()
+    private val haltSignals = AtomicLong()
+    private val pauseSignals = AtomicLong()
+    private val yieldSignals = AtomicLong()
+    private val sleepSignals = AtomicLong()
+    private val waitEventSignals = AtomicLong()
+    private val hostCallSignals = AtomicLong()
 
     override fun recordServerTick(nanos: Long) {
         serverTickCalls.incrementAndGet()
@@ -275,6 +296,17 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
         executionWindowNanos.addAndGet(nanos.coerceAtLeast(0))
     }
 
+    override fun recordVmSignal(kind: VmSignalKind) {
+        when (kind) {
+            VmSignalKind.HALT -> haltSignals.incrementAndGet()
+            VmSignalKind.PAUSE -> pauseSignals.incrementAndGet()
+            VmSignalKind.YIELD -> yieldSignals.incrementAndGet()
+            VmSignalKind.SLEEP -> sleepSignals.incrementAndGet()
+            VmSignalKind.WAIT_EVENT -> waitEventSignals.incrementAndGet()
+            VmSignalKind.HOST_CALL -> hostCallSignals.incrementAndGet()
+        }
+    }
+
     override fun snapshot(): RuntimeProfilingSnapshot =
         RuntimeProfilingSnapshot(
             tick =
@@ -310,6 +342,12 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
                     waitForSliceSchedulingPoints = waitForSliceSchedulingPoints.get(),
                     executionWindows = executionWindows.get(),
                     executionWindowNanos = executionWindowNanos.get(),
+                        haltSignals = haltSignals.get(),
+                        pauseSignals = pauseSignals.get(),
+                        yieldSignals = yieldSignals.get(),
+                        sleepSignals = sleepSignals.get(),
+                        waitEventSignals = waitEventSignals.get(),
+                        hostCallSignals = hostCallSignals.get(),
                 ),
         )
 }

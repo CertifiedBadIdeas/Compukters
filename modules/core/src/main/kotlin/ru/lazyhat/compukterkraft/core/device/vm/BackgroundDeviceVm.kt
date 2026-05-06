@@ -54,11 +54,13 @@ import ru.lazyhat.compukterkraft.lang.api.BuiltinRegistry
 import ru.lazyhat.compukterkraft.lang.frontend.LanguageBuiltins
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceCapability
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceProfile
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceRuntimeMetrics
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceVmHandle
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.HostCall
 import ru.lazyhat.compukterkraft.lang.runtime.HostResult
 import ru.lazyhat.compukterkraft.lang.runtime.VmEvent
+import ru.lazyhat.compukterkraft.lang.runtime.VmSignalKind
 import ru.lazyhat.compukterkraft.lang.runtime.VmSnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.VmState
 import ru.lazyhat.compukterkraft.lang.runtime.VmStopReason
@@ -127,6 +129,12 @@ class BackgroundDeviceVm(
     private val peripheralRegistry = VmPeripheralRegistry()
     private val runtimeRegistryProfile = createRuntimeRegistryProfile()
     private var executionWindowStartedNanos: Long? = null
+
+    private inner class RuntimeMetricsApi : DeviceRuntimeMetrics {
+        override fun recordVmSignal(kind: VmSignalKind) {
+            runtimeMetricsCollector.recordVmSignal(kind)
+        }
+    }
 
     /**
      * Observe terminal VM states (stopped, crashed).
@@ -367,6 +375,7 @@ class BackgroundDeviceVm(
             ipcApi = VmIpcApi(ipcRegistry),
             eventApi = VmEventApi(eventPayloadStore),
             peripheralsApi = peripheralsApi,
+            metricsApi = RuntimeMetricsApi(),
         )
     }
 
