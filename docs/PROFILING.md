@@ -100,13 +100,27 @@ Run Rust crate tests:
 cd native/ckl-vm && cargo test
 ```
 
+Build the local JNI library:
+
+```bash
+cd native/ckl-vm && cargo build
+```
+
 Run Kotlin ABI and runner seam tests:
 
 ```bash
 ./gradlew :compiler:test --tests ru.lazyhat.compukterkraft.lang.runtime.BytecodeAbiTest --tests ru.lazyhat.compukterkraft.lang.runtime.VmRunnerSelectionTest
 ```
 
-The native runner is disabled unless `-Dckl.vm.native.library=/absolute/path/to/libckl_vm.so` is provided. The Kotlin VM remains the default runtime path.
+Run the optional Kotlin JNI smoke test with the local debug library:
+
+```bash
+./gradlew :compiler:test \
+  --tests ru.lazyhat.compukterkraft.lang.runtime.native.NativeVmRunnerJniTest \
+  -Dckl.vm.native.library=$PWD/native/ckl-vm/target/debug/libckl_vm.so
+```
+
+The native runner is disabled unless both `-Dckl.vm.runner=rust` and `-Dckl.vm.native.library=/absolute/path/to/libckl_vm.so` are provided. The Kotlin VM remains the default runtime path.
 
 ## Interpretation notes
 
