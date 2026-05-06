@@ -278,6 +278,12 @@ data class IndexAccessExpression(
     override val range: SourceRange,
 ) : Expression
 
+data class TypeApplicationExpression(
+    val name: String,
+    val arguments: List<TypeSyntax>,
+    override val range: SourceRange,
+) : Expression
+
 data class RecordConstructionExpression(
     val typeName: String,
     val fields: List<RecordFieldInitializer>,
