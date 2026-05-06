@@ -109,7 +109,10 @@ class LanguageIdeTest {
         val snapshot = ide.analyze("bitwise.ck", source)
 
         assertTrue(snapshot.highlights.any { it.kind == HighlightTokenKind.OPERATOR }, snapshot.highlights.joinToString())
-        assertTrue(snapshot.diagnostics.none { it.severity == IdeDiagnosticSeverity.ERROR }, snapshot.diagnostics.joinToString { it.message })
+        assertTrue(
+            snapshot.diagnostics.none { it.severity == IdeDiagnosticSeverity.ERROR },
+            snapshot.diagnostics.joinToString { it.message },
+        )
     }
 
     @Test

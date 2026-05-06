@@ -50,7 +50,12 @@ class LanguageCollectionsSemanticTest {
                 """.trimIndent(),
             )
 
-        assertTrue(artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR }, artifact.analysis.diagnostics.joinToString { it.message })
+        assertTrue(
+            artifact.analysis.diagnostics.none {
+                it.severity == FrontendSeverity.ERROR
+            },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
     }
 
     @Test

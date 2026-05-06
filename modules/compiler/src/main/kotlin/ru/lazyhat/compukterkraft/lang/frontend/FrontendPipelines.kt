@@ -165,17 +165,18 @@ internal class DefaultAnalyzerFacade(
         val semantic =
             SemanticAnalyzer(registry, name)
                 .analyze(program)
-        val analysis = AnalyzedProgram(
-            name = parsed.name,
-            source = parsed.source,
-            tokens = parsed.tokens,
-            program = program,
-            diagnostics = parsed.syntaxDiagnostics + semantic.diagnostics,
-            symbols = semantic.symbols,
-            references = semantic.references,
-            builtinModules = registry.modules,
-            builtinGlobals = registry.globals,
-        ).rememberSemantic(semantic)
+        val analysis =
+            AnalyzedProgram(
+                name = parsed.name,
+                source = parsed.source,
+                tokens = parsed.tokens,
+                program = program,
+                diagnostics = parsed.syntaxDiagnostics + semantic.diagnostics,
+                symbols = semantic.symbols,
+                references = semantic.references,
+                builtinModules = registry.modules,
+                builtinGlobals = registry.globals,
+            ).rememberSemantic(semantic)
         metricsCollector.recordAnalyze(
             name,
             diagnostics = analysis.diagnostics.size,
@@ -301,21 +302,22 @@ internal class DefaultCompilerFacade(
                     resolveImport = { path -> loader.resolve(canonical, path) },
                     lookupExports = { dependency -> exports[dependency] },
                 ).analyze(source.program)
-            val analysis = AnalyzedProgram(
-                name = source.name,
-                source = source.source,
-                tokens = source.tokens,
-                program = source.program,
-                diagnostics =
-                    source.syntaxDiagnostics +
-                        (importDiagnostics[canonical] ?: emptyList()) +
-                        semantic.diagnostics +
-                        if (canonical == rootName) entryPointDiagnostics(source) else emptyList(),
-                symbols = semantic.symbols,
-                references = semantic.references,
-                builtinModules = registry.modules,
-                builtinGlobals = registry.globals,
-            ).rememberSemantic(semantic)
+            val analysis =
+                AnalyzedProgram(
+                    name = source.name,
+                    source = source.source,
+                    tokens = source.tokens,
+                    program = source.program,
+                    diagnostics =
+                        source.syntaxDiagnostics +
+                            (importDiagnostics[canonical] ?: emptyList()) +
+                            semantic.diagnostics +
+                            if (canonical == rootName) entryPointDiagnostics(source) else emptyList(),
+                    symbols = semantic.symbols,
+                    references = semantic.references,
+                    builtinModules = registry.modules,
+                    builtinGlobals = registry.globals,
+                ).rememberSemantic(semantic)
             metricsCollector.recordAnalyze(
                 canonical,
                 diagnostics = analysis.diagnostics.size,

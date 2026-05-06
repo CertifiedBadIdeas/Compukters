@@ -87,8 +87,8 @@ abstract class AbstractComputerMenu(
     /**
      * Type-safe side discriminator.
      * On the server: [MenuSide.Server] — holds the [RuntimeDevice] + input.
-    * On the client: [MenuSide.Client] — holds the [ClientDisplayBuffer]
-    * attached by the open computer screen.
+     * On the client: [MenuSide.Client] — holds the [ClientDisplayBuffer]
+     * attached by the open computer screen.
      */
 
     override val side: MenuSide =

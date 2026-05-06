@@ -84,6 +84,7 @@ internal class VmProcessManager(
         workingDirectory: String,
     ): Int {
         val stderr = StdioDescriptor.decode(argument)?.stderr
+
         suspend fun reportError(message: String) {
             ctx.log("VM[$deviceId] $message")
             if (stderr != null && stderr >= 0) {

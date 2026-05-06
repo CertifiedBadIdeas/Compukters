@@ -342,12 +342,12 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
                     waitForSliceSchedulingPoints = waitForSliceSchedulingPoints.get(),
                     executionWindows = executionWindows.get(),
                     executionWindowNanos = executionWindowNanos.get(),
-                        haltSignals = haltSignals.get(),
-                        pauseSignals = pauseSignals.get(),
-                        yieldSignals = yieldSignals.get(),
-                        sleepSignals = sleepSignals.get(),
-                        waitEventSignals = waitEventSignals.get(),
-                        hostCallSignals = hostCallSignals.get(),
+                    haltSignals = haltSignals.get(),
+                    pauseSignals = pauseSignals.get(),
+                    yieldSignals = yieldSignals.get(),
+                    sleepSignals = sleepSignals.get(),
+                    waitEventSignals = waitEventSignals.get(),
+                    hostCallSignals = hostCallSignals.get(),
                 ),
         )
 }

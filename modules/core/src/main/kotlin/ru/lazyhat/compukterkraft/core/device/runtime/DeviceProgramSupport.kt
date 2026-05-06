@@ -18,17 +18,16 @@
  */
 package ru.lazyhat.compukterkraft.core.device.runtime
 
-import ru.lazyhat.compukterkraft.core.language.LanguageServices
 import ru.lazyhat.compukterkraft.lang.api.BuiltinRegistry
 import ru.lazyhat.compukterkraft.lang.api.BytecodeClass
 import ru.lazyhat.compukterkraft.lang.api.BytecodeFunction
 import ru.lazyhat.compukterkraft.lang.api.BytecodeModule
 import ru.lazyhat.compukterkraft.lang.api.BytecodeRecord
 import ru.lazyhat.compukterkraft.lang.api.Instruction
+import ru.lazyhat.compukterkraft.lang.frontend.CompilerMetricsCollector
 import ru.lazyhat.compukterkraft.lang.frontend.FrontendSeverity
 import ru.lazyhat.compukterkraft.lang.frontend.LanguageBuiltins
 import ru.lazyhat.compukterkraft.lang.frontend.LanguageFrontend
-import ru.lazyhat.compukterkraft.lang.frontend.CompilerMetricsCollector
 import ru.lazyhat.compukterkraft.lang.frontend.NoOpCompilerMetricsCollector
 import ru.lazyhat.compukterkraft.lang.frontend.NoOpSourceLoader
 import ru.lazyhat.compukterkraft.lang.frontend.SourceLoader

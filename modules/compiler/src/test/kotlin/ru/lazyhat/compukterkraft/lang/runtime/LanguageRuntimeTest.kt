@@ -600,7 +600,12 @@ class LanguageRuntimeTest {
                 """.trimIndent(),
             )
 
-        assertTrue(artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR }, artifact.analysis.diagnostics.joinToString { it.message })
+        assertTrue(
+            artifact.analysis.diagnostics.none {
+                it.severity == FrontendSeverity.ERROR
+            },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
         val runtime = RecordingRuntime()
         runBlocking { BytecodeComputerProgram(requireNotNull(artifact.module)).run(runtime) }
         assertEquals(listOf("list=3:1:7:3", "array=2:5:9", "map=1:ok:true"), runtime.lines)
@@ -623,7 +628,12 @@ class LanguageRuntimeTest {
                 }
                 """.trimIndent(),
             )
-        assertTrue(artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR }, artifact.analysis.diagnostics.joinToString { it.message })
+        assertTrue(
+            artifact.analysis.diagnostics.none {
+                it.severity == FrontendSeverity.ERROR
+            },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
         val runtime = RecordingRuntime()
         runBlocking { BytecodeComputerProgram(requireNotNull(artifact.module)).run(runtime) }
         assertEquals(listOf("ab:3:4"), runtime.lines)
@@ -641,10 +651,16 @@ class LanguageRuntimeTest {
                 }
                 """.trimIndent(),
             )
-        assertTrue(artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR }, artifact.analysis.diagnostics.joinToString { it.message })
-        val failure = assertFailsWith<IllegalStateException> {
-            runBlocking { BytecodeComputerProgram(requireNotNull(artifact.module)).run(RecordingRuntime()) }
-        }
+        assertTrue(
+            artifact.analysis.diagnostics.none {
+                it.severity == FrontendSeverity.ERROR
+            },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+        val failure =
+            assertFailsWith<IllegalStateException> {
+                runBlocking { BytecodeComputerProgram(requireNotNull(artifact.module)).run(RecordingRuntime()) }
+            }
         assertTrue(failure.message.orEmpty().contains("Index 2 out of bounds"), failure.message.orEmpty())
     }
 

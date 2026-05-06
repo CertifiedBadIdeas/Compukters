@@ -51,8 +51,8 @@ import ru.lazyhat.compukterkraft.core.device.vm.display.DisplayRegistry
 import ru.lazyhat.compukterkraft.core.device.vm.display.NoOpDisplayMetricsCollector
 import ru.lazyhat.compukterkraft.lang.api.BuiltinModule
 import ru.lazyhat.compukterkraft.lang.api.BuiltinRegistry
-import ru.lazyhat.compukterkraft.lang.frontend.LanguageBuiltins
 import ru.lazyhat.compukterkraft.lang.frontend.CompilerMetricsCollector
+import ru.lazyhat.compukterkraft.lang.frontend.LanguageBuiltins
 import ru.lazyhat.compukterkraft.lang.frontend.NoOpCompilerMetricsCollector
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceCapability
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceProfile

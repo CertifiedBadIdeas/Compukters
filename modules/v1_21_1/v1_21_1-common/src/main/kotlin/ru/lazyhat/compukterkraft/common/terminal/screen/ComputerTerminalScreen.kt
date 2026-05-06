@@ -321,13 +321,9 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
             contentTopInset = COMPUTER_CONTENT_TOP,
         )
 
-    private fun currentDisplayWidth(): Int {
-        return (DEFAULT_COLS * TerminalFontConstants.FONT_WIDTH).coerceAtLeast(64)
-    }
+    private fun currentDisplayWidth(): Int = (DEFAULT_COLS * TerminalFontConstants.FONT_WIDTH).coerceAtLeast(64)
 
-    private fun currentDisplayHeight(): Int {
-        return (DEFAULT_ROWS * TerminalFontConstants.FONT_HEIGHT).coerceAtLeast(48)
-    }
+    private fun currentDisplayHeight(): Int = (DEFAULT_ROWS * TerminalFontConstants.FONT_HEIGHT).coerceAtLeast(48)
 
     private fun statusButtonBounds(
         statusBounds: TerminalRect,
