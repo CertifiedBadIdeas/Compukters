@@ -65,6 +65,41 @@ fun draw_text(displayId: Int, row: Int, text: String, color: Int) {
     }
 }
 
+fun draw_sprite(displayId: Int, x: Int, y: Int, width: Int, height: Int, pattern: String, color: Int) {
+    display::blitMono(displayId, x, y, width, height, pattern, color, -1)
+}
+
+fun draw_splash(displayId: Int) {
+    display::clear(displayId, 0)
+    display::fillRect(displayId, 0, 0, display::width(displayId), 2, 2016)
+    display::fillRect(displayId, 0, display::height(displayId) - 3, display::width(displayId), 3, 2016)
+    draw_text(displayId, 1, "Compukter", 2016)
+    draw_text(displayId, 3, "KRAFT BIOS", 65535)
+    draw_sprite(displayId, 6, 52, 17, 9, "111111111111111111000000000000000110111100111100101101000001000001011011110011110010110000000000000001111111111111111110000001111100000000001111111110000", 63488)
+    draw_text(displayId, 10, "Loading boot.ck...", 65535)
+    display::present(displayId)
+}
+
+fun draw_splash_frame() {
+    val id: Int = display::primary()
+    if (id >= 0) {
+        draw_splash(id)
+    }
+}
+
+fun hold_splash(ticks: Int) {
+    draw_splash_frame()
+    var remaining: Int = ticks
+    while remaining > 0 {
+        val event: Event = events::tryPull()
+        if (event.name == "display_attach" || event.name == "display_resize") {
+            draw_splash_frame()
+        }
+        remaining = remaining - 1
+        sleep(1)
+    }
+}
+
 fun draw_boot_frame(status: String) {
     val id: Int = display::primary()
     if (id >= 0) {
@@ -76,6 +111,8 @@ fun draw_boot_frame(status: String) {
 }
 
 pub fun main() {
+    hold_splash(40)
+
     var status: String = "Searching for boot.ck..."
     draw_boot_frame(status)
 
