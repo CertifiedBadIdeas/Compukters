@@ -26,6 +26,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import ru.lazyhat.compukterkraft.core.device.runtime.FirmwareProgramLoader
 import ru.lazyhat.compukterkraft.core.device.runtime.LoadedFirmwareProgramSource
+import ru.lazyhat.compukterkraft.core.device.runtime.RecordingRuntimeMetricsCollector
 import ru.lazyhat.compukterkraft.core.device.runtime.test.runtimeProfile
 import ru.lazyhat.compukterkraft.core.device.runtime.test.runtimeTestWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceCapability
@@ -61,6 +62,46 @@ class BackgroundDeviceVmTest {
     }
 
     private fun firmwareTestProfile(): DeviceProfile = runtimeProfile()
+
+    @Test
+    fun recordsRuntimeSchedulingMetrics() {
+        runtimeTestWorkspace("vm-runtime-profiling") { workspace ->
+            val metrics = RecordingRuntimeMetricsCollector()
+            val vm =
+                BackgroundDeviceVm(
+                    deviceId = 1,
+                    profile = firmwareTestProfile(),
+                    dispatcher = Dispatchers.Default,
+                    labelProvider = { null },
+                    logger = DeviceVmLogger { },
+                    workspace = workspace.host,
+                    firmwareLoader =
+                        StaticFirmwareLoader(
+                            """
+                            pub fun main() {
+                                var count: Int = 0;
+                                while count < 3 {
+                                    count = count + 1;
+                                    sleep(1L);
+                                }
+                            }
+                            """.trimIndent(),
+                        ),
+                    runtimeMetricsCollector = metrics,
+                )
+
+            assertTrue(vm.boot())
+            runVmTicks(vm, ticks = 12)
+
+            val snapshot = metrics.snapshot()
+            assertTrue(snapshot.vm.sliceRequests > 0, snapshot.summary())
+            assertTrue(snapshot.vm.slicePermitsSent > 0, snapshot.summary())
+            assertTrue(snapshot.vm.slicePermitsReceived > 0, snapshot.summary())
+            assertTrue(snapshot.vm.schedulingPoints > 0, snapshot.summary())
+            assertTrue(snapshot.vm.executionWindows > 0, snapshot.summary())
+            assertTrue(snapshot.vm.executionWindowNanos > 0, snapshot.summary())
+        }
+    }
 
     @Test
     fun ownsDisplayRegistryFrames() {
