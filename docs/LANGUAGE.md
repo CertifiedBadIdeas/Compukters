@@ -19,6 +19,7 @@ Statements:
 - `val name = expr`
 - `var counter: Int = 0`
 - `name = expr` (reassign a `var`; `val` cannot be reassigned)
+- `collection[index] = expr` (assigns an `Array`, `List`, or `Map` element)
 - `name += expr`, `name -= expr`, `name *= expr`, `name /= expr`, `name &= expr`, `name |= expr`, `name ^= expr`, `name <<= expr`, `name >>= expr` (compound, desugars to `name = name <op> expr`)
 - `if (condition) { ... } else { ... }`
 - `if (condition) { ... } else if (condition) { ... } else { ... }`
@@ -76,6 +77,10 @@ Expressions:
 - function calls: `main()`, `helper()`
 - struct construction: `Vec2(x = 1, y = 2)`
 - class construction: `Counter(value = 1)`
+- list literals: `[1, 2, 3]`
+- map literals: `{"a": 1, "b": 2}`
+- indexing: `xs[0]`, `table["key"]`
+- array construction: `Array<Int>(size = 4, default = 0)`
 
 ### Bitwise operators
 
@@ -165,7 +170,7 @@ Rules:
 - `this` is available in instance methods and `init` blocks, but not in `static fun`.
 - `val` fields can only be assigned during construction; `var` fields can be assigned later.
 - Instances have reference identity: two variables can refer to the same object and observe shared mutation.
-- Inheritance, interfaces, and generics are not part of v1.
+- Inheritance and interfaces are not part of v1.
 
 ## Visibility
 
@@ -191,6 +196,122 @@ Builtin types:
 - `Event`
 
 User-defined struct types are declared with `struct`. User-defined reference object types are declared with `class`.
+
+## Generics
+
+Functions, structs, and classes can declare type parameters. Generic type arguments are checked at compile time and erased at runtime.
+
+```ck
+pub struct Pair<A, B> { first: A, second: B }
+
+pub class Box<T>(pub var value: T) {
+    pub fun current(): T {
+        return this.value
+    }
+}
+
+pub fun identity<T>(value: T): T {
+    return value
+}
+```
+
+Generic types use angle brackets and may be nested:
+
+```ck
+val xs: List<Int> = [1, 2, 3]
+val groups: Map<String, List<Int>> = {"even": [2, 4]}
+```
+
+## Collections
+
+CKL has three mutable native collection types:
+
+- `Array<T>`: fixed-size mutable indexed storage.
+- `List<T>`: growable mutable indexed storage.
+- `Map<K, V>`: mutable insertion-ordered key/value storage.
+
+Collection type arguments are enforced by the compiler. Runtime collection values are native reference objects.
+
+### `Array<T>`
+
+Create arrays with an explicit generic constructor:
+
+```ck
+val pixels: Array<Int> = Array<Int>(size = 16, default = 0)
+pixels[0] = 255
+val first: Int = pixels[0]
+```
+
+Methods:
+
+- `size(): Int`
+- `get(index: Int): T`
+- `set(index: Int, value: T): Unit`
+- `getOrNull(index: Int): T?`
+
+### `List<T>`
+
+List literals use square brackets. Empty list literals require an expected `List<T>` type.
+
+```ck
+val xs: List<Int> = [1, 2]
+xs.add(3)
+xs[0] = 42
+```
+
+Methods:
+
+- `size(): Int`
+- `isEmpty(): Bool`
+- `get(index: Int): T`
+- `set(index: Int, value: T): Unit`
+- `getOrNull(index: Int): T?`
+- `add(value: T): Unit`
+- `insert(index: Int, value: T): Unit`
+- `removeAt(index: Int): T`
+- `clear(): Unit`
+
+### `Map<K, V>`
+
+Map literals use `{key: value}` entries. Empty map literals require an expected `Map<K, V>` type.
+
+```ck
+val ports: Map<String, Int> = {"http": 80, "https": 443}
+ports["ssh"] = 22
+val maybePort: Int? = ports["http"]
+```
+
+Methods:
+
+- `size(): Int`
+- `isEmpty(): Bool`
+- `containsKey(key: K): Bool`
+- `get(key: K): V?`
+- `getOrDefault(key: K, default: V): V`
+- `set(key: K, value: V): Unit`
+- `remove(key: K): V?`
+- `clear(): Unit`
+- `keys(): List<K>`
+- `values(): List<V>`
+
+Map keys may be any non-null CKL value/reference type. Primitive values and strings compare by value, structs compare structurally, and class/collection objects compare by reference identity. `Map` preserves insertion order for `keys()` and `values()`.
+
+### Indexing
+
+`Array<T>` and `List<T>` indexed reads return `T`; invalid indexes crash the running program. `getOrNull(index)` returns `null` instead.
+
+`Map<K, V>` indexed reads return `V?` because a key can be absent:
+
+```ck
+val value: Int? = ports["missing"]
+```
+
+Indexed assignment mutates the receiver:
+
+```ck
+xs[1] = 99
+ports["debug"] = 5005
+```
 
 ## Builtin Modules
 

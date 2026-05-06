@@ -136,6 +136,57 @@ class LanguageFrontendTest {
     }
 
     @Test
+    fun parsesGenericTypeDeclarationsAndNestedTypeArguments() {
+        val parsed =
+            DefaultParserFacade().parse(
+                "generics.ck",
+                """
+                pub struct Pair<A, B> { first: A, second: B }
+                pub class Box<T>(pub var value: T) {
+                    pub fun current(): T { return this.value; }
+                }
+                pub fun identity<T>(value: T): T { return value; }
+                pub fun main() {
+                    val xs: List<Int> = null;
+                    val table: Map<String, List<Int>> = null;
+                }
+                """.trimIndent(),
+            )
+
+        assertTrue(parsed.syntaxDiagnostics.none { it.severity == FrontendSeverity.ERROR }, parsed.syntaxDiagnostics.joinToString { it.message })
+        val pair = parsed.program.declarations.filterIsInstance<StructDeclaration>().single()
+        assertEquals(listOf("A", "B"), pair.typeParameters.map { it.name })
+        assertEquals("A", pair.fields.single { it.name == "first" }.type.name)
+
+        val box = parsed.program.declarations.filterIsInstance<ClassDeclaration>().single()
+        assertEquals(listOf("T"), box.typeParameters.map { it.name })
+        assertEquals("T", box.constructorParameters.single().type.name)
+
+        val identity = parsed.program.declarations.filterIsInstance<FunctionDeclaration>().single { it.name == "identity" }
+        assertEquals(listOf("T"), identity.typeParameters.map { it.name })
+        assertEquals("T", identity.returnType?.name)
+    }
+
+    @Test
+    fun parsesCollectionLiteralsAndIndexing() {
+        val parsed =
+            DefaultParserFacade().parse(
+                "collections_parse.ck",
+                """
+                pub fun main() {
+                    val xs: List<Int> = [1, 2, 3];
+                    val table: Map<String, Int> = {"a": 1, "b": 2};
+                    val first: Int = xs[0];
+                    xs[1] = 42;
+                    table["c"] = first;
+                }
+                """.trimIndent(),
+            )
+
+        assertTrue(parsed.syntaxDiagnostics.none { it.severity == FrontendSeverity.ERROR }, parsed.syntaxDiagnostics.joinToString { it.message })
+    }
+
+    @Test
     fun parsesPubTopLevelDeclarationsAndClassMembers() {
         val parsed =
             DefaultParserFacade().parse(

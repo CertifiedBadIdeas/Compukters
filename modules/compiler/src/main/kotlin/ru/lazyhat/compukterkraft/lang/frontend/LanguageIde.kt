@@ -218,7 +218,21 @@ class LanguageIde(
         offset: Int,
         receiverName: String,
     ): List<SymbolInfo> {
-        val semantic = analysis.semantic ?: return incompleteThisMemberSymbols(source, offset, receiverName)
+        val declaredType = declaredReceiverType(source, offset, receiverName)
+        val semantic = analysis.semantic ?: return incompleteThisMemberSymbols(source, offset, receiverName) + collectionMemberSymbols(declaredType)
+        val visibleSymbols = analysis.visibleSymbolsAt(offset)
+        val receiverSymbolType =
+            if (receiverName == "this") {
+                null
+            } else {
+                visibleSymbols
+                    .firstOrNull { it.name == receiverName && (it.kind == SymbolKind.VARIABLE || it.kind == SymbolKind.PARAMETER) }
+                    ?.detail
+                    ?.substringAfter(':', "")
+                    ?.trim()
+                    ?.removeSuffix("?")
+            }
+        val receiverType = receiverSymbolType ?: declaredType
         val classBinding =
             if (receiverName == "this") {
                 semantic.classBindings.values.firstOrNull { it.declaration.range.contains(offset) }
@@ -226,23 +240,15 @@ class LanguageIde(
                         .filter { it.declaration.range.start.offset <= offset }
                         .maxByOrNull { it.declaration.range.start.offset }
             } else {
-                val visibleSymbols = analysis.visibleSymbolsAt(offset)
                 visibleSymbols.firstOrNull { it.name == receiverName && it.kind == SymbolKind.CLASS }?.let { classSymbol ->
                     semantic.classBindings.values.firstOrNull { it.symbol.name == classSymbol.name }
-                } ?: visibleSymbols
-                    .firstOrNull { it.name == receiverName && (it.kind == SymbolKind.VARIABLE || it.kind == SymbolKind.PARAMETER) }
-                    ?.let { receiverSymbol ->
-                        val receiverType =
-                            receiverSymbol.detail
-                                .substringAfter(':', "")
-                                .trim()
-                                .removeSuffix("?")
-                        semantic.classBindings.values.firstOrNull { it.symbol.name == receiverType }
-                    } ?: declaredReceiverType(source, offset, receiverName)?.let { receiverType ->
-                    semantic.classBindings.values.firstOrNull { it.symbol.name == receiverType }
+                } ?: receiverSymbolType?.let { receiverType ->
+                    semantic.classBindings.values.firstOrNull { it.symbol.name == receiverType.substringBefore('<') }
+                } ?: declaredType?.let { receiverType ->
+                    semantic.classBindings.values.firstOrNull { it.symbol.name == receiverType.substringBefore('<') }
                 }
-            } ?: return incompleteThisMemberSymbols(source, offset, receiverName)
-        val staticReceiver = analysis.visibleSymbolsAt(offset).any { it.name == receiverName && it.kind == SymbolKind.CLASS }
+            } ?: return incompleteThisMemberSymbols(source, offset, receiverName) + collectionMemberSymbols(receiverType)
+        val staticReceiver = visibleSymbols.any { it.name == receiverName && it.kind == SymbolKind.CLASS }
         val canSeePrivate = receiverName == "this" || classBinding.declaration.range.contains(offset)
         return if (receiverName == "this" || !staticReceiver) {
             classBinding.fields.values
@@ -255,6 +261,25 @@ class LanguageIde(
             classBinding.staticMethods.values
                 .filter { canSeePrivate || it.visibility == Visibility.PUBLIC }
                 .map { it.symbol }
+        }
+    }
+
+    private fun collectionMemberSymbols(receiverType: String?): List<SymbolInfo> {
+        val type = receiverType?.trim()?.removeSuffix("?") ?: return emptyList()
+        val methods =
+            when {
+                type.startsWith("Array<") -> listOf("size", "get", "set", "getOrNull")
+                type.startsWith("List<") -> listOf("size", "isEmpty", "get", "set", "getOrNull", "add", "insert", "removeAt", "clear")
+                type.startsWith("Map<") -> listOf("size", "isEmpty", "containsKey", "get", "getOrDefault", "set", "remove", "clear", "keys", "values")
+                else -> return emptyList()
+            }
+        return methods.map { method ->
+            SymbolInfo(
+                name = method,
+                kind = SymbolKind.METHOD,
+                range = null,
+                detail = "$type.$method(...)",
+            )
         }
     }
 
@@ -305,8 +330,8 @@ class LanguageIde(
         receiverName: String,
     ): String? {
         val escapedName = Regex.escape(receiverName)
-        val match = Regex("\\b(?:val|var)\\s+$escapedName\\s*:\\s*([A-Za-z_][A-Za-z0-9_:]*\\??)").findAll(source.take(offset)).lastOrNull()
-        return match?.groupValues?.get(1)?.removeSuffix("?")
+        val match = Regex("\\b(?:val|var)\\s+$escapedName\\s*:\\s*([^=;\\n]+)").findAll(source.take(offset)).lastOrNull()
+        return match?.groupValues?.get(1)?.trim()?.removeSuffix("?")
     }
 
     override fun hover(
