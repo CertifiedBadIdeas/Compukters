@@ -60,7 +60,7 @@ class RuntimeDisplayProfilingTest {
         DeviceProfile(
             id = "display-profiling-test",
             displayName = "Display Profiling Test",
-            cpuBudgetNanosPerSlice = 5_000_000,
+            cpuBudgetNanosPerSlice = 500_000,
             maxEventQueueSize = 64,
             allowedCapabilities =
                 setOf(
@@ -72,7 +72,7 @@ class RuntimeDisplayProfilingTest {
                 ),
             resources =
                 DeviceResources(
-                    cpu = DeviceCpuResources(wallTimeGuardNanosPerSlice = 5_000_000),
+                    cpu = DeviceCpuResources(wallTimeGuardNanosPerSlice = 500_000),
                     memory = DeviceMemoryResources(),
                     storage = DeviceStorageResources(programRomBytes = 128 * 1024, diskBytes = 1024 * 1024),
                     queues = DeviceQueueResources(eventQueueSlots = 64, hostCallQueueSlots = 64),
@@ -84,32 +84,31 @@ class RuntimeDisplayProfilingTest {
         dispatcher: HostCallDispatcher,
         metrics: RecordingRuntimeMetricsCollector,
         ticks: Int,
-    ) =
-        runBlocking {
-            repeat(ticks) { tick ->
-                val tickStarted = System.nanoTime()
-                val requestStarted = System.nanoTime()
-                vm.requestSlice(tick.toLong())
-                metrics.recordRequestSlice(System.nanoTime() - requestStarted)
+    ) = runBlocking {
+        repeat(ticks) { tick ->
+            val tickStarted = System.nanoTime()
+            val requestStarted = System.nanoTime()
+            vm.requestSlice(tick.toLong())
+            metrics.recordRequestSlice(System.nanoTime() - requestStarted)
 
-                val drainStarted = System.nanoTime()
-                val calls = vm.drainHostCalls()
-                metrics.recordHostCallDrain(calls.size, System.nanoTime() - drainStarted)
+            val drainStarted = System.nanoTime()
+            val calls = vm.drainHostCalls()
+            metrics.recordHostCallDrain(calls.size, System.nanoTime() - drainStarted)
 
-                val dispatchStarted = System.nanoTime()
-                val results = calls.map(dispatcher::dispatch)
-                metrics.recordHostCallDispatch(calls.size, System.nanoTime() - dispatchStarted)
+            val dispatchStarted = System.nanoTime()
+            val results = calls.map(dispatcher::dispatch)
+            metrics.recordHostCallDispatch(calls.size, System.nanoTime() - dispatchStarted)
 
-                val deliverStarted = System.nanoTime()
-                if (results.isNotEmpty()) {
-                    vm.deliverHostResults(results)
-                }
-                metrics.recordHostResultDelivery(results.size, System.nanoTime() - deliverStarted)
-                metrics.recordServerTick(System.nanoTime() - tickStarted)
-
-                kotlinx.coroutines.delay(10)
+            val deliverStarted = System.nanoTime()
+            if (results.isNotEmpty()) {
+                vm.deliverHostResults(results)
             }
+            metrics.recordHostResultDelivery(results.size, System.nanoTime() - deliverStarted)
+            metrics.recordServerTick(System.nanoTime() - tickStarted)
+
+            kotlinx.coroutines.delay(10)
         }
+    }
 
     @Test
     fun bundledTerminalWorkloadProducesProfilingMetrics() {
