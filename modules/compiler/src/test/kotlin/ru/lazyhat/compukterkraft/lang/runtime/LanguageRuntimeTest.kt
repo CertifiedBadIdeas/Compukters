@@ -418,6 +418,35 @@ class LanguageRuntimeTest {
     }
 
     @Test
+    fun executesErasedGenericFunctionAndClass() {
+        val artifact =
+            frontend.compile(
+                "generic_runtime.ck",
+                """
+                pub class Box<T>(pub var value: T) {
+                    pub fun current(): T { return this.value; }
+                }
+                pub fun identity<T>(value: T): T { return value; }
+                pub fun main() {
+                    val box: Box<String> = Box(value = identity("ok"));
+                    system::log(box.current());
+                }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+        val runtime = RecordingRuntime()
+        runBlocking {
+            BytecodeComputerProgram(requireNotNull(artifact.module)).run(runtime)
+        }
+
+        assertEquals(listOf("ok"), runtime.lines)
+    }
+
+    @Test
     fun classFieldInitializersCanReadPlainConstructorParameters() {
         val artifact =
             frontend.compile(
