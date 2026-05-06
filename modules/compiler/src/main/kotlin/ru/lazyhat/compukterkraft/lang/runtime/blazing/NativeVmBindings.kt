@@ -32,6 +32,36 @@ internal object NativeVmBindings {
         return runUntilSignalNative(bytecode, instructionBudget.coerceAtLeast(1))
     }
 
+    fun create(
+        libraryPath: String,
+        bytecode: ByteArray,
+        instructionBudget: Int,
+    ): Long {
+        load(libraryPath)
+        val handle = createNative(bytecode, instructionBudget.coerceAtLeast(1))
+        check(handle != 0L) { "Native VM create returned a zero handle" }
+        return handle
+    }
+
+    fun runUntilSignal(handle: Long): ByteArray {
+        require(handle != 0L) { "Native VM handle is zero" }
+        return runUntilSignalForHandleNative(handle)
+    }
+
+    fun resumeWith(
+        handle: Long,
+        value: ByteArray,
+    ) {
+        require(handle != 0L) { "Native VM handle is zero" }
+        resumeWithNative(handle, value)
+    }
+
+    fun free(handle: Long) {
+        if (handle != 0L) {
+            freeNative(handle)
+        }
+    }
+
     private fun load(libraryPath: String) {
         synchronized(lock) {
             val current = loadedPath
@@ -51,4 +81,22 @@ internal object NativeVmBindings {
         bytecode: ByteArray,
         instructionBudget: Int,
     ): ByteArray
+
+    @JvmStatic
+    private external fun createNative(
+        bytecode: ByteArray,
+        instructionBudget: Int,
+    ): Long
+
+    @JvmStatic
+    private external fun runUntilSignalForHandleNative(handle: Long): ByteArray
+
+    @JvmStatic
+    private external fun resumeWithNative(
+        handle: Long,
+        value: ByteArray,
+    )
+
+    @JvmStatic
+    private external fun freeNative(handle: Long)
 }

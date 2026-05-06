@@ -19,6 +19,8 @@
 
 package ru.lazyhat.compukterkraft.lang.runtime.blazing
 
+import ru.lazyhat.compukterkraft.lang.runtime.VmValue
+
 internal sealed interface NativeVmValue {
     data object UnitValue : NativeVmValue
     data object NullValue : NativeVmValue
@@ -60,6 +62,54 @@ internal sealed interface NativeVmSignal {
         }
     }
 }
+
+internal fun NativeVmValue.toVmValue(
+    moduleName: String,
+    functionName: String,
+): VmValue =
+    when (this) {
+        NativeVmValue.UnitValue -> VmValue.UnitValue
+        NativeVmValue.NullValue -> VmValue.NullValue
+        is NativeVmValue.BoolValue -> VmValue.BoolValue(value)
+        is NativeVmValue.IntValue -> VmValue.IntValue(value)
+        is NativeVmValue.LongValue -> VmValue.LongValue(value)
+        is NativeVmValue.StringValue -> VmValue.StringValue(value)
+    }
+
+internal fun VmValue.toNativeBytes(
+    moduleName: String,
+    functionName: String,
+): ByteArray =
+    when (this) {
+        VmValue.UnitValue -> byteArrayOf(0)
+        VmValue.NullValue -> byteArrayOf(1)
+        is VmValue.BoolValue -> byteArrayOf(2, if (value) 1 else 0)
+        is VmValue.IntValue -> byteArrayOf(3) + value.toLittleEndianBytes()
+        is VmValue.LongValue -> byteArrayOf(4) + value.toLittleEndianBytes()
+        is VmValue.StringValue -> byteArrayOf(5) + value.encodeToByteArray().withLengthPrefix()
+        is VmValue.RecordValue -> unsupportedNativeValue("RecordValue", moduleName, functionName)
+        is VmValue.ObjectRef -> unsupportedNativeValue("ObjectRef", moduleName, functionName)
+    }
+
+private fun Int.toLittleEndianBytes(): ByteArray =
+    byteArrayOf(
+        toByte(),
+        (this ushr 8).toByte(),
+        (this ushr 16).toByte(),
+        (this ushr 24).toByte(),
+    )
+
+private fun Long.toLittleEndianBytes(): ByteArray =
+    ByteArray(8) { index -> (this ushr (index * 8)).toByte() }
+
+private fun ByteArray.withLengthPrefix(): ByteArray = size.toLittleEndianBytes() + this
+
+private fun unsupportedNativeValue(
+    kind: String,
+    moduleName: String,
+    functionName: String,
+): Nothing =
+    throw UnsupportedOperationException("Native VM cannot resume with $kind returned by $moduleName::$functionName")
 
 private class Reader(
     private val bytes: ByteArray,
