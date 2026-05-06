@@ -7,4 +7,5 @@ edition = "2021"
 crate-type = ["rlib", "cdylib"]
 
 [dependencies]
+jni = "0.21"
 thiserror = "1.0"
