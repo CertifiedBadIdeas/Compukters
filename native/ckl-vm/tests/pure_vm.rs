@@ -29,6 +29,72 @@ fn executes_integer_addition_and_return() {
 }
 
 #[test]
+fn evaluates_greater_equals_binary_operator() {
+    let mut vm = VmInstance::new(binary_module(vec![Instruction::PushInt(2), Instruction::PushInt(1), Instruction::Binary(9)], "Bool"), 64);
+
+    assert_eq!(vm.run_until_signal().unwrap(), VmSignal::Halt(VmValue::Bool(true)));
+}
+
+#[test]
+fn evaluates_integer_binary_operator_subset() {
+    let cases = vec![
+        (vec![Instruction::PushInt(5), Instruction::PushInt(3), Instruction::Binary(1)], "Int", VmValue::Int(2)),
+        (vec![Instruction::PushInt(5), Instruction::PushInt(3), Instruction::Binary(2)], "Int", VmValue::Int(15)),
+        (vec![Instruction::PushInt(6), Instruction::PushInt(3), Instruction::Binary(3)], "Int", VmValue::Int(2)),
+        (vec![Instruction::PushInt(6), Instruction::PushInt(6), Instruction::Binary(4)], "Bool", VmValue::Bool(true)),
+        (vec![Instruction::PushInt(6), Instruction::PushInt(5), Instruction::Binary(5)], "Bool", VmValue::Bool(true)),
+        (vec![Instruction::PushInt(4), Instruction::PushInt(5), Instruction::Binary(6)], "Bool", VmValue::Bool(true)),
+        (vec![Instruction::PushInt(5), Instruction::PushInt(5), Instruction::Binary(7)], "Bool", VmValue::Bool(true)),
+        (vec![Instruction::PushInt(6), Instruction::PushInt(5), Instruction::Binary(8)], "Bool", VmValue::Bool(true)),
+        (vec![Instruction::PushInt(0b1100), Instruction::PushInt(0b1010), Instruction::Binary(12)], "Int", VmValue::Int(0b1000)),
+        (vec![Instruction::PushInt(0b1100), Instruction::PushInt(0b1010), Instruction::Binary(13)], "Int", VmValue::Int(0b1110)),
+        (vec![Instruction::PushInt(0b1100), Instruction::PushInt(0b1010), Instruction::Binary(14)], "Int", VmValue::Int(0b0110)),
+        (vec![Instruction::PushInt(1), Instruction::PushInt(3), Instruction::Binary(15)], "Int", VmValue::Int(8)),
+        (vec![Instruction::PushInt(8), Instruction::PushInt(1), Instruction::Binary(16)], "Int", VmValue::Int(4)),
+    ];
+
+    for (instructions, return_type, expected) in cases {
+        let mut vm = VmInstance::new(binary_module(instructions, return_type), 64);
+
+        assert_eq!(vm.run_until_signal().unwrap(), VmSignal::Halt(expected));
+    }
+}
+
+#[test]
+fn evaluates_boolean_binary_operators() {
+    let cases = vec![
+        (vec![Instruction::PushBool(true), Instruction::PushBool(true), Instruction::Binary(10)], VmValue::Bool(true)),
+        (vec![Instruction::PushBool(false), Instruction::PushBool(true), Instruction::Binary(11)], VmValue::Bool(true)),
+    ];
+
+    for (instructions, expected) in cases {
+        let mut vm = VmInstance::new(binary_module(instructions, "Bool"), 64);
+
+        assert_eq!(vm.run_until_signal().unwrap(), VmSignal::Halt(expected));
+    }
+}
+
+fn binary_module(
+    mut instructions: Vec<Instruction>,
+    return_type: &str,
+) -> Module {
+    instructions.push(Instruction::Return);
+    Module {
+        name: "main".to_string(),
+        entry_function_index: 0,
+        records: vec![],
+        classes: vec![],
+        functions: vec![Function {
+            name: "main".to_string(),
+            parameters: vec![],
+            locals: vec![],
+            return_type: return_type.to_string(),
+            instructions,
+        }],
+    }
+}
+
+#[test]
 fn emits_host_call_signal_for_unknown_builtin() {
     let module = Module {
         name: "main".to_string(),
