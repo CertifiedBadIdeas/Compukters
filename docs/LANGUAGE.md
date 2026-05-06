@@ -19,7 +19,7 @@ Statements:
 - `val name = expr`
 - `var counter: Int = 0`
 - `name = expr` (reassign a `var`; `val` cannot be reassigned)
-- `name += expr`, `name -= expr`, `name *= expr`, `name /= expr` (compound, desugars to `name = name <op> expr`)
+- `name += expr`, `name -= expr`, `name *= expr`, `name /= expr`, `name &= expr`, `name |= expr`, `name ^= expr`, `name <<= expr`, `name >>= expr` (compound, desugars to `name = name <op> expr`)
 - `if (condition) { ... } else { ... }`
 - `if (condition) { ... } else if (condition) { ... } else { ... }`
 - `while condition { ... }`
@@ -67,14 +67,53 @@ val name: String = event.name
 
 Expressions:
 
-- literals: `42`, `42L`, `"text"`, `true`, `false`, `null`
-- arithmetic and logic: `+ - * / == != < <= > >= && || !`
+- literals: `42`, `42L`, `0b01110`, `0B01110L`, `"text"`, `true`, `false`, `null`
+- arithmetic, bitwise, comparison, and logic: `+ - * / & | ^ ~ << >> == != < <= > >= && || !`
+- assignment and compound assignment: `= += -= *= /= &= |= ^= <<= >>=`
 - `+` concatenates strings when either side is `String`; non-string values are converted to text for that expression.
 - member access: `event.name`
 - namespace calls: `display::present(id)`
 - function calls: `main()`, `helper()`
 - struct construction: `Vec2(x = 1, y = 2)`
 - class construction: `Counter(value = 1)`
+
+### Bitwise operators
+
+CKL supports signed bitwise operations on `Int` and `Long`:
+
+- `a & b` bitwise AND.
+- `a | b` bitwise OR.
+- `a ^ b` bitwise XOR.
+- `~a` bitwise NOT.
+- `a << count` signed left shift.
+- `a >> count` signed arithmetic right shift.
+
+`&`, `|`, and `^` return `Long` if either operand is `Long`; otherwise they return `Int`. Shifts preserve the left operand type. Shift counts can be `Int` or `Long` and are evaluated as integer counts at runtime. CKL does not currently have unsigned integer types or unsigned right shift.
+
+Binary integer literals use `0b` or `0B`:
+
+```ck
+val row: Int = 0b01110
+val mask: Int = 0b11111
+val wide: Long = 0b10000000000000000000000000000000L
+```
+
+Bitwise precedence is designed for readable flag and mask checks. Low to high:
+
+1. `||`
+2. `&&`
+3. `==`, `!=`
+4. `<`, `<=`, `>`, `>=`
+5. `|`
+6. `^`
+7. `&`
+8. `<<`, `>>`
+9. `+`, `-`
+10. `*`, `/`
+11. unary `-`, `!`, `~`
+12. call/member/namespace/primary expressions
+
+`flags & mask == mask` parses as `(flags & mask) == mask`; `1 << 4 - col` parses as `1 << (4 - col)`.
 
 ## Structs
 

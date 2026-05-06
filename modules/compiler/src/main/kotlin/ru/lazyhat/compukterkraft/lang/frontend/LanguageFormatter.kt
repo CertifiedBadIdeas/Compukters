@@ -800,11 +800,15 @@ private const val PRECEDENCE_OR = 1
 private const val PRECEDENCE_AND = 2
 private const val PRECEDENCE_EQUALITY = 3
 private const val PRECEDENCE_COMPARISON = 4
-private const val PRECEDENCE_TERM = 5
-private const val PRECEDENCE_FACTOR = 6
-private const val PRECEDENCE_UNARY = 7
-private const val PRECEDENCE_CALL = 8
-private const val PRECEDENCE_PRIMARY = 9
+private const val PRECEDENCE_BIT_OR = 5
+private const val PRECEDENCE_BIT_XOR = 6
+private const val PRECEDENCE_BIT_AND = 7
+private const val PRECEDENCE_SHIFT = 8
+private const val PRECEDENCE_TERM = 9
+private const val PRECEDENCE_FACTOR = 10
+private const val PRECEDENCE_UNARY = 11
+private const val PRECEDENCE_CALL = 12
+private const val PRECEDENCE_PRIMARY = 13
 
 private fun ImportSource.displayText(): String =
     when (this) {
@@ -826,6 +830,10 @@ private fun BinaryOperator.precedence(): Int =
         BinaryOperator.AND -> PRECEDENCE_AND
         BinaryOperator.EQUALS, BinaryOperator.NOT_EQUALS -> PRECEDENCE_EQUALITY
         BinaryOperator.LESS, BinaryOperator.LESS_EQUALS, BinaryOperator.GREATER, BinaryOperator.GREATER_EQUALS -> PRECEDENCE_COMPARISON
+        BinaryOperator.BIT_OR -> PRECEDENCE_BIT_OR
+        BinaryOperator.BIT_XOR -> PRECEDENCE_BIT_XOR
+        BinaryOperator.BIT_AND -> PRECEDENCE_BIT_AND
+        BinaryOperator.SHIFT_LEFT, BinaryOperator.SHIFT_RIGHT -> PRECEDENCE_SHIFT
         BinaryOperator.ADD, BinaryOperator.SUBTRACT -> PRECEDENCE_TERM
         BinaryOperator.MULTIPLY, BinaryOperator.DIVIDE -> PRECEDENCE_FACTOR
     }
@@ -844,12 +852,18 @@ private fun BinaryOperator.symbol(): String =
         BinaryOperator.GREATER_EQUALS -> ">="
         BinaryOperator.AND -> "&&"
         BinaryOperator.OR -> "||"
+        BinaryOperator.BIT_AND -> "&"
+        BinaryOperator.BIT_OR -> "|"
+        BinaryOperator.BIT_XOR -> "^"
+        BinaryOperator.SHIFT_LEFT -> "<<"
+        BinaryOperator.SHIFT_RIGHT -> ">>"
     }
 
 private fun UnaryOperator.symbol(): String =
     when (this) {
         UnaryOperator.NEGATE -> "-"
         UnaryOperator.NOT -> "!"
+        UnaryOperator.BIT_NOT -> "~"
     }
 
 private fun String.escapeString(): String =

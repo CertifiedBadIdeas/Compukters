@@ -22,4 +22,5 @@ package ru.lazyhat.compukterkraft.lang.api
 enum class UnaryOperator {
     NEGATE,
     NOT,
+    BIT_NOT,
 }
