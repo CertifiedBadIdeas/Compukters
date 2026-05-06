@@ -60,6 +60,11 @@ interface DisplayMetricsCollector {
         nanos: Long,
     )
 
+    fun recordFrameBuild(
+        displayId: Int,
+        metrics: DisplayFrameBuildMetrics,
+    )
+
     fun recordFrameDrain(frames: List<DisplayFrameDelta>)
 
     fun snapshot(): DisplayProfilingSnapshot
@@ -103,9 +108,36 @@ data class DisplayFrameMetrics(
     val payloadBytes: Long = 0,
 )
 
+data class DisplayFrameBuildMetrics(
+    val dirtyTileScanNanos: Long = 0,
+    val frameBuildNanos: Long = 0,
+    val tileSerializationNanos: Long = 0,
+    val frontCopyNanos: Long = 0,
+    val totalNanos: Long = 0,
+    val tileCount: Long = 0,
+    val payloadBytes: Long = 0,
+)
+
+data class DisplayFrameBuildTotals(
+    val buildCalls: Long = 0,
+    val dirtyTileScanNanos: Long = 0,
+    val frameBuildNanos: Long = 0,
+    val tileSerializationNanos: Long = 0,
+    val frontCopyNanos: Long = 0,
+    val totalNanos: Long = 0,
+    val tileCount: Long = 0,
+    val payloadBytes: Long = 0,
+) {
+    val averageTotalNanosPerBuild: Long get() = average(totalNanos, buildCalls)
+    val averageTotalNanosPerTile: Long get() = average(totalNanos, tileCount)
+    val averageTileSerializationNanosPerTile: Long get() = average(tileSerializationNanos, tileCount)
+    val averageTileSerializationNanosPerPayloadByte: Long get() = average(tileSerializationNanos, payloadBytes)
+}
+
 data class DisplayProfilingSnapshot(
     val operations: DisplayOperationMetrics = DisplayOperationMetrics(),
     val frames: DisplayFrameMetrics = DisplayFrameMetrics(),
+    val frameBuild: DisplayFrameBuildTotals = DisplayFrameBuildTotals(),
 ) {
     fun summary(): String =
         "display: clear=${operations.clearCalls}, clearNanos=${operations.clearNanos}, " +
@@ -118,7 +150,14 @@ data class DisplayProfilingSnapshot(
             "avgFillNanos=${operations.averageFillRectNanos}, avgCopyNanos=${operations.averageCopyRectNanos}, " +
             "avgBlitNanos=${operations.averageBlitMonoNanos}, avgPresentNanos=${operations.averagePresentNanos}\n" +
             "frames: count=${frames.frameCount}, fullRefresh=${frames.fullRefreshFrames}, " +
-            "tiles=${frames.tileCount}, payloadBytes=${frames.payloadBytes}"
+            "tiles=${frames.tileCount}, payloadBytes=${frames.payloadBytes}\n" +
+            "frame-build: builds=${frameBuild.buildCalls}, dirtyScanNanos=${frameBuild.dirtyTileScanNanos}, " +
+            "frameBuildNanos=${frameBuild.frameBuildNanos}, tileSerializationNanos=${frameBuild.tileSerializationNanos}, " +
+            "frontCopyNanos=${frameBuild.frontCopyNanos}, totalNanos=${frameBuild.totalNanos}, " +
+            "tiles=${frameBuild.tileCount}, payloadBytes=${frameBuild.payloadBytes}, " +
+            "avgBuildNanos=${frameBuild.averageTotalNanosPerBuild}, " +
+            "nanosPerTile=${frameBuild.averageTileSerializationNanosPerTile}, " +
+            "nanosPerPayloadByte=${frameBuild.averageTileSerializationNanosPerPayloadByte}"
 }
 
 object NoOpDisplayMetricsCollector : DisplayMetricsCollector {
@@ -159,6 +198,11 @@ object NoOpDisplayMetricsCollector : DisplayMetricsCollector {
         nanos: Long,
     ) = Unit
 
+    override fun recordFrameBuild(
+        displayId: Int,
+        metrics: DisplayFrameBuildMetrics,
+    ) = Unit
+
     override fun recordFrameDrain(frames: List<DisplayFrameDelta>) = Unit
 
     override fun snapshot(): DisplayProfilingSnapshot = DisplayProfilingSnapshot()
@@ -181,6 +225,14 @@ class RecordingDisplayMetricsCollector : DisplayMetricsCollector {
     private val presentCalls = AtomicLong()
     private val presentFrames = AtomicLong()
     private val presentNanos = AtomicLong()
+    private val frameBuildCalls = AtomicLong()
+    private val dirtyTileScanNanos = AtomicLong()
+    private val frameBuildNanos = AtomicLong()
+    private val tileSerializationNanos = AtomicLong()
+    private val frontCopyNanos = AtomicLong()
+    private val frameBuildTotalNanos = AtomicLong()
+    private val frameBuildTileCount = AtomicLong()
+    private val frameBuildPayloadBytes = AtomicLong()
     private val frameCount = AtomicLong()
     private val fullRefreshFrames = AtomicLong()
     private val tileCount = AtomicLong()
@@ -253,6 +305,20 @@ class RecordingDisplayMetricsCollector : DisplayMetricsCollector {
         }
     }
 
+    override fun recordFrameBuild(
+        displayId: Int,
+        metrics: DisplayFrameBuildMetrics,
+    ) {
+        frameBuildCalls.incrementAndGet()
+        dirtyTileScanNanos.addAndGet(metrics.dirtyTileScanNanos.coerceAtLeast(0))
+        frameBuildNanos.addAndGet(metrics.frameBuildNanos.coerceAtLeast(0))
+        tileSerializationNanos.addAndGet(metrics.tileSerializationNanos.coerceAtLeast(0))
+        frontCopyNanos.addAndGet(metrics.frontCopyNanos.coerceAtLeast(0))
+        frameBuildTotalNanos.addAndGet(metrics.totalNanos.coerceAtLeast(0))
+        frameBuildTileCount.addAndGet(metrics.tileCount.coerceAtLeast(0))
+        frameBuildPayloadBytes.addAndGet(metrics.payloadBytes.coerceAtLeast(0))
+    }
+
     override fun recordFrameDrain(frames: List<DisplayFrameDelta>) {
         frameCount.addAndGet(frames.size.toLong())
         fullRefreshFrames.addAndGet(frames.count { it.fullRefresh }.toLong())
@@ -287,6 +353,17 @@ class RecordingDisplayMetricsCollector : DisplayMetricsCollector {
                     fullRefreshFrames = fullRefreshFrames.get(),
                     tileCount = tileCount.get(),
                     payloadBytes = payloadBytes.get(),
+                ),
+            frameBuild =
+                DisplayFrameBuildTotals(
+                    buildCalls = frameBuildCalls.get(),
+                    dirtyTileScanNanos = dirtyTileScanNanos.get(),
+                    frameBuildNanos = frameBuildNanos.get(),
+                    tileSerializationNanos = tileSerializationNanos.get(),
+                    frontCopyNanos = frontCopyNanos.get(),
+                    totalNanos = frameBuildTotalNanos.get(),
+                    tileCount = frameBuildTileCount.get(),
+                    payloadBytes = frameBuildPayloadBytes.get(),
                 ),
         )
 }

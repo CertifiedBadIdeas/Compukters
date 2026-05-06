@@ -295,7 +295,7 @@ git commit -m "feat: record display operation timings"
 - Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/display/DisplayState.kt`
 - Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/display/DisplayRegistry.kt`
 - Modify: `modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/display/DisplayProfilingTest.kt`
-- Create: `modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/display/DisplayStateTest.kt`
+- Modify: `modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/display/DisplayStateTest.kt`
 
 - [ ] **Step 1: Write failing tests for frame build timings**
 
@@ -330,24 +330,16 @@ Add this test to `DisplayProfilingTest`:
         assertEquals(2, snapshot.frameBuild.tileCount)
         assertEquals(16, snapshot.frameBuild.payloadBytes)
         assertEquals(50, snapshot.frameBuild.averageTotalNanosPerTile)
-        assertEquals(6, snapshot.frameBuild.averageTileSerializationNanosPerTile)
+        assertEquals(15, snapshot.frameBuild.averageTileSerializationNanosPerTile)
         assertEquals(1, snapshot.frameBuild.averageTileSerializationNanosPerPayloadByte)
         assertTrue(snapshot.summary().contains("frame-build:"), snapshot.summary())
         assertTrue(snapshot.summary().contains("nanosPerPayloadByte=1"), snapshot.summary())
     }
 ```
 
-Create `DisplayStateTest.kt` with this test file:
+Add this test to `DisplayStateTest.kt`:
 
 ```kotlin
-package ru.lazyhat.compukterkraft.core.device.vm.display
-
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
-import kotlin.test.assertTrue
-
-class DisplayStateTest {
     @Test
     fun profiledPresentReturnsFrameBuildMetrics() {
         val state = DisplayState(displayId = 8, width = 16, height = 16, pixelFormat = DisplayPixelFormat.RGB565)
@@ -361,7 +353,6 @@ class DisplayStateTest {
         assertTrue(result.metrics.totalNanos >= 0)
         assertTrue(result.metrics.tileSerializationNanos >= 0)
     }
-}
 ```
 
 - [ ] **Step 2: Run tests and verify they fail**

@@ -23,6 +23,11 @@ import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayPixelFormat
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayTile
 
+data class DisplayFrameBuildResult(
+    val frame: DisplayFrameDelta,
+    val metrics: DisplayFrameBuildMetrics,
+)
+
 class DisplayState(
     val displayId: Int,
     val width: Int,
@@ -108,48 +113,117 @@ class DisplayState(
     }
 
     @Synchronized
-    fun present(): DisplayFrameDelta? {
+    fun present(): DisplayFrameDelta? = presentWithMetrics()?.frame
+
+    @Synchronized
+    fun presentWithMetrics(): DisplayFrameBuildResult? {
+        val totalStarted = System.nanoTime()
+        val dirtyStarted = System.nanoTime()
         val dirtyTiles = dirty.dirtyTiles()
+        val dirtyNanos = System.nanoTime() - dirtyStarted
         if (dirtyTiles.isEmpty()) return null
         sequence += 1
-        val frame = buildFrame(dirtyTiles, fullRefresh = false)
+        val frameStarted = System.nanoTime()
+        val frame = buildFrameWithMetrics(dirtyTiles, fullRefresh = false)
+        val frameBuildNanos = System.nanoTime() - frameStarted
+        val copyStarted = System.nanoTime()
         front.copyFrom(back)
+        val frontCopyNanos = System.nanoTime() - copyStarted
         dirty.clear()
-        return frame
+        return DisplayFrameBuildResult(
+            frame = frame.frame,
+            metrics =
+                DisplayFrameBuildMetrics(
+                    dirtyTileScanNanos = dirtyNanos,
+                    frameBuildNanos = frameBuildNanos,
+                    tileSerializationNanos = frame.tileSerializationNanos,
+                    frontCopyNanos = frontCopyNanos,
+                    totalNanos = System.nanoTime() - totalStarted,
+                    tileCount = frame.frame.tiles.size.toLong(),
+                    payloadBytes = frame.frame.tiles.sumOf { it.payload.size }.toLong(),
+                ),
+        )
     }
 
     @Synchronized
-    fun fullRefresh(): DisplayFrameDelta {
+    fun fullRefresh(): DisplayFrameDelta = fullRefreshWithMetrics().frame
+
+    @Synchronized
+    fun fullRefreshWithMetrics(): DisplayFrameBuildResult {
         dirty.markAllDirty()
-        sequence += 1
-        val frame = buildFrame(dirty.dirtyTiles(), fullRefresh = true)
-        front.copyFrom(back)
-        dirty.clear()
-        return frame
+        return presentWithMetrics(fullRefresh = true) ?: error("Full refresh should always produce a frame")
     }
+
+    private fun presentWithMetrics(fullRefresh: Boolean): DisplayFrameBuildResult? {
+        val totalStarted = System.nanoTime()
+        val dirtyStarted = System.nanoTime()
+        val dirtyTiles = dirty.dirtyTiles()
+        val dirtyNanos = System.nanoTime() - dirtyStarted
+        if (dirtyTiles.isEmpty()) return null
+        sequence += 1
+        val frameStarted = System.nanoTime()
+        val frame = buildFrameWithMetrics(dirtyTiles, fullRefresh = fullRefresh)
+        val frameBuildNanos = System.nanoTime() - frameStarted
+        val copyStarted = System.nanoTime()
+        front.copyFrom(back)
+        val frontCopyNanos = System.nanoTime() - copyStarted
+        dirty.clear()
+        return DisplayFrameBuildResult(
+            frame = frame.frame,
+            metrics =
+                DisplayFrameBuildMetrics(
+                    dirtyTileScanNanos = dirtyNanos,
+                    frameBuildNanos = frameBuildNanos,
+                    tileSerializationNanos = frame.tileSerializationNanos,
+                    frontCopyNanos = frontCopyNanos,
+                    totalNanos = System.nanoTime() - totalStarted,
+                    tileCount = frame.frame.tiles.size.toLong(),
+                    payloadBytes = frame.frame.tiles.sumOf { it.payload.size }.toLong(),
+                ),
+        )
+    }
+
+    private data class BuiltFrame(
+        val frame: DisplayFrameDelta,
+        val tileSerializationNanos: Long,
+    )
 
     private fun buildFrame(
         tiles: List<DirtyTile>,
         fullRefresh: Boolean,
-    ): DisplayFrameDelta =
-        DisplayFrameDelta(
-            displayId = displayId,
-            sequence = sequence,
-            width = width,
-            height = height,
-            pixelFormat = pixelFormat,
-            fullRefresh = fullRefresh,
-            tiles =
-                tiles.map { tile ->
-                    DisplayTile(
-                        tileX = tile.tileX,
-                        tileY = tile.tileY,
-                        x = tile.x,
-                        y = tile.y,
-                        width = tile.width,
-                        height = tile.height,
-                        payload = back.copyTile(tile),
-                    )
-                },
+    ): DisplayFrameDelta = buildFrameWithMetrics(tiles, fullRefresh).frame
+
+    private fun buildFrameWithMetrics(
+        tiles: List<DirtyTile>,
+        fullRefresh: Boolean,
+    ): BuiltFrame {
+        var tileSerializationNanos = 0L
+        val displayTiles =
+            tiles.map { tile ->
+                val copied = back.copyTileWithMetrics(tile)
+                tileSerializationNanos += copied.nanos
+                DisplayTile(
+                    tileX = tile.tileX,
+                    tileY = tile.tileY,
+                    x = tile.x,
+                    y = tile.y,
+                    width = tile.width,
+                    height = tile.height,
+                    payload = copied.payload,
+                )
+            }
+        return BuiltFrame(
+            frame =
+                DisplayFrameDelta(
+                    displayId = displayId,
+                    sequence = sequence,
+                    width = width,
+                    height = height,
+                    pixelFormat = pixelFormat,
+                    fullRefresh = fullRefresh,
+                    tiles = displayTiles,
+                ),
+            tileSerializationNanos = tileSerializationNanos,
         )
+    }
 }

@@ -46,6 +46,20 @@ class DisplayStateTest {
     }
 
     @Test
+    fun profiledPresentReturnsFrameBuildMetrics() {
+        val state = DisplayState(displayId = 8, width = 16, height = 16, pixelFormat = DisplayPixelFormat.RGB565)
+        state.fillRect(x = 0, y = 0, width = 8, height = 8, rgb565 = 0x07E0)
+
+        val result = assertNotNull(state.presentWithMetrics())
+
+        assertEquals(1, result.frame.tiles.size)
+        assertEquals(1, result.metrics.tileCount)
+        assertEquals(result.frame.tiles.sumOf { it.payload.size }.toLong(), result.metrics.payloadBytes)
+        assertTrue(result.metrics.totalNanos >= 0)
+        assertTrue(result.metrics.tileSerializationNanos >= 0)
+    }
+
+    @Test
     fun fullRefreshMarksWholeDisplay() {
         val state = DisplayState(displayId = 1, width = 17, height = 17, pixelFormat = DisplayPixelFormat.RGB565)
 
