@@ -1180,7 +1180,7 @@ Run:
 
 ```bash
 ./gradlew :compiler:test --tests ru.lazyhat.compukterkraft.lang.frontend.CompilerProfilingTest \
-    :core:test --tests ru.lazyhat.compukterkraft.core.device.runtime.DeviceProgramSupportTest
+    :core:test
 ```
 
 Expected: PASS.
