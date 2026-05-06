@@ -27,18 +27,40 @@ class ClientDisplayBuffer(
     val width: Int,
     val height: Int,
 ) {
+    data class Region(
+        val x: Int,
+        val y: Int,
+        val width: Int,
+        val height: Int,
+    )
+
+    data class FrontSnapshot(
+        val version: Long,
+        val regions: List<Region>,
+        val pixels: IntArray,
+    )
+
     private val front = IntArray(width * height) { OPAQUE_BLACK }
     private val staging = IntArray(width * height) { OPAQUE_BLACK }
+    private val pendingDirtyRegions = mutableListOf<Region>()
+    private val swappedDirtyRegions = mutableListOf<Region>()
     private var expectedSequence: Long = 1
     private var dirty = false
+    var frontVersion: Long = 0
+        private set
     var hasReceivedFrames: Boolean = false
         private set
 
+    @Synchronized
     fun apply(frame: DisplayFrameDelta): Boolean {
         if (frame.displayId != displayId || frame.width != width || frame.height != height) return false
         if (frame.pixelFormat != DisplayPixelFormat.RGB565) return false
         if (!frame.fullRefresh && frame.sequence != expectedSequence) return false
-        if (frame.fullRefresh) staging.fill(OPAQUE_BLACK)
+        if (frame.fullRefresh) {
+            staging.fill(OPAQUE_BLACK)
+            pendingDirtyRegions.clear()
+            pendingDirtyRegions.add(Region(0, 0, width, height))
+        }
         for (tile in frame.tiles) {
             var offset = 0
             for (row in tile.y until tile.y + tile.height) {
@@ -48,6 +70,9 @@ class ClientDisplayBuffer(
                     staging[row * width + col] = rgb565ToArgb((hi shl 8) or lo)
                 }
             }
+            if (!frame.fullRefresh) {
+                pendingDirtyRegions.add(Region(tile.x, tile.y, tile.width, tile.height))
+            }
         }
         expectedSequence = frame.sequence + 1
         hasReceivedFrames = true
@@ -55,14 +80,76 @@ class ClientDisplayBuffer(
         return true
     }
 
+    @Synchronized
     fun swapIfDirty(): Boolean {
         if (!dirty) return false
-        staging.copyInto(front)
+        for (region in pendingDirtyRegions) {
+            copyRegion(staging, front, region)
+        }
+        swappedDirtyRegions.clear()
+        swappedDirtyRegions.addAll(pendingDirtyRegions)
+        pendingDirtyRegions.clear()
         dirty = false
+        frontVersion = frontVersion + 1
         return true
     }
 
+    @Synchronized
     fun frontArgb(): IntArray = front.copyOf()
+
+    @Synchronized
+    fun frontDirtyRegions(): List<Region> = swappedDirtyRegions.toList()
+
+    @Synchronized
+    fun copyFrontSnapshotSince(uploadedVersion: Long): FrontSnapshot {
+        val regions =
+            if (frontVersion != uploadedVersion + 1) {
+                listOf(Region(0, 0, width, height))
+            } else {
+                swappedDirtyRegions.ifEmpty { listOf(Region(0, 0, width, height)) }
+            }
+        return FrontSnapshot(frontVersion, regions, front.copyOf())
+    }
+
+    @Synchronized
+    fun copyFrontArgbRegion(
+        region: Region,
+        destination: IntArray,
+    ) {
+        require(region.x >= 0 && region.y >= 0 && region.x + region.width <= width && region.y + region.height <= height)
+        require(destination.size >= region.width * region.height)
+        var destinationOffset = 0
+        var row = region.y
+        while (row < region.y + region.height) {
+            front.copyInto(destination, destinationOffset, row * width + region.x, row * width + region.x + region.width)
+            destinationOffset = destinationOffset + region.width
+            row = row + 1
+        }
+    }
+
+    @Synchronized
+    fun copyFrontArgbRow(
+        x: Int,
+        y: Int,
+        width: Int,
+        destination: IntArray,
+    ) {
+        require(x >= 0 && y >= 0 && x + width <= this.width && y < height)
+        require(destination.size >= width)
+        front.copyInto(destination, 0, y * this.width + x, y * this.width + x + width)
+    }
+
+    private fun copyRegion(
+        source: IntArray,
+        destination: IntArray,
+        region: Region,
+    ) {
+        var row = region.y
+        while (row < region.y + region.height) {
+            source.copyInto(destination, row * width + region.x, row * width + region.x, row * width + region.x + region.width)
+            row = row + 1
+        }
+    }
 
     private fun rgb565ToArgb(value: Int): Int {
         val r5 = (value ushr 11) and 0x1F

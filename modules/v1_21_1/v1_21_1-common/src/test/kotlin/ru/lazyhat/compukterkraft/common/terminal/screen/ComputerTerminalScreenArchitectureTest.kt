@@ -22,4 +22,14 @@ class ComputerTerminalScreenArchitectureTest {
         assertTrue(source.contains("DisplayAttachServerMessage"))
         assertTrue(source.contains("DisplayResizeServerMessage"))
     }
+
+    @Test
+    fun computerScreenRendersDisplayAsTextureNotPerPixelGuiRects() {
+        assertTrue(source.contains("NativeImage"))
+        assertTrue(source.contains("DynamicTexture"))
+        assertTrue(source.contains("drawDisplayTexture"))
+        assertFalse(source.contains("frontArgb()"))
+        assertFalse(source.contains("while (x < buffer.width)"))
+        assertFalse(source.contains("fillRect(px, py, pw, ph, color)"))
+    }
 }
