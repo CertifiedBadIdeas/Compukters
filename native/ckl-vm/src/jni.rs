@@ -7,7 +7,7 @@ use jni::JNIEnv;
 use crate::runner::run_bytecode_until_signal;
 
 #[no_mangle]
-pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_native_NativeVmBindings_runUntilSignalNative(
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_runUntilSignalNative(
 	mut env: JNIEnv<'_>,
 	_class: JClass<'_>,
 	bytecode: JByteArray<'_>,
