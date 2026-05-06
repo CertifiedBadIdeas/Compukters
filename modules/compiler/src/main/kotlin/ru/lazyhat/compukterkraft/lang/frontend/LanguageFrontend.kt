@@ -50,11 +50,16 @@ import ru.lazyhat.compukterkraft.lang.api.ImportDeclaration
 import ru.lazyhat.compukterkraft.lang.api.ImportItem
 import ru.lazyhat.compukterkraft.lang.api.ImportMode
 import ru.lazyhat.compukterkraft.lang.api.ImportSource
+import ru.lazyhat.compukterkraft.lang.api.IndexAccessExpression
+import ru.lazyhat.compukterkraft.lang.api.IndexAssignmentStatement
 import ru.lazyhat.compukterkraft.lang.api.Instruction
 import ru.lazyhat.compukterkraft.lang.api.IntLiteralValue
 import ru.lazyhat.compukterkraft.lang.api.LegacyRecordConstructionExpression
+import ru.lazyhat.compukterkraft.lang.api.ListLiteralExpression
 import ru.lazyhat.compukterkraft.lang.api.LiteralExpression
 import ru.lazyhat.compukterkraft.lang.api.LongLiteralValue
+import ru.lazyhat.compukterkraft.lang.api.MapEntryExpression
+import ru.lazyhat.compukterkraft.lang.api.MapLiteralExpression
 import ru.lazyhat.compukterkraft.lang.api.MemberAccessExpression
 import ru.lazyhat.compukterkraft.lang.api.MemberAssignmentStatement
 import ru.lazyhat.compukterkraft.lang.api.NameExpression
@@ -1090,6 +1095,7 @@ internal class SemanticAnalyzer(
             }
 
             is AssignmentStatement,
+            is IndexAssignmentStatement,
             is ExpressionStatement,
             is ReturnStatement,
             is VariableDeclarationStatement,
@@ -1257,6 +1263,10 @@ internal class SemanticAnalyzer(
                 analyzeMemberAssignment(statement, scope)
             }
 
+            is IndexAssignmentStatement -> {
+                analyzeIndexAssignment(statement, scope)
+            }
+
             is WhileStatement -> {
                 val conditionType = analyzeExpression(statement.condition, scope)
                 expectAssignable(
@@ -1336,6 +1346,18 @@ internal class SemanticAnalyzer(
 
                 is LegacyRecordConstructionExpression -> {
                     analyzeLegacyRecordConstruction(expression, scope)
+                }
+
+                is ListLiteralExpression -> {
+                    analyzeListLiteral(expression, scope)
+                }
+
+                is MapLiteralExpression -> {
+                    analyzeMapLiteral(expression, scope)
+                }
+
+                is IndexAccessExpression -> {
+                    analyzeIndexAccess(expression, scope)
                 }
 
                 is ScopeAccessExpression -> {
@@ -1455,6 +1477,15 @@ internal class SemanticAnalyzer(
         val fieldType = substitute(field.type, substitutions)
         expectAssignable(actual, fieldType, statement.expression.range, "Field assignment type mismatch.")
         references += ReferenceInfo(statement.memberName, statement.memberRange, field.symbol, fieldType.displayName)
+    }
+
+    private fun analyzeIndexAssignment(
+        statement: IndexAssignmentStatement,
+        scope: Scope,
+    ) {
+        analyzeExpression(statement.receiver, scope)
+        analyzeExpression(statement.index, scope)
+        analyzeExpression(statement.expression, scope)
     }
 
     private fun analyzeThis(expression: ThisExpression): TypeRef {
@@ -2077,6 +2108,34 @@ internal class SemanticAnalyzer(
         return TypeRef("Unit")
     }
 
+    private fun analyzeListLiteral(
+        expression: ListLiteralExpression,
+        scope: Scope,
+    ): TypeRef {
+        expression.elements.forEach { analyzeExpression(it, scope) }
+        return TypeRef("List")
+    }
+
+    private fun analyzeMapLiteral(
+        expression: MapLiteralExpression,
+        scope: Scope,
+    ): TypeRef {
+        expression.entries.forEach { entry ->
+            analyzeExpression(entry.key, scope)
+            analyzeExpression(entry.value, scope)
+        }
+        return TypeRef("Map")
+    }
+
+    private fun analyzeIndexAccess(
+        expression: IndexAccessExpression,
+        scope: Scope,
+    ): TypeRef {
+        analyzeExpression(expression.receiver, scope)
+        analyzeExpression(expression.index, scope)
+        return TypeRef("Unit")
+    }
+
     private fun analyzeUnary(
         expression: UnaryExpression,
         scope: Scope,
@@ -2519,6 +2578,15 @@ internal class BytecodeCompiler(
                     instructions += Instruction.SetField(statement.memberName)
                     instructions += Instruction.Pop
                 }
+
+                is IndexAssignmentStatement -> {
+                    compileExpression(statement.receiver)
+                    compileExpression(statement.index)
+                    compileExpression(statement.expression)
+                    instructions += Instruction.Pop
+                    instructions += Instruction.Pop
+                    instructions += Instruction.Pop
+                }
             }
         }
 
@@ -2686,6 +2754,33 @@ internal class BytecodeCompiler(
                     instructions += Instruction.PushUnit
                 }
 
+                is ListLiteralExpression -> {
+                    expression.elements.forEach(::compileExpression)
+                    repeat(expression.elements.size) {
+                        instructions += Instruction.Pop
+                    }
+                    instructions += Instruction.PushUnit
+                }
+
+                is MapLiteralExpression -> {
+                    expression.entries.forEach { entry ->
+                        compileExpression(entry.key)
+                        compileExpression(entry.value)
+                    }
+                    repeat(expression.entries.size * 2) {
+                        instructions += Instruction.Pop
+                    }
+                    instructions += Instruction.PushUnit
+                }
+
+                is IndexAccessExpression -> {
+                    compileExpression(expression.receiver)
+                    compileExpression(expression.index)
+                    instructions += Instruction.Pop
+                    instructions += Instruction.Pop
+                    instructions += Instruction.PushUnit
+                }
+
                 is ScopeAccessExpression -> {
                     instructions += Instruction.PushUnit
                 }
@@ -2785,6 +2880,14 @@ internal class Lexer(
 
                 ')' -> {
                     addToken(TokenKind.RPAREN, ")", start)
+                }
+
+                '[' -> {
+                    addToken(TokenKind.LBRACKET, "[", start)
+                }
+
+                ']' -> {
+                    addToken(TokenKind.RBRACKET, "]", start)
                 }
 
                 '{' -> {
@@ -3433,6 +3536,16 @@ internal class Parser(
                     parseAssignment()
                 } else {
                     val expression = parseExpression() ?: return null
+                    if (expression is IndexAccessExpression && match(TokenKind.EQUAL)) {
+                        val value = parseExpression() ?: return null
+                        consumeOptional(TokenKind.SEMICOLON)
+                        return IndexAssignmentStatement(
+                            receiver = expression.receiver,
+                            index = expression.index,
+                            expression = value,
+                            range = SourceRange(expression.range.start, value.range.end),
+                        )
+                    }
                     val range = expression.range
                     consumeOptional(TokenKind.SEMICOLON)
                     ExpressionStatement(expression, range)
@@ -3900,6 +4013,16 @@ internal class Parser(
                         )
                     }
 
+                    match(TokenKind.LBRACKET) -> {
+                        val index = parseExpression() ?: return null
+                        val end = consume(TokenKind.RBRACKET, "Expected `]` after index.") ?: return null
+                        IndexAccessExpression(
+                            expression,
+                            index,
+                            SourceRange(expression.range.start, end.range.end),
+                        )
+                    }
+
                     else -> {
                         return expression
                     }
@@ -4000,11 +4123,44 @@ internal class Parser(
                 GroupExpression(expression, SourceRange(token.range.start, end.range.end))
             }
 
+            TokenKind.LBRACKET -> {
+                parseListLiteral(token)
+            }
+
+            TokenKind.LBRACE -> {
+                parseMapLiteral(token)
+            }
+
             else -> {
                 diagnostics += FrontendDiagnostic("Expected an expression.", token.range)
                 null
             }
         }
+    }
+
+    private fun parseListLiteral(start: Token): Expression? {
+        val elements = mutableListOf<Expression>()
+        if (!check(TokenKind.RBRACKET)) {
+            do {
+                elements += parseExpression() ?: return null
+            } while (match(TokenKind.COMMA))
+        }
+        val end = consume(TokenKind.RBRACKET, "Expected `]` after list literal.") ?: return null
+        return ListLiteralExpression(elements, SourceRange(start.range.start, end.range.end))
+    }
+
+    private fun parseMapLiteral(start: Token): Expression? {
+        val entries = mutableListOf<MapEntryExpression>()
+        if (!check(TokenKind.RBRACE)) {
+            do {
+                val key = parseExpression() ?: return null
+                consume(TokenKind.COLON, "Expected `:` after map key.") ?: return null
+                val value = parseExpression() ?: return null
+                entries += MapEntryExpression(key, value, SourceRange(key.range.start, value.range.end))
+            } while (match(TokenKind.COMMA))
+        }
+        val end = consume(TokenKind.RBRACE, "Expected `}` after map literal.") ?: return null
+        return MapLiteralExpression(entries, SourceRange(start.range.start, end.range.end))
     }
 
     private fun parseRecordConstruction(nameToken: Token): Expression? {
