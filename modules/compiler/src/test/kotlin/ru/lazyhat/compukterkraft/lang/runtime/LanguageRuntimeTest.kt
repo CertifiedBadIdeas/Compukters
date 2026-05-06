@@ -447,6 +447,38 @@ class LanguageRuntimeTest {
     }
 
     @Test
+    fun executesListArrayAndMapCollections() {
+        val artifact =
+            frontend.compile(
+                "collections_runtime.ck",
+                """
+                pub struct Key { name: String }
+
+                pub fun main() {
+                    val xs: List<Int> = [1, 2];
+                    xs.add(3);
+                    xs[1] = 7;
+                    system::log("list=" + xs.size() + ":" + xs[0] + ":" + xs[1] + ":" + xs.removeAt(2));
+
+                    val fixed: Array<Int> = Array<Int>(size = 2, default = 5);
+                    fixed[1] = 9;
+                    system::log("array=" + fixed.size() + ":" + fixed[0] + ":" + fixed[1]);
+
+                    val table: Map<Key, String> = {};
+                    val key: Key = Key(name = "a");
+                    table[key] = "ok";
+                    system::log("map=" + table.size() + ":" + table[key] + ":" + table.containsKey(Key(name = "a")));
+                }
+                """.trimIndent(),
+            )
+
+        assertTrue(artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR }, artifact.analysis.diagnostics.joinToString { it.message })
+        val runtime = RecordingRuntime()
+        runBlocking { BytecodeComputerProgram(requireNotNull(artifact.module)).run(runtime) }
+        assertEquals(listOf("list=3:1:7:3", "array=2:5:9", "map=1:ok:true"), runtime.lines)
+    }
+
+    @Test
     fun classFieldInitializersCanReadPlainConstructorParameters() {
         val artifact =
             frontend.compile(

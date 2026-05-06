@@ -2805,8 +2805,7 @@ internal class BytecodeCompiler(
                     compileExpression(statement.receiver)
                     compileExpression(statement.index)
                     compileExpression(statement.expression)
-                    instructions += Instruction.Pop
-                    instructions += Instruction.Pop
+                    instructions += Instruction.IndexSet
                     instructions += Instruction.Pop
                 }
             }
@@ -2879,6 +2878,19 @@ internal class BytecodeCompiler(
                 }
 
                 is CallExpression -> {
+                    if (expression.callee is TypeApplicationExpression && expression.callee.name == "Array") {
+                        val namedArguments = expression.arguments.filterIsInstance<NamedCallArgument>().associateBy { it.name }
+                        namedArguments["size"]?.let { compileExpression(it.expression) } ?: run { instructions += Instruction.PushInt(0) }
+                        namedArguments["default"]?.let { compileExpression(it.expression) } ?: run { instructions += Instruction.PushUnit }
+                        instructions += Instruction.ConstructArray
+                        return
+                    }
+                    if (expression.callee is MemberAccessExpression && isCollectionReceiver(expression.callee.receiver)) {
+                        compileExpression(expression.callee.receiver)
+                        expression.arguments.forEach { compileExpression(it.expression) }
+                        instructions += Instruction.CallCollectionMethod(expression.callee.memberName, expression.arguments.size)
+                        return
+                    }
                     val method = semantic.methodCallBindings[expression]
                     if (method != null && expression.callee is MemberAccessExpression) {
                         if (!method.static) {
@@ -2978,10 +2990,7 @@ internal class BytecodeCompiler(
 
                 is ListLiteralExpression -> {
                     expression.elements.forEach(::compileExpression)
-                    repeat(expression.elements.size) {
-                        instructions += Instruction.Pop
-                    }
-                    instructions += Instruction.PushUnit
+                    instructions += Instruction.ConstructList(expression.elements.size)
                 }
 
                 is MapLiteralExpression -> {
@@ -2989,18 +2998,13 @@ internal class BytecodeCompiler(
                         compileExpression(entry.key)
                         compileExpression(entry.value)
                     }
-                    repeat(expression.entries.size * 2) {
-                        instructions += Instruction.Pop
-                    }
-                    instructions += Instruction.PushUnit
+                    instructions += Instruction.ConstructMap(expression.entries.size)
                 }
 
                 is IndexAccessExpression -> {
                     compileExpression(expression.receiver)
                     compileExpression(expression.index)
-                    instructions += Instruction.Pop
-                    instructions += Instruction.Pop
-                    instructions += Instruction.PushUnit
+                    instructions += Instruction.IndexGet
                 }
 
                 is TypeApplicationExpression -> {
@@ -3017,6 +3021,8 @@ internal class BytecodeCompiler(
                 }
             }
         }
+
+        private fun isCollectionReceiver(expression: Expression): Boolean = semantic.expressionTypes[expression]?.name in setOf("Array", "List", "Map")
 
         private fun compileClassConstructor(
             expression: CallExpression,
