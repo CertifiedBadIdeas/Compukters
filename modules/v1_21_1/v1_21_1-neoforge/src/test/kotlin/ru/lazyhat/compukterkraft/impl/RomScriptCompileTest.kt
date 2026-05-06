@@ -55,6 +55,25 @@ class RomScriptCompileTest {
     }
 
     @Test
+    fun bundledRomTerminalCommitsInputByRowsNotByFullBufferCellRewrite() {
+        val source = resourceText("rom/terminal.ck")
+
+        assertTrue(source.contains("replaceRange"), "terminal.ck should batch committed text into row-sized cell updates")
+        assertTrue(source.contains("commitDirtySegment"), "terminal.ck should commit one dirty row segment at a time")
+        assertFalse(source.contains("fun setCell"), "terminal.ck must not rebuild the full cell buffer for every committed character")
+        assertFalse(source.contains("cells = setCell"), "terminal.ck must not use per-character full-buffer writes in appendText")
+    }
+
+    @Test
+    fun bundledRomShellChecksExternalCommandBeforeRun() {
+        val source = resourceText("rom/shell.ck")
+
+        assertTrue(source.contains("import filesystem { exists }"), "shell.ck should query filesystem before external command launch")
+        assertTrue(source.contains("exists(command + \".ck\")"), "shell.ck should reject missing commands before process::run")
+        assertFalse(source.contains("if (process::run(command + \".ck\""), "shell.ck must not call process::run directly for unknown commands")
+    }
+
+    @Test
     fun bundledRomStdioUsesTaggedDescriptorOnly() {
         val source = resourceText("rom/stdio.ck")
 

@@ -1,3 +1,4 @@
+import filesystem { exists };
 import "stdio.ck" { Stdio, encode, error, fromArgument, println, readLine, write };
 
 fun displayPath(path: String): String {
@@ -21,8 +22,13 @@ fun printHelp(ctx: Stdio) {
 }
 
 fun runExternal(ctx: Stdio, command: String, argument: String) {
-    if (process::run(command + ".ck", encode(ctx, argument)) != 0) {
+    if (!exists(command + ".ck")) {
         error(ctx, "Unknown command: " + command)
+        return
+    }
+    val code: Int = process::run(command + ".ck", encode(ctx, argument))
+    if (code != 0) {
+        error(ctx, "Command failed: " + command)
     }
 }
 
