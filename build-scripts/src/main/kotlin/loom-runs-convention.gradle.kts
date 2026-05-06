@@ -115,7 +115,7 @@ runs.register("client3") {
 runs.register("clientRust") {
     client()
     configName = "Minecraft Client Rust VM"
-    runDir("run/clientRust")
+    runDir("run/client")
     applyShared()
     applyRustVm()
     programArgs("--username", DEV_CLIENT_USERNAMES[0])
@@ -124,7 +124,7 @@ runs.register("clientRust") {
 runs.register("client2Rust") {
     client()
     configName = "Minecraft Client 2 Rust VM"
-    runDir("run/client2Rust")
+    runDir("run/client2")
     applyShared()
     applyRustVm()
     programArgs("--username", DEV_CLIENT_USERNAMES[1])
@@ -133,7 +133,7 @@ runs.register("client2Rust") {
 runs.register("client3Rust") {
     client()
     configName = "Minecraft Client 3 Rust VM"
-    runDir("run/client3Rust")
+    runDir("run/client3")
     applyShared()
     applyRustVm()
     programArgs("--username", DEV_CLIENT_USERNAMES[2])
@@ -273,9 +273,6 @@ private val CLIENT_RUN_DIRS =
         "run/client",
         "run/client2",
         "run/client3",
-        "run/clientRust",
-        "run/client2Rust",
-        "run/client3Rust",
     )
 
 val prepareClientDev =
