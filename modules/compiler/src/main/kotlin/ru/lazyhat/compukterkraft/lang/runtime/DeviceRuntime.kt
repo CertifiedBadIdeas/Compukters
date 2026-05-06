@@ -91,6 +91,27 @@ interface DeviceDisplayApi {
         rgb565: Int,
     )
 
+    fun copyRect(
+        displayId: Int,
+        srcX: Int,
+        srcY: Int,
+        width: Int,
+        height: Int,
+        dstX: Int,
+        dstY: Int,
+    )
+
+    fun blitMono(
+        displayId: Int,
+        x: Int,
+        y: Int,
+        width: Int,
+        height: Int,
+        mask: String,
+        foreground: Int,
+        background: Int,
+    )
+
     fun present(displayId: Int)
 }
 
@@ -122,6 +143,27 @@ object NoopDeviceDisplayApi : DeviceDisplayApi {
         width: Int,
         height: Int,
         rgb565: Int,
+    ) = Unit
+
+    override fun copyRect(
+        displayId: Int,
+        srcX: Int,
+        srcY: Int,
+        width: Int,
+        height: Int,
+        dstX: Int,
+        dstY: Int,
+    ) = Unit
+
+    override fun blitMono(
+        displayId: Int,
+        x: Int,
+        y: Int,
+        width: Int,
+        height: Int,
+        mask: String,
+        foreground: Int,
+        background: Int,
     ) = Unit
 
     override fun present(displayId: Int) = Unit
