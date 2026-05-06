@@ -1,6 +1,16 @@
 use crate::abi::{Instruction, Module};
 use crate::value::VmValue;
 
+#[derive(Debug, thiserror::Error, PartialEq, Eq)]
+pub enum VmError {
+	#[error("native VM is waiting for resume")]
+	WaitingForResume,
+	#[error("native VM is not waiting for resume")]
+	NotWaitingForResume,
+	#[error("native VM is halted")]
+	Halted,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VmSignal {
 	Halt(VmValue),
@@ -19,6 +29,14 @@ pub struct VmInstance {
 	frames: Vec<Frame>,
 	instruction_budget: usize,
 	instructions_since_pause: usize,
+	state: VmState,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum VmState {
+	Ready,
+	WaitingForResume,
+	Halted,
 }
 
 struct Frame {
@@ -37,10 +55,17 @@ impl VmInstance {
 			frames: vec![entry_frame],
 			instruction_budget: instruction_budget.max(1),
 			instructions_since_pause: 0,
+			state: VmState::Ready,
 		}
 	}
 
-	pub fn run_until_signal(&mut self) -> VmSignal {
+	pub fn run_until_signal(&mut self) -> Result<VmSignal, VmError> {
+		match self.state {
+			VmState::Ready => {}
+			VmState::WaitingForResume => return Err(VmError::WaitingForResume),
+			VmState::Halted => return Err(VmError::Halted),
+		}
+
 		loop {
 			let instruction = match self.next_instruction() {
 				Some(instruction) => instruction,
@@ -92,21 +117,33 @@ impl VmInstance {
 					}
 					arguments.reverse();
 					if module_name.is_empty() && function_name == "yield" {
-						return VmSignal::Yield;
+						self.state = VmState::WaitingForResume;
+						return Ok(VmSignal::Yield);
 					}
 					if module_name.is_empty() && function_name == "sleep" {
-						return VmSignal::Sleep(as_i64(arguments.first().unwrap_or(&VmValue::Long(0))));
+						self.state = VmState::WaitingForResume;
+						return Ok(VmSignal::Sleep(as_i64(arguments.first().unwrap_or(&VmValue::Long(0)))));
 					}
-					return VmSignal::HostCall { module_name, function_name, arguments };
+					self.state = VmState::WaitingForResume;
+					return Ok(VmSignal::HostCall { module_name, function_name, arguments });
 				}
 				other => panic!("instruction not implemented in pure VM prototype: {other:?}"),
 			}
 
 			if self.instructions_since_pause >= self.instruction_budget {
 				self.instructions_since_pause = 0;
-				return VmSignal::Pause;
+				return Ok(VmSignal::Pause);
 			}
 		}
+	}
+
+	pub fn resume_with(&mut self, value: VmValue) -> Result<(), VmError> {
+		if self.state != VmState::WaitingForResume {
+			return Err(VmError::NotWaitingForResume);
+		}
+		self.current_frame_mut().stack.push(value);
+		self.state = VmState::Ready;
+		Ok(())
 	}
 
 	fn next_instruction(&mut self) -> Option<Instruction> {
@@ -136,13 +173,14 @@ impl VmInstance {
 		values
 	}
 
-	fn handle_return(&mut self, result: VmValue) -> VmSignal {
+	fn handle_return(&mut self, result: VmValue) -> Result<VmSignal, VmError> {
 		self.frames.pop();
 		if let Some(caller) = self.frames.last_mut() {
 			caller.stack.push(result);
 			self.run_until_signal()
 		} else {
-			VmSignal::Halt(result)
+			self.state = VmState::Halted;
+			Ok(VmSignal::Halt(result))
 		}
 	}
 }

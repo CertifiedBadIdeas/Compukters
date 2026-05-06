@@ -16,7 +16,8 @@ pub fn run_bytecode_until_signal(bytecode: &[u8], instruction_budget: usize) -> 
 	}));
 
 	match result {
-		Ok(signal) => encode_signal(&signal),
+		Ok(Ok(signal)) => encode_signal(&signal),
+		Ok(Err(error)) => encode_error(error.to_string()),
 		Err(payload) => encode_error(panic_message(payload)),
 	}
 }
