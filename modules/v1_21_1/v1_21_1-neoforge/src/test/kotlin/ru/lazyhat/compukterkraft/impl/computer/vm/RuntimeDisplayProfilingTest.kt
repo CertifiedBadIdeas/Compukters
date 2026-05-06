@@ -31,6 +31,7 @@ import ru.lazyhat.compukterkraft.core.device.vm.DeviceWorkspaceHost
 import ru.lazyhat.compukterkraft.core.device.vm.DeviceWorkspaceInitializer
 import ru.lazyhat.compukterkraft.core.device.vm.display.RecordingDisplayMetricsCollector
 import ru.lazyhat.compukterkraft.core.input.KeyCodes
+import ru.lazyhat.compukterkraft.lang.frontend.RecordingCompilerMetricsCollector
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceCapability
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceCpuResources
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceMemoryResources
@@ -44,6 +45,12 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 
 class RuntimeDisplayProfilingTest {
+    private data class ProfilingRun(
+        val displayMetrics: RecordingDisplayMetricsCollector,
+        val runtimeMetrics: RecordingRuntimeMetricsCollector,
+        val compilerMetrics: RecordingCompilerMetricsCollector,
+    )
+
     private class ClasspathFirmwareLoader : FirmwareProgramLoader {
         override fun load(path: String): LoadedFirmwareProgramSource {
             val source =
@@ -84,11 +91,14 @@ class RuntimeDisplayProfilingTest {
         dispatcher: HostCallDispatcher,
         metrics: RecordingRuntimeMetricsCollector,
         ticks: Int,
-    ) = runBlocking {
+        delayMillis: Long = 10,
+    ) = runBlocking(Dispatchers.Default) {
         repeat(ticks) { tick ->
             val tickStarted = System.nanoTime()
             val requestStarted = System.nanoTime()
+            val permitsSentBefore = metrics.snapshot().vm.slicePermitsSent
             vm.requestSlice(tick.toLong())
+            val permitsSentAfter = metrics.snapshot().vm.slicePermitsSent
             metrics.recordRequestSlice(System.nanoTime() - requestStarted)
 
             val drainStarted = System.nanoTime()
@@ -106,18 +116,46 @@ class RuntimeDisplayProfilingTest {
             metrics.recordHostResultDelivery(results.size, System.nanoTime() - deliverStarted)
             metrics.recordServerTick(System.nanoTime() - tickStarted)
 
-            kotlinx.coroutines.delay(10)
+            if (delayMillis > 0) {
+                kotlinx.coroutines.delay(delayMillis)
+            } else {
+                var yields = 0
+                while (permitsSentAfter > permitsSentBefore && metrics.snapshot().vm.slicePermitsReceived < permitsSentAfter && yields < 32) {
+                    kotlinx.coroutines.yield()
+                    yields += 1
+                }
+            }
         }
     }
 
-    @Test
-    fun bundledTerminalWorkloadProducesProfilingMetrics() {
+    private fun waitForBootCompile(metrics: RecordingCompilerMetricsCollector) = runBlocking(Dispatchers.Default) {
+        repeat(1_000) {
+            if (metrics.snapshot().compileCalls > 0) return@runBlocking
+            kotlinx.coroutines.delay(1)
+        }
+    }
+
+    private fun waitForRuntimeProgress(metrics: RecordingRuntimeMetricsCollector) = runBlocking(Dispatchers.Default) {
+        repeat(1_000) {
+            val vm = metrics.snapshot().vm
+            if (vm.executionWindows > 0 && vm.pauseSignals + vm.yieldSignals + vm.hostCallSignals > 0) return@runBlocking
+            kotlinx.coroutines.delay(1)
+        }
+    }
+
+    private fun runTerminalWorkload(
+        delayMillis: Long,
+        bootTicks: Int,
+        inputTicks: Int,
+        enterTicks: Int,
+    ): ProfilingRun {
         val root = createTempDirectory("compukterkraft-display-profiling")
         try {
             DeviceWorkspaceInitializer(root).ensureInitialized(1)
             val workspace = DeviceWorkspaceHost(root)
             val displayMetrics = RecordingDisplayMetricsCollector()
             val runtimeMetrics = RecordingRuntimeMetricsCollector()
+            val compilerMetrics = RecordingCompilerMetricsCollector()
             val vm =
                 BackgroundDeviceVm(
                     deviceId = 1,
@@ -129,46 +167,80 @@ class RuntimeDisplayProfilingTest {
                     firmwareLoader = ClasspathFirmwareLoader(),
                     displayMetricsCollector = displayMetrics,
                     runtimeMetricsCollector = runtimeMetrics,
+                    compilerMetricsCollector = compilerMetrics,
                 )
             val dispatcher = HostCallDispatcher(deviceId = 1, workspace = workspace)
 
             vm.attachDisplay(displayId = 9, width = 96, height = 48)
             assertTrue(vm.boot())
-            runTicks(vm, dispatcher, runtimeMetrics, ticks = 80)
+            waitForBootCompile(compilerMetrics)
+            runTicks(vm, dispatcher, runtimeMetrics, ticks = bootTicks, delayMillis = delayMillis)
+            waitForRuntimeProgress(runtimeMetrics)
 
             "help".forEach { ch -> vm.enqueueEvent(VmEvent("char", listOf(byteArrayOf(ch.code.toByte())))) }
-            runTicks(vm, dispatcher, runtimeMetrics, ticks = 20)
+            runTicks(vm, dispatcher, runtimeMetrics, ticks = inputTicks, delayMillis = delayMillis)
+            waitForRuntimeProgress(runtimeMetrics)
 
             vm.enqueueEvent(VmEvent("key", listOf(KeyCodes.KEY_ENTER, false)))
-            runTicks(vm, dispatcher, runtimeMetrics, ticks = 40)
+            runTicks(vm, dispatcher, runtimeMetrics, ticks = enterTicks, delayMillis = delayMillis)
+            waitForRuntimeProgress(runtimeMetrics)
             val drainStarted = System.nanoTime()
             val frames = vm.drainDisplayFrames()
             runtimeMetrics.recordDisplayFrameDrain(frames.size, System.nanoTime() - drainStarted)
 
-            val displaySnapshot = displayMetrics.snapshot()
-            val runtimeSnapshot = runtimeMetrics.snapshot()
-            println(displaySnapshot.summary())
-            println(runtimeSnapshot.summary())
-
-            assertTrue(displaySnapshot.operations.fillRectCalls > 0, displaySnapshot.summary())
-            assertTrue(displaySnapshot.operations.copyRectCalls > 0, displaySnapshot.summary())
-            assertTrue(displaySnapshot.operations.blitMonoCalls > 0, displaySnapshot.summary())
-            assertTrue(displaySnapshot.operations.fillRectCalls < 1000, displaySnapshot.summary())
-            assertTrue(displaySnapshot.operations.presentCalls > 0, displaySnapshot.summary())
-            assertTrue(displaySnapshot.frames.frameCount > 0, displaySnapshot.summary())
-            assertTrue(displaySnapshot.frames.tileCount > 0, displaySnapshot.summary())
-            assertTrue(displaySnapshot.frames.payloadBytes > 0, displaySnapshot.summary())
-            assertTrue(runtimeSnapshot.tick.serverTickCalls > 0, runtimeSnapshot.summary())
-            assertTrue(runtimeSnapshot.tick.requestSliceCalls > 0, runtimeSnapshot.summary())
-            assertTrue(runtimeSnapshot.tick.hostCallDrainCalls > 0, runtimeSnapshot.summary())
-            assertTrue(runtimeSnapshot.tick.hostCallDispatchCalls > 0, runtimeSnapshot.summary())
-            assertTrue(runtimeSnapshot.tick.hostResultDeliveryCalls > 0, runtimeSnapshot.summary())
-            assertTrue(runtimeSnapshot.tick.displayFrameDrainCalls > 0, runtimeSnapshot.summary())
-            assertTrue(runtimeSnapshot.vm.sliceRequests > 0, runtimeSnapshot.summary())
-            assertTrue(runtimeSnapshot.vm.slicePermitsReceived > 0, runtimeSnapshot.summary())
-            assertTrue(runtimeSnapshot.vm.executionWindowNanos > 0, runtimeSnapshot.summary())
+            return ProfilingRun(displayMetrics, runtimeMetrics, compilerMetrics)
         } finally {
             root.toFile().deleteRecursively()
         }
+    }
+
+    @Test
+    fun bundledTerminalWorkloadProducesProfilingMetrics() {
+        val run = runTerminalWorkload(delayMillis = 10, bootTicks = 80, inputTicks = 20, enterTicks = 40)
+        val displaySnapshot = run.displayMetrics.snapshot()
+        val runtimeSnapshot = run.runtimeMetrics.snapshot()
+        val compilerSnapshot = run.compilerMetrics.snapshot()
+        println(displaySnapshot.summary())
+        println(runtimeSnapshot.summary())
+        println(compilerSnapshot.summary())
+
+        assertTrue(displaySnapshot.operations.fillRectCalls > 0, displaySnapshot.summary())
+        assertTrue(displaySnapshot.operations.copyRectCalls > 0, displaySnapshot.summary())
+        assertTrue(displaySnapshot.operations.blitMonoCalls > 0, displaySnapshot.summary())
+        assertTrue(displaySnapshot.operations.fillRectCalls < 1000, displaySnapshot.summary())
+        assertTrue(displaySnapshot.operations.presentCalls > 0, displaySnapshot.summary())
+        assertTrue(displaySnapshot.frames.frameCount > 0, displaySnapshot.summary())
+        assertTrue(displaySnapshot.frames.tileCount > 0, displaySnapshot.summary())
+        assertTrue(displaySnapshot.frames.payloadBytes > 0, displaySnapshot.summary())
+        assertTrue(runtimeSnapshot.tick.serverTickCalls > 0, runtimeSnapshot.summary())
+        assertTrue(runtimeSnapshot.tick.requestSliceCalls > 0, runtimeSnapshot.summary())
+        assertTrue(runtimeSnapshot.tick.hostCallDrainCalls > 0, runtimeSnapshot.summary())
+        assertTrue(runtimeSnapshot.tick.hostCallDispatchCalls > 0, runtimeSnapshot.summary())
+        assertTrue(runtimeSnapshot.tick.hostResultDeliveryCalls > 0, runtimeSnapshot.summary())
+        assertTrue(runtimeSnapshot.tick.displayFrameDrainCalls > 0, runtimeSnapshot.summary())
+        assertTrue(runtimeSnapshot.vm.sliceRequests > 0, runtimeSnapshot.summary())
+        assertTrue(runtimeSnapshot.vm.slicePermitsReceived > 0, runtimeSnapshot.summary())
+        assertTrue(runtimeSnapshot.vm.executionWindowNanos > 0, runtimeSnapshot.summary())
+        assertTrue(compilerSnapshot.compileCalls > 0, compilerSnapshot.summary())
+        assertTrue(compilerSnapshot.compileNanos > 0, compilerSnapshot.summary())
+    }
+
+    @Test
+    fun sustainedTerminalWorkloadProducesNoDelayProfilingMetrics() {
+        val run = runTerminalWorkload(delayMillis = 0, bootTicks = 120, inputTicks = 40, enterTicks = 80)
+        val displaySnapshot = run.displayMetrics.snapshot()
+        val runtimeSnapshot = run.runtimeMetrics.snapshot()
+        val compilerSnapshot = run.compilerMetrics.snapshot()
+
+        println(displaySnapshot.summary())
+        println(runtimeSnapshot.summary())
+        println(compilerSnapshot.summary())
+
+        assertTrue(displaySnapshot.operations.blitMonoNanos >= 0, displaySnapshot.summary())
+        assertTrue(displaySnapshot.frameBuild.buildCalls > 0, displaySnapshot.summary())
+        assertTrue(runtimeSnapshot.vm.pauseSignals + runtimeSnapshot.vm.yieldSignals + runtimeSnapshot.vm.hostCallSignals > 0, runtimeSnapshot.summary())
+        assertTrue(runtimeSnapshot.vm.averageExecutionWindowNanos >= 0, runtimeSnapshot.summary())
+        assertTrue(compilerSnapshot.compileCalls > 0, compilerSnapshot.summary())
+        assertTrue(compilerSnapshot.compileNanos > 0, compilerSnapshot.summary())
     }
 }
