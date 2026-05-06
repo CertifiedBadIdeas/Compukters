@@ -86,6 +86,7 @@ import ru.lazyhat.compukterkraft.lang.api.Visibility
 import ru.lazyhat.compukterkraft.lang.api.WhenBranch
 import ru.lazyhat.compukterkraft.lang.api.WhenStatement
 import ru.lazyhat.compukterkraft.lang.api.WhileStatement
+import java.math.BigInteger
 import java.util.IdentityHashMap
 
 class LanguageFrontend(
@@ -1944,6 +1945,13 @@ internal class SemanticAnalyzer(
                 )
                 TypeRef("Bool")
             }
+
+            UnaryOperator.BIT_NOT -> {
+                if (!isNumeric(operandType)) {
+                    diagnostics += FrontendDiagnostic("Bitwise not expects Int or Long.", expression.range)
+                }
+                operandType
+            }
         }
     }
 
@@ -2007,6 +2015,27 @@ internal class SemanticAnalyzer(
                 TypeRef("Bool")
             }
 
+            BinaryOperator.BIT_AND,
+            BinaryOperator.BIT_OR,
+            BinaryOperator.BIT_XOR,
+            -> {
+                if (!isNumeric(left) || !isNumeric(right)) {
+                    diagnostics += FrontendDiagnostic("Bitwise operators expect Int or Long operands.", expression.range)
+                    TypeRef("Unit")
+                } else {
+                    widerNumericType(left, right)
+                }
+            }
+
+            BinaryOperator.SHIFT_LEFT,
+            BinaryOperator.SHIFT_RIGHT,
+            -> {
+                if (!isNumeric(left) || !isNumeric(right)) {
+                    diagnostics += FrontendDiagnostic("Shift operators expect Int or Long operands.", expression.range)
+                }
+                left
+            }
+
             BinaryOperator.EQUALS,
             BinaryOperator.NOT_EQUALS,
             BinaryOperator.LESS,
@@ -2025,6 +2054,13 @@ internal class SemanticAnalyzer(
             }
         }
     }
+
+    private fun isNumeric(type: TypeRef): Boolean = type.name in setOf("Int", "Long") && !type.nullable
+
+    private fun widerNumericType(
+        left: TypeRef,
+        right: TypeRef,
+    ): TypeRef = if (left.name == "Long" || right.name == "Long") TypeRef("Long") else TypeRef("Int")
 
     private fun resolveType(
         syntax: TypeSyntax,
@@ -2688,35 +2724,55 @@ internal class Lexer(
                 }
 
                 '<' -> {
-                    addToken(if (match('=')) TokenKind.LTE else TokenKind.LT, if (previous() == '=') "<=" else "<", start)
+                    if (match('<')) {
+                        if (match('=')) {
+                            addToken(TokenKind.LT_LT_EQUAL, "<<=", start)
+                        } else {
+                            addToken(TokenKind.LT_LT, "<<", start)
+                        }
+                    } else {
+                        addToken(if (match('=')) TokenKind.LTE else TokenKind.LT, if (previous() == '=') "<=" else "<", start)
+                    }
                 }
 
                 '>' -> {
-                    addToken(if (match('=')) TokenKind.GTE else TokenKind.GT, if (previous() == '=') ">=" else ">", start)
+                    if (match('>')) {
+                        if (match('=')) {
+                            addToken(TokenKind.GT_GT_EQUAL, ">>=", start)
+                        } else {
+                            addToken(TokenKind.GT_GT, ">>", start)
+                        }
+                    } else {
+                        addToken(if (match('=')) TokenKind.GTE else TokenKind.GT, if (previous() == '=') ">=" else ">", start)
+                    }
                 }
 
                 '&' -> {
-                    if (match('&')) {
-                        addToken(TokenKind.AMP_AMP, "&&", start)
-                    } else {
-                        diagnostics +=
-                            FrontendDiagnostic(
-                                "Unexpected `&`.",
-                                range(start),
-                            )
+                    when {
+                        match('&') -> addToken(TokenKind.AMP_AMP, "&&", start)
+                        match('=') -> addToken(TokenKind.AMP_EQUAL, "&=", start)
+                        else -> addToken(TokenKind.AMP, "&", start)
                     }
                 }
 
                 '|' -> {
-                    if (match('|')) {
-                        addToken(TokenKind.PIPE_PIPE, "||", start)
-                    } else {
-                        diagnostics +=
-                            FrontendDiagnostic(
-                                "Unexpected `|`.",
-                                range(start),
-                            )
+                    when {
+                        match('|') -> addToken(TokenKind.PIPE_PIPE, "||", start)
+                        match('=') -> addToken(TokenKind.PIPE_EQUAL, "|=", start)
+                        else -> addToken(TokenKind.PIPE, "|", start)
                     }
+                }
+
+                '^' -> {
+                    if (match('=')) {
+                        addToken(TokenKind.CARET_EQUAL, "^=", start)
+                    } else {
+                        addToken(TokenKind.CARET, "^", start)
+                    }
+                }
+
+                '~' -> {
+                    addToken(TokenKind.TILDE, "~", start)
                 }
 
                 '"' -> {
@@ -2813,8 +2869,37 @@ internal class Lexer(
         first: Char,
     ) {
         val builder = StringBuilder().append(first)
+        if (first == '0' && !isAtEnd() && (peek() == 'b' || peek() == 'B')) {
+            builder.append(advance())
+            lexBinaryNumber(start, builder)
+            return
+        }
         while (!isAtEnd() && peek().isDigit()) {
             builder.append(advance())
+        }
+        if (!isAtEnd() && peek() == 'L') {
+            builder.append(advance())
+        }
+        tokens += Token(TokenKind.NUMBER, builder.toString(), SourceRange(start, location()))
+    }
+
+    private fun lexBinaryNumber(
+        start: SourceLocation,
+        builder: StringBuilder,
+    ) {
+        var digitCount = 0
+        while (!isAtEnd() && (peek() == '0' || peek() == '1')) {
+            builder.append(advance())
+            digitCount += 1
+        }
+        if (digitCount == 0) {
+            diagnostics += FrontendDiagnostic("Binary literal requires at least one digit after `0b`.", range(start))
+        }
+        if (!isAtEnd() && peek().isDigit()) {
+            while (!isAtEnd() && peek().isDigit()) {
+                builder.append(advance())
+            }
+            diagnostics += FrontendDiagnostic("Binary literal can only contain 0 or 1 digits.", SourceRange(start, location()))
         }
         if (!isAtEnd() && peek() == 'L') {
             builder.append(advance())
@@ -3284,10 +3369,30 @@ internal class Parser(
                     compoundDesugar(nameTok, BinaryOperator.DIVIDE, rhs)
                 }
 
+                TokenKind.AMP_EQUAL -> {
+                    compoundDesugar(nameTok, BinaryOperator.BIT_AND, rhs)
+                }
+
+                TokenKind.PIPE_EQUAL -> {
+                    compoundDesugar(nameTok, BinaryOperator.BIT_OR, rhs)
+                }
+
+                TokenKind.CARET_EQUAL -> {
+                    compoundDesugar(nameTok, BinaryOperator.BIT_XOR, rhs)
+                }
+
+                TokenKind.LT_LT_EQUAL -> {
+                    compoundDesugar(nameTok, BinaryOperator.SHIFT_LEFT, rhs)
+                }
+
+                TokenKind.GT_GT_EQUAL -> {
+                    compoundDesugar(nameTok, BinaryOperator.SHIFT_RIGHT, rhs)
+                }
+
                 else -> {
                     diagnostics +=
                         FrontendDiagnostic(
-                            "Expected `=`, `+=`, `-=`, `*=` or `/=` in assignment.",
+                            "Expected assignment operator. Supported operators: `=`, `+=`, `-=`, `*=`, `/=`, `&=`, `|=`, `^=`, `<<=`, `>>=`.",
                             opTok.range,
                         )
                     return null
@@ -3344,10 +3449,30 @@ internal class Parser(
                     compoundMemberDesugar(receiver, field, BinaryOperator.DIVIDE, rhs)
                 }
 
+                TokenKind.AMP_EQUAL -> {
+                    compoundMemberDesugar(receiver, field, BinaryOperator.BIT_AND, rhs)
+                }
+
+                TokenKind.PIPE_EQUAL -> {
+                    compoundMemberDesugar(receiver, field, BinaryOperator.BIT_OR, rhs)
+                }
+
+                TokenKind.CARET_EQUAL -> {
+                    compoundMemberDesugar(receiver, field, BinaryOperator.BIT_XOR, rhs)
+                }
+
+                TokenKind.LT_LT_EQUAL -> {
+                    compoundMemberDesugar(receiver, field, BinaryOperator.SHIFT_LEFT, rhs)
+                }
+
+                TokenKind.GT_GT_EQUAL -> {
+                    compoundMemberDesugar(receiver, field, BinaryOperator.SHIFT_RIGHT, rhs)
+                }
+
                 else -> {
                     diagnostics +=
                         FrontendDiagnostic(
-                            "Expected `=`, `+=`, `-=`, `*=` or `/=` in assignment.",
+                            "Expected assignment operator. Supported operators: `=`, `+=`, `-=`, `*=`, `/=`, `&=`, `|=`, `^=`, `<<=`, `>>=`.",
                             opTok.range,
                         )
                     return null
@@ -3531,17 +3656,17 @@ internal class Parser(
     }
 
     private fun parseComparison(): Expression? {
-        var expression = parseTerm() ?: return null
+        var expression = parseBitwiseOr() ?: return null
         while (true) {
             expression =
                 when {
                     match(TokenKind.LT) -> {
-                        val right = parseTerm() ?: return null
+                        val right = parseBitwiseOr() ?: return null
                         BinaryExpression(expression, BinaryOperator.LESS, right, SourceRange(expression.range.start, right.range.end))
                     }
 
                     match(TokenKind.LTE) -> {
-                        val right = parseTerm() ?: return null
+                        val right = parseBitwiseOr() ?: return null
                         BinaryExpression(
                             expression,
                             BinaryOperator.LESS_EQUALS,
@@ -3551,18 +3676,67 @@ internal class Parser(
                     }
 
                     match(TokenKind.GT) -> {
-                        val right = parseTerm() ?: return null
+                        val right = parseBitwiseOr() ?: return null
                         BinaryExpression(expression, BinaryOperator.GREATER, right, SourceRange(expression.range.start, right.range.end))
                     }
 
                     match(TokenKind.GTE) -> {
-                        val right = parseTerm() ?: return null
+                        val right = parseBitwiseOr() ?: return null
                         BinaryExpression(
                             expression,
                             BinaryOperator.GREATER_EQUALS,
                             right,
                             SourceRange(expression.range.start, right.range.end),
                         )
+                    }
+
+                    else -> {
+                        return expression
+                    }
+                }
+        }
+    }
+
+    private fun parseBitwiseOr(): Expression? {
+        var expression = parseBitwiseXor() ?: return null
+        while (match(TokenKind.PIPE)) {
+            val right = parseBitwiseXor() ?: return null
+            expression = BinaryExpression(expression, BinaryOperator.BIT_OR, right, SourceRange(expression.range.start, right.range.end))
+        }
+        return expression
+    }
+
+    private fun parseBitwiseXor(): Expression? {
+        var expression = parseBitwiseAnd() ?: return null
+        while (match(TokenKind.CARET)) {
+            val right = parseBitwiseAnd() ?: return null
+            expression = BinaryExpression(expression, BinaryOperator.BIT_XOR, right, SourceRange(expression.range.start, right.range.end))
+        }
+        return expression
+    }
+
+    private fun parseBitwiseAnd(): Expression? {
+        var expression = parseShift() ?: return null
+        while (match(TokenKind.AMP)) {
+            val right = parseShift() ?: return null
+            expression = BinaryExpression(expression, BinaryOperator.BIT_AND, right, SourceRange(expression.range.start, right.range.end))
+        }
+        return expression
+    }
+
+    private fun parseShift(): Expression? {
+        var expression = parseTerm() ?: return null
+        while (true) {
+            expression =
+                when {
+                    match(TokenKind.LT_LT) -> {
+                        val right = parseTerm() ?: return null
+                        BinaryExpression(expression, BinaryOperator.SHIFT_LEFT, right, SourceRange(expression.range.start, right.range.end))
+                    }
+
+                    match(TokenKind.GT_GT) -> {
+                        val right = parseTerm() ?: return null
+                        BinaryExpression(expression, BinaryOperator.SHIFT_RIGHT, right, SourceRange(expression.range.start, right.range.end))
                     }
 
                     else -> {
@@ -3656,6 +3830,15 @@ internal class Parser(
                 )
             }
 
+            match(TokenKind.TILDE) -> {
+                val operand = parseUnary() ?: return null
+                UnaryExpression(
+                    UnaryOperator.BIT_NOT,
+                    operand,
+                    SourceRange(previous().range.start, operand.range.end),
+                )
+            }
+
             else -> {
                 parseCall()
             }
@@ -3728,33 +3911,7 @@ internal class Parser(
             }
 
             TokenKind.NUMBER -> {
-                if (token.text.endsWith("L")) {
-                    val raw = token.text.dropLast(1)
-                    val value = raw.toLongOrNull()
-                    if (value == null) {
-                        diagnostics +=
-                            FrontendDiagnostic(
-                                "Long literal `${token.text}` is out of range.",
-                                token.range,
-                            )
-                        return null
-                    }
-                    LiteralExpression(LongLiteralValue(value), token.range)
-                } else {
-                    val value = token.text.toIntOrNull()
-                    if (value == null) {
-                        val asLong = token.text.toLongOrNull()
-                        val hint =
-                            if (asLong != null) {
-                                "Integer literal `${token.text}` exceeds Int range; append `L` to make it a Long (e.g. `${token.text}L`)."
-                            } else {
-                                "Integer literal `${token.text}` is out of range."
-                            }
-                        diagnostics += FrontendDiagnostic(hint, token.range)
-                        return null
-                    }
-                    LiteralExpression(IntLiteralValue(value), token.range)
-                }
+                parseNumberLiteral(token)
             }
 
             TokenKind.IDENTIFIER -> {
@@ -3793,6 +3950,37 @@ internal class Parser(
             else -> {
                 diagnostics += FrontendDiagnostic("Expected an expression.", token.range)
                 null
+            }
+        }
+    }
+
+    private fun parseNumberLiteral(token: Token): LiteralExpression? {
+        val text = token.text
+        val isLong = text.endsWith("L")
+        val raw = if (isLong) text.dropLast(1) else text
+        val isBinary = raw.startsWith("0b") || raw.startsWith("0B")
+        val digits = if (isBinary) raw.drop(2) else raw
+        val radix = if (isBinary) 2 else 10
+        if (digits.isEmpty()) return null
+        val value = digits.toBigIntegerOrNull(radix)
+        if (value == null) {
+            diagnostics += FrontendDiagnostic("Integer literal `${token.text}` is out of range.", token.range)
+            return null
+        }
+        return if (isLong) {
+            if (value > LONG_MAX) {
+                diagnostics += FrontendDiagnostic("Long literal `${token.text}` is out of range.", token.range)
+                null
+            } else {
+                LiteralExpression(LongLiteralValue(value.toLong()), token.range)
+            }
+        } else {
+            if (value > INT_MAX) {
+                val hint = "Integer literal `${token.text}` exceeds Int range; append `L` to make it a Long (e.g. `${token.text}L`)."
+                diagnostics += FrontendDiagnostic(hint, token.range)
+                null
+            } else {
+                LiteralExpression(IntLiteralValue(value.toInt()), token.range)
             }
         }
     }
@@ -3880,6 +4068,13 @@ internal class Parser(
                 TokenKind.MINUS_EQUAL,
                 TokenKind.STAR_EQUAL,
                 TokenKind.SLASH_EQUAL,
+                TokenKind.AMP_EQUAL,
+                TokenKind.PIPE_EQUAL,
+                TokenKind.CARET_EQUAL,
+                TokenKind.LT_LT_EQUAL,
+                TokenKind.GT_GT_EQUAL,
             )
+        val INT_MAX: BigInteger = BigInteger.valueOf(Int.MAX_VALUE.toLong())
+        val LONG_MAX: BigInteger = BigInteger.valueOf(Long.MAX_VALUE)
     }
 }

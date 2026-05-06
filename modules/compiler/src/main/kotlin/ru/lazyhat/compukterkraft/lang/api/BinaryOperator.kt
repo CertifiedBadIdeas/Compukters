@@ -32,4 +32,9 @@ enum class BinaryOperator {
     GREATER_EQUALS,
     AND,
     OR,
+    BIT_AND,
+    BIT_OR,
+    BIT_XOR,
+    SHIFT_LEFT,
+    SHIFT_RIGHT,
 }

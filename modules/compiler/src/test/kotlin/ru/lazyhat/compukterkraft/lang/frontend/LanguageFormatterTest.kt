@@ -93,6 +93,24 @@ class LanguageFormatterTest {
     }
 
     @Test
+    fun formatsBitwiseOperatorsWithApprovedPrecedence() {
+        val source = "pub fun main(){val a:Int=flags&mask==mask;val b:Int=1<<4-col;val c:Int=a|b^c&d;val e:Int=~a;}"
+        val expected =
+            """
+            pub fun main() {
+                val a: Int = flags & mask == mask
+                val b: Int = 1 << 4 - col
+                val c: Int = a | b ^ c & d
+                val e: Int = ~a
+            }
+            """.trimIndent() + "\n"
+
+        val formatted = applySingleEdit(source, formatter.formatDocument("bitwise.ck", source))
+
+        assertEquals(expected, formatted)
+    }
+
+    @Test
     fun formatRemovesStatementAndImportSemicolons() {
         val source = "import terminal { println };\nfun main(){println(\"hi\");return;}"
         val expected =
