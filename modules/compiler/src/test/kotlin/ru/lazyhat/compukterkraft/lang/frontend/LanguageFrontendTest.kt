@@ -285,6 +285,57 @@ class LanguageFrontendTest {
     }
 
     @Test
+    fun compilesBitwiseOperatorsWithApprovedTypes() {
+        val artifact =
+            frontend.compile(
+                "bitwise.ck",
+                """
+                pub fun main() {
+                    val a: Int = 0b01100 & 0b01010;
+                    val b: Int = a | 0b00001;
+                    val c: Int = b ^ 0b00100;
+                    val d: Int = ~c;
+                    val e: Int = 1 << 4 - 1;
+                    val f: Int = e >> 2;
+                    val g: Long = 0b1000L | 0b0011;
+                    val h: Long = g & 0b1111L;
+                    val i: Long = h << 2;
+                }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+        assertNotNull(artifact.module)
+    }
+
+    @Test
+    fun rejectsBitwiseOperatorsForNonNumericOperands() {
+        val artifact =
+            frontend.compile(
+                "bad_bitwise.ck",
+                """
+                pub fun main() {
+                    val a: Bool = true & false;
+                    val b: String = "a" | "b";
+                    val c: Bool = ~true;
+                }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.any { it.message.contains("Bitwise operators expect Int or Long operands") },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+        assertTrue(
+            artifact.analysis.diagnostics.any { it.message.contains("Bitwise not expects Int or Long") },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+    }
+
+    @Test
     fun terminalAndStdoutBuiltinsAreRemoved() {
         assertNull(LanguageBuiltins.defaultRuntimeRegistry.module("terminal"))
         assertNull(LanguageBuiltins.defaultRuntimeRegistry.module("stdout"))

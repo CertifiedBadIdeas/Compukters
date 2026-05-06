@@ -385,6 +385,14 @@ class BytecodeVirtualMachine(
                 UnaryOperator.NOT -> {
                     VmValue.BoolValue(!value.asBoolean())
                 }
+
+                UnaryOperator.BIT_NOT -> {
+                    when (value) {
+                        is VmValue.IntValue -> VmValue.IntValue(value.value.inv())
+                        is VmValue.LongValue -> VmValue.LongValue(value.value.inv())
+                        else -> error("Bitwise not expects a numeric value.")
+                    }
+                }
             }
     }
 
@@ -466,6 +474,46 @@ class BytecodeVirtualMachine(
 
                 BinaryOperator.OR -> {
                     VmValue.BoolValue(left.asBoolean() || right.asBoolean())
+                }
+
+                BinaryOperator.BIT_AND -> {
+                    if (left is VmValue.IntValue && right is VmValue.IntValue) {
+                        VmValue.IntValue(left.value and right.value)
+                    } else {
+                        VmValue.LongValue(left.asLong() and right.asLong())
+                    }
+                }
+
+                BinaryOperator.BIT_OR -> {
+                    if (left is VmValue.IntValue && right is VmValue.IntValue) {
+                        VmValue.IntValue(left.value or right.value)
+                    } else {
+                        VmValue.LongValue(left.asLong() or right.asLong())
+                    }
+                }
+
+                BinaryOperator.BIT_XOR -> {
+                    if (left is VmValue.IntValue && right is VmValue.IntValue) {
+                        VmValue.IntValue(left.value xor right.value)
+                    } else {
+                        VmValue.LongValue(left.asLong() xor right.asLong())
+                    }
+                }
+
+                BinaryOperator.SHIFT_LEFT -> {
+                    if (left is VmValue.IntValue) {
+                        VmValue.IntValue(left.value shl right.asInt())
+                    } else {
+                        VmValue.LongValue(left.asLong() shl right.asInt())
+                    }
+                }
+
+                BinaryOperator.SHIFT_RIGHT -> {
+                    if (left is VmValue.IntValue) {
+                        VmValue.IntValue(left.value shr right.asInt())
+                    } else {
+                        VmValue.LongValue(left.asLong() shr right.asInt())
+                    }
                 }
             }
     }

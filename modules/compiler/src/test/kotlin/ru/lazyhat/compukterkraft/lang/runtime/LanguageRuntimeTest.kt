@@ -331,6 +331,52 @@ class LanguageRuntimeTest {
     }
 
     @Test
+    fun executesBitwiseOperatorsWithApprovedPrecedence() {
+        val artifact =
+            frontend.compile(
+                "bitwise_runtime.ck",
+                """
+                pub fun main() {
+                    val flags: Int = 0b01100;
+                    val mask: Int = 0b00100;
+                    system::log("and=" + (flags & 0b01010));
+                    system::log("or=" + (flags | 0b00011));
+                    system::log("xor=" + (flags ^ 0b00101));
+                    system::log("not=" + (~0b00000));
+                    system::log("left=" + (1 << 4 - 1));
+                    system::log("right=" + (0b10000 >> 2));
+                    system::log("compare=" + (flags & mask == mask));
+                    system::log("mixed=" + (0b1000L | 0b0011));
+                }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+
+        val runtime = RecordingRuntime()
+        runBlocking {
+            BytecodeComputerProgram(requireNotNull(artifact.module)).run(runtime)
+        }
+
+        assertEquals(
+            listOf(
+                "and=8",
+                "or=15",
+                "xor=9",
+                "not=-1",
+                "left=8",
+                "right=4",
+                "compare=true",
+                "mixed=11",
+            ),
+            runtime.lines,
+        )
+    }
+
+    @Test
     fun constructsStructsWithNamedCallSyntax() {
         val artifact =
             frontend.compile(
