@@ -479,6 +479,48 @@ class LanguageRuntimeTest {
     }
 
     @Test
+    fun preservesMapInsertionOrderForKeysAndValues() {
+        val artifact =
+            frontend.compile(
+                "map_order.ck",
+                """
+                pub fun main() {
+                    val map: Map<String, Int> = {"a": 1, "b": 2};
+                    map["a"] = 3;
+                    map.remove("b");
+                    map["b"] = 4;
+                    val keys: List<String> = map.keys();
+                    val values: List<Int> = map.values();
+                    system::log(keys[0] + keys[1] + ":" + values[0] + ":" + values[1]);
+                }
+                """.trimIndent(),
+            )
+        assertTrue(artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR }, artifact.analysis.diagnostics.joinToString { it.message })
+        val runtime = RecordingRuntime()
+        runBlocking { BytecodeComputerProgram(requireNotNull(artifact.module)).run(runtime) }
+        assertEquals(listOf("ab:3:4"), runtime.lines)
+    }
+
+    @Test
+    fun crashesOnOutOfBoundsListIndex() {
+        val artifact =
+            frontend.compile(
+                "list_oob.ck",
+                """
+                pub fun main() {
+                    val xs: List<Int> = [1];
+                    system::log("" + xs[2]);
+                }
+                """.trimIndent(),
+            )
+        assertTrue(artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR }, artifact.analysis.diagnostics.joinToString { it.message })
+        val failure = assertFailsWith<IllegalStateException> {
+            runBlocking { BytecodeComputerProgram(requireNotNull(artifact.module)).run(RecordingRuntime()) }
+        }
+        assertTrue(failure.message.orEmpty().contains("Index 2 out of bounds"), failure.message.orEmpty())
+    }
+
+    @Test
     fun classFieldInitializersCanReadPlainConstructorParameters() {
         val artifact =
             frontend.compile(
