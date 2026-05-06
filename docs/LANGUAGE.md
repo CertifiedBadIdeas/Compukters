@@ -237,9 +237,10 @@ In the Workbench editor, Format can be triggered from the toolbar or with `Ctrl+
 - `fillRect(displayId: Int, x: Int, y: Int, width: Int, height: Int, color: Int): Unit`
 - `copyRect(displayId: Int, srcX: Int, srcY: Int, width: Int, height: Int, dstX: Int, dstY: Int): Unit`
 - `blitMono(displayId: Int, x: Int, y: Int, width: Int, height: Int, mask: String, foreground: Int, background: Int): Unit`
+- `blitMono5x7(displayId: Int, x: Int, y: Int, row0: Int, row1: Int, row2: Int, row3: Int, row4: Int, row5: Int, row6: Int, foreground: Int, background: Int): Unit`
 - `present(displayId: Int): Unit`
 
-`copyRect` copies pixels inside the display back buffer and is useful for scrolling or moving rectangular regions. `blitMono` draws a row-major `0`/`1` monochrome mask; `1` writes the foreground color and `0` writes the background color, or remains transparent when `background < 0`.
+`copyRect` copies pixels inside the display back buffer and is useful for scrolling or moving rectangular regions. `blitMono` draws a row-major `0`/`1` monochrome mask; `1` writes the foreground color and `0` writes the background color, or remains transparent when `background < 0`. `blitMono5x7` draws a fixed 5x7 monochrome bitmap from seven numeric row masks; each row uses the low five bits from left to right (`14` is `01110`, `17` is `10001`, `31` is `11111`).
 
 `filesystem`
 

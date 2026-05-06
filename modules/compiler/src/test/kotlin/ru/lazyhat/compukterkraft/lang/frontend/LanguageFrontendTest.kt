@@ -203,6 +203,25 @@ class LanguageFrontendTest {
     }
 
     @Test
+    fun parsesNumericGlyphDisplayBuiltin() {
+        val artifact =
+            frontend.compile(
+                "glyph.ck",
+                """
+                pub fun main() {
+                    display::blitMono5x7(1, 2, 3, 14, 17, 17, 31, 17, 17, 17, 2016, -1)
+                }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+        assertNotNull(artifact.module)
+    }
+
+    @Test
     fun terminalAndStdoutBuiltinsAreRemoved() {
         assertNull(LanguageBuiltins.defaultRuntimeRegistry.module("terminal"))
         assertNull(LanguageBuiltins.defaultRuntimeRegistry.module("stdout"))
