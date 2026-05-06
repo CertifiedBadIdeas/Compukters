@@ -138,8 +138,18 @@ private val Instruction.kind: VmInstructionKind
 
 class BytecodeComputerProgram(
     private val module: BytecodeModule,
+    private val runnerFactory: () -> VmRunner = { KotlinVmRunner },
 ) : DeviceProgram {
     override suspend fun run(runtime: DeviceRuntime) {
+        runnerFactory().run(module, runtime)
+    }
+}
+
+object KotlinVmRunner : VmRunner {
+    override suspend fun run(
+        module: BytecodeModule,
+        runtime: DeviceRuntime,
+    ) {
         val bridge = RuntimeHostBridge(runtime)
         val vm =
             BytecodeVirtualMachine(
