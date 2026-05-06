@@ -2525,7 +2525,20 @@ internal class SemanticAnalyzer(
                         )
                 }
             }
-            return type.copy(nullable = syntax.nullable, arguments = arguments)
+            val resolvedType = type.copy(nullable = syntax.nullable, arguments = arguments)
+            references +=
+                ReferenceInfo(
+                    syntax.name,
+                    syntax.range,
+                    SymbolInfo(
+                        name = syntax.name,
+                        kind = if (registry.builtinType(syntax.name) != null) SymbolKind.BUILTIN_TYPE else if (userClassesByName.containsKey(syntax.name)) SymbolKind.CLASS else SymbolKind.RECORD,
+                        range = null,
+                        detail = resolvedType.displayName,
+                    ),
+                    resolvedType.displayName,
+                )
+            return resolvedType
     }
 
     private fun expectAssignable(
