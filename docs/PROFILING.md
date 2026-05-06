@@ -90,6 +90,24 @@ Unlikely candidates:
 - event queue bookkeeping;
 - Minecraft UI glue.
 
+## Rust VM prototype
+
+The Rust VM prototype is local-development only until packaging is designed.
+
+Run Rust crate tests:
+
+```bash
+cd native/ckl-vm && cargo test
+```
+
+Run Kotlin ABI and runner seam tests:
+
+```bash
+./gradlew :compiler:test --tests ru.lazyhat.compukterkraft.lang.runtime.BytecodeAbiTest --tests ru.lazyhat.compukterkraft.lang.runtime.VmRunnerSelectionTest
+```
+
+The native runner is disabled unless `-Dckl.vm.native.library=/absolute/path/to/libckl_vm.so` is provided. The Kotlin VM remains the default runtime path.
+
 ## Interpretation notes
 
 - High operation counts with low total nanos usually do not justify native code.
