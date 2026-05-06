@@ -433,6 +433,5 @@ class ServerWorkbenchTest {
             calls += "event:$event"
             return true
         }
-
     }
 }

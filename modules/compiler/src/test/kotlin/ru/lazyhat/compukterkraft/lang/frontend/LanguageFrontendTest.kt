@@ -153,16 +153,38 @@ class LanguageFrontendTest {
                 """.trimIndent(),
             )
 
-        assertTrue(parsed.syntaxDiagnostics.none { it.severity == FrontendSeverity.ERROR }, parsed.syntaxDiagnostics.joinToString { it.message })
-        val pair = parsed.program.declarations.filterIsInstance<StructDeclaration>().single()
+        assertTrue(
+            parsed.syntaxDiagnostics.none { it.severity == FrontendSeverity.ERROR },
+            parsed.syntaxDiagnostics.joinToString { it.message },
+        )
+        val pair =
+            parsed.program.declarations
+                .filterIsInstance<StructDeclaration>()
+                .single()
         assertEquals(listOf("A", "B"), pair.typeParameters.map { it.name })
-        assertEquals("A", pair.fields.single { it.name == "first" }.type.name)
+        assertEquals(
+            "A",
+            pair.fields
+                .single { it.name == "first" }
+                .type.name,
+        )
 
-        val box = parsed.program.declarations.filterIsInstance<ClassDeclaration>().single()
+        val box =
+            parsed.program.declarations
+                .filterIsInstance<ClassDeclaration>()
+                .single()
         assertEquals(listOf("T"), box.typeParameters.map { it.name })
-        assertEquals("T", box.constructorParameters.single().type.name)
+        assertEquals(
+            "T",
+            box.constructorParameters
+                .single()
+                .type.name,
+        )
 
-        val identity = parsed.program.declarations.filterIsInstance<FunctionDeclaration>().single { it.name == "identity" }
+        val identity =
+            parsed.program.declarations
+                .filterIsInstance<FunctionDeclaration>()
+                .single { it.name == "identity" }
         assertEquals(listOf("T"), identity.typeParameters.map { it.name })
         assertEquals("T", identity.returnType?.name)
     }
@@ -183,7 +205,10 @@ class LanguageFrontendTest {
                 """.trimIndent(),
             )
 
-        assertTrue(parsed.syntaxDiagnostics.none { it.severity == FrontendSeverity.ERROR }, parsed.syntaxDiagnostics.joinToString { it.message })
+        assertTrue(
+            parsed.syntaxDiagnostics.none { it.severity == FrontendSeverity.ERROR },
+            parsed.syntaxDiagnostics.joinToString { it.message },
+        )
     }
 
     @Test

@@ -123,5 +123,4 @@ class RuntimeDeviceImplDisplayTest {
             sentFrames += SentFrame(playerUuid, containerId, frame)
         }
     }
-
 }

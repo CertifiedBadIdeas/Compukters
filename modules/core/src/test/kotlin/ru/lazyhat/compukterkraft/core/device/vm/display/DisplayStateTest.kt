@@ -54,7 +54,12 @@ class DisplayStateTest {
 
         assertEquals(1, result.frame.tiles.size)
         assertEquals(1, result.metrics.tileCount)
-        assertEquals(result.frame.tiles.sumOf { it.payload.size }.toLong(), result.metrics.payloadBytes)
+        assertEquals(
+            result.frame.tiles
+                .sumOf { it.payload.size }
+                .toLong(),
+            result.metrics.payloadBytes,
+        )
         assertTrue(result.metrics.totalNanos >= 0)
         assertTrue(result.metrics.tileSerializationNanos >= 0)
     }

@@ -565,7 +565,14 @@ class LanguageFormatter(
             }
 
             is IndexAssignmentStatement -> {
-                writer.write("${renderExpression(statement.receiver, PRECEDENCE_CALL)}[${renderExpression(statement.index)}] = ${renderExpression(statement.expression)}")
+                writer.write(
+                    "${
+                        renderExpression(
+                            statement.receiver,
+                            PRECEDENCE_CALL,
+                        )
+                    }[${renderExpression(statement.index)}] = ${renderExpression(statement.expression)}",
+                )
                 writer.line()
             }
 
@@ -873,8 +880,16 @@ private fun ImportSource.displayText(): String =
 private fun Expression.precedence(): Int =
     when (this) {
         is BinaryExpression -> operator.precedence()
+
         is UnaryExpression -> PRECEDENCE_UNARY
-        is CallExpression, is IndexAccessExpression, is MemberAccessExpression, is ScopeAccessExpression, is TypeApplicationExpression -> PRECEDENCE_CALL
+
+        is CallExpression,
+        is IndexAccessExpression,
+        is MemberAccessExpression,
+        is ScopeAccessExpression,
+        is TypeApplicationExpression,
+        -> PRECEDENCE_CALL
+
         else -> PRECEDENCE_PRIMARY
     }
 

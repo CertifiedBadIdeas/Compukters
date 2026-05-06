@@ -219,7 +219,12 @@ class LanguageIde(
         receiverName: String,
     ): List<SymbolInfo> {
         val declaredType = declaredReceiverType(source, offset, receiverName)
-        val semantic = analysis.semantic ?: return incompleteThisMemberSymbols(source, offset, receiverName) + collectionMemberSymbols(declaredType)
+        val semantic =
+            analysis.semantic ?: return incompleteThisMemberSymbols(
+                source,
+                offset,
+                receiverName,
+            ) + collectionMemberSymbols(declaredType)
         val visibleSymbols = analysis.visibleSymbolsAt(offset)
         val receiverSymbolType =
             if (receiverName == "this") {
@@ -269,8 +274,26 @@ class LanguageIde(
         val methods =
             when {
                 type.startsWith("Array<") -> listOf("size", "get", "set", "getOrNull")
+
                 type.startsWith("List<") -> listOf("size", "isEmpty", "get", "set", "getOrNull", "add", "insert", "removeAt", "clear")
-                type.startsWith("Map<") -> listOf("size", "isEmpty", "containsKey", "get", "getOrDefault", "set", "remove", "clear", "keys", "values")
+
+                type.startsWith(
+                    "Map<",
+                ) -> {
+                    listOf(
+                        "size",
+                        "isEmpty",
+                        "containsKey",
+                        "get",
+                        "getOrDefault",
+                        "set",
+                        "remove",
+                        "clear",
+                        "keys",
+                        "values",
+                )
+                }
+
                 else -> return emptyList()
             }
         return methods.map { method ->
@@ -331,7 +354,11 @@ class LanguageIde(
     ): String? {
         val escapedName = Regex.escape(receiverName)
         val match = Regex("\\b(?:val|var)\\s+$escapedName\\s*:\\s*([^=;\\n]+)").findAll(source.take(offset)).lastOrNull()
-        return match?.groupValues?.get(1)?.trim()?.removeSuffix("?")
+        return match
+            ?.groupValues
+            ?.get(1)
+            ?.trim()
+            ?.removeSuffix("?")
     }
 
     override fun hover(

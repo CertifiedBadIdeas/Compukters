@@ -342,7 +342,9 @@ internal class SemanticAnalyzer(
                 return true
             }
             if (expected.name != actual.name || expected.arguments.size != actual.arguments.size) return false
-            return expected.arguments.zip(actual.arguments).all { (expectedArgument, actualArgument) -> collect(expectedArgument, actualArgument) }
+            return expected.arguments.zip(actual.arguments).all { (expectedArgument, actualArgument) ->
+                collect(expectedArgument, actualArgument)
+            }
         }
 
         return if (parameters.zip(arguments).all { (parameter, argument) -> collect(parameter, argument) }) result else null
@@ -812,7 +814,11 @@ internal class SemanticAnalyzer(
 
             val fields = linkedMapOf<String, ClassFieldBinding>()
             declaration.constructorParameters.forEach { parameter ->
-                val parameterType = withResolvedClassTypeParameters(declaration) { resolveType(parameter.type, parameter.range) ?: TypeRef("Unit") }
+                val parameterType =
+                    withResolvedClassTypeParameters(declaration) {
+                        resolveType(parameter.type, parameter.range)
+                            ?: TypeRef("Unit")
+                    }
                 val mutability = parameter.fieldMutability
                 if (mutability != null) {
                     if (fields.containsKey(parameter.name)) {
@@ -849,7 +855,11 @@ internal class SemanticAnalyzer(
                             field.range,
                         )
                 }
-                val fieldType = withResolvedClassTypeParameters(declaration) { field.type?.let { resolveType(it, it.range) } ?: TypeRef("Unit") }
+                val fieldType =
+                    withResolvedClassTypeParameters(declaration) {
+                        field.type?.let { resolveType(it, it.range) }
+                            ?: TypeRef("Unit")
+                    }
                 val fieldSymbol =
                     SymbolInfo(
                         name = field.name,
@@ -1510,13 +1520,23 @@ internal class SemanticAnalyzer(
             receiverType.elementType() != null -> {
                 expectAssignable(indexType, TypeRef("Int"), statement.index.range, "Index type mismatch.")
                 val valueType = analyzeExpression(statement.expression, scope, receiverType.elementType())
-                expectAssignable(valueType, receiverType.elementType() ?: TypeRef("Unit"), statement.expression.range, "Index assignment type mismatch.")
+                expectAssignable(
+                    valueType,
+                    receiverType.elementType() ?: TypeRef("Unit"),
+                    statement.expression.range,
+                    "Index assignment type mismatch.",
+                )
             }
 
             receiverType.mapKeyType() != null && receiverType.mapValueType() != null -> {
                 expectAssignable(indexType, receiverType.mapKeyType() ?: TypeRef("Unit"), statement.index.range, "Index type mismatch.")
                 val valueType = analyzeExpression(statement.expression, scope, receiverType.mapValueType())
-                expectAssignable(valueType, receiverType.mapValueType() ?: TypeRef("Unit"), statement.expression.range, "Index assignment type mismatch.")
+                expectAssignable(
+                    valueType,
+                    receiverType.mapValueType() ?: TypeRef("Unit"),
+                    statement.expression.range,
+                    "Index assignment type mismatch.",
+                )
             }
 
             else -> {
@@ -1730,7 +1750,11 @@ internal class SemanticAnalyzer(
             binding.declaration?.typeParameters?.takeIf { it.isNotEmpty() }?.let {
                 inferSubstitutions(binding.parameterTypes, argumentTypes)
                     ?: run {
-                        diagnostics += FrontendDiagnostic("Cannot infer generic type arguments for `${binding.symbol.name}`.", expression.range)
+                        diagnostics +=
+                            FrontendDiagnostic(
+                                "Cannot infer generic type arguments for `${binding.symbol.name}`.",
+                                expression.range,
+                            )
                         emptyMap()
                     }
             } ?: emptyMap()
@@ -1822,7 +1846,11 @@ internal class SemanticAnalyzer(
                     name = callee.memberName,
                     kind = SymbolKind.METHOD,
                     range = callee.range,
-                    detail = "${receiverType.displayName}.${callee.memberName}(${signature.parameterTypes.joinToString { it.displayName }}) : ${signature.returnType.displayName}",
+                    detail = "${receiverType.displayName}.${callee.memberName}(${
+                        signature.parameterTypes.joinToString {
+                            it.displayName
+                        }
+                    }) : ${signature.returnType.displayName}",
                 ),
                 signature.returnType.displayName,
             )
@@ -1840,7 +1868,7 @@ internal class SemanticAnalyzer(
     ): CollectionMethodSignature? {
         receiverType.elementType()?.let { elementType ->
             return when (receiverType.name) {
-                "Array" ->
+                "Array" -> {
                     when (methodName) {
                         "size" -> CollectionMethodSignature(emptyList(), TypeRef("Int"))
                         "get" -> CollectionMethodSignature(listOf(TypeRef("Int")), elementType)
@@ -1848,8 +1876,9 @@ internal class SemanticAnalyzer(
                         "getOrNull" -> CollectionMethodSignature(listOf(TypeRef("Int")), elementType.copy(nullable = true))
                         else -> null
                     }
+                }
 
-                "List" ->
+                "List" -> {
                     when (methodName) {
                         "size" -> CollectionMethodSignature(emptyList(), TypeRef("Int"))
                         "isEmpty" -> CollectionMethodSignature(emptyList(), TypeRef("Bool"))
@@ -1862,8 +1891,11 @@ internal class SemanticAnalyzer(
                         "clear" -> CollectionMethodSignature(emptyList(), TypeRef("Unit"))
                         else -> null
                     }
+                }
 
-                else -> null
+                else -> {
+                    null
+                }
             }
         }
         val keyType = receiverType.mapKeyType()
@@ -2020,7 +2052,11 @@ internal class SemanticAnalyzer(
                 )
         }
         classConstructorBindings[expression] = binding
-        val constructedType = TypeRef(binding.symbol.name, arguments = binding.declaration.typeParameters.mapNotNull { substitutions[it.name] })
+        val constructedType =
+            TypeRef(
+                binding.symbol.name,
+                arguments = binding.declaration.typeParameters.mapNotNull { substitutions[it.name] },
+            )
         references +=
             ReferenceInfo(
                 binding.symbol.name,
@@ -2113,7 +2149,15 @@ internal class SemanticAnalyzer(
                 )
         }
         recordConstructorBindings[expression] = binding
-        val constructedType = TypeRef(binding.symbol.name, arguments = binding.declaration?.typeParameters.orEmpty().mapNotNull { substitutions[it.name] })
+        val constructedType =
+            TypeRef(
+                binding.symbol.name,
+                arguments =
+                    binding.declaration
+                        ?.typeParameters
+                        .orEmpty()
+                        .mapNotNull { substitutions[it.name] },
+            )
         references +=
             ReferenceInfo(
                 binding.symbol.name,
@@ -2553,29 +2597,38 @@ internal class SemanticAnalyzer(
                     )
                 return null
             }
-            registry.builtinType(syntax.name)?.let { builtinType ->
-                if (builtinType.typeParameterCount != arguments.size) {
-                    diagnostics +=
-                        FrontendDiagnostic(
-                            "Type `${syntax.name}` expects ${builtinType.typeParameterCount} type argument(s), got ${arguments.size}.",
-                            syntax.range,
-                        )
-                }
+        registry.builtinType(syntax.name)?.let { builtinType ->
+            if (builtinType.typeParameterCount != arguments.size) {
+                diagnostics +=
+                    FrontendDiagnostic(
+                        "Type `${syntax.name}` expects ${builtinType.typeParameterCount} type argument(s), got ${arguments.size}.",
+                        syntax.range,
+                    )
             }
-            val resolvedType = type.copy(nullable = syntax.nullable, arguments = arguments)
-            references +=
-                ReferenceInfo(
-                    syntax.name,
-                    syntax.range,
-                    SymbolInfo(
-                        name = syntax.name,
-                        kind = if (registry.builtinType(syntax.name) != null) SymbolKind.BUILTIN_TYPE else if (userClassesByName.containsKey(syntax.name)) SymbolKind.CLASS else SymbolKind.RECORD,
-                        range = null,
-                        detail = resolvedType.displayName,
-                    ),
-                    resolvedType.displayName,
-                )
-            return resolvedType
+        }
+        val resolvedType = type.copy(nullable = syntax.nullable, arguments = arguments)
+        references +=
+            ReferenceInfo(
+                syntax.name,
+                syntax.range,
+                SymbolInfo(
+                    name = syntax.name,
+                    kind =
+                        if (registry.builtinType(syntax.name) !=
+                            null
+                        ) {
+                            SymbolKind.BUILTIN_TYPE
+                        } else if (userClassesByName.containsKey(syntax.name)) {
+                            SymbolKind.CLASS
+                        } else {
+                            SymbolKind.RECORD
+                        },
+                    range = null,
+                    detail = resolvedType.displayName,
+                ),
+                resolvedType.displayName,
+            )
+        return resolvedType
     }
 
     private fun expectAssignable(
@@ -3072,7 +3125,8 @@ internal class BytecodeCompiler(
             }
         }
 
-        private fun isCollectionReceiver(expression: Expression): Boolean = semantic.expressionTypes[expression]?.name in setOf("Array", "List", "Map")
+        private fun isCollectionReceiver(expression: Expression): Boolean =
+            semantic.expressionTypes[expression]?.name in setOf("Array", "List", "Map")
 
         private fun compileClassConstructor(
             expression: CallExpression,
@@ -3676,7 +3730,15 @@ internal class Parser(
         consume(TokenKind.RPAREN, "Expected `)` after parameters.") ?: return null
         val returnType = if (match(TokenKind.COLON)) parseType() else null
         val body = parseBlock() ?: return null
-        return FunctionDeclaration(name.text, parameters, returnType, body, visibility, SourceRange(name.range.start, body.range.end), typeParameters)
+        return FunctionDeclaration(
+            name.text,
+            parameters,
+            returnType,
+            body,
+            visibility,
+            SourceRange(name.range.start, body.range.end),
+            typeParameters,
+        )
     }
 
     private fun parseStruct(visibility: Visibility): StructDeclaration? {
@@ -4306,7 +4368,12 @@ internal class Parser(
 
                     match(TokenKind.GT_GT) -> {
                         val right = parseTerm() ?: return null
-                        BinaryExpression(expression, BinaryOperator.SHIFT_RIGHT, right, SourceRange(expression.range.start, right.range.end))
+                        BinaryExpression(
+                            expression,
+                            BinaryOperator.SHIFT_RIGHT,
+                            right,
+                            SourceRange(expression.range.start, right.range.end),
+                        )
                     }
 
                     else -> {
@@ -4609,7 +4676,10 @@ internal class Parser(
         while (true) {
             val token = peekAhead(offset) ?: return false
             when (token.kind) {
-                TokenKind.LT -> depth += 1
+                TokenKind.LT -> {
+                    depth += 1
+                }
+
                 TokenKind.GT -> {
                     depth -= 1
                     if (depth == 0) return peekAhead(offset + 1)?.kind == TokenKind.LPAREN
@@ -4621,8 +4691,13 @@ internal class Parser(
                     if (depth < 0) return false
                 }
 
-                TokenKind.EOF -> return false
-                else -> Unit
+                TokenKind.EOF -> {
+                    return false
+                }
+
+                else -> {
+                    Unit
+                }
             }
             offset += 1
         }

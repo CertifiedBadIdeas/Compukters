@@ -632,14 +632,26 @@ class BytecodeVirtualMachine(
         args: List<VmValue>,
     ): VmValue =
         when (methodName) {
-            "size" -> VmValue.IntValue(array.elements.size)
-            "get" -> array.elements[checkedIndex(args[0].asInt(), array.elements.size)]
+            "size" -> {
+                VmValue.IntValue(array.elements.size)
+            }
+
+            "get" -> {
+                array.elements[checkedIndex(args[0].asInt(), array.elements.size)]
+            }
+
             "set" -> {
                 array.elements[checkedIndex(args[0].asInt(), array.elements.size)] = args[1]
                 VmValue.UnitValue
             }
-            "getOrNull" -> array.elements.getOrNull(args[0].asInt()) ?: VmValue.NullValue
-            else -> error("Unknown Array method $methodName.")
+
+            "getOrNull" -> {
+                array.elements.getOrNull(args[0].asInt()) ?: VmValue.NullValue
+            }
+
+            else -> {
+                error("Unknown Array method $methodName.")
+            }
         }
 
     private fun applyListMethod(
@@ -648,30 +660,51 @@ class BytecodeVirtualMachine(
         args: List<VmValue>,
     ): VmValue =
         when (methodName) {
-            "size" -> VmValue.IntValue(list.elements.size)
-            "isEmpty" -> VmValue.BoolValue(list.elements.isEmpty())
-            "get" -> list.elements[checkedIndex(args[0].asInt(), list.elements.size)]
+            "size" -> {
+                VmValue.IntValue(list.elements.size)
+            }
+
+            "isEmpty" -> {
+                VmValue.BoolValue(list.elements.isEmpty())
+            }
+
+            "get" -> {
+                list.elements[checkedIndex(args[0].asInt(), list.elements.size)]
+            }
+
             "set" -> {
                 list.elements[checkedIndex(args[0].asInt(), list.elements.size)] = args[1]
                 VmValue.UnitValue
             }
-            "getOrNull" -> list.elements.getOrNull(args[0].asInt()) ?: VmValue.NullValue
+
+            "getOrNull" -> {
+                list.elements.getOrNull(args[0].asInt()) ?: VmValue.NullValue
+            }
+
             "add" -> {
                 list.elements += args[0]
                 VmValue.UnitValue
             }
+
             "insert" -> {
                 val index = args[0].asInt()
                 check(index >= 0 && index <= list.elements.size) { "Index $index out of bounds for size ${list.elements.size}." }
                 list.elements.add(index, args[1])
                 VmValue.UnitValue
             }
-            "removeAt" -> list.elements.removeAt(checkedIndex(args[0].asInt(), list.elements.size))
+
+            "removeAt" -> {
+                list.elements.removeAt(checkedIndex(args[0].asInt(), list.elements.size))
+            }
+
             "clear" -> {
                 list.elements.clear()
                 VmValue.UnitValue
             }
-            else -> error("Unknown List method $methodName.")
+
+            else -> {
+                error("Unknown List method $methodName.")
+            }
         }
 
     private fun applyMapMethod(
@@ -680,23 +713,57 @@ class BytecodeVirtualMachine(
         args: List<VmValue>,
     ): VmValue =
         when (methodName) {
-            "size" -> VmValue.IntValue(map.entries.size)
-            "isEmpty" -> VmValue.BoolValue(map.entries.isEmpty())
-            "containsKey" -> VmValue.BoolValue(map.entries.containsKey(mapKey(args[0])))
-            "get" -> map.entries[mapKey(args[0])] ?: VmValue.NullValue
-            "getOrDefault" -> map.entries[mapKey(args[0])] ?: args[1]
+            "size" -> {
+                VmValue.IntValue(map.entries.size)
+            }
+
+            "isEmpty" -> {
+                VmValue.BoolValue(map.entries.isEmpty())
+            }
+
+            "containsKey" -> {
+                VmValue.BoolValue(map.entries.containsKey(mapKey(args[0])))
+            }
+
+            "get" -> {
+                map.entries[mapKey(args[0])] ?: VmValue.NullValue
+            }
+
+            "getOrDefault" -> {
+                map.entries[mapKey(args[0])] ?: args[1]
+            }
+
             "set" -> {
                 map.entries[mapKey(args[0])] = args[1]
                 VmValue.UnitValue
             }
-            "remove" -> map.entries.remove(mapKey(args[0])) ?: VmValue.NullValue
+
+            "remove" -> {
+                map.entries.remove(mapKey(args[0])) ?: VmValue.NullValue
+            }
+
             "clear" -> {
                 map.entries.clear()
                 VmValue.UnitValue
             }
-            "keys" -> allocate(VmListObject(map.entries.keys.map { it.value }.toMutableList()))
-            "values" -> allocate(VmListObject(map.entries.values.toMutableList()))
-            else -> error("Unknown Map method $methodName.")
+
+            "keys" -> {
+                allocate(
+                    VmListObject(
+                        map.entries.keys
+                            .map { it.value }
+                            .toMutableList(),
+                    ),
+                )
+            }
+
+            "values" -> {
+                allocate(VmListObject(map.entries.values.toMutableList()))
+            }
+
+            else -> {
+                error("Unknown Map method $methodName.")
+            }
         }
 
     private fun createFrame(
@@ -760,7 +827,8 @@ class BytecodeVirtualMachine(
         val className: String,
         val fields: MutableMap<String, VmValue>,
     ) : VmObject {
-        override fun estimatedMemoryBytes(): Long = className.length.toLong() + fields.entries.sumOf { it.key.length.toLong() + it.value.estimatedMemoryBytes() }
+        override fun estimatedMemoryBytes(): Long =
+            className.length.toLong() + fields.entries.sumOf { it.key.length.toLong() + it.value.estimatedMemoryBytes() }
     }
 
     private data class VmArrayObject(
@@ -778,7 +846,8 @@ class BytecodeVirtualMachine(
     private data class VmMapObject(
         val entries: LinkedHashMap<VmMapKey, VmValue>,
     ) : VmObject {
-        override fun estimatedMemoryBytes(): Long = 16L + entries.entries.sumOf { it.key.value.estimatedMemoryBytes() + it.value.estimatedMemoryBytes() }
+        override fun estimatedMemoryBytes(): Long =
+            16L + entries.entries.sumOf { it.key.value.estimatedMemoryBytes() + it.value.estimatedMemoryBytes() }
     }
 
     private data class VmMapKey(

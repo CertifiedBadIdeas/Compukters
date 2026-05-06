@@ -245,7 +245,6 @@ class WorkbenchBlockEntity(
             computer.queueEvent(event, arguments)
             return true
         }
-
     }
 
     companion object {

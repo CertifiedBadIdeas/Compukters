@@ -139,8 +139,13 @@ class DisplayState(
                     tileSerializationNanos = frame.tileSerializationNanos,
                     frontCopyNanos = frontCopyNanos,
                     totalNanos = System.nanoTime() - totalStarted,
-                    tileCount = frame.frame.tiles.size.toLong(),
-                    payloadBytes = frame.frame.tiles.sumOf { it.payload.size }.toLong(),
+                    tileCount =
+                        frame.frame.tiles.size
+                            .toLong(),
+                    payloadBytes =
+                        frame.frame.tiles
+                            .sumOf { it.payload.size }
+                            .toLong(),
                 ),
         )
     }
@@ -177,8 +182,13 @@ class DisplayState(
                     tileSerializationNanos = frame.tileSerializationNanos,
                     frontCopyNanos = frontCopyNanos,
                     totalNanos = System.nanoTime() - totalStarted,
-                    tileCount = frame.frame.tiles.size.toLong(),
-                    payloadBytes = frame.frame.tiles.sumOf { it.payload.size }.toLong(),
+                    tileCount =
+                        frame.frame.tiles.size
+                            .toLong(),
+                    payloadBytes =
+                        frame.frame.tiles
+                            .sumOf { it.payload.size }
+                            .toLong(),
                 ),
         )
     }

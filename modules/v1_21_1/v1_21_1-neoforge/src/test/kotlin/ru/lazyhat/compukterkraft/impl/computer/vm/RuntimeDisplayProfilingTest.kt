@@ -120,7 +120,9 @@ class RuntimeDisplayProfilingTest {
                 kotlinx.coroutines.delay(delayMillis)
             } else {
                 var yields = 0
-                while (permitsSentAfter > permitsSentBefore && metrics.snapshot().vm.slicePermitsReceived < permitsSentAfter && yields < 32) {
+                while (permitsSentAfter > permitsSentBefore && metrics.snapshot().vm.slicePermitsReceived < permitsSentAfter &&
+                    yields < 32
+                ) {
                     kotlinx.coroutines.yield()
                     yields += 1
                 }
@@ -128,20 +130,22 @@ class RuntimeDisplayProfilingTest {
         }
     }
 
-    private fun waitForBootCompile(metrics: RecordingCompilerMetricsCollector) = runBlocking(Dispatchers.Default) {
-        repeat(1_000) {
-            if (metrics.snapshot().compileCalls > 0) return@runBlocking
-            kotlinx.coroutines.delay(1)
+    private fun waitForBootCompile(metrics: RecordingCompilerMetricsCollector) =
+        runBlocking(Dispatchers.Default) {
+            repeat(1_000) {
+                if (metrics.snapshot().compileCalls > 0) return@runBlocking
+                kotlinx.coroutines.delay(1)
+            }
         }
-    }
 
-    private fun waitForRuntimeProgress(metrics: RecordingRuntimeMetricsCollector) = runBlocking(Dispatchers.Default) {
-        repeat(1_000) {
-            val vm = metrics.snapshot().vm
-            if (vm.executionWindows > 0 && vm.pauseSignals + vm.yieldSignals + vm.hostCallSignals > 0) return@runBlocking
-            kotlinx.coroutines.delay(1)
+    private fun waitForRuntimeProgress(metrics: RecordingRuntimeMetricsCollector) =
+        runBlocking(Dispatchers.Default) {
+            repeat(1_000) {
+                val vm = metrics.snapshot().vm
+                if (vm.executionWindows > 0 && vm.pauseSignals + vm.yieldSignals + vm.hostCallSignals > 0) return@runBlocking
+                kotlinx.coroutines.delay(1)
+            }
         }
-    }
 
     private fun runTerminalWorkload(
         delayMillis: Long,
@@ -238,7 +242,10 @@ class RuntimeDisplayProfilingTest {
 
         assertTrue(displaySnapshot.operations.blitMonoNanos >= 0, displaySnapshot.summary())
         assertTrue(displaySnapshot.frameBuild.buildCalls > 0, displaySnapshot.summary())
-        assertTrue(runtimeSnapshot.vm.pauseSignals + runtimeSnapshot.vm.yieldSignals + runtimeSnapshot.vm.hostCallSignals > 0, runtimeSnapshot.summary())
+        assertTrue(
+            runtimeSnapshot.vm.pauseSignals + runtimeSnapshot.vm.yieldSignals + runtimeSnapshot.vm.hostCallSignals > 0,
+            runtimeSnapshot.summary(),
+        )
         assertTrue(runtimeSnapshot.vm.averageExecutionWindowNanos >= 0, runtimeSnapshot.summary())
         assertTrue(compilerSnapshot.compileCalls > 0, compilerSnapshot.summary())
         assertTrue(compilerSnapshot.compileNanos > 0, compilerSnapshot.summary())

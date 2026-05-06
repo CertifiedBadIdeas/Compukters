@@ -454,6 +454,5 @@ interface WorkbenchTargetRuntimeBridge {
             event: String,
             arguments: Array<Any>,
         ): Boolean = false
-
     }
 }

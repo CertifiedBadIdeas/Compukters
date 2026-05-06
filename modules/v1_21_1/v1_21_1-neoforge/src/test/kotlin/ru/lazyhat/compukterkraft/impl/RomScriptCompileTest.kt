@@ -180,7 +180,10 @@ class RomScriptCompileTest {
         assertFalse(source.contains("fun glyphRows(ch: String): Glyph5x7"), "terminal.ck should not return glyph row structs")
         assertFalse(source.contains("Glyph5x7("), "terminal.ck should not construct glyph row structs")
         assertFalse(source.contains("fun glyphPattern(ch: String): String"), "terminal.ck should not keep string glyph masks")
-        assertFalse(Regex("return \\\"[01]{35}\\\"").containsMatchIn(source), "terminal.ck should not return 35-character string glyph masks")
+        assertFalse(
+            Regex("return \\\"[01]{35}\\\"").containsMatchIn(source),
+            "terminal.ck should not return 35-character string glyph masks",
+        )
         assertTrue(
             source.contains("if (ch == \">\") { return 0b10000010000010000010001000100010000L }"),
             "terminal.ck should preserve the balanced '>' glyph as packed bits",
@@ -197,7 +200,10 @@ class RomScriptCompileTest {
 
         assertTrue(source.contains("import filesystem { exists }"), "shell.ck should query filesystem before external command launch")
         assertTrue(source.contains("exists(command + \".ck\")"), "shell.ck should reject missing commands before process::run")
-        assertFalse(source.contains("if (process::run(command + \".ck\""), "shell.ck must not call process::run directly for unknown commands")
+        assertFalse(
+            source.contains("if (process::run(command + \".ck\""),
+            "shell.ck must not call process::run directly for unknown commands",
+        )
     }
 
     @Test
@@ -241,14 +247,15 @@ class RomScriptCompileTest {
             val compiled = ComputerProgramCompiler.compile(path, source, sourceLoader = sourceLoader)
             if (compiled.program == null) {
                 val artifact = LanguageFrontend(LanguageBuiltins.defaultRuntimeRegistry).compile(path, source, sourceLoader)
-                val details = artifact.analysis.diagnostics.joinToString { diagnostic ->
-                    val range = diagnostic.range
-                    if (range == null) {
-                        diagnostic.message
-                    } else {
-                        "${diagnostic.message} @ ${range.start.line}:${range.start.column}-${range.end.line}:${range.end.column}"
+                val details =
+                    artifact.analysis.diagnostics.joinToString { diagnostic ->
+                        val range = diagnostic.range
+                        if (range == null) {
+                            diagnostic.message
+                        } else {
+                            "${diagnostic.message} @ ${range.start.line}:${range.start.column}-${range.end.line}:${range.end.column}"
+                        }
                     }
-                }
                 fail("ROM script $path failed to compile: ${compiled.errorMessage}; diagnostics: $details")
             }
         }
