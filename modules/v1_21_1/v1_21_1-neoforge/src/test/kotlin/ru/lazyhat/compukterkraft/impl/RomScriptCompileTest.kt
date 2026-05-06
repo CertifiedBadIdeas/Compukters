@@ -49,6 +49,22 @@ class RomScriptCompileTest {
     }
 
     @Test
+    fun bundledFirmwareShowsSplashBeforeBootLookup() {
+        val source = resourceText("firmware/bios.ck")
+
+        assertTrue(source.contains("fun draw_splash"), "bios.ck should have a dedicated splash renderer")
+        assertTrue(source.contains("fun hold_splash"), "bios.ck should keep the splash visible before boot starts")
+        assertTrue(source.contains("display::blitMono"), "bios.ck should render the splash through display primitives")
+        assertTrue(source.contains("Compukter"), "bios.ck should include visible Compukter branding")
+        assertTrue(source.contains("hold_splash(40)"), "bios.ck should hold the splash for roughly two seconds")
+        assertTrue(
+            source.indexOf("hold_splash(40)") < source.indexOf("filesystem::exists(\"boot.ck\")"),
+            "bios.ck should show the splash before looking up boot.ck",
+        )
+        assertFalse(source.contains("stdout::write"), "bios.ck must not use stdout for visible splash UI")
+    }
+
+    @Test
     fun bundledRomTerminalDoesNotUseStdoutForVisibleUi() {
         val source = resourceText("rom/terminal.ck")
         assertFalse(source.contains("stdout::write"), "rom/terminal.ck must render via display, not stdout")
