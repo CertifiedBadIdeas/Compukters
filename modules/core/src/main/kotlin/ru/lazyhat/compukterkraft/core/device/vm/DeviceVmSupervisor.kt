@@ -22,6 +22,8 @@ package ru.lazyhat.compukterkraft.core.device.vm
 import kotlinx.coroutines.asCoroutineDispatcher
 import ru.lazyhat.compukterkraft.core.Config
 import ru.lazyhat.compukterkraft.core.MOD_ID
+import ru.lazyhat.compukterkraft.core.device.runtime.NoOpRuntimeMetricsCollector
+import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeMetricsCollector
 import ru.lazyhat.compukterkraft.core.platform.api.ServerWorldAccess
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceIdeHost
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceProfile
@@ -60,6 +62,7 @@ class DeviceVmSupervisor(
         profile: DeviceProfile,
         labelProvider: () -> String?,
         logger: DeviceVmLogger,
+        runtimeMetricsCollector: RuntimeMetricsCollector = NoOpRuntimeMetricsCollector,
     ): BackgroundDeviceVm =
         handles.computeIfAbsent(deviceId) {
             workspaceStore.setDiskQuota(deviceId, profile.resources.storage.diskBytes)
@@ -70,6 +73,7 @@ class DeviceVmSupervisor(
                 labelProvider = labelProvider,
                 logger = logger,
                 workspace = workspaceStore,
+                runtimeMetricsCollector = runtimeMetricsCollector,
             )
         } as BackgroundDeviceVm
 

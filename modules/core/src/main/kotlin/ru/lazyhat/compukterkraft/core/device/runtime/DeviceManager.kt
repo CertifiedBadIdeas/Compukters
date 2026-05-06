@@ -66,7 +66,8 @@ class DeviceManager(
         profile: DeviceProfile,
         labelProvider: () -> String?,
         logger: DeviceVmLogger,
-    ): BackgroundDeviceVm = vmSupervisor.getOrCreate(deviceId, profile, labelProvider, logger)
+        runtimeMetricsCollector: RuntimeMetricsCollector = NoOpRuntimeMetricsCollector,
+    ): BackgroundDeviceVm = vmSupervisor.getOrCreate(deviceId, profile, labelProvider, logger, runtimeMetricsCollector)
 
     fun removeVm(
         deviceId: Int,

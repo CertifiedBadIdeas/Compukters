@@ -33,6 +33,42 @@ import kotlin.test.assertTrue
 
 class RuntimeDeviceImplDisplayTest {
     @Test
+    fun recordsServerTickRuntimeMetrics() {
+        val supervisor = DeviceVmSupervisor(ServerWorldAccess { createTempDirectory("runtime-profiling-test") })
+        val manager = DeviceManager(supervisor)
+        val displayNetwork = RecordingDisplayNetworkBridge()
+        val metrics = RecordingRuntimeMetricsCollector()
+        val device =
+            RuntimeDeviceImpl(
+                deviceId = 42,
+                properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
+                manager = manager,
+                gameTime = { 0L },
+                displayNetwork = displayNetwork,
+                stateSink = {},
+                runtimeMetricsCollector = metrics,
+            )
+        val playerUuid = UUID.randomUUID()
+
+        device.attachDisplaySession(playerUuid, containerId = 11, displayId = 1, width = 32, height = 16)
+        device.turnOn()
+        device.serverTick()
+
+        val snapshot = metrics.snapshot()
+        assertEquals(1, snapshot.tick.serverTickCalls)
+        assertEquals(1, snapshot.tick.requestSliceCalls)
+        assertEquals(1, snapshot.tick.hostCallDrainCalls)
+        assertEquals(1, snapshot.tick.hostCallDispatchCalls)
+        assertTrue(snapshot.tick.displayFrameDrainCalls > 0, snapshot.summary())
+        assertTrue(snapshot.tick.displayFlushCalls > 0, snapshot.summary())
+        assertTrue(snapshot.tick.serverTickNanos > 0, snapshot.summary())
+        assertTrue(snapshot.vm.sliceRequests > 0, snapshot.summary())
+
+        device.close()
+        manager.close()
+    }
+
+    @Test
     fun flushesDisplayFramesToAttachedSession() {
         val supervisor = DeviceVmSupervisor(ServerWorldAccess { createTempDirectory("runtime-display-test") })
         val manager = DeviceManager(supervisor)
