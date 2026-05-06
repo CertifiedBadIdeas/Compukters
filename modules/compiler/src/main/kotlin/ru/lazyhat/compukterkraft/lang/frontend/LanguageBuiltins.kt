@@ -80,6 +80,18 @@ object LanguageBuiltins {
                                     "Fills a rectangle with an RGB565 color.",
                                 ),
                                 BuiltinFunction(
+                                    "copyRect",
+                                    listOf("Int", "Int", "Int", "Int", "Int", "Int", "Int"),
+                                    "Unit",
+                                    "Copies a rectangle inside the display back buffer.",
+                                ),
+                                BuiltinFunction(
+                                    "blitMono",
+                                    listOf("Int", "Int", "Int", "Int", "Int", "String", "Int", "Int"),
+                                    "Unit",
+                                    "Draws a row-major monochrome bitmap mask.",
+                                ),
+                                BuiltinFunction(
                                     "present",
                                     listOf("Int"),
                                     "Unit",

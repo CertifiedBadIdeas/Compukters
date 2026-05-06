@@ -60,5 +60,30 @@ class VmDisplayApi(
         registry.fillRect(displayId, x, y, width, height, rgb565)
     }
 
+    override fun copyRect(
+        displayId: Int,
+        srcX: Int,
+        srcY: Int,
+        width: Int,
+        height: Int,
+        dstX: Int,
+        dstY: Int,
+    ) {
+        registry.copyRect(displayId, srcX, srcY, width, height, dstX, dstY)
+    }
+
+    override fun blitMono(
+        displayId: Int,
+        x: Int,
+        y: Int,
+        width: Int,
+        height: Int,
+        mask: String,
+        foreground: Int,
+        background: Int,
+    ) {
+        registry.blitMono(displayId, x, y, width, height, mask, foreground, background)
+    }
+
     override fun present(displayId: Int) = registry.present(displayId)
 }
