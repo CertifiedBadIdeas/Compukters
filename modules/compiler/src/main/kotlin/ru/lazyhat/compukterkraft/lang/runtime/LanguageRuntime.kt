@@ -91,6 +91,17 @@ sealed interface VmSignal {
     ) : VmSignal
 }
 
+private val VmSignal.kind: VmSignalKind
+    get() =
+        when (this) {
+            VmSignal.Halt -> VmSignalKind.HALT
+            VmSignal.Pause -> VmSignalKind.PAUSE
+            VmSignal.Yield -> VmSignalKind.YIELD
+            is VmSignal.Sleep -> VmSignalKind.SLEEP
+            is VmSignal.WaitEvent -> VmSignalKind.WAIT_EVENT
+            is VmSignal.HostCall -> VmSignalKind.HOST_CALL
+        }
+
 class BytecodeComputerProgram(
     private val module: BytecodeModule,
 ) : DeviceProgram {
@@ -103,7 +114,9 @@ class BytecodeComputerProgram(
                 maxVmRamBytes = runtime.profile.resources.memory.vmRamBytes,
             )
         while (true) {
-            when (val signal = vm.runUntilSignal()) {
+            val signal = vm.runUntilSignal()
+            runtime.metrics.recordVmSignal(signal.kind)
+            when (signal) {
                 VmSignal.Halt -> {
                     return
                 }

@@ -19,6 +19,7 @@
 
 package ru.lazyhat.compukterkraft.core.device.runtime
 
+import ru.lazyhat.compukterkraft.lang.runtime.VmSignalKind
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -41,6 +42,12 @@ class RuntimeProfilingTest {
         collector.recordSchedulingPoint(waitedForSlice = false)
         collector.recordSchedulingPoint(waitedForSlice = true)
         collector.recordVmExecutionWindow(nanos = 70)
+        collector.recordVmSignal(VmSignalKind.PAUSE)
+        collector.recordVmSignal(VmSignalKind.YIELD)
+        collector.recordVmSignal(VmSignalKind.SLEEP)
+        collector.recordVmSignal(VmSignalKind.WAIT_EVENT)
+        collector.recordVmSignal(VmSignalKind.HOST_CALL)
+        collector.recordVmSignal(VmSignalKind.HALT)
 
         val snapshot = collector.snapshot()
 
@@ -72,8 +79,16 @@ class RuntimeProfilingTest {
         assertEquals(1, snapshot.vm.waitForSliceSchedulingPoints)
         assertEquals(1, snapshot.vm.executionWindows)
         assertEquals(70, snapshot.vm.executionWindowNanos)
+        assertEquals(70, snapshot.vm.averageExecutionWindowNanos)
+        assertEquals(1, snapshot.vm.pauseSignals)
+        assertEquals(1, snapshot.vm.yieldSignals)
+        assertEquals(1, snapshot.vm.sleepSignals)
+        assertEquals(1, snapshot.vm.waitEventSignals)
+        assertEquals(1, snapshot.vm.hostCallSignals)
+        assertEquals(1, snapshot.vm.haltSignals)
         assertTrue(snapshot.summary().contains("runtime:"))
         assertTrue(snapshot.summary().contains("vm:"))
+        assertTrue(snapshot.summary().contains("signals:"), snapshot.summary())
     }
 
     @Test
@@ -91,6 +106,7 @@ class RuntimeProfilingTest {
         collector.recordSlicePermitReceived()
         collector.recordSchedulingPoint(waitedForSlice = true)
         collector.recordVmExecutionWindow(nanos = 70)
+        collector.recordVmSignal(VmSignalKind.PAUSE)
 
         assertEquals(RuntimeProfilingSnapshot(), collector.snapshot())
     }

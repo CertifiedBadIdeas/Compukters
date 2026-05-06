@@ -29,10 +29,12 @@ import ru.lazyhat.compukterkraft.lang.runtime.DeviceProcessApi
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceProfile
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceRedstoneApi
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceRuntime
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceRuntimeMetrics
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceSystemApi
 import ru.lazyhat.compukterkraft.lang.runtime.NoopDeviceDisplayApi
 import ru.lazyhat.compukterkraft.lang.runtime.NoopDeviceEventApi
 import ru.lazyhat.compukterkraft.lang.runtime.NoopDeviceIpcApi
+import ru.lazyhat.compukterkraft.lang.runtime.NoopDeviceRuntimeMetrics
 import ru.lazyhat.compukterkraft.lang.runtime.VmEvent
 import ru.lazyhat.compukterkraft.lang.runtime.VmState
 
@@ -48,8 +50,10 @@ class VmRuntime(
     private val eventApi: DeviceEventApi = NoopDeviceEventApi,
     private val redstoneApi: DeviceRedstoneApi = object : DeviceRedstoneApi {},
     private val peripheralsApi: DevicePeripheralApi = object : DevicePeripheralApi {},
+    private val metricsApi: DeviceRuntimeMetrics = NoopDeviceRuntimeMetrics,
 ) : DeviceRuntime {
     override val profile: DeviceProfile = initialProfile
+    override val metrics: DeviceRuntimeMetrics = metricsApi
     override val system: DeviceSystemApi = systemApi
     override val display: DeviceDisplayApi = displayApi
     override val filesystem: DeviceFileSystemApi = filesystemApi

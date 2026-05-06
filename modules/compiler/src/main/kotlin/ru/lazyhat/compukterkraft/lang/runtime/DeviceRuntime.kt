@@ -23,8 +23,27 @@ interface DeviceProgram {
     suspend fun run(runtime: DeviceRuntime)
 }
 
+enum class VmSignalKind {
+    HALT,
+    PAUSE,
+    YIELD,
+    SLEEP,
+    WAIT_EVENT,
+    HOST_CALL,
+}
+
+interface DeviceRuntimeMetrics {
+    fun recordVmSignal(kind: VmSignalKind)
+}
+
+object NoopDeviceRuntimeMetrics : DeviceRuntimeMetrics {
+    override fun recordVmSignal(kind: VmSignalKind) = Unit
+}
+
 interface DeviceRuntime {
     val profile: DeviceProfile
+    val metrics: DeviceRuntimeMetrics
+        get() = NoopDeviceRuntimeMetrics
     val system: DeviceSystemApi
     val display: DeviceDisplayApi
         get() = NoopDeviceDisplayApi
