@@ -19,11 +19,14 @@
 package ru.lazyhat.compukterkraft.impl
 
 import ru.lazyhat.compukterkraft.core.device.runtime.ComputerProgramCompiler
+import ru.lazyhat.compukterkraft.lang.frontend.LanguageBuiltins
+import ru.lazyhat.compukterkraft.lang.frontend.LanguageFrontend
 import ru.lazyhat.compukterkraft.lang.frontend.MapSourceLoader
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 import kotlin.test.fail
 
 class RomScriptCompileTest {
@@ -49,6 +52,14 @@ class RomScriptCompileTest {
     fun bundledRomTerminalDoesNotUseStdoutForVisibleUi() {
         val source = resourceText("rom/terminal.ck")
         assertFalse(source.contains("stdout::write"), "rom/terminal.ck must render via display, not stdout")
+    }
+
+    @Test
+    fun bundledRomStdioUsesTaggedDescriptorOnly() {
+        val source = resourceText("rom/stdio.ck")
+
+        assertTrue(source.contains("stdio-v1"), "rom/stdio.ck must emit tagged stdio-v1 descriptors")
+        assertFalse(source.contains("return ctx.input +"), "rom/stdio.ck must not emit untagged descriptors")
     }
 
     @Test
@@ -83,7 +94,16 @@ class RomScriptCompileTest {
             val source = sources[path] ?: fail("rom/$path missing from source map")
             val compiled = ComputerProgramCompiler.compile(path, source, sourceLoader = sourceLoader)
             if (compiled.program == null) {
-                fail("ROM script $path failed to compile: ${compiled.errorMessage}")
+                val artifact = LanguageFrontend(LanguageBuiltins.defaultRuntimeRegistry).compile(path, source, sourceLoader)
+                val details = artifact.analysis.diagnostics.joinToString { diagnostic ->
+                    val range = diagnostic.range
+                    if (range == null) {
+                        diagnostic.message
+                    } else {
+                        "${diagnostic.message} @ ${range.start.line}:${range.start.column}-${range.end.line}:${range.end.column}"
+                    }
+                }
+                fail("ROM script $path failed to compile: ${compiled.errorMessage}; diagnostics: $details")
             }
         }
     }
