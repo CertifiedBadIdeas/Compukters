@@ -32,6 +32,8 @@ class DisplayProfilingTest {
         collector.recordClear(displayId = 1)
         collector.recordSetPixel(displayId = 1)
         collector.recordFillRect(displayId = 1, width = 3, height = 4)
+        collector.recordCopyRect(displayId = 1, width = 4, height = 5)
+        collector.recordBlitMono(displayId = 1, width = 6, height = 7)
         collector.recordPresent(displayId = 1, emittedFrame = true)
         collector.recordFrameDrain(
             listOf(
@@ -64,6 +66,10 @@ class DisplayProfilingTest {
         assertEquals(1, snapshot.operations.setPixelCalls)
         assertEquals(1, snapshot.operations.fillRectCalls)
         assertEquals(12, snapshot.operations.fillRectArea)
+        assertEquals(1, snapshot.operations.copyRectCalls)
+        assertEquals(20, snapshot.operations.copyRectArea)
+        assertEquals(1, snapshot.operations.blitMonoCalls)
+        assertEquals(42, snapshot.operations.blitMonoArea)
         assertEquals(1, snapshot.operations.presentCalls)
         assertEquals(1, snapshot.operations.presentFrames)
         assertEquals(1, snapshot.frames.frameCount)
@@ -78,6 +84,8 @@ class DisplayProfilingTest {
         collector.recordClear(displayId = 1)
         collector.recordSetPixel(displayId = 1)
         collector.recordFillRect(displayId = 1, width = 3, height = 4)
+        collector.recordCopyRect(displayId = 1, width = 4, height = 5)
+        collector.recordBlitMono(displayId = 1, width = 6, height = 7)
         collector.recordPresent(displayId = 1, emittedFrame = true)
         collector.recordFrameDrain(emptyList())
 
@@ -95,6 +103,8 @@ class DisplayProfilingTest {
         registry.attach(displayId = 7, width = 16, height = 16)
         registry.clear(displayId = 7, rgb565 = 0)
         registry.fillRect(displayId = 7, x = 0, y = 0, width = 5, height = 7, rgb565 = 0x07E0)
+        registry.blitMono(displayId = 7, x = 1, y = 1, width = 3, height = 2, mask = "111000", foreground = 0x07E0, background = -1)
+        registry.copyRect(displayId = 7, srcX = 1, srcY = 1, width = 3, height = 2, dstX = 5, dstY = 5)
         registry.present(displayId = 7)
         val frames = registry.drainFrames()
 
@@ -104,6 +114,10 @@ class DisplayProfilingTest {
         assertEquals(1, snapshot.operations.clearCalls)
         assertEquals(1, snapshot.operations.fillRectCalls)
         assertEquals(35, snapshot.operations.fillRectArea)
+        assertEquals(1, snapshot.operations.copyRectCalls)
+        assertEquals(6, snapshot.operations.copyRectArea)
+        assertEquals(1, snapshot.operations.blitMonoCalls)
+        assertEquals(6, snapshot.operations.blitMonoArea)
         assertEquals(1, snapshot.operations.presentCalls)
         assertEquals(1, snapshot.operations.presentFrames)
         assertEquals(2, snapshot.frames.frameCount)

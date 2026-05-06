@@ -90,6 +90,33 @@ class DisplayRegistry(
         displays[displayId]?.fillRect(x, y, width, height, rgb565)
     }
 
+    fun copyRect(
+        displayId: Int,
+        srcX: Int,
+        srcY: Int,
+        width: Int,
+        height: Int,
+        dstX: Int,
+        dstY: Int,
+    ) {
+        metricsCollector.recordCopyRect(displayId, width, height)
+        displays[displayId]?.copyRect(srcX, srcY, width, height, dstX, dstY)
+    }
+
+    fun blitMono(
+        displayId: Int,
+        x: Int,
+        y: Int,
+        width: Int,
+        height: Int,
+        mask: String,
+        foreground: Int,
+        background: Int,
+    ) {
+        metricsCollector.recordBlitMono(displayId, width, height)
+        displays[displayId]?.blitMono(x, y, width, height, mask, foreground, background)
+    }
+
     fun present(displayId: Int) {
         val frame = displays[displayId]?.present()
         metricsCollector.recordPresent(displayId, emittedFrame = frame != null)

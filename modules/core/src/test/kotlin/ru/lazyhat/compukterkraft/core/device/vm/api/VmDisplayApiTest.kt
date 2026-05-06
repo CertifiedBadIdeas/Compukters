@@ -38,6 +38,8 @@ class VmDisplayApiTest {
 
         api.clear(3, 0x0000)
         api.fillRect(3, 4, 5, 6, 7, 0xF800)
+    api.blitMono(3, 1, 1, 3, 2, "101010", 0x07E0, 0x0000)
+    api.copyRect(3, 1, 1, 3, 2, 8, 8)
         api.present(3)
 
         val frame = assertNotNull(registry.drainFrames().lastOrNull())
