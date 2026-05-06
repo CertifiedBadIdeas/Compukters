@@ -61,6 +61,7 @@ class RuntimeDeviceImpl(
     private val gameTime: GameTimeSource,
     private val displayNetwork: DisplayNetworkBridge = NoopDisplayNetworkBridge,
     private val stateSink: DeviceStateSink,
+    private val runtimeMetricsCollector: RuntimeMetricsCollector = NoOpRuntimeMetricsCollector,
 ) : RuntimeDevice,
     DeviceEvents.Receiver {
     override val family: DeviceFamily = properties.family
@@ -129,7 +130,7 @@ class RuntimeDeviceImpl(
         manager.ensureWorkspaceInitialized(deviceId)
 
         manager.removeVm(deviceId, VmStopReason.CLOSED)
-        val handle = manager.getOrCreateVm(deviceId, profile, { labelBacking }, logger)
+        val handle = manager.getOrCreateVm(deviceId, profile, { labelBacking }, logger, runtimeMetricsCollector)
         vmHandle = handle
 
         reattachDisplaySessions(handle)
@@ -154,16 +155,28 @@ class RuntimeDeviceImpl(
 
     override fun serverTick() {
         val handle = vmHandle ?: return
+        val tickStarted = System.nanoTime()
 
-        handle.requestSlice(gameTime.gameTime())
+        val (_, requestNanos) = measureNanos { handle.requestSlice(gameTime.gameTime()) }
+        runtimeMetricsCollector.recordRequestSlice(requestNanos)
 
-        // Dispatch filesystem host calls
-        val results = handle.drainHostCalls().map(hostCallDispatcher::dispatch)
-        if (results.isNotEmpty()) {
-            handle.deliverHostResults(results)
-        }
+        val (calls, drainNanos) = measureNanos { handle.drainHostCalls() }
+        runtimeMetricsCollector.recordHostCallDrain(calls.size, drainNanos)
 
-        flushDisplaySessions(handle)
+        val (results, dispatchNanos) = measureNanos { calls.map(hostCallDispatcher::dispatch) }
+        runtimeMetricsCollector.recordHostCallDispatch(calls.size, dispatchNanos)
+
+        val (_, deliverNanos) =
+            measureNanos {
+                if (results.isNotEmpty()) {
+                    handle.deliverHostResults(results)
+                }
+            }
+        runtimeMetricsCollector.recordHostResultDelivery(results.size, deliverNanos)
+
+        val (flushedFrames, flushNanos) = measureNanos { flushDisplaySessions(handle) }
+        runtimeMetricsCollector.recordDisplayFlush(frameCount = flushedFrames, nanos = flushNanos)
+        runtimeMetricsCollector.recordServerTick(System.nanoTime() - tickStarted)
     }
 
     // ── Lifecycle observation ────────────────────────────────────────
@@ -236,10 +249,17 @@ class RuntimeDeviceImpl(
         }
     }
 
-    private fun flushDisplaySessions(handle: BackgroundDeviceVm) {
-        if (displaySessions.isEmpty()) return
-        val frames = handle.drainDisplayFrames()
-        if (frames.isEmpty()) return
+    private inline fun <T> measureNanos(block: () -> T): Pair<T, Long> {
+        val started = System.nanoTime()
+        val result = block()
+        return result to (System.nanoTime() - started)
+    }
+
+    private fun flushDisplaySessions(handle: BackgroundDeviceVm): Int {
+        if (displaySessions.isEmpty()) return 0
+        val (frames, drainNanos) = measureNanos { handle.drainDisplayFrames() }
+        runtimeMetricsCollector.recordDisplayFrameDrain(frames.size, drainNanos)
+        if (frames.isEmpty()) return 0
 
         val sessionsByDisplay = displaySessions.values.groupBy { it.displayId }
         val toDetach = mutableListOf<Pair<UUID, Int>>()
@@ -254,5 +274,6 @@ class RuntimeDeviceImpl(
             }
         }
         toDetach.forEach { (playerUuid, displayId) -> detachDisplaySession(playerUuid, displayId) }
+        return frames.size
     }
 }
