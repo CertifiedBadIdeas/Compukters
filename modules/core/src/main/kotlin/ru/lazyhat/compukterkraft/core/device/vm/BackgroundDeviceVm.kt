@@ -35,6 +35,8 @@ import ru.lazyhat.compukterkraft.core.LOGGER
 import ru.lazyhat.compukterkraft.core.device.runtime.ClasspathFirmwareProgramLoader
 import ru.lazyhat.compukterkraft.core.device.runtime.ComputerProgramCompiler
 import ru.lazyhat.compukterkraft.core.device.runtime.FirmwareProgramLoader
+import ru.lazyhat.compukterkraft.core.device.runtime.NoOpRuntimeMetricsCollector
+import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeMetricsCollector
 import ru.lazyhat.compukterkraft.core.device.runtime.WorkspaceProgramLoader
 import ru.lazyhat.compukterkraft.core.device.vm.api.VmDisplayApi
 import ru.lazyhat.compukterkraft.core.device.vm.api.VmEventApi
@@ -100,6 +102,7 @@ class BackgroundDeviceVm(
     workspace: DeviceWorkspace,
     private val firmwareLoader: FirmwareProgramLoader = ClasspathFirmwareProgramLoader(),
     private val displayMetricsCollector: DisplayMetricsCollector = NoOpDisplayMetricsCollector,
+    private val runtimeMetricsCollector: RuntimeMetricsCollector = NoOpRuntimeMetricsCollector,
 ) : DeviceVmHandle,
     VmContext {
     private val scope = CoroutineScope(SupervisorJob() + dispatcher)
@@ -123,6 +126,7 @@ class BackgroundDeviceVm(
     private val displayRegistry = DisplayRegistry(displayMetricsCollector)
     private val peripheralRegistry = VmPeripheralRegistry()
     private val runtimeRegistryProfile = createRuntimeRegistryProfile()
+    private var executionWindowStartedNanos: Long? = null
 
     /**
      * Observe terminal VM states (stopped, crashed).
@@ -196,8 +200,12 @@ class BackgroundDeviceVm(
     override fun requestSlice(serverTick: Long) {
         stateManager.updateCurrentTick(serverTick)
         val wakeTick = stateManager.sleepUntilTick
-        if (wakeTick != null && serverTick < wakeTick) return
-        slicePermits.trySend(Unit)
+        if (wakeTick != null && serverTick < wakeTick) {
+            runtimeMetricsCollector.recordSliceRequest(sent = false, sleepGated = true)
+            return
+        }
+        val result = slicePermits.trySend(Unit)
+        runtimeMetricsCollector.recordSliceRequest(sent = result.isSuccess, sleepGated = false)
     }
 
     override fun drainHostCalls(): List<HostCall> = hostCallManager.drainHostCalls()
@@ -274,6 +282,7 @@ class BackgroundDeviceVm(
         reason: VmStopReason = VmStopReason.REQUESTED,
         errorMessage: String? = null,
     ) {
+        finishExecutionWindow()
         if (stateManager.isStopped) {
             LOGGER.debug { "DeviceID: $deviceId already stopped, ignoring stop request (reason: $reason, error: $errorMessage)" }
             return
@@ -289,7 +298,14 @@ class BackgroundDeviceVm(
         LOGGER.debug { "DeviceID: $deviceId stop lock request ended (reason: $reason, error: $errorMessage)" }
     }
 
+    private fun finishExecutionWindow() {
+        val started = executionWindowStartedNanos ?: return
+        executionWindowStartedNanos = null
+        runtimeMetricsCollector.recordVmExecutionWindow(System.nanoTime() - started)
+    }
+
     private suspend fun awaitSlicePermit() {
+        finishExecutionWindow()
         stateManager.setState(
             when {
                 stateManager.sleepUntilTick != null -> VmState.Sleeping
@@ -298,6 +314,8 @@ class BackgroundDeviceVm(
             },
         )
         slicePermits.receive()
+        runtimeMetricsCollector.recordSlicePermitReceived()
+        executionWindowStartedNanos = System.nanoTime()
         stateManager.updateSliceDeadlineNanos(profile.resources.cpu.wallTimeGuardNanosPerSlice)
         stateManager.setState(VmState.Running)
     }
@@ -305,8 +323,10 @@ class BackgroundDeviceVm(
     private suspend fun applySchedulingPoint() {
         coroutineContext.ensureActive()
         if (System.nanoTime() >= stateManager.sliceDeadlineNanos) {
+            runtimeMetricsCollector.recordSchedulingPoint(waitedForSlice = true)
             awaitSlicePermit()
         } else {
+            runtimeMetricsCollector.recordSchedulingPoint(waitedForSlice = false)
             coroutineYield()
         }
     }
