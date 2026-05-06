@@ -19,7 +19,9 @@
 
 package ru.lazyhat.compukterkraft.lang.runtime.blazing
 
+import ru.lazyhat.compukterkraft.lang.runtime.VmValue
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 
 class NativeVmSignalTest {
@@ -52,6 +54,24 @@ class NativeVmSignalTest {
             NativeVmSignal.Error("bad bytecode"),
             NativeVmSignal.decode(byteArrayOf(255.toByte()) + stringBytes("bad bytecode")),
         )
+    }
+
+    @Test
+    fun primitiveNativeValuesConvertToRuntimeValues() {
+        assertEquals(VmValue.UnitValue, NativeVmValue.UnitValue.toVmValue("system", "log"))
+        assertEquals(VmValue.NullValue, NativeVmValue.NullValue.toVmValue("system", "log"))
+        assertEquals(VmValue.BoolValue(true), NativeVmValue.BoolValue(true).toVmValue("display", "isAttached"))
+        assertEquals(VmValue.IntValue(7), NativeVmValue.IntValue(7).toVmValue("display", "primary"))
+        assertEquals(VmValue.LongValue(9), NativeVmValue.LongValue(9).toVmValue("system", "currentTick"))
+        assertEquals(VmValue.StringValue("ok"), NativeVmValue.StringValue("ok").toVmValue("system", "label"))
+    }
+
+    @Test
+    fun primitiveRuntimeValuesEncodeForResume() {
+        assertContentEquals(byteArrayOf(0), VmValue.UnitValue.toNativeBytes("", "yield"))
+        assertContentEquals(byteArrayOf(1), VmValue.NullValue.toNativeBytes("test", "null"))
+        assertContentEquals(byteArrayOf(2, 1), VmValue.BoolValue(true).toNativeBytes("display", "isAttached"))
+        assertContentEquals(byteArrayOf(3, 7, 0, 0, 0), VmValue.IntValue(7).toNativeBytes("display", "primary"))
     }
 
     private fun stringBytes(value: String): ByteArray =
