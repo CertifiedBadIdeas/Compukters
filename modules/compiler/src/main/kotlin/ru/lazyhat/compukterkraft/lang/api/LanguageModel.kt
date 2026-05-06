@@ -21,11 +21,17 @@ package ru.lazyhat.compukterkraft.lang.api
 
 enum class Visibility { PUBLIC, PRIVATE }
 
+data class TypeParameterDeclaration(
+    val name: String,
+    val range: SourceRange,
+)
+
 data class StructDeclaration(
     override val name: String,
     val fields: List<RecordFieldDeclaration>,
     val visibility: Visibility = Visibility.PRIVATE,
     override val range: SourceRange,
+    val typeParameters: List<TypeParameterDeclaration> = emptyList(),
 ) : TopLevelDeclaration
 
 data class ClassDeclaration(
@@ -34,6 +40,7 @@ data class ClassDeclaration(
     val members: List<ClassMemberDeclaration>,
     val visibility: Visibility = Visibility.PRIVATE,
     override val range: SourceRange,
+    val typeParameters: List<TypeParameterDeclaration> = emptyList(),
 ) : TopLevelDeclaration
 
 data class ClassConstructorParameter(
@@ -88,11 +95,13 @@ data class TypeSyntax(
     val nullable: Boolean = false,
     val range: SourceRange,
     val qualifier: String? = null,
+    val arguments: List<TypeSyntax> = emptyList(),
 ) {
     val displayName: String
         get() {
             val qualifiedName = qualifier?.let { "$it::$name" } ?: name
-            return if (nullable) "$qualifiedName?" else qualifiedName
+            val argumentList = if (arguments.isEmpty()) "" else arguments.joinToString(", ", "<", ">") { it.displayName }
+            return if (nullable) "$qualifiedName$argumentList?" else "$qualifiedName$argumentList"
         }
 }
 
