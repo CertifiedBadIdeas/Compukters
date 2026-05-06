@@ -126,7 +126,13 @@ Run a Minecraft dev client with the Rust VM option enabled:
 ./gradlew :v1_21_1-neoforge:runClientRust
 ```
 
-The Rust client run tasks are `runClientRust`, `runClient2Rust`, and `runClient3Rust`. Each depends on `buildRustVmNativeLibrary`, which builds `native/ckl-vm/target/debug/libckl_vm.so` before launching the client and passes the required `ckl.vm.runner=rust` and `ckl.vm.native.library=...` JVM properties.
+Run a Minecraft dev server with the Rust VM option enabled:
+
+```bash
+./gradlew :v1_21_1-neoforge:runServerRust
+```
+
+The Rust run tasks are `runClientRust`, `runClient2Rust`, `runClient3Rust`, and `runServerRust`. Each depends on `buildRustVmNativeLibrary`, which builds `native/ckl-vm/target/debug/libckl_vm.so` before launching Minecraft and passes the required `ckl.vm.runner=rust` and `ckl.vm.native.library=...` JVM properties.
 
 The native runner is disabled unless both `-Dckl.vm.runner=rust` and `-Dckl.vm.native.library=/absolute/path/to/libckl_vm.so` are provided. The Kotlin VM remains the default runtime path.
 
