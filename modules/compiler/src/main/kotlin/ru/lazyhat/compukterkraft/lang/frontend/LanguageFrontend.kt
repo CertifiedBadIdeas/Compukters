@@ -50,11 +50,16 @@ import ru.lazyhat.compukterkraft.lang.api.ImportDeclaration
 import ru.lazyhat.compukterkraft.lang.api.ImportItem
 import ru.lazyhat.compukterkraft.lang.api.ImportMode
 import ru.lazyhat.compukterkraft.lang.api.ImportSource
+import ru.lazyhat.compukterkraft.lang.api.IndexAccessExpression
+import ru.lazyhat.compukterkraft.lang.api.IndexAssignmentStatement
 import ru.lazyhat.compukterkraft.lang.api.Instruction
 import ru.lazyhat.compukterkraft.lang.api.IntLiteralValue
 import ru.lazyhat.compukterkraft.lang.api.LegacyRecordConstructionExpression
+import ru.lazyhat.compukterkraft.lang.api.ListLiteralExpression
 import ru.lazyhat.compukterkraft.lang.api.LiteralExpression
 import ru.lazyhat.compukterkraft.lang.api.LongLiteralValue
+import ru.lazyhat.compukterkraft.lang.api.MapEntryExpression
+import ru.lazyhat.compukterkraft.lang.api.MapLiteralExpression
 import ru.lazyhat.compukterkraft.lang.api.MemberAccessExpression
 import ru.lazyhat.compukterkraft.lang.api.MemberAssignmentStatement
 import ru.lazyhat.compukterkraft.lang.api.NameExpression
@@ -78,6 +83,8 @@ import ru.lazyhat.compukterkraft.lang.api.ThisExpression
 import ru.lazyhat.compukterkraft.lang.api.Token
 import ru.lazyhat.compukterkraft.lang.api.TokenKind
 import ru.lazyhat.compukterkraft.lang.api.TopLevelDeclaration
+import ru.lazyhat.compukterkraft.lang.api.TypeApplicationExpression
+import ru.lazyhat.compukterkraft.lang.api.TypeParameterDeclaration
 import ru.lazyhat.compukterkraft.lang.api.TypeSyntax
 import ru.lazyhat.compukterkraft.lang.api.UnaryExpression
 import ru.lazyhat.compukterkraft.lang.api.UnaryOperator
@@ -118,9 +125,14 @@ class LanguageFrontend(
 internal data class TypeRef(
     val name: String,
     val nullable: Boolean = false,
+    val arguments: List<TypeRef> = emptyList(),
+    val typeParameter: Boolean = false,
 ) {
     val displayName: String
-        get() = if (nullable) "$name?" else name
+        get() {
+            val argumentList = if (arguments.isEmpty()) "" else arguments.joinToString(", ", "<", ">") { it.displayName }
+            return if (nullable) "$name$argumentList?" else "$name$argumentList"
+        }
 }
 
 internal sealed interface Binding {
@@ -255,6 +267,7 @@ internal class SemanticAnalyzer(
     private val methodCallBindings = IdentityHashMap<CallExpression, ClassMethodBinding>()
     private val memberBindings = IdentityHashMap<MemberAccessExpression, Binding>()
     private val builtinModules = registry.modules.associateBy { it.name }
+    private val typeParameterScopes = ArrayDeque<Set<String>>()
 
     private val typeNames: MutableMap<String, TypeRef> =
         registry.builtinTypes
@@ -274,6 +287,77 @@ internal class SemanticAnalyzer(
     private var currentClass: ClassBinding? = null
     private var currentStaticMethod: Boolean = false
     private var inConstruction: Boolean = false
+
+    private fun <T> withTypeParameters(
+        parameters: List<TypeParameterDeclaration>,
+        action: () -> T,
+    ): T {
+        typeParameterScopes.addLast(parameters.map { it.name }.toSet())
+        try {
+            return action()
+        } finally {
+            typeParameterScopes.removeLast()
+        }
+    }
+
+    private fun <T> withResolvedClassTypeParameters(
+        declaration: ClassDeclaration,
+        action: () -> T,
+    ): T = withTypeParameters(declaration.typeParameters, action)
+
+    private fun isTypeParameter(name: String): Boolean = typeParameterScopes.asReversed().any { name in it }
+
+    private fun substitute(
+        type: TypeRef,
+        substitutions: Map<String, TypeRef>,
+    ): TypeRef {
+        if (type.typeParameter) {
+            val replacement = substitutions[type.name] ?: return type
+            return if (type.nullable) replacement.copy(nullable = true) else replacement
+        }
+        return type.copy(arguments = type.arguments.map { substitute(it, substitutions) })
+    }
+
+    private fun substitutionsFor(
+        parameters: List<TypeParameterDeclaration>,
+        arguments: List<TypeRef>,
+    ): Map<String, TypeRef> = parameters.zip(arguments).associate { (parameter, argument) -> parameter.name to argument }
+
+    private fun inferSubstitutions(
+        parameters: List<TypeRef>,
+        arguments: List<TypeRef>,
+        initial: Map<String, TypeRef> = emptyMap(),
+    ): Map<String, TypeRef>? {
+        val result = initial.toMutableMap()
+
+        fun collect(
+            expected: TypeRef,
+            actual: TypeRef,
+        ): Boolean {
+            if (expected.typeParameter) {
+                val replacement = if (expected.nullable) actual.copy(nullable = false) else actual
+                val previous = result[expected.name]
+                if (previous != null && previous != replacement) return false
+                result[expected.name] = replacement
+                return true
+            }
+            if (expected.name != actual.name || expected.arguments.size != actual.arguments.size) return false
+            return expected.arguments.zip(actual.arguments).all { (expectedArgument, actualArgument) -> collect(expectedArgument, actualArgument) }
+        }
+
+        return if (parameters.zip(arguments).all { (parameter, argument) -> collect(parameter, argument) }) result else null
+    }
+
+    private fun collectionType(
+        name: String,
+        vararg arguments: TypeRef,
+    ): TypeRef = TypeRef(name, arguments = arguments.toList())
+
+    private fun TypeRef.elementType(): TypeRef? = if (name in setOf("Array", "List") && arguments.size == 1) arguments[0] else null
+
+    private fun TypeRef.mapKeyType(): TypeRef? = if (name == "Map" && arguments.size == 2) arguments[0] else null
+
+    private fun TypeRef.mapValueType(): TypeRef? = if (name == "Map" && arguments.size == 2) arguments[1] else null
 
     fun analyze(program: Program): SemanticResult {
         registerAmbientBuiltins()
@@ -642,20 +726,22 @@ internal class SemanticAnalyzer(
         exports: ModuleExports,
         qualifier: String?,
     ): TypeRef {
+        val exportedUserType =
+            syntax.qualifier == null &&
+                qualifier != null &&
+                (exports.structs.containsKey(syntax.name) || exports.classes.containsKey(syntax.name))
         val typeName =
-            if (syntax.qualifier == null && (
-                    exports.structs.containsKey(syntax.name) ||
-                        exports.classes.containsKey(
-                            syntax.name,
-                        )
-                ) &&
-                qualifier != null
-            ) {
+            if (exportedUserType) {
                 "$qualifier::${syntax.name}"
             } else {
-                syntax.displayName.removeSuffix("?")
+                syntax.name
             }
-        return TypeRef(typeName, syntax.nullable)
+        return TypeRef(
+            typeName,
+            syntax.nullable,
+            syntax.arguments.map { exportTypeRef(it, exports, qualifier) },
+            typeParameter = syntax.qualifier == null && !exportedUserType && !typeNames.containsKey(syntax.name),
+        )
     }
 
     private fun registerTopLevel(declarations: List<TopLevelDeclaration>) {
@@ -669,13 +755,17 @@ internal class SemanticAnalyzer(
                 return@forEach
             }
             val fields =
-                declaration.fields.associate { field ->
-                    field.name to
-                        (
-                            resolveType(field.type, field.range) ?: TypeRef(
-                                "Unit",
+                buildMap {
+                    withTypeParameters(declaration.typeParameters) {
+                        declaration.fields.forEach { field ->
+                            put(
+                                field.name,
+                                resolveType(field.type, field.range) ?: TypeRef(
+                                    "Unit",
+                                ),
                             )
-                        )
+                        }
+                    }
                 }
             val symbol =
                 SymbolInfo(
@@ -722,7 +812,7 @@ internal class SemanticAnalyzer(
 
             val fields = linkedMapOf<String, ClassFieldBinding>()
             declaration.constructorParameters.forEach { parameter ->
-                val parameterType = resolveType(parameter.type, parameter.range) ?: TypeRef("Unit")
+                val parameterType = withResolvedClassTypeParameters(declaration) { resolveType(parameter.type, parameter.range) ?: TypeRef("Unit") }
                 val mutability = parameter.fieldMutability
                 if (mutability != null) {
                     if (fields.containsKey(parameter.name)) {
@@ -759,7 +849,7 @@ internal class SemanticAnalyzer(
                             field.range,
                         )
                 }
-                val fieldType = field.type?.let { resolveType(it, it.range) } ?: TypeRef("Unit")
+                val fieldType = withResolvedClassTypeParameters(declaration) { field.type?.let { resolveType(it, it.range) } ?: TypeRef("Unit") }
                 val fieldSymbol =
                     SymbolInfo(
                         name = field.name,
@@ -780,8 +870,18 @@ internal class SemanticAnalyzer(
 
             fun methodBinding(member: ClassMethodDeclaration): ClassMethodBinding {
                 val function = member.function
-                val parameterTypes = function.parameters.map { resolveType(it.type, it.range) ?: TypeRef("Unit") }
-                val returnType = function.returnType?.let { resolveType(it, it.range) } ?: TypeRef("Unit")
+                val parameterTypes =
+                    withResolvedClassTypeParameters(declaration) {
+                        withTypeParameters(function.typeParameters) {
+                            function.parameters.map { resolveType(it.type, it.range) ?: TypeRef("Unit") }
+                        }
+                    }
+                val returnType =
+                    withResolvedClassTypeParameters(declaration) {
+                        withTypeParameters(function.typeParameters) {
+                            function.returnType?.let { resolveType(it, it.range) } ?: TypeRef("Unit")
+                        }
+                    }
                 val methodSymbol =
                     SymbolInfo(
                         name = function.name,
@@ -831,17 +931,21 @@ internal class SemanticAnalyzer(
                 return@forEach
             }
             val parameterTypes =
-                declaration.parameters.map {
-                    resolveType(it.type, it.range)
+                withTypeParameters(declaration.typeParameters) {
+                    declaration.parameters.map {
+                        resolveType(it.type, it.range)
+                            ?: TypeRef(
+                                "Unit",
+                            )
+                    }
+                }
+            val returnType =
+                withTypeParameters(declaration.typeParameters) {
+                    declaration.returnType?.let { resolveType(it, it.range) }
                         ?: TypeRef(
                             "Unit",
                         )
                 }
-            val returnType =
-                declaration.returnType?.let { resolveType(it, it.range) }
-                    ?: TypeRef(
-                        "Unit",
-                    )
             val symbol =
                 SymbolInfo(
                     name = declaration.name,
@@ -865,17 +969,19 @@ internal class SemanticAnalyzer(
     private fun analyzeClass(declaration: ClassDeclaration) {
         val binding = classBindings[declaration] ?: return
         val constructorScope = Scope(null)
-        declaration.constructorParameters.forEach { parameter ->
-            val type = resolveType(parameter.type, parameter.range) ?: TypeRef("Unit")
-            val symbol =
-                SymbolInfo(
-                    name = parameter.name,
-                    kind = SymbolKind.PARAMETER,
-                    range = parameter.range,
-                    detail = "${parameter.name}: ${type.displayName}",
-                )
-            symbols += symbol
-            constructorScope.define(parameter.name, VariableBinding(symbol, type, mutable = false))
+        withTypeParameters(declaration.typeParameters) {
+            declaration.constructorParameters.forEach { parameter ->
+                val type = resolveType(parameter.type, parameter.range) ?: TypeRef("Unit")
+                val symbol =
+                    SymbolInfo(
+                        name = parameter.name,
+                        kind = SymbolKind.PARAMETER,
+                        range = parameter.range,
+                        detail = "${parameter.name}: ${type.displayName}",
+                    )
+                symbols += symbol
+                constructorScope.define(parameter.name, VariableBinding(symbol, type, mutable = false))
+            }
         }
 
         declaration.members.forEach { member ->
@@ -1003,6 +1109,7 @@ internal class SemanticAnalyzer(
             }
 
             is AssignmentStatement,
+            is IndexAssignmentStatement,
             is ExpressionStatement,
             is ReturnStatement,
             is VariableDeclarationStatement,
@@ -1040,8 +1147,12 @@ internal class SemanticAnalyzer(
             symbols += symbol
             scope.define(parameter.name, VariableBinding(symbol, type, mutable = false))
         }
-        withClassContext(owner, staticMethod = member.static, construction = false) {
-            analyzeBlock(member.function.body, scope, member.function.range, methodBinding.returnType)
+        withTypeParameters(owner.declaration.typeParameters) {
+            withTypeParameters(member.function.typeParameters) {
+                withClassContext(owner, staticMethod = member.static, construction = false) {
+                    analyzeBlock(member.function.body, scope, member.function.range, methodBinding.returnType)
+                }
+            }
         }
     }
 
@@ -1085,7 +1196,9 @@ internal class SemanticAnalyzer(
                 VariableBinding(symbol, type, mutable = false),
             )
         }
-        analyzeBlock(declaration.body, scope, declaration.range, binding.returnType)
+        withTypeParameters(declaration.typeParameters) {
+            analyzeBlock(declaration.body, scope, declaration.range, binding.returnType)
+        }
     }
 
     private fun analyzeBlock(
@@ -1129,7 +1242,7 @@ internal class SemanticAnalyzer(
 
             is ReturnStatement -> {
                 val actual =
-                    statement.expression?.let { analyzeExpression(it, scope) }
+                    statement.expression?.let { analyzeExpression(it, scope, expectedReturnType) }
                         ?: TypeRef(
                             "Unit",
                         )
@@ -1137,22 +1250,23 @@ internal class SemanticAnalyzer(
             }
 
             is VariableDeclarationStatement -> {
-                val valueType = analyzeExpression(statement.initializer, scope)
                 val declaredType =
-                    statement.type?.let { resolveType(it, statement.range) } ?: valueType
-                expectAssignable(valueType, declaredType, statement.range, "Initializer type mismatch.")
+                    statement.type?.let { resolveType(it, statement.range) }
+                val valueType = analyzeExpression(statement.initializer, scope, declaredType)
+                val variableType = declaredType ?: valueType
+                expectAssignable(valueType, variableType, statement.range, "Initializer type mismatch.")
                 val symbol =
                     SymbolInfo(
                         name = statement.name,
                         kind = SymbolKind.VARIABLE,
                         range = statement.range,
-                        detail = "${if (statement.mutable) "var" else "val"} ${statement.name}: ${declaredType.displayName}",
+                        detail = "${if (statement.mutable) "var" else "val"} ${statement.name}: ${variableType.displayName}",
                         ownerFunctionRange = functionRange,
                     )
                 symbols += symbol
                 scope.define(
                     statement.name,
-                    VariableBinding(symbol, declaredType, mutable = statement.mutable),
+                    VariableBinding(symbol, variableType, mutable = statement.mutable),
                 )
             }
 
@@ -1162,6 +1276,10 @@ internal class SemanticAnalyzer(
 
             is MemberAssignmentStatement -> {
                 analyzeMemberAssignment(statement, scope)
+            }
+
+            is IndexAssignmentStatement -> {
+                analyzeIndexAssignment(statement, scope)
             }
 
             is WhileStatement -> {
@@ -1207,6 +1325,7 @@ internal class SemanticAnalyzer(
     private fun analyzeExpression(
         expression: Expression,
         scope: Scope,
+        expectedType: TypeRef? = null,
     ): TypeRef =
         expressionTypes[expression]
             ?: when (expression) {
@@ -1243,6 +1362,23 @@ internal class SemanticAnalyzer(
 
                 is LegacyRecordConstructionExpression -> {
                     analyzeLegacyRecordConstruction(expression, scope)
+                }
+
+                is ListLiteralExpression -> {
+                    analyzeListLiteral(expression, scope, expectedType)
+                }
+
+                is MapLiteralExpression -> {
+                    analyzeMapLiteral(expression, scope, expectedType)
+                }
+
+                is IndexAccessExpression -> {
+                    analyzeIndexAccess(expression, scope)
+                }
+
+                is TypeApplicationExpression -> {
+                    resolveType(TypeSyntax(expression.name, range = expression.range, arguments = expression.arguments), expression.range)
+                        ?: TypeRef("Unit")
                 }
 
                 is ScopeAccessExpression -> {
@@ -1358,8 +1494,36 @@ internal class SemanticAnalyzer(
                 )
         }
         val actual = analyzeExpression(statement.expression, scope)
-        expectAssignable(actual, field.type, statement.expression.range, "Field assignment type mismatch.")
-        references += ReferenceInfo(statement.memberName, statement.memberRange, field.symbol, field.type.displayName)
+        val substitutions = substitutionsFor(classBinding.declaration.typeParameters, receiverType.arguments)
+        val fieldType = substitute(field.type, substitutions)
+        expectAssignable(actual, fieldType, statement.expression.range, "Field assignment type mismatch.")
+        references += ReferenceInfo(statement.memberName, statement.memberRange, field.symbol, fieldType.displayName)
+    }
+
+    private fun analyzeIndexAssignment(
+        statement: IndexAssignmentStatement,
+        scope: Scope,
+    ) {
+        val receiverType = analyzeExpression(statement.receiver, scope)
+        val indexType = analyzeExpression(statement.index, scope)
+        when {
+            receiverType.elementType() != null -> {
+                expectAssignable(indexType, TypeRef("Int"), statement.index.range, "Index type mismatch.")
+                val valueType = analyzeExpression(statement.expression, scope, receiverType.elementType())
+                expectAssignable(valueType, receiverType.elementType() ?: TypeRef("Unit"), statement.expression.range, "Index assignment type mismatch.")
+            }
+
+            receiverType.mapKeyType() != null && receiverType.mapValueType() != null -> {
+                expectAssignable(indexType, receiverType.mapKeyType() ?: TypeRef("Unit"), statement.index.range, "Index type mismatch.")
+                val valueType = analyzeExpression(statement.expression, scope, receiverType.mapValueType())
+                expectAssignable(valueType, receiverType.mapValueType() ?: TypeRef("Unit"), statement.expression.range, "Index assignment type mismatch.")
+            }
+
+            else -> {
+                diagnostics += FrontendDiagnostic("Type `${receiverType.displayName}` is not index-assignable.", statement.range)
+                analyzeExpression(statement.expression, scope)
+            }
+        }
     }
 
     private fun analyzeThis(expression: ThisExpression): TypeRef {
@@ -1439,9 +1603,15 @@ internal class SemanticAnalyzer(
         val classBinding = userClassesByName[receiverType.name]
         val builtinType = registry.builtinType(receiverType.name)
         val classField = classBinding?.fields?.get(expression.memberName)
+        val substitutions =
+            when {
+                recordBinding != null -> substitutionsFor(recordBinding.declaration?.typeParameters.orEmpty(), receiverType.arguments)
+                classBinding != null -> substitutionsFor(classBinding.declaration.typeParameters, receiverType.arguments)
+                else -> emptyMap()
+            }
         val fieldType =
-            recordBinding?.fields?.get(expression.memberName)
-                ?: classField?.type
+            recordBinding?.fields?.get(expression.memberName)?.let { substitute(it, substitutions) }
+                ?: classField?.type?.let { substitute(it, substitutions) }
                 ?: builtinType?.fields?.firstOrNull { it.name == expression.memberName }?.let {
                     TypeRef(
                         it.typeName,
@@ -1492,8 +1662,10 @@ internal class SemanticAnalyzer(
         expression: CallExpression,
         scope: Scope,
     ): TypeRef {
+        analyzeCollectionConstructorCall(expression, scope)?.let { return it }
         analyzeClassConstructorCall(expression, scope)?.let { return it }
         analyzeRecordConstructorCall(expression, scope)?.let { return it }
+        analyzeCollectionMethodCall(expression, scope)?.let { return it }
         analyzeClassMethodCall(expression, scope)?.let { return it }
         val binding =
             when (val callee = expression.callee) {
@@ -1553,9 +1725,20 @@ internal class SemanticAnalyzer(
                     expression.range,
                 )
         }
+        val argumentTypes = expression.arguments.map { analyzeExpression(it.expression, scope) }
+        val substitutions =
+            binding.declaration?.typeParameters?.takeIf { it.isNotEmpty() }?.let {
+                inferSubstitutions(binding.parameterTypes, argumentTypes)
+                    ?: run {
+                        diagnostics += FrontendDiagnostic("Cannot infer generic type arguments for `${binding.symbol.name}`.", expression.range)
+                        emptyMap()
+                    }
+            } ?: emptyMap()
+        val parameterTypes = binding.parameterTypes.map { substitute(it, substitutions) }
+        val returnType = substitute(binding.returnType, substitutions)
         expression.arguments.forEachIndexed { index, argument ->
-            val actual = analyzeExpression(argument.expression, scope)
-            val expected = binding.parameterTypes.getOrNull(index) ?: return@forEachIndexed
+            val actual = argumentTypes[index]
+            val expected = parameterTypes.getOrNull(index) ?: return@forEachIndexed
             expectAssignable(actual, expected, argument.expression.range, "Argument type mismatch.")
         }
         callBindings[expression] = binding
@@ -1564,9 +1747,143 @@ internal class SemanticAnalyzer(
                 binding.symbol.name,
                 expression.callee.range,
                 binding.symbol,
-                binding.returnType.displayName,
+                returnType.displayName,
             )
-        return binding.returnType
+        return returnType
+    }
+
+    private fun analyzeCollectionConstructorCall(
+        expression: CallExpression,
+        scope: Scope,
+    ): TypeRef? {
+        val callee = expression.callee as? TypeApplicationExpression ?: return null
+        if (callee.name != "Array") return null
+        val type = resolveType(TypeSyntax(callee.name, range = callee.range, arguments = callee.arguments), callee.range) ?: TypeRef("Unit")
+        val elementType = type.elementType() ?: TypeRef("Unit")
+        val namedArguments = expression.arguments.filterIsInstance<NamedCallArgument>()
+        if (namedArguments.size != expression.arguments.size) {
+            diagnostics += FrontendDiagnostic("Array constructor arguments must be named.", expression.range)
+            expression.arguments.forEach { analyzeExpression(it.expression, scope) }
+            return type
+        }
+        val argumentsByName = namedArguments.associateBy { it.name }
+        val size = argumentsByName["size"]
+        val default = argumentsByName["default"]
+        if (size == null) {
+            diagnostics += FrontendDiagnostic("Missing constructor argument `size` for Array.", expression.range)
+        } else {
+            val actual = analyzeExpression(size.expression, scope, TypeRef("Int"))
+            expectAssignable(actual, TypeRef("Int"), size.expression.range, "Constructor argument type mismatch.")
+        }
+        if (default == null) {
+            diagnostics += FrontendDiagnostic("Missing constructor argument `default` for Array.", expression.range)
+        } else {
+            val actual = analyzeExpression(default.expression, scope, elementType)
+            expectAssignable(actual, elementType, default.expression.range, "Constructor argument type mismatch.")
+        }
+        namedArguments.filter { it.name !in setOf("size", "default") }.forEach { argument ->
+            diagnostics += FrontendDiagnostic("Unknown constructor parameter `${argument.name}` for Array.", argument.nameRange)
+            analyzeExpression(argument.expression, scope)
+        }
+        return type
+    }
+
+    private fun analyzeCollectionMethodCall(
+        expression: CallExpression,
+        scope: Scope,
+    ): TypeRef? {
+        val callee = expression.callee as? MemberAccessExpression ?: return null
+        val receiverName = callee.receiver as? NameExpression
+        if (receiverName != null && userClassesByName.containsKey(receiverName.name)) return null
+        val receiverType = analyzeExpression(callee.receiver, scope)
+        val signature = collectionMethodSignature(receiverType, callee.memberName) ?: return null
+        expression.arguments.filterIsInstance<NamedCallArgument>().forEach { argument ->
+            diagnostics += FrontendDiagnostic("Named arguments are not supported for collection methods.", argument.range)
+        }
+        if (signature.parameterTypes.size != expression.arguments.size) {
+            diagnostics +=
+                FrontendDiagnostic(
+                    "Expected ${signature.parameterTypes.size} arguments but got ${expression.arguments.size}.",
+                    expression.range,
+                )
+        }
+        expression.arguments.forEachIndexed { index, argument ->
+            val expected = signature.parameterTypes.getOrNull(index)
+            val actual = analyzeExpression(argument.expression, scope, expected)
+            if (expected != null) {
+                expectAssignable(actual, expected, argument.expression.range, "Argument type mismatch.")
+            }
+        }
+        references +=
+            ReferenceInfo(
+                callee.memberName,
+                callee.range,
+                SymbolInfo(
+                    name = callee.memberName,
+                    kind = SymbolKind.METHOD,
+                    range = callee.range,
+                    detail = "${receiverType.displayName}.${callee.memberName}(${signature.parameterTypes.joinToString { it.displayName }}) : ${signature.returnType.displayName}",
+                ),
+                signature.returnType.displayName,
+            )
+        return signature.returnType
+    }
+
+    private data class CollectionMethodSignature(
+        val parameterTypes: List<TypeRef>,
+        val returnType: TypeRef,
+    )
+
+    private fun collectionMethodSignature(
+        receiverType: TypeRef,
+        methodName: String,
+    ): CollectionMethodSignature? {
+        receiverType.elementType()?.let { elementType ->
+            return when (receiverType.name) {
+                "Array" ->
+                    when (methodName) {
+                        "size" -> CollectionMethodSignature(emptyList(), TypeRef("Int"))
+                        "get" -> CollectionMethodSignature(listOf(TypeRef("Int")), elementType)
+                        "set" -> CollectionMethodSignature(listOf(TypeRef("Int"), elementType), TypeRef("Unit"))
+                        "getOrNull" -> CollectionMethodSignature(listOf(TypeRef("Int")), elementType.copy(nullable = true))
+                        else -> null
+                    }
+
+                "List" ->
+                    when (methodName) {
+                        "size" -> CollectionMethodSignature(emptyList(), TypeRef("Int"))
+                        "isEmpty" -> CollectionMethodSignature(emptyList(), TypeRef("Bool"))
+                        "get" -> CollectionMethodSignature(listOf(TypeRef("Int")), elementType)
+                        "set" -> CollectionMethodSignature(listOf(TypeRef("Int"), elementType), TypeRef("Unit"))
+                        "getOrNull" -> CollectionMethodSignature(listOf(TypeRef("Int")), elementType.copy(nullable = true))
+                        "add" -> CollectionMethodSignature(listOf(elementType), TypeRef("Unit"))
+                        "insert" -> CollectionMethodSignature(listOf(TypeRef("Int"), elementType), TypeRef("Unit"))
+                        "removeAt" -> CollectionMethodSignature(listOf(TypeRef("Int")), elementType)
+                        "clear" -> CollectionMethodSignature(emptyList(), TypeRef("Unit"))
+                        else -> null
+                    }
+
+                else -> null
+            }
+        }
+        val keyType = receiverType.mapKeyType()
+        val valueType = receiverType.mapValueType()
+        if (keyType != null && valueType != null) {
+            return when (methodName) {
+                "size" -> CollectionMethodSignature(emptyList(), TypeRef("Int"))
+                "isEmpty" -> CollectionMethodSignature(emptyList(), TypeRef("Bool"))
+                "containsKey" -> CollectionMethodSignature(listOf(keyType), TypeRef("Bool"))
+                "get" -> CollectionMethodSignature(listOf(keyType), valueType.copy(nullable = true))
+                "getOrDefault" -> CollectionMethodSignature(listOf(keyType, valueType), valueType)
+                "set" -> CollectionMethodSignature(listOf(keyType, valueType), TypeRef("Unit"))
+                "remove" -> CollectionMethodSignature(listOf(keyType), valueType.copy(nullable = true))
+                "clear" -> CollectionMethodSignature(emptyList(), TypeRef("Unit"))
+                "keys" -> CollectionMethodSignature(emptyList(), collectionType("List", keyType))
+                "values" -> CollectionMethodSignature(emptyList(), collectionType("List", valueType))
+                else -> null
+            }
+        }
+        return null
     }
 
     private fun analyzeClassMethodCall(
@@ -1580,8 +1897,7 @@ internal class SemanticAnalyzer(
             if (!canAccessClassMember(staticClass, method.visibility)) {
                 diagnostics += privateMemberDiagnostic(staticClass, callee.memberName, callee.range)
             }
-            analyzeClassMethodArguments(expression, method, callee, scope)
-            return method.returnType
+            return analyzeClassMethodArguments(expression, staticClass, TypeRef(staticClass.symbol.name), method, callee, scope)
         }
         val receiverType = analyzeExpression(callee.receiver, scope)
         val classBinding = userClassesByName[receiverType.name] ?: return null
@@ -1589,8 +1905,7 @@ internal class SemanticAnalyzer(
         if (!canAccessClassMember(classBinding, method.visibility)) {
             diagnostics += privateMemberDiagnostic(classBinding, callee.memberName, callee.range)
         }
-        analyzeClassMethodArguments(expression, method, callee, scope)
-        return method.returnType
+        return analyzeClassMethodArguments(expression, classBinding, receiverType, method, callee, scope)
     }
 
     private fun canAccessClassMember(
@@ -1606,10 +1921,12 @@ internal class SemanticAnalyzer(
 
     private fun analyzeClassMethodArguments(
         expression: CallExpression,
+        owner: ClassBinding,
+        receiverType: TypeRef,
         method: ClassMethodBinding,
         callee: MemberAccessExpression,
         scope: Scope,
-    ) {
+    ): TypeRef {
         expression.arguments.filterIsInstance<NamedCallArgument>().forEach { argument ->
             diagnostics += FrontendDiagnostic("Named arguments are only supported for constructors.", argument.range)
         }
@@ -1620,13 +1937,27 @@ internal class SemanticAnalyzer(
                     expression.range,
                 )
         }
+        val argumentTypes = expression.arguments.map { analyzeExpression(it.expression, scope) }
+        val ownerSubstitutions = substitutionsFor(owner.declaration.typeParameters, receiverType.arguments)
+        val ownerParameterTypes = method.parameterTypes.map { substitute(it, ownerSubstitutions) }
+        val inferredSubstitutions =
+            method.function.typeParameters.takeIf { it.isNotEmpty() }?.let {
+                inferSubstitutions(ownerParameterTypes, argumentTypes, ownerSubstitutions)
+                    ?: run {
+                        diagnostics += FrontendDiagnostic("Cannot infer generic type arguments for `${method.name}`.", expression.range)
+                        ownerSubstitutions
+                    }
+            } ?: ownerSubstitutions
+        val parameterTypes = method.parameterTypes.map { substitute(it, inferredSubstitutions) }
+        val returnType = substitute(method.returnType, inferredSubstitutions)
         expression.arguments.forEachIndexed { index, argument ->
-            val actual = analyzeExpression(argument.expression, scope)
-            val expected = method.parameterTypes.getOrNull(index) ?: return@forEachIndexed
+            val actual = argumentTypes[index]
+            val expected = parameterTypes.getOrNull(index) ?: return@forEachIndexed
             expectAssignable(actual, expected, argument.expression.range, "Argument type mismatch.")
         }
         methodCallBindings[expression] = method
-        references += ReferenceInfo(callee.memberName, callee.range, method.symbol, method.returnType.displayName)
+        references += ReferenceInfo(callee.memberName, callee.range, method.symbol, returnType.displayName)
+        return returnType
     }
 
     private fun analyzeClassConstructorCall(
@@ -1646,7 +1977,12 @@ internal class SemanticAnalyzer(
             return TypeRef(binding.symbol.name)
         }
         val parameters = binding.constructorParameters.associateBy { it.name }
+        val parameterTypes =
+            parameters.mapValues { (_, parameter) ->
+                withResolvedClassTypeParameters(binding.declaration) { resolveType(parameter.type, parameter.range) ?: TypeRef("Unit") }
+            }
         val seen = mutableSetOf<String>()
+        val argumentTypes = mutableMapOf<String, TypeRef>()
         namedArguments.forEach { argument ->
             if (!seen.add(argument.name)) {
                 diagnostics += FrontendDiagnostic("Duplicate constructor argument `${argument.name}`.", argument.nameRange)
@@ -1660,8 +1996,19 @@ internal class SemanticAnalyzer(
                     )
                 analyzeExpression(argument.expression, scope)
             } else {
-                val expected = resolveType(parameter.type, parameter.range) ?: TypeRef("Unit")
                 val actual = analyzeExpression(argument.expression, scope)
+                argumentTypes[argument.name] = actual
+            }
+        }
+        val substitutions =
+            inferSubstitutions(
+                parameters.keys.mapNotNull { parameterTypes[it] },
+                parameters.keys.mapNotNull { argumentTypes[it] },
+            ) ?: emptyMap()
+        namedArguments.forEach { argument ->
+            val expected = parameterTypes[argument.name]?.let { substitute(it, substitutions) }
+            val actual = argumentTypes[argument.name]
+            if (expected != null && actual != null) {
                 expectAssignable(actual, expected, argument.expression.range, "Constructor argument type mismatch.")
             }
         }
@@ -1673,14 +2020,15 @@ internal class SemanticAnalyzer(
                 )
         }
         classConstructorBindings[expression] = binding
+        val constructedType = TypeRef(binding.symbol.name, arguments = binding.declaration.typeParameters.mapNotNull { substitutions[it.name] })
         references +=
             ReferenceInfo(
                 binding.symbol.name,
                 callee.range,
                 binding.symbol,
-                binding.symbol.name,
+                constructedType.displayName,
             )
-        return TypeRef(binding.symbol.name)
+        return constructedType
     }
 
     private fun analyzeRecordConstructorCall(
@@ -1723,6 +2071,7 @@ internal class SemanticAnalyzer(
             } ?: return null
 
         val seen = mutableSetOf<String>()
+        val argumentTypes = mutableMapOf<String, TypeRef>()
         namedArguments.forEach { argument ->
             if (!seen.add(argument.name)) {
                 diagnostics +=
@@ -1741,6 +2090,18 @@ internal class SemanticAnalyzer(
                 analyzeExpression(argument.expression, scope)
             } else {
                 val actual = analyzeExpression(argument.expression, scope)
+                argumentTypes[argument.name] = actual
+            }
+        }
+        val substitutions =
+            inferSubstitutions(
+                binding.fields.keys.mapNotNull { binding.fields[it] },
+                binding.fields.keys.mapNotNull { argumentTypes[it] },
+            ) ?: emptyMap()
+        namedArguments.forEach { argument ->
+            val expected = binding.fields[argument.name]?.let { substitute(it, substitutions) }
+            val actual = argumentTypes[argument.name]
+            if (expected != null && actual != null) {
                 expectAssignable(actual, expected, argument.expression.range, "Struct field type mismatch.")
             }
         }
@@ -1752,14 +2113,15 @@ internal class SemanticAnalyzer(
                 )
         }
         recordConstructorBindings[expression] = binding
+        val constructedType = TypeRef(binding.symbol.name, arguments = binding.declaration?.typeParameters.orEmpty().mapNotNull { substitutions[it.name] })
         references +=
             ReferenceInfo(
                 binding.symbol.name,
                 expression.callee.range,
                 binding.symbol,
-                binding.symbol.name,
+                constructedType.displayName,
             )
-        return TypeRef(binding.symbol.name)
+        return constructedType
     }
 
     private fun analyzeScopeCall(
@@ -1920,6 +2282,84 @@ internal class SemanticAnalyzer(
         return TypeRef("Unit")
     }
 
+    private fun analyzeListLiteral(
+        expression: ListLiteralExpression,
+        scope: Scope,
+        expectedType: TypeRef?,
+    ): TypeRef {
+        val expectedElement = expectedType?.takeIf { it.name == "List" && it.arguments.size == 1 }?.arguments?.single()
+        val elementTypes = expression.elements.map { analyzeExpression(it, scope, expectedElement) }
+        if (expectedElement != null) {
+            elementTypes.zip(expression.elements).forEach { (actual, element) ->
+                expectAssignable(actual, expectedElement, element.range, "List literal element type mismatch.")
+            }
+            return collectionType("List", expectedElement)
+        }
+        if (elementTypes.isEmpty()) {
+            diagnostics += FrontendDiagnostic("Empty list literal requires an expected List<T> type.", expression.range)
+            return collectionType("List", TypeRef("Unit"))
+        }
+        val elementType = elementTypes.first()
+        elementTypes.drop(1).zip(expression.elements.drop(1)).forEach { (actual, element) ->
+            expectAssignable(actual, elementType, element.range, "List literal element type mismatch.")
+        }
+        return collectionType("List", elementType)
+    }
+
+    private fun analyzeMapLiteral(
+        expression: MapLiteralExpression,
+        scope: Scope,
+        expectedType: TypeRef?,
+    ): TypeRef {
+        val expectedMap = expectedType?.takeIf { it.name == "Map" && it.arguments.size == 2 }
+        val expectedKey = expectedMap?.arguments?.get(0)
+        val expectedValue = expectedMap?.arguments?.get(1)
+        val keyTypes = mutableListOf<TypeRef>()
+        val valueTypes = mutableListOf<TypeRef>()
+        expression.entries.forEach { entry ->
+            keyTypes += analyzeExpression(entry.key, scope, expectedKey)
+            valueTypes += analyzeExpression(entry.value, scope, expectedValue)
+        }
+        if (expectedKey != null && expectedValue != null) {
+            expression.entries.forEachIndexed { index, entry ->
+                expectAssignable(keyTypes[index], expectedKey, entry.key.range, "Map literal key type mismatch.")
+                expectAssignable(valueTypes[index], expectedValue, entry.value.range, "Map literal value type mismatch.")
+            }
+            return collectionType("Map", expectedKey, expectedValue)
+        }
+        if (expression.entries.isEmpty()) {
+            diagnostics += FrontendDiagnostic("Empty map literal requires an expected Map<K, V> type.", expression.range)
+            return collectionType("Map", TypeRef("Unit"), TypeRef("Unit"))
+        }
+        val keyType = keyTypes.first()
+        val valueType = valueTypes.first()
+        expression.entries.drop(1).forEachIndexed { index, entry ->
+            expectAssignable(keyTypes[index + 1], keyType, entry.key.range, "Map literal key type mismatch.")
+            expectAssignable(valueTypes[index + 1], valueType, entry.value.range, "Map literal value type mismatch.")
+        }
+        return collectionType("Map", keyType, valueType)
+    }
+
+    private fun analyzeIndexAccess(
+        expression: IndexAccessExpression,
+        scope: Scope,
+    ): TypeRef {
+        val receiverType = analyzeExpression(expression.receiver, scope)
+        val indexType = analyzeExpression(expression.index, scope)
+        receiverType.elementType()?.let { elementType ->
+            expectAssignable(indexType, TypeRef("Int"), expression.index.range, "Index type mismatch.")
+            return elementType
+        }
+        val keyType = receiverType.mapKeyType()
+        val valueType = receiverType.mapValueType()
+        if (keyType != null && valueType != null) {
+            expectAssignable(indexType, keyType, expression.index.range, "Index type mismatch.")
+            return valueType.copy(nullable = true)
+        }
+        diagnostics += FrontendDiagnostic("Type `${receiverType.displayName}` is not indexable.", expression.range)
+        return TypeRef("Unit")
+    }
+
     private fun analyzeUnary(
         expression: UnaryExpression,
         scope: Scope,
@@ -2067,6 +2507,7 @@ internal class SemanticAnalyzer(
         syntax: TypeSyntax,
         range: SourceRange,
     ): TypeRef? {
+        val arguments = syntax.arguments.mapNotNull { resolveType(it, it.range) }
         if (syntax.qualifier != null) {
             val alias = importAliases[syntax.qualifier]
             if (alias != null) {
@@ -2076,14 +2517,14 @@ internal class SemanticAnalyzer(
                     userRecordsByName.getOrPut(visibleName) {
                         recordBindingForExport(visibleName, struct, alias.exports, syntax.qualifier, syntax.range)
                     }
-                    return TypeRef(visibleName, nullable = syntax.nullable)
+                    return TypeRef(visibleName, nullable = syntax.nullable, arguments = arguments)
                 }
                 diagnostics +=
                     FrontendDiagnostic(
                         "Namespace `${syntax.qualifier}` has no type `${syntax.name}`.",
                         syntax.range,
                     )
-                return TypeRef(syntax.name, nullable = syntax.nullable)
+                return TypeRef(syntax.name, nullable = syntax.nullable, arguments = arguments)
             }
             diagnostics +=
                 FrontendDiagnostic(
@@ -2091,7 +2532,17 @@ internal class SemanticAnalyzer(
                         "User-file imports introducing namespaces will land in the next version.",
                     syntax.range,
                 )
-            return TypeRef(syntax.name, nullable = syntax.nullable)
+            return TypeRef(syntax.name, nullable = syntax.nullable, arguments = arguments)
+        }
+        if (isTypeParameter(syntax.name)) {
+            if (arguments.isNotEmpty()) {
+                diagnostics +=
+                    FrontendDiagnostic(
+                        "Type parameter `${syntax.name}` cannot have type arguments.",
+                        syntax.range,
+                    )
+            }
+            return TypeRef(syntax.name, nullable = syntax.nullable, typeParameter = true)
         }
         val type =
             typeNames[syntax.name] ?: run {
@@ -2102,7 +2553,29 @@ internal class SemanticAnalyzer(
                     )
                 return null
             }
-        return type.copy(nullable = syntax.nullable)
+            registry.builtinType(syntax.name)?.let { builtinType ->
+                if (builtinType.typeParameterCount != arguments.size) {
+                    diagnostics +=
+                        FrontendDiagnostic(
+                            "Type `${syntax.name}` expects ${builtinType.typeParameterCount} type argument(s), got ${arguments.size}.",
+                            syntax.range,
+                        )
+                }
+            }
+            val resolvedType = type.copy(nullable = syntax.nullable, arguments = arguments)
+            references +=
+                ReferenceInfo(
+                    syntax.name,
+                    syntax.range,
+                    SymbolInfo(
+                        name = syntax.name,
+                        kind = if (registry.builtinType(syntax.name) != null) SymbolKind.BUILTIN_TYPE else if (userClassesByName.containsKey(syntax.name)) SymbolKind.CLASS else SymbolKind.RECORD,
+                        range = null,
+                        detail = resolvedType.displayName,
+                    ),
+                    resolvedType.displayName,
+                )
+            return resolvedType
     }
 
     private fun expectAssignable(
@@ -2126,7 +2599,7 @@ internal class SemanticAnalyzer(
     ): Boolean =
         actual == expected ||
             (actual.name == "Int" && expected.name == "Long" && !actual.nullable && !expected.nullable) ||
-            (actual.nullable && expected.nullable && actual.name == expected.name)
+            (actual.nullable && expected.nullable && actual.name == expected.name && actual.arguments == expected.arguments)
 
     private fun errorBinding(
         range: SourceRange,
@@ -2377,6 +2850,14 @@ internal class BytecodeCompiler(
                     instructions += Instruction.SetField(statement.memberName)
                     instructions += Instruction.Pop
                 }
+
+                is IndexAssignmentStatement -> {
+                    compileExpression(statement.receiver)
+                    compileExpression(statement.index)
+                    compileExpression(statement.expression)
+                    instructions += Instruction.IndexSet
+                    instructions += Instruction.Pop
+                }
             }
         }
 
@@ -2447,6 +2928,19 @@ internal class BytecodeCompiler(
                 }
 
                 is CallExpression -> {
+                    if (expression.callee is TypeApplicationExpression && expression.callee.name == "Array") {
+                        val namedArguments = expression.arguments.filterIsInstance<NamedCallArgument>().associateBy { it.name }
+                        namedArguments["size"]?.let { compileExpression(it.expression) } ?: run { instructions += Instruction.PushInt(0) }
+                        namedArguments["default"]?.let { compileExpression(it.expression) } ?: run { instructions += Instruction.PushUnit }
+                        instructions += Instruction.ConstructArray
+                        return
+                    }
+                    if (expression.callee is MemberAccessExpression && isCollectionReceiver(expression.callee.receiver)) {
+                        compileExpression(expression.callee.receiver)
+                        expression.arguments.forEach { compileExpression(it.expression) }
+                        instructions += Instruction.CallCollectionMethod(expression.callee.memberName, expression.arguments.size)
+                        return
+                    }
                     val method = semantic.methodCallBindings[expression]
                     if (method != null && expression.callee is MemberAccessExpression) {
                         if (!method.static) {
@@ -2544,6 +3038,29 @@ internal class BytecodeCompiler(
                     instructions += Instruction.PushUnit
                 }
 
+                is ListLiteralExpression -> {
+                    expression.elements.forEach(::compileExpression)
+                    instructions += Instruction.ConstructList(expression.elements.size)
+                }
+
+                is MapLiteralExpression -> {
+                    expression.entries.forEach { entry ->
+                        compileExpression(entry.key)
+                        compileExpression(entry.value)
+                    }
+                    instructions += Instruction.ConstructMap(expression.entries.size)
+                }
+
+                is IndexAccessExpression -> {
+                    compileExpression(expression.receiver)
+                    compileExpression(expression.index)
+                    instructions += Instruction.IndexGet
+                }
+
+                is TypeApplicationExpression -> {
+                    instructions += Instruction.PushUnit
+                }
+
                 is ScopeAccessExpression -> {
                     instructions += Instruction.PushUnit
                 }
@@ -2554,6 +3071,8 @@ internal class BytecodeCompiler(
                 }
             }
         }
+
+        private fun isCollectionReceiver(expression: Expression): Boolean = semantic.expressionTypes[expression]?.name in setOf("Array", "List", "Map")
 
         private fun compileClassConstructor(
             expression: CallExpression,
@@ -2643,6 +3162,14 @@ internal class Lexer(
 
                 ')' -> {
                     addToken(TokenKind.RPAREN, ")", start)
+                }
+
+                '[' -> {
+                    addToken(TokenKind.LBRACKET, "[", start)
+                }
+
+                ']' -> {
+                    addToken(TokenKind.RBRACKET, "]", start)
                 }
 
                 '{' -> {
@@ -2998,6 +3525,7 @@ internal class Parser(
 ) {
     val diagnostics = initialDiagnostics.toMutableList()
     private var index = 0
+    private var pendingSplitTypeArgumentClosers = 0
 
     fun parseProgram(): Program {
         val imports = mutableListOf<ImportDeclaration>()
@@ -3134,6 +3662,7 @@ internal class Parser(
 
     private fun parseFunction(visibility: Visibility = Visibility.PRIVATE): FunctionDeclaration? {
         val name = consume(TokenKind.IDENTIFIER, "Expected function name.") ?: return null
+        val typeParameters = parseTypeParameterList()
         consume(TokenKind.LPAREN, "Expected `(` after function name.") ?: return null
         val parameters = mutableListOf<ParameterDeclaration>()
         if (!check(TokenKind.RPAREN)) {
@@ -3147,11 +3676,12 @@ internal class Parser(
         consume(TokenKind.RPAREN, "Expected `)` after parameters.") ?: return null
         val returnType = if (match(TokenKind.COLON)) parseType() else null
         val body = parseBlock() ?: return null
-        return FunctionDeclaration(name.text, parameters, returnType, body, visibility, SourceRange(name.range.start, body.range.end))
+        return FunctionDeclaration(name.text, parameters, returnType, body, visibility, SourceRange(name.range.start, body.range.end), typeParameters)
     }
 
     private fun parseStruct(visibility: Visibility): StructDeclaration? {
         val name = consume(TokenKind.IDENTIFIER, "Expected struct name.") ?: return null
+        val typeParameters = parseTypeParameterList()
         consume(TokenKind.LBRACE, "Expected `{` after struct name.") ?: return null
         val fields = mutableListOf<RecordFieldDeclaration>()
         while (!check(TokenKind.RBRACE) && !isAtEnd()) {
@@ -3163,12 +3693,13 @@ internal class Parser(
             consumeOptional(TokenKind.SEMICOLON)
         }
         val end = consume(TokenKind.RBRACE, "Expected `}` after struct body.") ?: return null
-        return StructDeclaration(name.text, fields, visibility, SourceRange(name.range.start, end.range.end))
+        return StructDeclaration(name.text, fields, visibility, SourceRange(name.range.start, end.range.end), typeParameters)
     }
 
     private fun parseClass(visibility: Visibility): ClassDeclaration? {
         val keyword = previous()
         val name = consume(TokenKind.IDENTIFIER, "Expected class name.") ?: return null
+        val typeParameters = parseTypeParameterList()
         consume(TokenKind.LPAREN, "Expected `(` after class name.") ?: return null
         val constructorParameters = mutableListOf<ClassConstructorParameter>()
         if (!check(TokenKind.RPAREN)) {
@@ -3189,6 +3720,7 @@ internal class Parser(
             members = members,
             visibility = visibility,
             range = SourceRange(keyword.range.start, end.range.end),
+            typeParameters = typeParameters,
         )
     }
 
@@ -3336,6 +3868,16 @@ internal class Parser(
                     parseAssignment()
                 } else {
                     val expression = parseExpression() ?: return null
+                    if (expression is IndexAccessExpression && match(TokenKind.EQUAL)) {
+                        val value = parseExpression() ?: return null
+                        consumeOptional(TokenKind.SEMICOLON)
+                        return IndexAssignmentStatement(
+                            receiver = expression.receiver,
+                            index = expression.index,
+                            expression = value,
+                            range = SourceRange(expression.range.start, value.range.end),
+                        )
+                    }
                     val range = expression.range
                     consumeOptional(TokenKind.SEMICOLON)
                     ExpressionStatement(expression, range)
@@ -3596,6 +4138,31 @@ internal class Parser(
         return ReturnStatement(expression, expression.range)
     }
 
+    private fun parseTypeParameterList(): List<TypeParameterDeclaration> {
+        if (!match(TokenKind.LT)) return emptyList()
+        val parameters = mutableListOf<TypeParameterDeclaration>()
+        if (!check(TokenKind.GT)) {
+            do {
+                val name = consume(TokenKind.IDENTIFIER, "Expected type parameter name.") ?: return parameters
+                parameters += TypeParameterDeclaration(name.text, name.range)
+            } while (match(TokenKind.COMMA))
+        }
+        consume(TokenKind.GT, "Expected `>` after type parameters.")
+        return parameters
+    }
+
+    private fun parseTypeArgumentList(): List<TypeSyntax> {
+        if (!match(TokenKind.LT)) return emptyList()
+        val arguments = mutableListOf<TypeSyntax>()
+        if (!checkTypeArgumentClose()) {
+            do {
+                arguments += parseType() ?: return arguments
+            } while (match(TokenKind.COMMA))
+        }
+        consumeTypeArgumentClose("Expected `>` after type arguments.")
+        return arguments
+    }
+
     private fun parseType(): TypeSyntax? {
         val first = consume(TokenKind.IDENTIFIER, "Expected type name.") ?: return null
         val (qualifier, name) =
@@ -3604,12 +4171,14 @@ internal class Parser(
             } else {
                 null to first
             }
+        val arguments = parseTypeArgumentList()
         val nullable = match(TokenKind.QUESTION)
         return TypeSyntax(
             name = name.text,
             nullable = nullable,
             range = SourceRange(first.range.start, previous().range.end),
             qualifier = qualifier,
+            arguments = arguments,
         )
     }
 
@@ -3874,6 +4443,16 @@ internal class Parser(
                         )
                     }
 
+                    match(TokenKind.LBRACKET) -> {
+                        val index = parseExpression() ?: return null
+                        val end = consume(TokenKind.RBRACKET, "Expected `]` after index.") ?: return null
+                        IndexAccessExpression(
+                            expression,
+                            index,
+                            SourceRange(expression.range.start, end.range.end),
+                        )
+                    }
+
                     else -> {
                         return expression
                     }
@@ -3933,6 +4512,10 @@ internal class Parser(
                     }
                 } else if (check(TokenKind.LBRACE)) {
                     parseRecordConstruction(token)
+                } else if (isTypeApplicationAhead()) {
+                    val arguments = parseTypeArgumentList()
+                    val end = previous()
+                    TypeApplicationExpression(token.text, arguments, SourceRange(token.range.start, end.range.end))
                 } else {
                     NameExpression(token.text, token.range)
                 }
@@ -3946,6 +4529,14 @@ internal class Parser(
                 val expression = parseExpression() ?: return null
                 val end = consume(TokenKind.RPAREN, "Expected `)` after expression.") ?: return null
                 GroupExpression(expression, SourceRange(token.range.start, end.range.end))
+            }
+
+            TokenKind.LBRACKET -> {
+                parseListLiteral(token)
+            }
+
+            TokenKind.LBRACE -> {
+                parseMapLiteral(token)
             }
 
             else -> {
@@ -3984,6 +4575,74 @@ internal class Parser(
                 LiteralExpression(IntLiteralValue(value.toInt()), token.range)
             }
         }
+    }
+
+    private fun parseListLiteral(start: Token): Expression? {
+        val elements = mutableListOf<Expression>()
+        if (!check(TokenKind.RBRACKET)) {
+            do {
+                elements += parseExpression() ?: return null
+            } while (match(TokenKind.COMMA))
+        }
+        val end = consume(TokenKind.RBRACKET, "Expected `]` after list literal.") ?: return null
+        return ListLiteralExpression(elements, SourceRange(start.range.start, end.range.end))
+    }
+
+    private fun parseMapLiteral(start: Token): Expression? {
+        val entries = mutableListOf<MapEntryExpression>()
+        if (!check(TokenKind.RBRACE)) {
+            do {
+                val key = parseExpression() ?: return null
+                consume(TokenKind.COLON, "Expected `:` after map key.") ?: return null
+                val value = parseExpression() ?: return null
+                entries += MapEntryExpression(key, value, SourceRange(key.range.start, value.range.end))
+            } while (match(TokenKind.COMMA))
+        }
+        val end = consume(TokenKind.RBRACE, "Expected `}` after map literal.") ?: return null
+        return MapLiteralExpression(entries, SourceRange(start.range.start, end.range.end))
+    }
+
+    private fun isTypeApplicationAhead(): Boolean {
+        if (!check(TokenKind.LT)) return false
+        var depth = 0
+        var offset = 0
+        while (true) {
+            val token = peekAhead(offset) ?: return false
+            when (token.kind) {
+                TokenKind.LT -> depth += 1
+                TokenKind.GT -> {
+                    depth -= 1
+                    if (depth == 0) return peekAhead(offset + 1)?.kind == TokenKind.LPAREN
+                }
+
+                TokenKind.GT_GT -> {
+                    depth -= 2
+                    if (depth == 0) return peekAhead(offset + 1)?.kind == TokenKind.LPAREN
+                    if (depth < 0) return false
+                }
+
+                TokenKind.EOF -> return false
+                else -> Unit
+            }
+            offset += 1
+        }
+    }
+
+    private fun checkTypeArgumentClose(): Boolean = pendingSplitTypeArgumentClosers > 0 || check(TokenKind.GT) || check(TokenKind.GT_GT)
+
+    private fun consumeTypeArgumentClose(message: String): Token? {
+        if (pendingSplitTypeArgumentClosers > 0) {
+            pendingSplitTypeArgumentClosers -= 1
+            return previous()
+        }
+        if (check(TokenKind.GT)) return advance()
+        if (check(TokenKind.GT_GT)) {
+            val token = advance()
+            pendingSplitTypeArgumentClosers += 1
+            return token
+        }
+        diagnostics += FrontendDiagnostic(message, peek().range)
+        return null
     }
 
     private fun parseRecordConstruction(nameToken: Token): Expression? {

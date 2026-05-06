@@ -21,11 +21,17 @@ package ru.lazyhat.compukterkraft.lang.api
 
 enum class Visibility { PUBLIC, PRIVATE }
 
+data class TypeParameterDeclaration(
+    val name: String,
+    val range: SourceRange,
+)
+
 data class StructDeclaration(
     override val name: String,
     val fields: List<RecordFieldDeclaration>,
     val visibility: Visibility = Visibility.PRIVATE,
     override val range: SourceRange,
+    val typeParameters: List<TypeParameterDeclaration> = emptyList(),
 ) : TopLevelDeclaration
 
 data class ClassDeclaration(
@@ -34,6 +40,7 @@ data class ClassDeclaration(
     val members: List<ClassMemberDeclaration>,
     val visibility: Visibility = Visibility.PRIVATE,
     override val range: SourceRange,
+    val typeParameters: List<TypeParameterDeclaration> = emptyList(),
 ) : TopLevelDeclaration
 
 data class ClassConstructorParameter(
@@ -88,11 +95,13 @@ data class TypeSyntax(
     val nullable: Boolean = false,
     val range: SourceRange,
     val qualifier: String? = null,
+    val arguments: List<TypeSyntax> = emptyList(),
 ) {
     val displayName: String
         get() {
             val qualifiedName = qualifier?.let { "$it::$name" } ?: name
-            return if (nullable) "$qualifiedName?" else qualifiedName
+            val argumentList = if (arguments.isEmpty()) "" else arguments.joinToString(", ", "<", ">") { it.displayName }
+            return if (nullable) "$qualifiedName$argumentList?" else "$qualifiedName$argumentList"
         }
 }
 
@@ -124,6 +133,13 @@ data class MemberAssignmentStatement(
     val receiver: Expression,
     val memberName: String,
     val memberRange: SourceRange,
+    val expression: Expression,
+    override val range: SourceRange,
+) : Statement
+
+data class IndexAssignmentStatement(
+    val receiver: Expression,
+    val index: Expression,
     val expression: Expression,
     override val range: SourceRange,
 ) : Statement
@@ -240,6 +256,34 @@ data class GroupExpression(
     override val range: SourceRange,
 ) : Expression
 
+data class ListLiteralExpression(
+    val elements: List<Expression>,
+    override val range: SourceRange,
+) : Expression
+
+data class MapEntryExpression(
+    val key: Expression,
+    val value: Expression,
+    val range: SourceRange,
+)
+
+data class MapLiteralExpression(
+    val entries: List<MapEntryExpression>,
+    override val range: SourceRange,
+) : Expression
+
+data class IndexAccessExpression(
+    val receiver: Expression,
+    val index: Expression,
+    override val range: SourceRange,
+) : Expression
+
+data class TypeApplicationExpression(
+    val name: String,
+    val arguments: List<TypeSyntax>,
+    override val range: SourceRange,
+) : Expression
+
 data class RecordConstructionExpression(
     val typeName: String,
     val fields: List<RecordFieldInitializer>,
@@ -322,6 +366,7 @@ data class BuiltinType(
     val name: String,
     val documentation: String,
     val fields: List<RecordFieldDefinition> = emptyList(),
+    val typeParameterCount: Int = 0,
 )
 
 data class RecordFieldDefinition(
@@ -442,6 +487,25 @@ sealed interface Instruction {
     data class ConstructClass(
         val className: String,
         val fieldNames: List<String>,
+    ) : Instruction
+
+    data object ConstructArray : Instruction
+
+    data class ConstructList(
+        val elementCount: Int,
+    ) : Instruction
+
+    data class ConstructMap(
+        val entryCount: Int,
+    ) : Instruction
+
+    data object IndexGet : Instruction
+
+    data object IndexSet : Instruction
+
+    data class CallCollectionMethod(
+        val methodName: String,
+        val argumentCount: Int,
     ) : Instruction
 
     data class CallMethod(

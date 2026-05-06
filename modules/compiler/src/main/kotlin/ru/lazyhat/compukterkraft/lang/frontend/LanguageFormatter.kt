@@ -39,10 +39,14 @@ import ru.lazyhat.compukterkraft.lang.api.IfStatement
 import ru.lazyhat.compukterkraft.lang.api.ImportDeclaration
 import ru.lazyhat.compukterkraft.lang.api.ImportMode
 import ru.lazyhat.compukterkraft.lang.api.ImportSource
+import ru.lazyhat.compukterkraft.lang.api.IndexAccessExpression
+import ru.lazyhat.compukterkraft.lang.api.IndexAssignmentStatement
 import ru.lazyhat.compukterkraft.lang.api.IntLiteralValue
 import ru.lazyhat.compukterkraft.lang.api.LegacyRecordConstructionExpression
+import ru.lazyhat.compukterkraft.lang.api.ListLiteralExpression
 import ru.lazyhat.compukterkraft.lang.api.LiteralExpression
 import ru.lazyhat.compukterkraft.lang.api.LongLiteralValue
+import ru.lazyhat.compukterkraft.lang.api.MapLiteralExpression
 import ru.lazyhat.compukterkraft.lang.api.MemberAccessExpression
 import ru.lazyhat.compukterkraft.lang.api.MemberAssignmentStatement
 import ru.lazyhat.compukterkraft.lang.api.NameExpression
@@ -57,6 +61,7 @@ import ru.lazyhat.compukterkraft.lang.api.StringLiteralValue
 import ru.lazyhat.compukterkraft.lang.api.StructDeclaration
 import ru.lazyhat.compukterkraft.lang.api.ThisExpression
 import ru.lazyhat.compukterkraft.lang.api.TopLevelDeclaration
+import ru.lazyhat.compukterkraft.lang.api.TypeApplicationExpression
 import ru.lazyhat.compukterkraft.lang.api.TypeSyntax
 import ru.lazyhat.compukterkraft.lang.api.UnaryExpression
 import ru.lazyhat.compukterkraft.lang.api.UnaryOperator
@@ -256,6 +261,26 @@ class LanguageFormatter(
                     expression.fields.forEach { collectExpression(it.expression) }
                 }
 
+                is ListLiteralExpression -> {
+                    expression.elements.forEach(::collectExpression)
+                }
+
+                is MapLiteralExpression -> {
+                    expression.entries.forEach { entry ->
+                        collectExpression(entry.key)
+                        collectExpression(entry.value)
+                    }
+                }
+
+                is IndexAccessExpression -> {
+                    collectExpression(expression.receiver)
+                    collectExpression(expression.index)
+                }
+
+                is TypeApplicationExpression -> {
+                    expression.arguments.forEach(::collectType)
+                }
+
                 is LiteralExpression -> {
                     Unit
                 }
@@ -309,6 +334,12 @@ class LanguageFormatter(
 
                 is MemberAssignmentStatement -> {
                     collectExpression(statement.receiver)
+                    collectExpression(statement.expression)
+                }
+
+                is IndexAssignmentStatement -> {
+                    collectExpression(statement.receiver)
+                    collectExpression(statement.index)
                     collectExpression(statement.expression)
                 }
 
@@ -533,6 +564,11 @@ class LanguageFormatter(
                 writer.line()
             }
 
+            is IndexAssignmentStatement -> {
+                writer.write("${renderExpression(statement.receiver, PRECEDENCE_CALL)}[${renderExpression(statement.index)}] = ${renderExpression(statement.expression)}")
+                writer.line()
+            }
+
             is ReturnStatement -> {
                 writer.write("return")
                 statement.expression?.let { writer.write(" ${renderExpression(it)}") }
@@ -652,6 +688,24 @@ class LanguageFormatter(
 
                 is LegacyRecordConstructionExpression -> {
                     renderLegacyRecordConstruction(expression)
+                }
+
+                is ListLiteralExpression -> {
+                    expression.elements.joinToString(", ", "[", "]") { renderExpression(it) }
+                }
+
+                is MapLiteralExpression -> {
+                    expression.entries.joinToString(", ", "{", "}") { entry ->
+                        "${renderExpression(entry.key)}: ${renderExpression(entry.value)}"
+                    }
+                }
+
+                is IndexAccessExpression -> {
+                    "${renderExpression(expression.receiver, PRECEDENCE_CALL)}[${renderExpression(expression.index)}]"
+                }
+
+                is TypeApplicationExpression -> {
+                    "${expression.name}${expression.arguments.joinToString(", ", "<", ">") { renderType(it) }}"
                 }
 
                 is LiteralExpression -> {
@@ -820,7 +874,7 @@ private fun Expression.precedence(): Int =
     when (this) {
         is BinaryExpression -> operator.precedence()
         is UnaryExpression -> PRECEDENCE_UNARY
-        is CallExpression, is MemberAccessExpression, is ScopeAccessExpression -> PRECEDENCE_CALL
+        is CallExpression, is IndexAccessExpression, is MemberAccessExpression, is ScopeAccessExpression, is TypeApplicationExpression -> PRECEDENCE_CALL
         else -> PRECEDENCE_PRIMARY
     }
 

@@ -243,7 +243,7 @@ class BytecodeVirtualMachine(
                     val args = frame.popMany(instruction.argumentCount)
                     val receiver = frame.pop()
                     val objectRef = receiver as? VmValue.ObjectRef ?: error("Method receiver is not an object.")
-                    val objectState = heap[objectRef.id] ?: error("Object #${objectRef.id} is missing.")
+                    val objectState = heap[objectRef.id] as? VmClassObject ?: error("Object #${objectRef.id} is not a class instance.")
                     val classInfo =
                         module.classes.firstOrNull { it.name == objectState.className }
                             ?: error("Class ${objectState.className} is missing.")
@@ -273,7 +273,7 @@ class BytecodeVirtualMachine(
                     val values = frame.popMany(instruction.fieldNames.size)
                     val id = nextObjectId++
                     heap[id] =
-                        VmObject(
+                        VmClassObject(
                             instruction.className,
                             instruction.fieldNames
                                 .zip(values)
@@ -283,12 +283,33 @@ class BytecodeVirtualMachine(
                     frame.stack += VmValue.ObjectRef(id)
                 }
 
+                Instruction.ConstructArray -> {
+                    val default = frame.pop()
+                    val size = frame.pop().asInt()
+                    check(size >= 0) { "Array size must be non-negative." }
+                    frame.stack += allocate(VmArrayObject(MutableList(size) { default }))
+                }
+
+                is Instruction.ConstructList -> {
+                    val values = frame.popMany(instruction.elementCount)
+                    frame.stack += allocate(VmListObject(values.toMutableList()))
+                }
+
+                is Instruction.ConstructMap -> {
+                    val values = frame.popMany(instruction.entryCount * 2)
+                    val entries = LinkedHashMap<VmMapKey, VmValue>()
+                    values.chunked(2).forEach { (key, value) ->
+                        entries[mapKey(key)] = value
+                    }
+                    frame.stack += allocate(VmMapObject(entries))
+                }
+
                 is Instruction.GetField -> {
                     val receiver = frame.pop()
                     val value =
                         when (receiver) {
                             is VmValue.RecordValue -> receiver.fields[instruction.fieldName]
-                            is VmValue.ObjectRef -> heap[receiver.id]?.fields?.get(instruction.fieldName)
+                            is VmValue.ObjectRef -> (heap[receiver.id] as? VmClassObject)?.fields?.get(instruction.fieldName)
                             else -> null
                         } ?: error("Field ${instruction.fieldName} is missing.")
                     frame.stack += value
@@ -298,9 +319,21 @@ class BytecodeVirtualMachine(
                     val value = frame.pop()
                     val receiver = frame.pop()
                     val objectRef = receiver as? VmValue.ObjectRef ?: error("Field assignment receiver is not an object.")
-                    val objectState = heap[objectRef.id] ?: error("Object #${objectRef.id} is missing.")
+                    val objectState = heap[objectRef.id] as? VmClassObject ?: error("Object #${objectRef.id} is not a class instance.")
                     objectState.fields[instruction.fieldName] = value
                     frame.stack += VmValue.UnitValue
+                }
+
+                Instruction.IndexGet -> {
+                    applyIndexGet(frame)
+                }
+
+                Instruction.IndexSet -> {
+                    applyIndexSet(frame)
+                }
+
+                is Instruction.CallCollectionMethod -> {
+                    applyCollectionMethod(frame, instruction.methodName, instruction.argumentCount)
                 }
 
                 is Instruction.Jump -> {
@@ -531,6 +564,141 @@ class BytecodeVirtualMachine(
             }
     }
 
+    private fun allocate(value: VmObject): VmValue.ObjectRef {
+        val id = nextObjectId++
+        heap[id] = value
+        return VmValue.ObjectRef(id)
+    }
+
+    private fun heapObject(value: VmValue): VmObject {
+        val ref = value as? VmValue.ObjectRef ?: error("Expected collection reference but got ${value.render()}.")
+        return heap[ref.id] ?: error("Object #${ref.id} is missing.")
+    }
+
+    private fun mapKey(value: VmValue): VmMapKey = VmMapKey(value)
+
+    private fun checkedIndex(
+        index: Int,
+        size: Int,
+    ): Int {
+        check(index >= 0 && index < size) { "Index $index out of bounds for size $size." }
+        return index
+    }
+
+    private fun applyIndexGet(frame: FrameState) {
+        val index = frame.pop()
+        val receiver = frame.pop()
+        frame.stack +=
+            when (val collection = heapObject(receiver)) {
+                is VmArrayObject -> collection.elements[checkedIndex(index.asInt(), collection.elements.size)]
+                is VmListObject -> collection.elements[checkedIndex(index.asInt(), collection.elements.size)]
+                is VmMapObject -> collection.entries[mapKey(index)] ?: VmValue.NullValue
+                is VmClassObject -> error("Class instance is not indexable.")
+            }
+    }
+
+    private fun applyIndexSet(frame: FrameState) {
+        val value = frame.pop()
+        val index = frame.pop()
+        val receiver = frame.pop()
+        when (val collection = heapObject(receiver)) {
+            is VmArrayObject -> collection.elements[checkedIndex(index.asInt(), collection.elements.size)] = value
+            is VmListObject -> collection.elements[checkedIndex(index.asInt(), collection.elements.size)] = value
+            is VmMapObject -> collection.entries[mapKey(index)] = value
+            is VmClassObject -> error("Class instance is not index-assignable.")
+        }
+        frame.stack += VmValue.UnitValue
+    }
+
+    private fun applyCollectionMethod(
+        frame: FrameState,
+        methodName: String,
+        argumentCount: Int,
+    ) {
+        val args = frame.popMany(argumentCount)
+        val receiver = frame.pop()
+        frame.stack +=
+            when (val collection = heapObject(receiver)) {
+                is VmArrayObject -> applyArrayMethod(collection, methodName, args)
+                is VmListObject -> applyListMethod(collection, methodName, args)
+                is VmMapObject -> applyMapMethod(collection, methodName, args)
+                is VmClassObject -> error("Class instance has no collection method $methodName.")
+            }
+    }
+
+    private fun applyArrayMethod(
+        array: VmArrayObject,
+        methodName: String,
+        args: List<VmValue>,
+    ): VmValue =
+        when (methodName) {
+            "size" -> VmValue.IntValue(array.elements.size)
+            "get" -> array.elements[checkedIndex(args[0].asInt(), array.elements.size)]
+            "set" -> {
+                array.elements[checkedIndex(args[0].asInt(), array.elements.size)] = args[1]
+                VmValue.UnitValue
+            }
+            "getOrNull" -> array.elements.getOrNull(args[0].asInt()) ?: VmValue.NullValue
+            else -> error("Unknown Array method $methodName.")
+        }
+
+    private fun applyListMethod(
+        list: VmListObject,
+        methodName: String,
+        args: List<VmValue>,
+    ): VmValue =
+        when (methodName) {
+            "size" -> VmValue.IntValue(list.elements.size)
+            "isEmpty" -> VmValue.BoolValue(list.elements.isEmpty())
+            "get" -> list.elements[checkedIndex(args[0].asInt(), list.elements.size)]
+            "set" -> {
+                list.elements[checkedIndex(args[0].asInt(), list.elements.size)] = args[1]
+                VmValue.UnitValue
+            }
+            "getOrNull" -> list.elements.getOrNull(args[0].asInt()) ?: VmValue.NullValue
+            "add" -> {
+                list.elements += args[0]
+                VmValue.UnitValue
+            }
+            "insert" -> {
+                val index = args[0].asInt()
+                check(index >= 0 && index <= list.elements.size) { "Index $index out of bounds for size ${list.elements.size}." }
+                list.elements.add(index, args[1])
+                VmValue.UnitValue
+            }
+            "removeAt" -> list.elements.removeAt(checkedIndex(args[0].asInt(), list.elements.size))
+            "clear" -> {
+                list.elements.clear()
+                VmValue.UnitValue
+            }
+            else -> error("Unknown List method $methodName.")
+        }
+
+    private fun applyMapMethod(
+        map: VmMapObject,
+        methodName: String,
+        args: List<VmValue>,
+    ): VmValue =
+        when (methodName) {
+            "size" -> VmValue.IntValue(map.entries.size)
+            "isEmpty" -> VmValue.BoolValue(map.entries.isEmpty())
+            "containsKey" -> VmValue.BoolValue(map.entries.containsKey(mapKey(args[0])))
+            "get" -> map.entries[mapKey(args[0])] ?: VmValue.NullValue
+            "getOrDefault" -> map.entries[mapKey(args[0])] ?: args[1]
+            "set" -> {
+                map.entries[mapKey(args[0])] = args[1]
+                VmValue.UnitValue
+            }
+            "remove" -> map.entries.remove(mapKey(args[0])) ?: VmValue.NullValue
+            "clear" -> {
+                map.entries.clear()
+                VmValue.UnitValue
+            }
+            "keys" -> allocate(VmListObject(map.entries.keys.map { it.value }.toMutableList()))
+            "values" -> allocate(VmListObject(map.entries.values.toMutableList()))
+            else -> error("Unknown Map method $methodName.")
+        }
+
     private fun createFrame(
         functionIndex: Int,
         arguments: List<VmValue>,
@@ -562,7 +730,7 @@ class BytecodeVirtualMachine(
 
     private fun ensureWithinMemoryLimit() {
         if (maxVmRamBytes == Long.MAX_VALUE) return
-        val usedBytes = frames.sumOf(FrameState::estimatedMemoryBytes)
+        val usedBytes = frames.sumOf(FrameState::estimatedMemoryBytes) + heap.values.sumOf(VmObject::estimatedMemoryBytes)
         check(usedBytes <= maxVmRamBytes) { "VM out of memory: $usedBytes > $maxVmRamBytes" }
     }
 
@@ -584,9 +752,37 @@ class BytecodeVirtualMachine(
         fun estimatedMemoryBytes(): Long = 16L + locals.sumOf(VmValue::estimatedMemoryBytes) + stack.sumOf(VmValue::estimatedMemoryBytes)
     }
 
-    private data class VmObject(
+    private sealed interface VmObject {
+        fun estimatedMemoryBytes(): Long
+    }
+
+    private data class VmClassObject(
         val className: String,
         val fields: MutableMap<String, VmValue>,
+    ) : VmObject {
+        override fun estimatedMemoryBytes(): Long = className.length.toLong() + fields.entries.sumOf { it.key.length.toLong() + it.value.estimatedMemoryBytes() }
+    }
+
+    private data class VmArrayObject(
+        val elements: MutableList<VmValue>,
+    ) : VmObject {
+        override fun estimatedMemoryBytes(): Long = 16L + elements.sumOf(VmValue::estimatedMemoryBytes)
+    }
+
+    private data class VmListObject(
+        val elements: MutableList<VmValue>,
+    ) : VmObject {
+        override fun estimatedMemoryBytes(): Long = 16L + elements.sumOf(VmValue::estimatedMemoryBytes)
+    }
+
+    private data class VmMapObject(
+        val entries: LinkedHashMap<VmMapKey, VmValue>,
+    ) : VmObject {
+        override fun estimatedMemoryBytes(): Long = 16L + entries.entries.sumOf { it.key.value.estimatedMemoryBytes() + it.value.estimatedMemoryBytes() }
+    }
+
+    private data class VmMapKey(
+        val value: VmValue,
     )
 
     private companion object {

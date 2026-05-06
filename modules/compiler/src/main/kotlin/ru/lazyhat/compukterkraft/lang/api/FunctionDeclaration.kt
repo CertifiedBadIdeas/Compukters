@@ -26,4 +26,5 @@ data class FunctionDeclaration(
     val body: BlockStatement,
     val visibility: Visibility = Visibility.PRIVATE,
     override val range: SourceRange,
+    val typeParameters: List<TypeParameterDeclaration> = emptyList(),
 ) : TopLevelDeclaration
