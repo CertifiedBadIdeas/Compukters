@@ -23,6 +23,7 @@ import kotlinx.coroutines.runBlocking
 import ru.lazyhat.compukterkraft.lang.api.BuiltinFunction
 import ru.lazyhat.compukterkraft.lang.api.BuiltinModule
 import ru.lazyhat.compukterkraft.lang.api.BuiltinRegistry
+import ru.lazyhat.compukterkraft.lang.api.BytecodeModule
 import ru.lazyhat.compukterkraft.lang.api.ModuleOrigin
 import ru.lazyhat.compukterkraft.lang.frontend.FrontendSeverity
 import ru.lazyhat.compukterkraft.lang.frontend.LanguageBuiltins
@@ -34,6 +35,33 @@ import kotlin.test.assertTrue
 
 class LanguageRuntimeTest {
     private val frontend = LanguageFrontend()
+
+    @Test
+    fun bytecodeComputerProgramDelegatesToProvidedRunner() {
+        val artifact =
+            frontend.compile(
+                "runner.ck",
+                """
+                pub fun main() {
+                    system::log("runner");
+                }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+
+        val runner = RecordingVmRunner()
+        val runtime = RecordingRuntime()
+        runBlocking {
+            BytecodeComputerProgram(requireNotNull(artifact.module), runnerFactory = { runner }).run(runtime)
+        }
+
+        assertEquals(1, runner.runCalls)
+        assertEquals(requireNotNull(artifact.module).name, runner.moduleName)
+    }
 
     @Test
     fun executesHostCallsThroughRuntimeBridge() {
@@ -1178,6 +1206,19 @@ class LanguageRuntimeTest {
         }
 
         assertEquals(listOf("connected"), runtime.lines)
+    }
+}
+
+private class RecordingVmRunner : VmRunner {
+    var runCalls = 0
+    var moduleName = ""
+
+    override suspend fun run(
+        module: BytecodeModule,
+        runtime: DeviceRuntime,
+    ) {
+        runCalls += 1
+        moduleName = module.name
     }
 }
 
