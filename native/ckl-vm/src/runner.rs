@@ -1,8 +1,36 @@
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
 use crate::abi::decode_module;
-use crate::signal::{encode_error, encode_signal};
+use crate::signal::{decode_value, encode_error, encode_signal};
 use crate::vm::VmInstance;
+
+pub struct NativeVmHandle {
+	vm: VmInstance,
+}
+
+impl NativeVmHandle {
+	pub fn create(bytecode: &[u8], instruction_budget: usize) -> Result<Self, String> {
+		let module = decode_module(bytecode).map_err(|error| error.to_string())?;
+		Ok(Self { vm: VmInstance::new(module, instruction_budget.max(1)) })
+	}
+
+	pub fn run_until_signal(&mut self) -> Vec<u8> {
+		match catch_unwind(AssertUnwindSafe(|| self.vm.run_until_signal())) {
+			Ok(Ok(signal)) => encode_signal(&signal),
+			Ok(Err(error)) => encode_error(error.to_string()),
+			Err(payload) => encode_error(panic_message(payload)),
+		}
+	}
+
+	pub fn resume_with_value_bytes(&mut self, value: &[u8]) -> Result<(), String> {
+		let value = decode_value(value)?;
+		match catch_unwind(AssertUnwindSafe(|| self.vm.resume_with(value))) {
+			Ok(Ok(())) => Ok(()),
+			Ok(Err(error)) => Err(error.to_string()),
+			Err(payload) => Err(panic_message(payload)),
+		}
+	}
+}
 
 pub fn run_bytecode_until_signal(bytecode: &[u8], instruction_budget: usize) -> Vec<u8> {
 	let module = match decode_module(bytecode) {
