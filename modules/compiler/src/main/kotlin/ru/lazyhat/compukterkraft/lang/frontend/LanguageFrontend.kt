@@ -1945,6 +1945,13 @@ internal class SemanticAnalyzer(
                 )
                 TypeRef("Bool")
             }
+
+            UnaryOperator.BIT_NOT -> {
+                if (!isNumeric(operandType)) {
+                    diagnostics += FrontendDiagnostic("Bitwise not expects Int or Long.", expression.range)
+                }
+                operandType
+            }
         }
     }
 
@@ -2008,6 +2015,27 @@ internal class SemanticAnalyzer(
                 TypeRef("Bool")
             }
 
+            BinaryOperator.BIT_AND,
+            BinaryOperator.BIT_OR,
+            BinaryOperator.BIT_XOR,
+            -> {
+                if (!isNumeric(left) || !isNumeric(right)) {
+                    diagnostics += FrontendDiagnostic("Bitwise operators expect Int or Long operands.", expression.range)
+                    TypeRef("Unit")
+                } else {
+                    widerNumericType(left, right)
+                }
+            }
+
+            BinaryOperator.SHIFT_LEFT,
+            BinaryOperator.SHIFT_RIGHT,
+            -> {
+                if (!isNumeric(left) || !isNumeric(right)) {
+                    diagnostics += FrontendDiagnostic("Shift operators expect Int or Long operands.", expression.range)
+                }
+                left
+            }
+
             BinaryOperator.EQUALS,
             BinaryOperator.NOT_EQUALS,
             BinaryOperator.LESS,
@@ -2026,6 +2054,13 @@ internal class SemanticAnalyzer(
             }
         }
     }
+
+    private fun isNumeric(type: TypeRef): Boolean = type.name in setOf("Int", "Long") && !type.nullable
+
+    private fun widerNumericType(
+        left: TypeRef,
+        right: TypeRef,
+    ): TypeRef = if (left.name == "Long" || right.name == "Long") TypeRef("Long") else TypeRef("Int")
 
     private fun resolveType(
         syntax: TypeSyntax,
@@ -3581,17 +3616,17 @@ internal class Parser(
     }
 
     private fun parseComparison(): Expression? {
-        var expression = parseTerm() ?: return null
+        var expression = parseBitwiseOr() ?: return null
         while (true) {
             expression =
                 when {
                     match(TokenKind.LT) -> {
-                        val right = parseTerm() ?: return null
+                        val right = parseBitwiseOr() ?: return null
                         BinaryExpression(expression, BinaryOperator.LESS, right, SourceRange(expression.range.start, right.range.end))
                     }
 
                     match(TokenKind.LTE) -> {
-                        val right = parseTerm() ?: return null
+                        val right = parseBitwiseOr() ?: return null
                         BinaryExpression(
                             expression,
                             BinaryOperator.LESS_EQUALS,
@@ -3601,18 +3636,67 @@ internal class Parser(
                     }
 
                     match(TokenKind.GT) -> {
-                        val right = parseTerm() ?: return null
+                        val right = parseBitwiseOr() ?: return null
                         BinaryExpression(expression, BinaryOperator.GREATER, right, SourceRange(expression.range.start, right.range.end))
                     }
 
                     match(TokenKind.GTE) -> {
-                        val right = parseTerm() ?: return null
+                        val right = parseBitwiseOr() ?: return null
                         BinaryExpression(
                             expression,
                             BinaryOperator.GREATER_EQUALS,
                             right,
                             SourceRange(expression.range.start, right.range.end),
                         )
+                    }
+
+                    else -> {
+                        return expression
+                    }
+                }
+        }
+    }
+
+    private fun parseBitwiseOr(): Expression? {
+        var expression = parseBitwiseXor() ?: return null
+        while (match(TokenKind.PIPE)) {
+            val right = parseBitwiseXor() ?: return null
+            expression = BinaryExpression(expression, BinaryOperator.BIT_OR, right, SourceRange(expression.range.start, right.range.end))
+        }
+        return expression
+    }
+
+    private fun parseBitwiseXor(): Expression? {
+        var expression = parseBitwiseAnd() ?: return null
+        while (match(TokenKind.CARET)) {
+            val right = parseBitwiseAnd() ?: return null
+            expression = BinaryExpression(expression, BinaryOperator.BIT_XOR, right, SourceRange(expression.range.start, right.range.end))
+        }
+        return expression
+    }
+
+    private fun parseBitwiseAnd(): Expression? {
+        var expression = parseShift() ?: return null
+        while (match(TokenKind.AMP)) {
+            val right = parseShift() ?: return null
+            expression = BinaryExpression(expression, BinaryOperator.BIT_AND, right, SourceRange(expression.range.start, right.range.end))
+        }
+        return expression
+    }
+
+    private fun parseShift(): Expression? {
+        var expression = parseTerm() ?: return null
+        while (true) {
+            expression =
+                when {
+                    match(TokenKind.LT_LT) -> {
+                        val right = parseTerm() ?: return null
+                        BinaryExpression(expression, BinaryOperator.SHIFT_LEFT, right, SourceRange(expression.range.start, right.range.end))
+                    }
+
+                    match(TokenKind.GT_GT) -> {
+                        val right = parseTerm() ?: return null
+                        BinaryExpression(expression, BinaryOperator.SHIFT_RIGHT, right, SourceRange(expression.range.start, right.range.end))
                     }
 
                     else -> {
@@ -3701,6 +3785,15 @@ internal class Parser(
                 val operand = parseUnary() ?: return null
                 UnaryExpression(
                     UnaryOperator.NEGATE,
+                    operand,
+                    SourceRange(previous().range.start, operand.range.end),
+                )
+            }
+
+            match(TokenKind.TILDE) -> {
+                val operand = parseUnary() ?: return null
+                UnaryExpression(
+                    UnaryOperator.BIT_NOT,
                     operand,
                     SourceRange(previous().range.start, operand.range.end),
                 )
