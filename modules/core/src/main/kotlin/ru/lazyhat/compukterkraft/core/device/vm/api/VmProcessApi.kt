@@ -23,7 +23,6 @@ import ru.lazyhat.compukterkraft.core.device.vm.VmContext
 import ru.lazyhat.compukterkraft.core.device.vm.VmPathResolver
 import ru.lazyhat.compukterkraft.core.device.vm.VmProcessManager
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceProcessApi
-import ru.lazyhat.compukterkraft.lang.runtime.DeviceTerminalApi
 
 internal class VmProcessApi(
     private val ctx: VmContext,
@@ -32,7 +31,6 @@ internal class VmProcessApi(
     private val pathResolver: VmPathResolver,
     private val filesystemApi: VmFileSystemApi,
     private val processManager: VmProcessManager,
-    private val terminal: DeviceTerminalApi,
 ) : DeviceProcessApi {
     override val argument: String = initialArgument
     override val workingDirectory: String get() = pathResolver.workingDirectory
@@ -52,7 +50,7 @@ internal class VmProcessApi(
     override suspend fun spawn(
         path: String,
         argument: String,
-    ): Int = processManager.spawn(path, argument, workingDirectory, terminal)
+    ): Int = processManager.spawn(path, argument, workingDirectory)
 
     override suspend fun wait(pid: Int): Int = processManager.wait(pid)
 }

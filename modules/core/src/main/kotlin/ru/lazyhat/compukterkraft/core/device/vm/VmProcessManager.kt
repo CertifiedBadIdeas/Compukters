@@ -28,7 +28,6 @@ import ru.lazyhat.compukterkraft.core.device.runtime.ComputerProgramCompiler
 import ru.lazyhat.compukterkraft.core.device.runtime.WorkspaceProgramLoader
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceProfile
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceRuntime
-import ru.lazyhat.compukterkraft.lang.runtime.DeviceTerminalApi
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -47,13 +46,12 @@ internal class VmProcessManager(
         path: String,
         argument: String,
         workingDirectory: String,
-        terminal: DeviceTerminalApi,
     ): Int {
         val pid = nextPid.getAndIncrement()
         val exitCode = CompletableDeferred<Int>()
         val job =
             scope.launch {
-                val code = execute(path, argument, workingDirectory, terminal)
+                val code = execute(path, argument, workingDirectory)
                 exitCode.complete(code)
             }
         job.invokeOnCompletion { failure ->
@@ -81,14 +79,20 @@ internal class VmProcessManager(
         path: String,
         argument: String,
         workingDirectory: String,
-        terminal: DeviceTerminalApi,
     ): Int {
+        val stderr = StdioDescriptor.decode(argument)?.stderr
+        suspend fun reportError(message: String) {
+            ctx.log("VM[$deviceId] $message")
+            if (stderr != null && stderr >= 0) {
+                ctx.writeIpc(stderr, "$message\n")
+            }
+        }
+
         val resolved = path
         val programSource =
             programLoader.load(deviceId, resolved) ?: run {
                 val message = "Program not found: $resolved"
-                ctx.log("VM[$deviceId] $message")
-                terminal.println(message)
+                reportError(message)
                 return 1
             }
         val compiledProgram =
@@ -101,7 +105,7 @@ internal class VmProcessManager(
         val program = compiledProgram.program
         if (program == null) {
             val message = compiledProgram.errorMessage.orEmpty().ifEmpty { "Compilation failed." }
-            terminal.println("Compilation Error in ${programSource.path}: $message")
+            reportError("Compilation Error in ${programSource.path}: $message")
             return 1
         }
 
@@ -111,7 +115,7 @@ internal class VmProcessManager(
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (failure: Throwable) {
-            terminal.println("Program error in ${programSource.path}: ${failure.message ?: failure.javaClass.simpleName}")
+            reportError("Program error in ${programSource.path}: ${failure.message ?: failure.javaClass.simpleName}")
             1
         }
     }

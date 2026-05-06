@@ -280,6 +280,11 @@ class BackgroundDeviceVm(
 
     override fun log(message: String) = logger.log(message)
 
+    override suspend fun writeIpc(
+        channel: Int,
+        text: String,
+    ) = ipcRegistry.write(channel, text)
+
     // ── Internal ────────────────────────────────────────────────────
 
     private suspend fun stopInternal(
@@ -348,7 +353,6 @@ class BackgroundDeviceVm(
                 pathResolver = pathResolver,
                 filesystemApi = filesystemApi,
                 processManager = processManager,
-                terminal = terminalApi,
             )
 
         return VmRuntime(

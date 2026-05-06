@@ -301,22 +301,98 @@ class BackgroundDeviceVmTest {
     }
 
     @Test
-    fun firmwareReportsMissingBootFileAndStaysActive() {
-        runtimeTestWorkspace("firmware-missing-boot") { workspace ->
+    fun processRunWritesLaunchErrorsToTaggedStderr() {
+        runtimeTestWorkspace("process-stderr-launch") { workspace ->
+            val logs = mutableListOf<String>()
             val vm =
                 BackgroundDeviceVm(
                     deviceId = 1,
                     profile = firmwareTestProfile(),
                     dispatcher = Dispatchers.Default,
                     labelProvider = { null },
-                    logger = DeviceVmLogger { },
+                    logger = DeviceVmLogger(logs::add),
                     workspace = workspace.host,
                     firmwareLoader =
                         StaticFirmwareLoader(
                             """
                             pub fun main() {
-                                val code: Int = process::run("boot.ck")
-                                terminal::println("code=" + code)
+                                val input: Int = ipc::open()
+                                val output: Int = ipc::open()
+                                val error: Int = ipc::open()
+                                val code: Int = process::run("missing.ck", "stdio-v1 " + input + " " + output + " " + error + " ")
+                                system::log("code=" + code)
+                                system::log(ipc::read(error))
+                            }
+                            """.trimIndent(),
+                        ),
+                )
+
+            assertTrue(vm.boot())
+            runVmTicks(vm, ticks = 24)
+
+            assertTrue(logs.any { it.contains("code=1") }, logs.toString())
+            assertTrue(logs.any { it.contains("Program not found: missing.ck") }, logs.toString())
+        }
+    }
+
+    @Test
+    fun processRunWritesCompilationErrorsToTaggedStderr() {
+        runtimeTestWorkspace("process-stderr-compile") { workspace ->
+            workspace.writeProgram(1, "bad.ck", "pub fun main() { val x: Int = \"bad\"; }")
+            val logs = mutableListOf<String>()
+            val vm =
+                BackgroundDeviceVm(
+                    deviceId = 1,
+                    profile = firmwareTestProfile(),
+                    dispatcher = Dispatchers.Default,
+                    labelProvider = { null },
+                    logger = DeviceVmLogger(logs::add),
+                    workspace = workspace.host,
+                    firmwareLoader =
+                        StaticFirmwareLoader(
+                            """
+                            pub fun main() {
+                                val input: Int = ipc::open()
+                                val output: Int = ipc::open()
+                                val error: Int = ipc::open()
+                                val code: Int = process::run("bad.ck", "stdio-v1 " + input + " " + output + " " + error + " ")
+                                system::log("code=" + code)
+                                system::log(ipc::read(error))
+                            }
+                            """.trimIndent(),
+                        ),
+                )
+
+            assertTrue(vm.boot())
+            runVmTicks(vm, ticks = 24)
+
+            assertTrue(logs.any { it.contains("code=1") }, logs.toString())
+            assertTrue(logs.any { it.contains("Compilation Error in bad.ck") }, logs.toString())
+        }
+    }
+
+    @Test
+    fun firmwareReportsMissingBootFileAndStaysActive() {
+        runtimeTestWorkspace("firmware-missing-boot") { workspace ->
+            val logs = mutableListOf<String>()
+            val vm =
+                BackgroundDeviceVm(
+                    deviceId = 1,
+                    profile = firmwareTestProfile(),
+                    dispatcher = Dispatchers.Default,
+                    labelProvider = { null },
+                    logger = DeviceVmLogger(logs::add),
+                    workspace = workspace.host,
+                    firmwareLoader =
+                        StaticFirmwareLoader(
+                            """
+                            pub fun main() {
+                                val input: Int = ipc::open()
+                                val output: Int = ipc::open()
+                                val error: Int = ipc::open()
+                                val code: Int = process::run("boot.ck", "stdio-v1 " + input + " " + output + " " + error + " ")
+                                system::log("code=" + code)
+                                system::log(ipc::read(error))
                                 while true { sleep(20L) }
                             }
                             """.trimIndent(),
@@ -326,9 +402,8 @@ class BackgroundDeviceVmTest {
             vm.boot()
             runVmTicks(vm)
 
-            val text = vm.forceScreenSnapshot().visibleText()
-            assertTrue(text.contains("Program not found: boot.ck"), text)
-            assertTrue(text.contains("code=1"), text)
+            assertTrue(logs.any { it.contains("Program not found: boot.ck") }, logs.toString())
+            assertTrue(logs.any { it.contains("code=1") }, logs.toString())
             assertTrue(vm.snapshot().state.isActive, vm.snapshot().state.toString())
         }
     }
@@ -337,20 +412,25 @@ class BackgroundDeviceVmTest {
     fun firmwareReportsBootCompileErrorAndStaysActive() {
         runtimeTestWorkspace("firmware-invalid-boot") { workspace ->
             workspace.writeProgram(1, "boot.ck", "fun main() {}")
+            val logs = mutableListOf<String>()
             val vm =
                 BackgroundDeviceVm(
                     deviceId = 1,
                     profile = firmwareTestProfile(),
                     dispatcher = Dispatchers.Default,
                     labelProvider = { null },
-                    logger = DeviceVmLogger { },
+                    logger = DeviceVmLogger(logs::add),
                     workspace = workspace.host,
                     firmwareLoader =
                         StaticFirmwareLoader(
                             """
                             pub fun main() {
-                                val code: Int = process::run("boot.ck")
-                                terminal::println("code=" + code)
+                                val input: Int = ipc::open()
+                                val output: Int = ipc::open()
+                                val error: Int = ipc::open()
+                                val code: Int = process::run("boot.ck", "stdio-v1 " + input + " " + output + " " + error + " ")
+                                system::log("code=" + code)
+                                system::log(ipc::read(error))
                                 while true { sleep(20L) }
                             }
                             """.trimIndent(),
@@ -360,10 +440,9 @@ class BackgroundDeviceVmTest {
             vm.boot()
             runVmTicks(vm)
 
-            val text = vm.forceScreenSnapshot().visibleText()
-            assertTrue(text.contains("Compilation Error in boot.ck"), text)
-            assertTrue(text.contains("pub fun main"), text)
-            assertTrue(text.contains("code=1"), text)
+            assertTrue(logs.any { it.contains("Compilation Error in boot.ck") }, logs.toString())
+            assertTrue(logs.any { it.contains("pub fun main") }, logs.toString())
+            assertTrue(logs.any { it.contains("code=1") }, logs.toString())
             assertTrue(vm.snapshot().state.isActive, vm.snapshot().state.toString())
         }
     }
