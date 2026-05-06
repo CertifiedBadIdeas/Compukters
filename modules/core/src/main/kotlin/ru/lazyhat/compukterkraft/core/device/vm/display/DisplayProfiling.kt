@@ -23,31 +23,41 @@ import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 import java.util.concurrent.atomic.AtomicLong
 
 interface DisplayMetricsCollector {
-    fun recordClear(displayId: Int)
+    fun recordClear(
+        displayId: Int,
+        nanos: Long,
+    )
 
-    fun recordSetPixel(displayId: Int)
+    fun recordSetPixel(
+        displayId: Int,
+        nanos: Long,
+    )
 
     fun recordFillRect(
         displayId: Int,
         width: Int,
         height: Int,
+        nanos: Long,
     )
 
     fun recordCopyRect(
         displayId: Int,
         width: Int,
         height: Int,
+        nanos: Long,
     )
 
     fun recordBlitMono(
         displayId: Int,
         width: Int,
         height: Int,
+        nanos: Long,
     )
 
     fun recordPresent(
         displayId: Int,
         emittedFrame: Boolean,
+        nanos: Long,
     )
 
     fun recordFrameDrain(frames: List<DisplayFrameDelta>)
@@ -57,16 +67,34 @@ interface DisplayMetricsCollector {
 
 data class DisplayOperationMetrics(
     val clearCalls: Long = 0,
+    val clearNanos: Long = 0,
     val setPixelCalls: Long = 0,
+    val setPixelNanos: Long = 0,
     val fillRectCalls: Long = 0,
     val fillRectArea: Long = 0,
+    val fillRectNanos: Long = 0,
     val copyRectCalls: Long = 0,
     val copyRectArea: Long = 0,
+    val copyRectNanos: Long = 0,
     val blitMonoCalls: Long = 0,
     val blitMonoArea: Long = 0,
+    val blitMonoNanos: Long = 0,
     val presentCalls: Long = 0,
     val presentFrames: Long = 0,
-)
+    val presentNanos: Long = 0,
+) {
+    val averageClearNanos: Long get() = average(clearNanos, clearCalls)
+    val averageSetPixelNanos: Long get() = average(setPixelNanos, setPixelCalls)
+    val averageFillRectNanos: Long get() = average(fillRectNanos, fillRectCalls)
+    val averageCopyRectNanos: Long get() = average(copyRectNanos, copyRectCalls)
+    val averageBlitMonoNanos: Long get() = average(blitMonoNanos, blitMonoCalls)
+    val averagePresentNanos: Long get() = average(presentNanos, presentCalls)
+}
+
+private fun average(
+    total: Long,
+    count: Long,
+): Long = if (count <= 0) 0 else total / count
 
 data class DisplayFrameMetrics(
     val frameCount: Long = 0,
@@ -80,41 +108,55 @@ data class DisplayProfilingSnapshot(
     val frames: DisplayFrameMetrics = DisplayFrameMetrics(),
 ) {
     fun summary(): String =
-        "display: clear=${operations.clearCalls}, setPixel=${operations.setPixelCalls}, " +
-            "fillRect=${operations.fillRectCalls}, fillArea=${operations.fillRectArea}, " +
-            "copyRect=${operations.copyRectCalls}, copyArea=${operations.copyRectArea}, " +
-            "blitMono=${operations.blitMonoCalls}, blitArea=${operations.blitMonoArea}, " +
-            "present=${operations.presentCalls}, presentFrames=${operations.presentFrames}\n" +
+        "display: clear=${operations.clearCalls}, clearNanos=${operations.clearNanos}, " +
+            "setPixel=${operations.setPixelCalls}, setPixelNanos=${operations.setPixelNanos}, " +
+            "fillRect=${operations.fillRectCalls}, fillArea=${operations.fillRectArea}, fillNanos=${operations.fillRectNanos}, " +
+            "copyRect=${operations.copyRectCalls}, copyArea=${operations.copyRectArea}, copyNanos=${operations.copyRectNanos}, " +
+            "blitMono=${operations.blitMonoCalls}, blitArea=${operations.blitMonoArea}, blitNanos=${operations.blitMonoNanos}, " +
+            "present=${operations.presentCalls}, presentFrames=${operations.presentFrames}, presentNanos=${operations.presentNanos}\n" +
+            "display-avg: avgClearNanos=${operations.averageClearNanos}, avgSetPixelNanos=${operations.averageSetPixelNanos}, " +
+            "avgFillNanos=${operations.averageFillRectNanos}, avgCopyNanos=${operations.averageCopyRectNanos}, " +
+            "avgBlitNanos=${operations.averageBlitMonoNanos}, avgPresentNanos=${operations.averagePresentNanos}\n" +
             "frames: count=${frames.frameCount}, fullRefresh=${frames.fullRefreshFrames}, " +
             "tiles=${frames.tileCount}, payloadBytes=${frames.payloadBytes}"
 }
 
 object NoOpDisplayMetricsCollector : DisplayMetricsCollector {
-    override fun recordClear(displayId: Int) = Unit
+    override fun recordClear(
+        displayId: Int,
+        nanos: Long,
+    ) = Unit
 
-    override fun recordSetPixel(displayId: Int) = Unit
+    override fun recordSetPixel(
+        displayId: Int,
+        nanos: Long,
+    ) = Unit
 
     override fun recordFillRect(
         displayId: Int,
         width: Int,
         height: Int,
+        nanos: Long,
     ) = Unit
 
     override fun recordCopyRect(
         displayId: Int,
         width: Int,
         height: Int,
+        nanos: Long,
     ) = Unit
 
     override fun recordBlitMono(
         displayId: Int,
         width: Int,
         height: Int,
+        nanos: Long,
     ) = Unit
 
     override fun recordPresent(
         displayId: Int,
         emittedFrame: Boolean,
+        nanos: Long,
     ) = Unit
 
     override fun recordFrameDrain(frames: List<DisplayFrameDelta>) = Unit
@@ -124,34 +166,50 @@ object NoOpDisplayMetricsCollector : DisplayMetricsCollector {
 
 class RecordingDisplayMetricsCollector : DisplayMetricsCollector {
     private val clearCalls = AtomicLong()
+    private val clearNanos = AtomicLong()
     private val setPixelCalls = AtomicLong()
+    private val setPixelNanos = AtomicLong()
     private val fillRectCalls = AtomicLong()
     private val fillRectArea = AtomicLong()
+    private val fillRectNanos = AtomicLong()
     private val copyRectCalls = AtomicLong()
     private val copyRectArea = AtomicLong()
+    private val copyRectNanos = AtomicLong()
     private val blitMonoCalls = AtomicLong()
     private val blitMonoArea = AtomicLong()
+    private val blitMonoNanos = AtomicLong()
     private val presentCalls = AtomicLong()
     private val presentFrames = AtomicLong()
+    private val presentNanos = AtomicLong()
     private val frameCount = AtomicLong()
     private val fullRefreshFrames = AtomicLong()
     private val tileCount = AtomicLong()
     private val payloadBytes = AtomicLong()
 
-    override fun recordClear(displayId: Int) {
+    override fun recordClear(
+        displayId: Int,
+        nanos: Long,
+    ) {
         clearCalls.incrementAndGet()
+        clearNanos.addAndGet(nanos.coerceAtLeast(0))
     }
 
-    override fun recordSetPixel(displayId: Int) {
+    override fun recordSetPixel(
+        displayId: Int,
+        nanos: Long,
+    ) {
         setPixelCalls.incrementAndGet()
+        setPixelNanos.addAndGet(nanos.coerceAtLeast(0))
     }
 
     override fun recordFillRect(
         displayId: Int,
         width: Int,
         height: Int,
+        nanos: Long,
     ) {
         fillRectCalls.incrementAndGet()
+        fillRectNanos.addAndGet(nanos.coerceAtLeast(0))
         if (width > 0 && height > 0) {
             fillRectArea.addAndGet(width.toLong() * height.toLong())
         }
@@ -161,8 +219,10 @@ class RecordingDisplayMetricsCollector : DisplayMetricsCollector {
         displayId: Int,
         width: Int,
         height: Int,
+        nanos: Long,
     ) {
         copyRectCalls.incrementAndGet()
+        copyRectNanos.addAndGet(nanos.coerceAtLeast(0))
         if (width > 0 && height > 0) {
             copyRectArea.addAndGet(width.toLong() * height.toLong())
         }
@@ -172,8 +232,10 @@ class RecordingDisplayMetricsCollector : DisplayMetricsCollector {
         displayId: Int,
         width: Int,
         height: Int,
+        nanos: Long,
     ) {
         blitMonoCalls.incrementAndGet()
+        blitMonoNanos.addAndGet(nanos.coerceAtLeast(0))
         if (width > 0 && height > 0) {
             blitMonoArea.addAndGet(width.toLong() * height.toLong())
         }
@@ -182,8 +244,10 @@ class RecordingDisplayMetricsCollector : DisplayMetricsCollector {
     override fun recordPresent(
         displayId: Int,
         emittedFrame: Boolean,
+        nanos: Long,
     ) {
         presentCalls.incrementAndGet()
+        presentNanos.addAndGet(nanos.coerceAtLeast(0))
         if (emittedFrame) {
             presentFrames.incrementAndGet()
         }
@@ -201,15 +265,21 @@ class RecordingDisplayMetricsCollector : DisplayMetricsCollector {
             operations =
                 DisplayOperationMetrics(
                     clearCalls = clearCalls.get(),
+                    clearNanos = clearNanos.get(),
                     setPixelCalls = setPixelCalls.get(),
+                    setPixelNanos = setPixelNanos.get(),
                     fillRectCalls = fillRectCalls.get(),
                     fillRectArea = fillRectArea.get(),
+                    fillRectNanos = fillRectNanos.get(),
                     copyRectCalls = copyRectCalls.get(),
                     copyRectArea = copyRectArea.get(),
+                    copyRectNanos = copyRectNanos.get(),
                     blitMonoCalls = blitMonoCalls.get(),
                     blitMonoArea = blitMonoArea.get(),
+                    blitMonoNanos = blitMonoNanos.get(),
                     presentCalls = presentCalls.get(),
                     presentFrames = presentFrames.get(),
+                    presentNanos = presentNanos.get(),
                 ),
             frames =
                 DisplayFrameMetrics(
