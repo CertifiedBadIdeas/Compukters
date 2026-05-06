@@ -86,6 +86,7 @@ import ru.lazyhat.compukterkraft.lang.api.Visibility
 import ru.lazyhat.compukterkraft.lang.api.WhenBranch
 import ru.lazyhat.compukterkraft.lang.api.WhenStatement
 import ru.lazyhat.compukterkraft.lang.api.WhileStatement
+import java.math.BigInteger
 import java.util.IdentityHashMap
 
 class LanguageFrontend(
@@ -2688,35 +2689,55 @@ internal class Lexer(
                 }
 
                 '<' -> {
-                    addToken(if (match('=')) TokenKind.LTE else TokenKind.LT, if (previous() == '=') "<=" else "<", start)
+                    if (match('<')) {
+                        if (match('=')) {
+                            addToken(TokenKind.LT_LT_EQUAL, "<<=", start)
+                        } else {
+                            addToken(TokenKind.LT_LT, "<<", start)
+                        }
+                    } else {
+                        addToken(if (match('=')) TokenKind.LTE else TokenKind.LT, if (previous() == '=') "<=" else "<", start)
+                    }
                 }
 
                 '>' -> {
-                    addToken(if (match('=')) TokenKind.GTE else TokenKind.GT, if (previous() == '=') ">=" else ">", start)
+                    if (match('>')) {
+                        if (match('=')) {
+                            addToken(TokenKind.GT_GT_EQUAL, ">>=", start)
+                        } else {
+                            addToken(TokenKind.GT_GT, ">>", start)
+                        }
+                    } else {
+                        addToken(if (match('=')) TokenKind.GTE else TokenKind.GT, if (previous() == '=') ">=" else ">", start)
+                    }
                 }
 
                 '&' -> {
-                    if (match('&')) {
-                        addToken(TokenKind.AMP_AMP, "&&", start)
-                    } else {
-                        diagnostics +=
-                            FrontendDiagnostic(
-                                "Unexpected `&`.",
-                                range(start),
-                            )
+                    when {
+                        match('&') -> addToken(TokenKind.AMP_AMP, "&&", start)
+                        match('=') -> addToken(TokenKind.AMP_EQUAL, "&=", start)
+                        else -> addToken(TokenKind.AMP, "&", start)
                     }
                 }
 
                 '|' -> {
-                    if (match('|')) {
-                        addToken(TokenKind.PIPE_PIPE, "||", start)
-                    } else {
-                        diagnostics +=
-                            FrontendDiagnostic(
-                                "Unexpected `|`.",
-                                range(start),
-                            )
+                    when {
+                        match('|') -> addToken(TokenKind.PIPE_PIPE, "||", start)
+                        match('=') -> addToken(TokenKind.PIPE_EQUAL, "|=", start)
+                        else -> addToken(TokenKind.PIPE, "|", start)
                     }
+                }
+
+                '^' -> {
+                    if (match('=')) {
+                        addToken(TokenKind.CARET_EQUAL, "^=", start)
+                    } else {
+                        addToken(TokenKind.CARET, "^", start)
+                    }
+                }
+
+                '~' -> {
+                    addToken(TokenKind.TILDE, "~", start)
                 }
 
                 '"' -> {
@@ -2813,8 +2834,37 @@ internal class Lexer(
         first: Char,
     ) {
         val builder = StringBuilder().append(first)
+        if (first == '0' && !isAtEnd() && (peek() == 'b' || peek() == 'B')) {
+            builder.append(advance())
+            lexBinaryNumber(start, builder)
+            return
+        }
         while (!isAtEnd() && peek().isDigit()) {
             builder.append(advance())
+        }
+        if (!isAtEnd() && peek() == 'L') {
+            builder.append(advance())
+        }
+        tokens += Token(TokenKind.NUMBER, builder.toString(), SourceRange(start, location()))
+    }
+
+    private fun lexBinaryNumber(
+        start: SourceLocation,
+        builder: StringBuilder,
+    ) {
+        var digitCount = 0
+        while (!isAtEnd() && (peek() == '0' || peek() == '1')) {
+            builder.append(advance())
+            digitCount += 1
+        }
+        if (digitCount == 0) {
+            diagnostics += FrontendDiagnostic("Binary literal requires at least one digit after `0b`.", range(start))
+        }
+        if (!isAtEnd() && peek().isDigit()) {
+            while (!isAtEnd() && peek().isDigit()) {
+                builder.append(advance())
+            }
+            diagnostics += FrontendDiagnostic("Binary literal can only contain 0 or 1 digits.", SourceRange(start, location()))
         }
         if (!isAtEnd() && peek() == 'L') {
             builder.append(advance())
@@ -3728,33 +3778,7 @@ internal class Parser(
             }
 
             TokenKind.NUMBER -> {
-                if (token.text.endsWith("L")) {
-                    val raw = token.text.dropLast(1)
-                    val value = raw.toLongOrNull()
-                    if (value == null) {
-                        diagnostics +=
-                            FrontendDiagnostic(
-                                "Long literal `${token.text}` is out of range.",
-                                token.range,
-                            )
-                        return null
-                    }
-                    LiteralExpression(LongLiteralValue(value), token.range)
-                } else {
-                    val value = token.text.toIntOrNull()
-                    if (value == null) {
-                        val asLong = token.text.toLongOrNull()
-                        val hint =
-                            if (asLong != null) {
-                                "Integer literal `${token.text}` exceeds Int range; append `L` to make it a Long (e.g. `${token.text}L`)."
-                            } else {
-                                "Integer literal `${token.text}` is out of range."
-                            }
-                        diagnostics += FrontendDiagnostic(hint, token.range)
-                        return null
-                    }
-                    LiteralExpression(IntLiteralValue(value), token.range)
-                }
+                parseNumberLiteral(token)
             }
 
             TokenKind.IDENTIFIER -> {
@@ -3793,6 +3817,37 @@ internal class Parser(
             else -> {
                 diagnostics += FrontendDiagnostic("Expected an expression.", token.range)
                 null
+            }
+        }
+    }
+
+    private fun parseNumberLiteral(token: Token): LiteralExpression? {
+        val text = token.text
+        val isLong = text.endsWith("L")
+        val raw = if (isLong) text.dropLast(1) else text
+        val isBinary = raw.startsWith("0b") || raw.startsWith("0B")
+        val digits = if (isBinary) raw.drop(2) else raw
+        val radix = if (isBinary) 2 else 10
+        if (digits.isEmpty()) return null
+        val value = digits.toBigIntegerOrNull(radix)
+        if (value == null) {
+            diagnostics += FrontendDiagnostic("Integer literal `${token.text}` is out of range.", token.range)
+            return null
+        }
+        return if (isLong) {
+            if (value > LONG_MAX) {
+                diagnostics += FrontendDiagnostic("Long literal `${token.text}` is out of range.", token.range)
+                null
+            } else {
+                LiteralExpression(LongLiteralValue(value.toLong()), token.range)
+            }
+        } else {
+            if (value > INT_MAX) {
+                val hint = "Integer literal `${token.text}` exceeds Int range; append `L` to make it a Long (e.g. `${token.text}L`)."
+                diagnostics += FrontendDiagnostic(hint, token.range)
+                null
+            } else {
+                LiteralExpression(IntLiteralValue(value.toInt()), token.range)
             }
         }
     }
@@ -3881,5 +3936,7 @@ internal class Parser(
                 TokenKind.STAR_EQUAL,
                 TokenKind.SLASH_EQUAL,
             )
+        val INT_MAX: BigInteger = BigInteger.valueOf(Int.MAX_VALUE.toLong())
+        val LONG_MAX: BigInteger = BigInteger.valueOf(Long.MAX_VALUE)
     }
 }
