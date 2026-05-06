@@ -15,6 +15,12 @@ Run the bundled terminal profiling workload:
 ./gradlew :v1_21_1-neoforge:test --tests ru.lazyhat.compukterkraft.impl.computer.vm.RuntimeDisplayProfilingTest --info
 ```
 
+Run only the held-Enter backlog workload:
+
+```bash
+./gradlew :v1_21_1-neoforge:test --tests ru.lazyhat.compukterkraft.impl.computer.vm.RuntimeDisplayProfilingTest.heldEnterWorkloadProducesBacklogProfilingMetrics --info
+```
+
 The output includes:
 
 - `display:` operation counts, areas, and operation timings;
@@ -30,6 +36,10 @@ The output includes:
 - `instructions:` VM bytecode instruction distribution by instruction kind, with counts and timings;
 - `compiler:` compile totals;
 - `compiler-phases:` parse/analyze/codegen metrics.
+
+The held-Enter workload additionally prints a `held-enter:` line with accepted repeated Enter events, settle ticks,
+maximum/final queued VM events, maximum/final pending host calls, and drained display frame count. It does not filter
+repeated Enter; it measures terminal/shell backlog behavior under repeat input.
 
 ## JFR
 

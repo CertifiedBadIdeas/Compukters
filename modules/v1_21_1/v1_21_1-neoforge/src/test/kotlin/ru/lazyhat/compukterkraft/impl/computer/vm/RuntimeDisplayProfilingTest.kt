@@ -51,6 +51,30 @@ class RuntimeDisplayProfilingTest {
         val compilerMetrics: RecordingCompilerMetricsCollector,
     )
 
+    private data class TickObservation(
+        val maxQueuedEvents: Int,
+        val finalQueuedEvents: Int,
+        val maxPendingHostCalls: Int,
+        val finalPendingHostCalls: Int,
+    )
+
+    private data class HeldEnterProfilingRun(
+        val profiling: ProfilingRun,
+        val enterEventsQueued: Int,
+        val settleTicks: Int,
+        val maxQueuedEvents: Int,
+        val finalQueuedEvents: Int,
+        val maxPendingHostCalls: Int,
+        val finalPendingHostCalls: Int,
+        val displayFramesDrained: Int,
+    ) {
+        fun summary(): String =
+            "held-enter: enterEventsQueued=$enterEventsQueued, settleTicks=$settleTicks, " +
+                "maxQueuedEvents=$maxQueuedEvents, finalQueuedEvents=$finalQueuedEvents, " +
+                "maxPendingHostCalls=$maxPendingHostCalls, finalPendingHostCalls=$finalPendingHostCalls, " +
+                "displayFramesDrained=$displayFramesDrained"
+    }
+
     private class ClasspathFirmwareLoader : FirmwareProgramLoader {
         override fun load(path: String): LoadedFirmwareProgramSource {
             val source =
@@ -92,8 +116,11 @@ class RuntimeDisplayProfilingTest {
         metrics: RecordingRuntimeMetricsCollector,
         ticks: Int,
         delayMillis: Long = 10,
-    ) = runBlocking(Dispatchers.Default) {
-        repeat(ticks) { tick ->
+    ): TickObservation =
+        runBlocking(Dispatchers.Default) {
+            var maxQueuedEvents = vm.snapshot().queuedEvents
+            var maxPendingHostCalls = vm.snapshot().pendingHostCalls
+            repeat(ticks) { tick ->
             val tickStarted = System.nanoTime()
             val requestStarted = System.nanoTime()
             val permitsSentBefore = metrics.snapshot().vm.slicePermitsSent
@@ -127,7 +154,17 @@ class RuntimeDisplayProfilingTest {
                     yields += 1
                 }
             }
-        }
+                val snapshot = vm.snapshot()
+                maxQueuedEvents = maxOf(maxQueuedEvents, snapshot.queuedEvents)
+                maxPendingHostCalls = maxOf(maxPendingHostCalls, snapshot.pendingHostCalls)
+            }
+            val finalSnapshot = vm.snapshot()
+            TickObservation(
+                maxQueuedEvents = maxQueuedEvents,
+                finalQueuedEvents = finalSnapshot.queuedEvents,
+                maxPendingHostCalls = maxPendingHostCalls,
+                finalPendingHostCalls = finalSnapshot.pendingHostCalls,
+        )
     }
 
     private fun waitForBootCompile(metrics: RecordingCompilerMetricsCollector) =
@@ -198,6 +235,75 @@ class RuntimeDisplayProfilingTest {
         }
     }
 
+    private fun runHeldEnterWorkload(
+        repeatEnterEvents: Int,
+        settleTicks: Int,
+    ): HeldEnterProfilingRun {
+        val root = createTempDirectory("compukterkraft-held-enter-profiling")
+        try {
+            DeviceWorkspaceInitializer(root).ensureInitialized(1)
+            val workspace = DeviceWorkspaceHost(root)
+            val displayMetrics = RecordingDisplayMetricsCollector()
+            val runtimeMetrics = RecordingRuntimeMetricsCollector()
+            val compilerMetrics = RecordingCompilerMetricsCollector()
+            val vm =
+                BackgroundDeviceVm(
+                    deviceId = 1,
+                    profile = profile(),
+                    dispatcher = Dispatchers.Default,
+                    labelProvider = { null },
+                    logger = DeviceVmLogger { },
+                    workspace = workspace,
+                    firmwareLoader = ClasspathFirmwareLoader(),
+                    displayMetricsCollector = displayMetrics,
+                    runtimeMetricsCollector = runtimeMetrics,
+                    compilerMetricsCollector = compilerMetrics,
+                )
+            val dispatcher = HostCallDispatcher(deviceId = 1, workspace = workspace)
+
+            vm.attachDisplay(displayId = 9, width = 96, height = 48)
+            assertTrue(vm.boot())
+            waitForBootCompile(compilerMetrics)
+            runTicks(vm, dispatcher, runtimeMetrics, ticks = 100, delayMillis = 10)
+            waitForRuntimeProgress(runtimeMetrics)
+
+            var acceptedEnterEvents = 0
+            var maxQueuedEvents = vm.snapshot().queuedEvents
+            var maxPendingHostCalls = vm.snapshot().pendingHostCalls
+            repeat(repeatEnterEvents) {
+                if (vm.enqueueEvent(VmEvent("key", listOf(KeyCodes.KEY_ENTER, true)))) {
+                    acceptedEnterEvents += 1
+                }
+                val inputObservation = runTicks(vm, dispatcher, runtimeMetrics, ticks = 1, delayMillis = 0)
+                maxQueuedEvents =
+                    maxOf(maxQueuedEvents, inputObservation.maxQueuedEvents, inputObservation.finalQueuedEvents)
+                maxPendingHostCalls =
+                    maxOf(
+                        maxPendingHostCalls,
+                        inputObservation.maxPendingHostCalls,
+                        inputObservation.finalPendingHostCalls,
+                    )
+            }
+            val observation = runTicks(vm, dispatcher, runtimeMetrics, ticks = settleTicks, delayMillis = 0)
+            val drainStarted = System.nanoTime()
+            val frames = vm.drainDisplayFrames()
+            runtimeMetrics.recordDisplayFrameDrain(frames.size, System.nanoTime() - drainStarted)
+
+            return HeldEnterProfilingRun(
+                profiling = ProfilingRun(displayMetrics, runtimeMetrics, compilerMetrics),
+                enterEventsQueued = acceptedEnterEvents,
+                settleTicks = settleTicks,
+                maxQueuedEvents = maxOf(maxQueuedEvents, observation.maxQueuedEvents),
+                finalQueuedEvents = observation.finalQueuedEvents,
+                maxPendingHostCalls = maxOf(maxPendingHostCalls, observation.maxPendingHostCalls),
+                finalPendingHostCalls = observation.finalPendingHostCalls,
+                displayFramesDrained = frames.size,
+            )
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
     @Test
     fun bundledTerminalWorkloadProducesProfilingMetrics() {
         val run = runTerminalWorkload(delayMillis = 10, bootTicks = 80, inputTicks = 20, enterTicks = 40)
@@ -249,5 +355,32 @@ class RuntimeDisplayProfilingTest {
         assertTrue(runtimeSnapshot.vm.averageExecutionWindowNanos >= 0, runtimeSnapshot.summary())
         assertTrue(compilerSnapshot.compileCalls > 0, compilerSnapshot.summary())
         assertTrue(compilerSnapshot.compileNanos > 0, compilerSnapshot.summary())
+    }
+
+    @Test
+    fun heldEnterWorkloadProducesBacklogProfilingMetrics() {
+        val run = runHeldEnterWorkload(repeatEnterEvents = 120, settleTicks = 220)
+        val displaySnapshot = run.profiling.displayMetrics.snapshot()
+        val runtimeSnapshot = run.profiling.runtimeMetrics.snapshot()
+        val compilerSnapshot = run.profiling.compilerMetrics.snapshot()
+
+        println(run.summary())
+        println(displaySnapshot.summary())
+        println(runtimeSnapshot.summary())
+        println(compilerSnapshot.summary())
+
+        assertTrue(run.enterEventsQueued == 120, run.summary())
+        assertTrue(run.maxQueuedEvents > 0, run.summary())
+        assertTrue(runtimeSnapshot.vm.hostCallSignals > 0, runtimeSnapshot.summary())
+        assertTrue(
+            runtimeSnapshot.hostCalls.any { it.moduleName == "events" && it.functionName == "tryPull" },
+            runtimeSnapshot.summary(),
+        )
+        assertTrue(
+            runtimeSnapshot.hostCalls.any { it.moduleName == "ipc" && it.functionName == "write" },
+            runtimeSnapshot.summary(),
+        )
+        assertTrue(runtimeSnapshot.instructions.isNotEmpty(), runtimeSnapshot.summary())
+        assertTrue(displaySnapshot.frames.frameCount > 0, displaySnapshot.summary())
     }
 }

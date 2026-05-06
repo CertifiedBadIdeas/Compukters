@@ -38,7 +38,7 @@ class EventManager(
     fun enqueueEvent(event: VmEvent): Boolean =
         eventQueue.trySend(event).isSuccess.also { accepted ->
             if (accepted) {
-                queuedEvents.incrementAndGet()
+                queuedEvents.updateAndGet { current -> (current + 1).coerceAtMost(maxQueueSize) }
             }
         }
 
