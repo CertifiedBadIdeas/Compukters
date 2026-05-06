@@ -858,7 +858,9 @@ private fun String.escapeString(): String =
             append(
                 when (ch) {
                     '\n' -> "\\n"
+                    '\r' -> "\\r"
                     '\t' -> "\\t"
+                    '\b' -> "\\b"
                     '"' -> "\\\""
                     '\\' -> "\\\\"
                     else -> ch.toString()

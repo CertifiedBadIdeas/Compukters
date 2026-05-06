@@ -56,9 +56,9 @@ class RomScriptCompileTest {
         assertTrue(source.contains("fun hold_splash"), "bios.ck should keep the splash visible before boot starts")
         assertTrue(source.contains("display::blitMono"), "bios.ck should render the splash through display primitives")
         assertTrue(source.contains("Compukter"), "bios.ck should include visible Compukter branding")
-        assertTrue(source.contains("hold_splash(40)"), "bios.ck should hold the splash for roughly two seconds")
+        assertTrue(source.contains("hold_splash(20)"), "bios.ck should hold the splash briefly before boot")
         assertTrue(
-            source.indexOf("hold_splash(40)") < source.indexOf("filesystem::exists(\"boot.ck\")"),
+            source.indexOf("hold_splash(20)") < source.indexOf("filesystem::exists(\"boot.ck\")"),
             "bios.ck should show the splash before looking up boot.ck",
         )
         assertFalse(source.contains("stdout::write"), "bios.ck must not use stdout for visible splash UI")
@@ -126,6 +126,24 @@ class RomScriptCompileTest {
             source.contains("ipc::tryRead(output) + ipc::tryRead(error)"),
             "terminal.ck must not concatenate separate stdout/stderr reads in a fixed order",
         )
+    }
+
+    @Test
+    fun bundledRomShellOwnsSubmittedLineEchoAndTerminalHandlesControlChars() {
+        val terminal = resourceText("rom/terminal.ck")
+        val shell = resourceText("rom/shell.ck")
+
+        assertTrue(
+            shell.contains("val line: String = readLine(ctx)\n        write(ctx, line + \"\\n\")"),
+            "shell.ck should echo submitted lines so blank Enter is shell-owned visible output",
+        )
+        assertFalse(
+            terminal.contains("buffer = appendText(displayId, buffer, line + \"\\n\")"),
+            "terminal.ck must not locally commit submitted lines on Enter",
+        )
+        assertTrue(terminal.contains("ch == \"\\r\""), "terminal.ck should handle carriage return output")
+        assertTrue(terminal.contains("ch == \"\\b\""), "terminal.ck should handle backspace output")
+        assertTrue(terminal.contains("clearCell"), "terminal.ck should clear a cell for backspace output")
     }
 
     @Test
