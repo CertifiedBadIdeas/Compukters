@@ -1,55 +1,54 @@
 pub struct TerminalBuffer { cellsText: String, cursorRow: Int, cursorColumn: Int, displayColumns: Int, displayRows: Int }
-pub struct Glyph5x7 { row0: Int, row1: Int, row2: Int, row3: Int, row4: Int, row5: Int, row6: Int }
 
-fun glyphRows(ch: String): Glyph5x7 {
-    if (ch == "A" || ch == "a") { return Glyph5x7(row0 = 14, row1 = 17, row2 = 17, row3 = 31, row4 = 17, row5 = 17, row6 = 17) }
-    if (ch == "B" || ch == "b") { return Glyph5x7(row0 = 30, row1 = 17, row2 = 17, row3 = 30, row4 = 17, row5 = 17, row6 = 30) }
-    if (ch == "C" || ch == "c") { return Glyph5x7(row0 = 15, row1 = 16, row2 = 16, row3 = 16, row4 = 16, row5 = 16, row6 = 15) }
-    if (ch == "D" || ch == "d") { return Glyph5x7(row0 = 30, row1 = 17, row2 = 17, row3 = 17, row4 = 17, row5 = 17, row6 = 30) }
-    if (ch == "E" || ch == "e") { return Glyph5x7(row0 = 31, row1 = 16, row2 = 16, row3 = 30, row4 = 16, row5 = 16, row6 = 31) }
-    if (ch == "F" || ch == "f") { return Glyph5x7(row0 = 31, row1 = 16, row2 = 16, row3 = 30, row4 = 16, row5 = 16, row6 = 16) }
-    if (ch == "G" || ch == "g") { return Glyph5x7(row0 = 15, row1 = 16, row2 = 16, row3 = 19, row4 = 17, row5 = 17, row6 = 15) }
-    if (ch == "H" || ch == "h") { return Glyph5x7(row0 = 17, row1 = 17, row2 = 17, row3 = 31, row4 = 17, row5 = 17, row6 = 17) }
-    if (ch == "I" || ch == "i") { return Glyph5x7(row0 = 31, row1 = 4, row2 = 4, row3 = 4, row4 = 4, row5 = 4, row6 = 31) }
-    if (ch == "J" || ch == "j") { return Glyph5x7(row0 = 7, row1 = 2, row2 = 2, row3 = 2, row4 = 18, row5 = 18, row6 = 12) }
-    if (ch == "K" || ch == "k") { return Glyph5x7(row0 = 17, row1 = 18, row2 = 20, row3 = 24, row4 = 20, row5 = 18, row6 = 17) }
-    if (ch == "L" || ch == "l") { return Glyph5x7(row0 = 16, row1 = 16, row2 = 16, row3 = 16, row4 = 16, row5 = 16, row6 = 31) }
-    if (ch == "M" || ch == "m") { return Glyph5x7(row0 = 17, row1 = 27, row2 = 21, row3 = 21, row4 = 17, row5 = 17, row6 = 17) }
-    if (ch == "N" || ch == "n") { return Glyph5x7(row0 = 17, row1 = 25, row2 = 21, row3 = 19, row4 = 17, row5 = 17, row6 = 17) }
-    if (ch == "O" || ch == "o") { return Glyph5x7(row0 = 14, row1 = 17, row2 = 17, row3 = 17, row4 = 17, row5 = 17, row6 = 14) }
-    if (ch == "P" || ch == "p") { return Glyph5x7(row0 = 30, row1 = 17, row2 = 17, row3 = 30, row4 = 16, row5 = 16, row6 = 16) }
-    if (ch == "Q" || ch == "q") { return Glyph5x7(row0 = 14, row1 = 17, row2 = 17, row3 = 17, row4 = 21, row5 = 18, row6 = 13) }
-    if (ch == "R" || ch == "r") { return Glyph5x7(row0 = 30, row1 = 17, row2 = 17, row3 = 30, row4 = 20, row5 = 18, row6 = 17) }
-    if (ch == "S" || ch == "s") { return Glyph5x7(row0 = 15, row1 = 16, row2 = 16, row3 = 14, row4 = 1, row5 = 1, row6 = 30) }
-    if (ch == "T" || ch == "t") { return Glyph5x7(row0 = 31, row1 = 4, row2 = 4, row3 = 4, row4 = 4, row5 = 4, row6 = 4) }
-    if (ch == "U" || ch == "u") { return Glyph5x7(row0 = 17, row1 = 17, row2 = 17, row3 = 17, row4 = 17, row5 = 17, row6 = 14) }
-    if (ch == "V" || ch == "v") { return Glyph5x7(row0 = 17, row1 = 17, row2 = 17, row3 = 17, row4 = 17, row5 = 10, row6 = 4) }
-    if (ch == "W" || ch == "w") { return Glyph5x7(row0 = 17, row1 = 17, row2 = 17, row3 = 21, row4 = 21, row5 = 21, row6 = 10) }
-    if (ch == "X" || ch == "x") { return Glyph5x7(row0 = 17, row1 = 10, row2 = 4, row3 = 4, row4 = 4, row5 = 10, row6 = 17) }
-    if (ch == "Y" || ch == "y") { return Glyph5x7(row0 = 17, row1 = 10, row2 = 4, row3 = 4, row4 = 4, row5 = 4, row6 = 4) }
-    if (ch == "Z" || ch == "z") { return Glyph5x7(row0 = 31, row1 = 1, row2 = 2, row3 = 4, row4 = 8, row5 = 16, row6 = 31) }
-    if (ch == "0") { return Glyph5x7(row0 = 14, row1 = 17, row2 = 19, row3 = 21, row4 = 25, row5 = 17, row6 = 14) }
-    if (ch == "1") { return Glyph5x7(row0 = 4, row1 = 12, row2 = 4, row3 = 4, row4 = 4, row5 = 4, row6 = 14) }
-    if (ch == "2") { return Glyph5x7(row0 = 14, row1 = 17, row2 = 1, row3 = 2, row4 = 4, row5 = 8, row6 = 31) }
-    if (ch == "3") { return Glyph5x7(row0 = 30, row1 = 1, row2 = 1, row3 = 6, row4 = 1, row5 = 1, row6 = 30) }
-    if (ch == "4") { return Glyph5x7(row0 = 2, row1 = 6, row2 = 10, row3 = 18, row4 = 31, row5 = 2, row6 = 2) }
-    if (ch == "5") { return Glyph5x7(row0 = 31, row1 = 16, row2 = 30, row3 = 1, row4 = 1, row5 = 1, row6 = 30) }
-    if (ch == "6") { return Glyph5x7(row0 = 15, row1 = 16, row2 = 16, row3 = 30, row4 = 17, row5 = 17, row6 = 14) }
-    if (ch == "7") { return Glyph5x7(row0 = 31, row1 = 1, row2 = 2, row3 = 4, row4 = 8, row5 = 8, row6 = 8) }
-    if (ch == "8") { return Glyph5x7(row0 = 14, row1 = 17, row2 = 17, row3 = 14, row4 = 17, row5 = 17, row6 = 14) }
-    if (ch == "9") { return Glyph5x7(row0 = 14, row1 = 17, row2 = 17, row3 = 15, row4 = 1, row5 = 1, row6 = 30) }
-    if (ch == ".") { return Glyph5x7(row0 = 0, row1 = 0, row2 = 0, row3 = 0, row4 = 0, row5 = 0, row6 = 4) }
-    if (ch == ":") { return Glyph5x7(row0 = 0, row1 = 4, row2 = 4, row3 = 0, row4 = 4, row5 = 4, row6 = 0) }
-    if (ch == "/") { return Glyph5x7(row0 = 1, row1 = 2, row2 = 2, row3 = 4, row4 = 8, row5 = 8, row6 = 16) }
-    if (ch == "-") { return Glyph5x7(row0 = 0, row1 = 0, row2 = 0, row3 = 31, row4 = 0, row5 = 0, row6 = 0) }
-    if (ch == "_") { return Glyph5x7(row0 = 0, row1 = 0, row2 = 0, row3 = 0, row4 = 0, row5 = 0, row6 = 31) }
-    if (ch == ">") { return Glyph5x7(row0 = 16, row1 = 8, row2 = 4, row3 = 2, row4 = 4, row5 = 8, row6 = 16) }
-    if (ch == "<") { return Glyph5x7(row0 = 1, row1 = 2, row2 = 4, row3 = 8, row4 = 4, row5 = 2, row6 = 1) }
-    if (ch == "`" || ch == "'") { return Glyph5x7(row0 = 4, row1 = 4, row2 = 0, row3 = 0, row4 = 0, row5 = 0, row6 = 0) }
-    if (ch == "!") { return Glyph5x7(row0 = 4, row1 = 4, row2 = 4, row3 = 4, row4 = 4, row5 = 0, row6 = 4) }
-    if (ch == "?") { return Glyph5x7(row0 = 14, row1 = 17, row2 = 1, row3 = 2, row4 = 4, row5 = 0, row6 = 4) }
-    if (ch == "#") { return Glyph5x7(row0 = 10, row1 = 31, row2 = 10, row3 = 31, row4 = 10, row5 = 0, row6 = 0) }
-    return Glyph5x7(row0 = 31, row1 = 17, row2 = 17, row3 = 17, row4 = 17, row5 = 17, row6 = 31)
+fun glyphBits(ch: String): Long {
+    if (ch == "A" || ch == "a") { return 0b01110100011000111111100011000110001L }
+    if (ch == "B" || ch == "b") { return 0b11110100011000111110100011000111110L }
+    if (ch == "C" || ch == "c") { return 0b01111100001000010000100001000001111L }
+    if (ch == "D" || ch == "d") { return 0b11110100011000110001100011000111110L }
+    if (ch == "E" || ch == "e") { return 0b11111100001000011110100001000011111L }
+    if (ch == "F" || ch == "f") { return 0b11111100001000011110100001000010000L }
+    if (ch == "G" || ch == "g") { return 0b01111100001000010011100011000101111L }
+    if (ch == "H" || ch == "h") { return 0b10001100011000111111100011000110001L }
+    if (ch == "I" || ch == "i") { return 0b11111001000010000100001000010011111L }
+    if (ch == "J" || ch == "j") { return 0b00111000100001000010100101001001100L }
+    if (ch == "K" || ch == "k") { return 0b10001100101010011000101001001010001L }
+    if (ch == "L" || ch == "l") { return 0b10000100001000010000100001000011111L }
+    if (ch == "M" || ch == "m") { return 0b10001110111010110101100011000110001L }
+    if (ch == "N" || ch == "n") { return 0b10001110011010110011100011000110001L }
+    if (ch == "O" || ch == "o") { return 0b01110100011000110001100011000101110L }
+    if (ch == "P" || ch == "p") { return 0b11110100011000111110100001000010000L }
+    if (ch == "Q" || ch == "q") { return 0b01110100011000110001101011001001101L }
+    if (ch == "R" || ch == "r") { return 0b11110100011000111110101001001010001L }
+    if (ch == "S" || ch == "s") { return 0b01111100001000001110000010000111110L }
+    if (ch == "T" || ch == "t") { return 0b11111001000010000100001000010000100L }
+    if (ch == "U" || ch == "u") { return 0b10001100011000110001100011000101110L }
+    if (ch == "V" || ch == "v") { return 0b10001100011000110001100010101000100L }
+    if (ch == "W" || ch == "w") { return 0b10001100011000110101101011010101010L }
+    if (ch == "X" || ch == "x") { return 0b10001010100010000100001000101010001L }
+    if (ch == "Y" || ch == "y") { return 0b10001010100010000100001000010000100L }
+    if (ch == "Z" || ch == "z") { return 0b11111000010001000100010001000011111L }
+    if (ch == "0") { return 0b01110100011001110101110011000101110L }
+    if (ch == "1") { return 0b00100011000010000100001000010001110L }
+    if (ch == "2") { return 0b01110100010000100010001000100011111L }
+    if (ch == "3") { return 0b11110000010000100110000010000111110L }
+    if (ch == "4") { return 0b00010001100101010010111110001000010L }
+    if (ch == "5") { return 0b11111100001111000001000010000111110L }
+    if (ch == "6") { return 0b01111100001000011110100011000101110L }
+    if (ch == "7") { return 0b11111000010001000100010000100001000L }
+    if (ch == "8") { return 0b01110100011000101110100011000101110L }
+    if (ch == "9") { return 0b01110100011000101111000010000111110L }
+    if (ch == ".") { return 0b00000000000000000000000000000000100L }
+    if (ch == ":") { return 0b00000001000010000000001000010000000L }
+    if (ch == "/") { return 0b00001000100001000100010000100010000L }
+    if (ch == "-") { return 0b00000000000000011111000000000000000L }
+    if (ch == "_") { return 0b00000000000000000000000000000011111L }
+    if (ch == ">") { return 0b10000010000010000010001000100010000L }
+    if (ch == "<") { return 0b00001000100010001000001000001000001L }
+    if (ch == "`" || ch == "'") { return 0b00100001000000000000000000000000000L }
+    if (ch == "!") { return 0b00100001000010000100001000000000100L }
+    if (ch == "?") { return 0b01110100010000100010001000000000100L }
+    if (ch == "#") { return 0b01010111110101011111010100000000000L }
+    return 0b11111100011000110001100011000111111L
 }
 
 fun drawGlyph(displayId: Int, column: Int, row: Int, ch: String, color: Int) {
@@ -59,8 +58,8 @@ fun drawGlyph(displayId: Int, column: Int, row: Int, ch: String, color: Int) {
         display::fillRect(displayId, x, y, 6, 9, 0)
         return
     }
-    val glyph: Glyph5x7 = glyphRows(ch)
-    display::blitMono5x7(displayId, x, y, glyph.row0, glyph.row1, glyph.row2, glyph.row3, glyph.row4, glyph.row5, glyph.row6, color, -1)
+    val glyph: Long = glyphBits(ch)
+    display::blitMono5x7Packed(displayId, x, y, glyph, color, -1)
 }
 
 fun clearCell(displayId: Int, column: Int, row: Int) {
@@ -136,8 +135,8 @@ fun renderTextRow(displayId: Int, cells: String, row: Int) {
     while col < cols + 0 {
         val ch: String = cellAt(cells, row * cols + col)
         if (ch != " ") {
-                val glyph: Glyph5x7 = glyphRows(ch)
-                display::blitMono5x7(displayId, col * 6, row * 9, glyph.row0, glyph.row1, glyph.row2, glyph.row3, glyph.row4, glyph.row5, glyph.row6, 2016, -1)
+            val glyph: Long = glyphBits(ch)
+            display::blitMono5x7Packed(displayId, col * 6, row * 9, glyph, 2016, -1)
         }
         col = col + 1
     }

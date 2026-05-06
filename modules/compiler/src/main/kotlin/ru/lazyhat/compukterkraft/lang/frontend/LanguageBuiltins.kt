@@ -98,6 +98,12 @@ object LanguageBuiltins {
                                     "Draws a fixed 5x7 monochrome bitmap from seven numeric row masks.",
                                 ),
                                 BuiltinFunction(
+                                    "blitMono5x7Packed",
+                                    listOf("Int", "Int", "Int", "Long", "Int", "Int"),
+                                    "Unit",
+                                    "Draws a fixed 5x7 monochrome bitmap from one packed 35-bit glyph value.",
+                                ),
+                                BuiltinFunction(
                                     "present",
                                     listOf("Int"),
                                     "Unit",

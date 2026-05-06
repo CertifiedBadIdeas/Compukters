@@ -285,6 +285,25 @@ class LanguageFrontendTest {
     }
 
     @Test
+    fun parsesPackedNumericGlyphDisplayBuiltin() {
+        val artifact =
+            frontend.compile(
+                "packed_glyph.ck",
+                """
+                pub fun main() {
+                    display::blitMono5x7Packed(1, 2, 3, 0b01110100011000111111100011000110001L, 2016, -1)
+                }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+        assertNotNull(artifact.module)
+    }
+
+    @Test
     fun compilesBitwiseOperatorsWithApprovedTypes() {
         val artifact =
             frontend.compile(

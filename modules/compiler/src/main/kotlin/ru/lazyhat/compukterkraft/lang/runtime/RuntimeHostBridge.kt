@@ -269,6 +269,25 @@ internal class RuntimeHostBridge(
                 VmValue.UnitValue
             }
 
+            "blitMono5x7Packed" -> {
+                val glyph = arguments[3].asLong()
+                runtime.display.blitMono5x7(
+                    arguments[0].asInt(),
+                    arguments[1].asInt(),
+                    arguments[2].asInt(),
+                    ((glyph shr 30) and 0b11111).toInt(),
+                    ((glyph shr 25) and 0b11111).toInt(),
+                    ((glyph shr 20) and 0b11111).toInt(),
+                    ((glyph shr 15) and 0b11111).toInt(),
+                    ((glyph shr 10) and 0b11111).toInt(),
+                    ((glyph shr 5) and 0b11111).toInt(),
+                    (glyph and 0b11111).toInt(),
+                    arguments[4].asInt(),
+                    arguments[5].asInt(),
+                )
+                VmValue.UnitValue
+            }
+
             "present" -> {
                 runtime.display.present(arguments[0].asInt())
                 VmValue.UnitValue
