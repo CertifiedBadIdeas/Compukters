@@ -251,6 +251,24 @@ internal class RuntimeHostBridge(
                 VmValue.UnitValue
             }
 
+            "blitMono5x7" -> {
+                runtime.display.blitMono5x7(
+                    arguments[0].asInt(),
+                    arguments[1].asInt(),
+                    arguments[2].asInt(),
+                    arguments[3].asInt(),
+                    arguments[4].asInt(),
+                    arguments[5].asInt(),
+                    arguments[6].asInt(),
+                    arguments[7].asInt(),
+                    arguments[8].asInt(),
+                    arguments[9].asInt(),
+                    arguments[10].asInt(),
+                    arguments[11].asInt(),
+                )
+                VmValue.UnitValue
+            }
+
             "present" -> {
                 runtime.display.present(arguments[0].asInt())
                 VmValue.UnitValue
