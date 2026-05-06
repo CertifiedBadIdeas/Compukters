@@ -91,15 +91,17 @@ fun blankCells(count: Int): String {
     return result
 }
 
-fun setCell(cells: String, index: Int, ch: String): String {
+fun replaceRange(cells: String, start: Int, replacement: String): String {
     var result: String = ""
     var i: Int = 0
+    while i < start + 0 {
+        result = result + strings::charAt(cells, i)
+        i = i + 1
+    }
+    result = result + replacement
+    i = start + strings::length(replacement)
     while i < strings::length(cells) {
-        if (i == index) {
-            result = result + ch
-        } else {
-            result = result + strings::charAt(cells, i)
-        }
+        result = result + strings::charAt(cells, i)
         i = i + 1
     }
     return result
@@ -129,6 +131,16 @@ fun renderTextRow(displayId: Int, cells: String, row: Int) {
     }
 }
 
+fun commitDirtySegment(displayId: Int, cells: String, row: Int, startColumn: Int, text: String): String {
+    if (text == "") {
+        return cells
+    }
+    val index: Int = row * columns(displayId) + startColumn
+    val updated: String = replaceRange(cells, index, text)
+    renderTextRow(displayId, updated, row)
+    return updated
+}
+
 fun scrollUp(displayId: Int, cells: String): String {
     val cols: Int = columns(displayId)
     val rs: Int = rows(displayId)
@@ -152,46 +164,6 @@ fun scrollUp(displayId: Int, cells: String): String {
     return result
 }
 
-fun appendCharacter(displayId: Int, buffer: TerminalBuffer, ch: String): TerminalBuffer {
-    val cols: Int = columns(displayId)
-    val rs: Int = rows(displayId)
-    if (cols <= 0 || rs <= 0) {
-        return buffer
-    }
-
-    var cells: String = buffer.cellsText
-    var row: Int = buffer.cursorRow
-    var col: Int = buffer.cursorColumn
-
-    if (ch == "\n") {
-        col = 0
-        row = row + 1
-        if (row >= rs) {
-            cells = scrollUp(displayId, cells)
-            row = rs - 1
-        }
-        return TerminalBuffer(cellsText = cells, cursorRow = row, cursorColumn = col)
-    }
-
-    if (row >= rs) {
-        cells = scrollUp(displayId, cells)
-        row = rs - 1
-    }
-    cells = setCell(cells, row * cols + col, ch)
-    renderTextRow(displayId, cells, row)
-
-    col = col + 1
-    if (col >= cols) {
-        col = 0
-        row = row + 1
-        if (row >= rs) {
-            cells = scrollUp(displayId, cells)
-            row = rs - 1
-        }
-    }
-    return TerminalBuffer(cellsText = cells, cursorRow = row, cursorColumn = col)
-}
-
 fun appendText(displayId: Int, buffer: TerminalBuffer, text: String): TerminalBuffer {
     val cols: Int = columns(displayId)
     val rs: Int = rows(displayId)
@@ -203,13 +175,16 @@ fun appendText(displayId: Int, buffer: TerminalBuffer, text: String): TerminalBu
     var row: Int = buffer.cursorRow
     var col: Int = buffer.cursorColumn
     var dirtyRow: Int = 0 - 1
+    var dirtyStartColumn: Int = 0
+    var dirtyText: String = ""
     var i: Int = 0
     while i < strings::length(text) {
         val ch: String = strings::charAt(text, i)
         if (ch == "\n") {
             if (dirtyRow >= 0) {
-                renderTextRow(displayId, cells, dirtyRow)
+                cells = commitDirtySegment(displayId, cells, dirtyRow, dirtyStartColumn, dirtyText)
                 dirtyRow = 0 - 1
+                dirtyText = ""
             }
             col = 0
             row = row + 1
@@ -222,13 +197,18 @@ fun appendText(displayId: Int, buffer: TerminalBuffer, text: String): TerminalBu
                 cells = scrollUp(displayId, cells)
                 row = rs - 1
             }
-            cells = setCell(cells, row * cols + col, ch)
-            dirtyRow = row
+            if (dirtyRow < 0) {
+                dirtyRow = row
+                dirtyStartColumn = col
+                dirtyText = ""
+            }
+            dirtyText = dirtyText + ch
             col = col + 1
             if (col >= cols) {
                 if (dirtyRow >= 0) {
-                    renderTextRow(displayId, cells, dirtyRow)
+                    cells = commitDirtySegment(displayId, cells, dirtyRow, dirtyStartColumn, dirtyText)
                     dirtyRow = 0 - 1
+                    dirtyText = ""
                 }
                 col = 0
                 row = row + 1
@@ -241,7 +221,7 @@ fun appendText(displayId: Int, buffer: TerminalBuffer, text: String): TerminalBu
         i = i + 1
     }
     if (dirtyRow >= 0) {
-        renderTextRow(displayId, cells, dirtyRow)
+        cells = commitDirtySegment(displayId, cells, dirtyRow, dirtyStartColumn, dirtyText)
     }
     display::present(displayId)
     return TerminalBuffer(cellsText = cells, cursorRow = row, cursorColumn = col)
