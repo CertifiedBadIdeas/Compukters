@@ -27,10 +27,9 @@ fun render(displayId: Int, text: String) {
             x = 0
             y = y + 1
         } else {
-            if (y >= rows) {
-                return
+            if (y < rows) {
+                display::fillRect(displayId, x * 6, y * 9, 5, 8, 2016)
             }
-            display::fillRect(displayId, x * 6, y * 9, 5, 8, 2016)
             x = x + 1
             if (x >= columns) {
                 x = 0
@@ -73,6 +72,36 @@ fun lineRow(displayId: Int, screen: String): Int {
     return row
 }
 
+fun dropFirstLine(text: String): String {
+    var result: String = ""
+    var dropped: Bool = false
+    var i: Int = 0
+    while i < strings::length(text) {
+        val ch: String = strings::charAt(text, i)
+        if (dropped) {
+            result = result + ch
+        } else if (ch == "\n") {
+            dropped = true
+        }
+        i = i + 1
+    }
+    return result
+}
+
+fun trimScreen(displayId: Int, screen: String): String {
+    var result: String = screen
+    val maxRows: Int = rows(displayId) - 1
+    while lineRow(displayId, result) > maxRows && result != "" {
+        val tailText: String = dropFirstLine(result)
+        if (tailText == result) {
+            result = ""
+        } else {
+            result = tailText
+        }
+    }
+    return result
+}
+
 fun renderInputLine(displayId: Int, screen: String, line: String) {
     val cols: Int = columns(displayId)
     val row: Int = lineRow(displayId, screen)
@@ -108,7 +137,7 @@ pub fun main() {
     val input: Int = ipc::open()
     val output: Int = ipc::open()
     val error: Int = ipc::open()
-    process::spawn("shell.ck", input + " " + output + " " + error + " ")
+    process::spawn("shell.ck", "stdio-v1 " + input + " " + output + " " + error + " ")
 
     var displayId: Int = waitDisplay()
     var screen: String = ""
@@ -117,7 +146,7 @@ pub fun main() {
     while true {
         val chunk: String = ipc::tryRead(output) + ipc::tryRead(error)
         if (chunk != "") {
-            screen = screen + chunk
+            screen = trimScreen(displayId, screen + chunk)
             render(displayId, screen + line)
         } else {
             val event: Event = events::tryPull()
@@ -135,7 +164,7 @@ pub fun main() {
                     val key: Int = events::argInt(event, 0)
                     if (key == 257 || key == 335) {
                         ipc::write(input, line)
-                        screen = screen + line + "\n"
+                        screen = trimScreen(displayId, screen + line + "\n")
                         line = ""
                         render(displayId, screen)
                     } else if (key == 259) {

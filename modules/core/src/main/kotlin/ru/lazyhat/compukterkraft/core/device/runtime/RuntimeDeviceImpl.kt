@@ -23,7 +23,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import ru.lazyhat.compukterkraft.core.LOGGER
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
@@ -37,7 +36,6 @@ import ru.lazyhat.compukterkraft.core.device.vm.BackgroundDeviceVm
 import ru.lazyhat.compukterkraft.core.device.vm.DeviceProfileRegistry
 import ru.lazyhat.compukterkraft.core.device.vm.DeviceVmLogger
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceVmHandle
-import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.VmEvent
 import ru.lazyhat.compukterkraft.lang.runtime.VmState
 import ru.lazyhat.compukterkraft.lang.runtime.VmStopReason
@@ -48,7 +46,7 @@ import java.util.concurrent.ConcurrentHashMap
  * Platform-neutral runtime device implementation.
  *
  * Owns the [DeviceVmHandle] and orchestrates the VM lifecycle:
- * boot → tick → sync screen → detect stop/crash/reboot.
+ * boot → tick → flush display sessions → detect stop/crash/reboot.
  *
  * All world-side interactions are abstracted via narrow host ports
  * ([GameTimeSource], [DisplayNetworkBridge], [DeviceStateSink]) so this
@@ -80,11 +78,6 @@ class RuntimeDeviceImpl(
     private var vmHandle: BackgroundDeviceVm? = null
 
     private val serverScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-
-    private val screenSnapshot = MutableStateFlow<ScreenBufferSnapshot?>(null)
-
-    /** Current screen snapshot (synchronous read). */
-    override val lastScreenSnapshot: ScreenBufferSnapshot? get() = screenSnapshot.value
 
     private data class DisplaySession(
         val playerUuid: UUID,
@@ -170,9 +163,6 @@ class RuntimeDeviceImpl(
             handle.deliverHostResults(results)
         }
 
-        // Sync screen buffer to watching players (legacy snapshot path)
-        syncScreen(handle)
-
         flushDisplaySessions(handle)
     }
 
@@ -208,14 +198,6 @@ class RuntimeDeviceImpl(
     }
 
     // ── Internal ────────────────────────────────────────────────────
-
-    private fun syncScreen(handle: DeviceVmHandle) {
-        val snapshot = handle.readScreenSnapshot() ?: return
-        screenSnapshot.value = snapshot
-        // Runtime computer clients receive framebuffer deltas through display
-        // sessions. Workbench still reads [lastScreenSnapshot] via its own
-        // authoring pipeline until its live viewer is migrated to display.
-    }
 
     override fun attachDisplaySession(
         playerUuid: UUID,

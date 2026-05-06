@@ -153,7 +153,6 @@ class ComputerFamilyCatalogSource(
         val defaultRegistry = LanguageBuiltins.defaultRuntimeRegistry
         val modules =
             buildList {
-                defaultRegistry.module("terminal")?.let(::add)
                 defaultRegistry.module("system")?.let(::add)
                 if (DeviceCapability.DISPLAY in profile.allowedCapabilities) {
                     defaultRegistry.module("display")?.let(::add)

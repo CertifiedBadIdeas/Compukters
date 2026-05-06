@@ -26,7 +26,7 @@ Statements:
 - `when(subject) { value -> { ... } else -> { ... } }`
 - `when { condition -> { ... } else -> { ... } }`
 - `return expr`
-- expression statements such as `terminal::println("ok")`
+- expression statements such as `system::log("ok")`
 
 ### `when` statement
 
@@ -36,9 +36,9 @@ With subject (compared via `==`):
 
 ```
 when(x) {
-    1 -> { terminal::println("one") }
-    2, 3 -> { terminal::println("two or three") }
-    else -> { terminal::println("other") }
+    1 -> { system::log("one") }
+    2, 3 -> { system::log("two or three") }
+    else -> { system::log("other") }
 }
 ```
 
@@ -46,9 +46,9 @@ Without subject (each branch is a `Bool` condition):
 
 ```
 when {
-    x > 10 -> { terminal::println("big") }
-    x > 0 -> { terminal::println("positive") }
-    else -> { terminal::println("non-positive") }
+    x > 10 -> { system::log("big") }
+    x > 0 -> { system::log("positive") }
+    else -> { system::log("non-positive") }
 }
 ```
 
@@ -60,7 +60,7 @@ when {
 Examples:
 
 ```
-terminal::println("hi")
+system::log("hi")
 val id: Int = system::computerId()
 val name: String = event.name
 ```
@@ -71,7 +71,7 @@ Expressions:
 - arithmetic and logic: `+ - * / == != < <= > >= && || !`
 - `+` concatenates strings when either side is `String`; non-string values are converted to text for that expression.
 - member access: `event.name`
-- namespace calls: `terminal::write("hi")`
+- namespace calls: `display::present(id)`
 - function calls: `main()`, `helper()`
 - struct construction: `Vec2(x = 1, y = 2)`
 - class construction: `Counter(value = 1)`
@@ -85,7 +85,7 @@ pub struct Vec2 { x: Int, y: Int }
 
 pub fun main() {
     val v: Vec2 = Vec2(x = 1, y = 2)
-    terminal::println("x=" + v.x)
+    system::log("x=" + v.x)
 }
 ```
 
@@ -112,7 +112,7 @@ pub class Counter(pub var value: Int) {
 
 pub fun main() {
     val counter: Counter = Counter.zero()
-    terminal::println("value=" + counter.current())
+    system::log("value=" + counter.current())
 }
 ```
 
@@ -157,10 +157,10 @@ User-defined struct types are declared with `struct`. User-defined reference obj
 
 ### Built-in Modules Are Ambient
 
-Built-in modules (`terminal`, `display`, `system`, `filesystem`, `events`, `process`, `ipc`, `strings`, `stdout`) are always available — there is no `import` needed. Access their members with `::`:
+Built-in modules (`display`, `system`, `filesystem`, `events`, `process`, `ipc`, `strings`) are always available — there is no `import` needed. Access their members with `::`:
 
 ```
-terminal::println("hi")
+system::log("hi")
 val id: Int = system::deviceId()
 ```
 
@@ -173,7 +173,6 @@ CKL programs may import selected names from other `.ck` files. The path is inter
 ```ck
 import "lib/math.ck" { add, Vec2 }  // selected names visible directly
 import "lib/math.ck" as m           // namespace access via `m::name`
-import terminal { println }         // selected built-in member visible directly
 ```
 
 `import "lib/math.ck"` is invalid. Use a selective import list or a namespace alias.
@@ -191,13 +190,12 @@ Rules:
 Selected names become visible directly in the importing file:
 
 ```ck
-import terminal { println }
 import "math.ck" { add, Vec2, Counter }
 
 pub fun main() {
     val v: Vec2 = Vec2(x = 1, y = 2)
     val counter: Counter = Counter(value = 1)
-    println("x=" + add(v, v).x)
+    system::log("x=" + add(v, v).x)
 }
 ```
 
@@ -228,13 +226,6 @@ Cleanup Document runs the same formatter and additionally removes unused names f
 Both actions return no edits for invalid or incomplete source instead of attempting a partial rewrite.
 
 In the Workbench editor, Format can be triggered from the toolbar or with `Ctrl+Alt+F`. Cleanup can be triggered from the toolbar or with `Ctrl+Alt+L`.
-
-`terminal`
-
-- `write(text: String): Unit`
-- `println(text: String): Unit`
-- `clear(): Unit`
-- `setCursor(x: Int, y: Int): Unit`
 
 `display`
 
@@ -311,10 +302,6 @@ IPC is a low-level VM-local text channel primitive. The runtime does not attach 
 - `length(text: String): Int`
 - `charAt(text: String, index: Int): String`
 
-`stdout`
-
-- `write(text: String): Unit`
-
 Global intrinsics:
 
 - `yield(): Unit`
@@ -322,15 +309,15 @@ Global intrinsics:
 
 ## ROM stdio convention
 
-Bundled ROM programs that need input/output import `stdio.ck` and receive channel ids through `process::argument()` using this positional format:
+Bundled ROM programs that need input/output import `stdio.ck` and receive channel ids through `process::argument()` using this tagged format:
 
 ```text
-<stdin-channel-id> <stdout-channel-id> <stderr-channel-id> <command-argument>
+stdio-v1 <stdin-channel-id> <stdout-channel-id> <stderr-channel-id> <command-argument>
 ```
 
-`terminal.ck` opens these channels, spawns `shell.ck`, translates key/paste events into line input, and renders shell output to the framebuffer with `display::*`. `shell.ck` and command programs use the `stdio.ck` helpers instead of calling legacy `terminal::*` directly.
+`terminal.ck` is a ROM display program: it opens these channels, spawns `shell.ck` with a `stdio-v1` descriptor, translates key/paste events into line input, and renders shell output to the framebuffer with `display::*`. `shell.ck` and command programs use the `stdio.ck` helpers instead of built-in terminal APIs.
 
-The positional stdio format is a ROM convention only. Runtime APIs remain generic `ipc`, `events`, and `process` primitives.
+The tagged stdio format is a ROM/process convention only. Runtime APIs remain generic `ipc`, `events`, and `process` primitives. The VM does not provide `terminal` or `stdout` built-ins.
 
 ## Entry Point
 

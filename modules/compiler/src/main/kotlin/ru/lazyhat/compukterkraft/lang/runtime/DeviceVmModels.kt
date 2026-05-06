@@ -24,7 +24,6 @@ import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayInfo
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayPixelFormat
 
 enum class DeviceCapability {
-    TERMINAL,
     DISPLAY,
     FILESYSTEM,
     EVENTS,
@@ -67,9 +66,6 @@ data class DeviceProfile(
     val displayName: String,
     val cpuBudgetNanosPerSlice: Long,
     val maxEventQueueSize: Int,
-    val terminalWidth: Int,
-    val terminalHeight: Int,
-    val colorTerminal: Boolean,
     val allowedCapabilities: Set<DeviceCapability> = DeviceCapability.entries.toSet(),
     val bootScriptName: String = DeviceProgramFiles.BIOS_SCRIPT_NAME,
     val resources: DeviceResources =
@@ -196,17 +192,6 @@ interface DeviceVmHandle : AutoCloseable {
     fun deliverHostResults(results: List<HostResult>)
 
     fun snapshot(): VmSnapshot
-
-    /**
-     * Take an immutable snapshot of the VM's screen buffer if it has changed since the last call.
-     * Returns `null` when the screen has not been modified.
-     */
-    fun readScreenSnapshot(): ScreenBufferSnapshot?
-
-    /**
-     * Force a screen snapshot regardless of dirty state (e.g. when a new player opens the GUI).
-     */
-    fun forceScreenSnapshot(): ScreenBufferSnapshot
 
     fun attachDisplay(
         displayId: Int,

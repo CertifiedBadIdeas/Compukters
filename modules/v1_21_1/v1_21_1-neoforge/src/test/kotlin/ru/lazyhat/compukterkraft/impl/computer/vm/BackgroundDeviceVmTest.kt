@@ -89,12 +89,8 @@ class BackgroundDeviceVmTest {
             displayName = "ROM Terminal Test",
             cpuBudgetNanosPerSlice = 5_000_000,
             maxEventQueueSize = 64,
-            terminalWidth = 80,
-            terminalHeight = 16,
-            colorTerminal = true,
             allowedCapabilities =
                 setOf(
-                    DeviceCapability.TERMINAL,
                     DeviceCapability.DISPLAY,
                     DeviceCapability.FILESYSTEM,
                     DeviceCapability.EVENTS,
@@ -281,10 +277,7 @@ class BackgroundDeviceVmTest {
                     displayName = "Tiny ROM",
                     cpuBudgetNanosPerSlice = 1_000_000,
                     maxEventQueueSize = 16,
-                    terminalWidth = 16,
-                    terminalHeight = 8,
-                    colorTerminal = true,
-                    allowedCapabilities = setOf(DeviceCapability.TERMINAL, DeviceCapability.SYSTEM),
+                    allowedCapabilities = setOf(DeviceCapability.SYSTEM),
                     resources =
                         DeviceResources(
                             cpu = DeviceCpuResources(wallTimeGuardNanosPerSlice = 1_000_000),

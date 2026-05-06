@@ -49,6 +49,7 @@ class DisplayMessageCodecTest {
         assertFalse(7 in serverboundIds, "attach_terminal id 7 must stay removed")
         assertFalse(8 in serverboundIds, "resize_terminal id 8 must stay removed")
         assertFalse(14 in clientboundIds, "stdout_bytes id 14 must stay removed")
+        assertFalse(16 in clientboundIds, "workbench_terminal id 16 must stay removed")
     }
 
     @Test

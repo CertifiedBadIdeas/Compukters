@@ -40,7 +40,6 @@ import ru.lazyhat.compukterkraft.core.workbench.crdt.TextRun
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspaceDocument
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspaceEntry
-import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 import java.util.concurrent.ConcurrentHashMap
 
 class ServerWorkbench(
@@ -154,8 +153,6 @@ class ServerWorkbench(
         if (targetDescriptor.deviceId == null) return
         DeviceEvents.dispatch(this, event)
     }
-
-    fun currentScreenSnapshot(): ScreenBufferSnapshot? = runtimeBridge.currentScreenSnapshot(targetDescriptor)
 
     override fun queueEvent(
         event: String,
@@ -445,8 +442,6 @@ interface WorkbenchTargetRuntimeBridge {
         arguments: Array<Any>,
     ): Boolean
 
-    fun currentScreenSnapshot(target: ServerWorkbench.TargetDescriptor): ScreenBufferSnapshot?
-
     data object None : WorkbenchTargetRuntimeBridge {
         override fun rebootTarget(target: ServerWorkbench.TargetDescriptor) = Unit
 
@@ -460,6 +455,5 @@ interface WorkbenchTargetRuntimeBridge {
             arguments: Array<Any>,
         ): Boolean = false
 
-        override fun currentScreenSnapshot(target: ServerWorkbench.TargetDescriptor): ScreenBufferSnapshot? = null
     }
 }

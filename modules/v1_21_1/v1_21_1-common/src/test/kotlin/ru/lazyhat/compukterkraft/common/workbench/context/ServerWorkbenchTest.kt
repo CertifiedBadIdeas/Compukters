@@ -32,7 +32,6 @@ import ru.lazyhat.compukterkraft.core.workbench.EditorPresence
 import ru.lazyhat.compukterkraft.core.workbench.crdt.AtomId
 import ru.lazyhat.compukterkraft.core.workbench.crdt.CursorAnchor
 import ru.lazyhat.compukterkraft.core.workbench.crdt.SiteId
-import ru.lazyhat.compukterkraft.lang.runtime.ScreenBuffer
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -413,7 +412,6 @@ class ServerWorkbenchTest {
 
     private class FakeRuntimeBridge : WorkbenchTargetRuntimeBridge {
         val calls = mutableListOf<String>()
-        private val snapshot = ScreenBuffer(16, 8, true).forceSnapshot()
 
         override fun rebootTarget(target: ServerWorkbench.TargetDescriptor) {
             calls += "reboot:${target.deviceId}"
@@ -436,6 +434,5 @@ class ServerWorkbenchTest {
             return true
         }
 
-        override fun currentScreenSnapshot(target: ServerWorkbench.TargetDescriptor) = snapshot
     }
 }

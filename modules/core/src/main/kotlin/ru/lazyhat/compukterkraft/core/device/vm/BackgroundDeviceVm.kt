@@ -36,8 +36,6 @@ import ru.lazyhat.compukterkraft.core.device.runtime.ClasspathFirmwareProgramLoa
 import ru.lazyhat.compukterkraft.core.device.runtime.ComputerProgramCompiler
 import ru.lazyhat.compukterkraft.core.device.runtime.FirmwareProgramLoader
 import ru.lazyhat.compukterkraft.core.device.runtime.WorkspaceProgramLoader
-import ru.lazyhat.compukterkraft.core.device.vm.api.ComputerStdioBroadcaster
-import ru.lazyhat.compukterkraft.core.device.vm.api.ScreenBufferVtSink
 import ru.lazyhat.compukterkraft.core.device.vm.api.VmDisplayApi
 import ru.lazyhat.compukterkraft.core.device.vm.api.VmEventApi
 import ru.lazyhat.compukterkraft.core.device.vm.api.VmFileSystemApi
@@ -46,7 +44,6 @@ import ru.lazyhat.compukterkraft.core.device.vm.api.VmPeripheralRegistry
 import ru.lazyhat.compukterkraft.core.device.vm.api.VmPeripheralRuntimeApi
 import ru.lazyhat.compukterkraft.core.device.vm.api.VmProcessApi
 import ru.lazyhat.compukterkraft.core.device.vm.api.VmSystemApi
-import ru.lazyhat.compukterkraft.core.device.vm.api.VmTerminalApi
 import ru.lazyhat.compukterkraft.core.device.vm.display.DisplayRegistry
 import ru.lazyhat.compukterkraft.lang.api.BuiltinModule
 import ru.lazyhat.compukterkraft.lang.api.BuiltinRegistry
@@ -57,8 +54,6 @@ import ru.lazyhat.compukterkraft.lang.runtime.DeviceVmHandle
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.HostCall
 import ru.lazyhat.compukterkraft.lang.runtime.HostResult
-import ru.lazyhat.compukterkraft.lang.runtime.ScreenBuffer
-import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.VmEvent
 import ru.lazyhat.compukterkraft.lang.runtime.VmSnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.VmState
@@ -66,7 +61,6 @@ import ru.lazyhat.compukterkraft.lang.runtime.VmStopReason
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayInfo
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayPixelFormat
-import ru.lazyhat.compukterkraft.lang.runtime.vt.VtParser
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.yield as coroutineYield
 
@@ -82,14 +76,14 @@ private data class RuntimeApiRegistryProfile(
 /**
  * The main VM host for a single runtime device instance.
  *
- * Runs a compiled program on a background coroutine [dispatcher]. Owns a [ScreenBuffer]
- * that the VM coroutine writes to directly (no HostCall roundtrip for terminal I/O).
+ * Runs a compiled program on a background coroutine [dispatcher]. Visible output is owned by
+ * programs through display APIs.
  *
  * ## Thread model
- * - **VM coroutine:** calls `runtime.terminal.write()`, `runtime.filesystem.*()`, etc.
- *   Terminal writes go directly to [screenBuffer]. Filesystem ops go through [HostCallManager].
+ * - **VM coroutine:** calls `runtime.display.*()`, `runtime.filesystem.*()`, etc.
+ *   Filesystem ops go through [HostCallManager].
  * - **Server tick thread:** calls [requestSlice], [drainHostCalls], [deliverHostResults],
- *   [readScreenSnapshot], and [snapshot]. These are the cross-thread entry points.
+ *   [drainDisplayFrames], and [snapshot]. These are the cross-thread entry points.
  *
  * ## Lifecycle
  * Created by `DeviceManager`, started with [boot], stopped with [stop]. On reboot, the old VM
@@ -123,16 +117,7 @@ class BackgroundDeviceVm(
             profile = profile,
             runtimeCreator = { wd, arg -> createRuntime(wd, arg) },
         )
-    private val screenBuffer = ScreenBuffer(profile.terminalWidth, profile.terminalHeight, profile.colorTerminal)
     private val displayRegistry = DisplayRegistry()
-    private val screenBufferFeeder: VtParser = VtParser(ScreenBufferVtSink(screenBuffer))
-    val stdioBroadcaster =
-        ComputerStdioBroadcaster { text ->
-            // Keep the server-side ScreenBuffer synced with legacy VM terminal writes.
-            // Workbench still reads snapshots from this buffer until its live viewer
-            // is migrated to display sessions.
-            screenBufferFeeder.feed(text)
-        }
     private val peripheralRegistry = VmPeripheralRegistry()
     private val runtimeRegistryProfile = createRuntimeRegistryProfile()
 
@@ -153,7 +138,6 @@ class BackgroundDeviceVm(
     override fun boot(): Boolean {
         if (runner?.isActive == true) return false
 
-        runtime.terminal.clear()
         stateManager.setState(VmState.Booting)
 
         runner =
@@ -228,10 +212,6 @@ class BackgroundDeviceVm(
             queuedEvents = eventManager.queuedCount(),
             pendingHostCalls = hostCallManager.pendingCallsCount(),
         )
-
-    override fun readScreenSnapshot(): ScreenBufferSnapshot? = screenBuffer.snapshot()
-
-    override fun forceScreenSnapshot(): ScreenBufferSnapshot = screenBuffer.forceSnapshot()
 
     override fun attachDisplay(
         displayId: Int,
@@ -341,8 +321,6 @@ class BackgroundDeviceVm(
                 currentTickProvider = { stateManager.currentTick },
                 labelProvider = labelProvider,
             )
-        val stdioApi = stdioBroadcaster
-        val terminalApi = VmTerminalApi(stdio = stdioApi, cursorProvider = stdioBroadcaster::cursor, ctx = this)
         val filesystemApi = VmFileSystemApi(ctx = this)
         val peripheralsApi = VmPeripheralRuntimeApi(peripheralRegistry)
         val processApi =
@@ -360,9 +338,7 @@ class BackgroundDeviceVm(
             initialProfile = profile,
             runtimeRegistry = runtimeRegistryProfile.baseRegistry,
             systemApi = systemApi,
-            terminalApi = terminalApi,
             displayApi = VmDisplayApi(displayRegistry),
-            stdioApi = stdioApi,
             filesystemApi = filesystemApi,
             processApi = processApi,
             ipcApi = VmIpcApi(ipcRegistry),
@@ -375,8 +351,6 @@ class BackgroundDeviceVm(
         val defaultRegistry = LanguageBuiltins.defaultRuntimeRegistry
         val baseModules =
             buildList {
-                defaultRegistry.module("terminal")?.let(::add)
-                defaultRegistry.module("stdout")?.let(::add)
                 defaultRegistry.module("system")?.let(::add)
                 if (DeviceCapability.DISPLAY in profile.allowedCapabilities) {
                     defaultRegistry.module("display")?.let(::add)

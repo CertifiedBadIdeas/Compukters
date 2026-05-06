@@ -109,7 +109,7 @@ class RomScriptCompileTest {
     }
 
     @Test
-    fun romScriptsDoNotUseLegacyTerminalBuiltins() {
+    fun bundledFirmwareAndRomDoNotUseRemovedTerminalStdoutBuiltins() {
         val cl = RomScriptCompileTest::class.java.classLoader
         val index =
             cl
@@ -126,14 +126,16 @@ class RomScriptCompileTest {
                 .toList()
         assertNotNull(files.firstOrNull(), "rom.index is empty")
 
-        for (path in files) {
+        val paths = listOf("firmware/bios.ck") + files.map { "rom/$it" }
+        for (path in paths) {
             val source =
                 cl
-                    .getResourceAsStream("rom/$path")
+                    .getResourceAsStream(path)
                     ?.bufferedReader()
                     ?.readText()
-                    ?: fail("rom/$path missing from classpath")
-            assertFalse(source.contains("terminal::"), "rom/$path still uses legacy terminal builtins")
+                    ?: fail("$path missing from classpath")
+            assertFalse(source.contains("terminal::"), "$path still uses removed terminal builtins")
+            assertFalse(source.contains("stdout::"), "$path still uses removed stdout builtins")
         }
     }
 

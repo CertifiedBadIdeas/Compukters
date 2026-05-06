@@ -29,9 +29,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.DeviceProcessApi
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceProfile
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceRedstoneApi
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceRuntime
-import ru.lazyhat.compukterkraft.lang.runtime.DeviceStdioApi
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceSystemApi
-import ru.lazyhat.compukterkraft.lang.runtime.DeviceTerminalApi
 import ru.lazyhat.compukterkraft.lang.runtime.NoopDeviceDisplayApi
 import ru.lazyhat.compukterkraft.lang.runtime.NoopDeviceEventApi
 import ru.lazyhat.compukterkraft.lang.runtime.NoopDeviceIpcApi
@@ -43,9 +41,7 @@ class VmRuntime(
     private val initialProfile: DeviceProfile,
     val runtimeRegistry: BuiltinRegistry,
     private val systemApi: DeviceSystemApi,
-    private val terminalApi: DeviceTerminalApi,
     private val displayApi: DeviceDisplayApi = NoopDeviceDisplayApi,
-    private val stdioApi: DeviceStdioApi,
     private val filesystemApi: DeviceFileSystemApi,
     private val processApi: DeviceProcessApi,
     private val ipcApi: DeviceIpcApi = NoopDeviceIpcApi,
@@ -55,9 +51,7 @@ class VmRuntime(
 ) : DeviceRuntime {
     override val profile: DeviceProfile = initialProfile
     override val system: DeviceSystemApi = systemApi
-    override val terminal: DeviceTerminalApi = terminalApi
     override val display: DeviceDisplayApi = displayApi
-    override val stdio: DeviceStdioApi = stdioApi
     override val filesystem: DeviceFileSystemApi = filesystemApi
     override val process: DeviceProcessApi = processApi
     override val ipc: DeviceIpcApi = ipcApi

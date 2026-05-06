@@ -143,7 +143,7 @@ class WorkbenchEditorScreen(
             store = store,
             viewport = IntSize(imageWidth, imageHeight),
             viewModel = viewModel,
-            terminalSnapshot = { menu.screenSnapshot },
+            terminalSnapshot = { null },
             onTerminalKey = { keyCode ->
                 terminalInput.keyPressed(keyCode, 0, 0)
             },

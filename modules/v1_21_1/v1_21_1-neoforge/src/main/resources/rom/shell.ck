@@ -1,4 +1,4 @@
-import "stdio.ck" { Stdio, encode, fromArgument, println, readLine, write };
+import "stdio.ck" { Stdio, encode, error, fromArgument, println, readLine, write };
 
 fun displayPath(path: String): String {
     if (path == "") {
@@ -22,7 +22,7 @@ fun printHelp(ctx: Stdio) {
 
 fun runExternal(ctx: Stdio, command: String, argument: String) {
     if (process::run(command + ".ck", encode(ctx, argument)) != 0) {
-        println(ctx, "Unknown command: " + command)
+        error(ctx, "Unknown command: " + command)
     }
 }
 
@@ -32,7 +32,7 @@ fun handleCd(ctx: Stdio, argument: String) {
         return
     }
     if (!process::changeDirectory(argument)) {
-        println(ctx, "Directory not found: " + argument)
+        error(ctx, "Directory not found: " + argument)
     }
 }
 

@@ -27,7 +27,6 @@ import ru.lazyhat.compukterkraft.common.workbench.test.TestInventoryFactory
 import ru.lazyhat.compukterkraft.common.workbench.test.TestMinecraftBootstrap
 import ru.lazyhat.compukterkraft.core.device.vm.DeviceWorkspaceHost
 import ru.lazyhat.compukterkraft.core.workbench.WorkbenchTargetState
-import ru.lazyhat.compukterkraft.lang.runtime.ScreenBuffer
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -113,24 +112,6 @@ class WorkbenchMenuSmokeTest {
 
         assertNotNull(remoteState)
         assertTrue(remoteState.target.connected)
-    }
-
-    @Test
-    fun updatesTerminalSnapshotLocally() {
-        TestMinecraftBootstrap.ensureInitialized()
-
-        val menu =
-            WorkbenchMenuWithoutInventory(
-                MenuType.GENERIC_9x1,
-                4,
-                TestInventoryFactory.create(),
-                WorkbenchContainerData(),
-            )
-
-        val snapshot = ScreenBuffer(16, 8, true).forceSnapshot()
-        menu.updateScreenSnapshot(snapshot)
-
-        assertEquals(snapshot, menu.screenSnapshot)
     }
 
     @Test

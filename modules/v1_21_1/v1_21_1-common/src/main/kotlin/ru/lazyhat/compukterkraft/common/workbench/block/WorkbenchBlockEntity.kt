@@ -35,13 +35,10 @@ import net.minecraft.world.level.block.state.BlockState
 import ru.lazyhat.compukterkraft.common.binding.ModObjects
 import ru.lazyhat.compukterkraft.common.computer.context.ServerContext
 import ru.lazyhat.compukterkraft.common.localization.CompukterComponents
-import ru.lazyhat.compukterkraft.common.network.ServerNetworking
 import ru.lazyhat.compukterkraft.common.workbench.context.ServerWorkbench
 import ru.lazyhat.compukterkraft.common.workbench.context.WorkbenchTargetRuntimeBridge
 import ru.lazyhat.compukterkraft.common.workbench.data.WorkbenchContainerData
-import ru.lazyhat.compukterkraft.common.workbench.menu.AbstractWorkbenchMenu
 import ru.lazyhat.compukterkraft.common.workbench.menu.WorkbenchMenuWithoutInventory
-import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchTerminalClientMessage
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 import ru.lazyhat.compukterkraft.core.device.DeviceProperties
 import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDevice
@@ -49,7 +46,6 @@ import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDeviceImpl
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.DeviceStateSink
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.GameTimeSource
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.NoopDisplayNetworkBridge
-import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 
 class WorkbenchBlockEntity(
     pos: BlockPos,
@@ -63,7 +59,6 @@ class WorkbenchBlockEntity(
     private var targetFamilyId: String? = null
     private var serverWorkbench: ServerWorkbench? = null
     private var detachedTargetComputer: RuntimeDevice? = null
-    private var lastSyncedSnapshot: ScreenBufferSnapshot? = null
 
     override fun createMenu(
         containerId: Int,
@@ -97,7 +92,6 @@ class WorkbenchBlockEntity(
         val descriptor = ServerWorkbench.extractTargetDescriptor(singleStack)
         if (descriptor.deviceId != targetComputerId) {
             releaseDetachedTargetComputer()
-            lastSyncedSnapshot = null
         }
         targetStack = singleStack
         targetComputerId = descriptor.deviceId
@@ -144,19 +138,16 @@ class WorkbenchBlockEntity(
 
         if (targetId == null) {
             releaseDetachedTargetComputer()
-            syncTargetSnapshot(null)
             return
         }
 
         val liveComputer = ServerContext.deviceManager.get(targetId)
         if (liveComputer != null) {
             releaseDetachedTargetComputer()
-            syncTargetSnapshot(liveComputer.lastScreenSnapshot)
             return
         }
 
         detachedTargetComputer?.serverTick()
-        syncTargetSnapshot(detachedTargetComputer?.lastScreenSnapshot)
     }
 
     override fun saveAdditional(
@@ -186,7 +177,6 @@ class WorkbenchBlockEntity(
         targetFamilyId = tag.takeIf { it.contains(TARGET_FAMILY_ID_TAG) }?.getString(TARGET_FAMILY_ID_TAG)
         serverWorkbench = null
         releaseDetachedTargetComputer()
-        lastSyncedSnapshot = null
     }
 
     override fun setRemoved() {
@@ -221,24 +211,6 @@ class WorkbenchBlockEntity(
         }
     }
 
-    private fun syncTargetSnapshot(snapshot: ScreenBufferSnapshot?) {
-        if (snapshot == lastSyncedSnapshot) return
-        lastSyncedSnapshot = snapshot
-
-        val workbench = serverWorkbench ?: return
-        viewingPlayers(workbench).forEach { player ->
-            val menu = player.containerMenu as? AbstractWorkbenchMenu ?: return@forEach
-            menu.updateScreenSnapshot(snapshot)
-            ServerNetworking.sendToPlayer(WorkbenchTerminalClientMessage(menu, snapshot), player)
-        }
-    }
-
-    private fun viewingPlayers(workbench: ServerWorkbench): List<ServerPlayer> =
-        ServerContext.server.playerList.players.filter { player ->
-            val menu = player.containerMenu as? AbstractWorkbenchMenu ?: return@filter false
-            menu.serverWorkbenchIdentity() === workbench
-        }
-
     private fun releaseDetachedTargetComputer() {
         detachedTargetComputer?.close()
         detachedTargetComputer = null
@@ -252,12 +224,10 @@ class WorkbenchBlockEntity(
     private inner class RuntimeBridge : WorkbenchTargetRuntimeBridge {
         override fun rebootTarget(target: ServerWorkbench.TargetDescriptor) {
             resolveTargetComputer(createDetached = true)?.reboot()
-            syncTargetSnapshot(resolveTargetComputer(createDetached = false)?.lastScreenSnapshot)
         }
 
         override fun runTargetProgram(target: ServerWorkbench.TargetDescriptor) {
             resolveTargetComputer(createDetached = true)?.turnOn()
-            syncTargetSnapshot(resolveTargetComputer(createDetached = false)?.lastScreenSnapshot)
         }
 
         override fun attachTerminal(target: ServerWorkbench.TargetDescriptor) {
@@ -276,8 +246,6 @@ class WorkbenchBlockEntity(
             return true
         }
 
-        override fun currentScreenSnapshot(target: ServerWorkbench.TargetDescriptor): ScreenBufferSnapshot? =
-            resolveTargetComputer(createDetached = false)?.lastScreenSnapshot
     }
 
     companion object {

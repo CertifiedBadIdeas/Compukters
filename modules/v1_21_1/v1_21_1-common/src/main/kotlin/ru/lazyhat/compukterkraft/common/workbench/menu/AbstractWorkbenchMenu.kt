@@ -47,7 +47,6 @@ import ru.lazyhat.compukterkraft.core.workbench.crdt.Op
 import ru.lazyhat.compukterkraft.core.workbench.crdt.SiteId
 import ru.lazyhat.compukterkraft.core.workbench.crdt.TextRun
 import ru.lazyhat.compukterkraft.core.workbench.screen.presencesForRecipient
-import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 import java.util.concurrent.ConcurrentHashMap
 
 abstract class AbstractWorkbenchMenu(
@@ -65,7 +64,6 @@ abstract class AbstractWorkbenchMenu(
     ServerWorkbench.SessionSubscriber,
     ServerWorkbench.MenuObserver {
     private val _workspaceStateFlow = MutableStateFlow(containerData.toRemoteState())
-    private val _screenSnapshot = MutableStateFlow<ScreenBufferSnapshot?>(null)
     private val _presencesFlow = MutableStateFlow<List<EditorPresence>>(emptyList())
     private val _remoteCursorsFlow = MutableStateFlow<Map<SiteId, RemoteCursor>>(emptyMap())
 
@@ -77,8 +75,6 @@ abstract class AbstractWorkbenchMenu(
     private val subscribedPaths: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
     val workspaceStateFlow: StateFlow<WorkbenchRemoteState> = _workspaceStateFlow.asStateFlow()
-
-    val screenSnapshot: ScreenBufferSnapshot? get() = _screenSnapshot.value
 
     /** Live snapshot of every collaborator on this workbench (client-side feed). */
     val presencesFlow: StateFlow<List<EditorPresence>> = _presencesFlow.asStateFlow()
@@ -99,7 +95,6 @@ abstract class AbstractWorkbenchMenu(
 
     init {
         refreshFromServerWorkbench()
-        updateScreenSnapshot(serverWorkbench?.currentScreenSnapshot())
         // Server-side: register for workbench-wide presence broadcasts immediately. The hook
         // call also primes us with the current snapshot so a freshly opened menu starts with
         // the existing collaborator list, not an empty one.
@@ -115,16 +110,11 @@ abstract class AbstractWorkbenchMenu(
         _workspaceStateFlow.value = remoteState
     }
 
-    fun updateScreenSnapshot(snapshot: ScreenBufferSnapshot?) {
-        _screenSnapshot.value = snapshot
-    }
-
     fun serverWorkbenchIdentity(): ServerWorkbench? = serverWorkbench
 
     fun handleInputEvent(event: InputEvent) {
         val workbench = serverWorkbench ?: return
         workbench.handleInput(event)
-        updateScreenSnapshot(workbench.currentScreenSnapshot())
     }
 
     fun handleWorkspaceAction(
