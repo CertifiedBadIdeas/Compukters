@@ -25,8 +25,8 @@ import ru.lazyhat.compukterkraft.lang.runtime.HostResult
 /**
  * Dispatches [HostCall]s from the VM to the appropriate server-side handler.
  *
- * Terminal I/O is no longer routed through HostCalls — the VM writes directly
- * to its [ScreenBuffer]. Only filesystem operations remain.
+ * Display, events, process, and IPC are VM-local runtime APIs. Filesystem
+ * operations remain host calls because they cross the workspace boundary.
  */
 class HostCallDispatcher(
     private val deviceId: Int,

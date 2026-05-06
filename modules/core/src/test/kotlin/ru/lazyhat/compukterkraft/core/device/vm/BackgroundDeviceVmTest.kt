@@ -35,13 +35,11 @@ import ru.lazyhat.compukterkraft.lang.runtime.DeviceProfile
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceQueueResources
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceResources
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceStorageResources
-import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.VmState
 import ru.lazyhat.compukterkraft.lang.runtime.VmStopReason
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -51,12 +49,6 @@ class BackgroundDeviceVmTest {
     ) : FirmwareProgramLoader {
         override fun load(path: String): LoadedFirmwareProgramSource = LoadedFirmwareProgramSource(path, source)
     }
-
-    private fun ScreenBufferSnapshot.visibleText(): String =
-        (0 until height)
-            .joinToString("\n") { y ->
-                (0 until width).joinToString("") { x -> charAt(x, y).toString() }.trimEnd()
-            }.trim()
 
     private fun runVmTicks(
         vm: BackgroundDeviceVm,
@@ -68,7 +60,7 @@ class BackgroundDeviceVmTest {
         }
     }
 
-    private fun firmwareTestProfile(): DeviceProfile = runtimeProfile().copy(terminalWidth = 120, terminalHeight = 16)
+    private fun firmwareTestProfile(): DeviceProfile = runtimeProfile()
 
     @Test
     fun ownsDisplayRegistryFrames() {
@@ -144,111 +136,6 @@ class BackgroundDeviceVmTest {
     }
 
     @Test
-    fun bootsFirmwareAndRunsUserBootFileFromWorkspace() {
-        runtimeTestWorkspace("firmware-runs-user-boot") { workspace ->
-            workspace.writeProgram(1, "boot.ck", "pub fun main() { terminal::println(\"from boot\"); }")
-            val vm =
-                BackgroundDeviceVm(
-                    deviceId = 1,
-                    profile = firmwareTestProfile(),
-                    dispatcher = Dispatchers.Default,
-                    labelProvider = { null },
-                    logger = DeviceVmLogger { },
-                    workspace = workspace.host,
-                    firmwareLoader =
-                        StaticFirmwareLoader(
-                            """
-                            pub fun main() {
-                                terminal::println("from bios")
-                                val code: Int = process::run("boot.ck")
-                                terminal::println("code=" + code)
-                                while true { sleep(20L) }
-                            }
-                            """.trimIndent(),
-                        ),
-                )
-
-            vm.boot()
-            runVmTicks(vm)
-
-            val text = vm.forceScreenSnapshot().visibleText()
-            assertTrue(text.contains("from bios"), text)
-            assertTrue(text.contains("from boot"), text)
-            assertTrue(text.contains("code=0"), text)
-            assertTrue(vm.snapshot().state.isActive, vm.snapshot().state.toString())
-        }
-    }
-
-    @Test
-    fun bootClearsPreviousTerminalOutput() {
-        runtimeTestWorkspace("firmware-boot-clears-terminal") { workspace ->
-            val vm =
-                BackgroundDeviceVm(
-                    deviceId = 1,
-                    profile = firmwareTestProfile(),
-                    dispatcher = Dispatchers.Default,
-                    labelProvider = { null },
-                    logger = DeviceVmLogger { },
-                    workspace = workspace.host,
-                    firmwareLoader =
-                        StaticFirmwareLoader(
-                            """
-                            pub fun main() {
-                                terminal::println("fresh boot")
-                                while true { sleep(20L) }
-                            }
-                            """.trimIndent(),
-                        ),
-                )
-
-            vm.stdioBroadcaster.writeString("stale log line\n")
-            assertTrue(vm.boot())
-            runVmTicks(vm)
-
-            val text = vm.forceScreenSnapshot().visibleText()
-            assertFalse(text.contains("stale log line"), text)
-            assertTrue(text.contains("fresh boot"), text)
-            vm.stop(VmStopReason.REQUESTED)
-        }
-    }
-
-    @Test
-    fun stoppingRunningChildProcessDoesNotPrintCancellationAsProgramError() {
-        runtimeTestWorkspace("firmware-stop-cancels-child-quietly") { workspace ->
-            workspace.writeProgram(1, "boot.ck", "pub fun main() { terminal::println(\"child running\"); while true { sleep(20L) } }")
-            val vm =
-                BackgroundDeviceVm(
-                    deviceId = 1,
-                    profile = firmwareTestProfile(),
-                    dispatcher = Dispatchers.Default,
-                    labelProvider = { null },
-                    logger = DeviceVmLogger { },
-                    workspace = workspace.host,
-                    firmwareLoader =
-                        StaticFirmwareLoader(
-                            """
-                            pub fun main() {
-                                terminal::println("from bios")
-                                process::run("boot.ck")
-                            }
-                            """.trimIndent(),
-                        ),
-                )
-
-            assertTrue(vm.boot())
-            runVmTicks(vm, ticks = 12)
-            assertTrue(vm.forceScreenSnapshot().visibleText().contains("child running"))
-
-            vm.stop(VmStopReason.REQUESTED)
-            runVmTicks(vm, ticks = 4)
-
-            val text = vm.forceScreenSnapshot().visibleText()
-            assertFalse(text.contains("StandaloneCoroutine was cancelled"), text)
-            assertFalse(text.contains("Program error in boot.ck"), text)
-        }
-    }
-
-    @Test
     fun parentCanSpawnChildAndExchangeIpcText() {
         runtimeTestWorkspace("firmware-spawn-ipc-child") { workspace ->
             val logs = mutableListOf<String>()
@@ -284,7 +171,7 @@ class BackgroundDeviceVmTest {
                                 ipc::write(childInput, "parent-")
                                 val text: String = ipc::read(childOutput)
                                 val code: Int = process::wait(pid)
-                                terminal::println(text + "code=" + code)
+                                system::log(text + "code=" + code)
                                 while true { sleep(20L) }
                             }
                             """.trimIndent(),
@@ -294,8 +181,7 @@ class BackgroundDeviceVmTest {
             vm.boot()
             runVmTicks(vm, ticks = 40)
 
-            val text = vm.forceScreenSnapshot().visibleText()
-            assertTrue(text.contains("parent-child-code=0"), "text=[$text] state=${vm.snapshot().state} logs=$logs")
+            assertTrue(logs.any { it.contains("parent-child-code=0") }, "state=${vm.snapshot().state} logs=$logs")
             assertTrue(vm.snapshot().state.isActive, vm.snapshot().state.toString())
         }
     }
@@ -489,10 +375,7 @@ class BackgroundDeviceVmTest {
                     displayName = "Tiny ROM",
                     cpuBudgetNanosPerSlice = 1_000_000,
                     maxEventQueueSize = 16,
-                    terminalWidth = 16,
-                    terminalHeight = 8,
-                    colorTerminal = true,
-                    allowedCapabilities = setOf(DeviceCapability.TERMINAL, DeviceCapability.SYSTEM),
+                    allowedCapabilities = setOf(DeviceCapability.SYSTEM),
                     resources =
                         DeviceResources(
                             cpu = DeviceCpuResources(wallTimeGuardNanosPerSlice = 1_000_000),
@@ -548,10 +431,7 @@ class BackgroundDeviceVmTest {
                     displayName = "Terminal Only",
                     cpuBudgetNanosPerSlice = 1_000_000,
                     maxEventQueueSize = 16,
-                    terminalWidth = 16,
-                    terminalHeight = 8,
-                    colorTerminal = true,
-                    allowedCapabilities = setOf(DeviceCapability.TERMINAL, DeviceCapability.SYSTEM),
+                    allowedCapabilities = setOf(DeviceCapability.SYSTEM),
                     resources =
                         DeviceResources(
                             cpu = DeviceCpuResources(wallTimeGuardNanosPerSlice = 1_000_000),

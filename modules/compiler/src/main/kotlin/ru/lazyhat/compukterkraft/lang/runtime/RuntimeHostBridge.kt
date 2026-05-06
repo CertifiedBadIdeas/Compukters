@@ -30,9 +30,7 @@ internal class RuntimeHostBridge(
         return when (moduleName) {
             "filesystem" -> invokeFilesystem(functionName, arguments)
             "system" -> invokeSystem(functionName, arguments)
-            "terminal" -> invokeTerminal(functionName, arguments)
             "display" -> invokeDisplay(functionName, arguments)
-            "stdout" -> invokeStdout(functionName, arguments)
             "events" -> invokeEvents(functionName, arguments)
             "ipc" -> invokeIpc(functionName, arguments)
             "process" -> invokeProcess(functionName, arguments)
@@ -133,55 +131,6 @@ internal class RuntimeHostBridge(
 
             else -> {
                 error("Unknown system function $functionName")
-            }
-        }
-
-    private suspend fun invokeTerminal(
-        functionName: String,
-        arguments: List<VmValue>,
-    ): VmValue =
-        when (functionName) {
-            "write" -> {
-                runtime.terminal.write(arguments[0].asString())
-                VmValue.UnitValue
-            }
-
-            "println" -> {
-                runtime.terminal.println(arguments[0].asString())
-                VmValue.UnitValue
-            }
-
-            "readln" -> {
-                VmValue.StringValue(runtime.terminal.readln(arguments.singleOrNull()?.asString().orEmpty()))
-            }
-
-            "clear" -> {
-                runtime.terminal.clear()
-                VmValue.UnitValue
-            }
-
-            "setCursor" -> {
-                runtime.terminal.setCursor(arguments[0].asInt(), arguments[1].asInt())
-                VmValue.UnitValue
-            }
-
-            else -> {
-                error("Unknown terminal function $functionName")
-            }
-        }
-
-    private fun invokeStdout(
-        functionName: String,
-        arguments: List<VmValue>,
-    ): VmValue =
-        when (functionName) {
-            "write" -> {
-                runtime.stdio.writeString(arguments[0].asString())
-                VmValue.UnitValue
-            }
-
-            else -> {
-                error("Unknown stdout function $functionName")
             }
         }
 
@@ -391,8 +340,6 @@ internal class RuntimeHostBridge(
             when (moduleName) {
                 "filesystem" -> DeviceCapability.FILESYSTEM
                 "system" -> DeviceCapability.SYSTEM
-                "terminal" -> DeviceCapability.TERMINAL
-                "stdout" -> DeviceCapability.TERMINAL
                 "display" -> DeviceCapability.DISPLAY
                 "events" -> DeviceCapability.EVENTS
                 "ipc" -> DeviceCapability.IPC

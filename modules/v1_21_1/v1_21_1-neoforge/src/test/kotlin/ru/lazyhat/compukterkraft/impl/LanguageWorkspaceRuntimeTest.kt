@@ -33,7 +33,7 @@ import kotlin.test.assertTrue
 
 class LanguageWorkspaceRuntimeTest {
     @Test
-    fun seededBootScriptCompilesAndDelegatesToTerminal() {
+    fun seededBootScriptCompilesAndForwardsStdioDescriptorToTerminal() {
         val root = createTempDirectory("compukterkraft-language-workspace")
 
         try {
@@ -53,13 +53,21 @@ class LanguageWorkspaceRuntimeTest {
             val vm = BytecodeVirtualMachine(requireNotNull(artifact.module))
             val firstSignal = vm.runUntilSignal()
             assertEquals(
-                VmSignal.HostCall("process", "run", listOf(VmValue.StringValue("terminal.ck"))),
+                VmSignal.HostCall("process", "argument", emptyList()),
                 firstSignal,
             )
 
-            vm.resumeWith(VmValue.IntValue(0))
+            val descriptor = "stdio-v1 1 2 3 "
+            vm.resumeWith(VmValue.StringValue(descriptor))
             val secondSignal = vm.runUntilSignal()
-            assertEquals(VmSignal.Halt, secondSignal)
+            assertEquals(
+                VmSignal.HostCall("process", "run", listOf(VmValue.StringValue("terminal.ck"), VmValue.StringValue(descriptor))),
+                secondSignal,
+            )
+
+            vm.resumeWith(VmValue.IntValue(0))
+            val thirdSignal = vm.runUntilSignal()
+            assertEquals(VmSignal.Halt, thirdSignal)
         } finally {
             root.toFile().deleteRecursively()
         }

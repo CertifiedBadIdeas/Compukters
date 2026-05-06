@@ -19,23 +19,21 @@
 
 package ru.lazyhat.compukterkraft.core.device.vm
 
-import ru.lazyhat.compukterkraft.core.Config
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceCapability
 import kotlin.test.Test
 import kotlin.test.assertContains
-import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 
 class DeviceProfileRegistryTest {
     @Test
-    fun normalComputerUsesTallerTerminalThanOtherFamilies() {
-        val normal = DeviceProfileRegistry.forFamily(DeviceFamily.NORMAL)
-        val advanced = DeviceProfileRegistry.forFamily(DeviceFamily.ADVANCED)
-        val command = DeviceProfileRegistry.forFamily(DeviceFamily.COMMAND)
+    fun computerFamiliesDoNotExposeTerminalCapability() {
+        DeviceFamily.entries.forEach { family ->
+            val profile = DeviceProfileRegistry.forFamily(family)
 
-        assertEquals(Config.DEFAULT_COMPUTER_TERM_HEIGHT, normal.terminalHeight)
-        assertEquals(Config.DEFAULT_COMPUTER_TERM_HEIGHT, advanced.terminalHeight)
-        assertEquals(Config.DEFAULT_COMPUTER_TERM_HEIGHT, command.terminalHeight)
+            assertFalse(DeviceCapability.entries.any { it.name == "TERMINAL" })
+            assertFalse(profile.allowedCapabilities.any { it.name == "TERMINAL" }, "$family must not expose removed terminal capability")
+        }
     }
 
     @Test

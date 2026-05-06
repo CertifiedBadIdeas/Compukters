@@ -90,9 +90,6 @@ class DeviceProgramSupportTest {
                 displayName = "Test",
                 cpuBudgetNanosPerSlice = 1_000_000,
                 maxEventQueueSize = 16,
-                terminalWidth = 16,
-                terminalHeight = 8,
-                colorTerminal = true,
                 resources =
                     DeviceResources(
                         cpu = DeviceCpuResources(wallTimeGuardNanosPerSlice = 1_000_000),

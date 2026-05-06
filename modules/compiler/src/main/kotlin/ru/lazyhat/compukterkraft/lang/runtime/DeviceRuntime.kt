@@ -26,10 +26,8 @@ interface DeviceProgram {
 interface DeviceRuntime {
     val profile: DeviceProfile
     val system: DeviceSystemApi
-    val terminal: DeviceTerminalApi
     val display: DeviceDisplayApi
         get() = NoopDeviceDisplayApi
-    val stdio: DeviceStdioApi
     val filesystem: DeviceFileSystemApi
     val process: DeviceProcessApi
     val ipc: DeviceIpcApi
@@ -61,21 +59,6 @@ interface DeviceSystemApi {
     fun reboot()
 
     fun log(message: String)
-}
-
-interface DeviceTerminalApi {
-    fun write(text: String)
-
-    fun println(text: String)
-
-    suspend fun readln(prompt: String = ""): String
-
-    fun clear()
-
-    fun setCursor(
-        x: Int,
-        y: Int,
-    )
 }
 
 interface DeviceDisplayApi {

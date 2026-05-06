@@ -57,7 +57,6 @@ fun runtimeProfile(
     diskBytes: Long = 1024,
     allowedCapabilities: Set<DeviceCapability> =
         setOf(
-            DeviceCapability.TERMINAL,
             DeviceCapability.DISPLAY,
             DeviceCapability.FILESYSTEM,
             DeviceCapability.EVENTS,
@@ -71,9 +70,6 @@ fun runtimeProfile(
         displayName = displayName,
         cpuBudgetNanosPerSlice = 1_000_000,
         maxEventQueueSize = 16,
-        terminalWidth = 16,
-        terminalHeight = 8,
-        colorTerminal = true,
         allowedCapabilities = allowedCapabilities,
         resources =
             DeviceResources(

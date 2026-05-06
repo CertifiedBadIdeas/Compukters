@@ -150,7 +150,7 @@ RuntimeDeviceImpl.turnOn()
   ├─ DeviceManager.getOrCreateVm(id, profile, callbacks, logger)
   │    └─ BackgroundDeviceVm(id, profile, dispatcher, callbacks, logger, workspace)
   │         ├─ owns DisplayRegistry for runtime UI frames
-  │         └─ owns legacy ScreenBuffer for temporary Workbench snapshots
+  │         └─ owns IpcChannelRegistry for VM-local text channels
   ├─ vmHandle.boot()
   │    └─ load boot script → compile → scope.launch { program.run(runtime) }
   └─ stateSink.onPowerStateChanged(true)
@@ -158,7 +158,6 @@ RuntimeDeviceImpl.turnOn()
 RuntimeDeviceImpl.serverTick()  [every game tick, 50ms]
   ├─ vmHandle.requestSlice(gameTime.gameTime())
   ├─ dispatch host calls
-  ├─ syncScreen() → readScreenSnapshot() → publish to lastScreenSnapshot
   ├─ flushDisplaySessions()
   │    ├─ displayNetwork.isDisplaySessionStillBound(uuid, containerId, deviceId, displayId)
   │    └─ displayNetwork.sendDisplayFrame(uuid, containerId, frame)
@@ -179,8 +178,8 @@ RuntimeDeviceImpl.close()
 | `ru.lazyhat.compukterkraft.lang.api`              | Bytecode format: `Instruction`, `BytecodeModule`, operators  |
 | `ru.lazyhat.compukterkraft.lang.frontend`         | Parser, type checker, code generator, IDE support            |
 | `ru.lazyhat.compukterkraft.lang.runtime`          | VM runtime: `BytecodeVirtualMachine`, `RuntimeHostBridge`    |
-|                            | Data types: `ScreenBuffer`, `ScreenBufferSnapshot`           |
-|                            | Interfaces: `DeviceRuntime`, `DeviceTerminalApi`, `DeviceWorkspace`, `DeviceIdeHost` |
+|                            | Data types: `ScreenBuffer`, `ScreenBufferSnapshot` for non-VM terminal-style UI models |
+|                            | Interfaces: `DeviceRuntime`, `DeviceWorkspace`, `DeviceIdeHost` |
 |                            | Models: `DeviceProfile`, `VmSnapshot`, `HostCall`            |
 
 ### `core` module
@@ -241,7 +240,7 @@ RuntimeDeviceImpl.close()
 
 The main VM host. Runs the compiled program on a background coroutine dispatcher.
 
-- **Thread model:** One coroutine per computer. Runtime UI output is written to display/framebuffer state, which the server tick thread drains as frame deltas for attached display sessions. Legacy terminal writes can still feed `ScreenBuffer` internally for temporary Workbench snapshots during staged cleanup.
+- **Thread model:** One coroutine per computer. Runtime UI output is written to display/framebuffer state, which the server tick thread drains as frame deltas for attached display sessions. There is no VM-owned terminal/stdout screen snapshot path.
 - **Scheduling:** Each tick, the server calls `requestSlice()` which sends a permit through a `Channel`. The VM coroutine suspends at scheduling points when it exhausts its CPU budget.
 - **Lifecycle:** Created by `DeviceManager`, booted by `RuntimeDeviceImpl`, stopped with `stop(reason)`.
 
@@ -257,8 +256,8 @@ Server-wide singleton (held by `ServerContext.deviceManager`) that manages all a
 
 Platform-neutral runtime-device contract and its canonical implementation, both living in `:core/.../computer/runtime/`.
 
-- `RuntimeDevice` is the umbrella interface composed from five role interfaces: `RuntimeDeviceLifecycle`, `RuntimeDeviceInput` (extends `DeviceEvents.Receiver`), `RuntimeDeviceScreen`, `RuntimeDeviceDisplaySessions`, `RuntimeDeviceMetadata`.
-- `RuntimeDeviceImpl` orchestrates the VM lifecycle: each game tick it requests a VM slice, dispatches host calls, updates the legacy workbench snapshot, and flushes per-player display sessions. Reboot/shutdown/crash state transitions are handled here.
+- `RuntimeDevice` is the umbrella interface composed from four role interfaces: `RuntimeDeviceLifecycle`, `RuntimeDeviceInput` (extends `DeviceEvents.Receiver`), `RuntimeDeviceDisplaySessions`, `RuntimeDeviceMetadata`.
+- `RuntimeDeviceImpl` orchestrates the VM lifecycle: each game tick it requests a VM slice, dispatches host calls, and flushes per-player display sessions. Reboot/shutdown/crash state transitions are handled here.
 - All world-side interactions are abstracted via narrow host ports — `GameTimeSource`, `DisplayNetworkBridge`, `DeviceStateSink` — so the impl has zero Minecraft imports.
 
 ### Host ports (`:core/.../computer/runtime/ports/`)
@@ -275,14 +274,12 @@ In `:v1_21_1-common`, `BlockEntityRuntimeDeviceHost` implements these ports agai
 
 The historical name for `RuntimeDeviceImpl`. Renamed in Phase 2b; the class no longer exists under that name.
 
-### `DisplayRegistry` and legacy `ScreenBuffer`
+### `DisplayRegistry`
 
 - **Display writer:** VM coroutine / ROM uses `display::*` framebuffer APIs.
 - **Display reader:** Server tick thread calls display snapshot methods and sends `DisplayFrameDelta` through display sessions.
-- **Legacy writer:** VM terminal/stdout compatibility APIs may still feed `ScreenBuffer`.
-- **Legacy reader:** Workbench snapshot paths can call `ScreenBuffer.snapshot()` until the live viewer is migrated to display sessions.
 
-The flat character grid (`CharArray` + `ByteArray` colours) is no longer the runtime client-server UI transport.
+The flat character grid (`CharArray` + `ByteArray` colours) is not runtime client-server UI transport. Workbench terminal-style editor UI can still use terminal render utilities locally, but the VM itself publishes visible output only as display frames.
 
 ### `WorkbenchStore`
 
@@ -305,7 +302,7 @@ Converts `List<UiNode>` into Minecraft draw calls.
 
 ### Runtime UI output is display-only
 
-Runtime UI output is rendered by ROM/user code through display/framebuffer APIs. Terminal/stdout bytes are not broadcast to clients. Legacy terminal writes may still update internal diagnostics or workbench snapshots during the staged cleanup, but they are not part of the runtime client-server UI protocol.
+Runtime UI output is rendered by ROM/user code through display/framebuffer APIs. Terminal/stdout bytes are not broadcast to clients, and the VM no longer owns a terminal snapshot or stdout API. Diagnostics do not get a separate renderer: programs that need visible output must draw it through `display::*`.
 
 ### MenuSide sealed interface
 

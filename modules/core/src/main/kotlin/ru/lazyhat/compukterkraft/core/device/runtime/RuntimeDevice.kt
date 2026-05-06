@@ -21,7 +21,6 @@ package ru.lazyhat.compukterkraft.core.device.runtime
 
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 import ru.lazyhat.compukterkraft.core.device.DeviceEvents
-import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 import java.util.UUID
 
 /** Lifecycle role: turn on/off, tick, query state. */
@@ -43,11 +42,6 @@ interface RuntimeDeviceLifecycle {
 /** Input role: accept VM events. Re-uses [DeviceEvents.Receiver] so that
  *  device implementations can plug into the existing event-dispatch pipeline. */
 interface RuntimeDeviceInput : DeviceEvents.Receiver
-
-/** Screen role: read latest screen snapshot (used by workbench / legacy clients). */
-interface RuntimeDeviceScreen {
-    val lastScreenSnapshot: ScreenBufferSnapshot?
-}
 
 /** Display-session role: per-player framebuffer endpoint attachments. */
 interface RuntimeDeviceDisplaySessions {
@@ -85,6 +79,5 @@ interface RuntimeDeviceMetadata {
 interface RuntimeDevice :
     RuntimeDeviceLifecycle,
     RuntimeDeviceInput,
-    RuntimeDeviceScreen,
     RuntimeDeviceDisplaySessions,
     RuntimeDeviceMetadata

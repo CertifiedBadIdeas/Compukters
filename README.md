@@ -21,16 +21,13 @@ Inspired by ComputerCraft. With one big difference: the language is not Lua.
 
 ## A taste of CKL
 
-    import terminal
-    import system
-
     fun greet(name: String): String {
         return "Hello, " + name + "!"
     }
 
     pub fun main() {
-        terminal.println(greet("world"))
-        terminal.println("Computer #" + system.computerId())
+        system::log(greet("world"))
+        system::log("Computer #" + system::deviceId())
     }
 
 Types are checked at compile time. Errors show up in the editor before you ever
@@ -38,7 +35,7 @@ press Run. Because debugging Lua at 2 AM is a war crime.
 
 ## Built-in modules
 
-`terminal`, `filesystem`, `system`, `events`, `process`, `strings` — enough to
+`display`, `filesystem`, `system`, `events`, `process`, `ipc`, `strings` — enough to
 write shells, file utilities, automation scripts, and small games.
 
 ## Status

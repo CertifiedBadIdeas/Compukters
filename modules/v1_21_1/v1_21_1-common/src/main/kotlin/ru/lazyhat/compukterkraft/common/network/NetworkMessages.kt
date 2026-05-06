@@ -36,7 +36,6 @@ import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchCursor
 import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchDocumentSnapshotClientMessage
 import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchOpsClientMessage
 import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchPresenceClientMessage
-import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchTerminalClientMessage
 import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchWorkspaceClientMessage
 import ru.lazyhat.compukterkraft.common.workbench.network.server.WorkbenchCursorServerMessage
 import ru.lazyhat.compukterkraft.common.workbench.network.server.WorkbenchInputServerMessage
@@ -70,7 +69,7 @@ import ru.lazyhat.compukterkraft.common.workbench.network.server.WorkbenchWorksp
  * | 13 | unused               | —                                  | Reserved for removed ComputerTerminalClientMessage (Epic 4)     | —                                             |
  * | 14 | unused               | —                                  | Reserved for removed stdout byte stream packet       | —                                             |
  * | 15 | `workbench_workspace` | [WorkbenchWorkspaceClientMessage] | Response to a Workbench action or workspace request | [AbstractWorkbenchMenu.updateRemoteState] |
- * | 16 | `workbench_terminal`  | [WorkbenchTerminalClientMessage]  | Target terminal snapshot changed while Workbench is open | [AbstractWorkbenchMenu.updateScreenSnapshot] |
+ * | 16 | unused               | —                                  | Reserved for removed Workbench terminal snapshot packet | — |
  */
 object NetworkMessages {
     private val seenIds: IntSet = IntOpenHashSet()
@@ -137,12 +136,6 @@ object NetworkMessages {
             15,
             "workbench_workspace",
             { buf -> WorkbenchWorkspaceClientMessage(buf) },
-        )
-    val WORKBENCH_TERMINAL: MessageType<WorkbenchTerminalClientMessage> =
-        registerClientbound(
-            16,
-            "workbench_terminal",
-            { buf -> WorkbenchTerminalClientMessage(buf) },
         )
     val WORKBENCH_OPS: MessageType<WorkbenchOpsClientMessage> =
         registerClientbound(

@@ -30,7 +30,6 @@ import ru.lazyhat.compukterkraft.core.workbench.crdt.CursorAnchor
 import ru.lazyhat.compukterkraft.core.workbench.crdt.Op
 import ru.lazyhat.compukterkraft.core.workbench.crdt.SiteId
 import ru.lazyhat.compukterkraft.core.workbench.crdt.TextRun
-import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 
 class ClientNetworkContextImpl : ClientNetworkContext {
@@ -77,13 +76,6 @@ class ClientNetworkContextImpl : ClientNetworkContext {
         remoteState: WorkbenchRemoteState,
     ) = withCheckedWorkbenchMenu(containerId) {
         updateRemoteState(remoteState)
-    }
-
-    override fun handleWorkbenchTerminal(
-        containerId: Int,
-        snapshot: ScreenBufferSnapshot?,
-    ) = withCheckedWorkbenchMenu(containerId) {
-        updateScreenSnapshot(snapshot)
     }
 
     override fun handleWorkbenchOps(

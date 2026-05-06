@@ -79,7 +79,7 @@ interface VtSink {
      * Sinks that don't track cursor visibility can leave the default no-op.
      */
     fun setCursorVisible(visible: Boolean) {
-        // Default: ignore. Server-side sinks (CursorTracker) don't render,
+        // Default: ignore. Server-side state-tracking sinks don't render,
         // so they don't need to react. Client-side sinks map this to the
         // buffer's cursor-blink state.
     }

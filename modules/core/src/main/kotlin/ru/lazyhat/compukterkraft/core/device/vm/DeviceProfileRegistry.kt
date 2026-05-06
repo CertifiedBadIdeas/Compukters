@@ -38,9 +38,6 @@ object DeviceProfileRegistry {
                     displayName = "Normal Computer",
                     cpuBudgetNanosPerSlice = 1_000_000,
                     maxEventQueueSize = 64,
-                    terminalWidth = Config.DEFAULT_COMPUTER_TERM_WIDTH,
-                    terminalHeight = Config.DEFAULT_COMPUTER_TERM_HEIGHT,
-                    colorTerminal = false,
                     allowedCapabilities = defaultCapabilities(),
                     resources =
                         defaultResources(
@@ -58,9 +55,6 @@ object DeviceProfileRegistry {
                     displayName = "Advanced Computer",
                     cpuBudgetNanosPerSlice = 2_000_000,
                     maxEventQueueSize = 128,
-                    terminalWidth = Config.DEFAULT_COMPUTER_TERM_WIDTH,
-                    terminalHeight = Config.DEFAULT_COMPUTER_TERM_HEIGHT,
-                    colorTerminal = true,
                     allowedCapabilities = defaultCapabilities(),
                     resources =
                         defaultResources(
@@ -78,9 +72,6 @@ object DeviceProfileRegistry {
                     displayName = "Command Computer",
                     cpuBudgetNanosPerSlice = 4_000_000,
                     maxEventQueueSize = 256,
-                    terminalWidth = Config.DEFAULT_COMPUTER_TERM_WIDTH,
-                    terminalHeight = Config.DEFAULT_COMPUTER_TERM_HEIGHT,
-                    colorTerminal = true,
                     allowedCapabilities = defaultCapabilities() + DeviceCapability.REDSTONE + DeviceCapability.PERIPHERALS,
                     resources =
                         defaultResources(
@@ -112,7 +103,6 @@ object DeviceProfileRegistry {
 
     private fun defaultCapabilities(): Set<DeviceCapability> =
         setOf(
-            DeviceCapability.TERMINAL,
             DeviceCapability.DISPLAY,
             DeviceCapability.FILESYSTEM,
             DeviceCapability.EVENTS,
@@ -120,6 +110,4 @@ object DeviceProfileRegistry {
             DeviceCapability.IPC,
             DeviceCapability.IDE,
         )
-
-    private const val NORMAL_COMPUTER_EXTRA_HEIGHT: Int = 2
 }

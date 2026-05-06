@@ -9,13 +9,13 @@
 VM здесь состоит из четырех слоев:
 
 1. `ServerComputer`
-   Серверное представление одного компьютера в мире. Оно отвечает за включение, выключение, тики, доставку событий, обработку host calls и синхронизацию экрана игрокам.
+   Серверное представление одного компьютера в мире. Оно отвечает за включение, выключение, тики, доставку событий, обработку host calls и синхронизацию display sessions игрокам.
 
 2. `BackgroundDeviceVm`
-   Хост одной VM. Запускает программу на фоновой корутине, держит состояние VM, очередь событий, очередь host calls, display registry, временный legacy screen buffer и runtime-объекты.
+   Хост одной VM. Запускает программу на фоновой корутине, держит состояние VM, очередь событий, очередь host calls, display registry, IPC registry и runtime-объекты.
 
 3. `VmRuntime`
-   Реализация `ComputerRuntime`, которую видит исполняемая программа. Через нее язык получает доступ к `system`, `terminal`, `filesystem`, `process`, а также к операциям `pullEvent`, `sleep`, `yield`.
+   Реализация runtime API, которую видит исполняемая программа. Через нее язык получает доступ к `display`, `system`, `filesystem`, `events`, `process`, `ipc`, `strings`, а также к операциям `sleep` и `yield`.
 
 4. `BytecodeComputerProgram` / `BytecodeVirtualMachine`
    Исполнитель байткода языка из модуля `compiler`. Он гоняет инструкции до тех пор, пока не встретит один из сигналов: `Yield`, `Sleep`, `WaitEvent`, `HostCall` или `Halt`.
@@ -29,7 +29,7 @@ Server tick thread
      -> BackgroundComputerVm.drainHostCalls()
      -> HostCallDispatcher.dispatch(...)
      -> BackgroundComputerVm.deliverHostResults()
-     -> BackgroundComputerVm.readScreenSnapshot()
+   -> RuntimeDeviceImpl.flushDisplaySessions()
 
 Background coroutine
   -> BackgroundComputerVm.boot()
@@ -82,8 +82,8 @@ Background coroutine
 - удаляет старую VM, если она осталась;
 - получает или создает новую `BackgroundComputerVm`;
 - вызывает `boot()`;
-- слушает terminal states и реагирует на stop/crash/reboot;
-- каждый тик двигает VM вперед и синхронизирует экран.
+- слушает terminal lifecycle states и реагирует на stop/crash/reboot;
+- каждый тик двигает VM вперед и flush-ит display sessions.
 
 ## 3. Что находится внутри `BackgroundComputerVm`
 
@@ -98,8 +98,8 @@ Background coroutine
 - `hostCallManager = HostCallManager()`
 - `programLoader = WorkspaceProgramLoader(workspace)`
 - `pathResolver = VmPathResolver()`
-- `screenBuffer = ScreenBuffer(profile.terminalWidth, profile.terminalHeight, profile.colorTerminal)` — временный legacy snapshot path для Workbench;
 - `displayRegistry = DisplayRegistry()` — источник runtime UI frames для клиентского Computer screen;
+- `ipcRegistry = IpcChannelRegistry()` — VM-local текстовые каналы без встроенной семантики stdin/stdout/stderr;
 - `runtime = createRuntime("", "")`
 
 Смысл каждого компонента:
@@ -111,8 +111,8 @@ Background coroutine
 - `hostCallManager` хранит запросы VM к хосту и ожидаемые ответы.
 - `programLoader` читает исходники программ из workspace.
 - `pathResolver` реализует текущую рабочую директорию и нормализацию путей.
-- `screenBuffer` больше не является client-server runtime UI transport; он остается внутренним legacy snapshot path для Workbench/diagnostics до отдельной миграции.
 - `displayRegistry` хранит display/framebuffer state, из которого `RuntimeDeviceImpl` flush-ит `DisplayFrameDelta` в клиентские display sessions.
+- `ipcRegistry` хранит локальные каналы; stdio для ROM/process code задается только соглашением поверх `ipc`.
 - `runtime` это API-объект, который получает выполняемая программа.
 
 ## 4. Полный жизненный цикл VM
@@ -151,22 +151,26 @@ Background coroutine
 
 Имя boot script живет в `ComputerProfile.bootScriptName` и по умолчанию равно `bios.ck`.
 
-ROM-файл `mod/src/main/resources/rom/bios.ck` очень простой:
+Firmware-файл `firmware/bios.ck` рисует bootstrap status через `display::*`, проверяет user `boot.ck` и запускает его с tagged stdio descriptor:
 
 ```ck
 pub fun main() {
-   process::run("shell.ck");
+   val input: Int = ipc::open()
+   val output: Int = ipc::open()
+   val error: Int = ipc::open()
+   process::run("boot.ck", "stdio-v1 " + input + " " + output + " " + error + " ")
 }
 ```
 
 То есть фактический boot flow такой:
 
 1. VM поднимается.
-2. Компилируется `bios.ck`.
-3. `bios.ck` вызывает `process::run("shell.ck")`.
-4. Запускается shell.
+2. Компилируется hidden firmware `bios.ck`.
+3. `bios.ck` рисует bootstrap status через `display::*`.
+4. `bios.ck` запускает user `boot.ck` с `stdio-v1` descriptor.
+5. Default user `boot.ck` делегирует в `terminal.ck`, который сам рендерит shell output через `display::*`.
 
-Это поведение дополнительно подтверждается тестом `LanguageWorkspaceRuntimeTest`, который проверяет, что первый сигнал из `bios.ck` это `HostCall("process", "run", ["shell.ck"])`.
+Это поведение дополнительно подтверждается тестом `LanguageWorkspaceRuntimeTest`, который проверяет, что seeded `boot.ck` forward-ит текущий stdio descriptor в `terminal.ck`.
 
 ### 4.4. Выключение и перезапуск
 
@@ -192,14 +196,14 @@ pub fun main() {
 VM спроектирована как кооперативная система с двумя основными контекстами:
 
 1. Фоновая coroutine VM
-   Именно здесь исполняется байткод программы и вызываются API `runtime.terminal`, `runtime.filesystem`, `runtime.process`, `runtime.system`.
+   Именно здесь исполняется байткод программы и вызываются API `runtime.display`, `runtime.filesystem`, `runtime.process`, `runtime.system`, `runtime.ipc`.
 
 2. Server tick thread
    Именно отсюда сервер вызывает:
    - `requestSlice(serverTick)`
    - `drainHostCalls()`
    - `deliverHostResults(...)`
-   - `readScreenSnapshot()`
+   - `flushDisplaySessions()`
    - `snapshot()`
 
 ### 5.2. Почему это кооперативная VM
@@ -509,51 +513,26 @@ return candidate
 Это значит:
 
 - server-to-client output не идет через stdout byte stream;
-- `terminal`/`stdout` APIs остаются только staged compatibility;
-- legacy terminal writes могут обновлять внутренний `ScreenBuffer` для Workbench snapshots, но не рассылаются клиентам как runtime UI.
+- VM не предоставляет `terminal`/`stdout` APIs;
+- runtime diagnostics не имеют отдельного renderer-а: если программа хочет показать что-то игроку, она должна сама рисовать это через `display::*`.
 
-Сервер для обычного Computer GUI читает display deltas через `snapshotDisplayFrames()` / `flushDisplaySessions()`, а не `readScreenSnapshot()`.
+Сервер для обычного Computer GUI читает display deltas через `flushDisplaySessions()`. VM больше не публикует terminal screen snapshots.
 
-### 11.2. Чтение строки
+### 11.2. ROM stdio поверх IPC
 
-`VmTerminalApi.readln(prompt)`:
+IPC остается низкоуровневым VM-local transport-ом. Семантика stdin/stdout/stderr появляется только как ROM/process convention:
 
-1. включает мигание курсора;
-2. создает `TerminalLineReader`;
-3. читает события `char`, `paste`, `key`;
-4. печатает вводимые символы обратно в экран;
-5. по Enter завершает строку;
-6. по Backspace корректирует текст и курсор;
-7. все посторонние события откладывает через `deferEvent(...)`;
-8. в конце выключает мигание курсора.
+```text
+stdio-v1 <stdin-channel-id> <stdout-channel-id> <stderr-channel-id> <argument>
+```
 
-Декодирование текста вынесено в `VmEventTextDecoder`:
+`terminal.ck` открывает каналы, запускает `shell.ck` с таким descriptor-ом, читает keyboard/paste events, пишет line input в stdin channel и рендерит stdout/stderr chunks через `display::*`.
 
-- `char` ожидает `ByteArray`;
-- `paste` ожидает `ByteBuffer`.
+`process::run(path, argument)` и `process::spawn(path, argument)` не знают о stdio на уровне типа. Если `argument` является valid `stdio-v1` descriptor-ом, launch/compile/runtime errors дочернего процесса записываются в descriptor stderr channel. Если descriptor отсутствует или malformed, ошибка остается только в server log и exit code.
 
-### 11.3. Display и временный legacy ScreenBuffer
+### 11.3. Display state
 
-Размер legacy terminal buffer задается профилем:
-
-- ширина: `Config.DEFAULT_COMPUTER_TERM_WIDTH`
-- высота: `Config.DEFAULT_COMPUTER_TERM_HEIGHT`
-- цветность: `profile.colorTerminal`
-
-Соответственно:
-
-- normal profile работает без цветного терминала;
-- advanced и command profiles работают с цветом.
-
-Физически legacy terminal snapshot представлен `ScreenBuffer`, который хранит:
-
-- символы;
-- foreground color;
-- background color;
-- позицию курсора;
-- dirty state.
-
-Runtime Computer UI физически представлен display/framebuffer state, который затем кодируется в `DisplayFrameDelta`.
+Runtime Computer UI физически представлен display/framebuffer state, который затем кодируется в `DisplayFrameDelta`. Workbench live terminal attach сейчас не читает VM terminal snapshot; future live viewer должен подключаться к display sessions, а не reintroduce stdout transport.
 
 ## 12. Как запускаются программы
 
@@ -807,7 +786,7 @@ stack = []
 Если дальше есть:
 
 ```ck
-terminal.println(x);
+system::log(x)
 ```
 
 то использование имени `x` компилируется в `Instruction.LoadLocal(slot)`.
@@ -828,9 +807,9 @@ is Instruction.LoadLocal -> {
 
 ```ck
 if (flag) {
-   terminal.println("yes");
+   system::log("yes")
 } else {
-   terminal.println("no");
+   system::log("no")
 }
 ```
 
@@ -841,13 +820,13 @@ LoadLocal(flagSlot)
 JumpIfFalse(elseStart)
 
 PushString("yes")
-CallBuiltin("terminal", "println", 1)
+CallBuiltin("system", "log", 1)
 Pop
 Jump(end)
 
 elseStart:
 PushString("no")
-CallBuiltin("terminal", "println", 1)
+CallBuiltin("system", "log", 1)
 Pop
 
 end:
@@ -873,7 +852,7 @@ end:
 
 ```ck
 while (i < 3) {
-   terminal.println("tick");
+   system::log("tick")
 }
 ```
 
@@ -887,7 +866,7 @@ Binary(LESS)
 JumpIfFalse(loopEnd)
 
 PushString("tick")
-CallBuiltin("terminal", "println", 1)
+CallBuiltin("system", "log", 1)
 Pop
 Jump(loopStart)
 
@@ -1105,14 +1084,14 @@ Capability <module> is not allowed for this computer profile.
 ROM-файл `shell.ck` показывает, как предполагается работа системы изнутри:
 
 - shell печатает баннер;
-- читает строку через `terminal.readln(...)`;
+- читает строку через `stdio.ck` helper поверх IPC stdin channel;
 - builtin-команды обрабатывает сам:
   - `help`
   - `cd`
   - `pwd`
   - `reboot`
   - `shutdown`
-- остальные команды запускает через `process.run(command + ".ck", argument)`.
+- остальные команды запускает через `process.run(command + ".ck", encode(ctx, argument))`, где `encode` импортирован из `stdio.ck`.
 
 Команда `cd` использует `process.changeDirectory(...)`.
 
@@ -1122,19 +1101,16 @@ ROM-файл `shell.ck` показывает, как предполагаетс�
 
 То есть shell здесь не встроен в движок VM. Это обычная программа на том же языке, которая использует тот же API, что и пользовательский код.
 
-## 16. Снимки экрана и синхронизация с клиентом
+## 16. Display frames и синхронизация с клиентом
 
-Во время `ServerComputer.serverTick()` после обработки host calls вызывается `syncScreen(handle)`:
+Во время `RuntimeDeviceImpl.serverTick()` после обработки host calls вызывается `flushDisplaySessions()`:
 
-1. берется `handle.readScreenSnapshot()`;
-2. если экран не менялся, возвращается `null` и ничего не отправляется;
-3. если изменения есть, snapshot сохраняется локально;
-4. всем игрокам, которые смотрят на данный компьютер, отправляется `ComputerTerminalClientMessage`.
+1. `DisplayRegistry` отдает dirty framebuffer deltas;
+2. сервер проверяет, что display session еще привязана к player/container/device/display;
+3. dirty frame отправляется как `FrameDeltaClientMessage`;
+4. клиент применяет frame к `ClientDisplayBuffer` и рендерит его в Computer screen.
 
-Это означает, что терминал обновляется в модели:
-
-- запись в экран идет сразу на VM-потоке;
-- публикация игрокам идет по серверным тикам.
+VM не создает terminal snapshot и не рассылает stdout bytes. Видимый текст shell существует только потому, что ROM `terminal.ck` сам превращает stdout/stderr IPC chunks в draw calls `display::*`.
 
 ## 17. Что именно ограничивает ресурсы
 
@@ -1152,9 +1128,9 @@ ROM-файл `shell.ck` показывает, как предполагаетс�
 
 Есть. Ограничивается `profile.resources.queues.eventQueueSlots`, при переполнении используется `DROP_OLDEST`.
 
-### 16.4. Размер экрана
+### 16.4. Размер display framebuffer
 
-Есть. Ограничивается `terminalWidth`, `terminalHeight`, `colorTerminal` из профиля.
+Есть. Ограничивается display profile/resources и client display session dimensions.
 
 ### 16.5. Доступ к файловой системе
 
@@ -1189,7 +1165,7 @@ ROM-файл `shell.ck` показывает, как предполагаетс�
 ### 17.1. Runtime display и файловая система устроены по-разному
 
 - runtime UI работает через `DisplayRegistry`/display frame deltas;
-- legacy terminal writes могут обновлять `ScreenBuffer` только как временный internal snapshot path;
+- IPC/stdio channels являются локальным process convention и сами по себе ничего не рендерят;
 - файловая система ходит через `HostCallManager` и серверный `HostCallDispatcher`.
 
 Это разное поведение и разная стоимость операций.
@@ -1281,7 +1257,7 @@ BIOS и shell лежат в ROM как `.ck` файлы. Их можно чит�
 - двигаемая серверными тиками через slice permits;
 - ограниченная по времени slice и по размеру event queue;
 - изолированная в пределах workspace конкретного компьютера;
-- работающая с файлами через host calls, а с терминалом напрямую;
+- работающая с файлами через host calls, с display framebuffer через `display::*`, а с process I/O через VM-local `ipc` conventions;
 - запускающая BIOS и shell как обычные программы на том же языке;
 - публикующая внутрь программ модульный API через `RuntimeHostBridge`.
 
@@ -1291,7 +1267,7 @@ BIOS и shell лежат в ROM как `.ck` файлы. Их можно чит�
 2. `mod/src/main/kotlin/ck/mod/computer/ServerComputer.kt`
 3. `mod/src/main/kotlin/ck/mod/computer/vm/VmProcessApi.kt`
 4. `mod/src/main/kotlin/ck/mod/computer/vm/VmFileSystemApi.kt`
-5. `mod/src/main/kotlin/ck/mod/computer/vm/VmTerminalApi.kt`
-6. `mod/src/main/kotlin/ck/mod/computer/vm/ComputerWorkspaceHost.kt`
-7. `compiler/src/main/kotlin/ck/lang/runtime/LanguageRuntime.kt`
-8. `compiler/src/main/kotlin/ck/lang/runtime/RuntimeHostBridge.kt`
+5. `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/api/VmProcessApi.kt`
+6. `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/DeviceWorkspaceHost.kt`
+7. `modules/compiler/src/main/kotlin/ru/lazyhat/compukterkraft/lang/runtime/DeviceRuntime.kt`
+8. `modules/compiler/src/main/kotlin/ru/lazyhat/compukterkraft/lang/runtime/RuntimeHostBridge.kt`

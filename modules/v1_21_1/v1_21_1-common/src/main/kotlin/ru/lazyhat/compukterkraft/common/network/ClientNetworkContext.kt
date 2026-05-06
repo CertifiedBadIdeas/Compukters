@@ -23,7 +23,6 @@ import ru.lazyhat.compukterkraft.core.workbench.WorkbenchRemoteState
 import ru.lazyhat.compukterkraft.core.workbench.crdt.Op
 import ru.lazyhat.compukterkraft.core.workbench.crdt.SiteId
 import ru.lazyhat.compukterkraft.core.workbench.crdt.TextRun
-import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 
 /**
@@ -40,11 +39,6 @@ interface ClientNetworkContext {
     fun handleWorkbenchWorkspace(
         containerId: Int,
         remoteState: WorkbenchRemoteState,
-    )
-
-    fun handleWorkbenchTerminal(
-        containerId: Int,
-        snapshot: ScreenBufferSnapshot?,
     )
 
     fun handleWorkbenchOps(

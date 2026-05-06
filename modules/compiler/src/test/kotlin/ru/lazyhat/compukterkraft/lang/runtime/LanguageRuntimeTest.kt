@@ -922,12 +922,8 @@ internal class RecordingRuntime(
             displayName = "Test Computer",
             cpuBudgetNanosPerSlice = 1_000_000,
             maxEventQueueSize = 16,
-            terminalWidth = 16,
-            terminalHeight = 8,
-            colorTerminal = true,
             allowedCapabilities =
                 setOf(
-                    DeviceCapability.TERMINAL,
                     DeviceCapability.FILESYSTEM,
                     DeviceCapability.SYSTEM,
                     DeviceCapability.EVENTS,
@@ -972,35 +968,6 @@ internal class RecordingRuntime(
 
             override fun log(message: String) {
                 lines += message
-            }
-        }
-
-    override val terminal =
-        object : DeviceTerminalApi {
-            override fun write(text: String) {
-                lines += text
-            }
-
-            override fun println(text: String) {
-                lines += text
-            }
-
-            override suspend fun readln(prompt: String): String = "typed"
-
-            override fun clear() = Unit
-
-            override fun setCursor(
-                x: Int,
-                y: Int,
-            ) = Unit
-        }
-
-    val stdioWrites: MutableList<String> = mutableListOf()
-
-    override val stdio: DeviceStdioApi =
-        object : DeviceStdioApi {
-            override fun writeString(text: String) {
-                stdioWrites += text
             }
         }
 
