@@ -3369,10 +3369,30 @@ internal class Parser(
                     compoundDesugar(nameTok, BinaryOperator.DIVIDE, rhs)
                 }
 
+                TokenKind.AMP_EQUAL -> {
+                    compoundDesugar(nameTok, BinaryOperator.BIT_AND, rhs)
+                }
+
+                TokenKind.PIPE_EQUAL -> {
+                    compoundDesugar(nameTok, BinaryOperator.BIT_OR, rhs)
+                }
+
+                TokenKind.CARET_EQUAL -> {
+                    compoundDesugar(nameTok, BinaryOperator.BIT_XOR, rhs)
+                }
+
+                TokenKind.LT_LT_EQUAL -> {
+                    compoundDesugar(nameTok, BinaryOperator.SHIFT_LEFT, rhs)
+                }
+
+                TokenKind.GT_GT_EQUAL -> {
+                    compoundDesugar(nameTok, BinaryOperator.SHIFT_RIGHT, rhs)
+                }
+
                 else -> {
                     diagnostics +=
                         FrontendDiagnostic(
-                            "Expected `=`, `+=`, `-=`, `*=` or `/=` in assignment.",
+                            "Expected assignment operator. Supported operators: `=`, `+=`, `-=`, `*=`, `/=`, `&=`, `|=`, `^=`, `<<=`, `>>=`.",
                             opTok.range,
                         )
                     return null
@@ -3429,10 +3449,30 @@ internal class Parser(
                     compoundMemberDesugar(receiver, field, BinaryOperator.DIVIDE, rhs)
                 }
 
+                TokenKind.AMP_EQUAL -> {
+                    compoundMemberDesugar(receiver, field, BinaryOperator.BIT_AND, rhs)
+                }
+
+                TokenKind.PIPE_EQUAL -> {
+                    compoundMemberDesugar(receiver, field, BinaryOperator.BIT_OR, rhs)
+                }
+
+                TokenKind.CARET_EQUAL -> {
+                    compoundMemberDesugar(receiver, field, BinaryOperator.BIT_XOR, rhs)
+                }
+
+                TokenKind.LT_LT_EQUAL -> {
+                    compoundMemberDesugar(receiver, field, BinaryOperator.SHIFT_LEFT, rhs)
+                }
+
+                TokenKind.GT_GT_EQUAL -> {
+                    compoundMemberDesugar(receiver, field, BinaryOperator.SHIFT_RIGHT, rhs)
+                }
+
                 else -> {
                     diagnostics +=
                         FrontendDiagnostic(
-                            "Expected `=`, `+=`, `-=`, `*=` or `/=` in assignment.",
+                            "Expected assignment operator. Supported operators: `=`, `+=`, `-=`, `*=`, `/=`, `&=`, `|=`, `^=`, `<<=`, `>>=`.",
                             opTok.range,
                         )
                     return null
@@ -4028,6 +4068,11 @@ internal class Parser(
                 TokenKind.MINUS_EQUAL,
                 TokenKind.STAR_EQUAL,
                 TokenKind.SLASH_EQUAL,
+                TokenKind.AMP_EQUAL,
+                TokenKind.PIPE_EQUAL,
+                TokenKind.CARET_EQUAL,
+                TokenKind.LT_LT_EQUAL,
+                TokenKind.GT_GT_EQUAL,
             )
         val INT_MAX: BigInteger = BigInteger.valueOf(Int.MAX_VALUE.toLong())
         val LONG_MAX: BigInteger = BigInteger.valueOf(Long.MAX_VALUE)
