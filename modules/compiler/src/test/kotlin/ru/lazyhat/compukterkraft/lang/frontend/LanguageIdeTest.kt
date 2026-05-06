@@ -266,6 +266,29 @@ class LanguageIdeTest {
         assertTrue(items.any { it.label == "hidden" }, items.joinToString { it.label })
     }
 
+    @Test
+    fun completesCollectionMethodsAndShowsGenericHover() {
+        val source =
+            """
+            pub fun main() {
+                val xs: List<Int> = [1];
+                xs.
+            }
+            """.trimIndent()
+        val cursor = lineAndColumnOf(source, "xs.") + 3
+
+        val items = ide.complete("collections.ck", source, cursor.first, cursor.second)
+
+        assertTrue(items.any { it.label == "add" }, items.joinToString { it.label })
+        assertTrue(items.any { it.label == "getOrNull" }, items.joinToString { it.label })
+
+        val hoverSource = source.replace("xs.\n", "xs.add(2);\n")
+        val hoverPosition = lineAndColumnOf(hoverSource, "List")
+        val hover = ide.hover("collections.ck", hoverSource, hoverPosition.first, hoverPosition.second)
+        assertNotNull(hover)
+        assertTrue(hover.contents.contains("List<Int>"), hover.contents)
+    }
+
     private fun lineAndColumnOf(
         source: String,
         needle: String,

@@ -93,6 +93,23 @@ class LanguageFormatterTest {
     }
 
     @Test
+    fun formatsGenericCollectionsAndIndexing() {
+        val source = "pub fun main(){val xs:List<Int> = [1,2];xs[0]=3;val map:Map<String,Int> = {\"a\":1};}"
+        val expected =
+            """
+            pub fun main() {
+                val xs: List<Int> = [1, 2]
+                xs[0] = 3
+                val map: Map<String, Int> = {"a": 1}
+            }
+            """.trimIndent() + "\n"
+
+        val formatted = applySingleEdit(source, formatter.formatDocument("collections.ck", source))
+
+        assertEquals(expected, formatted)
+    }
+
+    @Test
     fun formatRemovesStatementAndImportSemicolons() {
         val source = "import terminal { println };\nfun main(){println(\"hi\");return;}"
         val expected =
