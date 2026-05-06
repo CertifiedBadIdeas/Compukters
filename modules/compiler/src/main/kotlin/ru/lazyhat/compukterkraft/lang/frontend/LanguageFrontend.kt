@@ -78,6 +78,7 @@ import ru.lazyhat.compukterkraft.lang.api.ThisExpression
 import ru.lazyhat.compukterkraft.lang.api.Token
 import ru.lazyhat.compukterkraft.lang.api.TokenKind
 import ru.lazyhat.compukterkraft.lang.api.TopLevelDeclaration
+import ru.lazyhat.compukterkraft.lang.api.TypeParameterDeclaration
 import ru.lazyhat.compukterkraft.lang.api.TypeSyntax
 import ru.lazyhat.compukterkraft.lang.api.UnaryExpression
 import ru.lazyhat.compukterkraft.lang.api.UnaryOperator
@@ -3048,6 +3049,7 @@ internal class Parser(
 
     private fun parseFunction(visibility: Visibility = Visibility.PRIVATE): FunctionDeclaration? {
         val name = consume(TokenKind.IDENTIFIER, "Expected function name.") ?: return null
+        val typeParameters = parseTypeParameterList()
         consume(TokenKind.LPAREN, "Expected `(` after function name.") ?: return null
         val parameters = mutableListOf<ParameterDeclaration>()
         if (!check(TokenKind.RPAREN)) {
@@ -3061,11 +3063,12 @@ internal class Parser(
         consume(TokenKind.RPAREN, "Expected `)` after parameters.") ?: return null
         val returnType = if (match(TokenKind.COLON)) parseType() else null
         val body = parseBlock() ?: return null
-        return FunctionDeclaration(name.text, parameters, returnType, body, visibility, SourceRange(name.range.start, body.range.end))
+        return FunctionDeclaration(name.text, parameters, returnType, body, visibility, SourceRange(name.range.start, body.range.end), typeParameters)
     }
 
     private fun parseStruct(visibility: Visibility): StructDeclaration? {
         val name = consume(TokenKind.IDENTIFIER, "Expected struct name.") ?: return null
+        val typeParameters = parseTypeParameterList()
         consume(TokenKind.LBRACE, "Expected `{` after struct name.") ?: return null
         val fields = mutableListOf<RecordFieldDeclaration>()
         while (!check(TokenKind.RBRACE) && !isAtEnd()) {
@@ -3077,12 +3080,13 @@ internal class Parser(
             consumeOptional(TokenKind.SEMICOLON)
         }
         val end = consume(TokenKind.RBRACE, "Expected `}` after struct body.") ?: return null
-        return StructDeclaration(name.text, fields, visibility, SourceRange(name.range.start, end.range.end))
+        return StructDeclaration(name.text, fields, visibility, SourceRange(name.range.start, end.range.end), typeParameters)
     }
 
     private fun parseClass(visibility: Visibility): ClassDeclaration? {
         val keyword = previous()
         val name = consume(TokenKind.IDENTIFIER, "Expected class name.") ?: return null
+        val typeParameters = parseTypeParameterList()
         consume(TokenKind.LPAREN, "Expected `(` after class name.") ?: return null
         val constructorParameters = mutableListOf<ClassConstructorParameter>()
         if (!check(TokenKind.RPAREN)) {
@@ -3103,6 +3107,7 @@ internal class Parser(
             members = members,
             visibility = visibility,
             range = SourceRange(keyword.range.start, end.range.end),
+            typeParameters = typeParameters,
         )
     }
 
@@ -3470,6 +3475,31 @@ internal class Parser(
         return ReturnStatement(expression, expression.range)
     }
 
+    private fun parseTypeParameterList(): List<TypeParameterDeclaration> {
+        if (!match(TokenKind.LT)) return emptyList()
+        val parameters = mutableListOf<TypeParameterDeclaration>()
+        if (!check(TokenKind.GT)) {
+            do {
+                val name = consume(TokenKind.IDENTIFIER, "Expected type parameter name.") ?: return parameters
+                parameters += TypeParameterDeclaration(name.text, name.range)
+            } while (match(TokenKind.COMMA))
+        }
+        consume(TokenKind.GT, "Expected `>` after type parameters.")
+        return parameters
+    }
+
+    private fun parseTypeArgumentList(): List<TypeSyntax> {
+        if (!match(TokenKind.LT)) return emptyList()
+        val arguments = mutableListOf<TypeSyntax>()
+        if (!check(TokenKind.GT)) {
+            do {
+                arguments += parseType() ?: return arguments
+            } while (match(TokenKind.COMMA))
+        }
+        consume(TokenKind.GT, "Expected `>` after type arguments.")
+        return arguments
+    }
+
     private fun parseType(): TypeSyntax? {
         val first = consume(TokenKind.IDENTIFIER, "Expected type name.") ?: return null
         val (qualifier, name) =
@@ -3478,12 +3508,14 @@ internal class Parser(
             } else {
                 null to first
             }
+        val arguments = parseTypeArgumentList()
         val nullable = match(TokenKind.QUESTION)
         return TypeSyntax(
             name = name.text,
             nullable = nullable,
             range = SourceRange(first.range.start, previous().range.end),
             qualifier = qualifier,
+            arguments = arguments,
         )
     }
 
