@@ -50,6 +50,8 @@ enum class TokenKind {
     QUESTION,
     LPAREN,
     RPAREN,
+    LBRACKET,
+    RBRACKET,
     LBRACE,
     RBRACE,
     PLUS,

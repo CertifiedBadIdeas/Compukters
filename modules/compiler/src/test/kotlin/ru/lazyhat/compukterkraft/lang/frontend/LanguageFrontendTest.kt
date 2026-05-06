@@ -105,6 +105,25 @@ class LanguageFrontendTest {
     }
 
     @Test
+    fun parsesCollectionLiteralsAndIndexing() {
+        val parsed =
+            DefaultParserFacade().parse(
+                "collections_parse.ck",
+                """
+                pub fun main() {
+                    val xs: List<Int> = [1, 2, 3];
+                    val table: Map<String, Int> = {"a": 1, "b": 2};
+                    val first: Int = xs[0];
+                    xs[1] = 42;
+                    table["c"] = first;
+                }
+                """.trimIndent(),
+            )
+
+        assertTrue(parsed.syntaxDiagnostics.none { it.severity == FrontendSeverity.ERROR }, parsed.syntaxDiagnostics.joinToString { it.message })
+    }
+
+    @Test
     fun parsesPubTopLevelDeclarationsAndClassMembers() {
         val parsed =
             DefaultParserFacade().parse(

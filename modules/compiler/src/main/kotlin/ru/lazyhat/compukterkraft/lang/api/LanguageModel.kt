@@ -137,6 +137,13 @@ data class MemberAssignmentStatement(
     override val range: SourceRange,
 ) : Statement
 
+data class IndexAssignmentStatement(
+    val receiver: Expression,
+    val index: Expression,
+    val expression: Expression,
+    override val range: SourceRange,
+) : Statement
+
 data class IfStatement(
     val condition: Expression,
     val thenBranch: BlockStatement,
@@ -246,6 +253,28 @@ data class BinaryExpression(
 
 data class GroupExpression(
     val expression: Expression,
+    override val range: SourceRange,
+) : Expression
+
+data class ListLiteralExpression(
+    val elements: List<Expression>,
+    override val range: SourceRange,
+) : Expression
+
+data class MapEntryExpression(
+    val key: Expression,
+    val value: Expression,
+    val range: SourceRange,
+)
+
+data class MapLiteralExpression(
+    val entries: List<MapEntryExpression>,
+    override val range: SourceRange,
+) : Expression
+
+data class IndexAccessExpression(
+    val receiver: Expression,
+    val index: Expression,
     override val range: SourceRange,
 ) : Expression
 

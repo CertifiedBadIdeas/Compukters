@@ -148,6 +148,8 @@ internal object IdePresentationSupport {
             TokenKind.QUESTION,
             TokenKind.LPAREN,
             TokenKind.RPAREN,
+            TokenKind.LBRACKET,
+            TokenKind.RBRACKET,
             TokenKind.LBRACE,
             TokenKind.RBRACE,
             -> HighlightTokenKind.PUNCTUATION
