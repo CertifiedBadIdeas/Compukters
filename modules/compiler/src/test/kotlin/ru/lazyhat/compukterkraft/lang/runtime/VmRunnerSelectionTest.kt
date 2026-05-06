@@ -19,23 +19,95 @@
 
 package ru.lazyhat.compukterkraft.lang.runtime
 
+import kotlinx.coroutines.runBlocking
 import ru.lazyhat.compukterkraft.lang.frontend.LanguageFrontend
 import ru.lazyhat.compukterkraft.lang.runtime.native.NativeVmRunner
 import kotlin.test.Test
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class VmRunnerSelectionTest {
     @Test
     fun nativeRunnerIsUnavailableWithoutExplicitLibraryPath() {
-        assertFalse(NativeVmRunner.isAvailable(System.getProperty("ckl.vm.native.library")))
+        withVmProperties(runner = null, libraryPath = null) {
+            assertFalse(NativeVmRunner.isAvailable(System.getProperty("ckl.vm.native.library")))
+        }
+    }
+
+    @Test
+    fun defaultSelectionReturnsKotlinRunner() {
+        withVmProperties(runner = null, libraryPath = null) {
+            assertSame(KotlinVmRunner, VmRunnerFactory.fromSystemProperties())
+        }
+    }
+
+    @Test
+    fun rustSelectionRequiresExplicitLibraryPath() {
+        withVmProperties(runner = "rust", libraryPath = null) {
+            val error = assertFailsWith<IllegalStateException> {
+                VmRunnerFactory.fromSystemProperties()
+            }
+
+            assertTrue(requireNotNull(error.message).contains("ckl.vm.native.library"))
+        }
+    }
+
+    @Test
+    fun rustSelectionReturnsNativeRunnerWhenLibraryPathIsConfigured() {
+        withVmProperties(runner = "rust", libraryPath = "/tmp/libckl_vm.so") {
+            assertTrue(VmRunnerFactory.fromSystemProperties() is NativeVmRunner)
+        }
     }
 
     @Test
     fun bytecodeProgramStillUsesKotlinRunnerByDefault() {
-        val artifact = LanguageFrontend().compile("default.ck", "pub fun main() { return }")
-        val program = BytecodeComputerProgram(requireNotNull(artifact.module))
+        withVmProperties(runner = null, libraryPath = null) {
+            val artifact = LanguageFrontend().compile("default.ck", "pub fun main() { return }")
+            val program = BytecodeComputerProgram(requireNotNull(artifact.module))
 
-        assertTrue(program.toString().isNotBlank())
+            assertTrue(program.toString().isNotBlank())
+        }
+    }
+
+    @Test
+    fun bytecodeProgramUsesSystemPropertyRunnerSelectorByDefault() {
+        withVmProperties(runner = "rust", libraryPath = null) {
+            val artifact = LanguageFrontend().compile("rust.ck", "pub fun main() { return }")
+            val error = assertFailsWith<IllegalStateException> {
+                runBlocking { BytecodeComputerProgram(requireNotNull(artifact.module)).run(RecordingRuntime()) }
+            }
+
+            assertTrue(requireNotNull(error.message).contains("ckl.vm.native.library"))
+        }
+    }
+
+    private fun withVmProperties(
+        runner: String?,
+        libraryPath: String?,
+        block: () -> Unit,
+    ) {
+        val oldRunner = System.getProperty("ckl.vm.runner")
+        val oldLibraryPath = System.getProperty("ckl.vm.native.library")
+        try {
+            setOrClear("ckl.vm.runner", runner)
+            setOrClear("ckl.vm.native.library", libraryPath)
+            block()
+        } finally {
+            setOrClear("ckl.vm.runner", oldRunner)
+            setOrClear("ckl.vm.native.library", oldLibraryPath)
+        }
+    }
+
+    private fun setOrClear(
+        key: String,
+        value: String?,
+    ) {
+        if (value == null) {
+            System.clearProperty(key)
+        } else {
+            System.setProperty(key, value)
+        }
     }
 }
