@@ -149,6 +149,37 @@ class PixelBuffer(
         }
     }
 
+    fun blitMono5x7(
+        x: Int,
+        y: Int,
+        row0: Int,
+        row1: Int,
+        row2: Int,
+        row3: Int,
+        row4: Int,
+        row5: Int,
+        row6: Int,
+        foreground: Int,
+        background: Int,
+    ) {
+        val rows = intArrayOf(row0, row1, row2, row3, row4, row5, row6)
+        for (row in 0 until 7) {
+            val targetY = y + row
+            if (targetY !in 0 until height) continue
+            val bits = rows[row] and 0b11111
+            for (col in 0 until 5) {
+                val targetX = x + col
+                if (targetX !in 0 until width) continue
+                val isForeground = bits and (1 shl (4 - col)) != 0
+                if (isForeground) {
+                    pixels[targetY * width + targetX] = foreground.toShort()
+                } else if (background >= 0) {
+                    pixels[targetY * width + targetX] = background.toShort()
+                }
+            }
+        }
+    }
+
     fun copyTile(tile: DirtyTile): ByteArray {
         val out = ByteArray(tile.width * tile.height * BYTES_PER_PIXEL)
         var offset = 0

@@ -117,6 +117,24 @@ class DisplayRegistry(
         displays[displayId]?.blitMono(x, y, width, height, mask, foreground, background)
     }
 
+    fun blitMono5x7(
+        displayId: Int,
+        x: Int,
+        y: Int,
+        row0: Int,
+        row1: Int,
+        row2: Int,
+        row3: Int,
+        row4: Int,
+        row5: Int,
+        row6: Int,
+        foreground: Int,
+        background: Int,
+    ) {
+        metricsCollector.recordBlitMono(displayId, 5, 7)
+        displays[displayId]?.blitMono5x7(x, y, row0, row1, row2, row3, row4, row5, row6, foreground, background)
+    }
+
     fun present(displayId: Int) {
         val frame = displays[displayId]?.present()
         metricsCollector.recordPresent(displayId, emittedFrame = frame != null)

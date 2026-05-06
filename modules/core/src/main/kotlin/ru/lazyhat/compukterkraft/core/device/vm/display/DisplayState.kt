@@ -90,6 +90,24 @@ class DisplayState(
     }
 
     @Synchronized
+    fun blitMono5x7(
+        x: Int,
+        y: Int,
+        row0: Int,
+        row1: Int,
+        row2: Int,
+        row3: Int,
+        row4: Int,
+        row5: Int,
+        row6: Int,
+        foreground: Int,
+        background: Int,
+    ) {
+        back.blitMono5x7(x, y, row0, row1, row2, row3, row4, row5, row6, foreground, background)
+        dirty.markRectDirty(x, y, 5, 7)
+    }
+
+    @Synchronized
     fun present(): DisplayFrameDelta? {
         val dirtyTiles = dirty.dirtyTiles()
         if (dirtyTiles.isEmpty()) return null
