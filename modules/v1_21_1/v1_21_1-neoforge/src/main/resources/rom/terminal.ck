@@ -1,4 +1,4 @@
-pub struct TerminalBuffer { cellsText: String, cursorRow: Int, cursorColumn: Int }
+pub struct TerminalBuffer { cellsText: String, cursorRow: Int, cursorColumn: Int, displayColumns: Int, displayRows: Int }
 
 fun glyphPattern(ch: String): String {
     if (ch == "A" || ch == "a") { return "01110100011000111111100011000110001" }
@@ -91,6 +91,10 @@ fun blankCells(count: Int): String {
     return result
 }
 
+fun newTerminalBuffer(displayId: Int): TerminalBuffer {
+    return TerminalBuffer(cellsText = blankCells(cellCount(displayId)), cursorRow = 0, cursorColumn = 0, displayColumns = columns(displayId), displayRows = rows(displayId))
+}
+
 fun replaceRange(cells: String, start: Int, replacement: String): String {
     var result: String = ""
     var i: Int = 0
@@ -129,6 +133,17 @@ fun renderTextRow(displayId: Int, cells: String, row: Int) {
         }
         col = col + 1
     }
+}
+
+fun renderAllRows(displayId: Int, cells: String) {
+    display::clear(displayId, 0)
+    var row: Int = 0
+    val rs: Int = rows(displayId)
+    while row < rs + 0 {
+        renderTextRow(displayId, cells, row)
+        row = row + 1
+    }
+    display::present(displayId)
 }
 
 fun commitDirtySegment(displayId: Int, cells: String, row: Int, startColumn: Int, text: String): String {
@@ -224,7 +239,7 @@ fun appendText(displayId: Int, buffer: TerminalBuffer, text: String): TerminalBu
         cells = commitDirtySegment(displayId, cells, dirtyRow, dirtyStartColumn, dirtyText)
     }
     display::present(displayId)
-    return TerminalBuffer(cellsText = cells, cursorRow = row, cursorColumn = col)
+    return TerminalBuffer(cellsText = cells, cursorRow = row, cursorColumn = col, displayColumns = cols, displayRows = rs)
 }
 
 fun renderInputLine(displayId: Int, buffer: TerminalBuffer, line: String) {
@@ -232,6 +247,9 @@ fun renderInputLine(displayId: Int, buffer: TerminalBuffer, line: String) {
     val row: Int = buffer.cursorRow
     val startColumn: Int = buffer.cursorColumn
     if (row < 0 || row >= rows(displayId)) {
+        return
+    }
+    if (startColumn < 0 || startColumn >= cols) {
         return
     }
     display::fillRect(displayId, startColumn * 6, row * 9, (cols - startColumn) * 6, 9, 0)
@@ -263,13 +281,12 @@ pub fun main() {
     val input: Int = ipc::open()
     val output: Int = ipc::open()
     val error: Int = ipc::open()
-    process::spawn("shell.ck", "stdio-v1 " + input + " " + output + " " + error + " ")
-
     var displayId: Int = waitDisplay()
     display::clear(displayId, 0)
     display::present(displayId)
-    var buffer: TerminalBuffer = TerminalBuffer(cellsText = blankCells(cellCount(displayId)), cursorRow = 0, cursorColumn = 0)
+    var buffer: TerminalBuffer = newTerminalBuffer(displayId)
     var line: String = ""
+    process::spawn("shell.ck", "stdio-v1 " + input + " " + output + " " + error + " ")
 
     while true {
         val chunk: String = ipc::tryRead(output) + ipc::tryRead(error)
@@ -283,10 +300,17 @@ pub fun main() {
             if (event.name != "") {
                 if (event.name == "display_attach" || event.name == "display_resize") {
                     displayId = display::primary()
-                    display::clear(displayId, 0)
-                    display::present(displayId)
-                    buffer = TerminalBuffer(cellsText = blankCells(cellCount(displayId)), cursorRow = 0, cursorColumn = 0)
-                    line = ""
+                    if (buffer.displayColumns == columns(displayId) && buffer.displayRows == rows(displayId)) {
+                        renderAllRows(displayId, buffer.cellsText)
+                        if (line != "") {
+                            renderInputLine(displayId, buffer, line)
+                        }
+                    } else {
+                        display::clear(displayId, 0)
+                        display::present(displayId)
+                        buffer = newTerminalBuffer(displayId)
+                        line = ""
+                    }
                 } else if (event.name == "char" || event.name == "paste") {
                     val typed: String = events::argString(event, 0)
                     if (typed != "") {

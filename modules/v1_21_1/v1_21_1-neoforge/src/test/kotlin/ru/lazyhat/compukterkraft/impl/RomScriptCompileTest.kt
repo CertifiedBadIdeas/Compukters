@@ -65,6 +65,36 @@ class RomScriptCompileTest {
     }
 
     @Test
+    fun bundledRomTerminalStartsShellAfterDisplayReadyAndPreservesBufferOnResize() {
+        val source = resourceText("rom/terminal.ck")
+
+        assertTrue(
+            source.indexOf("var displayId: Int = waitDisplay()") < source.indexOf("process::spawn(\"shell.ck\""),
+            "terminal.ck should start shell only after display init so greeting/prompt cannot be cleared by startup display events",
+        )
+        assertTrue(
+            source.contains("renderAllRows"),
+            "terminal.ck should redraw existing text after same-size display attach/resize",
+        )
+        assertTrue(
+            source.contains("displayColumns: Int"),
+            "terminal buffer should track the column geometry used to lay out cellsText",
+        )
+        assertTrue(
+            source.contains("displayRows: Int"),
+            "terminal buffer should track the row geometry used to lay out cellsText",
+        )
+        assertTrue(
+            source.contains("buffer.displayColumns == columns(displayId) && buffer.displayRows == rows(displayId)"),
+            "terminal.ck should preserve/redraw cells only when the display grid geometry is unchanged",
+        )
+        assertTrue(
+            source.contains("newTerminalBuffer(displayId)"),
+            "terminal.ck should reset through a single geometry-aware buffer initializer when the grid changes",
+        )
+    }
+
+    @Test
     fun bundledRomShellChecksExternalCommandBeforeRun() {
         val source = resourceText("rom/shell.ck")
 
