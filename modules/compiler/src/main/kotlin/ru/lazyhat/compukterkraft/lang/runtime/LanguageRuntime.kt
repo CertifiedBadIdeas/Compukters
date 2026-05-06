@@ -102,6 +102,40 @@ private val VmSignal.kind: VmSignalKind
             is VmSignal.HostCall -> VmSignalKind.HOST_CALL
         }
 
+private val Instruction.kind: VmInstructionKind
+    get() =
+        when (this) {
+            is Instruction.PushInt -> VmInstructionKind.PUSH_INT
+            is Instruction.PushLong -> VmInstructionKind.PUSH_LONG
+            is Instruction.PushString -> VmInstructionKind.PUSH_STRING
+            is Instruction.PushBool -> VmInstructionKind.PUSH_BOOL
+            Instruction.PushUnit -> VmInstructionKind.PUSH_UNIT
+            Instruction.PushNull -> VmInstructionKind.PUSH_NULL
+            is Instruction.LoadLocal -> VmInstructionKind.LOAD_LOCAL
+            is Instruction.StoreLocal -> VmInstructionKind.STORE_LOCAL
+            Instruction.Pop -> VmInstructionKind.POP
+            is Instruction.Jump -> VmInstructionKind.JUMP
+            is Instruction.JumpIfFalse -> VmInstructionKind.JUMP_IF_FALSE
+            is Instruction.JumpIfTrue -> VmInstructionKind.JUMP_IF_TRUE
+            is Instruction.CallFunction -> VmInstructionKind.CALL_FUNCTION
+            is Instruction.CallBuiltin -> VmInstructionKind.CALL_BUILTIN
+            is Instruction.GetField -> VmInstructionKind.GET_FIELD
+            is Instruction.SetField -> VmInstructionKind.SET_FIELD
+            is Instruction.ConstructRecord -> VmInstructionKind.CONSTRUCT_RECORD
+            is Instruction.ConstructClass -> VmInstructionKind.CONSTRUCT_CLASS
+            Instruction.ConstructArray -> VmInstructionKind.CONSTRUCT_ARRAY
+            is Instruction.ConstructList -> VmInstructionKind.CONSTRUCT_LIST
+            is Instruction.ConstructMap -> VmInstructionKind.CONSTRUCT_MAP
+            Instruction.IndexGet -> VmInstructionKind.INDEX_GET
+            Instruction.IndexSet -> VmInstructionKind.INDEX_SET
+            is Instruction.CallCollectionMethod -> VmInstructionKind.CALL_COLLECTION_METHOD
+            is Instruction.CallMethod -> VmInstructionKind.CALL_METHOD
+            is Instruction.CallStaticMethod -> VmInstructionKind.CALL_STATIC_METHOD
+            is Instruction.Binary -> VmInstructionKind.BINARY
+            is Instruction.Unary -> VmInstructionKind.UNARY
+            Instruction.Return -> VmInstructionKind.RETURN
+        }
+
 class BytecodeComputerProgram(
     private val module: BytecodeModule,
 ) : DeviceProgram {
@@ -112,6 +146,7 @@ class BytecodeComputerProgram(
                 module,
                 instructionBudgetPerSlice = runtime.profile.resources.cpu.instructionsPerSlice,
                 maxVmRamBytes = runtime.profile.resources.memory.vmRamBytes,
+                metrics = runtime.metrics,
             )
         while (true) {
             val signal = vm.runUntilSignal()
@@ -131,7 +166,16 @@ class BytecodeComputerProgram(
                 }
 
                 is VmSignal.HostCall -> {
-                    vm.resumeWith(bridge.invoke(signal.moduleName, signal.functionName, signal.arguments))
+                    if (runtime.metrics.collectsDetailedMetrics) {
+                        val started = System.nanoTime()
+                        try {
+                            vm.resumeWith(bridge.invoke(signal.moduleName, signal.functionName, signal.arguments))
+                        } finally {
+                            runtime.metrics.recordVmHostCall(signal.moduleName, signal.functionName, System.nanoTime() - started)
+                        }
+                    } else {
+                        vm.resumeWith(bridge.invoke(signal.moduleName, signal.functionName, signal.arguments))
+                    }
                 }
 
                 is VmSignal.Sleep -> {
@@ -152,6 +196,7 @@ class BytecodeVirtualMachine(
     snapshot: BytecodeVmSnapshot? = null,
     instructionBudgetPerSlice: Int = DEFAULT_INSTRUCTION_BUDGET,
     private val maxVmRamBytes: Long = Long.MAX_VALUE,
+    private val metrics: DeviceRuntimeMetrics = NoopDeviceRuntimeMetrics,
 ) {
     private val frames = ArrayDeque<FrameState>()
     private var lastResult: VmValue? = snapshot?.lastResult
@@ -160,6 +205,7 @@ class BytecodeVirtualMachine(
     private val instructionBudgetPerSlice = instructionBudgetPerSlice.coerceAtLeast(1)
     private val heap = mutableMapOf<Int, VmObject>()
     private var nextObjectId = 1
+    private val collectDetailedMetrics = metrics.collectsDetailedMetrics
 
     init {
         if (snapshot != null) {
@@ -204,10 +250,12 @@ class BytecodeVirtualMachine(
                     ?: return handleReturn(frame.popOrDefault())
             frame.instructionPointer += 1
             instructionsSinceYield += 1
-            when (instruction) {
-                is Instruction.Binary -> {
-                    applyBinary(frame, instruction.operator)
-                }
+            val instructionStarted = if (collectDetailedMetrics) System.nanoTime() else 0L
+            try {
+                when (instruction) {
+                    is Instruction.Binary -> {
+                        applyBinary(frame, instruction.operator)
+                    }
 
                 is Instruction.CallBuiltin -> {
                     val args = frame.popMany(instruction.argumentCount)
@@ -384,13 +432,18 @@ class BytecodeVirtualMachine(
                     return handleReturn(frame.popOrDefault())
                 }
 
-                is Instruction.StoreLocal -> {
-                    ensureLocal(frame, instruction.slot)
-                    frame.locals[instruction.slot] = frame.pop()
-                }
+                    is Instruction.StoreLocal -> {
+                        ensureLocal(frame, instruction.slot)
+                        frame.locals[instruction.slot] = frame.pop()
+                    }
 
-                is Instruction.Unary -> {
-                    applyUnary(frame, instruction.operator)
+                    is Instruction.Unary -> {
+                        applyUnary(frame, instruction.operator)
+                    }
+                }
+            } finally {
+                if (collectDetailedMetrics) {
+                    metrics.recordVmInstruction(instruction.kind, System.nanoTime() - instructionStarted)
                 }
             }
             ensureWithinMemoryLimit()

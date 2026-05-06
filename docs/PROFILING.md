@@ -26,6 +26,8 @@ The output includes:
 - `display-runtime:` frame drain/flush timings;
 - `vm:` scheduler and execution window metrics;
 - `signals:` VM signal distribution;
+- `host-calls:` VM-level builtin/host-call distribution by `module.function`, with counts and wall-clock timings;
+- `instructions:` VM bytecode instruction distribution by instruction kind, with counts and timings;
 - `compiler:` compile totals;
 - `compiler-phases:` parse/analyze/codegen metrics.
 
@@ -84,4 +86,7 @@ Unlikely candidates:
 - High total nanos in small per-call operations suggests batching before native code.
 - High tile payload bytes with high serialization nanos may justify native serialization or compression.
 - High VM execution nanos plus many pause/yield signals points to VM interpreter work.
+- High `host-calls:` counts point to chatty CKL-to-runtime builtins; prefer batching or moving work inside the VM before considering native code.
+- High `host-calls:` nanos can include coroutine wait time for blocking APIs such as IPC reads or event polling. Treat these as latency/blocking signals first, then use JFR to confirm CPU cost.
+- High `instructions:` nanos or counts identify interpreter opcode families to inspect with JFR before rewriting the VM.
 - Compiler phase timings affect startup and IDE latency, not steady-state display FPS.

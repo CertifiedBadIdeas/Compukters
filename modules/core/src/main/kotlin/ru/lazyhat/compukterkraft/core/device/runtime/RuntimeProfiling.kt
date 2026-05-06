@@ -19,7 +19,9 @@
 
 package ru.lazyhat.compukterkraft.core.device.runtime
 
+import ru.lazyhat.compukterkraft.lang.runtime.VmInstructionKind
 import ru.lazyhat.compukterkraft.lang.runtime.VmSignalKind
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
 interface RuntimeMetricsCollector {
@@ -64,6 +66,17 @@ interface RuntimeMetricsCollector {
     fun recordVmExecutionWindow(nanos: Long)
 
     fun recordVmSignal(kind: VmSignalKind)
+
+    fun recordVmHostCall(
+        moduleName: String,
+        functionName: String,
+        nanos: Long,
+    )
+
+    fun recordVmInstruction(
+        kind: VmInstructionKind,
+        nanos: Long,
+    )
 
     fun snapshot(): RuntimeProfilingSnapshot
 }
@@ -110,9 +123,28 @@ data class RuntimeVmMetrics(
     val averageExecutionWindowNanos: Long get() = if (executionWindows <= 0) 0 else executionWindowNanos / executionWindows
 }
 
+data class RuntimeHostCallMetrics(
+    val moduleName: String,
+    val functionName: String,
+    val calls: Long,
+    val nanos: Long,
+) {
+    val averageNanos: Long get() = if (calls <= 0) 0 else nanos / calls
+}
+
+data class RuntimeInstructionMetrics(
+    val kind: VmInstructionKind,
+    val count: Long,
+    val nanos: Long,
+) {
+    val averageNanos: Long get() = if (count <= 0) 0 else nanos / count
+}
+
 data class RuntimeProfilingSnapshot(
     val tick: RuntimeTickMetrics = RuntimeTickMetrics(),
     val vm: RuntimeVmMetrics = RuntimeVmMetrics(),
+    val hostCalls: List<RuntimeHostCallMetrics> = emptyList(),
+    val instructions: List<RuntimeInstructionMetrics> = emptyList(),
 ) {
     fun summary(): String =
         "runtime: serverTicks=${tick.serverTickCalls}, serverTickNanos=${tick.serverTickNanos}, " +
@@ -129,7 +161,29 @@ data class RuntimeProfilingSnapshot(
             "waitPoints=${vm.waitForSliceSchedulingPoints}, executionWindows=${vm.executionWindows}, " +
             "executionNanos=${vm.executionWindowNanos}, avgExecutionWindowNanos=${vm.averageExecutionWindowNanos}\n" +
             "signals: halt=${vm.haltSignals}, pause=${vm.pauseSignals}, yield=${vm.yieldSignals}, " +
-            "sleep=${vm.sleepSignals}, waitEvent=${vm.waitEventSignals}, hostCall=${vm.hostCallSignals}"
+            "sleep=${vm.sleepSignals}, waitEvent=${vm.waitEventSignals}, hostCall=${vm.hostCallSignals}" +
+            hostCallSummary() +
+            instructionSummary()
+
+    private fun hostCallSummary(): String {
+        if (hostCalls.isEmpty()) return ""
+        return hostCalls.joinToString(
+            prefix = "\nhost-calls: ",
+            separator = "; ",
+        ) { call ->
+            "${call.moduleName}.${call.functionName}=count:${call.calls},nanos:${call.nanos},avg:${call.averageNanos}"
+        }
+    }
+
+    private fun instructionSummary(): String {
+        if (instructions.isEmpty()) return ""
+        return instructions.joinToString(
+            prefix = "\ninstructions: ",
+            separator = "; ",
+        ) { instruction ->
+            "${instruction.kind}=count:${instruction.count},nanos:${instruction.nanos},avg:${instruction.averageNanos}"
+        }
+    }
 }
 
 object NoOpRuntimeMetricsCollector : RuntimeMetricsCollector {
@@ -175,7 +229,28 @@ object NoOpRuntimeMetricsCollector : RuntimeMetricsCollector {
 
     override fun recordVmSignal(kind: VmSignalKind) = Unit
 
+    override fun recordVmHostCall(
+        moduleName: String,
+        functionName: String,
+        nanos: Long,
+    ) = Unit
+
+    override fun recordVmInstruction(
+        kind: VmInstructionKind,
+        nanos: Long,
+    ) = Unit
+
     override fun snapshot(): RuntimeProfilingSnapshot = RuntimeProfilingSnapshot()
+}
+
+private class RuntimeCounter {
+    val count = AtomicLong()
+    val nanos = AtomicLong()
+
+    fun record(nanos: Long) {
+        count.incrementAndGet()
+        this.nanos.addAndGet(nanos.coerceAtLeast(0))
+    }
 }
 
 class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
@@ -213,6 +288,8 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
     private val sleepSignals = AtomicLong()
     private val waitEventSignals = AtomicLong()
     private val hostCallSignals = AtomicLong()
+    private val hostCalls = ConcurrentHashMap<Pair<String, String>, RuntimeCounter>()
+    private val instructions = ConcurrentHashMap<VmInstructionKind, RuntimeCounter>()
 
     override fun recordServerTick(nanos: Long) {
         serverTickCalls.incrementAndGet()
@@ -307,6 +384,21 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
         }
     }
 
+    override fun recordVmHostCall(
+        moduleName: String,
+        functionName: String,
+        nanos: Long,
+    ) {
+        hostCalls.computeIfAbsent(moduleName to functionName) { RuntimeCounter() }.record(nanos)
+    }
+
+    override fun recordVmInstruction(
+        kind: VmInstructionKind,
+        nanos: Long,
+    ) {
+        instructions.computeIfAbsent(kind) { RuntimeCounter() }.record(nanos)
+    }
+
     override fun snapshot(): RuntimeProfilingSnapshot =
         RuntimeProfilingSnapshot(
             tick =
@@ -349,5 +441,22 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
                     waitEventSignals = waitEventSignals.get(),
                     hostCallSignals = hostCallSignals.get(),
                 ),
+            hostCalls =
+                hostCalls.map { (key, counter) ->
+                    RuntimeHostCallMetrics(
+                        moduleName = key.first,
+                        functionName = key.second,
+                        calls = counter.count.get(),
+                        nanos = counter.nanos.get(),
+                    )
+                }.sortedWith(compareByDescending<RuntimeHostCallMetrics> { it.nanos }.thenBy { it.moduleName }.thenBy { it.functionName }),
+            instructions =
+                instructions.map { (kind, counter) ->
+                    RuntimeInstructionMetrics(
+                        kind = kind,
+                        count = counter.count.get(),
+                        nanos = counter.nanos.get(),
+                    )
+                }.sortedWith(compareByDescending<RuntimeInstructionMetrics> { it.nanos }.thenBy { it.kind.name }),
         )
 }
