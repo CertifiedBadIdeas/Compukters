@@ -377,6 +377,51 @@ class LanguageRuntimeTest {
     }
 
     @Test
+    fun bitwiseCompoundAssignmentOperatorsMutateLocalAndMember() {
+        val artifact =
+            frontend.compile(
+                "bitwise_compound.ck",
+                """
+                class Register(pub var value: Int) {
+                    pub fun apply(): Unit {
+                        this.value |= 0b0100;
+                        this.value &= 0b0110;
+                        this.value ^= 0b0010;
+                        this.value <<= 2;
+                        this.value >>= 1;
+                    }
+                }
+
+                pub fun main() {
+                    var flags: Int = 0b0011;
+                    flags |= 0b0100;
+                    flags &= 0b0110;
+                    flags ^= 0b0010;
+                    flags <<= 2;
+                    flags >>= 1;
+                    system::log("local=" + flags);
+
+                    val register: Register = Register(value = 0b0011);
+                    register.apply();
+                    system::log("field=" + register.value);
+                }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+
+        val runtime = RecordingRuntime()
+        runBlocking {
+            BytecodeComputerProgram(requireNotNull(artifact.module)).run(runtime)
+        }
+
+        assertEquals(listOf("local=8", "field=8"), runtime.lines)
+    }
+
+    @Test
     fun constructsStructsWithNamedCallSyntax() {
         val artifact =
             frontend.compile(
