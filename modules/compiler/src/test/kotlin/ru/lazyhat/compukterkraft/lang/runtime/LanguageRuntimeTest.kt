@@ -68,6 +68,43 @@ class LanguageRuntimeTest {
     }
 
     @Test
+    fun packedGlyphDisplayBuiltinDecodesRowsThroughRuntimeBridge() {
+        val artifact =
+            frontend.compile(
+                "packed_display.ck",
+                """
+                pub fun main() {
+                    display::blitMono5x7Packed(7, 2, 3, 0b01110100011000111111100011000110001L, 2016, -1);
+                }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+
+        val runtime = RecordingRuntime()
+        runBlocking {
+            BytecodeComputerProgram(requireNotNull(artifact.module)).run(runtime)
+        }
+
+        assertEquals(
+            listOf(
+                CapturedMono5x7Blit(
+                    displayId = 7,
+                    x = 2,
+                    y = 3,
+                    rows = listOf(14, 17, 17, 31, 17, 17, 17),
+                    foreground = 2016,
+                    background = -1,
+                ),
+            ),
+            runtime.mono5x7Blits,
+        )
+    }
+
+    @Test
     fun compilesIpcSpawnWaitEventPayloadAndStringHelpers() {
         val artifact =
             frontend.compile(
@@ -990,6 +1027,15 @@ class LanguageRuntimeTest {
     }
 }
 
+internal data class CapturedMono5x7Blit(
+    val displayId: Int,
+    val x: Int,
+    val y: Int,
+    val rows: List<Int>,
+    val foreground: Int,
+    val background: Int,
+)
+
 internal class RecordingRuntime(
     private val argument: String = "",
     private val instructionsPerSlice: Int = 64,
@@ -1002,6 +1048,7 @@ internal class RecordingRuntime(
     val lines = mutableListOf<String>()
     val eventFilters = mutableListOf<String?>()
     val createdDirectories = mutableListOf<String>()
+    val mono5x7Blits = mutableListOf<CapturedMono5x7Blit>()
     var sleepCalls = 0
     var yieldCalls = 0
     private var nextEventIndex = 0
@@ -1019,6 +1066,7 @@ internal class RecordingRuntime(
                     DeviceCapability.SYSTEM,
                     DeviceCapability.EVENTS,
                     DeviceCapability.IPC,
+                    DeviceCapability.DISPLAY,
                     DeviceCapability.PERIPHERALS,
                 ),
             resources =
@@ -1041,6 +1089,34 @@ internal class RecordingRuntime(
                         ),
                 ),
         )
+
+    override val display: DeviceDisplayApi =
+        object : DeviceDisplayApi by NoopDeviceDisplayApi {
+            override fun blitMono5x7(
+                displayId: Int,
+                x: Int,
+                y: Int,
+                row0: Int,
+                row1: Int,
+                row2: Int,
+                row3: Int,
+                row4: Int,
+                row5: Int,
+                row6: Int,
+                foreground: Int,
+                background: Int,
+            ) {
+                mono5x7Blits +=
+                    CapturedMono5x7Blit(
+                        displayId = displayId,
+                        x = x,
+                        y = y,
+                        rows = listOf(row0, row1, row2, row3, row4, row5, row6),
+                        foreground = foreground,
+                        background = background,
+                    )
+            }
+        }
 
     override val system =
         object : DeviceSystemApi {
