@@ -55,4 +55,55 @@ class DisplayStateTest {
         assertEquals(4, frame.tiles.size)
         assertEquals(1L, frame.sequence)
     }
+
+    @Test
+    fun copyRectCopiesPixelsAndMarksDestinationDirty() {
+        val state = DisplayState(displayId = 2, width = 8, height = 4, pixelFormat = DisplayPixelFormat.RGB565)
+        state.fillRect(x = 0, y = 0, width = 8, height = 4, rgb565 = 0x0000)
+        state.fillRect(x = 0, y = 0, width = 2, height = 2, rgb565 = 0xF800)
+        state.present()
+
+        state.copyRect(srcX = 0, srcY = 0, width = 2, height = 2, dstX = 3, dstY = 1)
+        val frame = assertNotNull(state.present())
+        val payload = frame.tiles.flatMap { it.payload.toList() }.toByteArray()
+
+        assertTrue(payload.containsRgb565(0xF800), "copyRect should copy red pixels into emitted tiles")
+        assertFalse(frame.fullRefresh)
+    }
+
+    @Test
+    fun blitMonoDrawsForegroundAndBackground() {
+        val state = DisplayState(displayId = 3, width = 8, height = 4, pixelFormat = DisplayPixelFormat.RGB565)
+        state.blitMono(x = 1, y = 1, width = 3, height = 2, mask = "101010", foreground = 0x07E0, background = 0x0000)
+        val frame = assertNotNull(state.present())
+        val payload = frame.tiles.flatMap { it.payload.toList() }.toByteArray()
+
+        assertTrue(payload.containsRgb565(0x07E0), "blitMono should write foreground pixels")
+        assertTrue(payload.containsRgb565(0x0000), "blitMono should write background pixels")
+    }
+
+    @Test
+    fun blitMonoSupportsTransparentBackground() {
+        val state = DisplayState(displayId = 4, width = 8, height = 4, pixelFormat = DisplayPixelFormat.RGB565)
+        state.fillRect(x = 0, y = 0, width = 8, height = 4, rgb565 = 0x001F)
+        state.present()
+
+        state.blitMono(x = 1, y = 1, width = 3, height = 2, mask = "100000", foreground = 0x07E0, background = -1)
+        val frame = assertNotNull(state.present())
+        val payload = frame.tiles.flatMap { it.payload.toList() }.toByteArray()
+
+        assertTrue(payload.containsRgb565(0x07E0), "foreground should be drawn")
+        assertTrue(payload.containsRgb565(0x001F), "transparent zeros should preserve old pixels")
+    }
+
+    private fun ByteArray.containsRgb565(rgb565: Int): Boolean {
+        var i = 0
+        val hi = (rgb565 ushr 8).toByte()
+        val lo = rgb565.toByte()
+        while (i + 1 < size) {
+            if (this[i] == hi && this[i + 1] == lo) return true
+            i += 2
+        }
+        return false
+    }
 }
