@@ -136,6 +136,8 @@ Runtime computer UI uses display sessions for server-to-client output. The clien
 
 The VM display path has optional profiling hooks for local tests and diagnostics. They count display operations (`clear`, `setPixel`, `fillRect`, `present`), emitted frame deltas, dirty tiles, and approximate payload bytes. These hooks are disabled by default and should be used to justify display/terminal optimizations before changing rendering behavior.
 
+Runtime CPU-time profiling is also available through optional runtime metrics collectors. These collectors can measure server tick phases, host-call dispatch, display frame drain/flush work, and coarse VM scheduling/execution diagnostics. Timing output is diagnostic and should guide optimization design; it is not a strict CI performance budget.
+
 Workbench live attach-terminal over stdout is temporarily removed. Workbench file sync, IDE, and run controls remain available. A future live viewer should attach to display sessions rather than reintroducing stdout transport.
 
 ---
