@@ -142,7 +142,40 @@ class BackgroundDeviceVmTest {
                 )
             assertTrue(rendered.tiles.isNotEmpty(), "terminal frame missing; frames=${frames.size} state=${vm.snapshot().state} logs=$logs")
             assertTrue(frames.greenPixelCount() > 0, "terminal frame should contain rendered glyph pixels")
+            assertTrue(frames.hasTextLikeGlyphCell(), "terminal text should render glyph shapes, not solid rectangles")
             assertTrue(vm.snapshot().state.isActive, vm.snapshot().state.toString())
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun bundledFirmwareStatusRendersGlyphShapes() {
+        val root = createTempDirectory("compukterkraft-bios-text")
+
+        try {
+            val workspace = DeviceWorkspaceHost(root)
+            val vm =
+                BackgroundDeviceVm(
+                    deviceId = 1,
+                    profile = firmwareTestProfile(),
+                    dispatcher = Dispatchers.Default,
+                    labelProvider = { null },
+                    logger = DeviceVmLogger { },
+                    workspace = workspace,
+                    firmwareLoader = ClasspathFirmwareLoader(),
+                )
+
+            vm.attachDisplay(displayId = 9, width = 96, height = 48)
+            assertTrue(vm.boot())
+            runVmTicks(vm, ticks = 24, hostCallDispatcher = HostCallDispatcher(1, workspace))
+
+            val frames = vm.drainDisplayFrames()
+            assertTrue(frames.greenPixelCount() > 0, "firmware status should draw glyph pixels")
+            assertTrue(
+                frames.hasTextLikeGlyphCell(),
+                "firmware status should render glyph shapes, not solid rectangles",
+            )
         } finally {
             root.toFile().deleteRecursively()
         }
@@ -182,6 +215,45 @@ class BackgroundDeviceVmTest {
             val submittedFrames = vm.drainDisplayFrames()
             assertTrue(submittedFrames.isNotEmpty(), "submitted command should render shell output through display frames")
             assertTrue(submittedFrames.greenPixelCount() > 0, "shell output should draw glyph pixels")
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun bundledRomTerminalKeepsPromptVisibleWhileTyping() {
+        val root = createTempDirectory("compukterkraft-rom-terminal-prompt")
+
+        try {
+            DeviceWorkspaceInitializer(root).ensureInitialized(1)
+            val workspace = DeviceWorkspaceHost(root)
+            val vm =
+                BackgroundDeviceVm(
+                    deviceId = 1,
+                    profile = firmwareTestProfile(),
+                    dispatcher = Dispatchers.Default,
+                    labelProvider = { null },
+                    logger = DeviceVmLogger { },
+                    workspace = workspace,
+                    firmwareLoader = ClasspathFirmwareLoader(),
+                )
+
+            vm.attachDisplay(displayId = 9, width = 96, height = 48)
+            assertTrue(vm.boot())
+            val dispatcher = HostCallDispatcher(1, workspace)
+            runVmTicks(vm, ticks = 80, hostCallDispatcher = dispatcher)
+            val bootFrames = vm.drainDisplayFrames()
+
+            vm.enqueueEvent(VmEvent("char", listOf(byteArrayOf('h'.code.toByte()))))
+            runVmTicks(vm, ticks = 12, hostCallDispatcher = dispatcher)
+            val typedFrames = vm.drainDisplayFrames()
+
+            val inputRow = bootFrames.lastGreenRow()
+            assertTrue(inputRow >= 0, "boot output should include a prompt row")
+            assertTrue(
+                (bootFrames + typedFrames).cellGreenPixelCount(column = 2, row = inputRow) > 0,
+                "typing should preserve the prompt glyph before the input text",
+            )
         } finally {
             root.toFile().deleteRecursively()
         }
@@ -261,6 +333,85 @@ class BackgroundDeviceVmTest {
         sumOf { frame ->
             frame.tiles.sumOf { tile -> tile.payload.countRgb565(0x07E0) }
         }
+
+    private fun List<DisplayFrameDelta>.hasTextLikeGlyphCell(): Boolean {
+        val lastFrame = lastOrNull() ?: return false
+        val pixels = composePixels()
+
+        val columns = lastFrame.width / 6
+        val rows = lastFrame.height / 9
+        for (row in 0 until rows) {
+            for (column in 0 until columns) {
+                val green = cellGreenPixelCount(pixels, lastFrame.width, column, row)
+                if (green in 1 until 35) return true
+            }
+        }
+        return false
+    }
+
+    private fun List<DisplayFrameDelta>.cellGreenPixelCount(
+        column: Int,
+        row: Int,
+    ): Int {
+        val lastFrame = lastOrNull() ?: return 0
+        return cellGreenPixelCount(composePixels(), lastFrame.width, column, row)
+    }
+
+    private fun List<DisplayFrameDelta>.lastGreenRow(): Int {
+        val lastFrame = lastOrNull() ?: return -1
+        val pixels = composePixels()
+        var result = -1
+        val rows = lastFrame.height / 9
+        val columns = lastFrame.width / 6
+        for (row in 0 until rows) {
+            var green = 0
+            for (column in 0 until columns) {
+                green += cellGreenPixelCount(pixels, lastFrame.width, column, row)
+            }
+            if (green > 0) result = row
+        }
+        return result
+    }
+
+    private fun cellGreenPixelCount(
+        pixels: IntArray,
+        width: Int,
+        column: Int,
+        row: Int,
+    ): Int {
+        var green = 0
+        for (y in 0 until 7) {
+            for (x in 0 until 5) {
+                if (pixels[(row * 9 + y) * width + column * 6 + x] == 0x07E0) {
+                    green += 1
+                }
+            }
+        }
+        return green
+    }
+
+    private fun List<DisplayFrameDelta>.composePixels(): IntArray {
+        val lastFrame = lastOrNull() ?: return IntArray(0)
+        val pixels = IntArray(lastFrame.width * lastFrame.height)
+        for (frame in this) {
+            for (tile in frame.tiles) {
+                var y = 0
+                while (y < tile.height) {
+                    var x = 0
+                    while (x < tile.width) {
+                        val payloadIndex = (y * tile.width + x) * 2
+                        val value =
+                            ((tile.payload[payloadIndex].toInt() and 0xFF) shl 8) or
+                                (tile.payload[payloadIndex + 1].toInt() and 0xFF)
+                        pixels[(tile.y + y) * frame.width + tile.x + x] = value
+                        x += 1
+                    }
+                    y += 1
+                }
+            }
+        }
+        return pixels
+    }
 
     private fun DisplayFrameDelta.dirtyPixelArea(): Int = tiles.sumOf { tile -> tile.width * tile.height }
 
