@@ -161,31 +161,33 @@ class RomScriptCompileTest {
 
         assertTrue(source.contains("if (ch == \"<\")"), "terminal.ck should define a '<' glyph")
         assertTrue(
-            source.contains("if (ch == \">\") { return Glyph5x7(row0 = 16, row1 = 8, row2 = 4, row3 = 2, row4 = 4, row5 = 8, row6 = 16) }"),
-            "terminal.ck should use a balanced seven-row '>' glyph",
+            source.contains("if (ch == \">\") { return 0b10000010000010000010001000100010000L }"),
+            "terminal.ck should use a balanced packed seven-row '>' glyph",
         )
         assertTrue(
-            source.contains("if (ch == \"<\") { return Glyph5x7(row0 = 1, row1 = 2, row2 = 4, row3 = 8, row4 = 4, row5 = 2, row6 = 1) }"),
-            "terminal.ck should use a balanced seven-row '<' glyph",
+            source.contains("if (ch == \"<\") { return 0b00001000100010001000001000001000001L }"),
+            "terminal.ck should use a balanced packed seven-row '<' glyph",
         )
     }
 
     @Test
-    fun bundledRomTerminalUsesNumericGlyphRows() {
+    fun bundledRomTerminalUsesPackedBitwiseGlyphs() {
         val source = resourceText("rom/terminal.ck")
 
-        assertTrue(source.contains("pub struct Glyph5x7"), "terminal.ck should define a numeric 5x7 glyph row struct")
-        assertTrue(source.contains("fun glyphRows(ch: String): Glyph5x7"), "terminal.ck should map characters to numeric glyph rows")
-        assertTrue(source.contains("display::blitMono5x7"), "terminal.ck should render glyphs through the numeric display API")
+        assertTrue(source.contains("fun glyphBits(ch: String): Long"), "terminal.ck should map characters to packed glyph bits")
+        assertTrue(source.contains("display::blitMono5x7Packed"), "terminal.ck should render glyphs through the packed display API")
+        assertFalse(source.contains("pub struct Glyph5x7"), "terminal.ck should not allocate glyph row structs")
+        assertFalse(source.contains("fun glyphRows(ch: String): Glyph5x7"), "terminal.ck should not return glyph row structs")
+        assertFalse(source.contains("Glyph5x7("), "terminal.ck should not construct glyph row structs")
         assertFalse(source.contains("fun glyphPattern(ch: String): String"), "terminal.ck should not keep string glyph masks")
         assertFalse(Regex("return \\\"[01]{35}\\\"").containsMatchIn(source), "terminal.ck should not return 35-character string glyph masks")
         assertTrue(
-            source.contains("if (ch == \">\") { return Glyph5x7(row0 = 16, row1 = 8, row2 = 4, row3 = 2, row4 = 4, row5 = 8, row6 = 16) }"),
-            "terminal.ck should preserve the balanced '>' glyph as numeric rows",
+            source.contains("if (ch == \">\") { return 0b10000010000010000010001000100010000L }"),
+            "terminal.ck should preserve the balanced '>' glyph as packed bits",
         )
         assertTrue(
-            source.contains("if (ch == \"<\") { return Glyph5x7(row0 = 1, row1 = 2, row2 = 4, row3 = 8, row4 = 4, row5 = 2, row6 = 1) }"),
-            "terminal.ck should preserve the balanced '<' glyph as numeric rows",
+            source.contains("if (ch == \"<\") { return 0b00001000100010001000001000001000001L }"),
+            "terminal.ck should preserve the balanced '<' glyph as packed bits",
         )
     }
 
