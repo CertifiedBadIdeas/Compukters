@@ -171,7 +171,7 @@ Tests must assert decoding for:
 
 - [ ] **Step 2: Run RED**
 
-Run: `./gradlew :compiler:test --tests ru.lazyhat.compukterkraft.lang.runtime.native.NativeVmSignalTest`
+Run: `./gradlew :compiler:test --tests ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeVmSignalTest`
 
 Expected: FAIL because `NativeVmSignal` does not exist.
 
@@ -181,7 +181,7 @@ Create `NativeVmSignal.kt` with sealed `NativeVmSignal`, sealed `NativeVmValue`,
 
 - [ ] **Step 4: Run GREEN**
 
-Run: `./gradlew :compiler:test --tests ru.lazyhat.compukterkraft.lang.runtime.native.NativeVmSignalTest`
+Run: `./gradlew :compiler:test --tests ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeVmSignalTest`
 
 Expected: PASS.
 
@@ -249,7 +249,7 @@ Create a test that exits early if `ckl.vm.native.library` is blank. When present
 
 - [ ] **Step 2: Run test without native path**
 
-Run: `./gradlew :compiler:test --tests ru.lazyhat.compukterkraft.lang.runtime.native.NativeVmRunnerJniTest`
+Run: `./gradlew :compiler:test --tests ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeVmRunnerJniTest`
 
 Expected: PASS because the test is skipped by early return.
 
@@ -259,7 +259,7 @@ Run: `cd native/ckl-vm && cargo build`.
 
 Then run from repo root:
 
-`./gradlew :compiler:test --tests ru.lazyhat.compukterkraft.lang.runtime.native.NativeVmRunnerJniTest -Dckl.vm.native.library=$PWD/native/ckl-vm/target/debug/libckl_vm.so`
+`./gradlew :compiler:test --tests ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeVmRunnerJniTest -Dckl.vm.native.library=$PWD/native/ckl-vm/target/debug/libckl_vm.so`
 
 Expected: PASS.
 
@@ -271,7 +271,7 @@ Add commands for building `libckl_vm.so` and running the optional JNI smoke test
 
 Run:
 
-`./gradlew :compiler:test --tests ru.lazyhat.compukterkraft.lang.runtime.LanguageRuntimeTest --tests ru.lazyhat.compukterkraft.lang.runtime.BytecodeAbiTest --tests ru.lazyhat.compukterkraft.lang.runtime.VmRunnerSelectionTest --tests ru.lazyhat.compukterkraft.lang.runtime.native.NativeVmSignalTest --tests ru.lazyhat.compukterkraft.lang.runtime.native.NativeVmRunnerJniTest && cd native/ckl-vm && cargo test && cargo build`
+`./gradlew :compiler:test --tests ru.lazyhat.compukterkraft.lang.runtime.LanguageRuntimeTest --tests ru.lazyhat.compukterkraft.lang.runtime.BytecodeAbiTest --tests ru.lazyhat.compukterkraft.lang.runtime.VmRunnerSelectionTest --tests ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeVmSignalTest --tests ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeVmRunnerJniTest && cd native/ckl-vm && cargo test && cargo build`
 
 Expected: PASS.
 

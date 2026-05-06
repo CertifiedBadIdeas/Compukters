@@ -21,7 +21,7 @@ package ru.lazyhat.compukterkraft.lang.runtime
 
 import kotlinx.coroutines.runBlocking
 import ru.lazyhat.compukterkraft.lang.frontend.LanguageFrontend
-import ru.lazyhat.compukterkraft.lang.runtime.native.NativeVmRunner
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeVmRunner
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse

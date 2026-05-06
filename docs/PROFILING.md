@@ -116,7 +116,7 @@ Run the optional Kotlin JNI smoke test with the local debug library:
 
 ```bash
 ./gradlew :compiler:test \
-  --tests ru.lazyhat.compukterkraft.lang.runtime.native.NativeVmRunnerJniTest \
+  --tests ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeVmRunnerJniTest \
   -Dckl.vm.native.library=$PWD/native/ckl-vm/target/debug/libckl_vm.so
 ```
 
