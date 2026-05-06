@@ -31,14 +31,10 @@ struct Frame {
 impl VmInstance {
 	pub fn new(module: Module, instruction_budget: usize) -> Self {
 		let entry = module.entry_function_index as usize;
+		let entry_frame = create_frame(&module, entry, vec![]);
 		Self {
 			module,
-			frames: vec![Frame {
-				function_index: entry,
-				instruction_pointer: 0,
-				locals: vec![],
-				stack: vec![],
-			}],
+			frames: vec![entry_frame],
 			instruction_budget: instruction_budget.max(1),
 			instructions_since_pause: 0,
 		}
@@ -79,6 +75,11 @@ impl VmInstance {
 					let right = self.pop();
 					let left = self.pop();
 					self.current_frame_mut().stack.push(add_values(left, right));
+				}
+				Instruction::CallFunction { function_index, argument_count } => {
+					let arguments = self.pop_many(argument_count as usize);
+					let frame = create_frame(&self.module, function_index as usize, arguments);
+					self.frames.push(frame);
 				}
 				Instruction::Return => {
 					let result = self.current_frame_mut().stack.pop().unwrap_or(VmValue::Unit);
@@ -126,6 +127,15 @@ impl VmInstance {
 		self.current_frame_mut().stack.pop().expect("VM stack value")
 	}
 
+	fn pop_many(&mut self, count: usize) -> Vec<VmValue> {
+		let mut values = Vec::with_capacity(count);
+		for _ in 0..count {
+			values.push(self.pop());
+		}
+		values.reverse();
+		values
+	}
+
 	fn handle_return(&mut self, result: VmValue) -> VmSignal {
 		self.frames.pop();
 		if let Some(caller) = self.frames.last_mut() {
@@ -135,6 +145,16 @@ impl VmInstance {
 			VmSignal::Halt(result)
 		}
 	}
+}
+
+fn create_frame(module: &Module, function_index: usize, arguments: Vec<VmValue>) -> Frame {
+	let function = &module.functions[function_index];
+	let local_count = function.locals.len().max(function.parameters.len()).max(arguments.len());
+	let mut locals = vec![VmValue::Unit; local_count];
+	for (index, argument) in arguments.into_iter().enumerate() {
+		locals[index] = argument;
+	}
+	Frame { function_index, instruction_pointer: 0, locals, stack: vec![] }
 }
 
 fn add_values(left: VmValue, right: VmValue) -> VmValue {
