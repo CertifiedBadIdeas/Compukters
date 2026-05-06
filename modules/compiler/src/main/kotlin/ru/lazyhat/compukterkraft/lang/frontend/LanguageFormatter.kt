@@ -61,6 +61,7 @@ import ru.lazyhat.compukterkraft.lang.api.StringLiteralValue
 import ru.lazyhat.compukterkraft.lang.api.StructDeclaration
 import ru.lazyhat.compukterkraft.lang.api.ThisExpression
 import ru.lazyhat.compukterkraft.lang.api.TopLevelDeclaration
+import ru.lazyhat.compukterkraft.lang.api.TypeApplicationExpression
 import ru.lazyhat.compukterkraft.lang.api.TypeSyntax
 import ru.lazyhat.compukterkraft.lang.api.UnaryExpression
 import ru.lazyhat.compukterkraft.lang.api.UnaryOperator
@@ -274,6 +275,10 @@ class LanguageFormatter(
                 is IndexAccessExpression -> {
                     collectExpression(expression.receiver)
                     collectExpression(expression.index)
+                }
+
+                is TypeApplicationExpression -> {
+                    expression.arguments.forEach(::collectType)
                 }
 
                 is LiteralExpression -> {
@@ -699,6 +704,10 @@ class LanguageFormatter(
                     "${renderExpression(expression.receiver, PRECEDENCE_CALL)}[${renderExpression(expression.index)}]"
                 }
 
+                is TypeApplicationExpression -> {
+                    "${expression.name}${expression.arguments.joinToString(", ", "<", ">") { renderType(it) }}"
+                }
+
                 is LiteralExpression -> {
                     renderLiteral(expression)
                 }
@@ -861,7 +870,7 @@ private fun Expression.precedence(): Int =
     when (this) {
         is BinaryExpression -> operator.precedence()
         is UnaryExpression -> PRECEDENCE_UNARY
-        is CallExpression, is IndexAccessExpression, is MemberAccessExpression, is ScopeAccessExpression -> PRECEDENCE_CALL
+        is CallExpression, is IndexAccessExpression, is MemberAccessExpression, is ScopeAccessExpression, is TypeApplicationExpression -> PRECEDENCE_CALL
         else -> PRECEDENCE_PRIMARY
     }
 
