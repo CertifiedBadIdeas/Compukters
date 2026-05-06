@@ -25,7 +25,9 @@ import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayPixelFormat
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 
-class DisplayRegistry {
+class DisplayRegistry(
+    private val metricsCollector: DisplayMetricsCollector = NoOpDisplayMetricsCollector,
+) {
     private val displays = ConcurrentHashMap<Int, DisplayState>()
     private val pendingFrames = ConcurrentLinkedQueue<DisplayFrameDelta>()
 
@@ -61,14 +63,20 @@ class DisplayRegistry {
     fun clear(
         displayId: Int,
         rgb565: Int,
-    ) = displays[displayId]?.clear(rgb565)
+    ) {
+        metricsCollector.recordClear(displayId)
+        displays[displayId]?.clear(rgb565)
+    }
 
     fun setPixel(
         displayId: Int,
         x: Int,
         y: Int,
         rgb565: Int,
-    ) = displays[displayId]?.setPixel(x, y, rgb565)
+    ) {
+        metricsCollector.recordSetPixel(displayId)
+        displays[displayId]?.setPixel(x, y, rgb565)
+    }
 
     fun fillRect(
         displayId: Int,
@@ -77,10 +85,15 @@ class DisplayRegistry {
         width: Int,
         height: Int,
         rgb565: Int,
-    ) = displays[displayId]?.fillRect(x, y, width, height, rgb565)
+    ) {
+        metricsCollector.recordFillRect(displayId, width, height)
+        displays[displayId]?.fillRect(x, y, width, height, rgb565)
+    }
 
     fun present(displayId: Int) {
-        displays[displayId]?.present()?.let(pendingFrames::add)
+        val frame = displays[displayId]?.present()
+        metricsCollector.recordPresent(displayId, emittedFrame = frame != null)
+        frame?.let(pendingFrames::add)
     }
 
     fun drainFrames(): List<DisplayFrameDelta> =
@@ -88,7 +101,7 @@ class DisplayRegistry {
             while (true) {
                 add(pendingFrames.poll() ?: break)
             }
-        }
+        }.also(metricsCollector::recordFrameDrain)
 
     private fun info(state: DisplayState): DisplayInfo = DisplayInfo(state.displayId, state.width, state.height, state.pixelFormat)
 

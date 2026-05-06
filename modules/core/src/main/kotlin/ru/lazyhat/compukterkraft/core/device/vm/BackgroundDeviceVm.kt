@@ -44,7 +44,9 @@ import ru.lazyhat.compukterkraft.core.device.vm.api.VmPeripheralRegistry
 import ru.lazyhat.compukterkraft.core.device.vm.api.VmPeripheralRuntimeApi
 import ru.lazyhat.compukterkraft.core.device.vm.api.VmProcessApi
 import ru.lazyhat.compukterkraft.core.device.vm.api.VmSystemApi
+import ru.lazyhat.compukterkraft.core.device.vm.display.DisplayMetricsCollector
 import ru.lazyhat.compukterkraft.core.device.vm.display.DisplayRegistry
+import ru.lazyhat.compukterkraft.core.device.vm.display.NoOpDisplayMetricsCollector
 import ru.lazyhat.compukterkraft.lang.api.BuiltinModule
 import ru.lazyhat.compukterkraft.lang.api.BuiltinRegistry
 import ru.lazyhat.compukterkraft.lang.frontend.LanguageBuiltins
@@ -97,6 +99,7 @@ class BackgroundDeviceVm(
     private val logger: DeviceVmLogger,
     workspace: DeviceWorkspace,
     private val firmwareLoader: FirmwareProgramLoader = ClasspathFirmwareProgramLoader(),
+    private val displayMetricsCollector: DisplayMetricsCollector = NoOpDisplayMetricsCollector,
 ) : DeviceVmHandle,
     VmContext {
     private val scope = CoroutineScope(SupervisorJob() + dispatcher)
@@ -117,7 +120,7 @@ class BackgroundDeviceVm(
             profile = profile,
             runtimeCreator = { wd, arg -> createRuntime(wd, arg) },
         )
-    private val displayRegistry = DisplayRegistry()
+    private val displayRegistry = DisplayRegistry(displayMetricsCollector)
     private val peripheralRegistry = VmPeripheralRegistry()
     private val runtimeRegistryProfile = createRuntimeRegistryProfile()
 
