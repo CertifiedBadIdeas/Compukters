@@ -23,6 +23,7 @@ import ru.lazyhat.compukterkraft.lang.api.BuiltinRegistry
 import ru.lazyhat.compukterkraft.lang.api.ModuleOrigin
 import ru.lazyhat.compukterkraft.lang.runtime.CompletionItemKind
 import ru.lazyhat.compukterkraft.lang.runtime.HighlightTokenKind
+import ru.lazyhat.compukterkraft.lang.runtime.IdeDiagnosticSeverity
 import ru.lazyhat.compukterkraft.lang.runtime.TextEdit
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -94,6 +95,21 @@ class LanguageIdeTest {
         assertTrue(snapshot.diagnostics.any { it.message.contains("Expected Bool") })
         assertTrue(snapshot.highlights.any { it.kind == HighlightTokenKind.KEYWORD })
         assertTrue(snapshot.highlights.any { it.kind == HighlightTokenKind.FUNCTION })
+    }
+
+    @Test
+    fun highlightsBitwiseOperators() {
+        val source =
+            """
+            pub fun main() {
+                val value: Int = ~0b0011 & 0b1111 | 0b0001 ^ 0b0010 << 1 >> 1;
+            }
+            """.trimIndent()
+
+        val snapshot = ide.analyze("bitwise.ck", source)
+
+        assertTrue(snapshot.highlights.any { it.kind == HighlightTokenKind.OPERATOR }, snapshot.highlights.joinToString())
+        assertTrue(snapshot.diagnostics.none { it.severity == IdeDiagnosticSeverity.ERROR }, snapshot.diagnostics.joinToString { it.message })
     }
 
     @Test
