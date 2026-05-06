@@ -61,6 +61,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.DeviceVmHandle
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.HostCall
 import ru.lazyhat.compukterkraft.lang.runtime.HostResult
+import ru.lazyhat.compukterkraft.lang.runtime.VmInstructionKind
 import ru.lazyhat.compukterkraft.lang.runtime.VmEvent
 import ru.lazyhat.compukterkraft.lang.runtime.VmSignalKind
 import ru.lazyhat.compukterkraft.lang.runtime.VmSnapshot
@@ -135,8 +136,25 @@ class BackgroundDeviceVm(
     private var executionWindowStartedNanos: Long? = null
 
     private inner class RuntimeMetricsApi : DeviceRuntimeMetrics {
+        override val collectsDetailedMetrics: Boolean = runtimeMetricsCollector !== NoOpRuntimeMetricsCollector
+
         override fun recordVmSignal(kind: VmSignalKind) {
             runtimeMetricsCollector.recordVmSignal(kind)
+        }
+
+        override fun recordVmHostCall(
+            moduleName: String,
+            functionName: String,
+            nanos: Long,
+        ) {
+            runtimeMetricsCollector.recordVmHostCall(moduleName, functionName, nanos)
+        }
+
+        override fun recordVmInstruction(
+            kind: VmInstructionKind,
+            nanos: Long,
+        ) {
+            runtimeMetricsCollector.recordVmInstruction(kind, nanos)
         }
     }
 

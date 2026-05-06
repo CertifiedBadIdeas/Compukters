@@ -68,6 +68,41 @@ class LanguageRuntimeTest {
     }
 
     @Test
+    fun recordsHostCallAndInstructionMetricsThroughRuntime() {
+        val artifact =
+            frontend.compile(
+                "metrics.ck",
+                """
+                pub fun main() {
+                    system::log("id=" + system::deviceId());
+                    val event: Event = events::tryPull("boot");
+                    display::blitMono5x7Packed(7, 2, 3, 0b01110100011000111111100011000110001L, 2016, -1);
+                }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+
+        val metrics = RecordingDeviceRuntimeMetrics()
+        val runtime = RecordingRuntime(metrics = metrics)
+        runBlocking {
+            BytecodeComputerProgram(requireNotNull(artifact.module)).run(runtime)
+        }
+
+        assertEquals(1, metrics.hostCallCounts["system.deviceId"])
+        assertEquals(1, metrics.hostCallCounts["system.log"])
+        assertEquals(1, metrics.hostCallCounts["events.tryPull"])
+        assertEquals(1, metrics.hostCallCounts["display.blitMono5x7Packed"])
+        assertTrue(metrics.hostCallNanos.getValue("display.blitMono5x7Packed") >= 0)
+        assertTrue(metrics.instructionCounts.getValue(VmInstructionKind.CALL_BUILTIN) >= 4)
+        assertTrue(metrics.instructionCounts.getValue(VmInstructionKind.PUSH_STRING) >= 2)
+        assertTrue(metrics.instructionNanos.getValue(VmInstructionKind.CALL_BUILTIN) >= 0)
+    }
+
+    @Test
     fun packedGlyphDisplayBuiltinDecodesRowsThroughRuntimeBridge() {
         val artifact =
             frontend.compile(
@@ -1163,6 +1198,7 @@ internal class RecordingRuntime(
     private val queuedEvents: List<VmEvent> = listOf(VmEvent("boot")),
     private val spawnPid: Int = 1,
     private val waitCode: Int = 0,
+    override val metrics: DeviceRuntimeMetrics = NoopDeviceRuntimeMetrics,
 ) : DeviceRuntime {
     val lines = mutableListOf<String>()
     val eventFilters = mutableListOf<String?>()
@@ -1441,5 +1477,34 @@ internal class RecordingRuntime(
 
     override suspend fun yield() {
         yieldCalls += 1
+    }
+}
+
+internal class RecordingDeviceRuntimeMetrics : DeviceRuntimeMetrics {
+    override val collectsDetailedMetrics: Boolean = true
+
+    val hostCallCounts = mutableMapOf<String, Long>()
+    val hostCallNanos = mutableMapOf<String, Long>()
+    val instructionCounts = mutableMapOf<VmInstructionKind, Long>()
+    val instructionNanos = mutableMapOf<VmInstructionKind, Long>()
+
+    override fun recordVmSignal(kind: VmSignalKind) = Unit
+
+    override fun recordVmHostCall(
+        moduleName: String,
+        functionName: String,
+        nanos: Long,
+    ) {
+        val key = "$moduleName.$functionName"
+        hostCallCounts[key] = hostCallCounts.getOrDefault(key, 0) + 1
+        hostCallNanos[key] = hostCallNanos.getOrDefault(key, 0) + nanos.coerceAtLeast(0)
+    }
+
+    override fun recordVmInstruction(
+        kind: VmInstructionKind,
+        nanos: Long,
+    ) {
+        instructionCounts[kind] = instructionCounts.getOrDefault(kind, 0) + 1
+        instructionNanos[kind] = instructionNanos.getOrDefault(kind, 0) + nanos.coerceAtLeast(0)
     }
 }
