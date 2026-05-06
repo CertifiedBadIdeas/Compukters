@@ -62,4 +62,10 @@ interface VmContext {
 
     /** Log a message through the VM logger. */
     fun log(message: String)
+
+    /** Write directly to a VM-local IPC channel. */
+    suspend fun writeIpc(
+        channel: Int,
+        text: String,
+    )
 }
