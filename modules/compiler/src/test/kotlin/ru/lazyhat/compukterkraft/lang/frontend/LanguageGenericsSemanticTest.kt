@@ -59,4 +59,27 @@ class LanguageGenericsSemanticTest {
             artifact.analysis.diagnostics.joinToString { it.message },
         )
     }
+
+    @Test
+    fun substitutesGenericFunctionStructAndClassTypes() {
+        val artifact =
+            frontend.compile(
+                "generic_substitution.ck",
+                """
+                pub struct Pair<A, B> { first: A, second: B }
+                pub class Box<T>(pub var value: T) {
+                    pub fun current(): T { return this.value; }
+                }
+                pub fun identity<T>(value: T): T { return value; }
+                pub fun main() {
+                    val answer: Int = identity(42);
+                    val pair: Pair<String, Int> = Pair(first = "x", second = answer);
+                    val box: Box<String> = Box(value = pair.first);
+                    val text: String = box.current();
+                }
+                """.trimIndent(),
+            )
+
+        assertTrue(artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR }, artifact.analysis.diagnostics.joinToString { it.message })
+    }
 }
