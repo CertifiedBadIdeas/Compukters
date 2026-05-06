@@ -111,7 +111,7 @@ fun draw_boot_frame(status: String) {
 }
 
 pub fun main() {
-    hold_splash(40)
+    hold_splash(20)
 
     var status: String = "Searching for boot.ck..."
     draw_boot_frame(status)
