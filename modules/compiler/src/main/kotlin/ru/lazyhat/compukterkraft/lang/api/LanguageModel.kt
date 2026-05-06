@@ -489,6 +489,25 @@ sealed interface Instruction {
         val fieldNames: List<String>,
     ) : Instruction
 
+    data object ConstructArray : Instruction
+
+    data class ConstructList(
+        val elementCount: Int,
+    ) : Instruction
+
+    data class ConstructMap(
+        val entryCount: Int,
+    ) : Instruction
+
+    data object IndexGet : Instruction
+
+    data object IndexSet : Instruction
+
+    data class CallCollectionMethod(
+        val methodName: String,
+        val argumentCount: Int,
+    ) : Instruction
+
     data class CallMethod(
         val methodName: String,
         val argumentCount: Int,
