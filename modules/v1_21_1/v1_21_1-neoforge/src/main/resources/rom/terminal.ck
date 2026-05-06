@@ -1,3 +1,5 @@
+pub struct TerminalBuffer { cellsText: String, cursorRow: Int, cursorColumn: Int }
+
 fun glyphPattern(ch: String): String {
     if (ch == "A" || ch == "a") { return "01110100011000111111100011000110001" }
     if (ch == "B" || ch == "b") { return "11110100011000111110100011000111110" }
@@ -67,41 +69,6 @@ fun waitDisplay(): Int {
     return id
 }
 
-fun render(displayId: Int, text: String) {
-    val width: Int = display::width(displayId)
-    val height: Int = display::height(displayId)
-    if (width < 6 || height < 9) {
-        return
-    }
-
-    display::clear(displayId, 0)
-
-    val columns: Int = width / 6
-    val rows: Int = height / 9
-    var x: Int = 0
-    var y: Int = 0
-    var i: Int = 0
-    while i < strings::length(text) {
-        val ch: String = strings::charAt(text, i)
-        if (ch == "\n") {
-            x = 0
-            y = y + 1
-        } else {
-            if (y < rows) {
-                drawGlyph(displayId, x, y, ch, 2016)
-            }
-            x = x + 1
-            if (x >= columns) {
-                x = 0
-                y = y + 1
-            }
-        }
-        i = i + 1
-    }
-
-    display::present(displayId)
-}
-
 fun columns(displayId: Int): Int {
     return display::width(displayId) / 6
 }
@@ -110,81 +77,180 @@ fun rows(displayId: Int): Int {
     return display::height(displayId) / 9
 }
 
-fun lineRow(displayId: Int, screen: String): Int {
-    var row: Int = 0
-    var col: Int = 0
-    var i: Int = 0
-    val cols: Int = columns(displayId)
-    while i < strings::length(screen) {
-        val ch: String = strings::charAt(screen, i)
-        if (ch == "\n") {
-            row = row + 1
-            col = 0
-        } else {
-            col = col + 1
-            if (col >= cols) {
-                col = 0
-                row = row + 1
-            }
-        }
-        i = i + 1
-    }
-    return row
+fun cellCount(displayId: Int): Int {
+    return columns(displayId) * rows(displayId)
 }
 
-fun lineColumn(displayId: Int, screen: String): Int {
-    var col: Int = 0
-    var i: Int = 0
-    val cols: Int = columns(displayId)
-    while i < strings::length(screen) {
-        val ch: String = strings::charAt(screen, i)
-        if (ch == "\n") {
-            col = 0
-        } else {
-            col = col + 1
-            if (col >= cols) {
-                col = 0
-            }
-        }
-        i = i + 1
-    }
-    return col
-}
-
-fun dropFirstLine(text: String): String {
+fun blankCells(count: Int): String {
     var result: String = ""
-    var dropped: Bool = false
+    var i: Int = 0
+    while i < count + 0 {
+        result = result + " "
+        i = i + 1
+    }
+    return result
+}
+
+fun setCell(cells: String, index: Int, ch: String): String {
+    var result: String = ""
+    var i: Int = 0
+    while i < strings::length(cells) {
+        if (i == index) {
+            result = result + ch
+        } else {
+            result = result + strings::charAt(cells, i)
+        }
+        i = i + 1
+    }
+    return result
+}
+
+fun cellAt(cells: String, index: Int): String {
+    if (index < 0 || index >= strings::length(cells)) {
+        return " "
+    }
+    return strings::charAt(cells, index)
+}
+
+fun clearTextRow(displayId: Int, row: Int) {
+    display::fillRect(displayId, 0, row * 9, columns(displayId) * 6, 9, 0)
+}
+
+fun renderTextRow(displayId: Int, cells: String, row: Int) {
+    clearTextRow(displayId, row)
+    var col: Int = 0
+    val cols: Int = columns(displayId)
+    while col < cols + 0 {
+        val ch: String = cellAt(cells, row * cols + col)
+        if (ch != " ") {
+            display::blitMono(displayId, col * 6, row * 9, 5, 7, glyphPattern(ch), 2016, -1)
+        }
+        col = col + 1
+    }
+}
+
+fun scrollUp(displayId: Int, cells: String): String {
+    val cols: Int = columns(displayId)
+    val rs: Int = rows(displayId)
+    if (rs <= 1) {
+        clearTextRow(displayId, 0)
+        return blankCells(cellCount(displayId))
+    }
+    display::copyRect(displayId, 0, 9, cols * 6, (rs - 1) * 9, 0, 0)
+    clearTextRow(displayId, rs - 1)
+    var result: String = ""
+    var i: Int = cols
+    while i < strings::length(cells) {
+        result = result + strings::charAt(cells, i)
+        i = i + 1
+    }
+    var col: Int = 0
+    while col < cols + 0 {
+        result = result + " "
+        col = col + 1
+    }
+    return result
+}
+
+fun appendCharacter(displayId: Int, buffer: TerminalBuffer, ch: String): TerminalBuffer {
+    val cols: Int = columns(displayId)
+    val rs: Int = rows(displayId)
+    if (cols <= 0 || rs <= 0) {
+        return buffer
+    }
+
+    var cells: String = buffer.cellsText
+    var row: Int = buffer.cursorRow
+    var col: Int = buffer.cursorColumn
+
+    if (ch == "\n") {
+        col = 0
+        row = row + 1
+        if (row >= rs) {
+            cells = scrollUp(displayId, cells)
+            row = rs - 1
+        }
+        return TerminalBuffer(cellsText = cells, cursorRow = row, cursorColumn = col)
+    }
+
+    if (row >= rs) {
+        cells = scrollUp(displayId, cells)
+        row = rs - 1
+    }
+    cells = setCell(cells, row * cols + col, ch)
+    renderTextRow(displayId, cells, row)
+
+    col = col + 1
+    if (col >= cols) {
+        col = 0
+        row = row + 1
+        if (row >= rs) {
+            cells = scrollUp(displayId, cells)
+            row = rs - 1
+        }
+    }
+    return TerminalBuffer(cellsText = cells, cursorRow = row, cursorColumn = col)
+}
+
+fun appendText(displayId: Int, buffer: TerminalBuffer, text: String): TerminalBuffer {
+    val cols: Int = columns(displayId)
+    val rs: Int = rows(displayId)
+    if (cols <= 0 || rs <= 0) {
+        return buffer
+    }
+
+    var cells: String = buffer.cellsText
+    var row: Int = buffer.cursorRow
+    var col: Int = buffer.cursorColumn
+    var dirtyRow: Int = 0 - 1
     var i: Int = 0
     while i < strings::length(text) {
         val ch: String = strings::charAt(text, i)
-        if (dropped) {
-            result = result + ch
-        } else if (ch == "\n") {
-            dropped = true
+        if (ch == "\n") {
+            if (dirtyRow >= 0) {
+                renderTextRow(displayId, cells, dirtyRow)
+                dirtyRow = 0 - 1
+            }
+            col = 0
+            row = row + 1
+            if (row >= rs) {
+                cells = scrollUp(displayId, cells)
+                row = rs - 1
+            }
+        } else {
+            if (row >= rs) {
+                cells = scrollUp(displayId, cells)
+                row = rs - 1
+            }
+            cells = setCell(cells, row * cols + col, ch)
+            dirtyRow = row
+            col = col + 1
+            if (col >= cols) {
+                if (dirtyRow >= 0) {
+                    renderTextRow(displayId, cells, dirtyRow)
+                    dirtyRow = 0 - 1
+                }
+                col = 0
+                row = row + 1
+                if (row >= rs) {
+                    cells = scrollUp(displayId, cells)
+                    row = rs - 1
+                }
+            }
         }
         i = i + 1
     }
-    return result
-}
-
-fun trimScreen(displayId: Int, screen: String): String {
-    var result: String = screen
-    val maxRows: Int = rows(displayId) - 1
-    while lineRow(displayId, result) > maxRows && result != "" {
-        val tailText: String = dropFirstLine(result)
-        if (tailText == result) {
-            result = ""
-        } else {
-            result = tailText
-        }
+    if (dirtyRow >= 0) {
+        renderTextRow(displayId, cells, dirtyRow)
     }
-    return result
+    display::present(displayId)
+    return TerminalBuffer(cellsText = cells, cursorRow = row, cursorColumn = col)
 }
 
-fun renderInputLine(displayId: Int, screen: String, line: String) {
+fun renderInputLine(displayId: Int, buffer: TerminalBuffer, line: String) {
     val cols: Int = columns(displayId)
-    val row: Int = lineRow(displayId, screen)
-    val startColumn: Int = lineColumn(displayId, screen)
+    val row: Int = buffer.cursorRow
+    val startColumn: Int = buffer.cursorColumn
     if (row < 0 || row >= rows(displayId)) {
         return
     }
@@ -220,37 +286,43 @@ pub fun main() {
     process::spawn("shell.ck", "stdio-v1 " + input + " " + output + " " + error + " ")
 
     var displayId: Int = waitDisplay()
-    var screen: String = ""
+    display::clear(displayId, 0)
+    display::present(displayId)
+    var buffer: TerminalBuffer = TerminalBuffer(cellsText = blankCells(cellCount(displayId)), cursorRow = 0, cursorColumn = 0)
     var line: String = ""
 
     while true {
         val chunk: String = ipc::tryRead(output) + ipc::tryRead(error)
         if (chunk != "") {
-            screen = trimScreen(displayId, screen + chunk)
-            render(displayId, screen + line)
+            buffer = appendText(displayId, buffer, chunk)
+            if (line != "") {
+                renderInputLine(displayId, buffer, line)
+            }
         } else {
             val event: Event = events::tryPull()
             if (event.name != "") {
                 if (event.name == "display_attach" || event.name == "display_resize") {
                     displayId = display::primary()
-                    render(displayId, screen + line)
+                    display::clear(displayId, 0)
+                    display::present(displayId)
+                    buffer = TerminalBuffer(cellsText = blankCells(cellCount(displayId)), cursorRow = 0, cursorColumn = 0)
+                    line = ""
                 } else if (event.name == "char" || event.name == "paste") {
                     val typed: String = events::argString(event, 0)
                     if (typed != "") {
                         line = line + typed
-                        renderInputLine(displayId, screen, line)
+                        renderInputLine(displayId, buffer, line)
                     }
                 } else if (event.name == "key") {
                     val key: Int = events::argInt(event, 0)
                     if (key == 257 || key == 335) {
                         ipc::write(input, line)
-                        screen = trimScreen(displayId, screen + line + "\n")
+                        buffer = appendText(displayId, buffer, line + "\n")
                         line = ""
-                        render(displayId, screen)
                     } else if (key == 259) {
                         if (line != "") {
                             line = dropLast(line)
-                            renderInputLine(displayId, screen, line)
+                            renderInputLine(displayId, buffer, line)
                         }
                     }
                 }
