@@ -131,8 +131,17 @@ class RomScriptCompileTest {
     @Test
     fun bundledRomShellOwnsSubmittedLineEchoAndTerminalHandlesControlChars() {
         val terminal = resourceText("rom/terminal.ck")
+        val stdio = resourceText("rom/stdio.ck")
         val shell = resourceText("rom/shell.ck")
 
+        assertTrue(
+            terminal.contains("ipc::write(input, line + \"\\n\")"),
+            "terminal.ck should send newline-delimited stdin so empty Enter is a non-empty IPC payload",
+        )
+        assertTrue(
+            stdio.contains("return stripLineDelimiter(ipc::read(ctx.input))"),
+            "stdio.readLine should strip the stdin line delimiter before returning command text",
+        )
         assertTrue(
             shell.contains("val line: String = readLine(ctx)\n        write(ctx, line + \"\\n\")"),
             "shell.ck should echo submitted lines so blank Enter is shell-owned visible output",

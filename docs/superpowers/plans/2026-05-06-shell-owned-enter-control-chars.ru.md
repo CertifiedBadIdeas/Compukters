@@ -4,7 +4,7 @@
 
 **Цель:** Сделать Enter echo ответственностью shell, исправить поведение пустого Enter у prompt и добавить минимальную поддержку CKL/terminal control characters.
 
-**Архитектура:** `terminal.ck` продолжает редактировать input как overlay, но больше не делает local commit `line + "\n"` на Enter. `shell.ck` echo-ит submitted line через `write(ctx, line + "\n")` сразу после `readLine(ctx)`, затем обрабатывает command. `terminal.ck` рендерит `\n`, `\r` и `\b`; CKL lexer/formatter поддерживают authoring и preservation для `\r`/`\b` escapes, а Gradle копирует `.ck` resources raw, чтобы эти escapes не портились до CKL compilation.
+**Архитектура:** `terminal.ck` продолжает редактировать input как overlay, но больше не делает local commit `line + "\n"` на Enter. Он отправляет stdin как Unix-like newline-delimited input (`line + "\n"`), а `stdio.readLine(ctx)` снимает trailing delimiter перед возвратом command text. `shell.ck` echo-ит submitted line через `write(ctx, line + "\n")` сразу после `readLine(ctx)`, затем обрабатывает command. `terminal.ck` рендерит `\n`, `\r` и `\b`; CKL lexer/formatter поддерживают authoring и preservation для `\r`/`\b` escapes, а Gradle копирует `.ck` resources raw, чтобы эти escapes не портились до CKL compilation.
 
 **Tech Stack:** CKL ROM scripts, Kotlin compiler/frontend tests, Kotlin ROM resource tests, Gradle.
 
@@ -18,6 +18,7 @@
 - Изменить `modules/compiler/src/test/kotlin/ru/lazyhat/compukterkraft/lang/frontend/LanguageFrontendTest.kt`: добавить lexer regression для `\r`.
 - Изменить `modules/compiler/src/test/kotlin/ru/lazyhat/compukterkraft/lang/frontend/LanguageFormatterTest.kt`: добавить formatter regression для `\r`/`\b`.
 - Изменить `modules/v1_21_1/v1_21_1-neoforge/src/main/resources/rom/terminal.ck`: добавить `\r`/`\b` handling и убрать local Enter commit.
+- Изменить `modules/v1_21_1/v1_21_1-neoforge/src/main/resources/rom/stdio.ck`: снимать trailing newline delimiters в `readLine(ctx)`.
 - Изменить `modules/v1_21_1/v1_21_1-neoforge/src/main/resources/rom/shell.ck`: echo entered line после `readLine(ctx)`.
 - Изменить `modules/v1_21_1/v1_21_1-neoforge/src/test/kotlin/ru/lazyhat/compukterkraft/impl/RomScriptCompileTest.kt`: добавить ROM source regressions.
 
@@ -148,8 +149,17 @@ Expected: grep prints the `write(ctx, line + "\\n")` line with a textual backsla
     @Test
     fun bundledRomShellOwnsSubmittedLineEchoAndTerminalHandlesControlChars() {
         val terminal = resourceText("rom/terminal.ck")
+        val stdio = resourceText("rom/stdio.ck")
         val shell = resourceText("rom/shell.ck")
 
+        assertTrue(
+            terminal.contains("ipc::write(input, line + \"\\\\n\")"),
+            "terminal.ck should send newline-delimited stdin so empty Enter is a non-empty IPC payload",
+        )
+        assertTrue(
+            stdio.contains("return stripLineDelimiter(ipc::read(ctx.input))"),
+            "stdio.readLine should strip the stdin line delimiter before returning command text",
+        )
         assertTrue(
             shell.contains("val line: String = readLine(ctx)\n        write(ctx, line + \"\\\\n\")"),
             "shell.ck should echo submitted lines so blank Enter is shell-owned visible output",
@@ -220,9 +230,13 @@ fun clearCell(displayId: Int, column: Int, row: Int) {
 
 ```ck
                     if (key == 257 || key == 335) {
-                        ipc::write(input, line)
+                        ipc::write(input, line + "\n")
                         line = ""
 ```
+
+- [ ] **Step 5a: Strip stdin line delimiter in stdio**
+
+В `stdio.ck` сделать так, чтобы `readLine(ctx)` возвращал `stripLineDelimiter(ipc::read(ctx.input))`, где `stripLineDelimiter(text)` снимает один trailing `"\n"`, если он есть.
 
 - [ ] **Step 6: Add shell-owned echo**
 

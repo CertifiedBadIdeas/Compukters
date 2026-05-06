@@ -22,7 +22,9 @@
 
 ## Архитектура
 
-Terminal остаётся ответственным за interactive input overlay до Enter. На Enter он отправляет текущую строку через stdin и очищает pending input state, но не делает локальный commit `line + "\n"`.
+Terminal остаётся ответственным за interactive input overlay до Enter. На Enter он отправляет текущую строку плюс newline delimiter через stdin (`line + "\n"`) и очищает pending input state, но не делает локальный commit `line + "\n"` в display.
+
+`stdio.readLine(ctx)` владеет stdin line framing: читает IPC text и снимает один trailing newline delimiter перед возвратом command text. Empty Enter поэтому передаётся как non-empty IPC payload `"\n"`, а `readLine(ctx)` возвращает shell строку `""`.
 
 Shell становится ответственным за commit введённой строки в visible output. Сразу после `readLine(ctx)` shell пишет `line + "\n"` в stdout, затем обрабатывает trimmed command. Blank input остаётся no-op command, но newline теперь является shell-owned visible output, а следующий prompt выводится обычным shell loop.
 
@@ -45,6 +47,8 @@ Numeric glyph masks — отдельная language/runtime задача. Для
 Добавляем regressions, которые проверяют:
 
 - `terminal.ck` больше не делает local commit `line + "\n"` на Enter.
+- `terminal.ck` отправляет newline-delimited stdin через `ipc::write(input, line + "\n")`.
+- `stdio.readLine(ctx)` снимает trailing stdin newline delimiter перед возвратом command text.
 - `shell.ck` echo-ит `line + "\n"` сразу после `readLine(ctx)`.
 - `terminal.ck` обрабатывает `\r` и `\b` в `appendText()`.
 - CKL lexes `\r` как carriage return, а formatter сохраняет `\r`/`\b` escapes.
