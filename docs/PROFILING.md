@@ -120,6 +120,14 @@ Run the optional Kotlin JNI smoke test with the local debug library:
   -Dckl.vm.native.library=$PWD/native/ckl-vm/target/debug/libckl_vm.so
 ```
 
+Run a Minecraft dev client with the Rust VM option enabled:
+
+```bash
+./gradlew :v1_21_1-neoforge:runClientRust
+```
+
+The Rust client run tasks are `runClientRust`, `runClient2Rust`, and `runClient3Rust`. Each depends on `buildRustVmNativeLibrary`, which builds `native/ckl-vm/target/debug/libckl_vm.so` before launching the client and passes the required `ckl.vm.runner=rust` and `ckl.vm.native.library=...` JVM properties.
+
 The native runner is disabled unless both `-Dckl.vm.runner=rust` and `-Dckl.vm.native.library=/absolute/path/to/libckl_vm.so` are provided. The Kotlin VM remains the default runtime path.
 
 ## Interpretation notes
