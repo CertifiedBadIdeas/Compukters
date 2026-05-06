@@ -56,6 +56,26 @@ fun RunConfigSettings.applyShared() {
 
 private val DEV_CLIENT_USERNAMES = listOf("DevA", "DevB", "DevC")
 
+val rustVmCrateDir = rootProject.layout.projectDirectory.dir("native/ckl-vm")
+val rustVmNativeLibrary = rustVmCrateDir.file("target/debug/libckl_vm.so")
+
+val buildRustVmNativeLibrary =
+    tasks.register<Exec>("buildRustVmNativeLibrary") {
+        group = "loom"
+        description = "Build the local Rust CKL VM JNI library used by Rust VM dev run configurations."
+        workingDir = rustVmCrateDir.asFile
+        commandLine("cargo", "build")
+        inputs.file(rustVmCrateDir.file("Cargo.toml"))
+        inputs.file(rustVmCrateDir.file("Cargo.lock"))
+        inputs.dir(rustVmCrateDir.dir("src"))
+        outputs.file(rustVmNativeLibrary)
+    }
+
+fun RunConfigSettings.applyRustVm() {
+    property("ckl.vm.runner", "rust")
+    property("ckl.vm.native.library", rustVmNativeLibrary.asFile.absolutePath)
+}
+
 val loom = extensions.getByType<LoomGradleExtensionAPI>()
 val runs = loom.runs
 
@@ -87,6 +107,35 @@ runs.register("client3") {
     configName = "Minecraft Client 3"
     runDir("run/client3")
     applyShared()
+    programArgs("--username", DEV_CLIENT_USERNAMES[2])
+}
+
+// Rust VM variants of the dev clients. These keep the default client runs on
+// the Kotlin VM while making native-runner smoke testing a single Gradle task.
+runs.register("clientRust") {
+    client()
+    configName = "Minecraft Client Rust VM"
+    runDir("run/clientRust")
+    applyShared()
+    applyRustVm()
+    programArgs("--username", DEV_CLIENT_USERNAMES[0])
+}
+
+runs.register("client2Rust") {
+    client()
+    configName = "Minecraft Client 2 Rust VM"
+    runDir("run/client2Rust")
+    applyShared()
+    applyRustVm()
+    programArgs("--username", DEV_CLIENT_USERNAMES[1])
+}
+
+runs.register("client3Rust") {
+    client()
+    configName = "Minecraft Client 3 Rust VM"
+    runDir("run/client3Rust")
+    applyShared()
+    applyRustVm()
     programArgs("--username", DEV_CLIENT_USERNAMES[2])
 }
 
@@ -199,7 +248,15 @@ private val DEV_CLIENT_SERVERS =
         DevServerEntry(name = "Compukter Kraft (dev)", ip = "localhost"),
     )
 
-private val CLIENT_RUN_DIRS = listOf("run/client", "run/client2", "run/client3")
+private val CLIENT_RUN_DIRS =
+    listOf(
+        "run/client",
+        "run/client2",
+        "run/client3",
+        "run/clientRust",
+        "run/client2Rust",
+        "run/client3Rust",
+    )
 
 val prepareClientDev =
     tasks.register("prepareClientDev") {
@@ -220,8 +277,23 @@ val prepareClientDev =
         }
     }
 
-tasks.matching { it.name == "runClient" || it.name == "runClient2" || it.name == "runClient3" }.configureEach {
+private val CLIENT_RUN_TASKS =
+    setOf(
+        "runClient",
+        "runClient2",
+        "runClient3",
+        "runClientRust",
+        "runClient2Rust",
+        "runClient3Rust",
+    )
+private val RUST_CLIENT_RUN_TASKS = setOf("runClientRust", "runClient2Rust", "runClient3Rust")
+
+tasks.matching { it.name in CLIENT_RUN_TASKS }.configureEach {
     dependsOn(prepareClientDev)
+}
+
+tasks.matching { it.name in RUST_CLIENT_RUN_TASKS }.configureEach {
+    dependsOn(buildRustVmNativeLibrary)
 }
 
 private fun seedOptionsTxt(file: File) {
