@@ -233,8 +233,13 @@ In the Workbench editor, Format can be triggered from the toolbar or with `Ctrl+
 - `width(displayId: Int): Int`
 - `height(displayId: Int): Int`
 - `clear(displayId: Int, color: Int): Unit`
+- `setPixel(displayId: Int, x: Int, y: Int, color: Int): Unit`
 - `fillRect(displayId: Int, x: Int, y: Int, width: Int, height: Int, color: Int): Unit`
+- `copyRect(displayId: Int, srcX: Int, srcY: Int, width: Int, height: Int, dstX: Int, dstY: Int): Unit`
+- `blitMono(displayId: Int, x: Int, y: Int, width: Int, height: Int, mask: String, foreground: Int, background: Int): Unit`
 - `present(displayId: Int): Unit`
+
+`copyRect` copies pixels inside the display back buffer and is useful for scrolling or moving rectangular regions. `blitMono` draws a row-major `0`/`1` monochrome mask; `1` writes the foreground color and `0` writes the background color, or remains transparent when `background < 0`.
 
 `filesystem`
 
