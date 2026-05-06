@@ -96,7 +96,8 @@ These rules are enforced by `ArchitectureBoundaryTest` in `modules/core`.
 │                                                                      │
 │  DeviceProgram.run(runtime)                                          │
 │    ├─ events::tryPull()             ──►  VM event queue             │
-│    ├─ display::fillRect()/present()  ──►  DisplayRegistry           │
+│    ├─ display::fillRect()/copyRect()/blitMono()/present()           │
+│    │                                  ──►  DisplayRegistry           │
 │    ├─ runtime.filesystem.readText()    ──►  HostCall → HostResult    │
 │    └─ runtime.system.shutdown()        ──►  HostCall → HostResult    │
 └──────────────────────────────────────────┬───────────────────────────┘
@@ -132,9 +133,11 @@ These rules are enforced by `ArchitectureBoundaryTest` in `modules/core`.
 
 Runtime computer UI uses display sessions for server-to-client output. The client sends discrete input events (`key`, `key_up`, `char`, `paste`, mouse events) to the VM event queue. The server sends framebuffer deltas through display sessions (`DisplayAttachServerMessage`, `DisplayResizeServerMessage`, `DisplayDetachServerMessage`, `FrameDeltaClientMessage`). There is no runtime stdout byte broadcast in the client-server protocol.
 
+The display device exposes generic accelerated framebuffer primitives. `copyRect` supports back-buffer region copies such as terminal scrolling and future sprite/window movement. `blitMono` supports bitmap masks such as ROM glyphs and icons. These primitives remain framebuffer operations rather than terminal-specific rendering APIs, so the ROM terminal stays a CKL program layered on top of the display device.
+
 ### Runtime display profiling
 
-The VM display path has optional profiling hooks for local tests and diagnostics. They count display operations (`clear`, `setPixel`, `fillRect`, `present`), emitted frame deltas, dirty tiles, and approximate payload bytes. These hooks are disabled by default and should be used to justify display/terminal optimizations before changing rendering behavior.
+The VM display path has optional profiling hooks for local tests and diagnostics. They count display operations (`clear`, `setPixel`, `fillRect`, `copyRect`, `blitMono`, `present`), emitted frame deltas, dirty tiles, and approximate payload bytes. These hooks are disabled by default and should be used to justify display/terminal optimizations before changing rendering behavior.
 
 Runtime CPU-time profiling is also available through optional runtime metrics collectors. These collectors can measure server tick phases, host-call dispatch, display frame drain/flush work, and coarse VM scheduling/execution diagnostics. Timing output is diagnostic and should guide optimization design; it is not a strict CI performance budget.
 
