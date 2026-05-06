@@ -24,17 +24,18 @@ import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayPixelFormat
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayTile
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class DisplayProfilingTest {
     @Test
     fun recordingCollectorCountsOperationsAndFrames() {
         val collector = RecordingDisplayMetricsCollector()
-        collector.recordClear(displayId = 1)
-        collector.recordSetPixel(displayId = 1)
-        collector.recordFillRect(displayId = 1, width = 3, height = 4)
-        collector.recordCopyRect(displayId = 1, width = 4, height = 5)
-        collector.recordBlitMono(displayId = 1, width = 6, height = 7)
-        collector.recordPresent(displayId = 1, emittedFrame = true)
+        collector.recordClear(displayId = 1, nanos = 0)
+        collector.recordSetPixel(displayId = 1, nanos = 0)
+        collector.recordFillRect(displayId = 1, width = 3, height = 4, nanos = 0)
+        collector.recordCopyRect(displayId = 1, width = 4, height = 5, nanos = 0)
+        collector.recordBlitMono(displayId = 1, width = 6, height = 7, nanos = 0)
+        collector.recordPresent(displayId = 1, emittedFrame = true, nanos = 0)
         collector.recordFrameDrain(
             listOf(
                 DisplayFrameDelta(
@@ -79,14 +80,41 @@ class DisplayProfilingTest {
     }
 
     @Test
+    fun recordingCollectorAccumulatesOperationTimingsAndAverages() {
+        val collector = RecordingDisplayMetricsCollector()
+
+        collector.recordClear(displayId = 1, nanos = 10)
+        collector.recordSetPixel(displayId = 1, nanos = 20)
+        collector.recordFillRect(displayId = 1, width = 3, height = 4, nanos = 30)
+        collector.recordCopyRect(displayId = 1, width = 4, height = 5, nanos = 40)
+        collector.recordBlitMono(displayId = 1, width = 6, height = 7, nanos = 50)
+        collector.recordPresent(displayId = 1, emittedFrame = true, nanos = 60)
+
+        val snapshot = collector.snapshot()
+
+        assertEquals(10, snapshot.operations.clearNanos)
+        assertEquals(20, snapshot.operations.setPixelNanos)
+        assertEquals(30, snapshot.operations.fillRectNanos)
+        assertEquals(40, snapshot.operations.copyRectNanos)
+        assertEquals(50, snapshot.operations.blitMonoNanos)
+        assertEquals(60, snapshot.operations.presentNanos)
+        assertEquals(30, snapshot.operations.averageFillRectNanos)
+        assertEquals(40, snapshot.operations.averageCopyRectNanos)
+        assertEquals(50, snapshot.operations.averageBlitMonoNanos)
+        assertEquals(60, snapshot.operations.averagePresentNanos)
+        assertTrue(snapshot.summary().contains("fillNanos=30"), snapshot.summary())
+        assertTrue(snapshot.summary().contains("avgBlitNanos=50"), snapshot.summary())
+    }
+
+    @Test
     fun noopCollectorKeepsEmptySnapshot() {
         val collector = NoOpDisplayMetricsCollector
-        collector.recordClear(displayId = 1)
-        collector.recordSetPixel(displayId = 1)
-        collector.recordFillRect(displayId = 1, width = 3, height = 4)
-        collector.recordCopyRect(displayId = 1, width = 4, height = 5)
-        collector.recordBlitMono(displayId = 1, width = 6, height = 7)
-        collector.recordPresent(displayId = 1, emittedFrame = true)
+        collector.recordClear(displayId = 1, nanos = 100)
+        collector.recordSetPixel(displayId = 1, nanos = 100)
+        collector.recordFillRect(displayId = 1, width = 3, height = 4, nanos = 100)
+        collector.recordCopyRect(displayId = 1, width = 4, height = 5, nanos = 100)
+        collector.recordBlitMono(displayId = 1, width = 6, height = 7, nanos = 100)
+        collector.recordPresent(displayId = 1, emittedFrame = true, nanos = 100)
         collector.recordFrameDrain(emptyList())
 
         val snapshot = collector.snapshot()

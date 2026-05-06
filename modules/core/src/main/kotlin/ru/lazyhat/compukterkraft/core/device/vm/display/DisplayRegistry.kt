@@ -64,8 +64,9 @@ class DisplayRegistry(
         displayId: Int,
         rgb565: Int,
     ) {
-        metricsCollector.recordClear(displayId)
+        val started = System.nanoTime()
         displays[displayId]?.clear(rgb565)
+        metricsCollector.recordClear(displayId, System.nanoTime() - started)
     }
 
     fun setPixel(
@@ -74,8 +75,9 @@ class DisplayRegistry(
         y: Int,
         rgb565: Int,
     ) {
-        metricsCollector.recordSetPixel(displayId)
+        val started = System.nanoTime()
         displays[displayId]?.setPixel(x, y, rgb565)
+        metricsCollector.recordSetPixel(displayId, System.nanoTime() - started)
     }
 
     fun fillRect(
@@ -86,8 +88,9 @@ class DisplayRegistry(
         height: Int,
         rgb565: Int,
     ) {
-        metricsCollector.recordFillRect(displayId, width, height)
+        val started = System.nanoTime()
         displays[displayId]?.fillRect(x, y, width, height, rgb565)
+        metricsCollector.recordFillRect(displayId, width, height, System.nanoTime() - started)
     }
 
     fun copyRect(
@@ -99,8 +102,9 @@ class DisplayRegistry(
         dstX: Int,
         dstY: Int,
     ) {
-        metricsCollector.recordCopyRect(displayId, width, height)
+        val started = System.nanoTime()
         displays[displayId]?.copyRect(srcX, srcY, width, height, dstX, dstY)
+        metricsCollector.recordCopyRect(displayId, width, height, System.nanoTime() - started)
     }
 
     fun blitMono(
@@ -113,8 +117,9 @@ class DisplayRegistry(
         foreground: Int,
         background: Int,
     ) {
-        metricsCollector.recordBlitMono(displayId, width, height)
+        val started = System.nanoTime()
         displays[displayId]?.blitMono(x, y, width, height, mask, foreground, background)
+        metricsCollector.recordBlitMono(displayId, width, height, System.nanoTime() - started)
     }
 
     fun blitMono5x7(
@@ -131,14 +136,16 @@ class DisplayRegistry(
         foreground: Int,
         background: Int,
     ) {
-        metricsCollector.recordBlitMono(displayId, 5, 7)
+        val started = System.nanoTime()
         displays[displayId]?.blitMono5x7(x, y, row0, row1, row2, row3, row4, row5, row6, foreground, background)
+        metricsCollector.recordBlitMono(displayId, 5, 7, System.nanoTime() - started)
     }
 
     fun present(displayId: Int) {
+        val started = System.nanoTime()
         val frame = displays[displayId]?.present()
-        metricsCollector.recordPresent(displayId, emittedFrame = frame != null)
         frame?.let(pendingFrames::add)
+        metricsCollector.recordPresent(displayId, emittedFrame = frame != null, nanos = System.nanoTime() - started)
     }
 
     fun drainFrames(): List<DisplayFrameDelta> =
