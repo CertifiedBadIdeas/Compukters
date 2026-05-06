@@ -121,12 +121,18 @@ private fun Instruction.estimatedRomBytes(): Long =
     when (this) {
         is Instruction.Binary -> 4L
         is Instruction.CallBuiltin -> 12L + functionName.length + (moduleName?.length ?: 0)
+        is Instruction.CallCollectionMethod -> 8L + methodName.length
         is Instruction.CallFunction -> 8L
         is Instruction.CallMethod -> 8L + methodName.length
         is Instruction.CallStaticMethod -> 12L + className.length + methodName.length
+        Instruction.ConstructArray -> 4L
         is Instruction.ConstructClass -> 8L + className.length + fieldNames.sumOf(String::length)
+        is Instruction.ConstructList -> 4L + elementCount
+        is Instruction.ConstructMap -> 4L + entryCount * 2L
         is Instruction.ConstructRecord -> 8L + typeName.length + fieldNames.sumOf(String::length)
         is Instruction.GetField -> 4L + fieldName.length
+        Instruction.IndexGet -> 2L
+        Instruction.IndexSet -> 2L
         is Instruction.Jump -> 4L
         is Instruction.JumpIfFalse -> 4L
         is Instruction.JumpIfTrue -> 4L
