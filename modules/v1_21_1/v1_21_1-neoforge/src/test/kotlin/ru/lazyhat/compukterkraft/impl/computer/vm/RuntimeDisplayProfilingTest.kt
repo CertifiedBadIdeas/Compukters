@@ -24,6 +24,7 @@ import kotlinx.coroutines.runBlocking
 import ru.lazyhat.compukterkraft.core.device.runtime.FirmwareProgramLoader
 import ru.lazyhat.compukterkraft.core.device.runtime.HostCallDispatcher
 import ru.lazyhat.compukterkraft.core.device.runtime.LoadedFirmwareProgramSource
+import ru.lazyhat.compukterkraft.core.device.runtime.RecordingRuntimeMetricsCollector
 import ru.lazyhat.compukterkraft.core.device.vm.BackgroundDeviceVm
 import ru.lazyhat.compukterkraft.core.device.vm.DeviceVmLogger
 import ru.lazyhat.compukterkraft.core.device.vm.DeviceWorkspaceHost
@@ -81,19 +82,33 @@ class RuntimeDisplayProfilingTest {
     private fun runTicks(
         vm: BackgroundDeviceVm,
         dispatcher: HostCallDispatcher,
+        metrics: RecordingRuntimeMetricsCollector,
         ticks: Int,
-    ): Long =
+    ) =
         runBlocking {
-            val started = System.nanoTime()
             repeat(ticks) { tick ->
+                val tickStarted = System.nanoTime()
+                val requestStarted = System.nanoTime()
                 vm.requestSlice(tick.toLong())
-                val results = vm.drainHostCalls().map(dispatcher::dispatch)
+                metrics.recordRequestSlice(System.nanoTime() - requestStarted)
+
+                val drainStarted = System.nanoTime()
+                val calls = vm.drainHostCalls()
+                metrics.recordHostCallDrain(calls.size, System.nanoTime() - drainStarted)
+
+                val dispatchStarted = System.nanoTime()
+                val results = calls.map(dispatcher::dispatch)
+                metrics.recordHostCallDispatch(calls.size, System.nanoTime() - dispatchStarted)
+
+                val deliverStarted = System.nanoTime()
                 if (results.isNotEmpty()) {
                     vm.deliverHostResults(results)
                 }
+                metrics.recordHostResultDelivery(results.size, System.nanoTime() - deliverStarted)
+                metrics.recordServerTick(System.nanoTime() - tickStarted)
+
                 kotlinx.coroutines.delay(10)
             }
-            System.nanoTime() - started
         }
 
     @Test
@@ -102,7 +117,8 @@ class RuntimeDisplayProfilingTest {
         try {
             DeviceWorkspaceInitializer(root).ensureInitialized(1)
             val workspace = DeviceWorkspaceHost(root)
-            val metrics = RecordingDisplayMetricsCollector()
+            val displayMetrics = RecordingDisplayMetricsCollector()
+            val runtimeMetrics = RecordingRuntimeMetricsCollector()
             val vm =
                 BackgroundDeviceVm(
                     deviceId = 1,
@@ -112,33 +128,43 @@ class RuntimeDisplayProfilingTest {
                     logger = DeviceVmLogger { },
                     workspace = workspace,
                     firmwareLoader = ClasspathFirmwareLoader(),
-                    displayMetricsCollector = metrics,
+                    displayMetricsCollector = displayMetrics,
+                    runtimeMetricsCollector = runtimeMetrics,
                 )
             val dispatcher = HostCallDispatcher(deviceId = 1, workspace = workspace)
 
             vm.attachDisplay(displayId = 9, width = 96, height = 48)
             assertTrue(vm.boot())
-            val bootNanos = runTicks(vm, dispatcher, ticks = 80)
+            runTicks(vm, dispatcher, runtimeMetrics, ticks = 80)
 
             "help".forEach { ch -> vm.enqueueEvent(VmEvent("char", listOf(byteArrayOf(ch.code.toByte())))) }
-            val inputNanos = runTicks(vm, dispatcher, ticks = 20)
+            runTicks(vm, dispatcher, runtimeMetrics, ticks = 20)
 
             vm.enqueueEvent(VmEvent("key", listOf(KeyCodes.KEY_ENTER, false)))
-            val outputNanos = runTicks(vm, dispatcher, ticks = 40)
-            vm.drainDisplayFrames()
+            runTicks(vm, dispatcher, runtimeMetrics, ticks = 40)
+            val drainStarted = System.nanoTime()
+            val frames = vm.drainDisplayFrames()
+            runtimeMetrics.recordDisplayFrameDrain(frames.size, System.nanoTime() - drainStarted)
 
-            val snapshot = metrics.snapshot()
-            println(snapshot.summary())
-            println("timing: bootNanos=$bootNanos, inputNanos=$inputNanos, outputNanos=$outputNanos")
+            val displaySnapshot = displayMetrics.snapshot()
+            val runtimeSnapshot = runtimeMetrics.snapshot()
+            println(displaySnapshot.summary())
+            println(runtimeSnapshot.summary())
 
-            assertTrue(snapshot.operations.fillRectCalls > 0, snapshot.summary())
-            assertTrue(snapshot.operations.presentCalls > 0, snapshot.summary())
-            assertTrue(snapshot.frames.frameCount > 0, snapshot.summary())
-            assertTrue(snapshot.frames.tileCount > 0, snapshot.summary())
-            assertTrue(snapshot.frames.payloadBytes > 0, snapshot.summary())
-            assertTrue(bootNanos > 0)
-            assertTrue(inputNanos > 0)
-            assertTrue(outputNanos > 0)
+            assertTrue(displaySnapshot.operations.fillRectCalls > 0, displaySnapshot.summary())
+            assertTrue(displaySnapshot.operations.presentCalls > 0, displaySnapshot.summary())
+            assertTrue(displaySnapshot.frames.frameCount > 0, displaySnapshot.summary())
+            assertTrue(displaySnapshot.frames.tileCount > 0, displaySnapshot.summary())
+            assertTrue(displaySnapshot.frames.payloadBytes > 0, displaySnapshot.summary())
+            assertTrue(runtimeSnapshot.tick.serverTickCalls > 0, runtimeSnapshot.summary())
+            assertTrue(runtimeSnapshot.tick.requestSliceCalls > 0, runtimeSnapshot.summary())
+            assertTrue(runtimeSnapshot.tick.hostCallDrainCalls > 0, runtimeSnapshot.summary())
+            assertTrue(runtimeSnapshot.tick.hostCallDispatchCalls > 0, runtimeSnapshot.summary())
+            assertTrue(runtimeSnapshot.tick.hostResultDeliveryCalls > 0, runtimeSnapshot.summary())
+            assertTrue(runtimeSnapshot.tick.displayFrameDrainCalls > 0, runtimeSnapshot.summary())
+            assertTrue(runtimeSnapshot.vm.sliceRequests > 0, runtimeSnapshot.summary())
+            assertTrue(runtimeSnapshot.vm.slicePermitsReceived > 0, runtimeSnapshot.summary())
+            assertTrue(runtimeSnapshot.vm.executionWindowNanos > 0, runtimeSnapshot.summary())
         } finally {
             root.toFile().deleteRecursively()
         }
