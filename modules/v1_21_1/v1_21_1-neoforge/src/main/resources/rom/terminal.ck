@@ -42,7 +42,8 @@ fun glyphPattern(ch: String): String {
     if (ch == "/") { return "00001000100001000100010001000000000" }
     if (ch == "-") { return "00000000000000011111000000000000000" }
     if (ch == "_") { return "00000000000000000000000000000011111" }
-    if (ch == ">") { return "10000010000010000010001001000000000" }
+    if (ch == ">") { return "10000010000010000010001000100010000" }
+    if (ch == "<") { return "00001000100010001000001000001000001" }
     if (ch == "`" || ch == "'") { return "00100001000000000000000000000000000" }
     if (ch == "!") { return "00100001000010000100001000000000100" }
     if (ch == "?") { return "01110100010000100010001000000000100" }
@@ -279,17 +280,16 @@ fun dropLast(text: String): String {
 
 pub fun main() {
     val input: Int = ipc::open()
-    val output: Int = ipc::open()
-    val error: Int = ipc::open()
+    val stream: Int = ipc::open()
     var displayId: Int = waitDisplay()
     display::clear(displayId, 0)
     display::present(displayId)
     var buffer: TerminalBuffer = newTerminalBuffer(displayId)
     var line: String = ""
-    process::spawn("shell.ck", "stdio-v1 " + input + " " + output + " " + error + " ")
+    process::spawn("shell.ck", "stdio-v1 " + input + " " + stream + " " + stream + " ")
 
     while true {
-        val chunk: String = ipc::tryRead(output) + ipc::tryRead(error)
+        val chunk: String = ipc::tryRead(stream)
         if (chunk != "") {
             buffer = appendText(displayId, buffer, chunk)
             if (line != "") {

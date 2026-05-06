@@ -95,6 +95,39 @@ class RomScriptCompileTest {
     }
 
     @Test
+    fun bundledRomTerminalUsesSingleVisibleStreamForStdoutAndStderr() {
+        val source = resourceText("rom/terminal.ck")
+
+        assertTrue(
+            source.contains("val stream: Int = ipc::open()"),
+            "terminal.ck should use one visible IPC stream so stdout/stderr cannot reorder around the prompt",
+        )
+        assertTrue(
+            source.contains("\"stdio-v1 \" + input + \" \" + stream + \" \" + stream"),
+            "terminal.ck should pass the same visible stream as stdout and stderr",
+        )
+        assertFalse(
+            source.contains("ipc::tryRead(output) + ipc::tryRead(error)"),
+            "terminal.ck must not concatenate separate stdout/stderr reads in a fixed order",
+        )
+    }
+
+    @Test
+    fun bundledRomTerminalHasSymmetricAngleGlyphs() {
+        val source = resourceText("rom/terminal.ck")
+
+        assertTrue(source.contains("if (ch == \"<\")"), "terminal.ck should define a '<' glyph")
+        assertTrue(
+            source.contains("if (ch == \">\") { return \"10000010000010000010001000100010000\" }"),
+            "terminal.ck should use a balanced seven-row '>' glyph",
+        )
+        assertTrue(
+            source.contains("if (ch == \"<\") { return \"00001000100010001000001000001000001\" }"),
+            "terminal.ck should use a balanced seven-row '<' glyph",
+        )
+    }
+
+    @Test
     fun bundledRomShellChecksExternalCommandBeforeRun() {
         val source = resourceText("rom/shell.ck")
 
