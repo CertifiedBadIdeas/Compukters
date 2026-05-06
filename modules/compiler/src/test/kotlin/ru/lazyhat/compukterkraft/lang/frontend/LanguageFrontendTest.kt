@@ -73,6 +73,69 @@ class LanguageFrontendTest {
     }
 
     @Test
+    fun lexesBitwiseTokensAndBinaryLiterals() {
+        val tokens =
+            Lexer(
+                """
+                pub fun main() {
+                    var flags: Int = 0b00101;
+                    flags &= 0B11111;
+                    flags |= 0b01000L;
+                    flags ^= 0b00001;
+                    flags <<= 1;
+                    flags >>= 2;
+                    val inverted: Int = ~flags;
+                    val shifted: Int = flags << 1 >> 1;
+                    val masked: Int = flags & 0b11111 | 0b00010 ^ 0b00001;
+                }
+                """.trimIndent(),
+            ).lex()
+
+        val kinds = tokens.map { it.kind }
+        assertTrue(TokenKind.AMP in kinds, tokens.joinToString { "${it.kind}:${it.text}" })
+        assertTrue(TokenKind.PIPE in kinds, tokens.joinToString { "${it.kind}:${it.text}" })
+        assertTrue(TokenKind.CARET in kinds, tokens.joinToString { "${it.kind}:${it.text}" })
+        assertTrue(TokenKind.TILDE in kinds, tokens.joinToString { "${it.kind}:${it.text}" })
+        assertTrue(TokenKind.LT_LT in kinds, tokens.joinToString { "${it.kind}:${it.text}" })
+        assertTrue(TokenKind.GT_GT in kinds, tokens.joinToString { "${it.kind}:${it.text}" })
+        assertTrue(TokenKind.AMP_EQUAL in kinds, tokens.joinToString { "${it.kind}:${it.text}" })
+        assertTrue(TokenKind.PIPE_EQUAL in kinds, tokens.joinToString { "${it.kind}:${it.text}" })
+        assertTrue(TokenKind.CARET_EQUAL in kinds, tokens.joinToString { "${it.kind}:${it.text}" })
+        assertTrue(TokenKind.LT_LT_EQUAL in kinds, tokens.joinToString { "${it.kind}:${it.text}" })
+        assertTrue(TokenKind.GT_GT_EQUAL in kinds, tokens.joinToString { "${it.kind}:${it.text}" })
+        assertTrue(tokens.any { it.kind == TokenKind.NUMBER && it.text == "0b00101" }, tokens.joinToString { it.text })
+        assertTrue(tokens.any { it.kind == TokenKind.NUMBER && it.text == "0B11111" }, tokens.joinToString { it.text })
+        assertTrue(tokens.any { it.kind == TokenKind.NUMBER && it.text == "0b01000L" }, tokens.joinToString { it.text })
+    }
+
+    @Test
+    fun rejectsMalformedBinaryLiterals() {
+        val empty = DefaultParserFacade().parse("empty_binary.ck", "pub fun main() { val value: Int = 0b; }")
+        assertTrue(
+            empty.syntaxDiagnostics.any { it.message.contains("Binary literal requires at least one digit") },
+            empty.syntaxDiagnostics.joinToString { it.message },
+        )
+
+        val badDigit = DefaultParserFacade().parse("bad_binary.ck", "pub fun main() { val value: Int = 0b102; }")
+        assertTrue(
+            badDigit.syntaxDiagnostics.any { it.message.contains("Binary literal can only contain 0 or 1") },
+            badDigit.syntaxDiagnostics.joinToString { it.message },
+        )
+
+        val tooLarge =
+            frontend.compile(
+                "large_binary.ck",
+                "pub fun main() { val value: Int = 0b10000000000000000000000000000000; }",
+            )
+        assertTrue(
+            tooLarge.analysis.diagnostics.any {
+                it.message.contains("exceeds Int range") && it.message.contains("append `L`")
+            },
+            tooLarge.analysis.diagnostics.joinToString { it.message },
+        )
+    }
+
+    @Test
     fun parsesPubTopLevelDeclarationsAndClassMembers() {
         val parsed =
             DefaultParserFacade().parse(
