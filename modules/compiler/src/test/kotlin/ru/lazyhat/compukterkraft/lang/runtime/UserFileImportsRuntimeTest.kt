@@ -37,7 +37,7 @@ class UserFileImportsRuntimeTest {
                     "main.ck" to
                         """
                         import "math.ck" as m;
-                        pub fun main() { terminal::println("sum=" + m::add(2, 3)); }
+                        pub fun main() { system::log("sum=" + m::add(2, 3)); }
                         """.trimIndent(),
                 ),
             )
@@ -54,7 +54,7 @@ class UserFileImportsRuntimeTest {
         val loader =
             MapSourceLoader(
                 mapOf(
-                    "io.ck" to "pub fun greet(): Unit { terminal::println(\"hi\"); }",
+                    "io.ck" to "pub fun greet(): Unit { system::log(\"hi\"); }",
                     "main.ck" to
                         """
                         import "io.ck" { greet };

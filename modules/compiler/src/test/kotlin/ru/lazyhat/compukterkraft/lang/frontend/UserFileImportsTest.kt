@@ -53,7 +53,7 @@ class UserFileImportsTest {
                         import "model.ck" { Counter };
                         pub fun main() {
                             val counter: Counter = Counter(value = 2);
-                            terminal::println("value=" + counter.value);
+                            system::log("value=" + counter.value);
                         }
                         """.trimIndent(),
                     "model.ck" to "pub class Counter(pub var value: Int) {}",
@@ -95,7 +95,7 @@ class UserFileImportsTest {
             MapSourceLoader(
                 mapOf(
                     "lib.ck" to "fun helper(): Int { return 1; } pub fun api(): Int { return helper(); }",
-                    "main.ck" to "import \"lib.ck\" { api }; pub fun main() { terminal::println(\"v=\" + api()); }",
+                    "main.ck" to "import \"lib.ck\" { api }; pub fun main() { system::log(\"v=\" + api()); }",
                 ),
             )
 
@@ -125,7 +125,7 @@ class UserFileImportsTest {
 
     @Test
     fun parsesSelectiveBuiltinImport() {
-        val artifact = frontend.compile("main.ck", "import terminal { println }; pub fun main() { println(\"hi\"); }")
+        val artifact = frontend.compile("main.ck", "import system { log }; pub fun main() { log(\"hi\"); }")
 
         assertTrue(
             artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
@@ -135,11 +135,11 @@ class UserFileImportsTest {
 
     @Test
     fun rejectsBareBuiltinImport() {
-        val artifact = frontend.compile("main.ck", "import terminal; pub fun main() { terminal::println(\"hi\"); }")
+        val artifact = frontend.compile("main.ck", "import system; pub fun main() { system::log(\"hi\"); }")
 
         assertTrue(
             artifact.analysis.diagnostics.any {
-                it.severity == FrontendSeverity.ERROR && it.message.contains("Use `import terminal { name }`")
+                it.severity == FrontendSeverity.ERROR && it.message.contains("Use `import system { name }`")
             },
             artifact.analysis.diagnostics.joinToString { it.message },
         )
@@ -147,12 +147,12 @@ class UserFileImportsTest {
 
     @Test
     fun selectiveBuiltinImportDoesNotExposeOtherMembers() {
-        val artifact = frontend.compile("main.ck", "import terminal { println }; pub fun main() { clear(); }")
+        val artifact = frontend.compile("main.ck", "import system { log }; pub fun main() { deviceId(); }")
 
         assertTrue(
             artifact.analysis.diagnostics.any {
                 it.severity == FrontendSeverity.ERROR &&
-                    (it.message.contains("Unknown function `clear`") || it.message.contains("Expression is not callable"))
+                    (it.message.contains("Unknown function `deviceId`") || it.message.contains("Expression is not callable"))
             },
             artifact.analysis.diagnostics.joinToString { it.message },
         )
@@ -160,7 +160,7 @@ class UserFileImportsTest {
 
     @Test
     fun selectiveBuiltinImportConflictsWithLocalFunction() {
-        val artifact = frontend.compile("main.ck", "import terminal { println }; fun println() { }")
+        val artifact = frontend.compile("main.ck", "import system { log }; fun log() { }")
 
         assertTrue(
             artifact.analysis.diagnostics.any {
@@ -176,7 +176,7 @@ class UserFileImportsTest {
             MapSourceLoader(
                 mapOf(
                     "math.ck" to "pub fun add(): Int { return 1; } fun hidden(): Int { return 2; }",
-                    "main.ck" to "import \"math.ck\" { add }; pub fun main() { terminal::println(\"v=\" + add()); hidden(); }",
+                    "main.ck" to "import \"math.ck\" { add }; pub fun main() { system::log(\"v=\" + add()); hidden(); }",
                 ),
             )
 
@@ -198,7 +198,7 @@ class UserFileImportsTest {
                 mapOf(
                     "math.ck" to "pub struct Vec2 { x: Int, y: Int } pub fun make(): Vec2 { return Vec2(x = 1, y = 2); }",
                     "main.ck" to
-                        "import \"math.ck\" { Vec2, make }; pub fun main() { val v: Vec2 = make(); terminal::println(\"x=\" + v.x); }",
+                        "import \"math.ck\" { Vec2, make }; pub fun main() { val v: Vec2 = make(); system::log(\"x=\" + v.x); }",
                 ),
             )
 
@@ -228,7 +228,7 @@ class UserFileImportsTest {
                         pub fun main() {
                             val v: m::Vec2 = m::Vec2(x = 1, y = 2);
                             val w: m::Vec2 = m::add(v, m::Vec2(x = 3, y = 4));
-                            terminal::println("x=" + w.x);
+                            system::log("x=" + w.x);
                         }
                         """.trimIndent(),
                 ),
@@ -255,8 +255,8 @@ class UserFileImportsTest {
                         import "a.ck" as a;
                         import "b.ck" as b;
                         pub fun main() {
-                            terminal::println("a=" + a::helper());
-                            terminal::println("b=" + b::helper());
+                            system::log("a=" + a::helper());
+                            system::log("b=" + b::helper());
                         }
                         """.trimIndent(),
                 ),
@@ -275,9 +275,9 @@ class UserFileImportsTest {
 
     @Test
     fun aliasCollidesWithBuiltinModule() {
-        val loader = MapSourceLoader(mapOf("foo.ck" to "fun x(): Int { return 0; }"))
+        val loader = MapSourceLoader(mapOf("foo.ck" to "pub fun x(): Int { return 0; }"))
 
-        val artifact = frontend.compile("main.ck", """import "foo.ck" as terminal; pub fun main() { }""", loader)
+        val artifact = frontend.compile("main.ck", """import "foo.ck" as system; pub fun main() { }""", loader)
 
         assertTrue(
             artifact.analysis.diagnostics.any {
@@ -394,7 +394,7 @@ class UserFileImportsTest {
                         import "a.ck" { aFn };
                         import "b.ck" { bFn };
                         pub fun main() {
-                            terminal::println("a=" + aFn() + " b=" + bFn());
+                            system::log("a=" + aFn() + " b=" + bFn());
                         }
                         """.trimIndent(),
                 ),
@@ -422,7 +422,7 @@ class UserFileImportsTest {
                         import "left.ck" { left };
                         import "right.ck" { right };
                         pub fun main() {
-                            terminal::println("sum=" + (left() + right()));
+                            system::log("sum=" + (left() + right()));
                         }
                         """.trimIndent(),
                 ),

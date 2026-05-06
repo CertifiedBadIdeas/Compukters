@@ -32,56 +32,6 @@ object LanguageBuiltins {
             modules =
                 listOf(
                     BuiltinModule(
-                        name = "terminal",
-                        documentation = "Terminal I/O operations.",
-                        origin = ModuleOrigin.BASE_VM,
-                        functions =
-                            listOf(
-                                BuiltinFunction(
-                                    "write",
-                                    listOf("String"),
-                                    "Unit",
-                                    "Writes text without advancing the cursor.",
-                                ),
-                                BuiltinFunction(
-                                    "println",
-                                    listOf("String"),
-                                    "Unit",
-                                    "Writes text and moves to the next line.",
-                                ),
-                                BuiltinFunction("readln", emptyList(), "String", "Reads a line from terminal input."),
-                                BuiltinFunction(
-                                    "readln",
-                                    listOf("String"),
-                                    "String",
-                                    "Prints a prompt and reads a line from terminal input.",
-                                ),
-                                BuiltinFunction("clear", emptyList(), "Unit", "Clears the terminal contents."),
-                                BuiltinFunction(
-                                    "setCursor",
-                                    listOf("Int", "Int"),
-                                    "Unit",
-                                    "Moves the terminal cursor.",
-                                ),
-                            ),
-                    ),
-                    BuiltinModule(
-                        name = "stdout",
-                        documentation =
-                            "Raw byte stream output. Writes are interpreted as a VT-100 subset " +
-                                "by the attached terminal(s).",
-                        origin = ModuleOrigin.BASE_VM,
-                        functions =
-                            listOf(
-                                BuiltinFunction(
-                                    "write",
-                                    listOf("String"),
-                                    "Unit",
-                                    "Appends text to the computer's stdout stream.",
-                                ),
-                            ),
-                    ),
-                    BuiltinModule(
                         name = "display",
                         documentation = "Framebuffer display operations. The attached display endpoint supplies resolution.",
                         origin = ModuleOrigin.BASE_VM,
