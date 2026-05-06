@@ -342,7 +342,7 @@ pub fun main() {
                 } else if (event.name == "key") {
                     val key: Int = events::argInt(event, 0)
                     if (key == 257 || key == 335) {
-                        ipc::write(input, line)
+                        ipc::write(input, line + "\n")
                         line = ""
                     } else if (key == 259) {
                         if (line != "") {

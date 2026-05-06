@@ -22,7 +22,9 @@ Fix empty Enter behavior in the ROM shell/terminal and make visible line commits
 
 ## Architecture
 
-Terminal remains responsible for interactive input overlay before Enter. On Enter it sends the current line through stdin and clears the pending input state, but it does not commit `line + "\n"` locally.
+Terminal remains responsible for interactive input overlay before Enter. On Enter it sends the current line plus a newline delimiter through stdin (`line + "\n"`) and clears the pending input state, but it does not commit `line + "\n"` locally to the display.
+
+`stdio.readLine(ctx)` owns stdin line framing: it reads IPC text and strips one trailing newline delimiter before returning command text. Empty Enter is therefore transported as the non-empty IPC payload `"\n"`, and `readLine(ctx)` returns `""` to the shell.
 
 Shell becomes responsible for committing the entered line to visible output. Immediately after `readLine(ctx)`, shell writes `line + "\n"` to stdout, then handles the trimmed command. Blank input remains a no-op command, but its newline is now shell-owned visible output and the next prompt is emitted by the normal shell loop.
 
@@ -45,6 +47,8 @@ Numeric glyph masks should be a separate language/runtime task. It requires CKL 
 Add regressions that verify:
 
 - `terminal.ck` does not locally commit `line + "\n"` on Enter.
+- `terminal.ck` sends newline-delimited stdin with `ipc::write(input, line + "\n")`.
+- `stdio.readLine(ctx)` strips the trailing stdin newline delimiter before returning command text.
 - `shell.ck` echoes `line + "\n"` immediately after `readLine(ctx)`.
 - `terminal.ck` handles `\r` and `\b` in `appendText()`.
 - CKL lexes `\r` as carriage return and the formatter preserves `\r`/`\b` escapes.

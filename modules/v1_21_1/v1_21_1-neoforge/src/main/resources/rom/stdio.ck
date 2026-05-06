@@ -36,11 +36,28 @@ pub fun error(ctx: Stdio, text: String) {
     }
 }
 
+fun stripLineDelimiter(text: String): String {
+    val length: Int = strings::length(text)
+    if (length <= 0) {
+        return text
+    }
+    if (strings::charAt(text, length - 1) != "\n") {
+        return text
+    }
+    var result: String = ""
+    var i: Int = 0
+    while i + 1 < length + 0 {
+        result = result + strings::charAt(text, i)
+        i = i + 1
+    }
+    return result
+}
+
 pub fun readLine(ctx: Stdio): String {
     if (ctx.input < 0) {
         return ""
     }
-    return ipc::read(ctx.input)
+    return stripLineDelimiter(ipc::read(ctx.input))
 }
 
 pub fun main() {
