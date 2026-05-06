@@ -107,6 +107,41 @@ class DisplayProfilingTest {
     }
 
     @Test
+    fun recordingCollectorAccumulatesFrameBuildTimings() {
+        val collector = RecordingDisplayMetricsCollector()
+
+        collector.recordFrameBuild(
+            displayId = 1,
+            metrics =
+                DisplayFrameBuildMetrics(
+                    dirtyTileScanNanos = 10,
+                    frameBuildNanos = 20,
+                    tileSerializationNanos = 30,
+                    frontCopyNanos = 40,
+                    totalNanos = 100,
+                    tileCount = 2,
+                    payloadBytes = 16,
+                ),
+        )
+
+        val snapshot = collector.snapshot()
+
+        assertEquals(1, snapshot.frameBuild.buildCalls)
+        assertEquals(10, snapshot.frameBuild.dirtyTileScanNanos)
+        assertEquals(20, snapshot.frameBuild.frameBuildNanos)
+        assertEquals(30, snapshot.frameBuild.tileSerializationNanos)
+        assertEquals(40, snapshot.frameBuild.frontCopyNanos)
+        assertEquals(100, snapshot.frameBuild.totalNanos)
+        assertEquals(2, snapshot.frameBuild.tileCount)
+        assertEquals(16, snapshot.frameBuild.payloadBytes)
+        assertEquals(50, snapshot.frameBuild.averageTotalNanosPerTile)
+        assertEquals(15, snapshot.frameBuild.averageTileSerializationNanosPerTile)
+        assertEquals(1, snapshot.frameBuild.averageTileSerializationNanosPerPayloadByte)
+        assertTrue(snapshot.summary().contains("frame-build:"), snapshot.summary())
+        assertTrue(snapshot.summary().contains("nanosPerPayloadByte=1"), snapshot.summary())
+    }
+
+    @Test
     fun noopCollectorKeepsEmptySnapshot() {
         val collector = NoOpDisplayMetricsCollector
         collector.recordClear(displayId = 1, nanos = 100)
@@ -121,6 +156,7 @@ class DisplayProfilingTest {
 
         assertEquals(DisplayOperationMetrics(), snapshot.operations)
         assertEquals(DisplayFrameMetrics(), snapshot.frames)
+        assertEquals(DisplayFrameBuildTotals(), snapshot.frameBuild)
     }
 
     @Test

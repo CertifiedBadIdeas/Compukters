@@ -19,6 +19,11 @@
 
 package ru.lazyhat.compukterkraft.core.device.vm.display
 
+data class TileCopyResult(
+    val payload: ByteArray,
+    val nanos: Long,
+)
+
 class PixelBuffer(
     val width: Int,
     val height: Int,
@@ -180,7 +185,10 @@ class PixelBuffer(
         }
     }
 
-    fun copyTile(tile: DirtyTile): ByteArray {
+    fun copyTile(tile: DirtyTile): ByteArray = copyTileWithMetrics(tile).payload
+
+    fun copyTileWithMetrics(tile: DirtyTile): TileCopyResult {
+        val started = System.nanoTime()
         val out = ByteArray(tile.width * tile.height * BYTES_PER_PIXEL)
         var offset = 0
         for (row in tile.y until tile.y + tile.height) {
@@ -190,7 +198,7 @@ class PixelBuffer(
                 out[offset++] = value.toByte()
             }
         }
-        return out
+        return TileCopyResult(out, System.nanoTime() - started)
     }
 
     fun copyFrom(other: PixelBuffer) {

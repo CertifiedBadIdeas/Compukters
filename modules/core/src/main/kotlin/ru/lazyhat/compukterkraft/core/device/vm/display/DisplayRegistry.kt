@@ -41,7 +41,9 @@ class DisplayRegistry(
         require(height in MIN_SIZE..MAX_SIZE) { "Display height out of range: $height" }
         val state = DisplayState(displayId, width, height, pixelFormat)
         displays[displayId] = state
-        pendingFrames.add(state.fullRefresh())
+        val result = state.fullRefreshWithMetrics()
+        pendingFrames.add(result.frame)
+        metricsCollector.recordFrameBuild(displayId, result.metrics)
         return info(state)
     }
 
@@ -143,9 +145,12 @@ class DisplayRegistry(
 
     fun present(displayId: Int) {
         val started = System.nanoTime()
-        val frame = displays[displayId]?.present()
-        frame?.let(pendingFrames::add)
-        metricsCollector.recordPresent(displayId, emittedFrame = frame != null, nanos = System.nanoTime() - started)
+        val result = displays[displayId]?.presentWithMetrics()
+        result?.let {
+            pendingFrames.add(it.frame)
+            metricsCollector.recordFrameBuild(displayId, it.metrics)
+        }
+        metricsCollector.recordPresent(displayId, emittedFrame = result != null, nanos = System.nanoTime() - started)
     }
 
     fun drainFrames(): List<DisplayFrameDelta> =
