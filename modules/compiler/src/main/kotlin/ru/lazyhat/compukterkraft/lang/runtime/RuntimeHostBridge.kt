@@ -224,6 +224,33 @@ internal class RuntimeHostBridge(
                 VmValue.UnitValue
             }
 
+            "copyRect" -> {
+                runtime.display.copyRect(
+                    arguments[0].asInt(),
+                    arguments[1].asInt(),
+                    arguments[2].asInt(),
+                    arguments[3].asInt(),
+                    arguments[4].asInt(),
+                    arguments[5].asInt(),
+                    arguments[6].asInt(),
+                )
+                VmValue.UnitValue
+            }
+
+            "blitMono" -> {
+                runtime.display.blitMono(
+                    arguments[0].asInt(),
+                    arguments[1].asInt(),
+                    arguments[2].asInt(),
+                    arguments[3].asInt(),
+                    arguments[4].asInt(),
+                    arguments[5].asString(),
+                    arguments[6].asInt(),
+                    arguments[7].asInt(),
+                )
+                VmValue.UnitValue
+            }
+
             "present" -> {
                 runtime.display.present(arguments[0].asInt())
                 VmValue.UnitValue

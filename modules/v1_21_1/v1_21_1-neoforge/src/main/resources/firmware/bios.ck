@@ -52,16 +52,7 @@ fun draw_glyph(displayId: Int, column: Int, row: Int, ch: String, color: Int) {
     if (ch == " ") {
         return
     }
-    val pattern: String = glyphPattern(ch)
-    var i: Int = 0
-    while i < 35 {
-        if (strings::charAt(pattern, i) == "1") {
-            val px: Int = i - (i / 5) * 5
-            val py: Int = i / 5
-            display::fillRect(displayId, column * 6 + px, row * 9 + py, 1, 1, color)
-        }
-        i = i + 1
-    }
+    display::blitMono(displayId, column * 6, row * 9, 5, 7, glyphPattern(ch), color, -1)
 }
 
 fun draw_text(displayId: Int, row: Int, text: String, color: Int) {

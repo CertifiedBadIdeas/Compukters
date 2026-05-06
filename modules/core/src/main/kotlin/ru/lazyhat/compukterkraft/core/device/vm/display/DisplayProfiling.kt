@@ -33,6 +33,18 @@ interface DisplayMetricsCollector {
         height: Int,
     )
 
+    fun recordCopyRect(
+        displayId: Int,
+        width: Int,
+        height: Int,
+    )
+
+    fun recordBlitMono(
+        displayId: Int,
+        width: Int,
+        height: Int,
+    )
+
     fun recordPresent(
         displayId: Int,
         emittedFrame: Boolean,
@@ -48,6 +60,10 @@ data class DisplayOperationMetrics(
     val setPixelCalls: Long = 0,
     val fillRectCalls: Long = 0,
     val fillRectArea: Long = 0,
+    val copyRectCalls: Long = 0,
+    val copyRectArea: Long = 0,
+    val blitMonoCalls: Long = 0,
+    val blitMonoArea: Long = 0,
     val presentCalls: Long = 0,
     val presentFrames: Long = 0,
 )
@@ -66,6 +82,8 @@ data class DisplayProfilingSnapshot(
     fun summary(): String =
         "display: clear=${operations.clearCalls}, setPixel=${operations.setPixelCalls}, " +
             "fillRect=${operations.fillRectCalls}, fillArea=${operations.fillRectArea}, " +
+            "copyRect=${operations.copyRectCalls}, copyArea=${operations.copyRectArea}, " +
+            "blitMono=${operations.blitMonoCalls}, blitArea=${operations.blitMonoArea}, " +
             "present=${operations.presentCalls}, presentFrames=${operations.presentFrames}\n" +
             "frames: count=${frames.frameCount}, fullRefresh=${frames.fullRefreshFrames}, " +
             "tiles=${frames.tileCount}, payloadBytes=${frames.payloadBytes}"
@@ -77,6 +95,18 @@ object NoOpDisplayMetricsCollector : DisplayMetricsCollector {
     override fun recordSetPixel(displayId: Int) = Unit
 
     override fun recordFillRect(
+        displayId: Int,
+        width: Int,
+        height: Int,
+    ) = Unit
+
+    override fun recordCopyRect(
+        displayId: Int,
+        width: Int,
+        height: Int,
+    ) = Unit
+
+    override fun recordBlitMono(
         displayId: Int,
         width: Int,
         height: Int,
@@ -97,6 +127,10 @@ class RecordingDisplayMetricsCollector : DisplayMetricsCollector {
     private val setPixelCalls = AtomicLong()
     private val fillRectCalls = AtomicLong()
     private val fillRectArea = AtomicLong()
+    private val copyRectCalls = AtomicLong()
+    private val copyRectArea = AtomicLong()
+    private val blitMonoCalls = AtomicLong()
+    private val blitMonoArea = AtomicLong()
     private val presentCalls = AtomicLong()
     private val presentFrames = AtomicLong()
     private val frameCount = AtomicLong()
@@ -120,6 +154,28 @@ class RecordingDisplayMetricsCollector : DisplayMetricsCollector {
         fillRectCalls.incrementAndGet()
         if (width > 0 && height > 0) {
             fillRectArea.addAndGet(width.toLong() * height.toLong())
+        }
+    }
+
+    override fun recordCopyRect(
+        displayId: Int,
+        width: Int,
+        height: Int,
+    ) {
+        copyRectCalls.incrementAndGet()
+        if (width > 0 && height > 0) {
+            copyRectArea.addAndGet(width.toLong() * height.toLong())
+        }
+    }
+
+    override fun recordBlitMono(
+        displayId: Int,
+        width: Int,
+        height: Int,
+    ) {
+        blitMonoCalls.incrementAndGet()
+        if (width > 0 && height > 0) {
+            blitMonoArea.addAndGet(width.toLong() * height.toLong())
         }
     }
 
@@ -148,6 +204,10 @@ class RecordingDisplayMetricsCollector : DisplayMetricsCollector {
                     setPixelCalls = setPixelCalls.get(),
                     fillRectCalls = fillRectCalls.get(),
                     fillRectArea = fillRectArea.get(),
+                    copyRectCalls = copyRectCalls.get(),
+                    copyRectArea = copyRectArea.get(),
+                    blitMonoCalls = blitMonoCalls.get(),
+                    blitMonoArea = blitMonoArea.get(),
                     presentCalls = presentCalls.get(),
                     presentFrames = presentFrames.get(),
                 ),

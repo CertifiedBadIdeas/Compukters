@@ -151,6 +151,9 @@ class RuntimeDisplayProfilingTest {
             println(runtimeSnapshot.summary())
 
             assertTrue(displaySnapshot.operations.fillRectCalls > 0, displaySnapshot.summary())
+            assertTrue(displaySnapshot.operations.copyRectCalls > 0, displaySnapshot.summary())
+            assertTrue(displaySnapshot.operations.blitMonoCalls > 0, displaySnapshot.summary())
+            assertTrue(displaySnapshot.operations.fillRectCalls < 1000, displaySnapshot.summary())
             assertTrue(displaySnapshot.operations.presentCalls > 0, displaySnapshot.summary())
             assertTrue(displaySnapshot.frames.frameCount > 0, displaySnapshot.summary())
             assertTrue(displaySnapshot.frames.tileCount > 0, displaySnapshot.summary())
