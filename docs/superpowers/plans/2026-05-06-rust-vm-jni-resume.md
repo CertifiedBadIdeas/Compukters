@@ -597,7 +597,7 @@ Run:
 
 ```bash
 ./gradlew buildRustVmNativeLibrary
-./gradlew :compiler:test --tests '*NativeVmRunnerJniTest' -Dckl.vm.native.library=native/ckl-vm/target/debug/libckl_vm.so
+./gradlew :compiler:test --tests '*NativeVmRunnerJniTest' -Dckl.vm.native.library=$PWD/native/ckl-vm/target/debug/libckl_vm.so
 ```
 
 Expected: FAIL because `NativeVmRunner` still uses one-shot `runUntilSignal` and rejects `HostCall`.
@@ -646,7 +646,7 @@ Run:
 
 ```bash
 ./gradlew buildRustVmNativeLibrary
-./gradlew :compiler:test --tests '*NativeVmRunnerJniTest' -Dckl.vm.native.library=native/ckl-vm/target/debug/libckl_vm.so
+./gradlew :compiler:test --tests '*NativeVmRunnerJniTest' -Dckl.vm.native.library=$PWD/native/ckl-vm/target/debug/libckl_vm.so
 ```
 
 Expected: PASS.
@@ -679,7 +679,7 @@ Run:
 
 ```bash
 ./gradlew buildRustVmNativeLibrary
-./gradlew :compiler:test --tests '*NativeVm*' -Dckl.vm.native.library=native/ckl-vm/target/debug/libckl_vm.so
+./gradlew :compiler:test --tests '*NativeVm*' -Dckl.vm.native.library=$PWD/native/ckl-vm/target/debug/libckl_vm.so
 ```
 
 Expected: PASS.

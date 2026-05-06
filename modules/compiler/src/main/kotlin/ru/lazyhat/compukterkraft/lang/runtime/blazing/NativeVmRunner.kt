@@ -21,6 +21,9 @@ package ru.lazyhat.compukterkraft.lang.runtime.blazing
 
 import ru.lazyhat.compukterkraft.lang.api.BytecodeModule
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceRuntime
+import ru.lazyhat.compukterkraft.lang.runtime.RuntimeHostBridge
+import ru.lazyhat.compukterkraft.lang.runtime.VmSignalKind
+import ru.lazyhat.compukterkraft.lang.runtime.VmValue
 import ru.lazyhat.compukterkraft.lang.runtime.VmRunner
 import ru.lazyhat.compukterkraft.lang.runtime.abi.BytecodeAbi
 
@@ -32,21 +35,53 @@ class NativeVmRunner private constructor(
         runtime: DeviceRuntime,
     ) {
         val bytecode = BytecodeAbi.encode(module)
-        when (val signal = NativeVmSignal.decode(NativeVmBindings.runUntilSignal(libraryPath, bytecode, runtime.profile.resources.cpu.instructionsPerSlice))) {
-            is NativeVmSignal.Halt -> return
-            is NativeVmSignal.Error -> error("Native VM failed for device ${runtime.system.deviceId}: ${signal.message}")
-            NativeVmSignal.Pause -> unsupported(signal)
-            NativeVmSignal.Yield -> unsupported(signal)
-            is NativeVmSignal.Sleep -> unsupported(signal)
-            is NativeVmSignal.HostCall -> unsupported(signal)
+        val bridge = RuntimeHostBridge(runtime)
+        val handle = NativeVmBindings.create(libraryPath, bytecode, runtime.profile.resources.cpu.instructionsPerSlice)
+        try {
+            while (true) {
+                val signal = NativeVmSignal.decode(NativeVmBindings.runUntilSignal(handle))
+                if (signal !is NativeVmSignal.Error) {
+                    runtime.metrics.recordVmSignal(signal.kind)
+                }
+                when (signal) {
+                    is NativeVmSignal.Halt -> return
+                    is NativeVmSignal.Error -> error("Native VM failed for device ${runtime.system.deviceId}: ${signal.message}")
+                    NativeVmSignal.Pause -> runtime.yield()
+                    NativeVmSignal.Yield -> {
+                        runtime.yield()
+                        NativeVmBindings.resumeWith(handle, VmValue.UnitValue.toNativeBytes("", "yield"))
+                    }
+                    is NativeVmSignal.Sleep -> {
+                        runtime.sleep(signal.ticks)
+                        NativeVmBindings.resumeWith(handle, VmValue.UnitValue.toNativeBytes("", "sleep"))
+                    }
+                    is NativeVmSignal.HostCall -> {
+                        val result = invokeHostCall(runtime, bridge, signal)
+                        NativeVmBindings.resumeWith(handle, result.toNativeBytes(signal.moduleName, signal.functionName))
+                    }
+                }
+            }
+        } finally {
+            NativeVmBindings.free(handle)
         }
     }
 
-    private fun unsupported(signal: NativeVmSignal): Nothing =
-        throw UnsupportedOperationException(
-            "Native VM signal $signal is not supported by the JNI prototype yet; " +
-                "host-call resume and persistent native VM state are not implemented",
-        )
+    private suspend fun invokeHostCall(
+        runtime: DeviceRuntime,
+        bridge: RuntimeHostBridge,
+        signal: NativeVmSignal.HostCall,
+    ): VmValue {
+        val arguments = signal.arguments.map { it.toVmValue(signal.moduleName, signal.functionName) }
+        if (!runtime.metrics.collectsDetailedMetrics) {
+            return bridge.invoke(signal.moduleName, signal.functionName, arguments)
+        }
+        val started = System.nanoTime()
+        try {
+            return bridge.invoke(signal.moduleName, signal.functionName, arguments)
+        } finally {
+            runtime.metrics.recordVmHostCall(signal.moduleName, signal.functionName, System.nanoTime() - started)
+        }
+    }
 
     companion object {
         fun isAvailable(libraryPath: String?): Boolean = !libraryPath.isNullOrBlank()
@@ -59,3 +94,14 @@ class NativeVmRunner private constructor(
         }
     }
 }
+
+private val NativeVmSignal.kind: VmSignalKind
+    get() =
+        when (this) {
+            is NativeVmSignal.Halt -> VmSignalKind.HALT
+            NativeVmSignal.Pause -> VmSignalKind.PAUSE
+            NativeVmSignal.Yield -> VmSignalKind.YIELD
+            is NativeVmSignal.Sleep -> VmSignalKind.SLEEP
+            is NativeVmSignal.HostCall -> VmSignalKind.HOST_CALL
+            is NativeVmSignal.Error -> error("Native VM errors are not runtime VM signals")
+        }
