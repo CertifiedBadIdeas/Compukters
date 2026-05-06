@@ -92,6 +92,12 @@ object LanguageBuiltins {
                                     "Draws a row-major monochrome bitmap mask.",
                                 ),
                                 BuiltinFunction(
+                                    "blitMono5x7",
+                                    listOf("Int", "Int", "Int", "Int", "Int", "Int", "Int", "Int", "Int", "Int", "Int", "Int"),
+                                    "Unit",
+                                    "Draws a fixed 5x7 monochrome bitmap from seven numeric row masks.",
+                                ),
+                                BuiltinFunction(
                                     "present",
                                     listOf("Int"),
                                     "Unit",
