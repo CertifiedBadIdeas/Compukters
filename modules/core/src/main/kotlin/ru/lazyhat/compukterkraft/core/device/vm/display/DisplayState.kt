@@ -63,6 +63,33 @@ class DisplayState(
     }
 
     @Synchronized
+    fun copyRect(
+        srcX: Int,
+        srcY: Int,
+        width: Int,
+        height: Int,
+        dstX: Int,
+        dstY: Int,
+    ) {
+        back.copyRect(srcX, srcY, width, height, dstX, dstY)
+        dirty.markRectDirty(dstX, dstY, width, height)
+    }
+
+    @Synchronized
+    fun blitMono(
+        x: Int,
+        y: Int,
+        width: Int,
+        height: Int,
+        mask: String,
+        foreground: Int,
+        background: Int,
+    ) {
+        back.blitMono(x, y, width, height, mask, foreground, background)
+        dirty.markRectDirty(x, y, width, height)
+    }
+
+    @Synchronized
     fun present(): DisplayFrameDelta? {
         val dirtyTiles = dirty.dirtyTiles()
         if (dirtyTiles.isEmpty()) return null
