@@ -50,6 +50,17 @@ fn rejects_unknown_constant_tag() {
     assert_eq!(decode_image(&bytes), Err(ImageError::UnknownConstantTag(99)));
 }
 
+#[test]
+fn decodes_kotlin_generated_fixture() {
+    let bytes = include_bytes!("fixtures/representative.ckim");
+    let image = decode_image(bytes).expect("fixture decodes");
+
+    assert_eq!(image.language_version, "ckl-1");
+    assert_eq!(image.target_abi_version, 1);
+    assert_eq!(image.capabilities, vec!["host-import-ids"]);
+    assert_eq!(image.functions[0].code, vec![1, 2, 3]);
+}
+
 fn representative_image_bytes() -> Vec<u8> {
     let mut out = Vec::new();
     out.extend_from_slice(b"CKIM");
