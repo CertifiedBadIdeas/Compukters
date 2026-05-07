@@ -21,3 +21,9 @@ plugins {
     alias(libs.plugins.kotlin) apply false
     alias(libs.plugins.releaseConvention)
 }
+
+tasks.register("profileRuntimeVmComparison") {
+    group = "verification"
+    description = "Run JVM and Rust VM runtime profiling workloads and write a Markdown comparison report."
+    dependsOn(":v1_21_1-neoforge:profileRuntimeVmComparison")
+}

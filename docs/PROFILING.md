@@ -9,6 +9,20 @@ The in-code metrics explain what the VM/display/compiler did. External profilers
 
 ## Runtime/display profiling workload
 
+Generate a JVM-vs-Rust VM Markdown comparison report with one task:
+
+```bash
+./gradlew profileRuntimeVmComparison
+```
+
+The task builds the local Rust JNI library, runs the terminal profiling workloads with both runners, and writes:
+
+```text
+modules/v1_21_1/v1_21_1-neoforge/build/reports/profiling/runtime-vm-comparison.md
+```
+
+Use this report for quick before/after comparisons. It includes per-workload runtime/display/compiler tables, selected host-call tables, held-Enter backlog metrics, and notes about currently missing Rust per-instruction metrics.
+
 Run the bundled terminal profiling workload:
 
 ```bash
