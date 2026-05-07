@@ -61,6 +61,20 @@ fn decodes_kotlin_generated_fixture() {
     assert_eq!(image.functions[0].code, vec![1, 2, 3]);
 }
 
+#[test]
+fn decodes_backend_generated_system_log_fixture() {
+    let bytes = include_bytes!("fixtures/backend-system-log.ckim");
+    let image = decode_image(bytes).expect("backend fixture decodes");
+
+    assert_eq!(image.language_version, "ckl-1");
+    assert_eq!(image.capabilities, vec!["host-import-ids"]);
+    assert_eq!(image.constants, vec![Constant::String("hi".to_string())]);
+    assert_eq!(image.host_imports.len(), 1);
+    assert_eq!(image.host_imports[0].module_name, "system");
+    assert_eq!(image.host_imports[0].function_name, "log");
+    assert_eq!(image.functions[0].code, vec![3, 0, 0, 0, 0, 4, 0, 0, 0, 0, 1, 0, 0, 0, 5, 1, 2]);
+}
+
 fn representative_image_bytes() -> Vec<u8> {
     let mut out = Vec::new();
     out.extend_from_slice(b"CKIM");
