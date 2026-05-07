@@ -6,6 +6,7 @@ const OP_PUSH_UNIT: u8 = 1;
 const OP_RETURN: u8 = 2;
 const OP_PUSH_CONSTANT: u8 = 3;
 const OP_CALL_HOST: u8 = 4;
+const OP_POP: u8 = 5;
 const OP_PUSH_BOOL: u8 = 6;
 const OP_PUSH_NULL: u8 = 7;
 const OP_LOAD_LOCAL: u8 = 8;
@@ -15,6 +16,7 @@ const OP_JUMP_IF_FALSE: u8 = 11;
 const OP_JUMP_IF_TRUE: u8 = 12;
 const OP_BINARY: u8 = 13;
 const OP_UNARY: u8 = 14;
+const OP_CALL_FUNCTION: u8 = 15;
 
 #[test]
 fn stores_and_loads_local_value() {
@@ -376,10 +378,311 @@ fn rejects_string_concatenation_with_record_value() {
     assert!(String::from_utf8_lossy(&signal).contains("string concatenation with records"));
 }
 
+#[test]
+fn calls_function_and_returns_value_to_entry_frame() {
+    let main_code = vec![
+        OP_PUSH_CONSTANT,
+        0,
+        0,
+        0,
+        0,
+        OP_PUSH_CONSTANT,
+        1,
+        0,
+        0,
+        0,
+        OP_CALL_FUNCTION,
+        1,
+        0,
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        OP_RETURN,
+    ];
+    let add_code = vec![
+        OP_LOAD_LOCAL,
+        0,
+        0,
+        0,
+        0,
+        OP_LOAD_LOCAL,
+        1,
+        0,
+        0,
+        0,
+        OP_BINARY,
+        0,
+        OP_RETURN,
+    ];
+    let mut vm = ImageVmHandle::create(
+        &image_with_constants_host_import_and_functions(
+            vec![ConstantFixture::Int(2), ConstantFixture::Int(5)],
+            false,
+            0,
+            vec![
+                FunctionFixture {
+                    name: "main".to_string(),
+                    frame_size: 0,
+                    code: main_code,
+                },
+                FunctionFixture {
+                    name: "add".to_string(),
+                    frame_size: 2,
+                    code: add_code,
+                },
+            ],
+        ),
+        64,
+    )
+    .unwrap();
+
+    assert_eq!(vm.run_until_signal(), vec![0, 3, 7, 0, 0, 0]);
+}
+
+#[test]
+fn restores_caller_locals_after_return() {
+    let main_code = vec![
+        OP_PUSH_CONSTANT,
+        0,
+        0,
+        0,
+        0,
+        OP_STORE_LOCAL,
+        0,
+        0,
+        0,
+        0,
+        OP_CALL_FUNCTION,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        OP_POP,
+        OP_LOAD_LOCAL,
+        0,
+        0,
+        0,
+        0,
+        OP_RETURN,
+    ];
+    let callee_code = vec![OP_PUSH_CONSTANT, 1, 0, 0, 0, OP_RETURN];
+    let mut vm = ImageVmHandle::create(
+        &image_with_constants_host_import_and_functions(
+            vec![ConstantFixture::Int(9), ConstantFixture::Int(1)],
+            false,
+            0,
+            vec![
+                FunctionFixture {
+                    name: "main".to_string(),
+                    frame_size: 1,
+                    code: main_code,
+                },
+                FunctionFixture {
+                    name: "callee".to_string(),
+                    frame_size: 0,
+                    code: callee_code,
+                },
+            ],
+        ),
+        64,
+    )
+    .unwrap();
+
+    assert_eq!(vm.run_until_signal(), vec![0, 3, 9, 0, 0, 0]);
+}
+
+#[test]
+fn supports_nested_function_calls() {
+    let main_code = vec![OP_CALL_FUNCTION, 1, 0, 0, 0, 0, 0, 0, 0, OP_RETURN];
+    let first_code = vec![
+        OP_CALL_FUNCTION,
+        2,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        OP_PUSH_CONSTANT,
+        1,
+        0,
+        0,
+        0,
+        OP_BINARY,
+        0,
+        OP_RETURN,
+    ];
+    let second_code = vec![OP_PUSH_CONSTANT, 0, 0, 0, 0, OP_RETURN];
+    let mut vm = ImageVmHandle::create(
+        &image_with_constants_host_import_and_functions(
+            vec![ConstantFixture::Int(3), ConstantFixture::Int(4)],
+            false,
+            0,
+            vec![
+                FunctionFixture {
+                    name: "main".to_string(),
+                    frame_size: 0,
+                    code: main_code,
+                },
+                FunctionFixture {
+                    name: "first".to_string(),
+                    frame_size: 0,
+                    code: first_code,
+                },
+                FunctionFixture {
+                    name: "second".to_string(),
+                    frame_size: 0,
+                    code: second_code,
+                },
+            ],
+        ),
+        64,
+    )
+    .unwrap();
+
+    assert_eq!(vm.run_until_signal(), vec![0, 3, 7, 0, 0, 0]);
+}
+
+#[test]
+fn resumes_host_call_inside_callee() {
+    let main_code = vec![OP_CALL_FUNCTION, 1, 0, 0, 0, 0, 0, 0, 0, OP_RETURN];
+    let callee_code = vec![
+        OP_PUSH_CONSTANT,
+        0,
+        0,
+        0,
+        0,
+        OP_CALL_HOST,
+        1,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        OP_RETURN,
+    ];
+    let mut vm = ImageVmHandle::create(
+        &image_with_constants_host_import_and_functions(
+            vec![ConstantFixture::String("callee".to_string())],
+            true,
+            0,
+            vec![
+                FunctionFixture {
+                    name: "main".to_string(),
+                    frame_size: 0,
+                    code: main_code,
+                },
+                FunctionFixture {
+                    name: "callee".to_string(),
+                    frame_size: 0,
+                    code: callee_code,
+                },
+            ],
+        ),
+        64,
+    )
+    .unwrap();
+
+    assert_eq!(vm.run_until_signal()[0], 4);
+    vm.resume_with_value_bytes(&encode_value(&VmValue::Unit))
+        .unwrap();
+
+    assert_eq!(vm.run_until_signal(), vec![0, 0]);
+}
+
+#[test]
+fn rejects_call_function_out_of_bounds() {
+    let code = vec![OP_CALL_FUNCTION, 99, 0, 0, 0, 0, 0, 0, 0];
+    let mut vm = ImageVmHandle::create(&image_with_code(0, code), 64).unwrap();
+
+    let signal = vm.run_until_signal();
+
+    assert_eq!(signal[0], 255);
+    assert!(String::from_utf8_lossy(&signal).contains("function index 99 is out of bounds"));
+}
+
+#[test]
+fn rejects_call_function_argument_count_exceeding_frame_size() {
+    let code = vec![OP_CALL_FUNCTION, 1, 0, 0, 0, 1, 0, 0, 0];
+    let mut vm = ImageVmHandle::create(
+        &image_with_constants_host_import_and_functions(
+            Vec::new(),
+            false,
+            0,
+            vec![
+                FunctionFixture {
+                    name: "main".to_string(),
+                    frame_size: 0,
+                    code,
+                },
+                FunctionFixture {
+                    name: "callee".to_string(),
+                    frame_size: 0,
+                    code: vec![OP_RETURN],
+                },
+            ],
+        ),
+        64,
+    )
+    .unwrap();
+
+    let signal = vm.run_until_signal();
+
+    assert_eq!(signal[0], 255);
+    assert!(String::from_utf8_lossy(&signal).contains("argument count 1 exceeds frame size 0"));
+}
+
+#[test]
+fn rejects_call_function_stack_underflow() {
+    let code = vec![OP_CALL_FUNCTION, 1, 0, 0, 0, 1, 0, 0, 0];
+    let mut vm = ImageVmHandle::create(
+        &image_with_constants_host_import_and_functions(
+            Vec::new(),
+            false,
+            0,
+            vec![
+                FunctionFixture {
+                    name: "main".to_string(),
+                    frame_size: 0,
+                    code,
+                },
+                FunctionFixture {
+                    name: "callee".to_string(),
+                    frame_size: 1,
+                    code: vec![OP_RETURN],
+                },
+            ],
+        ),
+        64,
+    )
+    .unwrap();
+
+    let signal = vm.run_until_signal();
+
+    assert_eq!(signal[0], 255);
+    assert!(String::from_utf8_lossy(&signal).contains("stack underflow"));
+}
+
 enum ConstantFixture {
     String(String),
     Int(i32),
     Long(i64),
+}
+
+struct FunctionFixture {
+    name: String,
+    frame_size: i32,
+    code: Vec<u8>,
 }
 
 fn image_with_code(frame_size: i32, code: Vec<u8>) -> Vec<u8> {
@@ -408,6 +711,24 @@ fn image_with_constants_and_optional_host_import(
     frame_size: i32,
     code: Vec<u8>,
 ) -> Vec<u8> {
+    image_with_constants_host_import_and_functions(
+        constants,
+        include_host_import,
+        0,
+        vec![FunctionFixture {
+            name: "main".to_string(),
+            frame_size,
+            code,
+        }],
+    )
+}
+
+fn image_with_constants_host_import_and_functions(
+    constants: Vec<ConstantFixture>,
+    include_host_import: bool,
+    entry_function_index: i32,
+    functions: Vec<FunctionFixture>,
+) -> Vec<u8> {
     let mut out = Vec::new();
     out.extend_from_slice(b"CKIM");
     out.push(1);
@@ -435,18 +756,21 @@ fn image_with_constants_and_optional_host_import(
         list_len(&mut out, 1);
         i32(&mut out, 1);
         string(&mut out, "test");
-        string(&mut out, "record");
-        list_len(&mut out, 0);
-        string(&mut out, "Record");
+        string(&mut out, "log");
+        list_len(&mut out, 1);
+        string(&mut out, "String");
+        string(&mut out, "Unit");
     } else {
         list_len(&mut out, 0);
     }
-    i32(&mut out, 0);
-    list_len(&mut out, 1);
-    string(&mut out, "main");
-    i32(&mut out, frame_size);
-    list_len(&mut out, code.len() as i32);
-    out.extend_from_slice(&code);
+    i32(&mut out, entry_function_index);
+    list_len(&mut out, functions.len() as i32);
+    for function in functions {
+        string(&mut out, &function.name);
+        i32(&mut out, function.frame_size);
+        list_len(&mut out, function.code.len() as i32);
+        out.extend_from_slice(&function.code);
+    }
     out
 }
 
