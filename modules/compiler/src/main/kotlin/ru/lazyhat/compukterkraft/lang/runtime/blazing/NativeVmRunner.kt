@@ -55,6 +55,9 @@ class NativeVmRunner private constructor(
                         runtime.sleep(signal.ticks)
                         NativeVmBindings.resumeWith(handle, VmValue.UnitValue.toNativeBytes("", "sleep"))
                     }
+                    is NativeVmSignal.WaitEvent -> {
+                        NativeVmBindings.resumeWith(handle, bridge.fromEvent(runtime.pullEvent(signal.filter)).toNativeBytes("events", "pull"))
+                    }
                     is NativeVmSignal.HostCall -> {
                         val result = invokeHostCall(runtime, bridge, signal)
                         NativeVmBindings.resumeWith(handle, result.toNativeBytes(signal.moduleName, signal.functionName))
@@ -102,6 +105,7 @@ private val NativeVmSignal.kind: VmSignalKind
             NativeVmSignal.Pause -> VmSignalKind.PAUSE
             NativeVmSignal.Yield -> VmSignalKind.YIELD
             is NativeVmSignal.Sleep -> VmSignalKind.SLEEP
+            is NativeVmSignal.WaitEvent -> VmSignalKind.WAIT_EVENT
             is NativeVmSignal.HostCall -> VmSignalKind.HOST_CALL
             is NativeVmSignal.Error -> error("Native VM errors are not runtime VM signals")
         }

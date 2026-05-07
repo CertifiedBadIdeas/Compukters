@@ -28,6 +28,7 @@ internal sealed interface NativeVmValue {
     data class IntValue(val value: Int) : NativeVmValue
     data class LongValue(val value: Long) : NativeVmValue
     data class StringValue(val value: String) : NativeVmValue
+    data class RecordValue(val typeName: String, val fields: LinkedHashMap<String, NativeVmValue>) : NativeVmValue
 }
 
 internal sealed interface NativeVmSignal {
@@ -35,6 +36,7 @@ internal sealed interface NativeVmSignal {
     data object Pause : NativeVmSignal
     data object Yield : NativeVmSignal
     data class Sleep(val ticks: Long) : NativeVmSignal
+    data class WaitEvent(val filter: String?) : NativeVmSignal
     data class HostCall(
         val moduleName: String,
         val functionName: String,
@@ -56,6 +58,7 @@ internal sealed interface NativeVmSignal {
                     val arguments = List(reader.i32()) { reader.value() }
                     HostCall(moduleName, functionName, arguments)
                 }
+                5 -> WaitEvent(if (reader.u8() == 0) null else reader.string())
                 255 -> Error(reader.string())
                 else -> error("Unknown native VM signal tag $tag")
             }
@@ -74,6 +77,10 @@ internal fun NativeVmValue.toVmValue(
         is NativeVmValue.IntValue -> VmValue.IntValue(value)
         is NativeVmValue.LongValue -> VmValue.LongValue(value)
         is NativeVmValue.StringValue -> VmValue.StringValue(value)
+        is NativeVmValue.RecordValue -> VmValue.RecordValue(
+            typeName = typeName,
+            fields = fields.mapValuesTo(LinkedHashMap()) { (_, value) -> value.toVmValue(moduleName, functionName) },
+        )
     }
 
 internal fun VmValue.toNativeBytes(
@@ -87,7 +94,12 @@ internal fun VmValue.toNativeBytes(
         is VmValue.IntValue -> byteArrayOf(3) + value.toLittleEndianBytes()
         is VmValue.LongValue -> byteArrayOf(4) + value.toLittleEndianBytes()
         is VmValue.StringValue -> byteArrayOf(5) + value.encodeToByteArray().withLengthPrefix()
-        is VmValue.RecordValue -> unsupportedNativeValue("RecordValue", moduleName, functionName)
+        is VmValue.RecordValue -> byteArrayOf(6) +
+            typeName.encodeToByteArray().withLengthPrefix() +
+            fields.size.toLittleEndianBytes() +
+            fields.entries.fold(byteArrayOf()) { bytes, (name, value) ->
+                bytes + name.encodeToByteArray().withLengthPrefix() + value.toNativeBytes(moduleName, functionName)
+            }
         is VmValue.ObjectRef -> unsupportedNativeValue("ObjectRef", moduleName, functionName)
     }
 
@@ -154,6 +166,19 @@ private class Reader(
             3 -> NativeVmValue.IntValue(i32())
             4 -> NativeVmValue.LongValue(i64())
             5 -> NativeVmValue.StringValue(string())
+            6 -> {
+                val typeName = string()
+                val fieldCount = i32()
+                require(fieldCount >= 0) { "Negative native VM record field count $fieldCount" }
+                NativeVmValue.RecordValue(
+                    typeName = typeName,
+                    fields = LinkedHashMap<String, NativeVmValue>().apply {
+                        repeat(fieldCount) {
+                            this[string()] = value()
+                        }
+                    },
+                )
+            }
             else -> error("Unknown native VM value tag $tag")
         }
 }

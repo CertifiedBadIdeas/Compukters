@@ -49,6 +49,12 @@ class NativeVmSignalTest {
     }
 
     @Test
+    fun decodesWaitEventSignal() {
+        assertEquals(NativeVmSignal.WaitEvent("boot"), NativeVmSignal.decode(byteArrayOf(5, 1) + stringBytes("boot")))
+        assertEquals(NativeVmSignal.WaitEvent(null), NativeVmSignal.decode(byteArrayOf(5, 0)))
+    }
+
+    @Test
     fun decodesErrorSignal() {
         assertEquals(
             NativeVmSignal.Error("bad bytecode"),
@@ -72,6 +78,18 @@ class NativeVmSignalTest {
         assertContentEquals(byteArrayOf(1), VmValue.NullValue.toNativeBytes("test", "null"))
         assertContentEquals(byteArrayOf(2, 1), VmValue.BoolValue(true).toNativeBytes("display", "isAttached"))
         assertContentEquals(byteArrayOf(3, 7, 0, 0, 0), VmValue.IntValue(7).toNativeBytes("display", "primary"))
+    }
+
+    @Test
+    fun recordRuntimeValuesEncodeAndDecodeForEventResume() {
+        val record = VmValue.RecordValue(
+            typeName = "Event",
+            fields = linkedMapOf("name" to VmValue.StringValue("boot"), "id" to VmValue.IntValue(7)),
+        )
+
+        val bytes = record.toNativeBytes("events", "pull")
+
+        assertEquals(NativeVmValue.RecordValue("Event", linkedMapOf("name" to NativeVmValue.StringValue("boot"), "id" to NativeVmValue.IntValue(7))), NativeVmSignal.decode(byteArrayOf(0) + bytes).let { (it as NativeVmSignal.Halt).value })
     }
 
     private fun stringBytes(value: String): ByteArray =
