@@ -642,7 +642,7 @@ Expected: BUILD SUCCESSFUL with no `abi_decode`, `pure_vm`, or `runner` test bin
 Run:
 
 ```bash
-grep -R "BytecodeAbi\|run_bytecode_until_signal\|NativeVmHandle\|createNative\|runUntilSignalNative\|resumeWithNative\|freeNative\|ckl.vm.runner\|profileRuntimeVmComparison\|profileRuntimeVmJvm" modules build-scripts native docs/ARCHITECTURE.md docs/MACHINE.md docs/PROFILING.md -n || true
+grep -R "BytecodeAbi\|run_bytecode_until_signal\|NativeVmHandle\|createNative\|runUntilSignalNative\|resumeWithNative\|freeNative\|ckl.vm.runner\|profileRuntimeVmComparison\|profileRuntimeVmJvm" modules/*/src build-scripts/src native/ckl-vm/src native/ckl-vm/tests docs/ARCHITECTURE.md docs/MACHINE.md docs/PROFILING.md -n || true
 git diff --check
 git status --short --untracked-files=all
 ```
