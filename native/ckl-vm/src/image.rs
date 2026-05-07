@@ -68,7 +68,15 @@ pub fn decode_image(bytes: &[u8]) -> Result<Image, ImageError> {
     let host_imports = reader.list(read_host_import)?;
     let entry_function_index = reader.i32()?;
     let functions = reader.list(read_function)?;
-    Ok(Image { language_version, target_abi_version, capabilities, constants, host_imports, entry_function_index, functions })
+    Ok(Image {
+        language_version,
+        target_abi_version,
+        capabilities,
+        constants,
+        host_imports,
+        entry_function_index,
+        functions,
+    })
 }
 
 fn read_string(reader: &mut Reader<'_>) -> Result<String, ImageError> {
@@ -109,8 +117,14 @@ struct Reader<'a> {
 
 impl<'a> Reader<'a> {
     fn take(&mut self, count: usize) -> Result<&'a [u8], ImageError> {
-        let end = self.offset.checked_add(count).ok_or(ImageError::UnexpectedEnd)?;
-        let slice = self.bytes.get(self.offset..end).ok_or(ImageError::UnexpectedEnd)?;
+        let end = self
+            .offset
+            .checked_add(count)
+            .ok_or(ImageError::UnexpectedEnd)?;
+        let slice = self
+            .bytes
+            .get(self.offset..end)
+            .ok_or(ImageError::UnexpectedEnd)?;
         self.offset = end;
         Ok(slice)
     }
@@ -147,7 +161,10 @@ impl<'a> Reader<'a> {
         Ok(self.take(length)?.to_vec())
     }
 
-    fn list<T>(&mut self, read: fn(&mut Reader<'a>) -> Result<T, ImageError>) -> Result<Vec<T>, ImageError> {
+    fn list<T>(
+        &mut self,
+        read: fn(&mut Reader<'a>) -> Result<T, ImageError>,
+    ) -> Result<Vec<T>, ImageError> {
         let length = self.length()?;
         let mut values = Vec::with_capacity(length);
         for _ in 0..length {
