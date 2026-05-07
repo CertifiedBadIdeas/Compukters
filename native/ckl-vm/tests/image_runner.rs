@@ -443,6 +443,70 @@ fn calls_function_and_returns_value_to_entry_frame() {
 }
 
 #[test]
+fn preserves_function_argument_order() {
+    let main_code = vec![
+        OP_PUSH_CONSTANT,
+        0,
+        0,
+        0,
+        0,
+        OP_PUSH_CONSTANT,
+        1,
+        0,
+        0,
+        0,
+        OP_CALL_FUNCTION,
+        1,
+        0,
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        OP_RETURN,
+    ];
+    let subtract_code = vec![
+        OP_LOAD_LOCAL,
+        0,
+        0,
+        0,
+        0,
+        OP_LOAD_LOCAL,
+        1,
+        0,
+        0,
+        0,
+        OP_BINARY,
+        1,
+        OP_RETURN,
+    ];
+    let mut vm = ImageVmHandle::create(
+        &image_with_constants_host_import_and_functions(
+            vec![ConstantFixture::Int(2), ConstantFixture::Int(5)],
+            false,
+            0,
+            vec![
+                FunctionFixture {
+                    name: "main".to_string(),
+                    frame_size: 0,
+                    code: main_code,
+                },
+                FunctionFixture {
+                    name: "subtract".to_string(),
+                    frame_size: 2,
+                    code: subtract_code,
+                },
+            ],
+        ),
+        64,
+    )
+    .unwrap();
+
+    assert_eq!(vm.run_until_signal(), vec![0, 3, 253, 255, 255, 255]);
+}
+
+#[test]
 fn restores_caller_locals_after_return() {
     let main_code = vec![
         OP_PUSH_CONSTANT,
@@ -569,11 +633,20 @@ fn resumes_host_call_inside_callee() {
         0,
         0,
         0,
+        OP_POP,
+        OP_PUSH_CONSTANT,
+        1,
+        0,
+        0,
+        0,
         OP_RETURN,
     ];
     let mut vm = ImageVmHandle::create(
         &image_with_constants_host_import_and_functions(
-            vec![ConstantFixture::String("callee".to_string())],
+            vec![
+                ConstantFixture::String("callee".to_string()),
+                ConstantFixture::Int(7),
+            ],
             true,
             0,
             vec![
@@ -597,7 +670,7 @@ fn resumes_host_call_inside_callee() {
     vm.resume_with_value_bytes(&encode_value(&VmValue::Unit))
         .unwrap();
 
-    assert_eq!(vm.run_until_signal(), vec![0, 0]);
+    assert_eq!(vm.run_until_signal(), vec![0, 3, 7, 0, 0, 0]);
 }
 
 #[test]

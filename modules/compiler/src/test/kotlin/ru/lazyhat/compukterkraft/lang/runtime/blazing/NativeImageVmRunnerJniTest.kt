@@ -109,8 +109,8 @@ class NativeImageVmRunnerJniTest {
             LanguageFrontend().compileImage(
                 "main.ck",
                 """
-                fun add(a: Int, b: Int): Int {
-                    return a + b;
+                fun subtract(a: Int, b: Int): Int {
+                    return a - b;
                 }
 
                 fun label(value: Int): String {
@@ -118,7 +118,7 @@ class NativeImageVmRunnerJniTest {
                 }
 
                 pub fun main() {
-                    val result: Int = add(2, 5);
+                    val result: Int = subtract(2, 5);
                     system::log(label(result));
                 }
                 """.trimIndent(),
@@ -130,6 +130,6 @@ class NativeImageVmRunnerJniTest {
             NativeImageVmRunner.fromLibraryPath(libraryPath).run(image, runtime)
         }
 
-        assertEquals(listOf("value=7"), runtime.lines)
+        assertEquals(listOf("value=-3"), runtime.lines)
     }
 }
