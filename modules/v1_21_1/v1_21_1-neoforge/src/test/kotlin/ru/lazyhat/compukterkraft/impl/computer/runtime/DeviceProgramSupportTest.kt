@@ -27,6 +27,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.DeviceProfile
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceQueueResources
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceResources
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceStorageResources
+import ru.lazyhat.compukterkraft.lang.runtime.image.CkVmImageComputerProgram
 import kotlin.io.path.createDirectories
 import kotlin.io.path.createTempDirectory
 import kotlin.io.path.writeText
@@ -83,7 +84,15 @@ class DeviceProgramSupportTest {
     }
 
     @Test
-    fun rejectsProgramWhenCompiledBytecodeExceedsRomLimit() {
+    fun compilesSupportedSourceToImageProgram() {
+        val compiled = ComputerProgramCompiler.compile("tiny.ck", "pub fun main() { }")
+
+        assertTrue(compiled.program is CkVmImageComputerProgram)
+        assertNull(compiled.errorMessage)
+    }
+
+    @Test
+    fun rejectsProgramWhenCompiledImageExceedsRomLimit() {
         val profile =
             DeviceProfile(
                 id = "test",
