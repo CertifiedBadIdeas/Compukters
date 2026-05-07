@@ -19,11 +19,8 @@
 
 import net.fabricmc.loom.api.LoomGradleExtensionAPI
 import net.fabricmc.loom.configuration.ide.RunConfigSettings
-import org.gradle.kotlin.dsl.getByType
-import org.gradle.kotlin.dsl.invoke
 import java.io.ByteArrayOutputStream
 import java.io.DataOutputStream
-import java.io.File
 import java.util.UUID
 
 plugins {
@@ -82,6 +79,7 @@ val runs = loom.runs
 runs.named("client") {
     runDir("run/client")
     applyShared()
+    applyRustVm()
     programArgs("--username", DEV_CLIENT_USERNAMES[0])
 }
 
@@ -94,6 +92,7 @@ runs.register("client2") {
     configName = "Minecraft Client 2"
     runDir("run/client2")
     applyShared()
+    applyRustVm()
     programArgs("--username", DEV_CLIENT_USERNAMES[1])
 }
 
@@ -104,34 +103,6 @@ runs.register("client2") {
 runs.register("client3") {
     client()
     configName = "Minecraft Client 3"
-    runDir("run/client3")
-    applyShared()
-    programArgs("--username", DEV_CLIENT_USERNAMES[2])
-}
-
-// Rust VM variants of the dev clients. These keep the default client runs on
-// the Kotlin VM while making native-runner smoke testing a single Gradle task.
-runs.register("clientRust") {
-    client()
-    configName = "Minecraft Client Rust VM"
-    runDir("run/client")
-    applyShared()
-    applyRustVm()
-    programArgs("--username", DEV_CLIENT_USERNAMES[0])
-}
-
-runs.register("client2Rust") {
-    client()
-    configName = "Minecraft Client 2 Rust VM"
-    runDir("run/client2")
-    applyShared()
-    applyRustVm()
-    programArgs("--username", DEV_CLIENT_USERNAMES[1])
-}
-
-runs.register("client3Rust") {
-    client()
-    configName = "Minecraft Client 3 Rust VM"
     runDir("run/client3")
     applyShared()
     applyRustVm()
@@ -145,13 +116,6 @@ runs.register("client3Rust") {
 // to `localhost:25565`.
 runs.named("server") {
     runDir("run/server")
-    applyShared()
-}
-
-runs.register("serverRust") {
-    server()
-    configName = "Minecraft Server Rust VM"
-    runDir("run/serverRust")
     applyShared()
     applyRustVm()
 }
@@ -179,10 +143,7 @@ private val DEV_SERVER_PROPERTIES =
 val prepareServerDev =
     tasks.register("prepareServerDev") {
         val runDirs =
-            listOf(
-                layout.projectDirectory.dir("run/server"),
-                layout.projectDirectory.dir("run/serverRust"),
-            )
+            listOf(layout.projectDirectory.dir("run/server"))
         runDirs.forEach { runDir ->
             outputs.file(runDir.file("eula.txt"))
             outputs.file(runDir.file("server.properties"))
@@ -201,13 +162,13 @@ val prepareServerDev =
                 // Preserve manual edits: only write properties that are not yet present.
                 val existing =
                     if (propsFile.exists()) {
-                        propsFile.readLines()
+                        propsFile
+                            .readLines()
                             .filter { it.isNotBlank() && !it.startsWith("#") }
                             .associate {
                                 val eq = it.indexOf('=')
                                 if (eq < 0) it to "" else it.substring(0, eq) to it.substring(eq + 1)
-                            }
-                            .toMutableMap()
+                            }.toMutableMap()
                     } else {
                         mutableMapOf()
                     }
@@ -227,12 +188,8 @@ val prepareServerDev =
         }
     }
 
-tasks.matching { it.name == "runServer" || it.name == "runServerRust" }.configureEach {
-    dependsOn(prepareServerDev)
-}
-
-tasks.matching { it.name == "runServerRust" }.configureEach {
-    dependsOn(buildRustVmNativeLibrary)
+tasks.matching { it.name == "runServer" }.configureEach {
+    dependsOn(prepareServerDev, buildRustVmNativeLibrary)
 }
 
 // ---------------------------------------------------------------------------
@@ -260,7 +217,10 @@ private val DEV_CLIENT_OPTIONS =
         "pauseOnLostFocus" to "false",
     )
 
-private data class DevServerEntry(val name: String, val ip: String)
+private data class DevServerEntry(
+    val name: String,
+    val ip: String,
+)
 
 private val DEV_CLIENT_SERVERS =
     listOf(
@@ -298,18 +258,10 @@ private val CLIENT_RUN_TASKS =
         "runClient",
         "runClient2",
         "runClient3",
-        "runClientRust",
-        "runClient2Rust",
-        "runClient3Rust",
     )
-private val RUST_CLIENT_RUN_TASKS = setOf("runClientRust", "runClient2Rust", "runClient3Rust")
 
 tasks.matching { it.name in CLIENT_RUN_TASKS }.configureEach {
-    dependsOn(prepareClientDev)
-}
-
-tasks.matching { it.name in RUST_CLIENT_RUN_TASKS }.configureEach {
-    dependsOn(buildRustVmNativeLibrary)
+    dependsOn(prepareClientDev, buildRustVmNativeLibrary)
 }
 
 private fun seedOptionsTxt(file: File) {
@@ -317,13 +269,13 @@ private fun seedOptionsTxt(file: File) {
     // only add keys that are not yet present.
     val existing: MutableMap<String, String> =
         if (file.exists()) {
-            file.readLines()
+            file
+                .readLines()
                 .filter { it.isNotBlank() && !it.startsWith("#") }
                 .mapNotNull { line ->
                     val sep = line.indexOf(':')
                     if (sep < 0) null else line.substring(0, sep) to line.substring(sep + 1)
-                }
-                .toMap()
+                }.toMap()
                 .toMutableMap()
         } else {
             mutableMapOf()
@@ -369,7 +321,10 @@ private val NBT_STRING: Int = 8
 private val NBT_LIST: Int = 9
 private val NBT_COMPOUND: Int = 10
 
-private fun DataOutputStream.writeNbtString(name: String, value: String) {
+private fun DataOutputStream.writeNbtString(
+    name: String,
+    value: String,
+) {
     writeByte(NBT_STRING)
     writeUTF(name)
     writeUTF(value)
