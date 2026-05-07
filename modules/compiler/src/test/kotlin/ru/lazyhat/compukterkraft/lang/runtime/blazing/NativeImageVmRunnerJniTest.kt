@@ -101,4 +101,35 @@ class NativeImageVmRunnerJniTest {
 
         assertEquals(listOf("value=7"), runtime.lines)
     }
+
+    @Test
+    fun imageRunnerExecutesUserFunctionCallsThroughJniWhenLibraryIsConfigured() {
+        val libraryPath = System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val image = assertNotNull(
+            LanguageFrontend().compileImage(
+                "main.ck",
+                """
+                fun add(a: Int, b: Int): Int {
+                    return a + b;
+                }
+
+                fun label(value: Int): String {
+                    return "value=" + value;
+                }
+
+                pub fun main() {
+                    val result: Int = add(2, 5);
+                    system::log(label(result));
+                }
+                """.trimIndent(),
+            ).image,
+        )
+        val runtime = RecordingRuntime()
+
+        runBlocking {
+            NativeImageVmRunner.fromLibraryPath(libraryPath).run(image, runtime)
+        }
+
+        assertEquals(listOf("value=7"), runtime.lines)
+    }
 }
