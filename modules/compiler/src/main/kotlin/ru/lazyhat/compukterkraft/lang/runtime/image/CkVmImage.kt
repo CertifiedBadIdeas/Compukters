@@ -54,4 +54,6 @@ object CkVmImageOpcodes {
     const val BINARY = 13
     const val UNARY = 14
     const val CALL_FUNCTION = 15
+    const val CONSTRUCT_RECORD = 16
+    const val GET_FIELD = 17
 }

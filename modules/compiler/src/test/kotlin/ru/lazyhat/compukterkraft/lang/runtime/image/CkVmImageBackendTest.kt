@@ -227,6 +227,56 @@ class CkVmImageBackendTest {
     }
 
     @Test
+    fun compileImageLowersRecordConstructionAndFieldAccess() {
+        val image = assertNotNull(
+            LanguageFrontend().compileImage(
+                "main.ck",
+                """
+                struct Point { x: Int, y: Int }
+
+                pub fun main() {
+                    val point: Point = Point(x = 2, y = 5);
+                    val delta: Int = point.x - point.y;
+                }
+                """.trimIndent(),
+            ).image,
+        )
+        val mainFunction = image.functions.single { it.name == "main.ck#main" }
+
+        assertEquals(
+            listOf(
+                CkVmConstant.IntConstant(2),
+                CkVmConstant.IntConstant(5),
+                CkVmConstant.StringConstant("Point"),
+                CkVmConstant.StringConstant("x"),
+                CkVmConstant.StringConstant("y"),
+            ),
+            image.constants,
+        )
+        assertEquals(2, mainFunction.frameSize)
+        assertContentEquals(
+            listOf(
+                CkVmImageOpcodes.PUSH_CONSTANT, 0, 0, 0, 0,
+                CkVmImageOpcodes.PUSH_CONSTANT, 1, 0, 0, 0,
+                CkVmImageOpcodes.CONSTRUCT_RECORD,
+            ) + i32(2) + i32(2) + i32(3) + i32(4) + listOf(
+                CkVmImageOpcodes.STORE_LOCAL, 0, 0, 0, 0,
+                CkVmImageOpcodes.LOAD_LOCAL, 0, 0, 0, 0,
+                CkVmImageOpcodes.GET_FIELD,
+            ) + i32(3) + listOf(
+                CkVmImageOpcodes.LOAD_LOCAL, 0, 0, 0, 0,
+                CkVmImageOpcodes.GET_FIELD,
+            ) + i32(4) + listOf(
+                CkVmImageOpcodes.BINARY, 1,
+                CkVmImageOpcodes.STORE_LOCAL, 1, 0, 0, 0,
+                CkVmImageOpcodes.PUSH_UNIT,
+                CkVmImageOpcodes.RETURN,
+            ),
+            mainFunction.code,
+        )
+    }
+
+    @Test
     fun compileImageReturnsNullImageWhenFrontendHasErrors() {
         val artifact = LanguageFrontend().compileImage("main.ck", "fun main() { }")
 
@@ -236,20 +286,14 @@ class CkVmImageBackendTest {
 
     @Test
     fun unsupportedInstructionReportsClearError() {
-        val artifact = LanguageFrontend().compile(
-            "main.ck",
-            """
-            struct Box { value: Int }
-            pub fun main() { val box: Box = Box(value = 1); }
-            """.trimIndent(),
-        )
-        val module = assertNotNull(artifact.module)
+        val base = assertNotNull(LanguageFrontend().compile("main.ck", "pub fun main() { }").module)
+        val function = base.functions.single().copy(instructions = listOf(Instruction.ConstructList(0), Instruction.Return))
 
         val error = assertFailsWith<UnsupportedOperationException> {
-            CkVmImageCompiler.compile(module)
+            CkVmImageCompiler.compile(base.copy(functions = listOf(function)))
         }
 
-        assertTrue(error.message.orEmpty().contains("CkVmImage backend does not support ConstructRecord"))
+        assertTrue(error.message.orEmpty().contains("CkVmImage backend does not support ConstructList"))
     }
 
     private fun i32(value: Int): List<Int> =
