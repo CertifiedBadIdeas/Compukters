@@ -26,10 +26,17 @@ import ru.lazyhat.compukterkraft.lang.runtime.VmValue
 import ru.lazyhat.compukterkraft.lang.runtime.image.CkVmImage
 import ru.lazyhat.compukterkraft.lang.runtime.image.CkVmImageAbi
 
+interface NativeImageRuntimeRunner {
+    suspend fun run(
+        image: CkVmImage,
+        runtime: DeviceRuntime,
+    )
+}
+
 class NativeImageVmRunner private constructor(
     private val libraryPath: String,
-) {
-    suspend fun run(
+) : NativeImageRuntimeRunner {
+    override suspend fun run(
         image: CkVmImage,
         runtime: DeviceRuntime,
     ) {
