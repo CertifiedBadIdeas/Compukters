@@ -101,7 +101,16 @@ data class RuntimeTickMetrics(
     val displayFlushCalls: Long = 0,
     val displayFramesFlushed: Long = 0,
     val displayFlushNanos: Long = 0,
-)
+) {
+    val allCalls = serverTickCalls + requestSliceCalls + hostCallDrainCalls + hostCallDispatchCalls + hostResultDeliveryCalls + displayFrameDrainCalls + displayFlushCalls
+    val allNanos = serverTickNanos + requestSliceNanos + hostCallDrainNanos + hostCallDispatchNanos + hostResultDeliveryNanos + displayFrameDrainNanos + displayFlushNanos
+    val tickCalls = serverTickCalls + requestSliceCalls
+    val tickNanos = serverTickNanos + requestSliceNanos
+    val hostCalls = hostCallDrainCalls + hostCallDispatchCalls + hostResultDeliveryCalls
+    val hostNanos = hostCallDrainCalls + hostCallDispatchCalls + hostResultDeliveryCalls
+    val displayCalls = displayFrameDrainCalls + displayFlushCalls
+    val displayNanos = displayFrameDrainNanos + displayFlushNanos
+}
 
 data class RuntimeVmMetrics(
     val sliceRequests: Long = 0,
@@ -149,14 +158,15 @@ data class RuntimeProfilingSnapshot(
     fun summary(): String =
         buildString {
             appendLine("runtime:")
-            appendLine("  tick:")
+            appendLine("  allTicks: calls=${tick.allCalls}, time=${tick.allNanos.nanos()}")
+            appendLine("  tick: calls=${tick.tickCalls}, time=${tick.tickNanos.nanos()}")
             appendLine("    server: calls=${tick.serverTickCalls}, time=${tick.serverTickNanos.nanos()}")
             appendLine("    requestSlice: calls=${tick.requestSliceCalls}, time=${tick.requestSliceNanos.nanos()}")
-            appendLine("  host-queue:")
+            appendLine("  host-queue: calls=${tick.hostCalls}, time=${tick.hostNanos.nanos()}")
             appendLine("    drain: calls=${tick.hostCallDrainCalls}, items=${tick.hostCallsDrained}, time=${tick.hostCallDrainNanos.nanos()}")
             appendLine("    dispatch: calls=${tick.hostCallDispatchCalls}, items=${tick.hostCallsDispatched}, time=${tick.hostCallDispatchNanos.nanos()}")
             appendLine("    delivery: calls=${tick.hostResultDeliveryCalls}, items=${tick.hostResultsDelivered}, time=${tick.hostResultDeliveryNanos.nanos()}")
-            appendLine("  display-runtime:")
+            appendLine("  display-runtime: calls=${tick.displayCalls}, time=${tick.displayNanos.nanos()}")
             appendLine("    drain: calls=${tick.displayFrameDrainCalls}, frames=${tick.displayFramesDrained}, time=${tick.displayFrameDrainNanos.nanos()}")
             appendLine("    flush: calls=${tick.displayFlushCalls}, frames=${tick.displayFramesFlushed}, time=${tick.displayFlushNanos.nanos()}")
             appendLine("  vm:")
@@ -173,8 +183,8 @@ data class RuntimeProfilingSnapshot(
             appendLine("  host-calls: none")
             return
         }
-        appendLine("  host-calls:")
-        hostCalls.forEach { call ->
+        appendLine("  host-calls: calls=${hostCalls.sumOf { it.calls }}, time=${hostCalls.sumOf { it.nanos }.nanos()}, avg=${hostCalls.sumOf { it.averageNanos }.nanos()}")
+        hostCalls.sortedBy { it.moduleName + it.functionName }.forEach { call ->
             appendLine("    ${call.moduleName}.${call.functionName}: count=${call.calls}, time=${call.nanos.nanos()}, avg=${call.averageNanos.nanos()}")
         }
     }
@@ -184,8 +194,8 @@ data class RuntimeProfilingSnapshot(
             append("  instructions: none")
             return
         }
-        appendLine("  instructions:")
-        instructions.forEachIndexed { index, instruction ->
+        appendLine("  instructions: count=${instructions.sumOf { it.count }}, time=${instructions.sumOf { it.nanos }.nanos()}, avg=${instructions.sumOf { it.averageNanos }.nanos()}")
+        instructions.sortedBy { it.kind }.forEachIndexed { index, instruction ->
             val line = "    ${instruction.kind}: count=${instruction.count}, time=${instruction.nanos.nanos()}, avg=${instruction.averageNanos.nanos()}"
             if (index == instructions.lastIndex) append(line) else appendLine(line)
         }
