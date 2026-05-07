@@ -1,5 +1,6 @@
 package ru.lazyhat.compukterkraft.lang.runtime.image
 
+import ru.lazyhat.compukterkraft.lang.api.Instruction
 import ru.lazyhat.compukterkraft.lang.frontend.FrontendSeverity
 import ru.lazyhat.compukterkraft.lang.frontend.LanguageFrontend
 import kotlin.test.Test
@@ -43,14 +44,13 @@ class CkVmImageBackendTest {
     }
 
     @Test
-    fun compileImageLowersBoolNullAndLocalSlots() {
+    fun compileImageLowersBoolAndLocalSlots() {
         val image = assertNotNull(
             LanguageFrontend().compileImage(
                 "main.ck",
                 """
                 pub fun main() {
                     val enabled: Bool = true;
-                    val missing: String? = null;
                     if (enabled) {
                         system::log("yes");
                     }
@@ -59,23 +59,35 @@ class CkVmImageBackendTest {
             ).image,
         )
 
-        assertEquals(2, image.functions.single().frameSize)
+        assertEquals(1, image.functions.single().frameSize)
         assertEquals(listOf(CkVmConstant.StringConstant("yes")), image.constants)
         assertEquals(listOf(CkVmHostImport(3004, "system", "log", listOf("String"), "Unit")), image.hostImports)
         assertContentEquals(
             listOf(
                 CkVmImageOpcodes.PUSH_BOOL, 1,
                 CkVmImageOpcodes.STORE_LOCAL, 0, 0, 0, 0,
-                CkVmImageOpcodes.PUSH_NULL,
-                CkVmImageOpcodes.STORE_LOCAL, 1, 0, 0, 0,
                 CkVmImageOpcodes.LOAD_LOCAL, 0, 0, 0, 0,
-                CkVmImageOpcodes.JUMP_IF_FALSE, 38, 0, 0, 0,
+                CkVmImageOpcodes.JUMP_IF_FALSE, 37, 0, 0, 0,
                 CkVmImageOpcodes.PUSH_CONSTANT, 0, 0, 0, 0,
                 CkVmImageOpcodes.CALL_HOST, 188, 11, 0, 0, 1, 0, 0, 0,
                 CkVmImageOpcodes.POP,
+                CkVmImageOpcodes.JUMP, 37, 0, 0, 0,
                 CkVmImageOpcodes.PUSH_UNIT,
                 CkVmImageOpcodes.RETURN,
             ),
+            image.functions.single().code,
+        )
+    }
+
+    @Test
+    fun compileImageLowersPushNullFromBytecodeModule() {
+        val base = assertNotNull(LanguageFrontend().compile("main.ck", "pub fun main() { }").module)
+        val function = base.functions.single().copy(instructions = listOf(Instruction.PushNull, Instruction.Return))
+
+        val image = CkVmImageCompiler.compile(base.copy(functions = listOf(function)))
+
+        assertContentEquals(
+            listOf(CkVmImageOpcodes.PUSH_NULL, CkVmImageOpcodes.RETURN),
             image.functions.single().code,
         )
     }
