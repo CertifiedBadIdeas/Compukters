@@ -79,12 +79,14 @@ data class CompilerProfilingSnapshot(
     val averageCompileNanos: Long get() = average(compileNanos, compileCalls)
 
     fun summary(): String =
-        "compiler: compileCalls=$compileCalls, compileNanos=$compileNanos, avgCompileNanos=$averageCompileNanos, " +
-            "sources=$compiledSources, sourceBytes=$sourceBytes, diagnostics=$diagnostics\n" +
-            "compiler-phases: parseCalls=$parseCalls, parseNanos=$parseNanos, avgParseNanos=$averageParseNanos, tokens=$tokens, " +
-            "analyzeCalls=$analyzeCalls, analyzeNanos=$analyzeNanos, avgAnalyzeNanos=$averageAnalyzeNanos, " +
-            "symbols=$symbols, references=$references, codegenCalls=$codegenCalls, codegenNanos=$codegenNanos, " +
-            "avgCodegenNanos=$averageCodegenNanos, functions=$functions, instructions=$instructions"
+        buildString {
+            appendLine("compiler:")
+            appendLine("  totals: calls=$compileCalls, time=${compileNanos.nanos()}, avg=${averageCompileNanos.nanos()}, sources=$compiledSources, sourceBytes=${sourceBytes.bytes()}, diagnostics=$diagnostics")
+            appendLine("  phases:")
+            appendLine("    parse: calls=$parseCalls, time=${parseNanos.nanos()}, avg=${averageParseNanos.nanos()}, tokens=$tokens")
+            appendLine("    analyze: calls=$analyzeCalls, time=${analyzeNanos.nanos()}, avg=${averageAnalyzeNanos.nanos()}, symbols=$symbols, references=$references")
+            append("    codegen: calls=$codegenCalls, time=${codegenNanos.nanos()}, avg=${averageCodegenNanos.nanos()}, functions=$functions, instructions=$instructions")
+        }
 }
 
 object NoOpCompilerMetricsCollector : CompilerMetricsCollector {
@@ -215,3 +217,7 @@ private fun average(
     total: Long,
     count: Long,
 ): Long = if (count <= 0) 0 else total / count
+
+private fun Long.nanos(): String = "$this ns"
+
+private fun Long.bytes(): String = "$this B"

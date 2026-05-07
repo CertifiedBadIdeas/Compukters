@@ -21,21 +21,11 @@ Run only the held-Enter backlog workload:
 ./gradlew :v1_21_1-neoforge:test --tests ru.lazyhat.compukterkraft.impl.computer.vm.RuntimeDisplayProfilingTest.heldEnterWorkloadProducesBacklogProfilingMetrics --info
 ```
 
-The output includes:
+The output is grouped into multi-line, indented sections:
 
-- `display:` operation counts, areas, and operation timings;
-- `display-avg:` per-operation averages;
-- `frames:` emitted frame/tile/payload counts;
-- `frame-build:` dirty tile scan, tile serialization, front-copy, and build timings;
-- `runtime:` server tick and slice request timings;
-- `host:` host call drain/dispatch/delivery timings;
-- `display-runtime:` frame drain/flush timings;
-- `vm:` scheduler and execution window metrics;
-- `signals:` VM signal distribution;
-- `host-calls:` VM-level builtin/host-call distribution by `module.function`, with counts and wall-clock timings;
-- `instructions:` VM bytecode instruction distribution by instruction kind, with counts and timings;
-- `compiler:` compile totals;
-- `compiler-phases:` parse/analyze/codegen metrics.
+- `display:` with `operations`, `frames`, and `frame-build` subsections for display counts, areas, payload bytes, timings, and averages;
+- `runtime:` with `tick`, `host-queue`, `display-runtime`, `vm`, `signals`, `host-calls`, and `instructions` subsections;
+- `compiler:` with `totals` and `phases` subsections for compile, parse, analyze, and codegen metrics.
 
 The held-Enter workload additionally prints a `held-enter:` line with accepted repeated Enter events, settle ticks,
 maximum/final queued VM events, maximum/final pending host calls, and drained display frame count. It does not filter

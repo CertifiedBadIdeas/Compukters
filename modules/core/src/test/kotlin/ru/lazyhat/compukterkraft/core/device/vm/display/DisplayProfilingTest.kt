@@ -102,8 +102,11 @@ class DisplayProfilingTest {
         assertEquals(40, snapshot.operations.averageCopyRectNanos)
         assertEquals(50, snapshot.operations.averageBlitMonoNanos)
         assertEquals(60, snapshot.operations.averagePresentNanos)
-        assertTrue(snapshot.summary().contains("fillNanos=30"), snapshot.summary())
-        assertTrue(snapshot.summary().contains("avgBlitNanos=50"), snapshot.summary())
+        val summary = snapshot.summary()
+        assertTrue(summary.startsWith("display:\n"), summary)
+        assertTrue(summary.contains("  operations:\n"), summary)
+        assertTrue(summary.contains("    fillRect: count=1, area=12, time=30 ns, avg=30 ns"), summary)
+        assertTrue(summary.contains("    blitMono: count=1, area=42, time=50 ns, avg=50 ns"), summary)
     }
 
     @Test
@@ -137,8 +140,10 @@ class DisplayProfilingTest {
         assertEquals(50, snapshot.frameBuild.averageTotalNanosPerTile)
         assertEquals(15, snapshot.frameBuild.averageTileSerializationNanosPerTile)
         assertEquals(1, snapshot.frameBuild.averageTileSerializationNanosPerPayloadByte)
-        assertTrue(snapshot.summary().contains("frame-build:"), snapshot.summary())
-        assertTrue(snapshot.summary().contains("nanosPerPayloadByte=1"), snapshot.summary())
+        val summary = snapshot.summary()
+        assertTrue(summary.contains("  frame-build:\n"), summary)
+        assertTrue(summary.contains("    total: builds=1, time=100 ns, avg/build=100 ns, avg/tile=50 ns"), summary)
+        assertTrue(summary.contains("    serialization: tiles=2, payload=16 B, avg/tile=15 ns, avg/byte=1 ns"), summary)
     }
 
     @Test

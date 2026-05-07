@@ -48,7 +48,11 @@ class CompilerProfilingTest {
         assertEquals(1, snapshot.compileCalls)
         assertEquals(60, snapshot.compileNanos)
         assertEquals(60, snapshot.averageCompileNanos)
-        assertTrue(snapshot.summary().contains("compiler:"), snapshot.summary())
+        val summary = snapshot.summary()
+        assertTrue(summary.startsWith("compiler:\n"), summary)
+        assertTrue(summary.contains("  totals: calls=1, time=60 ns, avg=60 ns, sources=1, sourceBytes=24 B, diagnostics=0"), summary)
+        assertTrue(summary.contains("  phases:\n"), summary)
+        assertTrue(summary.contains("    parse: calls=1, time=10 ns, avg=10 ns, tokens=7"), summary)
     }
 
     @Test

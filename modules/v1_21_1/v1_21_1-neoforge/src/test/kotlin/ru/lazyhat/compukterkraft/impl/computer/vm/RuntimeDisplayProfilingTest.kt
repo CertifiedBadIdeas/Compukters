@@ -69,10 +69,13 @@ class RuntimeDisplayProfilingTest {
         val displayFramesDrained: Int,
     ) {
         fun summary(): String =
-            "held-enter: enterEventsQueued=$enterEventsQueued, settleTicks=$settleTicks, " +
-                "maxQueuedEvents=$maxQueuedEvents, finalQueuedEvents=$finalQueuedEvents, " +
-                "maxPendingHostCalls=$maxPendingHostCalls, finalPendingHostCalls=$finalPendingHostCalls, " +
-                "displayFramesDrained=$displayFramesDrained"
+            buildString {
+                appendLine("held-enter:")
+                appendLine("  input: enterEventsQueued=$enterEventsQueued, settleTicks=$settleTicks")
+                appendLine("  queues: maxQueuedEvents=$maxQueuedEvents, finalQueuedEvents=$finalQueuedEvents")
+                appendLine("  host-calls: maxPending=$maxPendingHostCalls, finalPending=$finalPendingHostCalls")
+                append("  display: framesDrained=$displayFramesDrained")
+            }
     }
 
     private class ClasspathFirmwareLoader : FirmwareProgramLoader {
