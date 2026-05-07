@@ -19,31 +19,35 @@
 
 package ru.lazyhat.compukterkraft.impl.computer.vm
 
-import java.nio.file.Files
+import org.junit.jupiter.api.Assumptions.assumeTrue
 import java.nio.file.Path
 import kotlin.io.path.absolutePathString
-import kotlin.io.path.writeText
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
 class RuntimeVmProfilingReportTest {
     @Test
-    fun generatesRuntimeVmComparisonReport() {
-        val nativeLibrary = System.getProperty(NATIVE_LIBRARY_PROPERTY)?.takeIf { it.isNotBlank() }
-            ?: error("Runtime VM profiling comparison requires -D$NATIVE_LIBRARY_PROPERTY=/absolute/path/to/libckl_vm.so")
-        val reportPath = Path.of(System.getProperty(REPORT_PATH_PROPERTY, DEFAULT_REPORT_PATH))
+    fun writesCurrentRunnerProfile() {
+        val profilePathValue = System.getProperty(PROFILE_PATH_PROPERTY)
+        assumeTrue(!profilePathValue.isNullOrBlank(), "Report profile path is only provided by profiling Gradle tasks")
+        val profilePath = Path.of(profilePathValue)
+        val runnerName = System.getProperty(RUNNER_NAME_PROPERTY, "JVM")
 
-        val jvmProfile = RuntimeProfilingWorkload.withVmRunner("kotlin") { profileRunner("JVM") }
-        val rustProfile = RuntimeProfilingWorkload.withVmRunner("rust", nativeLibrary) { profileRunner("Rust") }
-        val markdown = RuntimeVmProfilingReportFormatter.markdown(jvmProfile, rustProfile)
+        warmUpRunner()
+        val profile = profileRunner(runnerName)
+        RuntimeVmProfileCodec.write(profile, profilePath)
+        println("Runtime VM $runnerName profiling data: ${profilePath.absolutePathString()}")
 
-        Files.createDirectories(reportPath.parent)
-        reportPath.writeText(markdown)
-        println("Runtime VM profiling comparison report: ${reportPath.absolutePathString()}")
+        assertTrue(profile.workloads.isNotEmpty())
+    }
 
-        assertTrue(Files.exists(reportPath), "Expected report at ${reportPath.absolutePathString()}")
-        assertTrue(markdown.contains("JVM"), markdown)
-        assertTrue(markdown.contains("Rust"), markdown)
+    private fun warmUpRunner() {
+        RuntimeProfilingWorkload.runTerminalWorkload(
+            delayMillis = 0,
+            bootTicks = 40,
+            inputTicks = 10,
+            enterTicks = 20,
+        )
     }
 
     private fun profileRunner(runnerName: String): VmRunnerProfile =
@@ -103,8 +107,7 @@ class RuntimeVmProfilingReportTest {
     }
 
     private companion object {
-        const val NATIVE_LIBRARY_PROPERTY = "ckl.vm.native.library"
-        const val REPORT_PATH_PROPERTY = "ckl.profiling.report.path"
-        const val DEFAULT_REPORT_PATH = "build/reports/profiling/runtime-vm-comparison.md"
+        const val PROFILE_PATH_PROPERTY = "ckl.profiling.profile.path"
+        const val RUNNER_NAME_PROPERTY = "ckl.profiling.runner.name"
     }
 }

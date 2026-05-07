@@ -40,6 +40,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.DeviceQueueResources
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceResources
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceStorageResources
 import ru.lazyhat.compukterkraft.lang.runtime.VmEvent
+import ru.lazyhat.compukterkraft.lang.runtime.VmStopReason
 import kotlin.io.path.createTempDirectory
 import kotlin.test.assertTrue
 
@@ -101,27 +102,6 @@ internal object RuntimeProfilingWorkload {
         }
     }
 
-    fun <T> withVmRunner(
-        runner: String,
-        nativeLibrary: String? = null,
-        block: () -> T,
-    ): T {
-        val oldRunner = System.getProperty(RUNNER_PROPERTY)
-        val oldNativeLibrary = System.getProperty(NATIVE_LIBRARY_PROPERTY)
-        try {
-            System.setProperty(RUNNER_PROPERTY, runner)
-            if (nativeLibrary.isNullOrBlank()) {
-                System.clearProperty(NATIVE_LIBRARY_PROPERTY)
-            } else {
-                System.setProperty(NATIVE_LIBRARY_PROPERTY, nativeLibrary)
-            }
-            return block()
-        } finally {
-            setOrClear(RUNNER_PROPERTY, oldRunner)
-            setOrClear(NATIVE_LIBRARY_PROPERTY, oldNativeLibrary)
-        }
-    }
-
     fun runTerminalWorkload(
         delayMillis: Long,
         bootTicks: Int,
@@ -129,13 +109,14 @@ internal object RuntimeProfilingWorkload {
         enterTicks: Int,
     ): ProfilingRun {
         val root = createTempDirectory("compukterkraft-display-profiling")
+        var vm: BackgroundDeviceVm? = null
         try {
             DeviceWorkspaceInitializer(root).ensureInitialized(1)
             val workspace = DeviceWorkspaceHost(root)
             val displayMetrics = RecordingDisplayMetricsCollector()
             val runtimeMetrics = RecordingRuntimeMetricsCollector()
             val compilerMetrics = RecordingCompilerMetricsCollector()
-            val vm =
+            vm =
                 BackgroundDeviceVm(
                     deviceId = 1,
                     profile = profile(),
@@ -169,6 +150,7 @@ internal object RuntimeProfilingWorkload {
 
             return ProfilingRun(displayMetrics, runtimeMetrics, compilerMetrics)
         } finally {
+            vm?.stop(VmStopReason.REQUESTED)
             root.toFile().deleteRecursively()
         }
     }
@@ -178,13 +160,14 @@ internal object RuntimeProfilingWorkload {
         settleTicks: Int,
     ): HeldEnterProfilingRun {
         val root = createTempDirectory("compukterkraft-held-enter-profiling")
+        var vm: BackgroundDeviceVm? = null
         try {
             DeviceWorkspaceInitializer(root).ensureInitialized(1)
             val workspace = DeviceWorkspaceHost(root)
             val displayMetrics = RecordingDisplayMetricsCollector()
             val runtimeMetrics = RecordingRuntimeMetricsCollector()
             val compilerMetrics = RecordingCompilerMetricsCollector()
-            val vm =
+            vm =
                 BackgroundDeviceVm(
                     deviceId = 1,
                     profile = profile(),
@@ -238,6 +221,7 @@ internal object RuntimeProfilingWorkload {
                 displayFramesDrained = frames.size,
             )
         } finally {
+            vm?.stop(VmStopReason.REQUESTED)
             root.toFile().deleteRecursively()
         }
     }
@@ -340,17 +324,4 @@ internal object RuntimeProfilingWorkload {
             }
         }
 
-    private fun setOrClear(
-        key: String,
-        value: String?,
-    ) {
-        if (value == null) {
-            System.clearProperty(key)
-        } else {
-            System.setProperty(key, value)
-        }
-    }
-
-    private const val RUNNER_PROPERTY = "ckl.vm.runner"
-    private const val NATIVE_LIBRARY_PROPERTY = "ckl.vm.native.library"
 }
