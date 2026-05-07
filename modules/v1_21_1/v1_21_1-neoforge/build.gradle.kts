@@ -76,3 +76,22 @@ dependencies {
     add(gameTest.implementationConfigurationName, sourceSets.main.get().output)
     add(gameTest.implementationConfigurationName, project(path = projects.v1211Common.path, configuration = "namedElements"))
 }
+
+val rustVmNativeLibrary = rootProject.layout.projectDirectory.file("native/ckl-vm/target/debug/libckl_vm.so")
+val runtimeVmComparisonReport = layout.buildDirectory.file("reports/profiling/runtime-vm-comparison.md")
+
+tasks.register<Test>("profileRuntimeVmComparison") {
+    group = "verification"
+    description = "Run JVM and Rust VM runtime profiling workloads and write a Markdown comparison report."
+    dependsOn("buildRustVmNativeLibrary")
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    useJUnitPlatform()
+    filter {
+        includeTestsMatching("ru.lazyhat.compukterkraft.impl.computer.vm.RuntimeVmProfilingReportTest")
+    }
+    systemProperty("ckl.vm.native.library", rustVmNativeLibrary.asFile.absolutePath)
+    systemProperty("ckl.profiling.report.path", runtimeVmComparisonReport.get().asFile.absolutePath)
+    testLogging.showStandardStreams = true
+    outputs.file(runtimeVmComparisonReport)
+}
