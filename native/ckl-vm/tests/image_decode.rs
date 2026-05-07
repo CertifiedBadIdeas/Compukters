@@ -72,7 +72,8 @@ fn decodes_backend_generated_system_log_fixture() {
     assert_eq!(image.host_imports.len(), 1);
     assert_eq!(image.host_imports[0].module_name, "system");
     assert_eq!(image.host_imports[0].function_name, "log");
-    assert_eq!(image.functions[0].code, vec![3, 0, 0, 0, 0, 4, 0, 0, 0, 0, 1, 0, 0, 0, 5, 1, 2]);
+    assert_eq!(image.host_imports[0].id, 3004);
+    assert_eq!(image.functions[0].code, vec![3, 0, 0, 0, 0, 4, 188, 11, 0, 0, 1, 0, 0, 0, 5, 1, 2]);
 }
 
 fn representative_image_bytes() -> Vec<u8> {
