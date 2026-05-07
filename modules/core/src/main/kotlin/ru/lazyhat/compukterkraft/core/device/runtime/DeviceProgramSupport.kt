@@ -19,11 +19,6 @@
 package ru.lazyhat.compukterkraft.core.device.runtime
 
 import ru.lazyhat.compukterkraft.lang.api.BuiltinRegistry
-import ru.lazyhat.compukterkraft.lang.api.BytecodeClass
-import ru.lazyhat.compukterkraft.lang.api.BytecodeFunction
-import ru.lazyhat.compukterkraft.lang.api.BytecodeModule
-import ru.lazyhat.compukterkraft.lang.api.BytecodeRecord
-import ru.lazyhat.compukterkraft.lang.api.Instruction
 import ru.lazyhat.compukterkraft.lang.frontend.CompilerMetricsCollector
 import ru.lazyhat.compukterkraft.lang.frontend.FrontendSeverity
 import ru.lazyhat.compukterkraft.lang.frontend.LanguageBuiltins
@@ -31,11 +26,14 @@ import ru.lazyhat.compukterkraft.lang.frontend.LanguageFrontend
 import ru.lazyhat.compukterkraft.lang.frontend.NoOpCompilerMetricsCollector
 import ru.lazyhat.compukterkraft.lang.frontend.NoOpSourceLoader
 import ru.lazyhat.compukterkraft.lang.frontend.SourceLoader
-import ru.lazyhat.compukterkraft.lang.runtime.BytecodeComputerProgram
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceProfile
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceProgram
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspaceSourceLoader
+import ru.lazyhat.compukterkraft.lang.runtime.image.CkVmImage
+import ru.lazyhat.compukterkraft.lang.runtime.image.CkVmImageAbi
+import ru.lazyhat.compukterkraft.lang.runtime.image.CkVmImageComputerProgram
+import ru.lazyhat.compukterkraft.lang.runtime.image.compileImage
 
 data class LoadedComputerProgramSource(
     val path: String,
@@ -70,84 +68,27 @@ object ComputerProgramCompiler {
         sourceLoader: SourceLoader = NoOpSourceLoader,
         compilerMetricsCollector: CompilerMetricsCollector = NoOpCompilerMetricsCollector,
     ): CompiledComputerProgram {
-        val artifact = LanguageFrontend(runtimeRegistry, compilerMetricsCollector).compile(path, source, sourceLoader)
-        val module = artifact.module
+        val artifact = LanguageFrontend(runtimeRegistry, compilerMetricsCollector).compileImage(path, source, sourceLoader)
+        val image = artifact.image
         val errorMessage =
-            artifact.analysis.diagnostics
+            artifact.bytecode.analysis.diagnostics
                 .filter { it.severity == FrontendSeverity.ERROR }
                 .joinToString { it.message }
 
-        return if (module == null || errorMessage.isNotEmpty()) {
+        return if (image == null || errorMessage.isNotEmpty()) {
             CompiledComputerProgram(
                 program = null,
                 errorMessage = errorMessage.ifEmpty { "Compilation failed." },
             )
-        } else if (profile != null && module.estimatedRomBytes() > profile.resources.storage.programRomBytes) {
+        } else if (profile != null && image.estimatedRomBytes() > profile.resources.storage.programRomBytes) {
             CompiledComputerProgram(
                 program = null,
-                errorMessage = "Program exceeds ROM limit: ${module.estimatedRomBytes()} > ${profile.resources.storage.programRomBytes}",
+                errorMessage = "Program exceeds ROM limit: ${image.estimatedRomBytes()} > ${profile.resources.storage.programRomBytes}",
             )
         } else {
-            CompiledComputerProgram(program = BytecodeComputerProgram(module))
+            CompiledComputerProgram(program = CkVmImageComputerProgram(image))
         }
     }
 }
 
-private fun BytecodeModule.estimatedRomBytes(): Long =
-    name.length.toLong() +
-        16L +
-        functions.sumOf(BytecodeFunction::estimatedRomBytes) +
-        records.sumOf(BytecodeRecord::estimatedRomBytes) +
-        classes.sumOf(BytecodeClass::estimatedRomBytes)
-
-private fun BytecodeFunction.estimatedRomBytes(): Long =
-    name.length.toLong() +
-        returnType.length +
-        24L +
-        parameters.sumOf { it.name.length.toLong() + it.typeName.length } +
-        locals.sumOf { it.name.length.toLong() + it.typeName.length } +
-        instructions.sumOf(Instruction::estimatedRomBytes)
-
-private fun BytecodeRecord.estimatedRomBytes(): Long =
-    name.length.toLong() + 8L + fields.sumOf { it.name.length.toLong() + it.typeName.length }
-
-private fun BytecodeClass.estimatedRomBytes(): Long =
-    name.length.toLong() +
-        12L +
-        fields.sumOf { it.name.length.toLong() + it.typeName.length + 1L } +
-        instanceMethods.entries.sumOf { it.key.length.toLong() + 4L } +
-        staticMethods.entries.sumOf { it.key.length.toLong() + 4L } +
-        if (initFunctionIndex != null) 4L else 0L
-
-private fun Instruction.estimatedRomBytes(): Long =
-    when (this) {
-        is Instruction.Binary -> 4L
-        is Instruction.CallBuiltin -> 12L + functionName.length + (moduleName?.length ?: 0)
-        is Instruction.CallCollectionMethod -> 8L + methodName.length
-        is Instruction.CallFunction -> 8L
-        is Instruction.CallMethod -> 8L + methodName.length
-        is Instruction.CallStaticMethod -> 12L + className.length + methodName.length
-        Instruction.ConstructArray -> 4L
-        is Instruction.ConstructClass -> 8L + className.length + fieldNames.sumOf(String::length)
-        is Instruction.ConstructList -> 4L + elementCount
-        is Instruction.ConstructMap -> 4L + entryCount * 2L
-        is Instruction.ConstructRecord -> 8L + typeName.length + fieldNames.sumOf(String::length)
-        is Instruction.GetField -> 4L + fieldName.length
-        Instruction.IndexGet -> 2L
-        Instruction.IndexSet -> 2L
-        is Instruction.Jump -> 4L
-        is Instruction.JumpIfFalse -> 4L
-        is Instruction.JumpIfTrue -> 4L
-        is Instruction.LoadLocal -> 4L
-        Instruction.Pop -> 2L
-        is Instruction.PushBool -> 2L
-        is Instruction.PushInt -> 8L
-        is Instruction.PushLong -> 12L
-        Instruction.PushNull -> 2L
-        is Instruction.PushString -> 8L + value.length
-        Instruction.PushUnit -> 2L
-        Instruction.Return -> 2L
-        is Instruction.SetField -> 4L + fieldName.length
-        is Instruction.StoreLocal -> 4L
-        is Instruction.Unary -> 4L
-    }
+private fun CkVmImage.estimatedRomBytes(): Long = CkVmImageAbi.encode(this).size.toLong()
