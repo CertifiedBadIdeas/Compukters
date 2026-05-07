@@ -9,28 +9,19 @@ The in-code metrics explain what the VM/display/compiler did. External profilers
 
 ## Runtime/display profiling workload
 
-Generate a JVM-vs-Rust VM Markdown comparison report with one task:
+Runtime VM profiling now records the Rust image runtime path only. Use `profileRuntimeVmImage` to build the native library, run the profiling workload, and write `build/reports/profiling/runtime-vm-image.tsv`.
 
 ```bash
-./gradlew profileRuntimeVmComparison
+./gradlew profileRuntimeVmImage
 ```
 
-The task builds the local Rust JNI library, runs the terminal profiling workloads in isolated JVM and Rust test tasks, then aggregates the raw profiles into:
+The task builds the local Rust JNI library and runs the terminal profiling workloads through the same image runtime path used by computer programs. It writes the raw profile to:
 
 ```text
-modules/v1_21_1/v1_21_1-neoforge/build/reports/profiling/runtime-vm-comparison.md
+modules/v1_21_1/v1_21_1-neoforge/build/reports/profiling/runtime-vm-image.tsv
 ```
 
-It also writes raw per-run profiles for debugging the comparison:
-
-```text
-modules/v1_21_1/v1_21_1-neoforge/build/reports/profiling/runtime-vm-jvm.tsv
-modules/v1_21_1/v1_21_1-neoforge/build/reports/profiling/runtime-vm-rust.tsv
-```
-
-Use this report for quick before/after comparisons. It includes per-workload runtime/display/compiler tables, selected host-call tables, held-Enter backlog metrics, and notes about currently missing Rust per-instruction metrics.
-
-The report task runs a short warm-up inside each isolated runner task before collecting measurements. The workloads are still integration diagnostics rather than strict microbenchmarks: no-delay and backlog scenarios can complete different amounts of visible work per run. If frame or host-call progress differs significantly, the report prints a `Progress differs for this workload` warning and timing ratios for that workload should be treated as diagnostic, not as equal-work speedups.
+Use this raw profile for before/after comparisons across commits. It includes per-workload runtime, display, compiler, host-call, and held-Enter backlog metrics. The task runs a short warm-up before collecting measurements, but the workloads are still integration diagnostics rather than strict microbenchmarks.
 
 Run the bundled terminal profiling workload:
 
