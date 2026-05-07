@@ -39,12 +39,12 @@ class RuntimeVmProfilingReportFormatterTest {
         val jvm =
             VmRunnerProfile(
                 runnerName = "JVM",
-                workloads = listOf(workload("terminal", runtimeNanos = 100, instructionCount = 4)),
+                workloads = listOf(workload("terminal", runtimeNanos = 100, instructionCount = 4, frameCount = 2)),
             )
         val rust =
             VmRunnerProfile(
                 runnerName = "Rust",
-                workloads = listOf(workload("terminal", runtimeNanos = 150, instructionCount = 0)),
+                workloads = listOf(workload("terminal", runtimeNanos = 150, instructionCount = 0, frameCount = 1)),
             )
 
         val markdown = RuntimeVmProfilingReportFormatter.markdown(jvm, rust)
@@ -53,6 +53,8 @@ class RuntimeVmProfilingReportFormatterTest {
         assertTrue(markdown.contains("## terminal"), markdown)
         assertTrue(markdown.contains("| Runtime all ticks | 100 ns | 150 ns | 1.50x |"), markdown)
         assertTrue(markdown.contains("| display.present | 2 | 100 ns | 2 | 100 ns | 1.00x |"), markdown)
+        assertTrue(markdown.contains("| Instructions | 4 | unavailable | — |"), markdown)
+        assertTrue(markdown.contains("Progress differs for this workload"), markdown)
         assertTrue(markdown.contains("Rust instruction metrics are currently unavailable"), markdown)
     }
 
@@ -60,6 +62,7 @@ class RuntimeVmProfilingReportFormatterTest {
         name: String,
         runtimeNanos: Long,
         instructionCount: Long,
+        frameCount: Long,
     ): RuntimeWorkloadProfile =
         RuntimeWorkloadProfile(
             name = name,
@@ -74,7 +77,7 @@ class RuntimeVmProfilingReportFormatterTest {
                             presentFrames = 1,
                             presentNanos = 40,
                         ),
-                    frames = DisplayFrameMetrics(frameCount = 1, tileCount = 2, payloadBytes = 128),
+                    frames = DisplayFrameMetrics(frameCount = frameCount, tileCount = 2, payloadBytes = 128),
                     frameBuild = DisplayFrameBuildTotals(buildCalls = 1, totalNanos = 64, tileCount = 2, payloadBytes = 128),
                 ),
             runtime =

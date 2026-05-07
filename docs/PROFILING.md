@@ -15,13 +15,22 @@ Generate a JVM-vs-Rust VM Markdown comparison report with one task:
 ./gradlew profileRuntimeVmComparison
 ```
 
-The task builds the local Rust JNI library, runs the terminal profiling workloads with both runners, and writes:
+The task builds the local Rust JNI library, runs the terminal profiling workloads in isolated JVM and Rust test tasks, then aggregates the raw profiles into:
 
 ```text
 modules/v1_21_1/v1_21_1-neoforge/build/reports/profiling/runtime-vm-comparison.md
 ```
 
+It also writes raw per-run profiles for debugging the comparison:
+
+```text
+modules/v1_21_1/v1_21_1-neoforge/build/reports/profiling/runtime-vm-jvm.tsv
+modules/v1_21_1/v1_21_1-neoforge/build/reports/profiling/runtime-vm-rust.tsv
+```
+
 Use this report for quick before/after comparisons. It includes per-workload runtime/display/compiler tables, selected host-call tables, held-Enter backlog metrics, and notes about currently missing Rust per-instruction metrics.
+
+The report task runs a short warm-up inside each isolated runner task before collecting measurements. The workloads are still integration diagnostics rather than strict microbenchmarks: no-delay and backlog scenarios can complete different amounts of visible work per run. If frame or host-call progress differs significantly, the report prints a `Progress differs for this workload` warning and timing ratios for that workload should be treated as diagnostic, not as equal-work speedups.
 
 Run the bundled terminal profiling workload:
 
