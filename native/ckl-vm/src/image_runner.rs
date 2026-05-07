@@ -416,8 +416,8 @@ fn apply_unary_operator(operator: u8, operand: VmValue) -> Result<VmValue, Strin
 
 fn binary_add(left: VmValue, right: VmValue) -> Result<VmValue, String> {
     match (left, right) {
-        (VmValue::String(left), right) => Ok(VmValue::String(left + &value_to_string(&right))),
-        (left, VmValue::String(right)) => Ok(VmValue::String(value_to_string(&left) + &right)),
+        (VmValue::String(left), right) => Ok(VmValue::String(left + &value_to_string(&right)?)),
+        (left, VmValue::String(right)) => Ok(VmValue::String(value_to_string(&left)? + &right)),
         (VmValue::Int(left), VmValue::Int(right)) => Ok(VmValue::Int(left.wrapping_add(right))),
         (VmValue::Long(left), VmValue::Long(right)) => Ok(VmValue::Long(left.wrapping_add(right))),
         (VmValue::Int(left), VmValue::Long(right)) => {
@@ -541,16 +541,37 @@ fn value_equals(left: &VmValue, right: &VmValue) -> bool {
     }
 }
 
-fn value_to_string(value: &VmValue) -> String {
+fn value_to_string(value: &VmValue) -> Result<String, String> {
     match value {
-        VmValue::Unit => "unit".to_string(),
-        VmValue::Null => "null".to_string(),
-        VmValue::Bool(value) => value.to_string(),
-        VmValue::Int(value) => value.to_string(),
-        VmValue::Long(value) => value.to_string(),
-        VmValue::String(value) => value.clone(),
-        VmValue::Record { type_name, .. } => format!("{type_name}(...)"),
-        VmValue::ObjectRef(value) => format!("object#{value}"),
+        VmValue::Unit => Ok("unit".to_string()),
+        VmValue::Null => Ok("null".to_string()),
+        VmValue::Bool(value) => Ok(value.to_string()),
+        VmValue::Int(value) => Ok(value.to_string()),
+        VmValue::Long(value) => Ok(value.to_string()),
+        VmValue::String(value) => Ok(value.clone()),
+        VmValue::Record { .. } => {
+            Err("CkVmImage string concatenation with records is not supported".to_string())
+        }
+        VmValue::ObjectRef(_) => {
+            Err("CkVmImage string concatenation with objects is not supported".to_string())
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rejects_string_concatenation_with_object_value() {
+        let error = apply_binary_operator(
+            0,
+            VmValue::ObjectRef(42),
+            VmValue::String("suffix".to_string()),
+        )
+        .unwrap_err();
+
+        assert!(error.contains("string concatenation with objects"));
     }
 }
 

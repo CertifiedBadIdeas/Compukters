@@ -1,8 +1,6 @@
 package ru.lazyhat.compukterkraft.lang.runtime.image
 
-import ru.lazyhat.compukterkraft.lang.api.BinaryOperator
 import ru.lazyhat.compukterkraft.lang.api.Instruction
-import ru.lazyhat.compukterkraft.lang.api.UnaryOperator
 import ru.lazyhat.compukterkraft.lang.frontend.FrontendSeverity
 import ru.lazyhat.compukterkraft.lang.frontend.LanguageFrontend
 import kotlin.test.Test
@@ -156,15 +154,15 @@ class CkVmImageBackendTest {
                 CkVmImageOpcodes.PUSH_CONSTANT, 0, 0, 0, 0,
                 CkVmImageOpcodes.PUSH_CONSTANT, 1, 0, 0, 0,
                 CkVmImageOpcodes.PUSH_CONSTANT, 2, 0, 0, 0,
-                CkVmImageOpcodes.BINARY, BinaryOperator.MULTIPLY.ordinal,
-                CkVmImageOpcodes.BINARY, BinaryOperator.ADD.ordinal,
+                CkVmImageOpcodes.BINARY, 2,
+                CkVmImageOpcodes.BINARY, 0,
                 CkVmImageOpcodes.STORE_LOCAL, 0, 0, 0, 0,
                 CkVmImageOpcodes.LOAD_LOCAL, 0, 0, 0, 0,
                 CkVmImageOpcodes.PUSH_CONSTANT, 3, 0, 0, 0,
-                CkVmImageOpcodes.BINARY, BinaryOperator.GREATER_EQUALS.ordinal,
+                CkVmImageOpcodes.BINARY, 9,
                 CkVmImageOpcodes.PUSH_BOOL, 0,
-                CkVmImageOpcodes.UNARY, UnaryOperator.NOT.ordinal,
-                CkVmImageOpcodes.BINARY, BinaryOperator.AND.ordinal,
+                CkVmImageOpcodes.UNARY, 1,
+                CkVmImageOpcodes.BINARY, 10,
                 CkVmImageOpcodes.STORE_LOCAL, 1, 0, 0, 0,
                 CkVmImageOpcodes.LOAD_LOCAL, 1, 0, 0, 0,
                 CkVmImageOpcodes.JUMP_IF_FALSE, 77, 0, 0, 0,
