@@ -23,26 +23,6 @@ internal object NativeVmBindings {
     private val lock = Any()
     private var loadedPath: String? = null
 
-    fun runUntilSignal(
-        libraryPath: String,
-        bytecode: ByteArray,
-        instructionBudget: Int,
-    ): ByteArray {
-        load(libraryPath)
-        return runUntilSignalNative(bytecode, instructionBudget.coerceAtLeast(1))
-    }
-
-    fun create(
-        libraryPath: String,
-        bytecode: ByteArray,
-        instructionBudget: Int,
-    ): Long {
-        load(libraryPath)
-        val handle = createNative(bytecode, instructionBudget.coerceAtLeast(1))
-        check(handle != 0L) { "Native VM create returned a zero handle" }
-        return handle
-    }
-
     fun createImage(
         libraryPath: String,
         image: ByteArray,
@@ -54,22 +34,9 @@ internal object NativeVmBindings {
         return handle
     }
 
-    fun runUntilSignal(handle: Long): ByteArray {
-        require(handle != 0L) { "Native VM handle is zero" }
-        return runUntilSignalForHandleNative(handle)
-    }
-
     fun runImageUntilSignal(handle: Long): ByteArray {
         require(handle != 0L) { "Native image VM handle is zero" }
         return runImageUntilSignalForHandleNative(handle)
-    }
-
-    fun resumeWith(
-        handle: Long,
-        value: ByteArray,
-    ) {
-        require(handle != 0L) { "Native VM handle is zero" }
-        resumeWithNative(handle, value)
     }
 
     fun resumeImageWith(
@@ -78,12 +45,6 @@ internal object NativeVmBindings {
     ) {
         require(handle != 0L) { "Native image VM handle is zero" }
         resumeImageWithNative(handle, value)
-    }
-
-    fun free(handle: Long) {
-        if (handle != 0L) {
-            freeNative(handle)
-        }
     }
 
     fun freeImage(handle: Long) {
@@ -107,43 +68,19 @@ internal object NativeVmBindings {
     }
 
     @JvmStatic
-    private external fun runUntilSignalNative(
-        bytecode: ByteArray,
-        instructionBudget: Int,
-    ): ByteArray
-
-    @JvmStatic
-    private external fun createNative(
-        bytecode: ByteArray,
-        instructionBudget: Int,
-    ): Long
-
-    @JvmStatic
     private external fun createImageNative(
         image: ByteArray,
         instructionBudget: Int,
     ): Long
 
     @JvmStatic
-    private external fun runUntilSignalForHandleNative(handle: Long): ByteArray
-
-    @JvmStatic
     private external fun runImageUntilSignalForHandleNative(handle: Long): ByteArray
-
-    @JvmStatic
-    private external fun resumeWithNative(
-        handle: Long,
-        value: ByteArray,
-    )
 
     @JvmStatic
     private external fun resumeImageWithNative(
         handle: Long,
         value: ByteArray,
     )
-
-    @JvmStatic
-    private external fun freeNative(handle: Long)
 
     @JvmStatic
     private external fun freeImageNative(handle: Long)
