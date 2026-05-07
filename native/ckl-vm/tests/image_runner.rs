@@ -379,6 +379,76 @@ fn executes_array_index_set_and_get() {
 }
 
 #[test]
+fn executes_array_collection_methods() {
+    let mut code = Vec::new();
+    push_constant(&mut code, 0);
+    push_constant(&mut code, 1);
+    code.push(OP_CONSTRUCT_ARRAY);
+    store_local(&mut code, 0);
+    load_local(&mut code, 0);
+    push_constant(&mut code, 2);
+    push_constant(&mut code, 3);
+    call_collection_method(&mut code, 5, 2);
+    code.push(OP_POP);
+    load_local(&mut code, 0);
+    call_collection_method(&mut code, 6, 0);
+    push_constant(&mut code, 4);
+    code.push(OP_BINARY);
+    code.push(2);
+    load_local(&mut code, 0);
+    push_constant(&mut code, 2);
+    call_collection_method(&mut code, 7, 1);
+    code.push(OP_BINARY);
+    code.push(0);
+    code.push(OP_RETURN);
+    let mut vm = ImageVmHandle::create(
+        &image_with_constants_and_code(
+            vec![
+                ConstantFixture::Int(2),
+                ConstantFixture::Int(1),
+                ConstantFixture::Int(0),
+                ConstantFixture::Int(7),
+                ConstantFixture::Int(10),
+                ConstantFixture::String("set".to_string()),
+                ConstantFixture::String("size".to_string()),
+                ConstantFixture::String("get".to_string()),
+            ],
+            1,
+            code,
+        ),
+        128,
+    ).unwrap();
+
+    assert_eq!(vm.run_until_signal(), vec![0, 3, 27, 0, 0, 0]);
+}
+
+#[test]
+fn executes_array_get_or_null_for_missing_index() {
+    let mut code = Vec::new();
+    push_constant(&mut code, 0);
+    push_constant(&mut code, 1);
+    code.push(OP_CONSTRUCT_ARRAY);
+    push_constant(&mut code, 2);
+    call_collection_method(&mut code, 3, 1);
+    code.push(OP_RETURN);
+    let mut vm = ImageVmHandle::create(
+        &image_with_constants_and_code(
+            vec![
+                ConstantFixture::Int(1),
+                ConstantFixture::Int(0),
+                ConstantFixture::Int(9),
+                ConstantFixture::String("getOrNull".to_string()),
+            ],
+            0,
+            code,
+        ),
+        64,
+    ).unwrap();
+
+    assert_eq!(vm.run_until_signal(), vec![0, 1]);
+}
+
+#[test]
 fn executes_list_methods_and_preserves_alias_identity() {
     let code = vec![
         OP_PUSH_CONSTANT, 0, 0, 0, 0,
@@ -415,6 +485,85 @@ fn executes_list_methods_and_preserves_alias_identity() {
     ).unwrap();
 
     assert_eq!(vm.run_until_signal(), vec![0, 3, 253, 255, 255, 255]);
+}
+
+#[test]
+fn executes_list_collection_methods() {
+    let mut code = Vec::new();
+    push_constant(&mut code, 0);
+    push_constant(&mut code, 1);
+    code.push(OP_CONSTRUCT_LIST);
+    i32(&mut code, 2);
+    store_local(&mut code, 0);
+    load_local(&mut code, 0);
+    push_constant(&mut code, 2);
+    push_constant(&mut code, 3);
+    call_collection_method(&mut code, 8, 2);
+    code.push(OP_POP);
+    load_local(&mut code, 0);
+    push_constant(&mut code, 4);
+    push_constant(&mut code, 5);
+    call_collection_method(&mut code, 9, 2);
+    code.push(OP_POP);
+    load_local(&mut code, 0);
+    push_constant(&mut code, 6);
+    call_collection_method(&mut code, 10, 1);
+    code.push(OP_POP);
+    load_local(&mut code, 0);
+    call_collection_method(&mut code, 11, 0);
+    code.push(OP_POP);
+    load_local(&mut code, 0);
+    call_collection_method(&mut code, 12, 0);
+    code.push(OP_RETURN);
+    let mut vm = ImageVmHandle::create(
+        &image_with_constants_and_code(
+            vec![
+                ConstantFixture::Int(1),
+                ConstantFixture::Int(3),
+                ConstantFixture::Int(1),
+                ConstantFixture::Int(2),
+                ConstantFixture::Int(0),
+                ConstantFixture::Int(4),
+                ConstantFixture::Int(2),
+                ConstantFixture::Int(9),
+                ConstantFixture::String("insert".to_string()),
+                ConstantFixture::String("set".to_string()),
+                ConstantFixture::String("removeAt".to_string()),
+                ConstantFixture::String("clear".to_string()),
+                ConstantFixture::String("isEmpty".to_string()),
+            ],
+            1,
+            code,
+        ),
+        128,
+    ).unwrap();
+
+    assert_eq!(vm.run_until_signal(), vec![0, 2, 1]);
+}
+
+#[test]
+fn executes_list_get_or_null_for_missing_index() {
+    let mut code = Vec::new();
+    push_constant(&mut code, 0);
+    code.push(OP_CONSTRUCT_LIST);
+    i32(&mut code, 1);
+    push_constant(&mut code, 1);
+    call_collection_method(&mut code, 2, 1);
+    code.push(OP_RETURN);
+    let mut vm = ImageVmHandle::create(
+        &image_with_constants_and_code(
+            vec![
+                ConstantFixture::Int(1),
+                ConstantFixture::Int(-1),
+                ConstantFixture::String("getOrNull".to_string()),
+            ],
+            0,
+            code,
+        ),
+        64,
+    ).unwrap();
+
+    assert_eq!(vm.run_until_signal(), vec![0, 1]);
 }
 
 #[test]
@@ -482,6 +631,128 @@ fn executes_map_contains_key() {
 }
 
 #[test]
+fn executes_map_duplicate_key_replacement_with_numeric_widening() {
+    let mut code = Vec::new();
+    push_constant(&mut code, 0);
+    push_constant(&mut code, 1);
+    push_constant(&mut code, 2);
+    push_constant(&mut code, 3);
+    code.push(OP_CONSTRUCT_MAP);
+    i32(&mut code, 2);
+    store_local(&mut code, 0);
+    load_local(&mut code, 0);
+    call_collection_method(&mut code, 5, 0);
+    push_constant(&mut code, 4);
+    code.push(OP_BINARY);
+    code.push(2);
+    load_local(&mut code, 0);
+    push_constant(&mut code, 2);
+    call_collection_method(&mut code, 6, 1);
+    code.push(OP_BINARY);
+    code.push(0);
+    code.push(OP_RETURN);
+    let mut vm = ImageVmHandle::create(
+        &image_with_constants_and_code(
+            vec![
+                ConstantFixture::Int(1),
+                ConstantFixture::Int(3),
+                ConstantFixture::Long(1),
+                ConstantFixture::Int(4),
+                ConstantFixture::Int(10),
+                ConstantFixture::String("size".to_string()),
+                ConstantFixture::String("get".to_string()),
+            ],
+            1,
+            code,
+        ),
+        128,
+    ).unwrap();
+
+    assert_eq!(vm.run_until_signal(), vec![0, 3, 14, 0, 0, 0]);
+}
+
+#[test]
+fn executes_map_keys_and_values_as_lists() {
+    let mut code = Vec::new();
+    push_constant(&mut code, 0);
+    push_constant(&mut code, 1);
+    push_constant(&mut code, 2);
+    push_constant(&mut code, 3);
+    code.push(OP_CONSTRUCT_MAP);
+    i32(&mut code, 2);
+    store_local(&mut code, 0);
+    load_local(&mut code, 0);
+    call_collection_method(&mut code, 4, 0);
+    store_local(&mut code, 1);
+    load_local(&mut code, 0);
+    call_collection_method(&mut code, 5, 0);
+    store_local(&mut code, 2);
+    load_local(&mut code, 2);
+    push_constant(&mut code, 6);
+    code.push(OP_INDEX_GET);
+    load_local(&mut code, 1);
+    call_collection_method(&mut code, 7, 0);
+    code.push(OP_BINARY);
+    code.push(1);
+    code.push(OP_RETURN);
+    let mut vm = ImageVmHandle::create(
+        &image_with_constants_and_code(
+            vec![
+                ConstantFixture::String("a".to_string()),
+                ConstantFixture::Int(2),
+                ConstantFixture::String("b".to_string()),
+                ConstantFixture::Int(5),
+                ConstantFixture::String("keys".to_string()),
+                ConstantFixture::String("values".to_string()),
+                ConstantFixture::Int(1),
+                ConstantFixture::String("size".to_string()),
+            ],
+            3,
+            code,
+        ),
+        128,
+    ).unwrap();
+
+    assert_eq!(vm.run_until_signal(), vec![0, 3, 3, 0, 0, 0]);
+}
+
+#[test]
+fn executes_map_remove_clear_and_is_empty() {
+    let mut code = Vec::new();
+    push_constant(&mut code, 0);
+    push_constant(&mut code, 1);
+    code.push(OP_CONSTRUCT_MAP);
+    i32(&mut code, 1);
+    store_local(&mut code, 0);
+    load_local(&mut code, 0);
+    push_constant(&mut code, 0);
+    call_collection_method(&mut code, 2, 1);
+    code.push(OP_POP);
+    load_local(&mut code, 0);
+    call_collection_method(&mut code, 3, 0);
+    code.push(OP_POP);
+    load_local(&mut code, 0);
+    call_collection_method(&mut code, 4, 0);
+    code.push(OP_RETURN);
+    let mut vm = ImageVmHandle::create(
+        &image_with_constants_and_code(
+            vec![
+                ConstantFixture::String("a".to_string()),
+                ConstantFixture::Int(2),
+                ConstantFixture::String("remove".to_string()),
+                ConstantFixture::String("clear".to_string()),
+                ConstantFixture::String("isEmpty".to_string()),
+            ],
+            1,
+            code,
+        ),
+        128,
+    ).unwrap();
+
+    assert_eq!(vm.run_until_signal(), vec![0, 2, 1]);
+}
+
+#[test]
 fn rejects_array_negative_size() {
     let code = vec![OP_PUSH_CONSTANT, 0, 0, 0, 0, OP_PUSH_UNIT, OP_CONSTRUCT_ARRAY];
     let mut vm = ImageVmHandle::create(&image_with_constants_and_code(vec![ConstantFixture::Int(-1)], 0, code), 64).unwrap();
@@ -506,6 +777,22 @@ fn rejects_index_get_on_non_collection_receiver() {
 #[test]
 fn rejects_null_map_key() {
     let code = vec![OP_PUSH_NULL, OP_PUSH_CONSTANT, 0, 0, 0, 0, OP_CONSTRUCT_MAP, 1, 0, 0, 0];
+    let mut vm = ImageVmHandle::create(&image_with_constants_and_code(vec![ConstantFixture::Int(1)], 0, code), 64).unwrap();
+
+    let signal = vm.run_until_signal();
+
+    assert_eq!(signal[0], 255);
+    assert!(String::from_utf8_lossy(&signal).contains("Map keys cannot be null"));
+}
+
+#[test]
+fn rejects_null_map_key_for_index_set() {
+    let code = vec![
+        OP_CONSTRUCT_MAP, 0, 0, 0, 0,
+        OP_PUSH_NULL,
+        OP_PUSH_CONSTANT, 0, 0, 0, 0,
+        OP_INDEX_SET,
+    ];
     let mut vm = ImageVmHandle::create(&image_with_constants_and_code(vec![ConstantFixture::Int(1)], 0, code), 64).unwrap();
 
     let signal = vm.run_until_signal();
@@ -1328,6 +1615,27 @@ struct FunctionFixture {
 
 fn image_with_code(frame_size: i32, code: Vec<u8>) -> Vec<u8> {
     image_with_constants_and_code(Vec::new(), frame_size, code)
+}
+
+fn push_constant(out: &mut Vec<u8>, constant_index: i32) {
+    out.push(OP_PUSH_CONSTANT);
+    i32(out, constant_index);
+}
+
+fn load_local(out: &mut Vec<u8>, local_index: i32) {
+    out.push(OP_LOAD_LOCAL);
+    i32(out, local_index);
+}
+
+fn store_local(out: &mut Vec<u8>, local_index: i32) {
+    out.push(OP_STORE_LOCAL);
+    i32(out, local_index);
+}
+
+fn call_collection_method(out: &mut Vec<u8>, method_name_index: i32, argument_count: i32) {
+    out.push(OP_CALL_COLLECTION_METHOD);
+    i32(out, method_name_index);
+    i32(out, argument_count);
 }
 
 fn image_with_constants_and_code(
