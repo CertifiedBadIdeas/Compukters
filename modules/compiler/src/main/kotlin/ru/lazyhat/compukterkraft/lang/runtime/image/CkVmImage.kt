@@ -53,4 +53,5 @@ object CkVmImageOpcodes {
     const val JUMP_IF_TRUE = 12
     const val BINARY = 13
     const val UNARY = 14
+    const val CALL_FUNCTION = 15
 }
