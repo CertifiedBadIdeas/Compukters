@@ -19,6 +19,12 @@ const OP_UNARY: u8 = 14;
 const OP_CALL_FUNCTION: u8 = 15;
 const OP_CONSTRUCT_RECORD: u8 = 16;
 const OP_GET_FIELD: u8 = 17;
+const OP_CONSTRUCT_ARRAY: u8 = 18;
+const OP_CONSTRUCT_LIST: u8 = 19;
+const OP_CONSTRUCT_MAP: u8 = 20;
+const OP_INDEX_GET: u8 = 21;
+const OP_INDEX_SET: u8 = 22;
+const OP_CALL_COLLECTION_METHOD: u8 = 23;
 
 fn halt_signal(value: &VmValue) -> Vec<u8> {
     let mut signal = vec![0];
@@ -341,6 +347,171 @@ fn rejects_unknown_operator_tag() {
 
     assert_eq!(signal[0], 255);
     assert!(String::from_utf8_lossy(&signal).contains("unknown CkVmImage binary operator tag 99"));
+}
+
+#[test]
+fn executes_array_index_set_and_get() {
+    let code = vec![
+        OP_PUSH_CONSTANT, 0, 0, 0, 0,
+        OP_PUSH_CONSTANT, 1, 0, 0, 0,
+        OP_CONSTRUCT_ARRAY,
+        OP_STORE_LOCAL, 0, 0, 0, 0,
+        OP_LOAD_LOCAL, 0, 0, 0, 0,
+        OP_PUSH_CONSTANT, 2, 0, 0, 0,
+        OP_PUSH_CONSTANT, 3, 0, 0, 0,
+        OP_INDEX_SET,
+        OP_POP,
+        OP_LOAD_LOCAL, 0, 0, 0, 0,
+        OP_PUSH_CONSTANT, 2, 0, 0, 0,
+        OP_INDEX_GET,
+        OP_RETURN,
+    ];
+    let mut vm = ImageVmHandle::create(
+        &image_with_constants_and_code(
+            vec![ConstantFixture::Int(2), ConstantFixture::Int(0), ConstantFixture::Int(1), ConstantFixture::Int(7)],
+            1,
+            code,
+        ),
+        64,
+    ).unwrap();
+
+    assert_eq!(vm.run_until_signal(), vec![0, 3, 7, 0, 0, 0]);
+}
+
+#[test]
+fn executes_list_methods_and_preserves_alias_identity() {
+    let code = vec![
+        OP_PUSH_CONSTANT, 0, 0, 0, 0,
+        OP_CONSTRUCT_LIST, 1, 0, 0, 0,
+        OP_STORE_LOCAL, 0, 0, 0, 0,
+        OP_LOAD_LOCAL, 0, 0, 0, 0,
+        OP_STORE_LOCAL, 1, 0, 0, 0,
+        OP_LOAD_LOCAL, 1, 0, 0, 0,
+        OP_PUSH_CONSTANT, 1, 0, 0, 0,
+        OP_CALL_COLLECTION_METHOD, 2, 0, 0, 0, 1, 0, 0, 0,
+        OP_POP,
+        OP_LOAD_LOCAL, 0, 0, 0, 0,
+        OP_PUSH_CONSTANT, 3, 0, 0, 0,
+        OP_INDEX_GET,
+        OP_LOAD_LOCAL, 0, 0, 0, 0,
+        OP_PUSH_CONSTANT, 4, 0, 0, 0,
+        OP_INDEX_GET,
+        OP_BINARY, 1,
+        OP_RETURN,
+    ];
+    let mut vm = ImageVmHandle::create(
+        &image_with_constants_and_code(
+            vec![
+                ConstantFixture::Int(2),
+                ConstantFixture::Int(5),
+                ConstantFixture::String("add".to_string()),
+                ConstantFixture::Int(0),
+                ConstantFixture::Int(1),
+            ],
+            2,
+            code,
+        ),
+        64,
+    ).unwrap();
+
+    assert_eq!(vm.run_until_signal(), vec![0, 3, 253, 255, 255, 255]);
+}
+
+#[test]
+fn executes_map_index_set_and_get_or_default() {
+    let code = vec![
+        OP_PUSH_CONSTANT, 0, 0, 0, 0,
+        OP_PUSH_CONSTANT, 1, 0, 0, 0,
+        OP_CONSTRUCT_MAP, 1, 0, 0, 0,
+        OP_STORE_LOCAL, 0, 0, 0, 0,
+        OP_LOAD_LOCAL, 0, 0, 0, 0,
+        OP_PUSH_CONSTANT, 2, 0, 0, 0,
+        OP_PUSH_CONSTANT, 3, 0, 0, 0,
+        OP_INDEX_SET,
+        OP_POP,
+        OP_LOAD_LOCAL, 0, 0, 0, 0,
+        OP_PUSH_CONSTANT, 4, 0, 0, 0,
+        OP_PUSH_CONSTANT, 5, 0, 0, 0,
+        OP_CALL_COLLECTION_METHOD, 6, 0, 0, 0, 2, 0, 0, 0,
+        OP_RETURN,
+    ];
+    let mut vm = ImageVmHandle::create(
+        &image_with_constants_and_code(
+            vec![
+                ConstantFixture::String("x".to_string()),
+                ConstantFixture::Int(3),
+                ConstantFixture::String("y".to_string()),
+                ConstantFixture::Int(4),
+                ConstantFixture::String("missing".to_string()),
+                ConstantFixture::Int(9),
+                ConstantFixture::String("getOrDefault".to_string()),
+            ],
+            1,
+            code,
+        ),
+        128,
+    ).unwrap();
+
+    assert_eq!(vm.run_until_signal(), vec![0, 3, 9, 0, 0, 0]);
+}
+
+#[test]
+fn executes_map_contains_key() {
+    let code = vec![
+        OP_PUSH_CONSTANT, 0, 0, 0, 0,
+        OP_PUSH_CONSTANT, 1, 0, 0, 0,
+        OP_CONSTRUCT_MAP, 1, 0, 0, 0,
+        OP_PUSH_CONSTANT, 0, 0, 0, 0,
+        OP_CALL_COLLECTION_METHOD, 2, 0, 0, 0, 1, 0, 0, 0,
+        OP_RETURN,
+    ];
+    let mut vm = ImageVmHandle::create(
+        &image_with_constants_and_code(
+            vec![
+                ConstantFixture::String("x".to_string()),
+                ConstantFixture::Int(3),
+                ConstantFixture::String("containsKey".to_string()),
+            ],
+            0,
+            code,
+        ),
+        64,
+    ).unwrap();
+
+    assert_eq!(vm.run_until_signal(), vec![0, 2, 1]);
+}
+
+#[test]
+fn rejects_array_negative_size() {
+    let code = vec![OP_PUSH_CONSTANT, 0, 0, 0, 0, OP_PUSH_UNIT, OP_CONSTRUCT_ARRAY];
+    let mut vm = ImageVmHandle::create(&image_with_constants_and_code(vec![ConstantFixture::Int(-1)], 0, code), 64).unwrap();
+
+    let signal = vm.run_until_signal();
+
+    assert_eq!(signal[0], 255);
+    assert!(String::from_utf8_lossy(&signal).contains("negative CkVmImage array size -1"));
+}
+
+#[test]
+fn rejects_index_get_on_non_collection_receiver() {
+    let code = vec![OP_PUSH_CONSTANT, 0, 0, 0, 0, OP_PUSH_CONSTANT, 1, 0, 0, 0, OP_INDEX_GET];
+    let mut vm = ImageVmHandle::create(&image_with_constants_and_code(vec![ConstantFixture::Int(1), ConstantFixture::Int(0)], 0, code), 64).unwrap();
+
+    let signal = vm.run_until_signal();
+
+    assert_eq!(signal[0], 255);
+    assert!(String::from_utf8_lossy(&signal).contains("requires collection ObjectRef receiver"));
+}
+
+#[test]
+fn rejects_null_map_key() {
+    let code = vec![OP_PUSH_NULL, OP_PUSH_CONSTANT, 0, 0, 0, 0, OP_CONSTRUCT_MAP, 1, 0, 0, 0];
+    let mut vm = ImageVmHandle::create(&image_with_constants_and_code(vec![ConstantFixture::Int(1)], 0, code), 64).unwrap();
+
+    let signal = vm.run_until_signal();
+
+    assert_eq!(signal[0], 255);
+    assert!(String::from_utf8_lossy(&signal).contains("Map keys cannot be null"));
 }
 
 #[test]

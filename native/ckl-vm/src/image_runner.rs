@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
 use crate::image::{decode_image, Constant, Function, HostImport, Image};
@@ -21,11 +22,24 @@ const OP_UNARY: u8 = 14;
 const OP_CALL_FUNCTION: u8 = 15;
 const OP_CONSTRUCT_RECORD: u8 = 16;
 const OP_GET_FIELD: u8 = 17;
+const OP_CONSTRUCT_ARRAY: u8 = 18;
+const OP_CONSTRUCT_LIST: u8 = 19;
+const OP_CONSTRUCT_MAP: u8 = 20;
+const OP_INDEX_GET: u8 = 21;
+const OP_INDEX_SET: u8 = 22;
+const OP_CALL_COLLECTION_METHOD: u8 = 23;
 
 struct CallFrame {
     function_index: usize,
     instruction_pointer: usize,
     locals: Vec<VmValue>,
+}
+
+#[derive(Debug, Clone)]
+enum HeapObject {
+    Array(Vec<VmValue>),
+    List(Vec<VmValue>),
+    Map(Vec<(VmValue, VmValue)>),
 }
 
 pub struct ImageVmHandle {
@@ -35,6 +49,8 @@ pub struct ImageVmHandle {
     stack: Vec<VmValue>,
     locals: Vec<VmValue>,
     call_stack: Vec<CallFrame>,
+    objects: HashMap<u32, HeapObject>,
+    next_object_id: u32,
     instruction_budget: usize,
     instructions_since_pause: usize,
     state: ImageVmState,
@@ -59,6 +75,8 @@ impl ImageVmHandle {
             stack: Vec::new(),
             locals: vec![VmValue::Unit; frame_size],
             call_stack: Vec::new(),
+            objects: HashMap::new(),
+            next_object_id: 1,
             instruction_budget: instruction_budget.max(1),
             instructions_since_pause: 0,
             state: ImageVmState::Ready,
@@ -194,6 +212,20 @@ impl ImageVmHandle {
                 }
                 OP_CONSTRUCT_RECORD => self.construct_record()?,
                 OP_GET_FIELD => self.get_field()?,
+                OP_CONSTRUCT_ARRAY => self.construct_array()?,
+                OP_CONSTRUCT_LIST => self.construct_list()?,
+                OP_CONSTRUCT_MAP => self.construct_map()?,
+                OP_INDEX_GET => self.index_get()?,
+                OP_INDEX_SET => self.index_set()?,
+                OP_CALL_COLLECTION_METHOD => {
+                    let method_name_index = self.read_i32()?;
+                    let method_name = self.constant_string_metadata(
+                        method_name_index,
+                        "collection method name",
+                    )?;
+                    let argument_count = self.read_i32()?;
+                    self.call_collection_method(method_name, argument_count)?;
+                }
                 other => return Err(format!("unknown CkVmImage opcode {other}")),
             }
 
@@ -310,6 +342,495 @@ impl ImageVmHandle {
             other => Err(format!(
                 "CkVmImage GET_FIELD requires Record receiver but found {other:?}"
             )),
+        }
+    }
+
+    fn construct_array(&mut self) -> Result<(), String> {
+        let default = self.pop_one("construct array default")?;
+        let size = Self::require_int(self.pop_one("construct array size")?, "array size")?;
+        if size < 0 {
+            return Err(format!("negative CkVmImage array size {size}"));
+        }
+        let object_ref = self.allocate_object(HeapObject::Array(vec![default; size as usize]))?;
+        self.stack.push(object_ref);
+        Ok(())
+    }
+
+    fn construct_list(&mut self) -> Result<(), String> {
+        let element_count = self.read_i32()?;
+        if element_count < 0 {
+            return Err(format!(
+                "negative CkVmImage list element count {element_count}"
+            ));
+        }
+        let values = self.pop_many(element_count)?;
+        let object_ref = self.allocate_object(HeapObject::List(values))?;
+        self.stack.push(object_ref);
+        Ok(())
+    }
+
+    fn construct_map(&mut self) -> Result<(), String> {
+        let entry_count = self.read_i32()?;
+        if entry_count < 0 {
+            return Err(format!(
+                "negative CkVmImage map entry count {entry_count}"
+            ));
+        }
+        let value_count = entry_count.checked_mul(2).ok_or_else(|| {
+            format!("CkVmImage map entry count {entry_count} overflows value count")
+        })?;
+        let values = self.pop_many(value_count)?;
+        let mut entries = Vec::with_capacity(entry_count as usize);
+        let mut values = values.into_iter();
+        while let Some(key) = values.next() {
+            let value = values
+                .next()
+                .ok_or_else(|| "CkVmImage map construction missing value".to_string())?;
+            Self::map_set(&mut entries, Self::require_non_null_key(key)?, value);
+        }
+        let object_ref = self.allocate_object(HeapObject::Map(entries))?;
+        self.stack.push(object_ref);
+        Ok(())
+    }
+
+    fn index_get(&mut self) -> Result<(), String> {
+        let index_or_key = self.pop_one("index get key")?;
+        let receiver = self.pop_one("index get receiver")?;
+        let result = match self.collection_object(receiver, "INDEX_GET")? {
+            HeapObject::Array(values) => {
+                let index = Self::checked_index(
+                    Self::require_int(index_or_key, "array index get")?,
+                    values.len(),
+                    "array index get",
+                )?;
+                values[index].clone()
+            }
+            HeapObject::List(values) => {
+                let index = Self::checked_index(
+                    Self::require_int(index_or_key, "list index get")?,
+                    values.len(),
+                    "list index get",
+                )?;
+                values[index].clone()
+            }
+            HeapObject::Map(entries) => {
+                let key = Self::require_non_null_key(index_or_key)?;
+                Self::map_find_index(entries, &key)
+                    .map(|index| entries[index].1.clone())
+                    .unwrap_or(VmValue::Null)
+            }
+        };
+        self.stack.push(result);
+        Ok(())
+    }
+
+    fn index_set(&mut self) -> Result<(), String> {
+        let value = self.pop_one("index set value")?;
+        let index_or_key = self.pop_one("index set key")?;
+        let receiver = self.pop_one("index set receiver")?;
+        match self.collection_object_mut(receiver, "INDEX_SET")? {
+            HeapObject::Array(values) => {
+                let index = Self::checked_index(
+                    Self::require_int(index_or_key, "array index set")?,
+                    values.len(),
+                    "array index set",
+                )?;
+                values[index] = value;
+            }
+            HeapObject::List(values) => {
+                let index = Self::checked_index(
+                    Self::require_int(index_or_key, "list index set")?,
+                    values.len(),
+                    "list index set",
+                )?;
+                values[index] = value;
+            }
+            HeapObject::Map(entries) => {
+                Self::map_set(entries, Self::require_non_null_key(index_or_key)?, value);
+            }
+        }
+        self.stack.push(VmValue::Unit);
+        Ok(())
+    }
+
+    fn call_collection_method(
+        &mut self,
+        method_name: String,
+        argument_count: i32,
+    ) -> Result<(), String> {
+        let arguments = self.pop_many(argument_count)?;
+        let receiver = self.pop_one("collection method receiver")?;
+        let id = Self::require_object_ref(receiver, "CALL_COLLECTION_METHOD")?;
+        let result = match self.objects.get(&id) {
+            Some(HeapObject::Array(_)) => self.call_array_method(id, &method_name, arguments)?,
+            Some(HeapObject::List(_)) => self.call_list_method(id, &method_name, arguments)?,
+            Some(HeapObject::Map(_)) => self.call_map_method(id, &method_name, arguments)?,
+            None => return Err(format!("CkVmImage CALL_COLLECTION_METHOD object id {id} does not exist")),
+        };
+        self.stack.push(result);
+        Ok(())
+    }
+
+    fn call_array_method(
+        &mut self,
+        id: u32,
+        method_name: &str,
+        arguments: Vec<VmValue>,
+    ) -> Result<VmValue, String> {
+        match method_name {
+            "size" => {
+                Self::expect_argument_count(method_name, arguments.len(), 0)?;
+                let values = self.array_values(id, method_name)?;
+                Ok(VmValue::Int(values.len() as i32))
+            }
+            "get" => {
+                Self::expect_argument_count(method_name, arguments.len(), 1)?;
+                let index = Self::require_int(arguments[0].clone(), "array get index")?;
+                let values = self.array_values(id, method_name)?;
+                let index = Self::checked_index(index, values.len(), "array get")?;
+                Ok(values[index].clone())
+            }
+            "set" => {
+                Self::expect_argument_count(method_name, arguments.len(), 2)?;
+                let index = Self::require_int(arguments[0].clone(), "array set index")?;
+                let values = self.array_values_mut(id, method_name)?;
+                let index = Self::checked_index(index, values.len(), "array set")?;
+                values[index] = arguments[1].clone();
+                Ok(VmValue::Unit)
+            }
+            "getOrNull" => {
+                Self::expect_argument_count(method_name, arguments.len(), 1)?;
+                let index = Self::require_int(arguments[0].clone(), "array getOrNull index")?;
+                let values = self.array_values(id, method_name)?;
+                if index < 0 || index as usize >= values.len() {
+                    Ok(VmValue::Null)
+                } else {
+                    Ok(values[index as usize].clone())
+                }
+            }
+            other => Err(format!("CkVmImage Array has no collection method `{other}`")),
+        }
+    }
+
+    fn call_list_method(
+        &mut self,
+        id: u32,
+        method_name: &str,
+        arguments: Vec<VmValue>,
+    ) -> Result<VmValue, String> {
+        match method_name {
+            "size" => {
+                Self::expect_argument_count(method_name, arguments.len(), 0)?;
+                let values = self.list_values(id, method_name)?;
+                Ok(VmValue::Int(values.len() as i32))
+            }
+            "isEmpty" => {
+                Self::expect_argument_count(method_name, arguments.len(), 0)?;
+                let values = self.list_values(id, method_name)?;
+                Ok(VmValue::Bool(values.is_empty()))
+            }
+            "get" => {
+                Self::expect_argument_count(method_name, arguments.len(), 1)?;
+                let index = Self::require_int(arguments[0].clone(), "list get index")?;
+                let values = self.list_values(id, method_name)?;
+                let index = Self::checked_index(index, values.len(), "list get")?;
+                Ok(values[index].clone())
+            }
+            "set" => {
+                Self::expect_argument_count(method_name, arguments.len(), 2)?;
+                let index = Self::require_int(arguments[0].clone(), "list set index")?;
+                let values = self.list_values_mut(id, method_name)?;
+                let index = Self::checked_index(index, values.len(), "list set")?;
+                values[index] = arguments[1].clone();
+                Ok(VmValue::Unit)
+            }
+            "getOrNull" => {
+                Self::expect_argument_count(method_name, arguments.len(), 1)?;
+                let index = Self::require_int(arguments[0].clone(), "list getOrNull index")?;
+                let values = self.list_values(id, method_name)?;
+                if index < 0 || index as usize >= values.len() {
+                    Ok(VmValue::Null)
+                } else {
+                    Ok(values[index as usize].clone())
+                }
+            }
+            "add" => {
+                Self::expect_argument_count(method_name, arguments.len(), 1)?;
+                let values = self.list_values_mut(id, method_name)?;
+                values.push(arguments[0].clone());
+                Ok(VmValue::Unit)
+            }
+            "insert" => {
+                Self::expect_argument_count(method_name, arguments.len(), 2)?;
+                let index = Self::require_int(arguments[0].clone(), "list insert index")?;
+                let values = self.list_values_mut(id, method_name)?;
+                if index < 0 || index as usize > values.len() {
+                    return Err(format!(
+                        "CkVmImage list insert index {index} is out of bounds for length {}",
+                        values.len()
+                    ));
+                }
+                values.insert(index as usize, arguments[1].clone());
+                Ok(VmValue::Unit)
+            }
+            "removeAt" => {
+                Self::expect_argument_count(method_name, arguments.len(), 1)?;
+                let index = Self::require_int(arguments[0].clone(), "list removeAt index")?;
+                let values = self.list_values_mut(id, method_name)?;
+                let index = Self::checked_index(index, values.len(), "list removeAt")?;
+                Ok(values.remove(index))
+            }
+            "clear" => {
+                Self::expect_argument_count(method_name, arguments.len(), 0)?;
+                let values = self.list_values_mut(id, method_name)?;
+                values.clear();
+                Ok(VmValue::Unit)
+            }
+            other => Err(format!("CkVmImage List has no collection method `{other}`")),
+        }
+    }
+
+    fn call_map_method(
+        &mut self,
+        id: u32,
+        method_name: &str,
+        arguments: Vec<VmValue>,
+    ) -> Result<VmValue, String> {
+        match method_name {
+            "size" => {
+                Self::expect_argument_count(method_name, arguments.len(), 0)?;
+                let entries = self.map_entries(id, method_name)?;
+                Ok(VmValue::Int(entries.len() as i32))
+            }
+            "isEmpty" => {
+                Self::expect_argument_count(method_name, arguments.len(), 0)?;
+                let entries = self.map_entries(id, method_name)?;
+                Ok(VmValue::Bool(entries.is_empty()))
+            }
+            "containsKey" => {
+                Self::expect_argument_count(method_name, arguments.len(), 1)?;
+                let key = Self::require_non_null_key(arguments[0].clone())?;
+                let entries = self.map_entries(id, method_name)?;
+                Ok(VmValue::Bool(Self::map_find_index(entries, &key).is_some()))
+            }
+            "get" => {
+                Self::expect_argument_count(method_name, arguments.len(), 1)?;
+                let key = Self::require_non_null_key(arguments[0].clone())?;
+                let entries = self.map_entries(id, method_name)?;
+                Ok(Self::map_find_index(entries, &key)
+                    .map(|index| entries[index].1.clone())
+                    .unwrap_or(VmValue::Null))
+            }
+            "getOrDefault" => {
+                Self::expect_argument_count(method_name, arguments.len(), 2)?;
+                let key = Self::require_non_null_key(arguments[0].clone())?;
+                let entries = self.map_entries(id, method_name)?;
+                Ok(Self::map_find_index(entries, &key)
+                    .map(|index| entries[index].1.clone())
+                    .unwrap_or_else(|| arguments[1].clone()))
+            }
+            "set" => {
+                Self::expect_argument_count(method_name, arguments.len(), 2)?;
+                let key = Self::require_non_null_key(arguments[0].clone())?;
+                let entries = self.map_entries_mut(id, method_name)?;
+                Self::map_set(entries, key, arguments[1].clone());
+                Ok(VmValue::Unit)
+            }
+            "remove" => {
+                Self::expect_argument_count(method_name, arguments.len(), 1)?;
+                let key = Self::require_non_null_key(arguments[0].clone())?;
+                let entries = self.map_entries_mut(id, method_name)?;
+                if let Some(index) = Self::map_find_index(entries, &key) {
+                    Ok(entries.remove(index).1)
+                } else {
+                    Ok(VmValue::Null)
+                }
+            }
+            "clear" => {
+                Self::expect_argument_count(method_name, arguments.len(), 0)?;
+                let entries = self.map_entries_mut(id, method_name)?;
+                entries.clear();
+                Ok(VmValue::Unit)
+            }
+            "keys" => {
+                Self::expect_argument_count(method_name, arguments.len(), 0)?;
+                let values = self
+                    .map_entries(id, method_name)?
+                    .iter()
+                    .map(|(key, _)| key.clone())
+                    .collect();
+                self.allocate_object(HeapObject::List(values))
+            }
+            "values" => {
+                Self::expect_argument_count(method_name, arguments.len(), 0)?;
+                let values = self
+                    .map_entries(id, method_name)?
+                    .iter()
+                    .map(|(_, value)| value.clone())
+                    .collect();
+                self.allocate_object(HeapObject::List(values))
+            }
+            other => Err(format!("CkVmImage Map has no collection method `{other}`")),
+        }
+    }
+
+    fn allocate_object(&mut self, object: HeapObject) -> Result<VmValue, String> {
+        let id = self.next_object_id;
+        self.next_object_id = self
+            .next_object_id
+            .checked_add(1)
+            .ok_or_else(|| "CkVmImage object id overflow".to_string())?;
+        self.objects.insert(id, object);
+        Ok(VmValue::ObjectRef(id))
+    }
+
+    fn require_object_ref(receiver: VmValue, operation: &str) -> Result<u32, String> {
+        match receiver {
+            VmValue::ObjectRef(id) => Ok(id),
+            other => Err(format!(
+                "CkVmImage {operation} requires collection ObjectRef receiver but found {other:?}"
+            )),
+        }
+    }
+
+    fn collection_object(
+        &self,
+        receiver: VmValue,
+        operation: &str,
+    ) -> Result<&HeapObject, String> {
+        let id = Self::require_object_ref(receiver, operation)?;
+        self.objects
+            .get(&id)
+            .ok_or_else(|| format!("CkVmImage {operation} object id {id} does not exist"))
+    }
+
+    fn collection_object_mut(
+        &mut self,
+        receiver: VmValue,
+        operation: &str,
+    ) -> Result<&mut HeapObject, String> {
+        let id = Self::require_object_ref(receiver, operation)?;
+        self.objects
+            .get_mut(&id)
+            .ok_or_else(|| format!("CkVmImage {operation} object id {id} does not exist"))
+    }
+
+    fn array_values(&self, id: u32, operation: &str) -> Result<&Vec<VmValue>, String> {
+        match self.objects.get(&id) {
+            Some(HeapObject::Array(values)) => Ok(values),
+            Some(other) => Err(format!(
+                "CkVmImage Array method `{operation}` found non-array object {other:?}"
+            )),
+            None => Err(format!("CkVmImage Array method `{operation}` object id {id} does not exist")),
+        }
+    }
+
+    fn array_values_mut(&mut self, id: u32, operation: &str) -> Result<&mut Vec<VmValue>, String> {
+        match self.objects.get_mut(&id) {
+            Some(HeapObject::Array(values)) => Ok(values),
+            Some(other) => Err(format!(
+                "CkVmImage Array method `{operation}` found non-array object {other:?}"
+            )),
+            None => Err(format!("CkVmImage Array method `{operation}` object id {id} does not exist")),
+        }
+    }
+
+    fn list_values(&self, id: u32, operation: &str) -> Result<&Vec<VmValue>, String> {
+        match self.objects.get(&id) {
+            Some(HeapObject::List(values)) => Ok(values),
+            Some(other) => Err(format!(
+                "CkVmImage List method `{operation}` found non-list object {other:?}"
+            )),
+            None => Err(format!("CkVmImage List method `{operation}` object id {id} does not exist")),
+        }
+    }
+
+    fn list_values_mut(&mut self, id: u32, operation: &str) -> Result<&mut Vec<VmValue>, String> {
+        match self.objects.get_mut(&id) {
+            Some(HeapObject::List(values)) => Ok(values),
+            Some(other) => Err(format!(
+                "CkVmImage List method `{operation}` found non-list object {other:?}"
+            )),
+            None => Err(format!("CkVmImage List method `{operation}` object id {id} does not exist")),
+        }
+    }
+
+    fn map_entries(&self, id: u32, operation: &str) -> Result<&Vec<(VmValue, VmValue)>, String> {
+        match self.objects.get(&id) {
+            Some(HeapObject::Map(entries)) => Ok(entries),
+            Some(other) => Err(format!(
+                "CkVmImage Map method `{operation}` found non-map object {other:?}"
+            )),
+            None => Err(format!("CkVmImage Map method `{operation}` object id {id} does not exist")),
+        }
+    }
+
+    fn map_entries_mut(
+        &mut self,
+        id: u32,
+        operation: &str,
+    ) -> Result<&mut Vec<(VmValue, VmValue)>, String> {
+        match self.objects.get_mut(&id) {
+            Some(HeapObject::Map(entries)) => Ok(entries),
+            Some(other) => Err(format!(
+                "CkVmImage Map method `{operation}` found non-map object {other:?}"
+            )),
+            None => Err(format!("CkVmImage Map method `{operation}` object id {id} does not exist")),
+        }
+    }
+
+    fn expect_argument_count(
+        method_name: &str,
+        actual: usize,
+        expected: usize,
+    ) -> Result<(), String> {
+        if actual == expected {
+            Ok(())
+        } else {
+            Err(format!(
+                "CkVmImage collection method `{method_name}` expected {expected} arguments but got {actual}"
+            ))
+        }
+    }
+
+    fn require_int(value: VmValue, operation: &str) -> Result<i32, String> {
+        match value {
+            VmValue::Int(value) => Ok(value),
+            other => Err(format!(
+                "CkVmImage {operation} requires Int but found {other:?}"
+            )),
+        }
+    }
+
+    fn checked_index(index: i32, length: usize, operation: &str) -> Result<usize, String> {
+        if index < 0 || index as usize >= length {
+            Err(format!(
+                "CkVmImage {operation} index {index} is out of bounds for length {length}"
+            ))
+        } else {
+            Ok(index as usize)
+        }
+    }
+
+    fn require_non_null_key(key: VmValue) -> Result<VmValue, String> {
+        if key == VmValue::Null {
+            Err("CkVmImage Map keys cannot be null".to_string())
+        } else {
+            Ok(key)
+        }
+    }
+
+    fn map_find_index(entries: &[(VmValue, VmValue)], key: &VmValue) -> Option<usize> {
+        entries
+            .iter()
+            .position(|(entry_key, _)| value_equals(entry_key, key))
+    }
+
+    fn map_set(entries: &mut Vec<(VmValue, VmValue)>, key: VmValue, value: VmValue) {
+        if let Some(index) = Self::map_find_index(entries, &key) {
+            entries[index].1 = value;
+        } else {
+            entries.push((key, value));
         }
     }
 
