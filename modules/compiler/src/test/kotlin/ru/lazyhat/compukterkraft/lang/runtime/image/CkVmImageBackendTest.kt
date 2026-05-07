@@ -43,6 +43,74 @@ class CkVmImageBackendTest {
     }
 
     @Test
+    fun compileImageLowersBoolNullAndLocalSlots() {
+        val image = assertNotNull(
+            LanguageFrontend().compileImage(
+                "main.ck",
+                """
+                pub fun main() {
+                    val enabled: Bool = true;
+                    val missing: String? = null;
+                    if (enabled) {
+                        system::log("yes");
+                    }
+                }
+                """.trimIndent(),
+            ).image,
+        )
+
+        assertEquals(2, image.functions.single().frameSize)
+        assertEquals(listOf(CkVmConstant.StringConstant("yes")), image.constants)
+        assertEquals(listOf(CkVmHostImport(3004, "system", "log", listOf("String"), "Unit")), image.hostImports)
+        assertContentEquals(
+            listOf(
+                CkVmImageOpcodes.PUSH_BOOL, 1,
+                CkVmImageOpcodes.STORE_LOCAL, 0, 0, 0, 0,
+                CkVmImageOpcodes.PUSH_NULL,
+                CkVmImageOpcodes.STORE_LOCAL, 1, 0, 0, 0,
+                CkVmImageOpcodes.LOAD_LOCAL, 0, 0, 0, 0,
+                CkVmImageOpcodes.JUMP_IF_FALSE, 38, 0, 0, 0,
+                CkVmImageOpcodes.PUSH_CONSTANT, 0, 0, 0, 0,
+                CkVmImageOpcodes.CALL_HOST, 188, 11, 0, 0, 1, 0, 0, 0,
+                CkVmImageOpcodes.POP,
+                CkVmImageOpcodes.PUSH_UNIT,
+                CkVmImageOpcodes.RETURN,
+            ),
+            image.functions.single().code,
+        )
+    }
+
+    @Test
+    fun compileImageLowersForwardAndBackwardJumpsToByteOffsets() {
+        val image = assertNotNull(
+            LanguageFrontend().compileImage(
+                "main.ck",
+                """
+                pub fun main() {
+                    while (false) {
+                        system::log("loop");
+                    }
+                }
+                """.trimIndent(),
+            ).image,
+        )
+
+        assertContentEquals(
+            listOf(
+                CkVmImageOpcodes.PUSH_BOOL, 0,
+                CkVmImageOpcodes.JUMP_IF_FALSE, 27, 0, 0, 0,
+                CkVmImageOpcodes.PUSH_CONSTANT, 0, 0, 0, 0,
+                CkVmImageOpcodes.CALL_HOST, 188, 11, 0, 0, 1, 0, 0, 0,
+                CkVmImageOpcodes.POP,
+                CkVmImageOpcodes.JUMP, 0, 0, 0, 0,
+                CkVmImageOpcodes.PUSH_UNIT,
+                CkVmImageOpcodes.RETURN,
+            ),
+            image.functions.single().code,
+        )
+    }
+
+    @Test
     fun compileImageReturnsNullImageWhenFrontendHasErrors() {
         val artifact = LanguageFrontend().compileImage("main.ck", "fun main() { }")
 
@@ -52,14 +120,14 @@ class CkVmImageBackendTest {
 
     @Test
     fun unsupportedInstructionReportsClearError() {
-        val artifact = LanguageFrontend().compile("main.ck", "pub fun main() { if (true) { system::log(\"x\"); } }")
+        val artifact = LanguageFrontend().compile("main.ck", "pub fun main() { val x: Int = 1 + 2; }")
         val module = assertNotNull(artifact.module)
 
         val error = assertFailsWith<UnsupportedOperationException> {
             CkVmImageCompiler.compile(module)
         }
 
-        assertTrue(error.message.orEmpty().contains("CkVmImage backend does not support"))
+        assertTrue(error.message.orEmpty().contains("CkVmImage backend does not support Binary"))
     }
 
     @Test
