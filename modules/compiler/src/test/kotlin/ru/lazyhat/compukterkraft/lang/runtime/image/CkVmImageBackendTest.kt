@@ -29,11 +29,11 @@ class CkVmImageBackendTest {
         val image = assertNotNull(artifact.image)
 
         assertEquals(listOf(CkVmConstant.StringConstant("hi")), image.constants)
-        assertEquals(listOf(CkVmHostImport(0, "system", "log", listOf("Any"), "Unit")), image.hostImports)
+        assertEquals(listOf(CkVmHostImport(3004, "system", "log", listOf("String"), "Unit")), image.hostImports)
         assertContentEquals(
             listOf(
                 CkVmImageOpcodes.PUSH_CONSTANT, 0, 0, 0, 0,
-                CkVmImageOpcodes.CALL_HOST, 0, 0, 0, 0, 1, 0, 0, 0,
+            CkVmImageOpcodes.CALL_HOST, 188, 11, 0, 0, 1, 0, 0, 0,
                 CkVmImageOpcodes.POP,
                 CkVmImageOpcodes.PUSH_UNIT,
                 CkVmImageOpcodes.RETURN,
