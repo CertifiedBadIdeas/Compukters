@@ -56,4 +56,10 @@ object CkVmImageOpcodes {
     const val CALL_FUNCTION = 15
     const val CONSTRUCT_RECORD = 16
     const val GET_FIELD = 17
+    const val CONSTRUCT_ARRAY = 18
+    const val CONSTRUCT_LIST = 19
+    const val CONSTRUCT_MAP = 20
+    const val INDEX_GET = 21
+    const val INDEX_SET = 22
+    const val CALL_COLLECTION_METHOD = 23
 }
