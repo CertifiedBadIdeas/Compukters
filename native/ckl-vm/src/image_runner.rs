@@ -18,6 +18,13 @@ const OP_JUMP_IF_FALSE: u8 = 11;
 const OP_JUMP_IF_TRUE: u8 = 12;
 const OP_BINARY: u8 = 13;
 const OP_UNARY: u8 = 14;
+const OP_CALL_FUNCTION: u8 = 15;
+
+struct CallFrame {
+    function_index: usize,
+    instruction_pointer: usize,
+    locals: Vec<VmValue>,
+}
 
 pub struct ImageVmHandle {
     image: Image,
@@ -25,6 +32,7 @@ pub struct ImageVmHandle {
     instruction_pointer: usize,
     stack: Vec<VmValue>,
     locals: Vec<VmValue>,
+    call_stack: Vec<CallFrame>,
     instruction_budget: usize,
     instructions_since_pause: usize,
     state: ImageVmState,
@@ -48,6 +56,7 @@ impl ImageVmHandle {
             instruction_pointer: 0,
             stack: Vec::new(),
             locals: vec![VmValue::Unit; frame_size],
+            call_stack: Vec::new(),
             instruction_budget: instruction_budget.max(1),
             instructions_since_pause: 0,
             state: ImageVmState::Ready,
@@ -92,7 +101,14 @@ impl ImageVmHandle {
                 OP_PUSH_UNIT => self.stack.push(VmValue::Unit),
                 OP_RETURN => {
                     let result = self.stack.pop().unwrap_or(VmValue::Unit);
-                    return self.halt(result);
+                    if let Some(frame) = self.call_stack.pop() {
+                        self.function_index = frame.function_index;
+                        self.instruction_pointer = frame.instruction_pointer;
+                        self.locals = frame.locals;
+                        self.stack.push(result);
+                    } else {
+                        return self.halt(result);
+                    }
                 }
                 OP_PUSH_CONSTANT => {
                     let constant_index = self.read_i32()?;
@@ -168,6 +184,11 @@ impl ImageVmHandle {
                     })?;
                     let operand = self.pop_one("unary operand")?;
                     self.stack.push(apply_unary_operator(operator, operand)?);
+                }
+                OP_CALL_FUNCTION => {
+                    let function_index = self.read_i32()?;
+                    let argument_count = self.read_i32()?;
+                    self.call_function(function_index, argument_count)?;
                 }
                 other => return Err(format!("unknown CkVmImage opcode {other}")),
             }
@@ -300,6 +321,52 @@ impl ImageVmHandle {
         }
         self.instruction_pointer = target;
         Ok(())
+    }
+
+    fn call_function(&mut self, function_index: i32, argument_count: i32) -> Result<(), String> {
+        let function_index = self.checked_function_index(function_index)?;
+        if argument_count < 0 {
+            return Err(format!(
+                "negative CkVmImage argument count {argument_count}"
+            ));
+        }
+        let argument_count = argument_count as usize;
+        let frame_size = checked_frame_size(&self.image, function_index)?;
+        if argument_count > frame_size {
+            return Err(format!(
+                "CkVmImage argument count {argument_count} exceeds frame size {frame_size} for function {function_index}"
+            ));
+        }
+        let arguments = self.pop_many(argument_count as i32)?;
+        let caller_frame = CallFrame {
+            function_index: self.function_index,
+            instruction_pointer: self.instruction_pointer,
+            locals: std::mem::take(&mut self.locals),
+        };
+        self.call_stack.push(caller_frame);
+        self.function_index = function_index;
+        self.instruction_pointer = 0;
+        self.locals = vec![VmValue::Unit; frame_size];
+        for (slot, argument) in arguments.into_iter().enumerate() {
+            self.locals[slot] = argument;
+        }
+        Ok(())
+    }
+
+    fn checked_function_index(&self, function_index: i32) -> Result<usize, String> {
+        if function_index < 0 {
+            return Err(format!(
+                "negative CkVmImage function index {function_index}"
+            ));
+        }
+        let function_index = function_index as usize;
+        if function_index >= self.image.functions.len() {
+            return Err(format!(
+                "CkVmImage function index {function_index} is out of bounds for {} functions",
+                self.image.functions.len()
+            ));
+        }
+        Ok(function_index)
     }
 
     fn current_function(&self) -> Result<&Function, String> {
