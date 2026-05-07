@@ -44,4 +44,11 @@ object CkVmImageOpcodes {
     const val PUSH_CONSTANT = 3
     const val CALL_HOST = 4
     const val POP = 5
+    const val PUSH_BOOL = 6
+    const val PUSH_NULL = 7
+    const val LOAD_LOCAL = 8
+    const val STORE_LOCAL = 9
+    const val JUMP = 10
+    const val JUMP_IF_FALSE = 11
+    const val JUMP_IF_TRUE = 12
 }

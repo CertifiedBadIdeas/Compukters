@@ -62,24 +62,86 @@ object CkVmImageCompiler {
         private val hostImportIds = hostImports.associateBy { Triple(it.moduleName, it.functionName, it.parameterTypes.size) }
         val constants = mutableListOf<CkVmConstant>()
 
-        fun lower(function: BytecodeFunction): CkVmFunction =
-            CkVmFunction(
+        fun lower(function: BytecodeFunction): CkVmFunction {
+            val offsets = instructionOffsets(function.instructions)
+            val code =
+                function.instructions.flatMapIndexed { index, instruction ->
+                    lowerInstruction(instruction, offsets, function.instructions.size, index)
+                }
+            return CkVmFunction(
                 name = function.name,
                 frameSize = function.parameters.size + function.locals.size,
-                code = function.instructions.flatMap(::lowerInstruction),
+                code = code,
             )
+        }
 
-        private fun lowerInstruction(instruction: Instruction): List<Int> =
+        private fun instructionOffsets(instructions: List<Instruction>): List<Int> {
+            val offsets = mutableListOf<Int>()
+            var offset = 0
+            instructions.forEach { instruction ->
+                offsets += offset
+                offset += instructionLength(instruction)
+            }
+            offsets += offset
+            return offsets
+        }
+
+        private fun instructionLength(instruction: Instruction): Int =
+            when (instruction) {
+                Instruction.PushUnit,
+                Instruction.PushNull,
+                Instruction.Return,
+                Instruction.Pop,
+                -> 1
+                is Instruction.PushBool -> 2
+                is Instruction.PushString,
+                is Instruction.PushInt,
+                is Instruction.PushLong,
+                is Instruction.LoadLocal,
+                is Instruction.StoreLocal,
+                is Instruction.Jump,
+                is Instruction.JumpIfFalse,
+                is Instruction.JumpIfTrue,
+                -> 5
+                is Instruction.CallBuiltin -> 9
+                else -> throw UnsupportedOperationException("CkVmImage backend does not support ${instruction::class.simpleName}")
+            }
+
+        private fun lowerInstruction(
+            instruction: Instruction,
+            offsets: List<Int>,
+            instructionCount: Int,
+            instructionIndex: Int,
+        ): List<Int> =
             when (instruction) {
                 Instruction.PushUnit -> listOf(CkVmImageOpcodes.PUSH_UNIT)
+                Instruction.PushNull -> listOf(CkVmImageOpcodes.PUSH_NULL)
                 Instruction.Return -> listOf(CkVmImageOpcodes.RETURN)
                 Instruction.Pop -> listOf(CkVmImageOpcodes.POP)
+                is Instruction.PushBool -> listOf(CkVmImageOpcodes.PUSH_BOOL, if (instruction.value) 1 else 0)
                 is Instruction.PushString -> pushConstant(CkVmConstant.StringConstant(instruction.value))
                 is Instruction.PushInt -> pushConstant(CkVmConstant.IntConstant(instruction.value))
                 is Instruction.PushLong -> pushConstant(CkVmConstant.LongConstant(instruction.value))
+                is Instruction.LoadLocal -> listOf(CkVmImageOpcodes.LOAD_LOCAL) + i32(instruction.slot)
+                is Instruction.StoreLocal -> listOf(CkVmImageOpcodes.STORE_LOCAL) + i32(instruction.slot)
+                is Instruction.Jump -> listOf(CkVmImageOpcodes.JUMP) + i32(resolveJumpTarget(instruction.target, offsets, instructionCount, instructionIndex))
+                is Instruction.JumpIfFalse -> listOf(CkVmImageOpcodes.JUMP_IF_FALSE) + i32(resolveJumpTarget(instruction.target, offsets, instructionCount, instructionIndex))
+                is Instruction.JumpIfTrue -> listOf(CkVmImageOpcodes.JUMP_IF_TRUE) + i32(resolveJumpTarget(instruction.target, offsets, instructionCount, instructionIndex))
                 is Instruction.CallBuiltin -> callBuiltin(instruction)
                 else -> throw UnsupportedOperationException("CkVmImage backend does not support ${instruction::class.simpleName}")
             }
+
+        private fun resolveJumpTarget(
+            target: Int,
+            offsets: List<Int>,
+            instructionCount: Int,
+            instructionIndex: Int,
+        ): Int {
+            require(target in 0..instructionCount) {
+                "CkVmImage jump target $target at instruction $instructionIndex is outside 0..$instructionCount"
+            }
+            return offsets[target]
+        }
 
         private fun pushConstant(constant: CkVmConstant): List<Int> {
             val existing = constants.indexOf(constant)
