@@ -184,9 +184,10 @@ RuntimeDeviceImpl.close()
 
 | Package                    | Responsibility                                               |
 |----------------------------|--------------------------------------------------------------|
-| `ru.lazyhat.compukterkraft.lang.api`              | Bytecode format: `Instruction`, `BytecodeModule`, operators  |
+| `ru.lazyhat.compukterkraft.lang.api`              | Temporary compiler IR: `Instruction`, `BytecodeModule`, operators |
 | `ru.lazyhat.compukterkraft.lang.frontend`         | Parser, type checker, code generator, IDE support            |
-| `ru.lazyhat.compukterkraft.lang.runtime`          | VM runtime: `BytecodeVirtualMachine`, `RuntimeHostBridge`    |
+| `ru.lazyhat.compukterkraft.lang.runtime`          | Runtime contracts and host bridge: `DeviceRuntime`, `RuntimeHostBridge`, `VmValue` |
+| `ru.lazyhat.compukterkraft.lang.runtime.image`    | Rust image runtime artifacts and adapters: `CkVmImage`, `CkVmImageComputerProgram`, `NativeImageVmRunner` |
 |                            | Data types: `ScreenBuffer`, `ScreenBufferSnapshot` for non-VM terminal-style UI models |
 |                            | Interfaces: `DeviceRuntime`, `DeviceWorkspace`, `DeviceIdeHost` |
 |                            | Models: `DeviceProfile`, `VmSnapshot`, `HostCall`            |

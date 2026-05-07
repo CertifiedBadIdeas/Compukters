@@ -31,7 +31,7 @@ class RuntimeVmProfilingReportTest {
         val profilePathValue = System.getProperty(PROFILE_PATH_PROPERTY)
         assumeTrue(!profilePathValue.isNullOrBlank(), "Report profile path is only provided by profiling Gradle tasks")
         val profilePath = Path.of(profilePathValue)
-        val runnerName = System.getProperty(RUNNER_NAME_PROPERTY, "JVM")
+        val runnerName = System.getProperty(RUNNER_NAME_PROPERTY, "Rust image")
 
         warmUpRunner()
         val profile = profileRunner(runnerName)

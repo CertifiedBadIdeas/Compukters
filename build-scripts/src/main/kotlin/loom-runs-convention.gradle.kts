@@ -72,7 +72,6 @@ val buildRustVmNativeLibrary =
     }
 
 fun RunConfigSettings.applyRustVm() {
-    property("ckl.vm.runner", "rust")
     property("ckl.vm.native.library", rustVmNativeLibrary.asFile.absolutePath)
 }
 

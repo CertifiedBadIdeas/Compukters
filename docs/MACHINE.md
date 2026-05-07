@@ -17,8 +17,8 @@ VM здесь состоит из четырех слоев:
 3. `VmRuntime`
    Реализация runtime API, которую видит исполняемая программа. Через нее язык получает доступ к `display`, `system`, `filesystem`, `events`, `process`, `ipc`, `strings`, а также к операциям `sleep` и `yield`.
 
-4. `BytecodeComputerProgram` / `BytecodeVirtualMachine`
-   Исполнитель байткода языка из модуля `compiler`. Он гоняет инструкции до тех пор, пока не встретит один из сигналов: `Yield`, `Sleep`, `WaitEvent`, `HostCall` или `Halt`.
+4. `CkVmImageComputerProgram` / `NativeImageVmRunner`
+   Исполнитель Rust image VM. Kotlin frontend временно компилирует исходник в `CkVmImage`, а runtime запускает его через JNI и `native/ckl-vm`.
 
 В результате архитектура выглядит так:
 
@@ -34,8 +34,8 @@ Server tick thread
 Background coroutine
   -> BackgroundComputerVm.boot()
      -> ComputerProgramCompiler.compile(...)
-     -> BytecodeComputerProgram.run(runtime)
-     -> BytecodeVirtualMachine.runUntilSignal()
+   -> CkVmImageComputerProgram.run(runtime)
+   -> NativeImageVmRunner.run(image, runtime)
      -> RuntimeHostBridge / VmRuntime / APIs
 ```
 
@@ -548,25 +548,27 @@ Runtime Computer UI физически представлен display/framebuffe
 
 `ComputerProgramCompiler.compile(path, source)`:
 
-1. вызывает `LanguageServices.frontend.compile(path, source)`;
-2. берет `artifact.module`;
+1. вызывает `LanguageFrontend(...).compileImage(path, source)`;
+2. берет `artifact.image`;
 3. собирает все diagnostics уровня `ERROR`;
-4. если модуль не получился или есть ошибки, возвращает `CompiledComputerProgram(program = null, errorMessage = ...)`;
-5. иначе возвращает `BytecodeComputerProgram(module)`.
+4. если image не получился или есть ошибки, возвращает `CompiledComputerProgram(program = null, errorMessage = ...)`;
+5. проверяет encoded CKIM size против ROM limit профиля;
+6. иначе возвращает `CkVmImageComputerProgram(image)`.
 
 ### 12.3. Выполнение
 
-`BytecodeComputerProgram.run(runtime)`:
+`CkVmImageComputerProgram.run(runtime)`:
 
-1. создает `RuntimeHostBridge(runtime)`;
-2. создает `BytecodeVirtualMachine(module)`;
-3. бесконечно вызывает `vm.runUntilSignal()`;
-4. на основе сигнала делает следующее:
+1. загружает native library из `ckl.vm.native.library`;
+2. кодирует `CkVmImage` через `CkVmImageAbi`;
+3. создает Rust image VM handle через JNI;
+4. циклически вызывает image VM до следующего native signal;
+5. на основе сигнала делает следующее:
    - `Halt` -> завершает программу;
-   - `Yield` -> вызывает `runtime.yield()` и продолжает;
-   - `Sleep(ticks)` -> вызывает `runtime.sleep(ticks)` и продолжает;
-   - `WaitEvent(filter)` -> вызывает `runtime.pullEvent(filter)` и возвращает событие в VM;
-   - `HostCall(module, function, args)` -> вызывает `RuntimeHostBridge.invoke(...)` и возвращает результат в VM.
+   - `Yield` -> вызывает `runtime.yield()` и продолжает, когда opcode support появится в image VM;
+   - `Sleep(ticks)` -> вызывает `runtime.sleep(ticks)` и возвращает `Unit` в VM, когда opcode support появится;
+   - `WaitEvent(filter)` -> вызывает `runtime.pullEvent(filter)` и возвращает событие в VM, когда event value codec появится;
+   - `HostCall(module, function, args)` -> вызывает `RuntimeHostBridge.invoke(...)` и возвращает результат в Rust image VM.
 
 ### 12.4. `process.run(...)`
 
@@ -624,46 +626,16 @@ val resolved = ctx.resolvePath(path)
 
 ## 13. Memory Model VM
 
-Если смотреть на VM совсем без абстракций, то память программы находится не в отдельном custom heap, а в обычных объектах Kotlin/JVM внутри `BytecodeVirtualMachine`.
+Runtime memory now belongs to the Rust image VM. Kotlin still defines `VmValue` for host-call boundary values and uses `BytecodeModule` as temporary compiler scaffolding, but Kotlin/JVM no longer owns an interpreter heap, frame stack, or instruction pointer.
 
-Ключевой файл: `compiler/src/main/kotlin/ck/lang/runtime/LanguageRuntime.kt`.
+Ключевые файлы:
 
-Внутри `BytecodeVirtualMachine` хранятся:
+- `compiler/src/main/kotlin/ru/lazyhat/compukterkraft/lang/runtime/image/CkVmImageBackend.kt`
+- `compiler/src/main/kotlin/ru/lazyhat/compukterkraft/lang/runtime/image/CkVmImageComputerProgram.kt`
+- `compiler/src/main/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeImageVmRunner.kt`
+- `native/ckl-vm/src/image_runner.rs`
 
-- `frames = ArrayDeque<FrameState>()`
-- `lastResult: VmValue?`
-- `halted: Boolean`
-- `instructionsSinceYield: Int`
-
-Главное здесь это `frames`.
-
-Каждый `FrameState` это один кадр вызова функции и содержит:
-
-- `functionIndex: Int`
-- `instructionPointer: Int`
-- `locals: MutableList<VmValue>`
-- `stack: MutableList<VmValue>`
-
-То есть текущая память исполнения программы в каждый момент времени это:
-
-1. стек вызовов `frames`
-2. локальные переменные каждого кадра в `locals`
-3. временный стек вычислений каждого кадра в `stack`
-4. указатель текущей инструкции `instructionPointer`
-
-Отдельного VM heap с адресами, указателями, manual allocation или собственной моделью RAM здесь нет.
-
-### 13.1. Где физически лежит память VM
-
-Если отвечать буквально, где она находится:
-
-- объект `BytecodeVirtualMachine` лежит в JVM heap;
-- `ArrayDeque<FrameState>` лежит в JVM heap;
-- каждый `FrameState` лежит в JVM heap;
-- `locals` и `stack` это `MutableList<VmValue>` в JVM heap;
-- сами значения, например `VmValue.IntValue(42)`, тоже лежат в JVM heap.
-
-То есть память VM сейчас это граф объектов JVM, а не отдельный байтовый буфер.
+Практический вывод: новые runtime features должны добавлять поддержку в `CkVmImage` lowering, CKIM ABI и Rust image runner, а не восстанавливать Kotlin/JVM interpreter.
 
 ### 13.2. Какие значения умеет хранить VM
 

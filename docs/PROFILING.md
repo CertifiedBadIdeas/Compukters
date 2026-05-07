@@ -119,17 +119,18 @@ Build the local JNI library:
 cd native/ckl-vm && cargo build
 ```
 
-Run Kotlin ABI and runner seam tests:
+Run Kotlin CKIM/image backend and image runner seam tests:
 
 ```bash
-./gradlew :compiler:test --tests ru.lazyhat.compukterkraft.lang.runtime.BytecodeAbiTest --tests ru.lazyhat.compukterkraft.lang.runtime.VmRunnerSelectionTest
+./gradlew :compiler:test --tests '*CkVmImageBackendTest' --tests '*CkVmImageComputerProgramTest'
 ```
 
-Run the optional Kotlin JNI smoke test with the local debug library:
+Run optional image JNI smoke tests with the local debug library:
 
 ```bash
-./gradlew :compiler:test \
-  --tests ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeVmRunnerJniTest \
+./gradlew buildRustVmNativeLibrary :compiler:test \
+  --tests '*NativeImageVmRunnerJniTest' \
+  --tests '*NativeImageVmBindingsJniTest' \
   -Dckl.vm.native.library=$PWD/native/ckl-vm/target/debug/libckl_vm.so
 ```
 
@@ -145,9 +146,9 @@ Run a Minecraft dev server with the Rust VM option enabled:
 ./gradlew :v1_21_1-neoforge:runServerRust
 ```
 
-The Rust run tasks are `runClientRust`, `runClient2Rust`, `runClient3Rust`, and `runServerRust`. Each depends on `buildRustVmNativeLibrary`, which builds `native/ckl-vm/target/debug/libckl_vm.so` before launching Minecraft and passes the required `ckl.vm.runner=rust` and `ckl.vm.native.library=...` JVM properties.
+The Rust run tasks are `runClientRust`, `runClient2Rust`, `runClient3Rust`, and `runServerRust`. Each depends on `buildRustVmNativeLibrary`, which builds `native/ckl-vm/target/debug/libckl_vm.so` before launching Minecraft and passes `ckl.vm.native.library=...` to the JVM.
 
-The native runner is disabled unless both `-Dckl.vm.runner=rust` and `-Dckl.vm.native.library=/absolute/path/to/libckl_vm.so` are provided. The Kotlin VM remains the default runtime path.
+Runtime execution in this branch is Rust-image based. Kotlin still owns frontend analysis and temporary image lowering scaffolding, but JVM bytecode VM execution is no longer maintained here.
 
 ## Interpretation notes
 

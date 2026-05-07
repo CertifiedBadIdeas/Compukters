@@ -79,9 +79,7 @@ dependencies {
 
 val rustVmNativeLibrary = rootProject.layout.projectDirectory.file("native/ckl-vm/target/debug/libckl_vm.so")
 val runtimeVmProfilingReports = layout.buildDirectory.dir("reports/profiling")
-val runtimeVmJvmProfile = runtimeVmProfilingReports.map { it.file("runtime-vm-jvm.tsv") }
-val runtimeVmRustProfile = runtimeVmProfilingReports.map { it.file("runtime-vm-rust.tsv") }
-val runtimeVmComparisonReport = runtimeVmProfilingReports.map { it.file("runtime-vm-comparison.md") }
+val runtimeVmImageProfile = runtimeVmProfilingReports.map { it.file("runtime-vm-image.tsv") }
 
 fun Test.configureRuntimeVmProfilingTestTask() {
     group = "verification"
@@ -92,44 +90,15 @@ fun Test.configureRuntimeVmProfilingTestTask() {
     outputs.upToDateWhen { false }
 }
 
-val profileRuntimeVmJvm =
-    tasks.register<Test>("profileRuntimeVmJvm") {
-        configureRuntimeVmProfilingTestTask()
-        description = "Run runtime profiling workloads with the JVM CKL VM runner and write raw profiling data."
-        filter {
-            includeTestsMatching("ru.lazyhat.compukterkraft.impl.computer.vm.RuntimeVmProfilingReportTest")
-        }
-        systemProperty("ckl.vm.runner", "kotlin")
-        systemProperty("ckl.profiling.runner.name", "JVM")
-        systemProperty("ckl.profiling.profile.path", runtimeVmJvmProfile.get().asFile.absolutePath)
-        outputs.file(runtimeVmJvmProfile)
-    }
-
-val profileRuntimeVmRust =
-    tasks.register<Test>("profileRuntimeVmRust") {
-        configureRuntimeVmProfilingTestTask()
-        description = "Run runtime profiling workloads with the Rust CKL VM runner and write raw profiling data."
-        dependsOn("buildRustVmNativeLibrary")
-        mustRunAfter(profileRuntimeVmJvm)
-        filter {
-            includeTestsMatching("ru.lazyhat.compukterkraft.impl.computer.vm.RuntimeVmProfilingReportTest")
-        }
-        systemProperty("ckl.vm.runner", "rust")
-        systemProperty("ckl.vm.native.library", rustVmNativeLibrary.asFile.absolutePath)
-        systemProperty("ckl.profiling.runner.name", "Rust")
-        systemProperty("ckl.profiling.profile.path", runtimeVmRustProfile.get().asFile.absolutePath)
-        outputs.file(runtimeVmRustProfile)
-    }
-
-tasks.register<Test>("profileRuntimeVmComparison") {
+tasks.register<Test>("profileRuntimeVmImage") {
     configureRuntimeVmProfilingTestTask()
-    description = "Run isolated JVM and Rust VM runtime profiling tasks and write a Markdown comparison report."
-    dependsOn(profileRuntimeVmJvm, profileRuntimeVmRust)
+    description = "Run runtime profiling workloads with the Rust CKL image VM runner and write raw profiling data."
+    dependsOn("buildRustVmNativeLibrary")
     filter {
-        includeTestsMatching("ru.lazyhat.compukterkraft.impl.computer.vm.RuntimeVmProfilingReportAggregationTest")
+        includeTestsMatching("ru.lazyhat.compukterkraft.impl.computer.vm.RuntimeVmProfilingReportTest")
     }
-    systemProperty("ckl.profiling.jvm.profile.path", runtimeVmJvmProfile.get().asFile.absolutePath)
-    systemProperty("ckl.profiling.rust.profile.path", runtimeVmRustProfile.get().asFile.absolutePath)
-    systemProperty("ckl.profiling.report.path", runtimeVmComparisonReport.get().asFile.absolutePath)
-    outputs.file(runtimeVmComparisonReport)
+    systemProperty("ckl.vm.native.library", rustVmNativeLibrary.asFile.absolutePath)
+    systemProperty("ckl.profiling.runner.name", "Rust image")
+    systemProperty("ckl.profiling.profile.path", runtimeVmImageProfile.get().asFile.absolutePath)
+    outputs.file(runtimeVmImageProfile)
 }
