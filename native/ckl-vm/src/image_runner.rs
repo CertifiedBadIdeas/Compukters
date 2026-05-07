@@ -19,6 +19,8 @@ const OP_JUMP_IF_TRUE: u8 = 12;
 const OP_BINARY: u8 = 13;
 const OP_UNARY: u8 = 14;
 const OP_CALL_FUNCTION: u8 = 15;
+const OP_CONSTRUCT_RECORD: u8 = 16;
+const OP_GET_FIELD: u8 = 17;
 
 struct CallFrame {
     function_index: usize,
@@ -190,6 +192,8 @@ impl ImageVmHandle {
                     let argument_count = self.read_i32()?;
                     self.call_function(function_index, argument_count)?;
                 }
+                OP_CONSTRUCT_RECORD => self.construct_record()?,
+                OP_GET_FIELD => self.get_field()?,
                 other => return Err(format!("unknown CkVmImage opcode {other}")),
             }
 
@@ -242,6 +246,69 @@ impl ImageVmHandle {
             Some(Constant::Long(value)) => Ok(VmValue::Long(*value)),
             None => Err(format!(
                 "CkVmImage constant index {constant_index} is out of bounds"
+            )),
+        }
+    }
+
+    fn constant_string_metadata(
+        &self,
+        constant_index: i32,
+        metadata_name: &str,
+    ) -> Result<String, String> {
+        if constant_index < 0 {
+            return Err(format!(
+                "negative CkVmImage {metadata_name} constant index {constant_index}"
+            ));
+        }
+        match self.image.constants.get(constant_index as usize) {
+            Some(Constant::String(value)) => Ok(value.clone()),
+            Some(other) => Err(format!(
+                "CkVmImage {metadata_name} constant index {constant_index} must be String metadata but found {other:?}"
+            )),
+            None => Err(format!(
+                "CkVmImage {metadata_name} constant index {constant_index} is out of bounds"
+            )),
+        }
+    }
+
+    fn construct_record(&mut self) -> Result<(), String> {
+        let type_name_index = self.read_i32()?;
+        let type_name = self.constant_string_metadata(type_name_index, "record type name")?;
+        let field_count = self.read_i32()?;
+        if field_count < 0 {
+            return Err(format!(
+                "negative CkVmImage record field count {field_count}"
+            ));
+        }
+        let field_count = field_count as usize;
+        let mut field_names = Vec::with_capacity(field_count);
+        for _ in 0..field_count {
+            let field_name_index = self.read_i32()?;
+            field_names.push(self.constant_string_metadata(field_name_index, "record field name")?);
+        }
+        let values = self.pop_many(field_count as i32)?;
+        let fields = field_names.into_iter().zip(values).collect();
+        self.stack.push(VmValue::Record { type_name, fields });
+        Ok(())
+    }
+
+    fn get_field(&mut self) -> Result<(), String> {
+        let field_name_index = self.read_i32()?;
+        let field_name = self.constant_string_metadata(field_name_index, "field name")?;
+        let receiver = self.pop_one("get field receiver")?;
+        match receiver {
+            VmValue::Record { type_name, fields } => {
+                if let Some((_, value)) = fields.into_iter().find(|(name, _)| name == &field_name) {
+                    self.stack.push(value);
+                    Ok(())
+                } else {
+                    Err(format!(
+                        "CkVmImage record `{type_name}` has no field `{field_name}`"
+                    ))
+                }
+            }
+            other => Err(format!(
+                "CkVmImage GET_FIELD requires Record receiver but found {other:?}"
             )),
         }
     }

@@ -17,6 +17,14 @@ const OP_JUMP_IF_TRUE: u8 = 12;
 const OP_BINARY: u8 = 13;
 const OP_UNARY: u8 = 14;
 const OP_CALL_FUNCTION: u8 = 15;
+const OP_CONSTRUCT_RECORD: u8 = 16;
+const OP_GET_FIELD: u8 = 17;
+
+fn halt_signal(value: &VmValue) -> Vec<u8> {
+    let mut signal = vec![0];
+    signal.extend_from_slice(&encode_value(value));
+    signal
+}
 
 #[test]
 fn stores_and_loads_local_value() {
@@ -333,6 +341,395 @@ fn rejects_unknown_operator_tag() {
 
     assert_eq!(signal[0], 255);
     assert!(String::from_utf8_lossy(&signal).contains("unknown CkVmImage binary operator tag 99"));
+}
+
+#[test]
+fn constructs_record_with_ordered_fields() {
+    let code = vec![
+        OP_PUSH_CONSTANT,
+        0,
+        0,
+        0,
+        0,
+        OP_PUSH_CONSTANT,
+        1,
+        0,
+        0,
+        0,
+        OP_CONSTRUCT_RECORD,
+        2,
+        0,
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        3,
+        0,
+        0,
+        0,
+        4,
+        0,
+        0,
+        0,
+        OP_RETURN,
+    ];
+    let expected = VmValue::Record {
+        type_name: "Point".to_string(),
+        fields: vec![
+            ("x".to_string(), VmValue::Int(2)),
+            ("y".to_string(), VmValue::Int(5)),
+        ],
+    };
+    let mut vm = ImageVmHandle::create(
+        &image_with_constants_and_code(
+            vec![
+                ConstantFixture::Int(2),
+                ConstantFixture::Int(5),
+                ConstantFixture::String("Point".to_string()),
+                ConstantFixture::String("x".to_string()),
+                ConstantFixture::String("y".to_string()),
+            ],
+            0,
+            code,
+        ),
+        64,
+    )
+    .unwrap();
+
+    assert_eq!(vm.run_until_signal(), halt_signal(&expected));
+}
+
+#[test]
+fn gets_record_field() {
+    let code = vec![
+        OP_PUSH_CONSTANT,
+        0,
+        0,
+        0,
+        0,
+        OP_PUSH_CONSTANT,
+        1,
+        0,
+        0,
+        0,
+        OP_CONSTRUCT_RECORD,
+        2,
+        0,
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        3,
+        0,
+        0,
+        0,
+        4,
+        0,
+        0,
+        0,
+        OP_GET_FIELD,
+        4,
+        0,
+        0,
+        0,
+        OP_RETURN,
+    ];
+    let mut vm = ImageVmHandle::create(
+        &image_with_constants_and_code(
+            vec![
+                ConstantFixture::Int(2),
+                ConstantFixture::Int(5),
+                ConstantFixture::String("Point".to_string()),
+                ConstantFixture::String("x".to_string()),
+                ConstantFixture::String("y".to_string()),
+            ],
+            0,
+            code,
+        ),
+        64,
+    )
+    .unwrap();
+
+    assert_eq!(vm.run_until_signal(), vec![0, 3, 5, 0, 0, 0]);
+}
+
+#[test]
+fn preserves_record_field_order_for_get_field() {
+    let code = vec![
+        OP_PUSH_CONSTANT,
+        0,
+        0,
+        0,
+        0,
+        OP_PUSH_CONSTANT,
+        1,
+        0,
+        0,
+        0,
+        OP_CONSTRUCT_RECORD,
+        2,
+        0,
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        3,
+        0,
+        0,
+        0,
+        4,
+        0,
+        0,
+        0,
+        OP_STORE_LOCAL,
+        0,
+        0,
+        0,
+        0,
+        OP_LOAD_LOCAL,
+        0,
+        0,
+        0,
+        0,
+        OP_GET_FIELD,
+        3,
+        0,
+        0,
+        0,
+        OP_LOAD_LOCAL,
+        0,
+        0,
+        0,
+        0,
+        OP_GET_FIELD,
+        4,
+        0,
+        0,
+        0,
+        OP_BINARY,
+        1,
+        OP_RETURN,
+    ];
+    let mut vm = ImageVmHandle::create(
+        &image_with_constants_and_code(
+            vec![
+                ConstantFixture::Int(2),
+                ConstantFixture::Int(5),
+                ConstantFixture::String("Point".to_string()),
+                ConstantFixture::String("x".to_string()),
+                ConstantFixture::String("y".to_string()),
+            ],
+            1,
+            code,
+        ),
+        64,
+    )
+    .unwrap();
+
+    assert_eq!(vm.run_until_signal(), vec![0, 3, 253, 255, 255, 255]);
+}
+
+#[test]
+fn rejects_record_type_metadata_that_is_not_string() {
+    let code = vec![
+        OP_PUSH_CONSTANT,
+        0,
+        0,
+        0,
+        0,
+        OP_CONSTRUCT_RECORD,
+        1,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+    ];
+    let mut vm = ImageVmHandle::create(
+        &image_with_constants_and_code(
+            vec![
+                ConstantFixture::Int(2),
+                ConstantFixture::Int(99),
+                ConstantFixture::String("x".to_string()),
+            ],
+            0,
+            code,
+        ),
+        64,
+    )
+    .unwrap();
+
+    let signal = vm.run_until_signal();
+
+    assert_eq!(signal[0], 255);
+    assert!(String::from_utf8_lossy(&signal).contains("record type name constant index 1 must be String"));
+}
+
+#[test]
+fn rejects_record_field_metadata_that_is_not_string() {
+    let code = vec![
+        OP_PUSH_CONSTANT,
+        0,
+        0,
+        0,
+        0,
+        OP_CONSTRUCT_RECORD,
+        1,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+    ];
+    let mut vm = ImageVmHandle::create(
+        &image_with_constants_and_code(
+            vec![
+                ConstantFixture::Int(2),
+                ConstantFixture::String("Point".to_string()),
+            ],
+            0,
+            code,
+        ),
+        64,
+    )
+    .unwrap();
+
+    let signal = vm.run_until_signal();
+
+    assert_eq!(signal[0], 255);
+    assert!(String::from_utf8_lossy(&signal).contains("record field name constant index 0 must be String"));
+}
+
+#[test]
+fn rejects_missing_record_field() {
+    let code = vec![
+        OP_PUSH_CONSTANT,
+        0,
+        0,
+        0,
+        0,
+        OP_CONSTRUCT_RECORD,
+        1,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        OP_GET_FIELD,
+        3,
+        0,
+        0,
+        0,
+    ];
+    let mut vm = ImageVmHandle::create(
+        &image_with_constants_and_code(
+            vec![
+                ConstantFixture::Int(2),
+                ConstantFixture::String("Point".to_string()),
+                ConstantFixture::String("x".to_string()),
+                ConstantFixture::String("y".to_string()),
+            ],
+            0,
+            code,
+        ),
+        64,
+    )
+    .unwrap();
+
+    let signal = vm.run_until_signal();
+
+    assert_eq!(signal[0], 255);
+    assert!(String::from_utf8_lossy(&signal).contains("record `Point` has no field `y`"));
+}
+
+#[test]
+fn rejects_get_field_on_non_record() {
+    let code = vec![OP_PUSH_CONSTANT, 0, 0, 0, 0, OP_GET_FIELD, 1, 0, 0, 0];
+    let mut vm = ImageVmHandle::create(
+        &image_with_constants_and_code(
+            vec![ConstantFixture::Int(2), ConstantFixture::String("x".to_string())],
+            0,
+            code,
+        ),
+        64,
+    )
+    .unwrap();
+
+    let signal = vm.run_until_signal();
+
+    assert_eq!(signal[0], 255);
+    assert!(String::from_utf8_lossy(&signal).contains("GET_FIELD requires Record receiver"));
+}
+
+#[test]
+fn rejects_construct_record_stack_underflow() {
+    let code = vec![
+        OP_PUSH_CONSTANT,
+        0,
+        0,
+        0,
+        0,
+        OP_CONSTRUCT_RECORD,
+        1,
+        0,
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        3,
+        0,
+        0,
+        0,
+    ];
+    let mut vm = ImageVmHandle::create(
+        &image_with_constants_and_code(
+            vec![
+                ConstantFixture::Int(2),
+                ConstantFixture::String("Point".to_string()),
+                ConstantFixture::String("x".to_string()),
+                ConstantFixture::String("y".to_string()),
+            ],
+            0,
+            code,
+        ),
+        64,
+    )
+    .unwrap();
+
+    let signal = vm.run_until_signal();
+
+    assert_eq!(signal[0], 255);
+    assert!(String::from_utf8_lossy(&signal).contains("need 2 arguments but stack has 1"));
 }
 
 #[test]
