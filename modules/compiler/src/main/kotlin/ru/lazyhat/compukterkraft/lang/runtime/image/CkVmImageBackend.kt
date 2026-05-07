@@ -50,18 +50,9 @@ object CkVmImageCompiler {
         module.functions
             .flatMap { function -> function.instructions.filterIsInstance<Instruction.CallBuiltin>() }
             .filter { instruction -> instruction.moduleName != null }
-            .map { instruction -> HostImportKey(requireNotNull(instruction.moduleName), instruction.functionName, instruction.argumentCount) }
+            .map { instruction -> CkVmHostImportRegistry.require(requireNotNull(instruction.moduleName), instruction.functionName, instruction.argumentCount) }
             .distinct()
-            .sortedWith(compareBy<HostImportKey> { it.moduleName }.thenBy { it.functionName }.thenBy { it.argumentCount })
-            .mapIndexed { index, key ->
-                CkVmHostImport(index, key.moduleName, key.functionName, List(key.argumentCount) { "Any" }, "Unit")
-            }
-
-    private data class HostImportKey(
-        val moduleName: String,
-        val functionName: String,
-        val argumentCount: Int,
-    )
+            .sortedBy { import -> import.id }
 
     private class LoweringContext(
         hostImports: List<CkVmHostImport>,
