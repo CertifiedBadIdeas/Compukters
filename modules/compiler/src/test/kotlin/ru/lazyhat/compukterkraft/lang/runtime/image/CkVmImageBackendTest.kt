@@ -1,6 +1,8 @@
 package ru.lazyhat.compukterkraft.lang.runtime.image
 
+import ru.lazyhat.compukterkraft.lang.api.BinaryOperator
 import ru.lazyhat.compukterkraft.lang.api.Instruction
+import ru.lazyhat.compukterkraft.lang.api.UnaryOperator
 import ru.lazyhat.compukterkraft.lang.frontend.FrontendSeverity
 import ru.lazyhat.compukterkraft.lang.frontend.LanguageFrontend
 import kotlin.test.Test
@@ -123,6 +125,61 @@ class CkVmImageBackendTest {
     }
 
     @Test
+    fun compileImageLowersBinaryAndUnaryOperators() {
+        val image = assertNotNull(
+            LanguageFrontend().compileImage(
+                "main.ck",
+                """
+                pub fun main() {
+                    val value: Int = 1 + 2 * 3;
+                    val ok: Bool = value >= 7 && !false;
+                    if (ok) {
+                        system::log("ok");
+                    }
+                }
+                """.trimIndent(),
+            ).image,
+        )
+
+        assertEquals(
+            listOf(
+                CkVmConstant.IntConstant(1),
+                CkVmConstant.IntConstant(2),
+                CkVmConstant.IntConstant(3),
+                CkVmConstant.IntConstant(7),
+                CkVmConstant.StringConstant("ok"),
+            ),
+            image.constants,
+        )
+        assertContentEquals(
+            listOf(
+                CkVmImageOpcodes.PUSH_CONSTANT, 0, 0, 0, 0,
+                CkVmImageOpcodes.PUSH_CONSTANT, 1, 0, 0, 0,
+                CkVmImageOpcodes.PUSH_CONSTANT, 2, 0, 0, 0,
+                CkVmImageOpcodes.BINARY, BinaryOperator.MULTIPLY.ordinal,
+                CkVmImageOpcodes.BINARY, BinaryOperator.ADD.ordinal,
+                CkVmImageOpcodes.STORE_LOCAL, 0, 0, 0, 0,
+                CkVmImageOpcodes.LOAD_LOCAL, 0, 0, 0, 0,
+                CkVmImageOpcodes.PUSH_CONSTANT, 3, 0, 0, 0,
+                CkVmImageOpcodes.BINARY, BinaryOperator.GREATER_EQUALS.ordinal,
+                CkVmImageOpcodes.PUSH_BOOL, 0,
+                CkVmImageOpcodes.UNARY, UnaryOperator.NOT.ordinal,
+                CkVmImageOpcodes.BINARY, BinaryOperator.AND.ordinal,
+                CkVmImageOpcodes.STORE_LOCAL, 1, 0, 0, 0,
+                CkVmImageOpcodes.LOAD_LOCAL, 1, 0, 0, 0,
+                CkVmImageOpcodes.JUMP_IF_FALSE, 77, 0, 0, 0,
+                CkVmImageOpcodes.PUSH_CONSTANT, 4, 0, 0, 0,
+                CkVmImageOpcodes.CALL_HOST, 188, 11, 0, 0, 1, 0, 0, 0,
+                CkVmImageOpcodes.POP,
+                CkVmImageOpcodes.JUMP, 77, 0, 0, 0,
+                CkVmImageOpcodes.PUSH_UNIT,
+                CkVmImageOpcodes.RETURN,
+            ),
+            image.functions.single().code,
+        )
+    }
+
+    @Test
     fun compileImageReturnsNullImageWhenFrontendHasErrors() {
         val artifact = LanguageFrontend().compileImage("main.ck", "fun main() { }")
 
@@ -132,14 +189,20 @@ class CkVmImageBackendTest {
 
     @Test
     fun unsupportedInstructionReportsClearError() {
-        val artifact = LanguageFrontend().compile("main.ck", "pub fun main() { val x: Int = 1 + 2; }")
+        val artifact = LanguageFrontend().compile(
+            "main.ck",
+            """
+            fun helper(): Int { return 1; }
+            pub fun main() { val x: Int = helper(); }
+            """.trimIndent(),
+        )
         val module = assertNotNull(artifact.module)
 
         val error = assertFailsWith<UnsupportedOperationException> {
             CkVmImageCompiler.compile(module)
         }
 
-        assertTrue(error.message.orEmpty().contains("CkVmImage backend does not support Binary"))
+        assertTrue(error.message.orEmpty().contains("CkVmImage backend does not support CallFunction"))
     }
 
     @Test
