@@ -79,9 +79,10 @@ Add image support for:
 
 - `Instruction.ConstructRecord`
 - `Instruction.GetField`
-- `Instruction.SetField`
 
-Records should use the existing `VmValue::Record` representation where practical. Record construction should preserve field names and source declaration order. Field access and field update should validate receiver type and field presence rather than silently producing unrelated values.
+Records should use the existing `VmValue::Record` representation where practical. Record construction should preserve field names and source declaration order. Field access should validate receiver type and field presence rather than silently producing unrelated values.
+
+Do not implement `Instruction.SetField` in this slice. Current `SetField` emission is tied to class/object mutation and class initialization, while CKL structs are value-shaped records. Field mutation belongs with the class/object slice.
 
 This slice should unlock state structs used by `stdio.ck`, `terminal.ck`, shell contexts, and utility programs.
 
@@ -107,6 +108,7 @@ Add class/object support after records and collections unless bundled parity req
 Candidate instructions:
 
 - `Instruction.ConstructClass`
+- `Instruction.SetField`
 - `Instruction.CallMethod`
 - `Instruction.CallStaticMethod`
 
