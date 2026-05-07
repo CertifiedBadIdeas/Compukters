@@ -61,6 +61,14 @@ class CkVmImageAbiTest {
         }
     }
 
+    @Test
+    fun writesGoldenFixtureWhenPathIsProvided() {
+        val path = System.getProperty("ckl.image.golden.path")?.takeIf(String::isNotBlank) ?: return
+
+        java.nio.file.Files.createDirectories(java.nio.file.Path.of(path).parent)
+        java.nio.file.Files.write(java.nio.file.Path.of(path), CkVmImageAbi.encode(representativeImage()))
+    }
+
     private fun minimalImage(): CkVmImage =
         CkVmImage(
             languageVersion = "ckl-1",
