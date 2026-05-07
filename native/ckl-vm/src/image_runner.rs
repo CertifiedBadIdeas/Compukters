@@ -16,6 +16,8 @@ const OP_STORE_LOCAL: u8 = 9;
 const OP_JUMP: u8 = 10;
 const OP_JUMP_IF_FALSE: u8 = 11;
 const OP_JUMP_IF_TRUE: u8 = 12;
+const OP_BINARY: u8 = 13;
+const OP_UNARY: u8 = 14;
 
 pub struct ImageVmHandle {
     image: Image,
@@ -150,6 +152,22 @@ impl ImageVmHandle {
                     if self.pop_bool_condition("JUMP_IF_TRUE")? {
                         self.jump(target)?;
                     }
+                }
+                OP_BINARY => {
+                    let operator = self.read_u8()?.ok_or_else(|| {
+                        "unexpected end of CkVmImage instruction stream".to_string()
+                    })?;
+                    let right = self.pop_one("binary right operand")?;
+                    let left = self.pop_one("binary left operand")?;
+                    self.stack
+                        .push(apply_binary_operator(operator, left, right)?);
+                }
+                OP_UNARY => {
+                    let operator = self.read_u8()?.ok_or_else(|| {
+                        "unexpected end of CkVmImage instruction stream".to_string()
+                    })?;
+                    let operand = self.pop_one("unary operand")?;
+                    self.stack.push(apply_unary_operator(operator, operand)?);
                 }
                 other => return Err(format!("unknown CkVmImage opcode {other}")),
             }
@@ -321,6 +339,219 @@ fn checked_frame_size(image: &Image, function_index: usize) -> Result<usize, Str
         return Err(format!("negative CkVmImage frame size {frame_size}"));
     }
     Ok(frame_size as usize)
+}
+
+fn apply_binary_operator(operator: u8, left: VmValue, right: VmValue) -> Result<VmValue, String> {
+    match operator {
+        0 => binary_add(left, right),
+        1 => numeric_binary(
+            left,
+            right,
+            "-",
+            |a, b| a.wrapping_sub(b),
+            |a, b| a.wrapping_sub(b),
+        ),
+        2 => numeric_binary(
+            left,
+            right,
+            "*",
+            |a, b| a.wrapping_mul(b),
+            |a, b| a.wrapping_mul(b),
+        ),
+        3 => binary_divide(left, right),
+        4 => Ok(VmValue::Bool(value_equals(&left, &right))),
+        5 => Ok(VmValue::Bool(!value_equals(&left, &right))),
+        6 => compare_values(left, right, "<", |ordering| ordering.is_lt()),
+        7 => compare_values(left, right, "<=", |ordering| !ordering.is_gt()),
+        8 => compare_values(left, right, ">", |ordering| ordering.is_gt()),
+        9 => compare_values(left, right, ">=", |ordering| !ordering.is_lt()),
+        10 => bool_binary(left, right, "&&", |a, b| a && b),
+        11 => bool_binary(left, right, "||", |a, b| a || b),
+        12 => numeric_binary(left, right, "&", |a, b| a & b, |a, b| a & b),
+        13 => numeric_binary(left, right, "|", |a, b| a | b, |a, b| a | b),
+        14 => numeric_binary(left, right, "^", |a, b| a ^ b, |a, b| a ^ b),
+        15 => shift_binary(
+            left,
+            right,
+            "<<",
+            |a, b| a.wrapping_shl(b),
+            |a, b| a.wrapping_shl(b),
+        ),
+        16 => shift_binary(
+            left,
+            right,
+            ">>",
+            |a, b| a.wrapping_shr(b),
+            |a, b| a.wrapping_shr(b),
+        ),
+        other => Err(format!("unknown CkVmImage binary operator tag {other}")),
+    }
+}
+
+fn apply_unary_operator(operator: u8, operand: VmValue) -> Result<VmValue, String> {
+    match operator {
+        0 => match operand {
+            VmValue::Int(value) => Ok(VmValue::Int(value.wrapping_neg())),
+            VmValue::Long(value) => Ok(VmValue::Long(value.wrapping_neg())),
+            other => Err(format!(
+                "CkVmImage unary - requires Int or Long but found {other:?}"
+            )),
+        },
+        1 => match operand {
+            VmValue::Bool(value) => Ok(VmValue::Bool(!value)),
+            other => Err(format!(
+                "CkVmImage unary ! requires Bool but found {other:?}"
+            )),
+        },
+        2 => match operand {
+            VmValue::Int(value) => Ok(VmValue::Int(!value)),
+            VmValue::Long(value) => Ok(VmValue::Long(!value)),
+            other => Err(format!(
+                "CkVmImage unary ~ requires Int or Long but found {other:?}"
+            )),
+        },
+        other => Err(format!("unknown CkVmImage unary operator tag {other}")),
+    }
+}
+
+fn binary_add(left: VmValue, right: VmValue) -> Result<VmValue, String> {
+    match (left, right) {
+        (VmValue::String(left), right) => Ok(VmValue::String(left + &value_to_string(&right))),
+        (left, VmValue::String(right)) => Ok(VmValue::String(value_to_string(&left) + &right)),
+        (VmValue::Int(left), VmValue::Int(right)) => Ok(VmValue::Int(left.wrapping_add(right))),
+        (VmValue::Long(left), VmValue::Long(right)) => Ok(VmValue::Long(left.wrapping_add(right))),
+        (VmValue::Int(left), VmValue::Long(right)) => {
+            Ok(VmValue::Long((left as i64).wrapping_add(right)))
+        }
+        (VmValue::Long(left), VmValue::Int(right)) => {
+            Ok(VmValue::Long(left.wrapping_add(right as i64)))
+        }
+        (left, right) => Err(format!(
+            "CkVmImage binary + requires numbers or strings but found {left:?} and {right:?}"
+        )),
+    }
+}
+
+fn binary_divide(left: VmValue, right: VmValue) -> Result<VmValue, String> {
+    match (left, right) {
+        (_, VmValue::Int(0)) | (_, VmValue::Long(0)) => {
+            Err("CkVmImage division by zero".to_string())
+        }
+        (VmValue::Int(left), VmValue::Int(right)) => Ok(VmValue::Int(left.wrapping_div(right))),
+        (VmValue::Long(left), VmValue::Long(right)) => Ok(VmValue::Long(left.wrapping_div(right))),
+        (VmValue::Int(left), VmValue::Long(right)) => {
+            Ok(VmValue::Long((left as i64).wrapping_div(right)))
+        }
+        (VmValue::Long(left), VmValue::Int(right)) => {
+            Ok(VmValue::Long(left.wrapping_div(right as i64)))
+        }
+        (left, right) => Err(format!(
+            "CkVmImage binary / requires Int or Long but found {left:?} and {right:?}"
+        )),
+    }
+}
+
+fn numeric_binary(
+    left: VmValue,
+    right: VmValue,
+    symbol: &str,
+    int_op: fn(i32, i32) -> i32,
+    long_op: fn(i64, i64) -> i64,
+) -> Result<VmValue, String> {
+    match (left, right) {
+        (VmValue::Int(left), VmValue::Int(right)) => Ok(VmValue::Int(int_op(left, right))),
+        (VmValue::Long(left), VmValue::Long(right)) => Ok(VmValue::Long(long_op(left, right))),
+        (VmValue::Int(left), VmValue::Long(right)) => {
+            Ok(VmValue::Long(long_op(left as i64, right)))
+        }
+        (VmValue::Long(left), VmValue::Int(right)) => {
+            Ok(VmValue::Long(long_op(left, right as i64)))
+        }
+        (left, right) => Err(format!(
+            "CkVmImage binary {symbol} requires Int or Long but found {left:?} and {right:?}"
+        )),
+    }
+}
+
+fn shift_binary(
+    left: VmValue,
+    right: VmValue,
+    symbol: &str,
+    int_op: fn(i32, u32) -> i32,
+    long_op: fn(i64, u32) -> i64,
+) -> Result<VmValue, String> {
+    let shift = match right {
+        VmValue::Int(value) => value as u32,
+        VmValue::Long(value) => value as u32,
+        other => {
+            return Err(format!(
+                "CkVmImage binary {symbol} shift count requires Int or Long but found {other:?}"
+            ));
+        }
+    };
+    match left {
+        VmValue::Int(value) => Ok(VmValue::Int(int_op(value, shift))),
+        VmValue::Long(value) => Ok(VmValue::Long(long_op(value, shift))),
+        other => Err(format!(
+            "CkVmImage binary {symbol} requires Int or Long left operand but found {other:?}"
+        )),
+    }
+}
+
+fn bool_binary(
+    left: VmValue,
+    right: VmValue,
+    symbol: &str,
+    op: fn(bool, bool) -> bool,
+) -> Result<VmValue, String> {
+    match (left, right) {
+        (VmValue::Bool(left), VmValue::Bool(right)) => Ok(VmValue::Bool(op(left, right))),
+        (left, right) => Err(format!(
+            "CkVmImage binary {symbol} requires Bool but found {left:?} and {right:?}"
+        )),
+    }
+}
+
+fn compare_values(
+    left: VmValue,
+    right: VmValue,
+    symbol: &str,
+    predicate: fn(std::cmp::Ordering) -> bool,
+) -> Result<VmValue, String> {
+    let ordering = match (left, right) {
+        (VmValue::Int(left), VmValue::Int(right)) => left.cmp(&right),
+        (VmValue::Long(left), VmValue::Long(right)) => left.cmp(&right),
+        (VmValue::Int(left), VmValue::Long(right)) => (left as i64).cmp(&right),
+        (VmValue::Long(left), VmValue::Int(right)) => left.cmp(&(right as i64)),
+        (VmValue::String(left), VmValue::String(right)) => left.cmp(&right),
+        (left, right) => {
+            return Err(format!(
+                "CkVmImage binary {symbol} requires comparable values but found {left:?} and {right:?}"
+            ));
+        }
+    };
+    Ok(VmValue::Bool(predicate(ordering)))
+}
+
+fn value_equals(left: &VmValue, right: &VmValue) -> bool {
+    match (left, right) {
+        (VmValue::Int(left), VmValue::Long(right)) => i64::from(*left) == *right,
+        (VmValue::Long(left), VmValue::Int(right)) => *left == i64::from(*right),
+        _ => left == right,
+    }
+}
+
+fn value_to_string(value: &VmValue) -> String {
+    match value {
+        VmValue::Unit => "unit".to_string(),
+        VmValue::Null => "null".to_string(),
+        VmValue::Bool(value) => value.to_string(),
+        VmValue::Int(value) => value.to_string(),
+        VmValue::Long(value) => value.to_string(),
+        VmValue::String(value) => value.clone(),
+        VmValue::Record { type_name, .. } => format!("{type_name}(...)"),
+        VmValue::ObjectRef(value) => format!("object#{value}"),
+    }
 }
 
 fn panic_message(payload: Box<dyn std::any::Any + Send>) -> String {
