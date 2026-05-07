@@ -1,5 +1,18 @@
 use crate::value::VmValue;
-use crate::vm::VmSignal;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum VmSignal {
+    Halt(VmValue),
+    Pause,
+    Yield,
+    Sleep(i64),
+    WaitEvent(Option<String>),
+    HostCall {
+        module_name: String,
+        function_name: String,
+        arguments: Vec<VmValue>,
+    },
+}
 
 const SIGNAL_HALT: u8 = 0;
 const SIGNAL_PAUSE: u8 = 1;
