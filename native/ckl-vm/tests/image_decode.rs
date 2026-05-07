@@ -10,7 +10,11 @@ fn decodes_representative_image() {
     assert_eq!(image.capabilities, vec!["host-import-ids"]);
     assert_eq!(
         image.constants,
-        vec![Constant::String("hello".to_string()), Constant::Int(7), Constant::Long(9)]
+        vec![
+            Constant::String("hello".to_string()),
+            Constant::Int(7),
+            Constant::Long(9)
+        ]
     );
     assert_eq!(image.host_imports.len(), 1);
     assert_eq!(image.host_imports[0].id, 42);
@@ -38,7 +42,10 @@ fn rejects_unknown_version() {
     let mut bytes = representative_image_bytes();
     bytes[4] = 99;
 
-    assert_eq!(decode_image(&bytes), Err(ImageError::UnsupportedVersion(99)));
+    assert_eq!(
+        decode_image(&bytes),
+        Err(ImageError::UnsupportedVersion(99))
+    );
 }
 
 #[test]
@@ -47,7 +54,10 @@ fn rejects_unknown_constant_tag() {
     let first_constant_tag_offset = 43;
     bytes[first_constant_tag_offset] = 99;
 
-    assert_eq!(decode_image(&bytes), Err(ImageError::UnknownConstantTag(99)));
+    assert_eq!(
+        decode_image(&bytes),
+        Err(ImageError::UnknownConstantTag(99))
+    );
 }
 
 #[test]
@@ -73,7 +83,10 @@ fn decodes_backend_generated_system_log_fixture() {
     assert_eq!(image.host_imports[0].module_name, "system");
     assert_eq!(image.host_imports[0].function_name, "log");
     assert_eq!(image.host_imports[0].id, 3004);
-    assert_eq!(image.functions[0].code, vec![3, 0, 0, 0, 0, 4, 188, 11, 0, 0, 1, 0, 0, 0, 5, 1, 2]);
+    assert_eq!(
+        image.functions[0].code,
+        vec![3, 0, 0, 0, 0, 4, 188, 11, 0, 0, 1, 0, 0, 0, 5, 1, 2]
+    );
 }
 
 fn representative_image_bytes() -> Vec<u8> {
