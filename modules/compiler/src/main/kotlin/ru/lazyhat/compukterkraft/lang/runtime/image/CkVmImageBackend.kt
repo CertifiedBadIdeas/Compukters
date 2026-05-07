@@ -94,6 +94,9 @@ object CkVmImageCompiler {
                 Instruction.PushNull,
                 Instruction.Return,
                 Instruction.Pop,
+                Instruction.ConstructArray,
+                Instruction.IndexGet,
+                Instruction.IndexSet,
                 -> 1
                 is Instruction.PushBool -> 2
                 is Instruction.PushString,
@@ -105,13 +108,17 @@ object CkVmImageCompiler {
                 is Instruction.JumpIfFalse,
                 is Instruction.JumpIfTrue,
                 is Instruction.GetField,
+                is Instruction.ConstructList,
+                is Instruction.ConstructMap,
                 -> 5
                 is Instruction.ConstructRecord -> 9 + 4 * instruction.fieldNames.size
                 is Instruction.Binary,
                 is Instruction.Unary,
                 -> 2
                 is Instruction.CallFunction,
-                is Instruction.CallBuiltin -> 9
+                is Instruction.CallBuiltin,
+                is Instruction.CallCollectionMethod,
+                -> 9
                 else -> throw UnsupportedOperationException("CkVmImage backend does not support ${instruction::class.simpleName}")
             }
 
@@ -143,6 +150,15 @@ object CkVmImageCompiler {
                         i32(instruction.fieldNames.size) +
                         instruction.fieldNames.flatMap(::stringConstantIndexBytes)
                 is Instruction.GetField -> listOf(CkVmImageOpcodes.GET_FIELD) + stringConstantIndexBytes(instruction.fieldName)
+                Instruction.ConstructArray -> listOf(CkVmImageOpcodes.CONSTRUCT_ARRAY)
+                is Instruction.ConstructList -> listOf(CkVmImageOpcodes.CONSTRUCT_LIST) + i32(instruction.elementCount)
+                is Instruction.ConstructMap -> listOf(CkVmImageOpcodes.CONSTRUCT_MAP) + i32(instruction.entryCount)
+                Instruction.IndexGet -> listOf(CkVmImageOpcodes.INDEX_GET)
+                Instruction.IndexSet -> listOf(CkVmImageOpcodes.INDEX_SET)
+                is Instruction.CallCollectionMethod ->
+                    listOf(CkVmImageOpcodes.CALL_COLLECTION_METHOD) +
+                        stringConstantIndexBytes(instruction.methodName) +
+                        i32(instruction.argumentCount)
                 is Instruction.CallFunction -> listOf(CkVmImageOpcodes.CALL_FUNCTION) + i32(instruction.functionIndex) + i32(instruction.argumentCount)
                 is Instruction.CallBuiltin -> callBuiltin(instruction)
                 else -> throw UnsupportedOperationException("CkVmImage backend does not support ${instruction::class.simpleName}")

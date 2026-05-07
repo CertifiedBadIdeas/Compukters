@@ -277,6 +277,78 @@ class CkVmImageBackendTest {
     }
 
     @Test
+    fun compileImageLowersCollectionConstructorsAndIndexOps() {
+        val image = assertNotNull(
+            LanguageFrontend().compileImage(
+                "main.ck",
+                """
+                pub fun main() {
+                    val array: Array<Int> = Array<Int>(size = 2, default = 0);
+                    array[1] = 7;
+                    val arrayValue: Int = array[1];
+                    val list: List<Int> = [2, 5];
+                    val listValue: Int = list[0] - list[1];
+                    val map: Map<String, Int> = {"x": 3};
+                    map["y"] = 4;
+                    val mapValue: Int? = map["missing"];
+                }
+                """.trimIndent(),
+            ).image,
+        )
+        val mainFunction = image.functions.single { it.name == "main.ck#main" }
+
+        assertEquals(
+            listOf(
+                CkVmConstant.IntConstant(2),
+                CkVmConstant.IntConstant(0),
+                CkVmConstant.IntConstant(1),
+                CkVmConstant.IntConstant(7),
+                CkVmConstant.IntConstant(5),
+                CkVmConstant.StringConstant("x"),
+                CkVmConstant.IntConstant(3),
+                CkVmConstant.StringConstant("y"),
+                CkVmConstant.IntConstant(4),
+                CkVmConstant.StringConstant("missing"),
+            ),
+            image.constants,
+        )
+        assertEquals(6, mainFunction.frameSize)
+        assertTrue(mainFunction.code.contains(CkVmImageOpcodes.CONSTRUCT_ARRAY))
+        assertTrue(mainFunction.code.contains(CkVmImageOpcodes.CONSTRUCT_LIST))
+        assertTrue(mainFunction.code.contains(CkVmImageOpcodes.CONSTRUCT_MAP))
+        assertTrue(mainFunction.code.contains(CkVmImageOpcodes.INDEX_GET))
+        assertTrue(mainFunction.code.contains(CkVmImageOpcodes.INDEX_SET))
+    }
+
+    @Test
+    fun compileImageLowersCollectionMethodsWithStringMetadata() {
+        val image = assertNotNull(
+            LanguageFrontend().compileImage(
+                "main.ck",
+                """
+                pub fun main() {
+                    val list: List<Int> = [2];
+                    list.add(5);
+                    val size: Int = list.size();
+                    val removed: Int = list.removeAt(0);
+                    val map: Map<String, Int> = {"x": 1};
+                    val exists: Bool = map.containsKey("x");
+                    val fallback: Int = map.getOrDefault("missing", 9);
+                }
+                """.trimIndent(),
+            ).image,
+        )
+        val mainFunction = image.functions.single { it.name == "main.ck#main" }
+
+        assertTrue(image.constants.contains(CkVmConstant.StringConstant("add")))
+        assertTrue(image.constants.contains(CkVmConstant.StringConstant("size")))
+        assertTrue(image.constants.contains(CkVmConstant.StringConstant("removeAt")))
+        assertTrue(image.constants.contains(CkVmConstant.StringConstant("containsKey")))
+        assertTrue(image.constants.contains(CkVmConstant.StringConstant("getOrDefault")))
+        assertTrue(mainFunction.code.contains(CkVmImageOpcodes.CALL_COLLECTION_METHOD))
+    }
+
+    @Test
     fun compileImageReturnsNullImageWhenFrontendHasErrors() {
         val artifact = LanguageFrontend().compileImage("main.ck", "fun main() { }")
 
@@ -287,13 +359,13 @@ class CkVmImageBackendTest {
     @Test
     fun unsupportedInstructionReportsClearError() {
         val base = assertNotNull(LanguageFrontend().compile("main.ck", "pub fun main() { }").module)
-        val function = base.functions.single().copy(instructions = listOf(Instruction.ConstructList(0), Instruction.Return))
+        val function = base.functions.single().copy(instructions = listOf(Instruction.ConstructClass("Box", emptyList()), Instruction.Return))
 
         val error = assertFailsWith<UnsupportedOperationException> {
             CkVmImageCompiler.compile(base.copy(functions = listOf(function)))
         }
 
-        assertTrue(error.message.orEmpty().contains("CkVmImage backend does not support ConstructList"))
+        assertTrue(error.message.orEmpty().contains("CkVmImage backend does not support ConstructClass"))
     }
 
     private fun i32(value: Int): List<Int> =
