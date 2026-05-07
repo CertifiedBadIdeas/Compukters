@@ -9,12 +9,20 @@ const OP_RETURN: u8 = 2;
 const OP_PUSH_CONSTANT: u8 = 3;
 const OP_CALL_HOST: u8 = 4;
 const OP_POP: u8 = 5;
+const OP_PUSH_BOOL: u8 = 6;
+const OP_PUSH_NULL: u8 = 7;
+const OP_LOAD_LOCAL: u8 = 8;
+const OP_STORE_LOCAL: u8 = 9;
+const OP_JUMP: u8 = 10;
+const OP_JUMP_IF_FALSE: u8 = 11;
+const OP_JUMP_IF_TRUE: u8 = 12;
 
 pub struct ImageVmHandle {
     image: Image,
     function_index: usize,
     instruction_pointer: usize,
     stack: Vec<VmValue>,
+    locals: Vec<VmValue>,
     instruction_budget: usize,
     instructions_since_pause: usize,
     state: ImageVmState,
@@ -31,11 +39,13 @@ impl ImageVmHandle {
     pub fn create(image: &[u8], instruction_budget: usize) -> Result<Self, String> {
         let image = decode_image(image).map_err(|error| error.to_string())?;
         let function_index = checked_entry_function_index(&image)?;
+        let frame_size = checked_frame_size(&image, function_index)?;
         Ok(Self {
             image,
             function_index,
             instruction_pointer: 0,
             stack: Vec::new(),
+            locals: vec![VmValue::Unit; frame_size],
             instruction_budget: instruction_budget.max(1),
             instructions_since_pause: 0,
             state: ImageVmState::Ready,
@@ -103,6 +113,43 @@ impl ImageVmHandle {
                 }
                 OP_POP => {
                     let _ = self.stack.pop();
+                }
+                OP_PUSH_BOOL => {
+                    let value = self.read_u8()?.ok_or_else(|| {
+                        "unexpected end of CkVmImage instruction stream".to_string()
+                    })?;
+                    match value {
+                        0 => self.stack.push(VmValue::Bool(false)),
+                        1 => self.stack.push(VmValue::Bool(true)),
+                        other => return Err(format!("invalid CkVmImage bool byte {other}")),
+                    }
+                }
+                OP_PUSH_NULL => self.stack.push(VmValue::Null),
+                OP_LOAD_LOCAL => {
+                    let slot = self.read_i32()?;
+                    let value = self.local(slot)?.clone();
+                    self.stack.push(value);
+                }
+                OP_STORE_LOCAL => {
+                    let slot = self.read_i32()?;
+                    let value = self.pop_one("store local")?;
+                    *self.local_mut(slot)? = value;
+                }
+                OP_JUMP => {
+                    let target = self.read_i32()?;
+                    self.jump(target)?;
+                }
+                OP_JUMP_IF_FALSE => {
+                    let target = self.read_i32()?;
+                    if !self.pop_bool_condition("JUMP_IF_FALSE")? {
+                        self.jump(target)?;
+                    }
+                }
+                OP_JUMP_IF_TRUE => {
+                    let target = self.read_i32()?;
+                    if self.pop_bool_condition("JUMP_IF_TRUE")? {
+                        self.jump(target)?;
+                    }
                 }
                 other => return Err(format!("unknown CkVmImage opcode {other}")),
             }
@@ -185,6 +232,58 @@ impl ImageVmHandle {
         Ok(self.stack.split_off(start))
     }
 
+    fn pop_one(&mut self, operation: &str) -> Result<VmValue, String> {
+        self.stack
+            .pop()
+            .ok_or_else(|| format!("CkVmImage stack underflow during {operation}"))
+    }
+
+    fn pop_bool_condition(&mut self, opcode_name: &str) -> Result<bool, String> {
+        match self.pop_one(opcode_name)? {
+            VmValue::Bool(value) => Ok(value),
+            other => Err(format!(
+                "CkVmImage {opcode_name} requires Bool condition but found {other:?}"
+            )),
+        }
+    }
+
+    fn local(&self, slot: i32) -> Result<&VmValue, String> {
+        if slot < 0 {
+            return Err(format!("CkVmImage local slot {slot} is negative"));
+        }
+        self.locals.get(slot as usize).ok_or_else(|| {
+            format!(
+                "CkVmImage local slot {slot} is out of bounds for {} locals",
+                self.locals.len()
+            )
+        })
+    }
+
+    fn local_mut(&mut self, slot: i32) -> Result<&mut VmValue, String> {
+        if slot < 0 {
+            return Err(format!("CkVmImage local slot {slot} is negative"));
+        }
+        let local_count = self.locals.len();
+        self.locals.get_mut(slot as usize).ok_or_else(|| {
+            format!("CkVmImage local slot {slot} is out of bounds for {local_count} locals")
+        })
+    }
+
+    fn jump(&mut self, target: i32) -> Result<(), String> {
+        if target < 0 {
+            return Err(format!("CkVmImage jump target {target} is negative"));
+        }
+        let target = target as usize;
+        let code_len = self.current_function()?.code.len();
+        if target > code_len {
+            return Err(format!(
+                "CkVmImage jump target {target} is outside function code length {code_len}"
+            ));
+        }
+        self.instruction_pointer = target;
+        Ok(())
+    }
+
     fn current_function(&self) -> Result<&Function, String> {
         self.image
             .functions
@@ -214,6 +313,14 @@ fn checked_entry_function_index(image: &Image) -> Result<usize, String> {
         ));
     }
     Ok(index)
+}
+
+fn checked_frame_size(image: &Image, function_index: usize) -> Result<usize, String> {
+    let frame_size = image.functions[function_index].frame_size;
+    if frame_size < 0 {
+        return Err(format!("negative CkVmImage frame size {frame_size}"));
+    }
+    Ok(frame_size as usize)
 }
 
 fn panic_message(payload: Box<dyn std::any::Any + Send>) -> String {
