@@ -104,13 +104,14 @@ class RuntimeProfilingTest {
         assertEquals(2, snapshot.instructions.first().count)
         assertEquals(100, snapshot.instructions.first().nanos)
         assertEquals(50, snapshot.instructions.first().averageNanos)
-        assertTrue(snapshot.summary().contains("runtime:"))
-        assertTrue(snapshot.summary().contains("vm:"))
-        assertTrue(snapshot.summary().contains("signals:"), snapshot.summary())
-        assertTrue(snapshot.summary().contains("host-calls:"), snapshot.summary())
-        assertTrue(snapshot.summary().contains("display.blitMono5x7Packed=count:2,nanos:150,avg:75"), snapshot.summary())
-        assertTrue(snapshot.summary().contains("instructions:"), snapshot.summary())
-        assertTrue(snapshot.summary().contains("CALL_BUILTIN=count:2,nanos:100,avg:50"), snapshot.summary())
+        val summary = snapshot.summary()
+        assertTrue(summary.startsWith("runtime:\n"), summary)
+        assertTrue(summary.contains("  vm:\n"), summary)
+        assertTrue(summary.contains("  signals: halt=1, pause=1, yield=1, sleep=1, waitEvent=1, hostCall=1"), summary)
+        assertTrue(summary.contains("  host-calls:\n"), summary)
+        assertTrue(summary.contains("    display.blitMono5x7Packed: count=2, time=150 ns, avg=75 ns"), summary)
+        assertTrue(summary.contains("  instructions:\n"), summary)
+        assertTrue(summary.contains("    CALL_BUILTIN: count=2, time=100 ns, avg=50 ns"), summary)
     }
 
     @Test

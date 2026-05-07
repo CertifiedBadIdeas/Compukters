@@ -140,25 +140,27 @@ data class DisplayProfilingSnapshot(
     val frameBuild: DisplayFrameBuildTotals = DisplayFrameBuildTotals(),
 ) {
     fun summary(): String =
-        "display: clear=${operations.clearCalls}, clearNanos=${operations.clearNanos}, " +
-            "setPixel=${operations.setPixelCalls}, setPixelNanos=${operations.setPixelNanos}, " +
-            "fillRect=${operations.fillRectCalls}, fillArea=${operations.fillRectArea}, fillNanos=${operations.fillRectNanos}, " +
-            "copyRect=${operations.copyRectCalls}, copyArea=${operations.copyRectArea}, copyNanos=${operations.copyRectNanos}, " +
-            "blitMono=${operations.blitMonoCalls}, blitArea=${operations.blitMonoArea}, blitNanos=${operations.blitMonoNanos}, " +
-            "present=${operations.presentCalls}, presentFrames=${operations.presentFrames}, presentNanos=${operations.presentNanos}\n" +
-            "display-avg: avgClearNanos=${operations.averageClearNanos}, avgSetPixelNanos=${operations.averageSetPixelNanos}, " +
-            "avgFillNanos=${operations.averageFillRectNanos}, avgCopyNanos=${operations.averageCopyRectNanos}, " +
-            "avgBlitNanos=${operations.averageBlitMonoNanos}, avgPresentNanos=${operations.averagePresentNanos}\n" +
-            "frames: count=${frames.frameCount}, fullRefresh=${frames.fullRefreshFrames}, " +
-            "tiles=${frames.tileCount}, payloadBytes=${frames.payloadBytes}\n" +
-            "frame-build: builds=${frameBuild.buildCalls}, dirtyScanNanos=${frameBuild.dirtyTileScanNanos}, " +
-            "frameBuildNanos=${frameBuild.frameBuildNanos}, tileSerializationNanos=${frameBuild.tileSerializationNanos}, " +
-            "frontCopyNanos=${frameBuild.frontCopyNanos}, totalNanos=${frameBuild.totalNanos}, " +
-            "tiles=${frameBuild.tileCount}, payloadBytes=${frameBuild.payloadBytes}, " +
-            "avgBuildNanos=${frameBuild.averageTotalNanosPerBuild}, " +
-            "nanosPerTile=${frameBuild.averageTileSerializationNanosPerTile}, " +
-            "nanosPerPayloadByte=${frameBuild.averageTileSerializationNanosPerPayloadByte}"
+        buildString {
+            appendLine("display:")
+            appendLine("  operations:")
+            appendLine("    clear: count=${operations.clearCalls}, time=${operations.clearNanos.nanos()}, avg=${operations.averageClearNanos.nanos()}")
+            appendLine("    setPixel: count=${operations.setPixelCalls}, time=${operations.setPixelNanos.nanos()}, avg=${operations.averageSetPixelNanos.nanos()}")
+            appendLine("    fillRect: count=${operations.fillRectCalls}, area=${operations.fillRectArea}, time=${operations.fillRectNanos.nanos()}, avg=${operations.averageFillRectNanos.nanos()}")
+            appendLine("    copyRect: count=${operations.copyRectCalls}, area=${operations.copyRectArea}, time=${operations.copyRectNanos.nanos()}, avg=${operations.averageCopyRectNanos.nanos()}")
+            appendLine("    blitMono: count=${operations.blitMonoCalls}, area=${operations.blitMonoArea}, time=${operations.blitMonoNanos.nanos()}, avg=${operations.averageBlitMonoNanos.nanos()}")
+            appendLine("    present: count=${operations.presentCalls}, frames=${operations.presentFrames}, time=${operations.presentNanos.nanos()}, avg=${operations.averagePresentNanos.nanos()}")
+            appendLine("  frames:")
+            appendLine("    emitted: count=${frames.frameCount}, fullRefresh=${frames.fullRefreshFrames}, tiles=${frames.tileCount}, payload=${frames.payloadBytes.bytes()}")
+            appendLine("  frame-build:")
+            appendLine("    total: builds=${frameBuild.buildCalls}, time=${frameBuild.totalNanos.nanos()}, avg/build=${frameBuild.averageTotalNanosPerBuild.nanos()}, avg/tile=${frameBuild.averageTotalNanosPerTile.nanos()}")
+            appendLine("    phases: dirtyScan=${frameBuild.dirtyTileScanNanos.nanos()}, frameBuild=${frameBuild.frameBuildNanos.nanos()}, tileSerialization=${frameBuild.tileSerializationNanos.nanos()}, frontCopy=${frameBuild.frontCopyNanos.nanos()}")
+            append("    serialization: tiles=${frameBuild.tileCount}, payload=${frameBuild.payloadBytes.bytes()}, avg/tile=${frameBuild.averageTileSerializationNanosPerTile.nanos()}, avg/byte=${frameBuild.averageTileSerializationNanosPerPayloadByte.nanos()}")
+        }
 }
+
+private fun Long.nanos(): String = "$this ns"
+
+private fun Long.bytes(): String = "$this B"
 
 object NoOpDisplayMetricsCollector : DisplayMetricsCollector {
     override fun recordClear(

@@ -147,44 +147,52 @@ data class RuntimeProfilingSnapshot(
     val instructions: List<RuntimeInstructionMetrics> = emptyList(),
 ) {
     fun summary(): String =
-        "runtime: serverTicks=${tick.serverTickCalls}, serverTickNanos=${tick.serverTickNanos}, " +
-            "requestSliceCalls=${tick.requestSliceCalls}, requestSliceNanos=${tick.requestSliceNanos}\n" +
-            "host: drainedCalls=${tick.hostCallsDrained}, dispatchedCalls=${tick.hostCallsDispatched}, " +
-            "deliveredResults=${tick.hostResultsDelivered}, drainNanos=${tick.hostCallDrainNanos}, " +
-            "dispatchNanos=${tick.hostCallDispatchNanos}, deliverNanos=${tick.hostResultDeliveryNanos}\n" +
-            "display-runtime: drainFrames=${tick.displayFramesDrained}, drainNanos=${tick.displayFrameDrainNanos}, " +
-            "flushCalls=${tick.displayFlushCalls}, flushFrames=${tick.displayFramesFlushed}, " +
-            "flushNanos=${tick.displayFlushNanos}\n" +
-            "vm: sliceRequests=${vm.sliceRequests}, slicePermits=${vm.slicePermitsSent}, " +
-            "sleepGated=${vm.sleepGatedSliceRequests}, permitsReceived=${vm.slicePermitsReceived}, " +
-            "schedulingPoints=${vm.schedulingPoints}, yieldPoints=${vm.yieldSchedulingPoints}, " +
-            "waitPoints=${vm.waitForSliceSchedulingPoints}, executionWindows=${vm.executionWindows}, " +
-            "executionNanos=${vm.executionWindowNanos}, avgExecutionWindowNanos=${vm.averageExecutionWindowNanos}\n" +
-            "signals: halt=${vm.haltSignals}, pause=${vm.pauseSignals}, yield=${vm.yieldSignals}, " +
-            "sleep=${vm.sleepSignals}, waitEvent=${vm.waitEventSignals}, hostCall=${vm.hostCallSignals}" +
-            hostCallSummary() +
-            instructionSummary()
+        buildString {
+            appendLine("runtime:")
+            appendLine("  tick:")
+            appendLine("    server: calls=${tick.serverTickCalls}, time=${tick.serverTickNanos.nanos()}")
+            appendLine("    requestSlice: calls=${tick.requestSliceCalls}, time=${tick.requestSliceNanos.nanos()}")
+            appendLine("  host-queue:")
+            appendLine("    drain: calls=${tick.hostCallDrainCalls}, items=${tick.hostCallsDrained}, time=${tick.hostCallDrainNanos.nanos()}")
+            appendLine("    dispatch: calls=${tick.hostCallDispatchCalls}, items=${tick.hostCallsDispatched}, time=${tick.hostCallDispatchNanos.nanos()}")
+            appendLine("    delivery: calls=${tick.hostResultDeliveryCalls}, items=${tick.hostResultsDelivered}, time=${tick.hostResultDeliveryNanos.nanos()}")
+            appendLine("  display-runtime:")
+            appendLine("    drain: calls=${tick.displayFrameDrainCalls}, frames=${tick.displayFramesDrained}, time=${tick.displayFrameDrainNanos.nanos()}")
+            appendLine("    flush: calls=${tick.displayFlushCalls}, frames=${tick.displayFramesFlushed}, time=${tick.displayFlushNanos.nanos()}")
+            appendLine("  vm:")
+            appendLine("    slices: requests=${vm.sliceRequests}, permitsSent=${vm.slicePermitsSent}, sleepGated=${vm.sleepGatedSliceRequests}, permitsReceived=${vm.slicePermitsReceived}")
+            appendLine("    scheduling: points=${vm.schedulingPoints}, yieldPoints=${vm.yieldSchedulingPoints}, waitPoints=${vm.waitForSliceSchedulingPoints}")
+            appendLine("    execution: windows=${vm.executionWindows}, time=${vm.executionWindowNanos.nanos()}, avg=${vm.averageExecutionWindowNanos.nanos()}")
+            appendLine("  signals: halt=${vm.haltSignals}, pause=${vm.pauseSignals}, yield=${vm.yieldSignals}, sleep=${vm.sleepSignals}, waitEvent=${vm.waitEventSignals}, hostCall=${vm.hostCallSignals}")
+            appendHostCallSummary()
+            appendInstructionSummary()
+        }
 
-    private fun hostCallSummary(): String {
-        if (hostCalls.isEmpty()) return ""
-        return hostCalls.joinToString(
-            prefix = "\nhost-calls: ",
-            separator = "; ",
-        ) { call ->
-            "${call.moduleName}.${call.functionName}=count:${call.calls},nanos:${call.nanos},avg:${call.averageNanos}"
+    private fun StringBuilder.appendHostCallSummary() {
+        if (hostCalls.isEmpty()) {
+            appendLine("  host-calls: none")
+            return
+        }
+        appendLine("  host-calls:")
+        hostCalls.forEach { call ->
+            appendLine("    ${call.moduleName}.${call.functionName}: count=${call.calls}, time=${call.nanos.nanos()}, avg=${call.averageNanos.nanos()}")
         }
     }
 
-    private fun instructionSummary(): String {
-        if (instructions.isEmpty()) return ""
-        return instructions.joinToString(
-            prefix = "\ninstructions: ",
-            separator = "; ",
-        ) { instruction ->
-            "${instruction.kind}=count:${instruction.count},nanos:${instruction.nanos},avg:${instruction.averageNanos}"
+    private fun StringBuilder.appendInstructionSummary() {
+        if (instructions.isEmpty()) {
+            append("  instructions: none")
+            return
+        }
+        appendLine("  instructions:")
+        instructions.forEachIndexed { index, instruction ->
+            val line = "    ${instruction.kind}: count=${instruction.count}, time=${instruction.nanos.nanos()}, avg=${instruction.averageNanos.nanos()}"
+            if (index == instructions.lastIndex) append(line) else appendLine(line)
         }
     }
 }
+
+private fun Long.nanos(): String = "$this ns"
 
 object NoOpRuntimeMetricsCollector : RuntimeMetricsCollector {
     override fun recordServerTick(nanos: Long) = Unit
