@@ -94,6 +94,9 @@ data class DisplayOperationMetrics(
     val averageCopyRectNanos: Long get() = average(copyRectNanos, copyRectCalls)
     val averageBlitMonoNanos: Long get() = average(blitMonoNanos, blitMonoCalls)
     val averagePresentNanos: Long get() = average(presentNanos, presentCalls)
+
+    val allCalls = clearCalls + setPixelCalls + fillRectCalls + copyRectCalls + blitMonoCalls + presentCalls
+    val allNanos = clearNanos + setPixelNanos + fillRectNanos + copyRectNanos + blitMonoNanos + presentNanos
 }
 
 private fun average(
@@ -142,7 +145,7 @@ data class DisplayProfilingSnapshot(
     fun summary(): String =
         buildString {
             appendLine("display:")
-            appendLine("  operations:")
+            appendLine("  operations: count=${operations.allCalls}, time=${operations.allNanos.nanos()}")
             appendLine("    clear: count=${operations.clearCalls}, time=${operations.clearNanos.nanos()}, avg=${operations.averageClearNanos.nanos()}")
             appendLine("    setPixel: count=${operations.setPixelCalls}, time=${operations.setPixelNanos.nanos()}, avg=${operations.averageSetPixelNanos.nanos()}")
             appendLine("    fillRect: count=${operations.fillRectCalls}, area=${operations.fillRectArea}, time=${operations.fillRectNanos.nanos()}, avg=${operations.averageFillRectNanos.nanos()}")
