@@ -132,4 +132,30 @@ class NativeImageVmRunnerJniTest {
 
         assertEquals(listOf("value=-3"), runtime.lines)
     }
+
+    @Test
+    fun imageRunnerExecutesRecordConstructionAndFieldAccessThroughJniWhenLibraryIsConfigured() {
+        val libraryPath = System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val image = assertNotNull(
+            LanguageFrontend().compileImage(
+                "main.ck",
+                """
+                struct Point { x: Int, y: Int }
+
+                pub fun main() {
+                    val point: Point = Point(x = 2, y = 5);
+                    val delta: Int = point.x - point.y;
+                    system::log("value=" + delta);
+                }
+                """.trimIndent(),
+            ).image,
+        )
+        val runtime = RecordingRuntime()
+
+        runBlocking {
+            NativeImageVmRunner.fromLibraryPath(libraryPath).run(image, runtime)
+        }
+
+        assertEquals(listOf("value=-3"), runtime.lines)
+    }
 }
