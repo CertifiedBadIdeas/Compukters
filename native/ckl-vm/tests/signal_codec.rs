@@ -1,6 +1,6 @@
+use ckl_vm::signal::VmSignal;
 use ckl_vm::signal::{decode_value, encode_error, encode_signal, encode_value};
 use ckl_vm::value::VmValue;
-use ckl_vm::vm::VmSignal;
 
 #[test]
 fn encodes_halt_int_signal() {

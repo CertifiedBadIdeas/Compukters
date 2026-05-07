@@ -1,9 +1,8 @@
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
 use crate::image::{decode_image, Constant, Function, HostImport, Image};
-use crate::signal::{decode_value, encode_error, encode_signal};
+use crate::signal::{decode_value, encode_error, encode_signal, VmSignal};
 use crate::value::VmValue;
-use crate::vm::VmSignal;
 
 const OP_PUSH_UNIT: u8 = 1;
 const OP_RETURN: u8 = 2;
