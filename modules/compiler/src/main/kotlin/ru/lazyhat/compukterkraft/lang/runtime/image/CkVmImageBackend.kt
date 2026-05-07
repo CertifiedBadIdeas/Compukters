@@ -104,7 +104,9 @@ object CkVmImageCompiler {
                 is Instruction.Jump,
                 is Instruction.JumpIfFalse,
                 is Instruction.JumpIfTrue,
+                is Instruction.GetField,
                 -> 5
+                is Instruction.ConstructRecord -> 9 + 4 * instruction.fieldNames.size
                 is Instruction.Binary,
                 is Instruction.Unary,
                 -> 2
@@ -135,6 +137,12 @@ object CkVmImageCompiler {
                 is Instruction.JumpIfTrue -> listOf(CkVmImageOpcodes.JUMP_IF_TRUE) + i32(resolveJumpTarget(instruction.target, offsets, instructionCount, instructionIndex))
                 is Instruction.Binary -> listOf(CkVmImageOpcodes.BINARY, binaryOperatorTag(instruction.operator))
                 is Instruction.Unary -> listOf(CkVmImageOpcodes.UNARY, unaryOperatorTag(instruction.operator))
+                is Instruction.ConstructRecord ->
+                    listOf(CkVmImageOpcodes.CONSTRUCT_RECORD) +
+                        stringConstantIndexBytes(instruction.typeName) +
+                        i32(instruction.fieldNames.size) +
+                        instruction.fieldNames.flatMap(::stringConstantIndexBytes)
+                is Instruction.GetField -> listOf(CkVmImageOpcodes.GET_FIELD) + stringConstantIndexBytes(instruction.fieldName)
                 is Instruction.CallFunction -> listOf(CkVmImageOpcodes.CALL_FUNCTION) + i32(instruction.functionIndex) + i32(instruction.argumentCount)
                 is Instruction.CallBuiltin -> callBuiltin(instruction)
                 else -> throw UnsupportedOperationException("CkVmImage backend does not support ${instruction::class.simpleName}")
@@ -152,10 +160,15 @@ object CkVmImageCompiler {
             return offsets[target]
         }
 
-        private fun pushConstant(constant: CkVmConstant): List<Int> {
+        private fun pushConstant(constant: CkVmConstant): List<Int> =
+            listOf(CkVmImageOpcodes.PUSH_CONSTANT) + i32(constantIndex(constant))
+
+        private fun stringConstantIndexBytes(value: String): List<Int> =
+            i32(constantIndex(CkVmConstant.StringConstant(value)))
+
+        private fun constantIndex(constant: CkVmConstant): Int {
             val existing = constants.indexOf(constant)
-            val index = if (existing >= 0) existing else constants.size.also { constants += constant }
-            return listOf(CkVmImageOpcodes.PUSH_CONSTANT) + i32(index)
+            return if (existing >= 0) existing else constants.size.also { constants += constant }
         }
 
         private fun callBuiltin(instruction: Instruction.CallBuiltin): List<Int> {
