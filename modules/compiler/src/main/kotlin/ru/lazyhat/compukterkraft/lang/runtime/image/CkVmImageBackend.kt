@@ -48,11 +48,13 @@ object CkVmImageCompiler {
 
     private fun collectHostImports(module: BytecodeModule): List<CkVmHostImport> =
         module.functions
+            .asSequence()
             .flatMap { function -> function.instructions.filterIsInstance<Instruction.CallBuiltin>() }
             .filter { instruction -> instruction.moduleName != null }
             .map { instruction -> CkVmHostImportRegistry.require(requireNotNull(instruction.moduleName), instruction.functionName, instruction.argumentCount) }
             .distinct()
             .sortedBy { import -> import.id }
+            .toList()
 
     private class LoweringContext(
         hostImports: List<CkVmHostImport>,
