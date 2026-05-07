@@ -72,7 +72,7 @@ object CkVmImageCompiler {
                 }
             return CkVmFunction(
                 name = function.name,
-                frameSize = function.parameters.size + function.locals.size,
+                frameSize = function.locals.size,
                 code = code,
             )
         }
@@ -108,6 +108,7 @@ object CkVmImageCompiler {
                 is Instruction.Binary,
                 is Instruction.Unary,
                 -> 2
+                is Instruction.CallFunction,
                 is Instruction.CallBuiltin -> 9
                 else -> throw UnsupportedOperationException("CkVmImage backend does not support ${instruction::class.simpleName}")
             }
@@ -134,6 +135,7 @@ object CkVmImageCompiler {
                 is Instruction.JumpIfTrue -> listOf(CkVmImageOpcodes.JUMP_IF_TRUE) + i32(resolveJumpTarget(instruction.target, offsets, instructionCount, instructionIndex))
                 is Instruction.Binary -> listOf(CkVmImageOpcodes.BINARY, binaryOperatorTag(instruction.operator))
                 is Instruction.Unary -> listOf(CkVmImageOpcodes.UNARY, unaryOperatorTag(instruction.operator))
+                is Instruction.CallFunction -> listOf(CkVmImageOpcodes.CALL_FUNCTION) + i32(instruction.functionIndex) + i32(instruction.argumentCount)
                 is Instruction.CallBuiltin -> callBuiltin(instruction)
                 else -> throw UnsupportedOperationException("CkVmImage backend does not support ${instruction::class.simpleName}")
             }

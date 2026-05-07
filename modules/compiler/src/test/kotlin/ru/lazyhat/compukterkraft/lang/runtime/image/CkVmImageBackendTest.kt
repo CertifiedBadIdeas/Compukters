@@ -207,6 +207,8 @@ class CkVmImageBackendTest {
                 CkVmImageOpcodes.LOAD_LOCAL, 1, 0, 0, 0,
                 CkVmImageOpcodes.BINARY, 0,
                 CkVmImageOpcodes.RETURN,
+                CkVmImageOpcodes.PUSH_UNIT,
+                CkVmImageOpcodes.RETURN,
             ),
             addFunction.code,
         )
