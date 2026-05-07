@@ -37,3 +37,11 @@ data class CkVmFunction(
     val frameSize: Int,
     val code: List<Int>,
 )
+
+object CkVmImageOpcodes {
+    const val PUSH_UNIT = 1
+    const val RETURN = 2
+    const val PUSH_CONSTANT = 3
+    const val CALL_HOST = 4
+    const val POP = 5
+}
