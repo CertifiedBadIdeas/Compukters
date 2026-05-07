@@ -43,9 +43,25 @@ internal object NativeVmBindings {
         return handle
     }
 
+    fun createImage(
+        libraryPath: String,
+        image: ByteArray,
+        instructionBudget: Int,
+    ): Long {
+        load(libraryPath)
+        val handle = createImageNative(image, instructionBudget.coerceAtLeast(1))
+        check(handle != 0L) { "Native image VM create returned a zero handle" }
+        return handle
+    }
+
     fun runUntilSignal(handle: Long): ByteArray {
         require(handle != 0L) { "Native VM handle is zero" }
         return runUntilSignalForHandleNative(handle)
+    }
+
+    fun runImageUntilSignal(handle: Long): ByteArray {
+        require(handle != 0L) { "Native image VM handle is zero" }
+        return runImageUntilSignalForHandleNative(handle)
     }
 
     fun resumeWith(
@@ -56,9 +72,23 @@ internal object NativeVmBindings {
         resumeWithNative(handle, value)
     }
 
+    fun resumeImageWith(
+        handle: Long,
+        value: ByteArray,
+    ) {
+        require(handle != 0L) { "Native image VM handle is zero" }
+        resumeImageWithNative(handle, value)
+    }
+
     fun free(handle: Long) {
         if (handle != 0L) {
             freeNative(handle)
+        }
+    }
+
+    fun freeImage(handle: Long) {
+        if (handle != 0L) {
+            freeImageNative(handle)
         }
     }
 
@@ -89,7 +119,16 @@ internal object NativeVmBindings {
     ): Long
 
     @JvmStatic
+    private external fun createImageNative(
+        image: ByteArray,
+        instructionBudget: Int,
+    ): Long
+
+    @JvmStatic
     private external fun runUntilSignalForHandleNative(handle: Long): ByteArray
+
+    @JvmStatic
+    private external fun runImageUntilSignalForHandleNative(handle: Long): ByteArray
 
     @JvmStatic
     private external fun resumeWithNative(
@@ -98,5 +137,14 @@ internal object NativeVmBindings {
     )
 
     @JvmStatic
+    private external fun resumeImageWithNative(
+        handle: Long,
+        value: ByteArray,
+    )
+
+    @JvmStatic
     private external fun freeNative(handle: Long)
+
+    @JvmStatic
+    private external fun freeImageNative(handle: Long)
 }
