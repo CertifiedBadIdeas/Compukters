@@ -27,21 +27,21 @@ import kotlin.test.assertTrue
 
 class RuntimeVmProfilingReportTest {
     @Test
-    fun writesCurrentRunnerProfile() {
+    fun writesCurrentRuntimeProfile() {
         val profilePathValue = System.getProperty(PROFILE_PATH_PROPERTY)
         assumeTrue(!profilePathValue.isNullOrBlank(), "Report profile path is only provided by profiling Gradle tasks")
         val profilePath = Path.of(profilePathValue)
-        val runnerName = System.getProperty(RUNNER_NAME_PROPERTY, "Rust image")
+        val runtimeName = System.getProperty(RUNTIME_NAME_PROPERTY, "Rust image")
 
-        warmUpRunner()
-        val profile = profileRunner(runnerName)
+        warmUpRuntime()
+        val profile = profileRuntime(runtimeName)
         RuntimeVmProfileCodec.write(profile, profilePath)
-        println("Runtime VM $runnerName profiling data: ${profilePath.absolutePathString()}")
+        println("Runtime VM $runtimeName profiling data: ${profilePath.absolutePathString()}")
 
         assertTrue(profile.workloads.isNotEmpty())
     }
 
-    private fun warmUpRunner() {
+    private fun warmUpRuntime() {
         RuntimeProfilingWorkload.runTerminalWorkload(
             delayMillis = 0,
             bootTicks = 40,
@@ -50,9 +50,9 @@ class RuntimeVmProfilingReportTest {
         )
     }
 
-    private fun profileRunner(runnerName: String): VmRunnerProfile =
-        VmRunnerProfile(
-            runnerName = runnerName,
+    private fun profileRuntime(runtimeName: String): RuntimeVmProfile =
+        RuntimeVmProfile(
+            runtimeName = runtimeName,
             workloads =
                 listOf(
                     terminalWorkload(
@@ -108,6 +108,6 @@ class RuntimeVmProfilingReportTest {
 
     private companion object {
         const val PROFILE_PATH_PROPERTY = "ckl.profiling.profile.path"
-        const val RUNNER_NAME_PROPERTY = "ckl.profiling.runner.name"
+        const val RUNTIME_NAME_PROPERTY = "ckl.profiling.runtime.name"
     }
 }
