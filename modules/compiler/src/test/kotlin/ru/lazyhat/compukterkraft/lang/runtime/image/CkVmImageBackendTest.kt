@@ -178,6 +178,53 @@ class CkVmImageBackendTest {
     }
 
     @Test
+    fun compileImageLowersUserFunctionCall() {
+        val image = assertNotNull(
+            LanguageFrontend().compileImage(
+                "main.ck",
+                """
+                fun add(a: Int, b: Int): Int {
+                    return a + b;
+                }
+
+                pub fun main() {
+                    val result: Int = add(2, 5);
+                }
+                """.trimIndent(),
+            ).image,
+        )
+        val addIndex = image.functions.indexOfFirst { it.name == "main.ck#add" }
+        val mainFunction = image.functions.single { it.name == "main.ck#main" }
+        val addFunction = image.functions.single { it.name == "main.ck#add" }
+
+        assertTrue(addIndex >= 0)
+        assertEquals(2, addFunction.frameSize)
+        assertEquals(1, mainFunction.frameSize)
+        assertEquals(listOf(CkVmConstant.IntConstant(2), CkVmConstant.IntConstant(5)), image.constants)
+        assertContentEquals(
+            listOf(
+                CkVmImageOpcodes.LOAD_LOCAL, 0, 0, 0, 0,
+                CkVmImageOpcodes.LOAD_LOCAL, 1, 0, 0, 0,
+                CkVmImageOpcodes.BINARY, 0,
+                CkVmImageOpcodes.RETURN,
+            ),
+            addFunction.code,
+        )
+        assertContentEquals(
+            listOf(
+                CkVmImageOpcodes.PUSH_CONSTANT, 0, 0, 0, 0,
+                CkVmImageOpcodes.PUSH_CONSTANT, 1, 0, 0, 0,
+                CkVmImageOpcodes.CALL_FUNCTION,
+            ) + i32(addIndex) + i32(2) + listOf(
+                CkVmImageOpcodes.STORE_LOCAL, 0, 0, 0, 0,
+                CkVmImageOpcodes.PUSH_UNIT,
+                CkVmImageOpcodes.RETURN,
+            ),
+            mainFunction.code,
+        )
+    }
+
+    @Test
     fun compileImageReturnsNullImageWhenFrontendHasErrors() {
         val artifact = LanguageFrontend().compileImage("main.ck", "fun main() { }")
 
@@ -190,8 +237,8 @@ class CkVmImageBackendTest {
         val artifact = LanguageFrontend().compile(
             "main.ck",
             """
-            fun helper(): Int { return 1; }
-            pub fun main() { val x: Int = helper(); }
+            struct Box { value: Int }
+            pub fun main() { val box: Box = Box(value = 1); }
             """.trimIndent(),
         )
         val module = assertNotNull(artifact.module)
@@ -200,8 +247,11 @@ class CkVmImageBackendTest {
             CkVmImageCompiler.compile(module)
         }
 
-        assertTrue(error.message.orEmpty().contains("CkVmImage backend does not support CallFunction"))
+        assertTrue(error.message.orEmpty().contains("CkVmImage backend does not support ConstructRecord"))
     }
+
+    private fun i32(value: Int): List<Int> =
+        listOf(value and 0xff, (value ushr 8) and 0xff, (value ushr 16) and 0xff, (value ushr 24) and 0xff)
 
     @Test
     fun writesBackendFixtureWhenPathIsProvided() {
