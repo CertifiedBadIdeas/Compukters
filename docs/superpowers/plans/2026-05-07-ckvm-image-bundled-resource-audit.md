@@ -132,7 +132,7 @@ class CkVmImageBundledResourceCompileTest {
 Run:
 
 ```bash
-./gradlew :v1_21_1:v1_21_1-neoforge:test --tests 'ru.lazyhat.compukterkraft.impl.CkVmImageBundledResourceCompileTest'
+./gradlew :v1_21_1-neoforge:test --tests 'ru.lazyhat.compukterkraft.impl.CkVmImageBundledResourceCompileTest'
 ```
 
 Expected outcome: one of these is acceptable for RED:
@@ -173,7 +173,7 @@ private fun bundledSources(): Map<String, String> {
 Run:
 
 ```bash
-./gradlew :v1_21_1:v1_21_1-neoforge:test --tests 'ru.lazyhat.compukterkraft.impl.CkVmImageBundledResourceCompileTest'
+./gradlew :v1_21_1-neoforge:test --tests 'ru.lazyhat.compukterkraft.impl.CkVmImageBundledResourceCompileTest'
 ```
 
 Expected outcome: the test reaches the real image parity result:
@@ -204,7 +204,7 @@ If the test fails with a real parity blocker, commit the RED audit test anyway. 
 Run:
 
 ```bash
-./gradlew :v1_21_1:v1_21_1-neoforge:test --tests 'ru.lazyhat.compukterkraft.impl.CkVmImageBundledResourceCompileTest'
+./gradlew :v1_21_1-neoforge:test --tests 'ru.lazyhat.compukterkraft.impl.CkVmImageBundledResourceCompileTest'
 ```
 
 Expected outcome:
