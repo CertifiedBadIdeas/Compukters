@@ -38,8 +38,8 @@ class RuntimeVmProfilingProfileCodecTest {
     @Test
     fun profileRoundTripsThroughFile() {
         val profile =
-            VmRunnerProfile(
-                runnerName = "JVM",
+            RuntimeVmProfile(
+                runtimeName = "Rust image",
                 workloads =
                     listOf(
                         RuntimeWorkloadProfile(
