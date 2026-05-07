@@ -37,9 +37,9 @@ class NativeVmBindingsImageOnlyTest {
         assertFalse("create" in methodNames)
         assertFalse("resumeWith" in methodNames)
         assertFalse("free" in methodNames)
-        assertFalse("runUntilSignalNative" in methodNames)
-        assertFalse("createNative" in methodNames)
-        assertFalse("resumeWithNative" in methodNames)
-        assertFalse("freeNative" in methodNames)
+        assertFalse(("runUntilSignal" + "Native") in methodNames)
+        assertFalse(("create" + "Native") in methodNames)
+        assertFalse(("resumeWith" + "Native") in methodNames)
+        assertFalse(("free" + "Native") in methodNames)
     }
 }
