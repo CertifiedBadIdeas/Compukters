@@ -1,8 +1,11 @@
 use ckl_vm::image_runner::ImageVmHandle;
+use ckl_vm::signal::encode_value;
+use ckl_vm::value::VmValue;
 
 const OP_PUSH_UNIT: u8 = 1;
 const OP_RETURN: u8 = 2;
 const OP_PUSH_CONSTANT: u8 = 3;
+const OP_CALL_HOST: u8 = 4;
 const OP_PUSH_BOOL: u8 = 6;
 const OP_PUSH_NULL: u8 = 7;
 const OP_LOAD_LOCAL: u8 = 8;
@@ -330,6 +333,49 @@ fn rejects_unknown_operator_tag() {
     assert!(String::from_utf8_lossy(&signal).contains("unknown CkVmImage binary operator tag 99"));
 }
 
+#[test]
+fn rejects_string_concatenation_with_record_value() {
+    let code = vec![
+        OP_CALL_HOST,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        OP_PUSH_CONSTANT,
+        0,
+        0,
+        0,
+        0,
+        OP_BINARY,
+        0,
+        OP_RETURN,
+    ];
+    let mut vm = ImageVmHandle::create(
+        &image_with_constants_host_import_and_code(
+            vec![ConstantFixture::String("suffix".to_string())],
+            0,
+            code,
+        ),
+        64,
+    )
+    .unwrap();
+
+    assert_eq!(vm.run_until_signal()[0], 4);
+    let record = VmValue::Record {
+        type_name: "Box".to_string(),
+        fields: vec![("value".to_string(), VmValue::Int(1))],
+    };
+    vm.resume_with_value_bytes(&encode_value(&record)).unwrap();
+    let signal = vm.run_until_signal();
+
+    assert_eq!(signal[0], 255);
+    assert!(String::from_utf8_lossy(&signal).contains("string concatenation with records"));
+}
+
 enum ConstantFixture {
     String(String),
     Int(i32),
@@ -342,6 +388,23 @@ fn image_with_code(frame_size: i32, code: Vec<u8>) -> Vec<u8> {
 
 fn image_with_constants_and_code(
     constants: Vec<ConstantFixture>,
+    frame_size: i32,
+    code: Vec<u8>,
+) -> Vec<u8> {
+    image_with_constants_and_optional_host_import(constants, false, frame_size, code)
+}
+
+fn image_with_constants_host_import_and_code(
+    constants: Vec<ConstantFixture>,
+    frame_size: i32,
+    code: Vec<u8>,
+) -> Vec<u8> {
+    image_with_constants_and_optional_host_import(constants, true, frame_size, code)
+}
+
+fn image_with_constants_and_optional_host_import(
+    constants: Vec<ConstantFixture>,
+    include_host_import: bool,
     frame_size: i32,
     code: Vec<u8>,
 ) -> Vec<u8> {
@@ -368,7 +431,16 @@ fn image_with_constants_and_code(
             }
         }
     }
-    list_len(&mut out, 0);
+    if include_host_import {
+        list_len(&mut out, 1);
+        i32(&mut out, 1);
+        string(&mut out, "test");
+        string(&mut out, "record");
+        list_len(&mut out, 0);
+        string(&mut out, "Record");
+    } else {
+        list_len(&mut out, 0);
+    }
     i32(&mut out, 0);
     list_len(&mut out, 1);
     string(&mut out, "main");
