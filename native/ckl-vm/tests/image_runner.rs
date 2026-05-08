@@ -1238,13 +1238,21 @@ fn executes_sleep_signal_and_resumes_with_unit() {
 }
 
 #[test]
-fn rejects_sleep_with_non_long_ticks() {
+fn executes_sleep_signal_with_int_ticks() {
     let code = vec![OP_PUSH_CONSTANT, 0, 0, 0, 0, OP_SLEEP];
     let mut vm = ImageVmHandle::create(
-        &image_with_constants_and_code(vec![ConstantFixture::Int(9)], 0, code),
+        &image_with_constants_and_code(vec![ConstantFixture::Int(1)], 0, code),
         64,
     )
     .unwrap();
+
+    assert_eq!(vm.run_until_signal(), vec![3, 1, 0, 0, 0, 0, 0, 0, 0]);
+}
+
+#[test]
+fn rejects_sleep_with_non_long_ticks() {
+    let code = vec![OP_PUSH_UNIT, OP_SLEEP];
+    let mut vm = ImageVmHandle::create(&image_with_code(0, code), 64).unwrap();
 
     let signal = vm.run_until_signal();
 

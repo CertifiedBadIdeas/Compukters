@@ -878,6 +878,7 @@ impl ImageVmHandle {
 
     fn sleep_ticks(&mut self) -> Result<i64, String> {
         match self.pop_one("sleep ticks")? {
+            VmValue::Int(ticks) => Ok(i64::from(ticks)),
             VmValue::Long(ticks) => Ok(ticks),
             other => Err(format!(
                 "CkVmImage SLEEP requires Long ticks but found {other:?}"
