@@ -60,7 +60,7 @@ class NativeImageVmRunnerJniTest {
                 """
                 pub fun main() {
                     yield();
-                    sleep(3L);
+                    sleep(3);
                     system::log("done");
                 }
                 """.trimIndent(),
