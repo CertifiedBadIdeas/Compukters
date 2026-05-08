@@ -83,6 +83,9 @@ object CkVmHostImportRegistry {
             descriptor(7004, "strings", "toInt", listOf("String"), "Int"),
             descriptor(7005, "strings", "length", listOf("String"), "Int"),
             descriptor(7006, "strings", "charAt", listOf("String", "Int"), "String"),
+            descriptor(7007, "strings", "repeat", listOf("String", "Int"), "String"),
+            descriptor(7008, "strings", "slice", listOf("String", "Int", "Int"), "String"),
+            descriptor(7009, "strings", "replaceRange", listOf("String", "Int", "String"), "String"),
             descriptor(8000, "runtime", "poll", listOf("Int"), "Poll"),
         ).also(::validate)
 

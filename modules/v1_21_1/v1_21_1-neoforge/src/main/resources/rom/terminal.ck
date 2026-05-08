@@ -97,13 +97,7 @@ fun cellCount(displayId: Int): Int {
 }
 
 fun blankCells(count: Int): String {
-    var result: String = ""
-    var i: Int = 0
-    while i < count + 0 {
-        result = result + " "
-        i = i + 1
-    }
-    return result
+    return strings::repeat(" ", count)
 }
 
 fun newTerminalBuffer(displayId: Int): TerminalBuffer {
@@ -121,19 +115,7 @@ fun newTerminalBuffer(displayId: Int): TerminalBuffer {
 }
 
 fun replaceRange(cells: String, start: Int, replacement: String): String {
-    var result: String = ""
-    var i: Int = 0
-    while i < start + 0 {
-        result = result + strings::charAt(cells, i)
-        i = i + 1
-    }
-    result = result + replacement
-    i = start + strings::length(replacement)
-    while i < strings::length(cells) {
-        result = result + strings::charAt(cells, i)
-        i = i + 1
-    }
-    return result
+    return strings::replaceRange(cells, start, replacement)
 }
 
 fun cellAt(cells: String, index: Int): String {
@@ -172,6 +154,23 @@ fun renderAllRows(displayId: Int, cells: String) {
     display::present(displayId)
 }
 
+fun renderRows(displayId: Int, cells: String, startRow: Int, endRow: Int) {
+    var row: Int = startRow
+    if (row < 0) {
+        row = 0
+    }
+    var last: Int = endRow
+    val rs: Int = rows(displayId)
+    if (last >= rs) {
+        last = rs - 1
+    }
+    while row < last + 1 {
+        renderTextRow(displayId, cells, row)
+        row = row + 1
+    }
+    display::present(displayId)
+}
+
 fun commitDirtySegment(displayId: Int, cells: String, row: Int, startColumn: Int, text: String): String {
     if (text == "") {
         return cells
@@ -181,17 +180,7 @@ fun commitDirtySegment(displayId: Int, cells: String, row: Int, startColumn: Int
 }
 
 fun appendBlankHistoryRows(cells: String, cols: Int, count: Int): String {
-    var result: String = cells
-    var row: Int = 0
-    while row < count + 0 {
-        var col: Int = 0
-        while col < cols + 0 {
-            result = result + " "
-            col = col + 1
-        }
-        row = row + 1
-    }
-    return result
+    return cells + strings::repeat(" ", cols * count)
 }
 
 fun historyRowStart(historyRows: Int, displayRows: Int, viewportOffset: Int): Int {
@@ -203,8 +192,14 @@ fun historyRowStart(historyRows: Int, displayRows: Int, viewportOffset: Int): In
 }
 
 fun viewportCells(historyCells: String, historyRows: Int, cols: Int, rs: Int, viewportOffset: Int): String {
-    var result: String = ""
     val startRow: Int = historyRowStart(historyRows, rs, viewportOffset)
+    if (viewportOffset == 0 && historyRows == rs) {
+        return historyCells
+    }
+    if (startRow >= 0 && startRow + rs <= historyRows) {
+        return strings::slice(historyCells, startRow * cols, (startRow + rs) * cols)
+    }
+    var result: String = ""
     var visibleRow: Int = 0
     while visibleRow < rs + 0 {
         val sourceRow: Int = startRow + visibleRow
@@ -292,18 +287,7 @@ fun scrollUp(displayId: Int, cells: String): String {
     }
     display::copyRect(displayId, 0, 9, cols * 6, (rs - 1) * 9, 0, 0)
     clearTextRow(displayId, rs - 1)
-    var result: String = ""
-    var i: Int = cols
-    while i < strings::length(cells) {
-        result = result + strings::charAt(cells, i)
-        i = i + 1
-    }
-    var col: Int = 0
-    while col < cols + 0 {
-        result = result + " "
-        col = col + 1
-    }
-    return result
+    return strings::slice(cells, cols, strings::length(cells)) + blankCells(cols)
 }
 
 fun appendText(displayId: Int, buffer: TerminalBuffer, text: String): TerminalBuffer {
@@ -318,6 +302,8 @@ fun appendText(displayId: Int, buffer: TerminalBuffer, text: String): TerminalBu
     var row: Int = buffer.cursorRow
     var col: Int = buffer.cursorColumn
     var historyRows: Int = buffer.historyRows
+    val startRow: Int = row
+    var scrolled: Bool = false
     var i: Int = 0
     while i < strings::length(text) {
         val ch: String = strings::charAt(text, i)
@@ -330,6 +316,7 @@ fun appendText(displayId: Int, buffer: TerminalBuffer, text: String): TerminalBu
             }
             if (row >= rs) {
                 cells = scrollUp(displayId, cells)
+                scrolled = true
             }
         } else if (ch == "\r") {
             col = 0
@@ -368,7 +355,11 @@ fun appendText(displayId: Int, buffer: TerminalBuffer, text: String): TerminalBu
         viewportOffset = buffer.viewportOffset
     )
     if (buffer.viewportOffset == 0) {
-        renderViewport(displayId, updated)
+        if (scrolled) {
+            renderViewport(displayId, updated)
+        } else {
+            renderRows(displayId, cells, startRow, row)
+        }
     }
     return updated
 }

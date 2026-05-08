@@ -133,6 +133,32 @@ class NativeImageVmRunnerJniTest {
     }
 
     @Test
+    fun imageRunnerExecutesBulkStringIntrinsicsThroughJniWhenLibraryIsConfigured() {
+        val libraryPath = System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val image =
+            assertNotNull(
+                LanguageFrontend()
+                    .compileImage(
+                        "main.ck",
+                        """
+                        pub fun main() {
+                            val cells: String = strings::repeat(".", 6);
+                            val patched: String = strings::replaceRange(cells, 2, "XY");
+                            system::log(strings::slice(patched, 1, 5));
+                        }
+                        """.trimIndent(),
+                    ).image,
+            )
+        val runtime = RecordingRuntime()
+
+        runBlocking {
+            NativeImageVmRunner.fromLibraryPath(libraryPath).run(image, runtime)
+        }
+
+        assertEquals(listOf(".XY."), runtime.lines)
+    }
+
+    @Test
     fun imageRunnerExecutesUserFunctionCallsThroughJniWhenLibraryIsConfigured() {
         val libraryPath = System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val image =

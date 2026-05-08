@@ -39,6 +39,9 @@ const STRINGS_IS_BLANK_IMPORT_ID: i32 = 7003;
 const STRINGS_TO_INT_IMPORT_ID: i32 = 7004;
 const STRINGS_LENGTH_IMPORT_ID: i32 = 7005;
 const STRINGS_CHAR_AT_IMPORT_ID: i32 = 7006;
+const STRINGS_REPEAT_IMPORT_ID: i32 = 7007;
+const STRINGS_SLICE_IMPORT_ID: i32 = 7008;
+const STRINGS_REPLACE_RANGE_IMPORT_ID: i32 = 7009;
 
 struct CallFrame {
     function_index: usize,
@@ -1182,6 +1185,9 @@ fn try_native_host_import(
             native_string_unary(arguments, |text| VmValue::Int(text.len() as i32))
         }
         STRINGS_CHAR_AT_IMPORT_ID => native_string_char_at(arguments),
+        STRINGS_REPEAT_IMPORT_ID => native_string_repeat(arguments),
+        STRINGS_SLICE_IMPORT_ID => native_string_slice(arguments),
+        STRINGS_REPLACE_RANGE_IMPORT_ID => native_string_replace_range(arguments),
         _ => Ok(NativeHostImportResult::Fallback(arguments)),
     }
 }
@@ -1222,6 +1228,80 @@ fn native_string_char_at(arguments: Vec<VmValue>) -> Result<NativeHostImportResu
             .map(|byte| (*byte as char).to_string())
             .unwrap_or_default()
     };
+    Ok(NativeHostImportResult::Handled(VmValue::String(value)))
+}
+
+fn native_string_repeat(arguments: Vec<VmValue>) -> Result<NativeHostImportResult, String> {
+    if arguments.len() != 2 {
+        return Ok(NativeHostImportResult::Fallback(arguments));
+    }
+    let text = match &arguments[0] {
+        VmValue::String(text) if text.is_ascii() => text,
+        _ => return Ok(NativeHostImportResult::Fallback(arguments)),
+    };
+    let count = match &arguments[1] {
+        VmValue::Int(value) => *value,
+        VmValue::Long(value) => *value as i32,
+        _ => return Ok(NativeHostImportResult::Fallback(arguments)),
+    };
+    let value = if count <= 0 {
+        String::new()
+    } else {
+        text.repeat(count as usize)
+    };
+    Ok(NativeHostImportResult::Handled(VmValue::String(value)))
+}
+
+fn native_string_slice(arguments: Vec<VmValue>) -> Result<NativeHostImportResult, String> {
+    if arguments.len() != 3 {
+        return Ok(NativeHostImportResult::Fallback(arguments));
+    }
+    let text = match &arguments[0] {
+        VmValue::String(text) if text.is_ascii() => text,
+        _ => return Ok(NativeHostImportResult::Fallback(arguments)),
+    };
+    let start = match &arguments[1] {
+        VmValue::Int(value) => *value,
+        VmValue::Long(value) => *value as i32,
+        _ => return Ok(NativeHostImportResult::Fallback(arguments)),
+    };
+    let end = match &arguments[2] {
+        VmValue::Int(value) => *value,
+        VmValue::Long(value) => *value as i32,
+        _ => return Ok(NativeHostImportResult::Fallback(arguments)),
+    };
+    let len = text.len() as i32;
+    let start = start.clamp(0, len) as usize;
+    let end = end.clamp(start as i32, len) as usize;
+    Ok(NativeHostImportResult::Handled(VmValue::String(
+        text[start..end].to_string(),
+    )))
+}
+
+fn native_string_replace_range(arguments: Vec<VmValue>) -> Result<NativeHostImportResult, String> {
+    if arguments.len() != 3 {
+        return Ok(NativeHostImportResult::Fallback(arguments));
+    }
+    let text = match &arguments[0] {
+        VmValue::String(text) if text.is_ascii() => text,
+        _ => return Ok(NativeHostImportResult::Fallback(arguments)),
+    };
+    let start = match &arguments[1] {
+        VmValue::Int(value) => *value,
+        VmValue::Long(value) => *value as i32,
+        _ => return Ok(NativeHostImportResult::Fallback(arguments)),
+    };
+    let replacement = match &arguments[2] {
+        VmValue::String(value) if value.is_ascii() => value,
+        _ => return Ok(NativeHostImportResult::Fallback(arguments)),
+    };
+    let len = text.len() as i32;
+    let start = start.clamp(0, len) as usize;
+    let end = (start + replacement.len()).min(text.len());
+    let mut value = String::with_capacity(text.len().max(start + replacement.len()));
+    value.push_str(&text[..start]);
+    value.push_str(replacement);
+    value.push_str(&text[end..]);
     Ok(NativeHostImportResult::Handled(VmValue::String(value)))
 }
 
