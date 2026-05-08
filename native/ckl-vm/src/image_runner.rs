@@ -28,6 +28,8 @@ const OP_CONSTRUCT_MAP: u8 = 20;
 const OP_INDEX_GET: u8 = 21;
 const OP_INDEX_SET: u8 = 22;
 const OP_CALL_COLLECTION_METHOD: u8 = 23;
+const OP_YIELD: u8 = 24;
+const OP_SLEEP: u8 = 25;
 
 struct CallFrame {
     function_index: usize,
@@ -225,6 +227,15 @@ impl ImageVmHandle {
                     )?;
                     let argument_count = self.read_i32()?;
                     self.call_collection_method(method_name, argument_count)?;
+                }
+                OP_YIELD => {
+                    self.state = ImageVmState::WaitingForResume;
+                    return Ok(VmSignal::Yield);
+                }
+                OP_SLEEP => {
+                    let ticks = self.sleep_ticks()?;
+                    self.state = ImageVmState::WaitingForResume;
+                    return Ok(VmSignal::Sleep(ticks));
                 }
                 other => return Err(format!("unknown CkVmImage opcode {other}")),
             }
@@ -863,6 +874,15 @@ impl ImageVmHandle {
         self.stack
             .pop()
             .ok_or_else(|| format!("CkVmImage stack underflow during {operation}"))
+    }
+
+    fn sleep_ticks(&mut self) -> Result<i64, String> {
+        match self.pop_one("sleep ticks")? {
+            VmValue::Long(ticks) => Ok(ticks),
+            other => Err(format!(
+                "CkVmImage SLEEP requires Long ticks but found {other:?}"
+            )),
+        }
     }
 
     fn pop_bool_condition(&mut self, opcode_name: &str) -> Result<bool, String> {

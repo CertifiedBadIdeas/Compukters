@@ -349,6 +349,49 @@ class CkVmImageBackendTest {
     }
 
     @Test
+    fun compileImageLowersGlobalSchedulerBuiltins() {
+        val image = assertNotNull(
+            LanguageFrontend().compileImage(
+                "main.ck",
+                """
+                pub fun main() {
+                    yield();
+                    sleep(2L);
+                    system::log("done");
+                }
+                """.trimIndent(),
+            ).image,
+        )
+
+        assertEquals(
+            listOf(
+                CkVmConstant.LongConstant(2),
+                CkVmConstant.StringConstant("done"),
+            ),
+            image.constants,
+        )
+        assertEquals(
+            listOf(CkVmHostImportRegistry.require("system", "log", 1)),
+            image.hostImports,
+        )
+        assertContentEquals(
+            listOf(
+                CkVmImageOpcodes.YIELD,
+                CkVmImageOpcodes.POP,
+                CkVmImageOpcodes.PUSH_CONSTANT, 0, 0, 0, 0,
+                CkVmImageOpcodes.SLEEP,
+                CkVmImageOpcodes.POP,
+                CkVmImageOpcodes.PUSH_CONSTANT, 1, 0, 0, 0,
+                CkVmImageOpcodes.CALL_HOST, 188, 11, 0, 0, 1, 0, 0, 0,
+                CkVmImageOpcodes.POP,
+                CkVmImageOpcodes.PUSH_UNIT,
+                CkVmImageOpcodes.RETURN,
+            ),
+            image.functions.single().code,
+        )
+    }
+
+    @Test
     fun compileImageReturnsNullImageWhenFrontendHasErrors() {
         val artifact = LanguageFrontend().compileImage("main.ck", "fun main() { }")
 
