@@ -31,6 +31,14 @@ const OP_CALL_COLLECTION_METHOD: u8 = 23;
 const OP_YIELD: u8 = 24;
 const OP_SLEEP: u8 = 25;
 
+const STRINGS_TRIM_IMPORT_ID: i32 = 7000;
+const STRINGS_BEFORE_SPACE_IMPORT_ID: i32 = 7001;
+const STRINGS_AFTER_SPACE_IMPORT_ID: i32 = 7002;
+const STRINGS_IS_BLANK_IMPORT_ID: i32 = 7003;
+const STRINGS_TO_INT_IMPORT_ID: i32 = 7004;
+const STRINGS_LENGTH_IMPORT_ID: i32 = 7005;
+const STRINGS_CHAR_AT_IMPORT_ID: i32 = 7006;
+
 struct CallFrame {
     function_index: usize,
     instruction_pointer: usize,
@@ -63,6 +71,11 @@ enum ImageVmState {
     Ready,
     WaitingForResume,
     Halted,
+}
+
+enum NativeHostImportResult {
+    Handled(VmValue),
+    Fallback(Vec<VmValue>),
 }
 
 impl ImageVmHandle {
@@ -144,12 +157,19 @@ impl ImageVmHandle {
                     let import = self.host_import(import_id)?;
                     let module_name = import.module_name.clone();
                     let function_name = import.function_name.clone();
-                    self.state = ImageVmState::WaitingForResume;
-                    return Ok(VmSignal::HostCall {
-                        module_name,
-                        function_name,
-                        arguments,
-                    });
+                    match try_native_host_import(import_id, &module_name, arguments)? {
+                        NativeHostImportResult::Handled(value) => {
+                            self.stack.push(value);
+                        }
+                        NativeHostImportResult::Fallback(arguments) => {
+                            self.state = ImageVmState::WaitingForResume;
+                            return Ok(VmSignal::HostCall {
+                                module_name,
+                                function_name,
+                                arguments,
+                            });
+                        }
+                    }
                 }
                 OP_POP => {
                     let _ = self.stack.pop();
@@ -221,10 +241,8 @@ impl ImageVmHandle {
                 OP_INDEX_SET => self.index_set()?,
                 OP_CALL_COLLECTION_METHOD => {
                     let method_name_index = self.read_i32()?;
-                    let method_name = self.constant_string_metadata(
-                        method_name_index,
-                        "collection method name",
-                    )?;
+                    let method_name =
+                        self.constant_string_metadata(method_name_index, "collection method name")?;
                     let argument_count = self.read_i32()?;
                     self.call_collection_method(method_name, argument_count)?;
                 }
@@ -383,9 +401,7 @@ impl ImageVmHandle {
     fn construct_map(&mut self) -> Result<(), String> {
         let entry_count = self.read_i32()?;
         if entry_count < 0 {
-            return Err(format!(
-                "negative CkVmImage map entry count {entry_count}"
-            ));
+            return Err(format!("negative CkVmImage map entry count {entry_count}"));
         }
         let value_count = entry_count.checked_mul(2).ok_or_else(|| {
             format!("CkVmImage map entry count {entry_count} overflows value count")
@@ -476,7 +492,11 @@ impl ImageVmHandle {
             Some(HeapObject::Array(_)) => self.call_array_method(id, &method_name, arguments)?,
             Some(HeapObject::List(_)) => self.call_list_method(id, &method_name, arguments)?,
             Some(HeapObject::Map(_)) => self.call_map_method(id, &method_name, arguments)?,
-            None => return Err(format!("CkVmImage CALL_COLLECTION_METHOD object id {id} does not exist")),
+            None => {
+                return Err(format!(
+                    "CkVmImage CALL_COLLECTION_METHOD object id {id} does not exist"
+                ))
+            }
         };
         self.stack.push(result);
         Ok(())
@@ -519,7 +539,9 @@ impl ImageVmHandle {
                     Ok(values[index as usize].clone())
                 }
             }
-            other => Err(format!("CkVmImage Array has no collection method `{other}`")),
+            other => Err(format!(
+                "CkVmImage Array has no collection method `{other}`"
+            )),
         }
     }
 
@@ -704,11 +726,7 @@ impl ImageVmHandle {
         }
     }
 
-    fn collection_object(
-        &self,
-        receiver: VmValue,
-        operation: &str,
-    ) -> Result<&HeapObject, String> {
+    fn collection_object(&self, receiver: VmValue, operation: &str) -> Result<&HeapObject, String> {
         let id = Self::require_object_ref(receiver, operation)?;
         self.objects
             .get(&id)
@@ -732,7 +750,9 @@ impl ImageVmHandle {
             Some(other) => Err(format!(
                 "CkVmImage Array method `{operation}` found non-array object {other:?}"
             )),
-            None => Err(format!("CkVmImage Array method `{operation}` object id {id} does not exist")),
+            None => Err(format!(
+                "CkVmImage Array method `{operation}` object id {id} does not exist"
+            )),
         }
     }
 
@@ -742,7 +762,9 @@ impl ImageVmHandle {
             Some(other) => Err(format!(
                 "CkVmImage Array method `{operation}` found non-array object {other:?}"
             )),
-            None => Err(format!("CkVmImage Array method `{operation}` object id {id} does not exist")),
+            None => Err(format!(
+                "CkVmImage Array method `{operation}` object id {id} does not exist"
+            )),
         }
     }
 
@@ -752,7 +774,9 @@ impl ImageVmHandle {
             Some(other) => Err(format!(
                 "CkVmImage List method `{operation}` found non-list object {other:?}"
             )),
-            None => Err(format!("CkVmImage List method `{operation}` object id {id} does not exist")),
+            None => Err(format!(
+                "CkVmImage List method `{operation}` object id {id} does not exist"
+            )),
         }
     }
 
@@ -762,7 +786,9 @@ impl ImageVmHandle {
             Some(other) => Err(format!(
                 "CkVmImage List method `{operation}` found non-list object {other:?}"
             )),
-            None => Err(format!("CkVmImage List method `{operation}` object id {id} does not exist")),
+            None => Err(format!(
+                "CkVmImage List method `{operation}` object id {id} does not exist"
+            )),
         }
     }
 
@@ -772,7 +798,9 @@ impl ImageVmHandle {
             Some(other) => Err(format!(
                 "CkVmImage Map method `{operation}` found non-map object {other:?}"
             )),
-            None => Err(format!("CkVmImage Map method `{operation}` object id {id} does not exist")),
+            None => Err(format!(
+                "CkVmImage Map method `{operation}` object id {id} does not exist"
+            )),
         }
     }
 
@@ -786,7 +814,9 @@ impl ImageVmHandle {
             Some(other) => Err(format!(
                 "CkVmImage Map method `{operation}` found non-map object {other:?}"
             )),
-            None => Err(format!("CkVmImage Map method `{operation}` object id {id} does not exist")),
+            None => Err(format!(
+                "CkVmImage Map method `{operation}` object id {id} does not exist"
+            )),
         }
     }
 
@@ -1088,6 +1118,97 @@ fn apply_unary_operator(operator: u8, operand: VmValue) -> Result<VmValue, Strin
         },
         other => Err(format!("unknown CkVmImage unary operator tag {other}")),
     }
+}
+
+fn try_native_host_import(
+    import_id: i32,
+    module_name: &str,
+    arguments: Vec<VmValue>,
+) -> Result<NativeHostImportResult, String> {
+    if module_name != "strings" {
+        return Ok(NativeHostImportResult::Fallback(arguments));
+    }
+
+    match import_id {
+        STRINGS_TRIM_IMPORT_ID => native_string_unary(arguments, |text| {
+            VmValue::String(
+                text.trim_matches(|ch: char| ch.is_ascii_whitespace())
+                    .to_string(),
+            )
+        }),
+        STRINGS_BEFORE_SPACE_IMPORT_ID => native_string_unary(arguments, |text| {
+            let text = text.trim_start_matches(|ch: char| ch.is_ascii_whitespace());
+            let before_space = match text.find(|ch: char| ch.is_ascii_whitespace()) {
+                Some(index) => &text[..index],
+                None => text,
+            };
+            VmValue::String(before_space.to_string())
+        }),
+        STRINGS_AFTER_SPACE_IMPORT_ID => native_string_unary(arguments, |text| {
+            let text = text.trim_start_matches(|ch: char| ch.is_ascii_whitespace());
+            let after_space = match text.find(|ch: char| ch.is_ascii_whitespace()) {
+                Some(index) => {
+                    text[index + 1..].trim_start_matches(|ch: char| ch.is_ascii_whitespace())
+                }
+                None => "",
+            };
+            VmValue::String(after_space.to_string())
+        }),
+        STRINGS_IS_BLANK_IMPORT_ID => native_string_unary(arguments, |text| {
+            VmValue::Bool(text.bytes().all(|byte| byte.is_ascii_whitespace()))
+        }),
+        STRINGS_TO_INT_IMPORT_ID => native_string_unary(arguments, |text| {
+            let value = text
+                .trim_matches(|ch: char| ch.is_ascii_whitespace())
+                .parse::<i32>()
+                .unwrap_or(0);
+            VmValue::Int(value)
+        }),
+        STRINGS_LENGTH_IMPORT_ID => {
+            native_string_unary(arguments, |text| VmValue::Int(text.len() as i32))
+        }
+        STRINGS_CHAR_AT_IMPORT_ID => native_string_char_at(arguments),
+        _ => Ok(NativeHostImportResult::Fallback(arguments)),
+    }
+}
+
+fn native_string_unary(
+    arguments: Vec<VmValue>,
+    operation: fn(&str) -> VmValue,
+) -> Result<NativeHostImportResult, String> {
+    if arguments.len() != 1 {
+        return Ok(NativeHostImportResult::Fallback(arguments));
+    }
+    match &arguments[0] {
+        VmValue::String(text) if text.is_ascii() => {
+            Ok(NativeHostImportResult::Handled(operation(text)))
+        }
+        _ => Ok(NativeHostImportResult::Fallback(arguments)),
+    }
+}
+
+fn native_string_char_at(arguments: Vec<VmValue>) -> Result<NativeHostImportResult, String> {
+    if arguments.len() != 2 {
+        return Ok(NativeHostImportResult::Fallback(arguments));
+    }
+    let text = match &arguments[0] {
+        VmValue::String(text) if text.is_ascii() => text,
+        _ => return Ok(NativeHostImportResult::Fallback(arguments)),
+    };
+    let index = match &arguments[1] {
+        VmValue::Int(value) => *value,
+        VmValue::Long(value) => *value as i32,
+        _ => return Ok(NativeHostImportResult::Fallback(arguments)),
+    };
+    let value = if index < 0 {
+        String::new()
+    } else {
+        text.as_bytes()
+            .get(index as usize)
+            .map(|byte| (*byte as char).to_string())
+            .unwrap_or_default()
+    };
+    Ok(NativeHostImportResult::Handled(VmValue::String(value)))
 }
 
 fn binary_add(left: VmValue, right: VmValue) -> Result<VmValue, String> {

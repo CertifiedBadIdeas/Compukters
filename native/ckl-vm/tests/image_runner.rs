@@ -28,6 +28,14 @@ const OP_CALL_COLLECTION_METHOD: u8 = 23;
 const OP_YIELD: u8 = 24;
 const OP_SLEEP: u8 = 25;
 
+const STRINGS_TRIM_IMPORT_ID: i32 = 7000;
+const STRINGS_BEFORE_SPACE_IMPORT_ID: i32 = 7001;
+const STRINGS_AFTER_SPACE_IMPORT_ID: i32 = 7002;
+const STRINGS_IS_BLANK_IMPORT_ID: i32 = 7003;
+const STRINGS_TO_INT_IMPORT_ID: i32 = 7004;
+const STRINGS_LENGTH_IMPORT_ID: i32 = 7005;
+const STRINGS_CHAR_AT_IMPORT_ID: i32 = 7006;
+
 fn halt_signal(value: &VmValue) -> Vec<u8> {
     let mut signal = vec![0];
     signal.extend_from_slice(&encode_value(value));
@@ -354,28 +362,66 @@ fn rejects_unknown_operator_tag() {
 #[test]
 fn executes_array_index_set_and_get() {
     let code = vec![
-        OP_PUSH_CONSTANT, 0, 0, 0, 0,
-        OP_PUSH_CONSTANT, 1, 0, 0, 0,
+        OP_PUSH_CONSTANT,
+        0,
+        0,
+        0,
+        0,
+        OP_PUSH_CONSTANT,
+        1,
+        0,
+        0,
+        0,
         OP_CONSTRUCT_ARRAY,
-        OP_STORE_LOCAL, 0, 0, 0, 0,
-        OP_LOAD_LOCAL, 0, 0, 0, 0,
-        OP_PUSH_CONSTANT, 2, 0, 0, 0,
-        OP_PUSH_CONSTANT, 3, 0, 0, 0,
+        OP_STORE_LOCAL,
+        0,
+        0,
+        0,
+        0,
+        OP_LOAD_LOCAL,
+        0,
+        0,
+        0,
+        0,
+        OP_PUSH_CONSTANT,
+        2,
+        0,
+        0,
+        0,
+        OP_PUSH_CONSTANT,
+        3,
+        0,
+        0,
+        0,
         OP_INDEX_SET,
         OP_POP,
-        OP_LOAD_LOCAL, 0, 0, 0, 0,
-        OP_PUSH_CONSTANT, 2, 0, 0, 0,
+        OP_LOAD_LOCAL,
+        0,
+        0,
+        0,
+        0,
+        OP_PUSH_CONSTANT,
+        2,
+        0,
+        0,
+        0,
         OP_INDEX_GET,
         OP_RETURN,
     ];
     let mut vm = ImageVmHandle::create(
         &image_with_constants_and_code(
-            vec![ConstantFixture::Int(2), ConstantFixture::Int(0), ConstantFixture::Int(1), ConstantFixture::Int(7)],
+            vec![
+                ConstantFixture::Int(2),
+                ConstantFixture::Int(0),
+                ConstantFixture::Int(1),
+                ConstantFixture::Int(7),
+            ],
             1,
             code,
         ),
         64,
-    ).unwrap();
+    )
+    .unwrap();
 
     assert_eq!(vm.run_until_signal(), vec![0, 3, 7, 0, 0, 0]);
 }
@@ -419,7 +465,8 @@ fn executes_array_collection_methods() {
             code,
         ),
         128,
-    ).unwrap();
+    )
+    .unwrap();
 
     assert_eq!(vm.run_until_signal(), vec![0, 3, 27, 0, 0, 0]);
 }
@@ -445,7 +492,8 @@ fn executes_array_get_or_null_for_missing_index() {
             code,
         ),
         64,
-    ).unwrap();
+    )
+    .unwrap();
 
     assert_eq!(vm.run_until_signal(), vec![0, 1]);
 }
@@ -453,22 +501,75 @@ fn executes_array_get_or_null_for_missing_index() {
 #[test]
 fn executes_list_methods_and_preserves_alias_identity() {
     let code = vec![
-        OP_PUSH_CONSTANT, 0, 0, 0, 0,
-        OP_CONSTRUCT_LIST, 1, 0, 0, 0,
-        OP_STORE_LOCAL, 0, 0, 0, 0,
-        OP_LOAD_LOCAL, 0, 0, 0, 0,
-        OP_STORE_LOCAL, 1, 0, 0, 0,
-        OP_LOAD_LOCAL, 1, 0, 0, 0,
-        OP_PUSH_CONSTANT, 1, 0, 0, 0,
-        OP_CALL_COLLECTION_METHOD, 2, 0, 0, 0, 1, 0, 0, 0,
+        OP_PUSH_CONSTANT,
+        0,
+        0,
+        0,
+        0,
+        OP_CONSTRUCT_LIST,
+        1,
+        0,
+        0,
+        0,
+        OP_STORE_LOCAL,
+        0,
+        0,
+        0,
+        0,
+        OP_LOAD_LOCAL,
+        0,
+        0,
+        0,
+        0,
+        OP_STORE_LOCAL,
+        1,
+        0,
+        0,
+        0,
+        OP_LOAD_LOCAL,
+        1,
+        0,
+        0,
+        0,
+        OP_PUSH_CONSTANT,
+        1,
+        0,
+        0,
+        0,
+        OP_CALL_COLLECTION_METHOD,
+        2,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
         OP_POP,
-        OP_LOAD_LOCAL, 0, 0, 0, 0,
-        OP_PUSH_CONSTANT, 3, 0, 0, 0,
+        OP_LOAD_LOCAL,
+        0,
+        0,
+        0,
+        0,
+        OP_PUSH_CONSTANT,
+        3,
+        0,
+        0,
+        0,
         OP_INDEX_GET,
-        OP_LOAD_LOCAL, 0, 0, 0, 0,
-        OP_PUSH_CONSTANT, 4, 0, 0, 0,
+        OP_LOAD_LOCAL,
+        0,
+        0,
+        0,
+        0,
+        OP_PUSH_CONSTANT,
+        4,
+        0,
+        0,
+        0,
         OP_INDEX_GET,
-        OP_BINARY, 1,
+        OP_BINARY,
+        1,
         OP_RETURN,
     ];
     let mut vm = ImageVmHandle::create(
@@ -484,7 +585,8 @@ fn executes_list_methods_and_preserves_alias_identity() {
             code,
         ),
         64,
-    ).unwrap();
+    )
+    .unwrap();
 
     assert_eq!(vm.run_until_signal(), vec![0, 3, 253, 255, 255, 255]);
 }
@@ -538,7 +640,8 @@ fn executes_list_collection_methods() {
             code,
         ),
         128,
-    ).unwrap();
+    )
+    .unwrap();
 
     assert_eq!(vm.run_until_signal(), vec![0, 2, 1]);
 }
@@ -563,7 +666,8 @@ fn executes_list_get_or_null_for_missing_index() {
             code,
         ),
         64,
-    ).unwrap();
+    )
+    .unwrap();
 
     assert_eq!(vm.run_until_signal(), vec![0, 1]);
 }
@@ -571,19 +675,67 @@ fn executes_list_get_or_null_for_missing_index() {
 #[test]
 fn executes_map_index_set_and_get_or_default() {
     let code = vec![
-        OP_PUSH_CONSTANT, 0, 0, 0, 0,
-        OP_PUSH_CONSTANT, 1, 0, 0, 0,
-        OP_CONSTRUCT_MAP, 1, 0, 0, 0,
-        OP_STORE_LOCAL, 0, 0, 0, 0,
-        OP_LOAD_LOCAL, 0, 0, 0, 0,
-        OP_PUSH_CONSTANT, 2, 0, 0, 0,
-        OP_PUSH_CONSTANT, 3, 0, 0, 0,
+        OP_PUSH_CONSTANT,
+        0,
+        0,
+        0,
+        0,
+        OP_PUSH_CONSTANT,
+        1,
+        0,
+        0,
+        0,
+        OP_CONSTRUCT_MAP,
+        1,
+        0,
+        0,
+        0,
+        OP_STORE_LOCAL,
+        0,
+        0,
+        0,
+        0,
+        OP_LOAD_LOCAL,
+        0,
+        0,
+        0,
+        0,
+        OP_PUSH_CONSTANT,
+        2,
+        0,
+        0,
+        0,
+        OP_PUSH_CONSTANT,
+        3,
+        0,
+        0,
+        0,
         OP_INDEX_SET,
         OP_POP,
-        OP_LOAD_LOCAL, 0, 0, 0, 0,
-        OP_PUSH_CONSTANT, 4, 0, 0, 0,
-        OP_PUSH_CONSTANT, 5, 0, 0, 0,
-        OP_CALL_COLLECTION_METHOD, 6, 0, 0, 0, 2, 0, 0, 0,
+        OP_LOAD_LOCAL,
+        0,
+        0,
+        0,
+        0,
+        OP_PUSH_CONSTANT,
+        4,
+        0,
+        0,
+        0,
+        OP_PUSH_CONSTANT,
+        5,
+        0,
+        0,
+        0,
+        OP_CALL_COLLECTION_METHOD,
+        6,
+        0,
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
         OP_RETURN,
     ];
     let mut vm = ImageVmHandle::create(
@@ -601,7 +753,8 @@ fn executes_map_index_set_and_get_or_default() {
             code,
         ),
         128,
-    ).unwrap();
+    )
+    .unwrap();
 
     assert_eq!(vm.run_until_signal(), vec![0, 3, 9, 0, 0, 0]);
 }
@@ -609,11 +762,35 @@ fn executes_map_index_set_and_get_or_default() {
 #[test]
 fn executes_map_contains_key() {
     let code = vec![
-        OP_PUSH_CONSTANT, 0, 0, 0, 0,
-        OP_PUSH_CONSTANT, 1, 0, 0, 0,
-        OP_CONSTRUCT_MAP, 1, 0, 0, 0,
-        OP_PUSH_CONSTANT, 0, 0, 0, 0,
-        OP_CALL_COLLECTION_METHOD, 2, 0, 0, 0, 1, 0, 0, 0,
+        OP_PUSH_CONSTANT,
+        0,
+        0,
+        0,
+        0,
+        OP_PUSH_CONSTANT,
+        1,
+        0,
+        0,
+        0,
+        OP_CONSTRUCT_MAP,
+        1,
+        0,
+        0,
+        0,
+        OP_PUSH_CONSTANT,
+        0,
+        0,
+        0,
+        0,
+        OP_CALL_COLLECTION_METHOD,
+        2,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
         OP_RETURN,
     ];
     let mut vm = ImageVmHandle::create(
@@ -627,7 +804,8 @@ fn executes_map_contains_key() {
             code,
         ),
         64,
-    ).unwrap();
+    )
+    .unwrap();
 
     assert_eq!(vm.run_until_signal(), vec![0, 2, 1]);
 }
@@ -668,7 +846,8 @@ fn executes_map_duplicate_key_replacement_with_numeric_widening() {
             code,
         ),
         128,
-    ).unwrap();
+    )
+    .unwrap();
 
     assert_eq!(vm.run_until_signal(), vec![0, 3, 14, 0, 0, 0]);
 }
@@ -713,7 +892,8 @@ fn executes_map_keys_and_values_as_lists() {
             code,
         ),
         128,
-    ).unwrap();
+    )
+    .unwrap();
 
     assert_eq!(vm.run_until_signal(), vec![0, 3, 3, 0, 0, 0]);
 }
@@ -749,15 +929,28 @@ fn executes_map_remove_clear_and_is_empty() {
             code,
         ),
         128,
-    ).unwrap();
+    )
+    .unwrap();
 
     assert_eq!(vm.run_until_signal(), vec![0, 2, 1]);
 }
 
 #[test]
 fn rejects_array_negative_size() {
-    let code = vec![OP_PUSH_CONSTANT, 0, 0, 0, 0, OP_PUSH_UNIT, OP_CONSTRUCT_ARRAY];
-    let mut vm = ImageVmHandle::create(&image_with_constants_and_code(vec![ConstantFixture::Int(-1)], 0, code), 64).unwrap();
+    let code = vec![
+        OP_PUSH_CONSTANT,
+        0,
+        0,
+        0,
+        0,
+        OP_PUSH_UNIT,
+        OP_CONSTRUCT_ARRAY,
+    ];
+    let mut vm = ImageVmHandle::create(
+        &image_with_constants_and_code(vec![ConstantFixture::Int(-1)], 0, code),
+        64,
+    )
+    .unwrap();
 
     let signal = vm.run_until_signal();
 
@@ -767,8 +960,28 @@ fn rejects_array_negative_size() {
 
 #[test]
 fn rejects_index_get_on_non_collection_receiver() {
-    let code = vec![OP_PUSH_CONSTANT, 0, 0, 0, 0, OP_PUSH_CONSTANT, 1, 0, 0, 0, OP_INDEX_GET];
-    let mut vm = ImageVmHandle::create(&image_with_constants_and_code(vec![ConstantFixture::Int(1), ConstantFixture::Int(0)], 0, code), 64).unwrap();
+    let code = vec![
+        OP_PUSH_CONSTANT,
+        0,
+        0,
+        0,
+        0,
+        OP_PUSH_CONSTANT,
+        1,
+        0,
+        0,
+        0,
+        OP_INDEX_GET,
+    ];
+    let mut vm = ImageVmHandle::create(
+        &image_with_constants_and_code(
+            vec![ConstantFixture::Int(1), ConstantFixture::Int(0)],
+            0,
+            code,
+        ),
+        64,
+    )
+    .unwrap();
 
     let signal = vm.run_until_signal();
 
@@ -778,8 +991,24 @@ fn rejects_index_get_on_non_collection_receiver() {
 
 #[test]
 fn rejects_null_map_key() {
-    let code = vec![OP_PUSH_NULL, OP_PUSH_CONSTANT, 0, 0, 0, 0, OP_CONSTRUCT_MAP, 1, 0, 0, 0];
-    let mut vm = ImageVmHandle::create(&image_with_constants_and_code(vec![ConstantFixture::Int(1)], 0, code), 64).unwrap();
+    let code = vec![
+        OP_PUSH_NULL,
+        OP_PUSH_CONSTANT,
+        0,
+        0,
+        0,
+        0,
+        OP_CONSTRUCT_MAP,
+        1,
+        0,
+        0,
+        0,
+    ];
+    let mut vm = ImageVmHandle::create(
+        &image_with_constants_and_code(vec![ConstantFixture::Int(1)], 0, code),
+        64,
+    )
+    .unwrap();
 
     let signal = vm.run_until_signal();
 
@@ -790,12 +1019,24 @@ fn rejects_null_map_key() {
 #[test]
 fn rejects_null_map_key_for_index_set() {
     let code = vec![
-        OP_CONSTRUCT_MAP, 0, 0, 0, 0,
+        OP_CONSTRUCT_MAP,
+        0,
+        0,
+        0,
+        0,
         OP_PUSH_NULL,
-        OP_PUSH_CONSTANT, 0, 0, 0, 0,
+        OP_PUSH_CONSTANT,
+        0,
+        0,
+        0,
+        0,
         OP_INDEX_SET,
     ];
-    let mut vm = ImageVmHandle::create(&image_with_constants_and_code(vec![ConstantFixture::Int(1)], 0, code), 64).unwrap();
+    let mut vm = ImageVmHandle::create(
+        &image_with_constants_and_code(vec![ConstantFixture::Int(1)], 0, code),
+        64,
+    )
+    .unwrap();
 
     let signal = vm.run_until_signal();
 
@@ -1034,7 +1275,8 @@ fn rejects_record_type_metadata_that_is_not_string() {
     let signal = vm.run_until_signal();
 
     assert_eq!(signal[0], 255);
-    assert!(String::from_utf8_lossy(&signal).contains("record type name constant index 1 must be String"));
+    assert!(String::from_utf8_lossy(&signal)
+        .contains("record type name constant index 1 must be String"));
 }
 
 #[test]
@@ -1075,7 +1317,8 @@ fn rejects_record_field_metadata_that_is_not_string() {
     let signal = vm.run_until_signal();
 
     assert_eq!(signal[0], 255);
-    assert!(String::from_utf8_lossy(&signal).contains("record field name constant index 0 must be String"));
+    assert!(String::from_utf8_lossy(&signal)
+        .contains("record field name constant index 0 must be String"));
 }
 
 #[test]
@@ -1131,7 +1374,10 @@ fn rejects_get_field_on_non_record() {
     let code = vec![OP_PUSH_CONSTANT, 0, 0, 0, 0, OP_GET_FIELD, 1, 0, 0, 0];
     let mut vm = ImageVmHandle::create(
         &image_with_constants_and_code(
-            vec![ConstantFixture::Int(2), ConstantFixture::String("x".to_string())],
+            vec![
+                ConstantFixture::Int(2),
+                ConstantFixture::String("x".to_string()),
+            ],
             0,
             code,
         ),
@@ -1202,7 +1448,8 @@ fn executes_yield_signal_and_resumes_with_unit() {
     .unwrap();
 
     assert_eq!(vm.run_until_signal(), vec![2]);
-    vm.resume_with_value_bytes(&encode_value(&VmValue::Unit)).unwrap();
+    vm.resume_with_value_bytes(&encode_value(&VmValue::Unit))
+        .unwrap();
     assert_eq!(vm.run_until_signal(), vec![0, 3, 7, 0, 0, 0]);
 }
 
@@ -1233,7 +1480,8 @@ fn executes_sleep_signal_and_resumes_with_unit() {
     .unwrap();
 
     assert_eq!(vm.run_until_signal(), vec![3, 9, 0, 0, 0, 0, 0, 0, 0]);
-    vm.resume_with_value_bytes(&encode_value(&VmValue::Unit)).unwrap();
+    vm.resume_with_value_bytes(&encode_value(&VmValue::Unit))
+        .unwrap();
     assert_eq!(vm.run_until_signal(), vec![0, 3, 3, 0, 0, 0]);
 }
 
@@ -1301,6 +1549,154 @@ fn rejects_string_concatenation_with_record_value() {
 
     assert_eq!(signal[0], 255);
     assert!(String::from_utf8_lossy(&signal).contains("string concatenation with records"));
+}
+
+#[test]
+fn native_strings_length_handles_ascii_without_host_signal() {
+    let mut code = Vec::new();
+    push_constant(&mut code, 0);
+    call_host(&mut code, STRINGS_LENGTH_IMPORT_ID, 1);
+    code.push(OP_RETURN);
+    let mut vm = ImageVmHandle::create(
+        &image_with_constants_host_imports_and_code(
+            vec![ConstantFixture::String("terminal".to_string())],
+            vec![strings_import(
+                STRINGS_LENGTH_IMPORT_ID,
+                "length",
+                vec!["String"],
+                "Int",
+            )],
+            0,
+            code,
+        ),
+        64,
+    )
+    .unwrap();
+
+    assert_eq!(vm.run_until_signal(), vec![0, 3, 8, 0, 0, 0]);
+}
+
+#[test]
+fn native_strings_char_at_handles_ascii_without_host_signal() {
+    let mut code = Vec::new();
+    push_constant(&mut code, 0);
+    push_constant(&mut code, 1);
+    call_host(&mut code, STRINGS_CHAR_AT_IMPORT_ID, 2);
+    code.push(OP_RETURN);
+    let mut vm = ImageVmHandle::create(
+        &image_with_constants_host_imports_and_code(
+            vec![
+                ConstantFixture::String("prompt".to_string()),
+                ConstantFixture::Int(2),
+            ],
+            vec![strings_import(
+                STRINGS_CHAR_AT_IMPORT_ID,
+                "charAt",
+                vec!["String", "Int"],
+                "String",
+            )],
+            0,
+            code,
+        ),
+        64,
+    )
+    .unwrap();
+
+    assert_eq!(
+        vm.run_until_signal(),
+        halt_signal(&VmValue::String("o".to_string()))
+    );
+}
+
+#[test]
+fn native_strings_whitespace_helpers_handle_ascii_without_host_signal() {
+    let mut code = Vec::new();
+    push_constant(&mut code, 0);
+    call_host(&mut code, STRINGS_BEFORE_SPACE_IMPORT_ID, 1);
+    push_constant(&mut code, 1);
+    call_host(&mut code, STRINGS_AFTER_SPACE_IMPORT_ID, 1);
+    code.push(OP_BINARY);
+    code.push(0);
+    push_constant(&mut code, 2);
+    call_host(&mut code, STRINGS_TRIM_IMPORT_ID, 1);
+    code.push(OP_BINARY);
+    code.push(0);
+    push_constant(&mut code, 3);
+    call_host(&mut code, STRINGS_IS_BLANK_IMPORT_ID, 1);
+    code.push(OP_BINARY);
+    code.push(0);
+    push_constant(&mut code, 4);
+    call_host(&mut code, STRINGS_TO_INT_IMPORT_ID, 1);
+    code.push(OP_BINARY);
+    code.push(0);
+    code.push(OP_RETURN);
+    let mut vm = ImageVmHandle::create(
+        &image_with_constants_host_imports_and_code(
+            vec![
+                ConstantFixture::String("  alpha beta".to_string()),
+                ConstantFixture::String("  alpha   beta".to_string()),
+                ConstantFixture::String("\ttrimmed\n".to_string()),
+                ConstantFixture::String(" \t\n".to_string()),
+                ConstantFixture::String(" 42 ".to_string()),
+            ],
+            vec![
+                strings_import(
+                    STRINGS_BEFORE_SPACE_IMPORT_ID,
+                    "beforeSpace",
+                    vec!["String"],
+                    "String",
+                ),
+                strings_import(
+                    STRINGS_AFTER_SPACE_IMPORT_ID,
+                    "afterSpace",
+                    vec!["String"],
+                    "String",
+                ),
+                strings_import(STRINGS_TRIM_IMPORT_ID, "trim", vec!["String"], "String"),
+                strings_import(
+                    STRINGS_IS_BLANK_IMPORT_ID,
+                    "isBlank",
+                    vec!["String"],
+                    "Bool",
+                ),
+                strings_import(STRINGS_TO_INT_IMPORT_ID, "toInt", vec!["String"], "Int"),
+            ],
+            0,
+            code,
+        ),
+        128,
+    )
+    .unwrap();
+
+    assert_eq!(
+        vm.run_until_signal(),
+        halt_signal(&VmValue::String("alphabetatrimmedtrue42".to_string())),
+    );
+}
+
+#[test]
+fn native_strings_falls_back_to_host_signal_for_non_ascii() {
+    let mut code = Vec::new();
+    push_constant(&mut code, 0);
+    call_host(&mut code, STRINGS_LENGTH_IMPORT_ID, 1);
+    code.push(OP_RETURN);
+    let mut vm = ImageVmHandle::create(
+        &image_with_constants_host_imports_and_code(
+            vec![ConstantFixture::String("é".to_string())],
+            vec![strings_import(
+                STRINGS_LENGTH_IMPORT_ID,
+                "length",
+                vec!["String"],
+                "Int",
+            )],
+            0,
+            code,
+        ),
+        64,
+    )
+    .unwrap();
+
+    assert_eq!(vm.run_until_signal()[0], 4);
 }
 
 #[test]
@@ -1683,6 +2079,14 @@ struct FunctionFixture {
     code: Vec<u8>,
 }
 
+struct HostImportFixture {
+    id: i32,
+    module_name: String,
+    function_name: String,
+    parameter_types: Vec<String>,
+    return_type: String,
+}
+
 fn image_with_code(frame_size: i32, code: Vec<u8>) -> Vec<u8> {
     image_with_constants_and_code(Vec::new(), frame_size, code)
 }
@@ -1708,6 +2112,30 @@ fn call_collection_method(out: &mut Vec<u8>, method_name_index: i32, argument_co
     i32(out, argument_count);
 }
 
+fn call_host(out: &mut Vec<u8>, import_id: i32, argument_count: i32) {
+    out.push(OP_CALL_HOST);
+    i32(out, import_id);
+    i32(out, argument_count);
+}
+
+fn strings_import(
+    id: i32,
+    function_name: &str,
+    parameter_types: Vec<&str>,
+    return_type: &str,
+) -> HostImportFixture {
+    HostImportFixture {
+        id,
+        module_name: "strings".to_string(),
+        function_name: function_name.to_string(),
+        parameter_types: parameter_types
+            .into_iter()
+            .map(|parameter_type| parameter_type.to_string())
+            .collect(),
+        return_type: return_type.to_string(),
+    }
+}
+
 fn image_with_constants_and_code(
     constants: Vec<ConstantFixture>,
     frame_size: i32,
@@ -1721,7 +2149,36 @@ fn image_with_constants_host_import_and_code(
     frame_size: i32,
     code: Vec<u8>,
 ) -> Vec<u8> {
-    image_with_constants_and_optional_host_import(constants, true, frame_size, code)
+    image_with_constants_host_imports_and_code(
+        constants,
+        vec![HostImportFixture {
+            id: 1,
+            module_name: "test".to_string(),
+            function_name: "log".to_string(),
+            parameter_types: vec!["String".to_string()],
+            return_type: "Unit".to_string(),
+        }],
+        frame_size,
+        code,
+    )
+}
+
+fn image_with_constants_host_imports_and_code(
+    constants: Vec<ConstantFixture>,
+    host_imports: Vec<HostImportFixture>,
+    frame_size: i32,
+    code: Vec<u8>,
+) -> Vec<u8> {
+    image_with_constants_host_imports_and_functions(
+        constants,
+        host_imports,
+        0,
+        vec![FunctionFixture {
+            name: "main".to_string(),
+            frame_size,
+            code,
+        }],
+    )
 }
 
 fn image_with_constants_and_optional_host_import(
@@ -1748,6 +2205,31 @@ fn image_with_constants_host_import_and_functions(
     entry_function_index: i32,
     functions: Vec<FunctionFixture>,
 ) -> Vec<u8> {
+    let host_imports = if include_host_import {
+        vec![HostImportFixture {
+            id: 1,
+            module_name: "test".to_string(),
+            function_name: "log".to_string(),
+            parameter_types: vec!["String".to_string()],
+            return_type: "Unit".to_string(),
+        }]
+    } else {
+        Vec::new()
+    };
+    image_with_constants_host_imports_and_functions(
+        constants,
+        host_imports,
+        entry_function_index,
+        functions,
+    )
+}
+
+fn image_with_constants_host_imports_and_functions(
+    constants: Vec<ConstantFixture>,
+    host_imports: Vec<HostImportFixture>,
+    entry_function_index: i32,
+    functions: Vec<FunctionFixture>,
+) -> Vec<u8> {
     let mut out = Vec::new();
     out.extend_from_slice(b"CKIM");
     out.push(1);
@@ -1771,16 +2253,16 @@ fn image_with_constants_host_import_and_functions(
             }
         }
     }
-    if include_host_import {
-        list_len(&mut out, 1);
-        i32(&mut out, 1);
-        string(&mut out, "test");
-        string(&mut out, "log");
-        list_len(&mut out, 1);
-        string(&mut out, "String");
-        string(&mut out, "Unit");
-    } else {
-        list_len(&mut out, 0);
+    list_len(&mut out, host_imports.len() as i32);
+    for host_import in host_imports {
+        i32(&mut out, host_import.id);
+        string(&mut out, &host_import.module_name);
+        string(&mut out, &host_import.function_name);
+        list_len(&mut out, host_import.parameter_types.len() as i32);
+        for parameter_type in host_import.parameter_types {
+            string(&mut out, &parameter_type);
+        }
+        string(&mut out, &host_import.return_type);
     }
     i32(&mut out, entry_function_index);
     list_len(&mut out, functions.len() as i32);
