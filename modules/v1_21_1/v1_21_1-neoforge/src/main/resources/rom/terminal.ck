@@ -1,4 +1,13 @@
-pub struct TerminalBuffer { cellsText: String, cursorRow: Int, cursorColumn: Int, displayColumns: Int, displayRows: Int }
+pub struct TerminalBuffer {
+    cellsText: String,
+    historyCells: String,
+    cursorRow: Int,
+    cursorColumn: Int,
+    displayColumns: Int,
+    displayRows: Int,
+    historyRows: Int,
+    viewportOffset: Int
+}
 
 fun glyphBits(ch: String): Long {
     if (ch == "A" || ch == "a") { return 0b01110100011000111111100011000110001L }
@@ -98,7 +107,17 @@ fun blankCells(count: Int): String {
 }
 
 fun newTerminalBuffer(displayId: Int): TerminalBuffer {
-    return TerminalBuffer(cellsText = blankCells(cellCount(displayId)), cursorRow = 0, cursorColumn = 0, displayColumns = columns(displayId), displayRows = rows(displayId))
+    val cells: String = blankCells(cellCount(displayId))
+    return TerminalBuffer(
+        cellsText = cells,
+        historyCells = cells,
+        cursorRow = 0,
+        cursorColumn = 0,
+        displayColumns = columns(displayId),
+        displayRows = rows(displayId),
+        historyRows = rows(displayId),
+        viewportOffset = 0
+    )
 }
 
 fun replaceRange(cells: String, start: Int, replacement: String): String {
@@ -158,8 +177,109 @@ fun commitDirtySegment(displayId: Int, cells: String, row: Int, startColumn: Int
         return cells
     }
     val index: Int = row * columns(displayId) + startColumn
-    val updated: String = replaceRange(cells, index, text)
-    renderTextRow(displayId, updated, row)
+    return replaceRange(cells, index, text)
+}
+
+fun appendBlankHistoryRows(cells: String, cols: Int, count: Int): String {
+    var result: String = cells
+    var row: Int = 0
+    while row < count + 0 {
+        var col: Int = 0
+        while col < cols + 0 {
+            result = result + " "
+            col = col + 1
+        }
+        row = row + 1
+    }
+    return result
+}
+
+fun historyRowStart(historyRows: Int, displayRows: Int, viewportOffset: Int): Int {
+    var start: Int = historyRows - displayRows - viewportOffset
+    if (start < 0) {
+        start = 0
+    }
+    return start
+}
+
+fun viewportCells(historyCells: String, historyRows: Int, cols: Int, rs: Int, viewportOffset: Int): String {
+    var result: String = ""
+    val startRow: Int = historyRowStart(historyRows, rs, viewportOffset)
+    var visibleRow: Int = 0
+    while visibleRow < rs + 0 {
+        val sourceRow: Int = startRow + visibleRow
+        var col: Int = 0
+        while col < cols + 0 {
+            if (sourceRow >= 0 && sourceRow < historyRows) {
+                result = result + cellAt(historyCells, sourceRow * cols + col)
+            } else {
+                result = result + " "
+            }
+            col = col + 1
+        }
+        visibleRow = visibleRow + 1
+    }
+    return result
+}
+
+fun renderViewport(displayId: Int, buffer: TerminalBuffer) {
+    if (buffer.viewportOffset == 0) {
+        renderAllRows(displayId, buffer.cellsText)
+        return
+    }
+    renderAllRows(
+        displayId,
+        viewportCells(
+            buffer.historyCells,
+            buffer.historyRows,
+            buffer.displayColumns,
+            buffer.displayRows,
+            buffer.viewportOffset
+        )
+    )
+}
+
+fun scrollViewportBy(displayId: Int, buffer: TerminalBuffer, deltaRows: Int): TerminalBuffer {
+    var maxOffset: Int = buffer.historyRows - buffer.displayRows
+    if (maxOffset < 0) {
+        maxOffset = 0
+    }
+    var nextOffset: Int = buffer.viewportOffset + deltaRows
+    if (nextOffset < 0) {
+        nextOffset = 0
+    }
+    if (nextOffset > maxOffset) {
+        nextOffset = maxOffset
+    }
+    val updated: TerminalBuffer = TerminalBuffer(
+        cellsText = buffer.cellsText,
+        historyCells = buffer.historyCells,
+        cursorRow = buffer.cursorRow,
+        cursorColumn = buffer.cursorColumn,
+        displayColumns = buffer.displayColumns,
+        displayRows = buffer.displayRows,
+        historyRows = buffer.historyRows,
+        viewportOffset = nextOffset
+    )
+    renderViewport(displayId, updated)
+    return updated
+}
+
+fun followBottom(displayId: Int, buffer: TerminalBuffer): TerminalBuffer {
+    if (buffer.viewportOffset == 0) {
+        return buffer
+    }
+    val updated: TerminalBuffer = TerminalBuffer(
+        cellsText = buffer.cellsText,
+        historyCells = buffer.historyCells,
+        cursorRow = buffer.cursorRow,
+        cursorColumn = buffer.cursorColumn,
+        displayColumns = buffer.displayColumns,
+        displayRows = buffer.displayRows,
+        historyRows = buffer.historyRows,
+        viewportOffset = 0
+    )
+    renderViewport(displayId, updated)
     return updated
 }
 
@@ -194,77 +314,63 @@ fun appendText(displayId: Int, buffer: TerminalBuffer, text: String): TerminalBu
     }
 
     var cells: String = buffer.cellsText
+    var history: String = buffer.historyCells
     var row: Int = buffer.cursorRow
     var col: Int = buffer.cursorColumn
-    var dirtyRow: Int = 0 - 1
-    var dirtyStartColumn: Int = 0
-    var dirtyText: String = ""
+    var historyRows: Int = buffer.historyRows
     var i: Int = 0
     while i < strings::length(text) {
         val ch: String = strings::charAt(text, i)
         if (ch == "\n") {
-            if (dirtyRow >= 0) {
-                cells = commitDirtySegment(displayId, cells, dirtyRow, dirtyStartColumn, dirtyText)
-                dirtyRow = 0 - 1
-                dirtyText = ""
-            }
             col = 0
             row = row + 1
+            if (row >= historyRows) {
+                history = appendBlankHistoryRows(history, cols, 1)
+                historyRows = historyRows + 1
+            }
             if (row >= rs) {
                 cells = scrollUp(displayId, cells)
-                row = rs - 1
             }
         } else if (ch == "\r") {
-            if (dirtyRow >= 0) {
-                cells = commitDirtySegment(displayId, cells, dirtyRow, dirtyStartColumn, dirtyText)
-                dirtyRow = 0 - 1
-                dirtyText = ""
-            }
             col = 0
         } else if (ch == "\b") {
-            if (dirtyRow >= 0) {
-                cells = commitDirtySegment(displayId, cells, dirtyRow, dirtyStartColumn, dirtyText)
-                dirtyRow = 0 - 1
-                dirtyText = ""
-            }
             if (col > 0) {
                 col = col - 1
-                cells = replaceRange(cells, row * cols + col, " ")
-                clearCell(displayId, col, row)
+                history = replaceRange(history, row * cols + col, " ")
             }
         } else {
-            if (row >= rs) {
-                cells = scrollUp(displayId, cells)
-                row = rs - 1
+            if (row >= historyRows) {
+                history = appendBlankHistoryRows(history, cols, 1)
+                historyRows = historyRows + 1
             }
-            if (dirtyRow < 0) {
-                dirtyRow = row
-                dirtyStartColumn = col
-                dirtyText = ""
-            }
-            dirtyText = dirtyText + ch
+            history = commitDirtySegment(displayId, history, row, col, ch)
             col = col + 1
             if (col >= cols) {
-                if (dirtyRow >= 0) {
-                    cells = commitDirtySegment(displayId, cells, dirtyRow, dirtyStartColumn, dirtyText)
-                    dirtyRow = 0 - 1
-                    dirtyText = ""
-                }
                 col = 0
                 row = row + 1
-                if (row >= rs) {
-                    cells = scrollUp(displayId, cells)
-                    row = rs - 1
+                if (row >= historyRows) {
+                    history = appendBlankHistoryRows(history, cols, 1)
+                    historyRows = historyRows + 1
                 }
             }
         }
         i = i + 1
     }
-    if (dirtyRow >= 0) {
-        cells = commitDirtySegment(displayId, cells, dirtyRow, dirtyStartColumn, dirtyText)
+    cells = viewportCells(history, historyRows, cols, rs, 0)
+    val updated: TerminalBuffer = TerminalBuffer(
+        cellsText = cells,
+        historyCells = history,
+        cursorRow = row,
+        cursorColumn = col,
+        displayColumns = cols,
+        displayRows = rs,
+        historyRows = historyRows,
+        viewportOffset = buffer.viewportOffset
+    )
+    if (buffer.viewportOffset == 0) {
+        renderViewport(displayId, updated)
     }
-    display::present(displayId)
-    return TerminalBuffer(cellsText = cells, cursorRow = row, cursorColumn = col, displayColumns = cols, displayRows = rs)
+    return updated
 }
 
 fun inputOverlayRows(displayId: Int, buffer: TerminalBuffer, line: String): Int {
@@ -293,12 +399,23 @@ fun inputOverlayRows(displayId: Int, buffer: TerminalBuffer, line: String): Int 
 
 fun clearRenderedInputLine(displayId: Int, buffer: TerminalBuffer, previousLine: String) {
     val rowsUsed: Int = inputOverlayRows(displayId, buffer, previousLine)
+    var visibleCells: String = buffer.cellsText
+    if (buffer.viewportOffset != 0) {
+        visibleCells =
+            viewportCells(
+                buffer.historyCells,
+                buffer.historyRows,
+                buffer.displayColumns,
+                buffer.displayRows,
+                buffer.viewportOffset
+            )
+    }
     var rowOffset: Int = 0
     while rowOffset < rowsUsed + 0 {
-        val row: Int = buffer.cursorRow + rowOffset
+        val row: Int = (buffer.cursorRow - historyRowStart(buffer.historyRows, buffer.displayRows, buffer.viewportOffset)) + rowOffset
         if (row >= 0 && row < rows(displayId)) {
             clearTextRow(displayId, row)
-            renderTextRow(displayId, buffer.cellsText, row)
+            renderTextRow(displayId, visibleCells, row)
         }
         rowOffset = rowOffset + 1
     }
@@ -308,7 +425,7 @@ fun renderInputLine(displayId: Int, buffer: TerminalBuffer, previousLine: String
     val cols: Int = columns(displayId)
     val rs: Int = rows(displayId)
     var x: Int = buffer.cursorColumn
-    var y: Int = buffer.cursorRow
+    var y: Int = buffer.cursorRow - historyRowStart(buffer.historyRows, buffer.displayRows, buffer.viewportOffset)
     if (rs <= 0 || cols <= 0) {
         return
     }
@@ -365,7 +482,7 @@ pub fun main() {
         val chunk: String = ipc::tryRead(stream)
         if (chunk != "") {
             buffer = appendText(displayId, buffer, chunk)
-            if (line != "") {
+            if (buffer.viewportOffset == 0 && line != "") {
                 renderInputLine(displayId, buffer, renderedLine, line)
                 renderedLine = line
             }
@@ -375,8 +492,8 @@ pub fun main() {
                 if (event.name == "display_attach" || event.name == "display_resize") {
                     displayId = display::primary()
                     if (buffer.displayColumns == columns(displayId) && buffer.displayRows == rows(displayId)) {
-                        renderAllRows(displayId, buffer.cellsText)
-                        if (line != "") {
+                        renderViewport(displayId, buffer)
+                        if (buffer.viewportOffset == 0 && line != "") {
                             renderInputLine(displayId, buffer, renderedLine, line)
                             renderedLine = line
                         }
@@ -390,6 +507,7 @@ pub fun main() {
                 } else if (event.name == "char" || event.name == "paste") {
                     val typed: String = events::argString(event, 0)
                     if (typed != "") {
+                        buffer = followBottom(displayId, buffer)
                         line = line + typed
                         renderInputLine(displayId, buffer, renderedLine, line)
                         renderedLine = line
@@ -397,12 +515,30 @@ pub fun main() {
                 } else if (event.name == "key") {
                     val key: Int = events::argInt(event, 0)
                     if (key == 257 || key == 335) {
+                        buffer = followBottom(displayId, buffer)
                         ipc::write(input, line + "\n")
                         line = ""
                         renderedLine = ""
                     } else if (key == 259) {
                         if (line != "") {
+                            buffer = followBottom(displayId, buffer)
                             line = dropLast(line)
+                            renderInputLine(displayId, buffer, renderedLine, line)
+                            renderedLine = line
+                        }
+                    } else if (key == 266) {
+                        var pageRows: Int = rows(displayId) - 1
+                        if (pageRows <= 0) {
+                            pageRows = 1
+                        }
+                        buffer = scrollViewportBy(displayId, buffer, pageRows)
+                    } else if (key == 267) {
+                        var pageRows: Int = rows(displayId) - 1
+                        if (pageRows <= 0) {
+                            pageRows = 1
+                        }
+                        buffer = scrollViewportBy(displayId, buffer, 0 - pageRows)
+                        if (buffer.viewportOffset == 0 && line != "") {
                             renderInputLine(displayId, buffer, renderedLine, line)
                             renderedLine = line
                         }
