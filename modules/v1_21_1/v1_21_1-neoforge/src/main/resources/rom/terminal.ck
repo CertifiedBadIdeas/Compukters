@@ -267,25 +267,73 @@ fun appendText(displayId: Int, buffer: TerminalBuffer, text: String): TerminalBu
     return TerminalBuffer(cellsText = cells, cursorRow = row, cursorColumn = col, displayColumns = cols, displayRows = rs)
 }
 
-fun renderInputLine(displayId: Int, buffer: TerminalBuffer, line: String) {
+fun inputOverlayRows(displayId: Int, buffer: TerminalBuffer, line: String): Int {
     val cols: Int = columns(displayId)
-    val row: Int = buffer.cursorRow
-    val startColumn: Int = buffer.cursorColumn
-    if (row < 0 || row >= rows(displayId)) {
-        return
+    if (cols <= 0) {
+        return 0
     }
-    if (startColumn < 0 || startColumn >= cols) {
-        return
+    if (strings::length(line) <= 0) {
+        return 1
     }
-    display::fillRect(displayId, startColumn * 6, row * 9, (cols - startColumn) * 6, 9, 0)
-    var x: Int = startColumn
+    var rowsUsed: Int = 1
+    var x: Int = buffer.cursorColumn
     var i: Int = 0
     while i < strings::length(line) {
+        x = x + 1
         if (x >= cols) {
+            x = 0
+            if (i + 1 < strings::length(line)) {
+                rowsUsed = rowsUsed + 1
+            }
+        }
+        i = i + 1
+    }
+    return rowsUsed
+}
+
+fun clearRenderedInputLine(displayId: Int, buffer: TerminalBuffer, previousLine: String) {
+    val rowsUsed: Int = inputOverlayRows(displayId, buffer, previousLine)
+    var rowOffset: Int = 0
+    while rowOffset < rowsUsed + 0 {
+        val row: Int = buffer.cursorRow + rowOffset
+        if (row >= 0 && row < rows(displayId)) {
+            clearTextRow(displayId, row)
+            renderTextRow(displayId, buffer.cellsText, row)
+        }
+        rowOffset = rowOffset + 1
+    }
+}
+
+fun renderInputLine(displayId: Int, buffer: TerminalBuffer, previousLine: String, line: String) {
+    val cols: Int = columns(displayId)
+    val rs: Int = rows(displayId)
+    var x: Int = buffer.cursorColumn
+    var y: Int = buffer.cursorRow
+    if (rs <= 0 || cols <= 0) {
+        return
+    }
+    if (y < 0 || y >= rs) {
+        return
+    }
+    if (x < 0 || x >= cols) {
+        return
+    }
+    clearRenderedInputLine(displayId, buffer, previousLine)
+    var i: Int = 0
+    while i < strings::length(line) {
+        if (y >= rs) {
             display::present(displayId)
             return
         }
-        drawGlyph(displayId, x, row, strings::charAt(line, i), 2016)
+        if (x >= cols) {
+            x = 0
+            y = y + 1
+            if (y >= rs) {
+                display::present(displayId)
+                return
+            }
+        }
+        drawGlyph(displayId, x, y, strings::charAt(line, i), 2016)
         x = x + 1
         i = i + 1
     }
@@ -310,6 +358,7 @@ pub fun main() {
     display::present(displayId)
     var buffer: TerminalBuffer = newTerminalBuffer(displayId)
     var line: String = ""
+    var renderedLine: String = ""
     process::spawn("shell.ck", "stdio-v1 " + input + " " + stream + " " + stream + " ")
 
     while true {
@@ -317,7 +366,8 @@ pub fun main() {
         if (chunk != "") {
             buffer = appendText(displayId, buffer, chunk)
             if (line != "") {
-                renderInputLine(displayId, buffer, line)
+                renderInputLine(displayId, buffer, renderedLine, line)
+                renderedLine = line
             }
         } else {
             val event: Event = events::tryPull()
@@ -327,29 +377,34 @@ pub fun main() {
                     if (buffer.displayColumns == columns(displayId) && buffer.displayRows == rows(displayId)) {
                         renderAllRows(displayId, buffer.cellsText)
                         if (line != "") {
-                            renderInputLine(displayId, buffer, line)
+                            renderInputLine(displayId, buffer, renderedLine, line)
+                            renderedLine = line
                         }
                     } else {
                         display::clear(displayId, 0)
                         display::present(displayId)
                         buffer = newTerminalBuffer(displayId)
                         line = ""
+                        renderedLine = ""
                     }
                 } else if (event.name == "char" || event.name == "paste") {
                     val typed: String = events::argString(event, 0)
                     if (typed != "") {
                         line = line + typed
-                        renderInputLine(displayId, buffer, line)
+                        renderInputLine(displayId, buffer, renderedLine, line)
+                        renderedLine = line
                     }
                 } else if (event.name == "key") {
                     val key: Int = events::argInt(event, 0)
                     if (key == 257 || key == 335) {
                         ipc::write(input, line + "\n")
                         line = ""
+                        renderedLine = ""
                     } else if (key == 259) {
                         if (line != "") {
                             line = dropLast(line)
-                            renderInputLine(displayId, buffer, line)
+                            renderInputLine(displayId, buffer, renderedLine, line)
+                            renderedLine = line
                         }
                     }
                 }

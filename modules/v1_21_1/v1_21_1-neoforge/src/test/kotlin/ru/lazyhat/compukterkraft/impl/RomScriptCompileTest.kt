@@ -156,6 +156,40 @@ class RomScriptCompileTest {
     }
 
     @Test
+    fun bundledRomTerminalWrapsRenderedInputOverlayByDisplayBounds() {
+        val source = resourceText("rom/terminal.ck")
+
+        assertTrue(
+            source.contains("fun inputOverlayRows(displayId: Int, buffer: TerminalBuffer, line: String): Int"),
+            "terminal.ck should calculate how many rows a typed input overlay occupies",
+        )
+        assertTrue(
+            source.contains("fun clearRenderedInputLine(displayId: Int, buffer: TerminalBuffer, previousLine: String)"),
+            "terminal.ck should clear every row previously occupied by typed input",
+        )
+        assertTrue(
+            source.contains("fun renderInputLine(displayId: Int, buffer: TerminalBuffer, previousLine: String, line: String)"),
+            "terminal.ck should render typed input with access to the previous overlay text",
+        )
+        assertTrue(
+            source.contains("if (x >= cols)"),
+            "terminal.ck should wrap typed input when it reaches the right display bound",
+        )
+        assertTrue(
+            source.contains("x = 0\n            y = y + 1"),
+            "terminal.ck should continue wrapped typed input on the next row",
+        )
+        assertTrue(
+            source.contains("var renderedLine: String = \"\""),
+            "terminal.ck should track the last rendered input overlay",
+        )
+        assertTrue(
+            source.contains("renderInputLine(displayId, buffer, renderedLine, line)"),
+            "terminal.ck should redraw input using previous and current overlay text",
+        )
+    }
+
+    @Test
     fun bundledRomTerminalHasSymmetricAngleGlyphs() {
         val source = resourceText("rom/terminal.ck")
 
