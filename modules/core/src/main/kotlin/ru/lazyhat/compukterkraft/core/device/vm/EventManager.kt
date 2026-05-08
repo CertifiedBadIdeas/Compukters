@@ -21,6 +21,8 @@ package ru.lazyhat.compukterkraft.core.device.vm
 
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.ChannelResult
+import kotlinx.coroutines.selects.SelectClause1
 import ru.lazyhat.compukterkraft.lang.runtime.VmEvent
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -58,6 +60,14 @@ class EventManager(
             return deferred
         }
         val event = eventQueue.tryReceive().getOrNull() ?: return null
+        queuedEvents.decrementAndGet()
+        return event
+    }
+
+    fun receiveEventClause(): SelectClause1<ChannelResult<VmEvent>> = eventQueue.onReceiveCatching
+
+    fun acceptSelectedEvent(result: ChannelResult<VmEvent>): VmEvent? {
+        val event = result.getOrNull() ?: return null
         queuedEvents.decrementAndGet()
         return event
     }

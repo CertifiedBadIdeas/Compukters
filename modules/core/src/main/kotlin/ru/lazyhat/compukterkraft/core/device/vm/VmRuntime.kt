@@ -37,6 +37,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.NoopDeviceEventApi
 import ru.lazyhat.compukterkraft.lang.runtime.NoopDeviceIpcApi
 import ru.lazyhat.compukterkraft.lang.runtime.NoopDeviceRuntimeMetrics
 import ru.lazyhat.compukterkraft.lang.runtime.VmEvent
+import ru.lazyhat.compukterkraft.lang.runtime.VmPollResult
 import ru.lazyhat.compukterkraft.lang.runtime.VmState
 
 class VmRuntime(
@@ -104,4 +105,6 @@ class VmRuntime(
     override suspend fun yield() {
         ctx.schedulingPoint()
     }
+
+    override suspend fun poll(channelId: Int): VmPollResult = ctx.pollIpcOrEvent(channelId)
 }

@@ -479,73 +479,71 @@ pub fun main() {
     process::spawn("shell.ck", "stdio-v1 " + input + " " + stream + " " + stream + " ")
 
     while true {
-        val chunk: String = ipc::tryRead(stream)
-        if (chunk != "") {
+        val signal: Poll = runtime::poll(stream)
+        if (signal.kind == "ipc") {
+            val chunk: String = signal.text
             buffer = appendText(displayId, buffer, chunk)
             if (buffer.viewportOffset == 0 && line != "") {
                 renderInputLine(displayId, buffer, renderedLine, line)
                 renderedLine = line
             }
-        } else {
-            val event: Event = events::tryPull()
-            if (event.name != "") {
-                if (event.name == "display_attach" || event.name == "display_resize") {
-                    displayId = display::primary()
-                    if (buffer.displayColumns == columns(displayId) && buffer.displayRows == rows(displayId)) {
-                        renderViewport(displayId, buffer)
-                        if (buffer.viewportOffset == 0 && line != "") {
-                            renderInputLine(displayId, buffer, renderedLine, line)
-                            renderedLine = line
-                        }
-                    } else {
-                        display::clear(displayId, 0)
-                        display::present(displayId)
-                        buffer = newTerminalBuffer(displayId)
-                        line = ""
-                        renderedLine = ""
-                    }
-                } else if (event.name == "char" || event.name == "paste") {
-                    val typed: String = events::argString(event, 0)
-                    if (typed != "") {
-                        buffer = followBottom(displayId, buffer)
-                        line = line + typed
+        } else if (signal.kind == "event") {
+            val event: Event = signal.event
+            if (event.name == "display_attach" || event.name == "display_resize") {
+                displayId = display::primary()
+                if (buffer.displayColumns == columns(displayId) && buffer.displayRows == rows(displayId)) {
+                    renderViewport(displayId, buffer)
+                    if (buffer.viewportOffset == 0 && line != "") {
                         renderInputLine(displayId, buffer, renderedLine, line)
                         renderedLine = line
                     }
-                } else if (event.name == "key") {
-                    val key: Int = events::argInt(event, 0)
-                    if (key == 257 || key == 335) {
+                } else {
+                    display::clear(displayId, 0)
+                    display::present(displayId)
+                    buffer = newTerminalBuffer(displayId)
+                    line = ""
+                    renderedLine = ""
+                }
+            } else if (event.name == "char" || event.name == "paste") {
+                val typed: String = events::argString(event, 0)
+                if (typed != "") {
+                    buffer = followBottom(displayId, buffer)
+                    line = line + typed
+                    renderInputLine(displayId, buffer, renderedLine, line)
+                    renderedLine = line
+                }
+            } else if (event.name == "key") {
+                val key: Int = events::argInt(event, 0)
+                if (key == 257 || key == 335) {
+                    buffer = followBottom(displayId, buffer)
+                    ipc::write(input, line + "\n")
+                    line = ""
+                    renderedLine = ""
+                } else if (key == 259) {
+                    if (line != "") {
                         buffer = followBottom(displayId, buffer)
-                        ipc::write(input, line + "\n")
-                        line = ""
-                        renderedLine = ""
-                    } else if (key == 259) {
-                        if (line != "") {
-                            buffer = followBottom(displayId, buffer)
-                            line = dropLast(line)
-                            renderInputLine(displayId, buffer, renderedLine, line)
-                            renderedLine = line
-                        }
-                    } else if (key == 266) {
-                        var pageRows: Int = rows(displayId) - 1
-                        if (pageRows <= 0) {
-                            pageRows = 1
-                        }
-                        buffer = scrollViewportBy(displayId, buffer, pageRows)
-                    } else if (key == 267) {
-                        var pageRows: Int = rows(displayId) - 1
-                        if (pageRows <= 0) {
-                            pageRows = 1
-                        }
-                        buffer = scrollViewportBy(displayId, buffer, 0 - pageRows)
-                        if (buffer.viewportOffset == 0 && line != "") {
-                            renderInputLine(displayId, buffer, renderedLine, line)
-                            renderedLine = line
-                        }
+                        line = dropLast(line)
+                        renderInputLine(displayId, buffer, renderedLine, line)
+                        renderedLine = line
+                    }
+                } else if (key == 266) {
+                    var pageRows: Int = rows(displayId) - 1
+                    if (pageRows <= 0) {
+                        pageRows = 1
+                    }
+                    buffer = scrollViewportBy(displayId, buffer, pageRows)
+                } else if (key == 267) {
+                    var pageRows: Int = rows(displayId) - 1
+                    if (pageRows <= 0) {
+                        pageRows = 1
+                    }
+                    buffer = scrollViewportBy(displayId, buffer, 0 - pageRows)
+                    if (buffer.viewportOffset == 0 && line != "") {
+                        renderInputLine(displayId, buffer, renderedLine, line)
+                        renderedLine = line
                     }
                 }
             }
-            yield()
         }
     }
 }

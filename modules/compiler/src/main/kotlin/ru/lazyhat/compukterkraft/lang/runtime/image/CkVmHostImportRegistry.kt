@@ -83,6 +83,7 @@ object CkVmHostImportRegistry {
             descriptor(7004, "strings", "toInt", listOf("String"), "Int"),
             descriptor(7005, "strings", "length", listOf("String"), "Int"),
             descriptor(7006, "strings", "charAt", listOf("String", "Int"), "String"),
+            descriptor(8000, "runtime", "poll", listOf("Int"), "Poll"),
         ).also(::validate)
 
     private val bySignature: Map<Key, CkVmHostImport> =

@@ -117,6 +117,20 @@ interface DeviceRuntime {
 
     suspend fun tryPullEvent(filter: String? = null): VmEvent? = null
 
+    suspend fun poll(channelId: Int): VmPollResult {
+        while (true) {
+            val text = ipc.tryRead(channelId)
+            if (text.isNotEmpty()) {
+                return VmPollResult(kind = "ipc", text = text)
+            }
+            val event = tryPullEvent()
+            if (event != null) {
+                return VmPollResult(kind = "event", event = event)
+            }
+            yield()
+        }
+    }
+
     suspend fun sleep(ticks: Long)
 
     suspend fun yield()

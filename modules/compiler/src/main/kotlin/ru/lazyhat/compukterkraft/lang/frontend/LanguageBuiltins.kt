@@ -193,6 +193,20 @@ object LanguageBuiltins {
                             ),
                     ),
                     BuiltinModule(
+                        name = "runtime",
+                        documentation = "Runtime scheduling helpers.",
+                        origin = ModuleOrigin.BASE_VM,
+                        functions =
+                            listOf(
+                                BuiltinFunction(
+                                    "poll",
+                                    listOf("Int"),
+                                    "Poll",
+                                    "Waits until an IPC channel has text or a runtime event is available.",
+                                ),
+                            ),
+                    ),
+                    BuiltinModule(
                         name = "events",
                         documentation = "Event queue access.",
                         origin = ModuleOrigin.BASE_VM,
@@ -381,6 +395,16 @@ object LanguageBuiltins {
                                 RecordFieldDefinition("name", "String", "The event name."),
                                 RecordFieldDefinition("id", "Int", "Runtime-local event payload id."),
                                 RecordFieldDefinition("argCount", "Int", "Number of low-level event payload arguments."),
+                            ),
+                    ),
+                    BuiltinType(
+                        name = "Poll",
+                        documentation = "A runtime poll result containing either IPC text or an event.",
+                        fields =
+                            listOf(
+                                RecordFieldDefinition("kind", "String", "Either ipc or event."),
+                                RecordFieldDefinition("text", "String", "IPC text when kind is ipc."),
+                                RecordFieldDefinition("event", "Event", "Runtime event when kind is event."),
                             ),
                     ),
                 ),

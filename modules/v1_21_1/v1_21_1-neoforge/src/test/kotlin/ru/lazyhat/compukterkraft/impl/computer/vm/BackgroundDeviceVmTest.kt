@@ -370,6 +370,94 @@ class BackgroundDeviceVmTest {
         }
     }
 
+    @Test
+    fun runtimePollWakesCurrentProcessForQueuedEvents() {
+        val root = createTempDirectory("compukterkraft-runtime-poll-event")
+
+        try {
+            val workspace = DeviceWorkspaceHost(root)
+            val logs = mutableListOf<String>()
+            val vm =
+                BackgroundDeviceVm(
+                    deviceId = 1,
+                    profile = firmwareTestProfile(),
+                    dispatcher = Dispatchers.Default,
+                    labelProvider = { null },
+                    logger = DeviceVmLogger(logs::add),
+                    workspace = workspace,
+                    firmwareLoader =
+                        StaticFirmwareLoader(
+                            """
+                            pub fun main() {
+                                val stream: Int = ipc::open()
+                                val signal: Poll = runtime::poll(stream)
+                                system::log(signal.kind + ":" + signal.event.name)
+                            }
+                            """.trimIndent(),
+                        ),
+            )
+
+            assertTrue(vm.boot())
+            runVmTicks(vm, ticks = 40, hostCallDispatcher = HostCallDispatcher(1, workspace))
+
+            assertTrue(logs.any { it.endsWith("event:boot") }, "logs=$logs state=${vm.snapshot().state}")
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun runtimePollWakesCurrentProcessForIpcText() {
+        val root = createTempDirectory("compukterkraft-runtime-poll-ipc")
+
+        try {
+            val workspace = DeviceWorkspaceHost(root)
+            workspace.writeDocument(
+                deviceId = 1,
+                path = "writer.ck",
+                text =
+                    """
+                    pub fun main() {
+                        val outputText: String = strings::beforeSpace(process::argument())
+                        val output: Int = strings::toInt(outputText)
+                        ipc::write(output, "hello")
+                    }
+                    """.trimIndent(),
+            )
+            val logs = mutableListOf<String>()
+            val vm =
+                BackgroundDeviceVm(
+                    deviceId = 1,
+                    profile = firmwareTestProfile(),
+                    dispatcher = Dispatchers.Default,
+                    labelProvider = { null },
+                    logger = DeviceVmLogger(logs::add),
+                    workspace = workspace,
+                    firmwareLoader =
+                        StaticFirmwareLoader(
+                            """
+                            pub fun main() {
+                                val stream: Int = ipc::open()
+                                process::spawn("writer.ck", stream + " ")
+                                var signal: Poll = runtime::poll(stream)
+                                while signal.kind != "ipc" {
+                                    signal = runtime::poll(stream)
+                                }
+                                system::log(signal.kind + ":" + signal.text)
+                            }
+                            """.trimIndent(),
+                        ),
+                )
+
+            assertTrue(vm.boot())
+            runVmTicks(vm, ticks = 60, hostCallDispatcher = HostCallDispatcher(1, workspace))
+
+            assertTrue(logs.any { it.endsWith("ipc:hello") }, "logs=$logs state=${vm.snapshot().state}")
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
     private fun ByteArray.containsRgb565(value: Int): Boolean {
         val hi = (value ushr 8).toByte()
         val lo = value.toByte()
@@ -513,8 +601,6 @@ class BackgroundDeviceVmTest {
                     firmwareLoader = StaticFirmwareLoader("pub fun main() { }"),
                 )
 
-            vm.boot()
-
             val terminalState =
                 runBlocking {
                     val terminalState =
@@ -524,6 +610,7 @@ class BackgroundDeviceVmTest {
                             }
                         }
 
+                    assertTrue(vm.boot())
                     vm.requestSlice(0)
                     terminalState.await()
                 }

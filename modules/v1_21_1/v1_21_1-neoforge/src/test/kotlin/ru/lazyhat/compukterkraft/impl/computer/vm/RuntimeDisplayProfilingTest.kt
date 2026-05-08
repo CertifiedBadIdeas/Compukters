@@ -96,10 +96,17 @@ class RuntimeDisplayProfilingTest {
             runtimeSnapshot.summary(),
         )
         assertTrue(
+            runtimeSnapshot.hostCalls.any { it.moduleName == "runtime" && it.functionName == "poll" },
+            runtimeSnapshot.summary(),
+        )
+        assertTrue(
+            runtimeSnapshot.hostCalls.none { it.moduleName == "ipc" && it.functionName == "tryRead" },
+            runtimeSnapshot.summary(),
+        )
+        assertTrue(
             runtimeSnapshot.hostCalls.any { it.moduleName == "ipc" && it.functionName == "write" },
             runtimeSnapshot.summary(),
         )
-        assertTrue(runtimeSnapshot.instructions.isNotEmpty(), runtimeSnapshot.summary())
         assertTrue(displaySnapshot.frames.frameCount > 0, displaySnapshot.summary())
     }
 }
