@@ -50,21 +50,33 @@ class NativeImageVmRunner private constructor(
                     runtime.metrics.recordVmSignal(signal.kind)
                 }
                 when (signal) {
-                    is NativeVmSignal.Halt -> return
-                    is NativeVmSignal.Error -> error("Native image VM failed for device ${runtime.system.deviceId}: ${signal.message}")
-                    NativeVmSignal.Pause -> runtime.yield()
+                    is NativeVmSignal.Halt -> {
+                        return
+                    }
+
+                    is NativeVmSignal.Error -> {
+                        error("Native image VM failed for device ${runtime.system.deviceId}: ${signal.message}")
+                    }
+
+                    NativeVmSignal.Pause -> {
+                        runtime.yield()
+                    }
+
                     NativeVmSignal.Yield -> {
                         runtime.yield()
                         NativeVmBindings.resumeImageWith(handle, VmValue.UnitValue.toNativeBytes("", "yield"))
                     }
+
                     is NativeVmSignal.Sleep -> {
                         runtime.sleep(signal.ticks)
                         NativeVmBindings.resumeImageWith(handle, VmValue.UnitValue.toNativeBytes("", "sleep"))
                     }
+
                     is NativeVmSignal.WaitEvent -> {
                         val event = runtime.pullEvent(signal.filter)
                         NativeVmBindings.resumeImageWith(handle, bridge.fromEvent(event).toNativeBytes("events", "pull"))
                     }
+
                     is NativeVmSignal.HostCall -> {
                         val result = invokeHostCall(runtime, bridge, signal)
                         NativeVmBindings.resumeImageWith(handle, result.toNativeBytes(signal.moduleName, signal.functionName))

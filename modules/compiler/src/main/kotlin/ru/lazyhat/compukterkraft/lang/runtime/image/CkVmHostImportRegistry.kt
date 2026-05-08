@@ -1,3 +1,22 @@
+/*
+ * The Compukter Kraft Developers
+ *
+ * Copyright (C) 2026 Vsevolod Petrov (lazyhat)
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package ru.lazyhat.compukterkraft.lang.runtime.image
 
 object CkVmHostImportRegistry {
@@ -12,7 +31,13 @@ object CkVmHostImportRegistry {
             descriptor(1006, "display", "fillRect", listOf("Int", "Int", "Int", "Int", "Int", "Int"), "Unit"),
             descriptor(1007, "display", "copyRect", listOf("Int", "Int", "Int", "Int", "Int", "Int", "Int"), "Unit"),
             descriptor(1008, "display", "blitMono", listOf("Int", "Int", "Int", "Int", "Int", "String", "Int", "Int"), "Unit"),
-            descriptor(1009, "display", "blitMono5x7", listOf("Int", "Int", "Int", "Int", "Int", "Int", "Int", "Int", "Int", "Int", "Int", "Int"), "Unit"),
+            descriptor(
+                1009,
+                "display",
+                "blitMono5x7",
+                listOf("Int", "Int", "Int", "Int", "Int", "Int", "Int", "Int", "Int", "Int", "Int", "Int"),
+                "Unit",
+            ),
             descriptor(1010, "display", "blitMono5x7Packed", listOf("Int", "Int", "Int", "Long", "Int", "Int"), "Unit"),
             descriptor(1011, "display", "present", listOf("Int"), "Unit"),
             descriptor(2000, "filesystem", "exists", listOf("String"), "Bool"),
@@ -75,7 +100,9 @@ object CkVmHostImportRegistry {
         argumentCount: Int,
     ): CkVmHostImport =
         find(moduleName, functionName, argumentCount)
-            ?: throw UnsupportedOperationException("CkVmImage backend does not support host import $moduleName::$functionName/$argumentCount")
+            ?: throw UnsupportedOperationException(
+                "CkVmImage backend does not support host import $moduleName::$functionName/$argumentCount",
+            )
 
     private data class Key(
         val moduleName: String,
@@ -94,7 +121,16 @@ object CkVmHostImportRegistry {
     private fun validate(imports: List<CkVmHostImport>) {
         val duplicateIds = imports.groupBy { it.id }.filterValues { it.size > 1 }.keys
         require(duplicateIds.isEmpty()) { "Duplicate CKVM host import ids: $duplicateIds" }
-        val duplicateSignatures = imports.groupBy { Key(it.moduleName, it.functionName, it.parameterTypes.size) }.filterValues { it.size > 1 }.keys
+        val duplicateSignatures =
+            imports
+                .groupBy {
+                    Key(
+                        it.moduleName,
+                        it.functionName,
+                        it.parameterTypes.size,
+                    )
+                }.filterValues { it.size > 1 }
+                .keys
         require(duplicateSignatures.isEmpty()) { "Duplicate CKVM host import signatures: $duplicateSignatures" }
     }
 }

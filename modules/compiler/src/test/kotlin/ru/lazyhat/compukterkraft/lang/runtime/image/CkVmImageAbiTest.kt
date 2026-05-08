@@ -1,3 +1,22 @@
+/*
+ * The Compukter Kraft Developers
+ *
+ * Copyright (C) 2026 Vsevolod Petrov (lazyhat)
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package ru.lazyhat.compukterkraft.lang.runtime.image
 
 import kotlin.test.Test
@@ -10,7 +29,10 @@ class CkVmImageAbiTest {
     fun encodedImageStartsWithMagicAndVersion() {
         val bytes = CkVmImageAbi.encode(minimalImage())
 
-        assertContentEquals(byteArrayOf('C'.code.toByte(), 'K'.code.toByte(), 'I'.code.toByte(), 'M'.code.toByte()), bytes.copyOfRange(0, 4))
+        assertContentEquals(
+            byteArrayOf('C'.code.toByte(), 'K'.code.toByte(), 'I'.code.toByte(), 'M'.code.toByte()),
+            bytes.copyOfRange(0, 4),
+        )
         assertEquals(1, bytes[4].toInt())
     }
 
@@ -65,8 +87,18 @@ class CkVmImageAbiTest {
     fun writesGoldenFixtureWhenPathIsProvided() {
         val path = System.getProperty("ckl.image.golden.path")?.takeIf(String::isNotBlank) ?: return
 
-        java.nio.file.Files.createDirectories(java.nio.file.Path.of(path).parent)
-        java.nio.file.Files.write(java.nio.file.Path.of(path), CkVmImageAbi.encode(representativeImage()))
+        java.nio.file.Files
+            .createDirectories(
+                java.nio.file.Path
+                    .of(path)
+                    .parent,
+            )
+        java.nio.file.Files
+            .write(
+                java.nio.file.Path
+                    .of(path),
+                CkVmImageAbi.encode(representativeImage()),
+            )
     }
 
     private fun minimalImage(): CkVmImage =
@@ -82,11 +114,12 @@ class CkVmImageAbiTest {
             languageVersion = "ckl-1",
             targetAbiVersion = 1,
             capabilities = listOf("host-import-ids"),
-            constants = listOf(
-                CkVmConstant.StringConstant("hello"),
-                CkVmConstant.IntConstant(7),
-                CkVmConstant.LongConstant(9L),
-            ),
+            constants =
+                listOf(
+                    CkVmConstant.StringConstant("hello"),
+                    CkVmConstant.IntConstant(7),
+                    CkVmConstant.LongConstant(9L),
+                ),
             hostImports = listOf(CkVmHostImport(42, "display", "present", listOf("Int"), "Unit")),
             entryFunctionIndex = 0,
             functions = listOf(CkVmFunction("main", frameSize = 8, code = listOf(0x01, 0x02, 0x03))),

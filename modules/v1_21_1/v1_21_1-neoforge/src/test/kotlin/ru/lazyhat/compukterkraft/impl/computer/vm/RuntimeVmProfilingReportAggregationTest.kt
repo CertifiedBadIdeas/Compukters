@@ -43,9 +43,16 @@ class RuntimeVmProfilingReportAggregationTest {
         val reportPathValue = System.getProperty(COMPARISON_PATH_PROPERTY)
         assumeTrue(!runsDirValue.isNullOrBlank(), "$RUNS_DIR_PROPERTY is only provided by profiling Gradle tasks")
         assumeTrue(!reportPathValue.isNullOrBlank(), "$COMPARISON_PATH_PROPERTY is only provided by profiling Gradle tasks")
-        val reportPath = java.nio.file.Path.of(reportPathValue)
+        val reportPath =
+            java.nio.file.Path
+                .of(reportPathValue)
 
-        val runs = RuntimeVmProfilingReportArchive.writeHistoricalReport(java.nio.file.Path.of(runsDirValue), reportPath)
+        val runs =
+            RuntimeVmProfilingReportArchive.writeHistoricalReport(
+                java.nio.file.Path
+                    .of(runsDirValue),
+                reportPath,
+            )
 
         assertTrue(runs.isNotEmpty(), "Expected archived profiling runs under $runsDirValue")
         assertTrue(Files.exists(reportPath), "Expected historical report at $reportPath")

@@ -87,19 +87,27 @@ internal object RuntimeVmProfileCodec {
                 profile.workloads.forEach { workload ->
                     appendLine("workload\t${workload.name}")
                     workload.display.operations.run {
-                        appendLine("displayOps\t$clearCalls\t$clearNanos\t$setPixelCalls\t$setPixelNanos\t$fillRectCalls\t$fillRectArea\t$fillRectNanos\t$copyRectCalls\t$copyRectArea\t$copyRectNanos\t$blitMonoCalls\t$blitMonoArea\t$blitMonoNanos\t$presentCalls\t$presentFrames\t$presentNanos")
+                        appendLine(
+                            "displayOps\t$clearCalls\t$clearNanos\t$setPixelCalls\t$setPixelNanos\t$fillRectCalls\t$fillRectArea\t$fillRectNanos\t$copyRectCalls\t$copyRectArea\t$copyRectNanos\t$blitMonoCalls\t$blitMonoArea\t$blitMonoNanos\t$presentCalls\t$presentFrames\t$presentNanos",
+                        )
                     }
                     workload.display.frames.run {
                         appendLine("displayFrames\t$frameCount\t$fullRefreshFrames\t$tileCount\t$payloadBytes")
                     }
                     workload.display.frameBuild.run {
-                        appendLine("displayBuild\t$buildCalls\t$dirtyTileScanNanos\t$frameBuildNanos\t$tileSerializationNanos\t$frontCopyNanos\t$totalNanos\t$tileCount\t$payloadBytes")
+                        appendLine(
+                            "displayBuild\t$buildCalls\t$dirtyTileScanNanos\t$frameBuildNanos\t$tileSerializationNanos\t$frontCopyNanos\t$totalNanos\t$tileCount\t$payloadBytes",
+                        )
                     }
                     workload.runtime.tick.run {
-                        appendLine("runtimeTick\t$serverTickCalls\t$serverTickNanos\t$requestSliceCalls\t$requestSliceNanos\t$hostCallDrainCalls\t$hostCallsDrained\t$hostCallDrainNanos\t$hostCallDispatchCalls\t$hostCallsDispatched\t$hostCallDispatchNanos\t$hostResultDeliveryCalls\t$hostResultsDelivered\t$hostResultDeliveryNanos\t$displayFrameDrainCalls\t$displayFramesDrained\t$displayFrameDrainNanos\t$displayFlushCalls\t$displayFramesFlushed\t$displayFlushNanos")
+                        appendLine(
+                            "runtimeTick\t$serverTickCalls\t$serverTickNanos\t$requestSliceCalls\t$requestSliceNanos\t$hostCallDrainCalls\t$hostCallsDrained\t$hostCallDrainNanos\t$hostCallDispatchCalls\t$hostCallsDispatched\t$hostCallDispatchNanos\t$hostResultDeliveryCalls\t$hostResultsDelivered\t$hostResultDeliveryNanos\t$displayFrameDrainCalls\t$displayFramesDrained\t$displayFrameDrainNanos\t$displayFlushCalls\t$displayFramesFlushed\t$displayFlushNanos",
+                        )
                     }
                     workload.runtime.vm.run {
-                        appendLine("runtimeVm\t$sliceRequests\t$slicePermitsSent\t$sleepGatedSliceRequests\t$slicePermitsReceived\t$schedulingPoints\t$yieldSchedulingPoints\t$waitForSliceSchedulingPoints\t$executionWindows\t$executionWindowNanos\t$haltSignals\t$pauseSignals\t$yieldSignals\t$sleepSignals\t$waitEventSignals\t$hostCallSignals")
+                        appendLine(
+                            "runtimeVm\t$sliceRequests\t$slicePermitsSent\t$sleepGatedSliceRequests\t$slicePermitsReceived\t$schedulingPoints\t$yieldSchedulingPoints\t$waitForSliceSchedulingPoints\t$executionWindows\t$executionWindowNanos\t$haltSignals\t$pauseSignals\t$yieldSignals\t$sleepSignals\t$waitEventSignals\t$hostCallSignals",
+                        )
                     }
                     workload.runtime.hostCalls.forEach { call ->
                         appendLine("host\t${call.moduleName}\t${call.functionName}\t${call.calls}\t${call.nanos}")
@@ -108,10 +116,14 @@ internal object RuntimeVmProfileCodec {
                         appendLine("instruction\t${instruction.kind}\t${instruction.count}\t${instruction.nanos}")
                     }
                     workload.compiler.run {
-                        appendLine("compiler\t$parseCalls\t$parseNanos\t$sourceBytes\t$tokens\t$analyzeCalls\t$analyzeNanos\t$diagnostics\t$symbols\t$references\t$codegenCalls\t$codegenNanos\t$functions\t$instructions\t$compileCalls\t$compileNanos\t$compiledSources")
+                        appendLine(
+                            "compiler\t$parseCalls\t$parseNanos\t$sourceBytes\t$tokens\t$analyzeCalls\t$analyzeNanos\t$diagnostics\t$symbols\t$references\t$codegenCalls\t$codegenNanos\t$functions\t$instructions\t$compileCalls\t$compileNanos\t$compiledSources",
+                        )
                     }
                     workload.heldEnter?.run {
-                        appendLine("held\t$enterEventsQueued\t$settleTicks\t$maxQueuedEvents\t$finalQueuedEvents\t$maxPendingHostCalls\t$finalPendingHostCalls\t$displayFramesDrained")
+                        appendLine(
+                            "held\t$enterEventsQueued\t$settleTicks\t$maxQueuedEvents\t$finalQueuedEvents\t$maxPendingHostCalls\t$finalPendingHostCalls\t$displayFramesDrained",
+                        )
                     }
                     appendLine("endWorkload")
                 }
@@ -127,17 +139,143 @@ internal object RuntimeVmProfileCodec {
         path.readLines().forEach { line ->
             val parts = line.split('\t')
             when (parts.firstOrNull()) {
-                "runtime", "runner" -> runtimeName = parts[1]
-                "workload" -> current = WorkloadBuilder(parts[1])
-                "displayOps" -> current.requireCurrent().operations = parts.longs().let { v -> DisplayOperationMetrics(v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7], v[8], v[9], v[10], v[11], v[12], v[13], v[14], v[15]) }
-                "displayFrames" -> current.requireCurrent().frames = parts.longs().let { v -> DisplayFrameMetrics(v[0], v[1], v[2], v[3]) }
-                "displayBuild" -> current.requireCurrent().frameBuild = parts.longs().let { v -> DisplayFrameBuildTotals(v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7]) }
-                "runtimeTick" -> current.requireCurrent().tick = parts.longs().let { v -> RuntimeTickMetrics(v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7], v[8], v[9], v[10], v[11], v[12], v[13], v[14], v[15], v[16], v[17], v[18]) }
-                "runtimeVm" -> current.requireCurrent().vm = parts.longs().let { v -> RuntimeVmMetrics(v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7], v[8], v[9], v[10], v[11], v[12], v[13], v[14]) }
-                "host" -> current.requireCurrent().hostCalls += RuntimeHostCallMetrics(parts[1], parts[2], parts[3].toLong(), parts[4].toLong())
-                "instruction" -> current.requireCurrent().instructions += RuntimeInstructionMetrics(VmInstructionKind.valueOf(parts[1]), parts[2].toLong(), parts[3].toLong())
-                "compiler" -> current.requireCurrent().compiler = parts.longs().let { v -> CompilerProfilingSnapshot(v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7], v[8], v[9], v[10], v[11], v[12], v[13], v[14], v[15]) }
-                "held" -> current.requireCurrent().heldEnter = parts.ints().let { v -> HeldEnterWorkloadSummary(v[0], v[1], v[2], v[3], v[4], v[5], v[6]) }
+                "runtime", "runner" -> {
+                    runtimeName = parts[1]
+                }
+
+                "workload" -> {
+                    current = WorkloadBuilder(parts[1])
+                }
+
+                "displayOps" -> {
+                    current.requireCurrent().operations =
+                        parts.longs().let { v ->
+                            DisplayOperationMetrics(
+                                v[0],
+                                v[1],
+                                v[2],
+                                v[3],
+                                v[4],
+                                v[5],
+                                v[6],
+                                v[7],
+                                v[8],
+                                v[9],
+                                v[10],
+                                v[11],
+                                v[12],
+                                v[13],
+                                v[14],
+                                v[15],
+                            )
+                        }
+                }
+
+                "displayFrames" -> {
+                    current.requireCurrent().frames =
+                        parts.longs().let { v -> DisplayFrameMetrics(v[0], v[1], v[2], v[3]) }
+                }
+
+                "displayBuild" -> {
+                    current.requireCurrent().frameBuild =
+                        parts
+                            .longs()
+                            .let { v -> DisplayFrameBuildTotals(v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7]) }
+                }
+
+                "runtimeTick" -> {
+                    current.requireCurrent().tick =
+                        parts.longs().let { v ->
+                            RuntimeTickMetrics(
+                                v[0],
+                                v[1],
+                                v[2],
+                                v[3],
+                                v[4],
+                                v[5],
+                                v[6],
+                                v[7],
+                                v[8],
+                                v[9],
+                                v[10],
+                                v[11],
+                                v[12],
+                                v[13],
+                                v[14],
+                                v[15],
+                                v[16],
+                                v[17],
+                                v[18],
+                            )
+                        }
+                }
+
+                "runtimeVm" -> {
+                    current.requireCurrent().vm =
+                        parts.longs().let { v ->
+                            RuntimeVmMetrics(
+                                v[0],
+                                v[1],
+                                v[2],
+                                v[3],
+                                v[4],
+                                v[5],
+                                v[6],
+                                v[7],
+                                v[8],
+                                v[9],
+                                v[10],
+                                v[11],
+                                v[12],
+                                v[13],
+                                v[14],
+                            )
+                        }
+                }
+
+                "host" -> {
+                    current.requireCurrent().hostCalls +=
+                        RuntimeHostCallMetrics(parts[1], parts[2], parts[3].toLong(), parts[4].toLong())
+                }
+
+                "instruction" -> {
+                    current.requireCurrent().instructions +=
+                        RuntimeInstructionMetrics(
+                            VmInstructionKind.valueOf(parts[1]),
+                            parts[2].toLong(),
+                            parts[3].toLong(),
+                        )
+                }
+
+                "compiler" -> {
+                    current.requireCurrent().compiler =
+                        parts.longs().let { v ->
+                            CompilerProfilingSnapshot(
+                                v[0],
+                                v[1],
+                                v[2],
+                                v[3],
+                                v[4],
+                                v[5],
+                                v[6],
+                                v[7],
+                                v[8],
+                                v[9],
+                                v[10],
+                                v[11],
+                                v[12],
+                                v[13],
+                                v[14],
+                                v[15],
+                            )
+                        }
+                }
+
+                "held" -> {
+                    current.requireCurrent().heldEnter =
+                        parts.ints().let { v -> HeldEnterWorkloadSummary(v[0], v[1], v[2], v[3], v[4], v[5], v[6]) }
+                }
+
                 "endWorkload" -> {
                     workloads += current.requireCurrent()
                     current = null
@@ -166,8 +304,19 @@ internal object RuntimeVmProfileCodec {
         fun build(): RuntimeWorkloadProfile =
             RuntimeWorkloadProfile(
                 name = name,
-                display = DisplayProfilingSnapshot(operations ?: error("Missing displayOps for $name"), frames ?: error("Missing displayFrames for $name"), frameBuild ?: error("Missing displayBuild for $name")),
-                runtime = RuntimeProfilingSnapshot(tick ?: error("Missing runtimeTick for $name"), vm ?: error("Missing runtimeVm for $name"), hostCalls.toList(), instructions.toList()),
+                display =
+                    DisplayProfilingSnapshot(
+                        operations ?: error("Missing displayOps for $name"),
+                        frames ?: error("Missing displayFrames for $name"),
+                        frameBuild ?: error("Missing displayBuild for $name"),
+                    ),
+                runtime =
+                    RuntimeProfilingSnapshot(
+                        tick ?: error("Missing runtimeTick for $name"),
+                        vm ?: error("Missing runtimeVm for $name"),
+                        hostCalls.toList(),
+                        instructions.toList(),
+                    ),
                 compiler = compiler ?: error("Missing compiler for $name"),
                 heldEnter = heldEnter,
             )
@@ -218,8 +367,7 @@ internal object RuntimeVmProfilingReportArchive {
                         metadata = readMetadata(runDir.resolve(METADATA_FILE_NAME), runDir.name, profile.runtimeName),
                         profile = profile,
                     )
-                }
-                .sorted { left, right -> left.metadata.timestamp.compareTo(right.metadata.timestamp) }
+                }.sorted { left, right -> left.metadata.timestamp.compareTo(right.metadata.timestamp) }
                 .toList()
         }
     }
@@ -256,13 +404,13 @@ internal object RuntimeVmProfilingReportArchive {
             return RuntimeVmProfileRunMetadata(fallbackTimestamp, fallbackRuntimeName)
         }
         val values =
-            path.readText()
+            path
+                .readText()
                 .lineSequence()
                 .mapNotNull { line ->
                     val index = line.indexOf('=')
                     if (index < 0) null else line.substring(0, index) to line.substring(index + 1)
-                }
-                .toMap()
+                }.toMap()
         return RuntimeVmProfileRunMetadata(
             timestamp = values["timestamp"] ?: fallbackTimestamp,
             runtimeName = values["runtimeName"] ?: fallbackRuntimeName,
@@ -292,7 +440,9 @@ internal object RuntimeVmProfilingReportFormatter {
             appendLine("| Timestamp | Runtime | Commit | Workloads |")
             appendLine("|---|---|---|---:|")
             runs.forEach { run ->
-                appendLine("| ${run.metadata.timestamp} | ${run.profile.runtimeName} | ${run.metadata.gitCommit ?: ""} | ${run.profile.workloads.size} |")
+                appendLine(
+                    "| ${run.metadata.timestamp} | ${run.profile.runtimeName} | ${run.metadata.gitCommit ?: ""} | ${run.profile.workloads.size} |",
+                )
             }
             appendLine()
 
@@ -342,14 +492,40 @@ internal object RuntimeVmProfilingReportFormatter {
         appendLine("| Metric | Value | vs previous |")
         appendLine("|---|---:|---:|")
         appendHistoricalMetric("Display operations", workload.display.operations.allCalls, previous?.display?.operations?.allCalls)
-        appendHistoricalMetric("Display operation time", workload.display.operations.allNanos, previous?.display?.operations?.allNanos, ::formatNanos)
+        appendHistoricalMetric(
+            "Display operation time",
+            workload.display.operations.allNanos,
+            previous?.display?.operations?.allNanos,
+            ::formatNanos,
+        )
         appendHistoricalMetric("Frames emitted", workload.display.frames.frameCount, previous?.display?.frames?.frameCount)
-        appendHistoricalMetric("Frame build time", workload.display.frameBuild.totalNanos, previous?.display?.frameBuild?.totalNanos, ::formatNanos)
+        appendHistoricalMetric(
+            "Frame build time",
+            workload.display.frameBuild.totalNanos,
+            previous?.display?.frameBuild?.totalNanos,
+            ::formatNanos,
+        )
         appendHistoricalMetric("Runtime all ticks", workload.runtime.tick.allNanos, previous?.runtime?.tick?.allNanos, ::formatNanos)
-        appendHistoricalMetric("VM execution time", workload.runtime.vm.executionWindowNanos, previous?.runtime?.vm?.executionWindowNanos, ::formatNanos)
+        appendHistoricalMetric(
+            "VM execution time",
+            workload.runtime.vm.executionWindowNanos,
+            previous?.runtime?.vm?.executionWindowNanos,
+            ::formatNanos,
+        )
         appendHistoricalMetric("Host-call signals", workload.runtime.vm.hostCallSignals, previous?.runtime?.vm?.hostCallSignals)
-        appendHistoricalMetric("Host calls", workload.runtime.hostCalls.sumOf { it.calls }, previous?.runtime?.hostCalls?.sumOf { it.calls })
-        appendHistoricalMetric("Host-call time", workload.runtime.hostCalls.sumOf { it.nanos }, previous?.runtime?.hostCalls?.sumOf { it.nanos }, ::formatNanos)
+        appendHistoricalMetric(
+            "Host calls",
+            workload.runtime.hostCalls.sumOf { it.calls },
+            previous?.runtime?.hostCalls?.sumOf { it.calls },
+        )
+        appendHistoricalMetric(
+            "Host-call time",
+            workload.runtime.hostCalls.sumOf {
+                it.nanos
+            },
+            previous?.runtime?.hostCalls?.sumOf { it.nanos },
+            ::formatNanos,
+        )
         appendHistoricalMetric("Compiler time", workload.compiler.compileNanos, previous?.compiler?.compileNanos, ::formatNanos)
         appendLine()
         appendHostCalls(workload.runtime.hostCalls)

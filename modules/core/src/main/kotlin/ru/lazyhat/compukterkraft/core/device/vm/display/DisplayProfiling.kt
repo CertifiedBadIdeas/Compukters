@@ -146,18 +146,38 @@ data class DisplayProfilingSnapshot(
         buildString {
             appendLine("display:")
             appendLine("  operations: count=${operations.allCalls}, time=${operations.allNanos.nanos()}")
-            appendLine("    clear: count=${operations.clearCalls}, time=${operations.clearNanos.nanos()}, avg=${operations.averageClearNanos.nanos()}")
-            appendLine("    setPixel: count=${operations.setPixelCalls}, time=${operations.setPixelNanos.nanos()}, avg=${operations.averageSetPixelNanos.nanos()}")
-            appendLine("    fillRect: count=${operations.fillRectCalls}, area=${operations.fillRectArea}, time=${operations.fillRectNanos.nanos()}, avg=${operations.averageFillRectNanos.nanos()}")
-            appendLine("    copyRect: count=${operations.copyRectCalls}, area=${operations.copyRectArea}, time=${operations.copyRectNanos.nanos()}, avg=${operations.averageCopyRectNanos.nanos()}")
-            appendLine("    blitMono: count=${operations.blitMonoCalls}, area=${operations.blitMonoArea}, time=${operations.blitMonoNanos.nanos()}, avg=${operations.averageBlitMonoNanos.nanos()}")
-            appendLine("    present: count=${operations.presentCalls}, frames=${operations.presentFrames}, time=${operations.presentNanos.nanos()}, avg=${operations.averagePresentNanos.nanos()}")
+            appendLine(
+                "    clear: count=${operations.clearCalls}, time=${operations.clearNanos.nanos()}, avg=${operations.averageClearNanos.nanos()}",
+            )
+            appendLine(
+                "    setPixel: count=${operations.setPixelCalls}, time=${operations.setPixelNanos.nanos()}, avg=${operations.averageSetPixelNanos.nanos()}",
+            )
+            appendLine(
+                "    fillRect: count=${operations.fillRectCalls}, area=${operations.fillRectArea}, time=${operations.fillRectNanos.nanos()}, avg=${operations.averageFillRectNanos.nanos()}",
+            )
+            appendLine(
+                "    copyRect: count=${operations.copyRectCalls}, area=${operations.copyRectArea}, time=${operations.copyRectNanos.nanos()}, avg=${operations.averageCopyRectNanos.nanos()}",
+            )
+            appendLine(
+                "    blitMono: count=${operations.blitMonoCalls}, area=${operations.blitMonoArea}, time=${operations.blitMonoNanos.nanos()}, avg=${operations.averageBlitMonoNanos.nanos()}",
+            )
+            appendLine(
+                "    present: count=${operations.presentCalls}, frames=${operations.presentFrames}, time=${operations.presentNanos.nanos()}, avg=${operations.averagePresentNanos.nanos()}",
+            )
             appendLine("  frames:")
-            appendLine("    emitted: count=${frames.frameCount}, fullRefresh=${frames.fullRefreshFrames}, tiles=${frames.tileCount}, payload=${frames.payloadBytes.bytes()}")
+            appendLine(
+                "    emitted: count=${frames.frameCount}, fullRefresh=${frames.fullRefreshFrames}, tiles=${frames.tileCount}, payload=${frames.payloadBytes.bytes()}",
+            )
             appendLine("  frame-build:")
-            appendLine("    total: builds=${frameBuild.buildCalls}, time=${frameBuild.totalNanos.nanos()}, avg/build=${frameBuild.averageTotalNanosPerBuild.nanos()}, avg/tile=${frameBuild.averageTotalNanosPerTile.nanos()}")
-            appendLine("    phases: dirtyScan=${frameBuild.dirtyTileScanNanos.nanos()}, frameBuild=${frameBuild.frameBuildNanos.nanos()}, tileSerialization=${frameBuild.tileSerializationNanos.nanos()}, frontCopy=${frameBuild.frontCopyNanos.nanos()}")
-            append("    serialization: tiles=${frameBuild.tileCount}, payload=${frameBuild.payloadBytes.bytes()}, avg/tile=${frameBuild.averageTileSerializationNanosPerTile.nanos()}, avg/byte=${frameBuild.averageTileSerializationNanosPerPayloadByte.nanos()}")
+            appendLine(
+                "    total: builds=${frameBuild.buildCalls}, time=${frameBuild.totalNanos.nanos()}, avg/build=${frameBuild.averageTotalNanosPerBuild.nanos()}, avg/tile=${frameBuild.averageTotalNanosPerTile.nanos()}",
+            )
+            appendLine(
+                "    phases: dirtyScan=${frameBuild.dirtyTileScanNanos.nanos()}, frameBuild=${frameBuild.frameBuildNanos.nanos()}, tileSerialization=${frameBuild.tileSerializationNanos.nanos()}, frontCopy=${frameBuild.frontCopyNanos.nanos()}",
+            )
+            append(
+                "    serialization: tiles=${frameBuild.tileCount}, payload=${frameBuild.payloadBytes.bytes()}, avg/tile=${frameBuild.averageTileSerializationNanosPerTile.nanos()}, avg/byte=${frameBuild.averageTileSerializationNanosPerPayloadByte.nanos()}",
+            )
         }
 }
 

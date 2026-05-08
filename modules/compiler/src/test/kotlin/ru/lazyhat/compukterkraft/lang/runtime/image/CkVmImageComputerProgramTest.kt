@@ -33,16 +33,20 @@ class CkVmImageComputerProgramTest {
     fun imageProgramUsesInjectedRunnerFactory() {
         val image = assertNotNull(LanguageFrontend().compileImage("main.ck", "pub fun main() { }").image)
         var invoked = false
-        val program = CkVmImageComputerProgram(
-            image = image,
-            runnerFactory = {
-                object : NativeImageRuntimeRunner {
-                    override suspend fun run(image: CkVmImage, runtime: DeviceRuntime) {
-                        invoked = true
+        val program =
+            CkVmImageComputerProgram(
+                image = image,
+                runnerFactory = {
+                    object : NativeImageRuntimeRunner {
+                        override suspend fun run(
+                            image: CkVmImage,
+                            runtime: DeviceRuntime,
+                        ) {
+                            invoked = true
+                        }
                     }
-                }
-            },
-        )
+                },
+            )
 
         runBlocking { program.run(RecordingRuntime()) }
 

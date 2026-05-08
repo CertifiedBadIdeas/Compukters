@@ -46,27 +46,60 @@ class RuntimeVmProfilingProfileCodecTest {
                             name = "sample workload",
                             display =
                                 DisplayProfilingSnapshot(
-                                    operations = DisplayOperationMetrics(clearCalls = 1, clearNanos = 2, presentCalls = 3, presentFrames = 4, presentNanos = 5),
-                                    frames = DisplayFrameMetrics(frameCount = 6, fullRefreshFrames = 7, tileCount = 8, payloadBytes = 9),
-                                    frameBuild = DisplayFrameBuildTotals(buildCalls = 10, totalNanos = 11, tileCount = 12, payloadBytes = 13),
+                                    operations =
+                                        DisplayOperationMetrics(
+                                            clearCalls = 1,
+                                            clearNanos = 2,
+                                            presentCalls = 3,
+                                            presentFrames = 4,
+                                            presentNanos = 5,
+                                        ),
+                                    frames =
+                                        DisplayFrameMetrics(
+                                            frameCount = 6,
+                                            fullRefreshFrames = 7,
+                                            tileCount = 8,
+                                            payloadBytes = 9,
+                                        ),
+                                    frameBuild =
+                                        DisplayFrameBuildTotals(
+                                            buildCalls = 10,
+                                            totalNanos = 11,
+                                            tileCount = 12,
+                                            payloadBytes = 13,
+                                        ),
                                 ),
                             runtime =
                                 RuntimeProfilingSnapshot(
-                                    tick = RuntimeTickMetrics(serverTickCalls = 14, serverTickNanos = 15, requestSliceCalls = 16, requestSliceNanos = 17),
+                                    tick =
+                                        RuntimeTickMetrics(
+                                            serverTickCalls = 14,
+                                            serverTickNanos = 15,
+                                            requestSliceCalls = 16,
+                                            requestSliceNanos = 17,
+                                        ),
                                     vm = RuntimeVmMetrics(executionWindows = 18, executionWindowNanos = 19, hostCallSignals = 20),
                                     hostCalls = listOf(RuntimeHostCallMetrics("display", "present", calls = 21, nanos = 22)),
-                                    instructions = listOf(RuntimeInstructionMetrics(VmInstructionKind.CALL_BUILTIN, count = 23, nanos = 24)),
+                                    instructions =
+                                        listOf(
+                                            RuntimeInstructionMetrics(
+                                                VmInstructionKind.CALL_BUILTIN,
+                                                count = 23,
+                                                nanos = 24,
+                                            ),
+                                        ),
                                 ),
                             compiler = CompilerProfilingSnapshot(compileCalls = 25, compileNanos = 26, compiledSources = 27),
-                            heldEnter = HeldEnterWorkloadSummary(
-                                enterEventsQueued = 28,
-                                settleTicks = 29,
-                                maxQueuedEvents = 30,
-                                finalQueuedEvents = 31,
-                                maxPendingHostCalls = 32,
-                                finalPendingHostCalls = 33,
-                                displayFramesDrained = 34,
-                            ),
+                            heldEnter =
+                                HeldEnterWorkloadSummary(
+                                    enterEventsQueued = 28,
+                                    settleTicks = 29,
+                                    maxQueuedEvents = 30,
+                                    finalQueuedEvents = 31,
+                                    maxPendingHostCalls = 32,
+                                    finalPendingHostCalls = 33,
+                                    displayFramesDrained = 34,
+                                ),
                         ),
                     ),
             )

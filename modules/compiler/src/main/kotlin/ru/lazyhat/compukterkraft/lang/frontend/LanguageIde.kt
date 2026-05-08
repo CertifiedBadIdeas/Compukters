@@ -273,9 +273,13 @@ class LanguageIde(
         val type = receiverType?.trim()?.removeSuffix("?") ?: return emptyList()
         val methods =
             when {
-                type.startsWith("Array<") -> listOf("size", "get", "set", "getOrNull")
+                type.startsWith("Array<") -> {
+                    listOf("size", "get", "set", "getOrNull")
+                }
 
-                type.startsWith("List<") -> listOf("size", "isEmpty", "get", "set", "getOrNull", "add", "insert", "removeAt", "clear")
+                type.startsWith("List<") -> {
+                    listOf("size", "isEmpty", "get", "set", "getOrNull", "add", "insert", "removeAt", "clear")
+                }
 
                 type.startsWith(
                     "Map<",
@@ -291,10 +295,12 @@ class LanguageIde(
                         "clear",
                         "keys",
                         "values",
-                )
+                    )
                 }
 
-                else -> return emptyList()
+                else -> {
+                    return emptyList()
+                }
             }
         return methods.map { method ->
             SymbolInfo(
