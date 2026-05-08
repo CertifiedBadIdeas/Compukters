@@ -41,7 +41,7 @@ object DeviceProfileRegistry {
                     allowedCapabilities = defaultCapabilities(),
                     resources =
                         defaultResources(
-                            instructionsPerSlice = 64,
+                            instructionsPerSlice = 2_048,
                             wallTimeGuardNanosPerSlice = 1_000_000,
                             eventQueueSlots = 64,
                             diskBytes = Config.computerSpaceLimit.toLong(),
@@ -58,7 +58,7 @@ object DeviceProfileRegistry {
                     allowedCapabilities = defaultCapabilities(),
                     resources =
                         defaultResources(
-                            instructionsPerSlice = 128,
+                            instructionsPerSlice = 4_096,
                             wallTimeGuardNanosPerSlice = 2_000_000,
                             eventQueueSlots = 128,
                             diskBytes = Config.computerSpaceLimit.toLong(),
@@ -75,7 +75,7 @@ object DeviceProfileRegistry {
                     allowedCapabilities = defaultCapabilities() + DeviceCapability.REDSTONE + DeviceCapability.PERIPHERALS,
                     resources =
                         defaultResources(
-                            instructionsPerSlice = 256,
+                            instructionsPerSlice = 8_192,
                             wallTimeGuardNanosPerSlice = 4_000_000,
                             eventQueueSlots = 256,
                             diskBytes = Config.computerSpaceLimit.toLong(),

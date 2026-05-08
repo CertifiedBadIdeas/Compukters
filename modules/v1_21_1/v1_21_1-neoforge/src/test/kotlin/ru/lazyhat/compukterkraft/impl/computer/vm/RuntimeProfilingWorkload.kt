@@ -242,7 +242,7 @@ internal object RuntimeProfilingWorkload {
                 ),
             resources =
                 DeviceResources(
-                    cpu = DeviceCpuResources(wallTimeGuardNanosPerSlice = 500_000),
+                    cpu = DeviceCpuResources(instructionsPerSlice = 2_048, wallTimeGuardNanosPerSlice = 500_000),
                     memory = DeviceMemoryResources(),
                     storage = DeviceStorageResources(programRomBytes = 128 * 1024, diskBytes = 1024 * 1024),
                     queues = DeviceQueueResources(eventQueueSlots = 64, hostCallQueueSlots = 64),

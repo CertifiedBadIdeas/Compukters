@@ -156,23 +156,7 @@ class RuntimeDeviceImpl(
     override fun serverTick() {
         val handle = vmHandle ?: return
         val tickStarted = System.nanoTime()
-
-        val (_, requestNanos) = measureNanos { handle.requestSlice(gameTime.gameTime()) }
-        runtimeMetricsCollector.recordRequestSlice(requestNanos)
-
-        val (calls, drainNanos) = measureNanos { handle.drainHostCalls() }
-        runtimeMetricsCollector.recordHostCallDrain(calls.size, drainNanos)
-
-        val (results, dispatchNanos) = measureNanos { calls.map(hostCallDispatcher::dispatch) }
-        runtimeMetricsCollector.recordHostCallDispatch(calls.size, dispatchNanos)
-
-        val (_, deliverNanos) =
-            measureNanos {
-                if (results.isNotEmpty()) {
-                    handle.deliverHostResults(results)
-                }
-            }
-        runtimeMetricsCollector.recordHostResultDelivery(results.size, deliverNanos)
+        serviceVmTick(handle, gameTime.gameTime(), hostCallDispatcher::dispatch, runtimeMetricsCollector)
 
         val (flushedFrames, flushNanos) = measureNanos { flushDisplaySessions(handle) }
         runtimeMetricsCollector.recordDisplayFlush(frameCount = flushedFrames, nanos = flushNanos)
@@ -249,12 +233,6 @@ class RuntimeDeviceImpl(
         }
     }
 
-    private inline fun <T> measureNanos(block: () -> T): Pair<T, Long> {
-        val started = System.nanoTime()
-        val result = block()
-        return result to (System.nanoTime() - started)
-    }
-
     private fun flushDisplaySessions(handle: BackgroundDeviceVm): Int {
         if (displaySessions.isEmpty()) return 0
         val (frames, drainNanos) = measureNanos { handle.drainDisplayFrames() }
@@ -276,4 +254,68 @@ class RuntimeDeviceImpl(
         toDetach.forEach { (playerUuid, displayId) -> detachDisplaySession(playerUuid, displayId) }
         return frames.size
     }
+}
+
+internal fun serviceVmTick(
+    handle: DeviceVmHandle,
+    serverTick: Long,
+    dispatchHostCall: (ru.lazyhat.compukterkraft.lang.runtime.HostCall) -> ru.lazyhat.compukterkraft.lang.runtime.HostResult,
+    runtimeMetricsCollector: RuntimeMetricsCollector,
+) {
+    val (_, requestNanos) = measureNanos { handle.requestSlice(serverTick) }
+    runtimeMetricsCollector.recordRequestSlice(requestNanos)
+
+    val spinDeadline =
+        System.nanoTime() +
+            handle.profile.resources.cpu.wallTimeGuardNanosPerSlice
+                .coerceAtLeast(1L)
+    var remainingIdlePolls = 8
+    var drainedCalls = 0
+    var dispatchedCalls = 0
+    var deliveredResults = 0
+    var totalDrainNanos = 0L
+    var totalDispatchNanos = 0L
+    var totalDeliverNanos = 0L
+
+    while (true) {
+        val (calls, drainNanos) = measureNanos { handle.drainHostCalls() }
+        totalDrainNanos += drainNanos
+        drainedCalls += calls.size
+        if (calls.isEmpty()) {
+            if (remainingIdlePolls <= 0 || System.nanoTime() >= spinDeadline) {
+                break
+            }
+            remainingIdlePolls -= 1
+            Thread.onSpinWait()
+            continue
+        }
+
+        remainingIdlePolls = 8
+        val (results, dispatchNanos) = measureNanos { calls.map(dispatchHostCall) }
+        totalDispatchNanos += dispatchNanos
+        dispatchedCalls += calls.size
+
+        val (_, deliverNanos) =
+            measureNanos {
+                if (results.isNotEmpty()) {
+                    handle.deliverHostResults(results)
+                }
+            }
+        totalDeliverNanos += deliverNanos
+        deliveredResults += results.size
+
+        if (System.nanoTime() >= spinDeadline) {
+            break
+        }
+    }
+
+    runtimeMetricsCollector.recordHostCallDrain(drainedCalls, totalDrainNanos)
+    runtimeMetricsCollector.recordHostCallDispatch(dispatchedCalls, totalDispatchNanos)
+    runtimeMetricsCollector.recordHostResultDelivery(deliveredResults, totalDeliverNanos)
+}
+
+private inline fun <T> measureNanos(block: () -> T): Pair<T, Long> {
+    val started = System.nanoTime()
+    val result = block()
+    return result to (System.nanoTime() - started)
 }

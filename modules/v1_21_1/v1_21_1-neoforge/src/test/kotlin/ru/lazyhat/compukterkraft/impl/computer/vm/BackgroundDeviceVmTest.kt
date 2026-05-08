@@ -27,6 +27,8 @@ import kotlinx.coroutines.withTimeout
 import ru.lazyhat.compukterkraft.core.device.runtime.FirmwareProgramLoader
 import ru.lazyhat.compukterkraft.core.device.runtime.HostCallDispatcher
 import ru.lazyhat.compukterkraft.core.device.runtime.LoadedFirmwareProgramSource
+import ru.lazyhat.compukterkraft.core.device.runtime.NoOpRuntimeMetricsCollector
+import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeMetricsCollector
 import ru.lazyhat.compukterkraft.core.device.vm.BackgroundDeviceVm
 import ru.lazyhat.compukterkraft.core.device.vm.DeviceVmLogger
 import ru.lazyhat.compukterkraft.core.device.vm.DeviceWorkspaceHost
@@ -72,12 +74,10 @@ class BackgroundDeviceVmTest {
         hostCallDispatcher: HostCallDispatcher? = null,
     ) = runBlocking {
         repeat(ticks) { tick ->
-            vm.requestSlice(tick.toLong())
             hostCallDispatcher?.let { dispatcher ->
-                val results = vm.drainHostCalls().map(dispatcher::dispatch)
-                if (results.isNotEmpty()) {
-                    vm.deliverHostResults(results)
-                }
+                serviceVmTickForTest(vm, tick.toLong(), dispatcher::dispatch, NoOpRuntimeMetricsCollector)
+            } ?: run {
+                vm.requestSlice(tick.toLong())
             }
             kotlinx.coroutines.delay(10)
         }
@@ -105,6 +105,70 @@ class BackgroundDeviceVmTest {
                     queues = DeviceQueueResources(eventQueueSlots = 64, hostCallQueueSlots = 64),
                 ),
         )
+
+    private fun serviceVmTickForTest(
+        vm: BackgroundDeviceVm,
+        serverTick: Long,
+        dispatchHostCall: (ru.lazyhat.compukterkraft.lang.runtime.HostCall) -> ru.lazyhat.compukterkraft.lang.runtime.HostResult,
+        runtimeMetricsCollector: RuntimeMetricsCollector,
+    ) {
+        val (_, requestNanos) = measureNanos { vm.requestSlice(serverTick) }
+        runtimeMetricsCollector.recordRequestSlice(requestNanos)
+
+        val spinDeadline =
+            System.nanoTime() +
+                vm.profile.resources.cpu.wallTimeGuardNanosPerSlice
+                    .coerceAtLeast(1L)
+        var remainingIdlePolls: Int = 8
+        var drainedCalls: Int = 0
+        var dispatchedCalls: Int = 0
+        var deliveredResults: Int = 0
+        var totalDrainNanos: Long = 0L
+        var totalDispatchNanos: Long = 0L
+        var totalDeliverNanos: Long = 0L
+
+        while (true) {
+            val (calls, drainNanos) = measureNanos { vm.drainHostCalls() }
+            totalDrainNanos += drainNanos
+            drainedCalls += calls.size
+            if (calls.isEmpty()) {
+                if (remainingIdlePolls <= 0 || System.nanoTime() >= spinDeadline) {
+                    break
+                }
+                remainingIdlePolls -= 1
+                Thread.onSpinWait()
+                continue
+            }
+
+            remainingIdlePolls = 8
+            val (results, dispatchNanos) = measureNanos { calls.map(dispatchHostCall) }
+            totalDispatchNanos += dispatchNanos
+            dispatchedCalls += calls.size
+
+            val (_, deliverNanos) =
+                measureNanos {
+                    if (results.isNotEmpty()) {
+                        vm.deliverHostResults(results)
+                    }
+                }
+            totalDeliverNanos += deliverNanos
+            deliveredResults += results.size
+
+            if (System.nanoTime() >= spinDeadline) {
+                break
+            }
+        }
+
+        runtimeMetricsCollector.recordHostCallDrain(drainedCalls, totalDrainNanos)
+        runtimeMetricsCollector.recordHostCallDispatch(dispatchedCalls, totalDispatchNanos)
+        runtimeMetricsCollector.recordHostResultDelivery(deliveredResults, totalDeliverNanos)
+    }
+
+    private inline fun <T> measureNanos(block: () -> T): Pair<T, Long> {
+        val started = System.nanoTime()
+        val result = block()
+        return result to (System.nanoTime() - started)
+    }
 
     @Test
     fun bundledFirmwareBootsRomTerminalAndRendersShellOutput() {
