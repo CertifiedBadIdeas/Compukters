@@ -70,6 +70,8 @@ import ru.lazyhat.compukterkraft.lang.runtime.VmStopReason
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayInfo
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayPixelFormat
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeImageVmRunner
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeVmBindings
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.yield as coroutineYield
 
@@ -133,6 +135,15 @@ class BackgroundDeviceVm(
     private val displayRegistry = DisplayRegistry(displayMetricsCollector)
     private val peripheralRegistry = VmPeripheralRegistry()
     private val runtimeRegistryProfile = createRuntimeRegistryProfile()
+    private val nativeDeviceKernelHandle: Long? =
+        System.getProperty("ckl.vm.native.library")
+            ?.takeIf(NativeImageVmRunner::isAvailable)
+            ?.let {
+                NativeVmBindings.createDeviceKernel(
+                    maxEventQueueSize = profile.resources.queues.eventQueueSlots,
+                    maxBufferedBytesPerChannel = profile.resources.queues.ipcChannelBytes,
+                )
+            }
     private var executionWindowStartedNanos: Long? = null
 
     private inner class RuntimeMetricsApi : DeviceRuntimeMetrics {
@@ -325,6 +336,7 @@ class BackgroundDeviceVm(
         processManager.cancelAll()
         runner?.cancel()
         runner = null
+        nativeDeviceKernelHandle?.let(NativeVmBindings::freeDeviceKernel)
 
         LOGGER.debug { "DeviceID: $deviceId stop lock request ended (reason: $reason, error: $errorMessage)" }
     }
@@ -399,6 +411,7 @@ class BackgroundDeviceVm(
             eventApi = VmEventApi(eventPayloadStore),
             peripheralsApi = peripheralsApi,
             metricsApi = RuntimeMetricsApi(),
+            nativeDeviceKernelHandle = nativeDeviceKernelHandle ?: 0L,
         )
     }
 

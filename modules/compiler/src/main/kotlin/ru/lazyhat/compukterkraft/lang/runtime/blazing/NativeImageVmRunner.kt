@@ -20,6 +20,7 @@
 package ru.lazyhat.compukterkraft.lang.runtime.blazing
 
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceRuntime
+import ru.lazyhat.compukterkraft.lang.runtime.NativeDeviceKernelProvider
 import ru.lazyhat.compukterkraft.lang.runtime.RuntimeHostBridge
 import ru.lazyhat.compukterkraft.lang.runtime.VmSignalKind
 import ru.lazyhat.compukterkraft.lang.runtime.VmValue
@@ -33,8 +34,9 @@ interface NativeImageRuntimeRunner {
     )
 }
 
-class NativeImageVmRunner private constructor(
+class NativeImageVmRunner internal constructor(
     private val libraryPath: String,
+    private val bindings: NativeVmBindingsFacade = NativeVmBindings,
 ) : NativeImageRuntimeRunner {
     override suspend fun run(
         image: CkVmImage,
@@ -42,10 +44,11 @@ class NativeImageVmRunner private constructor(
     ) {
         val imageBytes = CkVmImageAbi.encode(image)
         val bridge = RuntimeHostBridge(runtime)
-        val handle = NativeVmBindings.createImage(libraryPath, imageBytes, runtime.profile.resources.cpu.instructionsPerSlice)
+        val handle = bindings.createImage(libraryPath, imageBytes, runtime.profile.resources.cpu.instructionsPerSlice)
         try {
+            kernelHandleOrNull(runtime)?.let { bindings.attachImageToKernel(handle, it) }
             while (true) {
-                val signal = NativeVmSignal.decode(NativeVmBindings.runImageUntilSignal(handle))
+                val signal = NativeVmSignal.decode(bindings.runImageUntilSignal(handle))
                 if (signal !is NativeVmSignal.Error) {
                     runtime.metrics.recordVmSignal(signal.kind)
                 }
@@ -64,29 +67,32 @@ class NativeImageVmRunner private constructor(
 
                     NativeVmSignal.Yield -> {
                         runtime.yield()
-                        NativeVmBindings.resumeImageWith(handle, VmValue.UnitValue.toNativeBytes("", "yield"))
+                        bindings.resumeImageWith(handle, VmValue.UnitValue.toNativeBytes("", "yield"))
                     }
 
                     is NativeVmSignal.Sleep -> {
                         runtime.sleep(signal.ticks)
-                        NativeVmBindings.resumeImageWith(handle, VmValue.UnitValue.toNativeBytes("", "sleep"))
+                        bindings.resumeImageWith(handle, VmValue.UnitValue.toNativeBytes("", "sleep"))
                     }
 
                     is NativeVmSignal.WaitEvent -> {
                         val event = runtime.pullEvent(signal.filter)
-                        NativeVmBindings.resumeImageWith(handle, bridge.fromEvent(event).toNativeBytes("events", "pull"))
+                        bindings.resumeImageWith(handle, bridge.fromEvent(event).toNativeBytes("events", "pull"))
                     }
 
                     is NativeVmSignal.HostCall -> {
                         val result = invokeHostCall(runtime, bridge, signal)
-                        NativeVmBindings.resumeImageWith(handle, result.toNativeBytes(signal.moduleName, signal.functionName))
+                        bindings.resumeImageWith(handle, result.toNativeBytes(signal.moduleName, signal.functionName))
                     }
                 }
             }
         } finally {
-            NativeVmBindings.freeImage(handle)
+            bindings.freeImage(handle)
         }
     }
+
+    private fun kernelHandleOrNull(runtime: DeviceRuntime): Long? =
+        (runtime as? NativeDeviceKernelProvider)?.nativeDeviceKernelHandle?.takeIf { it != 0L }
 
     private suspend fun invokeHostCall(
         runtime: DeviceRuntime,
