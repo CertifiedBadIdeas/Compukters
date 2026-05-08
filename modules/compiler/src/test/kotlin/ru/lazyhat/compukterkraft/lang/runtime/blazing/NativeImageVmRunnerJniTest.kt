@@ -54,18 +54,20 @@ class NativeImageVmRunnerJniTest {
     @Test
     fun imageRunnerExecutesSchedulerBuiltinsThroughJniWhenLibraryIsConfigured() {
         val libraryPath = System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
-        val image = assertNotNull(
-            LanguageFrontend().compileImage(
-                "main.ck",
-                """
-                pub fun main() {
-                    yield();
-                    sleep(3);
-                    system::log("done");
-                }
-                """.trimIndent(),
-            ).image,
-        )
+        val image =
+            assertNotNull(
+                LanguageFrontend()
+                    .compileImage(
+                        "main.ck",
+                        """
+                        pub fun main() {
+                            yield();
+                            sleep(3);
+                            system::log("done");
+                        }
+                        """.trimIndent(),
+                    ).image,
+            )
         val runtime = RecordingRuntime()
 
         runBlocking { NativeImageVmRunner.fromLibraryPath(libraryPath).run(image, runtime) }
@@ -78,19 +80,21 @@ class NativeImageVmRunnerJniTest {
     @Test
     fun imageRunnerExecutesIfConditionAndLocalThroughJniWhenLibraryIsConfigured() {
         val libraryPath = System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
-        val image = assertNotNull(
-            LanguageFrontend().compileImage(
-                "main.ck",
-                """
-                pub fun main() {
-                    val enabled: Bool = true;
-                    if (enabled) {
-                        system::log("yes");
-                    }
-                }
-                """.trimIndent(),
-            ).image,
-        )
+        val image =
+            assertNotNull(
+                LanguageFrontend()
+                    .compileImage(
+                        "main.ck",
+                        """
+                        pub fun main() {
+                            val enabled: Bool = true;
+                            if (enabled) {
+                                system::log("yes");
+                            }
+                        }
+                        """.trimIndent(),
+                    ).image,
+            )
         val runtime = RecordingRuntime()
 
         runBlocking {
@@ -103,20 +107,22 @@ class NativeImageVmRunnerJniTest {
     @Test
     fun imageRunnerExecutesOperatorsThroughJniWhenLibraryIsConfigured() {
         val libraryPath = System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
-        val image = assertNotNull(
-            LanguageFrontend().compileImage(
-                "main.ck",
-                """
-                pub fun main() {
-                    val value: Int = 1 + 2 * 3;
-                    val ok: Bool = value >= 7 && !false;
-                    if (ok) {
-                        system::log("value=" + value);
-                    }
-                }
-                """.trimIndent(),
-            ).image,
-        )
+        val image =
+            assertNotNull(
+                LanguageFrontend()
+                    .compileImage(
+                        "main.ck",
+                        """
+                        pub fun main() {
+                            val value: Int = 1 + 2 * 3;
+                            val ok: Bool = value >= 7 && !false;
+                            if (ok) {
+                                system::log("value=" + value);
+                            }
+                        }
+                        """.trimIndent(),
+                    ).image,
+            )
         val runtime = RecordingRuntime()
 
         runBlocking {
@@ -129,25 +135,27 @@ class NativeImageVmRunnerJniTest {
     @Test
     fun imageRunnerExecutesUserFunctionCallsThroughJniWhenLibraryIsConfigured() {
         val libraryPath = System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
-        val image = assertNotNull(
-            LanguageFrontend().compileImage(
-                "main.ck",
-                """
-                fun subtract(a: Int, b: Int): Int {
-                    return a - b;
-                }
+        val image =
+            assertNotNull(
+                LanguageFrontend()
+                    .compileImage(
+                        "main.ck",
+                        """
+                        fun subtract(a: Int, b: Int): Int {
+                            return a - b;
+                        }
 
-                fun label(value: Int): String {
-                    return "value=" + value;
-                }
+                        fun label(value: Int): String {
+                            return "value=" + value;
+                        }
 
-                pub fun main() {
-                    val result: Int = subtract(2, 5);
-                    system::log(label(result));
-                }
-                """.trimIndent(),
-            ).image,
-        )
+                        pub fun main() {
+                            val result: Int = subtract(2, 5);
+                            system::log(label(result));
+                        }
+                        """.trimIndent(),
+                    ).image,
+            )
         val runtime = RecordingRuntime()
 
         runBlocking {
@@ -160,20 +168,22 @@ class NativeImageVmRunnerJniTest {
     @Test
     fun imageRunnerExecutesRecordConstructionAndFieldAccessThroughJniWhenLibraryIsConfigured() {
         val libraryPath = System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
-        val image = assertNotNull(
-            LanguageFrontend().compileImage(
-                "main.ck",
-                """
-                struct Point { x: Int, y: Int }
+        val image =
+            assertNotNull(
+                LanguageFrontend()
+                    .compileImage(
+                        "main.ck",
+                        """
+                        struct Point { x: Int, y: Int }
 
-                pub fun main() {
-                    val point: Point = Point(x = 2, y = 5);
-                    val delta: Int = point.x - point.y;
-                    system::log("value=" + delta);
-                }
-                """.trimIndent(),
-            ).image,
-        )
+                        pub fun main() {
+                            val point: Point = Point(x = 2, y = 5);
+                            val delta: Int = point.x - point.y;
+                            system::log("value=" + delta);
+                        }
+                        """.trimIndent(),
+                    ).image,
+            )
         val runtime = RecordingRuntime()
 
         runBlocking {
@@ -186,19 +196,21 @@ class NativeImageVmRunnerJniTest {
     @Test
     fun imageRunnerExecutesArrayCollectionsThroughJniWhenLibraryIsConfigured() {
         val libraryPath = System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
-        val image = assertNotNull(
-            LanguageFrontend().compileImage(
-                "main.ck",
-                """
-                pub fun main() {
-                    val values: Array<Int> = Array<Int>(size = 2, default = 0);
-                    values[0] = 9;
-                    values[1] = 4;
-                    system::log("value=" + (values[0] - values[1]));
-                }
-                """.trimIndent(),
-            ).image,
-        )
+        val image =
+            assertNotNull(
+                LanguageFrontend()
+                    .compileImage(
+                        "main.ck",
+                        """
+                        pub fun main() {
+                            val values: Array<Int> = Array<Int>(size = 2, default = 0);
+                            values[0] = 9;
+                            values[1] = 4;
+                            system::log("value=" + (values[0] - values[1]));
+                        }
+                        """.trimIndent(),
+                    ).image,
+            )
         val runtime = RecordingRuntime()
 
         runBlocking { NativeImageVmRunner.fromLibraryPath(libraryPath).run(image, runtime) }
@@ -209,19 +221,21 @@ class NativeImageVmRunnerJniTest {
     @Test
     fun imageRunnerExecutesListCollectionsThroughJniWhenLibraryIsConfigured() {
         val libraryPath = System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
-        val image = assertNotNull(
-            LanguageFrontend().compileImage(
-                "main.ck",
-                """
-                pub fun main() {
-                    val values: List<Int> = [2];
-                    values.add(5);
-                    val removed: Int = values.removeAt(0);
-                    system::log("value=" + (removed - values[0]));
-                }
-                """.trimIndent(),
-            ).image,
-        )
+        val image =
+            assertNotNull(
+                LanguageFrontend()
+                    .compileImage(
+                        "main.ck",
+                        """
+                        pub fun main() {
+                            val values: List<Int> = [2];
+                            values.add(5);
+                            val removed: Int = values.removeAt(0);
+                            system::log("value=" + (removed - values[0]));
+                        }
+                        """.trimIndent(),
+                    ).image,
+            )
         val runtime = RecordingRuntime()
 
         runBlocking { NativeImageVmRunner.fromLibraryPath(libraryPath).run(image, runtime) }
@@ -232,20 +246,22 @@ class NativeImageVmRunnerJniTest {
     @Test
     fun imageRunnerExecutesMapCollectionsThroughJniWhenLibraryIsConfigured() {
         val libraryPath = System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
-        val image = assertNotNull(
-            LanguageFrontend().compileImage(
-                "main.ck",
-                """
-                pub fun main() {
-                    val values: Map<String, Int> = {"x": 3};
-                    values["y"] = 4;
-                    if (values.containsKey("x")) {
-                        system::log("value=" + values.getOrDefault("missing", 9));
-                    }
-                }
-                """.trimIndent(),
-            ).image,
-        )
+        val image =
+            assertNotNull(
+                LanguageFrontend()
+                    .compileImage(
+                        "main.ck",
+                        """
+                        pub fun main() {
+                            val values: Map<String, Int> = {"x": 3};
+                            values["y"] = 4;
+                            if (values.containsKey("x")) {
+                                system::log("value=" + values.getOrDefault("missing", 9));
+                            }
+                        }
+                        """.trimIndent(),
+                    ).image,
+            )
         val runtime = RecordingRuntime()
 
         runBlocking { NativeImageVmRunner.fromLibraryPath(libraryPath).run(image, runtime) }

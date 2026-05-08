@@ -47,8 +47,9 @@ class RuntimeVmProfilingReportTest {
                     runsDir = Path.of(runsDirValue),
                     metadata =
                         RuntimeVmProfileRunMetadata(
-                            timestamp = System.getProperty(RUN_TIMESTAMP_PROPERTY)
-                                ?: RuntimeVmProfilingReportArchive.currentTimestamp(),
+                            timestamp =
+                                System.getProperty(RUN_TIMESTAMP_PROPERTY)
+                                    ?: RuntimeVmProfilingReportArchive.currentTimestamp(),
                             runtimeName = runtimeName,
                             gitCommit = System.getProperty(GIT_COMMIT_PROPERTY),
                         ),

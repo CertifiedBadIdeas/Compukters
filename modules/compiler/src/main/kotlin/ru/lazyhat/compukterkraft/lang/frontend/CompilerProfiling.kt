@@ -81,11 +81,17 @@ data class CompilerProfilingSnapshot(
     fun summary(): String =
         buildString {
             appendLine("compiler:")
-            appendLine("  totals: calls=$compileCalls, time=${compileNanos.nanos()}, avg=${averageCompileNanos.nanos()}, sources=$compiledSources, sourceBytes=${sourceBytes.bytes()}, diagnostics=$diagnostics")
+            appendLine(
+                "  totals: calls=$compileCalls, time=${compileNanos.nanos()}, avg=${averageCompileNanos.nanos()}, sources=$compiledSources, sourceBytes=${sourceBytes.bytes()}, diagnostics=$diagnostics",
+            )
             appendLine("  phases:")
             appendLine("    parse: calls=$parseCalls, time=${parseNanos.nanos()}, avg=${averageParseNanos.nanos()}, tokens=$tokens")
-            appendLine("    analyze: calls=$analyzeCalls, time=${analyzeNanos.nanos()}, avg=${averageAnalyzeNanos.nanos()}, symbols=$symbols, references=$references")
-            append("    codegen: calls=$codegenCalls, time=${codegenNanos.nanos()}, avg=${averageCodegenNanos.nanos()}, functions=$functions, instructions=$instructions")
+            appendLine(
+                "    analyze: calls=$analyzeCalls, time=${analyzeNanos.nanos()}, avg=${averageAnalyzeNanos.nanos()}, symbols=$symbols, references=$references",
+            )
+            append(
+                "    codegen: calls=$codegenCalls, time=${codegenNanos.nanos()}, avg=${averageCodegenNanos.nanos()}, functions=$functions, instructions=$instructions",
+            )
         }
 }
 

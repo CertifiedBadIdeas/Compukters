@@ -82,18 +82,27 @@ class NativeVmSignalTest {
 
     @Test
     fun recordRuntimeValuesEncodeAndDecodeForEventResume() {
-        val record = VmValue.RecordValue(
-            typeName = "Event",
-            fields = linkedMapOf("name" to VmValue.StringValue("boot"), "id" to VmValue.IntValue(7)),
-        )
+        val record =
+            VmValue.RecordValue(
+                typeName = "Event",
+                fields = linkedMapOf("name" to VmValue.StringValue("boot"), "id" to VmValue.IntValue(7)),
+            )
 
         val bytes = record.toNativeBytes("events", "pull")
 
-        assertEquals(NativeVmValue.RecordValue("Event", linkedMapOf("name" to NativeVmValue.StringValue("boot"), "id" to NativeVmValue.IntValue(7))), NativeVmSignal.decode(byteArrayOf(0) + bytes).let { (it as NativeVmSignal.Halt).value })
+        assertEquals(
+            NativeVmValue.RecordValue(
+                "Event",
+                linkedMapOf(
+                    "name" to NativeVmValue.StringValue("boot"),
+                    "id" to NativeVmValue.IntValue(7),
+                ),
+            ),
+            NativeVmSignal.decode(byteArrayOf(0) + bytes).let { (it as NativeVmSignal.Halt).value },
+        )
     }
 
-    private fun stringBytes(value: String): ByteArray =
-        intBytes(value.encodeToByteArray().size) + value.encodeToByteArray()
+    private fun stringBytes(value: String): ByteArray = intBytes(value.encodeToByteArray().size) + value.encodeToByteArray()
 
     private fun intBytes(value: Int): ByteArray =
         byteArrayOf(

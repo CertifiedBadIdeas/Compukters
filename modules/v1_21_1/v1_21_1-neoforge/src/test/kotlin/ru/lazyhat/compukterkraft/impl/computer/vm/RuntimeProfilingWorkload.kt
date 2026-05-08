@@ -323,5 +323,4 @@ internal object RuntimeProfilingWorkload {
                 kotlinx.coroutines.delay(1)
             }
         }
-
 }

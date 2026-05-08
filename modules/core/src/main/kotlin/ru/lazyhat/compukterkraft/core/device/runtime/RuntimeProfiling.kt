@@ -102,8 +102,22 @@ data class RuntimeTickMetrics(
     val displayFramesFlushed: Long = 0,
     val displayFlushNanos: Long = 0,
 ) {
-    val allCalls = serverTickCalls + requestSliceCalls + hostCallDrainCalls + hostCallDispatchCalls + hostResultDeliveryCalls + displayFrameDrainCalls + displayFlushCalls
-    val allNanos = serverTickNanos + requestSliceNanos + hostCallDrainNanos + hostCallDispatchNanos + hostResultDeliveryNanos + displayFrameDrainNanos + displayFlushNanos
+    val allCalls =
+        serverTickCalls +
+            requestSliceCalls +
+            hostCallDrainCalls +
+            hostCallDispatchCalls +
+            hostResultDeliveryCalls +
+            displayFrameDrainCalls +
+            displayFlushCalls
+    val allNanos =
+        serverTickNanos +
+            requestSliceNanos +
+            hostCallDrainNanos +
+            hostCallDispatchNanos +
+            hostResultDeliveryNanos +
+            displayFrameDrainNanos +
+            displayFlushNanos
     val tickCalls = serverTickCalls + requestSliceCalls
     val tickNanos = serverTickNanos + requestSliceNanos
     val hostCalls = hostCallDrainCalls + hostCallDispatchCalls + hostResultDeliveryCalls
@@ -163,17 +177,35 @@ data class RuntimeProfilingSnapshot(
             appendLine("    server: calls=${tick.serverTickCalls}, time=${tick.serverTickNanos.nanos()}")
             appendLine("    requestSlice: calls=${tick.requestSliceCalls}, time=${tick.requestSliceNanos.nanos()}")
             appendLine("  host-queue: calls=${tick.hostCalls}, time=${tick.hostNanos.nanos()}")
-            appendLine("    drain: calls=${tick.hostCallDrainCalls}, items=${tick.hostCallsDrained}, time=${tick.hostCallDrainNanos.nanos()}")
-            appendLine("    dispatch: calls=${tick.hostCallDispatchCalls}, items=${tick.hostCallsDispatched}, time=${tick.hostCallDispatchNanos.nanos()}")
-            appendLine("    delivery: calls=${tick.hostResultDeliveryCalls}, items=${tick.hostResultsDelivered}, time=${tick.hostResultDeliveryNanos.nanos()}")
+            appendLine(
+                "    drain: calls=${tick.hostCallDrainCalls}, items=${tick.hostCallsDrained}, time=${tick.hostCallDrainNanos.nanos()}",
+            )
+            appendLine(
+                "    dispatch: calls=${tick.hostCallDispatchCalls}, items=${tick.hostCallsDispatched}, time=${tick.hostCallDispatchNanos.nanos()}",
+            )
+            appendLine(
+                "    delivery: calls=${tick.hostResultDeliveryCalls}, items=${tick.hostResultsDelivered}, time=${tick.hostResultDeliveryNanos.nanos()}",
+            )
             appendLine("  display-runtime: calls=${tick.displayCalls}, time=${tick.displayNanos.nanos()}")
-            appendLine("    drain: calls=${tick.displayFrameDrainCalls}, frames=${tick.displayFramesDrained}, time=${tick.displayFrameDrainNanos.nanos()}")
-            appendLine("    flush: calls=${tick.displayFlushCalls}, frames=${tick.displayFramesFlushed}, time=${tick.displayFlushNanos.nanos()}")
+            appendLine(
+                "    drain: calls=${tick.displayFrameDrainCalls}, frames=${tick.displayFramesDrained}, time=${tick.displayFrameDrainNanos.nanos()}",
+            )
+            appendLine(
+                "    flush: calls=${tick.displayFlushCalls}, frames=${tick.displayFramesFlushed}, time=${tick.displayFlushNanos.nanos()}",
+            )
             appendLine("  vm:")
-            appendLine("    slices: requests=${vm.sliceRequests}, permitsSent=${vm.slicePermitsSent}, sleepGated=${vm.sleepGatedSliceRequests}, permitsReceived=${vm.slicePermitsReceived}")
-            appendLine("    scheduling: points=${vm.schedulingPoints}, yieldPoints=${vm.yieldSchedulingPoints}, waitPoints=${vm.waitForSliceSchedulingPoints}")
-            appendLine("    execution: windows=${vm.executionWindows}, time=${vm.executionWindowNanos.nanos()}, avg=${vm.averageExecutionWindowNanos.nanos()}")
-            appendLine("  signals: halt=${vm.haltSignals}, pause=${vm.pauseSignals}, yield=${vm.yieldSignals}, sleep=${vm.sleepSignals}, waitEvent=${vm.waitEventSignals}, hostCall=${vm.hostCallSignals}")
+            appendLine(
+                "    slices: requests=${vm.sliceRequests}, permitsSent=${vm.slicePermitsSent}, sleepGated=${vm.sleepGatedSliceRequests}, permitsReceived=${vm.slicePermitsReceived}",
+            )
+            appendLine(
+                "    scheduling: points=${vm.schedulingPoints}, yieldPoints=${vm.yieldSchedulingPoints}, waitPoints=${vm.waitForSliceSchedulingPoints}",
+            )
+            appendLine(
+                "    execution: windows=${vm.executionWindows}, time=${vm.executionWindowNanos.nanos()}, avg=${vm.averageExecutionWindowNanos.nanos()}",
+            )
+            appendLine(
+                "  signals: halt=${vm.haltSignals}, pause=${vm.pauseSignals}, yield=${vm.yieldSignals}, sleep=${vm.sleepSignals}, waitEvent=${vm.waitEventSignals}, hostCall=${vm.hostCallSignals}",
+            )
             appendHostCallSummary()
             appendInstructionSummary()
         }
@@ -183,9 +215,17 @@ data class RuntimeProfilingSnapshot(
             appendLine("  host-calls: none")
             return
         }
-        appendLine("  host-calls: calls=${hostCalls.sumOf { it.calls }}, time=${hostCalls.sumOf { it.nanos }.nanos()}, avg=${hostCalls.sumOf { it.averageNanos }.nanos()}")
+        appendLine(
+            "  host-calls: calls=${
+                hostCalls.sumOf {
+                    it.calls
+                }
+            }, time=${hostCalls.sumOf { it.nanos }.nanos()}, avg=${hostCalls.sumOf { it.averageNanos }.nanos()}",
+        )
         hostCalls.sortedBy { it.moduleName + it.functionName }.forEach { call ->
-            appendLine("    ${call.moduleName}.${call.functionName}: count=${call.calls}, time=${call.nanos.nanos()}, avg=${call.averageNanos.nanos()}")
+            appendLine(
+                "    ${call.moduleName}.${call.functionName}: count=${call.calls}, time=${call.nanos.nanos()}, avg=${call.averageNanos.nanos()}",
+            )
         }
     }
 
@@ -194,9 +234,18 @@ data class RuntimeProfilingSnapshot(
             append("  instructions: none")
             return
         }
-        appendLine("  instructions: count=${instructions.sumOf { it.count }}, time=${instructions.sumOf { it.nanos }.nanos()}, avg=${instructions.sumOf { it.averageNanos }.nanos()}")
+        appendLine(
+            "  instructions: count=${
+                instructions.sumOf {
+                    it.count
+                }
+            }, time=${instructions.sumOf { it.nanos }.nanos()}, avg=${instructions.sumOf { it.averageNanos }.nanos()}",
+        )
         instructions.sortedBy { it.kind }.forEachIndexed { index, instruction ->
-            val line = "    ${instruction.kind}: count=${instruction.count}, time=${instruction.nanos.nanos()}, avg=${instruction.averageNanos.nanos()}"
+            val line =
+                "    ${instruction.kind}: count=${instruction.count}," +
+                    " time=${instruction.nanos.nanos()}," +
+                    " avg=${instruction.averageNanos.nanos()}"
             if (index == instructions.lastIndex) append(line) else appendLine(line)
         }
     }
@@ -460,21 +509,27 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
                     hostCallSignals = hostCallSignals.get(),
                 ),
             hostCalls =
-                hostCalls.map { (key, counter) ->
-                    RuntimeHostCallMetrics(
-                        moduleName = key.first,
-                        functionName = key.second,
-                        calls = counter.count.get(),
-                        nanos = counter.nanos.get(),
-                    )
-                }.sortedWith(compareByDescending<RuntimeHostCallMetrics> { it.nanos }.thenBy { it.moduleName }.thenBy { it.functionName }),
+                hostCalls
+                    .map { (key, counter) ->
+                        RuntimeHostCallMetrics(
+                            moduleName = key.first,
+                            functionName = key.second,
+                            calls = counter.count.get(),
+                            nanos = counter.nanos.get(),
+                        )
+                    }.sortedWith(
+                        compareByDescending<RuntimeHostCallMetrics> { it.nanos }
+                            .thenBy { it.moduleName }
+                            .thenBy { it.functionName },
+                    ),
             instructions =
-                instructions.map { (kind, counter) ->
-                    RuntimeInstructionMetrics(
-                        kind = kind,
-                        count = counter.count.get(),
-                        nanos = counter.nanos.get(),
-                    )
-                }.sortedWith(compareByDescending<RuntimeInstructionMetrics> { it.nanos }.thenBy { it.kind.name }),
+                instructions
+                    .map { (kind, counter) ->
+                        RuntimeInstructionMetrics(
+                            kind = kind,
+                            count = counter.count.get(),
+                            nanos = counter.nanos.get(),
+                        )
+                    }.sortedWith(compareByDescending<RuntimeInstructionMetrics> { it.nanos }.thenBy { it.kind.name }),
         )
 }

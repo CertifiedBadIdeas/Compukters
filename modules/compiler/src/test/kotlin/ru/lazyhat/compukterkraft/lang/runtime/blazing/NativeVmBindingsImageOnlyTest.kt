@@ -26,7 +26,10 @@ import kotlin.test.assertTrue
 class NativeVmBindingsImageOnlyTest {
     @Test
     fun nativeBindingsExposeOnlyImageVmLifecycle() {
-        val methodNames = NativeVmBindings::class.java.declaredMethods.map { it.name }.toSet()
+        val methodNames =
+            NativeVmBindings::class.java.declaredMethods
+                .map { it.name }
+                .toSet()
 
         assertTrue("createImage" in methodNames)
         assertTrue("runImageUntilSignal" in methodNames)

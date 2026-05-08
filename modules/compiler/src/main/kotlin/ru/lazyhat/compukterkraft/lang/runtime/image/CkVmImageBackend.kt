@@ -1,3 +1,22 @@
+/*
+ * The Compukter Kraft Developers
+ *
+ * Copyright (C) 2026 Vsevolod Petrov (lazyhat)
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package ru.lazyhat.compukterkraft.lang.runtime.image
 
 import ru.lazyhat.compukterkraft.lang.api.BinaryOperator
@@ -53,8 +72,13 @@ object CkVmImageCompiler {
             .asSequence()
             .flatMap { function -> function.instructions.filterIsInstance<Instruction.CallBuiltin>() }
             .filter { instruction -> instruction.moduleName != null }
-            .map { instruction -> CkVmHostImportRegistry.require(requireNotNull(instruction.moduleName), instruction.functionName, instruction.argumentCount) }
-            .distinct()
+            .map { instruction ->
+                CkVmHostImportRegistry.require(
+                    requireNotNull(instruction.moduleName),
+                    instruction.functionName,
+                    instruction.argumentCount,
+                )
+            }.distinct()
             .sortedBy { import -> import.id }
             .toList()
 
@@ -98,7 +122,9 @@ object CkVmImageCompiler {
                 Instruction.IndexGet,
                 Instruction.IndexSet,
                 -> 1
+
                 is Instruction.PushBool -> 2
+
                 is Instruction.PushString,
                 is Instruction.PushInt,
                 is Instruction.PushLong,
@@ -111,14 +137,19 @@ object CkVmImageCompiler {
                 is Instruction.ConstructList,
                 is Instruction.ConstructMap,
                 -> 5
+
                 is Instruction.ConstructRecord -> 9 + 4 * instruction.fieldNames.size
+
                 is Instruction.Binary,
                 is Instruction.Unary,
                 -> 2
+
                 is Instruction.CallFunction,
                 is Instruction.CallCollectionMethod,
                 -> 9
+
                 is Instruction.CallBuiltin -> callBuiltinLength(instruction)
+
                 else -> throw UnsupportedOperationException("CkVmImage backend does not support ${instruction::class.simpleName}")
             }
 
@@ -129,39 +160,118 @@ object CkVmImageCompiler {
             instructionIndex: Int,
         ): List<Int> =
             when (instruction) {
-                Instruction.PushUnit -> listOf(CkVmImageOpcodes.PUSH_UNIT)
-                Instruction.PushNull -> listOf(CkVmImageOpcodes.PUSH_NULL)
-                Instruction.Return -> listOf(CkVmImageOpcodes.RETURN)
-                Instruction.Pop -> listOf(CkVmImageOpcodes.POP)
-                is Instruction.PushBool -> listOf(CkVmImageOpcodes.PUSH_BOOL, if (instruction.value) 1 else 0)
-                is Instruction.PushString -> pushConstant(CkVmConstant.StringConstant(instruction.value))
-                is Instruction.PushInt -> pushConstant(CkVmConstant.IntConstant(instruction.value))
-                is Instruction.PushLong -> pushConstant(CkVmConstant.LongConstant(instruction.value))
-                is Instruction.LoadLocal -> listOf(CkVmImageOpcodes.LOAD_LOCAL) + i32(instruction.slot)
-                is Instruction.StoreLocal -> listOf(CkVmImageOpcodes.STORE_LOCAL) + i32(instruction.slot)
-                is Instruction.Jump -> listOf(CkVmImageOpcodes.JUMP) + i32(resolveJumpTarget(instruction.target, offsets, instructionCount, instructionIndex))
-                is Instruction.JumpIfFalse -> listOf(CkVmImageOpcodes.JUMP_IF_FALSE) + i32(resolveJumpTarget(instruction.target, offsets, instructionCount, instructionIndex))
-                is Instruction.JumpIfTrue -> listOf(CkVmImageOpcodes.JUMP_IF_TRUE) + i32(resolveJumpTarget(instruction.target, offsets, instructionCount, instructionIndex))
-                is Instruction.Binary -> listOf(CkVmImageOpcodes.BINARY, binaryOperatorTag(instruction.operator))
-                is Instruction.Unary -> listOf(CkVmImageOpcodes.UNARY, unaryOperatorTag(instruction.operator))
-                is Instruction.ConstructRecord ->
+                Instruction.PushUnit -> {
+                    listOf(CkVmImageOpcodes.PUSH_UNIT)
+                }
+
+                Instruction.PushNull -> {
+                    listOf(CkVmImageOpcodes.PUSH_NULL)
+                }
+
+                Instruction.Return -> {
+                    listOf(CkVmImageOpcodes.RETURN)
+                }
+
+                Instruction.Pop -> {
+                    listOf(CkVmImageOpcodes.POP)
+                }
+
+                is Instruction.PushBool -> {
+                    listOf(CkVmImageOpcodes.PUSH_BOOL, if (instruction.value) 1 else 0)
+                }
+
+                is Instruction.PushString -> {
+                    pushConstant(CkVmConstant.StringConstant(instruction.value))
+                }
+
+                is Instruction.PushInt -> {
+                    pushConstant(CkVmConstant.IntConstant(instruction.value))
+                }
+
+                is Instruction.PushLong -> {
+                    pushConstant(CkVmConstant.LongConstant(instruction.value))
+                }
+
+                is Instruction.LoadLocal -> {
+                    listOf(CkVmImageOpcodes.LOAD_LOCAL) + i32(instruction.slot)
+                }
+
+                is Instruction.StoreLocal -> {
+                    listOf(CkVmImageOpcodes.STORE_LOCAL) + i32(instruction.slot)
+                }
+
+                is Instruction.Jump -> {
+                    listOf(CkVmImageOpcodes.JUMP) +
+                        i32(resolveJumpTarget(instruction.target, offsets, instructionCount, instructionIndex))
+                }
+
+                is Instruction.JumpIfFalse -> {
+                    listOf(CkVmImageOpcodes.JUMP_IF_FALSE) +
+                        i32(resolveJumpTarget(instruction.target, offsets, instructionCount, instructionIndex))
+                }
+
+                is Instruction.JumpIfTrue -> {
+                    listOf(CkVmImageOpcodes.JUMP_IF_TRUE) +
+                        i32(resolveJumpTarget(instruction.target, offsets, instructionCount, instructionIndex))
+                }
+
+                is Instruction.Binary -> {
+                    listOf(CkVmImageOpcodes.BINARY, binaryOperatorTag(instruction.operator))
+                }
+
+                is Instruction.Unary -> {
+                    listOf(CkVmImageOpcodes.UNARY, unaryOperatorTag(instruction.operator))
+                }
+
+                is Instruction.ConstructRecord -> {
                     listOf(CkVmImageOpcodes.CONSTRUCT_RECORD) +
                         stringConstantIndexBytes(instruction.typeName) +
                         i32(instruction.fieldNames.size) +
                         instruction.fieldNames.flatMap(::stringConstantIndexBytes)
-                is Instruction.GetField -> listOf(CkVmImageOpcodes.GET_FIELD) + stringConstantIndexBytes(instruction.fieldName)
-                Instruction.ConstructArray -> listOf(CkVmImageOpcodes.CONSTRUCT_ARRAY)
-                is Instruction.ConstructList -> listOf(CkVmImageOpcodes.CONSTRUCT_LIST) + i32(instruction.elementCount)
-                is Instruction.ConstructMap -> listOf(CkVmImageOpcodes.CONSTRUCT_MAP) + i32(instruction.entryCount)
-                Instruction.IndexGet -> listOf(CkVmImageOpcodes.INDEX_GET)
-                Instruction.IndexSet -> listOf(CkVmImageOpcodes.INDEX_SET)
-                is Instruction.CallCollectionMethod ->
+                }
+
+                is Instruction.GetField -> {
+                    listOf(CkVmImageOpcodes.GET_FIELD) + stringConstantIndexBytes(instruction.fieldName)
+                }
+
+                Instruction.ConstructArray -> {
+                    listOf(CkVmImageOpcodes.CONSTRUCT_ARRAY)
+                }
+
+                is Instruction.ConstructList -> {
+                    listOf(CkVmImageOpcodes.CONSTRUCT_LIST) + i32(instruction.elementCount)
+                }
+
+                is Instruction.ConstructMap -> {
+                    listOf(CkVmImageOpcodes.CONSTRUCT_MAP) + i32(instruction.entryCount)
+                }
+
+                Instruction.IndexGet -> {
+                    listOf(CkVmImageOpcodes.INDEX_GET)
+                }
+
+                Instruction.IndexSet -> {
+                    listOf(CkVmImageOpcodes.INDEX_SET)
+                }
+
+                is Instruction.CallCollectionMethod -> {
                     listOf(CkVmImageOpcodes.CALL_COLLECTION_METHOD) +
                         stringConstantIndexBytes(instruction.methodName) +
                         i32(instruction.argumentCount)
-                is Instruction.CallFunction -> listOf(CkVmImageOpcodes.CALL_FUNCTION) + i32(instruction.functionIndex) + i32(instruction.argumentCount)
-                is Instruction.CallBuiltin -> callBuiltin(instruction)
-                else -> throw UnsupportedOperationException("CkVmImage backend does not support ${instruction::class.simpleName}")
+                }
+
+                is Instruction.CallFunction -> {
+                    listOf(CkVmImageOpcodes.CALL_FUNCTION) + i32(instruction.functionIndex) +
+                        i32(instruction.argumentCount)
+                }
+
+                is Instruction.CallBuiltin -> {
+                    callBuiltin(instruction)
+                }
+
+                else -> {
+                    throw UnsupportedOperationException("CkVmImage backend does not support ${instruction::class.simpleName}")
+                }
             }
 
         private fun resolveJumpTarget(
@@ -176,11 +286,9 @@ object CkVmImageCompiler {
             return offsets[target]
         }
 
-        private fun pushConstant(constant: CkVmConstant): List<Int> =
-            listOf(CkVmImageOpcodes.PUSH_CONSTANT) + i32(constantIndex(constant))
+        private fun pushConstant(constant: CkVmConstant): List<Int> = listOf(CkVmImageOpcodes.PUSH_CONSTANT) + i32(constantIndex(constant))
 
-        private fun stringConstantIndexBytes(value: String): List<Int> =
-            i32(constantIndex(CkVmConstant.StringConstant(value)))
+        private fun stringConstantIndexBytes(value: String): List<Int> = i32(constantIndex(CkVmConstant.StringConstant(value)))
 
         private fun constantIndex(constant: CkVmConstant): Int {
             val existing = constants.indexOf(constant)
@@ -199,8 +307,12 @@ object CkVmImageCompiler {
             if (instruction.moduleName == null) {
                 return when {
                     instruction.functionName == "yield" && instruction.argumentCount == 0 -> listOf(CkVmImageOpcodes.YIELD)
+
                     instruction.functionName == "sleep" && instruction.argumentCount == 1 -> listOf(CkVmImageOpcodes.SLEEP)
-                    else -> throw UnsupportedOperationException("CkVmImage backend does not support global builtin ${instruction.functionName}")
+
+                    else -> throw UnsupportedOperationException(
+                        "CkVmImage backend does not support global builtin ${instruction.functionName}",
+                    )
                 }
             }
             val import = hostImportIds.getValue(Triple(instruction.moduleName, instruction.functionName, instruction.argumentCount))

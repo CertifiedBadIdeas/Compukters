@@ -1,3 +1,22 @@
+/*
+ * The Compukter Kraft Developers
+ *
+ * Copyright (C) 2026 Vsevolod Petrov (lazyhat)
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package ru.lazyhat.compukterkraft.lang.runtime.image
 
 import ru.lazyhat.compukterkraft.lang.api.Instruction
@@ -33,8 +52,20 @@ class CkVmImageBackendTest {
         assertEquals(listOf(CkVmHostImport(3004, "system", "log", listOf("String"), "Unit")), image.hostImports)
         assertContentEquals(
             listOf(
-                CkVmImageOpcodes.PUSH_CONSTANT, 0, 0, 0, 0,
-            CkVmImageOpcodes.CALL_HOST, 188, 11, 0, 0, 1, 0, 0, 0,
+                CkVmImageOpcodes.PUSH_CONSTANT,
+                0,
+                0,
+                0,
+                0,
+                CkVmImageOpcodes.CALL_HOST,
+                188,
+                11,
+                0,
+                0,
+                1,
+                0,
+                0,
+                0,
                 CkVmImageOpcodes.POP,
                 CkVmImageOpcodes.PUSH_UNIT,
                 CkVmImageOpcodes.RETURN,
@@ -45,33 +76,64 @@ class CkVmImageBackendTest {
 
     @Test
     fun compileImageLowersBoolAndLocalSlots() {
-        val image = assertNotNull(
-            LanguageFrontend().compileImage(
-                "main.ck",
-                """
-                pub fun main() {
-                    val enabled: Bool = true;
-                    if (enabled) {
-                        system::log("yes");
-                    }
-                }
-                """.trimIndent(),
-            ).image,
-        )
+        val image =
+            assertNotNull(
+                LanguageFrontend()
+                    .compileImage(
+                        "main.ck",
+                        """
+                        pub fun main() {
+                            val enabled: Bool = true;
+                            if (enabled) {
+                                system::log("yes");
+                            }
+                        }
+                        """.trimIndent(),
+                    ).image,
+            )
 
         assertEquals(1, image.functions.single().frameSize)
         assertEquals(listOf(CkVmConstant.StringConstant("yes")), image.constants)
         assertEquals(listOf(CkVmHostImport(3004, "system", "log", listOf("String"), "Unit")), image.hostImports)
         assertContentEquals(
             listOf(
-                CkVmImageOpcodes.PUSH_BOOL, 1,
-                CkVmImageOpcodes.STORE_LOCAL, 0, 0, 0, 0,
-                CkVmImageOpcodes.LOAD_LOCAL, 0, 0, 0, 0,
-                CkVmImageOpcodes.JUMP_IF_FALSE, 37, 0, 0, 0,
-                CkVmImageOpcodes.PUSH_CONSTANT, 0, 0, 0, 0,
-                CkVmImageOpcodes.CALL_HOST, 188, 11, 0, 0, 1, 0, 0, 0,
+                CkVmImageOpcodes.PUSH_BOOL,
+                1,
+                CkVmImageOpcodes.STORE_LOCAL,
+                0,
+                0,
+                0,
+                0,
+                CkVmImageOpcodes.LOAD_LOCAL,
+                0,
+                0,
+                0,
+                0,
+                CkVmImageOpcodes.JUMP_IF_FALSE,
+                37,
+                0,
+                0,
+                0,
+                CkVmImageOpcodes.PUSH_CONSTANT,
+                0,
+                0,
+                0,
+                0,
+                CkVmImageOpcodes.CALL_HOST,
+                188,
+                11,
+                0,
+                0,
+                1,
+                0,
+                0,
+                0,
                 CkVmImageOpcodes.POP,
-                CkVmImageOpcodes.JUMP, 37, 0, 0, 0,
+                CkVmImageOpcodes.JUMP,
+                37,
+                0,
+                0,
+                0,
                 CkVmImageOpcodes.PUSH_UNIT,
                 CkVmImageOpcodes.RETURN,
             ),
@@ -94,27 +156,50 @@ class CkVmImageBackendTest {
 
     @Test
     fun compileImageLowersForwardAndBackwardJumpsToByteOffsets() {
-        val image = assertNotNull(
-            LanguageFrontend().compileImage(
-                "main.ck",
-                """
-                pub fun main() {
-                    while (false) {
-                        system::log("loop");
-                    }
-                }
-                """.trimIndent(),
-            ).image,
-        )
+        val image =
+            assertNotNull(
+                LanguageFrontend()
+                    .compileImage(
+                        "main.ck",
+                        """
+                        pub fun main() {
+                            while (false) {
+                                system::log("loop");
+                            }
+                        }
+                        """.trimIndent(),
+                    ).image,
+            )
 
         assertContentEquals(
             listOf(
-                CkVmImageOpcodes.PUSH_BOOL, 0,
-                CkVmImageOpcodes.JUMP_IF_FALSE, 27, 0, 0, 0,
-                CkVmImageOpcodes.PUSH_CONSTANT, 0, 0, 0, 0,
-                CkVmImageOpcodes.CALL_HOST, 188, 11, 0, 0, 1, 0, 0, 0,
+                CkVmImageOpcodes.PUSH_BOOL,
+                0,
+                CkVmImageOpcodes.JUMP_IF_FALSE,
+                27,
+                0,
+                0,
+                0,
+                CkVmImageOpcodes.PUSH_CONSTANT,
+                0,
+                0,
+                0,
+                0,
+                CkVmImageOpcodes.CALL_HOST,
+                188,
+                11,
+                0,
+                0,
+                1,
+                0,
+                0,
+                0,
                 CkVmImageOpcodes.POP,
-                CkVmImageOpcodes.JUMP, 0, 0, 0, 0,
+                CkVmImageOpcodes.JUMP,
+                0,
+                0,
+                0,
+                0,
                 CkVmImageOpcodes.PUSH_UNIT,
                 CkVmImageOpcodes.RETURN,
             ),
@@ -124,20 +209,22 @@ class CkVmImageBackendTest {
 
     @Test
     fun compileImageLowersBinaryAndUnaryOperators() {
-        val image = assertNotNull(
-            LanguageFrontend().compileImage(
-                "main.ck",
-                """
-                pub fun main() {
-                    val value: Int = 1 + 2 * 3;
-                    val ok: Bool = value >= 7 && !false;
-                    if (ok) {
-                        system::log("ok");
-                    }
-                }
-                """.trimIndent(),
-            ).image,
-        )
+        val image =
+            assertNotNull(
+                LanguageFrontend()
+                    .compileImage(
+                        "main.ck",
+                        """
+                        pub fun main() {
+                            val value: Int = 1 + 2 * 3;
+                            val ok: Bool = value >= 7 && !false;
+                            if (ok) {
+                                system::log("ok");
+                            }
+                        }
+                        """.trimIndent(),
+                    ).image,
+            )
 
         assertEquals(
             listOf(
@@ -151,25 +238,83 @@ class CkVmImageBackendTest {
         )
         assertContentEquals(
             listOf(
-                CkVmImageOpcodes.PUSH_CONSTANT, 0, 0, 0, 0,
-                CkVmImageOpcodes.PUSH_CONSTANT, 1, 0, 0, 0,
-                CkVmImageOpcodes.PUSH_CONSTANT, 2, 0, 0, 0,
-                CkVmImageOpcodes.BINARY, 2,
-                CkVmImageOpcodes.BINARY, 0,
-                CkVmImageOpcodes.STORE_LOCAL, 0, 0, 0, 0,
-                CkVmImageOpcodes.LOAD_LOCAL, 0, 0, 0, 0,
-                CkVmImageOpcodes.PUSH_CONSTANT, 3, 0, 0, 0,
-                CkVmImageOpcodes.BINARY, 9,
-                CkVmImageOpcodes.PUSH_BOOL, 0,
-                CkVmImageOpcodes.UNARY, 1,
-                CkVmImageOpcodes.BINARY, 10,
-                CkVmImageOpcodes.STORE_LOCAL, 1, 0, 0, 0,
-                CkVmImageOpcodes.LOAD_LOCAL, 1, 0, 0, 0,
-                CkVmImageOpcodes.JUMP_IF_FALSE, 77, 0, 0, 0,
-                CkVmImageOpcodes.PUSH_CONSTANT, 4, 0, 0, 0,
-                CkVmImageOpcodes.CALL_HOST, 188, 11, 0, 0, 1, 0, 0, 0,
+                CkVmImageOpcodes.PUSH_CONSTANT,
+                0,
+                0,
+                0,
+                0,
+                CkVmImageOpcodes.PUSH_CONSTANT,
+                1,
+                0,
+                0,
+                0,
+                CkVmImageOpcodes.PUSH_CONSTANT,
+                2,
+                0,
+                0,
+                0,
+                CkVmImageOpcodes.BINARY,
+                2,
+                CkVmImageOpcodes.BINARY,
+                0,
+                CkVmImageOpcodes.STORE_LOCAL,
+                0,
+                0,
+                0,
+                0,
+                CkVmImageOpcodes.LOAD_LOCAL,
+                0,
+                0,
+                0,
+                0,
+                CkVmImageOpcodes.PUSH_CONSTANT,
+                3,
+                0,
+                0,
+                0,
+                CkVmImageOpcodes.BINARY,
+                9,
+                CkVmImageOpcodes.PUSH_BOOL,
+                0,
+                CkVmImageOpcodes.UNARY,
+                1,
+                CkVmImageOpcodes.BINARY,
+                10,
+                CkVmImageOpcodes.STORE_LOCAL,
+                1,
+                0,
+                0,
+                0,
+                CkVmImageOpcodes.LOAD_LOCAL,
+                1,
+                0,
+                0,
+                0,
+                CkVmImageOpcodes.JUMP_IF_FALSE,
+                77,
+                0,
+                0,
+                0,
+                CkVmImageOpcodes.PUSH_CONSTANT,
+                4,
+                0,
+                0,
+                0,
+                CkVmImageOpcodes.CALL_HOST,
+                188,
+                11,
+                0,
+                0,
+                1,
+                0,
+                0,
+                0,
                 CkVmImageOpcodes.POP,
-                CkVmImageOpcodes.JUMP, 77, 0, 0, 0,
+                CkVmImageOpcodes.JUMP,
+                77,
+                0,
+                0,
+                0,
                 CkVmImageOpcodes.PUSH_UNIT,
                 CkVmImageOpcodes.RETURN,
             ),
@@ -179,20 +324,22 @@ class CkVmImageBackendTest {
 
     @Test
     fun compileImageLowersUserFunctionCall() {
-        val image = assertNotNull(
-            LanguageFrontend().compileImage(
-                "main.ck",
-                """
-                fun add(a: Int, b: Int): Int {
-                    return a + b;
-                }
+        val image =
+            assertNotNull(
+                LanguageFrontend()
+                    .compileImage(
+                        "main.ck",
+                        """
+                        fun add(a: Int, b: Int): Int {
+                            return a + b;
+                        }
 
-                pub fun main() {
-                    val result: Int = add(2, 5);
-                }
-                """.trimIndent(),
-            ).image,
-        )
+                        pub fun main() {
+                            val result: Int = add(2, 5);
+                        }
+                        """.trimIndent(),
+                    ).image,
+            )
         val addIndex = image.functions.indexOfFirst { it.name == "main.ck#add" }
         val mainFunction = image.functions.single { it.name == "main.ck#main" }
         val addFunction = image.functions.single { it.name == "main.ck#add" }
@@ -203,9 +350,18 @@ class CkVmImageBackendTest {
         assertEquals(listOf(CkVmConstant.IntConstant(2), CkVmConstant.IntConstant(5)), image.constants)
         assertContentEquals(
             listOf(
-                CkVmImageOpcodes.LOAD_LOCAL, 0, 0, 0, 0,
-                CkVmImageOpcodes.LOAD_LOCAL, 1, 0, 0, 0,
-                CkVmImageOpcodes.BINARY, 0,
+                CkVmImageOpcodes.LOAD_LOCAL,
+                0,
+                0,
+                0,
+                0,
+                CkVmImageOpcodes.LOAD_LOCAL,
+                1,
+                0,
+                0,
+                0,
+                CkVmImageOpcodes.BINARY,
+                0,
                 CkVmImageOpcodes.RETURN,
                 CkVmImageOpcodes.PUSH_UNIT,
                 CkVmImageOpcodes.RETURN,
@@ -214,33 +370,48 @@ class CkVmImageBackendTest {
         )
         assertContentEquals(
             listOf(
-                CkVmImageOpcodes.PUSH_CONSTANT, 0, 0, 0, 0,
-                CkVmImageOpcodes.PUSH_CONSTANT, 1, 0, 0, 0,
+                CkVmImageOpcodes.PUSH_CONSTANT,
+                0,
+                0,
+                0,
+                0,
+                CkVmImageOpcodes.PUSH_CONSTANT,
+                1,
+                0,
+                0,
+                0,
                 CkVmImageOpcodes.CALL_FUNCTION,
-            ) + i32(addIndex) + i32(2) + listOf(
-                CkVmImageOpcodes.STORE_LOCAL, 0, 0, 0, 0,
-                CkVmImageOpcodes.PUSH_UNIT,
-                CkVmImageOpcodes.RETURN,
-            ),
+            ) + i32(addIndex) + i32(2) +
+                listOf(
+                    CkVmImageOpcodes.STORE_LOCAL,
+                    0,
+                    0,
+                    0,
+                    0,
+                    CkVmImageOpcodes.PUSH_UNIT,
+                    CkVmImageOpcodes.RETURN,
+                ),
             mainFunction.code,
         )
     }
 
     @Test
     fun compileImageLowersRecordConstructionAndFieldAccess() {
-        val image = assertNotNull(
-            LanguageFrontend().compileImage(
-                "main.ck",
-                """
-                struct Point { x: Int, y: Int }
+        val image =
+            assertNotNull(
+                LanguageFrontend()
+                    .compileImage(
+                        "main.ck",
+                        """
+                        struct Point { x: Int, y: Int }
 
-                pub fun main() {
-                    val point: Point = Point(x = 2, y = 5);
-                    val delta: Int = point.x - point.y;
-                }
-                """.trimIndent(),
-            ).image,
-        )
+                        pub fun main() {
+                            val point: Point = Point(x = 2, y = 5);
+                            val delta: Int = point.x - point.y;
+                        }
+                        """.trimIndent(),
+                    ).image,
+            )
         val mainFunction = image.functions.single { it.name == "main.ck#main" }
 
         assertEquals(
@@ -256,45 +427,75 @@ class CkVmImageBackendTest {
         assertEquals(2, mainFunction.frameSize)
         assertContentEquals(
             listOf(
-                CkVmImageOpcodes.PUSH_CONSTANT, 0, 0, 0, 0,
-                CkVmImageOpcodes.PUSH_CONSTANT, 1, 0, 0, 0,
+                CkVmImageOpcodes.PUSH_CONSTANT,
+                0,
+                0,
+                0,
+                0,
+                CkVmImageOpcodes.PUSH_CONSTANT,
+                1,
+                0,
+                0,
+                0,
                 CkVmImageOpcodes.CONSTRUCT_RECORD,
-            ) + i32(2) + i32(2) + i32(3) + i32(4) + listOf(
-                CkVmImageOpcodes.STORE_LOCAL, 0, 0, 0, 0,
-                CkVmImageOpcodes.LOAD_LOCAL, 0, 0, 0, 0,
-                CkVmImageOpcodes.GET_FIELD,
-            ) + i32(3) + listOf(
-                CkVmImageOpcodes.LOAD_LOCAL, 0, 0, 0, 0,
-                CkVmImageOpcodes.GET_FIELD,
-            ) + i32(4) + listOf(
-                CkVmImageOpcodes.BINARY, 1,
-                CkVmImageOpcodes.STORE_LOCAL, 1, 0, 0, 0,
-                CkVmImageOpcodes.PUSH_UNIT,
-                CkVmImageOpcodes.RETURN,
-            ),
+            ) + i32(2) + i32(2) + i32(3) + i32(4) +
+                listOf(
+                    CkVmImageOpcodes.STORE_LOCAL,
+                    0,
+                    0,
+                    0,
+                    0,
+                    CkVmImageOpcodes.LOAD_LOCAL,
+                    0,
+                    0,
+                    0,
+                    0,
+                    CkVmImageOpcodes.GET_FIELD,
+                ) + i32(3) +
+                listOf(
+                    CkVmImageOpcodes.LOAD_LOCAL,
+                    0,
+                    0,
+                    0,
+                    0,
+                    CkVmImageOpcodes.GET_FIELD,
+                ) + i32(4) +
+                listOf(
+                    CkVmImageOpcodes.BINARY,
+                    1,
+                    CkVmImageOpcodes.STORE_LOCAL,
+                    1,
+                    0,
+                    0,
+                    0,
+                    CkVmImageOpcodes.PUSH_UNIT,
+                    CkVmImageOpcodes.RETURN,
+                ),
             mainFunction.code,
         )
     }
 
     @Test
     fun compileImageLowersCollectionConstructorsAndIndexOps() {
-        val image = assertNotNull(
-            LanguageFrontend().compileImage(
-                "main.ck",
-                """
-                pub fun main() {
-                    val array: Array<Int> = Array<Int>(size = 2, default = 0);
-                    array[1] = 7;
-                    val arrayValue: Int = array[1];
-                    val list: List<Int> = [2, 5];
-                    val listValue: Int = list[0] - list[1];
-                    val map: Map<String, Int> = {"x": 3};
-                    map["y"] = 4;
-                    val mapValue: Int? = map["missing"];
-                }
-                """.trimIndent(),
-            ).image,
-        )
+        val image =
+            assertNotNull(
+                LanguageFrontend()
+                    .compileImage(
+                        "main.ck",
+                        """
+                        pub fun main() {
+                            val array: Array<Int> = Array<Int>(size = 2, default = 0);
+                            array[1] = 7;
+                            val arrayValue: Int = array[1];
+                            val list: List<Int> = [2, 5];
+                            val listValue: Int = list[0] - list[1];
+                            val map: Map<String, Int> = {"x": 3};
+                            map["y"] = 4;
+                            val mapValue: Int? = map["missing"];
+                        }
+                        """.trimIndent(),
+                    ).image,
+            )
         val mainFunction = image.functions.single { it.name == "main.ck#main" }
 
         assertEquals(
@@ -322,22 +523,24 @@ class CkVmImageBackendTest {
 
     @Test
     fun compileImageLowersCollectionMethodsWithStringMetadata() {
-        val image = assertNotNull(
-            LanguageFrontend().compileImage(
-                "main.ck",
-                """
-                pub fun main() {
-                    val list: List<Int> = [2];
-                    list.add(5);
-                    val size: Int = list.size();
-                    val removed: Int = list.removeAt(0);
-                    val map: Map<String, Int> = {"x": 1};
-                    val exists: Bool = map.containsKey("x");
-                    val fallback: Int = map.getOrDefault("missing", 9);
-                }
-                """.trimIndent(),
-            ).image,
-        )
+        val image =
+            assertNotNull(
+                LanguageFrontend()
+                    .compileImage(
+                        "main.ck",
+                        """
+                        pub fun main() {
+                            val list: List<Int> = [2];
+                            list.add(5);
+                            val size: Int = list.size();
+                            val removed: Int = list.removeAt(0);
+                            val map: Map<String, Int> = {"x": 1};
+                            val exists: Bool = map.containsKey("x");
+                            val fallback: Int = map.getOrDefault("missing", 9);
+                        }
+                        """.trimIndent(),
+                    ).image,
+            )
         val mainFunction = image.functions.single { it.name == "main.ck#main" }
 
         assertTrue(image.constants.contains(CkVmConstant.StringConstant("add")))
@@ -350,18 +553,20 @@ class CkVmImageBackendTest {
 
     @Test
     fun compileImageLowersGlobalSchedulerBuiltins() {
-        val image = assertNotNull(
-            LanguageFrontend().compileImage(
-                "main.ck",
-                """
-                pub fun main() {
-                    yield();
-                    sleep(2L);
-                    system::log("done");
-                }
-                """.trimIndent(),
-            ).image,
-        )
+        val image =
+            assertNotNull(
+                LanguageFrontend()
+                    .compileImage(
+                        "main.ck",
+                        """
+                        pub fun main() {
+                            yield();
+                            sleep(2L);
+                            system::log("done");
+                        }
+                        """.trimIndent(),
+                    ).image,
+            )
 
         assertEquals(
             listOf(
@@ -378,11 +583,27 @@ class CkVmImageBackendTest {
             listOf(
                 CkVmImageOpcodes.YIELD,
                 CkVmImageOpcodes.POP,
-                CkVmImageOpcodes.PUSH_CONSTANT, 0, 0, 0, 0,
+                CkVmImageOpcodes.PUSH_CONSTANT,
+                0,
+                0,
+                0,
+                0,
                 CkVmImageOpcodes.SLEEP,
                 CkVmImageOpcodes.POP,
-                CkVmImageOpcodes.PUSH_CONSTANT, 1, 0, 0, 0,
-                CkVmImageOpcodes.CALL_HOST, 188, 11, 0, 0, 1, 0, 0, 0,
+                CkVmImageOpcodes.PUSH_CONSTANT,
+                1,
+                0,
+                0,
+                0,
+                CkVmImageOpcodes.CALL_HOST,
+                188,
+                11,
+                0,
+                0,
+                1,
+                0,
+                0,
+                0,
                 CkVmImageOpcodes.POP,
                 CkVmImageOpcodes.PUSH_UNIT,
                 CkVmImageOpcodes.RETURN,
@@ -396,17 +617,24 @@ class CkVmImageBackendTest {
         val artifact = LanguageFrontend().compileImage("main.ck", "fun main() { }")
 
         assertNull(artifact.image)
-        assertTrue(artifact.bytecode.analysis.diagnostics.any { it.severity == FrontendSeverity.ERROR })
+        assertTrue(
+            artifact.bytecode.analysis.diagnostics
+                .any { it.severity == FrontendSeverity.ERROR },
+        )
     }
 
     @Test
     fun unsupportedInstructionReportsClearError() {
         val base = assertNotNull(LanguageFrontend().compile("main.ck", "pub fun main() { }").module)
-        val function = base.functions.single().copy(instructions = listOf(Instruction.ConstructClass("Box", emptyList()), Instruction.Return))
+        val function =
+            base.functions.single().copy(
+                instructions = listOf(Instruction.ConstructClass("Box", emptyList()), Instruction.Return),
+            )
 
-        val error = assertFailsWith<UnsupportedOperationException> {
-            CkVmImageCompiler.compile(base.copy(functions = listOf(function)))
-        }
+        val error =
+            assertFailsWith<UnsupportedOperationException> {
+                CkVmImageCompiler.compile(base.copy(functions = listOf(function)))
+            }
 
         assertTrue(error.message.orEmpty().contains("CkVmImage backend does not support ConstructClass"))
     }
@@ -419,7 +647,17 @@ class CkVmImageBackendTest {
         val path = System.getProperty("ckl.image.backend.fixture.path")?.takeIf(String::isNotBlank) ?: return
         val image = assertNotNull(LanguageFrontend().compileImage("main.ck", "pub fun main() { system::log(\"hi\"); }").image)
 
-        java.nio.file.Files.createDirectories(java.nio.file.Path.of(path).parent)
-        java.nio.file.Files.write(java.nio.file.Path.of(path), CkVmImageAbi.encode(image))
+        java.nio.file.Files
+            .createDirectories(
+                java.nio.file.Path
+                    .of(path)
+                    .parent,
+            )
+        java.nio.file.Files
+            .write(
+                java.nio.file.Path
+                    .of(path),
+                CkVmImageAbi.encode(image),
+            )
     }
 }
