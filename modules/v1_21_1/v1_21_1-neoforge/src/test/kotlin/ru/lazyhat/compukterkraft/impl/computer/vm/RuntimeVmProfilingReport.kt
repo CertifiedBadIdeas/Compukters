@@ -435,27 +435,23 @@ internal object RuntimeVmProfilingReportFormatter {
 
     fun historicalMarkdown(runs: List<RuntimeVmProfileRun>): String =
         buildString {
+            val orderedRuns = runs.sortedByDescending { it.metadata.timestamp }
             appendLine("# Runtime VM Profiling History")
             appendLine()
             appendLine("| Timestamp | Runtime | Commit | Workloads |")
             appendLine("|---|---|---|---:|")
-            runs.forEach { run ->
+            orderedRuns.forEach { run ->
                 appendLine(
                     "| ${run.metadata.timestamp} | ${run.profile.runtimeName} | ${run.metadata.gitCommit ?: ""} | ${run.profile.workloads.size} |",
                 )
             }
             appendLine()
 
-            val workloadNames = runs.flatMap { run -> run.profile.workloads.map { it.name } }.distinct().sorted()
+            val workloadNames = orderedRuns.flatMap { run -> run.profile.workloads.map { it.name } }.distinct().sorted()
             workloadNames.forEach { workloadName ->
                 appendLine("## $workloadName")
                 appendLine()
-                var previous: RuntimeWorkloadProfile? = null
-                runs.forEach { run ->
-                    val workload = run.profile.workloads.firstOrNull { it.name == workloadName } ?: return@forEach
-                    appendHistoricalWorkload(run, workload, previous)
-                    previous = workload
-                }
+                appendHistoricalWorkloadTable(orderedRuns, workloadName)
             }
         }.trimEnd() + "\n"
 
@@ -482,62 +478,48 @@ internal object RuntimeVmProfilingReportFormatter {
         appendHostCalls(workload.runtime.hostCalls)
     }
 
-    private fun StringBuilder.appendHistoricalWorkload(
-        run: RuntimeVmProfileRun,
-        workload: RuntimeWorkloadProfile,
-        previous: RuntimeWorkloadProfile?,
+    private fun StringBuilder.appendHistoricalWorkloadTable(
+        runs: List<RuntimeVmProfileRun>,
+        workloadName: String,
     ) {
-        appendLine("### ${run.metadata.timestamp}")
+        val columns = runs.map { run -> run.metadata.timestamp to run.profile.workloads.firstOrNull { it.name == workloadName } }
+        val hostCallKeys =
+            columns
+                .flatMap { (_, workload) -> workload?.runtime?.hostCalls.orEmpty().map { it.key } }
+                .distinct()
+                .sorted()
+
+        appendLine("| Metric | ${columns.joinToString(" | ") { (timestamp, _) -> timestamp }} |")
+        appendLine("|---|${columns.joinToString("|") { "---:" }}|")
+        appendHistoricalMetricRow("Display operations", columns) { workload -> workload.display.operations.allCalls.toString() }
+        appendHistoricalMetricRow("Display operation time", columns) { workload -> formatNanos(workload.display.operations.allNanos) }
+        appendHistoricalMetricRow("Frames emitted", columns) { workload -> workload.display.frames.frameCount.toString() }
+        appendHistoricalMetricRow("Frame build time", columns) { workload -> formatNanos(workload.display.frameBuild.totalNanos) }
+        appendHistoricalMetricRow("Runtime all ticks", columns) { workload -> formatNanos(workload.runtime.tick.allNanos) }
+        appendHistoricalMetricRow("VM execution time", columns) { workload -> formatNanos(workload.runtime.vm.executionWindowNanos) }
+        appendHistoricalMetricRow("Host-call signals", columns) { workload -> workload.runtime.vm.hostCallSignals.toString() }
+        appendHistoricalMetricRow("Host calls", columns) { workload -> workload.runtime.hostCalls.sumOf { it.calls }.toString() }
+        appendHistoricalMetricRow("Host-call time", columns) { workload -> formatNanos(workload.runtime.hostCalls.sumOf { it.nanos }) }
+        appendHistoricalMetricRow("Compiler time", columns) { workload -> formatNanos(workload.compiler.compileNanos) }
+        if (columns.any { (_, workload) -> workload?.heldEnter != null }) {
+            appendHistoricalMetricRow("Held Enter accepted events", columns) { workload -> workload.heldEnter?.enterEventsQueued?.toString() ?: "" }
+            appendHistoricalMetricRow("Held Enter max queued events", columns) { workload -> workload.heldEnter?.maxQueuedEvents?.toString() ?: "" }
+        }
+        hostCallKeys.forEach { key ->
+            appendHistoricalMetricRow("host $key", columns) { workload ->
+                val call = workload.runtime.hostCalls.firstOrNull { it.key == key }
+                if (call == null) "0 calls / 0 ns" else "${call.calls} calls / ${formatNanos(call.nanos)}"
+            }
+        }
         appendLine()
-        appendLine("| Metric | Value | vs previous |")
-        appendLine("|---|---:|---:|")
-        appendHistoricalMetric("Display operations", workload.display.operations.allCalls, previous?.display?.operations?.allCalls)
-        appendHistoricalMetric(
-            "Display operation time",
-            workload.display.operations.allNanos,
-            previous?.display?.operations?.allNanos,
-            ::formatNanos,
-        )
-        appendHistoricalMetric("Frames emitted", workload.display.frames.frameCount, previous?.display?.frames?.frameCount)
-        appendHistoricalMetric(
-            "Frame build time",
-            workload.display.frameBuild.totalNanos,
-            previous?.display?.frameBuild?.totalNanos,
-            ::formatNanos,
-        )
-        appendHistoricalMetric("Runtime all ticks", workload.runtime.tick.allNanos, previous?.runtime?.tick?.allNanos, ::formatNanos)
-        appendHistoricalMetric(
-            "VM execution time",
-            workload.runtime.vm.executionWindowNanos,
-            previous?.runtime?.vm?.executionWindowNanos,
-            ::formatNanos,
-        )
-        appendHistoricalMetric("Host-call signals", workload.runtime.vm.hostCallSignals, previous?.runtime?.vm?.hostCallSignals)
-        appendHistoricalMetric(
-            "Host calls",
-            workload.runtime.hostCalls.sumOf { it.calls },
-            previous?.runtime?.hostCalls?.sumOf { it.calls },
-        )
-        appendHistoricalMetric(
-            "Host-call time",
-            workload.runtime.hostCalls.sumOf {
-                it.nanos
-            },
-            previous?.runtime?.hostCalls?.sumOf { it.nanos },
-            ::formatNanos,
-        )
-        appendHistoricalMetric("Compiler time", workload.compiler.compileNanos, previous?.compiler?.compileNanos, ::formatNanos)
-        appendLine()
-        appendHostCalls(workload.runtime.hostCalls)
     }
 
-    private fun StringBuilder.appendHistoricalMetric(
+    private fun StringBuilder.appendHistoricalMetricRow(
         name: String,
-        value: Long,
-        previous: Long?,
-        format: (Long) -> String = Long::toString,
+        columns: List<Pair<String, RuntimeWorkloadProfile?>>,
+        value: (RuntimeWorkloadProfile) -> String,
     ) {
-        appendLine("| $name | ${format(value)} | ${ratio(previous, value)} |")
+        appendLine("| $name | ${columns.joinToString(" | ") { (_, workload) -> workload?.let(value) ?: "" }} |")
     }
 
     private fun StringBuilder.appendHostCalls(hostCalls: List<RuntimeHostCallMetrics>) {
@@ -555,11 +537,6 @@ internal object RuntimeVmProfilingReportFormatter {
     }
 
     private val RuntimeHostCallMetrics.key: String get() = "$moduleName.$functionName"
-
-    private fun ratio(
-        previous: Long?,
-        value: Long,
-    ): String = if (previous == null || previous <= 0) "" else "%.2fx".format(value.toDouble() / previous.toDouble())
 
     private fun formatNanos(nanos: Long): String = "$nanos ns"
 }
