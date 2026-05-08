@@ -24,6 +24,6 @@ plugins {
 
 tasks.register("profileRuntimeVmComparison") {
     group = "verification"
-    description = "Run JVM and Rust VM runtime profiling workloads and write a Markdown comparison report."
+    description = "Run runtime profiling workloads and write a Markdown comparison report over all archived runs."
     dependsOn(":v1_21_1-neoforge:profileRuntimeVmComparison")
 }

@@ -32,12 +32,29 @@ import ru.lazyhat.compukterkraft.lang.frontend.CompilerProfilingSnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.VmInstructionKind
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.Clock
+import java.time.OffsetDateTime
+import java.time.format.DateTimeFormatter
+import kotlin.io.path.isDirectory
+import kotlin.io.path.name
 import kotlin.io.path.readLines
+import kotlin.io.path.readText
 import kotlin.io.path.writeText
 
 internal data class RuntimeVmProfile(
     val runtimeName: String,
     val workloads: List<RuntimeWorkloadProfile>,
+)
+
+internal data class RuntimeVmProfileRun(
+    val metadata: RuntimeVmProfileRunMetadata,
+    val profile: RuntimeVmProfile,
+)
+
+internal data class RuntimeVmProfileRunMetadata(
+    val timestamp: String,
+    val runtimeName: String,
+    val gitCommit: String? = null,
 )
 
 internal data class RuntimeWorkloadProfile(
@@ -161,4 +178,212 @@ internal object RuntimeVmProfileCodec {
     private fun List<String>.longs(): List<Long> = drop(1).map(String::toLong)
 
     private fun List<String>.ints(): List<Int> = drop(1).map(String::toInt)
+}
+
+internal object RuntimeVmProfilingReportArchive {
+    const val PROFILE_FILE_NAME = "runtime-vm-image.tsv"
+    const val MARKDOWN_FILE_NAME = "runtime-vm-image.md"
+    private const val METADATA_FILE_NAME = "metadata.properties"
+    private val timestampFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH-mm-ssXXX")
+
+    fun currentTimestamp(clock: Clock = Clock.systemDefaultZone()): String =
+        OffsetDateTime.now(clock).format(timestampFormatter).replace(':', '-')
+
+    fun writeRun(
+        profile: RuntimeVmProfile,
+        stableProfilePath: Path,
+        runsDir: Path,
+        metadata: RuntimeVmProfileRunMetadata,
+    ): RuntimeVmProfileRun {
+        Files.createDirectories(stableProfilePath.parent)
+        RuntimeVmProfileCodec.write(profile, stableProfilePath)
+
+        val run = RuntimeVmProfileRun(metadata.copy(runtimeName = profile.runtimeName), profile)
+        val runDir = runsDir.resolve(run.metadata.timestamp)
+        Files.createDirectories(runDir)
+        RuntimeVmProfileCodec.write(profile, runDir.resolve(PROFILE_FILE_NAME))
+        runDir.resolve(MARKDOWN_FILE_NAME).writeText(RuntimeVmProfilingReportFormatter.runMarkdown(run))
+        writeMetadata(run.metadata, runDir.resolve(METADATA_FILE_NAME))
+        return run
+    }
+
+    fun readRuns(runsDir: Path): List<RuntimeVmProfileRun> {
+        if (!Files.exists(runsDir)) return emptyList()
+        return Files.list(runsDir).use { stream ->
+            stream
+                .filter { it.isDirectory() }
+                .map { runDir ->
+                    val profile = RuntimeVmProfileCodec.read(runDir.resolve(PROFILE_FILE_NAME))
+                    RuntimeVmProfileRun(
+                        metadata = readMetadata(runDir.resolve(METADATA_FILE_NAME), runDir.name, profile.runtimeName),
+                        profile = profile,
+                    )
+                }
+                .sorted { left, right -> left.metadata.timestamp.compareTo(right.metadata.timestamp) }
+                .toList()
+        }
+    }
+
+    fun writeHistoricalReport(
+        runsDir: Path,
+        reportPath: Path,
+    ): List<RuntimeVmProfileRun> {
+        val runs = readRuns(runsDir)
+        Files.createDirectories(reportPath.parent)
+        reportPath.writeText(RuntimeVmProfilingReportFormatter.historicalMarkdown(runs))
+        return runs
+    }
+
+    private fun writeMetadata(
+        metadata: RuntimeVmProfileRunMetadata,
+        path: Path,
+    ) {
+        path.writeText(
+            buildString {
+                appendLine("timestamp=${metadata.timestamp}")
+                appendLine("runtimeName=${metadata.runtimeName}")
+                metadata.gitCommit?.let { appendLine("gitCommit=$it") }
+            },
+        )
+    }
+
+    private fun readMetadata(
+        path: Path,
+        fallbackTimestamp: String,
+        fallbackRuntimeName: String,
+    ): RuntimeVmProfileRunMetadata {
+        if (!Files.exists(path)) {
+            return RuntimeVmProfileRunMetadata(fallbackTimestamp, fallbackRuntimeName)
+        }
+        val values =
+            path.readText()
+                .lineSequence()
+                .mapNotNull { line ->
+                    val index = line.indexOf('=')
+                    if (index < 0) null else line.substring(0, index) to line.substring(index + 1)
+                }
+                .toMap()
+        return RuntimeVmProfileRunMetadata(
+            timestamp = values["timestamp"] ?: fallbackTimestamp,
+            runtimeName = values["runtimeName"] ?: fallbackRuntimeName,
+            gitCommit = values["gitCommit"],
+        )
+    }
+}
+
+internal object RuntimeVmProfilingReportFormatter {
+    fun runMarkdown(run: RuntimeVmProfileRun): String =
+        buildString {
+            appendLine("# Runtime VM Profiling Report")
+            appendLine()
+            appendLine("- Timestamp: `${run.metadata.timestamp}`")
+            appendLine("- Runtime: `${run.profile.runtimeName}`")
+            run.metadata.gitCommit?.let { appendLine("- Git commit: `$it`") }
+            appendLine()
+            run.profile.workloads.forEach { workload ->
+                appendRunWorkload(workload)
+            }
+        }.trimEnd() + "\n"
+
+    fun historicalMarkdown(runs: List<RuntimeVmProfileRun>): String =
+        buildString {
+            appendLine("# Runtime VM Profiling History")
+            appendLine()
+            appendLine("| Timestamp | Runtime | Commit | Workloads |")
+            appendLine("|---|---|---|---:|")
+            runs.forEach { run ->
+                appendLine("| ${run.metadata.timestamp} | ${run.profile.runtimeName} | ${run.metadata.gitCommit ?: ""} | ${run.profile.workloads.size} |")
+            }
+            appendLine()
+
+            val workloadNames = runs.flatMap { run -> run.profile.workloads.map { it.name } }.distinct().sorted()
+            workloadNames.forEach { workloadName ->
+                appendLine("## $workloadName")
+                appendLine()
+                var previous: RuntimeWorkloadProfile? = null
+                runs.forEach { run ->
+                    val workload = run.profile.workloads.firstOrNull { it.name == workloadName } ?: return@forEach
+                    appendHistoricalWorkload(run, workload, previous)
+                    previous = workload
+                }
+            }
+        }.trimEnd() + "\n"
+
+    private fun StringBuilder.appendRunWorkload(workload: RuntimeWorkloadProfile) {
+        appendLine("## ${workload.name}")
+        appendLine()
+        appendLine("| Metric | Value |")
+        appendLine("|---|---:|")
+        appendLine("| Display operations | ${workload.display.operations.allCalls} |")
+        appendLine("| Display operation time | ${formatNanos(workload.display.operations.allNanos)} |")
+        appendLine("| Frames emitted | ${workload.display.frames.frameCount} |")
+        appendLine("| Frame build time | ${formatNanos(workload.display.frameBuild.totalNanos)} |")
+        appendLine("| Runtime all ticks | ${formatNanos(workload.runtime.tick.allNanos)} |")
+        appendLine("| VM execution time | ${formatNanos(workload.runtime.vm.executionWindowNanos)} |")
+        appendLine("| Host-call signals | ${workload.runtime.vm.hostCallSignals} |")
+        appendLine("| Host calls | ${workload.runtime.hostCalls.sumOf { it.calls }} |")
+        appendLine("| Host-call time | ${formatNanos(workload.runtime.hostCalls.sumOf { it.nanos })} |")
+        appendLine("| Compiler time | ${formatNanos(workload.compiler.compileNanos)} |")
+        workload.heldEnter?.let { held ->
+            appendLine("| Held Enter accepted events | ${held.enterEventsQueued} |")
+            appendLine("| Held Enter max queued events | ${held.maxQueuedEvents} |")
+        }
+        appendLine()
+        appendHostCalls(workload.runtime.hostCalls)
+    }
+
+    private fun StringBuilder.appendHistoricalWorkload(
+        run: RuntimeVmProfileRun,
+        workload: RuntimeWorkloadProfile,
+        previous: RuntimeWorkloadProfile?,
+    ) {
+        appendLine("### ${run.metadata.timestamp}")
+        appendLine()
+        appendLine("| Metric | Value | vs previous |")
+        appendLine("|---|---:|---:|")
+        appendHistoricalMetric("Display operations", workload.display.operations.allCalls, previous?.display?.operations?.allCalls)
+        appendHistoricalMetric("Display operation time", workload.display.operations.allNanos, previous?.display?.operations?.allNanos, ::formatNanos)
+        appendHistoricalMetric("Frames emitted", workload.display.frames.frameCount, previous?.display?.frames?.frameCount)
+        appendHistoricalMetric("Frame build time", workload.display.frameBuild.totalNanos, previous?.display?.frameBuild?.totalNanos, ::formatNanos)
+        appendHistoricalMetric("Runtime all ticks", workload.runtime.tick.allNanos, previous?.runtime?.tick?.allNanos, ::formatNanos)
+        appendHistoricalMetric("VM execution time", workload.runtime.vm.executionWindowNanos, previous?.runtime?.vm?.executionWindowNanos, ::formatNanos)
+        appendHistoricalMetric("Host-call signals", workload.runtime.vm.hostCallSignals, previous?.runtime?.vm?.hostCallSignals)
+        appendHistoricalMetric("Host calls", workload.runtime.hostCalls.sumOf { it.calls }, previous?.runtime?.hostCalls?.sumOf { it.calls })
+        appendHistoricalMetric("Host-call time", workload.runtime.hostCalls.sumOf { it.nanos }, previous?.runtime?.hostCalls?.sumOf { it.nanos }, ::formatNanos)
+        appendHistoricalMetric("Compiler time", workload.compiler.compileNanos, previous?.compiler?.compileNanos, ::formatNanos)
+        appendLine()
+        appendHostCalls(workload.runtime.hostCalls)
+    }
+
+    private fun StringBuilder.appendHistoricalMetric(
+        name: String,
+        value: Long,
+        previous: Long?,
+        format: (Long) -> String = Long::toString,
+    ) {
+        appendLine("| $name | ${format(value)} | ${ratio(previous, value)} |")
+    }
+
+    private fun StringBuilder.appendHostCalls(hostCalls: List<RuntimeHostCallMetrics>) {
+        appendLine("### Host calls")
+        appendLine()
+        appendLine("| Host call | Calls | Time |")
+        appendLine("|---|---:|---:|")
+        hostCalls.sortedWith(compareByDescending<RuntimeHostCallMetrics> { it.nanos }.thenBy { it.key }).forEach { call ->
+            appendLine("| ${call.key} | ${call.calls} | ${formatNanos(call.nanos)} |")
+        }
+        if (hostCalls.isEmpty()) {
+            appendLine("| none | 0 | 0 ns |")
+        }
+        appendLine()
+    }
+
+    private val RuntimeHostCallMetrics.key: String get() = "$moduleName.$functionName"
+
+    private fun ratio(
+        previous: Long?,
+        value: Long,
+    ): String = if (previous == null || previous <= 0) "" else "%.2fx".format(value.toDouble() / previous.toDouble())
+
+    private fun formatNanos(nanos: Long): String = "$nanos ns"
 }
