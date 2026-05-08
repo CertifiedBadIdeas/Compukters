@@ -36,6 +36,9 @@ const STRINGS_IS_BLANK_IMPORT_ID: i32 = 7003;
 const STRINGS_TO_INT_IMPORT_ID: i32 = 7004;
 const STRINGS_LENGTH_IMPORT_ID: i32 = 7005;
 const STRINGS_CHAR_AT_IMPORT_ID: i32 = 7006;
+const STRINGS_REPEAT_IMPORT_ID: i32 = 7007;
+const STRINGS_SLICE_IMPORT_ID: i32 = 7008;
+const STRINGS_REPLACE_RANGE_IMPORT_ID: i32 = 7009;
 
 fn halt_signal(value: &VmValue) -> Vec<u8> {
     let mut signal = vec![0];
@@ -1617,6 +1620,62 @@ fn native_strings_char_at_handles_ascii_without_host_signal() {
     assert_eq!(
         vm.run_until_signal(),
         halt_signal(&VmValue::String("o".to_string()))
+    );
+}
+
+#[test]
+fn native_strings_bulk_helpers_handle_ascii_without_host_signal() {
+    let mut code = Vec::new();
+    push_constant(&mut code, 0);
+    push_constant(&mut code, 1);
+    call_host(&mut code, STRINGS_REPEAT_IMPORT_ID, 2);
+    push_constant(&mut code, 2);
+    push_constant(&mut code, 3);
+    call_host(&mut code, STRINGS_REPLACE_RANGE_IMPORT_ID, 3);
+    push_constant(&mut code, 4);
+    push_constant(&mut code, 5);
+    call_host(&mut code, STRINGS_SLICE_IMPORT_ID, 3);
+    code.push(OP_RETURN);
+    let mut vm = ImageVmHandle::create(
+        &image_with_constants_host_imports_and_code(
+            vec![
+                ConstantFixture::String(".".to_string()),
+                ConstantFixture::Int(6),
+                ConstantFixture::Int(2),
+                ConstantFixture::String("XY".to_string()),
+                ConstantFixture::Int(1),
+                ConstantFixture::Int(5),
+            ],
+            vec![
+                strings_import(
+                    STRINGS_REPEAT_IMPORT_ID,
+                    "repeat",
+                    vec!["String", "Int"],
+                    "String",
+                ),
+                strings_import(
+                    STRINGS_REPLACE_RANGE_IMPORT_ID,
+                    "replaceRange",
+                    vec!["String", "Int", "String"],
+                    "String",
+                ),
+                strings_import(
+                    STRINGS_SLICE_IMPORT_ID,
+                    "slice",
+                    vec!["String", "Int", "Int"],
+                    "String",
+                ),
+            ],
+            0,
+            code,
+        ),
+        64,
+    )
+    .unwrap();
+
+    assert_eq!(
+        vm.run_until_signal(),
+        halt_signal(&VmValue::String(".XY.".to_string()))
     );
 }
 

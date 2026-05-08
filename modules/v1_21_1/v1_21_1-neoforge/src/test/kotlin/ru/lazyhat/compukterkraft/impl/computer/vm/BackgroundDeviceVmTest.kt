@@ -24,15 +24,19 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import ru.lazyhat.compukterkraft.core.block.DeviceFamily
+import ru.lazyhat.compukterkraft.core.Config
 import ru.lazyhat.compukterkraft.core.device.runtime.FirmwareProgramLoader
 import ru.lazyhat.compukterkraft.core.device.runtime.HostCallDispatcher
 import ru.lazyhat.compukterkraft.core.device.runtime.LoadedFirmwareProgramSource
 import ru.lazyhat.compukterkraft.core.device.runtime.NoOpRuntimeMetricsCollector
+import ru.lazyhat.compukterkraft.core.device.runtime.RecordingRuntimeMetricsCollector
 import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeMetricsCollector
 import ru.lazyhat.compukterkraft.core.device.vm.BackgroundDeviceVm
 import ru.lazyhat.compukterkraft.core.device.vm.DeviceVmLogger
 import ru.lazyhat.compukterkraft.core.device.vm.DeviceWorkspaceHost
 import ru.lazyhat.compukterkraft.core.device.vm.DeviceWorkspaceInitializer
+import ru.lazyhat.compukterkraft.core.device.vm.DeviceProfileRegistry
 import ru.lazyhat.compukterkraft.core.input.KeyCodes
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceCapability
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceCpuResources
@@ -177,6 +181,7 @@ class BackgroundDeviceVmTest {
         try {
             DeviceWorkspaceInitializer(root).ensureInitialized(1)
             val workspace = DeviceWorkspaceHost(root)
+            val metrics = RecordingRuntimeMetricsCollector()
             val logs = mutableListOf<String>()
             val vm =
                 BackgroundDeviceVm(
@@ -187,6 +192,7 @@ class BackgroundDeviceVmTest {
                     logger = DeviceVmLogger(logs::add),
                     workspace = workspace,
                     firmwareLoader = ClasspathFirmwareLoader(),
+                    runtimeMetricsCollector = metrics,
                 )
 
             vm.attachDisplay(displayId = 9, width = 96, height = 48)
@@ -208,6 +214,126 @@ class BackgroundDeviceVmTest {
             assertTrue(frames.greenPixelCount() > 0, "terminal frame should contain rendered glyph pixels")
             assertTrue(frames.hasTextLikeGlyphCell(), "terminal text should render glyph shapes, not solid rectangles")
             assertTrue(vm.snapshot().state.isActive, vm.snapshot().state.toString())
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun normalProfileRendersInitialShellPromptWithinFewServerTicks() {
+        val root = createTempDirectory("compukterkraft-rom-terminal-prompt-latency")
+
+        try {
+            DeviceWorkspaceInitializer(root).ensureInitialized(1)
+            val workspace = DeviceWorkspaceHost(root)
+            val metrics = RecordingRuntimeMetricsCollector()
+            val logs = mutableListOf<String>()
+            val vm =
+                BackgroundDeviceVm(
+                    deviceId = 1,
+                    profile = DeviceProfileRegistry.forFamily(DeviceFamily.NORMAL),
+                    dispatcher = Dispatchers.Default,
+                    labelProvider = { null },
+                    logger = DeviceVmLogger(logs::add),
+                    workspace = workspace,
+                    firmwareLoader = ClasspathFirmwareLoader(),
+                    runtimeMetricsCollector = metrics,
+                )
+            val dispatcher = HostCallDispatcher(1, workspace)
+            val displayWidth = Config.DEFAULT_COMPUTER_TERM_WIDTH * 6
+            val displayHeight = Config.DEFAULT_COMPUTER_TERM_HEIGHT * 9
+
+            vm.attachDisplay(displayId = 9, width = displayWidth, height = displayHeight)
+            assertTrue(vm.boot())
+            var ticksUntilGlyphFrame = -1
+            var framesSeen = 0
+            var tick = 0
+            while (tick < 80 && ticksUntilGlyphFrame < 0) {
+                serviceVmTickForTest(vm, tick.toLong(), dispatcher::dispatch, metrics)
+                val frames = vm.drainDisplayFrames()
+                framesSeen += frames.size
+                if (metrics.snapshot().hostCalls.any { it.moduleName == "display" && it.functionName == "blitMono5x7Packed" }) {
+                    ticksUntilGlyphFrame = tick + 1
+                }
+                tick += 1
+                Thread.sleep(5)
+            }
+
+            assertTrue(
+                ticksUntilGlyphFrame in 1..40,
+                "ticksUntilGlyphFrame=$ticksUntilGlyphFrame framesSeen=$framesSeen state=${vm.snapshot().state} logs=$logs",
+            )
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun normalProfileEchoesTypingAndEnterWithinFewServerTicks() {
+        val root = createTempDirectory("compukterkraft-rom-terminal-input-latency")
+
+        try {
+            DeviceWorkspaceInitializer(root).ensureInitialized(1)
+            val workspace = DeviceWorkspaceHost(root)
+            val metrics = RecordingRuntimeMetricsCollector()
+            val vm =
+                BackgroundDeviceVm(
+                    deviceId = 1,
+                    profile = DeviceProfileRegistry.forFamily(DeviceFamily.NORMAL),
+                    dispatcher = Dispatchers.Default,
+                    labelProvider = { null },
+                    logger = DeviceVmLogger { },
+                    workspace = workspace,
+                    firmwareLoader = ClasspathFirmwareLoader(),
+                    runtimeMetricsCollector = metrics,
+                )
+            val dispatcher = HostCallDispatcher(1, workspace)
+            val displayWidth = Config.DEFAULT_COMPUTER_TERM_WIDTH * 6
+            val displayHeight = Config.DEFAULT_COMPUTER_TERM_HEIGHT * 9
+
+            vm.attachDisplay(displayId = 9, width = displayWidth, height = displayHeight)
+            assertTrue(vm.boot())
+            repeat(80) { tick ->
+                serviceVmTickForTest(vm, tick.toLong(), dispatcher::dispatch, metrics)
+                vm.drainDisplayFrames()
+                Thread.sleep(5)
+            }
+
+            var tick = 80L
+            var maxTicksToCharFrame = 0
+            for (ch in "help") {
+                vm.enqueueEvent(VmEvent("char", listOf(byteArrayOf(ch.code.toByte()))))
+                var ticksForChar = 0
+                var sawFrame = false
+                val framesBefore = metrics.snapshot().tick.displayFramesDrained
+                while (ticksForChar < 20 && !sawFrame) {
+                    serviceVmTickForTest(vm, tick, dispatcher::dispatch, metrics)
+                    tick += 1
+                    ticksForChar += 1
+                    val frames = vm.drainDisplayFrames()
+                    metrics.recordDisplayFrameDrain(frames.size, 0)
+                    sawFrame = metrics.snapshot().tick.displayFramesDrained > framesBefore
+                    Thread.sleep(5)
+                }
+                maxTicksToCharFrame = maxOf(maxTicksToCharFrame, ticksForChar)
+            }
+
+            vm.enqueueEvent(VmEvent("key", listOf(KeyCodes.KEY_ENTER, false)))
+            var ticksToEnterFrame = 0
+            var sawEnterFrame = false
+            val framesBeforeEnter = metrics.snapshot().tick.displayFramesDrained
+            while (ticksToEnterFrame < 80 && !sawEnterFrame) {
+                serviceVmTickForTest(vm, tick, dispatcher::dispatch, metrics)
+                tick += 1
+                ticksToEnterFrame += 1
+                val frames = vm.drainDisplayFrames()
+                metrics.recordDisplayFrameDrain(frames.size, 0)
+                sawEnterFrame = metrics.snapshot().tick.displayFramesDrained > framesBeforeEnter
+                Thread.sleep(5)
+            }
+
+            assertTrue(maxTicksToCharFrame in 1..4, "maxTicksToCharFrame=$maxTicksToCharFrame state=${vm.snapshot().state}")
+            assertTrue(ticksToEnterFrame in 1..20, "ticksToEnterFrame=$ticksToEnterFrame state=${vm.snapshot().state}")
         } finally {
             root.toFile().deleteRecursively()
         }
@@ -453,6 +579,45 @@ class BackgroundDeviceVmTest {
             runVmTicks(vm, ticks = 60, hostCallDispatcher = HostCallDispatcher(1, workspace))
 
             assertTrue(logs.any { it.endsWith("ipc:hello") }, "logs=$logs state=${vm.snapshot().state}")
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun runtimePollWakesAgainAfterIgnoringFirstEvent() {
+        val root = createTempDirectory("compukterkraft-runtime-poll-second-event")
+
+        try {
+            val workspace = DeviceWorkspaceHost(root)
+            val logs = mutableListOf<String>()
+            val vm =
+                BackgroundDeviceVm(
+                    deviceId = 1,
+                    profile = firmwareTestProfile(),
+                    dispatcher = Dispatchers.Default,
+                    labelProvider = { null },
+                    logger = DeviceVmLogger(logs::add),
+                    workspace = workspace,
+                    firmwareLoader =
+                        StaticFirmwareLoader(
+                            """
+                            pub fun main() {
+                                val stream: Int = ipc::open()
+                                val first: Poll = runtime::poll(stream)
+                                val second: Poll = runtime::poll(stream)
+                                system::log(first.kind + ":" + first.event.name + "," + second.kind + ":" + second.event.name)
+                            }
+                            """.trimIndent(),
+                        ),
+                )
+
+            assertTrue(vm.boot())
+            runVmTicks(vm, ticks = 20, hostCallDispatcher = HostCallDispatcher(1, workspace))
+            vm.enqueueEvent(VmEvent("char", listOf(byteArrayOf('x'.code.toByte()))))
+            runVmTicks(vm, ticks = 20, hostCallDispatcher = HostCallDispatcher(1, workspace))
+
+            assertTrue(logs.any { it.endsWith("event:boot,event:char") }, "logs=$logs state=${vm.snapshot().state}")
         } finally {
             root.toFile().deleteRecursively()
         }

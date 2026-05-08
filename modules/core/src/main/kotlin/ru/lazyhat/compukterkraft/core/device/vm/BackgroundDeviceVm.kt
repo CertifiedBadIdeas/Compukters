@@ -275,7 +275,9 @@ class BackgroundDeviceVm(
         pixelFormat: DisplayPixelFormat,
     ): DisplayInfo =
         displayRegistry.attach(displayId, width, height, pixelFormat).also {
-            enqueueEvent(VmEvent("display_attach", listOf(displayId, width, height)))
+            if (stateManager.state.isActive) {
+                enqueueEvent(VmEvent("display_attach", listOf(displayId, width, height)))
+            }
         }
 
     override fun resizeDisplay(

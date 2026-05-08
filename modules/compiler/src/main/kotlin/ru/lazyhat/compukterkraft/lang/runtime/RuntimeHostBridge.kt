@@ -400,6 +400,27 @@ internal class RuntimeHostBridge(
                 VmValue.StringValue(if (index in text.indices) text[index].toString() else "")
             }
 
+            "repeat" -> {
+                val text = arguments[0].asString()
+                val count = arguments[1].asInt().coerceAtLeast(0)
+                VmValue.StringValue(text.repeat(count))
+            }
+
+            "slice" -> {
+                val text = arguments[0].asString()
+                val start = arguments[1].asInt().coerceIn(0, text.length)
+                val end = arguments[2].asInt().coerceIn(start, text.length)
+                VmValue.StringValue(text.substring(start, end))
+            }
+
+            "replaceRange" -> {
+                val text = arguments[0].asString()
+                val start = arguments[1].asInt().coerceIn(0, text.length)
+                val replacement = arguments[2].asString()
+                val end = (start + replacement.length).coerceAtMost(text.length)
+                VmValue.StringValue(text.substring(0, start) + replacement + text.substring(end))
+            }
+
             else -> {
                 error("Unknown strings function $functionName")
             }
