@@ -27,8 +27,31 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 class NativeImageVmBindingsJniTest {
+    @Test
+    fun nativeKernelBindingsExposeDeviceKernelLifecycle() {
+        val memberNames = NativeVmBindings::class.java.declaredMethods.map { it.name }.toSet()
+
+        assertTrue(
+            "createDeviceKernel" in memberNames,
+            "NativeVmBindings must expose native device-kernel lifecycle",
+        )
+        assertTrue(
+            "freeDeviceKernel" in memberNames,
+            "NativeVmBindings must expose native device-kernel lifecycle",
+        )
+        assertTrue(
+            "enqueueDeviceEvent" in memberNames,
+            "NativeVmBindings must expose native device-kernel lifecycle",
+        )
+        assertTrue(
+            "attachImageToKernel" in memberNames,
+            "NativeVmBindings must expose native device-kernel lifecycle",
+        )
+    }
+
     @Test
     fun imageRunnerHaltsForEmptyMainWhenLibraryIsConfigured() {
         val libraryPath = System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
