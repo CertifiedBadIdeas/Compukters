@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
 use crate::image::{decode_image, Constant, Function, HostImport, Image};
+use crate::runtime_kernel::DeviceRuntimeKernel;
 use crate::signal::{decode_value, encode_error, encode_signal, VmSignal};
 use crate::value::VmValue;
 
@@ -61,6 +62,7 @@ pub struct ImageVmHandle {
     call_stack: Vec<CallFrame>,
     objects: HashMap<u32, HeapObject>,
     next_object_id: u32,
+    attached_kernel: Option<*mut DeviceRuntimeKernel>,
     instruction_budget: usize,
     instructions_since_pause: usize,
     state: ImageVmState,
@@ -92,10 +94,22 @@ impl ImageVmHandle {
             call_stack: Vec::new(),
             objects: HashMap::new(),
             next_object_id: 1,
+            attached_kernel: None,
             instruction_budget: instruction_budget.max(1),
             instructions_since_pause: 0,
             state: ImageVmState::Ready,
         })
+    }
+
+    pub fn attach_device_kernel(
+        &mut self,
+        kernel: *mut DeviceRuntimeKernel,
+    ) -> Result<(), String> {
+        if kernel.is_null() {
+            return Err("native device runtime kernel handle is null".to_string());
+        }
+        self.attached_kernel = Some(kernel);
+        Ok(())
     }
 
     pub fn run_until_signal(&mut self) -> Vec<u8> {

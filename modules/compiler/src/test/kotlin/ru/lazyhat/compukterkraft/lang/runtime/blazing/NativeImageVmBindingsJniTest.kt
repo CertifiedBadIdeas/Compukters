@@ -53,6 +53,22 @@ class NativeImageVmBindingsJniTest {
     }
 
     @Test
+    fun jniCreatesAndFreesDeviceKernelWhenLibraryIsConfigured() {
+        val libraryPath = System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val image = assertNotNull(LanguageFrontend().compileImage("main.ck", "pub fun main() { }").image)
+        val imageHandle = NativeVmBindings.createImage(libraryPath, CkVmImageAbi.encode(image), instructionBudget = 128)
+
+        try {
+            val kernelHandle = NativeVmBindings.createDeviceKernel(maxEventQueueSize = 64, maxBufferedBytesPerChannel = 4096)
+            assertTrue(kernelHandle != 0L)
+            NativeVmBindings.attachImageToKernel(imageHandle, kernelHandle)
+            NativeVmBindings.freeDeviceKernel(kernelHandle)
+        } finally {
+            NativeVmBindings.freeImage(imageHandle)
+        }
+    }
+
+    @Test
     fun imageRunnerHaltsForEmptyMainWhenLibraryIsConfigured() {
         val libraryPath = System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val image = assertNotNull(LanguageFrontend().compileImage("main.ck", "pub fun main() { }").image)
