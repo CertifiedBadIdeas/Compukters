@@ -80,6 +80,11 @@ internal class IpcChannelRegistry(
 
     fun tryReadBlocking(channelId: Int): String = runBlocking { tryRead(channelId) }
 
+    suspend fun readSignal(channelId: Int): Channel<Unit>? =
+        mutex.withLock {
+            channels[channelId]?.signal
+        }
+
     suspend fun close(channelId: Int) {
         val signal =
             mutex.withLock {

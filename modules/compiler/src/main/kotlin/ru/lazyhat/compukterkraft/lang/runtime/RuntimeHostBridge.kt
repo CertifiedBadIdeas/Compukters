@@ -31,6 +31,7 @@ internal class RuntimeHostBridge(
             "filesystem" -> invokeFilesystem(functionName, arguments)
             "system" -> invokeSystem(functionName, arguments)
             "display" -> invokeDisplay(functionName, arguments)
+            "runtime" -> invokeRuntime(functionName, arguments)
             "events" -> invokeEvents(functionName, arguments)
             "ipc" -> invokeIpc(functionName, arguments)
             "process" -> invokeProcess(functionName, arguments)
@@ -52,6 +53,17 @@ internal class RuntimeHostBridge(
                 ),
         )
     }
+
+    private fun fromPoll(result: VmPollResult): VmValue.RecordValue =
+        VmValue.RecordValue(
+            typeName = "Poll",
+            fields =
+                mapOf(
+                    "kind" to VmValue.StringValue(result.kind),
+                    "text" to VmValue.StringValue(result.text),
+                    "event" to fromEvent(result.event),
+                ),
+        )
 
     private suspend fun invokeFilesystem(
         functionName: String,
@@ -148,6 +160,15 @@ internal class RuntimeHostBridge(
             else -> error("Unknown events function $functionName")
         }
     }
+
+    private suspend fun invokeRuntime(
+        functionName: String,
+        arguments: List<VmValue>,
+    ): VmValue =
+        when (functionName) {
+            "poll" -> fromPoll(runtime.poll(arguments[0].asInt()))
+            else -> error("Unknown runtime function $functionName")
+        }
 
     private suspend fun invokeIpc(
         functionName: String,

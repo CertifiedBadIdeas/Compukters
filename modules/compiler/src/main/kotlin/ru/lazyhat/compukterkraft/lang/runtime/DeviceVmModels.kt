@@ -112,6 +112,12 @@ data class VmEvent(
     val arguments: List<Any?> = emptyList(),
 )
 
+data class VmPollResult(
+    val kind: String,
+    val text: String = "",
+    val event: VmEvent = VmEvent(""),
+)
+
 data class VmSnapshot(
     val deviceId: Int,
     val profile: DeviceProfile,

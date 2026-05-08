@@ -21,6 +21,7 @@ package ru.lazyhat.compukterkraft.core.device.vm
 
 import ru.lazyhat.compukterkraft.lang.runtime.HostCall
 import ru.lazyhat.compukterkraft.lang.runtime.VmEvent
+import ru.lazyhat.compukterkraft.lang.runtime.VmPollResult
 import ru.lazyhat.compukterkraft.lang.runtime.VmState
 import ru.lazyhat.compukterkraft.lang.runtime.VmStopReason
 
@@ -68,4 +69,7 @@ interface VmContext {
         channel: Int,
         text: String,
     )
+
+    /** Wait until either a VM-local IPC channel has text or an event is available. */
+    suspend fun pollIpcOrEvent(channel: Int): VmPollResult
 }

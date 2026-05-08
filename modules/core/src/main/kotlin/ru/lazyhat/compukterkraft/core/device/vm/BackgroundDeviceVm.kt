@@ -31,6 +31,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.selects.select
 import ru.lazyhat.compukterkraft.core.LOGGER
 import ru.lazyhat.compukterkraft.core.device.runtime.ClasspathFirmwareProgramLoader
 import ru.lazyhat.compukterkraft.core.device.runtime.ComputerProgramCompiler
@@ -63,6 +64,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.HostCall
 import ru.lazyhat.compukterkraft.lang.runtime.HostResult
 import ru.lazyhat.compukterkraft.lang.runtime.VmEvent
 import ru.lazyhat.compukterkraft.lang.runtime.VmInstructionKind
+import ru.lazyhat.compukterkraft.lang.runtime.VmPollResult
 import ru.lazyhat.compukterkraft.lang.runtime.VmSignalKind
 import ru.lazyhat.compukterkraft.lang.runtime.VmSnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.VmState
@@ -318,6 +320,42 @@ class BackgroundDeviceVm(
         text: String,
     ) = ipcRegistry.write(channel, text)
 
+    override suspend fun pollIpcOrEvent(channel: Int): VmPollResult {
+        while (true) {
+            val text = ipcRegistry.tryRead(channel)
+            if (text.isNotEmpty()) {
+                return VmPollResult(kind = "ipc", text = text)
+            }
+            val event = eventManager.tryReceiveEvent()
+            if (event != null) {
+                return VmPollResult(kind = "event", event = event)
+            }
+
+            val readSignal = ipcRegistry.readSignal(channel)
+            stateManager.setState(VmState.WaitingEvent)
+            val selected =
+                try {
+                    select<VmPollResult?> {
+                        if (readSignal != null) {
+                            readSignal.onReceiveCatching { null }
+                        }
+                        eventManager.receiveEventClause().invoke { result ->
+                            eventManager.acceptSelectedEvent(result)?.let { selectedEvent ->
+                                VmPollResult(kind = "event", event = selectedEvent)
+                            }
+                        }
+                    }
+                } finally {
+                    if (!stateManager.isStopped) {
+                        stateManager.setState(VmState.Running)
+                    }
+                }
+            if (selected != null) {
+                return selected
+            }
+        }
+    }
+
     // ── Internal ────────────────────────────────────────────────────
 
     private suspend fun stopInternal(
@@ -419,6 +457,7 @@ class BackgroundDeviceVm(
         val defaultRegistry = LanguageBuiltins.defaultRuntimeRegistry
         val baseModules =
             buildList {
+                defaultRegistry.module("runtime")?.let(::add)
                 defaultRegistry.module("system")?.let(::add)
                 if (DeviceCapability.DISPLAY in profile.allowedCapabilities) {
                     defaultRegistry.module("display")?.let(::add)

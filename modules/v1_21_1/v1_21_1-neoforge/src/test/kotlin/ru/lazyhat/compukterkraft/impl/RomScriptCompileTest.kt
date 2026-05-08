@@ -129,6 +129,15 @@ class RomScriptCompileTest {
     }
 
     @Test
+    fun bundledRomTerminalUsesRuntimePollInsteadOfBusyLoop() {
+        val source = resourceText("rom/terminal.ck")
+
+        assertTrue(source.contains("runtime::poll(stream)"), "terminal.ck should wait for IPC or events through one runtime poll")
+        assertFalse(source.contains("ipc::tryRead(stream)"), "terminal.ck should not poll IPC from CKL")
+        assertFalse(source.contains("events::tryPull()"), "terminal.ck should not poll events from CKL")
+    }
+
+    @Test
     fun bundledRomShellOwnsSubmittedLineEchoAndTerminalHandlesControlChars() {
         val terminal = resourceText("rom/terminal.ck")
         val stdio = resourceText("rom/stdio.ck")
