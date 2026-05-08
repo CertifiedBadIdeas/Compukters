@@ -116,9 +116,9 @@ object CkVmImageCompiler {
                 is Instruction.Unary,
                 -> 2
                 is Instruction.CallFunction,
-                is Instruction.CallBuiltin,
                 is Instruction.CallCollectionMethod,
                 -> 9
+                is Instruction.CallBuiltin -> callBuiltinLength(instruction)
                 else -> throw UnsupportedOperationException("CkVmImage backend does not support ${instruction::class.simpleName}")
             }
 
@@ -187,10 +187,23 @@ object CkVmImageCompiler {
             return if (existing >= 0) existing else constants.size.also { constants += constant }
         }
 
+        private fun callBuiltinLength(instruction: Instruction.CallBuiltin): Int =
+            when {
+                instruction.moduleName == null && instruction.functionName == "yield" && instruction.argumentCount == 0 -> 1
+                instruction.moduleName == null && instruction.functionName == "sleep" && instruction.argumentCount == 1 -> 1
+                instruction.moduleName != null -> 9
+                else -> throw UnsupportedOperationException("CkVmImage backend does not support global builtin ${instruction.functionName}")
+            }
+
         private fun callBuiltin(instruction: Instruction.CallBuiltin): List<Int> {
-            val moduleName = instruction.moduleName
-                ?: throw UnsupportedOperationException("CkVmImage backend does not support global builtin ${instruction.functionName}")
-            val import = hostImportIds.getValue(Triple(moduleName, instruction.functionName, instruction.argumentCount))
+            if (instruction.moduleName == null) {
+                return when {
+                    instruction.functionName == "yield" && instruction.argumentCount == 0 -> listOf(CkVmImageOpcodes.YIELD)
+                    instruction.functionName == "sleep" && instruction.argumentCount == 1 -> listOf(CkVmImageOpcodes.SLEEP)
+                    else -> throw UnsupportedOperationException("CkVmImage backend does not support global builtin ${instruction.functionName}")
+                }
+            }
+            val import = hostImportIds.getValue(Triple(instruction.moduleName, instruction.functionName, instruction.argumentCount))
             return listOf(CkVmImageOpcodes.CALL_HOST) + i32(import.id) + i32(instruction.argumentCount)
         }
 

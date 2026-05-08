@@ -62,4 +62,6 @@ object CkVmImageOpcodes {
     const val INDEX_GET = 21
     const val INDEX_SET = 22
     const val CALL_COLLECTION_METHOD = 23
+    const val YIELD = 24
+    const val SLEEP = 25
 }

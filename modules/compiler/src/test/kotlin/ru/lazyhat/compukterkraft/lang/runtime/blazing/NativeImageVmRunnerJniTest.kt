@@ -52,6 +52,30 @@ class NativeImageVmRunnerJniTest {
     }
 
     @Test
+    fun imageRunnerExecutesSchedulerBuiltinsThroughJniWhenLibraryIsConfigured() {
+        val libraryPath = System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val image = assertNotNull(
+            LanguageFrontend().compileImage(
+                "main.ck",
+                """
+                pub fun main() {
+                    yield();
+                    sleep(3L);
+                    system::log("done");
+                }
+                """.trimIndent(),
+            ).image,
+        )
+        val runtime = RecordingRuntime()
+
+        runBlocking { NativeImageVmRunner.fromLibraryPath(libraryPath).run(image, runtime) }
+
+        assertEquals(1, runtime.yieldCalls)
+        assertEquals(3, runtime.sleepCalls)
+        assertEquals(listOf("done"), runtime.lines)
+    }
+
+    @Test
     fun imageRunnerExecutesIfConditionAndLocalThroughJniWhenLibraryIsConfigured() {
         val libraryPath = System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val image = assertNotNull(

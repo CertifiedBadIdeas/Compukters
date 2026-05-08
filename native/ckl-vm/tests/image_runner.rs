@@ -25,6 +25,8 @@ const OP_CONSTRUCT_MAP: u8 = 20;
 const OP_INDEX_GET: u8 = 21;
 const OP_INDEX_SET: u8 = 22;
 const OP_CALL_COLLECTION_METHOD: u8 = 23;
+const OP_YIELD: u8 = 24;
+const OP_SLEEP: u8 = 25;
 
 fn halt_signal(value: &VmValue) -> Vec<u8> {
     let mut signal = vec![0];
@@ -1188,6 +1190,66 @@ fn rejects_construct_record_stack_underflow() {
 
     assert_eq!(signal[0], 255);
     assert!(String::from_utf8_lossy(&signal).contains("need 2 arguments but stack has 1"));
+}
+
+#[test]
+fn executes_yield_signal_and_resumes_with_unit() {
+    let code = vec![OP_YIELD, OP_PUSH_CONSTANT, 0, 0, 0, 0, OP_RETURN];
+    let mut vm = ImageVmHandle::create(
+        &image_with_constants_and_code(vec![ConstantFixture::Int(7)], 0, code),
+        64,
+    )
+    .unwrap();
+
+    assert_eq!(vm.run_until_signal(), vec![2]);
+    vm.resume_with_value_bytes(&encode_value(&VmValue::Unit)).unwrap();
+    assert_eq!(vm.run_until_signal(), vec![0, 3, 7, 0, 0, 0]);
+}
+
+#[test]
+fn executes_sleep_signal_and_resumes_with_unit() {
+    let code = vec![
+        OP_PUSH_CONSTANT,
+        0,
+        0,
+        0,
+        0,
+        OP_SLEEP,
+        OP_PUSH_CONSTANT,
+        1,
+        0,
+        0,
+        0,
+        OP_RETURN,
+    ];
+    let mut vm = ImageVmHandle::create(
+        &image_with_constants_and_code(
+            vec![ConstantFixture::Long(9), ConstantFixture::Int(3)],
+            0,
+            code,
+        ),
+        64,
+    )
+    .unwrap();
+
+    assert_eq!(vm.run_until_signal(), vec![3, 9, 0, 0, 0, 0, 0, 0, 0]);
+    vm.resume_with_value_bytes(&encode_value(&VmValue::Unit)).unwrap();
+    assert_eq!(vm.run_until_signal(), vec![0, 3, 3, 0, 0, 0]);
+}
+
+#[test]
+fn rejects_sleep_with_non_long_ticks() {
+    let code = vec![OP_PUSH_CONSTANT, 0, 0, 0, 0, OP_SLEEP];
+    let mut vm = ImageVmHandle::create(
+        &image_with_constants_and_code(vec![ConstantFixture::Int(9)], 0, code),
+        64,
+    )
+    .unwrap();
+
+    let signal = vm.run_until_signal();
+
+    assert_eq!(signal[0], 255);
+    assert!(String::from_utf8_lossy(&signal).contains("CkVmImage SLEEP requires Long ticks"));
 }
 
 #[test]
