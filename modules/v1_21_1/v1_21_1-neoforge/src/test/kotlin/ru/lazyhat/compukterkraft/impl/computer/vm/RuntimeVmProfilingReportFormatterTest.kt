@@ -73,14 +73,18 @@ class RuntimeVmProfilingReportFormatterTest {
         val markdown = RuntimeVmProfilingReportFormatter.historicalMarkdown(listOf(first, second))
 
         assertTrue(markdown.contains("# Runtime VM Profiling History"), markdown)
-        assertTrue(markdown.contains("2026-05-08T14-00-00+03-00"), markdown)
-        assertTrue(markdown.contains("2026-05-08T14-05-00+03-00"), markdown)
         assertTrue(markdown.contains("## bundled terminal"), markdown)
         assertTrue(markdown.contains("## new workload"), markdown)
-        assertTrue(markdown.contains("| Runtime all ticks | 50 ns | 0.50x |"), markdown)
-        assertTrue(markdown.contains("| strings.length | 5 | 50 ns |"), markdown)
-        assertTrue(markdown.contains("| display.present | 3 | 90 ns |"), markdown)
-        assertTrue(markdown.contains("| ipc.tryRead | 1 | 11 ns |"), markdown)
+        assertTrue(
+            markdown.contains("| Metric | 2026-05-08T14-05-00+03-00 | 2026-05-08T14-00-00+03-00 |"),
+            markdown,
+        )
+        assertTrue(markdown.contains("| Runtime all ticks | 50 ns | 100 ns |"), markdown)
+        assertTrue(markdown.contains("| VM execution time | 20 ns | 40 ns |"), markdown)
+        assertTrue(markdown.contains("| Host-call signals | 2 | 10 |"), markdown)
+        assertTrue(markdown.contains("| host display.present | 3 calls / 90 ns | 0 calls / 0 ns |"), markdown)
+        assertTrue(markdown.contains("| host strings.length | 0 calls / 0 ns | 5 calls / 50 ns |"), markdown)
+        assertTrue(markdown.contains("| host ipc.tryRead | 1 calls / 11 ns |"), markdown)
     }
 
     @Test

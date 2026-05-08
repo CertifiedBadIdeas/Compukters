@@ -68,9 +68,11 @@ class RuntimeVmProfilingReportAggregationTest {
         RuntimeVmProfilingReportArchive.writeHistoricalReport(runsDir, reportPath)
 
         val markdown = reportPath.readText()
-        assertTrue(markdown.contains("2026-05-08T14-00-00+03-00"), markdown)
-        assertTrue(markdown.contains("2026-05-08T14-05-00+03-00"), markdown)
-        assertTrue(markdown.contains("| Runtime all ticks | 50 ns | 0.50x |"), markdown)
+        assertTrue(
+            markdown.contains("| Metric | 2026-05-08T14-05-00+03-00 | 2026-05-08T14-00-00+03-00 |"),
+            markdown,
+        )
+        assertTrue(markdown.contains("| Runtime all ticks | 50 ns | 100 ns |"), markdown)
     }
 
     @Test
