@@ -53,6 +53,39 @@ internal object NativeVmBindings {
         }
     }
 
+    fun createDeviceKernel(
+        maxEventQueueSize: Int,
+        maxBufferedBytesPerChannel: Int,
+    ): Long {
+        val handle = createDeviceKernelNative(maxEventQueueSize.coerceAtLeast(1), maxBufferedBytesPerChannel.coerceAtLeast(1))
+        check(handle != 0L) { "Native device runtime kernel create returned a zero handle" }
+        return handle
+    }
+
+    fun freeDeviceKernel(handle: Long) {
+        if (handle != 0L) {
+            freeDeviceKernelNative(handle)
+        }
+    }
+
+    fun enqueueDeviceEvent(
+        handle: Long,
+        eventName: String,
+        payload: ByteArray,
+    ): Boolean {
+        require(handle != 0L) { "Native device runtime kernel handle is zero" }
+        return enqueueDeviceEventNative(handle, eventName, payload)
+    }
+
+    fun attachImageToKernel(
+        imageHandle: Long,
+        kernelHandle: Long,
+    ) {
+        require(imageHandle != 0L) { "Native image VM handle is zero" }
+        require(kernelHandle != 0L) { "Native device runtime kernel handle is zero" }
+        attachImageToKernelNative(imageHandle, kernelHandle)
+    }
+
     private fun load(libraryPath: String) {
         synchronized(lock) {
             val current = loadedPath
@@ -84,4 +117,26 @@ internal object NativeVmBindings {
 
     @JvmStatic
     private external fun freeImageNative(handle: Long)
+
+    @JvmStatic
+    private external fun createDeviceKernelNative(
+        maxEventQueueSize: Int,
+        maxBufferedBytesPerChannel: Int,
+    ): Long
+
+    @JvmStatic
+    private external fun freeDeviceKernelNative(handle: Long)
+
+    @JvmStatic
+    private external fun enqueueDeviceEventNative(
+        handle: Long,
+        eventName: String,
+        payload: ByteArray,
+    ): Boolean
+
+    @JvmStatic
+    private external fun attachImageToKernelNative(
+        imageHandle: Long,
+        kernelHandle: Long,
+    )
 }

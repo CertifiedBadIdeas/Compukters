@@ -159,7 +159,8 @@ RuntimeDeviceImpl.turnOn()
   ├─ DeviceManager.getOrCreateVm(id, profile, callbacks, logger)
   │    └─ BackgroundDeviceVm(id, profile, dispatcher, callbacks, logger, workspace)
   │         ├─ owns DisplayRegistry for runtime UI frames
-  │         └─ owns IpcChannelRegistry for VM-local text channels
+  │         ├─ owns native DeviceRuntimeKernel lifecycle for Rust image programs
+  │         └─ keeps Kotlin IPC/event managers only as fallback or non-native support while migration is in progress
   ├─ vmHandle.boot()
   │    └─ load boot script → compile → scope.launch { program.run(runtime) }
   └─ stateSink.onPowerStateChanged(true)
@@ -187,7 +188,7 @@ RuntimeDeviceImpl.close()
 | `ru.lazyhat.compukterkraft.lang.api`              | Temporary compiler IR: `Instruction`, `BytecodeModule`, operators |
 | `ru.lazyhat.compukterkraft.lang.frontend`         | Parser, type checker, code generator, IDE support            |
 | `ru.lazyhat.compukterkraft.lang.runtime`          | Runtime contracts and host bridge: `DeviceRuntime`, `RuntimeHostBridge`, `VmValue` |
-| `ru.lazyhat.compukterkraft.lang.runtime.image`    | Rust image runtime artifacts and adapters: `CkVmImage`, `CkVmImageComputerProgram`, `NativeImageVmRunner` |
+| `ru.lazyhat.compukterkraft.lang.runtime.image`    | Rust image runtime artifacts and adapters: `CkVmImage`, `CkVmImageComputerProgram`, `NativeImageVmRunner`, native device-kernel attachment |
 |                            | Data types: `ScreenBuffer`, `ScreenBufferSnapshot` for non-VM terminal-style UI models |
 |                            | Interfaces: `DeviceRuntime`, `DeviceWorkspace`, `DeviceIdeHost` |
 |                            | Models: `DeviceProfile`, `VmSnapshot`, `HostCall`            |
@@ -336,4 +337,3 @@ This stack has four layers:
 The key distinction from the earlier screen-first prototype is that UI structure is compiled into a `ScreenProgram` rather than rebuilt as a live tree every frame. The key distinction from the older render-only architecture is that authoring now starts from one screen-first DSL that includes interaction semantics.
 
 `ComputerTerminalScreen` is the first migration target on this new path. Legacy `core.ui.dsl.UiNode` and `common.ui.dsl.UiRenderer` remain transitional and are still valid for screens that have not yet moved to the compiled stack, especially `WorkbenchEditorScreen`.
-

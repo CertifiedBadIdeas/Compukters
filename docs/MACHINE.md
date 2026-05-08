@@ -113,6 +113,7 @@ Background coroutine
 - `pathResolver` реализует текущую рабочую директорию и нормализацию путей.
 - `displayRegistry` хранит display/framebuffer state, из которого `RuntimeDeviceImpl` flush-ит `DisplayFrameDelta` в клиентские display sessions.
 - `ipcRegistry` хранит локальные каналы; stdio для ROM/process code задается только соглашением поверх `ipc`.
+- для Rust image runtime целевой архитектурой теперь считается отдельный shared `DeviceRuntimeKernel`, который должен забрать device-local ownership у `eventManager` и `ipcRegistry`, оставив Kotlin-хосту только world-facing integration;
 - `runtime` это API-объект, который получает выполняемая программа.
 
 ## 4. Полный жизненный цикл VM
