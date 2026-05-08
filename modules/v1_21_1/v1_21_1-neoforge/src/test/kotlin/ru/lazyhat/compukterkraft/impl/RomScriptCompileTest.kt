@@ -190,6 +190,48 @@ class RomScriptCompileTest {
     }
 
     @Test
+    fun bundledRomTerminalSupportsScrollbackViewportHotkeys() {
+        val source = resourceText("rom/terminal.ck")
+
+        assertTrue(
+            source.contains("historyCells: String"),
+            "terminal.ck should keep committed terminal history in the buffer state",
+        )
+        assertTrue(
+            source.contains("historyRows: Int"),
+            "terminal.ck should track the number of committed history rows",
+        )
+        assertTrue(
+            source.contains("viewportOffset: Int"),
+            "terminal.ck should track how far the user scrolled above bottom",
+        )
+        assertTrue(
+            source.contains("fun renderViewport(displayId: Int, buffer: TerminalBuffer)"),
+            "terminal.ck should redraw visible rows from committed history",
+        )
+        assertTrue(
+            source.contains("fun scrollViewportBy(displayId: Int, buffer: TerminalBuffer, deltaRows: Int): TerminalBuffer"),
+            "terminal.ck should expose viewport page scrolling as a helper",
+        )
+        assertTrue(
+            source.contains("key == 266"),
+            "terminal.ck should handle PageUp scrollback hotkeys",
+        )
+        assertTrue(
+            source.contains("key == 267"),
+            "terminal.ck should handle PageDown scrollback hotkeys",
+        )
+        assertTrue(
+            source.contains("if (buffer.viewportOffset == 0 && line != \"\")"),
+            "terminal.ck should only redraw the draft input overlay while following the bottom viewport",
+        )
+        assertTrue(
+            source.contains("viewportOffset = 0"),
+            "terminal.ck should snap back to bottom on local input edits",
+        )
+    }
+
+    @Test
     fun bundledRomTerminalHasSymmetricAngleGlyphs() {
         val source = resourceText("rom/terminal.ck")
 
