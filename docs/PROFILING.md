@@ -9,19 +9,41 @@ The in-code metrics explain what the VM/display/compiler did. External profilers
 
 ## Runtime/display profiling workload
 
-Runtime VM profiling now records the Rust image runtime path only. Use `profileRuntimeVmImage` to build the native library, run the profiling workload, and write `build/reports/profiling/runtime-vm-image.tsv`.
+Runtime VM profiling records the Rust image runtime path. Use `profileRuntimeVmImage` to build the native library, run the profiling workload, write the stable raw profile, and archive a timestamped run with Markdown.
 
 ```bash
 ./gradlew profileRuntimeVmImage
 ```
 
-The task builds the local Rust JNI library and runs the terminal profiling workloads through the same image runtime path used by computer programs. It writes the raw profile to:
+The task builds the local Rust JNI library and runs the terminal profiling workloads through the same image runtime path used by computer programs. It always writes the latest raw profile to:
 
 ```text
 modules/v1_21_1/v1_21_1-neoforge/build/reports/profiling/runtime-vm-image.tsv
 ```
 
-Use this raw profile for before/after comparisons across commits. It includes per-workload runtime, display, compiler, host-call, and held-Enter backlog metrics. The task runs a short warm-up before collecting measurements, but the workloads are still integration diagnostics rather than strict microbenchmarks.
+Each run is also archived under a timestamped directory:
+
+```text
+modules/v1_21_1/v1_21_1-neoforge/build/reports/profiling/runs/<timestamp>/runtime-vm-image.tsv
+modules/v1_21_1/v1_21_1-neoforge/build/reports/profiling/runs/<timestamp>/runtime-vm-image.md
+modules/v1_21_1/v1_21_1-neoforge/build/reports/profiling/runs/<timestamp>/metadata.properties
+```
+
+Use the stable TSV for scripts that only need the latest profile. Use the timestamped archive for before/after comparisons across commits or local experiments. Profiles include every workload collected by the task, with runtime, display, compiler, host-call, and held-Enter backlog metrics. The task runs a short warm-up before collecting measurements, but the workloads are still integration diagnostics rather than strict microbenchmarks.
+
+Generate a historical Markdown comparison over every archived run:
+
+```bash
+./gradlew profileRuntimeVmComparison
+```
+
+This task runs a fresh `profileRuntimeVmImage` first, then scans every `runs/*/runtime-vm-image.tsv` and writes:
+
+```text
+modules/v1_21_1/v1_21_1-neoforge/build/reports/profiling/runtime-vm-comparison.md
+```
+
+The comparison report does not hard-code workload names. If a future profiling run adds a new workload or host call, it appears in the historical report automatically.
 
 Run the bundled terminal profiling workload:
 

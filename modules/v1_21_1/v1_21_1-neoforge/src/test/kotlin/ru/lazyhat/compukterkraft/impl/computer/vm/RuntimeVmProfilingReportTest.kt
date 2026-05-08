@@ -35,8 +35,27 @@ class RuntimeVmProfilingReportTest {
 
         warmUpRuntime()
         val profile = profileRuntime(runtimeName)
-        RuntimeVmProfileCodec.write(profile, profilePath)
-        println("Runtime VM $runtimeName profiling data: ${profilePath.absolutePathString()}")
+        val runsDirValue = System.getProperty(RUNS_DIR_PROPERTY)
+        if (runsDirValue.isNullOrBlank()) {
+            RuntimeVmProfileCodec.write(profile, profilePath)
+            println("Runtime VM $runtimeName profiling data: ${profilePath.absolutePathString()}")
+        } else {
+            val run =
+                RuntimeVmProfilingReportArchive.writeRun(
+                    profile = profile,
+                    stableProfilePath = profilePath,
+                    runsDir = Path.of(runsDirValue),
+                    metadata =
+                        RuntimeVmProfileRunMetadata(
+                            timestamp = System.getProperty(RUN_TIMESTAMP_PROPERTY)
+                                ?: RuntimeVmProfilingReportArchive.currentTimestamp(),
+                            runtimeName = runtimeName,
+                            gitCommit = System.getProperty(GIT_COMMIT_PROPERTY),
+                        ),
+                )
+            println("Runtime VM $runtimeName profiling data: ${profilePath.absolutePathString()}")
+            println("Runtime VM $runtimeName profiling run: ${Path.of(runsDirValue).resolve(run.metadata.timestamp).absolutePathString()}")
+        }
 
         assertTrue(profile.workloads.isNotEmpty())
     }
@@ -108,6 +127,9 @@ class RuntimeVmProfilingReportTest {
 
     private companion object {
         const val PROFILE_PATH_PROPERTY = "ckl.profiling.profile.path"
+        const val RUNS_DIR_PROPERTY = "ckl.profiling.runs.dir"
+        const val RUN_TIMESTAMP_PROPERTY = "ckl.profiling.run.timestamp"
+        const val GIT_COMMIT_PROPERTY = "ckl.profiling.git.commit"
         const val RUNTIME_NAME_PROPERTY = "ckl.profiling.runtime.name"
     }
 }
