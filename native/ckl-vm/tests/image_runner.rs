@@ -1,4 +1,5 @@
 use ckl_vm::image_runner::ImageVmHandle;
+use ckl_vm::runtime_kernel::DeviceRuntimeKernel;
 use ckl_vm::signal::encode_value;
 use ckl_vm::value::VmValue;
 
@@ -40,6 +41,17 @@ fn halt_signal(value: &VmValue) -> Vec<u8> {
     let mut signal = vec![0];
     signal.extend_from_slice(&encode_value(value));
     signal
+}
+
+#[test]
+fn device_kernel_accepts_event_and_ipc_setup() {
+    let mut kernel = DeviceRuntimeKernel::new(64, 4096);
+
+    assert!(kernel.enqueue_event("boot", vec![]));
+
+    let channel = kernel.open_ipc_channel().unwrap();
+
+    assert!(channel > 0);
 }
 
 #[test]
