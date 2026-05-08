@@ -19,11 +19,33 @@
 
 package ru.lazyhat.compukterkraft.lang.runtime.blazing
 
-internal object NativeVmBindings {
+internal interface NativeVmBindingsFacade {
+    fun createImage(
+        libraryPath: String,
+        image: ByteArray,
+        instructionBudget: Int,
+    ): Long
+
+    fun runImageUntilSignal(handle: Long): ByteArray
+
+    fun resumeImageWith(
+        handle: Long,
+        value: ByteArray,
+    )
+
+    fun freeImage(handle: Long)
+
+    fun attachImageToKernel(
+        imageHandle: Long,
+        kernelHandle: Long,
+    )
+}
+
+object NativeVmBindings : NativeVmBindingsFacade {
     private val lock = Any()
     private var loadedPath: String? = null
 
-    fun createImage(
+    override fun createImage(
         libraryPath: String,
         image: ByteArray,
         instructionBudget: Int,
@@ -34,12 +56,12 @@ internal object NativeVmBindings {
         return handle
     }
 
-    fun runImageUntilSignal(handle: Long): ByteArray {
+    override fun runImageUntilSignal(handle: Long): ByteArray {
         require(handle != 0L) { "Native image VM handle is zero" }
         return runImageUntilSignalForHandleNative(handle)
     }
 
-    fun resumeImageWith(
+    override fun resumeImageWith(
         handle: Long,
         value: ByteArray,
     ) {
@@ -47,7 +69,7 @@ internal object NativeVmBindings {
         resumeImageWithNative(handle, value)
     }
 
-    fun freeImage(handle: Long) {
+    override fun freeImage(handle: Long) {
         if (handle != 0L) {
             freeImageNative(handle)
         }
@@ -57,6 +79,7 @@ internal object NativeVmBindings {
         maxEventQueueSize: Int,
         maxBufferedBytesPerChannel: Int,
     ): Long {
+        load(requireConfiguredLibraryPath())
         val handle = createDeviceKernelNative(maxEventQueueSize.coerceAtLeast(1), maxBufferedBytesPerChannel.coerceAtLeast(1))
         check(handle != 0L) { "Native device runtime kernel create returned a zero handle" }
         return handle
@@ -77,7 +100,7 @@ internal object NativeVmBindings {
         return enqueueDeviceEventNative(handle, eventName, payload)
     }
 
-    fun attachImageToKernel(
+    override fun attachImageToKernel(
         imageHandle: Long,
         kernelHandle: Long,
     ) {
@@ -99,6 +122,11 @@ internal object NativeVmBindings {
             loadedPath = libraryPath
         }
     }
+
+    private fun requireConfiguredLibraryPath(): String =
+        System.getProperty("ckl.vm.native.library")
+            ?.takeIf { it.isNotBlank() }
+            ?: error("Rust image VM runner requires -Dckl.vm.native.library=/absolute/path/to/libckl_vm.so")
 
     @JvmStatic
     private external fun createImageNative(
