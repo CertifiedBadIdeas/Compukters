@@ -7,6 +7,9 @@ pub enum VmSignal {
     Yield,
     Sleep(i64),
     WaitEvent(Option<String>),
+    WaitPoll {
+        channel: i32,
+    },
     HostCall {
         module_name: String,
         function_name: String,
@@ -20,6 +23,7 @@ const SIGNAL_YIELD: u8 = 2;
 const SIGNAL_SLEEP: u8 = 3;
 const SIGNAL_HOST_CALL: u8 = 4;
 const SIGNAL_WAIT_EVENT: u8 = 5;
+const SIGNAL_WAIT_POLL: u8 = 6;
 const SIGNAL_ERROR: u8 = 255;
 
 const VALUE_UNIT: u8 = 0;
@@ -52,6 +56,10 @@ pub fn encode_signal(signal: &VmSignal) -> Vec<u8> {
                 }
                 None => writer.u8(0),
             }
+        }
+        VmSignal::WaitPoll { channel } => {
+            writer.u8(SIGNAL_WAIT_POLL);
+            writer.i32(*channel);
         }
         VmSignal::HostCall {
             module_name,

@@ -32,6 +32,13 @@ import kotlin.test.assertNotNull
 
 class NativeImageVmRunnerTest {
     @Test
+    fun decodesNativeWaitPollSignal() {
+        val signal = NativeVmSignal.decode(byteArrayOf(6, 7, 0, 0, 0))
+
+        assertEquals(NativeVmSignal.WaitPoll(channel = 7), signal)
+    }
+
+    @Test
     fun attachesImageToNativeKernelWhenRuntimeProvidesKernelHandle() {
         val image = assertNotNull(LanguageFrontend().compileImage("main.ck", "pub fun main() { }").image)
         val bindings = RecordingBindings()
@@ -51,6 +58,30 @@ class NativeImageVmRunnerTest {
         assertEquals(listOf(11L to "bin"), bindings.workingDirectories)
     }
 
+    @Test
+    fun waitPollYieldsWithoutResumingImage() {
+        val image = assertNotNull(LanguageFrontend().compileImage("main.ck", "pub fun main() { }").image)
+        val bindings =
+            RecordingBindings(
+                signals =
+                    ArrayDeque(
+                        listOf(
+                            byteArrayOf(6, 3, 0, 0, 0),
+                            byteArrayOf(0, 0),
+                        ),
+                    ),
+            )
+        val runtime = RecordingRuntime(metrics = NoopDeviceRuntimeMetrics)
+        val runner = NativeImageVmRunner(libraryPath = "/unused/libckl_vm.so", bindings = bindings)
+
+        runBlocking {
+            runner.run(image, runtime)
+        }
+
+        assertEquals(1, runtime.yieldCalls)
+        assertEquals(emptyList(), bindings.resumes)
+    }
+
     private class KernelAwareRuntime(
         private val delegate: RecordingRuntime,
         kernelHandle: Long,
@@ -60,8 +91,14 @@ class NativeImageVmRunnerTest {
     }
 
     private class RecordingBindings : NativeVmBindingsFacade {
+        constructor(signals: ArrayDeque<ByteArray> = ArrayDeque(listOf(byteArrayOf(0, 0)))) {
+            this.signals = signals
+        }
+
+        private val signals: ArrayDeque<ByteArray>
         val attachments = mutableListOf<Pair<Long, Long>>()
         val workingDirectories = mutableListOf<Pair<Long, String>>()
+        val resumes = mutableListOf<Pair<Long, ByteArray>>()
 
         override fun createImage(
             libraryPath: String,
@@ -69,12 +106,14 @@ class NativeImageVmRunnerTest {
             instructionBudget: Int,
         ): Long = 11L
 
-        override fun runImageUntilSignal(handle: Long): ByteArray = byteArrayOf(0, 0)
+        override fun runImageUntilSignal(handle: Long): ByteArray = signals.removeFirst()
 
         override fun resumeImageWith(
             handle: Long,
             value: ByteArray,
-        ) = Unit
+        ) {
+            resumes += handle to value
+        }
 
         override fun freeImage(handle: Long) = Unit
 

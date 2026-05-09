@@ -147,6 +147,7 @@ data class RuntimeVmMetrics(
     val yieldSignals: Long = 0,
     val sleepSignals: Long = 0,
     val waitEventSignals: Long = 0,
+    val waitPollSignals: Long = 0,
     val hostCallSignals: Long = 0,
 ) {
     val averageExecutionWindowNanos: Long get() = if (executionWindows <= 0) 0 else executionWindowNanos / executionWindows
@@ -213,7 +214,7 @@ data class RuntimeProfilingSnapshot(
                 "    execution: windows=${vm.executionWindows}, time=${vm.executionWindowNanos.nanos()}, avg=${vm.averageExecutionWindowNanos.nanos()}",
             )
             appendLine(
-                "  signals: halt=${vm.haltSignals}, pause=${vm.pauseSignals}, yield=${vm.yieldSignals}, sleep=${vm.sleepSignals}, waitEvent=${vm.waitEventSignals}, hostCall=${vm.hostCallSignals}",
+                "  signals: halt=${vm.haltSignals}, pause=${vm.pauseSignals}, yield=${vm.yieldSignals}, sleep=${vm.sleepSignals}, waitEvent=${vm.waitEventSignals}, waitPoll=${vm.waitPollSignals}, hostCall=${vm.hostCallSignals}",
             )
             appendHostCallSummary()
             appendInstructionSummary()
@@ -377,6 +378,7 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
     private val yieldSignals = AtomicLong()
     private val sleepSignals = AtomicLong()
     private val waitEventSignals = AtomicLong()
+    private val waitPollSignals = AtomicLong()
     private val hostCallSignals = AtomicLong()
     private val hostCalls = ConcurrentHashMap<Pair<String, String>, RuntimeCounter>()
     private val instructions = ConcurrentHashMap<VmInstructionKind, RuntimeCounter>()
@@ -470,6 +472,7 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
             VmSignalKind.YIELD -> yieldSignals.incrementAndGet()
             VmSignalKind.SLEEP -> sleepSignals.incrementAndGet()
             VmSignalKind.WAIT_EVENT -> waitEventSignals.incrementAndGet()
+            VmSignalKind.WAIT_POLL -> waitPollSignals.incrementAndGet()
             VmSignalKind.HOST_CALL -> hostCallSignals.incrementAndGet()
         }
     }
@@ -537,6 +540,7 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
                     yieldSignals = yieldSignals.get(),
                     sleepSignals = sleepSignals.get(),
                     waitEventSignals = waitEventSignals.get(),
+                    waitPollSignals = waitPollSignals.get(),
                     hostCallSignals = hostCallSignals.get(),
                 ),
             hostCalls =
