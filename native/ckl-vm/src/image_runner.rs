@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::sync::{Arc, Mutex};
 
 use crate::image::{decode_image, Constant, Function, HostImport, Image};
 use crate::runtime_kernel::DeviceRuntimeKernel;
@@ -66,7 +67,7 @@ pub struct ImageVmHandle {
     call_stack: Vec<CallFrame>,
     objects: HashMap<u32, HeapObject>,
     next_object_id: u32,
-    attached_kernel: Option<*mut DeviceRuntimeKernel>,
+    attached_kernel: Option<Arc<Mutex<DeviceRuntimeKernel>>>,
     instruction_budget: usize,
     instructions_since_pause: usize,
     state: ImageVmState,
@@ -107,11 +108,8 @@ impl ImageVmHandle {
 
     pub fn attach_device_kernel(
         &mut self,
-        kernel: *mut DeviceRuntimeKernel,
+        kernel: Arc<Mutex<DeviceRuntimeKernel>>,
     ) -> Result<(), String> {
-        if kernel.is_null() {
-            return Err("native device runtime kernel handle is null".to_string());
-        }
         self.attached_kernel = Some(kernel);
         Ok(())
     }
@@ -158,10 +156,12 @@ impl ImageVmHandle {
         if module_name != "display" {
             return Ok(NativeHostImportResult::Fallback(arguments));
         }
-        let Some(kernel_pointer) = self.attached_kernel else {
+        let Some(kernel_handle) = self.attached_kernel.as_ref() else {
             return Ok(NativeHostImportResult::Fallback(arguments));
         };
-        let kernel = unsafe { &mut *kernel_pointer };
+        let mut kernel = kernel_handle
+            .lock()
+            .map_err(|_| "native device runtime kernel lock is poisoned".to_string())?;
         match function_name {
             "clear" => {
                 let display_id = int_argument(&arguments, 0, "display.clear displayId")?;

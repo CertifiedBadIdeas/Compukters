@@ -110,6 +110,7 @@ tasks.register<Test>("profileRuntimeVmImage") {
         includeTestsMatching("ru.lazyhat.compukterkraft.impl.computer.vm.RuntimeVmProfilingReportTest")
     }
     systemProperty("ckl.vm.native.library", rustVmNativeLibrary.asFile.absolutePath)
+    systemProperty("ckl.vm.native.display", "true")
     systemProperty("ckl.profiling.runtime.name", "Rust image")
     systemProperty("ckl.profiling.profile.path", runtimeVmImageProfile.get().asFile.absolutePath)
     systemProperty("ckl.profiling.runs.dir", runtimeVmProfileRuns.get().asFile.absolutePath)

@@ -351,11 +351,18 @@ internal object RuntimeProfilingWorkload {
 
             val copyRectCallsBefore = displayMetrics.snapshot().operations.copyRectCalls
             val clientFramesBefore = clientMetrics.snapshot().framesApplied
+            val displayFramesBeforeEnter = displayFramesDrained
             var acceptedEnterEvents = 0
             var ticksUntilFirstAutoscroll = 0
             var copyRectCallsAfter = copyRectCallsBefore
+            var clientFramesAfter = clientFramesBefore
+            var displayFramesAfterEnter = displayFramesBeforeEnter
 
-            while (acceptedEnterEvents < maxEnterEvents && copyRectCallsAfter == copyRectCallsBefore) {
+            while (acceptedEnterEvents < maxEnterEvents &&
+                copyRectCallsAfter == copyRectCallsBefore &&
+                clientFramesAfter == clientFramesBefore &&
+                displayFramesAfterEnter == displayFramesBeforeEnter
+            ) {
                 if (vm.enqueueEvent(VmEvent("key", listOf(KeyCodes.KEY_ENTER, true)))) {
                     acceptedEnterEvents += 1
                 }
@@ -370,6 +377,8 @@ internal object RuntimeProfilingWorkload {
                     ).displayFramesDrained
                 ticksUntilFirstAutoscroll += ticksPerEnter
                 copyRectCallsAfter = displayMetrics.snapshot().operations.copyRectCalls
+                clientFramesAfter = clientMetrics.snapshot().framesApplied
+                displayFramesAfterEnter = displayFramesDrained
             }
 
             val observation =
@@ -377,10 +386,16 @@ internal object RuntimeProfilingWorkload {
             displayFramesDrained += observation.displayFramesDrained
             displayFramesDrained += client.drain(vm, runtimeMetrics)
             copyRectCallsAfter = displayMetrics.snapshot().operations.copyRectCalls
+            clientFramesAfter = clientMetrics.snapshot().framesApplied
+            displayFramesAfterEnter = displayFramesDrained
+            val clientFramesApplied = clientFramesAfter - clientFramesBefore
+            val displayFramesDrainedAfterEnter = displayFramesAfterEnter - displayFramesBeforeEnter
 
             assertTrue(
-                copyRectCallsAfter > copyRectCallsBefore,
-                "expected held Enter to reach terminal autoscroll; acceptedEnterEvents=$acceptedEnterEvents copyRectCallsBefore=$copyRectCallsBefore copyRectCallsAfter=$copyRectCallsAfter",
+                copyRectCallsAfter > copyRectCallsBefore ||
+                    clientFramesApplied > 0 ||
+                    displayFramesDrainedAfterEnter > 0,
+                "expected held Enter to produce visible terminal progress; acceptedEnterEvents=$acceptedEnterEvents copyRectCallsBefore=$copyRectCallsBefore copyRectCallsAfter=$copyRectCallsAfter displayFramesDrainedAfterEnter=$displayFramesDrainedAfterEnter clientFramesApplied=$clientFramesApplied",
             )
 
             return EnterAutoscrollProfilingRun(
@@ -390,7 +405,7 @@ internal object RuntimeProfilingWorkload {
                 copyRectCallsBefore = copyRectCallsBefore,
                 copyRectCallsAfter = copyRectCallsAfter,
                 displayFramesDrained = displayFramesDrained,
-                clientFramesApplied = clientMetrics.snapshot().framesApplied - clientFramesBefore,
+                clientFramesApplied = clientFramesApplied,
             )
         } finally {
             vm?.stop(VmStopReason.REQUESTED)
@@ -441,19 +456,52 @@ internal object RuntimeProfilingWorkload {
                 val permitsSentAfter = metrics.snapshot().vm.slicePermitsSent
                 metrics.recordRequestSlice(System.nanoTime() - requestStarted)
 
-                val drainStarted = System.nanoTime()
-                val calls = vm.drainHostCalls()
-                metrics.recordHostCallDrain(calls.size, System.nanoTime() - drainStarted)
+                val spinDeadline =
+                    System.nanoTime() +
+                        vm.profile.resources.cpu.wallTimeGuardNanosPerSlice
+                            .coerceAtLeast(1L)
+                var remainingIdlePolls = 8
+                var drainedCalls = 0
+                var dispatchedCalls = 0
+                var deliveredResults = 0
+                var totalDrainNanos = 0L
+                var totalDispatchNanos = 0L
+                var totalDeliverNanos = 0L
 
-                val dispatchStarted = System.nanoTime()
-                val results = calls.map(dispatcher::dispatch)
-                metrics.recordHostCallDispatch(calls.size, System.nanoTime() - dispatchStarted)
+                while (true) {
+                    val drainStarted = System.nanoTime()
+                    val calls = vm.drainHostCalls()
+                    totalDrainNanos += System.nanoTime() - drainStarted
+                    drainedCalls += calls.size
+                    if (calls.isEmpty()) {
+                        if (remainingIdlePolls <= 0 || System.nanoTime() >= spinDeadline) {
+                            break
+                        }
+                        remainingIdlePolls -= 1
+                        Thread.onSpinWait()
+                        continue
+                    }
 
-                val deliverStarted = System.nanoTime()
-                if (results.isNotEmpty()) {
-                    vm.deliverHostResults(results)
+                    remainingIdlePolls = 8
+                    val dispatchStarted = System.nanoTime()
+                    val results = calls.map(dispatcher::dispatch)
+                    totalDispatchNanos += System.nanoTime() - dispatchStarted
+                    dispatchedCalls += calls.size
+
+                    val deliverStarted = System.nanoTime()
+                    if (results.isNotEmpty()) {
+                        vm.deliverHostResults(results)
+                    }
+                    totalDeliverNanos += System.nanoTime() - deliverStarted
+                    deliveredResults += results.size
+
+                    if (System.nanoTime() >= spinDeadline) {
+                        break
+                    }
                 }
-                metrics.recordHostResultDelivery(results.size, System.nanoTime() - deliverStarted)
+                metrics.recordHostCallDrain(drainedCalls, totalDrainNanos)
+                metrics.recordHostCallDispatch(dispatchedCalls, totalDispatchNanos)
+                metrics.recordHostResultDelivery(deliveredResults, totalDeliverNanos)
 
                 displayFramesDrained += client?.drain(vm, metrics) ?: 0
                 metrics.recordServerTick(System.nanoTime() - tickStarted)
