@@ -365,7 +365,7 @@ internal object RuntimeProfilingWorkload {
                         dispatcher,
                         runtimeMetrics,
                         ticks = ticksPerEnter,
-                        delayMillis = 0,
+                        delayMillis = 1,
                         client = client,
                     ).displayFramesDrained
                 ticksUntilFirstAutoscroll += ticksPerEnter
@@ -373,7 +373,7 @@ internal object RuntimeProfilingWorkload {
             }
 
             val observation =
-                runTicks(vm, dispatcher, runtimeMetrics, ticks = settleTicks, delayMillis = 0, client = client)
+                runTicks(vm, dispatcher, runtimeMetrics, ticks = settleTicks, delayMillis = 1, client = client)
             displayFramesDrained += observation.displayFramesDrained
             displayFramesDrained += client.drain(vm, runtimeMetrics)
             copyRectCallsAfter = displayMetrics.snapshot().operations.copyRectCalls

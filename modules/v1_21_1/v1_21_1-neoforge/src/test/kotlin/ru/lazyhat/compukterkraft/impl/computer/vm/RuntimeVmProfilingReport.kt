@@ -36,6 +36,7 @@ import java.nio.file.Path
 import java.time.Clock
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 import kotlin.io.path.isDirectory
 import kotlin.io.path.name
 import kotlin.io.path.readLines
@@ -721,5 +722,20 @@ internal object RuntimeVmProfilingReportFormatter {
 
     private val RuntimeHostCallMetrics.key: String get() = "$moduleName.$functionName"
 
-    private fun formatNanos(nanos: Long): String = "$nanos ns"
+    private fun formatNanos(nanos: Long): String =
+        when {
+            nanos < 1_000L -> "$nanos ns"
+            nanos < 1_000_000L -> "${formatScaledNanos(nanos, 1_000.0)} us"
+            nanos < 1_000_000_000L -> "${formatScaledNanos(nanos, 1_000_000.0)} ms"
+            else -> "${formatScaledNanos(nanos, 1_000_000_000.0)} s"
+        }
+
+    private fun formatScaledNanos(
+        nanos: Long,
+        scale: Double,
+    ): String =
+        String
+            .format(Locale.ROOT, "%.2f", nanos / scale)
+            .trimEnd('0')
+            .trimEnd('.')
 }
