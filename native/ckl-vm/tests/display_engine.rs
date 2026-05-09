@@ -88,6 +88,27 @@ fn blit_mono5x7_text_draws_glyph_run() {
 }
 
 #[test]
+fn text_run_supports_digits_lowercase_and_punctuation() {
+    fn single_text_payload(text: &str) -> Vec<u8> {
+        let mut display = DisplayEngine::new(6, 18, 9, PixelFormat::Rgb565).unwrap();
+        display.blit_mono5x7_text(0, 1, text, 0x07E0, Some(0x0000));
+        display
+            .present()
+            .expect("text frame")
+            .tiles
+            .iter()
+            .flat_map(|tile| tile.payload.iter())
+            .copied()
+            .collect::<Vec<_>>()
+    }
+
+    assert_eq!(single_text_payload("a"), single_text_payload("A"));
+    assert_eq!(single_text_payload("x"), single_text_payload("X"));
+    assert_ne!(single_text_payload("1"), single_text_payload("@"));
+    assert_ne!(single_text_payload("-"), single_text_payload("@"));
+}
+
+#[test]
 fn registry_attach_queues_full_refresh_and_drain_frames() {
     let mut registry = DeviceDisplayRegistry::new();
 

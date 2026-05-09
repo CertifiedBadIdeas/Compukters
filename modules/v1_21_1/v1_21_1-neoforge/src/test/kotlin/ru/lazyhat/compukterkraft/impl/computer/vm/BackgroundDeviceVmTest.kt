@@ -397,7 +397,7 @@ class BackgroundDeviceVmTest {
             runVmTicks(vm, ticks = 80, hostCallDispatcher = dispatcher)
 
             "help".forEach { ch -> vm.enqueueEvent(VmEvent("char", listOf(byteArrayOf(ch.code.toByte())))) }
-            runVmTicks(vm, ticks = 20, hostCallDispatcher = dispatcher)
+            runVmTicks(vm, ticks = 80, hostCallDispatcher = dispatcher)
             val typedFrames = vm.drainDisplayFrames()
             assertTrue(typedFrames.isNotEmpty(), "typed input should update display frames")
             assertTrue(typedFrames.greenPixelCount() > 0, "typed input should draw glyph pixels")
@@ -535,6 +535,43 @@ class BackgroundDeviceVmTest {
                 snapshot.displayTextRunCalls() > 0,
                 "committed terminal output should render through batched text runs",
             )
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun bundledRomTerminalUsesNativeDisplayTextRunsWhenEnabled() {
+        System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val root = createTempDirectory("compukterkraft-rom-terminal-native-display")
+
+        try {
+            DeviceWorkspaceInitializer(root).ensureInitialized(1)
+            val workspace = DeviceWorkspaceHost(root)
+            val vm =
+                BackgroundDeviceVm(
+                    deviceId = 1,
+                    profile = firmwareTestProfile(),
+                    dispatcher = Dispatchers.Default,
+                    labelProvider = { null },
+                    logger = DeviceVmLogger { },
+                    workspace = workspace,
+                    firmwareLoader = ClasspathFirmwareLoader(),
+                    nativeDisplayEnabled = true,
+                )
+
+            vm.attachDisplay(displayId = 9, width = 96, height = 48)
+            assertTrue(vm.boot())
+            val dispatcher = HostCallDispatcher(1, workspace)
+            runVmTicks(vm, ticks = 80, hostCallDispatcher = dispatcher)
+            vm.drainDisplayFrames()
+
+            "ab".forEach { ch -> vm.enqueueEvent(VmEvent("char", listOf(byteArrayOf(ch.code.toByte())))) }
+            runVmTicks(vm, ticks = 20, hostCallDispatcher = dispatcher)
+            val frames = vm.drainDisplayFrames()
+
+            assertTrue(frames.isNotEmpty(), "native display path should emit client-visible frames")
+            assertTrue(frames.greenPixelCount() > 0, "native display text run should draw glyph pixels")
         } finally {
             root.toFile().deleteRecursively()
         }

@@ -163,6 +163,20 @@ impl ImageVmHandle {
         };
         let kernel = unsafe { &mut *kernel_pointer };
         match function_name {
+            "clear" => {
+                let display_id = int_argument(&arguments, 0, "display.clear displayId")?;
+                let rgb565 = int_argument(&arguments, 1, "display.clear rgb565")? as u16;
+                kernel.displays.clear(display_id, rgb565);
+                Ok(NativeHostImportResult::Handled(VmValue::Unit))
+            }
+            "setPixel" => {
+                let display_id = int_argument(&arguments, 0, "display.setPixel displayId")?;
+                let x = int_argument(&arguments, 1, "display.setPixel x")?;
+                let y = int_argument(&arguments, 2, "display.setPixel y")?;
+                let rgb565 = int_argument(&arguments, 3, "display.setPixel rgb565")? as u16;
+                kernel.displays.set_pixel(display_id, x, y, rgb565);
+                Ok(NativeHostImportResult::Handled(VmValue::Unit))
+            }
             "fillRect" => {
                 let display_id = int_argument(&arguments, 0, "display.fillRect displayId")?;
                 let x = int_argument(&arguments, 1, "display.fillRect x")?;
@@ -173,6 +187,72 @@ impl ImageVmHandle {
                 kernel
                     .displays
                     .fill_rect(display_id, x, y, width, height, rgb565);
+                Ok(NativeHostImportResult::Handled(VmValue::Unit))
+            }
+            "copyRect" => {
+                let display_id = int_argument(&arguments, 0, "display.copyRect displayId")?;
+                let src_x = int_argument(&arguments, 1, "display.copyRect srcX")?;
+                let src_y = int_argument(&arguments, 2, "display.copyRect srcY")?;
+                let width = int_argument(&arguments, 3, "display.copyRect width")?;
+                let height = int_argument(&arguments, 4, "display.copyRect height")?;
+                let dst_x = int_argument(&arguments, 5, "display.copyRect dstX")?;
+                let dst_y = int_argument(&arguments, 6, "display.copyRect dstY")?;
+                kernel
+                    .displays
+                    .copy_rect(display_id, src_x, src_y, width, height, dst_x, dst_y);
+                Ok(NativeHostImportResult::Handled(VmValue::Unit))
+            }
+            "blitMono" => {
+                let display_id = int_argument(&arguments, 0, "display.blitMono displayId")?;
+                let x = int_argument(&arguments, 1, "display.blitMono x")?;
+                let y = int_argument(&arguments, 2, "display.blitMono y")?;
+                let width = int_argument(&arguments, 3, "display.blitMono width")?;
+                let height = int_argument(&arguments, 4, "display.blitMono height")?;
+                let mask = string_argument(&arguments, 5, "display.blitMono mask")?;
+                let foreground = int_argument(&arguments, 6, "display.blitMono foreground")? as u16;
+                let background = match int_argument(&arguments, 7, "display.blitMono background")? {
+                    value if value < 0 => None,
+                    value => Some(value as u16),
+                };
+                kernel
+                    .displays
+                    .blit_mono(display_id, x, y, width, height, mask, foreground, background);
+                Ok(NativeHostImportResult::Handled(VmValue::Unit))
+            }
+            "blitMono5x7" => {
+                let display_id = int_argument(&arguments, 0, "display.blitMono5x7 displayId")?;
+                let x = int_argument(&arguments, 1, "display.blitMono5x7 x")?;
+                let y = int_argument(&arguments, 2, "display.blitMono5x7 y")?;
+                let mut glyph = 0_u64;
+                for index in 0..7 {
+                    let row = int_argument(&arguments, 3 + index, "display.blitMono5x7 row")? as u64;
+                    glyph = (glyph << 5) | (row & 0b11111);
+                }
+                let foreground = int_argument(&arguments, 10, "display.blitMono5x7 foreground")? as u16;
+                let background = match int_argument(&arguments, 11, "display.blitMono5x7 background")? {
+                    value if value < 0 => None,
+                    value => Some(value as u16),
+                };
+                kernel
+                    .displays
+                    .blit_mono5x7_packed(display_id, x, y, glyph, foreground, background);
+                Ok(NativeHostImportResult::Handled(VmValue::Unit))
+            }
+            "blitMono5x7Packed" => {
+                let display_id = int_argument(&arguments, 0, "display.blitMono5x7Packed displayId")?;
+                let x = int_argument(&arguments, 1, "display.blitMono5x7Packed x")?;
+                let y = int_argument(&arguments, 2, "display.blitMono5x7Packed y")?;
+                let glyph = long_argument(&arguments, 3, "display.blitMono5x7Packed glyph")? as u64;
+                let foreground =
+                    int_argument(&arguments, 4, "display.blitMono5x7Packed foreground")? as u16;
+                let background =
+                    match int_argument(&arguments, 5, "display.blitMono5x7Packed background")? {
+                        value if value < 0 => None,
+                        value => Some(value as u16),
+                    };
+                kernel
+                    .displays
+                    .blit_mono5x7_packed(display_id, x, y, glyph, foreground, background);
                 Ok(NativeHostImportResult::Handled(VmValue::Unit))
             }
             "present" => {
@@ -1282,6 +1362,18 @@ fn string_argument<'a>(
     match arguments.get(index) {
         Some(VmValue::String(value)) => Ok(value),
         Some(other) => Err(format!("{context} requires String but found {other:?}")),
+        None => Err(format!("{context} missing argument {index}")),
+    }
+}
+
+fn long_argument(
+    arguments: &[VmValue],
+    index: usize,
+    context: &str,
+) -> Result<i64, String> {
+    match arguments.get(index) {
+        Some(VmValue::Long(value)) => Ok(*value),
+        Some(other) => Err(format!("{context} requires Long but found {other:?}")),
         None => Err(format!("{context} missing argument {index}")),
     }
 }
