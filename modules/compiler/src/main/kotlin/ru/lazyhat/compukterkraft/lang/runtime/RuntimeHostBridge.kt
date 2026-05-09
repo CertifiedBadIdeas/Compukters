@@ -400,6 +400,12 @@ internal class RuntimeHostBridge(
                 VmValue.StringValue(if (index in text.indices) text[index].toString() else "")
             }
 
+            "charCodeAt" -> {
+                val text = arguments[0].asString()
+                val index = arguments[1].asInt()
+                VmValue.IntValue(if (index in text.indices) text[index].code else -1)
+            }
+
             "repeat" -> {
                 val text = arguments[0].asString()
                 val count = arguments[1].asInt().coerceAtLeast(0)

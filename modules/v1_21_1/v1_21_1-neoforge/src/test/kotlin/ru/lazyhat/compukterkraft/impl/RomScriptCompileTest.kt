@@ -81,6 +81,16 @@ class RomScriptCompileTest {
     }
 
     @Test
+    fun bundledRomTerminalUsesAsciiGlyphTableFastPath() {
+        val source = resourceText("rom/terminal.ck")
+
+        assertTrue(source.contains("glyphs: Array<Long>"), "terminal buffer should keep a reusable ASCII glyph table")
+        assertTrue(source.contains("Array<Long>(size = 128"), "terminal should allocate the ASCII glyph table once per buffer")
+        assertTrue(source.contains("strings::charCodeAt(ch, 0)"), "terminal glyph lookup should index by character code")
+        assertFalse(source.contains("if (ch == \"A\""), "terminal should not linearly scan glyph names for ASCII")
+    }
+
+    @Test
     fun bundledRomTerminalStartsShellAfterDisplayReadyAndPreservesBufferOnResize() {
         val source = resourceText("rom/terminal.ck")
 
@@ -244,13 +254,13 @@ class RomScriptCompileTest {
     fun bundledRomTerminalHasSymmetricAngleGlyphs() {
         val source = resourceText("rom/terminal.ck")
 
-        assertTrue(source.contains("if (ch == \"<\")"), "terminal.ck should define a '<' glyph")
+        assertTrue(source.contains("glyphs[60]"), "terminal.ck should define a '<' glyph")
         assertTrue(
-            source.contains("if (ch == \">\") { return 0b10000010000010000010001000100010000L }"),
+            source.contains("glyphs[62] = 0b10000010000010000010001000100010000L"),
             "terminal.ck should use a balanced packed seven-row '>' glyph",
         )
         assertTrue(
-            source.contains("if (ch == \"<\") { return 0b00001000100010001000001000001000001L }"),
+            source.contains("glyphs[60] = 0b00001000100010001000001000001000001L"),
             "terminal.ck should use a balanced packed seven-row '<' glyph",
         )
     }
@@ -259,7 +269,7 @@ class RomScriptCompileTest {
     fun bundledRomTerminalUsesPackedBitwiseGlyphs() {
         val source = resourceText("rom/terminal.ck")
 
-        assertTrue(source.contains("fun glyphBits(ch: String): Long"), "terminal.ck should map characters to packed glyph bits")
+        assertTrue(source.contains("fun glyphBits(glyphs: Array<Long>, ch: String): Long"), "terminal.ck should map characters to packed glyph bits")
         assertTrue(source.contains("display::blitMono5x7Packed"), "terminal.ck should render glyphs through the packed display API")
         assertFalse(source.contains("pub struct Glyph5x7"), "terminal.ck should not allocate glyph row structs")
         assertFalse(source.contains("fun glyphRows(ch: String): Glyph5x7"), "terminal.ck should not return glyph row structs")
@@ -270,11 +280,11 @@ class RomScriptCompileTest {
             "terminal.ck should not return 35-character string glyph masks",
         )
         assertTrue(
-            source.contains("if (ch == \">\") { return 0b10000010000010000010001000100010000L }"),
+            source.contains("glyphs[62] = 0b10000010000010000010001000100010000L"),
             "terminal.ck should preserve the balanced '>' glyph as packed bits",
         )
         assertTrue(
-            source.contains("if (ch == \"<\") { return 0b00001000100010001000001000001000001L }"),
+            source.contains("glyphs[60] = 0b00001000100010001000001000001000001L"),
             "terminal.ck should preserve the balanced '<' glyph as packed bits",
         )
     }
