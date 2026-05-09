@@ -133,7 +133,7 @@ internal object RuntimeVmProfileCodec {
                     }
                     workload.runtime.vm.run {
                         appendLine(
-                            "runtimeVm\t$sliceRequests\t$slicePermitsSent\t$sleepGatedSliceRequests\t$slicePermitsReceived\t$schedulingPoints\t$yieldSchedulingPoints\t$waitForSliceSchedulingPoints\t$executionWindows\t$executionWindowNanos\t$haltSignals\t$pauseSignals\t$yieldSignals\t$sleepSignals\t$waitEventSignals\t$waitPollSignals\t$waitProcessSignals\t$hostCallSignals\t$nativeFastPathCalls\t$nativeWaitCalls\t$nativeWaitNanos\t$nativeWaitWakeups\t$nativeWaitTimeouts\t$nativeDisplayPumpWaitCalls\t$nativeDisplayPumpWaitNanos\t$nativeDisplayPumpWakeups\t$nativeDisplayPumpTimeouts\t$nativeDisplayFrameByteBatches\t$nativeDisplayFrameBytes",
+                            "runtimeVm\t$sliceRequests\t$slicePermitsSent\t$sleepGatedSliceRequests\t$slicePermitsReceived\t$schedulingPoints\t$yieldSchedulingPoints\t$waitForSliceSchedulingPoints\t$executionWindows\t$executionWindowNanos\t$haltSignals\t$pauseSignals\t$yieldSignals\t$sleepSignals\t$waitEventSignals\t$waitPollSignals\t$waitProcessSignals\t$nativeProcessRegistrations\t$nativeProcessCompletions\t$nativeProcessStaleCompletions\t$hostCallSignals\t$nativeFastPathCalls\t$nativeWaitCalls\t$nativeWaitNanos\t$nativeWaitWakeups\t$nativeWaitTimeouts\t$nativeDisplayPumpWaitCalls\t$nativeDisplayPumpWaitNanos\t$nativeDisplayPumpWakeups\t$nativeDisplayPumpTimeouts\t$nativeDisplayFrameByteBatches\t$nativeDisplayFrameBytes",
                         )
                     }
                     workload.runtime.hostCalls.forEach { call ->
@@ -272,6 +272,7 @@ internal object RuntimeVmProfileCodec {
                 "runtimeVm" -> {
                     current.requireCurrent().vm =
                         parts.longs().let { v ->
+                            val hasProcessLifecycleFields = v.size >= 31
                             val hasProcessWaitField = v.size >= 28
                             val hasNativeWaitFields = v.size >= 27
                             val legacyHostCallSignals = v.getOrElse(14) { 0 }
@@ -292,74 +293,89 @@ internal object RuntimeVmProfileCodec {
                                 waitEventSignals = v.getOrElse(13) { 0 },
                                 waitPollSignals = if (hasNativeWaitFields) v[14] else 0,
                                 waitProcessSignals = if (hasProcessWaitField) v[15] else 0,
+                                nativeProcessRegistrations = if (hasProcessLifecycleFields) v[16] else 0,
+                                nativeProcessCompletions = if (hasProcessLifecycleFields) v[17] else 0,
+                                nativeProcessStaleCompletions = if (hasProcessLifecycleFields) v[18] else 0,
                                 hostCallSignals =
                                     when {
+                                        hasProcessLifecycleFields -> v[19]
                                         hasProcessWaitField -> v[16]
                                         hasNativeWaitFields -> v[15]
                                         else -> legacyHostCallSignals
                                     },
                                 nativeFastPathCalls =
                                     when {
+                                        hasProcessLifecycleFields -> v[20]
                                         hasProcessWaitField -> v[17]
                                         hasNativeWaitFields -> v[16]
                                         else -> 0
                                     },
                                 nativeWaitCalls =
                                     when {
+                                        hasProcessLifecycleFields -> v[21]
                                         hasProcessWaitField -> v[18]
                                         hasNativeWaitFields -> v[17]
                                         else -> 0
                                     },
                                 nativeWaitNanos =
                                     when {
+                                        hasProcessLifecycleFields -> v[22]
                                         hasProcessWaitField -> v[19]
                                         hasNativeWaitFields -> v[18]
                                         else -> 0
                                     },
                                 nativeWaitWakeups =
                                     when {
+                                        hasProcessLifecycleFields -> v[23]
                                         hasProcessWaitField -> v[20]
                                         hasNativeWaitFields -> v[19]
                                         else -> 0
                                     },
                                 nativeWaitTimeouts =
                                     when {
+                                        hasProcessLifecycleFields -> v[24]
                                         hasProcessWaitField -> v[21]
                                         hasNativeWaitFields -> v[20]
                                         else -> 0
                                     },
                                 nativeDisplayPumpWaitCalls =
                                     when {
+                                        hasProcessLifecycleFields -> v[25]
                                         hasProcessWaitField -> v[22]
                                         hasNativeWaitFields -> v[21]
                                         else -> 0
                                     },
                                 nativeDisplayPumpWaitNanos =
                                     when {
+                                        hasProcessLifecycleFields -> v[26]
                                         hasProcessWaitField -> v[23]
                                         hasNativeWaitFields -> v[22]
                                         else -> 0
                                     },
                                 nativeDisplayPumpWakeups =
                                     when {
+                                        hasProcessLifecycleFields -> v[27]
                                         hasProcessWaitField -> v[24]
                                         hasNativeWaitFields -> v[23]
                                         else -> 0
                                     },
                                 nativeDisplayPumpTimeouts =
                                     when {
+                                        hasProcessLifecycleFields -> v[28]
                                         hasProcessWaitField -> v[25]
                                         hasNativeWaitFields -> v[24]
                                         else -> 0
                                     },
                                 nativeDisplayFrameByteBatches =
                                     when {
+                                        hasProcessLifecycleFields -> v[29]
                                         hasProcessWaitField -> v[26]
                                         hasNativeWaitFields -> v[25]
                                         else -> 0
                                     },
                                 nativeDisplayFrameBytes =
                                     when {
+                                        hasProcessLifecycleFields -> v[30]
                                         hasProcessWaitField -> v[27]
                                         hasNativeWaitFields -> v[26]
                                         else -> 0
@@ -646,6 +662,9 @@ internal object RuntimeVmProfilingReportFormatter {
         appendLine("| VM execution time | ${formatNanos(workload.runtime.vm.executionWindowNanos)} |")
         appendLine("| Native wait signals | ${workload.runtime.vm.nativeWaitSignals} |")
         appendLine("| Native process wait signals | ${workload.runtime.vm.waitProcessSignals} |")
+        appendLine("| Native process registrations | ${workload.runtime.vm.nativeProcessRegistrations} |")
+        appendLine("| Native process completions | ${workload.runtime.vm.nativeProcessCompletions} |")
+        appendLine("| Native process stale completions | ${workload.runtime.vm.nativeProcessStaleCompletions} |")
         appendLine("| Native fast-path calls | ${workload.runtime.vm.nativeFastPathCalls} |")
         appendLine("| Native wait calls | ${workload.runtime.vm.nativeWaitCalls} |")
         appendLine("| Native wait time | ${formatNanos(workload.runtime.vm.nativeWaitNanos)} |")
@@ -722,6 +741,9 @@ internal object RuntimeVmProfilingReportFormatter {
         appendHistoricalMetricRow("VM execution time", columns) { workload -> formatNanos(workload.runtime.vm.executionWindowNanos) }
         appendHistoricalMetricRow("Native wait signals", columns) { workload -> workload.runtime.vm.nativeWaitSignals.toString() }
         appendHistoricalMetricRow("Native process wait signals", columns) { workload -> workload.runtime.vm.waitProcessSignals.toString() }
+        appendHistoricalMetricRow("Native process registrations", columns) { workload -> workload.runtime.vm.nativeProcessRegistrations.toString() }
+        appendHistoricalMetricRow("Native process completions", columns) { workload -> workload.runtime.vm.nativeProcessCompletions.toString() }
+        appendHistoricalMetricRow("Native process stale completions", columns) { workload -> workload.runtime.vm.nativeProcessStaleCompletions.toString() }
         appendHistoricalMetricRow("Native fast-path calls", columns) { workload -> workload.runtime.vm.nativeFastPathCalls.toString() }
         appendHistoricalMetricRow("Native wait calls", columns) { workload -> workload.runtime.vm.nativeWaitCalls.toString() }
         appendHistoricalMetricRow("Native wait time", columns) { workload -> formatNanos(workload.runtime.vm.nativeWaitNanos) }

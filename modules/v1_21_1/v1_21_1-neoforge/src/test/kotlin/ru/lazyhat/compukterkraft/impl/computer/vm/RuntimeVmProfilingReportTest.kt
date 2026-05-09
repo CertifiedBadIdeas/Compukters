@@ -68,6 +68,8 @@ class RuntimeVmProfilingReportTest {
                     .readText()
             assertContains(markdown, "Native wait signals")
             assertContains(markdown, "Native process wait signals")
+            assertContains(markdown, "Native process registrations")
+            assertContains(markdown, "Native process completions")
             assertContains(markdown, "Native fast-path calls")
         }
 
