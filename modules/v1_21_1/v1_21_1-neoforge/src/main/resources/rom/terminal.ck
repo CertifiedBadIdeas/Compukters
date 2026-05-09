@@ -169,14 +169,14 @@ fun clearTextRow(displayId: Int, row: Int) {
     display::fillRect(displayId, 0, row * 9, columns(displayId) * 6, 9, 0)
 }
 
-fun renderTextRow(displayId: Int, glyphs: Array<Long>, cells: String, row: Int) {
+fun renderRowCells(displayId: Int, glyphs: Array<Long>, row: Int, rowCells: String) {
     clearTextRow(displayId, row)
     var col: Int = 0
     val cols: Int = columns(displayId)
     var run: String = ""
     var runColumn: Int = 0
     while col < cols + 0 {
-        val ch: String = cellAt(cells, row * cols + col)
+        val ch: String = cellAt(rowCells, col)
         if (ch != " ") {
             if (run == "") {
                 runColumn = col
@@ -189,6 +189,11 @@ fun renderTextRow(displayId: Int, glyphs: Array<Long>, cells: String, row: Int) 
         col = col + 1
     }
     drawGlyphRun(displayId, runColumn, row, run, 2016)
+}
+
+fun renderTextRow(displayId: Int, glyphs: Array<Long>, cells: String, row: Int) {
+    val cols: Int = columns(displayId)
+    renderRowCells(displayId, glyphs, row, strings::slice(cells, row * cols, (row + 1) * cols))
 }
 
 fun renderAllRows(displayId: Int, glyphs: Array<Long>, cells: String) {
@@ -214,6 +219,22 @@ fun renderRows(displayId: Int, glyphs: Array<Long>, cells: String, startRow: Int
     }
     while row < last + 1 {
         renderTextRow(displayId, glyphs, cells, row)
+        row = row + 1
+    }
+    display::present(displayId)
+}
+
+fun renderAutoscrolledRows(displayId: Int, buffer: TerminalBuffer, startRow: Int) {
+    var row: Int = startRow
+    if (row < 0) {
+        row = 0
+    }
+    val rs: Int = rows(displayId)
+    if (row >= rs) {
+        row = rs - 1
+    }
+    while row < rs + 0 {
+        renderTextRow(displayId, buffer.glyphs, buffer.cellsText, row)
         row = row + 1
     }
     display::present(displayId)
@@ -265,6 +286,19 @@ fun viewportCells(historyCells: String, historyRows: Int, cols: Int, rs: Int, vi
     return result
 }
 
+fun viewportRowCells(buffer: TerminalBuffer, row: Int): String {
+    val cols: Int = buffer.displayColumns
+    val sourceRow: Int = historyRowStart(buffer.historyRows, buffer.displayRows, buffer.viewportOffset) + row
+    if (sourceRow >= 0 && sourceRow < buffer.historyRows) {
+        return strings::slice(buffer.historyCells, sourceRow * cols, (sourceRow + 1) * cols)
+    }
+    return blankCells(cols)
+}
+
+fun renderViewportRow(displayId: Int, buffer: TerminalBuffer, row: Int) {
+    renderRowCells(displayId, buffer.glyphs, row, viewportRowCells(buffer, row))
+}
+
 fun renderViewport(displayId: Int, buffer: TerminalBuffer) {
     if (buffer.viewportOffset == 0) {
         renderAllRows(displayId, buffer.glyphs, buffer.cellsText)
@@ -306,6 +340,24 @@ fun scrollViewportBy(displayId: Int, buffer: TerminalBuffer, deltaRows: Int): Te
         historyRows = buffer.historyRows,
         viewportOffset = nextOffset
     )
+    val actualDelta: Int = nextOffset - buffer.viewportOffset
+    if (actualDelta == 0) {
+        return updated
+    }
+    val cols: Int = columns(displayId)
+    val rs: Int = rows(displayId)
+    if (rs > 1 && actualDelta == 1) {
+        display::copyRect(displayId, 0, 0, cols * 6, (rs - 1) * 9, 0, 9)
+        renderViewportRow(displayId, updated, 0)
+        display::present(displayId)
+        return updated
+    }
+    if (rs > 1 && actualDelta == 0 - 1) {
+        display::copyRect(displayId, 0, 9, cols * 6, (rs - 1) * 9, 0, 0)
+        renderViewportRow(displayId, updated, rs - 1)
+        display::present(displayId)
+        return updated
+    }
     renderViewport(displayId, updated)
     return updated
 }
@@ -353,8 +405,9 @@ fun appendText(displayId: Int, buffer: TerminalBuffer, text: String): TerminalBu
     var row: Int = buffer.cursorRow
     var col: Int = buffer.cursorColumn
     var historyRows: Int = buffer.historyRows
-    val startRow: Int = row
+    val startVisibleRow: Int = row - historyRowStart(buffer.historyRows, rs, 0)
     var scrolled: Bool = false
+    var scrolls: Int = 0
     var i: Int = 0
     while i < strings::length(text) {
         val ch: String = strings::charAt(text, i)
@@ -368,6 +421,7 @@ fun appendText(displayId: Int, buffer: TerminalBuffer, text: String): TerminalBu
             if (row >= rs) {
                 cells = scrollUp(displayId, cells)
                 scrolled = true
+                scrolls = scrolls + 1
             }
         } else if (ch == "\r") {
             col = 0
@@ -408,9 +462,11 @@ fun appendText(displayId: Int, buffer: TerminalBuffer, text: String): TerminalBu
     )
     if (buffer.viewportOffset == 0) {
         if (scrolled) {
-            renderViewport(displayId, updated)
+            var startRow: Int = startVisibleRow - scrolls
+            renderAutoscrolledRows(displayId, updated, startRow)
         } else {
-            renderRows(displayId, buffer.glyphs, cells, startRow, row)
+            val endVisibleRow: Int = row - historyRowStart(historyRows, rs, 0)
+            renderRows(displayId, buffer.glyphs, cells, startVisibleRow, endVisibleRow)
         }
     }
     return updated
@@ -701,6 +757,17 @@ fun handleTerminalEvent(input: Int, displayId: Int, buffer: TerminalBuffer, line
                 pageRows = 1
             }
             return eventResult(displayId, scrollViewportBy(displayId, buffer, pageRows), line, renderedLine, false)
+        }
+        if (key == 265) {
+            return eventResult(displayId, scrollViewportBy(displayId, buffer, 1), line, renderedLine, false)
+        }
+        if (key == 264) {
+            val nextBuffer: TerminalBuffer = scrollViewportBy(displayId, buffer, 0 - 1)
+            if (nextBuffer.viewportOffset == 0 && line != "") {
+                renderInputLine(displayId, nextBuffer, renderedLine, line)
+                return eventResult(displayId, nextBuffer, line, line, false)
+            }
+            return eventResult(displayId, nextBuffer, line, renderedLine, false)
         }
         if (key == 267) {
             var pageRows: Int = rows(displayId) - 1
