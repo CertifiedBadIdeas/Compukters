@@ -2,6 +2,7 @@ use ckl_vm::image_runner::ImageVmHandle;
 use ckl_vm::runtime_kernel::DeviceRuntimeKernel;
 use ckl_vm::signal::encode_value;
 use ckl_vm::value::VmValue;
+use std::sync::{Arc, Mutex};
 
 const OP_PUSH_UNIT: u8 = 1;
 const OP_RETURN: u8 = 2;
@@ -73,12 +74,14 @@ fn device_kernel_owns_display_registry() {
 
 #[test]
 fn attached_kernel_handles_display_fill_rect_and_present_imports() {
-    let mut kernel = DeviceRuntimeKernel::new(64, 4096);
+    let kernel = Arc::new(Mutex::new(DeviceRuntimeKernel::new(64, 4096)));
     kernel
+        .lock()
+        .unwrap()
         .displays
         .attach(1, 18, 18, ckl_vm::display::PixelFormat::Rgb565)
         .unwrap();
-    let _ = kernel.displays.drain_frames();
+    let _ = kernel.lock().unwrap().displays.drain_frames();
 
     let mut code = Vec::new();
     push_constant(&mut code, 0);
@@ -132,23 +135,24 @@ fn attached_kernel_handles_display_fill_rect_and_present_imports() {
         512,
     )
     .unwrap();
-    vm.attach_device_kernel(&mut kernel as *mut DeviceRuntimeKernel)
-        .unwrap();
+    vm.attach_device_kernel(Arc::clone(&kernel)).unwrap();
 
     let signal = vm.run_until_signal();
 
     assert_eq!(signal[0], 0, "program should halt instead of emitting display host calls");
-    assert_eq!(kernel.displays.drain_frames().len(), 1);
+    assert_eq!(kernel.lock().unwrap().displays.drain_frames().len(), 1);
 }
 
 #[test]
 fn attached_kernel_handles_display_text_run_import() {
-    let mut kernel = DeviceRuntimeKernel::new(64, 4096);
+    let kernel = Arc::new(Mutex::new(DeviceRuntimeKernel::new(64, 4096)));
     kernel
+        .lock()
+        .unwrap()
         .displays
         .attach(1, 18, 18, ckl_vm::display::PixelFormat::Rgb565)
         .unwrap();
-    let _ = kernel.displays.drain_frames();
+    let _ = kernel.lock().unwrap().displays.drain_frames();
 
     let mut code = Vec::new();
     push_constant(&mut code, 0);
@@ -202,11 +206,10 @@ fn attached_kernel_handles_display_text_run_import() {
         512,
     )
     .unwrap();
-    vm.attach_device_kernel(&mut kernel as *mut DeviceRuntimeKernel)
-        .unwrap();
+    vm.attach_device_kernel(Arc::clone(&kernel)).unwrap();
 
     let signal = vm.run_until_signal();
-    let frames = kernel.displays.drain_frames();
+    let frames = kernel.lock().unwrap().displays.drain_frames();
 
     assert_eq!(signal[0], 0, "program should halt instead of emitting display host calls");
     assert_eq!(frames.len(), 1);
