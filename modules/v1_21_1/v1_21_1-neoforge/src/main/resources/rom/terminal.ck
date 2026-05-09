@@ -18,10 +18,6 @@ pub struct TerminalEventResult {
     renderInput: Bool
 }
 
-fun inputBatchLimit(): Int {
-    return 64
-}
-
 fun unknownGlyphBits(): Long {
     return 0b11111100011000110001100011000111111L
 }
@@ -790,29 +786,6 @@ fun handleTerminalEvent(input: Int, displayId: Int, buffer: TerminalBuffer, line
     return eventResult(displayId, buffer, line, renderedLine, false)
 }
 
-fun drainInputBatch(input: Int, displayId: Int, buffer: TerminalBuffer, line: String, renderedLine: String, renderInput: Bool): TerminalEventResult {
-    var result: TerminalEventResult = eventResult(displayId, buffer, line, renderedLine, renderInput)
-    var count: Int = 0
-    while count < inputBatchLimit() {
-        val event: Event = events::tryPull()
-        if (event.name == "") {
-            return result
-        }
-        val next: TerminalEventResult =
-            handleTerminalEvent(input, result.displayId, result.buffer, result.line, result.renderedLine, event)
-        result =
-            eventResult(
-                next.displayId,
-                next.buffer,
-                next.line,
-                next.renderedLine,
-                result.renderInput || next.renderInput
-            )
-        count = count + 1
-    }
-    return result
-}
-
 pub fun main() {
     val input: Int = ipc::open()
     val stream: Int = ipc::open()
@@ -836,13 +809,11 @@ pub fun main() {
         } else if (signal.kind == "event") {
             val event: Event = signal.event
             val first: TerminalEventResult = handleTerminalEvent(input, displayId, buffer, line, renderedLine, event)
-            val batch: TerminalEventResult =
-                drainInputBatch(input, first.displayId, first.buffer, first.line, first.renderedLine, first.renderInput)
-            displayId = batch.displayId
-            buffer = batch.buffer
-            line = batch.line
-            renderedLine = batch.renderedLine
-            if (batch.renderInput && buffer.viewportOffset == 0) {
+            displayId = first.displayId
+            buffer = first.buffer
+            line = first.line
+            renderedLine = first.renderedLine
+            if (first.renderInput && buffer.viewportOffset == 0) {
                 renderInputLine(displayId, buffer, renderedLine, line)
                 renderedLine = line
             }

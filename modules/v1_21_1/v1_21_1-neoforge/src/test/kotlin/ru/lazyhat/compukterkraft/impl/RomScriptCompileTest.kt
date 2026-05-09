@@ -154,18 +154,18 @@ class RomScriptCompileTest {
     fun bundledRomTerminalBatchesQueuedInputEventsBeforeRendering() {
         val source = resourceText("rom/terminal.ck")
 
-        assertTrue(
-            source.contains("fun inputBatchLimit(): Int"),
-            "terminal.ck should bound non-blocking input burst draining",
+        assertFalse(source.contains("fun inputBatchLimit(): Int"), "terminal.ck should not batch input events")
+        assertFalse(
+            source.contains("fun drainInputBatch("),
+            "terminal.ck should not drain queued input events in batches",
         )
-        assertTrue(source.contains("fun drainInputBatch("), "terminal.ck should drain queued input events in one batch")
-        assertTrue(
+        assertFalse(
             source.contains("events::tryPull()"),
-            "terminal.ck should drain already queued input events after runtime.poll wakes it",
+            "terminal.ck should not batch-drain already queued input events",
         )
         assertTrue(
             source.contains("renderInputLine(displayId, buffer, renderedLine, line)"),
-            "terminal.ck should render the input overlay once after a batch",
+            "terminal.ck should render the input overlay directly from the current event",
         )
     }
 
