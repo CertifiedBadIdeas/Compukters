@@ -323,6 +323,7 @@ internal class RecordingDeviceRuntimeMetrics : DeviceRuntimeMetrics {
 
     val hostCallCounts = mutableMapOf<String, Long>()
     val hostCallNanos = mutableMapOf<String, Long>()
+    val hostCallWaitNanos = mutableMapOf<String, Long>()
     val instructionCounts = mutableMapOf<VmInstructionKind, Long>()
     val instructionNanos = mutableMapOf<VmInstructionKind, Long>()
 
@@ -336,6 +337,15 @@ internal class RecordingDeviceRuntimeMetrics : DeviceRuntimeMetrics {
         val key = "$moduleName.$functionName"
         hostCallCounts[key] = hostCallCounts.getOrDefault(key, 0) + 1
         hostCallNanos[key] = hostCallNanos.getOrDefault(key, 0) + nanos.coerceAtLeast(0)
+    }
+
+    override fun recordVmHostCallWait(
+        moduleName: String,
+        functionName: String,
+        nanos: Long,
+    ) {
+        val key = "$moduleName.$functionName"
+        hostCallWaitNanos[key] = hostCallWaitNanos.getOrDefault(key, 0) + nanos.coerceAtLeast(0)
     }
 
     override fun recordVmInstruction(

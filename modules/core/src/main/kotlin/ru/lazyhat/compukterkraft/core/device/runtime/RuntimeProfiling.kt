@@ -73,6 +73,12 @@ interface RuntimeMetricsCollector {
         nanos: Long,
     )
 
+    fun recordVmHostCallWait(
+        moduleName: String,
+        functionName: String,
+        nanos: Long,
+    )
+
     fun recordVmInstruction(
         kind: VmInstructionKind,
         nanos: Long,
@@ -151,8 +157,11 @@ data class RuntimeHostCallMetrics(
     val functionName: String,
     val calls: Long,
     val nanos: Long,
+    val waitNanos: Long = 0,
 ) {
     val averageNanos: Long get() = if (calls <= 0) 0 else nanos / calls
+    val activeNanos: Long get() = (nanos - waitNanos).coerceAtLeast(0)
+    val averageActiveNanos: Long get() = if (calls <= 0) 0 else activeNanos / calls
 }
 
 data class RuntimeInstructionMetrics(
@@ -220,11 +229,13 @@ data class RuntimeProfilingSnapshot(
                 hostCalls.sumOf {
                     it.calls
                 }
-            }, time=${hostCalls.sumOf { it.nanos }.nanos()}, avg=${hostCalls.sumOf { it.averageNanos }.nanos()}",
+            }, total=${hostCalls.sumOf { it.nanos }.nanos()}, wait=${
+                hostCalls.sumOf { it.waitNanos }.nanos()
+            }, active=${hostCalls.sumOf { it.activeNanos }.nanos()}",
         )
         hostCalls.sortedBy { it.moduleName + it.functionName }.forEach { call ->
             appendLine(
-                "    ${call.moduleName}.${call.functionName}: count=${call.calls}, time=${call.nanos.nanos()}, avg=${call.averageNanos.nanos()}",
+                "    ${call.moduleName}.${call.functionName}: count=${call.calls}, total=${call.nanos.nanos()}, wait=${call.waitNanos.nanos()}, active=${call.activeNanos.nanos()}, avgActive=${call.averageActiveNanos.nanos()}",
             )
         }
     }
@@ -302,6 +313,12 @@ object NoOpRuntimeMetricsCollector : RuntimeMetricsCollector {
         nanos: Long,
     ) = Unit
 
+    override fun recordVmHostCallWait(
+        moduleName: String,
+        functionName: String,
+        nanos: Long,
+    ) = Unit
+
     override fun recordVmInstruction(
         kind: VmInstructionKind,
         nanos: Long,
@@ -318,6 +335,12 @@ private class RuntimeCounter {
         count.incrementAndGet()
         this.nanos.addAndGet(nanos.coerceAtLeast(0))
     }
+
+    fun recordWait(nanos: Long) {
+        waitNanos.addAndGet(nanos.coerceAtLeast(0))
+    }
+
+    val waitNanos = AtomicLong()
 }
 
 class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
@@ -459,6 +482,14 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
         hostCalls.computeIfAbsent(moduleName to functionName) { RuntimeCounter() }.record(nanos)
     }
 
+    override fun recordVmHostCallWait(
+        moduleName: String,
+        functionName: String,
+        nanos: Long,
+    ) {
+        hostCalls.computeIfAbsent(moduleName to functionName) { RuntimeCounter() }.recordWait(nanos)
+    }
+
     override fun recordVmInstruction(
         kind: VmInstructionKind,
         nanos: Long,
@@ -516,9 +547,11 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
                             functionName = key.second,
                             calls = counter.count.get(),
                             nanos = counter.nanos.get(),
+                            waitNanos = counter.waitNanos.get(),
                         )
                     }.sortedWith(
-                        compareByDescending<RuntimeHostCallMetrics> { it.nanos }
+                        compareByDescending<RuntimeHostCallMetrics> { it.activeNanos }
+                            .thenByDescending { it.nanos }
                             .thenBy { it.moduleName }
                             .thenBy { it.functionName },
                     ),

@@ -69,11 +69,11 @@ import ru.lazyhat.compukterkraft.lang.runtime.VmSignalKind
 import ru.lazyhat.compukterkraft.lang.runtime.VmSnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.VmState
 import ru.lazyhat.compukterkraft.lang.runtime.VmStopReason
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeImageVmRunner
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeVmBindings
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayInfo
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayPixelFormat
-import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeImageVmRunner
-import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeVmBindings
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.yield as coroutineYield
 
@@ -138,7 +138,8 @@ class BackgroundDeviceVm(
     private val peripheralRegistry = VmPeripheralRegistry()
     private val runtimeRegistryProfile = createRuntimeRegistryProfile()
     private val nativeDeviceKernelHandle: Long? =
-        System.getProperty("ckl.vm.native.library")
+        System
+            .getProperty("ckl.vm.native.library")
             ?.takeIf(NativeImageVmRunner::isAvailable)
             ?.let {
                 NativeVmBindings.createDeviceKernel(
@@ -161,6 +162,14 @@ class BackgroundDeviceVm(
             nanos: Long,
         ) {
             runtimeMetricsCollector.recordVmHostCall(moduleName, functionName, nanos)
+        }
+
+        override fun recordVmHostCallWait(
+            moduleName: String,
+            functionName: String,
+            nanos: Long,
+        ) {
+            runtimeMetricsCollector.recordVmHostCallWait(moduleName, functionName, nanos)
         }
 
         override fun recordVmInstruction(

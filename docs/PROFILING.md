@@ -33,6 +33,11 @@ Use the stable TSV for scripts that only need the latest profile. Use the timest
 
 The archived workload set includes both a compact terminal workload and `default-size terminal`, which uses the same pixel dimensions as `ComputerTerminalScreen` (`DEFAULT_COMPUTER_TERM_WIDTH * FONT_WIDTH` by `DEFAULT_COMPUTER_TERM_HEIGHT * FONT_HEIGHT`). Use the default-size workload when checking whether framebuffer payload, client apply, and front snapshot copy costs scale with the real in-game terminal size.
 
+Host-call timing is split into `total`, `wait`, and `active` in runtime summaries and Markdown reports. `total` is
+wall-clock latency for the host call. `wait` is time spent in intentionally blocking calls such as `runtime.poll` and
+`ipc.read`, where the VM is waiting for input or an event. `active` is `total - wait` and is the better number for
+CPU/work hotspot comparisons. Keep `total` in mind for user-visible latency.
+
 Generate a historical Markdown comparison over every archived run:
 
 ```bash

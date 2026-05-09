@@ -101,6 +101,7 @@ class RuntimeVmProfilingReportTest {
                         displayHeight = Config.DEFAULT_COMPUTER_TERM_HEIGHT * TerminalFontConstants.FONT_HEIGHT,
                     ),
                     heldEnterWorkload(),
+                    enterAutoscrollWorkload(),
                 ),
         )
 
@@ -141,6 +142,23 @@ class RuntimeVmProfilingReportTest {
             runtime = run.profiling.runtimeMetrics.snapshot(),
             compiler = run.profiling.compilerMetrics.snapshot(),
             heldEnter = run.summaryMetrics,
+        )
+    }
+
+    private fun enterAutoscrollWorkload(): RuntimeWorkloadProfile {
+        val run =
+            RuntimeProfilingWorkload.runEnterAutoscrollWorkload(
+                maxEnterEvents = 80,
+                ticksPerEnter = 8,
+                settleTicks = 80,
+            )
+        return RuntimeWorkloadProfile(
+            name = "held Enter to autoscroll",
+            display = run.profiling.displayMetrics.snapshot(),
+            client = run.profiling.clientMetrics.snapshot(),
+            runtime = run.profiling.runtimeMetrics.snapshot(),
+            compiler = run.profiling.compilerMetrics.snapshot(),
+            enterAutoscroll = run.summaryMetrics,
         )
     }
 

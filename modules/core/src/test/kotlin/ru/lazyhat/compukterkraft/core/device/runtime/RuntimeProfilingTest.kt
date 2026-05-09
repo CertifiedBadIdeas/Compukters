@@ -49,6 +49,8 @@ class RuntimeProfilingTest {
         collector.recordVmSignal(VmSignalKind.WAIT_EVENT)
         collector.recordVmSignal(VmSignalKind.HOST_CALL)
         collector.recordVmSignal(VmSignalKind.HALT)
+        collector.recordVmHostCallWait("display", "blitMono5x7Packed", nanos = 90)
+        collector.recordVmHostCallWait("display", "blitMono5x7Packed", nanos = 10)
         collector.recordVmHostCall("display", "blitMono5x7Packed", nanos = 100)
         collector.recordVmHostCall("display", "blitMono5x7Packed", nanos = 50)
         collector.recordVmHostCall("events", "tryPull", nanos = 30)
@@ -96,10 +98,14 @@ class RuntimeProfilingTest {
         val blitCall = snapshot.hostCalls.first { it.moduleName == "display" && it.functionName == "blitMono5x7Packed" }
         assertEquals(2, blitCall.calls)
         assertEquals(150, blitCall.nanos)
+        assertEquals(100, blitCall.waitNanos)
+        assertEquals(50, blitCall.activeNanos)
         assertEquals(75, blitCall.averageNanos)
+        assertEquals(25, blitCall.averageActiveNanos)
         val tryPullCall = snapshot.hostCalls.first { it.moduleName == "events" && it.functionName == "tryPull" }
         assertEquals(1, tryPullCall.calls)
         assertEquals(30, tryPullCall.nanos)
+        assertEquals(30, tryPullCall.activeNanos)
         assertEquals(VmInstructionKind.CALL_BUILTIN, snapshot.instructions.first().kind)
         assertEquals(2, snapshot.instructions.first().count)
         assertEquals(100, snapshot.instructions.first().nanos)
@@ -108,9 +114,12 @@ class RuntimeProfilingTest {
         assertTrue(summary.startsWith("runtime:\n"), summary)
         assertTrue(summary.contains("  vm:\n"), summary)
         assertTrue(summary.contains("  signals: halt=1, pause=1, yield=1, sleep=1, waitEvent=1, hostCall=1"), summary)
-        assertTrue(summary.contains("  host-calls:\n"), summary)
-        assertTrue(summary.contains("    display.blitMono5x7Packed: count=2, time=150 ns, avg=75 ns"), summary)
-        assertTrue(summary.contains("  instructions:\n"), summary)
+        assertTrue(summary.contains("  host-calls: calls="), summary)
+        assertTrue(
+            summary.contains("    display.blitMono5x7Packed: count=2, total=150 ns, wait=100 ns, active=50 ns, avgActive=25 ns"),
+            summary,
+        )
+        assertTrue(summary.contains("  instructions: count="), summary)
         assertTrue(summary.contains("    CALL_BUILTIN: count=2, time=100 ns, avg=50 ns"), summary)
     }
 
@@ -130,6 +139,7 @@ class RuntimeProfilingTest {
         collector.recordSchedulingPoint(waitedForSlice = true)
         collector.recordVmExecutionWindow(nanos = 70)
         collector.recordVmSignal(VmSignalKind.PAUSE)
+        collector.recordVmHostCallWait("display", "present", nanos = 50)
         collector.recordVmHostCall("display", "present", nanos = 80)
         collector.recordVmInstruction(VmInstructionKind.CALL_BUILTIN, nanos = 90)
 

@@ -111,11 +111,11 @@ class RomScriptCompileTest {
             "terminal buffer should track the row geometry used to lay out cellsText",
         )
         assertTrue(
-            source.contains("buffer.displayColumns == columns(displayId) && buffer.displayRows == rows(displayId)"),
+            source.contains("buffer.displayColumns == columns(nextDisplayId) && buffer.displayRows == rows(nextDisplayId)"),
             "terminal.ck should preserve/redraw cells only when the display grid geometry is unchanged",
         )
         assertTrue(
-            source.contains("newTerminalBuffer(displayId)"),
+            source.contains("newTerminalBuffer(nextDisplayId)"),
             "terminal.ck should reset through a single geometry-aware buffer initializer when the grid changes",
         )
     }
@@ -144,7 +144,29 @@ class RomScriptCompileTest {
 
         assertTrue(source.contains("runtime::poll(stream)"), "terminal.ck should wait for IPC or events through one runtime poll")
         assertFalse(source.contains("ipc::tryRead(stream)"), "terminal.ck should not poll IPC from CKL")
-        assertFalse(source.contains("events::tryPull()"), "terminal.ck should not poll events from CKL")
+        assertFalse(
+            source.contains("while true {\n        events::tryPull()"),
+            "terminal.ck should not busy-poll events from CKL",
+        )
+    }
+
+    @Test
+    fun bundledRomTerminalBatchesQueuedInputEventsBeforeRendering() {
+        val source = resourceText("rom/terminal.ck")
+
+        assertTrue(
+            source.contains("fun inputBatchLimit(): Int"),
+            "terminal.ck should bound non-blocking input burst draining",
+        )
+        assertTrue(source.contains("fun drainInputBatch("), "terminal.ck should drain queued input events in one batch")
+        assertTrue(
+            source.contains("events::tryPull()"),
+            "terminal.ck should drain already queued input events after runtime.poll wakes it",
+        )
+        assertTrue(
+            source.contains("renderInputLine(displayId, buffer, renderedLine, line)"),
+            "terminal.ck should render the input overlay once after a batch",
+        )
     }
 
     @Test

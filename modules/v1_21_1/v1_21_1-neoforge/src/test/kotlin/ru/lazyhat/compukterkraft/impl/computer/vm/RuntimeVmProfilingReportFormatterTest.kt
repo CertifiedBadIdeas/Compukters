@@ -59,8 +59,17 @@ class RuntimeVmProfilingReportFormatterTest {
                             runtimeNanos = 50,
                             executionNanos = 20,
                             hostCallSignals = 2,
-                            hostCalls = listOf(RuntimeHostCallMetrics("display", "present", calls = 3, nanos = 90)),
-                        ),
+                            hostCalls =
+                                listOf(
+                                    RuntimeHostCallMetrics(
+                                        "display",
+                                        "present",
+                                        calls = 3,
+                                        nanos = 90,
+                                        waitNanos = 60,
+                                    ),
+                            ),
+                                ),
                         workload(
                             name = "new workload",
                             runtimeNanos = 7,
@@ -83,12 +92,29 @@ class RuntimeVmProfilingReportFormatterTest {
         assertTrue(markdown.contains("| Runtime all ticks | 50 ns | 100 ns |"), markdown)
         assertTrue(markdown.contains("| VM execution time | 20 ns | 40 ns |"), markdown)
         assertTrue(markdown.contains("| Host-call signals | 2 | 10 |"), markdown)
-        assertTrue(markdown.contains("| host display.present | 3 calls / 90 ns | 0 calls / 0 ns |"), markdown)
-        assertTrue(markdown.contains("| host strings.length | 0 calls / 0 ns | 5 calls / 50 ns |"), markdown)
-        assertTrue(markdown.contains("| host ipc.tryRead | 1 calls / 11 ns |"), markdown)
+        assertTrue(markdown.contains("| Host-call active time | 30 ns | 50 ns |"), markdown)
+        assertTrue(markdown.contains("| Host-call wait time | 60 ns | 0 ns |"), markdown)
+        assertTrue(
+            markdown.contains(
+                "| host display.present | 3 calls / 30 ns active / 60 ns wait / 90 ns total | 0 calls / 0 ns active / 0 ns wait / 0 ns total |",
+            ),
+            markdown,
+        )
+        assertTrue(
+            markdown.contains(
+                "| host strings.length | 0 calls / 0 ns active / 0 ns wait / 0 ns total | 5 calls / 50 ns active / 0 ns wait / 50 ns total |",
+            ),
+            markdown,
+        )
+        assertTrue(
+            markdown.contains("| host ipc.tryRead | 1 calls / 11 ns active / 0 ns wait / 11 ns total |"),
+            markdown
+        )
         assertTrue(markdown.contains("| Client frames applied | 2 | 2 |"), markdown)
         assertTrue(markdown.contains("| Client apply time | 12 ns | 12 ns |"), markdown)
         assertTrue(markdown.contains("| Input phase to client | 44 ns | 44 ns |"), markdown)
+        assertTrue(markdown.contains("| Enter autoscroll accepted events | 9 | 9 |"), markdown)
+        assertTrue(markdown.contains("| Enter autoscroll ticks until first scroll | 10 | 10 |"), markdown)
     }
 
     @Test
@@ -109,9 +135,13 @@ class RuntimeVmProfilingReportFormatterTest {
         assertTrue(markdown.contains("sustained terminal no-delay"), markdown)
         assertTrue(markdown.contains("held Enter backlog"), markdown)
         assertTrue(markdown.contains("| Host-call signals | 4 |"), markdown)
+        assertTrue(markdown.contains("| Host-call active time | 0 ns |"), markdown)
+        assertTrue(markdown.contains("| Host-call wait time | 0 ns |"), markdown)
         assertTrue(markdown.contains("| Client frames applied | 2 |"), markdown)
         assertTrue(markdown.contains("| Client snapshot pixels | 32 |"), markdown)
         assertTrue(markdown.contains("| Enter phase to client | 55 ns |"), markdown)
+        assertTrue(markdown.contains("| Enter autoscroll copyRect calls before | 11 |"), markdown)
+        assertTrue(markdown.contains("| Enter autoscroll copyRect calls after | 12 |"), markdown)
     }
 
     private fun profileRun(
@@ -178,6 +208,15 @@ class RuntimeVmProfilingReportFormatterTest {
                     hostCalls = hostCalls,
                 ),
             compiler = CompilerProfilingSnapshot(compileCalls = 1, compileNanos = 30, compiledSources = 1),
+            enterAutoscroll =
+                EnterAutoscrollWorkloadSummary(
+                    enterEventsQueued = 9,
+                    ticksUntilFirstAutoscroll = 10,
+                    copyRectCallsBefore = 11,
+                    copyRectCallsAfter = 12,
+                    displayFramesDrained = 13,
+                    clientFramesApplied = 14,
+                ),
             pipeline =
                 TerminalPipelineSummary(
                     inputChars = 4,

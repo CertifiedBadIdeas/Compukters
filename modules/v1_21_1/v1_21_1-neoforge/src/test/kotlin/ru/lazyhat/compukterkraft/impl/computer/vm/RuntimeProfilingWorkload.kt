@@ -95,6 +95,36 @@ internal object RuntimeProfilingWorkload {
             }
     }
 
+    data class EnterAutoscrollProfilingRun(
+        val profiling: ProfilingRun,
+        val enterEventsQueued: Int,
+        val ticksUntilFirstAutoscroll: Int,
+        val copyRectCallsBefore: Long,
+        val copyRectCallsAfter: Long,
+        val displayFramesDrained: Int,
+        val clientFramesApplied: Long,
+    ) {
+        val summaryMetrics: EnterAutoscrollWorkloadSummary
+            get() =
+                EnterAutoscrollWorkloadSummary(
+                    enterEventsQueued = enterEventsQueued,
+                    ticksUntilFirstAutoscroll = ticksUntilFirstAutoscroll,
+                    copyRectCallsBefore = copyRectCallsBefore,
+                    copyRectCallsAfter = copyRectCallsAfter,
+                    displayFramesDrained = displayFramesDrained,
+                    clientFramesApplied = clientFramesApplied,
+                )
+
+        fun summary(): String =
+            buildString {
+                appendLine("enter-autoscroll:")
+                appendLine("  input: enterEventsQueued=$enterEventsQueued")
+                appendLine("  scroll: ticksUntilFirstAutoscroll=$ticksUntilFirstAutoscroll")
+                appendLine("  display: copyRectCallsBefore=$copyRectCallsBefore, copyRectCallsAfter=$copyRectCallsAfter")
+                append("  pipeline: displayFramesDrained=$displayFramesDrained, clientFramesApplied=$clientFramesApplied")
+            }
+    }
+
     private class ClasspathFirmwareLoader : FirmwareProgramLoader {
         override fun load(path: String): LoadedFirmwareProgramSource {
             val source =
@@ -259,6 +289,108 @@ internal object RuntimeProfilingWorkload {
                 maxPendingHostCalls = maxOf(maxPendingHostCalls, observation.maxPendingHostCalls),
                 finalPendingHostCalls = observation.finalPendingHostCalls,
                 displayFramesDrained = displayFramesDrained,
+            )
+        } finally {
+            vm?.stop(VmStopReason.REQUESTED)
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    fun runEnterAutoscrollWorkload(
+        maxEnterEvents: Int,
+        ticksPerEnter: Int,
+        settleTicks: Int,
+    ): EnterAutoscrollProfilingRun {
+        val root = createTempDirectory("compukterkraft-enter-autoscroll-profiling")
+        var vm: BackgroundDeviceVm? = null
+        try {
+            DeviceWorkspaceInitializer(root).ensureInitialized(1)
+            val workspace = DeviceWorkspaceHost(root)
+            val displayMetrics = RecordingDisplayMetricsCollector()
+            val runtimeMetrics = RecordingRuntimeMetricsCollector()
+            val compilerMetrics = RecordingCompilerMetricsCollector()
+            val clientMetrics = RecordingClientDisplayMetricsCollector()
+            val client =
+                ClientFrameSink(
+                    ClientDisplayBuffer(
+                        displayId = 9,
+                        width = 96,
+                        height = 48,
+                        metricsCollector = clientMetrics,
+                    ),
+                )
+            vm =
+                BackgroundDeviceVm(
+                    deviceId = 1,
+                    profile = profile(),
+                    dispatcher = Dispatchers.Default,
+                    labelProvider = { null },
+                    logger = DeviceVmLogger { },
+                    workspace = workspace,
+                    firmwareLoader = ClasspathFirmwareLoader(),
+                    displayMetricsCollector = displayMetrics,
+                    runtimeMetricsCollector = runtimeMetrics,
+                    compilerMetricsCollector = compilerMetrics,
+                )
+            val dispatcher = HostCallDispatcher(deviceId = 1, workspace = workspace)
+
+            vm.attachDisplay(displayId = 9, width = 96, height = 48)
+            assertTrue(vm.boot())
+            waitForBootCompile(compilerMetrics)
+            var displayFramesDrained = 0
+            displayFramesDrained +=
+                runTicks(
+                    vm,
+                    dispatcher,
+                    runtimeMetrics,
+                    ticks = 100,
+                    delayMillis = 10,
+                    client = client,
+                ).displayFramesDrained
+            waitForRuntimeProgress(runtimeMetrics)
+
+            val copyRectCallsBefore = displayMetrics.snapshot().operations.copyRectCalls
+            val clientFramesBefore = clientMetrics.snapshot().framesApplied
+            var acceptedEnterEvents = 0
+            var ticksUntilFirstAutoscroll = 0
+            var copyRectCallsAfter = copyRectCallsBefore
+
+            while (acceptedEnterEvents < maxEnterEvents && copyRectCallsAfter == copyRectCallsBefore) {
+                if (vm.enqueueEvent(VmEvent("key", listOf(KeyCodes.KEY_ENTER, true)))) {
+                    acceptedEnterEvents += 1
+                }
+                displayFramesDrained +=
+                    runTicks(
+                        vm,
+                        dispatcher,
+                        runtimeMetrics,
+                        ticks = ticksPerEnter,
+                        delayMillis = 0,
+                        client = client,
+                    ).displayFramesDrained
+                ticksUntilFirstAutoscroll += ticksPerEnter
+                copyRectCallsAfter = displayMetrics.snapshot().operations.copyRectCalls
+            }
+
+            val observation =
+                runTicks(vm, dispatcher, runtimeMetrics, ticks = settleTicks, delayMillis = 0, client = client)
+            displayFramesDrained += observation.displayFramesDrained
+            displayFramesDrained += client.drain(vm, runtimeMetrics)
+            copyRectCallsAfter = displayMetrics.snapshot().operations.copyRectCalls
+
+            assertTrue(
+                copyRectCallsAfter > copyRectCallsBefore,
+                "expected held Enter to reach terminal autoscroll; acceptedEnterEvents=$acceptedEnterEvents copyRectCallsBefore=$copyRectCallsBefore copyRectCallsAfter=$copyRectCallsAfter",
+            )
+
+            return EnterAutoscrollProfilingRun(
+                profiling = ProfilingRun(displayMetrics, runtimeMetrics, compilerMetrics, clientMetrics),
+                enterEventsQueued = acceptedEnterEvents,
+                ticksUntilFirstAutoscroll = ticksUntilFirstAutoscroll,
+                copyRectCallsBefore = copyRectCallsBefore,
+                copyRectCallsAfter = copyRectCallsAfter,
+                displayFramesDrained = displayFramesDrained,
+                clientFramesApplied = clientMetrics.snapshot().framesApplied - clientFramesBefore,
             )
         } finally {
             vm?.stop(VmStopReason.REQUESTED)
