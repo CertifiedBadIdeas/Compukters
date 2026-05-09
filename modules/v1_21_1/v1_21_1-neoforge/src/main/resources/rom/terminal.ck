@@ -819,6 +819,9 @@ pub fun main() {
                 renderInputLine(displayId, buffer, renderedLine, line)
                 renderedLine = line
             }
+            if (first.submittedLine) {
+                yield()
+            }
         }
     }
 }
