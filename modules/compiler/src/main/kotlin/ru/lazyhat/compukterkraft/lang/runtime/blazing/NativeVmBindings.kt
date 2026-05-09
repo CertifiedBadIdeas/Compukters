@@ -130,6 +130,20 @@ object NativeVmBindings : NativeVmBindingsFacade {
         return tryReadDeviceIpcNative(handle, channel)
     }
 
+    fun deviceKernelWakeSequence(handle: Long): Long {
+        require(handle != 0L) { "Native device runtime kernel handle is zero" }
+        return deviceKernelWakeSequenceNative(handle)
+    }
+
+    fun waitForDeviceWake(
+        handle: Long,
+        observedWakeSequence: Long,
+        timeoutMillis: Long,
+    ): Long {
+        require(handle != 0L) { "Native device runtime kernel handle is zero" }
+        return waitForDeviceWakeNative(handle, observedWakeSequence, timeoutMillis.coerceAtLeast(0))
+    }
+
     override fun attachImageToKernel(
         imageHandle: Long,
         kernelHandle: Long,
@@ -290,6 +304,16 @@ object NativeVmBindings : NativeVmBindingsFacade {
         handle: Long,
         channel: Int,
     ): String?
+
+    @JvmStatic
+    private external fun deviceKernelWakeSequenceNative(handle: Long): Long
+
+    @JvmStatic
+    private external fun waitForDeviceWakeNative(
+        handle: Long,
+        observedWakeSequence: Long,
+        timeoutMillis: Long,
+    ): Long
 
     @JvmStatic
     private external fun attachImageToKernelNative(
