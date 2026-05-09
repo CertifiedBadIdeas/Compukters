@@ -81,6 +81,10 @@ class NativeImageVmRunner internal constructor(
                         bindings.resumeImageWith(handle, bridge.fromEvent(event).toNativeBytes("events", "pull"))
                     }
 
+                    is NativeVmSignal.WaitPoll -> {
+                        runtime.yield()
+                    }
+
                     is NativeVmSignal.HostCall -> {
                         val result = invokeHostCall(runtime, bridge, signal)
                         bindings.resumeImageWith(handle, result.toNativeBytes(signal.moduleName, signal.functionName))
@@ -135,6 +139,7 @@ private val NativeVmSignal.kind: VmSignalKind
             NativeVmSignal.Yield -> VmSignalKind.YIELD
             is NativeVmSignal.Sleep -> VmSignalKind.SLEEP
             is NativeVmSignal.WaitEvent -> VmSignalKind.WAIT_EVENT
+            is NativeVmSignal.WaitPoll -> VmSignalKind.WAIT_POLL
             is NativeVmSignal.HostCall -> VmSignalKind.HOST_CALL
             is NativeVmSignal.Error -> error("Native image VM errors are not runtime VM signals")
         }

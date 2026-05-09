@@ -84,6 +84,10 @@ enum ImageVmState {
 enum NativeHostImportResult {
     Handled(VmValue),
     Fallback(Vec<VmValue>),
+    SignalNoResume {
+        signal: VmSignal,
+        arguments: Vec<VmValue>,
+    },
 }
 
 impl ImageVmHandle {
@@ -150,6 +154,7 @@ impl ImageVmHandle {
             NativeHostImportResult::Fallback(arguments) => {
                 try_builtin_native_host_import(import_id, module_name, arguments)
             }
+            signal @ NativeHostImportResult::SignalNoResume { .. } => Ok(signal),
         }
     }
 
@@ -294,7 +299,31 @@ impl ImageVmHandle {
             };
         }
         if module_name == "runtime" {
-            return Ok(NativeHostImportResult::Fallback(arguments));
+            return match function_name {
+                "poll" => {
+                    let channel = int_argument(&arguments, 0, "runtime.poll channel")?;
+                    let text = kernel.try_read_ipc(channel)?;
+                    if !text.is_empty() {
+                        return Ok(NativeHostImportResult::Handled(poll_record(
+                            "ipc",
+                            text,
+                            empty_event_record(),
+                        )));
+                    }
+                    if let Some(event) = kernel.try_pull_event(None) {
+                        return Ok(NativeHostImportResult::Handled(poll_record(
+                            "event",
+                            String::new(),
+                            event_record(event.name, event.id, event.arg_count),
+                        )));
+                    }
+                    Ok(NativeHostImportResult::SignalNoResume {
+                        signal: VmSignal::WaitPoll { channel },
+                        arguments,
+                    })
+                }
+                _ => Ok(NativeHostImportResult::Fallback(arguments)),
+            };
         }
         match function_name {
             "primary" => Ok(NativeHostImportResult::Handled(VmValue::Int(
@@ -450,6 +479,7 @@ impl ImageVmHandle {
         }
 
         loop {
+            let instruction_start = self.instruction_pointer;
             let opcode = match self.read_u8()? {
                 Some(opcode) => opcode,
                 None => return self.halt(VmValue::Unit),
@@ -497,6 +527,11 @@ impl ImageVmHandle {
                                 function_name,
                                 arguments,
                             });
+                        }
+                        NativeHostImportResult::SignalNoResume { signal, arguments } => {
+                            self.instruction_pointer = instruction_start;
+                            self.stack.extend(arguments);
+                            return Ok(signal);
                         }
                     }
                 }
@@ -1516,6 +1551,17 @@ fn event_record(name: String, id: i32, arg_count: i32) -> VmValue {
             ("name".to_string(), VmValue::String(name)),
             ("id".to_string(), VmValue::Int(id)),
             ("argCount".to_string(), VmValue::Int(arg_count)),
+        ],
+    }
+}
+
+fn poll_record(kind: &str, text: String, event: VmValue) -> VmValue {
+    VmValue::Record {
+        type_name: "Poll".to_string(),
+        fields: vec![
+            ("kind".to_string(), VmValue::String(kind.to_string())),
+            ("text".to_string(), VmValue::String(text)),
+            ("event".to_string(), event),
         ],
     }
 }

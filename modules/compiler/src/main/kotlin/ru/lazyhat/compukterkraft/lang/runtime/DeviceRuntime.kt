@@ -29,6 +29,7 @@ enum class VmSignalKind {
     YIELD,
     SLEEP,
     WAIT_EVENT,
+    WAIT_POLL,
     HOST_CALL,
 }
 

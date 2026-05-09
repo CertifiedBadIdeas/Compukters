@@ -96,6 +96,13 @@ fn encodes_wait_event_signal() {
 }
 
 #[test]
+fn encodes_wait_poll_signal() {
+    let bytes = encode_signal(&VmSignal::WaitPoll { channel: 7 });
+
+    assert_eq!(bytes, vec![6, 7, 0, 0, 0]);
+}
+
+#[test]
 fn encodes_error_signal() {
     let bytes = encode_error("bad bytecode");
 

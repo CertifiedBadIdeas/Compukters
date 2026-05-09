@@ -47,6 +47,7 @@ class RuntimeProfilingTest {
         collector.recordVmSignal(VmSignalKind.YIELD)
         collector.recordVmSignal(VmSignalKind.SLEEP)
         collector.recordVmSignal(VmSignalKind.WAIT_EVENT)
+        collector.recordVmSignal(VmSignalKind.WAIT_POLL)
         collector.recordVmSignal(VmSignalKind.HOST_CALL)
         collector.recordVmSignal(VmSignalKind.HALT)
         collector.recordVmHostCallWait("display", "blitMono5x7Packed", nanos = 90)
@@ -93,6 +94,7 @@ class RuntimeProfilingTest {
         assertEquals(1, snapshot.vm.yieldSignals)
         assertEquals(1, snapshot.vm.sleepSignals)
         assertEquals(1, snapshot.vm.waitEventSignals)
+        assertEquals(1, snapshot.vm.waitPollSignals)
         assertEquals(1, snapshot.vm.hostCallSignals)
         assertEquals(1, snapshot.vm.haltSignals)
         val blitCall = snapshot.hostCalls.first { it.moduleName == "display" && it.functionName == "blitMono5x7Packed" }
@@ -113,7 +115,10 @@ class RuntimeProfilingTest {
         val summary = snapshot.summary()
         assertTrue(summary.startsWith("runtime:\n"), summary)
         assertTrue(summary.contains("  vm:\n"), summary)
-        assertTrue(summary.contains("  signals: halt=1, pause=1, yield=1, sleep=1, waitEvent=1, hostCall=1"), summary)
+        assertTrue(
+            summary.contains("  signals: halt=1, pause=1, yield=1, sleep=1, waitEvent=1, waitPoll=1, hostCall=1"),
+            summary,
+        )
         assertTrue(summary.contains("  host-calls: calls="), summary)
         assertTrue(
             summary.contains("    display.blitMono5x7Packed: count=2, total=150 ns, wait=100 ns, active=50 ns, avgActive=25 ns"),

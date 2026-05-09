@@ -65,6 +65,10 @@ internal sealed interface NativeVmSignal {
         val filter: String?,
     ) : NativeVmSignal
 
+    data class WaitPoll(
+        val channel: Int,
+    ) : NativeVmSignal
+
     data class HostCall(
         val moduleName: String,
         val functionName: String,
@@ -104,6 +108,10 @@ internal sealed interface NativeVmSignal {
 
                 5 -> {
                     WaitEvent(if (reader.u8() == 0) null else reader.string())
+                }
+
+                6 -> {
+                    WaitPoll(reader.i32())
                 }
 
                 255 -> {

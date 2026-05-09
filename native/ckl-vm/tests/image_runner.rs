@@ -376,6 +376,49 @@ fn attached_kernel_handles_ipc_events_and_display_metadata_imports() {
 }
 
 #[test]
+fn attached_kernel_waits_poll_without_generic_host_call() {
+    let kernel = Arc::new(Mutex::new(DeviceRuntimeKernel::new(8, 64)));
+    let channel = kernel.lock().unwrap().open_ipc_channel().unwrap();
+
+    let mut code = Vec::new();
+    push_constant(&mut code, 0);
+    call_host(&mut code, 8000, 1);
+    code.push(OP_RETURN);
+
+    let mut vm = ImageVmHandle::create(
+        &image_with_constants_host_imports_and_code(
+            vec![ConstantFixture::Int(channel)],
+            vec![HostImportFixture {
+                id: 8000,
+                module_name: "runtime".to_string(),
+                function_name: "poll".to_string(),
+                parameter_types: vec!["Int".to_string()],
+                return_type: "Poll".to_string(),
+            }],
+            0,
+            code,
+        ),
+        4096,
+    )
+    .unwrap();
+    vm.attach_device_kernel(Arc::clone(&kernel)).unwrap();
+
+    assert_eq!(vm.run_until_signal(), vec![6, 1, 0, 0, 0]);
+
+    kernel
+        .lock()
+        .unwrap()
+        .write_ipc(channel, "ready")
+        .expect("write ipc");
+    let signal = vm.run_until_signal();
+
+    assert_eq!(
+        signal[0], 0,
+        "poll should halt with Poll value after native wake"
+    );
+}
+
+#[test]
 fn stores_and_loads_local_value() {
     let code = vec![
         OP_PUSH_BOOL,
