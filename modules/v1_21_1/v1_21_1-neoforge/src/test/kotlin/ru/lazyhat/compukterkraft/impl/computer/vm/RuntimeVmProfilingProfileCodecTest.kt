@@ -102,12 +102,15 @@ class RuntimeVmProfilingProfileCodecTest {
                                             executionWindowNanos = 33,
                                             waitPollSignals = 34,
                                             waitProcessSignals = 35,
-                                            hostCallSignals = 36,
-                                            nativeFastPathCalls = 37,
-                                            nativeWaitCalls = 38,
-                                            nativeWaitNanos = 39,
-                                            nativeWaitWakeups = 40,
-                                            nativeWaitTimeouts = 41,
+                                            nativeProcessRegistrations = 36,
+                                            nativeProcessCompletions = 37,
+                                            nativeProcessStaleCompletions = 38,
+                                            hostCallSignals = 39,
+                                            nativeFastPathCalls = 40,
+                                            nativeWaitCalls = 41,
+                                            nativeWaitNanos = 42,
+                                            nativeWaitWakeups = 43,
+                                            nativeWaitTimeouts = 44,
                                         ),
                                     hostCalls =
                                         listOf(
@@ -198,6 +201,9 @@ class RuntimeVmProfilingProfileCodecTest {
         assertEquals(36, decoded.workloads.single().runtime.hostCalls.single().activeNanos)
         assertEquals(0, decoded.workloads.single().runtime.vm.waitPollSignals)
         assertEquals(0, decoded.workloads.single().runtime.vm.waitProcessSignals)
+        assertEquals(0, decoded.workloads.single().runtime.vm.nativeProcessRegistrations)
+        assertEquals(0, decoded.workloads.single().runtime.vm.nativeProcessCompletions)
+        assertEquals(0, decoded.workloads.single().runtime.vm.nativeProcessStaleCompletions)
         assertEquals(12, decoded.workloads.single().runtime.vm.hostCallSignals)
         assertEquals(0, decoded.workloads.single().runtime.vm.nativeWaitCalls)
         assertEquals(0, decoded.workloads.single().runtime.vm.nativeWaitNanos)
