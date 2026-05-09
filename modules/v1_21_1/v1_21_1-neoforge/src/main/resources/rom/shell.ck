@@ -51,7 +51,6 @@ pub fun main() {
         val line: String = readLine(ctx)
         val trimmed: String = strings::trim(line)
         if (strings::isBlank(trimmed)) {
-            yield()
         } else {
             val name: String = commandName(trimmed)
             val argument: String = commandArgument(trimmed)
