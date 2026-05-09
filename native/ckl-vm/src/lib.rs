@@ -1,4 +1,5 @@
 pub mod display;
+pub mod filesystem;
 pub mod image;
 pub mod image_runner;
 pub mod jni;

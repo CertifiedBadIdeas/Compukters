@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, VecDeque};
 
 use crate::display::DeviceDisplayRegistry;
+use crate::filesystem::DeviceFilesystem;
 use crate::value::VmValue;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -14,6 +15,7 @@ pub struct DeviceRuntimeKernel {
     deferred_events: VecDeque<QueuedEvent>,
     ipc: IpcRegistry,
     pub displays: DeviceDisplayRegistry,
+    pub filesystem: Option<DeviceFilesystem>,
     max_event_queue_size: usize,
 }
 
@@ -24,15 +26,17 @@ impl DeviceRuntimeKernel {
             deferred_events: VecDeque::new(),
             ipc: IpcRegistry::new(max_buffered_bytes_per_channel),
             displays: DeviceDisplayRegistry::new(),
+            filesystem: None,
             max_event_queue_size: max_event_queue_size.max(1),
         }
     }
 
-    pub fn enqueue_event(
-        &mut self,
-        name: &str,
-        arguments: Vec<VmValue>,
-    ) -> bool {
+    pub fn attach_filesystem(&mut self, root_path: String, quota_bytes: i64) -> Result<(), String> {
+        self.filesystem = Some(DeviceFilesystem::attach(root_path, quota_bytes)?);
+        Ok(())
+    }
+
+    pub fn enqueue_event(&mut self, name: &str, arguments: Vec<VmValue>) -> bool {
         if self.event_queue.len() >= self.max_event_queue_size {
             let _ = self.event_queue.pop_front();
         }
@@ -47,11 +51,7 @@ impl DeviceRuntimeKernel {
         self.ipc.open()
     }
 
-    pub fn attach_placeholder_payload_event(
-        &mut self,
-        name: &str,
-        _payload: &[u8],
-    ) -> bool {
+    pub fn attach_placeholder_payload_event(&mut self, name: &str, _payload: &[u8]) -> bool {
         self.enqueue_event(name, Vec::new())
     }
 }
@@ -77,7 +77,8 @@ impl IpcRegistry {
         }
         let id = self.next_id;
         self.next_id += 1;
-        self.channels.insert(id, IpcChannel::new(self.max_buffered_bytes_per_channel));
+        self.channels
+            .insert(id, IpcChannel::new(self.max_buffered_bytes_per_channel));
         Ok(id)
     }
 }

@@ -39,6 +39,11 @@ internal interface NativeVmBindingsFacade {
         imageHandle: Long,
         kernelHandle: Long,
     )
+
+    fun setImageWorkingDirectory(
+        imageHandle: Long,
+        workingDirectory: String,
+    )
 }
 
 object NativeVmBindings : NativeVmBindingsFacade {
@@ -107,6 +112,23 @@ object NativeVmBindings : NativeVmBindingsFacade {
         require(imageHandle != 0L) { "Native image VM handle is zero" }
         require(kernelHandle != 0L) { "Native device runtime kernel handle is zero" }
         attachImageToKernelNative(imageHandle, kernelHandle)
+    }
+
+    override fun setImageWorkingDirectory(
+        imageHandle: Long,
+        workingDirectory: String,
+    ) {
+        require(imageHandle != 0L) { "Native image VM handle is zero" }
+        setImageWorkingDirectoryNative(imageHandle, workingDirectory)
+    }
+
+    fun attachNativeFilesystem(
+        kernelHandle: Long,
+        rootPath: String,
+        quotaBytes: Long,
+    ) {
+        require(kernelHandle != 0L) { "Native device runtime kernel handle is zero" }
+        attachNativeFilesystemNative(kernelHandle, rootPath, quotaBytes)
     }
 
     fun attachNativeDisplay(
@@ -210,6 +232,19 @@ object NativeVmBindings : NativeVmBindingsFacade {
     private external fun attachImageToKernelNative(
         imageHandle: Long,
         kernelHandle: Long,
+    )
+
+    @JvmStatic
+    private external fun setImageWorkingDirectoryNative(
+        imageHandle: Long,
+        workingDirectory: String,
+    )
+
+    @JvmStatic
+    private external fun attachNativeFilesystemNative(
+        kernelHandle: Long,
+        rootPath: String,
+        quotaBytes: Long,
     )
 
     @JvmStatic

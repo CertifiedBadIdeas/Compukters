@@ -175,6 +175,7 @@ internal object RuntimeProfilingWorkload {
                     displayMetricsCollector = displayMetrics,
                     runtimeMetricsCollector = runtimeMetrics,
                     compilerMetricsCollector = compilerMetrics,
+                    nativeFilesystemRoot = workspace.computerRoot(1),
                 )
             val dispatcher = HostCallDispatcher(deviceId = 1, workspace = workspace)
 
@@ -216,7 +217,7 @@ internal object RuntimeProfilingWorkload {
                 ),
             )
         } finally {
-            vm?.stop(VmStopReason.REQUESTED)
+            vm?.stopAndSettle()
             root.toFile().deleteRecursively()
         }
     }
@@ -247,6 +248,7 @@ internal object RuntimeProfilingWorkload {
                     displayMetricsCollector = displayMetrics,
                     runtimeMetricsCollector = runtimeMetrics,
                     compilerMetricsCollector = compilerMetrics,
+                    nativeFilesystemRoot = workspace.computerRoot(1),
                 )
             val dispatcher = HostCallDispatcher(deviceId = 1, workspace = workspace)
 
@@ -291,7 +293,7 @@ internal object RuntimeProfilingWorkload {
                 displayFramesDrained = displayFramesDrained,
             )
         } finally {
-            vm?.stop(VmStopReason.REQUESTED)
+            vm?.stopAndSettle()
             root.toFile().deleteRecursively()
         }
     }
@@ -331,6 +333,7 @@ internal object RuntimeProfilingWorkload {
                     displayMetricsCollector = displayMetrics,
                     runtimeMetricsCollector = runtimeMetrics,
                     compilerMetricsCollector = compilerMetrics,
+                    nativeFilesystemRoot = workspace.computerRoot(1),
                 )
             val dispatcher = HostCallDispatcher(deviceId = 1, workspace = workspace)
 
@@ -408,7 +411,7 @@ internal object RuntimeProfilingWorkload {
                 clientFramesApplied = clientFramesApplied,
             )
         } finally {
-            vm?.stop(VmStopReason.REQUESTED)
+            vm?.stopAndSettle()
             root.toFile().deleteRecursively()
         }
     }
@@ -568,6 +571,18 @@ internal object RuntimeProfilingWorkload {
             repeat(1_000) {
                 val vm = metrics.snapshot().vm
                 if (vm.executionWindows > 0 && vm.pauseSignals + vm.yieldSignals + vm.hostCallSignals > 0) return@runBlocking
+                kotlinx.coroutines.delay(1)
+            }
+        }
+
+    private fun BackgroundDeviceVm.stopAndSettle() =
+        runBlocking(Dispatchers.Default) {
+            stop(VmStopReason.REQUESTED)
+            repeat(1_000) {
+                if (snapshot().state.isTerminal) {
+                    kotlinx.coroutines.delay(1)
+                    return@runBlocking
+                }
                 kotlinx.coroutines.delay(1)
             }
         }
