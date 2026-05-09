@@ -20,6 +20,8 @@
 package ru.lazyhat.compukterkraft.impl.computer.vm
 
 import org.junit.jupiter.api.Assumptions.assumeTrue
+import ru.lazyhat.compukterkraft.core.Config
+import ru.lazyhat.compukterkraft.core.gui.TerminalFontConstants
 import java.nio.file.Path
 import kotlin.io.path.absolutePathString
 import kotlin.test.Test
@@ -89,6 +91,15 @@ class RuntimeVmProfilingReportTest {
                         inputTicks = 20,
                         enterTicks = 40,
                     ),
+                    terminalWorkload(
+                        name = "default-size terminal",
+                        delayMillis = 10,
+                        bootTicks = 80,
+                        inputTicks = 20,
+                        enterTicks = 40,
+                        displayWidth = Config.DEFAULT_COMPUTER_TERM_WIDTH * TerminalFontConstants.FONT_WIDTH,
+                        displayHeight = Config.DEFAULT_COMPUTER_TERM_HEIGHT * TerminalFontConstants.FONT_HEIGHT,
+                    ),
                     heldEnterWorkload(),
                 ),
         )
@@ -99,6 +110,8 @@ class RuntimeVmProfilingReportTest {
         bootTicks: Int,
         inputTicks: Int,
         enterTicks: Int,
+        displayWidth: Int = 96,
+        displayHeight: Int = 48,
     ): RuntimeWorkloadProfile {
         val run =
             RuntimeProfilingWorkload.runTerminalWorkload(
@@ -106,6 +119,8 @@ class RuntimeVmProfilingReportTest {
                 bootTicks = bootTicks,
                 inputTicks = inputTicks,
                 enterTicks = enterTicks,
+                displayWidth = displayWidth,
+                displayHeight = displayHeight,
             )
         return RuntimeWorkloadProfile(
             name = name,

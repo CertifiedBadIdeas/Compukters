@@ -112,6 +112,8 @@ internal object RuntimeProfilingWorkload {
         bootTicks: Int,
         inputTicks: Int,
         enterTicks: Int,
+        displayWidth: Int = 96,
+        displayHeight: Int = 48,
     ): ProfilingRun {
         val root = createTempDirectory("compukterkraft-display-profiling")
         var vm: BackgroundDeviceVm? = null
@@ -122,7 +124,15 @@ internal object RuntimeProfilingWorkload {
             val runtimeMetrics = RecordingRuntimeMetricsCollector()
             val compilerMetrics = RecordingCompilerMetricsCollector()
             val clientMetrics = RecordingClientDisplayMetricsCollector()
-            val client = ClientFrameSink(ClientDisplayBuffer(displayId = 9, width = 96, height = 48, metricsCollector = clientMetrics))
+            val client =
+                ClientFrameSink(
+                    ClientDisplayBuffer(
+                        displayId = 9,
+                        width = displayWidth,
+                        height = displayHeight,
+                        metricsCollector = clientMetrics,
+                    ),
+                )
             vm =
                 BackgroundDeviceVm(
                     deviceId = 1,
@@ -138,7 +148,7 @@ internal object RuntimeProfilingWorkload {
                 )
             val dispatcher = HostCallDispatcher(deviceId = 1, workspace = workspace)
 
-            vm.attachDisplay(displayId = 9, width = 96, height = 48)
+            vm.attachDisplay(displayId = 9, width = displayWidth, height = displayHeight)
             assertTrue(vm.boot())
             waitForBootCompile(compilerMetrics)
             runTicks(vm, dispatcher, runtimeMetrics, ticks = bootTicks, delayMillis = delayMillis, client = client)

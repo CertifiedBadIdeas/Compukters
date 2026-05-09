@@ -19,6 +19,8 @@
 
 package ru.lazyhat.compukterkraft.impl.computer.vm
 
+import ru.lazyhat.compukterkraft.core.Config
+import ru.lazyhat.compukterkraft.core.gui.TerminalFontConstants
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -82,6 +84,26 @@ class RuntimeDisplayProfilingTest {
         assertTrue(runtimeSnapshot.vm.averageExecutionWindowNanos >= 0, runtimeSnapshot.summary())
         assertTrue(compilerSnapshot.compileCalls > 0, compilerSnapshot.summary())
         assertTrue(compilerSnapshot.compileNanos > 0, compilerSnapshot.summary())
+    }
+
+    @Test
+    fun defaultSizeTerminalWorkloadUsesComputerTerminalResolution() {
+        val displayWidth = Config.DEFAULT_COMPUTER_TERM_WIDTH * TerminalFontConstants.FONT_WIDTH
+        val displayHeight = Config.DEFAULT_COMPUTER_TERM_HEIGHT * TerminalFontConstants.FONT_HEIGHT
+        val run =
+            RuntimeProfilingWorkload.runTerminalWorkload(
+                delayMillis = 10,
+                bootTicks = 80,
+                inputTicks = 20,
+                enterTicks = 40,
+                displayWidth = displayWidth,
+                displayHeight = displayHeight,
+            )
+        val clientSnapshot = run.clientMetrics.snapshot()
+
+        assertTrue(clientSnapshot.framesApplied > 0, clientSnapshot.toString())
+        assertTrue(clientSnapshot.snapshotPixels >= displayWidth.toLong() * displayHeight.toLong(), clientSnapshot.toString())
+        assertTrue(run.pipeline?.enterClientFrames ?: 0 > 0, run.pipeline.toString())
     }
 
     @Test
