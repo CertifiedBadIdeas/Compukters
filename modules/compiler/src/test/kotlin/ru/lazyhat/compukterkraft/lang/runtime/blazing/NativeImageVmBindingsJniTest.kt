@@ -125,6 +125,17 @@ class NativeImageVmBindingsJniTest {
     }
 
     @Test
+    fun nativeDisplayBindingsExposeWakeWait() {
+        val memberNames =
+            NativeVmBindings::class.java.declaredMethods
+                .map { it.name }
+                .toSet()
+
+        assertTrue("displayWakeSequence" in memberNames)
+        assertTrue("waitForDisplayWake" in memberNames)
+    }
+
+    @Test
     fun nativeDisplayAttachPresentAndDrainWhenLibraryIsConfigured() {
         System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val kernelHandle = NativeVmBindings.createDeviceKernel(maxEventQueueSize = 64, maxBufferedBytesPerChannel = 4096)
@@ -147,6 +158,31 @@ class NativeImageVmBindingsJniTest {
             val dirty = NativeVmBindings.drainNativeDisplayFrames(kernelHandle)
 
             assertTrue(dirty.isNotEmpty(), "present should queue a dirty frame")
+        } finally {
+            NativeVmBindings.freeDeviceKernel(kernelHandle)
+        }
+    }
+
+    @Test
+    fun nativeDisplayWaitReturnsAfterPresentWhenLibraryIsConfigured() {
+        System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val kernelHandle = NativeVmBindings.createDeviceKernel(maxEventQueueSize = 64, maxBufferedBytesPerChannel = 4096)
+
+        try {
+            NativeVmBindings.attachNativeDisplay(kernelHandle, displayId = 3, width = 18, height = 18)
+            NativeVmBindings.drainNativeDisplayFrames(kernelHandle)
+            val observed = NativeVmBindings.displayWakeSequence(kernelHandle)
+
+            val waiter =
+                java.util.concurrent.CompletableFuture.supplyAsync {
+                    NativeVmBindings.waitForDisplayWake(kernelHandle, observed, timeoutMillis = 500)
+                }
+
+            Thread.sleep(25)
+            NativeVmBindings.nativeDisplayFillRect(kernelHandle, 3, 0, 0, 2, 2, 0x07E0)
+            NativeVmBindings.nativeDisplayPresent(kernelHandle, 3)
+
+            assertTrue(waiter.get(1, java.util.concurrent.TimeUnit.SECONDS) > observed)
         } finally {
             NativeVmBindings.freeDeviceKernel(kernelHandle)
         }
