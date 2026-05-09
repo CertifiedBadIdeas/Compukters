@@ -394,10 +394,10 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
     pid: jint,
     parent_pid: jint,
     program_path: JString<'_>,
-) {
+) -> jboolean {
     let kernel_handle = match shared_kernel_handle(&mut env, kernel_handle) {
         Some(kernel) => kernel,
-        None => return,
+        None => return false as jboolean,
     };
     let program_path: String = match env.get_string(&program_path) {
         Ok(value) => value.into(),
@@ -406,13 +406,15 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
                 "java/lang/IllegalArgumentException",
                 format!("Cannot read native process program path: {error}"),
             );
-            return;
+            return false as jboolean;
         }
     };
-    if let Err(error) = kernel_handle.with_kernel_mut(|kernel| {
-        kernel.register_process(pid, parent_pid, program_path);
-    }) {
-        let _ = env.throw_new("java/lang/IllegalStateException", error);
+    match kernel_handle.with_kernel_mut(|kernel| kernel.register_process(pid, parent_pid, program_path)) {
+        Ok(registered) => registered as jboolean,
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalStateException", error);
+            false as jboolean
+        }
     }
 }
 
@@ -423,15 +425,17 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
     kernel_handle: jlong,
     pid: jint,
     exit_code: jint,
-) {
+) -> jboolean {
     let kernel_handle = match shared_kernel_handle(&mut env, kernel_handle) {
         Some(kernel) => kernel,
-        None => return,
+        None => return false as jboolean,
     };
-    if let Err(error) = kernel_handle.with_kernel_mut(|kernel| {
-        kernel.complete_process(pid, exit_code);
-    }) {
-        let _ = env.throw_new("java/lang/IllegalStateException", error);
+    match kernel_handle.with_kernel_mut(|kernel| kernel.complete_process(pid, exit_code)) {
+        Ok(completed) => completed as jboolean,
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalStateException", error);
+            false as jboolean
+        }
     }
 }
 

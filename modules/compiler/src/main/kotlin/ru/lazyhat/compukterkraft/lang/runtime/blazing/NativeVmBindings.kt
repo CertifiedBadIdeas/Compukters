@@ -65,13 +65,13 @@ internal interface NativeVmBindingsFacade {
         pid: Int,
         parentPid: Int,
         programPath: String,
-    )
+    ): Boolean
 
     fun completeProcess(
         kernelHandle: Long,
         pid: Int,
         exitCode: Int,
-    )
+    ): Boolean
 }
 
 object NativeVmBindings : NativeVmBindingsFacade {
@@ -185,18 +185,18 @@ object NativeVmBindings : NativeVmBindingsFacade {
         pid: Int,
         parentPid: Int,
         programPath: String,
-    ) {
+    ): Boolean {
         require(kernelHandle != 0L) { "Native device runtime kernel handle is zero" }
-        registerProcessNative(kernelHandle, pid, parentPid, programPath)
+        return registerProcessNative(kernelHandle, pid, parentPid, programPath)
     }
 
     override fun completeProcess(
         kernelHandle: Long,
         pid: Int,
         exitCode: Int,
-    ) {
+    ): Boolean {
         require(kernelHandle != 0L) { "Native device runtime kernel handle is zero" }
-        completeProcessNative(kernelHandle, pid, exitCode)
+        return completeProcessNative(kernelHandle, pid, exitCode)
     }
 
     override fun attachImageToKernel(
@@ -396,13 +396,13 @@ object NativeVmBindings : NativeVmBindingsFacade {
         pid: Int,
         parentPid: Int,
         programPath: String,
-    )
+    ): Boolean
 
     private external fun completeProcessNative(
         kernelHandle: Long,
         pid: Int,
         exitCode: Int,
-    )
+    ): Boolean
 
     @JvmStatic
     private external fun displayWakeSequenceNative(handle: Long): Long

@@ -565,6 +565,42 @@ fn attached_kernel_parks_on_running_process_wait() {
 }
 
 #[test]
+fn process_registration_and_completion_report_success() {
+    let mut kernel = ckl_vm::runtime_kernel::DeviceRuntimeKernel::new(8, 64);
+
+    assert!(kernel.register_process(2, 1, "shell.ck".to_string()));
+    assert_eq!(
+        kernel.process_status(2),
+        ckl_vm::runtime_kernel::ProcessStatus::Running
+    );
+    assert!(kernel.complete_process(2, 0));
+    assert_eq!(
+        kernel.process_status(2),
+        ckl_vm::runtime_kernel::ProcessStatus::Completed(0)
+    );
+}
+
+#[test]
+fn process_registration_rejects_duplicates_and_completion_rejects_stale_pid() {
+    let mut kernel = ckl_vm::runtime_kernel::DeviceRuntimeKernel::new(8, 64);
+
+    assert!(kernel.register_process(2, 1, "first.ck".to_string()));
+    assert!(!kernel.register_process(2, 1, "second.ck".to_string()));
+    assert!(!kernel.complete_process(99, 1));
+    assert!(kernel.complete_process(2, 0));
+    assert!(!kernel.complete_process(2, 1));
+
+    assert_eq!(
+        kernel.process_status(2),
+        ckl_vm::runtime_kernel::ProcessStatus::Completed(0)
+    );
+    assert_eq!(
+        kernel.process_status(99),
+        ckl_vm::runtime_kernel::ProcessStatus::Missing
+    );
+}
+
+#[test]
 fn stores_and_loads_local_value() {
     let code = vec![
         OP_PUSH_BOOL,

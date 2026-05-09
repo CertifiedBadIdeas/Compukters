@@ -93,6 +93,31 @@ class NativeImageVmBindingsJniTest {
     }
 
     @Test
+    fun nativeProcessBridgeMethodsExposeBooleanSuccess() {
+        assertEquals(
+            Boolean::class.javaPrimitiveType,
+            NativeVmBindings::class.java
+                .getDeclaredMethod(
+                    "registerProcessNative",
+                    Long::class.javaPrimitiveType,
+                    Int::class.javaPrimitiveType,
+                    Int::class.javaPrimitiveType,
+                    String::class.java,
+                ).returnType,
+        )
+        assertEquals(
+            Boolean::class.javaPrimitiveType,
+            NativeVmBindings::class.java
+                .getDeclaredMethod(
+                    "completeProcessNative",
+                    Long::class.javaPrimitiveType,
+                    Int::class.javaPrimitiveType,
+                    Int::class.javaPrimitiveType,
+                ).returnType,
+        )
+    }
+
+    @Test
     fun nativeDeviceWakeWaitsForEventWhenLibraryIsConfigured() {
         System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val kernelHandle = NativeVmBindings.createDeviceKernel(maxEventQueueSize = 64, maxBufferedBytesPerChannel = 4096)
