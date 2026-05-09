@@ -173,6 +173,14 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
         val powerRelY = powerBtn.y - topPos
         val rebootRelX = rebootBtn.x - leftPos
         val rebootRelY = rebootBtn.y - topPos
+        val resolutionTextWidth = font.width(displayResolutionText(currentDisplayWidth(), currentDisplayHeight()))
+        val resolutionRelX =
+            statusRightAlignedTextX(
+                statusBounds = layout.statusBounds,
+                rightBoundaryX = powerBtn.x,
+                textWidth = resolutionTextWidth,
+                gap = RESOLUTION_BUTTON_GAP,
+            ) - leftPos
 
         return ui(Modifier.size(imageWidth, imageHeight).background(BACKGROUND)) {
             text(
@@ -192,14 +200,14 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
                 text(
                     modifier =
                         Modifier.offset(
-                            statusRelX + layout.statusBounds.width - STATUS_TEXT_RIGHT_INSET,
+                            resolutionRelX,
                             statusRelY + 6,
                         ),
                     color = STATUS_TEXT_COLOR,
                     text =
                         value {
                             val buffer = menu.clientSide.displayBuffer
-                            buffer?.let { "${it.width} x ${it.height}" } ?: ""
+                            buffer?.let { displayResolutionText(it.width, it.height) } ?: ""
                         },
                 )
 
@@ -325,6 +333,11 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
 
     private fun currentDisplayHeight(): Int = (DEFAULT_ROWS * TerminalFontConstants.FONT_HEIGHT).coerceAtLeast(48)
 
+    private fun displayResolutionText(
+        width: Int,
+        height: Int,
+    ): String = "$width x $height"
+
     private fun statusButtonBounds(
         statusBounds: TerminalRect,
         slotFromRight: Int,
@@ -336,6 +349,13 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
         val y = statusBounds.y + (statusBounds.height - STATUS_BUTTON_SIZE) / 2
         return TerminalRect(x, y, STATUS_BUTTON_SIZE, STATUS_BUTTON_SIZE)
     }
+
+    private fun statusRightAlignedTextX(
+        statusBounds: TerminalRect,
+        rightBoundaryX: Int,
+        textWidth: Int,
+        gap: Int,
+    ): Int = (rightBoundaryX - gap - textWidth).coerceAtLeast(statusBounds.x + STATUS_TEXT_START_PADDING)
 
     private fun CanvasScope.drawButtonChrome(
         bg: Color,
@@ -381,7 +401,8 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
         private const val STATUS_BUTTON_SIZE = 14
         private const val STATUS_BUTTON_GAP = 6
         private const val STATUS_BUTTON_MARGIN_END = 10
-        private const val STATUS_TEXT_RIGHT_INSET = 52
+        private const val RESOLUTION_BUTTON_GAP = 8
+        private const val STATUS_TEXT_START_PADDING = 12
 
         private val BACKGROUND = Color.hex(0xFF12151DU)
         private val DISPLAY_PLACEHOLDER = Color.hex(0xFF05070AU)

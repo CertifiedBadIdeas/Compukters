@@ -51,4 +51,12 @@ class ComputerTerminalScreenArchitectureTest {
         assertFalse(source.contains("while (x < buffer.width)"))
         assertFalse(source.contains("fillRect(px, py, pw, ph, color)"))
     }
+
+    @Test
+    fun computerScreenKeepsResolutionLabelBeforeControlButtons() {
+        assertTrue(source.contains("resolutionRelX"))
+        assertTrue(source.contains("rightBoundaryX = powerBtn.x"))
+        assertTrue(source.contains("RESOLUTION_BUTTON_GAP"))
+        assertFalse(source.contains("STATUS_TEXT_RIGHT_INSET"))
+    }
 }
