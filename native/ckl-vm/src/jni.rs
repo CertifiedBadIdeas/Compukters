@@ -225,7 +225,11 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
     handle: jlong,
     channel: jint,
 ) -> jstring {
-    let mut kernel = match locked_kernel_handle(&mut env, handle) {
+    let kernel_handle = match shared_kernel_handle(&mut env, handle) {
+        Some(kernel) => kernel,
+        None => return null_mut(),
+    };
+    let mut kernel = match lock_kernel_handle(&mut env, &kernel_handle) {
         Some(kernel) => kernel,
         None => return null_mut(),
     };
@@ -300,7 +304,7 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
         Some(kernel) => kernel,
         None => return,
     };
-    if let Err(error) = handle.attach_device_kernel(Arc::clone(kernel)) {
+    if let Err(error) = handle.attach_device_kernel(kernel) {
         let _ = env.throw_new("java/lang/IllegalStateException", error);
     }
 }
@@ -337,7 +341,11 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
     root_path: JString<'_>,
     quota_bytes: jlong,
 ) {
-    let mut kernel = match locked_kernel_handle(&mut env, kernel_handle) {
+    let kernel_handle = match shared_kernel_handle(&mut env, kernel_handle) {
+        Some(kernel) => kernel,
+        None => return,
+    };
+    let mut kernel = match lock_kernel_handle(&mut env, &kernel_handle) {
         Some(kernel) => kernel,
         None => return,
     };
@@ -365,7 +373,11 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
     width: jint,
     height: jint,
 ) {
-    let mut kernel = match locked_kernel_handle(&mut env, kernel_handle) {
+    let kernel_handle = match shared_kernel_handle(&mut env, kernel_handle) {
+        Some(kernel) => kernel,
+        None => return,
+    };
+    let mut kernel = match lock_kernel_handle(&mut env, &kernel_handle) {
         Some(kernel) => kernel,
         None => return,
     };
@@ -384,7 +396,11 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
     kernel_handle: jlong,
     display_id: jint,
 ) {
-    let mut kernel = match locked_kernel_handle(&mut env, kernel_handle) {
+    let kernel_handle = match shared_kernel_handle(&mut env, kernel_handle) {
+        Some(kernel) => kernel,
+        None => return,
+    };
+    let mut kernel = match lock_kernel_handle(&mut env, &kernel_handle) {
         Some(kernel) => kernel,
         None => return,
     };
@@ -403,7 +419,11 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
     height: jint,
     rgb565: jint,
 ) {
-    let mut kernel = match locked_kernel_handle(&mut env, kernel_handle) {
+    let kernel_handle = match shared_kernel_handle(&mut env, kernel_handle) {
+        Some(kernel) => kernel,
+        None => return,
+    };
+    let mut kernel = match lock_kernel_handle(&mut env, &kernel_handle) {
         Some(kernel) => kernel,
         None => return,
     };
@@ -419,7 +439,11 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
     kernel_handle: jlong,
     display_id: jint,
 ) {
-    let mut kernel = match locked_kernel_handle(&mut env, kernel_handle) {
+    let kernel_handle = match shared_kernel_handle(&mut env, kernel_handle) {
+        Some(kernel) => kernel,
+        None => return,
+    };
+    let mut kernel = match lock_kernel_handle(&mut env, &kernel_handle) {
         Some(kernel) => kernel,
         None => return,
     };
@@ -432,7 +456,11 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
     _class: JClass<'_>,
     kernel_handle: jlong,
 ) -> jbyteArray {
-    let mut kernel = match locked_kernel_handle(&mut env, kernel_handle) {
+    let kernel_handle = match shared_kernel_handle(&mut env, kernel_handle) {
+        Some(kernel) => kernel,
+        None => return null_mut(),
+    };
+    let mut kernel = match lock_kernel_handle(&mut env, &kernel_handle) {
         Some(kernel) => kernel,
         None => return null_mut(),
     };
@@ -460,10 +488,7 @@ fn image_handle_mut(env: &mut JNIEnv<'_>, handle: jlong) -> Option<&'static mut 
     Some(unsafe { &mut *pointer })
 }
 
-fn shared_kernel_handle(
-    env: &mut JNIEnv<'_>,
-    handle: jlong,
-) -> Option<&'static SharedDeviceRuntimeKernel> {
+fn shared_kernel_handle(env: &mut JNIEnv<'_>, handle: jlong) -> Option<SharedDeviceRuntimeKernel> {
     if handle == 0 {
         let _ = env.throw_new(
             "java/lang/IllegalStateException",
@@ -479,14 +504,13 @@ fn shared_kernel_handle(
         );
         return None;
     }
-    Some(unsafe { &*pointer })
+    Some(Arc::clone(unsafe { &*pointer }))
 }
 
-fn locked_kernel_handle(
+fn lock_kernel_handle<'a>(
     env: &mut JNIEnv<'_>,
-    handle: jlong,
-) -> Option<MutexGuard<'static, DeviceRuntimeKernel>> {
-    let kernel = shared_kernel_handle(env, handle)?;
+    kernel: &'a SharedDeviceRuntimeKernel,
+) -> Option<MutexGuard<'a, DeviceRuntimeKernel>> {
     match kernel.lock() {
         Ok(guard) => Some(guard),
         Err(error) => {
