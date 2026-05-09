@@ -60,6 +60,47 @@ fn device_kernel_accepts_event_and_ipc_setup() {
 }
 
 #[test]
+fn native_kernel_pulls_filtered_events_and_reads_arguments() {
+    let mut kernel = DeviceRuntimeKernel::new(8, 64);
+    assert!(kernel.enqueue_event(
+        "mouse",
+        vec![
+            VmValue::Int(4),
+            VmValue::String("left".to_string()),
+        ],
+    ));
+    assert!(kernel.enqueue_event("key", vec![VmValue::Bool(true)]));
+
+    let event = kernel.try_pull_event(Some("mouse")).expect("mouse event");
+
+    assert_eq!(event.name, "mouse");
+    assert_eq!(event.arg_count, 2);
+    assert_eq!(kernel.event_arg_int(event.id, 0), 4);
+    assert_eq!(kernel.event_arg_string(event.id, 1), "left");
+    assert!(!kernel.event_arg_bool(event.id, 0));
+    assert!(kernel.try_pull_event(Some("missing")).is_none());
+    assert_eq!(kernel.try_pull_event(None).expect("next event").name, "key");
+}
+
+#[test]
+fn native_kernel_ipc_buffers_and_closes_channels() {
+    let mut kernel = DeviceRuntimeKernel::new(8, 5);
+    let channel = kernel.open_ipc_channel().expect("channel");
+
+    kernel.write_ipc(channel, "hello").expect("write hello");
+    kernel
+        .write_ipc(channel, " world")
+        .expect("write world truncated by quota");
+
+    assert_eq!(kernel.try_read_ipc(channel).expect("read"), "hello");
+    assert_eq!(kernel.try_read_ipc(channel).expect("empty read"), "");
+
+    kernel.close_ipc(channel).expect("close");
+    assert_eq!(kernel.try_read_ipc(channel).expect("closed read"), "");
+    assert!(kernel.write_ipc(channel, "x").is_err());
+}
+
+#[test]
 fn device_kernel_owns_display_registry() {
     let mut kernel = DeviceRuntimeKernel::new(64, 4096);
 
