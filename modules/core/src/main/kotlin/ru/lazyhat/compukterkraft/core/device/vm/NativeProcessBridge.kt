@@ -26,12 +26,12 @@ internal interface NativeProcessBridge {
         pid: Int,
         parentPid: Int,
         programPath: String,
-    )
+    ): Boolean
 
     fun completeProcess(
         pid: Int,
         exitCode: Int,
-    )
+    ): Boolean
 }
 
 internal object NoOpNativeProcessBridge : NativeProcessBridge {
@@ -39,12 +39,12 @@ internal object NoOpNativeProcessBridge : NativeProcessBridge {
         pid: Int,
         parentPid: Int,
         programPath: String,
-    ) = Unit
+    ): Boolean = false
 
     override fun completeProcess(
         pid: Int,
         exitCode: Int,
-    ) = Unit
+    ): Boolean = false
 }
 
 internal class NativeVmProcessBridge(
@@ -54,23 +54,21 @@ internal class NativeVmProcessBridge(
         pid: Int,
         parentPid: Int,
         programPath: String,
-    ) {
+    ): Boolean =
         NativeVmBindings.registerProcess(
             kernelHandle = kernelHandle,
             pid = pid,
             parentPid = parentPid,
             programPath = programPath,
         )
-    }
 
     override fun completeProcess(
         pid: Int,
         exitCode: Int,
-    ) {
+    ): Boolean =
         NativeVmBindings.completeProcess(
             kernelHandle = kernelHandle,
             pid = pid,
             exitCode = exitCode,
         )
-    }
 }

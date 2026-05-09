@@ -81,49 +81,30 @@ impl DeviceRuntimeKernel {
         parent_pid: i32,
         program_path: String,
     ) -> bool {
-        self.processes
-            .entry(pid)
-            .and_modify(|entry| {
-                entry.parent_pid = parent_pid;
-                entry.program_path = program_path.clone();
-                if matches!(entry.state, ProcessState::Running) {
-                    entry.state = ProcessState::Running;
-                }
-            })
-            .or_insert(ProcessEntry {
+        if pid <= 0 || self.processes.contains_key(&pid) {
+            return false;
+        }
+        self.processes.insert(
+            pid,
+            ProcessEntry {
                 parent_pid,
                 program_path,
                 state: ProcessState::Running,
-            });
+            },
+        );
         true
     }
 
     pub fn complete_process(&mut self, pid: i32, exit_code: i32) -> bool {
-        let mut changed = false;
-        match self.processes.get_mut(&pid) {
-            Some(entry) => {
-                if !matches!(entry.state, ProcessState::Completed { exit_code: current } if current == exit_code)
-                {
-                    entry.state = ProcessState::Completed { exit_code };
-                    changed = true;
-                }
-            }
-            None => {
-                self.processes.insert(
-                    pid,
-                    ProcessEntry {
-                        parent_pid: 0,
-                        program_path: String::new(),
-                        state: ProcessState::Completed { exit_code },
-                    },
-                );
-                changed = true;
-            }
+        let Some(entry) = self.processes.get_mut(&pid) else {
+            return false;
+        };
+        if !matches!(entry.state, ProcessState::Running) {
+            return false;
         }
-        if changed {
-            self.wake_sequence = self.wake_sequence.saturating_add(1);
-        }
-        changed
+        entry.state = ProcessState::Completed { exit_code };
+        self.wake_sequence = self.wake_sequence.saturating_add(1);
+        true
     }
 
     pub fn process_status(&self, pid: i32) -> ProcessStatus {

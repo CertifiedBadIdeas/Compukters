@@ -263,16 +263,18 @@ class NativeImageVmRunnerTest {
             pid: Int,
             parentPid: Int,
             programPath: String,
-        ) {
+        ): Boolean {
             registerProcessCalls += ProcessRegistration(kernelHandle, pid, parentPid, programPath)
+            return true
         }
 
         override fun completeProcess(
             kernelHandle: Long,
             pid: Int,
             exitCode: Int,
-        ) {
+        ): Boolean {
             completeProcessCalls += ProcessCompletion(kernelHandle, pid, exitCode)
+            return true
         }
     }
 }
