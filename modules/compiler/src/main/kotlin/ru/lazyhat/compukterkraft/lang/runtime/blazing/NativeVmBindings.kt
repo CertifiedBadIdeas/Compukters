@@ -220,6 +220,20 @@ object NativeVmBindings : NativeVmBindingsFacade {
         return drainNativeDisplayFramesNative(kernelHandle)
     }
 
+    fun displayWakeSequence(handle: Long): Long {
+        require(handle != 0L) { "Native device runtime kernel handle is zero" }
+        return displayWakeSequenceNative(handle)
+    }
+
+    fun waitForDisplayWake(
+        handle: Long,
+        observedWakeSequence: Long,
+        timeoutMillis: Long,
+    ): Long {
+        require(handle != 0L) { "Native device runtime kernel handle is zero" }
+        return waitForDisplayWakeNative(handle, observedWakeSequence, timeoutMillis.coerceAtLeast(0))
+    }
+
     private fun load(libraryPath: String) {
         synchronized(lock) {
             val current = loadedPath
@@ -316,6 +330,16 @@ object NativeVmBindings : NativeVmBindingsFacade {
 
     @JvmStatic
     private external fun waitForDeviceWakeNative(
+        handle: Long,
+        observedWakeSequence: Long,
+        timeoutMillis: Long,
+    ): Long
+
+    @JvmStatic
+    private external fun displayWakeSequenceNative(handle: Long): Long
+
+    @JvmStatic
+    private external fun waitForDisplayWakeNative(
         handle: Long,
         observedWakeSequence: Long,
         timeoutMillis: Long,
