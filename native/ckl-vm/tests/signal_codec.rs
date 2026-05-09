@@ -97,9 +97,12 @@ fn encodes_wait_event_signal() {
 
 #[test]
 fn encodes_wait_poll_signal() {
-    let bytes = encode_signal(&VmSignal::WaitPoll { channel: 7 });
+    let bytes = encode_signal(&VmSignal::WaitPoll {
+        channel: 7,
+        wake_sequence: 42,
+    });
 
-    assert_eq!(bytes, vec![6, 7, 0, 0, 0]);
+    assert_eq!(bytes, vec![6, 7, 0, 0, 0, 42, 0, 0, 0, 0, 0, 0, 0]);
 }
 
 #[test]

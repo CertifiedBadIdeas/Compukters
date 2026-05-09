@@ -55,6 +55,14 @@ class NativeVmSignalTest {
     }
 
     @Test
+    fun decodesWaitPollSignal() {
+        assertEquals(
+            NativeVmSignal.WaitPoll(channel = 7, wakeSequence = 42),
+            NativeVmSignal.decode(byteArrayOf(6, 7, 0, 0, 0, 42, 0, 0, 0, 0, 0, 0, 0)),
+        )
+    }
+
+    @Test
     fun decodesErrorSignal() {
         assertEquals(
             NativeVmSignal.Error("bad bytecode"),

@@ -317,8 +317,12 @@ impl ImageVmHandle {
                             event_record(event.name, event.id, event.arg_count),
                         )));
                     }
+                    let wake_sequence = kernel.wake_sequence();
                     Ok(NativeHostImportResult::SignalNoResume {
-                        signal: VmSignal::WaitPoll { channel },
+                        signal: VmSignal::WaitPoll {
+                            channel,
+                            wake_sequence,
+                        },
                         arguments,
                     })
                 }

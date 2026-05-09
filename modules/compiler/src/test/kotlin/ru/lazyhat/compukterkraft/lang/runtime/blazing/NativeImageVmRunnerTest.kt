@@ -33,9 +33,9 @@ import kotlin.test.assertNotNull
 class NativeImageVmRunnerTest {
     @Test
     fun decodesNativeWaitPollSignal() {
-        val signal = NativeVmSignal.decode(byteArrayOf(6, 7, 0, 0, 0))
+        val signal = NativeVmSignal.decode(byteArrayOf(6, 7, 0, 0, 0, 42, 0, 0, 0, 0, 0, 0, 0))
 
-        assertEquals(NativeVmSignal.WaitPoll(channel = 7), signal)
+        assertEquals(NativeVmSignal.WaitPoll(channel = 7, wakeSequence = 42), signal)
     }
 
     @Test
@@ -66,7 +66,7 @@ class NativeImageVmRunnerTest {
                 signals =
                     ArrayDeque(
                         listOf(
-                            byteArrayOf(6, 3, 0, 0, 0),
+                            byteArrayOf(6, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
                             byteArrayOf(0, 0),
                         ),
                     ),

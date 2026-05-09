@@ -67,6 +67,7 @@ internal sealed interface NativeVmSignal {
 
     data class WaitPoll(
         val channel: Int,
+        val wakeSequence: Long,
     ) : NativeVmSignal
 
     data class HostCall(
@@ -111,7 +112,7 @@ internal sealed interface NativeVmSignal {
                 }
 
                 6 -> {
-                    WaitPoll(reader.i32())
+                    WaitPoll(reader.i32(), reader.i64())
                 }
 
                 255 -> {
