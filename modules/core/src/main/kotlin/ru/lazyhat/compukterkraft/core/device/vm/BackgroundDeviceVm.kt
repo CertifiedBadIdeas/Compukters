@@ -76,6 +76,9 @@ import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayInfo
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayPixelFormat
 import java.nio.file.Path
+import java.util.concurrent.locks.ReentrantReadWriteLock
+import kotlin.concurrent.read
+import kotlin.concurrent.write
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.yield as coroutineYield
 
@@ -166,6 +169,7 @@ class BackgroundDeviceVm(
             ?.let(::NativeDisplayRegistry)
     private val stoppedNativeDisplayFrames = mutableListOf<DisplayFrameDelta>()
     private var nativeDeviceKernelFreed: Boolean = false
+    private val nativeDeviceKernelLock = ReentrantReadWriteLock()
     private var executionWindowStartedNanos: Long? = null
 
     private inner class RuntimeMetricsApi : DeviceRuntimeMetrics {
@@ -277,9 +281,13 @@ class BackgroundDeviceVm(
 
     override fun enqueueEvent(event: VmEvent): Boolean {
         val accepted = eventManager.enqueueEvent(event)
-        if (accepted && !nativeDeviceKernelFreed) {
-            nativeDeviceKernelHandle?.let { handle ->
-                NativeVmBindings.enqueueDeviceEvent(handle, event.name, event.arguments)
+        if (accepted) {
+            nativeDeviceKernelLock.read {
+                if (!nativeDeviceKernelFreed) {
+                    nativeDeviceKernelHandle?.let { handle ->
+                        NativeVmBindings.enqueueDeviceEvent(handle, event.name, event.arguments)
+                    }
+                }
             }
         }
         return accepted
@@ -319,7 +327,11 @@ class BackgroundDeviceVm(
         pixelFormat: DisplayPixelFormat,
     ): DisplayInfo =
         displayRegistry.attach(displayId, width, height, pixelFormat).also {
-            nativeDisplayRegistry?.attach(displayId, width, height, pixelFormat)
+            nativeDeviceKernelLock.read {
+                if (!nativeDeviceKernelFreed) {
+                    nativeDisplayRegistry?.attach(displayId, width, height, pixelFormat)
+                }
+            }
             if (stateManager.state.isActive) {
                 enqueueEvent(VmEvent("display_attach", listOf(displayId, width, height)))
             }
@@ -332,22 +344,32 @@ class BackgroundDeviceVm(
         pixelFormat: DisplayPixelFormat,
     ): DisplayInfo =
         displayRegistry.resize(displayId, width, height, pixelFormat).also {
-            nativeDisplayRegistry?.attach(displayId, width, height, pixelFormat)
+            nativeDeviceKernelLock.read {
+                if (!nativeDeviceKernelFreed) {
+                    nativeDisplayRegistry?.attach(displayId, width, height, pixelFormat)
+                }
+            }
             enqueueEvent(VmEvent("display_resize", listOf(displayId, width, height)))
         }
 
     override fun detachDisplay(displayId: Int) {
         displayRegistry.detach(displayId)
-        nativeDisplayRegistry?.detach(displayId)
+        nativeDeviceKernelLock.read {
+            if (!nativeDeviceKernelFreed) {
+                nativeDisplayRegistry?.detach(displayId)
+            }
+        }
         enqueueEvent(VmEvent("display_detach", listOf(displayId)))
     }
 
     override fun drainDisplayFrames(): List<DisplayFrameDelta> {
         val nativeFrames =
-            if (!nativeDeviceKernelFreed) {
-                nativeDisplayRegistry?.drainFrames()
-            } else {
-                null
+            nativeDeviceKernelLock.read {
+                if (!nativeDeviceKernelFreed) {
+                    nativeDisplayRegistry?.drainFrames()
+                } else {
+                    null
+                }
             }
         if (nativeFrames != null || stoppedNativeDisplayFrames.isNotEmpty()) {
             displayRegistry.drainFrames()
@@ -362,30 +384,39 @@ class BackgroundDeviceVm(
         return displayRegistry.drainFrames()
     }
 
-    fun supportsNativeDisplayFramePump(): Boolean = nativeDisplayRegistry != null && !nativeDeviceKernelFreed
+    fun supportsNativeDisplayFramePump(): Boolean =
+        nativeDeviceKernelLock.read {
+            nativeDisplayRegistry != null && !nativeDeviceKernelFreed
+        }
 
     fun nativeDisplayWakeSequence(): Long? =
-        if (!nativeDeviceKernelFreed) {
-            nativeDisplayRegistry?.displayWakeSequence()
-        } else {
-            null
+        nativeDeviceKernelLock.read {
+            if (!nativeDeviceKernelFreed) {
+                nativeDisplayRegistry?.displayWakeSequence()
+            } else {
+                null
+            }
         }
 
     fun waitForNativeDisplayWake(
         observedWakeSequence: Long,
         timeoutMillis: Long,
     ): Long? =
-        if (!nativeDeviceKernelFreed) {
-            nativeDisplayRegistry?.waitForDisplayWake(observedWakeSequence, timeoutMillis)
-        } else {
-            null
+        nativeDeviceKernelLock.read {
+            if (!nativeDeviceKernelFreed) {
+                nativeDisplayRegistry?.waitForDisplayWake(observedWakeSequence, timeoutMillis)
+            } else {
+                null
+            }
         }
 
     fun drainNativeDisplayFrameBytes(): ByteArray? =
-        if (!nativeDeviceKernelFreed) {
-            nativeDisplayRegistry?.drainFrameBytes()
-        } else {
-            null
+        nativeDeviceKernelLock.read {
+            if (!nativeDeviceKernelFreed) {
+                nativeDisplayRegistry?.drainFrameBytes()
+            } else {
+                null
+            }
         }
 
     // ── VmContext ───────────────────────────────────────────────────
@@ -412,12 +443,18 @@ class BackgroundDeviceVm(
         channel: Int,
         text: String,
     ) {
-        if (!nativeDeviceKernelFreed) {
-            nativeDeviceKernelHandle?.let { handle ->
-                if (NativeVmBindings.writeDeviceIpc(handle, channel, text)) {
-                    return
+        val wroteNative =
+            nativeDeviceKernelLock.read {
+                if (!nativeDeviceKernelFreed) {
+                    nativeDeviceKernelHandle?.let { handle ->
+                        NativeVmBindings.writeDeviceIpc(handle, channel, text)
+                    } == true
+                } else {
+                    false
                 }
             }
+        if (wroteNative) {
+            return
         }
         ipcRegistry.write(channel, text)
     }
@@ -473,15 +510,21 @@ class BackgroundDeviceVm(
         LOGGER.debug { "DeviceID: $deviceId stopped with reason: $reason, error: $errorMessage" }
 
         if (!nativeDeviceKernelFreed) {
-            nativeDisplayRegistry?.drainFrames()?.let(stoppedNativeDisplayFrames::addAll)
+            nativeDeviceKernelLock.read {
+                if (!nativeDeviceKernelFreed) {
+                    nativeDisplayRegistry?.drainFrames()?.let(stoppedNativeDisplayFrames::addAll)
+                }
+            }
         }
         processManager.cancelAll()
         stateManager.stopVm(reason, errorMessage)
         runner?.cancel()
         runner = null
-        if (!nativeDeviceKernelFreed) {
-            nativeDeviceKernelHandle?.let(NativeVmBindings::freeDeviceKernel)
-            nativeDeviceKernelFreed = true
+        nativeDeviceKernelLock.write {
+            if (!nativeDeviceKernelFreed) {
+                nativeDeviceKernelHandle?.let(NativeVmBindings::freeDeviceKernel)
+                nativeDeviceKernelFreed = true
+            }
         }
 
         LOGGER.debug { "DeviceID: $deviceId stop lock request ended (reason: $reason, error: $errorMessage)" }
