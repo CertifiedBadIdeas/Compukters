@@ -45,6 +45,10 @@ class RuntimeVmProfilingReportFormatterTest {
                             runtimeNanos = 100_000,
                             executionNanos = 40,
                             waitPollSignals = 3,
+                            nativeWaitCalls = 4,
+                            nativeWaitNanos = 55_000,
+                            nativeWaitWakeups = 3,
+                            nativeWaitTimeouts = 1,
                             hostCallSignals = 10,
                             hostCalls =
                                 listOf(
@@ -64,6 +68,10 @@ class RuntimeVmProfilingReportFormatterTest {
                             runtimeNanos = 1_500_000,
                             executionNanos = 20,
                             waitPollSignals = 7,
+                            nativeWaitCalls = 8,
+                            nativeWaitNanos = 2_000_000,
+                            nativeWaitWakeups = 6,
+                            nativeWaitTimeouts = 2,
                             hostCallSignals = 2,
                             hostCalls =
                                 listOf(
@@ -93,6 +101,10 @@ class RuntimeVmProfilingReportFormatterTest {
         assertTrue(markdown.contains("| VM execution time | 20 ns | 40 ns |"), markdown)
         assertTrue(markdown.contains("| Native wait signals | 7 | 3 |"), markdown)
         assertTrue(markdown.contains("| Native fast-path calls | 0 | 0 |"), markdown)
+        assertTrue(markdown.contains("| Native wait calls | 8 | 4 |"), markdown)
+        assertTrue(markdown.contains("| Native wait time | 2 ms | 55 us |"), markdown)
+        assertTrue(markdown.contains("| Native wait wakeups | 6 | 3 |"), markdown)
+        assertTrue(markdown.contains("| Native wait timeouts | 2 | 1 |"), markdown)
         assertTrue(markdown.contains("| Host-call signals | 2 | 10 |"), markdown)
         assertTrue(markdown.contains("| Host-call active time | 30 ms | 50.01 us |"), markdown)
         assertTrue(markdown.contains("| Host-call wait time | 60 ms | 0 ns |"), markdown)
@@ -141,6 +153,10 @@ class RuntimeVmProfilingReportFormatterTest {
                             runtimeNanos = 80,
                             executionNanos = 20,
                             waitPollSignals = 6,
+                            nativeWaitCalls = 5,
+                            nativeWaitNanos = 700_000,
+                            nativeWaitWakeups = 4,
+                            nativeWaitTimeouts = 1,
                             hostCallSignals = 2,
                         ),
                     ),
@@ -153,6 +169,10 @@ class RuntimeVmProfilingReportFormatterTest {
         assertTrue(markdown.contains("held Enter backlog"), markdown)
         assertTrue(markdown.contains("| Native wait signals | 6 |"), markdown)
         assertTrue(markdown.contains("| Native fast-path calls | 0 |"), markdown)
+        assertTrue(markdown.contains("| Native wait calls | 5 |"), markdown)
+        assertTrue(markdown.contains("| Native wait time | 700 us |"), markdown)
+        assertTrue(markdown.contains("| Native wait wakeups | 4 |"), markdown)
+        assertTrue(markdown.contains("| Native wait timeouts | 1 |"), markdown)
         assertTrue(markdown.contains("| Host-call signals | 4 |"), markdown)
         assertTrue(markdown.contains("| Host-call active time | 0 ns |"), markdown)
         assertTrue(markdown.contains("| Host-call wait time | 0 ns |"), markdown)
@@ -186,6 +206,10 @@ class RuntimeVmProfilingReportFormatterTest {
         runtimeNanos: Long,
         executionNanos: Long,
         waitPollSignals: Long = 0,
+        nativeWaitCalls: Long = 0,
+        nativeWaitNanos: Long = 0,
+        nativeWaitWakeups: Long = 0,
+        nativeWaitTimeouts: Long = 0,
         hostCallSignals: Long,
         hostCalls: List<RuntimeHostCallMetrics> = emptyList(),
     ): RuntimeWorkloadProfile =
@@ -229,6 +253,10 @@ class RuntimeVmProfilingReportFormatterTest {
                             executionWindows = 1,
                             executionWindowNanos = executionNanos,
                             waitPollSignals = waitPollSignals,
+                            nativeWaitCalls = nativeWaitCalls,
+                            nativeWaitNanos = nativeWaitNanos,
+                            nativeWaitWakeups = nativeWaitWakeups,
+                            nativeWaitTimeouts = nativeWaitTimeouts,
                             hostCallSignals = hostCallSignals,
                         ),
                     hostCalls = hostCalls,

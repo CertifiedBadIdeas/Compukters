@@ -133,7 +133,7 @@ internal object RuntimeVmProfileCodec {
                     }
                     workload.runtime.vm.run {
                         appendLine(
-                            "runtimeVm\t$sliceRequests\t$slicePermitsSent\t$sleepGatedSliceRequests\t$slicePermitsReceived\t$schedulingPoints\t$yieldSchedulingPoints\t$waitForSliceSchedulingPoints\t$executionWindows\t$executionWindowNanos\t$haltSignals\t$pauseSignals\t$yieldSignals\t$sleepSignals\t$waitEventSignals\t$waitPollSignals\t$hostCallSignals\t$nativeFastPathCalls",
+                            "runtimeVm\t$sliceRequests\t$slicePermitsSent\t$sleepGatedSliceRequests\t$slicePermitsReceived\t$schedulingPoints\t$yieldSchedulingPoints\t$waitForSliceSchedulingPoints\t$executionWindows\t$executionWindowNanos\t$haltSignals\t$pauseSignals\t$yieldSignals\t$sleepSignals\t$waitEventSignals\t$waitPollSignals\t$hostCallSignals\t$nativeFastPathCalls\t$nativeWaitCalls\t$nativeWaitNanos\t$nativeWaitWakeups\t$nativeWaitTimeouts",
                         )
                     }
                     workload.runtime.hostCalls.forEach { call ->
@@ -291,6 +291,10 @@ internal object RuntimeVmProfileCodec {
                                 waitPollSignals = if (v.size >= 16) v[14] else 0,
                                 hostCallSignals = if (v.size >= 16) v[15] else legacyHostCallSignals,
                                 nativeFastPathCalls = if (v.size >= 17) v[16] else 0,
+                                nativeWaitCalls = if (v.size >= 18) v[17] else 0,
+                                nativeWaitNanos = if (v.size >= 19) v[18] else 0,
+                                nativeWaitWakeups = if (v.size >= 20) v[19] else 0,
+                                nativeWaitTimeouts = if (v.size >= 21) v[20] else 0,
                             )
                         }
                 }
@@ -573,6 +577,10 @@ internal object RuntimeVmProfilingReportFormatter {
         appendLine("| VM execution time | ${formatNanos(workload.runtime.vm.executionWindowNanos)} |")
         appendLine("| Native wait signals | ${workload.runtime.vm.nativeWaitSignals} |")
         appendLine("| Native fast-path calls | ${workload.runtime.vm.nativeFastPathCalls} |")
+        appendLine("| Native wait calls | ${workload.runtime.vm.nativeWaitCalls} |")
+        appendLine("| Native wait time | ${formatNanos(workload.runtime.vm.nativeWaitNanos)} |")
+        appendLine("| Native wait wakeups | ${workload.runtime.vm.nativeWaitWakeups} |")
+        appendLine("| Native wait timeouts | ${workload.runtime.vm.nativeWaitTimeouts} |")
         appendLine("| Host-call signals | ${workload.runtime.vm.hostCallSignals} |")
         appendLine("| Host calls | ${workload.runtime.hostCalls.sumOf { it.calls }} |")
         appendLine("| Host-call time | ${formatNanos(workload.runtime.hostCalls.sumOf { it.nanos })} |")
@@ -638,6 +646,10 @@ internal object RuntimeVmProfilingReportFormatter {
         appendHistoricalMetricRow("VM execution time", columns) { workload -> formatNanos(workload.runtime.vm.executionWindowNanos) }
         appendHistoricalMetricRow("Native wait signals", columns) { workload -> workload.runtime.vm.nativeWaitSignals.toString() }
         appendHistoricalMetricRow("Native fast-path calls", columns) { workload -> workload.runtime.vm.nativeFastPathCalls.toString() }
+        appendHistoricalMetricRow("Native wait calls", columns) { workload -> workload.runtime.vm.nativeWaitCalls.toString() }
+        appendHistoricalMetricRow("Native wait time", columns) { workload -> formatNanos(workload.runtime.vm.nativeWaitNanos) }
+        appendHistoricalMetricRow("Native wait wakeups", columns) { workload -> workload.runtime.vm.nativeWaitWakeups.toString() }
+        appendHistoricalMetricRow("Native wait timeouts", columns) { workload -> workload.runtime.vm.nativeWaitTimeouts.toString() }
         appendHistoricalMetricRow("Host-call signals", columns) { workload -> workload.runtime.vm.hostCallSignals.toString() }
         appendHistoricalMetricRow("Host calls", columns) { workload -> workload.runtime.hostCalls.sumOf { it.calls }.toString() }
         appendHistoricalMetricRow("Host-call time", columns) { workload -> formatNanos(workload.runtime.hostCalls.sumOf { it.nanos }) }

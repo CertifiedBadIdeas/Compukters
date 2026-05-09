@@ -102,14 +102,19 @@ class RuntimeVmProfilingProfileCodecTest {
                                             executionWindowNanos = 33,
                                             waitPollSignals = 34,
                                             hostCallSignals = 35,
+                                            nativeFastPathCalls = 36,
+                                            nativeWaitCalls = 37,
+                                            nativeWaitNanos = 38,
+                                            nativeWaitWakeups = 39,
+                                            nativeWaitTimeouts = 40,
                                         ),
                                     hostCalls =
                                         listOf(
                                             RuntimeHostCallMetrics(
                                                 "display",
                                                 "present",
-                                                calls = 36,
-                                                nanos = 37,
+                                                calls = 41,
+                                                nanos = 42,
                                                 waitNanos = 20,
                                             ),
                                         ),
@@ -117,21 +122,21 @@ class RuntimeVmProfilingProfileCodecTest {
                                         listOf(
                                             RuntimeInstructionMetrics(
                                                 VmInstructionKind.CALL_BUILTIN,
-                                                count = 38,
-                                                nanos = 39,
+                                                count = 43,
+                                                nanos = 44,
                                             ),
                                         ),
                                 ),
-                            compiler = CompilerProfilingSnapshot(compileCalls = 40, compileNanos = 41, compiledSources = 42),
+                            compiler = CompilerProfilingSnapshot(compileCalls = 45, compileNanos = 46, compiledSources = 47),
                             heldEnter =
                                 HeldEnterWorkloadSummary(
-                                    enterEventsQueued = 43,
-                                    settleTicks = 44,
-                                    maxQueuedEvents = 45,
-                                    finalQueuedEvents = 46,
-                                    maxPendingHostCalls = 47,
-                                    finalPendingHostCalls = 48,
-                                    displayFramesDrained = 49,
+                                    enterEventsQueued = 48,
+                                    settleTicks = 49,
+                                    maxQueuedEvents = 50,
+                                    finalQueuedEvents = 51,
+                                    maxPendingHostCalls = 52,
+                                    finalPendingHostCalls = 53,
+                                    displayFramesDrained = 54,
                                 ),
                             enterAutoscroll =
                                 EnterAutoscrollWorkloadSummary(
@@ -187,10 +192,12 @@ class RuntimeVmProfilingProfileCodecTest {
             decoded.workloads
                 .single()
                 .runtime.hostCalls
-            .single().waitNanos
-                )
+                .single().waitNanos,
+        )
         assertEquals(36, decoded.workloads.single().runtime.hostCalls.single().activeNanos)
         assertEquals(0, decoded.workloads.single().runtime.vm.waitPollSignals)
         assertEquals(12, decoded.workloads.single().runtime.vm.hostCallSignals)
+        assertEquals(0, decoded.workloads.single().runtime.vm.nativeWaitCalls)
+        assertEquals(0, decoded.workloads.single().runtime.vm.nativeWaitNanos)
     }
 }
