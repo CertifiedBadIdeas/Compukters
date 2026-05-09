@@ -1,5 +1,6 @@
 use std::ptr::null_mut;
 use std::sync::{Arc, MutexGuard};
+use std::time::Duration;
 
 use jni::objects::{JByteArray, JClass, JString};
 use jni::sys::{jboolean, jbyteArray, jint, jlong, jstring};
@@ -144,10 +145,6 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
     event_name: JString<'_>,
     payload: JByteArray<'_>,
 ) -> jboolean {
-    let mut kernel = match locked_kernel_handle(&mut env, handle) {
-        Some(kernel) => kernel,
-        None => return 0,
-    };
     let event_name: String = match env.get_string(&event_name) {
         Ok(name) => name.into(),
         Err(error) => {
@@ -175,10 +172,17 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
             return 0;
         }
     };
-    if kernel.enqueue_event(&event_name, arguments) {
-        1
-    } else {
-        0
+    let kernel = match shared_kernel_handle(&mut env, handle) {
+        Some(kernel) => kernel,
+        None => return 0,
+    };
+    match kernel.with_kernel_mut(|kernel| kernel.enqueue_event(&event_name, arguments)) {
+        Ok(true) => 1,
+        Ok(false) => 0,
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalStateException", error);
+            0
+        }
     }
 }
 
@@ -190,10 +194,6 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
     channel: jint,
     text: JString<'_>,
 ) -> jboolean {
-    let mut kernel = match locked_kernel_handle(&mut env, handle) {
-        Some(kernel) => kernel,
-        None => return 0,
-    };
     let text: String = match env.get_string(&text) {
         Ok(text) => text.into(),
         Err(error) => {
@@ -204,9 +204,17 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
             return 0;
         }
     };
-    match kernel.write_ipc(channel, &text) {
-        Ok(()) => 1,
-        Err(_) => 0,
+    let kernel = match shared_kernel_handle(&mut env, handle) {
+        Some(kernel) => kernel,
+        None => return 0,
+    };
+    match kernel.with_kernel_mut(|kernel| kernel.write_ipc(channel, &text)) {
+        Ok(Ok(())) => 1,
+        Ok(Err(_)) => 0,
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalStateException", error);
+            0
+        }
     }
 }
 
@@ -233,6 +241,47 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
             }
         },
         Err(_) => null_mut(),
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_deviceKernelWakeSequenceNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    handle: jlong,
+) -> jlong {
+    let kernel = match shared_kernel_handle(&mut env, handle) {
+        Some(kernel) => kernel,
+        None => return 0,
+    };
+    match kernel.wake_sequence() {
+        Ok(sequence) => sequence as jlong,
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalStateException", error);
+            0
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_waitForDeviceWakeNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    handle: jlong,
+    observed_wake_sequence: jlong,
+    timeout_millis: jlong,
+) -> jlong {
+    let kernel = match shared_kernel_handle(&mut env, handle) {
+        Some(kernel) => kernel,
+        None => return observed_wake_sequence,
+    };
+    let timeout = Duration::from_millis(timeout_millis.max(0) as u64);
+    match kernel.wait_for_wake(observed_wake_sequence, timeout) {
+        Ok(sequence) => sequence as jlong,
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalStateException", error);
+            observed_wake_sequence
+        }
     }
 }
 

@@ -58,6 +58,14 @@ class NativeImageVmBindingsJniTest {
             "NativeVmBindings must expose native IPC writes for Kotlin-owned process code",
         )
         assertTrue(
+            "deviceKernelWakeSequence" in memberNames,
+            "NativeVmBindings must expose native device kernel wake sequence",
+        )
+        assertTrue(
+            "waitForDeviceWake" in memberNames,
+            "NativeVmBindings must expose native device kernel waits",
+        )
+        assertTrue(
             "attachImageToKernel" in memberNames,
             "NativeVmBindings must expose native device-kernel lifecycle",
         )
@@ -69,6 +77,21 @@ class NativeImageVmBindingsJniTest {
             "setImageWorkingDirectory" in memberNames,
             "NativeVmBindings must expose per-image working directory attachment",
         )
+    }
+
+    @Test
+    fun nativeDeviceWakeWaitsForEventWhenLibraryIsConfigured() {
+        System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val kernelHandle = NativeVmBindings.createDeviceKernel(maxEventQueueSize = 64, maxBufferedBytesPerChannel = 4096)
+
+        try {
+            val initial = NativeVmBindings.deviceKernelWakeSequence(kernelHandle)
+            assertEquals(initial, NativeVmBindings.waitForDeviceWake(kernelHandle, initial, timeoutMillis = 1))
+            assertTrue(NativeVmBindings.enqueueDeviceEvent(kernelHandle, "key", listOf("x")))
+            assertTrue(NativeVmBindings.waitForDeviceWake(kernelHandle, initial, timeoutMillis = 100) > initial)
+        } finally {
+            NativeVmBindings.freeDeviceKernel(kernelHandle)
+        }
     }
 
     @Test
