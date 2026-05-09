@@ -109,6 +109,50 @@ object NativeVmBindings : NativeVmBindingsFacade {
         attachImageToKernelNative(imageHandle, kernelHandle)
     }
 
+    fun attachNativeDisplay(
+        kernelHandle: Long,
+        displayId: Int,
+        width: Int,
+        height: Int,
+    ) {
+        require(kernelHandle != 0L) { "Native device runtime kernel handle is zero" }
+        attachNativeDisplayNative(kernelHandle, displayId, width, height)
+    }
+
+    fun detachNativeDisplay(
+        kernelHandle: Long,
+        displayId: Int,
+    ) {
+        require(kernelHandle != 0L) { "Native device runtime kernel handle is zero" }
+        detachNativeDisplayNative(kernelHandle, displayId)
+    }
+
+    fun nativeDisplayFillRect(
+        kernelHandle: Long,
+        displayId: Int,
+        x: Int,
+        y: Int,
+        width: Int,
+        height: Int,
+        rgb565: Int,
+    ) {
+        require(kernelHandle != 0L) { "Native device runtime kernel handle is zero" }
+        nativeDisplayFillRectNative(kernelHandle, displayId, x, y, width, height, rgb565)
+    }
+
+    fun nativeDisplayPresent(
+        kernelHandle: Long,
+        displayId: Int,
+    ) {
+        require(kernelHandle != 0L) { "Native device runtime kernel handle is zero" }
+        nativeDisplayPresentNative(kernelHandle, displayId)
+    }
+
+    fun drainNativeDisplayFrames(kernelHandle: Long): ByteArray {
+        require(kernelHandle != 0L) { "Native device runtime kernel handle is zero" }
+        return drainNativeDisplayFramesNative(kernelHandle)
+    }
+
     private fun load(libraryPath: String) {
         synchronized(lock) {
             val current = loadedPath
@@ -167,4 +211,38 @@ object NativeVmBindings : NativeVmBindingsFacade {
         imageHandle: Long,
         kernelHandle: Long,
     )
+
+    @JvmStatic
+    private external fun attachNativeDisplayNative(
+        kernelHandle: Long,
+        displayId: Int,
+        width: Int,
+        height: Int,
+    )
+
+    @JvmStatic
+    private external fun detachNativeDisplayNative(
+        kernelHandle: Long,
+        displayId: Int,
+    )
+
+    @JvmStatic
+    private external fun nativeDisplayFillRectNative(
+        kernelHandle: Long,
+        displayId: Int,
+        x: Int,
+        y: Int,
+        width: Int,
+        height: Int,
+        rgb565: Int,
+    )
+
+    @JvmStatic
+    private external fun nativeDisplayPresentNative(
+        kernelHandle: Long,
+        displayId: Int,
+    )
+
+    @JvmStatic
+    private external fun drainNativeDisplayFramesNative(kernelHandle: Long): ByteArray
 }

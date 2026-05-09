@@ -69,6 +69,45 @@ class NativeImageVmBindingsJniTest {
     }
 
     @Test
+    fun nativeDisplayBindingsExposeLifecycleAndFrameDrain() {
+        val memberNames = NativeVmBindings::class.java.declaredMethods.map { it.name }.toSet()
+
+        assertTrue("attachNativeDisplay" in memberNames)
+        assertTrue("detachNativeDisplay" in memberNames)
+        assertTrue("nativeDisplayFillRect" in memberNames)
+        assertTrue("nativeDisplayPresent" in memberNames)
+        assertTrue("drainNativeDisplayFrames" in memberNames)
+    }
+
+    @Test
+    fun nativeDisplayAttachPresentAndDrainWhenLibraryIsConfigured() {
+        System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val kernelHandle = NativeVmBindings.createDeviceKernel(maxEventQueueSize = 64, maxBufferedBytesPerChannel = 4096)
+
+        try {
+            NativeVmBindings.attachNativeDisplay(kernelHandle, displayId = 3, width = 18, height = 18)
+            val initial = NativeVmBindings.drainNativeDisplayFrames(kernelHandle)
+            assertTrue(initial.isNotEmpty(), "attach should queue a full refresh frame")
+
+            NativeVmBindings.nativeDisplayFillRect(
+                kernelHandle,
+                displayId = 3,
+                x = 0,
+                y = 0,
+                width = 2,
+                height = 2,
+                rgb565 = 0x07E0,
+            )
+            NativeVmBindings.nativeDisplayPresent(kernelHandle, displayId = 3)
+            val dirty = NativeVmBindings.drainNativeDisplayFrames(kernelHandle)
+
+            assertTrue(dirty.isNotEmpty(), "present should queue a dirty frame")
+        } finally {
+            NativeVmBindings.freeDeviceKernel(kernelHandle)
+        }
+    }
+
+    @Test
     fun imageRunnerHaltsForEmptyMainWhenLibraryIsConfigured() {
         val libraryPath = System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val image = assertNotNull(LanguageFrontend().compileImage("main.ck", "pub fun main() { }").image)
