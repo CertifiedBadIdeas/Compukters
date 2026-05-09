@@ -244,6 +244,48 @@ class NativeImageVmBindingsJniTest {
     }
 
     @Test
+    fun nativeEventsCarryArgumentsWhenLibraryIsConfigured() {
+        val libraryPath = System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val image =
+            assertNotNull(
+                LanguageFrontend()
+                    .compileImage(
+                        "main.ck",
+                        """
+                        pub fun main(): String {
+                            val event: Event = events::tryPull();
+                            return event.name + ":" + events::argString(event, 0);
+                        }
+                        """.trimIndent(),
+                    ).image,
+            )
+        val kernelHandle =
+            NativeVmBindings.createDeviceKernel(maxEventQueueSize = 64, maxBufferedBytesPerChannel = 4096)
+        val imageHandle =
+            NativeVmBindings.createImage(libraryPath, CkVmImageAbi.encode(image), instructionBudget = 4096)
+
+        try {
+            NativeVmBindings.enqueueDeviceEvent(
+                kernelHandle,
+                "char",
+                VmValue
+                    .RecordValue(
+                        typeName = "EventPayload",
+                        fields = linkedMapOf("arg0" to VmValue.StringValue("x")),
+                    ).toNativeBytes("events", "enqueue"),
+            )
+            NativeVmBindings.attachImageToKernel(imageHandle, kernelHandle)
+
+            val halt =
+                assertIs<NativeVmSignal.Halt>(NativeVmSignal.decode(NativeVmBindings.runImageUntilSignal(imageHandle)))
+            assertEquals(NativeVmValue.StringValue("char:x"), halt.value)
+        } finally {
+            NativeVmBindings.freeImage(imageHandle)
+            NativeVmBindings.freeDeviceKernel(kernelHandle)
+        }
+    }
+
+    @Test
     fun imageRunnerHaltsForEmptyMainWhenLibraryIsConfigured() {
         val libraryPath = System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val image = assertNotNull(LanguageFrontend().compileImage("main.ck", "pub fun main() { }").image)

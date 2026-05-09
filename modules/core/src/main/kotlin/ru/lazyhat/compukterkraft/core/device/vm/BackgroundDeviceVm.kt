@@ -267,7 +267,15 @@ class BackgroundDeviceVm(
         }
     }
 
-    override fun enqueueEvent(event: VmEvent): Boolean = eventManager.enqueueEvent(event)
+    override fun enqueueEvent(event: VmEvent): Boolean {
+        val accepted = eventManager.enqueueEvent(event)
+        if (accepted && !nativeDeviceKernelFreed) {
+            nativeDeviceKernelHandle?.let { handle ->
+                NativeVmBindings.enqueueDeviceEvent(handle, event.name, event.arguments)
+            }
+        }
+        return accepted
+    }
 
     override fun requestSlice(serverTick: Long) {
         stateManager.updateCurrentTick(serverTick)
