@@ -28,10 +28,10 @@ import ru.lazyhat.compukterkraft.lang.runtime.DevicePeripheralApi
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceProcessApi
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceProfile
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceRedstoneApi
-import ru.lazyhat.compukterkraft.lang.runtime.NativeDeviceKernelProvider
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceRuntime
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceRuntimeMetrics
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceSystemApi
+import ru.lazyhat.compukterkraft.lang.runtime.NativeDeviceKernelProvider
 import ru.lazyhat.compukterkraft.lang.runtime.NoopDeviceDisplayApi
 import ru.lazyhat.compukterkraft.lang.runtime.NoopDeviceEventApi
 import ru.lazyhat.compukterkraft.lang.runtime.NoopDeviceIpcApi
@@ -54,7 +54,8 @@ class VmRuntime(
     private val peripheralsApi: DevicePeripheralApi = object : DevicePeripheralApi {},
     private val metricsApi: DeviceRuntimeMetrics = NoopDeviceRuntimeMetrics,
     override val nativeDeviceKernelHandle: Long = 0L,
-) : DeviceRuntime, NativeDeviceKernelProvider {
+) : DeviceRuntime,
+    NativeDeviceKernelProvider {
     override val profile: DeviceProfile = initialProfile
     override val metrics: DeviceRuntimeMetrics = metricsApi
     override val system: DeviceSystemApi = systemApi
@@ -81,11 +82,9 @@ class VmRuntime(
     override suspend fun tryPullEvent(filter: String?): VmEvent? {
         val event = ctx.tryReceiveEvent()
         if (event == null) {
-            ctx.schedulingPoint()
             return null
         }
         if (filter == null || event.name == filter) {
-            ctx.schedulingPoint()
             return event
         }
         ctx.deferEvent(event)

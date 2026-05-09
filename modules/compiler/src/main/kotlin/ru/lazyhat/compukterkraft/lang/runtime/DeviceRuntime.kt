@@ -76,6 +76,12 @@ interface DeviceRuntimeMetrics {
         nanos: Long,
     )
 
+    fun recordVmHostCallWait(
+        moduleName: String,
+        functionName: String,
+        nanos: Long,
+    )
+
     fun recordVmInstruction(
         kind: VmInstructionKind,
         nanos: Long,
@@ -88,6 +94,12 @@ object NoopDeviceRuntimeMetrics : DeviceRuntimeMetrics {
     override fun recordVmSignal(kind: VmSignalKind) = Unit
 
     override fun recordVmHostCall(
+        moduleName: String,
+        functionName: String,
+        nanos: Long,
+    ) = Unit
+
+    override fun recordVmHostCallWait(
         moduleName: String,
         functionName: String,
         nanos: Long,

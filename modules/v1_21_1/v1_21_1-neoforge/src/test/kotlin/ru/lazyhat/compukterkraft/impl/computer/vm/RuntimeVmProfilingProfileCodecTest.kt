@@ -97,8 +97,17 @@ class RuntimeVmProfilingProfileCodecTest {
                                             requestSliceNanos = 31,
                                         ),
                                     vm = RuntimeVmMetrics(executionWindows = 32, executionWindowNanos = 33, hostCallSignals = 34),
-                                    hostCalls = listOf(RuntimeHostCallMetrics("display", "present", calls = 35, nanos = 36)),
-                                    instructions =
+                                    hostCalls =
+                                        listOf(
+                                            RuntimeHostCallMetrics(
+                                                "display",
+                                                "present",
+                                                calls = 35,
+                                                nanos = 36,
+                                                waitNanos = 20,
+                                            ),
+                                        ),
+                                        instructions =
                                         listOf(
                                             RuntimeInstructionMetrics(
                                                 VmInstructionKind.CALL_BUILTIN,
@@ -118,6 +127,15 @@ class RuntimeVmProfilingProfileCodecTest {
                                     finalPendingHostCalls = 47,
                                     displayFramesDrained = 48,
                                 ),
+                            enterAutoscroll =
+                                EnterAutoscrollWorkloadSummary(
+                                    enterEventsQueued = 54,
+                                    ticksUntilFirstAutoscroll = 55,
+                                    copyRectCallsBefore = 56,
+                                    copyRectCallsAfter = 57,
+                                    displayFramesDrained = 58,
+                                    clientFramesApplied = 59,
+                                ),
                             pipeline =
                                 TerminalPipelineSummary(
                                     inputChars = 49,
@@ -135,5 +153,36 @@ class RuntimeVmProfilingProfileCodecTest {
         val decoded = RuntimeVmProfileCodec.read(path)
 
         assertEquals(profile, decoded)
+    }
+
+    @Test
+    fun profileReaderAcceptsLegacyHostCallRowsWithoutWaitNanos() {
+        val path = createTempFile("runtime-vm-profile-legacy", ".tsv")
+        path.toFile().writeText(
+            """
+            runtime	Rust image
+            workload	sample workload
+            displayOps	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+            displayFrames	0	0	0	0
+            displayBuild	0	0	0	0	0	0	0	0
+            clientDisplay	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+            runtimeTick	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+            runtimeVm	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+            host	display	present	35	36
+            compiler	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+            endWorkload
+            """.trimIndent() + "\n",
+        )
+
+        val decoded = RuntimeVmProfileCodec.read(path)
+
+        assertEquals(
+            0,
+            decoded.workloads
+                .single()
+                .runtime.hostCalls
+            .single().waitNanos
+                )
+        assertEquals(36, decoded.workloads.single().runtime.hostCalls.single().activeNanos)
     }
 }

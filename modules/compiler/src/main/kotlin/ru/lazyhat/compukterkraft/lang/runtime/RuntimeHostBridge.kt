@@ -166,7 +166,12 @@ internal class RuntimeHostBridge(
         arguments: List<VmValue>,
     ): VmValue =
         when (functionName) {
-            "poll" -> fromPoll(runtime.poll(arguments[0].asInt()))
+            "poll" -> {
+                measuredHostCallWait("runtime", "poll") {
+                    fromPoll(runtime.poll(arguments[0].asInt()))
+                }
+            }
+
             else -> error("Unknown runtime function $functionName")
         }
 
@@ -185,7 +190,9 @@ internal class RuntimeHostBridge(
             }
 
             "read" -> {
-                VmValue.StringValue(runtime.ipc.read(arguments[0].asInt()))
+                measuredHostCallWait("ipc", "read") {
+                    VmValue.StringValue(runtime.ipc.read(arguments[0].asInt()))
+                }
             }
 
             "tryRead" -> {
@@ -201,6 +208,22 @@ internal class RuntimeHostBridge(
                 error("Unknown ipc function $functionName")
             }
         }
+
+    private suspend fun <T> measuredHostCallWait(
+        moduleName: String,
+        functionName: String,
+        block: suspend () -> T,
+    ): T {
+        if (!runtime.metrics.collectsDetailedMetrics) {
+            return block()
+        }
+        val started = System.nanoTime()
+        try {
+            return block()
+        } finally {
+            runtime.metrics.recordVmHostCallWait(moduleName, functionName, System.nanoTime() - started)
+        }
+    }
 
     private fun invokeDisplay(
         functionName: String,

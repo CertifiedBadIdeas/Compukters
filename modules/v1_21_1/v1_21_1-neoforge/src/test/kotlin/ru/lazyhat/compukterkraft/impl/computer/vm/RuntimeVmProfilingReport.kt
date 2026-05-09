@@ -65,6 +65,7 @@ internal data class RuntimeWorkloadProfile(
     val runtime: RuntimeProfilingSnapshot,
     val compiler: CompilerProfilingSnapshot,
     val heldEnter: HeldEnterWorkloadSummary? = null,
+    val enterAutoscroll: EnterAutoscrollWorkloadSummary? = null,
     val pipeline: TerminalPipelineSummary? = null,
 )
 
@@ -76,6 +77,15 @@ internal data class HeldEnterWorkloadSummary(
     val maxPendingHostCalls: Int,
     val finalPendingHostCalls: Int,
     val displayFramesDrained: Int,
+)
+
+internal data class EnterAutoscrollWorkloadSummary(
+    val enterEventsQueued: Int,
+    val ticksUntilFirstAutoscroll: Int,
+    val copyRectCallsBefore: Long,
+    val copyRectCallsAfter: Long,
+    val displayFramesDrained: Int,
+    val clientFramesApplied: Long,
 )
 
 internal data class TerminalPipelineSummary(
@@ -126,7 +136,7 @@ internal object RuntimeVmProfileCodec {
                         )
                     }
                     workload.runtime.hostCalls.forEach { call ->
-                        appendLine("host\t${call.moduleName}\t${call.functionName}\t${call.calls}\t${call.nanos}")
+                        appendLine("host\t${call.moduleName}\t${call.functionName}\t${call.calls}\t${call.nanos}\t${call.waitNanos}")
                     }
                     workload.runtime.instructions.forEach { instruction ->
                         appendLine("instruction\t${instruction.kind}\t${instruction.count}\t${instruction.nanos}")
@@ -139,6 +149,11 @@ internal object RuntimeVmProfileCodec {
                     workload.heldEnter?.run {
                         appendLine(
                             "held\t$enterEventsQueued\t$settleTicks\t$maxQueuedEvents\t$finalQueuedEvents\t$maxPendingHostCalls\t$finalPendingHostCalls\t$displayFramesDrained",
+                        )
+                    }
+                    workload.enterAutoscroll?.run {
+                        appendLine(
+                            "enterAutoscroll\t$enterEventsQueued\t$ticksUntilFirstAutoscroll\t$copyRectCallsBefore\t$copyRectCallsAfter\t$displayFramesDrained\t$clientFramesApplied",
                         )
                     }
                     workload.pipeline?.run {
@@ -278,7 +293,13 @@ internal object RuntimeVmProfileCodec {
 
                 "host" -> {
                     current.requireCurrent().hostCalls +=
-                        RuntimeHostCallMetrics(parts[1], parts[2], parts[3].toLong(), parts[4].toLong())
+                        RuntimeHostCallMetrics(
+                            parts[1],
+                            parts[2],
+                            parts[3].toLong(),
+                            parts[4].toLong(),
+                            waitNanos = parts.getOrNull(5)?.toLong() ?: 0,
+                        )
                 }
 
                 "instruction" -> {
@@ -319,6 +340,20 @@ internal object RuntimeVmProfileCodec {
                         parts.ints().let { v -> HeldEnterWorkloadSummary(v[0], v[1], v[2], v[3], v[4], v[5], v[6]) }
                 }
 
+                "enterAutoscroll" -> {
+                    current.requireCurrent().enterAutoscroll =
+                        parts.drop(1).let { v ->
+                            EnterAutoscrollWorkloadSummary(
+                                enterEventsQueued = v[0].toInt(),
+                                ticksUntilFirstAutoscroll = v[1].toInt(),
+                                copyRectCallsBefore = v[2].toLong(),
+                                copyRectCallsAfter = v[3].toLong(),
+                                displayFramesDrained = v[4].toInt(),
+                                clientFramesApplied = v[5].toLong(),
+                            )
+                        }
+                }
+
                 "pipeline" -> {
                     val values = parts.drop(1)
                     current.requireCurrent().pipeline =
@@ -356,6 +391,7 @@ internal object RuntimeVmProfileCodec {
         val instructions: MutableList<RuntimeInstructionMetrics> = mutableListOf(),
         var compiler: CompilerProfilingSnapshot? = null,
         var heldEnter: HeldEnterWorkloadSummary? = null,
+        var enterAutoscroll: EnterAutoscrollWorkloadSummary? = null,
         var pipeline: TerminalPipelineSummary? = null,
     ) {
         fun build(): RuntimeWorkloadProfile =
@@ -377,6 +413,7 @@ internal object RuntimeVmProfileCodec {
                     ),
                 compiler = compiler ?: error("Missing compiler for $name"),
                 heldEnter = heldEnter,
+                enterAutoscroll = enterAutoscroll,
                 pipeline = pipeline,
             )
     }
@@ -533,10 +570,20 @@ internal object RuntimeVmProfilingReportFormatter {
         appendLine("| Host-call signals | ${workload.runtime.vm.hostCallSignals} |")
         appendLine("| Host calls | ${workload.runtime.hostCalls.sumOf { it.calls }} |")
         appendLine("| Host-call time | ${formatNanos(workload.runtime.hostCalls.sumOf { it.nanos })} |")
+        appendLine("| Host-call wait time | ${formatNanos(workload.runtime.hostCalls.sumOf { it.waitNanos })} |")
+        appendLine("| Host-call active time | ${formatNanos(workload.runtime.hostCalls.sumOf { it.activeNanos })} |")
         appendLine("| Compiler time | ${formatNanos(workload.compiler.compileNanos)} |")
         workload.heldEnter?.let { held ->
             appendLine("| Held Enter accepted events | ${held.enterEventsQueued} |")
             appendLine("| Held Enter max queued events | ${held.maxQueuedEvents} |")
+        }
+        workload.enterAutoscroll?.let { autoscroll ->
+            appendLine("| Enter autoscroll accepted events | ${autoscroll.enterEventsQueued} |")
+            appendLine("| Enter autoscroll ticks until first scroll | ${autoscroll.ticksUntilFirstAutoscroll} |")
+            appendLine("| Enter autoscroll copyRect calls before | ${autoscroll.copyRectCallsBefore} |")
+            appendLine("| Enter autoscroll copyRect calls after | ${autoscroll.copyRectCallsAfter} |")
+            appendLine("| Enter autoscroll display frames drained | ${autoscroll.displayFramesDrained} |")
+            appendLine("| Enter autoscroll client frames applied | ${autoscroll.clientFramesApplied} |")
         }
         workload.pipeline?.let { pipeline ->
             appendLine("| Input chars | ${pipeline.inputChars} |")
@@ -576,10 +623,44 @@ internal object RuntimeVmProfilingReportFormatter {
         appendHistoricalMetricRow("Host-call signals", columns) { workload -> workload.runtime.vm.hostCallSignals.toString() }
         appendHistoricalMetricRow("Host calls", columns) { workload -> workload.runtime.hostCalls.sumOf { it.calls }.toString() }
         appendHistoricalMetricRow("Host-call time", columns) { workload -> formatNanos(workload.runtime.hostCalls.sumOf { it.nanos }) }
+        appendHistoricalMetricRow(
+            "Host-call wait time",
+            columns,
+        ) { workload -> formatNanos(workload.runtime.hostCalls.sumOf { it.waitNanos }) }
+        appendHistoricalMetricRow(
+            "Host-call active time",
+            columns,
+        ) { workload -> formatNanos(workload.runtime.hostCalls.sumOf { it.activeNanos }) }
         appendHistoricalMetricRow("Compiler time", columns) { workload -> formatNanos(workload.compiler.compileNanos) }
         if (columns.any { (_, workload) -> workload?.heldEnter != null }) {
             appendHistoricalMetricRow("Held Enter accepted events", columns) { workload -> workload.heldEnter?.enterEventsQueued?.toString() ?: "" }
             appendHistoricalMetricRow("Held Enter max queued events", columns) { workload -> workload.heldEnter?.maxQueuedEvents?.toString() ?: "" }
+        }
+        if (columns.any { (_, workload) -> workload?.enterAutoscroll != null }) {
+            appendHistoricalMetricRow(
+                "Enter autoscroll accepted events",
+                columns,
+            ) { workload -> workload.enterAutoscroll?.enterEventsQueued?.toString() ?: "" }
+            appendHistoricalMetricRow(
+                "Enter autoscroll ticks until first scroll",
+                columns,
+            ) { workload -> workload.enterAutoscroll?.ticksUntilFirstAutoscroll?.toString() ?: "" }
+            appendHistoricalMetricRow(
+                "Enter autoscroll copyRect calls before",
+                columns,
+            ) { workload -> workload.enterAutoscroll?.copyRectCallsBefore?.toString() ?: "" }
+            appendHistoricalMetricRow(
+                "Enter autoscroll copyRect calls after",
+                columns,
+            ) { workload -> workload.enterAutoscroll?.copyRectCallsAfter?.toString() ?: "" }
+            appendHistoricalMetricRow(
+                "Enter autoscroll display frames drained",
+                columns,
+            ) { workload -> workload.enterAutoscroll?.displayFramesDrained?.toString() ?: "" }
+            appendHistoricalMetricRow(
+                "Enter autoscroll client frames applied",
+                columns,
+            ) { workload -> workload.enterAutoscroll?.clientFramesApplied?.toString() ?: "" }
         }
         if (columns.any { (_, workload) -> workload?.pipeline != null }) {
             appendHistoricalMetricRow("Input chars", columns) { workload -> workload.pipeline?.inputChars?.toString() ?: "" }
@@ -591,7 +672,15 @@ internal object RuntimeVmProfilingReportFormatter {
         hostCallKeys.forEach { key ->
             appendHistoricalMetricRow("host $key", columns) { workload ->
                 val call = workload.runtime.hostCalls.firstOrNull { it.key == key }
-                if (call == null) "0 calls / 0 ns" else "${call.calls} calls / ${formatNanos(call.nanos)}"
+                if (call == null) {
+                    "0 calls / 0 ns active / 0 ns wait / 0 ns total"
+                } else {
+                    "${call.calls} calls / ${formatNanos(call.activeNanos)} active / ${formatNanos(call.waitNanos)} wait / ${
+                        formatNanos(
+                            call.nanos,
+                        )
+                    } total"
+                }
             }
         }
         appendLine()
@@ -608,13 +697,24 @@ internal object RuntimeVmProfilingReportFormatter {
     private fun StringBuilder.appendHostCalls(hostCalls: List<RuntimeHostCallMetrics>) {
         appendLine("### Host calls")
         appendLine()
-        appendLine("| Host call | Calls | Time |")
-        appendLine("|---|---:|---:|")
-        hostCalls.sortedWith(compareByDescending<RuntimeHostCallMetrics> { it.nanos }.thenBy { it.key }).forEach { call ->
-            appendLine("| ${call.key} | ${call.calls} | ${formatNanos(call.nanos)} |")
-        }
+        appendLine("| Host call | Calls | Total | Wait | Active |")
+        appendLine("|---|---:|---:|---:|---:|")
+        hostCalls
+            .sortedWith(
+                compareByDescending<RuntimeHostCallMetrics> { it.activeNanos }
+                    .thenByDescending { it.nanos }
+                    .thenBy { it.key },
+            ).forEach { call ->
+                appendLine(
+                    "| ${call.key} | ${call.calls} | ${formatNanos(call.nanos)} | ${formatNanos(call.waitNanos)} | ${
+                        formatNanos(
+                            call.activeNanos,
+                        )
+                    } |"
+                )
+            }
         if (hostCalls.isEmpty()) {
-            appendLine("| none | 0 | 0 ns |")
+            appendLine("| none | 0 | 0 ns | 0 ns | 0 ns |")
         }
         appendLine()
     }

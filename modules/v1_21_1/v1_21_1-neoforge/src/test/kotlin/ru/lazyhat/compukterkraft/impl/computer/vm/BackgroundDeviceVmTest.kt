@@ -24,8 +24,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
-import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 import ru.lazyhat.compukterkraft.core.Config
+import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 import ru.lazyhat.compukterkraft.core.device.runtime.FirmwareProgramLoader
 import ru.lazyhat.compukterkraft.core.device.runtime.HostCallDispatcher
 import ru.lazyhat.compukterkraft.core.device.runtime.LoadedFirmwareProgramSource
@@ -33,10 +33,11 @@ import ru.lazyhat.compukterkraft.core.device.runtime.NoOpRuntimeMetricsCollector
 import ru.lazyhat.compukterkraft.core.device.runtime.RecordingRuntimeMetricsCollector
 import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeMetricsCollector
 import ru.lazyhat.compukterkraft.core.device.vm.BackgroundDeviceVm
+import ru.lazyhat.compukterkraft.core.device.vm.DeviceProfileRegistry
 import ru.lazyhat.compukterkraft.core.device.vm.DeviceVmLogger
 import ru.lazyhat.compukterkraft.core.device.vm.DeviceWorkspaceHost
 import ru.lazyhat.compukterkraft.core.device.vm.DeviceWorkspaceInitializer
-import ru.lazyhat.compukterkraft.core.device.vm.DeviceProfileRegistry
+import ru.lazyhat.compukterkraft.core.device.vm.display.RecordingDisplayMetricsCollector
 import ru.lazyhat.compukterkraft.core.input.KeyCodes
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceCapability
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceCpuResources
@@ -411,6 +412,50 @@ class BackgroundDeviceVmTest {
     }
 
     @Test
+    fun bundledRomTerminalBatchesBurstTypedInputIntoFewPresents() {
+        val root = createTempDirectory("compukterkraft-rom-terminal-input-batching")
+
+        try {
+            DeviceWorkspaceInitializer(root).ensureInitialized(1)
+            val workspace = DeviceWorkspaceHost(root)
+            val displayMetrics = RecordingDisplayMetricsCollector()
+            val logs = mutableListOf<String>()
+            val vm =
+                BackgroundDeviceVm(
+                    deviceId = 1,
+                    profile = firmwareTestProfile(),
+                    dispatcher = Dispatchers.Default,
+                    labelProvider = { null },
+                    logger = DeviceVmLogger(logs::add),
+                    workspace = workspace,
+                    firmwareLoader = ClasspathFirmwareLoader(),
+                    displayMetricsCollector = displayMetrics,
+                )
+
+            vm.attachDisplay(displayId = 9, width = 96, height = 48)
+            assertTrue(vm.boot())
+            val dispatcher = HostCallDispatcher(1, workspace)
+            runVmTicks(vm, ticks = 80, hostCallDispatcher = dispatcher)
+            vm.drainDisplayFrames()
+            val presentsBeforeBurst = displayMetrics.snapshot().operations.presentCalls
+
+            "abcdefghijklmnop".forEach { ch ->
+                vm.enqueueEvent(VmEvent("char", listOf(byteArrayOf(ch.code.toByte()))))
+            }
+            runVmTicks(vm, ticks = 20, hostCallDispatcher = dispatcher)
+
+            val presentDelta = displayMetrics.snapshot().operations.presentCalls - presentsBeforeBurst
+            val frames = vm.drainDisplayFrames()
+            assertTrue(
+                presentDelta in 1..4,
+                "queued input burst should be coalesced into a few presents, presentDelta=$presentDelta frames=${frames.size} state=${vm.snapshot().state} logs=$logs",
+            )
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
     fun bundledRomTerminalKeepsPromptVisibleWhileTyping() {
         val root = createTempDirectory("compukterkraft-rom-terminal-prompt")
 
@@ -521,7 +566,7 @@ class BackgroundDeviceVmTest {
                             }
                             """.trimIndent(),
                         ),
-            )
+                )
 
             assertTrue(vm.boot())
             runVmTicks(vm, ticks = 40, hostCallDispatcher = HostCallDispatcher(1, workspace))

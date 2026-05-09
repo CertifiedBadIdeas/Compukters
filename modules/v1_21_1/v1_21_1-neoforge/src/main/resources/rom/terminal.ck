@@ -10,6 +10,18 @@ pub struct TerminalBuffer {
     viewportOffset: Int
 }
 
+pub struct TerminalEventResult {
+    displayId: Int,
+    buffer: TerminalBuffer,
+    line: String,
+    renderedLine: String,
+    renderInput: Bool
+}
+
+fun inputBatchLimit(): Int {
+    return 64
+}
+
 fun unknownGlyphBits(): Long {
     return 0b11111100011000110001100011000111111L
 }
@@ -483,6 +495,97 @@ fun dropLast(text: String): String {
     return result
 }
 
+fun eventResult(displayId: Int, buffer: TerminalBuffer, line: String, renderedLine: String, renderInput: Bool): TerminalEventResult {
+    return TerminalEventResult(
+        displayId = displayId,
+        buffer = buffer,
+        line = line,
+        renderedLine = renderedLine,
+        renderInput = renderInput
+    )
+}
+
+fun handleTerminalEvent(input: Int, displayId: Int, buffer: TerminalBuffer, line: String, renderedLine: String, event: Event): TerminalEventResult {
+    if (event.name == "display_attach" || event.name == "display_resize") {
+        val nextDisplayId: Int = display::primary()
+        if (buffer.displayColumns == columns(nextDisplayId) && buffer.displayRows == rows(nextDisplayId)) {
+            renderViewport(nextDisplayId, buffer)
+            if (buffer.viewportOffset == 0 && line != "") {
+                renderInputLine(nextDisplayId, buffer, renderedLine, line)
+                return eventResult(nextDisplayId, buffer, line, line, false)
+            }
+            return eventResult(nextDisplayId, buffer, line, renderedLine, false)
+        }
+        display::clear(nextDisplayId, 0)
+        display::present(nextDisplayId)
+        return eventResult(nextDisplayId, newTerminalBuffer(nextDisplayId), "", "", false)
+    }
+    if (event.name == "char" || event.name == "paste") {
+        val typed: String = events::argString(event, 0)
+        if (typed != "") {
+            return eventResult(displayId, followBottom(displayId, buffer), line + typed, renderedLine, true)
+        }
+        return eventResult(displayId, buffer, line, renderedLine, false)
+    }
+    if (event.name == "key") {
+        val key: Int = events::argInt(event, 0)
+        if (key == 257 || key == 335) {
+            val nextBuffer: TerminalBuffer = followBottom(displayId, buffer)
+            ipc::write(input, line + "\n")
+            return eventResult(displayId, nextBuffer, "", "", false)
+        }
+        if (key == 259) {
+            if (line != "") {
+                return eventResult(displayId, followBottom(displayId, buffer), dropLast(line), renderedLine, true)
+            }
+            return eventResult(displayId, buffer, line, renderedLine, false)
+        }
+        if (key == 266) {
+            var pageRows: Int = rows(displayId) - 1
+            if (pageRows <= 0) {
+                pageRows = 1
+            }
+            return eventResult(displayId, scrollViewportBy(displayId, buffer, pageRows), line, renderedLine, false)
+        }
+        if (key == 267) {
+            var pageRows: Int = rows(displayId) - 1
+            if (pageRows <= 0) {
+                pageRows = 1
+            }
+            val nextBuffer: TerminalBuffer = scrollViewportBy(displayId, buffer, 0 - pageRows)
+            if (nextBuffer.viewportOffset == 0 && line != "") {
+                renderInputLine(displayId, nextBuffer, renderedLine, line)
+                return eventResult(displayId, nextBuffer, line, line, false)
+            }
+            return eventResult(displayId, nextBuffer, line, renderedLine, false)
+        }
+    }
+    return eventResult(displayId, buffer, line, renderedLine, false)
+}
+
+fun drainInputBatch(input: Int, displayId: Int, buffer: TerminalBuffer, line: String, renderedLine: String, renderInput: Bool): TerminalEventResult {
+    var result: TerminalEventResult = eventResult(displayId, buffer, line, renderedLine, renderInput)
+    var count: Int = 0
+    while count < inputBatchLimit() {
+        val event: Event = events::tryPull()
+        if (event.name == "") {
+            return result
+        }
+        val next: TerminalEventResult =
+            handleTerminalEvent(input, result.displayId, result.buffer, result.line, result.renderedLine, event)
+        result =
+            eventResult(
+                next.displayId,
+                next.buffer,
+                next.line,
+                next.renderedLine,
+                result.renderInput || next.renderInput
+            )
+        count = count + 1
+    }
+    return result
+}
+
 pub fun main() {
     val input: Int = ipc::open()
     val stream: Int = ipc::open()
@@ -505,60 +608,16 @@ pub fun main() {
             }
         } else if (signal.kind == "event") {
             val event: Event = signal.event
-            if (event.name == "display_attach" || event.name == "display_resize") {
-                displayId = display::primary()
-                if (buffer.displayColumns == columns(displayId) && buffer.displayRows == rows(displayId)) {
-                    renderViewport(displayId, buffer)
-                    if (buffer.viewportOffset == 0 && line != "") {
-                        renderInputLine(displayId, buffer, renderedLine, line)
-                        renderedLine = line
-                    }
-                } else {
-                    display::clear(displayId, 0)
-                    display::present(displayId)
-                    buffer = newTerminalBuffer(displayId)
-                    line = ""
-                    renderedLine = ""
-                }
-            } else if (event.name == "char" || event.name == "paste") {
-                val typed: String = events::argString(event, 0)
-                if (typed != "") {
-                    buffer = followBottom(displayId, buffer)
-                    line = line + typed
-                    renderInputLine(displayId, buffer, renderedLine, line)
-                    renderedLine = line
-                }
-            } else if (event.name == "key") {
-                val key: Int = events::argInt(event, 0)
-                if (key == 257 || key == 335) {
-                    buffer = followBottom(displayId, buffer)
-                    ipc::write(input, line + "\n")
-                    line = ""
-                    renderedLine = ""
-                } else if (key == 259) {
-                    if (line != "") {
-                        buffer = followBottom(displayId, buffer)
-                        line = dropLast(line)
-                        renderInputLine(displayId, buffer, renderedLine, line)
-                        renderedLine = line
-                    }
-                } else if (key == 266) {
-                    var pageRows: Int = rows(displayId) - 1
-                    if (pageRows <= 0) {
-                        pageRows = 1
-                    }
-                    buffer = scrollViewportBy(displayId, buffer, pageRows)
-                } else if (key == 267) {
-                    var pageRows: Int = rows(displayId) - 1
-                    if (pageRows <= 0) {
-                        pageRows = 1
-                    }
-                    buffer = scrollViewportBy(displayId, buffer, 0 - pageRows)
-                    if (buffer.viewportOffset == 0 && line != "") {
-                        renderInputLine(displayId, buffer, renderedLine, line)
-                        renderedLine = line
-                    }
-                }
+            val first: TerminalEventResult = handleTerminalEvent(input, displayId, buffer, line, renderedLine, event)
+            val batch: TerminalEventResult =
+                drainInputBatch(input, first.displayId, first.buffer, first.line, first.renderedLine, first.renderInput)
+            displayId = batch.displayId
+            buffer = batch.buffer
+            line = batch.line
+            renderedLine = batch.renderedLine
+            if (batch.renderInput && buffer.viewportOffset == 0) {
+                renderInputLine(displayId, buffer, renderedLine, line)
+                renderedLine = line
             }
         }
     }
