@@ -19,6 +19,8 @@
 
 package ru.lazyhat.compukterkraft.lang.runtime.blazing
 
+import ru.lazyhat.compukterkraft.lang.runtime.VmValue
+
 internal interface NativeVmBindingsFacade {
     fun createImage(
         libraryPath: String,
@@ -95,6 +97,12 @@ object NativeVmBindings : NativeVmBindingsFacade {
             freeDeviceKernelNative(handle)
         }
     }
+
+    fun enqueueDeviceEvent(
+        handle: Long,
+        eventName: String,
+        arguments: List<Any?>,
+    ): Boolean = enqueueDeviceEvent(handle, eventName, nativeEventPayload(arguments))
 
     fun enqueueDeviceEvent(
         handle: Long,
@@ -193,6 +201,31 @@ object NativeVmBindings : NativeVmBindingsFacade {
         System.getProperty("ckl.vm.native.library")
             ?.takeIf { it.isNotBlank() }
             ?: error("Rust image VM runner requires -Dckl.vm.native.library=/absolute/path/to/libckl_vm.so")
+
+    private fun nativeEventPayload(arguments: List<Any?>): ByteArray =
+        VmValue
+            .RecordValue(
+                typeName = "EventPayload",
+                fields = arguments.toNativeEventFields(),
+            ).toNativeBytes("events", "enqueue")
+
+    private fun List<Any?>.toNativeEventFields(): LinkedHashMap<String, VmValue> {
+        val fields = LinkedHashMap<String, VmValue>()
+        forEachIndexed { index, value ->
+            fields["arg$index"] = value.toNativeEventValue()
+        }
+        return fields
+    }
+
+    private fun Any?.toNativeEventValue(): VmValue =
+        when (this) {
+            null -> VmValue.NullValue
+            is Int -> VmValue.IntValue(this)
+            is Boolean -> VmValue.BoolValue(this)
+            is String -> VmValue.StringValue(this)
+            is ByteArray -> VmValue.StringValue(decodeToString())
+            else -> VmValue.StringValue(toString())
+        }
 
     @JvmStatic
     private external fun createImageNative(

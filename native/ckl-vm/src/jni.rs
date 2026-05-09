@@ -8,6 +8,8 @@ use jni::JNIEnv;
 use crate::display::PixelFormat;
 use crate::image_runner::ImageVmHandle;
 use crate::runtime_kernel::DeviceRuntimeKernel;
+use crate::signal::decode_value;
+use crate::value::VmValue;
 
 type SharedDeviceRuntimeKernel = Arc<Mutex<DeviceRuntimeKernel>>;
 
@@ -166,7 +168,14 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
             return 0;
         }
     };
-    if kernel.attach_placeholder_payload_event(&event_name, &payload) {
+    let arguments = match event_arguments_from_payload(&payload) {
+        Ok(arguments) => arguments,
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalArgumentException", error);
+            return 0;
+        }
+    };
+    if kernel.enqueue_event(&event_name, arguments) {
         1
     } else {
         0
@@ -384,6 +393,16 @@ fn locked_kernel_handle(
             );
             None
         }
+    }
+}
+
+fn event_arguments_from_payload(payload: &[u8]) -> Result<Vec<VmValue>, String> {
+    if payload.is_empty() {
+        return Ok(Vec::new());
+    }
+    match decode_value(payload)? {
+        VmValue::Record { fields, .. } => Ok(fields.into_iter().map(|(_, value)| value).collect()),
+        value => Ok(vec![value]),
     }
 }
 
