@@ -27,9 +27,11 @@ class RuntimeDisplayProfilingTest {
     fun bundledTerminalWorkloadProducesProfilingMetrics() {
         val run = RuntimeProfilingWorkload.runTerminalWorkload(delayMillis = 10, bootTicks = 80, inputTicks = 20, enterTicks = 40)
         val displaySnapshot = run.displayMetrics.snapshot()
+        val clientSnapshot = run.clientMetrics.snapshot()
         val runtimeSnapshot = run.runtimeMetrics.snapshot()
         val compilerSnapshot = run.compilerMetrics.snapshot()
         println(displaySnapshot.summary())
+        println(clientSnapshot)
         println(runtimeSnapshot.summary())
         println(compilerSnapshot.summary())
 
@@ -41,6 +43,9 @@ class RuntimeDisplayProfilingTest {
         assertTrue(displaySnapshot.frames.frameCount > 0, displaySnapshot.summary())
         assertTrue(displaySnapshot.frames.tileCount > 0, displaySnapshot.summary())
         assertTrue(displaySnapshot.frames.payloadBytes > 0, displaySnapshot.summary())
+        assertTrue(clientSnapshot.framesApplied > 0, clientSnapshot.toString())
+        assertTrue(clientSnapshot.applyNanos >= 0, clientSnapshot.toString())
+        assertTrue(clientSnapshot.snapshotPixels > 0, clientSnapshot.toString())
         assertTrue(runtimeSnapshot.tick.serverTickCalls > 0, runtimeSnapshot.summary())
         assertTrue(runtimeSnapshot.tick.requestSliceCalls > 0, runtimeSnapshot.summary())
         assertTrue(runtimeSnapshot.tick.hostCallDrainCalls > 0, runtimeSnapshot.summary())
@@ -58,15 +63,18 @@ class RuntimeDisplayProfilingTest {
     fun sustainedTerminalWorkloadProducesNoDelayProfilingMetrics() {
         val run = RuntimeProfilingWorkload.runTerminalWorkload(delayMillis = 0, bootTicks = 120, inputTicks = 40, enterTicks = 80)
         val displaySnapshot = run.displayMetrics.snapshot()
+        val clientSnapshot = run.clientMetrics.snapshot()
         val runtimeSnapshot = run.runtimeMetrics.snapshot()
         val compilerSnapshot = run.compilerMetrics.snapshot()
 
         println(displaySnapshot.summary())
+        println(clientSnapshot)
         println(runtimeSnapshot.summary())
         println(compilerSnapshot.summary())
 
         assertTrue(displaySnapshot.operations.blitMonoNanos >= 0, displaySnapshot.summary())
         assertTrue(displaySnapshot.frameBuild.buildCalls > 0, displaySnapshot.summary())
+        assertTrue(clientSnapshot.framesApplied > 0, clientSnapshot.toString())
         assertTrue(
             runtimeSnapshot.vm.pauseSignals + runtimeSnapshot.vm.yieldSignals + runtimeSnapshot.vm.hostCallSignals > 0,
             runtimeSnapshot.summary(),
@@ -80,11 +88,13 @@ class RuntimeDisplayProfilingTest {
     fun heldEnterWorkloadProducesBacklogProfilingMetrics() {
         val run = RuntimeProfilingWorkload.runHeldEnterWorkload(repeatEnterEvents = 120, settleTicks = 220)
         val displaySnapshot = run.profiling.displayMetrics.snapshot()
+        val clientSnapshot = run.profiling.clientMetrics.snapshot()
         val runtimeSnapshot = run.profiling.runtimeMetrics.snapshot()
         val compilerSnapshot = run.profiling.compilerMetrics.snapshot()
 
         println(run.summary())
         println(displaySnapshot.summary())
+        println(clientSnapshot)
         println(runtimeSnapshot.summary())
         println(compilerSnapshot.summary())
 
@@ -108,5 +118,6 @@ class RuntimeDisplayProfilingTest {
             runtimeSnapshot.summary(),
         )
         assertTrue(displaySnapshot.frames.frameCount > 0, displaySnapshot.summary())
+        assertTrue(clientSnapshot.framesApplied > 0, clientSnapshot.toString())
     }
 }

@@ -26,6 +26,7 @@ class ClientDisplayBuffer(
     val displayId: Int,
     val width: Int,
     val height: Int,
+    private val metricsCollector: ClientDisplayMetricsCollector = NoOpClientDisplayMetricsCollector,
 ) {
     data class Region(
         val x: Int,
@@ -53,9 +54,19 @@ class ClientDisplayBuffer(
 
     @Synchronized
     fun apply(frame: DisplayFrameDelta): Boolean {
-        if (frame.displayId != displayId || frame.width != width || frame.height != height) return false
-        if (frame.pixelFormat != DisplayPixelFormat.RGB565) return false
-        if (!frame.fullRefresh && frame.sequence != expectedSequence) return false
+        val started = System.nanoTime()
+        if (frame.displayId != displayId || frame.width != width || frame.height != height) {
+            metricsCollector.recordApply(frame, accepted = false, nanos = System.nanoTime() - started)
+            return false
+        }
+        if (frame.pixelFormat != DisplayPixelFormat.RGB565) {
+            metricsCollector.recordApply(frame, accepted = false, nanos = System.nanoTime() - started)
+            return false
+        }
+        if (!frame.fullRefresh && frame.sequence != expectedSequence) {
+            metricsCollector.recordApply(frame, accepted = false, nanos = System.nanoTime() - started)
+            return false
+        }
         if (frame.fullRefresh) {
             staging.fill(OPAQUE_BLACK)
             pendingDirtyRegions.clear()
@@ -77,12 +88,17 @@ class ClientDisplayBuffer(
         expectedSequence = frame.sequence + 1
         hasReceivedFrames = true
         dirty = true
+        metricsCollector.recordApply(frame, accepted = true, nanos = System.nanoTime() - started)
         return true
     }
 
     @Synchronized
     fun swapIfDirty(): Boolean {
-        if (!dirty) return false
+        val started = System.nanoTime()
+        if (!dirty) {
+            metricsCollector.recordSwap(dirty = false, nanos = System.nanoTime() - started)
+            return false
+        }
         for (region in pendingDirtyRegions) {
             copyRegion(staging, front, region)
         }
@@ -91,6 +107,7 @@ class ClientDisplayBuffer(
         pendingDirtyRegions.clear()
         dirty = false
         frontVersion = frontVersion + 1
+        metricsCollector.recordSwap(dirty = true, nanos = System.nanoTime() - started)
         return true
     }
 
@@ -102,13 +119,16 @@ class ClientDisplayBuffer(
 
     @Synchronized
     fun copyFrontSnapshotSince(uploadedVersion: Long): FrontSnapshot {
+        val started = System.nanoTime()
         val regions =
             if (frontVersion != uploadedVersion + 1) {
                 listOf(Region(0, 0, width, height))
             } else {
                 swappedDirtyRegions.ifEmpty { listOf(Region(0, 0, width, height)) }
             }
-        return FrontSnapshot(frontVersion, regions, front.copyOf())
+        val pixels = front.copyOf()
+        metricsCollector.recordSnapshotCopy(regions, width, height, System.nanoTime() - started)
+        return FrontSnapshot(frontVersion, regions, pixels)
     }
 
     @Synchronized

@@ -19,6 +19,7 @@
 
 package ru.lazyhat.compukterkraft.impl.computer.vm
 
+import ru.lazyhat.compukterkraft.common.computer.client.ClientDisplayProfilingSnapshot
 import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeHostCallMetrics
 import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeInstructionMetrics
 import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeProfilingSnapshot
@@ -60,9 +61,11 @@ internal data class RuntimeVmProfileRunMetadata(
 internal data class RuntimeWorkloadProfile(
     val name: String,
     val display: DisplayProfilingSnapshot,
+    val client: ClientDisplayProfilingSnapshot = ClientDisplayProfilingSnapshot(),
     val runtime: RuntimeProfilingSnapshot,
     val compiler: CompilerProfilingSnapshot,
     val heldEnter: HeldEnterWorkloadSummary? = null,
+    val pipeline: TerminalPipelineSummary? = null,
 )
 
 internal data class HeldEnterWorkloadSummary(
@@ -73,6 +76,14 @@ internal data class HeldEnterWorkloadSummary(
     val maxPendingHostCalls: Int,
     val finalPendingHostCalls: Int,
     val displayFramesDrained: Int,
+)
+
+internal data class TerminalPipelineSummary(
+    val inputChars: Int,
+    val inputPhaseNanos: Long,
+    val inputClientFrames: Long,
+    val enterPhaseNanos: Long,
+    val enterClientFrames: Long,
 )
 
 internal object RuntimeVmProfileCodec {
@@ -99,6 +110,11 @@ internal object RuntimeVmProfileCodec {
                             "displayBuild\t$buildCalls\t$dirtyTileScanNanos\t$frameBuildNanos\t$tileSerializationNanos\t$frontCopyNanos\t$totalNanos\t$tileCount\t$payloadBytes",
                         )
                     }
+                    workload.client.run {
+                        appendLine(
+                            "clientDisplay\t$framesReceived\t$framesApplied\t$rejectedFrames\t$fullRefreshFrames\t$tilesApplied\t$payloadBytes\t$applyNanos\t$swapCalls\t$dirtySwaps\t$swapNanos\t$snapshotsCopied\t$snapshotRegions\t$snapshotPixels\t$snapshotCopyNanos",
+                        )
+                    }
                     workload.runtime.tick.run {
                         appendLine(
                             "runtimeTick\t$serverTickCalls\t$serverTickNanos\t$requestSliceCalls\t$requestSliceNanos\t$hostCallDrainCalls\t$hostCallsDrained\t$hostCallDrainNanos\t$hostCallDispatchCalls\t$hostCallsDispatched\t$hostCallDispatchNanos\t$hostResultDeliveryCalls\t$hostResultsDelivered\t$hostResultDeliveryNanos\t$displayFrameDrainCalls\t$displayFramesDrained\t$displayFrameDrainNanos\t$displayFlushCalls\t$displayFramesFlushed\t$displayFlushNanos",
@@ -123,6 +139,11 @@ internal object RuntimeVmProfileCodec {
                     workload.heldEnter?.run {
                         appendLine(
                             "held\t$enterEventsQueued\t$settleTicks\t$maxQueuedEvents\t$finalQueuedEvents\t$maxPendingHostCalls\t$finalPendingHostCalls\t$displayFramesDrained",
+                        )
+                    }
+                    workload.pipeline?.run {
+                        appendLine(
+                            "pipeline\t$inputChars\t$inputPhaseNanos\t$inputClientFrames\t$enterPhaseNanos\t$enterClientFrames",
                         )
                     }
                     appendLine("endWorkload")
@@ -181,6 +202,28 @@ internal object RuntimeVmProfileCodec {
                         parts
                             .longs()
                             .let { v -> DisplayFrameBuildTotals(v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7]) }
+                }
+
+                "clientDisplay" -> {
+                    current.requireCurrent().client =
+                        parts.longs().let { v ->
+                            ClientDisplayProfilingSnapshot(
+                                framesReceived = v[0],
+                                framesApplied = v[1],
+                                rejectedFrames = v[2],
+                                fullRefreshFrames = v[3],
+                                tilesApplied = v[4],
+                                payloadBytes = v[5],
+                                applyNanos = v[6],
+                                swapCalls = v[7],
+                                dirtySwaps = v[8],
+                                swapNanos = v[9],
+                                snapshotsCopied = v[10],
+                                snapshotRegions = v[11],
+                                snapshotPixels = v[12],
+                                snapshotCopyNanos = v[13],
+                            )
+                        }
                 }
 
                 "runtimeTick" -> {
@@ -276,6 +319,18 @@ internal object RuntimeVmProfileCodec {
                         parts.ints().let { v -> HeldEnterWorkloadSummary(v[0], v[1], v[2], v[3], v[4], v[5], v[6]) }
                 }
 
+                "pipeline" -> {
+                    val values = parts.drop(1)
+                    current.requireCurrent().pipeline =
+                        TerminalPipelineSummary(
+                            inputChars = values[0].toInt(),
+                            inputPhaseNanos = values[1].toLong(),
+                            inputClientFrames = values[2].toLong(),
+                            enterPhaseNanos = values[3].toLong(),
+                            enterClientFrames = values[4].toLong(),
+                        )
+                }
+
                 "endWorkload" -> {
                     workloads += current.requireCurrent()
                     current = null
@@ -294,12 +349,14 @@ internal object RuntimeVmProfileCodec {
         var operations: DisplayOperationMetrics? = null,
         var frames: DisplayFrameMetrics? = null,
         var frameBuild: DisplayFrameBuildTotals? = null,
+        var client: ClientDisplayProfilingSnapshot = ClientDisplayProfilingSnapshot(),
         var tick: RuntimeTickMetrics? = null,
         var vm: RuntimeVmMetrics? = null,
         val hostCalls: MutableList<RuntimeHostCallMetrics> = mutableListOf(),
         val instructions: MutableList<RuntimeInstructionMetrics> = mutableListOf(),
         var compiler: CompilerProfilingSnapshot? = null,
         var heldEnter: HeldEnterWorkloadSummary? = null,
+        var pipeline: TerminalPipelineSummary? = null,
     ) {
         fun build(): RuntimeWorkloadProfile =
             RuntimeWorkloadProfile(
@@ -310,6 +367,7 @@ internal object RuntimeVmProfileCodec {
                         frames ?: error("Missing displayFrames for $name"),
                         frameBuild ?: error("Missing displayBuild for $name"),
                     ),
+                client = client,
                 runtime =
                     RuntimeProfilingSnapshot(
                         tick ?: error("Missing runtimeTick for $name"),
@@ -319,6 +377,7 @@ internal object RuntimeVmProfileCodec {
                     ),
                 compiler = compiler ?: error("Missing compiler for $name"),
                 heldEnter = heldEnter,
+                pipeline = pipeline,
             )
     }
 
@@ -464,6 +523,11 @@ internal object RuntimeVmProfilingReportFormatter {
         appendLine("| Display operation time | ${formatNanos(workload.display.operations.allNanos)} |")
         appendLine("| Frames emitted | ${workload.display.frames.frameCount} |")
         appendLine("| Frame build time | ${formatNanos(workload.display.frameBuild.totalNanos)} |")
+        appendLine("| Client frames applied | ${workload.client.framesApplied} |")
+        appendLine("| Client apply time | ${formatNanos(workload.client.applyNanos)} |")
+        appendLine("| Client swap time | ${formatNanos(workload.client.swapNanos)} |")
+        appendLine("| Client snapshot time | ${formatNanos(workload.client.snapshotCopyNanos)} |")
+        appendLine("| Client snapshot pixels | ${workload.client.snapshotPixels} |")
         appendLine("| Runtime all ticks | ${formatNanos(workload.runtime.tick.allNanos)} |")
         appendLine("| VM execution time | ${formatNanos(workload.runtime.vm.executionWindowNanos)} |")
         appendLine("| Host-call signals | ${workload.runtime.vm.hostCallSignals} |")
@@ -473,6 +537,13 @@ internal object RuntimeVmProfilingReportFormatter {
         workload.heldEnter?.let { held ->
             appendLine("| Held Enter accepted events | ${held.enterEventsQueued} |")
             appendLine("| Held Enter max queued events | ${held.maxQueuedEvents} |")
+        }
+        workload.pipeline?.let { pipeline ->
+            appendLine("| Input chars | ${pipeline.inputChars} |")
+            appendLine("| Input phase to client | ${formatNanos(pipeline.inputPhaseNanos)} |")
+            appendLine("| Input client frames | ${pipeline.inputClientFrames} |")
+            appendLine("| Enter phase to client | ${formatNanos(pipeline.enterPhaseNanos)} |")
+            appendLine("| Enter client frames | ${pipeline.enterClientFrames} |")
         }
         appendLine()
         appendHostCalls(workload.runtime.hostCalls)
@@ -495,6 +566,11 @@ internal object RuntimeVmProfilingReportFormatter {
         appendHistoricalMetricRow("Display operation time", columns) { workload -> formatNanos(workload.display.operations.allNanos) }
         appendHistoricalMetricRow("Frames emitted", columns) { workload -> workload.display.frames.frameCount.toString() }
         appendHistoricalMetricRow("Frame build time", columns) { workload -> formatNanos(workload.display.frameBuild.totalNanos) }
+        appendHistoricalMetricRow("Client frames applied", columns) { workload -> workload.client.framesApplied.toString() }
+        appendHistoricalMetricRow("Client apply time", columns) { workload -> formatNanos(workload.client.applyNanos) }
+        appendHistoricalMetricRow("Client swap time", columns) { workload -> formatNanos(workload.client.swapNanos) }
+        appendHistoricalMetricRow("Client snapshot time", columns) { workload -> formatNanos(workload.client.snapshotCopyNanos) }
+        appendHistoricalMetricRow("Client snapshot pixels", columns) { workload -> workload.client.snapshotPixels.toString() }
         appendHistoricalMetricRow("Runtime all ticks", columns) { workload -> formatNanos(workload.runtime.tick.allNanos) }
         appendHistoricalMetricRow("VM execution time", columns) { workload -> formatNanos(workload.runtime.vm.executionWindowNanos) }
         appendHistoricalMetricRow("Host-call signals", columns) { workload -> workload.runtime.vm.hostCallSignals.toString() }
@@ -504,6 +580,13 @@ internal object RuntimeVmProfilingReportFormatter {
         if (columns.any { (_, workload) -> workload?.heldEnter != null }) {
             appendHistoricalMetricRow("Held Enter accepted events", columns) { workload -> workload.heldEnter?.enterEventsQueued?.toString() ?: "" }
             appendHistoricalMetricRow("Held Enter max queued events", columns) { workload -> workload.heldEnter?.maxQueuedEvents?.toString() ?: "" }
+        }
+        if (columns.any { (_, workload) -> workload?.pipeline != null }) {
+            appendHistoricalMetricRow("Input chars", columns) { workload -> workload.pipeline?.inputChars?.toString() ?: "" }
+            appendHistoricalMetricRow("Input phase to client", columns) { workload -> workload.pipeline?.inputPhaseNanos?.let(::formatNanos) ?: "" }
+            appendHistoricalMetricRow("Input client frames", columns) { workload -> workload.pipeline?.inputClientFrames?.toString() ?: "" }
+            appendHistoricalMetricRow("Enter phase to client", columns) { workload -> workload.pipeline?.enterPhaseNanos?.let(::formatNanos) ?: "" }
+            appendHistoricalMetricRow("Enter client frames", columns) { workload -> workload.pipeline?.enterClientFrames?.toString() ?: "" }
         }
         hostCallKeys.forEach { key ->
             appendHistoricalMetricRow("host $key", columns) { workload ->

@@ -29,7 +29,7 @@ modules/v1_21_1/v1_21_1-neoforge/build/reports/profiling/runs/<timestamp>/runtim
 modules/v1_21_1/v1_21_1-neoforge/build/reports/profiling/runs/<timestamp>/metadata.properties
 ```
 
-Use the stable TSV for scripts that only need the latest profile. Use the timestamped archive for before/after comparisons across commits or local experiments. Profiles include every workload collected by the task, with runtime, display, compiler, host-call, and held-Enter backlog metrics. The task runs a short warm-up before collecting measurements, but the workloads are still integration diagnostics rather than strict microbenchmarks.
+Use the stable TSV for scripts that only need the latest profile. Use the timestamped archive for before/after comparisons across commits or local experiments. Profiles include every workload collected by the task, with runtime, display, client display, compiler, host-call, terminal input-to-client, and held-Enter backlog metrics. The task runs a short warm-up before collecting measurements, but the workloads are still integration diagnostics rather than strict microbenchmarks.
 
 Generate a historical Markdown comparison over every archived run:
 
@@ -48,20 +48,35 @@ The comparison report does not hard-code workload names. If a future profiling r
 Run the bundled terminal profiling workload:
 
 ```bash
-./gradlew :v1_21_1-neoforge:test --tests ru.lazyhat.compukterkraft.impl.computer.vm.RuntimeDisplayProfilingTest --info
+./gradlew \
+  -Dckl.vm.native.library="$PWD/native/ckl-vm/target/debug/libckl_vm.so" \
+  :v1_21_1-neoforge:test \
+  --tests ru.lazyhat.compukterkraft.impl.computer.vm.RuntimeDisplayProfilingTest \
+  --info
 ```
 
 Run only the held-Enter backlog workload:
 
 ```bash
-./gradlew :v1_21_1-neoforge:test --tests ru.lazyhat.compukterkraft.impl.computer.vm.RuntimeDisplayProfilingTest.heldEnterWorkloadProducesBacklogProfilingMetrics --info
+./gradlew \
+  -Dckl.vm.native.library="$PWD/native/ckl-vm/target/debug/libckl_vm.so" \
+  :v1_21_1-neoforge:test \
+  --tests ru.lazyhat.compukterkraft.impl.computer.vm.RuntimeDisplayProfilingTest.heldEnterWorkloadProducesBacklogProfilingMetrics \
+  --info
 ```
 
 The output is grouped into multi-line, indented sections:
 
 - `display:` with `operations`, `frames`, and `frame-build` subsections for display counts, areas, payload bytes, timings, and averages;
+- `ClientDisplayProfilingSnapshot(...)` with client-side frame apply, swap, and front snapshot copy counts/timings. In the profiling workload, server display frames are drained every simulated tick and passed through `ClientDisplayBuffer`, so these numbers approximate the cost of a frame reaching the client buffer. They do not include Minecraft `NativeImage.upload` GPU texture upload time;
 - `runtime:` with `tick`, `host-queue`, `display-runtime`, `vm`, `signals`, `host-calls`, and `instructions` subsections;
 - `compiler:` with `totals` and `phases` subsections for compile, parse, analyze, and codegen metrics.
+
+The Markdown report also includes terminal pipeline phase rows for terminal workloads:
+
+- `Input phase to client` measures the elapsed profiling workload time from queuing the typed `help` characters through the fixed input tick window, including display frame drain and client buffer apply work.
+- `Input client frames` counts frames applied by the client buffer during that input phase.
+- `Enter phase to client` and `Enter client frames` do the same for the Enter/key-submit phase.
 
 The held-Enter workload additionally prints a `held-enter:` line with accepted repeated Enter events, settle ticks,
 maximum/final queued VM events, maximum/final pending host calls, and drained display frame count. It does not filter

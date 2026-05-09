@@ -19,6 +19,7 @@
 
 package ru.lazyhat.compukterkraft.impl.computer.vm
 
+import ru.lazyhat.compukterkraft.common.computer.client.ClientDisplayProfilingSnapshot
 import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeHostCallMetrics
 import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeInstructionMetrics
 import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeProfilingSnapshot
@@ -69,36 +70,61 @@ class RuntimeVmProfilingProfileCodecTest {
                                             payloadBytes = 13,
                                         ),
                                 ),
+                            client =
+                                ClientDisplayProfilingSnapshot(
+                                    framesReceived = 14,
+                                    framesApplied = 15,
+                                    rejectedFrames = 16,
+                                    fullRefreshFrames = 17,
+                                    tilesApplied = 18,
+                                    payloadBytes = 19,
+                                    applyNanos = 20,
+                                    swapCalls = 21,
+                                    dirtySwaps = 22,
+                                    swapNanos = 23,
+                                    snapshotsCopied = 24,
+                                    snapshotRegions = 25,
+                                    snapshotPixels = 26,
+                                    snapshotCopyNanos = 27,
+                                ),
                             runtime =
                                 RuntimeProfilingSnapshot(
                                     tick =
                                         RuntimeTickMetrics(
-                                            serverTickCalls = 14,
-                                            serverTickNanos = 15,
-                                            requestSliceCalls = 16,
-                                            requestSliceNanos = 17,
+                                            serverTickCalls = 28,
+                                            serverTickNanos = 29,
+                                            requestSliceCalls = 30,
+                                            requestSliceNanos = 31,
                                         ),
-                                    vm = RuntimeVmMetrics(executionWindows = 18, executionWindowNanos = 19, hostCallSignals = 20),
-                                    hostCalls = listOf(RuntimeHostCallMetrics("display", "present", calls = 21, nanos = 22)),
+                                    vm = RuntimeVmMetrics(executionWindows = 32, executionWindowNanos = 33, hostCallSignals = 34),
+                                    hostCalls = listOf(RuntimeHostCallMetrics("display", "present", calls = 35, nanos = 36)),
                                     instructions =
                                         listOf(
                                             RuntimeInstructionMetrics(
                                                 VmInstructionKind.CALL_BUILTIN,
-                                                count = 23,
-                                                nanos = 24,
+                                                count = 37,
+                                                nanos = 38,
                                             ),
                                         ),
                                 ),
-                            compiler = CompilerProfilingSnapshot(compileCalls = 25, compileNanos = 26, compiledSources = 27),
+                            compiler = CompilerProfilingSnapshot(compileCalls = 39, compileNanos = 40, compiledSources = 41),
                             heldEnter =
                                 HeldEnterWorkloadSummary(
-                                    enterEventsQueued = 28,
-                                    settleTicks = 29,
-                                    maxQueuedEvents = 30,
-                                    finalQueuedEvents = 31,
-                                    maxPendingHostCalls = 32,
-                                    finalPendingHostCalls = 33,
-                                    displayFramesDrained = 34,
+                                    enterEventsQueued = 42,
+                                    settleTicks = 43,
+                                    maxQueuedEvents = 44,
+                                    finalQueuedEvents = 45,
+                                    maxPendingHostCalls = 46,
+                                    finalPendingHostCalls = 47,
+                                    displayFramesDrained = 48,
+                                ),
+                            pipeline =
+                                TerminalPipelineSummary(
+                                    inputChars = 49,
+                                    inputPhaseNanos = 50,
+                                    inputClientFrames = 51,
+                                    enterPhaseNanos = 52,
+                                    enterClientFrames = 53,
                                 ),
                         ),
                     ),

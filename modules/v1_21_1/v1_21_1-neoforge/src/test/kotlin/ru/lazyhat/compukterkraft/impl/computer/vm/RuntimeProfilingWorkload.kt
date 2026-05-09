@@ -21,6 +21,8 @@ package ru.lazyhat.compukterkraft.impl.computer.vm
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import ru.lazyhat.compukterkraft.common.computer.client.ClientDisplayBuffer
+import ru.lazyhat.compukterkraft.common.computer.client.RecordingClientDisplayMetricsCollector
 import ru.lazyhat.compukterkraft.core.device.runtime.FirmwareProgramLoader
 import ru.lazyhat.compukterkraft.core.device.runtime.HostCallDispatcher
 import ru.lazyhat.compukterkraft.core.device.runtime.LoadedFirmwareProgramSource
@@ -49,6 +51,8 @@ internal object RuntimeProfilingWorkload {
         val displayMetrics: RecordingDisplayMetricsCollector,
         val runtimeMetrics: RecordingRuntimeMetricsCollector,
         val compilerMetrics: RecordingCompilerMetricsCollector,
+        val clientMetrics: RecordingClientDisplayMetricsCollector,
+        val pipeline: TerminalPipelineSummary? = null,
     )
 
     data class TickObservation(
@@ -56,6 +60,7 @@ internal object RuntimeProfilingWorkload {
         val finalQueuedEvents: Int,
         val maxPendingHostCalls: Int,
         val finalPendingHostCalls: Int,
+        val displayFramesDrained: Int,
     )
 
     data class HeldEnterProfilingRun(
@@ -116,6 +121,8 @@ internal object RuntimeProfilingWorkload {
             val displayMetrics = RecordingDisplayMetricsCollector()
             val runtimeMetrics = RecordingRuntimeMetricsCollector()
             val compilerMetrics = RecordingCompilerMetricsCollector()
+            val clientMetrics = RecordingClientDisplayMetricsCollector()
+            val client = ClientFrameSink(ClientDisplayBuffer(displayId = 9, width = 96, height = 48, metricsCollector = clientMetrics))
             vm =
                 BackgroundDeviceVm(
                     deviceId = 1,
@@ -134,21 +141,40 @@ internal object RuntimeProfilingWorkload {
             vm.attachDisplay(displayId = 9, width = 96, height = 48)
             assertTrue(vm.boot())
             waitForBootCompile(compilerMetrics)
-            runTicks(vm, dispatcher, runtimeMetrics, ticks = bootTicks, delayMillis = delayMillis)
+            runTicks(vm, dispatcher, runtimeMetrics, ticks = bootTicks, delayMillis = delayMillis, client = client)
             waitForRuntimeProgress(runtimeMetrics)
 
-            "help".forEach { ch -> vm.enqueueEvent(VmEvent("char", listOf(byteArrayOf(ch.code.toByte())))) }
-            runTicks(vm, dispatcher, runtimeMetrics, ticks = inputTicks, delayMillis = delayMillis)
+            val input = "help"
+            val inputFramesBefore = clientMetrics.snapshot().framesApplied
+            val inputStarted = System.nanoTime()
+            input.forEach { ch -> vm.enqueueEvent(VmEvent("char", listOf(byteArrayOf(ch.code.toByte())))) }
+            runTicks(vm, dispatcher, runtimeMetrics, ticks = inputTicks, delayMillis = delayMillis, client = client)
+            val inputPhaseNanos = System.nanoTime() - inputStarted
+            val inputClientFrames = clientMetrics.snapshot().framesApplied - inputFramesBefore
             waitForRuntimeProgress(runtimeMetrics)
 
+            val enterFramesBefore = clientMetrics.snapshot().framesApplied
+            val enterStarted = System.nanoTime()
             vm.enqueueEvent(VmEvent("key", listOf(KeyCodes.KEY_ENTER, false)))
-            runTicks(vm, dispatcher, runtimeMetrics, ticks = enterTicks, delayMillis = delayMillis)
+            runTicks(vm, dispatcher, runtimeMetrics, ticks = enterTicks, delayMillis = delayMillis, client = client)
+            val enterPhaseNanos = System.nanoTime() - enterStarted
+            val enterClientFrames = clientMetrics.snapshot().framesApplied - enterFramesBefore
             waitForRuntimeProgress(runtimeMetrics)
-            val drainStarted = System.nanoTime()
-            val frames = vm.drainDisplayFrames()
-            runtimeMetrics.recordDisplayFrameDrain(frames.size, System.nanoTime() - drainStarted)
+            client.drain(vm, runtimeMetrics)
 
-            return ProfilingRun(displayMetrics, runtimeMetrics, compilerMetrics)
+            return ProfilingRun(
+                displayMetrics,
+                runtimeMetrics,
+                compilerMetrics,
+                clientMetrics,
+                TerminalPipelineSummary(
+                    inputChars = input.length,
+                    inputPhaseNanos = inputPhaseNanos,
+                    inputClientFrames = inputClientFrames,
+                    enterPhaseNanos = enterPhaseNanos,
+                    enterClientFrames = enterClientFrames,
+                ),
+            )
         } finally {
             vm?.stop(VmStopReason.REQUESTED)
             root.toFile().deleteRecursively()
@@ -167,6 +193,8 @@ internal object RuntimeProfilingWorkload {
             val displayMetrics = RecordingDisplayMetricsCollector()
             val runtimeMetrics = RecordingRuntimeMetricsCollector()
             val compilerMetrics = RecordingCompilerMetricsCollector()
+            val clientMetrics = RecordingClientDisplayMetricsCollector()
+            val client = ClientFrameSink(ClientDisplayBuffer(displayId = 9, width = 96, height = 48, metricsCollector = clientMetrics))
             vm =
                 BackgroundDeviceVm(
                     deviceId = 1,
@@ -185,7 +213,8 @@ internal object RuntimeProfilingWorkload {
             vm.attachDisplay(displayId = 9, width = 96, height = 48)
             assertTrue(vm.boot())
             waitForBootCompile(compilerMetrics)
-            runTicks(vm, dispatcher, runtimeMetrics, ticks = 100, delayMillis = 10)
+            var displayFramesDrained = 0
+            displayFramesDrained += runTicks(vm, dispatcher, runtimeMetrics, ticks = 100, delayMillis = 10, client = client).displayFramesDrained
             waitForRuntimeProgress(runtimeMetrics)
 
             var acceptedEnterEvents = 0
@@ -195,7 +224,8 @@ internal object RuntimeProfilingWorkload {
                 if (vm.enqueueEvent(VmEvent("key", listOf(KeyCodes.KEY_ENTER, true)))) {
                     acceptedEnterEvents += 1
                 }
-                val inputObservation = runTicks(vm, dispatcher, runtimeMetrics, ticks = 1, delayMillis = 0)
+                val inputObservation = runTicks(vm, dispatcher, runtimeMetrics, ticks = 1, delayMillis = 0, client = client)
+                displayFramesDrained += inputObservation.displayFramesDrained
                 maxQueuedEvents =
                     maxOf(maxQueuedEvents, inputObservation.maxQueuedEvents, inputObservation.finalQueuedEvents)
                 maxPendingHostCalls =
@@ -205,20 +235,20 @@ internal object RuntimeProfilingWorkload {
                         inputObservation.finalPendingHostCalls,
                     )
             }
-            val observation = runTicks(vm, dispatcher, runtimeMetrics, ticks = settleTicks, delayMillis = 0)
-            val drainStarted = System.nanoTime()
-            val frames = vm.drainDisplayFrames()
-            runtimeMetrics.recordDisplayFrameDrain(frames.size, System.nanoTime() - drainStarted)
+            val observation = runTicks(vm, dispatcher, runtimeMetrics, ticks = settleTicks, delayMillis = 0, client = client)
+            displayFramesDrained += observation.displayFramesDrained
+            val finalFrames = client.drain(vm, runtimeMetrics)
+            displayFramesDrained += finalFrames
 
             return HeldEnterProfilingRun(
-                profiling = ProfilingRun(displayMetrics, runtimeMetrics, compilerMetrics),
+                profiling = ProfilingRun(displayMetrics, runtimeMetrics, compilerMetrics, clientMetrics),
                 enterEventsQueued = acceptedEnterEvents,
                 settleTicks = settleTicks,
                 maxQueuedEvents = maxOf(maxQueuedEvents, observation.maxQueuedEvents),
                 finalQueuedEvents = observation.finalQueuedEvents,
                 maxPendingHostCalls = maxOf(maxPendingHostCalls, observation.maxPendingHostCalls),
                 finalPendingHostCalls = observation.finalPendingHostCalls,
-                displayFramesDrained = frames.size,
+                displayFramesDrained = displayFramesDrained,
             )
         } finally {
             vm?.stop(VmStopReason.REQUESTED)
@@ -255,10 +285,12 @@ internal object RuntimeProfilingWorkload {
         metrics: RecordingRuntimeMetricsCollector,
         ticks: Int,
         delayMillis: Long = 10,
+        client: ClientFrameSink? = null,
     ): TickObservation =
         runBlocking(Dispatchers.Default) {
             var maxQueuedEvents = vm.snapshot().queuedEvents
             var maxPendingHostCalls = vm.snapshot().pendingHostCalls
+            var displayFramesDrained = 0
             repeat(ticks) { tick ->
                 val tickStarted = System.nanoTime()
                 val requestStarted = System.nanoTime()
@@ -280,6 +312,8 @@ internal object RuntimeProfilingWorkload {
                     vm.deliverHostResults(results)
                 }
                 metrics.recordHostResultDelivery(results.size, System.nanoTime() - deliverStarted)
+
+                displayFramesDrained += client?.drain(vm, metrics) ?: 0
                 metrics.recordServerTick(System.nanoTime() - tickStarted)
 
                 if (delayMillis > 0) {
@@ -304,8 +338,32 @@ internal object RuntimeProfilingWorkload {
                 finalQueuedEvents = finalSnapshot.queuedEvents,
                 maxPendingHostCalls = maxPendingHostCalls,
                 finalPendingHostCalls = finalSnapshot.pendingHostCalls,
+                displayFramesDrained = displayFramesDrained,
             )
         }
+
+    private class ClientFrameSink(
+        private val buffer: ClientDisplayBuffer,
+    ) {
+        private var uploadedVersion: Long = 0
+
+        fun drain(
+            vm: BackgroundDeviceVm,
+            metrics: RecordingRuntimeMetricsCollector,
+        ): Int {
+            val drainStarted = System.nanoTime()
+            val frames = vm.drainDisplayFrames()
+            metrics.recordDisplayFrameDrain(frames.size, System.nanoTime() - drainStarted)
+            for (frame in frames) {
+                val accepted = buffer.apply(frame)
+                if (accepted && buffer.swapIfDirty()) {
+                    val snapshot = buffer.copyFrontSnapshotSince(uploadedVersion)
+                    uploadedVersion = snapshot.version
+                }
+            }
+            return frames.size
+        }
+    }
 
     private fun waitForBootCompile(metrics: RecordingCompilerMetricsCollector) =
         runBlocking(Dispatchers.Default) {

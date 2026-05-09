@@ -19,6 +19,7 @@
 
 package ru.lazyhat.compukterkraft.impl.computer.vm
 
+import ru.lazyhat.compukterkraft.common.computer.client.ClientDisplayProfilingSnapshot
 import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeHostCallMetrics
 import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeProfilingSnapshot
 import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeTickMetrics
@@ -85,6 +86,9 @@ class RuntimeVmProfilingReportFormatterTest {
         assertTrue(markdown.contains("| host display.present | 3 calls / 90 ns | 0 calls / 0 ns |"), markdown)
         assertTrue(markdown.contains("| host strings.length | 0 calls / 0 ns | 5 calls / 50 ns |"), markdown)
         assertTrue(markdown.contains("| host ipc.tryRead | 1 calls / 11 ns |"), markdown)
+        assertTrue(markdown.contains("| Client frames applied | 2 | 2 |"), markdown)
+        assertTrue(markdown.contains("| Client apply time | 12 ns | 12 ns |"), markdown)
+        assertTrue(markdown.contains("| Input phase to client | 44 ns | 44 ns |"), markdown)
     }
 
     @Test
@@ -105,6 +109,9 @@ class RuntimeVmProfilingReportFormatterTest {
         assertTrue(markdown.contains("sustained terminal no-delay"), markdown)
         assertTrue(markdown.contains("held Enter backlog"), markdown)
         assertTrue(markdown.contains("| Host-call signals | 4 |"), markdown)
+        assertTrue(markdown.contains("| Client frames applied | 2 |"), markdown)
+        assertTrue(markdown.contains("| Client snapshot pixels | 32 |"), markdown)
+        assertTrue(markdown.contains("| Enter phase to client | 55 ns |"), markdown)
     }
 
     private fun profileRun(
@@ -148,6 +155,22 @@ class RuntimeVmProfilingReportFormatterTest {
                     frames = DisplayFrameMetrics(frameCount = 1, tileCount = 2, payloadBytes = 128),
                     frameBuild = DisplayFrameBuildTotals(buildCalls = 1, totalNanos = 64, tileCount = 2, payloadBytes = 128),
                 ),
+            client =
+                ClientDisplayProfilingSnapshot(
+                    framesReceived = 2,
+                    framesApplied = 2,
+                    fullRefreshFrames = 1,
+                    tilesApplied = 3,
+                    payloadBytes = 96,
+                    applyNanos = 12,
+                    swapCalls = 2,
+                    dirtySwaps = 2,
+                    swapNanos = 8,
+                    snapshotsCopied = 2,
+                    snapshotRegions = 2,
+                    snapshotPixels = 32,
+                    snapshotCopyNanos = 6,
+                ),
             runtime =
                 RuntimeProfilingSnapshot(
                     tick = RuntimeTickMetrics(serverTickCalls = 1, serverTickNanos = runtimeNanos),
@@ -155,5 +178,13 @@ class RuntimeVmProfilingReportFormatterTest {
                     hostCalls = hostCalls,
                 ),
             compiler = CompilerProfilingSnapshot(compileCalls = 1, compileNanos = 30, compiledSources = 1),
+            pipeline =
+                TerminalPipelineSummary(
+                    inputChars = 4,
+                    inputPhaseNanos = 44,
+                    inputClientFrames = 2,
+                    enterPhaseNanos = 55,
+                    enterClientFrames = 1,
+                ),
         )
 }
