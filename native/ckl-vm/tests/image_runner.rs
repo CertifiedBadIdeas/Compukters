@@ -2,7 +2,7 @@ use ckl_vm::image_runner::ImageVmHandle;
 use ckl_vm::runtime_kernel::{DeviceRuntimeKernel, DeviceRuntimeKernelHandle};
 use ckl_vm::signal::encode_value;
 use ckl_vm::value::VmValue;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 const OP_PUSH_UNIT: u8 = 1;
 const OP_RETURN: u8 = 2;
@@ -162,14 +162,18 @@ fn device_kernel_owns_display_registry() {
 
 #[test]
 fn attached_kernel_handles_display_fill_rect_and_present_imports() {
-    let kernel = Arc::new(Mutex::new(DeviceRuntimeKernel::new(64, 4096)));
+    let kernel = Arc::new(DeviceRuntimeKernelHandle::new(64, 4096));
     kernel
-        .lock()
+        .with_kernel_mut(|kernel| {
+            kernel
+                .displays
+                .attach(1, 18, 18, ckl_vm::display::PixelFormat::Rgb565)
+        })
         .unwrap()
-        .displays
-        .attach(1, 18, 18, ckl_vm::display::PixelFormat::Rgb565)
         .unwrap();
-    let _ = kernel.lock().unwrap().displays.drain_frames();
+    let _ = kernel
+        .with_kernel_mut(|kernel| kernel.displays.drain_frames())
+        .unwrap();
 
     let mut code = Vec::new();
     push_constant(&mut code, 0);
@@ -231,19 +235,29 @@ fn attached_kernel_handles_display_fill_rect_and_present_imports() {
         signal[0], 0,
         "program should halt instead of emitting display host calls"
     );
-    assert_eq!(kernel.lock().unwrap().displays.drain_frames().len(), 1);
+    assert_eq!(
+        kernel
+            .with_kernel_mut(|kernel| kernel.displays.drain_frames())
+            .unwrap()
+            .len(),
+        1
+    );
 }
 
 #[test]
 fn attached_kernel_handles_display_text_run_import() {
-    let kernel = Arc::new(Mutex::new(DeviceRuntimeKernel::new(64, 4096)));
+    let kernel = Arc::new(DeviceRuntimeKernelHandle::new(64, 4096));
     kernel
-        .lock()
+        .with_kernel_mut(|kernel| {
+            kernel
+                .displays
+                .attach(1, 18, 18, ckl_vm::display::PixelFormat::Rgb565)
+        })
         .unwrap()
-        .displays
-        .attach(1, 18, 18, ckl_vm::display::PixelFormat::Rgb565)
         .unwrap();
-    let _ = kernel.lock().unwrap().displays.drain_frames();
+    let _ = kernel
+        .with_kernel_mut(|kernel| kernel.displays.drain_frames())
+        .unwrap();
 
     let mut code = Vec::new();
     push_constant(&mut code, 0);
@@ -300,7 +314,9 @@ fn attached_kernel_handles_display_text_run_import() {
     vm.attach_device_kernel(Arc::clone(&kernel)).unwrap();
 
     let signal = vm.run_until_signal();
-    let frames = kernel.lock().unwrap().displays.drain_frames();
+    let frames = kernel
+        .with_kernel_mut(|kernel| kernel.displays.drain_frames())
+        .unwrap();
 
     assert_eq!(
         signal[0], 0,
@@ -312,15 +328,16 @@ fn attached_kernel_handles_display_text_run_import() {
 
 #[test]
 fn attached_kernel_handles_ipc_events_and_display_metadata_imports() {
-    let kernel = Arc::new(Mutex::new(DeviceRuntimeKernel::new(8, 64)));
-    {
-        let mut kernel = kernel.lock().unwrap();
-        kernel
-            .displays
-            .attach(7, 20, 10, ckl_vm::display::PixelFormat::Rgb565)
-            .unwrap();
-        kernel.enqueue_event("char", vec![VmValue::String("a".to_string())]);
-    }
+    let kernel = Arc::new(DeviceRuntimeKernelHandle::new(8, 64));
+    kernel
+        .with_kernel_mut(|kernel| {
+            kernel
+                .displays
+                .attach(7, 20, 10, ckl_vm::display::PixelFormat::Rgb565)
+                .unwrap();
+            kernel.enqueue_event("char", vec![VmValue::String("a".to_string())]);
+        })
+        .unwrap();
 
     let mut code = Vec::new();
     call_host(&mut code, 5000, 0);
@@ -427,8 +444,11 @@ fn attached_kernel_handles_ipc_events_and_display_metadata_imports() {
 
 #[test]
 fn attached_kernel_waits_poll_without_generic_host_call() {
-    let kernel = Arc::new(Mutex::new(DeviceRuntimeKernel::new(8, 64)));
-    let channel = kernel.lock().unwrap().open_ipc_channel().unwrap();
+    let kernel = Arc::new(DeviceRuntimeKernelHandle::new(8, 64));
+    let channel = kernel
+        .with_kernel_mut(|kernel| kernel.open_ipc_channel())
+        .unwrap()
+        .unwrap();
 
     let mut code = Vec::new();
     push_constant(&mut code, 0);
@@ -453,12 +473,14 @@ fn attached_kernel_waits_poll_without_generic_host_call() {
     .unwrap();
     vm.attach_device_kernel(Arc::clone(&kernel)).unwrap();
 
-    assert_eq!(vm.run_until_signal(), vec![6, 1, 0, 0, 0]);
+    assert_eq!(
+        vm.run_until_signal(),
+        vec![6, channel as u8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    );
 
     kernel
-        .lock()
+        .with_kernel_mut(|kernel| kernel.write_ipc(channel, "ready"))
         .unwrap()
-        .write_ipc(channel, "ready")
         .expect("write ipc");
     let signal = vm.run_until_signal();
 

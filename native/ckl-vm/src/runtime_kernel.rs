@@ -182,11 +182,7 @@ impl DeviceRuntimeKernelHandle {
         Ok(self.lock()?.wake_sequence())
     }
 
-    pub fn wait_for_wake(
-        &self,
-        observed_sequence: i64,
-        timeout: Duration,
-    ) -> Result<i64, String> {
+    pub fn wait_for_wake(&self, observed_sequence: i64, timeout: Duration) -> Result<i64, String> {
         let kernel = self.lock()?;
         if kernel.wake_sequence() > observed_sequence {
             return Ok(kernel.wake_sequence());

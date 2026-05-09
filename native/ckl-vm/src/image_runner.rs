@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 use std::panic::{catch_unwind, AssertUnwindSafe};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use crate::image::{decode_image, Constant, Function, HostImport, Image};
-use crate::runtime_kernel::DeviceRuntimeKernel;
+use crate::runtime_kernel::DeviceRuntimeKernelHandle;
 use crate::signal::{decode_value, encode_error, encode_signal, VmSignal};
 use crate::value::VmValue;
 
@@ -67,7 +67,7 @@ pub struct ImageVmHandle {
     call_stack: Vec<CallFrame>,
     objects: HashMap<u32, HeapObject>,
     next_object_id: u32,
-    attached_kernel: Option<Arc<Mutex<DeviceRuntimeKernel>>>,
+    attached_kernel: Option<Arc<DeviceRuntimeKernelHandle>>,
     working_directory: String,
     instruction_budget: usize,
     instructions_since_pause: usize,
@@ -114,7 +114,7 @@ impl ImageVmHandle {
 
     pub fn attach_device_kernel(
         &mut self,
-        kernel: Arc<Mutex<DeviceRuntimeKernel>>,
+        kernel: Arc<DeviceRuntimeKernelHandle>,
     ) -> Result<(), String> {
         self.attached_kernel = Some(kernel);
         Ok(())
@@ -173,10 +173,8 @@ impl ImageVmHandle {
         let Some(kernel_handle) = self.attached_kernel.as_ref() else {
             return Ok(NativeHostImportResult::Fallback(arguments));
         };
-        let mut kernel = kernel_handle
-            .lock()
-            .map_err(|_| "native device runtime kernel lock is poisoned".to_string())?;
         if module_name == "filesystem" {
+            let kernel = kernel_handle.lock()?;
             let Some(filesystem) = kernel.filesystem.as_ref() else {
                 return Ok(NativeHostImportResult::Fallback(arguments));
             };
@@ -231,6 +229,7 @@ impl ImageVmHandle {
             };
         }
         if module_name == "events" {
+            let mut kernel = kernel_handle.lock()?;
             return match function_name {
                 "tryPull" => {
                     let filter = arguments
@@ -276,29 +275,31 @@ impl ImageVmHandle {
         if module_name == "ipc" {
             return match function_name {
                 "open" => Ok(NativeHostImportResult::Handled(VmValue::Int(
-                    kernel.open_ipc_channel()?,
+                    kernel_handle.with_kernel_mut(|kernel| kernel.open_ipc_channel())??,
                 ))),
                 "write" => {
                     let channel = int_argument(&arguments, 0, "ipc.write channel")?;
                     let text = string_argument(&arguments, 1, "ipc.write text")?;
-                    kernel.write_ipc(channel, text)?;
+                    kernel_handle.with_kernel_mut(|kernel| kernel.write_ipc(channel, text))??;
                     Ok(NativeHostImportResult::Handled(VmValue::Unit))
                 }
                 "tryRead" => {
                     let channel = int_argument(&arguments, 0, "ipc.tryRead channel")?;
+                    let mut kernel = kernel_handle.lock()?;
                     Ok(NativeHostImportResult::Handled(VmValue::String(
                         kernel.try_read_ipc(channel)?,
                     )))
                 }
                 "close" => {
                     let channel = int_argument(&arguments, 0, "ipc.close channel")?;
-                    kernel.close_ipc(channel)?;
+                    kernel_handle.with_kernel_mut(|kernel| kernel.close_ipc(channel))??;
                     Ok(NativeHostImportResult::Handled(VmValue::Unit))
                 }
                 _ => Ok(NativeHostImportResult::Fallback(arguments)),
             };
         }
         if module_name == "runtime" {
+            let mut kernel = kernel_handle.lock()?;
             return match function_name {
                 "poll" => {
                     let channel = int_argument(&arguments, 0, "runtime.poll channel")?;
@@ -329,6 +330,7 @@ impl ImageVmHandle {
                 _ => Ok(NativeHostImportResult::Fallback(arguments)),
             };
         }
+        let mut kernel = kernel_handle.lock()?;
         if kernel.displays.first_display_id().is_none() {
             return Ok(NativeHostImportResult::Fallback(arguments));
         }
