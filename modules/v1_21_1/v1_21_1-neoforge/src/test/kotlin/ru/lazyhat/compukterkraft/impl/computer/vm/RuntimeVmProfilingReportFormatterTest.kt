@@ -45,6 +45,7 @@ class RuntimeVmProfilingReportFormatterTest {
                             runtimeNanos = 100_000,
                             executionNanos = 40,
                             waitPollSignals = 3,
+                            waitProcessSignals = 1,
                             nativeWaitCalls = 4,
                             nativeWaitNanos = 55_000,
                             nativeWaitWakeups = 3,
@@ -68,6 +69,7 @@ class RuntimeVmProfilingReportFormatterTest {
                             runtimeNanos = 1_500_000,
                             executionNanos = 20,
                             waitPollSignals = 7,
+                            waitProcessSignals = 2,
                             nativeWaitCalls = 8,
                             nativeWaitNanos = 2_000_000,
                             nativeWaitWakeups = 6,
@@ -106,6 +108,7 @@ class RuntimeVmProfilingReportFormatterTest {
         assertTrue(markdown.contains("| Runtime all ticks | 1.5 ms | 100 us |"), markdown)
         assertTrue(markdown.contains("| VM execution time | 20 ns | 40 ns |"), markdown)
         assertTrue(markdown.contains("| Native wait signals | 7 | 3 |"), markdown)
+        assertTrue(markdown.contains("| Native process wait signals | 2 | 1 |"), markdown)
         assertTrue(markdown.contains("| Native fast-path calls | 0 | 0 |"), markdown)
         assertTrue(markdown.contains("| Native wait calls | 8 | 4 |"), markdown)
         assertTrue(markdown.contains("| Native wait time | 2 ms | 55 us |"), markdown)
@@ -165,6 +168,7 @@ class RuntimeVmProfilingReportFormatterTest {
                             runtimeNanos = 80,
                             executionNanos = 20,
                             waitPollSignals = 6,
+                            waitProcessSignals = 3,
                             nativeWaitCalls = 5,
                             nativeWaitNanos = 700_000,
                             nativeWaitWakeups = 4,
@@ -186,6 +190,7 @@ class RuntimeVmProfilingReportFormatterTest {
         assertTrue(markdown.contains("sustained terminal no-delay"), markdown)
         assertTrue(markdown.contains("held Enter backlog"), markdown)
         assertTrue(markdown.contains("| Native wait signals | 6 |"), markdown)
+        assertTrue(markdown.contains("| Native process wait signals | 3 |"), markdown)
         assertTrue(markdown.contains("| Native fast-path calls | 0 |"), markdown)
         assertTrue(markdown.contains("| Native wait calls | 5 |"), markdown)
         assertTrue(markdown.contains("| Native wait time | 700 us |"), markdown)
@@ -230,6 +235,7 @@ class RuntimeVmProfilingReportFormatterTest {
         runtimeNanos: Long,
         executionNanos: Long,
         waitPollSignals: Long = 0,
+        waitProcessSignals: Long = 0,
         nativeWaitCalls: Long = 0,
         nativeWaitNanos: Long = 0,
         nativeWaitWakeups: Long = 0,
@@ -283,6 +289,7 @@ class RuntimeVmProfilingReportFormatterTest {
                             executionWindows = 1,
                             executionWindowNanos = executionNanos,
                             waitPollSignals = waitPollSignals,
+                            waitProcessSignals = waitProcessSignals,
                             nativeWaitCalls = nativeWaitCalls,
                             nativeWaitNanos = nativeWaitNanos,
                             nativeWaitWakeups = nativeWaitWakeups,

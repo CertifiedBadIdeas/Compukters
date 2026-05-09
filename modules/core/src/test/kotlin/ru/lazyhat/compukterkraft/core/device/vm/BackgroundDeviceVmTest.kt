@@ -293,6 +293,49 @@ class BackgroundDeviceVmTest {
     }
 
     @Test
+    fun nativeProcessWaitReturnsChildExitCodeWhenLibraryIsConfigured() {
+        System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        runtimeTestWorkspace("firmware-native-process-wait") { workspace ->
+            val logs = mutableListOf<String>()
+            workspace.writeProgram(
+                1,
+                "child.ck",
+                """
+                pub fun main() {
+                    system::log("child-running")
+                }
+                """.trimIndent(),
+            )
+            val vm =
+                BackgroundDeviceVm(
+                    deviceId = 1,
+                    profile = firmwareTestProfile(),
+                    dispatcher = Dispatchers.Default,
+                    labelProvider = { null },
+                    logger = DeviceVmLogger(logs::add),
+                    workspace = workspace.host,
+                    firmwareLoader =
+                        StaticFirmwareLoader(
+                            """
+                            pub fun main() {
+                                val pid: Int = process::spawn("child.ck", "")
+                                val code: Int = process::wait(pid)
+                                system::log("child-code=" + code)
+                                while true { sleep(20L) }
+                            }
+                            """.trimIndent(),
+                        ),
+                )
+
+            assertTrue(vm.boot())
+            runVmTicks(vm, ticks = 40)
+
+            assertTrue(logs.any { it.contains("child-running") }, logs.toString())
+            assertTrue(logs.any { it.contains("child-code=0") }, logs.toString())
+        }
+    }
+
+    @Test
     fun processRunWritesLaunchErrorsToTaggedStderr() {
         runtimeTestWorkspace("process-stderr-launch") { workspace ->
             val logs = mutableListOf<String>()

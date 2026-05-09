@@ -101,12 +101,13 @@ class RuntimeVmProfilingProfileCodecTest {
                                             executionWindows = 32,
                                             executionWindowNanos = 33,
                                             waitPollSignals = 34,
-                                            hostCallSignals = 35,
-                                            nativeFastPathCalls = 36,
-                                            nativeWaitCalls = 37,
-                                            nativeWaitNanos = 38,
-                                            nativeWaitWakeups = 39,
-                                            nativeWaitTimeouts = 40,
+                                            waitProcessSignals = 35,
+                                            hostCallSignals = 36,
+                                            nativeFastPathCalls = 37,
+                                            nativeWaitCalls = 38,
+                                            nativeWaitNanos = 39,
+                                            nativeWaitWakeups = 40,
+                                            nativeWaitTimeouts = 41,
                                         ),
                                     hostCalls =
                                         listOf(
@@ -196,6 +197,7 @@ class RuntimeVmProfilingProfileCodecTest {
         )
         assertEquals(36, decoded.workloads.single().runtime.hostCalls.single().activeNanos)
         assertEquals(0, decoded.workloads.single().runtime.vm.waitPollSignals)
+        assertEquals(0, decoded.workloads.single().runtime.vm.waitProcessSignals)
         assertEquals(12, decoded.workloads.single().runtime.vm.hostCallSignals)
         assertEquals(0, decoded.workloads.single().runtime.vm.nativeWaitCalls)
         assertEquals(0, decoded.workloads.single().runtime.vm.nativeWaitNanos)

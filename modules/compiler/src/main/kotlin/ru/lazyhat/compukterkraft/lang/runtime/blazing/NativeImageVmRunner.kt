@@ -104,6 +104,30 @@ class NativeImageVmRunner internal constructor(
                         }
                     }
 
+                    is NativeVmSignal.WaitProcess -> {
+                        val kernelHandle = kernelHandleOrNull(runtime)
+                        if (kernelHandle == null) {
+                            runtime.yield()
+                        } else {
+                            val started = System.nanoTime()
+                            val latest =
+                                bindings.waitForProcessWake(
+                                    kernelHandle,
+                                    signal.pid,
+                                    signal.wakeSequence,
+                                    NATIVE_PROCESS_WAIT_TIMEOUT_MILLIS,
+                                )
+                            runtime.metrics.recordNativeWait(
+                                kind = "process.wait",
+                                nanos = System.nanoTime() - started,
+                                woke = latest > signal.wakeSequence,
+                            )
+                            if (latest <= signal.wakeSequence) {
+                                runtime.yield()
+                            }
+                        }
+                    }
+
                     is NativeVmSignal.HostCall -> {
                         val result = invokeHostCall(runtime, bridge, signal)
                         bindings.resumeImageWith(handle, result.toNativeBytes(signal.moduleName, signal.functionName))
@@ -151,6 +175,7 @@ class NativeImageVmRunner internal constructor(
 }
 
 private const val NATIVE_POLL_WAIT_TIMEOUT_MILLIS = 50L
+private const val NATIVE_PROCESS_WAIT_TIMEOUT_MILLIS = 50L
 
 private val NativeVmSignal.kind: VmSignalKind
     get() =
@@ -161,6 +186,7 @@ private val NativeVmSignal.kind: VmSignalKind
             is NativeVmSignal.Sleep -> VmSignalKind.SLEEP
             is NativeVmSignal.WaitEvent -> VmSignalKind.WAIT_EVENT
             is NativeVmSignal.WaitPoll -> VmSignalKind.WAIT_POLL
+            is NativeVmSignal.WaitProcess -> VmSignalKind.WAIT_PROCESS
             is NativeVmSignal.HostCall -> VmSignalKind.HOST_CALL
             is NativeVmSignal.Error -> error("Native image VM errors are not runtime VM signals")
         }

@@ -145,6 +145,13 @@ class NativeImageVmRunnerTest {
         assertEquals(emptyList(), bindings.resumes)
     }
 
+    @Test
+    fun decodesNativeWaitProcessSignal() {
+        val signal = NativeVmSignal.decode(byteArrayOf(7, 11, 0, 0, 0, 99, 0, 0, 0, 0, 0, 0, 0))
+
+        assertEquals(NativeVmSignal.WaitProcess(pid = 11, wakeSequence = 99), signal)
+    }
+
     private class KernelAwareRuntime(
         val delegate: RecordingRuntime,
         kernelHandle: Long,
@@ -159,21 +166,47 @@ class NativeImageVmRunnerTest {
         val timeoutMillis: Long,
     )
 
+    private data class WaitProcessCall(
+        val handle: Long,
+        val pid: Int,
+        val observedWakeSequence: Long,
+        val timeoutMillis: Long,
+    )
+
+    private data class ProcessRegistration(
+        val kernelHandle: Long,
+        val pid: Int,
+        val parentPid: Int,
+        val programPath: String,
+    )
+
+    private data class ProcessCompletion(
+        val kernelHandle: Long,
+        val pid: Int,
+        val exitCode: Int,
+    )
+
     private class RecordingBindings : NativeVmBindingsFacade {
         constructor(
             signals: ArrayDeque<ByteArray> = ArrayDeque(listOf(byteArrayOf(0, 0))),
             waitForDeviceWakeResult: Long = 0,
+            waitForProcessWakeResult: Long = 0,
         ) {
             this.signals = signals
             this.waitForDeviceWakeResult = waitForDeviceWakeResult
+            this.waitForProcessWakeResult = waitForProcessWakeResult
         }
 
         private val signals: ArrayDeque<ByteArray>
         private val waitForDeviceWakeResult: Long
+        private val waitForProcessWakeResult: Long
         val attachments = mutableListOf<Pair<Long, Long>>()
         val workingDirectories = mutableListOf<Pair<Long, String>>()
         val resumes = mutableListOf<Pair<Long, ByteArray>>()
         val waitForDeviceWakeCalls = mutableListOf<WaitCall>()
+        val waitForProcessWakeCalls = mutableListOf<WaitProcessCall>()
+        val registerProcessCalls = mutableListOf<ProcessRegistration>()
+        val completeProcessCalls = mutableListOf<ProcessCompletion>()
 
         override fun createImage(
             libraryPath: String,
@@ -213,6 +246,33 @@ class NativeImageVmRunnerTest {
         ): Long {
             waitForDeviceWakeCalls += WaitCall(handle, observedWakeSequence, timeoutMillis)
             return waitForDeviceWakeResult
+        }
+
+        override fun waitForProcessWake(
+            handle: Long,
+            pid: Int,
+            observedWakeSequence: Long,
+            timeoutMillis: Long,
+        ): Long {
+            waitForProcessWakeCalls += WaitProcessCall(handle, pid, observedWakeSequence, timeoutMillis)
+            return waitForProcessWakeResult
+        }
+
+        override fun registerProcess(
+            kernelHandle: Long,
+            pid: Int,
+            parentPid: Int,
+            programPath: String,
+        ) {
+            registerProcessCalls += ProcessRegistration(kernelHandle, pid, parentPid, programPath)
+        }
+
+        override fun completeProcess(
+            kernelHandle: Long,
+            pid: Int,
+            exitCode: Int,
+        ) {
+            completeProcessCalls += ProcessCompletion(kernelHandle, pid, exitCode)
         }
     }
 }

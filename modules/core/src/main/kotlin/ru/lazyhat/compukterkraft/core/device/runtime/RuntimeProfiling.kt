@@ -161,6 +161,7 @@ data class RuntimeVmMetrics(
     val sleepSignals: Long = 0,
     val waitEventSignals: Long = 0,
     val waitPollSignals: Long = 0,
+    val waitProcessSignals: Long = 0,
     val hostCallSignals: Long = 0,
     val nativeFastPathCalls: Long = 0,
     val nativeWaitCalls: Long = 0,
@@ -239,7 +240,7 @@ data class RuntimeProfilingSnapshot(
                 "    execution: windows=${vm.executionWindows}, time=${vm.executionWindowNanos.nanos()}, avg=${vm.averageExecutionWindowNanos.nanos()}",
             )
             appendLine(
-                "  signals: halt=${vm.haltSignals}, pause=${vm.pauseSignals}, yield=${vm.yieldSignals}, sleep=${vm.sleepSignals}, waitEvent=${vm.waitEventSignals}, waitPoll=${vm.waitPollSignals}, hostCall=${vm.hostCallSignals}",
+                "  signals: halt=${vm.haltSignals}, pause=${vm.pauseSignals}, yield=${vm.yieldSignals}, sleep=${vm.sleepSignals}, waitEvent=${vm.waitEventSignals}, waitPoll=${vm.waitPollSignals}, waitProcess=${vm.waitProcessSignals}, hostCall=${vm.hostCallSignals}",
             )
             appendLine(
                 "    nativeDisplayPump: waits=${vm.nativeDisplayPumpWaitCalls}, waitTime=${vm.nativeDisplayPumpWaitNanos.nanos()}, wakeups=${vm.nativeDisplayPumpWakeups}, timeouts=${vm.nativeDisplayPumpTimeouts}, byteBatches=${vm.nativeDisplayFrameByteBatches}, bytes=${vm.nativeDisplayFrameBytes}",
@@ -420,6 +421,7 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
     private val sleepSignals = AtomicLong()
     private val waitEventSignals = AtomicLong()
     private val waitPollSignals = AtomicLong()
+    private val waitProcessSignals = AtomicLong()
     private val hostCallSignals = AtomicLong()
     private val nativeWaitCalls = AtomicLong()
     private val nativeWaitNanos = AtomicLong()
@@ -524,6 +526,7 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
             VmSignalKind.SLEEP -> sleepSignals.incrementAndGet()
             VmSignalKind.WAIT_EVENT -> waitEventSignals.incrementAndGet()
             VmSignalKind.WAIT_POLL -> waitPollSignals.incrementAndGet()
+            VmSignalKind.WAIT_PROCESS -> waitProcessSignals.incrementAndGet()
             VmSignalKind.HOST_CALL -> hostCallSignals.incrementAndGet()
         }
     }
@@ -624,6 +627,7 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
                     sleepSignals = sleepSignals.get(),
                     waitEventSignals = waitEventSignals.get(),
                     waitPollSignals = waitPollSignals.get(),
+                    waitProcessSignals = waitProcessSignals.get(),
                     hostCallSignals = hostCallSignals.get(),
                     nativeWaitCalls = nativeWaitCalls.get(),
                     nativeWaitNanos = nativeWaitNanos.get(),
