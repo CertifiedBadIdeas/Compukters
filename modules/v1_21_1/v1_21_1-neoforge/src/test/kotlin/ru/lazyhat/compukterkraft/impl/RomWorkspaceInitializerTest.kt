@@ -34,6 +34,7 @@ class RomWorkspaceInitializerTest {
 
             assertTrue(deviceRoot.resolve("boot.ck").exists(), "boot.ck should be copied into user workspace")
             assertTrue(deviceRoot.resolve("shell.ck").exists(), "shell.ck should be copied into user workspace")
+            assertTrue(deviceRoot.resolve("yes.ck").exists(), "yes.ck should be copied into user workspace")
             assertFalse(deviceRoot.resolve("bios.ck").exists(), "bios.ck must stay hidden in firmware storage")
         } finally {
             root.toFile().deleteRecursively()
