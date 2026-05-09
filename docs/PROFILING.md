@@ -31,6 +31,8 @@ modules/v1_21_1/v1_21_1-neoforge/build/reports/profiling/runs/<timestamp>/metada
 
 Use the stable TSV for scripts that only need the latest profile. Use the timestamped archive for before/after comparisons across commits or local experiments. Profiles include every workload collected by the task, with runtime, display, client display, compiler, host-call, terminal input-to-client, and held-Enter backlog metrics. The task runs a short warm-up before collecting measurements, but the workloads are still integration diagnostics rather than strict microbenchmarks.
 
+The archived workload set includes both a compact terminal workload and `default-size terminal`, which uses the same pixel dimensions as `ComputerTerminalScreen` (`DEFAULT_COMPUTER_TERM_WIDTH * FONT_WIDTH` by `DEFAULT_COMPUTER_TERM_HEIGHT * FONT_HEIGHT`). Use the default-size workload when checking whether framebuffer payload, client apply, and front snapshot copy costs scale with the real in-game terminal size.
+
 Generate a historical Markdown comparison over every archived run:
 
 ```bash
