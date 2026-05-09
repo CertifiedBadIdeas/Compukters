@@ -45,7 +45,11 @@ class RuntimeVmProfilingReportFormatterTest {
                             runtimeNanos = 100_000,
                             executionNanos = 40,
                             hostCallSignals = 10,
-                            hostCalls = listOf(RuntimeHostCallMetrics("strings", "length", calls = 5, nanos = 50_000)),
+                            hostCalls =
+                                listOf(
+                                    RuntimeHostCallMetrics("strings", "length", calls = 5, nanos = 50_000),
+                                    RuntimeHostCallMetrics("ipc", "tryRead", calls = 1, nanos = 11),
+                                ),
                         ),
                     ),
             )
@@ -70,13 +74,7 @@ class RuntimeVmProfilingReportFormatterTest {
                                     ),
                             ),
                                 ),
-                        workload(
-                            name = "new workload",
-                            runtimeNanos = 7,
-                            executionNanos = 3,
-                            hostCallSignals = 1,
-                            hostCalls = listOf(RuntimeHostCallMetrics("ipc", "tryRead", calls = 1, nanos = 11)),
-                        ),
+                        workload(name = "new workload", runtimeNanos = 7, executionNanos = 3, hostCallSignals = 1),
                     ),
             )
 
@@ -92,23 +90,32 @@ class RuntimeVmProfilingReportFormatterTest {
         assertTrue(markdown.contains("| Runtime all ticks | 1.5 ms | 100 us |"), markdown)
         assertTrue(markdown.contains("| VM execution time | 20 ns | 40 ns |"), markdown)
         assertTrue(markdown.contains("| Host-call signals | 2 | 10 |"), markdown)
-        assertTrue(markdown.contains("| Host-call active time | 30 ms | 50 us |"), markdown)
+        assertTrue(markdown.contains("| Host-call active time | 30 ms | 50.01 us |"), markdown)
         assertTrue(markdown.contains("| Host-call wait time | 60 ms | 0 ns |"), markdown)
         assertTrue(
-            markdown.contains(
-                "| host display.present | 3 calls / 30 ms active / 60 ms wait / 90 ms total | 0 calls / 0 ns active / 0 ns wait / 0 ns total |",
-            ),
+            markdown.contains("| host display.present calls | 3 | 0 |"),
             markdown,
         )
+        assertTrue(markdown.contains("| host display.present active | 30 ms | 0 ns |"), markdown)
+        assertTrue(markdown.contains("| host display.present wait | 60 ms | 0 ns |"), markdown)
+        assertTrue(markdown.contains("| host display.present total | 90 ms | 0 ns |"), markdown)
         assertTrue(
-            markdown.contains(
-                "| host strings.length | 0 calls / 0 ns active / 0 ns wait / 0 ns total | 5 calls / 50 us active / 0 ns wait / 50 us total |",
-            ),
+            markdown.contains("| host strings.length calls | 0 | 5 |"),
             markdown,
         )
+        assertTrue(markdown.contains("| host strings.length active | 0 ns | 50 us |"), markdown)
+        assertTrue(markdown.contains("| host strings.length wait | 0 ns | 0 ns |"), markdown)
+        assertTrue(markdown.contains("| host strings.length total | 0 ns | 50 us |"), markdown)
+        assertTrue(markdown.contains("| host ipc.tryRead calls | 0 | 1 |"), markdown)
+        assertTrue(markdown.contains("| host ipc.tryRead active | 0 ns | 11 ns |"), markdown)
+        assertTrue(markdown.contains("| host ipc.tryRead wait | 0 ns | 0 ns |"), markdown)
+        assertTrue(markdown.contains("| host ipc.tryRead total | 0 ns | 11 ns |"), markdown)
         assertTrue(
-            markdown.contains("| host ipc.tryRead | 1 calls / 11 ns active / 0 ns wait / 11 ns total |"),
-            markdown
+            markdown.indexOf("| host display.present calls |") <
+                markdown.indexOf("| host strings.length calls |") &&
+                markdown.indexOf("| host strings.length calls |") <
+                markdown.indexOf("| host ipc.tryRead calls |"),
+            markdown,
         )
         assertTrue(markdown.contains("| Client frames applied | 2 | 2 |"), markdown)
         assertTrue(markdown.contains("| Client apply time | 12 ns | 12 ns |"), markdown)

@@ -606,7 +606,17 @@ internal object RuntimeVmProfilingReportFormatter {
             columns
                 .flatMap { (_, workload) -> workload?.runtime?.hostCalls.orEmpty().map { it.key } }
                 .distinct()
-                .sorted()
+                .sortedWith(
+                    compareByDescending<String> { key ->
+                        columns.maxOf { (_, workload) ->
+                            workload
+                                ?.runtime
+                                ?.hostCalls
+                                ?.firstOrNull { it.key == key }
+                                ?.nanos ?: 0L
+                        }
+                    }.thenBy { it },
+                )
 
         appendLine("| Metric | ${columns.joinToString(" | ") { (timestamp, _) -> timestamp }} |")
         appendLine("|---|${columns.joinToString("|") { "---:" }}|")
@@ -671,17 +681,25 @@ internal object RuntimeVmProfilingReportFormatter {
             appendHistoricalMetricRow("Enter client frames", columns) { workload -> workload.pipeline?.enterClientFrames?.toString() ?: "" }
         }
         hostCallKeys.forEach { key ->
-            appendHistoricalMetricRow("host $key", columns) { workload ->
-                val call = workload.runtime.hostCalls.firstOrNull { it.key == key }
-                if (call == null) {
-                    "0 calls / 0 ns active / 0 ns wait / 0 ns total"
-                } else {
-                    "${call.calls} calls / ${formatNanos(call.activeNanos)} active / ${formatNanos(call.waitNanos)} wait / ${
-                        formatNanos(
-                            call.nanos,
-                        )
-                    } total"
-                }
+            appendHistoricalMetricRow("host $key calls", columns) { workload ->
+                workload.runtime.hostCalls
+                    .firstOrNull { it.key == key }
+                    ?.calls
+                    ?.toString() ?: "0"
+            }
+            appendHistoricalMetricRow("host $key active", columns) { workload ->
+                formatNanos(
+                    workload.runtime.hostCalls
+                        .firstOrNull { it.key == key }
+                        ?.activeNanos ?: 0,
+                )
+            }
+            appendHistoricalMetricRow("host $key wait", columns) { workload ->
+                formatNanos(workload.runtime.hostCalls
+                    .firstOrNull { it.key == key }?.waitNanos ?: 0)
+            }
+            appendHistoricalMetricRow("host $key total", columns) { workload ->
+                formatNanos(workload.runtime.hostCalls.firstOrNull { it.key == key }?.nanos ?: 0)
             }
         }
         appendLine()
