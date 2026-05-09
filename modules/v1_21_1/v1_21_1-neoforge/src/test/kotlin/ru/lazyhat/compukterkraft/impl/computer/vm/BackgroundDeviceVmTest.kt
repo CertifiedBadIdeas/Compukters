@@ -254,7 +254,10 @@ class BackgroundDeviceVmTest {
                 serviceVmTickForTest(vm, tick.toLong(), dispatcher::dispatch, metrics)
                 val frames = vm.drainDisplayFrames()
                 framesSeen += frames.size
-                if (metrics.snapshot().hostCalls.any { it.moduleName == "display" && it.functionName == "blitMono5x7Packed" }) {
+                val hasGlyphFrame =
+                    frames.any { frame -> !frame.fullRefresh && frame.tiles.isNotEmpty() } ||
+                        metrics.snapshot().hostCalls.any { it.moduleName == "display" && it.functionName == "blitMono5x7Packed" }
+                if (hasGlyphFrame) {
                     ticksUntilGlyphFrame = tick + 1
                 }
                 tick += 1

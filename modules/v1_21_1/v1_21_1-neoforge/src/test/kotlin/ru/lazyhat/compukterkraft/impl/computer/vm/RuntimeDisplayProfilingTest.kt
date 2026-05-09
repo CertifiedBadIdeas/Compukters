@@ -123,12 +123,13 @@ class RuntimeDisplayProfilingTest {
         assertTrue(run.enterEventsQueued == 120, run.summary())
         assertTrue(run.maxQueuedEvents > 0, run.summary())
         assertTrue(runtimeSnapshot.vm.hostCallSignals > 0, runtimeSnapshot.summary())
+        assertTrue(runtimeSnapshot.vm.nativeWaitSignals > 0, runtimeSnapshot.summary())
         assertTrue(
-            runtimeSnapshot.hostCalls.any { it.moduleName == "events" && it.functionName == "tryPull" },
+            runtimeSnapshot.hostCalls.none { it.moduleName == "events" && it.functionName == "tryPull" },
             runtimeSnapshot.summary(),
         )
         assertTrue(
-            runtimeSnapshot.hostCalls.any { it.moduleName == "runtime" && it.functionName == "poll" },
+            runtimeSnapshot.hostCalls.none { it.moduleName == "runtime" && it.functionName == "poll" },
             runtimeSnapshot.summary(),
         )
         assertTrue(
@@ -136,7 +137,7 @@ class RuntimeDisplayProfilingTest {
             runtimeSnapshot.summary(),
         )
         assertTrue(
-            runtimeSnapshot.hostCalls.any { it.moduleName == "ipc" && it.functionName == "write" },
+            runtimeSnapshot.hostCalls.none { it.moduleName == "ipc" && it.functionName == "write" },
             runtimeSnapshot.summary(),
         )
         assertTrue(displaySnapshot.frames.frameCount > 0, displaySnapshot.summary())
