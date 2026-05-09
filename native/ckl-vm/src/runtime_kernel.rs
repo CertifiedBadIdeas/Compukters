@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, VecDeque};
 use std::sync::{Condvar, Mutex, MutexGuard};
 use std::time::Duration;
 
-use crate::display::DeviceDisplayRegistry;
+use crate::display::{DeviceDisplayRegistry, DisplayFrameDelta, PixelFormat};
 use crate::filesystem::DeviceFilesystem;
 use crate::value::VmValue;
 
@@ -28,6 +28,7 @@ pub struct DeviceRuntimeKernel {
     pub filesystem: Option<DeviceFilesystem>,
     next_event_id: i32,
     wake_sequence: i64,
+    display_wake_sequence: i64,
     max_event_queue_size: usize,
 }
 
@@ -42,6 +43,7 @@ impl DeviceRuntimeKernel {
             filesystem: None,
             next_event_id: 1,
             wake_sequence: 0,
+            display_wake_sequence: 0,
             max_event_queue_size: max_event_queue_size.max(1),
         }
     }
@@ -138,6 +140,14 @@ impl DeviceRuntimeKernel {
         self.wake_sequence
     }
 
+    pub fn display_wake_sequence(&self) -> i64 {
+        self.display_wake_sequence
+    }
+
+    fn advance_display_wake_sequence(&mut self) {
+        self.display_wake_sequence = self.display_wake_sequence.saturating_add(1);
+    }
+
     pub fn attach_placeholder_payload_event(&mut self, name: &str, _payload: &[u8]) -> bool {
         self.enqueue_event(name, Vec::new())
     }
@@ -146,6 +156,7 @@ impl DeviceRuntimeKernel {
 pub struct DeviceRuntimeKernelHandle {
     kernel: Mutex<DeviceRuntimeKernel>,
     wake: Condvar,
+    display_wake: Condvar,
 }
 
 impl DeviceRuntimeKernelHandle {
@@ -156,6 +167,7 @@ impl DeviceRuntimeKernelHandle {
                 max_buffered_bytes_per_channel,
             )),
             wake: Condvar::new(),
+            display_wake: Condvar::new(),
         }
     }
 
@@ -182,6 +194,51 @@ impl DeviceRuntimeKernelHandle {
         Ok(self.lock()?.wake_sequence())
     }
 
+    pub fn display_wake_sequence(&self) -> Result<i64, String> {
+        Ok(self.lock()?.display_wake_sequence())
+    }
+
+    pub fn attach_display(
+        &self,
+        display_id: i32,
+        width: i32,
+        height: i32,
+        pixel_format: PixelFormat,
+    ) -> Result<(), String> {
+        let mut kernel = self.lock()?;
+        let emitted = kernel
+            .displays
+            .attach(display_id, width, height, pixel_format)?;
+        if emitted {
+            kernel.advance_display_wake_sequence();
+            self.display_wake.notify_all();
+        }
+        Ok(())
+    }
+
+    pub fn detach_display(&self, display_id: i32) -> Result<(), String> {
+        let mut kernel = self.lock()?;
+        if kernel.displays.detach(display_id) {
+            kernel.advance_display_wake_sequence();
+            self.display_wake.notify_all();
+        }
+        Ok(())
+    }
+
+    pub fn present_display(&self, display_id: i32) -> Result<(), String> {
+        let mut kernel = self.lock()?;
+        if kernel.displays.present(display_id) {
+            kernel.advance_display_wake_sequence();
+            self.display_wake.notify_all();
+        }
+        Ok(())
+    }
+
+    pub fn drain_display_frames(&self) -> Result<Vec<DisplayFrameDelta>, String> {
+        let mut kernel = self.lock()?;
+        Ok(kernel.displays.drain_frames())
+    }
+
     pub fn wait_for_wake(&self, observed_sequence: i64, timeout: Duration) -> Result<i64, String> {
         let kernel = self.lock()?;
         if kernel.wake_sequence() > observed_sequence {
@@ -194,6 +251,24 @@ impl DeviceRuntimeKernelHandle {
             })
             .map_err(|_| "native device runtime kernel wait lock is poisoned".to_string())?;
         Ok(kernel.wake_sequence())
+    }
+
+    pub fn wait_for_display_wake(
+        &self,
+        observed_sequence: i64,
+        timeout: Duration,
+    ) -> Result<i64, String> {
+        let kernel = self.lock()?;
+        if kernel.display_wake_sequence() > observed_sequence {
+            return Ok(kernel.display_wake_sequence());
+        }
+        let (kernel, _) = self
+            .display_wake
+            .wait_timeout_while(kernel, timeout, |kernel| {
+                kernel.display_wake_sequence() <= observed_sequence
+            })
+            .map_err(|_| "native display frame wait lock is poisoned".to_string())?;
+        Ok(kernel.display_wake_sequence())
     }
 }
 
@@ -282,4 +357,98 @@ impl IpcChannel {
 #[allow(dead_code)]
 fn _deferred_queue_len(kernel: &DeviceRuntimeKernel) -> usize {
     kernel.deferred_events.len()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::display::PixelFormat;
+    use std::thread;
+    use std::time::Duration;
+
+    #[test]
+    fn display_wake_sequence_advances_when_attach_queues_full_refresh() {
+        let handle = DeviceRuntimeKernelHandle::new(16, 1024);
+        let before = handle.display_wake_sequence().unwrap();
+
+        handle
+            .attach_display(7, 16, 16, PixelFormat::Rgb565)
+            .unwrap();
+
+        assert!(handle.display_wake_sequence().unwrap() > before);
+        assert!(!handle.drain_display_frames().unwrap().is_empty());
+    }
+
+    #[test]
+    fn display_wake_sequence_advances_when_present_emits_frame() {
+        let handle = DeviceRuntimeKernelHandle::new(16, 1024);
+        handle
+            .attach_display(7, 16, 16, PixelFormat::Rgb565)
+            .unwrap();
+        let _ = handle.drain_display_frames().unwrap();
+        let before = handle.display_wake_sequence().unwrap();
+
+        handle
+            .with_kernel_mut(|kernel| {
+                kernel.displays.fill_rect(7, 0, 0, 2, 2, 0x07e0);
+            })
+            .unwrap();
+        handle.present_display(7).unwrap();
+
+        assert!(handle.display_wake_sequence().unwrap() > before);
+        assert!(!handle.drain_display_frames().unwrap().is_empty());
+    }
+
+    #[test]
+    fn display_wake_sequence_does_not_advance_when_present_has_no_dirty_frame() {
+        let handle = DeviceRuntimeKernelHandle::new(16, 1024);
+        handle
+            .attach_display(7, 16, 16, PixelFormat::Rgb565)
+            .unwrap();
+        let _ = handle.drain_display_frames().unwrap();
+        let before = handle.display_wake_sequence().unwrap();
+
+        handle.present_display(7).unwrap();
+
+        assert_eq!(before, handle.display_wake_sequence().unwrap());
+    }
+
+    #[test]
+    fn wait_for_display_wake_returns_after_present() {
+        let handle = std::sync::Arc::new(DeviceRuntimeKernelHandle::new(16, 1024));
+        handle
+            .attach_display(7, 16, 16, PixelFormat::Rgb565)
+            .unwrap();
+        let _ = handle.drain_display_frames().unwrap();
+        let observed = handle.display_wake_sequence().unwrap();
+        let waiter = handle.clone();
+
+        let join = thread::spawn(move || {
+            waiter
+                .wait_for_display_wake(observed, Duration::from_millis(500))
+                .unwrap()
+        });
+
+        thread::sleep(Duration::from_millis(25));
+        handle
+            .with_kernel_mut(|kernel| {
+                kernel.displays.fill_rect(7, 0, 0, 2, 2, 0xffff);
+            })
+            .unwrap();
+        handle.present_display(7).unwrap();
+
+        assert!(join.join().unwrap() > observed);
+    }
+
+    #[test]
+    fn wait_for_display_wake_times_out_without_change() {
+        let handle = DeviceRuntimeKernelHandle::new(16, 1024);
+        let observed = handle.display_wake_sequence().unwrap();
+
+        let after = handle
+            .wait_for_display_wake(observed, Duration::from_millis(5))
+            .unwrap();
+
+        assert_eq!(observed, after);
+    }
 }

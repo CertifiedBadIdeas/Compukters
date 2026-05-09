@@ -290,6 +290,47 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
 }
 
 #[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_displayWakeSequenceNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    handle: jlong,
+) -> jlong {
+    let kernel = match shared_kernel_handle(&mut env, handle) {
+        Some(kernel) => kernel,
+        None => return 0,
+    };
+    match kernel.display_wake_sequence() {
+        Ok(sequence) => sequence as jlong,
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalStateException", error);
+            0
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_waitForDisplayWakeNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    handle: jlong,
+    observed_wake_sequence: jlong,
+    timeout_millis: jlong,
+) -> jlong {
+    let kernel = match shared_kernel_handle(&mut env, handle) {
+        Some(kernel) => kernel,
+        None => return observed_wake_sequence,
+    };
+    let timeout = Duration::from_millis(timeout_millis.max(0) as u64);
+    match kernel.wait_for_display_wake(observed_wake_sequence, timeout) {
+        Ok(sequence) => sequence as jlong,
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalStateException", error);
+            observed_wake_sequence
+        }
+    }
+}
+
+#[no_mangle]
 pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_attachImageToKernelNative(
     mut env: JNIEnv<'_>,
     _class: JClass<'_>,
@@ -377,13 +418,7 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
         Some(kernel) => kernel,
         None => return,
     };
-    let mut kernel = match lock_kernel_handle(&mut env, &kernel_handle) {
-        Some(kernel) => kernel,
-        None => return,
-    };
-    if let Err(error) = kernel
-        .displays
-        .attach(display_id, width, height, PixelFormat::Rgb565)
+    if let Err(error) = kernel_handle.attach_display(display_id, width, height, PixelFormat::Rgb565)
     {
         let _ = env.throw_new("java/lang/IllegalArgumentException", error);
     }
@@ -400,11 +435,9 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
         Some(kernel) => kernel,
         None => return,
     };
-    let mut kernel = match lock_kernel_handle(&mut env, &kernel_handle) {
-        Some(kernel) => kernel,
-        None => return,
-    };
-    kernel.displays.detach(display_id);
+    if let Err(error) = kernel_handle.detach_display(display_id) {
+        let _ = env.throw_new("java/lang/IllegalStateException", error);
+    }
 }
 
 #[no_mangle]
@@ -443,11 +476,9 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
         Some(kernel) => kernel,
         None => return,
     };
-    let mut kernel = match lock_kernel_handle(&mut env, &kernel_handle) {
-        Some(kernel) => kernel,
-        None => return,
-    };
-    kernel.displays.present(display_id);
+    if let Err(error) = kernel_handle.present_display(display_id) {
+        let _ = env.throw_new("java/lang/IllegalStateException", error);
+    }
 }
 
 #[no_mangle]
@@ -460,13 +491,16 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
         Some(kernel) => kernel,
         None => return null_mut(),
     };
-    let mut kernel = match lock_kernel_handle(&mut env, &kernel_handle) {
-        Some(kernel) => kernel,
-        None => return null_mut(),
-    };
-    let frames = kernel.displays.drain_frames();
-    let bytes = encode_display_frames(&frames);
-    byte_array_or_throw(&mut env, &bytes)
+    match kernel_handle.drain_display_frames() {
+        Ok(frames) => {
+            let bytes = encode_display_frames(&frames);
+            byte_array_or_throw(&mut env, &bytes)
+        }
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalStateException", error);
+            null_mut()
+        }
+    }
 }
 
 fn image_handle_mut(env: &mut JNIEnv<'_>, handle: jlong) -> Option<&'static mut ImageVmHandle> {
