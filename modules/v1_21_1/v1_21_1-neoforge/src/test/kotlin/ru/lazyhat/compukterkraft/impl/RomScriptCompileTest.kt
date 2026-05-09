@@ -207,6 +207,10 @@ class RomScriptCompileTest {
             shell.contains("write(ctx, line + \"\\n\")"),
             "shell.ck should not echo submitted lines; terminal owns visible input echo",
         )
+        assertFalse(
+            shell.contains("yield()"),
+            "shell.ck should not yield on blank Enter lines; readLine already blocks for input",
+        )
         assertTrue(terminal.contains("ch == \"\\r\""), "terminal.ck should handle carriage return output")
         assertTrue(terminal.contains("ch == \"\\b\""), "terminal.ck should handle backspace output")
         assertTrue(terminal.contains("clearCell"), "terminal.ck should clear a cell for backspace output")
