@@ -24,7 +24,9 @@ import ru.lazyhat.compukterkraft.core.Config
 import ru.lazyhat.compukterkraft.core.gui.TerminalFontConstants
 import java.nio.file.Path
 import kotlin.io.path.absolutePathString
+import kotlin.io.path.readText
 import kotlin.test.Test
+import kotlin.test.assertContains
 import kotlin.test.assertTrue
 
 class RuntimeVmProfilingReportTest {
@@ -58,6 +60,14 @@ class RuntimeVmProfilingReportTest {
                 )
             println("Runtime VM $runtimeName profiling data: ${profilePath.absolutePathString()}")
             println("Runtime VM $runtimeName profiling run: ${Path.of(runsDirValue).resolve(run.metadata.timestamp).absolutePathString()}")
+            val markdown =
+                Path
+                    .of(runsDirValue)
+                    .resolve(run.metadata.timestamp)
+                    .resolve(RuntimeVmProfilingReportArchive.MARKDOWN_FILE_NAME)
+                    .readText()
+            assertContains(markdown, "Native wait signals")
+            assertContains(markdown, "Native fast-path calls")
         }
 
         assertTrue(profile.workloads.isNotEmpty())

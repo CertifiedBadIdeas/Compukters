@@ -18,6 +18,8 @@
  */
 package ru.lazyhat.compukterkraft.lang.runtime
 
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeVmBindings
+
 internal class RuntimeHostBridge(
     private val runtime: DeviceRuntime,
 ) {
@@ -152,6 +154,7 @@ internal class RuntimeHostBridge(
     ): VmValue {
         val eventId = arguments.firstOrNull()?.eventId() ?: 0
         return when (functionName) {
+            "pull" -> fromEvent(runtime.pullEvent(arguments.singleOrNull()?.asString()))
             "tryPull" -> fromEvent(runtime.tryPullEvent(arguments.singleOrNull()?.asString()) ?: VmEvent(""))
             "argCount" -> VmValue.IntValue(runtime.events.argCount(eventId))
             "argInt" -> VmValue.IntValue(runtime.events.argInt(eventId, arguments[1].asInt()))
@@ -191,6 +194,7 @@ internal class RuntimeHostBridge(
 
             "read" -> {
                 measuredHostCallWait("ipc", "read") {
+                    readNativeIpc(arguments[0].asInt())?.let(VmValue::StringValue) ?:
                     VmValue.StringValue(runtime.ipc.read(arguments[0].asInt()))
                 }
             }
@@ -208,6 +212,17 @@ internal class RuntimeHostBridge(
                 error("Unknown ipc function $functionName")
             }
         }
+
+    private suspend fun readNativeIpc(channel: Int): String? {
+        val handle = (runtime as? NativeDeviceKernelProvider)?.nativeDeviceKernelHandle?.takeIf { it != 0L } ?: return null
+        while (true) {
+            val text = NativeVmBindings.tryReadDeviceIpc(handle, channel) ?: return null
+            if (text.isNotEmpty()) {
+                return text
+            }
+            runtime.yield()
+        }
+    }
 
     private suspend fun <T> measuredHostCallWait(
         moduleName: String,

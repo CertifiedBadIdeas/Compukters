@@ -2,7 +2,7 @@ use std::ptr::null_mut;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use jni::objects::{JByteArray, JClass, JString};
-use jni::sys::{jboolean, jbyteArray, jint, jlong};
+use jni::sys::{jboolean, jbyteArray, jint, jlong, jstring};
 use jni::JNIEnv;
 
 use crate::display::PixelFormat;
@@ -179,6 +179,60 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
         1
     } else {
         0
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_writeDeviceIpcNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    handle: jlong,
+    channel: jint,
+    text: JString<'_>,
+) -> jboolean {
+    let mut kernel = match locked_kernel_handle(&mut env, handle) {
+        Some(kernel) => kernel,
+        None => return 0,
+    };
+    let text: String = match env.get_string(&text) {
+        Ok(text) => text.into(),
+        Err(error) => {
+            let _ = env.throw_new(
+                "java/lang/IllegalArgumentException",
+                format!("Cannot read native IPC text: {error}"),
+            );
+            return 0;
+        }
+    };
+    match kernel.write_ipc(channel, &text) {
+        Ok(()) => 1,
+        Err(_) => 0,
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_tryReadDeviceIpcNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    handle: jlong,
+    channel: jint,
+) -> jstring {
+    let mut kernel = match locked_kernel_handle(&mut env, handle) {
+        Some(kernel) => kernel,
+        None => return null_mut(),
+    };
+    match kernel.try_read_ipc(channel) {
+        Ok(text) => match env.new_string(text) {
+            Ok(text) => text.into_raw(),
+            Err(error) => {
+                let _ = env.throw_new(
+                    "java/lang/IllegalArgumentException",
+                    format!("Cannot return native IPC text: {error}"),
+                );
+                null_mut()
+            }
+        },
+        Err(_) => null_mut(),
     }
 }
 

@@ -377,7 +377,16 @@ class BackgroundDeviceVm(
     override suspend fun writeIpc(
         channel: Int,
         text: String,
-    ) = ipcRegistry.write(channel, text)
+    ) {
+        if (!nativeDeviceKernelFreed) {
+            nativeDeviceKernelHandle?.let { handle ->
+                if (NativeVmBindings.writeDeviceIpc(handle, channel, text)) {
+                    return
+                }
+            }
+        }
+        ipcRegistry.write(channel, text)
+    }
 
     override suspend fun pollIpcOrEvent(channel: Int): VmPollResult {
         while (true) {
@@ -432,8 +441,8 @@ class BackgroundDeviceVm(
         if (!nativeDeviceKernelFreed) {
             nativeDisplayRegistry?.drainFrames()?.let(stoppedNativeDisplayFrames::addAll)
         }
-        stateManager.stopVm(reason, errorMessage)
         processManager.cancelAll()
+        stateManager.stopVm(reason, errorMessage)
         runner?.cancel()
         runner = null
         if (!nativeDeviceKernelFreed) {
