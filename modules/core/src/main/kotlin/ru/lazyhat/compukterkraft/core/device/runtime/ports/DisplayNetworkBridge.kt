@@ -19,6 +19,7 @@
 
 package ru.lazyhat.compukterkraft.core.device.runtime.ports
 
+import ru.lazyhat.compukterkraft.core.device.vm.display.NativeDisplayFrameCodec
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 import java.util.UUID
 
@@ -35,6 +36,16 @@ interface DisplayNetworkBridge {
         containerId: Int,
         frame: DisplayFrameDelta,
     )
+
+    fun sendNativeDisplayFrameBytes(
+        playerUuid: UUID,
+        containerId: Int,
+        payload: ByteArray,
+    ) {
+        for (frame in NativeDisplayFrameCodec.decodeFrames(payload)) {
+            sendDisplayFrame(playerUuid, containerId, frame)
+        }
+    }
 }
 
 object NoopDisplayNetworkBridge : DisplayNetworkBridge {
