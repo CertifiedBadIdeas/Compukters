@@ -72,6 +72,148 @@ fn device_kernel_owns_display_registry() {
 }
 
 #[test]
+fn attached_kernel_handles_display_fill_rect_and_present_imports() {
+    let mut kernel = DeviceRuntimeKernel::new(64, 4096);
+    kernel
+        .displays
+        .attach(1, 18, 18, ckl_vm::display::PixelFormat::Rgb565)
+        .unwrap();
+    let _ = kernel.displays.drain_frames();
+
+    let mut code = Vec::new();
+    push_constant(&mut code, 0);
+    push_constant(&mut code, 1);
+    push_constant(&mut code, 2);
+    push_constant(&mut code, 3);
+    push_constant(&mut code, 4);
+    push_constant(&mut code, 5);
+    call_host(&mut code, 1003, 6);
+    code.push(OP_POP);
+    push_constant(&mut code, 0);
+    call_host(&mut code, 1011, 1);
+    code.push(OP_RETURN);
+
+    let mut vm = ImageVmHandle::create(
+        &image_with_constants_host_imports_and_code(
+            vec![
+                ConstantFixture::Int(1),
+                ConstantFixture::Int(0),
+                ConstantFixture::Int(0),
+                ConstantFixture::Int(2),
+                ConstantFixture::Int(2),
+                ConstantFixture::Int(2016),
+            ],
+            vec![
+                HostImportFixture {
+                    id: 1003,
+                    module_name: "display".to_string(),
+                    function_name: "fillRect".to_string(),
+                    parameter_types: vec![
+                        "Int".to_string(),
+                        "Int".to_string(),
+                        "Int".to_string(),
+                        "Int".to_string(),
+                        "Int".to_string(),
+                        "Int".to_string(),
+                    ],
+                    return_type: "Unit".to_string(),
+                },
+                HostImportFixture {
+                    id: 1011,
+                    module_name: "display".to_string(),
+                    function_name: "present".to_string(),
+                    parameter_types: vec!["Int".to_string()],
+                    return_type: "Unit".to_string(),
+                },
+            ],
+            0,
+            code,
+        ),
+        512,
+    )
+    .unwrap();
+    vm.attach_device_kernel(&mut kernel as *mut DeviceRuntimeKernel)
+        .unwrap();
+
+    let signal = vm.run_until_signal();
+
+    assert_eq!(signal[0], 0, "program should halt instead of emitting display host calls");
+    assert_eq!(kernel.displays.drain_frames().len(), 1);
+}
+
+#[test]
+fn attached_kernel_handles_display_text_run_import() {
+    let mut kernel = DeviceRuntimeKernel::new(64, 4096);
+    kernel
+        .displays
+        .attach(1, 18, 18, ckl_vm::display::PixelFormat::Rgb565)
+        .unwrap();
+    let _ = kernel.displays.drain_frames();
+
+    let mut code = Vec::new();
+    push_constant(&mut code, 0);
+    push_constant(&mut code, 1);
+    push_constant(&mut code, 2);
+    push_constant(&mut code, 3);
+    push_constant(&mut code, 4);
+    push_constant(&mut code, 5);
+    call_host(&mut code, 1012, 6);
+    code.push(OP_POP);
+    push_constant(&mut code, 0);
+    call_host(&mut code, 1011, 1);
+    code.push(OP_RETURN);
+
+    let mut vm = ImageVmHandle::create(
+        &image_with_constants_host_imports_and_code(
+            vec![
+                ConstantFixture::Int(1),
+                ConstantFixture::Int(0),
+                ConstantFixture::Int(1),
+                ConstantFixture::String("AB".to_string()),
+                ConstantFixture::Int(2016),
+                ConstantFixture::Int(-1),
+            ],
+            vec![
+                HostImportFixture {
+                    id: 1012,
+                    module_name: "display".to_string(),
+                    function_name: "blitMono5x7Text".to_string(),
+                    parameter_types: vec![
+                        "Int".to_string(),
+                        "Int".to_string(),
+                        "Int".to_string(),
+                        "String".to_string(),
+                        "Int".to_string(),
+                        "Int".to_string(),
+                    ],
+                    return_type: "Unit".to_string(),
+                },
+                HostImportFixture {
+                    id: 1011,
+                    module_name: "display".to_string(),
+                    function_name: "present".to_string(),
+                    parameter_types: vec!["Int".to_string()],
+                    return_type: "Unit".to_string(),
+                },
+            ],
+            0,
+            code,
+        ),
+        512,
+    )
+    .unwrap();
+    vm.attach_device_kernel(&mut kernel as *mut DeviceRuntimeKernel)
+        .unwrap();
+
+    let signal = vm.run_until_signal();
+    let frames = kernel.displays.drain_frames();
+
+    assert_eq!(signal[0], 0, "program should halt instead of emitting display host calls");
+    assert_eq!(frames.len(), 1);
+    assert!(!frames[0].tiles.is_empty());
+}
+
+#[test]
 fn stores_and_loads_local_value() {
     let code = vec![
         OP_PUSH_BOOL,
