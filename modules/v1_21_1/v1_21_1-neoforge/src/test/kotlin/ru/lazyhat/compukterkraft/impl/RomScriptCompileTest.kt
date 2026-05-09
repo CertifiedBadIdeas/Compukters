@@ -263,12 +263,42 @@ class RomScriptCompileTest {
             "terminal.ck should handle PageDown scrollback hotkeys",
         )
         assertTrue(
+            source.contains("key == 265"),
+            "terminal.ck should handle one-row scrollback up hotkeys",
+        )
+        assertTrue(
+            source.contains("key == 264"),
+            "terminal.ck should handle one-row scrollback down hotkeys",
+        )
+        assertTrue(
             source.contains("if (buffer.viewportOffset == 0 && line != \"\")"),
             "terminal.ck should only redraw the draft input overlay while following the bottom viewport",
         )
         assertTrue(
             source.contains("viewportOffset = 0"),
             "terminal.ck should snap back to bottom on local input edits",
+        )
+    }
+
+    @Test
+    fun bundledRomTerminalKeepsAutoscrollIncremental() {
+        val source = resourceText("rom/terminal.ck")
+
+        assertTrue(
+            source.contains("fun renderAutoscrolledRows(displayId: Int, buffer: TerminalBuffer, startRow: Int)"),
+            "terminal.ck should redraw only newly exposed rows after display copyRect autoscroll",
+        )
+        assertTrue(
+            source.contains("renderAutoscrolledRows(displayId, updated, startRow)"),
+            "terminal.ck should use incremental autoscroll rendering instead of full viewport redraw",
+        )
+        assertTrue(
+            source.contains("startVisibleRow"),
+            "terminal.ck should translate history cursor rows to visible rows before incremental redraw",
+        )
+        assertFalse(
+            source.contains("if (scrolled) {\n            renderViewport(displayId, updated)\n        }"),
+            "terminal.ck should not repaint the whole viewport after copyRect autoscroll",
         )
     }
 
