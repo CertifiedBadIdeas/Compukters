@@ -1,4 +1,6 @@
 use std::collections::{BTreeMap, VecDeque};
+use std::sync::{Condvar, Mutex, MutexGuard};
+use std::time::Duration;
 
 use crate::display::DeviceDisplayRegistry;
 use crate::filesystem::DeviceFilesystem;
@@ -127,11 +129,75 @@ impl DeviceRuntimeKernel {
     }
 
     pub fn close_ipc(&mut self, channel: i32) -> Result<(), String> {
-        self.ipc.close(channel)
+        self.ipc.close(channel)?;
+        self.wake_sequence = self.wake_sequence.saturating_add(1);
+        Ok(())
+    }
+
+    pub fn wake_sequence(&self) -> i64 {
+        self.wake_sequence
     }
 
     pub fn attach_placeholder_payload_event(&mut self, name: &str, _payload: &[u8]) -> bool {
         self.enqueue_event(name, Vec::new())
+    }
+}
+
+pub struct DeviceRuntimeKernelHandle {
+    kernel: Mutex<DeviceRuntimeKernel>,
+    wake: Condvar,
+}
+
+impl DeviceRuntimeKernelHandle {
+    pub fn new(max_event_queue_size: usize, max_buffered_bytes_per_channel: usize) -> Self {
+        Self {
+            kernel: Mutex::new(DeviceRuntimeKernel::new(
+                max_event_queue_size,
+                max_buffered_bytes_per_channel,
+            )),
+            wake: Condvar::new(),
+        }
+    }
+
+    pub fn lock(&self) -> Result<MutexGuard<'_, DeviceRuntimeKernel>, String> {
+        self.kernel
+            .lock()
+            .map_err(|_| "native device runtime kernel lock is poisoned".to_string())
+    }
+
+    pub fn with_kernel_mut<T>(
+        &self,
+        action: impl FnOnce(&mut DeviceRuntimeKernel) -> T,
+    ) -> Result<T, String> {
+        let mut kernel = self.lock()?;
+        let before = kernel.wake_sequence();
+        let result = action(&mut kernel);
+        if kernel.wake_sequence() != before {
+            self.wake.notify_all();
+        }
+        Ok(result)
+    }
+
+    pub fn wake_sequence(&self) -> Result<i64, String> {
+        Ok(self.lock()?.wake_sequence())
+    }
+
+    pub fn wait_for_wake(
+        &self,
+        observed_sequence: i64,
+        timeout: Duration,
+    ) -> Result<i64, String> {
+        let kernel = self.lock()?;
+        if kernel.wake_sequence() > observed_sequence {
+            return Ok(kernel.wake_sequence());
+        }
+        let (kernel, _) = self
+            .wake
+            .wait_timeout_while(kernel, timeout, |kernel| {
+                kernel.wake_sequence() <= observed_sequence
+            })
+            .map_err(|_| "native device runtime kernel wait lock is poisoned".to_string())?;
+        Ok(kernel.wake_sequence())
     }
 }
 
