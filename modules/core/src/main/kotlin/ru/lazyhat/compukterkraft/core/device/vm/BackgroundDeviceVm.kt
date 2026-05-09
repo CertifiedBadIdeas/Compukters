@@ -362,6 +362,32 @@ class BackgroundDeviceVm(
         return displayRegistry.drainFrames()
     }
 
+    fun supportsNativeDisplayFramePump(): Boolean = nativeDisplayRegistry != null && !nativeDeviceKernelFreed
+
+    fun nativeDisplayWakeSequence(): Long? =
+        if (!nativeDeviceKernelFreed) {
+            nativeDisplayRegistry?.displayWakeSequence()
+        } else {
+            null
+        }
+
+    fun waitForNativeDisplayWake(
+        observedWakeSequence: Long,
+        timeoutMillis: Long,
+    ): Long? =
+        if (!nativeDeviceKernelFreed) {
+            nativeDisplayRegistry?.waitForDisplayWake(observedWakeSequence, timeoutMillis)
+        } else {
+            null
+        }
+
+    fun drainNativeDisplayFrameBytes(): ByteArray? =
+        if (!nativeDeviceKernelFreed) {
+            nativeDisplayRegistry?.drainFrameBytes()
+        } else {
+            null
+        }
+
     // ── VmContext ───────────────────────────────────────────────────
 
     override suspend fun receiveEvent(): VmEvent = eventManager.receiveEvent()

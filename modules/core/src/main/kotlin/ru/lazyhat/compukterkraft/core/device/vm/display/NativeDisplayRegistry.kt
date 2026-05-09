@@ -57,6 +57,15 @@ class NativeDisplayRegistry(
         NativeVmBindings.nativeDisplayPresent(kernelHandle, displayId)
     }
 
+    fun drainFrameBytes(): ByteArray = NativeVmBindings.drainNativeDisplayFrames(kernelHandle)
+
+    fun displayWakeSequence(): Long = NativeVmBindings.displayWakeSequence(kernelHandle)
+
+    fun waitForDisplayWake(
+        observedWakeSequence: Long,
+        timeoutMillis: Long,
+    ): Long = NativeVmBindings.waitForDisplayWake(kernelHandle, observedWakeSequence, timeoutMillis)
+
     fun drainFrames(): List<DisplayFrameDelta> =
         NativeDisplayFrameCodec.decodeFrames(NativeVmBindings.drainNativeDisplayFrames(kernelHandle))
 }
