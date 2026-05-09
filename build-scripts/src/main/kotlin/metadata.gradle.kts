@@ -35,6 +35,41 @@ val modProperties =
 
 base.archivesName = modProperties.getValue("mod_id").replace(" ", "")
 
+val generateCklResourceIndexes =
+    tasks.register("generateCklResourceIndexes") {
+        val resourcesRoot = layout.projectDirectory.dir("src/main/resources")
+        val outputRoot = layout.buildDirectory.dir("generated/ckl-resource-indexes")
+        val indexedRoots = listOf("rom", "firmware")
+
+        inputs.files(
+            indexedRoots.map { rootName -> fileTree(resourcesRoot.dir(rootName)) },
+        )
+        outputs.dir(outputRoot)
+
+        doLast {
+            for (rootName in indexedRoots) {
+                val sourceRoot = resourcesRoot.dir(rootName).asFile
+                val files =
+                    if (sourceRoot.isDirectory) {
+                        fileTree(sourceRoot)
+                            .files
+                            .map {
+                                sourceRoot
+                                    .toPath()
+                                    .relativize(it.toPath())
+                                    .toString()
+                                    .replace(File.separatorChar, '/')
+                            }.sorted()
+                    } else {
+                        emptyList()
+                    }
+                val indexFile = outputRoot.get().file("$rootName/$rootName.index").asFile
+                indexFile.parentFile.mkdirs()
+                indexFile.writeText(files.joinToString(separator = "\n", postfix = if (files.isEmpty()) "" else "\n"))
+            }
+        }
+    }
+
 val generateModMetadata =
     tasks.register("generateModMetadata", ProcessResources::class) {
         val replaceProperties = modProperties.toMap()
@@ -47,12 +82,14 @@ val generateModMetadata =
         outputs.dir(intoDir)
 
         from(from) {
+            exclude("rom/rom.index", "firmware/firmware.index")
             exclude { element -> element.name.contains(".png") || element.name.endsWith(".ck") }
             expand(replaceProperties)
         }
         from(from) {
             include("**/*.ck")
         }
+        from(generateCklResourceIndexes)
 
         into(intoDir)
     }
@@ -61,6 +98,7 @@ tasks.named<ProcessResources>("processResources") {
     duplicatesStrategy = DuplicatesStrategy.INCLUDE
 
     dependsOn(generateModMetadata)
+    dependsOn(generateCklResourceIndexes)
 }
 
 sourceSets.main {

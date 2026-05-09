@@ -374,6 +374,31 @@ class RomScriptCompileTest {
     }
 
     @Test
+    fun bundledCklResourceIndexesAreGeneratedForRomAndFirmware() {
+        val romIndex = resourceText("rom/rom.index")
+        val firmwareIndex = resourceText("firmware/firmware.index")
+
+        val romFiles =
+            romIndex
+                .lineSequence()
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .toList()
+        val firmwareFiles =
+            firmwareIndex
+                .lineSequence()
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .toList()
+
+        assertContains(romFiles, "boot.ck")
+        assertContains(romFiles, "yes.ck")
+        assertContains(firmwareFiles, "bios.ck")
+        assertTrue(romFiles.all { it.endsWith(".ck") }, "rom.index should contain CKL source paths only")
+        assertTrue(firmwareFiles.all { it.endsWith(".ck") }, "firmware.index should contain CKL source paths only")
+    }
+
+    @Test
     fun everyRomScriptCompilesCleanly() {
         val cl = RomScriptCompileTest::class.java.classLoader
         val index =

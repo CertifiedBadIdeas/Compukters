@@ -419,11 +419,15 @@ Host calls нужны для операций, которые выполняют
 Когда компьютер запускается впервые, `ComputerWorkspaceInitializer.ensureInitialized(computerId)`:
 
 - создает папку компьютера;
-- читает `rom/rom.index` из ресурсов мода;
+- читает generated `rom/rom.index` из ресурсов мода;
 - копирует перечисленные файлы в workspace;
 - не перезаписывает уже существующие файлы.
 
-Тесты подтверждают, что в новый workspace копируются `bios.ck`, `shell.ck`, `ls.ck`, `mkdir.ck`, `rmdir.ck`, `pwd.ck`, а повторная инициализация не трогает уже измененные файлы.
+`rom/rom.index` и `firmware/firmware.index` генерируются Gradle-таской из `src/main/resources/rom/**/*.ck` и
+`src/main/resources/firmware/**/*.ck`, поэтому вложенные ROM/firmware файлы попадают в manifest автоматически.
+Тесты подтверждают, что в новый workspace копируются пользовательские ROM-программы вроде `boot.ck`, `shell.ck`,
+`ls.ck`, `mkdir.ck`, `rmdir.ck`, `pwd.ck`, `nano.ck` и `yes.ck`, firmware `bios.ck` не копируется в пользовательский
+workspace, а повторная инициализация не трогает уже измененные файлы.
 
 ### 10.4. Root jail и защита от path traversal
 

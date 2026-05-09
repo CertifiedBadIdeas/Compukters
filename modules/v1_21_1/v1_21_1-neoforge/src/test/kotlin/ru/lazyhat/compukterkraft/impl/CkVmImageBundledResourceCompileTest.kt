@@ -74,9 +74,13 @@ class CkVmImageBundledResourceCompileTest {
 
     private fun bundledSources(): Map<String, String> {
         val romFiles = romIndex()
+        val firmwareFiles = firmwareIndex()
         assertNotNull(romFiles.firstOrNull(), "rom.index is empty")
+        assertNotNull(firmwareFiles.firstOrNull(), "firmware.index is empty")
         return buildMap {
-            put("firmware/bios.ck", resourceText("firmware/bios.ck"))
+            for (firmwareFile in firmwareFiles) {
+                put("firmware/$firmwareFile", resourceText("firmware/$firmwareFile"))
+            }
             for (romFile in romFiles) {
                 put(romFile, resourceText("rom/$romFile"))
             }
@@ -85,6 +89,14 @@ class CkVmImageBundledResourceCompileTest {
 
     private fun romIndex(): List<String> =
         resourceText("rom/rom.index")
+            .lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .filterNot { it.startsWith("#") }
+            .toList()
+
+    private fun firmwareIndex(): List<String> =
+        resourceText("firmware/firmware.index")
             .lineSequence()
             .map { it.trim() }
             .filter { it.isNotEmpty() }

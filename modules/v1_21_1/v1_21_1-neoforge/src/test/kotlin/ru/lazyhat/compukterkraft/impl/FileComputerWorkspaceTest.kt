@@ -132,6 +132,7 @@ class ComputerWorkspaceInitializerTest {
             assertTrue(computerDir.resolve("rmdir.ck").exists())
             assertTrue(computerDir.resolve("pwd.ck").exists())
             assertTrue(computerDir.resolve("nano.ck").exists())
+            assertTrue(computerDir.resolve("yes.ck").exists())
         } finally {
             root.toFile().deleteRecursively()
         }
