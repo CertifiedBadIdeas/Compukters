@@ -72,6 +72,12 @@ class RuntimeVmProfilingReportFormatterTest {
                             nativeWaitNanos = 2_000_000,
                             nativeWaitWakeups = 6,
                             nativeWaitTimeouts = 2,
+                            nativeDisplayPumpWaitCalls = 11,
+                            nativeDisplayPumpWaitNanos = 3_000_000,
+                            nativeDisplayPumpWakeups = 9,
+                            nativeDisplayPumpTimeouts = 2,
+                            nativeDisplayFrameByteBatches = 5,
+                            nativeDisplayFrameBytes = 4096,
                             hostCallSignals = 2,
                             hostCalls =
                                 listOf(
@@ -105,6 +111,12 @@ class RuntimeVmProfilingReportFormatterTest {
         assertTrue(markdown.contains("| Native wait time | 2 ms | 55 us |"), markdown)
         assertTrue(markdown.contains("| Native wait wakeups | 6 | 3 |"), markdown)
         assertTrue(markdown.contains("| Native wait timeouts | 2 | 1 |"), markdown)
+        assertTrue(markdown.contains("| Native display pump wait calls | 11 | 0 |"), markdown)
+        assertTrue(markdown.contains("| Native display pump wait time | 3 ms | 0 ns |"), markdown)
+        assertTrue(markdown.contains("| Native display pump wakeups | 9 | 0 |"), markdown)
+        assertTrue(markdown.contains("| Native display pump timeouts | 2 | 0 |"), markdown)
+        assertTrue(markdown.contains("| Native display frame byte batches | 5 | 0 |"), markdown)
+        assertTrue(markdown.contains("| Native display frame bytes | 4096 | 0 |"), markdown)
         assertTrue(markdown.contains("| Host-call signals | 2 | 10 |"), markdown)
         assertTrue(markdown.contains("| Host-call active time | 30 ms | 50.01 us |"), markdown)
         assertTrue(markdown.contains("| Host-call wait time | 60 ms | 0 ns |"), markdown)
@@ -157,6 +169,12 @@ class RuntimeVmProfilingReportFormatterTest {
                             nativeWaitNanos = 700_000,
                             nativeWaitWakeups = 4,
                             nativeWaitTimeouts = 1,
+                            nativeDisplayPumpWaitCalls = 6,
+                            nativeDisplayPumpWaitNanos = 800_000,
+                            nativeDisplayPumpWakeups = 5,
+                            nativeDisplayPumpTimeouts = 1,
+                            nativeDisplayFrameByteBatches = 4,
+                            nativeDisplayFrameBytes = 2048,
                             hostCallSignals = 2,
                         ),
                     ),
@@ -173,6 +191,12 @@ class RuntimeVmProfilingReportFormatterTest {
         assertTrue(markdown.contains("| Native wait time | 700 us |"), markdown)
         assertTrue(markdown.contains("| Native wait wakeups | 4 |"), markdown)
         assertTrue(markdown.contains("| Native wait timeouts | 1 |"), markdown)
+        assertTrue(markdown.contains("| Native display pump wait calls | 6 |"), markdown)
+        assertTrue(markdown.contains("| Native display pump wait time | 800 us |"), markdown)
+        assertTrue(markdown.contains("| Native display pump wakeups | 5 |"), markdown)
+        assertTrue(markdown.contains("| Native display pump timeouts | 1 |"), markdown)
+        assertTrue(markdown.contains("| Native display frame byte batches | 4 |"), markdown)
+        assertTrue(markdown.contains("| Native display frame bytes | 2048 |"), markdown)
         assertTrue(markdown.contains("| Host-call signals | 4 |"), markdown)
         assertTrue(markdown.contains("| Host-call active time | 0 ns |"), markdown)
         assertTrue(markdown.contains("| Host-call wait time | 0 ns |"), markdown)
@@ -210,6 +234,12 @@ class RuntimeVmProfilingReportFormatterTest {
         nativeWaitNanos: Long = 0,
         nativeWaitWakeups: Long = 0,
         nativeWaitTimeouts: Long = 0,
+        nativeDisplayPumpWaitCalls: Long = 0,
+        nativeDisplayPumpWaitNanos: Long = 0,
+        nativeDisplayPumpWakeups: Long = 0,
+        nativeDisplayPumpTimeouts: Long = 0,
+        nativeDisplayFrameByteBatches: Long = 0,
+        nativeDisplayFrameBytes: Long = 0,
         hostCallSignals: Long,
         hostCalls: List<RuntimeHostCallMetrics> = emptyList(),
     ): RuntimeWorkloadProfile =
@@ -257,6 +287,12 @@ class RuntimeVmProfilingReportFormatterTest {
                             nativeWaitNanos = nativeWaitNanos,
                             nativeWaitWakeups = nativeWaitWakeups,
                             nativeWaitTimeouts = nativeWaitTimeouts,
+                            nativeDisplayPumpWaitCalls = nativeDisplayPumpWaitCalls,
+                            nativeDisplayPumpWaitNanos = nativeDisplayPumpWaitNanos,
+                            nativeDisplayPumpWakeups = nativeDisplayPumpWakeups,
+                            nativeDisplayPumpTimeouts = nativeDisplayPumpTimeouts,
+                            nativeDisplayFrameByteBatches = nativeDisplayFrameByteBatches,
+                            nativeDisplayFrameBytes = nativeDisplayFrameBytes,
                             hostCallSignals = hostCallSignals,
                         ),
                     hostCalls = hostCalls,

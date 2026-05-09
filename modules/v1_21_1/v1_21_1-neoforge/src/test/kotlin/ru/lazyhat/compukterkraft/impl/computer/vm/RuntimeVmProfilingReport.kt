@@ -133,7 +133,7 @@ internal object RuntimeVmProfileCodec {
                     }
                     workload.runtime.vm.run {
                         appendLine(
-                            "runtimeVm\t$sliceRequests\t$slicePermitsSent\t$sleepGatedSliceRequests\t$slicePermitsReceived\t$schedulingPoints\t$yieldSchedulingPoints\t$waitForSliceSchedulingPoints\t$executionWindows\t$executionWindowNanos\t$haltSignals\t$pauseSignals\t$yieldSignals\t$sleepSignals\t$waitEventSignals\t$waitPollSignals\t$hostCallSignals\t$nativeFastPathCalls\t$nativeWaitCalls\t$nativeWaitNanos\t$nativeWaitWakeups\t$nativeWaitTimeouts",
+                            "runtimeVm\t$sliceRequests\t$slicePermitsSent\t$sleepGatedSliceRequests\t$slicePermitsReceived\t$schedulingPoints\t$yieldSchedulingPoints\t$waitForSliceSchedulingPoints\t$executionWindows\t$executionWindowNanos\t$haltSignals\t$pauseSignals\t$yieldSignals\t$sleepSignals\t$waitEventSignals\t$waitPollSignals\t$hostCallSignals\t$nativeFastPathCalls\t$nativeWaitCalls\t$nativeWaitNanos\t$nativeWaitWakeups\t$nativeWaitTimeouts\t$nativeDisplayPumpWaitCalls\t$nativeDisplayPumpWaitNanos\t$nativeDisplayPumpWakeups\t$nativeDisplayPumpTimeouts\t$nativeDisplayFrameByteBatches\t$nativeDisplayFrameBytes",
                         )
                     }
                     workload.runtime.hostCalls.forEach { call ->
@@ -295,6 +295,12 @@ internal object RuntimeVmProfileCodec {
                                 nativeWaitNanos = if (v.size >= 19) v[18] else 0,
                                 nativeWaitWakeups = if (v.size >= 20) v[19] else 0,
                                 nativeWaitTimeouts = if (v.size >= 21) v[20] else 0,
+                                nativeDisplayPumpWaitCalls = if (v.size >= 22) v[21] else 0,
+                                nativeDisplayPumpWaitNanos = if (v.size >= 23) v[22] else 0,
+                                nativeDisplayPumpWakeups = if (v.size >= 24) v[23] else 0,
+                                nativeDisplayPumpTimeouts = if (v.size >= 25) v[24] else 0,
+                                nativeDisplayFrameByteBatches = if (v.size >= 26) v[25] else 0,
+                                nativeDisplayFrameBytes = if (v.size >= 27) v[26] else 0,
                             )
                         }
                 }
@@ -581,6 +587,12 @@ internal object RuntimeVmProfilingReportFormatter {
         appendLine("| Native wait time | ${formatNanos(workload.runtime.vm.nativeWaitNanos)} |")
         appendLine("| Native wait wakeups | ${workload.runtime.vm.nativeWaitWakeups} |")
         appendLine("| Native wait timeouts | ${workload.runtime.vm.nativeWaitTimeouts} |")
+        appendLine("| Native display pump wait calls | ${workload.runtime.vm.nativeDisplayPumpWaitCalls} |")
+        appendLine("| Native display pump wait time | ${formatNanos(workload.runtime.vm.nativeDisplayPumpWaitNanos)} |")
+        appendLine("| Native display pump wakeups | ${workload.runtime.vm.nativeDisplayPumpWakeups} |")
+        appendLine("| Native display pump timeouts | ${workload.runtime.vm.nativeDisplayPumpTimeouts} |")
+        appendLine("| Native display frame byte batches | ${workload.runtime.vm.nativeDisplayFrameByteBatches} |")
+        appendLine("| Native display frame bytes | ${workload.runtime.vm.nativeDisplayFrameBytes} |")
         appendLine("| Host-call signals | ${workload.runtime.vm.hostCallSignals} |")
         appendLine("| Host calls | ${workload.runtime.hostCalls.sumOf { it.calls }} |")
         appendLine("| Host-call time | ${formatNanos(workload.runtime.hostCalls.sumOf { it.nanos })} |")
@@ -650,6 +662,12 @@ internal object RuntimeVmProfilingReportFormatter {
         appendHistoricalMetricRow("Native wait time", columns) { workload -> formatNanos(workload.runtime.vm.nativeWaitNanos) }
         appendHistoricalMetricRow("Native wait wakeups", columns) { workload -> workload.runtime.vm.nativeWaitWakeups.toString() }
         appendHistoricalMetricRow("Native wait timeouts", columns) { workload -> workload.runtime.vm.nativeWaitTimeouts.toString() }
+        appendHistoricalMetricRow("Native display pump wait calls", columns) { workload -> workload.runtime.vm.nativeDisplayPumpWaitCalls.toString() }
+        appendHistoricalMetricRow("Native display pump wait time", columns) { workload -> formatNanos(workload.runtime.vm.nativeDisplayPumpWaitNanos) }
+        appendHistoricalMetricRow("Native display pump wakeups", columns) { workload -> workload.runtime.vm.nativeDisplayPumpWakeups.toString() }
+        appendHistoricalMetricRow("Native display pump timeouts", columns) { workload -> workload.runtime.vm.nativeDisplayPumpTimeouts.toString() }
+        appendHistoricalMetricRow("Native display frame byte batches", columns) { workload -> workload.runtime.vm.nativeDisplayFrameByteBatches.toString() }
+        appendHistoricalMetricRow("Native display frame bytes", columns) { workload -> workload.runtime.vm.nativeDisplayFrameBytes.toString() }
         appendHistoricalMetricRow("Host-call signals", columns) { workload -> workload.runtime.vm.hostCallSignals.toString() }
         appendHistoricalMetricRow("Host calls", columns) { workload -> workload.runtime.hostCalls.sumOf { it.calls }.toString() }
         appendHistoricalMetricRow("Host-call time", columns) { workload -> formatNanos(workload.runtime.hostCalls.sumOf { it.nanos }) }
