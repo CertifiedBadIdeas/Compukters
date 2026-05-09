@@ -324,6 +324,9 @@ internal class RecordingDeviceRuntimeMetrics : DeviceRuntimeMetrics {
     val hostCallCounts = mutableMapOf<String, Long>()
     val hostCallNanos = mutableMapOf<String, Long>()
     val hostCallWaitNanos = mutableMapOf<String, Long>()
+    val nativeWaitNanos = mutableMapOf<String, Long>()
+    val nativeWaitWakeups = mutableMapOf<String, Long>()
+    val nativeWaitTimeouts = mutableMapOf<String, Long>()
     val instructionCounts = mutableMapOf<VmInstructionKind, Long>()
     val instructionNanos = mutableMapOf<VmInstructionKind, Long>()
 
@@ -354,5 +357,18 @@ internal class RecordingDeviceRuntimeMetrics : DeviceRuntimeMetrics {
     ) {
         instructionCounts[kind] = instructionCounts.getOrDefault(kind, 0) + 1
         instructionNanos[kind] = instructionNanos.getOrDefault(kind, 0) + nanos.coerceAtLeast(0)
+    }
+
+    override fun recordNativeWait(
+        kind: String,
+        nanos: Long,
+        woke: Boolean,
+    ) {
+        nativeWaitNanos[kind] = nativeWaitNanos.getOrDefault(kind, 0) + nanos.coerceAtLeast(0)
+        if (woke) {
+            nativeWaitWakeups[kind] = nativeWaitWakeups.getOrDefault(kind, 0) + 1
+        } else {
+            nativeWaitTimeouts[kind] = nativeWaitTimeouts.getOrDefault(kind, 0) + 1
+        }
     }
 }

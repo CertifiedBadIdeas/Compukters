@@ -220,7 +220,17 @@ internal class RuntimeHostBridge(
             if (text.isNotEmpty()) {
                 return text
             }
-            runtime.yield()
+            val observed = NativeVmBindings.deviceKernelWakeSequence(handle)
+            val started = System.nanoTime()
+            val latest = NativeVmBindings.waitForDeviceWake(handle, observed, NATIVE_IPC_READ_WAIT_TIMEOUT_MILLIS)
+            runtime.metrics.recordNativeWait(
+                kind = "ipc.read",
+                nanos = System.nanoTime() - started,
+                woke = latest > observed,
+            )
+            if (latest <= observed) {
+                runtime.yield()
+            }
         }
     }
 
@@ -514,3 +524,5 @@ internal class RuntimeHostBridge(
         }
     }
 }
+
+private const val NATIVE_IPC_READ_WAIT_TIMEOUT_MILLIS = 50L
