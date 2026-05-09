@@ -24,6 +24,7 @@ import ru.lazyhat.compukterkraft.common.computer.menu.ComputerMenu
 import ru.lazyhat.compukterkraft.common.network.text.ClientTableFormatter
 import ru.lazyhat.compukterkraft.common.network.text.TableBuilder
 import ru.lazyhat.compukterkraft.common.workbench.menu.AbstractWorkbenchMenu
+import ru.lazyhat.compukterkraft.core.device.vm.display.NativeDisplayFrameCodec
 import ru.lazyhat.compukterkraft.core.workbench.EditorPresence
 import ru.lazyhat.compukterkraft.core.workbench.WorkbenchRemoteState
 import ru.lazyhat.compukterkraft.core.workbench.crdt.CursorAnchor
@@ -69,6 +70,15 @@ class ClientNetworkContextImpl : ClientNetworkContext {
         frame: DisplayFrameDelta,
     ) = withCheckedContainerMenu(containerId) {
         handleDisplayFrame(frame)
+    }
+
+    override fun handleNativeDisplayFrameBytes(
+        containerId: Int,
+        payload: ByteArray,
+    ) = withCheckedContainerMenu(containerId) {
+        for (frame in NativeDisplayFrameCodec.decodeFrames(payload)) {
+            handleDisplayFrame(frame)
+        }
     }
 
     override fun handleWorkbenchWorkspace(
