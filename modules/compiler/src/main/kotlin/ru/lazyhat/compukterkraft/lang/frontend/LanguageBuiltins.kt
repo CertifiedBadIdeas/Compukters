@@ -359,6 +359,7 @@ object LanguageBuiltins {
                                 BuiltinFunction("toInt", listOf("String"), "Int", "Parses a decimal integer or returns 0."),
                                 BuiltinFunction("length", listOf("String"), "Int", "Returns the string length in UTF-16 code units."),
                                 BuiltinFunction("charAt", listOf("String", "Int"), "String", "Returns one character or an empty string."),
+                                BuiltinFunction("charCodeAt", listOf("String", "Int"), "Int", "Returns a UTF-16 code unit or -1."),
                                 BuiltinFunction("repeat", listOf("String", "Int"), "String", "Repeats a string count times."),
                                 BuiltinFunction("slice", listOf("String", "Int", "Int"), "String", "Returns a clamped substring."),
                                 BuiltinFunction(

@@ -42,6 +42,7 @@ const STRINGS_CHAR_AT_IMPORT_ID: i32 = 7006;
 const STRINGS_REPEAT_IMPORT_ID: i32 = 7007;
 const STRINGS_SLICE_IMPORT_ID: i32 = 7008;
 const STRINGS_REPLACE_RANGE_IMPORT_ID: i32 = 7009;
+const STRINGS_CHAR_CODE_AT_IMPORT_ID: i32 = 7010;
 
 struct CallFrame {
     function_index: usize,
@@ -1188,6 +1189,7 @@ fn try_native_host_import(
         STRINGS_REPEAT_IMPORT_ID => native_string_repeat(arguments),
         STRINGS_SLICE_IMPORT_ID => native_string_slice(arguments),
         STRINGS_REPLACE_RANGE_IMPORT_ID => native_string_replace_range(arguments),
+        STRINGS_CHAR_CODE_AT_IMPORT_ID => native_string_char_code_at(arguments),
         _ => Ok(NativeHostImportResult::Fallback(arguments)),
     }
 }
@@ -1229,6 +1231,30 @@ fn native_string_char_at(arguments: Vec<VmValue>) -> Result<NativeHostImportResu
             .unwrap_or_default()
     };
     Ok(NativeHostImportResult::Handled(VmValue::String(value)))
+}
+
+fn native_string_char_code_at(arguments: Vec<VmValue>) -> Result<NativeHostImportResult, String> {
+    if arguments.len() != 2 {
+        return Ok(NativeHostImportResult::Fallback(arguments));
+    }
+    let text = match &arguments[0] {
+        VmValue::String(text) if text.is_ascii() => text,
+        _ => return Ok(NativeHostImportResult::Fallback(arguments)),
+    };
+    let index = match &arguments[1] {
+        VmValue::Int(value) => *value,
+        VmValue::Long(value) => *value as i32,
+        _ => return Ok(NativeHostImportResult::Fallback(arguments)),
+    };
+    let value = if index < 0 {
+        -1
+    } else {
+        text.as_bytes()
+            .get(index as usize)
+            .map(|byte| *byte as i32)
+            .unwrap_or(-1)
+    };
+    Ok(NativeHostImportResult::Handled(VmValue::Int(value)))
 }
 
 fn native_string_repeat(arguments: Vec<VmValue>) -> Result<NativeHostImportResult, String> {

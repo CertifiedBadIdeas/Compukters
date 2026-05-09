@@ -39,6 +39,7 @@ const STRINGS_CHAR_AT_IMPORT_ID: i32 = 7006;
 const STRINGS_REPEAT_IMPORT_ID: i32 = 7007;
 const STRINGS_SLICE_IMPORT_ID: i32 = 7008;
 const STRINGS_REPLACE_RANGE_IMPORT_ID: i32 = 7009;
+const STRINGS_CHAR_CODE_AT_IMPORT_ID: i32 = 7010;
 
 fn halt_signal(value: &VmValue) -> Vec<u8> {
     let mut signal = vec![0];
@@ -1635,6 +1636,11 @@ fn native_strings_bulk_helpers_handle_ascii_without_host_signal() {
     push_constant(&mut code, 4);
     push_constant(&mut code, 5);
     call_host(&mut code, STRINGS_SLICE_IMPORT_ID, 3);
+    push_constant(&mut code, 6);
+    push_constant(&mut code, 7);
+    call_host(&mut code, STRINGS_CHAR_CODE_AT_IMPORT_ID, 2);
+    code.push(OP_BINARY);
+    code.push(0);
     code.push(OP_RETURN);
     let mut vm = ImageVmHandle::create(
         &image_with_constants_host_imports_and_code(
@@ -1645,6 +1651,8 @@ fn native_strings_bulk_helpers_handle_ascii_without_host_signal() {
                 ConstantFixture::String("XY".to_string()),
                 ConstantFixture::Int(1),
                 ConstantFixture::Int(5),
+                ConstantFixture::String("Az".to_string()),
+                ConstantFixture::Int(1),
             ],
             vec![
                 strings_import(
@@ -1665,6 +1673,12 @@ fn native_strings_bulk_helpers_handle_ascii_without_host_signal() {
                     vec!["String", "Int", "Int"],
                     "String",
                 ),
+                strings_import(
+                    STRINGS_CHAR_CODE_AT_IMPORT_ID,
+                    "charCodeAt",
+                    vec!["String", "Int"],
+                    "Int",
+                ),
             ],
             0,
             code,
@@ -1675,7 +1689,7 @@ fn native_strings_bulk_helpers_handle_ascii_without_host_signal() {
 
     assert_eq!(
         vm.run_until_signal(),
-        halt_signal(&VmValue::String(".XY.".to_string()))
+        halt_signal(&VmValue::String(".XY.122".to_string()))
     );
 }
 

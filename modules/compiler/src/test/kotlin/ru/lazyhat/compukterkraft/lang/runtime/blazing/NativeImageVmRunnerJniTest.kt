@@ -144,7 +144,7 @@ class NativeImageVmRunnerJniTest {
                         pub fun main() {
                             val cells: String = strings::repeat(".", 6);
                             val patched: String = strings::replaceRange(cells, 2, "XY");
-                            system::log(strings::slice(patched, 1, 5));
+                            system::log(strings::slice(patched, 1, 5) + ":" + strings::charCodeAt("Az", 1));
                         }
                         """.trimIndent(),
                     ).image,
@@ -155,7 +155,7 @@ class NativeImageVmRunnerJniTest {
             NativeImageVmRunner.fromLibraryPath(libraryPath).run(image, runtime)
         }
 
-        assertEquals(listOf(".XY."), runtime.lines)
+        assertEquals(listOf(".XY.:122"), runtime.lines)
     }
 
     @Test
