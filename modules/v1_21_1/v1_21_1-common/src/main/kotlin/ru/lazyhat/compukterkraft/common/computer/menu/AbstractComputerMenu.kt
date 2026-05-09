@@ -53,7 +53,18 @@ sealed interface MenuSide {
             private set
 
         fun attachDisplayBuffer(buffer: ClientDisplayBuffer) {
-            displayBuffer = buffer
+            val current = displayBuffer
+            displayBuffer =
+                if (
+                    current == null ||
+                    current.displayId != buffer.displayId ||
+                    current.width != buffer.width ||
+                    current.height != buffer.height
+                ) {
+                    buffer
+                } else {
+                    current
+                }
         }
 
         fun detachDisplayBuffer() {

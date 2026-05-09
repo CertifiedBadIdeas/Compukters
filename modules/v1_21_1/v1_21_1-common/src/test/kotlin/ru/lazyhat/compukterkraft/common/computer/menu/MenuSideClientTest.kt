@@ -20,10 +20,14 @@
 package ru.lazyhat.compukterkraft.common.computer.menu
 
 import ru.lazyhat.compukterkraft.common.computer.client.ClientDisplayBuffer
+import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
+import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayPixelFormat
+import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayTile
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertSame
+import kotlin.test.assertTrue
 
 class MenuSideClientTest {
     @Test
@@ -39,6 +43,32 @@ class MenuSideClientTest {
 
         client.detachDisplayBuffer()
         assertNull(client.displayBuffer)
+    }
+
+    @Test
+    fun clientSideRetainsDisplayBufferWhenReattachedWithSameGeometry() {
+        val client = MenuSide.Client()
+        val firstBuffer = ClientDisplayBuffer(displayId = 1, width = 64, height = 48)
+        val secondBuffer = ClientDisplayBuffer(displayId = 1, width = 64, height = 48)
+        val frame =
+            DisplayFrameDelta(
+                displayId = 1,
+                sequence = 1,
+                width = 64,
+                height = 48,
+                pixelFormat = DisplayPixelFormat.RGB565,
+                fullRefresh = true,
+                tiles = listOf(DisplayTile(0, 0, 0, 0, 1, 1, byteArrayOf(0, 0))),
+            )
+
+        client.attachDisplayBuffer(firstBuffer)
+        assertTrue(firstBuffer.apply(frame))
+        assertSame(firstBuffer, client.displayBuffer)
+
+        client.attachDisplayBuffer(secondBuffer)
+
+        assertSame(firstBuffer, client.displayBuffer)
+        assertTrue(client.displayBuffer?.hasReceivedFrames == true)
     }
 
     @Test
