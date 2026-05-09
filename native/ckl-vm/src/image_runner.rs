@@ -134,6 +134,74 @@ impl ImageVmHandle {
         Ok(())
     }
 
+    fn try_native_host_import(
+        &mut self,
+        import_id: i32,
+        module_name: &str,
+        function_name: &str,
+        arguments: Vec<VmValue>,
+    ) -> Result<NativeHostImportResult, String> {
+        match self.try_attached_kernel_host_import(module_name, function_name, arguments)? {
+            NativeHostImportResult::Handled(value) => Ok(NativeHostImportResult::Handled(value)),
+            NativeHostImportResult::Fallback(arguments) => {
+                try_builtin_native_host_import(import_id, module_name, arguments)
+            }
+        }
+    }
+
+    fn try_attached_kernel_host_import(
+        &mut self,
+        module_name: &str,
+        function_name: &str,
+        arguments: Vec<VmValue>,
+    ) -> Result<NativeHostImportResult, String> {
+        if module_name != "display" {
+            return Ok(NativeHostImportResult::Fallback(arguments));
+        }
+        let Some(kernel_pointer) = self.attached_kernel else {
+            return Ok(NativeHostImportResult::Fallback(arguments));
+        };
+        let kernel = unsafe { &mut *kernel_pointer };
+        match function_name {
+            "fillRect" => {
+                let display_id = int_argument(&arguments, 0, "display.fillRect displayId")?;
+                let x = int_argument(&arguments, 1, "display.fillRect x")?;
+                let y = int_argument(&arguments, 2, "display.fillRect y")?;
+                let width = int_argument(&arguments, 3, "display.fillRect width")?;
+                let height = int_argument(&arguments, 4, "display.fillRect height")?;
+                let rgb565 = int_argument(&arguments, 5, "display.fillRect rgb565")? as u16;
+                kernel
+                    .displays
+                    .fill_rect(display_id, x, y, width, height, rgb565);
+                Ok(NativeHostImportResult::Handled(VmValue::Unit))
+            }
+            "present" => {
+                let display_id = int_argument(&arguments, 0, "display.present displayId")?;
+                kernel.displays.present(display_id);
+                Ok(NativeHostImportResult::Handled(VmValue::Unit))
+            }
+            "blitMono5x7Text" => {
+                let display_id =
+                    int_argument(&arguments, 0, "display.blitMono5x7Text displayId")?;
+                let x = int_argument(&arguments, 1, "display.blitMono5x7Text x")?;
+                let y = int_argument(&arguments, 2, "display.blitMono5x7Text y")?;
+                let text = string_argument(&arguments, 3, "display.blitMono5x7Text text")?;
+                let foreground =
+                    int_argument(&arguments, 4, "display.blitMono5x7Text foreground")? as u16;
+                let background =
+                    match int_argument(&arguments, 5, "display.blitMono5x7Text background")? {
+                        value if value < 0 => None,
+                        value => Some(value as u16),
+                    };
+                kernel
+                    .displays
+                    .blit_mono5x7_text(display_id, x, y, text, foreground, background);
+                Ok(NativeHostImportResult::Handled(VmValue::Unit))
+            }
+            _ => Ok(NativeHostImportResult::Fallback(arguments)),
+        }
+    }
+
     fn run_until_signal_inner(&mut self) -> Result<VmSignal, String> {
         match self.state {
             ImageVmState::Ready => {}
@@ -175,7 +243,7 @@ impl ImageVmHandle {
                     let import = self.host_import(import_id)?;
                     let module_name = import.module_name.clone();
                     let function_name = import.function_name.clone();
-                    match try_native_host_import(import_id, &module_name, arguments)? {
+                    match self.try_native_host_import(import_id, &module_name, &function_name, arguments)? {
                         NativeHostImportResult::Handled(value) => {
                             self.stack.push(value);
                         }
@@ -1138,7 +1206,7 @@ fn apply_unary_operator(operator: u8, operand: VmValue) -> Result<VmValue, Strin
     }
 }
 
-fn try_native_host_import(
+fn try_builtin_native_host_import(
     import_id: i32,
     module_name: &str,
     arguments: Vec<VmValue>,
@@ -1191,6 +1259,30 @@ fn try_native_host_import(
         STRINGS_REPLACE_RANGE_IMPORT_ID => native_string_replace_range(arguments),
         STRINGS_CHAR_CODE_AT_IMPORT_ID => native_string_char_code_at(arguments),
         _ => Ok(NativeHostImportResult::Fallback(arguments)),
+    }
+}
+
+fn int_argument(
+    arguments: &[VmValue],
+    index: usize,
+    context: &str,
+) -> Result<i32, String> {
+    match arguments.get(index) {
+        Some(VmValue::Int(value)) => Ok(*value),
+        Some(other) => Err(format!("{context} requires Int but found {other:?}")),
+        None => Err(format!("{context} missing argument {index}")),
+    }
+}
+
+fn string_argument<'a>(
+    arguments: &'a [VmValue],
+    index: usize,
+    context: &str,
+) -> Result<&'a str, String> {
+    match arguments.get(index) {
+        Some(VmValue::String(value)) => Ok(value),
+        Some(other) => Err(format!("{context} requires String but found {other:?}")),
+        None => Err(format!("{context} missing argument {index}")),
     }
 }
 
