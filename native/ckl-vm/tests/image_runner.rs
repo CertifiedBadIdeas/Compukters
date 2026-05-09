@@ -59,6 +59,19 @@ fn device_kernel_accepts_event_and_ipc_setup() {
 }
 
 #[test]
+fn device_kernel_owns_display_registry() {
+    let mut kernel = DeviceRuntimeKernel::new(64, 4096);
+
+    kernel
+        .displays
+        .attach(12, 18, 18, ckl_vm::display::PixelFormat::Rgb565)
+        .unwrap();
+
+    assert_eq!(kernel.displays.first_display_id(), Some(12));
+    assert_eq!(kernel.displays.drain_frames().len(), 1);
+}
+
+#[test]
 fn stores_and_loads_local_value() {
     let code = vec![
         OP_PUSH_BOOL,

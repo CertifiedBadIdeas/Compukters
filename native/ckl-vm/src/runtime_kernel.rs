@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, VecDeque};
 
+use crate::display::DeviceDisplayRegistry;
 use crate::value::VmValue;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -12,6 +13,7 @@ pub struct DeviceRuntimeKernel {
     event_queue: VecDeque<QueuedEvent>,
     deferred_events: VecDeque<QueuedEvent>,
     ipc: IpcRegistry,
+    pub displays: DeviceDisplayRegistry,
     max_event_queue_size: usize,
 }
 
@@ -21,6 +23,7 @@ impl DeviceRuntimeKernel {
             event_queue: VecDeque::new(),
             deferred_events: VecDeque::new(),
             ipc: IpcRegistry::new(max_buffered_bytes_per_channel),
+            displays: DeviceDisplayRegistry::new(),
             max_event_queue_size: max_event_queue_size.max(1),
         }
     }
