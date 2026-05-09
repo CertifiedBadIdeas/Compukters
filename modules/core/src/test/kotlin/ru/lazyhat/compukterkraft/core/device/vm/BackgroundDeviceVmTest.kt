@@ -143,6 +143,71 @@ class BackgroundDeviceVmTest {
     }
 
     @Test
+    fun nativeDisplayPathDrainsAttachFullRefreshWhenEnabled() {
+        System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        runtimeTestWorkspace("vm-native-display-attach") { workspace ->
+            val vm =
+                BackgroundDeviceVm(
+                    deviceId = 1,
+                    profile = firmwareTestProfile(),
+                    dispatcher = Dispatchers.Default,
+                    labelProvider = { null },
+                    logger = DeviceVmLogger { },
+                    workspace = workspace.host,
+                    firmwareLoader =
+                        StaticFirmwareLoader(
+                            """
+                            pub fun main() {
+                            }
+                            """.trimIndent(),
+                        ),
+                    nativeDisplayEnabled = true,
+                )
+
+            val info = vm.attachDisplay(displayId = 4, width = 18, height = 18)
+            val frames = vm.drainDisplayFrames()
+
+            assertEquals(4, info.displayId)
+            assertTrue(frames.any { it.displayId == 4 && it.fullRefresh })
+        }
+    }
+
+    @Test
+    fun nativeDisplayPathDrainsProgramFrameWhenEnabled() {
+        System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        runtimeTestWorkspace("vm-native-display-program-frame") { workspace ->
+            val vm =
+                BackgroundDeviceVm(
+                    deviceId = 1,
+                    profile = firmwareTestProfile(),
+                    dispatcher = Dispatchers.Default,
+                    labelProvider = { null },
+                    logger = DeviceVmLogger { },
+                    workspace = workspace.host,
+                    firmwareLoader =
+                        StaticFirmwareLoader(
+                            """
+                            pub fun main() {
+                                val displayId = display::primary();
+                                display::fillRect(displayId, 0, 0, 2, 2, 2016);
+                                display::present(displayId);
+                            }
+                            """.trimIndent(),
+                        ),
+                    nativeDisplayEnabled = true,
+                )
+
+            vm.attachDisplay(displayId = 4, width = 18, height = 18)
+            assertEquals(1, vm.drainDisplayFrames().size)
+            assertTrue(vm.boot())
+            runVmTicks(vm)
+            val frames = vm.drainDisplayFrames()
+
+            assertTrue(frames.any { it.displayId == 4 && it.sequence >= 2L && !it.fullRefresh })
+        }
+    }
+
+    @Test
     fun displayAttachQueuesVmEvent() {
         runtimeTestWorkspace("vm-display-attach-event") { workspace ->
             val vm =

@@ -49,6 +49,7 @@ import ru.lazyhat.compukterkraft.core.device.vm.api.VmProcessApi
 import ru.lazyhat.compukterkraft.core.device.vm.api.VmSystemApi
 import ru.lazyhat.compukterkraft.core.device.vm.display.DisplayMetricsCollector
 import ru.lazyhat.compukterkraft.core.device.vm.display.DisplayRegistry
+import ru.lazyhat.compukterkraft.core.device.vm.display.NativeDisplayRegistry
 import ru.lazyhat.compukterkraft.core.device.vm.display.NoOpDisplayMetricsCollector
 import ru.lazyhat.compukterkraft.lang.api.BuiltinModule
 import ru.lazyhat.compukterkraft.lang.api.BuiltinRegistry
@@ -113,6 +114,7 @@ class BackgroundDeviceVm(
     private val displayMetricsCollector: DisplayMetricsCollector = NoOpDisplayMetricsCollector,
     private val runtimeMetricsCollector: RuntimeMetricsCollector = NoOpRuntimeMetricsCollector,
     private val compilerMetricsCollector: CompilerMetricsCollector = NoOpCompilerMetricsCollector,
+    private val nativeDisplayEnabled: Boolean = System.getProperty("ckl.vm.native.display") == "true",
 ) : DeviceVmHandle,
     VmContext {
     private val scope = CoroutineScope(SupervisorJob() + dispatcher)
@@ -147,6 +149,12 @@ class BackgroundDeviceVm(
                     maxBufferedBytesPerChannel = profile.resources.queues.ipcChannelBytes,
                 )
             }
+    private val nativeDisplayRegistry: NativeDisplayRegistry? =
+        nativeDeviceKernelHandle
+            ?.takeIf { nativeDisplayEnabled }
+            ?.let(::NativeDisplayRegistry)
+    private val stoppedNativeDisplayFrames = mutableListOf<DisplayFrameDelta>()
+    private var nativeDeviceKernelFreed: Boolean = false
     private var executionWindowStartedNanos: Long? = null
 
     private inner class RuntimeMetricsApi : DeviceRuntimeMetrics {
@@ -284,6 +292,7 @@ class BackgroundDeviceVm(
         pixelFormat: DisplayPixelFormat,
     ): DisplayInfo =
         displayRegistry.attach(displayId, width, height, pixelFormat).also {
+            nativeDisplayRegistry?.attach(displayId, width, height, pixelFormat)
             if (stateManager.state.isActive) {
                 enqueueEvent(VmEvent("display_attach", listOf(displayId, width, height)))
             }
@@ -296,15 +305,35 @@ class BackgroundDeviceVm(
         pixelFormat: DisplayPixelFormat,
     ): DisplayInfo =
         displayRegistry.resize(displayId, width, height, pixelFormat).also {
+            nativeDisplayRegistry?.attach(displayId, width, height, pixelFormat)
             enqueueEvent(VmEvent("display_resize", listOf(displayId, width, height)))
         }
 
     override fun detachDisplay(displayId: Int) {
         displayRegistry.detach(displayId)
+        nativeDisplayRegistry?.detach(displayId)
         enqueueEvent(VmEvent("display_detach", listOf(displayId)))
     }
 
-    override fun drainDisplayFrames(): List<DisplayFrameDelta> = displayRegistry.drainFrames()
+    override fun drainDisplayFrames(): List<DisplayFrameDelta> {
+        val nativeFrames =
+            if (!nativeDeviceKernelFreed) {
+                nativeDisplayRegistry?.drainFrames()
+            } else {
+                null
+            }
+        if (nativeFrames != null || stoppedNativeDisplayFrames.isNotEmpty()) {
+            displayRegistry.drainFrames()
+            return buildList {
+                addAll(stoppedNativeDisplayFrames)
+                stoppedNativeDisplayFrames.clear()
+                if (nativeFrames != null) {
+                    addAll(nativeFrames)
+                }
+            }
+        }
+        return displayRegistry.drainFrames()
+    }
 
     // ── VmContext ───────────────────────────────────────────────────
 
@@ -381,11 +410,17 @@ class BackgroundDeviceVm(
 
         LOGGER.debug { "DeviceID: $deviceId stopped with reason: $reason, error: $errorMessage" }
 
+        if (!nativeDeviceKernelFreed) {
+            nativeDisplayRegistry?.drainFrames()?.let(stoppedNativeDisplayFrames::addAll)
+        }
         stateManager.stopVm(reason, errorMessage)
         processManager.cancelAll()
         runner?.cancel()
         runner = null
-        nativeDeviceKernelHandle?.let(NativeVmBindings::freeDeviceKernel)
+        if (!nativeDeviceKernelFreed) {
+            nativeDeviceKernelHandle?.let(NativeVmBindings::freeDeviceKernel)
+            nativeDeviceKernelFreed = true
+        }
 
         LOGGER.debug { "DeviceID: $deviceId stop lock request ended (reason: $reason, error: $errorMessage)" }
     }
