@@ -82,7 +82,26 @@ class NativeImageVmRunner internal constructor(
                     }
 
                     is NativeVmSignal.WaitPoll -> {
-                        runtime.yield()
+                        val kernelHandle = kernelHandleOrNull(runtime)
+                        if (kernelHandle == null) {
+                            runtime.yield()
+                        } else {
+                            val started = System.nanoTime()
+                            val latest =
+                                bindings.waitForDeviceWake(
+                                    kernelHandle,
+                                    signal.wakeSequence,
+                                    NATIVE_POLL_WAIT_TIMEOUT_MILLIS,
+                                )
+                            runtime.metrics.recordNativeWait(
+                                kind = "runtime.poll",
+                                nanos = System.nanoTime() - started,
+                                woke = latest > signal.wakeSequence,
+                            )
+                            if (latest <= signal.wakeSequence) {
+                                runtime.yield()
+                            }
+                        }
                     }
 
                     is NativeVmSignal.HostCall -> {
@@ -130,6 +149,8 @@ class NativeImageVmRunner internal constructor(
         }
     }
 }
+
+private const val NATIVE_POLL_WAIT_TIMEOUT_MILLIS = 50L
 
 private val NativeVmSignal.kind: VmSignalKind
     get() =

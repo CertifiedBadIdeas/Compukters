@@ -82,23 +82,98 @@ class NativeImageVmRunnerTest {
         assertEquals(emptyList(), bindings.resumes)
     }
 
+    @Test
+    fun waitPollParksOnNativeKernelWakeWithoutResumingImage() {
+        val image = assertNotNull(LanguageFrontend().compileImage("main.ck", "pub fun main() { }").image)
+        val bindings =
+            RecordingBindings(
+                signals =
+                    ArrayDeque(
+                        listOf(
+                            byteArrayOf(6, 3, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0),
+                            byteArrayOf(0, 0),
+                        ),
+                    ),
+                waitForDeviceWakeResult = 5,
+            )
+        val runtime =
+            KernelAwareRuntime(
+                RecordingRuntime(metrics = NoopDeviceRuntimeMetrics),
+                kernelHandle = 77L,
+                nativeWorkingDirectory = "bin",
+            )
+        val runner = NativeImageVmRunner(libraryPath = "/unused/libckl_vm.so", bindings = bindings)
+
+        runBlocking {
+            runner.run(image, runtime)
+        }
+
+        assertEquals(listOf(WaitCall(77L, 4L, 50L)), bindings.waitForDeviceWakeCalls)
+        assertEquals(0, runtime.delegate.yieldCalls)
+        assertEquals(emptyList(), bindings.resumes)
+    }
+
+    @Test
+    fun waitPollYieldsAfterNativeKernelWaitTimeout() {
+        val image = assertNotNull(LanguageFrontend().compileImage("main.ck", "pub fun main() { }").image)
+        val bindings =
+            RecordingBindings(
+                signals =
+                    ArrayDeque(
+                        listOf(
+                            byteArrayOf(6, 3, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0),
+                            byteArrayOf(0, 0),
+                        ),
+                    ),
+                waitForDeviceWakeResult = 4,
+            )
+        val delegate = RecordingRuntime(metrics = NoopDeviceRuntimeMetrics)
+        val runtime =
+            KernelAwareRuntime(
+                delegate,
+                kernelHandle = 77L,
+                nativeWorkingDirectory = "bin",
+            )
+        val runner = NativeImageVmRunner(libraryPath = "/unused/libckl_vm.so", bindings = bindings)
+
+        runBlocking {
+            runner.run(image, runtime)
+        }
+
+        assertEquals(listOf(WaitCall(77L, 4L, 50L)), bindings.waitForDeviceWakeCalls)
+        assertEquals(1, delegate.yieldCalls)
+        assertEquals(emptyList(), bindings.resumes)
+    }
+
     private class KernelAwareRuntime(
-        private val delegate: RecordingRuntime,
+        val delegate: RecordingRuntime,
         kernelHandle: Long,
         override val nativeWorkingDirectory: String,
     ) : DeviceRuntime by delegate, NativeDeviceKernelProvider {
         override val nativeDeviceKernelHandle: Long = kernelHandle
     }
 
+    private data class WaitCall(
+        val handle: Long,
+        val observedWakeSequence: Long,
+        val timeoutMillis: Long,
+    )
+
     private class RecordingBindings : NativeVmBindingsFacade {
-        constructor(signals: ArrayDeque<ByteArray> = ArrayDeque(listOf(byteArrayOf(0, 0)))) {
+        constructor(
+            signals: ArrayDeque<ByteArray> = ArrayDeque(listOf(byteArrayOf(0, 0))),
+            waitForDeviceWakeResult: Long = 0,
+        ) {
             this.signals = signals
+            this.waitForDeviceWakeResult = waitForDeviceWakeResult
         }
 
         private val signals: ArrayDeque<ByteArray>
+        private val waitForDeviceWakeResult: Long
         val attachments = mutableListOf<Pair<Long, Long>>()
         val workingDirectories = mutableListOf<Pair<Long, String>>()
         val resumes = mutableListOf<Pair<Long, ByteArray>>()
+        val waitForDeviceWakeCalls = mutableListOf<WaitCall>()
 
         override fun createImage(
             libraryPath: String,
@@ -129,6 +204,15 @@ class NativeImageVmRunnerTest {
             workingDirectory: String,
         ) {
             workingDirectories += imageHandle to workingDirectory
+        }
+
+        override fun waitForDeviceWake(
+            handle: Long,
+            observedWakeSequence: Long,
+            timeoutMillis: Long,
+        ): Long {
+            waitForDeviceWakeCalls += WaitCall(handle, observedWakeSequence, timeoutMillis)
+            return waitForDeviceWakeResult
         }
     }
 }
