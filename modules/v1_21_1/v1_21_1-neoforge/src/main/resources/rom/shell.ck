@@ -18,7 +18,7 @@ fun commandArgument(line: String): String {
 
 fun printHelp(ctx: Stdio) {
     println(ctx, "Builtins: help cd pwd reboot shutdown")
-    println(ctx, "Programs: ls mkdir rmdir nano")
+    println(ctx, "Programs: ls mkdir rmdir nano yes")
 }
 
 fun runExternal(ctx: Stdio, command: String, argument: String) {

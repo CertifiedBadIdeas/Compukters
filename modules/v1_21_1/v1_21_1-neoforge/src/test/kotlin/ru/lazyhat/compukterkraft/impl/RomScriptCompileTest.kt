@@ -362,6 +362,18 @@ class RomScriptCompileTest {
     }
 
     @Test
+    fun bundledRomIncludesYesProgram() {
+        val index = resourceText("rom/rom.index")
+        assertContains(index.lineSequence().map { it.trim() }.toList(), "yes.ck")
+
+        val source = resourceText("rom/yes.ck")
+        assertTrue(source.contains("fromArgument(process::argument())"), "yes.ck should use stdio-v1 descriptors")
+        assertTrue(source.contains("while true"), "yes.ck should keep writing until the VM stops the process")
+        assertTrue(source.contains("\"y\""), "yes.ck should default to Unix-like 'y' output")
+        assertTrue(source.contains("println(ctx, text)"), "yes.ck should emit one line per iteration")
+    }
+
+    @Test
     fun everyRomScriptCompilesCleanly() {
         val cl = RomScriptCompileTest::class.java.classLoader
         val index =
