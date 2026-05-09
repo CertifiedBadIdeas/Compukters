@@ -187,6 +187,14 @@ class RomScriptCompileTest {
             terminal.contains("appendText(displayId, nextBuffer, line + \"\\n\")"),
             "terminal.ck should commit the submitted line and newline in the terminal layer",
         )
+        assertFalse(
+            terminal.contains("events::argBool(event, 1)"),
+            "terminal.ck should not suppress autorepeat Enter submissions",
+        )
+        assertFalse(
+            terminal.contains("submitPending"),
+            "terminal.ck should not keep a submit lock that drops repeated Enter presses",
+        )
         assertTrue(
             stdio.contains("return stripLineDelimiter(ipc::read(ctx.input))"),
             "stdio.readLine should strip the stdin line delimiter before returning command text",
