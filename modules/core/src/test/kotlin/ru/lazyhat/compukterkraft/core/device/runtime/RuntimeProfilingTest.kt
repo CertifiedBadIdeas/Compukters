@@ -57,6 +57,9 @@ class RuntimeProfilingTest {
         collector.recordVmHostCall("events", "tryPull", nanos = 30)
         collector.recordNativeWait("runtime.poll", nanos = 100)
         collector.recordNativeWait("runtime.poll", nanos = 50, woke = false)
+        collector.recordNativeDisplayPumpWait(nanos = 100)
+        collector.recordNativeDisplayPumpWait(nanos = 50, woke = false)
+        collector.recordNativeDisplayFrameBytes(bytes = 128)
         collector.recordVmInstruction(VmInstructionKind.CALL_BUILTIN, nanos = 40)
         collector.recordVmInstruction(VmInstructionKind.CALL_BUILTIN, nanos = 60)
         collector.recordVmInstruction(VmInstructionKind.PUSH_INT, nanos = 10)
@@ -103,6 +106,12 @@ class RuntimeProfilingTest {
         assertEquals(150, snapshot.vm.nativeWaitNanos)
         assertEquals(1, snapshot.vm.nativeWaitWakeups)
         assertEquals(1, snapshot.vm.nativeWaitTimeouts)
+        assertEquals(2, snapshot.vm.nativeDisplayPumpWaitCalls)
+        assertEquals(150, snapshot.vm.nativeDisplayPumpWaitNanos)
+        assertEquals(1, snapshot.vm.nativeDisplayPumpWakeups)
+        assertEquals(1, snapshot.vm.nativeDisplayPumpTimeouts)
+        assertEquals(1, snapshot.vm.nativeDisplayFrameByteBatches)
+        assertEquals(128, snapshot.vm.nativeDisplayFrameBytes)
         val blitCall = snapshot.hostCalls.first { it.moduleName == "display" && it.functionName == "blitMono5x7Packed" }
         assertEquals(2, blitCall.calls)
         assertEquals(150, blitCall.nanos)
@@ -123,6 +132,10 @@ class RuntimeProfilingTest {
         assertTrue(summary.contains("  vm:\n"), summary)
         assertTrue(
             summary.contains("  signals: halt=1, pause=1, yield=1, sleep=1, waitEvent=1, waitPoll=1, hostCall=1"),
+            summary,
+        )
+        assertTrue(
+            summary.contains("    nativeDisplayPump: waits=2, waitTime=150 ns, wakeups=1, timeouts=1, byteBatches=1, bytes=128"),
             summary,
         )
         assertTrue(summary.contains("  host-calls: calls="), summary)
@@ -153,6 +166,8 @@ class RuntimeProfilingTest {
         collector.recordVmHostCallWait("display", "present", nanos = 50)
         collector.recordVmHostCall("display", "present", nanos = 80)
         collector.recordNativeWait("runtime.poll", nanos = 100)
+        collector.recordNativeDisplayPumpWait(nanos = 100)
+        collector.recordNativeDisplayFrameBytes(bytes = 128)
         collector.recordVmInstruction(VmInstructionKind.CALL_BUILTIN, nanos = 90)
 
         assertEquals(RuntimeProfilingSnapshot(), collector.snapshot())

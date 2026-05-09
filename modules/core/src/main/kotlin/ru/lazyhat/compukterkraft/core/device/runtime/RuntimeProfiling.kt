@@ -90,6 +90,13 @@ interface RuntimeMetricsCollector {
         woke: Boolean = true,
     )
 
+    fun recordNativeDisplayPumpWait(
+        nanos: Long,
+        woke: Boolean = true,
+    )
+
+    fun recordNativeDisplayFrameBytes(bytes: Int)
+
     fun snapshot(): RuntimeProfilingSnapshot
 }
 
@@ -160,6 +167,12 @@ data class RuntimeVmMetrics(
     val nativeWaitNanos: Long = 0,
     val nativeWaitWakeups: Long = 0,
     val nativeWaitTimeouts: Long = 0,
+    val nativeDisplayPumpWaitCalls: Long = 0,
+    val nativeDisplayPumpWaitNanos: Long = 0,
+    val nativeDisplayPumpWakeups: Long = 0,
+    val nativeDisplayPumpTimeouts: Long = 0,
+    val nativeDisplayFrameByteBatches: Long = 0,
+    val nativeDisplayFrameBytes: Long = 0,
 ) {
     val averageExecutionWindowNanos: Long get() = if (executionWindows <= 0) 0 else executionWindowNanos / executionWindows
     val nativeWaitSignals: Long get() = waitPollSignals
@@ -227,6 +240,9 @@ data class RuntimeProfilingSnapshot(
             )
             appendLine(
                 "  signals: halt=${vm.haltSignals}, pause=${vm.pauseSignals}, yield=${vm.yieldSignals}, sleep=${vm.sleepSignals}, waitEvent=${vm.waitEventSignals}, waitPoll=${vm.waitPollSignals}, hostCall=${vm.hostCallSignals}",
+            )
+            appendLine(
+                "    nativeDisplayPump: waits=${vm.nativeDisplayPumpWaitCalls}, waitTime=${vm.nativeDisplayPumpWaitNanos.nanos()}, wakeups=${vm.nativeDisplayPumpWakeups}, timeouts=${vm.nativeDisplayPumpTimeouts}, byteBatches=${vm.nativeDisplayFrameByteBatches}, bytes=${vm.nativeDisplayFrameBytes}",
             )
             appendHostCallSummary()
             appendInstructionSummary()
@@ -343,6 +359,13 @@ object NoOpRuntimeMetricsCollector : RuntimeMetricsCollector {
         woke: Boolean,
     ) = Unit
 
+    override fun recordNativeDisplayPumpWait(
+        nanos: Long,
+        woke: Boolean,
+    ) = Unit
+
+    override fun recordNativeDisplayFrameBytes(bytes: Int) = Unit
+
     override fun snapshot(): RuntimeProfilingSnapshot = RuntimeProfilingSnapshot()
 }
 
@@ -402,6 +425,12 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
     private val nativeWaitNanos = AtomicLong()
     private val nativeWaitWakeups = AtomicLong()
     private val nativeWaitTimeouts = AtomicLong()
+    private val nativeDisplayPumpWaitCalls = AtomicLong()
+    private val nativeDisplayPumpWaitNanos = AtomicLong()
+    private val nativeDisplayPumpWakeups = AtomicLong()
+    private val nativeDisplayPumpTimeouts = AtomicLong()
+    private val nativeDisplayFrameByteBatches = AtomicLong()
+    private val nativeDisplayFrameBytes = AtomicLong()
     private val hostCalls = ConcurrentHashMap<Pair<String, String>, RuntimeCounter>()
     private val instructions = ConcurrentHashMap<VmInstructionKind, RuntimeCounter>()
 
@@ -536,6 +565,24 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
         }
     }
 
+    override fun recordNativeDisplayPumpWait(
+        nanos: Long,
+        woke: Boolean,
+    ) {
+        nativeDisplayPumpWaitCalls.incrementAndGet()
+        nativeDisplayPumpWaitNanos.addAndGet(nanos.coerceAtLeast(0))
+        if (woke) {
+            nativeDisplayPumpWakeups.incrementAndGet()
+        } else {
+            nativeDisplayPumpTimeouts.incrementAndGet()
+        }
+    }
+
+    override fun recordNativeDisplayFrameBytes(bytes: Int) {
+        nativeDisplayFrameByteBatches.incrementAndGet()
+        nativeDisplayFrameBytes.addAndGet(bytes.coerceAtLeast(0).toLong())
+    }
+
     override fun snapshot(): RuntimeProfilingSnapshot =
         RuntimeProfilingSnapshot(
             tick =
@@ -582,6 +629,12 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
                     nativeWaitNanos = nativeWaitNanos.get(),
                     nativeWaitWakeups = nativeWaitWakeups.get(),
                     nativeWaitTimeouts = nativeWaitTimeouts.get(),
+                    nativeDisplayPumpWaitCalls = nativeDisplayPumpWaitCalls.get(),
+                    nativeDisplayPumpWaitNanos = nativeDisplayPumpWaitNanos.get(),
+                    nativeDisplayPumpWakeups = nativeDisplayPumpWakeups.get(),
+                    nativeDisplayPumpTimeouts = nativeDisplayPumpTimeouts.get(),
+                    nativeDisplayFrameByteBatches = nativeDisplayFrameByteBatches.get(),
+                    nativeDisplayFrameBytes = nativeDisplayFrameBytes.get(),
                 ),
             hostCalls =
                 hostCalls

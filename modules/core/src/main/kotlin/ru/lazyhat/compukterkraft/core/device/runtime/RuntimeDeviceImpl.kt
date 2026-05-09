@@ -21,8 +21,11 @@ package ru.lazyhat.compukterkraft.core.device.runtime
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import ru.lazyhat.compukterkraft.core.LOGGER
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
@@ -77,6 +80,7 @@ class RuntimeDeviceImpl(
         }
 
     private var vmHandle: BackgroundDeviceVm? = null
+    private var displayPumpJob: Job? = null
 
     private val serverScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -137,6 +141,7 @@ class RuntimeDeviceImpl(
 
         handle.boot()
         observeLifecycle(handle)
+        startNativeDisplayPump(handle)
         stateSink.onPowerStateChanged(true)
     }
 
@@ -147,6 +152,7 @@ class RuntimeDeviceImpl(
 
     override fun close() {
         LOGGER.debug { "DeviceID: $deviceId close" }
+        stopNativeDisplayPump()
         displaySessions.keys.toList().forEach { (playerUuid, displayId) -> detachDisplaySession(playerUuid, displayId) }
         manager.removeVm(deviceId, VmStopReason.CLOSED)
         vmHandle = null
@@ -158,7 +164,14 @@ class RuntimeDeviceImpl(
         val tickStarted = System.nanoTime()
         serviceVmTick(handle, gameTime.gameTime(), hostCallDispatcher::dispatch, runtimeMetricsCollector)
 
-        val (flushedFrames, flushNanos) = measureNanos { flushDisplaySessions(handle) }
+        val (flushedFrames, flushNanos) =
+            measureNanos {
+                if (displayPumpJob?.isActive == true) {
+                    0
+                } else {
+                    flushDisplaySessions(handle)
+                }
+            }
         runtimeMetricsCollector.recordDisplayFlush(frameCount = flushedFrames, nanos = flushNanos)
         runtimeMetricsCollector.recordServerTick(System.nanoTime() - tickStarted)
     }
@@ -184,6 +197,7 @@ class RuntimeDeviceImpl(
 
         LOGGER.debug { "DeviceID: $deviceId stop handling $terminalState" }
 
+        stopNativeDisplayPump()
         manager.removeVm(deviceId, VmStopReason.CLOSED)
         vmHandle = null
         stateSink.onPowerStateChanged(false)
@@ -253,6 +267,61 @@ class RuntimeDeviceImpl(
         }
         toDetach.forEach { (playerUuid, displayId) -> detachDisplaySession(playerUuid, displayId) }
         return frames.size
+    }
+
+    private fun startNativeDisplayPump(handle: BackgroundDeviceVm) {
+        stopNativeDisplayPump()
+        if (!handle.supportsNativeDisplayFramePump()) return
+        displayPumpJob =
+            serverScope.launch {
+                flushNativeDisplayFrameBytes(handle)
+                var observed = handle.nativeDisplayWakeSequence() ?: return@launch
+                while (isActive && vmHandle === handle) {
+                    val started = System.nanoTime()
+                    val next =
+                        handle.waitForNativeDisplayWake(
+                            observed,
+                            NATIVE_DISPLAY_PUMP_TIMEOUT_MILLIS,
+                        ) ?: break
+                    val woke = next > observed
+                    runtimeMetricsCollector.recordNativeDisplayPumpWait(System.nanoTime() - started, woke)
+                    observed = next
+                    if (!woke) {
+                        delay(1)
+                        continue
+                    }
+                    flushNativeDisplayFrameBytes(handle)
+                }
+            }
+    }
+
+    private fun stopNativeDisplayPump() {
+        displayPumpJob?.cancel()
+        displayPumpJob = null
+    }
+
+    private fun flushNativeDisplayFrameBytes(handle: BackgroundDeviceVm): Int {
+        if (displaySessions.isEmpty()) return 0
+        val payload = handle.drainNativeDisplayFrameBytes() ?: return 0
+        if (payload.size <= EMPTY_NATIVE_FRAME_BATCH_BYTES) return 0
+        runtimeMetricsCollector.recordNativeDisplayFrameBytes(payload.size)
+
+        val toDetach = mutableListOf<Pair<UUID, Int>>()
+        val sessions = displaySessions.values.toList()
+        for (session in sessions) {
+            if (!displayNetwork.isDisplaySessionStillBound(session.playerUuid, session.containerId, deviceId, session.displayId)) {
+                toDetach += session.playerUuid to session.displayId
+                continue
+            }
+            displayNetwork.sendNativeDisplayFrameBytes(session.playerUuid, session.containerId, payload)
+        }
+        toDetach.forEach { (playerUuid, displayId) -> detachDisplaySession(playerUuid, displayId) }
+        return sessions.size
+    }
+
+    private companion object {
+        const val NATIVE_DISPLAY_PUMP_TIMEOUT_MILLIS: Long = 50
+        const val EMPTY_NATIVE_FRAME_BATCH_BYTES: Int = 4
     }
 }
 
