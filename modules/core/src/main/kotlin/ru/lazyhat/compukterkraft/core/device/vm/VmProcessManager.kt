@@ -23,6 +23,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import ru.lazyhat.compukterkraft.core.device.runtime.ComputerProgramCompiler
 import ru.lazyhat.compukterkraft.core.device.runtime.WorkspaceProgramLoader
@@ -73,9 +74,11 @@ internal class VmProcessManager(
         return code
     }
 
-    fun cancelAll() {
-        processes.values.forEach { it.job.cancel() }
+    suspend fun cancelAll() {
+        val jobs = processes.values.map { it.job }
+        jobs.forEach { it.cancel() }
         processes.clear()
+        jobs.joinAll()
     }
 
     private suspend fun execute(

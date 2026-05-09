@@ -325,6 +325,9 @@ impl ImageVmHandle {
                 _ => Ok(NativeHostImportResult::Fallback(arguments)),
             };
         }
+        if kernel.displays.first_display_id().is_none() {
+            return Ok(NativeHostImportResult::Fallback(arguments));
+        }
         match function_name {
             "primary" => Ok(NativeHostImportResult::Handled(VmValue::Int(
                 kernel.displays.first_display_id().unwrap_or(0),

@@ -54,6 +54,10 @@ class NativeImageVmBindingsJniTest {
             "NativeVmBindings must expose native device-kernel lifecycle",
         )
         assertTrue(
+            "writeDeviceIpc" in memberNames,
+            "NativeVmBindings must expose native IPC writes for Kotlin-owned process code",
+        )
+        assertTrue(
             "attachImageToKernel" in memberNames,
             "NativeVmBindings must expose native device-kernel lifecycle",
         )
@@ -279,6 +283,45 @@ class NativeImageVmBindingsJniTest {
             val halt =
                 assertIs<NativeVmSignal.Halt>(NativeVmSignal.decode(NativeVmBindings.runImageUntilSignal(imageHandle)))
             assertEquals(NativeVmValue.StringValue("char:x"), halt.value)
+        } finally {
+            NativeVmBindings.freeImage(imageHandle)
+            NativeVmBindings.freeDeviceKernel(kernelHandle)
+        }
+    }
+
+    @Test
+    fun nativeIpcWriteWakesWaitPollWhenLibraryIsConfigured() {
+        val libraryPath = System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val image =
+            assertNotNull(
+                LanguageFrontend()
+                    .compileImage(
+                        "main.ck",
+                        """
+                        pub fun main(): String {
+                            val channel: Int = ipc::open();
+                            val result: Poll = runtime::poll(channel);
+                            return result.kind + ":" + result.text;
+                        }
+                        """.trimIndent(),
+                    ).image,
+            )
+        val kernelHandle =
+            NativeVmBindings.createDeviceKernel(maxEventQueueSize = 64, maxBufferedBytesPerChannel = 4096)
+        val imageHandle =
+            NativeVmBindings.createImage(libraryPath, CkVmImageAbi.encode(image), instructionBudget = 4096)
+
+        try {
+            NativeVmBindings.attachImageToKernel(imageHandle, kernelHandle)
+
+            val wait =
+                assertIs<NativeVmSignal.WaitPoll>(NativeVmSignal.decode(NativeVmBindings.runImageUntilSignal(imageHandle)))
+            assertEquals(1, wait.channel)
+            assertTrue(NativeVmBindings.writeDeviceIpc(kernelHandle, wait.channel, "hello"))
+
+            val halt =
+                assertIs<NativeVmSignal.Halt>(NativeVmSignal.decode(NativeVmBindings.runImageUntilSignal(imageHandle)))
+            assertEquals(NativeVmValue.StringValue("ipc:hello"), halt.value)
         } finally {
             NativeVmBindings.freeImage(imageHandle)
             NativeVmBindings.freeDeviceKernel(kernelHandle)

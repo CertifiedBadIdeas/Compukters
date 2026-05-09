@@ -113,6 +113,23 @@ object NativeVmBindings : NativeVmBindingsFacade {
         return enqueueDeviceEventNative(handle, eventName, payload)
     }
 
+    fun writeDeviceIpc(
+        handle: Long,
+        channel: Int,
+        text: String,
+    ): Boolean {
+        require(handle != 0L) { "Native device runtime kernel handle is zero" }
+        return writeDeviceIpcNative(handle, channel, text)
+    }
+
+    fun tryReadDeviceIpc(
+        handle: Long,
+        channel: Int,
+    ): String? {
+        require(handle != 0L) { "Native device runtime kernel handle is zero" }
+        return tryReadDeviceIpcNative(handle, channel)
+    }
+
     override fun attachImageToKernel(
         imageHandle: Long,
         kernelHandle: Long,
@@ -260,6 +277,19 @@ object NativeVmBindings : NativeVmBindingsFacade {
         eventName: String,
         payload: ByteArray,
     ): Boolean
+
+    @JvmStatic
+    private external fun writeDeviceIpcNative(
+        handle: Long,
+        channel: Int,
+        text: String,
+    ): Boolean
+
+    @JvmStatic
+    private external fun tryReadDeviceIpcNative(
+        handle: Long,
+        channel: Int,
+    ): String?
 
     @JvmStatic
     private external fun attachImageToKernelNative(

@@ -133,7 +133,7 @@ internal object RuntimeVmProfileCodec {
                     }
                     workload.runtime.vm.run {
                         appendLine(
-                            "runtimeVm\t$sliceRequests\t$slicePermitsSent\t$sleepGatedSliceRequests\t$slicePermitsReceived\t$schedulingPoints\t$yieldSchedulingPoints\t$waitForSliceSchedulingPoints\t$executionWindows\t$executionWindowNanos\t$haltSignals\t$pauseSignals\t$yieldSignals\t$sleepSignals\t$waitEventSignals\t$hostCallSignals",
+                            "runtimeVm\t$sliceRequests\t$slicePermitsSent\t$sleepGatedSliceRequests\t$slicePermitsReceived\t$schedulingPoints\t$yieldSchedulingPoints\t$waitForSliceSchedulingPoints\t$executionWindows\t$executionWindowNanos\t$haltSignals\t$pauseSignals\t$yieldSignals\t$sleepSignals\t$waitEventSignals\t$waitPollSignals\t$hostCallSignals\t$nativeFastPathCalls",
                         )
                     }
                     workload.runtime.hostCalls.forEach { call ->
@@ -272,22 +272,25 @@ internal object RuntimeVmProfileCodec {
                 "runtimeVm" -> {
                     current.requireCurrent().vm =
                         parts.longs().let { v ->
+                            val legacyHostCallSignals = v.getOrElse(14) { 0 }
                             RuntimeVmMetrics(
-                                v[0],
-                                v[1],
-                                v[2],
-                                v[3],
-                                v[4],
-                                v[5],
-                                v[6],
-                                v[7],
-                                v[8],
-                                v[9],
-                                v[10],
-                                v[11],
-                                v[12],
-                                v[13],
-                                v[14],
+                                sliceRequests = v.getOrElse(0) { 0 },
+                                slicePermitsSent = v.getOrElse(1) { 0 },
+                                sleepGatedSliceRequests = v.getOrElse(2) { 0 },
+                                slicePermitsReceived = v.getOrElse(3) { 0 },
+                                schedulingPoints = v.getOrElse(4) { 0 },
+                                yieldSchedulingPoints = v.getOrElse(5) { 0 },
+                                waitForSliceSchedulingPoints = v.getOrElse(6) { 0 },
+                                executionWindows = v.getOrElse(7) { 0 },
+                                executionWindowNanos = v.getOrElse(8) { 0 },
+                                haltSignals = v.getOrElse(9) { 0 },
+                                pauseSignals = v.getOrElse(10) { 0 },
+                                yieldSignals = v.getOrElse(11) { 0 },
+                                sleepSignals = v.getOrElse(12) { 0 },
+                                waitEventSignals = v.getOrElse(13) { 0 },
+                                waitPollSignals = if (v.size >= 16) v[14] else 0,
+                                hostCallSignals = if (v.size >= 16) v[15] else legacyHostCallSignals,
+                                nativeFastPathCalls = if (v.size >= 17) v[16] else 0,
                             )
                         }
                 }
@@ -568,6 +571,8 @@ internal object RuntimeVmProfilingReportFormatter {
         appendLine("| Client snapshot pixels | ${workload.client.snapshotPixels} |")
         appendLine("| Runtime all ticks | ${formatNanos(workload.runtime.tick.allNanos)} |")
         appendLine("| VM execution time | ${formatNanos(workload.runtime.vm.executionWindowNanos)} |")
+        appendLine("| Native wait signals | ${workload.runtime.vm.nativeWaitSignals} |")
+        appendLine("| Native fast-path calls | ${workload.runtime.vm.nativeFastPathCalls} |")
         appendLine("| Host-call signals | ${workload.runtime.vm.hostCallSignals} |")
         appendLine("| Host calls | ${workload.runtime.hostCalls.sumOf { it.calls }} |")
         appendLine("| Host-call time | ${formatNanos(workload.runtime.hostCalls.sumOf { it.nanos })} |")
@@ -631,6 +636,8 @@ internal object RuntimeVmProfilingReportFormatter {
         appendHistoricalMetricRow("Client snapshot pixels", columns) { workload -> workload.client.snapshotPixels.toString() }
         appendHistoricalMetricRow("Runtime all ticks", columns) { workload -> formatNanos(workload.runtime.tick.allNanos) }
         appendHistoricalMetricRow("VM execution time", columns) { workload -> formatNanos(workload.runtime.vm.executionWindowNanos) }
+        appendHistoricalMetricRow("Native wait signals", columns) { workload -> workload.runtime.vm.nativeWaitSignals.toString() }
+        appendHistoricalMetricRow("Native fast-path calls", columns) { workload -> workload.runtime.vm.nativeFastPathCalls.toString() }
         appendHistoricalMetricRow("Host-call signals", columns) { workload -> workload.runtime.vm.hostCallSignals.toString() }
         appendHistoricalMetricRow("Host calls", columns) { workload -> workload.runtime.hostCalls.sumOf { it.calls }.toString() }
         appendHistoricalMetricRow("Host-call time", columns) { workload -> formatNanos(workload.runtime.hostCalls.sumOf { it.nanos }) }

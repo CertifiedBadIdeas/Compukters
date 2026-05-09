@@ -44,6 +44,7 @@ class RuntimeVmProfilingReportFormatterTest {
                             name = "bundled terminal",
                             runtimeNanos = 100_000,
                             executionNanos = 40,
+                            waitPollSignals = 3,
                             hostCallSignals = 10,
                             hostCalls =
                                 listOf(
@@ -62,6 +63,7 @@ class RuntimeVmProfilingReportFormatterTest {
                             name = "bundled terminal",
                             runtimeNanos = 1_500_000,
                             executionNanos = 20,
+                            waitPollSignals = 7,
                             hostCallSignals = 2,
                             hostCalls =
                                 listOf(
@@ -89,6 +91,8 @@ class RuntimeVmProfilingReportFormatterTest {
         )
         assertTrue(markdown.contains("| Runtime all ticks | 1.5 ms | 100 us |"), markdown)
         assertTrue(markdown.contains("| VM execution time | 20 ns | 40 ns |"), markdown)
+        assertTrue(markdown.contains("| Native wait signals | 7 | 3 |"), markdown)
+        assertTrue(markdown.contains("| Native fast-path calls | 0 | 0 |"), markdown)
         assertTrue(markdown.contains("| Host-call signals | 2 | 10 |"), markdown)
         assertTrue(markdown.contains("| Host-call active time | 30 ms | 50.01 us |"), markdown)
         assertTrue(markdown.contains("| Host-call wait time | 60 ms | 0 ns |"), markdown)
@@ -132,7 +136,13 @@ class RuntimeVmProfilingReportFormatterTest {
                 workloads =
                     listOf(
                         workload("sustained terminal no-delay", runtimeNanos = 100, executionNanos = 40, hostCallSignals = 4),
-                        workload("held Enter backlog", runtimeNanos = 80, executionNanos = 20, hostCallSignals = 2),
+                        workload(
+                            "held Enter backlog",
+                            runtimeNanos = 80,
+                            executionNanos = 20,
+                            waitPollSignals = 6,
+                            hostCallSignals = 2,
+                        ),
                     ),
             )
 
@@ -141,6 +151,8 @@ class RuntimeVmProfilingReportFormatterTest {
         assertTrue(markdown.contains("# Runtime VM Profiling Report"), markdown)
         assertTrue(markdown.contains("sustained terminal no-delay"), markdown)
         assertTrue(markdown.contains("held Enter backlog"), markdown)
+        assertTrue(markdown.contains("| Native wait signals | 6 |"), markdown)
+        assertTrue(markdown.contains("| Native fast-path calls | 0 |"), markdown)
         assertTrue(markdown.contains("| Host-call signals | 4 |"), markdown)
         assertTrue(markdown.contains("| Host-call active time | 0 ns |"), markdown)
         assertTrue(markdown.contains("| Host-call wait time | 0 ns |"), markdown)
@@ -173,6 +185,7 @@ class RuntimeVmProfilingReportFormatterTest {
         name: String,
         runtimeNanos: Long,
         executionNanos: Long,
+        waitPollSignals: Long = 0,
         hostCallSignals: Long,
         hostCalls: List<RuntimeHostCallMetrics> = emptyList(),
     ): RuntimeWorkloadProfile =
@@ -211,7 +224,13 @@ class RuntimeVmProfilingReportFormatterTest {
             runtime =
                 RuntimeProfilingSnapshot(
                     tick = RuntimeTickMetrics(serverTickCalls = 1, serverTickNanos = runtimeNanos),
-                    vm = RuntimeVmMetrics(executionWindows = 1, executionWindowNanos = executionNanos, hostCallSignals = hostCallSignals),
+                    vm =
+                        RuntimeVmMetrics(
+                            executionWindows = 1,
+                            executionWindowNanos = executionNanos,
+                            waitPollSignals = waitPollSignals,
+                            hostCallSignals = hostCallSignals,
+                        ),
                     hostCalls = hostCalls,
                 ),
             compiler = CompilerProfilingSnapshot(compileCalls = 1, compileNanos = 30, compiledSources = 1),

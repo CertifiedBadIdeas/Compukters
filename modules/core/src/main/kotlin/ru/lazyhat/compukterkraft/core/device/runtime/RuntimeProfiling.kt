@@ -149,8 +149,10 @@ data class RuntimeVmMetrics(
     val waitEventSignals: Long = 0,
     val waitPollSignals: Long = 0,
     val hostCallSignals: Long = 0,
+    val nativeFastPathCalls: Long = 0,
 ) {
     val averageExecutionWindowNanos: Long get() = if (executionWindows <= 0) 0 else executionWindowNanos / executionWindows
+    val nativeWaitSignals: Long get() = waitPollSignals
 }
 
 data class RuntimeHostCallMetrics(
