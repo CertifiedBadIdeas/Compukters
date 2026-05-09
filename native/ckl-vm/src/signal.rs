@@ -11,6 +11,10 @@ pub enum VmSignal {
         channel: i32,
         wake_sequence: i64,
     },
+    WaitProcess {
+        pid: i32,
+        wake_sequence: i64,
+    },
     HostCall {
         module_name: String,
         function_name: String,
@@ -25,6 +29,7 @@ const SIGNAL_SLEEP: u8 = 3;
 const SIGNAL_HOST_CALL: u8 = 4;
 const SIGNAL_WAIT_EVENT: u8 = 5;
 const SIGNAL_WAIT_POLL: u8 = 6;
+const SIGNAL_WAIT_PROCESS: u8 = 7;
 const SIGNAL_ERROR: u8 = 255;
 
 const VALUE_UNIT: u8 = 0;
@@ -64,6 +69,14 @@ pub fn encode_signal(signal: &VmSignal) -> Vec<u8> {
         } => {
             writer.u8(SIGNAL_WAIT_POLL);
             writer.i32(*channel);
+            writer.i64(*wake_sequence);
+        }
+        VmSignal::WaitProcess {
+            pid,
+            wake_sequence,
+        } => {
+            writer.u8(SIGNAL_WAIT_PROCESS);
+            writer.i32(*pid);
             writer.i64(*wake_sequence);
         }
         VmSignal::HostCall {

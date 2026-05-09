@@ -131,19 +131,6 @@ class BackgroundDeviceVm(
     private val hostCallManager = HostCallManager(profile.resources.queues.hostCallQueueSlots)
     private val programLoader = WorkspaceProgramLoader(workspace)
     private val pathResolver = VmPathResolver()
-    private val processManager =
-        VmProcessManager(
-            scope = scope,
-            ctx = this,
-            deviceId = deviceId,
-            programLoader = programLoader,
-            profile = profile,
-            runtimeCreator = { wd, arg -> createRuntime(wd, arg) },
-            compilerMetricsCollector = compilerMetricsCollector,
-        )
-    private val displayRegistry = DisplayRegistry(displayMetricsCollector)
-    private val peripheralRegistry = VmPeripheralRegistry()
-    private val runtimeRegistryProfile = createRuntimeRegistryProfile()
     private val nativeDeviceKernelHandle: Long? =
         System
             .getProperty("ckl.vm.native.library")
@@ -167,6 +154,22 @@ class BackgroundDeviceVm(
         nativeDeviceKernelHandle
             ?.takeIf { nativeDisplayEnabled }
             ?.let(::NativeDisplayRegistry)
+    private val nativeProcessBridge: NativeProcessBridge =
+        nativeDeviceKernelHandle?.let(::NativeVmProcessBridge) ?: NoOpNativeProcessBridge
+    private val processManager =
+        VmProcessManager(
+            scope = scope,
+            ctx = this,
+            deviceId = deviceId,
+            programLoader = programLoader,
+            profile = profile,
+            runtimeCreator = { wd, arg -> createRuntime(wd, arg) },
+            compilerMetricsCollector = compilerMetricsCollector,
+            nativeProcessBridge = nativeProcessBridge,
+        )
+    private val displayRegistry = DisplayRegistry(displayMetricsCollector)
+    private val peripheralRegistry = VmPeripheralRegistry()
+    private val runtimeRegistryProfile = createRuntimeRegistryProfile()
     private val stoppedNativeDisplayFrames = mutableListOf<DisplayFrameDelta>()
     private var nativeDeviceKernelFreed: Boolean = false
     private val nativeDeviceKernelLock = ReentrantReadWriteLock()

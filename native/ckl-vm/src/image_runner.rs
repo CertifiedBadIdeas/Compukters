@@ -3,7 +3,7 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::Arc;
 
 use crate::image::{decode_image, Constant, Function, HostImport, Image};
-use crate::runtime_kernel::DeviceRuntimeKernelHandle;
+use crate::runtime_kernel::{DeviceRuntimeKernelHandle, ProcessStatus};
 use crate::signal::{decode_value, encode_error, encode_signal, VmSignal};
 use crate::value::VmValue;
 
@@ -166,7 +166,7 @@ impl ImageVmHandle {
     ) -> Result<NativeHostImportResult, String> {
         if !matches!(
             module_name,
-            "display" | "filesystem" | "events" | "ipc" | "runtime"
+            "display" | "filesystem" | "events" | "ipc" | "runtime" | "process"
         ) {
             return Ok(NativeHostImportResult::Fallback(arguments));
         }
@@ -326,6 +326,31 @@ impl ImageVmHandle {
                         },
                         arguments,
                     })
+                }
+                _ => Ok(NativeHostImportResult::Fallback(arguments)),
+            };
+        }
+        if module_name == "process" {
+            let kernel = kernel_handle.lock()?;
+            return match function_name {
+                "wait" => {
+                    let pid = int_argument(&arguments, 0, "process.wait pid")?;
+                    match kernel.process_status(pid) {
+                        ProcessStatus::Completed(exit_code) => {
+                            Ok(NativeHostImportResult::Handled(VmValue::Int(exit_code)))
+                        }
+                        ProcessStatus::Missing => Ok(NativeHostImportResult::Handled(VmValue::Int(1))),
+                        ProcessStatus::Running => {
+                            let wake_sequence = kernel.wake_sequence();
+                            Ok(NativeHostImportResult::SignalNoResume {
+                                signal: VmSignal::WaitProcess {
+                                    pid,
+                                    wake_sequence,
+                                },
+                                arguments,
+                            })
+                        }
+                    }
                 }
                 _ => Ok(NativeHostImportResult::Fallback(arguments)),
             };

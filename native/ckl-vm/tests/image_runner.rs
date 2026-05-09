@@ -491,6 +491,80 @@ fn attached_kernel_waits_poll_without_generic_host_call() {
 }
 
 #[test]
+fn attached_kernel_handles_completed_process_wait_without_generic_host_call() {
+    let kernel = Arc::new(DeviceRuntimeKernelHandle::new(8, 64));
+    kernel
+        .with_kernel_mut(|kernel| {
+            kernel.register_process(7, 1, "child.ck".to_string());
+            kernel.complete_process(7, 0);
+        })
+        .unwrap();
+
+    let mut code = Vec::new();
+    push_constant(&mut code, 0);
+    call_host(&mut code, 6007, 1);
+    code.push(OP_RETURN);
+
+    let mut vm = ImageVmHandle::create(
+        &image_with_constants_host_imports_and_code(
+            vec![ConstantFixture::Int(7)],
+            vec![HostImportFixture {
+                id: 6007,
+                module_name: "process".to_string(),
+                function_name: "wait".to_string(),
+                parameter_types: vec!["Int".to_string()],
+                return_type: "Int".to_string(),
+            }],
+            0,
+            code,
+        ),
+        4096,
+    )
+    .unwrap();
+    vm.attach_device_kernel(Arc::clone(&kernel)).unwrap();
+
+    assert_eq!(vm.run_until_signal(), vec![0, 3, 0, 0, 0, 0]);
+}
+
+#[test]
+fn attached_kernel_parks_on_running_process_wait() {
+    let kernel = Arc::new(DeviceRuntimeKernelHandle::new(8, 64));
+    kernel
+        .with_kernel_mut(|kernel| {
+            kernel.register_process(7, 1, "child.ck".to_string());
+        })
+        .unwrap();
+
+    let mut code = Vec::new();
+    push_constant(&mut code, 0);
+    call_host(&mut code, 6007, 1);
+    code.push(OP_RETURN);
+
+    let mut vm = ImageVmHandle::create(
+        &image_with_constants_host_imports_and_code(
+            vec![ConstantFixture::Int(7)],
+            vec![HostImportFixture {
+                id: 6007,
+                module_name: "process".to_string(),
+                function_name: "wait".to_string(),
+                parameter_types: vec!["Int".to_string()],
+                return_type: "Int".to_string(),
+            }],
+            0,
+            code,
+        ),
+        4096,
+    )
+    .unwrap();
+    vm.attach_device_kernel(Arc::clone(&kernel)).unwrap();
+
+    assert_eq!(
+        vm.run_until_signal(),
+        vec![7, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    );
+}
+
+#[test]
 fn stores_and_loads_local_value() {
     let code = vec![
         OP_PUSH_BOOL,

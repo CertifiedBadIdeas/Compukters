@@ -19,10 +19,31 @@ pub struct PulledEvent {
     pub arg_count: i32,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProcessStatus {
+    Running,
+    Completed(i32),
+    Missing,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ProcessEntry {
+    parent_pid: i32,
+    program_path: String,
+    state: ProcessState,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ProcessState {
+    Running,
+    Completed { exit_code: i32 },
+}
+
 pub struct DeviceRuntimeKernel {
     event_queue: VecDeque<QueuedEvent>,
     deferred_events: VecDeque<QueuedEvent>,
     captured_events: BTreeMap<i32, Vec<VmValue>>,
+    processes: BTreeMap<i32, ProcessEntry>,
     ipc: IpcRegistry,
     pub displays: DeviceDisplayRegistry,
     pub filesystem: Option<DeviceFilesystem>,
@@ -38,6 +59,7 @@ impl DeviceRuntimeKernel {
             event_queue: VecDeque::new(),
             deferred_events: VecDeque::new(),
             captured_events: BTreeMap::new(),
+            processes: BTreeMap::new(),
             ipc: IpcRegistry::new(max_buffered_bytes_per_channel),
             displays: DeviceDisplayRegistry::new(),
             filesystem: None,
@@ -51,6 +73,67 @@ impl DeviceRuntimeKernel {
     pub fn attach_filesystem(&mut self, root_path: String, quota_bytes: i64) -> Result<(), String> {
         self.filesystem = Some(DeviceFilesystem::attach(root_path, quota_bytes)?);
         Ok(())
+    }
+
+    pub fn register_process(
+        &mut self,
+        pid: i32,
+        parent_pid: i32,
+        program_path: String,
+    ) -> bool {
+        self.processes
+            .entry(pid)
+            .and_modify(|entry| {
+                entry.parent_pid = parent_pid;
+                entry.program_path = program_path.clone();
+                if matches!(entry.state, ProcessState::Running) {
+                    entry.state = ProcessState::Running;
+                }
+            })
+            .or_insert(ProcessEntry {
+                parent_pid,
+                program_path,
+                state: ProcessState::Running,
+            });
+        true
+    }
+
+    pub fn complete_process(&mut self, pid: i32, exit_code: i32) -> bool {
+        let mut changed = false;
+        match self.processes.get_mut(&pid) {
+            Some(entry) => {
+                if !matches!(entry.state, ProcessState::Completed { exit_code: current } if current == exit_code)
+                {
+                    entry.state = ProcessState::Completed { exit_code };
+                    changed = true;
+                }
+            }
+            None => {
+                self.processes.insert(
+                    pid,
+                    ProcessEntry {
+                        parent_pid: 0,
+                        program_path: String::new(),
+                        state: ProcessState::Completed { exit_code },
+                    },
+                );
+                changed = true;
+            }
+        }
+        if changed {
+            self.wake_sequence = self.wake_sequence.saturating_add(1);
+        }
+        changed
+    }
+
+    pub fn process_status(&self, pid: i32) -> ProcessStatus {
+        match self.processes.get(&pid) {
+            Some(entry) => match entry.state {
+                ProcessState::Running => ProcessStatus::Running,
+                ProcessState::Completed { exit_code } => ProcessStatus::Completed(exit_code),
+            },
+            None => ProcessStatus::Missing,
+        }
     }
 
     pub fn enqueue_event(&mut self, name: &str, arguments: Vec<VmValue>) -> bool {
@@ -251,6 +334,15 @@ impl DeviceRuntimeKernelHandle {
             })
             .map_err(|_| "native device runtime kernel wait lock is poisoned".to_string())?;
         Ok(kernel.wake_sequence())
+    }
+
+    pub fn wait_for_process_wake(
+        &self,
+        _pid: i32,
+        observed_sequence: i64,
+        timeout: Duration,
+    ) -> Result<i64, String> {
+        self.wait_for_wake(observed_sequence, timeout)
     }
 
     pub fn wait_for_display_wake(

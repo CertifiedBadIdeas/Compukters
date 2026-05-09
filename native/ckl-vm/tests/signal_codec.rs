@@ -106,6 +106,16 @@ fn encodes_wait_poll_signal() {
 }
 
 #[test]
+fn encodes_wait_process_signal() {
+    let bytes = encode_signal(&VmSignal::WaitProcess {
+        pid: 11,
+        wake_sequence: 99,
+    });
+
+    assert_eq!(bytes, vec![7, 11, 0, 0, 0, 99, 0, 0, 0, 0, 0, 0, 0]);
+}
+
+#[test]
 fn encodes_error_signal() {
     let bytes = encode_error("bad bytecode");
 

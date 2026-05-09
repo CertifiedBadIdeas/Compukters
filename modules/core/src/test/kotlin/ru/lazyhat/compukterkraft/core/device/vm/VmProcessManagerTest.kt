@@ -1,0 +1,132 @@
+/*
+ * The Compukter Kraft Developers
+ *
+ * Copyright (C) 2026 Vsevolod Petrov (lazyhat)
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+package ru.lazyhat.compukterkraft.core.device.vm
+
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.withTimeout
+import ru.lazyhat.compukterkraft.core.device.runtime.WorkspaceProgramLoader
+import ru.lazyhat.compukterkraft.core.device.runtime.test.runtimeProfile
+import ru.lazyhat.compukterkraft.core.device.runtime.test.runtimeTestWorkspace
+import ru.lazyhat.compukterkraft.lang.frontend.NoOpCompilerMetricsCollector
+import ru.lazyhat.compukterkraft.lang.runtime.HostCall
+import ru.lazyhat.compukterkraft.lang.runtime.VmEvent
+import ru.lazyhat.compukterkraft.lang.runtime.VmPollResult
+import ru.lazyhat.compukterkraft.lang.runtime.VmState
+import ru.lazyhat.compukterkraft.lang.runtime.VmStopReason
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+import kotlinx.coroutines.runBlocking
+
+class VmProcessManagerTest {
+    private class RecordingNativeProcessBridge : NativeProcessBridge {
+        val registrations = mutableListOf<Triple<Int, Int, String>>()
+        val completions = mutableListOf<Pair<Int, Int>>()
+
+        override fun registerProcess(
+            pid: Int,
+            parentPid: Int,
+            programPath: String,
+        ) {
+            registrations += Triple(pid, parentPid, programPath)
+        }
+
+        override fun completeProcess(
+            pid: Int,
+            exitCode: Int,
+        ) {
+            completions += pid to exitCode
+        }
+    }
+
+    private class StubVmContext : VmContext {
+        val logs = mutableListOf<String>()
+
+        override suspend fun receiveEvent(): VmEvent = error("not used")
+
+        override fun tryReceiveEvent(): VmEvent? = null
+
+        override fun deferEvent(event: VmEvent) = Unit
+
+        override fun setState(state: VmState) = Unit
+
+        override fun setSleepUntil(tick: Long?) = Unit
+
+        override suspend fun schedulingPoint() = Unit
+
+        override suspend fun <T> awaitHostCall(callFactory: (Long) -> HostCall): T =
+            error("not used")
+
+        override fun resolvePath(path: String): String = path
+
+        override fun enqueueEvent(event: VmEvent): Boolean = true
+
+        override fun stop(reason: VmStopReason) = Unit
+
+        override fun log(message: String) {
+            logs += message
+        }
+
+        override suspend fun writeIpc(
+            channel: Int,
+            text: String,
+        ) = error("not used")
+
+        override suspend fun pollIpcOrEvent(channel: Int): VmPollResult =
+            error("not used")
+    }
+
+    @Test
+    fun spawnRegistersAndCompletesNativeProcess() {
+        runtimeTestWorkspace("vm-process-manager-native-bridge") { workspace ->
+            val bridge = RecordingNativeProcessBridge()
+            val ctx = StubVmContext()
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val manager =
+                VmProcessManager(
+                    scope = scope,
+                    ctx = ctx,
+                    deviceId = 1,
+                    programLoader = WorkspaceProgramLoader(workspace.host),
+                    profile = runtimeProfile(),
+                    runtimeCreator = { _, _ -> error("runtimeCreator should not run for a missing program") },
+                    compilerMetricsCollector = NoOpCompilerMetricsCollector,
+                    nativeProcessBridge = bridge,
+                )
+
+            try {
+                val pid = manager.spawn("missing.ck", "", "")
+                val code = runBlocking { withTimeout(5_000) { manager.wait(pid) } }
+
+                assertEquals(2, pid)
+                assertEquals(listOf(Triple(2, 1, "missing.ck")), bridge.registrations)
+                assertEquals(listOf(2 to 1), bridge.completions)
+                assertEquals(1, code)
+                assertTrue(ctx.logs.any { it.contains("Program not found: missing.ck") }, ctx.logs.toString())
+            } finally {
+                runBlocking { manager.cancelAll() }
+                scope.cancel()
+            }
+        }
+    }
+}

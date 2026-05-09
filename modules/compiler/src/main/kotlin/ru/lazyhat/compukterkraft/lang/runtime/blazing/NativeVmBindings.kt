@@ -52,6 +52,26 @@ internal interface NativeVmBindingsFacade {
         observedWakeSequence: Long,
         timeoutMillis: Long,
     ): Long
+
+    fun waitForProcessWake(
+        handle: Long,
+        pid: Int,
+        observedWakeSequence: Long,
+        timeoutMillis: Long,
+    ): Long
+
+    fun registerProcess(
+        kernelHandle: Long,
+        pid: Int,
+        parentPid: Int,
+        programPath: String,
+    )
+
+    fun completeProcess(
+        kernelHandle: Long,
+        pid: Int,
+        exitCode: Int,
+    )
 }
 
 object NativeVmBindings : NativeVmBindingsFacade {
@@ -148,6 +168,35 @@ object NativeVmBindings : NativeVmBindingsFacade {
     ): Long {
         require(handle != 0L) { "Native device runtime kernel handle is zero" }
         return waitForDeviceWakeNative(handle, observedWakeSequence, timeoutMillis.coerceAtLeast(0))
+    }
+
+    override fun waitForProcessWake(
+        handle: Long,
+        pid: Int,
+        observedWakeSequence: Long,
+        timeoutMillis: Long,
+    ): Long {
+        require(handle != 0L) { "Native device runtime kernel handle is zero" }
+        return waitForProcessWakeNative(handle, pid, observedWakeSequence, timeoutMillis.coerceAtLeast(0))
+    }
+
+    override fun registerProcess(
+        kernelHandle: Long,
+        pid: Int,
+        parentPid: Int,
+        programPath: String,
+    ) {
+        require(kernelHandle != 0L) { "Native device runtime kernel handle is zero" }
+        registerProcessNative(kernelHandle, pid, parentPid, programPath)
+    }
+
+    override fun completeProcess(
+        kernelHandle: Long,
+        pid: Int,
+        exitCode: Int,
+    ) {
+        require(kernelHandle != 0L) { "Native device runtime kernel handle is zero" }
+        completeProcessNative(kernelHandle, pid, exitCode)
     }
 
     override fun attachImageToKernel(
@@ -334,6 +383,26 @@ object NativeVmBindings : NativeVmBindingsFacade {
         observedWakeSequence: Long,
         timeoutMillis: Long,
     ): Long
+
+    private external fun waitForProcessWakeNative(
+        handle: Long,
+        pid: Int,
+        observedWakeSequence: Long,
+        timeoutMillis: Long,
+    ): Long
+
+    private external fun registerProcessNative(
+        kernelHandle: Long,
+        pid: Int,
+        parentPid: Int,
+        programPath: String,
+    )
+
+    private external fun completeProcessNative(
+        kernelHandle: Long,
+        pid: Int,
+        exitCode: Int,
+    )
 
     @JvmStatic
     private external fun displayWakeSequenceNative(handle: Long): Long

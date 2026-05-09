@@ -67,6 +67,18 @@ class NativeImageVmBindingsJniTest {
             "NativeVmBindings must expose native device kernel waits",
         )
         assertTrue(
+            "registerProcess" in memberNames,
+            "NativeVmBindings must expose native process registration",
+        )
+        assertTrue(
+            "completeProcess" in memberNames,
+            "NativeVmBindings must expose native process completion",
+        )
+        assertTrue(
+            "waitForProcessWake" in memberNames,
+            "NativeVmBindings must expose native process waits",
+        )
+        assertTrue(
             "attachImageToKernel" in memberNames,
             "NativeVmBindings must expose native device-kernel lifecycle",
         )

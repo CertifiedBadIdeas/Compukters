@@ -22,6 +22,7 @@ package ru.lazyhat.compukterkraft.core.device.vm
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
@@ -42,6 +43,7 @@ internal class VmProcessManager(
     private val profile: DeviceProfile,
     private val runtimeCreator: (String, String) -> DeviceRuntime,
     private val compilerMetricsCollector: CompilerMetricsCollector = NoOpCompilerMetricsCollector,
+    private val nativeProcessBridge: NativeProcessBridge = NoOpNativeProcessBridge,
 ) {
     private val nextPid = AtomicInteger(2)
     private val processes = ConcurrentHashMap<Int, ProcessHandle>()
@@ -54,16 +56,19 @@ internal class VmProcessManager(
         val pid = nextPid.getAndIncrement()
         val exitCode = CompletableDeferred<Int>()
         val job =
-            scope.launch {
+            scope.launch(start = CoroutineStart.LAZY) {
                 val code = execute(path, argument, workingDirectory)
+                nativeProcessBridge.completeProcess(pid, code)
                 exitCode.complete(code)
             }
+        processes[pid] = ProcessHandle(job, exitCode)
+        nativeProcessBridge.registerProcess(pid = pid, parentPid = 1, programPath = path)
+        job.start()
         job.invokeOnCompletion { failure ->
             if (failure != null && !exitCode.isCompleted) {
                 exitCode.complete(1)
             }
         }
-        processes[pid] = ProcessHandle(job, exitCode)
         return pid
     }
 

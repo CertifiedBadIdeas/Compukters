@@ -344,6 +344,29 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
 }
 
 #[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_waitForProcessWakeNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    handle: jlong,
+    _pid: jint,
+    observed_wake_sequence: jlong,
+    timeout_millis: jlong,
+) -> jlong {
+    let kernel = match shared_kernel_handle(&mut env, handle) {
+        Some(kernel) => kernel,
+        None => return observed_wake_sequence,
+    };
+    let timeout = Duration::from_millis(timeout_millis.max(0) as u64);
+    match kernel.wait_for_process_wake(0, observed_wake_sequence, timeout) {
+        Ok(sequence) => sequence as jlong,
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalStateException", error);
+            observed_wake_sequence
+        }
+    }
+}
+
+#[no_mangle]
 pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_attachImageToKernelNative(
     mut env: JNIEnv<'_>,
     _class: JClass<'_>,
@@ -359,6 +382,55 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
         None => return,
     };
     if let Err(error) = handle.attach_device_kernel(kernel) {
+        let _ = env.throw_new("java/lang/IllegalStateException", error);
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_registerProcessNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    kernel_handle: jlong,
+    pid: jint,
+    parent_pid: jint,
+    program_path: JString<'_>,
+) {
+    let kernel_handle = match shared_kernel_handle(&mut env, kernel_handle) {
+        Some(kernel) => kernel,
+        None => return,
+    };
+    let program_path: String = match env.get_string(&program_path) {
+        Ok(value) => value.into(),
+        Err(error) => {
+            let _ = env.throw_new(
+                "java/lang/IllegalArgumentException",
+                format!("Cannot read native process program path: {error}"),
+            );
+            return;
+        }
+    };
+    if let Err(error) = kernel_handle.with_kernel_mut(|kernel| {
+        kernel.register_process(pid, parent_pid, program_path);
+    }) {
+        let _ = env.throw_new("java/lang/IllegalStateException", error);
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_completeProcessNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    kernel_handle: jlong,
+    pid: jint,
+    exit_code: jint,
+) {
+    let kernel_handle = match shared_kernel_handle(&mut env, kernel_handle) {
+        Some(kernel) => kernel,
+        None => return,
+    };
+    if let Err(error) = kernel_handle.with_kernel_mut(|kernel| {
+        kernel.complete_process(pid, exit_code);
+    }) {
         let _ = env.throw_new("java/lang/IllegalStateException", error);
     }
 }

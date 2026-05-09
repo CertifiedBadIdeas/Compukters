@@ -67,6 +67,7 @@ class RuntimeVmProfilingReportTest {
                     .resolve(RuntimeVmProfilingReportArchive.MARKDOWN_FILE_NAME)
                     .readText()
             assertContains(markdown, "Native wait signals")
+            assertContains(markdown, "Native process wait signals")
             assertContains(markdown, "Native fast-path calls")
         }
 

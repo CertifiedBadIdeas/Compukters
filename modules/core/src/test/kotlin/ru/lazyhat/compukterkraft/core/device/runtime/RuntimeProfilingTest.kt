@@ -131,7 +131,7 @@ class RuntimeProfilingTest {
         assertTrue(summary.startsWith("runtime:\n"), summary)
         assertTrue(summary.contains("  vm:\n"), summary)
         assertTrue(
-            summary.contains("  signals: halt=1, pause=1, yield=1, sleep=1, waitEvent=1, waitPoll=1, hostCall=1"),
+            summary.contains("  signals: halt=1, pause=1, yield=1, sleep=1, waitEvent=1, waitPoll=1, waitProcess=0, hostCall=1"),
             summary,
         )
         assertTrue(

@@ -70,6 +70,11 @@ internal sealed interface NativeVmSignal {
         val wakeSequence: Long,
     ) : NativeVmSignal
 
+    data class WaitProcess(
+        val pid: Int,
+        val wakeSequence: Long,
+    ) : NativeVmSignal
+
     data class HostCall(
         val moduleName: String,
         val functionName: String,
@@ -113,6 +118,10 @@ internal sealed interface NativeVmSignal {
 
                 6 -> {
                     WaitPoll(reader.i32(), reader.i64())
+                }
+
+                7 -> {
+                    WaitProcess(reader.i32(), reader.i64())
                 }
 
                 255 -> {
