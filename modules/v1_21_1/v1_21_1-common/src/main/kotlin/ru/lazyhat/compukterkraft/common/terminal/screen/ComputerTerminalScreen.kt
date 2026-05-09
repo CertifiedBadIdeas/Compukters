@@ -100,7 +100,6 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
         displayTexture.close()
         ClientNetworking.sendToServer(DisplayDetachServerMessage(menu, displayId))
         super.removed()
-        menu.clientSide.detachDisplayBuffer()
     }
 
     override fun renderBg(
