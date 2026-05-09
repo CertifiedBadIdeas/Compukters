@@ -31,6 +31,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class NativeImageVmBindingsJniTest {
@@ -108,6 +109,19 @@ class NativeImageVmBindingsJniTest {
         } finally {
             NativeVmBindings.freeImage(imageHandle)
         }
+    }
+
+    @Test
+    fun staleNativeDeviceKernelHandleIsIgnoredWhenLibraryIsConfigured() {
+        System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val kernelHandle = NativeVmBindings.createDeviceKernel(maxEventQueueSize = 64, maxBufferedBytesPerChannel = 4096)
+
+        NativeVmBindings.freeDeviceKernel(kernelHandle)
+
+        assertNull(NativeVmBindings.tryReadDeviceIpc(kernelHandle, channel = 1))
+        assertEquals(0L, NativeVmBindings.deviceKernelWakeSequence(kernelHandle))
+        assertEquals(7L, NativeVmBindings.waitForDeviceWake(kernelHandle, observedWakeSequence = 7L, timeoutMillis = 1L))
+        NativeVmBindings.freeDeviceKernel(kernelHandle)
     }
 
     @Test
