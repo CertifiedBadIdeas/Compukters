@@ -1,3 +1,4 @@
+pub mod display;
 pub mod image;
 pub mod image_runner;
 pub mod jni;
