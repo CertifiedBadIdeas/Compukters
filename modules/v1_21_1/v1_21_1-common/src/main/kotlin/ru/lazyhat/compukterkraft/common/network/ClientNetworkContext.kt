@@ -36,6 +36,11 @@ interface ClientNetworkContext {
         frame: DisplayFrameDelta,
     )
 
+    fun handleNativeDisplayFrameBytes(
+        containerId: Int,
+        payload: ByteArray,
+    )
+
     fun handleWorkbenchWorkspace(
         containerId: Int,
         remoteState: WorkbenchRemoteState,

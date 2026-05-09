@@ -22,6 +22,7 @@ import it.unimi.dsi.fastutil.ints.IntOpenHashSet
 import it.unimi.dsi.fastutil.ints.IntSet
 import net.minecraft.network.FriendlyByteBuf
 import ru.lazyhat.compukterkraft.common.computer.network.client.FrameDeltaClientMessage
+import ru.lazyhat.compukterkraft.common.computer.network.client.NativeFrameBatchClientMessage
 import ru.lazyhat.compukterkraft.common.computer.network.server.ComputerActionServerMessage
 import ru.lazyhat.compukterkraft.common.computer.network.server.DisplayAttachServerMessage
 import ru.lazyhat.compukterkraft.common.computer.network.server.DisplayDetachServerMessage
@@ -184,6 +185,12 @@ object NetworkMessages {
             25,
             "frame_delta",
             { buf -> FrameDeltaClientMessage(buf) },
+        )
+    val NATIVE_FRAME_BATCH: MessageType<NativeFrameBatchClientMessage> =
+        registerClientbound(
+            26,
+            "native_frame_batch",
+            { buf -> NativeFrameBatchClientMessage(buf) },
         )
 
     @Suppress("UNCHECKED_CAST")
