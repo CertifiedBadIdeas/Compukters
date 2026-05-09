@@ -489,10 +489,51 @@ class BackgroundDeviceVmTest {
             vm.enqueueEvent(VmEvent("char", listOf(byteArrayOf('b'.code.toByte()))))
             runVmTicks(vm, ticks = 12, hostCallDispatcher = dispatcher, runtimeMetricsCollector = runtimeMetrics)
 
-            val blitDelta = runtimeMetrics.snapshot().displayGlyphBlitCalls() - blitsBeforeInput
+            val snapshot = runtimeMetrics.snapshot()
+            val blitDelta = snapshot.displayGlyphBlitCalls() - blitsBeforeInput
+            val textRunDelta = snapshot.displayTextRunCalls()
             assertTrue(
-                blitDelta <= 2,
+                blitDelta == 0L,
+                "append input should not call per-glyph packed blits, blitDelta=$blitDelta",
+            )
+            assertTrue(
+                textRunDelta > 0,
                 "append input should draw only the newly typed glyph, blitDelta=$blitDelta",
+            )
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun bundledRomTerminalRendersCommittedTextWithTextRuns() {
+        val root = createTempDirectory("compukterkraft-rom-terminal-output-text-run")
+
+        try {
+            DeviceWorkspaceInitializer(root).ensureInitialized(1)
+            val workspace = DeviceWorkspaceHost(root)
+            val runtimeMetrics = RecordingRuntimeMetricsCollector()
+            val vm =
+                BackgroundDeviceVm(
+                    deviceId = 1,
+                    profile = firmwareTestProfile(),
+                    dispatcher = Dispatchers.Default,
+                    labelProvider = { null },
+                    logger = DeviceVmLogger { },
+                    workspace = workspace,
+                    firmwareLoader = ClasspathFirmwareLoader(),
+                    runtimeMetricsCollector = runtimeMetrics,
+                )
+
+            vm.attachDisplay(displayId = 9, width = 96, height = 48)
+            assertTrue(vm.boot())
+            val dispatcher = HostCallDispatcher(1, workspace)
+            runVmTicks(vm, ticks = 80, hostCallDispatcher = dispatcher, runtimeMetricsCollector = runtimeMetrics)
+
+            val snapshot = runtimeMetrics.snapshot()
+            assertTrue(
+                snapshot.displayTextRunCalls() > 0,
+                "committed terminal output should render through batched text runs",
             )
         } finally {
             root.toFile().deleteRecursively()
@@ -816,6 +857,11 @@ class BackgroundDeviceVmTest {
     private fun ru.lazyhat.compukterkraft.core.device.runtime.RuntimeProfilingSnapshot.displayGlyphBlitCalls(): Long =
         hostCalls
             .filter { it.moduleName == "display" && it.functionName == "blitMono5x7Packed" }
+            .sumOf { it.calls }
+
+    private fun ru.lazyhat.compukterkraft.core.device.runtime.RuntimeProfilingSnapshot.displayTextRunCalls(): Long =
+        hostCalls
+            .filter { it.moduleName == "display" && it.functionName == "blitMono5x7Text" }
             .sumOf { it.calls }
 
     private fun ru.lazyhat.compukterkraft.core.device.runtime.RuntimeProfilingSnapshot.displayFillRectCalls(): Long =

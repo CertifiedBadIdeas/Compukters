@@ -40,6 +40,7 @@ object CkVmHostImportRegistry {
             ),
             descriptor(1010, "display", "blitMono5x7Packed", listOf("Int", "Int", "Int", "Long", "Int", "Int"), "Unit"),
             descriptor(1011, "display", "present", listOf("Int"), "Unit"),
+            descriptor(1012, "display", "blitMono5x7Text", listOf("Int", "Int", "Int", "String", "Int", "Int"), "Unit"),
             descriptor(2000, "filesystem", "exists", listOf("String"), "Bool"),
             descriptor(2001, "filesystem", "readText", listOf("String"), "String"),
             descriptor(2002, "filesystem", "isDirectory", listOf("String"), "Bool"),

@@ -102,5 +102,16 @@ class VmDisplayApi(
         registry.blitMono5x7(displayId, x, y, row0, row1, row2, row3, row4, row5, row6, foreground, background)
     }
 
+    override fun blitMono5x7Text(
+        displayId: Int,
+        x: Int,
+        y: Int,
+        text: String,
+        foreground: Int,
+        background: Int,
+    ) {
+        registry.blitMono5x7Text(displayId, x, y, text, foreground, background)
+    }
+
     override fun present(displayId: Int) = registry.present(displayId)
 }

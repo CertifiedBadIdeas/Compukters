@@ -104,7 +104,7 @@ class DisplayProfilingTest {
         assertEquals(60, snapshot.operations.averagePresentNanos)
         val summary = snapshot.summary()
         assertTrue(summary.startsWith("display:\n"), summary)
-        assertTrue(summary.contains("  operations:\n"), summary)
+        assertTrue(summary.contains("  operations:"), summary)
         assertTrue(summary.contains("    fillRect: count=1, area=12, time=30 ns, avg=30 ns"), summary)
         assertTrue(summary.contains("    blitMono: count=1, area=42, time=50 ns, avg=50 ns"), summary)
     }

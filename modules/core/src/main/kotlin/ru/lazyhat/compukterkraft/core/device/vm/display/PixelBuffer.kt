@@ -185,6 +185,31 @@ class PixelBuffer(
         }
     }
 
+    fun blitMono5x7Text(
+        x: Int,
+        y: Int,
+        text: String,
+        foreground: Int,
+        background: Int,
+    ) {
+        text.forEachIndexed { index, ch ->
+            val glyphX = x + index * Mono5x7Font.CELL_ADVANCE
+            blitMono5x7(
+                glyphX,
+                y,
+                Mono5x7Font.rowBits(ch, 0),
+                Mono5x7Font.rowBits(ch, 1),
+                Mono5x7Font.rowBits(ch, 2),
+                Mono5x7Font.rowBits(ch, 3),
+                Mono5x7Font.rowBits(ch, 4),
+                Mono5x7Font.rowBits(ch, 5),
+                Mono5x7Font.rowBits(ch, 6),
+                foreground,
+                background,
+            )
+        }
+    }
+
     fun copyTile(tile: DirtyTile): ByteArray = copyTileWithMetrics(tile).payload
 
     fun copyTileWithMetrics(tile: DirtyTile): TileCopyResult {
