@@ -84,6 +84,12 @@ interface RuntimeMetricsCollector {
         nanos: Long,
     )
 
+    fun recordNativeWait(
+        kind: String,
+        nanos: Long,
+        woke: Boolean = true,
+    )
+
     fun snapshot(): RuntimeProfilingSnapshot
 }
 
@@ -150,6 +156,10 @@ data class RuntimeVmMetrics(
     val waitPollSignals: Long = 0,
     val hostCallSignals: Long = 0,
     val nativeFastPathCalls: Long = 0,
+    val nativeWaitCalls: Long = 0,
+    val nativeWaitNanos: Long = 0,
+    val nativeWaitWakeups: Long = 0,
+    val nativeWaitTimeouts: Long = 0,
 ) {
     val averageExecutionWindowNanos: Long get() = if (executionWindows <= 0) 0 else executionWindowNanos / executionWindows
     val nativeWaitSignals: Long get() = waitPollSignals
@@ -327,6 +337,12 @@ object NoOpRuntimeMetricsCollector : RuntimeMetricsCollector {
         nanos: Long,
     ) = Unit
 
+    override fun recordNativeWait(
+        kind: String,
+        nanos: Long,
+        woke: Boolean,
+    ) = Unit
+
     override fun snapshot(): RuntimeProfilingSnapshot = RuntimeProfilingSnapshot()
 }
 
@@ -382,6 +398,10 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
     private val waitEventSignals = AtomicLong()
     private val waitPollSignals = AtomicLong()
     private val hostCallSignals = AtomicLong()
+    private val nativeWaitCalls = AtomicLong()
+    private val nativeWaitNanos = AtomicLong()
+    private val nativeWaitWakeups = AtomicLong()
+    private val nativeWaitTimeouts = AtomicLong()
     private val hostCalls = ConcurrentHashMap<Pair<String, String>, RuntimeCounter>()
     private val instructions = ConcurrentHashMap<VmInstructionKind, RuntimeCounter>()
 
@@ -502,6 +522,20 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
         instructions.computeIfAbsent(kind) { RuntimeCounter() }.record(nanos)
     }
 
+    override fun recordNativeWait(
+        kind: String,
+        nanos: Long,
+        woke: Boolean,
+    ) {
+        nativeWaitCalls.incrementAndGet()
+        nativeWaitNanos.addAndGet(nanos.coerceAtLeast(0))
+        if (woke) {
+            nativeWaitWakeups.incrementAndGet()
+        } else {
+            nativeWaitTimeouts.incrementAndGet()
+        }
+    }
+
     override fun snapshot(): RuntimeProfilingSnapshot =
         RuntimeProfilingSnapshot(
             tick =
@@ -544,6 +578,10 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
                     waitEventSignals = waitEventSignals.get(),
                     waitPollSignals = waitPollSignals.get(),
                     hostCallSignals = hostCallSignals.get(),
+                    nativeWaitCalls = nativeWaitCalls.get(),
+                    nativeWaitNanos = nativeWaitNanos.get(),
+                    nativeWaitWakeups = nativeWaitWakeups.get(),
+                    nativeWaitTimeouts = nativeWaitTimeouts.get(),
                 ),
             hostCalls =
                 hostCalls

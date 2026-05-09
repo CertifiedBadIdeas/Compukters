@@ -197,6 +197,14 @@ class BackgroundDeviceVm(
         ) {
             runtimeMetricsCollector.recordVmInstruction(kind, nanos)
         }
+
+        override fun recordNativeWait(
+            kind: String,
+            nanos: Long,
+            woke: Boolean,
+        ) {
+            runtimeMetricsCollector.recordNativeWait(kind, nanos, woke)
+        }
     }
 
     /**
