@@ -324,17 +324,20 @@ impl DeviceDisplayRegistry {
         width: i32,
         height: i32,
         pixel_format: PixelFormat,
-    ) -> Result<(), String> {
+    ) -> Result<bool, String> {
         let mut display = DisplayEngine::new(display_id, width, height, pixel_format)?;
-        if let Some(frame) = display.full_refresh() {
+        let emitted = if let Some(frame) = display.full_refresh() {
             self.pending_frames.push(frame);
-        }
+            true
+        } else {
+            false
+        };
         self.displays.insert(display_id, display);
-        Ok(())
+        Ok(emitted)
     }
 
-    pub fn detach(&mut self, display_id: i32) {
-        self.displays.remove(&display_id);
+    pub fn detach(&mut self, display_id: i32) -> bool {
+        self.displays.remove(&display_id).is_some()
     }
 
     pub fn first_display_id(&self) -> Option<i32> {
@@ -438,12 +441,14 @@ impl DeviceDisplayRegistry {
         }
     }
 
-    pub fn present(&mut self, display_id: i32) {
+    pub fn present(&mut self, display_id: i32) -> bool {
         if let Some(display) = self.displays.get_mut(&display_id) {
             if let Some(frame) = display.present() {
                 self.pending_frames.push(frame);
+                return true;
             }
         }
+        false
     }
 
     pub fn drain_frames(&mut self) -> Vec<DisplayFrameDelta> {
