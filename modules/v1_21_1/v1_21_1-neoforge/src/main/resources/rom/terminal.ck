@@ -449,6 +449,103 @@ fun clearRenderedInputLine(displayId: Int, buffer: TerminalBuffer, previousLine:
     }
 }
 
+fun startsWithText(text: String, prefix: String): Bool {
+    if (strings::length(prefix) > strings::length(text)) {
+        return false
+    }
+    var i: Int = 0
+    while i < strings::length(prefix) {
+        if (strings::charAt(text, i) != strings::charAt(prefix, i)) {
+            return false
+        }
+        i = i + 1
+    }
+    return true
+}
+
+fun renderInputLineAppend(displayId: Int, buffer: TerminalBuffer, line: String, startIndex: Int) {
+    val cols: Int = columns(displayId)
+    val rs: Int = rows(displayId)
+    var x: Int = buffer.cursorColumn
+    var y: Int = buffer.cursorRow - historyRowStart(buffer.historyRows, buffer.displayRows, buffer.viewportOffset)
+    if (rs <= 0 || cols <= 0) {
+        return
+    }
+    if (y < 0 || y >= rs) {
+        return
+    }
+    if (x < 0 || x >= cols) {
+        return
+    }
+    var i: Int = 0
+    while i < startIndex + 0 {
+        x = x + 1
+        if (x >= cols) {
+            x = 0
+            y = y + 1
+            if (y >= rs) {
+                return
+            }
+        }
+        i = i + 1
+    }
+    while i < strings::length(line) {
+        if (x >= cols) {
+            x = 0
+            y = y + 1
+            if (y >= rs) {
+                display::present(displayId)
+                return
+            }
+        }
+        drawGlyph(displayId, buffer.glyphs, x, y, strings::charAt(line, i), 2016)
+        x = x + 1
+        i = i + 1
+    }
+    display::present(displayId)
+}
+
+fun restoreInputCell(displayId: Int, buffer: TerminalBuffer, lineIndex: Int) {
+    val cols: Int = columns(displayId)
+    val rs: Int = rows(displayId)
+    var x: Int = buffer.cursorColumn
+    var y: Int = buffer.cursorRow - historyRowStart(buffer.historyRows, buffer.displayRows, buffer.viewportOffset)
+    if (rs <= 0 || cols <= 0) {
+        return
+    }
+    if (y < 0 || y >= rs) {
+        return
+    }
+    if (x < 0 || x >= cols) {
+        return
+    }
+    var i: Int = 0
+    while i < lineIndex + 0 {
+        x = x + 1
+        if (x >= cols) {
+            x = 0
+            y = y + 1
+            if (y >= rs) {
+                return
+            }
+        }
+        i = i + 1
+    }
+    var visibleCells: String = buffer.cellsText
+    if (buffer.viewportOffset != 0) {
+        visibleCells =
+            viewportCells(
+                buffer.historyCells,
+                buffer.historyRows,
+                buffer.displayColumns,
+                buffer.displayRows,
+                buffer.viewportOffset
+            )
+    }
+    drawGlyph(displayId, buffer.glyphs, x, y, cellAt(visibleCells, y * cols + x), 2016)
+    display::present(displayId)
+}
+
 fun renderInputLine(displayId: Int, buffer: TerminalBuffer, previousLine: String, line: String) {
     val cols: Int = columns(displayId)
     val rs: Int = rows(displayId)
@@ -461,6 +558,14 @@ fun renderInputLine(displayId: Int, buffer: TerminalBuffer, previousLine: String
         return
     }
     if (x < 0 || x >= cols) {
+        return
+    }
+    if (strings::length(previousLine) == strings::length(line) + 1 && startsWithText(previousLine, line)) {
+        restoreInputCell(displayId, buffer, strings::length(line))
+        return
+    }
+    if (strings::length(previousLine) < strings::length(line) && startsWithText(line, previousLine)) {
+        renderInputLineAppend(displayId, buffer, line, strings::length(previousLine))
         return
     }
     clearRenderedInputLine(displayId, buffer, previousLine)

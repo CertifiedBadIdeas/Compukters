@@ -77,10 +77,11 @@ class BackgroundDeviceVmTest {
         vm: BackgroundDeviceVm,
         ticks: Int = 16,
         hostCallDispatcher: HostCallDispatcher? = null,
+        runtimeMetricsCollector: RuntimeMetricsCollector = NoOpRuntimeMetricsCollector,
     ) = runBlocking {
         repeat(ticks) { tick ->
             hostCallDispatcher?.let { dispatcher ->
-                serviceVmTickForTest(vm, tick.toLong(), dispatcher::dispatch, NoOpRuntimeMetricsCollector)
+                serviceVmTickForTest(vm, tick.toLong(), dispatcher::dispatch, runtimeMetricsCollector)
             } ?: run {
                 vm.requestSlice(tick.toLong())
             }
@@ -456,6 +457,99 @@ class BackgroundDeviceVmTest {
     }
 
     @Test
+    fun bundledRomTerminalRendersAppendInputIncrementally() {
+        val root = createTempDirectory("compukterkraft-rom-terminal-incremental-input")
+
+        try {
+            DeviceWorkspaceInitializer(root).ensureInitialized(1)
+            val workspace = DeviceWorkspaceHost(root)
+            val runtimeMetrics = RecordingRuntimeMetricsCollector()
+            val vm =
+                BackgroundDeviceVm(
+                    deviceId = 1,
+                    profile = firmwareTestProfile(),
+                    dispatcher = Dispatchers.Default,
+                    labelProvider = { null },
+                    logger = DeviceVmLogger { },
+                    workspace = workspace,
+                    firmwareLoader = ClasspathFirmwareLoader(),
+                    runtimeMetricsCollector = runtimeMetrics,
+                )
+
+            vm.attachDisplay(displayId = 9, width = 96, height = 48)
+            assertTrue(vm.boot())
+            val dispatcher = HostCallDispatcher(1, workspace)
+            runVmTicks(vm, ticks = 80, hostCallDispatcher = dispatcher, runtimeMetricsCollector = runtimeMetrics)
+            vm.drainDisplayFrames()
+            vm.enqueueEvent(VmEvent("char", listOf(byteArrayOf('a'.code.toByte()))))
+            runVmTicks(vm, ticks = 12, hostCallDispatcher = dispatcher, runtimeMetricsCollector = runtimeMetrics)
+            vm.drainDisplayFrames()
+            val blitsBeforeInput = runtimeMetrics.snapshot().displayGlyphBlitCalls()
+
+            vm.enqueueEvent(VmEvent("char", listOf(byteArrayOf('b'.code.toByte()))))
+            runVmTicks(vm, ticks = 12, hostCallDispatcher = dispatcher, runtimeMetricsCollector = runtimeMetrics)
+
+            val blitDelta = runtimeMetrics.snapshot().displayGlyphBlitCalls() - blitsBeforeInput
+            assertTrue(
+                blitDelta <= 2,
+                "append input should draw only the newly typed glyph, blitDelta=$blitDelta",
+            )
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun bundledRomTerminalRestoresBackspaceInputIncrementally() {
+        val root = createTempDirectory("compukterkraft-rom-terminal-incremental-backspace")
+
+        try {
+            DeviceWorkspaceInitializer(root).ensureInitialized(1)
+            val workspace = DeviceWorkspaceHost(root)
+            val runtimeMetrics = RecordingRuntimeMetricsCollector()
+            val vm =
+                BackgroundDeviceVm(
+                    deviceId = 1,
+                    profile = firmwareTestProfile(),
+                    dispatcher = Dispatchers.Default,
+                    labelProvider = { null },
+                    logger = DeviceVmLogger { },
+                    workspace = workspace,
+                    firmwareLoader = ClasspathFirmwareLoader(),
+                    runtimeMetricsCollector = runtimeMetrics,
+                )
+
+            vm.attachDisplay(displayId = 9, width = 96, height = 48)
+            assertTrue(vm.boot())
+            val dispatcher = HostCallDispatcher(1, workspace)
+            runVmTicks(vm, ticks = 80, hostCallDispatcher = dispatcher, runtimeMetricsCollector = runtimeMetrics)
+            vm.drainDisplayFrames()
+            "ab".forEach { ch -> vm.enqueueEvent(VmEvent("char", listOf(byteArrayOf(ch.code.toByte())))) }
+            runVmTicks(vm, ticks = 20, hostCallDispatcher = dispatcher, runtimeMetricsCollector = runtimeMetrics)
+            vm.drainDisplayFrames()
+            val blitsBeforeBackspace = runtimeMetrics.snapshot().displayGlyphBlitCalls()
+            val fillsBeforeBackspace = runtimeMetrics.snapshot().displayFillRectCalls()
+
+            vm.enqueueEvent(VmEvent("key", listOf(KeyCodes.KEY_BACKSPACE, false)))
+            runVmTicks(vm, ticks = 12, hostCallDispatcher = dispatcher, runtimeMetricsCollector = runtimeMetrics)
+
+            val snapshot = runtimeMetrics.snapshot()
+            val blitDelta = snapshot.displayGlyphBlitCalls() - blitsBeforeBackspace
+            val fillDelta = snapshot.displayFillRectCalls() - fillsBeforeBackspace
+            assertTrue(
+                blitDelta <= 1,
+                "backspace should restore only the removed cell, blitDelta=$blitDelta",
+            )
+            assertTrue(
+                fillDelta <= 1,
+                "backspace should clear only the removed cell, fillDelta=$fillDelta",
+            )
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
     fun bundledRomTerminalKeepsPromptVisibleWhileTyping() {
         val root = createTempDirectory("compukterkraft-rom-terminal-prompt")
 
@@ -718,6 +812,16 @@ class BackgroundDeviceVmTest {
         val lastFrame = lastOrNull() ?: return 0
         return cellGreenPixelCount(composePixels(), lastFrame.width, column, row)
     }
+
+    private fun ru.lazyhat.compukterkraft.core.device.runtime.RuntimeProfilingSnapshot.displayGlyphBlitCalls(): Long =
+        hostCalls
+            .filter { it.moduleName == "display" && it.functionName == "blitMono5x7Packed" }
+            .sumOf { it.calls }
+
+    private fun ru.lazyhat.compukterkraft.core.device.runtime.RuntimeProfilingSnapshot.displayFillRectCalls(): Long =
+        hostCalls
+            .filter { it.moduleName == "display" && it.functionName == "fillRect" }
+            .sumOf { it.calls }
 
     private fun List<DisplayFrameDelta>.lastGreenRow(): Int {
         val lastFrame = lastOrNull() ?: return -1
