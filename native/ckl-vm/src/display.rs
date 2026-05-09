@@ -341,23 +341,25 @@ impl DeviceDisplayRegistry {
         self.displays.keys().next().copied()
     }
 
-    pub fn clear(
-        &mut self,
-        display_id: i32,
-        rgb565: u16,
-    ) {
+    pub fn is_attached(&self, display_id: i32) -> bool {
+        self.displays.contains_key(&display_id)
+    }
+
+    pub fn width(&self, display_id: i32) -> Option<i32> {
+        self.displays.get(&display_id).map(|display| display.width)
+    }
+
+    pub fn height(&self, display_id: i32) -> Option<i32> {
+        self.displays.get(&display_id).map(|display| display.height)
+    }
+
+    pub fn clear(&mut self, display_id: i32, rgb565: u16) {
         if let Some(display) = self.displays.get_mut(&display_id) {
             display.clear(rgb565);
         }
     }
 
-    pub fn set_pixel(
-        &mut self,
-        display_id: i32,
-        x: i32,
-        y: i32,
-        rgb565: u16,
-    ) {
+    pub fn set_pixel(&mut self, display_id: i32, x: i32, y: i32, rgb565: u16) {
         if let Some(display) = self.displays.get_mut(&display_id) {
             display.set_pixel(x, y, rgb565);
         }

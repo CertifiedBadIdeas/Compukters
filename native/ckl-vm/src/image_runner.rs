@@ -159,7 +159,10 @@ impl ImageVmHandle {
         function_name: &str,
         arguments: Vec<VmValue>,
     ) -> Result<NativeHostImportResult, String> {
-        if module_name != "display" && module_name != "filesystem" {
+        if !matches!(
+            module_name,
+            "display" | "filesystem" | "events" | "ipc" | "runtime"
+        ) {
             return Ok(NativeHostImportResult::Fallback(arguments));
         }
         let Some(kernel_handle) = self.attached_kernel.as_ref() else {
@@ -222,7 +225,99 @@ impl ImageVmHandle {
                 _ => Ok(NativeHostImportResult::Fallback(arguments)),
             };
         }
+        if module_name == "events" {
+            return match function_name {
+                "tryPull" => {
+                    let filter = arguments
+                        .first()
+                        .map(|_| string_argument(&arguments, 0, "events.tryPull filter"))
+                        .transpose()?;
+                    let value = kernel
+                        .try_pull_event(filter)
+                        .map(|event| event_record(event.name, event.id, event.arg_count))
+                        .unwrap_or_else(empty_event_record);
+                    Ok(NativeHostImportResult::Handled(value))
+                }
+                "argCount" => {
+                    let event_id = event_id_argument(&arguments, 0, "events.argCount event")?;
+                    Ok(NativeHostImportResult::Handled(VmValue::Int(
+                        kernel.event_arg_count(event_id),
+                    )))
+                }
+                "argInt" => {
+                    let event_id = event_id_argument(&arguments, 0, "events.argInt event")?;
+                    let index = int_argument(&arguments, 1, "events.argInt index")?;
+                    Ok(NativeHostImportResult::Handled(VmValue::Int(
+                        kernel.event_arg_int(event_id, index),
+                    )))
+                }
+                "argBool" => {
+                    let event_id = event_id_argument(&arguments, 0, "events.argBool event")?;
+                    let index = int_argument(&arguments, 1, "events.argBool index")?;
+                    Ok(NativeHostImportResult::Handled(VmValue::Bool(
+                        kernel.event_arg_bool(event_id, index),
+                    )))
+                }
+                "argString" => {
+                    let event_id = event_id_argument(&arguments, 0, "events.argString event")?;
+                    let index = int_argument(&arguments, 1, "events.argString index")?;
+                    Ok(NativeHostImportResult::Handled(VmValue::String(
+                        kernel.event_arg_string(event_id, index),
+                    )))
+                }
+                _ => Ok(NativeHostImportResult::Fallback(arguments)),
+            };
+        }
+        if module_name == "ipc" {
+            return match function_name {
+                "open" => Ok(NativeHostImportResult::Handled(VmValue::Int(
+                    kernel.open_ipc_channel()?,
+                ))),
+                "write" => {
+                    let channel = int_argument(&arguments, 0, "ipc.write channel")?;
+                    let text = string_argument(&arguments, 1, "ipc.write text")?;
+                    kernel.write_ipc(channel, text)?;
+                    Ok(NativeHostImportResult::Handled(VmValue::Unit))
+                }
+                "tryRead" => {
+                    let channel = int_argument(&arguments, 0, "ipc.tryRead channel")?;
+                    Ok(NativeHostImportResult::Handled(VmValue::String(
+                        kernel.try_read_ipc(channel)?,
+                    )))
+                }
+                "close" => {
+                    let channel = int_argument(&arguments, 0, "ipc.close channel")?;
+                    kernel.close_ipc(channel)?;
+                    Ok(NativeHostImportResult::Handled(VmValue::Unit))
+                }
+                _ => Ok(NativeHostImportResult::Fallback(arguments)),
+            };
+        }
+        if module_name == "runtime" {
+            return Ok(NativeHostImportResult::Fallback(arguments));
+        }
         match function_name {
+            "primary" => Ok(NativeHostImportResult::Handled(VmValue::Int(
+                kernel.displays.first_display_id().unwrap_or(0),
+            ))),
+            "isAttached" => {
+                let display_id = int_argument(&arguments, 0, "display.isAttached displayId")?;
+                Ok(NativeHostImportResult::Handled(VmValue::Bool(
+                    kernel.displays.is_attached(display_id),
+                )))
+            }
+            "width" => {
+                let display_id = int_argument(&arguments, 0, "display.width displayId")?;
+                Ok(NativeHostImportResult::Handled(VmValue::Int(
+                    kernel.displays.width(display_id).unwrap_or(0),
+                )))
+            }
+            "height" => {
+                let display_id = int_argument(&arguments, 0, "display.height displayId")?;
+                Ok(NativeHostImportResult::Handled(VmValue::Int(
+                    kernel.displays.height(display_id).unwrap_or(0),
+                )))
+            }
             "clear" => {
                 let display_id = int_argument(&arguments, 0, "display.clear displayId")?;
                 let rgb565 = int_argument(&arguments, 1, "display.clear rgb565")? as u16;
@@ -1408,6 +1503,44 @@ fn try_builtin_native_host_import(
         STRINGS_CHAR_CODE_AT_IMPORT_ID => native_string_char_code_at(arguments),
         _ => Ok(NativeHostImportResult::Fallback(arguments)),
     }
+}
+
+fn empty_event_record() -> VmValue {
+    event_record(String::new(), 0, 0)
+}
+
+fn event_record(name: String, id: i32, arg_count: i32) -> VmValue {
+    VmValue::Record {
+        type_name: "Event".to_string(),
+        fields: vec![
+            ("name".to_string(), VmValue::String(name)),
+            ("id".to_string(), VmValue::Int(id)),
+            ("argCount".to_string(), VmValue::Int(arg_count)),
+        ],
+    }
+}
+
+fn event_id_argument(arguments: &[VmValue], index: usize, context: &str) -> Result<i32, String> {
+    let value = arguments
+        .get(index)
+        .ok_or_else(|| format!("{context} missing argument {index}"))?;
+    let VmValue::Record { type_name, fields } = value else {
+        return Err(format!("{context} requires Event but found {value:?}"));
+    };
+    if type_name != "Event" {
+        return Err(format!("{context} requires Event but found {type_name}"));
+    }
+    for (name, value) in fields {
+        if name == "id" {
+            return match value {
+                VmValue::Int(id) => Ok(*id),
+                other => Err(format!(
+                    "{context} Event.id requires Int but found {other:?}"
+                )),
+            };
+        }
+    }
+    Ok(0)
 }
 
 fn int_argument(arguments: &[VmValue], index: usize, context: &str) -> Result<i32, String> {
