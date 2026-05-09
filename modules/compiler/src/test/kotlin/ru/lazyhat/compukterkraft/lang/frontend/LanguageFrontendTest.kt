@@ -380,6 +380,25 @@ class LanguageFrontendTest {
     }
 
     @Test
+    fun parsesTextRunDisplayBuiltin() {
+        val artifact =
+            frontend.compile(
+                "text_run.ck",
+                """
+                pub fun main() {
+                    display::blitMono5x7Text(1, 2, 3, "hello", 2016, -1)
+                }
+                """.trimIndent(),
+            )
+
+        assertTrue(
+            artifact.analysis.diagnostics.none { it.severity == FrontendSeverity.ERROR },
+            artifact.analysis.diagnostics.joinToString { it.message },
+        )
+        assertNotNull(artifact.module)
+    }
+
+    @Test
     fun compilesBitwiseOperatorsWithApprovedTypes() {
         val artifact =
             frontend.compile(

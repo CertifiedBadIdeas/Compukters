@@ -165,6 +165,17 @@ class DisplayStateTest {
         assertTrue(payload.containsRgb565(0x001F), "transparent zeros should preserve old pixels")
     }
 
+    @Test
+    fun blitMono5x7TextDrawsGlyphRun() {
+        val state = DisplayState(displayId = 7, width = 18, height = 9, pixelFormat = DisplayPixelFormat.RGB565)
+
+        state.blitMono5x7Text(x = 0, y = 1, text = "AB", foreground = 0x07E0, background = -1)
+        val frame = assertNotNull(state.present())
+        val payload = frame.tiles.flatMap { it.payload.toList() }.toByteArray()
+
+        assertTrue(payload.containsRgb565(0x07E0), "text run should draw foreground pixels")
+    }
+
     private fun ByteArray.containsRgb565(rgb565: Int): Boolean {
         var i = 0
         val hi = (rgb565 ushr 8).toByte()

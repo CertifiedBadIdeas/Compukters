@@ -103,6 +103,13 @@ fun drawGlyph(displayId: Int, glyphs: Array<Long>, column: Int, row: Int, ch: St
     display::blitMono5x7Packed(displayId, x, y, glyph, color, -1)
 }
 
+fun drawGlyphRun(displayId: Int, column: Int, row: Int, text: String, color: Int) {
+    if (text == "") {
+        return
+    }
+    display::blitMono5x7Text(displayId, column * 6, row * 9, text, color, -1)
+}
+
 fun clearCell(displayId: Int, column: Int, row: Int) {
     display::fillRect(displayId, column * 6, row * 9, 6, 9, 0)
 }
@@ -166,14 +173,22 @@ fun renderTextRow(displayId: Int, glyphs: Array<Long>, cells: String, row: Int) 
     clearTextRow(displayId, row)
     var col: Int = 0
     val cols: Int = columns(displayId)
+    var run: String = ""
+    var runColumn: Int = 0
     while col < cols + 0 {
         val ch: String = cellAt(cells, row * cols + col)
         if (ch != " ") {
-            val glyph: Long = glyphBits(glyphs, ch)
-            display::blitMono5x7Packed(displayId, col * 6, row * 9, glyph, 2016, -1)
+            if (run == "") {
+                runColumn = col
+            }
+            run = run + ch
+        } else {
+            drawGlyphRun(displayId, runColumn, row, run, 2016)
+            run = ""
         }
         col = col + 1
     }
+    drawGlyphRun(displayId, runColumn, row, run, 2016)
 }
 
 fun renderAllRows(displayId: Int, glyphs: Array<Long>, cells: String) {
@@ -478,6 +493,9 @@ fun renderInputLineAppend(displayId: Int, buffer: TerminalBuffer, line: String, 
         return
     }
     var i: Int = 0
+    var run: String = ""
+    var runX: Int = x
+    var runY: Int = y
     while i < startIndex + 0 {
         x = x + 1
         if (x >= cols) {
@@ -491,6 +509,8 @@ fun renderInputLineAppend(displayId: Int, buffer: TerminalBuffer, line: String, 
     }
     while i < strings::length(line) {
         if (x >= cols) {
+            drawGlyphRun(displayId, runX, runY, run, 2016)
+            run = ""
             x = 0
             y = y + 1
             if (y >= rs) {
@@ -498,10 +518,22 @@ fun renderInputLineAppend(displayId: Int, buffer: TerminalBuffer, line: String, 
                 return
             }
         }
-        drawGlyph(displayId, buffer.glyphs, x, y, strings::charAt(line, i), 2016)
+        val ch: String = strings::charAt(line, i)
+        if (ch == " ") {
+            drawGlyphRun(displayId, runX, runY, run, 2016)
+            run = ""
+            drawGlyph(displayId, buffer.glyphs, x, y, ch, 2016)
+        } else {
+            if (run == "") {
+                runX = x
+                runY = y
+            }
+            run = run + ch
+        }
         x = x + 1
         i = i + 1
     }
+    drawGlyphRun(displayId, runX, runY, run, 2016)
     display::present(displayId)
 }
 
@@ -570,12 +602,18 @@ fun renderInputLine(displayId: Int, buffer: TerminalBuffer, previousLine: String
     }
     clearRenderedInputLine(displayId, buffer, previousLine)
     var i: Int = 0
+    var run: String = ""
+    var runX: Int = x
+    var runY: Int = y
     while i < strings::length(line) {
         if (y >= rs) {
+            drawGlyphRun(displayId, runX, runY, run, 2016)
             display::present(displayId)
             return
         }
         if (x >= cols) {
+            drawGlyphRun(displayId, runX, runY, run, 2016)
+            run = ""
             x = 0
             y = y + 1
             if (y >= rs) {
@@ -583,10 +621,22 @@ fun renderInputLine(displayId: Int, buffer: TerminalBuffer, previousLine: String
                 return
             }
         }
-        drawGlyph(displayId, buffer.glyphs, x, y, strings::charAt(line, i), 2016)
+        val ch: String = strings::charAt(line, i)
+        if (ch == " ") {
+            drawGlyphRun(displayId, runX, runY, run, 2016)
+            run = ""
+            drawGlyph(displayId, buffer.glyphs, x, y, ch, 2016)
+        } else {
+            if (run == "") {
+                runX = x
+                runY = y
+            }
+            run = run + ch
+        }
         x = x + 1
         i = i + 1
     }
+    drawGlyphRun(displayId, runX, runY, run, 2016)
     display::present(displayId)
 }
 

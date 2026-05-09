@@ -113,6 +113,20 @@ class DisplayState(
     }
 
     @Synchronized
+    fun blitMono5x7Text(
+        x: Int,
+        y: Int,
+        text: String,
+        foreground: Int,
+        background: Int,
+    ) {
+        if (text.isEmpty()) return
+        back.blitMono5x7Text(x, y, text, foreground, background)
+        val width = (text.length - 1) * Mono5x7Font.CELL_ADVANCE + Mono5x7Font.WIDTH
+        dirty.markRectDirty(x, y, width, Mono5x7Font.HEIGHT)
+    }
+
+    @Synchronized
     fun present(): DisplayFrameDelta? = presentWithMetrics()?.frame
 
     @Synchronized

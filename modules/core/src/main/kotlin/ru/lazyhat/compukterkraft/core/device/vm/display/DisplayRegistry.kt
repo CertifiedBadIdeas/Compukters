@@ -143,6 +143,20 @@ class DisplayRegistry(
         metricsCollector.recordBlitMono(displayId, 5, 7, System.nanoTime() - started)
     }
 
+    fun blitMono5x7Text(
+        displayId: Int,
+        x: Int,
+        y: Int,
+        text: String,
+        foreground: Int,
+        background: Int,
+    ) {
+        val started = System.nanoTime()
+        displays[displayId]?.blitMono5x7Text(x, y, text, foreground, background)
+        val width = if (text.isEmpty()) 0 else (text.length - 1) * Mono5x7Font.CELL_ADVANCE + Mono5x7Font.WIDTH
+        metricsCollector.recordBlitMono(displayId, width, Mono5x7Font.HEIGHT, System.nanoTime() - started)
+    }
+
     fun present(displayId: Int) {
         val started = System.nanoTime()
         val result = displays[displayId]?.presentWithMetrics()

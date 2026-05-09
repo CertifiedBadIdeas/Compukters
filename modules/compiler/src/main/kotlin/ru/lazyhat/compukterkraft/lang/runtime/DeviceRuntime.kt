@@ -231,6 +231,15 @@ interface DeviceDisplayApi {
         background: Int,
     )
 
+    fun blitMono5x7Text(
+        displayId: Int,
+        x: Int,
+        y: Int,
+        text: String,
+        foreground: Int,
+        background: Int,
+    )
+
     fun present(displayId: Int)
 }
 
@@ -296,6 +305,15 @@ object NoopDeviceDisplayApi : DeviceDisplayApi {
         row4: Int,
         row5: Int,
         row6: Int,
+        foreground: Int,
+        background: Int,
+    ) = Unit
+
+    override fun blitMono5x7Text(
+        displayId: Int,
+        x: Int,
+        y: Int,
+        text: String,
         foreground: Int,
         background: Int,
     ) = Unit
