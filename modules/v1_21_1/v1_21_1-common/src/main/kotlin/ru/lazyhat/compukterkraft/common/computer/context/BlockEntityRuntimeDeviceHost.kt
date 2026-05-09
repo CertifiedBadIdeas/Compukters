@@ -23,6 +23,7 @@ import net.minecraft.server.level.ServerLevel
 import ru.lazyhat.compukterkraft.common.computer.block.AbstractComputerBlockEntity
 import ru.lazyhat.compukterkraft.common.computer.menu.ComputerMenu
 import ru.lazyhat.compukterkraft.common.computer.network.client.FrameDeltaClientMessage
+import ru.lazyhat.compukterkraft.common.computer.network.client.NativeFrameBatchClientMessage
 import ru.lazyhat.compukterkraft.common.network.ServerNetworking
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.DeviceStateSink
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.DisplayNetworkBridge
@@ -65,6 +66,18 @@ class BlockEntityRuntimeDeviceHost(
                 val player = level.server.playerList.getPlayer(playerUuid) ?: return
                 ServerNetworking.sendToPlayer(
                     FrameDeltaClientMessage(containerId, frame),
+                    player,
+                )
+            }
+
+            override fun sendNativeDisplayFrameBytes(
+                playerUuid: UUID,
+                containerId: Int,
+                payload: ByteArray,
+            ) {
+                val player = level.server.playerList.getPlayer(playerUuid) ?: return
+                ServerNetworking.sendToPlayer(
+                    NativeFrameBatchClientMessage(containerId, payload),
                     player,
                 )
             }
