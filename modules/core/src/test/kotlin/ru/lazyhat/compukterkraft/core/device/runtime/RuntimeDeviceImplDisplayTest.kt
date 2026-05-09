@@ -133,6 +133,35 @@ class RuntimeDeviceImplDisplayTest {
         manager.close()
     }
 
+    @Test
+    fun flushesNativeDisplayFrameBytesThroughServerTickWhenNativePumpIsEnabled() {
+        if (System.getProperty("ckl.vm.native.library")?.isNotBlank() != true) return
+        if (System.getProperty("ckl.vm.native.display") != "true") return
+
+        val supervisor = DeviceVmSupervisor(ServerWorldAccess { createTempDirectory("runtime-native-display-test") })
+        val manager = DeviceManager(supervisor)
+        val displayNetwork = RecordingDisplayNetworkBridge()
+        val device =
+            RuntimeDeviceImpl(
+                deviceId = 42,
+                properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
+                manager = manager,
+                gameTime = { 0L },
+                displayNetwork = displayNetwork,
+                stateSink = {},
+            )
+        val playerUuid = UUID.randomUUID()
+
+        device.attachDisplaySession(playerUuid, containerId = 11, displayId = 1, width = 32, height = 16)
+        device.turnOn()
+        device.serverTick()
+
+        assertTrue(displayNetwork.sentNativeFrameBytes.isNotEmpty(), "native pump should dispatch frame bytes on the server thread")
+
+        device.close()
+        manager.close()
+    }
+
     private data class SentFrame(
         val playerUuid: UUID,
         val containerId: Int,
@@ -141,6 +170,7 @@ class RuntimeDeviceImplDisplayTest {
 
     private class RecordingDisplayNetworkBridge : DisplayNetworkBridge {
         val sentFrames = mutableListOf<SentFrame>()
+        val sentNativeFrameBytes = mutableListOf<ByteArray>()
 
         override fun isDisplaySessionStillBound(
             playerUuid: UUID,
@@ -155,6 +185,14 @@ class RuntimeDeviceImplDisplayTest {
             frame: DisplayFrameDelta,
         ) {
             sentFrames += SentFrame(playerUuid, containerId, frame)
+        }
+
+        override fun sendNativeDisplayFrameBytes(
+            playerUuid: UUID,
+            containerId: Int,
+            payload: ByteArray,
+        ) {
+            sentNativeFrameBytes += payload
         }
     }
 
