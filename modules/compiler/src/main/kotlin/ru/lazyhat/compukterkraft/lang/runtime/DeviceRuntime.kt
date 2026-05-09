@@ -87,6 +87,12 @@ interface DeviceRuntimeMetrics {
         kind: VmInstructionKind,
         nanos: Long,
     )
+
+    fun recordNativeWait(
+        kind: String,
+        nanos: Long,
+        woke: Boolean,
+    ) = Unit
 }
 
 object NoopDeviceRuntimeMetrics : DeviceRuntimeMetrics {

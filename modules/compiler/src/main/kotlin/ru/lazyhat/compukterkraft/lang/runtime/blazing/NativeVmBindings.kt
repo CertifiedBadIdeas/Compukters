@@ -46,6 +46,12 @@ internal interface NativeVmBindingsFacade {
         imageHandle: Long,
         workingDirectory: String,
     )
+
+    fun waitForDeviceWake(
+        handle: Long,
+        observedWakeSequence: Long,
+        timeoutMillis: Long,
+    ): Long
 }
 
 object NativeVmBindings : NativeVmBindingsFacade {
@@ -135,7 +141,7 @@ object NativeVmBindings : NativeVmBindingsFacade {
         return deviceKernelWakeSequenceNative(handle)
     }
 
-    fun waitForDeviceWake(
+    override fun waitForDeviceWake(
         handle: Long,
         observedWakeSequence: Long,
         timeoutMillis: Long,
