@@ -1,5 +1,5 @@
 use std::ptr::null_mut;
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, MutexGuard};
 
 use jni::objects::{JByteArray, JClass, JString};
 use jni::sys::{jboolean, jbyteArray, jint, jlong, jstring};
@@ -7,11 +7,11 @@ use jni::JNIEnv;
 
 use crate::display::PixelFormat;
 use crate::image_runner::ImageVmHandle;
-use crate::runtime_kernel::DeviceRuntimeKernel;
+use crate::runtime_kernel::{DeviceRuntimeKernel, DeviceRuntimeKernelHandle};
 use crate::signal::decode_value;
 use crate::value::VmValue;
 
-type SharedDeviceRuntimeKernel = Arc<Mutex<DeviceRuntimeKernel>>;
+type SharedDeviceRuntimeKernel = Arc<DeviceRuntimeKernelHandle>;
 
 #[no_mangle]
 pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_createImageNative(
@@ -119,10 +119,10 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
                 return 0;
             }
         };
-    Box::into_raw(Box::new(Arc::new(Mutex::new(DeviceRuntimeKernel::new(
+    Box::into_raw(Box::new(Arc::new(DeviceRuntimeKernelHandle::new(
         max_event_queue_size,
         max_buffered_bytes_per_channel,
-    ))))) as jlong
+    )))) as jlong
 }
 
 #[no_mangle]
@@ -440,11 +440,8 @@ fn locked_kernel_handle(
     let kernel = shared_kernel_handle(env, handle)?;
     match kernel.lock() {
         Ok(guard) => Some(guard),
-        Err(_) => {
-            let _ = env.throw_new(
-                "java/lang/IllegalStateException",
-                "Native device runtime kernel lock is poisoned",
-            );
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalStateException", error);
             None
         }
     }
