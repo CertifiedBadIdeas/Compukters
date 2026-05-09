@@ -68,6 +68,7 @@ pub struct ImageVmHandle {
     objects: HashMap<u32, HeapObject>,
     next_object_id: u32,
     attached_kernel: Option<Arc<Mutex<DeviceRuntimeKernel>>>,
+    working_directory: String,
     instruction_budget: usize,
     instructions_since_pause: usize,
     state: ImageVmState,
@@ -100,6 +101,7 @@ impl ImageVmHandle {
             objects: HashMap::new(),
             next_object_id: 1,
             attached_kernel: None,
+            working_directory: String::new(),
             instruction_budget: instruction_budget.max(1),
             instructions_since_pause: 0,
             state: ImageVmState::Ready,
@@ -112,6 +114,10 @@ impl ImageVmHandle {
     ) -> Result<(), String> {
         self.attached_kernel = Some(kernel);
         Ok(())
+    }
+
+    pub fn set_working_directory(&mut self, working_directory: String) {
+        self.working_directory = normalize_working_directory(&working_directory);
     }
 
     pub fn run_until_signal(&mut self) -> Vec<u8> {
@@ -153,7 +159,7 @@ impl ImageVmHandle {
         function_name: &str,
         arguments: Vec<VmValue>,
     ) -> Result<NativeHostImportResult, String> {
-        if module_name != "display" {
+        if module_name != "display" && module_name != "filesystem" {
             return Ok(NativeHostImportResult::Fallback(arguments));
         }
         let Some(kernel_handle) = self.attached_kernel.as_ref() else {
@@ -162,6 +168,60 @@ impl ImageVmHandle {
         let mut kernel = kernel_handle
             .lock()
             .map_err(|_| "native device runtime kernel lock is poisoned".to_string())?;
+        if module_name == "filesystem" {
+            let Some(filesystem) = kernel.filesystem.as_ref() else {
+                return Ok(NativeHostImportResult::Fallback(arguments));
+            };
+            return match function_name {
+                "exists" => {
+                    let path = string_argument(&arguments, 0, "filesystem.exists path")?;
+                    Ok(NativeHostImportResult::Handled(VmValue::Bool(
+                        filesystem.exists(&self.working_directory, path)?,
+                    )))
+                }
+                "isDirectory" => {
+                    let path = string_argument(&arguments, 0, "filesystem.isDirectory path")?;
+                    Ok(NativeHostImportResult::Handled(VmValue::Bool(
+                        filesystem.is_directory(&self.working_directory, path)?,
+                    )))
+                }
+                "readText" => {
+                    let path = string_argument(&arguments, 0, "filesystem.readText path")?;
+                    Ok(NativeHostImportResult::Handled(VmValue::String(
+                        filesystem.read_text(&self.working_directory, path)?,
+                    )))
+                }
+                "writeText" => {
+                    let path = string_argument(&arguments, 0, "filesystem.writeText path")?;
+                    let text = string_argument(&arguments, 1, "filesystem.writeText text")?;
+                    filesystem.write_text(&self.working_directory, path, text)?;
+                    Ok(NativeHostImportResult::Handled(VmValue::Unit))
+                }
+                "makeDir" => {
+                    let path = string_argument(&arguments, 0, "filesystem.makeDir path")?;
+                    Ok(NativeHostImportResult::Handled(VmValue::Bool(
+                        filesystem.make_dir(&self.working_directory, path)?,
+                    )))
+                }
+                "remove" => {
+                    let path = string_argument(&arguments, 0, "filesystem.remove path")?;
+                    Ok(NativeHostImportResult::Handled(VmValue::Bool(
+                        filesystem.remove(&self.working_directory, path)?,
+                    )))
+                }
+                "list" => {
+                    let path = arguments
+                        .first()
+                        .map(|_| string_argument(&arguments, 0, "filesystem.list path"))
+                        .transpose()?
+                        .unwrap_or("");
+                    Ok(NativeHostImportResult::Handled(VmValue::String(
+                        filesystem.list(&self.working_directory, path)?,
+                    )))
+                }
+                _ => Ok(NativeHostImportResult::Fallback(arguments)),
+            };
+        }
         match function_name {
             "clear" => {
                 let display_id = int_argument(&arguments, 0, "display.clear displayId")?;
@@ -214,9 +274,9 @@ impl ImageVmHandle {
                     value if value < 0 => None,
                     value => Some(value as u16),
                 };
-                kernel
-                    .displays
-                    .blit_mono(display_id, x, y, width, height, mask, foreground, background);
+                kernel.displays.blit_mono(
+                    display_id, x, y, width, height, mask, foreground, background,
+                );
                 Ok(NativeHostImportResult::Handled(VmValue::Unit))
             }
             "blitMono5x7" => {
@@ -225,21 +285,25 @@ impl ImageVmHandle {
                 let y = int_argument(&arguments, 2, "display.blitMono5x7 y")?;
                 let mut glyph = 0_u64;
                 for index in 0..7 {
-                    let row = int_argument(&arguments, 3 + index, "display.blitMono5x7 row")? as u64;
+                    let row =
+                        int_argument(&arguments, 3 + index, "display.blitMono5x7 row")? as u64;
                     glyph = (glyph << 5) | (row & 0b11111);
                 }
-                let foreground = int_argument(&arguments, 10, "display.blitMono5x7 foreground")? as u16;
-                let background = match int_argument(&arguments, 11, "display.blitMono5x7 background")? {
-                    value if value < 0 => None,
-                    value => Some(value as u16),
-                };
+                let foreground =
+                    int_argument(&arguments, 10, "display.blitMono5x7 foreground")? as u16;
+                let background =
+                    match int_argument(&arguments, 11, "display.blitMono5x7 background")? {
+                        value if value < 0 => None,
+                        value => Some(value as u16),
+                    };
                 kernel
                     .displays
                     .blit_mono5x7_packed(display_id, x, y, glyph, foreground, background);
                 Ok(NativeHostImportResult::Handled(VmValue::Unit))
             }
             "blitMono5x7Packed" => {
-                let display_id = int_argument(&arguments, 0, "display.blitMono5x7Packed displayId")?;
+                let display_id =
+                    int_argument(&arguments, 0, "display.blitMono5x7Packed displayId")?;
                 let x = int_argument(&arguments, 1, "display.blitMono5x7Packed x")?;
                 let y = int_argument(&arguments, 2, "display.blitMono5x7Packed y")?;
                 let glyph = long_argument(&arguments, 3, "display.blitMono5x7Packed glyph")? as u64;
@@ -261,8 +325,7 @@ impl ImageVmHandle {
                 Ok(NativeHostImportResult::Handled(VmValue::Unit))
             }
             "blitMono5x7Text" => {
-                let display_id =
-                    int_argument(&arguments, 0, "display.blitMono5x7Text displayId")?;
+                let display_id = int_argument(&arguments, 0, "display.blitMono5x7Text displayId")?;
                 let x = int_argument(&arguments, 1, "display.blitMono5x7Text x")?;
                 let y = int_argument(&arguments, 2, "display.blitMono5x7Text y")?;
                 let text = string_argument(&arguments, 3, "display.blitMono5x7Text text")?;
@@ -323,7 +386,12 @@ impl ImageVmHandle {
                     let import = self.host_import(import_id)?;
                     let module_name = import.module_name.clone();
                     let function_name = import.function_name.clone();
-                    match self.try_native_host_import(import_id, &module_name, &function_name, arguments)? {
+                    match self.try_native_host_import(
+                        import_id,
+                        &module_name,
+                        &function_name,
+                        arguments,
+                    )? {
                         NativeHostImportResult::Handled(value) => {
                             self.stack.push(value);
                         }
@@ -1342,11 +1410,7 @@ fn try_builtin_native_host_import(
     }
 }
 
-fn int_argument(
-    arguments: &[VmValue],
-    index: usize,
-    context: &str,
-) -> Result<i32, String> {
+fn int_argument(arguments: &[VmValue], index: usize, context: &str) -> Result<i32, String> {
     match arguments.get(index) {
         Some(VmValue::Int(value)) => Ok(*value),
         Some(other) => Err(format!("{context} requires Int but found {other:?}")),
@@ -1366,11 +1430,7 @@ fn string_argument<'a>(
     }
 }
 
-fn long_argument(
-    arguments: &[VmValue],
-    index: usize,
-    context: &str,
-) -> Result<i64, String> {
+fn long_argument(arguments: &[VmValue], index: usize, context: &str) -> Result<i64, String> {
     match arguments.get(index) {
         Some(VmValue::Long(value)) => Ok(*value),
         Some(other) => Err(format!("{context} requires Long but found {other:?}")),
@@ -1659,6 +1719,20 @@ fn value_to_string(value: &VmValue) -> Result<String, String> {
     }
 }
 
+fn normalize_working_directory(path: &str) -> String {
+    let mut segments = Vec::new();
+    for segment in path.trim().trim_matches('/').split('/') {
+        match segment {
+            "" | "." => {}
+            ".." => {
+                let _ = segments.pop();
+            }
+            other => segments.push(other),
+        }
+    }
+    segments.join("/")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1673,6 +1747,11 @@ mod tests {
         .unwrap_err();
 
         assert!(error.contains("string concatenation with objects"));
+    }
+
+    #[test]
+    fn normalizes_native_filesystem_working_directory() {
+        assert_eq!(normalize_working_directory("/a/./b/../c/"), "a/c");
     }
 }
 

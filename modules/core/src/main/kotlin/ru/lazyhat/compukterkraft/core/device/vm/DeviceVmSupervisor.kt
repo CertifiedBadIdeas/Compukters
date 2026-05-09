@@ -74,6 +74,7 @@ class DeviceVmSupervisor(
                 logger = logger,
                 workspace = workspaceStore,
                 runtimeMetricsCollector = runtimeMetricsCollector,
+                nativeFilesystemRoot = workspaceStore.computerRoot(deviceId),
             )
         } as BackgroundDeviceVm
 

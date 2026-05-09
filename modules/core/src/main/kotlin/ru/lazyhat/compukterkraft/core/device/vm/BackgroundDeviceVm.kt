@@ -75,6 +75,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeVmBindings
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayInfo
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayPixelFormat
+import java.nio.file.Path
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.yield as coroutineYield
 
@@ -115,6 +116,7 @@ class BackgroundDeviceVm(
     private val runtimeMetricsCollector: RuntimeMetricsCollector = NoOpRuntimeMetricsCollector,
     private val compilerMetricsCollector: CompilerMetricsCollector = NoOpCompilerMetricsCollector,
     private val nativeDisplayEnabled: Boolean = System.getProperty("ckl.vm.native.display") == "true",
+    private val nativeFilesystemRoot: Path? = null,
 ) : DeviceVmHandle,
     VmContext {
     private val scope = CoroutineScope(SupervisorJob() + dispatcher)
@@ -144,10 +146,19 @@ class BackgroundDeviceVm(
             .getProperty("ckl.vm.native.library")
             ?.takeIf(NativeImageVmRunner::isAvailable)
             ?.let {
-                NativeVmBindings.createDeviceKernel(
-                    maxEventQueueSize = profile.resources.queues.eventQueueSlots,
+                val handle =
+                    NativeVmBindings.createDeviceKernel(
+                        maxEventQueueSize = profile.resources.queues.eventQueueSlots,
                     maxBufferedBytesPerChannel = profile.resources.queues.ipcChannelBytes,
-                )
+                    )
+                nativeFilesystemRoot?.let { root ->
+                    NativeVmBindings.attachNativeFilesystem(
+                        kernelHandle = handle,
+                        rootPath = root.toAbsolutePath().normalize().toString(),
+                        quotaBytes = profile.resources.storage.diskBytes,
+                    )
+                }
+                handle
             }
     private val nativeDisplayRegistry: NativeDisplayRegistry? =
         nativeDeviceKernelHandle
@@ -496,6 +507,7 @@ class BackgroundDeviceVm(
             peripheralsApi = peripheralsApi,
             metricsApi = RuntimeMetricsApi(),
             nativeDeviceKernelHandle = nativeDeviceKernelHandle ?: 0L,
+            nativeWorkingDirectory = workingDirectory,
         )
     }
 

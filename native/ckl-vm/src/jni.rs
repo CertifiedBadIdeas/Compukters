@@ -106,16 +106,17 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
             return 0;
         }
     };
-    let max_buffered_bytes_per_channel = match usize::try_from(max_buffered_bytes_per_channel.max(1)) {
-        Ok(value) => value,
-        Err(error) => {
-            let _ = env.throw_new(
-                "java/lang/IllegalArgumentException",
-                format!("Invalid native device runtime kernel IPC byte limit: {error}"),
-            );
-            return 0;
-        }
-    };
+    let max_buffered_bytes_per_channel =
+        match usize::try_from(max_buffered_bytes_per_channel.max(1)) {
+            Ok(value) => value,
+            Err(error) => {
+                let _ = env.throw_new(
+                    "java/lang/IllegalArgumentException",
+                    format!("Invalid native device runtime kernel IPC byte limit: {error}"),
+                );
+                return 0;
+            }
+        };
     Box::into_raw(Box::new(Arc::new(Mutex::new(DeviceRuntimeKernel::new(
         max_event_queue_size,
         max_buffered_bytes_per_channel,
@@ -189,6 +190,57 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
     };
     if let Err(error) = handle.attach_device_kernel(Arc::clone(kernel)) {
         let _ = env.throw_new("java/lang/IllegalStateException", error);
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_setImageWorkingDirectoryNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    image_handle: jlong,
+    working_directory: JString<'_>,
+) {
+    let handle = match image_handle_mut(&mut env, image_handle) {
+        Some(handle) => handle,
+        None => return,
+    };
+    let working_directory: String = match env.get_string(&working_directory) {
+        Ok(value) => value.into(),
+        Err(error) => {
+            let _ = env.throw_new(
+                "java/lang/IllegalArgumentException",
+                format!("Cannot read native image VM working directory: {error}"),
+            );
+            return;
+        }
+    };
+    handle.set_working_directory(working_directory);
+}
+
+#[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_attachNativeFilesystemNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    kernel_handle: jlong,
+    root_path: JString<'_>,
+    quota_bytes: jlong,
+) {
+    let mut kernel = match locked_kernel_handle(&mut env, kernel_handle) {
+        Some(kernel) => kernel,
+        None => return,
+    };
+    let root_path: String = match env.get_string(&root_path) {
+        Ok(value) => value.into(),
+        Err(error) => {
+            let _ = env.throw_new(
+                "java/lang/IllegalArgumentException",
+                format!("Cannot read native filesystem root path: {error}"),
+            );
+            return;
+        }
+    };
+    if let Err(error) = kernel.attach_filesystem(root_path, quota_bytes) {
+        let _ = env.throw_new("java/lang/IllegalArgumentException", error);
     }
 }
 

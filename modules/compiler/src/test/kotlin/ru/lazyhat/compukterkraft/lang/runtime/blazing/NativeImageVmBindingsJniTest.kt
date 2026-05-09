@@ -23,6 +23,10 @@ import ru.lazyhat.compukterkraft.lang.frontend.LanguageFrontend
 import ru.lazyhat.compukterkraft.lang.runtime.VmValue
 import ru.lazyhat.compukterkraft.lang.runtime.image.CkVmImageAbi
 import ru.lazyhat.compukterkraft.lang.runtime.image.compileImage
+import kotlin.io.path.createDirectories
+import kotlin.io.path.createTempDirectory
+import kotlin.io.path.exists
+import kotlin.io.path.writeText
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -32,7 +36,10 @@ import kotlin.test.assertTrue
 class NativeImageVmBindingsJniTest {
     @Test
     fun nativeKernelBindingsExposeDeviceKernelLifecycle() {
-        val memberNames = NativeVmBindings::class.java.declaredMethods.map { it.name }.toSet()
+        val memberNames =
+            NativeVmBindings::class.java.declaredMethods
+                .map { it.name }
+                .toSet()
 
         assertTrue(
             "createDeviceKernel" in memberNames,
@@ -49,6 +56,14 @@ class NativeImageVmBindingsJniTest {
         assertTrue(
             "attachImageToKernel" in memberNames,
             "NativeVmBindings must expose native device-kernel lifecycle",
+        )
+        assertTrue(
+            "attachNativeFilesystem" in memberNames,
+            "NativeVmBindings must expose native filesystem attachment",
+        )
+        assertTrue(
+            "setImageWorkingDirectory" in memberNames,
+            "NativeVmBindings must expose per-image working directory attachment",
         )
     }
 
@@ -70,7 +85,10 @@ class NativeImageVmBindingsJniTest {
 
     @Test
     fun nativeDisplayBindingsExposeLifecycleAndFrameDrain() {
-        val memberNames = NativeVmBindings::class.java.declaredMethods.map { it.name }.toSet()
+        val memberNames =
+            NativeVmBindings::class.java.declaredMethods
+                .map { it.name }
+                .toSet()
 
         assertTrue("attachNativeDisplay" in memberNames)
         assertTrue("detachNativeDisplay" in memberNames)
@@ -103,6 +121,124 @@ class NativeImageVmBindingsJniTest {
 
             assertTrue(dirty.isNotEmpty(), "present should queue a dirty frame")
         } finally {
+            NativeVmBindings.freeDeviceKernel(kernelHandle)
+        }
+    }
+
+    @Test
+    fun imageRunnerHandlesFilesystemInRustWhenKernelFilesystemIsAttached() {
+        val libraryPath = System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val workspaceRoot = createTempDirectory("ckl-native-fs")
+        val image =
+            assertNotNull(
+                LanguageFrontend()
+                    .compileImage(
+                        "main.ck",
+                        """
+                        pub fun main(): String {
+                            filesystem::makeDir("dir");
+                            filesystem::writeText("dir/note.txt", "hello");
+                            val body: String = filesystem::readText("dir/note.txt");
+                            val listed: String = filesystem::list("dir");
+                            val removed: Bool = filesystem::remove("dir/note.txt");
+                            if (body == "hello" && listed == "note.txt" && removed && !filesystem::exists("dir/note.txt")) {
+                                return "ok";
+                            }
+                            return body + "|" + listed;
+                        }
+                        """.trimIndent(),
+                    ).image,
+            )
+        val kernelHandle =
+            NativeVmBindings.createDeviceKernel(maxEventQueueSize = 64, maxBufferedBytesPerChannel = 4096)
+        val imageHandle =
+            NativeVmBindings.createImage(libraryPath, CkVmImageAbi.encode(image), instructionBudget = 4096)
+
+        try {
+            NativeVmBindings.attachNativeFilesystem(kernelHandle, workspaceRoot.toString(), 1024L * 1024L)
+            NativeVmBindings.attachImageToKernel(imageHandle, kernelHandle)
+
+            val halt =
+                assertIs<NativeVmSignal.Halt>(NativeVmSignal.decode(NativeVmBindings.runImageUntilSignal(imageHandle)))
+            assertEquals(NativeVmValue.StringValue("ok"), halt.value)
+            assertTrue(!workspaceRoot.resolve("dir").resolve("note.txt").exists())
+        } finally {
+            NativeVmBindings.freeImage(imageHandle)
+            NativeVmBindings.freeDeviceKernel(kernelHandle)
+        }
+    }
+
+    @Test
+    fun nativeFilesystemEnforcesWorkspaceRootWhenLibraryIsConfigured() {
+        val libraryPath = System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val workspaceRoot = createTempDirectory("ckl-native-fs-root")
+        val outside = createTempDirectory("ckl-native-fs-outside")
+        val image =
+            assertNotNull(
+                LanguageFrontend()
+                    .compileImage(
+                        "main.ck",
+                        """
+                        pub fun main(): String {
+                            filesystem::writeText("../escape.txt", "nope");
+                            return filesystem::readText("escape.txt");
+                        }
+                        """.trimIndent(),
+                    ).image,
+            )
+        val kernelHandle =
+            NativeVmBindings.createDeviceKernel(maxEventQueueSize = 64, maxBufferedBytesPerChannel = 4096)
+        val imageHandle =
+            NativeVmBindings.createImage(libraryPath, CkVmImageAbi.encode(image), instructionBudget = 4096)
+
+        try {
+            NativeVmBindings.attachNativeFilesystem(kernelHandle, workspaceRoot.toString(), 1024L * 1024L)
+            NativeVmBindings.attachImageToKernel(imageHandle, kernelHandle)
+
+            val halt =
+                assertIs<NativeVmSignal.Halt>(NativeVmSignal.decode(NativeVmBindings.runImageUntilSignal(imageHandle)))
+            assertEquals(NativeVmValue.StringValue("nope"), halt.value)
+            assertTrue(!outside.resolve("escape.txt").exists())
+            assertTrue(workspaceRoot.resolve("escape.txt").exists())
+        } finally {
+            NativeVmBindings.freeImage(imageHandle)
+            NativeVmBindings.freeDeviceKernel(kernelHandle)
+        }
+    }
+
+    @Test
+    fun nativeFilesystemUsesImageWorkingDirectoryWhenLibraryIsConfigured() {
+        val libraryPath = System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val workspaceRoot = createTempDirectory("ckl-native-fs-cwd")
+        workspaceRoot.resolve("sub").createDirectories()
+        workspaceRoot.resolve("sub").resolve("note.txt").writeText("cwd")
+        val image =
+            assertNotNull(
+                LanguageFrontend()
+                    .compileImage(
+                        "main.ck",
+                        """
+                        pub fun main(): String {
+                            return filesystem::readText("note.txt");
+                        }
+                        """.trimIndent(),
+                    ).image,
+            )
+        val kernelHandle =
+            NativeVmBindings.createDeviceKernel(maxEventQueueSize = 64, maxBufferedBytesPerChannel = 4096)
+        val imageHandle =
+            NativeVmBindings.createImage(libraryPath, CkVmImageAbi.encode(image), instructionBudget = 4096)
+
+        try {
+            NativeVmBindings.attachNativeFilesystem(kernelHandle, workspaceRoot.toString(), 1024L * 1024L)
+            NativeVmBindings.setImageWorkingDirectory(imageHandle, "sub")
+            NativeVmBindings.attachImageToKernel(imageHandle, kernelHandle)
+
+            val halt =
+                assertIs<NativeVmSignal.Halt>(NativeVmSignal.decode(NativeVmBindings.runImageUntilSignal(imageHandle)))
+            assertEquals(NativeVmValue.StringValue("cwd"), halt.value)
+        } finally {
+            NativeVmBindings.freeImage(imageHandle)
             NativeVmBindings.freeDeviceKernel(kernelHandle)
         }
     }

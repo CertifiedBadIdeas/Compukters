@@ -46,6 +46,7 @@ class NativeImageVmRunner internal constructor(
         val bridge = RuntimeHostBridge(runtime)
         val handle = bindings.createImage(libraryPath, imageBytes, runtime.profile.resources.cpu.instructionsPerSlice)
         try {
+            nativeWorkingDirectoryOrNull(runtime)?.let { bindings.setImageWorkingDirectory(handle, it) }
             kernelHandleOrNull(runtime)?.let { bindings.attachImageToKernel(handle, it) }
             while (true) {
                 val signal = NativeVmSignal.decode(bindings.runImageUntilSignal(handle))
@@ -93,6 +94,9 @@ class NativeImageVmRunner internal constructor(
 
     private fun kernelHandleOrNull(runtime: DeviceRuntime): Long? =
         (runtime as? NativeDeviceKernelProvider)?.nativeDeviceKernelHandle?.takeIf { it != 0L }
+
+    private fun nativeWorkingDirectoryOrNull(runtime: DeviceRuntime): String? =
+        (runtime as? NativeDeviceKernelProvider)?.nativeWorkingDirectory
 
     private suspend fun invokeHostCall(
         runtime: DeviceRuntime,

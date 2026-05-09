@@ -54,6 +54,7 @@ class VmRuntime(
     private val peripheralsApi: DevicePeripheralApi = object : DevicePeripheralApi {},
     private val metricsApi: DeviceRuntimeMetrics = NoopDeviceRuntimeMetrics,
     override val nativeDeviceKernelHandle: Long = 0L,
+    override val nativeWorkingDirectory: String = "",
 ) : DeviceRuntime,
     NativeDeviceKernelProvider {
     override val profile: DeviceProfile = initialProfile

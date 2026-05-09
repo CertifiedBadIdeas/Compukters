@@ -35,7 +35,12 @@ class NativeImageVmRunnerTest {
     fun attachesImageToNativeKernelWhenRuntimeProvidesKernelHandle() {
         val image = assertNotNull(LanguageFrontend().compileImage("main.ck", "pub fun main() { }").image)
         val bindings = RecordingBindings()
-        val runtime = KernelAwareRuntime(RecordingRuntime(metrics = NoopDeviceRuntimeMetrics), kernelHandle = 77L)
+        val runtime =
+            KernelAwareRuntime(
+                RecordingRuntime(metrics = NoopDeviceRuntimeMetrics),
+                kernelHandle = 77L,
+                nativeWorkingDirectory = "bin",
+        )
         val runner = NativeImageVmRunner(libraryPath = "/unused/libckl_vm.so", bindings = bindings)
 
         runBlocking {
@@ -43,17 +48,20 @@ class NativeImageVmRunnerTest {
         }
 
         assertEquals(listOf(11L to 77L), bindings.attachments)
+        assertEquals(listOf(11L to "bin"), bindings.workingDirectories)
     }
 
     private class KernelAwareRuntime(
         private val delegate: RecordingRuntime,
         kernelHandle: Long,
+        override val nativeWorkingDirectory: String,
     ) : DeviceRuntime by delegate, NativeDeviceKernelProvider {
         override val nativeDeviceKernelHandle: Long = kernelHandle
     }
 
     private class RecordingBindings : NativeVmBindingsFacade {
         val attachments = mutableListOf<Pair<Long, Long>>()
+        val workingDirectories = mutableListOf<Pair<Long, String>>()
 
         override fun createImage(
             libraryPath: String,
@@ -75,6 +83,13 @@ class NativeImageVmRunnerTest {
             kernelHandle: Long,
         ) {
             attachments += imageHandle to kernelHandle
+        }
+
+        override fun setImageWorkingDirectory(
+            imageHandle: Long,
+            workingDirectory: String,
+        ) {
+            workingDirectories += imageHandle to workingDirectory
         }
     }
 }
