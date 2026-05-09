@@ -317,6 +317,94 @@ impl DeviceDisplayRegistry {
             pending_frames: Vec::new(),
         }
     }
+
+    pub fn attach(
+        &mut self,
+        display_id: i32,
+        width: i32,
+        height: i32,
+        pixel_format: PixelFormat,
+    ) -> Result<(), String> {
+        let mut display = DisplayEngine::new(display_id, width, height, pixel_format)?;
+        if let Some(frame) = display.full_refresh() {
+            self.pending_frames.push(frame);
+        }
+        self.displays.insert(display_id, display);
+        Ok(())
+    }
+
+    pub fn detach(&mut self, display_id: i32) {
+        self.displays.remove(&display_id);
+    }
+
+    pub fn first_display_id(&self) -> Option<i32> {
+        self.displays.keys().next().copied()
+    }
+
+    pub fn clear(
+        &mut self,
+        display_id: i32,
+        rgb565: u16,
+    ) {
+        if let Some(display) = self.displays.get_mut(&display_id) {
+            display.clear(rgb565);
+        }
+    }
+
+    pub fn fill_rect(
+        &mut self,
+        display_id: i32,
+        x: i32,
+        y: i32,
+        width: i32,
+        height: i32,
+        rgb565: u16,
+    ) {
+        if let Some(display) = self.displays.get_mut(&display_id) {
+            display.fill_rect(x, y, width, height, rgb565);
+        }
+    }
+
+    pub fn copy_rect(
+        &mut self,
+        display_id: i32,
+        src_x: i32,
+        src_y: i32,
+        width: i32,
+        height: i32,
+        dst_x: i32,
+        dst_y: i32,
+    ) {
+        if let Some(display) = self.displays.get_mut(&display_id) {
+            display.copy_rect(src_x, src_y, width, height, dst_x, dst_y);
+        }
+    }
+
+    pub fn blit_mono5x7_text(
+        &mut self,
+        display_id: i32,
+        x: i32,
+        y: i32,
+        text: &str,
+        foreground: u16,
+        background: Option<u16>,
+    ) {
+        if let Some(display) = self.displays.get_mut(&display_id) {
+            display.blit_mono5x7_text(x, y, text, foreground, background);
+        }
+    }
+
+    pub fn present(&mut self, display_id: i32) {
+        if let Some(display) = self.displays.get_mut(&display_id) {
+            if let Some(frame) = display.present() {
+                self.pending_frames.push(frame);
+            }
+        }
+    }
+
+    pub fn drain_frames(&mut self) -> Vec<DisplayFrameDelta> {
+        std::mem::take(&mut self.pending_frames)
+    }
 }
 
 fn mono5x7_glyph(ch: char) -> u64 {

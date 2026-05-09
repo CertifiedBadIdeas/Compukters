@@ -1,4 +1,4 @@
-use ckl_vm::display::{DisplayEngine, PixelFormat};
+use ckl_vm::display::{DeviceDisplayRegistry, DisplayEngine, PixelFormat};
 
 fn payload_contains_rgb565(payload: &[u8], rgb565: u16) -> bool {
     let hi = (rgb565 >> 8) as u8;
@@ -85,4 +85,32 @@ fn blit_mono5x7_text_draws_glyph_run() {
         .collect::<Vec<_>>();
 
     assert!(payload_contains_rgb565(&payload, 0x07E0));
+}
+
+#[test]
+fn registry_attach_queues_full_refresh_and_drain_frames() {
+    let mut registry = DeviceDisplayRegistry::new();
+
+    registry.attach(9, 18, 18, PixelFormat::Rgb565).unwrap();
+    let frames = registry.drain_frames();
+
+    assert_eq!(frames.len(), 1);
+    assert_eq!(frames[0].display_id, 9);
+    assert!(frames[0].full_refresh);
+    assert_eq!(registry.first_display_id(), Some(9));
+}
+
+#[test]
+fn registry_present_queues_dirty_frame() {
+    let mut registry = DeviceDisplayRegistry::new();
+    registry.attach(9, 18, 18, PixelFormat::Rgb565).unwrap();
+    let _ = registry.drain_frames();
+
+    registry.fill_rect(9, 0, 0, 2, 2, 0x07E0);
+    registry.present(9);
+    let frames = registry.drain_frames();
+
+    assert_eq!(frames.len(), 1);
+    assert_eq!(frames[0].sequence, 2);
+    assert!(!frames[0].full_refresh);
 }
