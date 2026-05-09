@@ -97,6 +97,12 @@ interface RuntimeMetricsCollector {
 
     fun recordNativeDisplayFrameBytes(bytes: Int)
 
+    fun recordNativeProcessRegistration()
+
+    fun recordNativeProcessCompletion()
+
+    fun recordNativeProcessStaleCompletion()
+
     fun snapshot(): RuntimeProfilingSnapshot
 }
 
@@ -174,6 +180,9 @@ data class RuntimeVmMetrics(
     val nativeDisplayPumpTimeouts: Long = 0,
     val nativeDisplayFrameByteBatches: Long = 0,
     val nativeDisplayFrameBytes: Long = 0,
+    val nativeProcessRegistrations: Long = 0,
+    val nativeProcessCompletions: Long = 0,
+    val nativeProcessStaleCompletions: Long = 0,
 ) {
     val averageExecutionWindowNanos: Long get() = if (executionWindows <= 0) 0 else executionWindowNanos / executionWindows
     val nativeWaitSignals: Long get() = waitPollSignals
@@ -244,6 +253,9 @@ data class RuntimeProfilingSnapshot(
             )
             appendLine(
                 "    nativeDisplayPump: waits=${vm.nativeDisplayPumpWaitCalls}, waitTime=${vm.nativeDisplayPumpWaitNanos.nanos()}, wakeups=${vm.nativeDisplayPumpWakeups}, timeouts=${vm.nativeDisplayPumpTimeouts}, byteBatches=${vm.nativeDisplayFrameByteBatches}, bytes=${vm.nativeDisplayFrameBytes}",
+            )
+            appendLine(
+                "  process: registrations=${vm.nativeProcessRegistrations}, completions=${vm.nativeProcessCompletions}, staleCompletions=${vm.nativeProcessStaleCompletions}",
             )
             appendHostCallSummary()
             appendInstructionSummary()
@@ -367,6 +379,12 @@ object NoOpRuntimeMetricsCollector : RuntimeMetricsCollector {
 
     override fun recordNativeDisplayFrameBytes(bytes: Int) = Unit
 
+    override fun recordNativeProcessRegistration() = Unit
+
+    override fun recordNativeProcessCompletion() = Unit
+
+    override fun recordNativeProcessStaleCompletion() = Unit
+
     override fun snapshot(): RuntimeProfilingSnapshot = RuntimeProfilingSnapshot()
 }
 
@@ -433,6 +451,9 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
     private val nativeDisplayPumpTimeouts = AtomicLong()
     private val nativeDisplayFrameByteBatches = AtomicLong()
     private val nativeDisplayFrameBytes = AtomicLong()
+    private val nativeProcessRegistrations = AtomicLong()
+    private val nativeProcessCompletions = AtomicLong()
+    private val nativeProcessStaleCompletions = AtomicLong()
     private val hostCalls = ConcurrentHashMap<Pair<String, String>, RuntimeCounter>()
     private val instructions = ConcurrentHashMap<VmInstructionKind, RuntimeCounter>()
 
@@ -586,6 +607,18 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
         nativeDisplayFrameBytes.addAndGet(bytes.coerceAtLeast(0).toLong())
     }
 
+    override fun recordNativeProcessRegistration() {
+        nativeProcessRegistrations.incrementAndGet()
+    }
+
+    override fun recordNativeProcessCompletion() {
+        nativeProcessCompletions.incrementAndGet()
+    }
+
+    override fun recordNativeProcessStaleCompletion() {
+        nativeProcessStaleCompletions.incrementAndGet()
+    }
+
     override fun snapshot(): RuntimeProfilingSnapshot =
         RuntimeProfilingSnapshot(
             tick =
@@ -639,6 +672,9 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
                     nativeDisplayPumpTimeouts = nativeDisplayPumpTimeouts.get(),
                     nativeDisplayFrameByteBatches = nativeDisplayFrameByteBatches.get(),
                     nativeDisplayFrameBytes = nativeDisplayFrameBytes.get(),
+                    nativeProcessRegistrations = nativeProcessRegistrations.get(),
+                    nativeProcessCompletions = nativeProcessCompletions.get(),
+                    nativeProcessStaleCompletions = nativeProcessStaleCompletions.get(),
                 ),
             hostCalls =
                 hostCalls

@@ -60,6 +60,9 @@ class RuntimeProfilingTest {
         collector.recordNativeDisplayPumpWait(nanos = 100)
         collector.recordNativeDisplayPumpWait(nanos = 50, woke = false)
         collector.recordNativeDisplayFrameBytes(bytes = 128)
+        collector.recordNativeProcessRegistration()
+        collector.recordNativeProcessCompletion()
+        collector.recordNativeProcessStaleCompletion()
         collector.recordVmInstruction(VmInstructionKind.CALL_BUILTIN, nanos = 40)
         collector.recordVmInstruction(VmInstructionKind.CALL_BUILTIN, nanos = 60)
         collector.recordVmInstruction(VmInstructionKind.PUSH_INT, nanos = 10)
@@ -112,6 +115,9 @@ class RuntimeProfilingTest {
         assertEquals(1, snapshot.vm.nativeDisplayPumpTimeouts)
         assertEquals(1, snapshot.vm.nativeDisplayFrameByteBatches)
         assertEquals(128, snapshot.vm.nativeDisplayFrameBytes)
+        assertEquals(1, snapshot.vm.nativeProcessRegistrations)
+        assertEquals(1, snapshot.vm.nativeProcessCompletions)
+        assertEquals(1, snapshot.vm.nativeProcessStaleCompletions)
         val blitCall = snapshot.hostCalls.first { it.moduleName == "display" && it.functionName == "blitMono5x7Packed" }
         assertEquals(2, blitCall.calls)
         assertEquals(150, blitCall.nanos)
@@ -136,6 +142,10 @@ class RuntimeProfilingTest {
         )
         assertTrue(
             summary.contains("    nativeDisplayPump: waits=2, waitTime=150 ns, wakeups=1, timeouts=1, byteBatches=1, bytes=128"),
+            summary,
+        )
+        assertTrue(
+            summary.contains("  process: registrations=1, completions=1, staleCompletions=1"),
             summary,
         )
         assertTrue(summary.contains("  host-calls: calls="), summary)
@@ -168,6 +178,9 @@ class RuntimeProfilingTest {
         collector.recordNativeWait("runtime.poll", nanos = 100)
         collector.recordNativeDisplayPumpWait(nanos = 100)
         collector.recordNativeDisplayFrameBytes(bytes = 128)
+        collector.recordNativeProcessRegistration()
+        collector.recordNativeProcessCompletion()
+        collector.recordNativeProcessStaleCompletion()
         collector.recordVmInstruction(VmInstructionKind.CALL_BUILTIN, nanos = 90)
 
         assertEquals(RuntimeProfilingSnapshot(), collector.snapshot())
