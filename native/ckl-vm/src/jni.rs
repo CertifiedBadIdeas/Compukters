@@ -1,5 +1,7 @@
+use std::collections::HashMap;
 use std::ptr::null_mut;
-use std::sync::{Arc, MutexGuard};
+use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 use std::time::Duration;
 
 use jni::objects::{JByteArray, JClass, JString};
@@ -13,6 +15,10 @@ use crate::signal::decode_value;
 use crate::value::VmValue;
 
 type SharedDeviceRuntimeKernel = Arc<DeviceRuntimeKernelHandle>;
+
+static NEXT_DEVICE_KERNEL_HANDLE: AtomicI64 = AtomicI64::new(1);
+static DEVICE_KERNEL_HANDLES: OnceLock<Mutex<HashMap<jlong, SharedDeviceRuntimeKernel>>> =
+    OnceLock::new();
 
 #[no_mangle]
 pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_createImageNative(
@@ -120,10 +126,17 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
                 return 0;
             }
         };
-    Box::into_raw(Box::new(Arc::new(DeviceRuntimeKernelHandle::new(
+    let kernel = Arc::new(DeviceRuntimeKernelHandle::new(
         max_event_queue_size,
         max_buffered_bytes_per_channel,
-    )))) as jlong
+    ));
+    match register_device_kernel_handle(kernel) {
+        Ok(handle) => handle,
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalStateException", error);
+            0
+        }
+    }
 }
 
 #[no_mangle]
@@ -133,7 +146,7 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
     handle: jlong,
 ) {
     if handle != 0 {
-        unsafe { drop(Box::from_raw(handle as *mut SharedDeviceRuntimeKernel)) };
+        let _ = unregister_device_kernel_handle(handle);
     }
 }
 
@@ -522,6 +535,30 @@ fn image_handle_mut(env: &mut JNIEnv<'_>, handle: jlong) -> Option<&'static mut 
     Some(unsafe { &mut *pointer })
 }
 
+fn register_device_kernel_handle(kernel: SharedDeviceRuntimeKernel) -> Result<jlong, String> {
+    let handle = NEXT_DEVICE_KERNEL_HANDLE.fetch_add(1, Ordering::Relaxed);
+    if handle <= 0 {
+        return Err(format!("Invalid native device runtime kernel handle id: {handle}"));
+    }
+    let mut handles = device_kernel_handles()
+        .lock()
+        .map_err(|error| format!("Native device runtime kernel registry lock failed: {error}"))?;
+    handles.insert(handle, kernel);
+    Ok(handle)
+}
+
+fn unregister_device_kernel_handle(handle: jlong) -> Result<(), String> {
+    let mut handles = device_kernel_handles()
+        .lock()
+        .map_err(|error| format!("Native device runtime kernel registry lock failed: {error}"))?;
+    handles.remove(&handle);
+    Ok(())
+}
+
+fn device_kernel_handles() -> &'static Mutex<HashMap<jlong, SharedDeviceRuntimeKernel>> {
+    DEVICE_KERNEL_HANDLES.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
 fn shared_kernel_handle(env: &mut JNIEnv<'_>, handle: jlong) -> Option<SharedDeviceRuntimeKernel> {
     if handle == 0 {
         let _ = env.throw_new(
@@ -530,15 +567,16 @@ fn shared_kernel_handle(env: &mut JNIEnv<'_>, handle: jlong) -> Option<SharedDev
         );
         return None;
     }
-    let pointer = handle as *mut SharedDeviceRuntimeKernel;
-    if pointer.is_null() {
-        let _ = env.throw_new(
-            "java/lang/IllegalStateException",
-            "Native device runtime kernel handle is null",
-        );
-        return None;
+    match device_kernel_handles().lock() {
+        Ok(handles) => handles.get(&handle).cloned(),
+        Err(error) => {
+            let _ = env.throw_new(
+                "java/lang/IllegalStateException",
+                format!("Native device runtime kernel registry lock failed: {error}"),
+            );
+            None
+        }
     }
-    Some(Arc::clone(unsafe { &*pointer }))
 }
 
 fn lock_kernel_handle<'a>(
