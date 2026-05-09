@@ -1,5 +1,5 @@
 use ckl_vm::image_runner::ImageVmHandle;
-use ckl_vm::runtime_kernel::DeviceRuntimeKernel;
+use ckl_vm::runtime_kernel::{DeviceRuntimeKernel, DeviceRuntimeKernelHandle};
 use ckl_vm::signal::encode_value;
 use ckl_vm::value::VmValue;
 use std::sync::{Arc, Mutex};
@@ -57,6 +57,56 @@ fn device_kernel_accepts_event_and_ipc_setup() {
     let channel = kernel.open_ipc_channel().unwrap();
 
     assert!(channel > 0);
+}
+
+#[test]
+fn kernel_handle_advances_wake_sequence_for_poll_visible_mutations() {
+    let handle = DeviceRuntimeKernelHandle::new(8, 64);
+
+    assert_eq!(handle.wake_sequence().unwrap(), 0);
+    handle
+        .with_kernel_mut(|kernel| {
+            assert!(kernel.enqueue_event("key", vec![VmValue::String("x".to_string())]));
+        })
+        .unwrap();
+    assert_eq!(handle.wake_sequence().unwrap(), 1);
+
+    let channel = handle
+        .with_kernel_mut(|kernel| kernel.open_ipc_channel())
+        .unwrap()
+        .unwrap();
+    assert_eq!(handle.wake_sequence().unwrap(), 1);
+
+    handle
+        .with_kernel_mut(|kernel| kernel.write_ipc(channel, "ready"))
+        .unwrap()
+        .unwrap();
+    assert_eq!(handle.wake_sequence().unwrap(), 2);
+
+    handle
+        .with_kernel_mut(|kernel| kernel.try_read_ipc(channel))
+        .unwrap()
+        .unwrap();
+    assert_eq!(handle.wake_sequence().unwrap(), 2);
+
+    handle
+        .with_kernel_mut(|kernel| kernel.close_ipc(channel))
+        .unwrap()
+        .unwrap();
+    assert_eq!(handle.wake_sequence().unwrap(), 3);
+}
+
+#[test]
+fn kernel_handle_wait_returns_after_timeout_without_wake() {
+    let handle = DeviceRuntimeKernelHandle::new(8, 64);
+    let started = std::time::Instant::now();
+
+    let sequence = handle
+        .wait_for_wake(0, std::time::Duration::from_millis(1))
+        .unwrap();
+
+    assert_eq!(sequence, 0);
+    assert!(started.elapsed() < std::time::Duration::from_secs(1));
 }
 
 #[test]
