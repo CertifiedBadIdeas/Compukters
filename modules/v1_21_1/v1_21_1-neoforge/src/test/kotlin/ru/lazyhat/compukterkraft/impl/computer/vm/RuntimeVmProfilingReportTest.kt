@@ -110,8 +110,10 @@ class RuntimeVmProfilingReportTest {
         return RuntimeWorkloadProfile(
             name = name,
             display = run.displayMetrics.snapshot(),
+            client = run.clientMetrics.snapshot(),
             runtime = run.runtimeMetrics.snapshot(),
             compiler = run.compilerMetrics.snapshot(),
+            pipeline = run.pipeline,
         )
     }
 
@@ -120,6 +122,7 @@ class RuntimeVmProfilingReportTest {
         return RuntimeWorkloadProfile(
             name = "held Enter backlog",
             display = run.profiling.displayMetrics.snapshot(),
+            client = run.profiling.clientMetrics.snapshot(),
             runtime = run.profiling.runtimeMetrics.snapshot(),
             compiler = run.profiling.compilerMetrics.snapshot(),
             heldEnter = run.summaryMetrics,
