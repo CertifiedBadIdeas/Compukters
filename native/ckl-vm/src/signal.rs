@@ -9,6 +9,7 @@ pub enum VmSignal {
     WaitEvent(Option<String>),
     WaitPoll {
         channel: i32,
+        wake_sequence: i64,
     },
     HostCall {
         module_name: String,
@@ -57,9 +58,13 @@ pub fn encode_signal(signal: &VmSignal) -> Vec<u8> {
                 None => writer.u8(0),
             }
         }
-        VmSignal::WaitPoll { channel } => {
+        VmSignal::WaitPoll {
+            channel,
+            wake_sequence,
+        } => {
             writer.u8(SIGNAL_WAIT_POLL);
             writer.i32(*channel);
+            writer.i64(*wake_sequence);
         }
         VmSignal::HostCall {
             module_name,
