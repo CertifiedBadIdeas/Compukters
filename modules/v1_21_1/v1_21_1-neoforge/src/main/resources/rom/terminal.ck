@@ -742,9 +742,13 @@ fun handleTerminalEvent(input: Int, displayId: Int, buffer: TerminalBuffer, line
     if (event.name == "key") {
         val key: Int = events::argInt(event, 0)
         if (key == 257 || key == 335) {
+            if (line != "" && buffer.viewportOffset == 0) {
+                clearRenderedInputLine(displayId, buffer, line)
+            }
             val nextBuffer: TerminalBuffer = followBottom(displayId, buffer)
+            val committedBuffer: TerminalBuffer = appendText(displayId, nextBuffer, line + "\n")
             ipc::write(input, line + "\n")
-            return eventResult(displayId, nextBuffer, "", "", false)
+            return eventResult(displayId, committedBuffer, "", "", false)
         }
         if (key == 259) {
             if (line != "") {

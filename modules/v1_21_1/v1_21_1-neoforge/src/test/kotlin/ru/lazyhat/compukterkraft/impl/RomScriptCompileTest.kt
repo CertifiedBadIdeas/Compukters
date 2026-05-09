@@ -180,16 +180,24 @@ class RomScriptCompileTest {
             "terminal.ck should send newline-delimited stdin so empty Enter is a non-empty IPC payload",
         )
         assertTrue(
+            terminal.contains("clearRenderedInputLine(displayId, buffer, line)"),
+            "terminal.ck should clear the draft input overlay before submitting Enter",
+        )
+        assertTrue(
+            terminal.contains("appendText(displayId, nextBuffer, line + \"\\n\")"),
+            "terminal.ck should commit the submitted line and newline in the terminal layer",
+        )
+        assertTrue(
             stdio.contains("return stripLineDelimiter(ipc::read(ctx.input))"),
             "stdio.readLine should strip the stdin line delimiter before returning command text",
         )
         assertTrue(
-            shell.contains("val line: String = readLine(ctx)\n        write(ctx, line + \"\\n\")"),
-            "shell.ck should echo submitted lines so blank Enter is shell-owned visible output",
+            shell.contains("val line: String = readLine(ctx)"),
+            "shell.ck should still read submitted lines from stdio",
         )
         assertFalse(
-            terminal.contains("buffer = appendText(displayId, buffer, line + \"\\n\")"),
-            "terminal.ck must not locally commit submitted lines on Enter",
+            shell.contains("write(ctx, line + \"\\n\")"),
+            "shell.ck should not echo submitted lines; terminal owns visible input echo",
         )
         assertTrue(terminal.contains("ch == \"\\r\""), "terminal.ck should handle carriage return output")
         assertTrue(terminal.contains("ch == \"\\b\""), "terminal.ck should handle backspace output")
