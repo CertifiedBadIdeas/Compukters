@@ -42,10 +42,10 @@ class RuntimeVmProfilingReportFormatterTest {
                     listOf(
                         workload(
                             name = "bundled terminal",
-                            runtimeNanos = 100,
+                            runtimeNanos = 100_000,
                             executionNanos = 40,
                             hostCallSignals = 10,
-                            hostCalls = listOf(RuntimeHostCallMetrics("strings", "length", calls = 5, nanos = 50)),
+                            hostCalls = listOf(RuntimeHostCallMetrics("strings", "length", calls = 5, nanos = 50_000)),
                         ),
                     ),
             )
@@ -56,7 +56,7 @@ class RuntimeVmProfilingReportFormatterTest {
                     listOf(
                         workload(
                             name = "bundled terminal",
-                            runtimeNanos = 50,
+                            runtimeNanos = 1_500_000,
                             executionNanos = 20,
                             hostCallSignals = 2,
                             hostCalls =
@@ -65,8 +65,8 @@ class RuntimeVmProfilingReportFormatterTest {
                                         "display",
                                         "present",
                                         calls = 3,
-                                        nanos = 90,
-                                        waitNanos = 60,
+                                        nanos = 90_000_000,
+                                        waitNanos = 60_000_000,
                                     ),
                             ),
                                 ),
@@ -89,20 +89,20 @@ class RuntimeVmProfilingReportFormatterTest {
             markdown.contains("| Metric | 2026-05-08T14-05-00+03-00 | 2026-05-08T14-00-00+03-00 |"),
             markdown,
         )
-        assertTrue(markdown.contains("| Runtime all ticks | 50 ns | 100 ns |"), markdown)
+        assertTrue(markdown.contains("| Runtime all ticks | 1.5 ms | 100 us |"), markdown)
         assertTrue(markdown.contains("| VM execution time | 20 ns | 40 ns |"), markdown)
         assertTrue(markdown.contains("| Host-call signals | 2 | 10 |"), markdown)
-        assertTrue(markdown.contains("| Host-call active time | 30 ns | 50 ns |"), markdown)
-        assertTrue(markdown.contains("| Host-call wait time | 60 ns | 0 ns |"), markdown)
+        assertTrue(markdown.contains("| Host-call active time | 30 ms | 50 us |"), markdown)
+        assertTrue(markdown.contains("| Host-call wait time | 60 ms | 0 ns |"), markdown)
         assertTrue(
             markdown.contains(
-                "| host display.present | 3 calls / 30 ns active / 60 ns wait / 90 ns total | 0 calls / 0 ns active / 0 ns wait / 0 ns total |",
+                "| host display.present | 3 calls / 30 ms active / 60 ms wait / 90 ms total | 0 calls / 0 ns active / 0 ns wait / 0 ns total |",
             ),
             markdown,
         )
         assertTrue(
             markdown.contains(
-                "| host strings.length | 0 calls / 0 ns active / 0 ns wait / 0 ns total | 5 calls / 50 ns active / 0 ns wait / 50 ns total |",
+                "| host strings.length | 0 calls / 0 ns active / 0 ns wait / 0 ns total | 5 calls / 50 us active / 0 ns wait / 50 us total |",
             ),
             markdown,
         )
@@ -139,7 +139,7 @@ class RuntimeVmProfilingReportFormatterTest {
         assertTrue(markdown.contains("| Host-call wait time | 0 ns |"), markdown)
         assertTrue(markdown.contains("| Client frames applied | 2 |"), markdown)
         assertTrue(markdown.contains("| Client snapshot pixels | 32 |"), markdown)
-        assertTrue(markdown.contains("| Enter phase to client | 55 ns |"), markdown)
+        assertTrue(markdown.contains("| Enter phase to client | 1.5 s |"), markdown)
         assertTrue(markdown.contains("| Enter autoscroll copyRect calls before | 11 |"), markdown)
         assertTrue(markdown.contains("| Enter autoscroll copyRect calls after | 12 |"), markdown)
     }
@@ -222,7 +222,7 @@ class RuntimeVmProfilingReportFormatterTest {
                     inputChars = 4,
                     inputPhaseNanos = 44,
                     inputClientFrames = 2,
-                    enterPhaseNanos = 55,
+                    enterPhaseNanos = 1_500_000_000,
                     enterClientFrames = 1,
                 ),
         )
