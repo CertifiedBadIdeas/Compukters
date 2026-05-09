@@ -165,6 +165,7 @@ class BackgroundDeviceVm(
             profile = profile,
             runtimeCreator = { wd, arg -> createRuntime(wd, arg) },
             compilerMetricsCollector = compilerMetricsCollector,
+            runtimeMetricsCollector = runtimeMetricsCollector,
             nativeProcessBridge = nativeProcessBridge,
         )
     private val displayRegistry = DisplayRegistry(displayMetricsCollector)

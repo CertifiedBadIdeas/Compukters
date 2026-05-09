@@ -24,6 +24,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.withTimeout
+import ru.lazyhat.compukterkraft.core.device.runtime.RecordingRuntimeMetricsCollector
 import ru.lazyhat.compukterkraft.core.device.runtime.WorkspaceProgramLoader
 import ru.lazyhat.compukterkraft.core.device.runtime.test.runtimeProfile
 import ru.lazyhat.compukterkraft.core.device.runtime.test.runtimeTestWorkspace
@@ -42,20 +43,24 @@ class VmProcessManagerTest {
     private class RecordingNativeProcessBridge : NativeProcessBridge {
         val registrations = mutableListOf<Triple<Int, Int, String>>()
         val completions = mutableListOf<Pair<Int, Int>>()
+        var registerResult: Boolean = true
+        var completeResult: Boolean = true
 
         override fun registerProcess(
             pid: Int,
             parentPid: Int,
             programPath: String,
-        ) {
+        ): Boolean {
             registrations += Triple(pid, parentPid, programPath)
+            return registerResult
         }
 
         override fun completeProcess(
             pid: Int,
             exitCode: Int,
-        ) {
+        ): Boolean {
             completions += pid to exitCode
+            return completeResult
         }
     }
 
@@ -123,6 +128,76 @@ class VmProcessManagerTest {
                 assertEquals(listOf(2 to 1), bridge.completions)
                 assertEquals(1, code)
                 assertTrue(ctx.logs.any { it.contains("Program not found: missing.ck") }, ctx.logs.toString())
+            } finally {
+                runBlocking { manager.cancelAll() }
+                scope.cancel()
+            }
+        }
+    }
+
+    @Test
+    fun spawnRecordsAcceptedNativeProcessLifecycleMetrics() {
+        runtimeTestWorkspace("vm-process-manager-native-bridge-metrics") { workspace ->
+            val bridge = RecordingNativeProcessBridge()
+            val metrics = RecordingRuntimeMetricsCollector()
+            val ctx = StubVmContext()
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val manager =
+                VmProcessManager(
+                    scope = scope,
+                    ctx = ctx,
+                    deviceId = 1,
+                    programLoader = WorkspaceProgramLoader(workspace.host),
+                    profile = runtimeProfile(),
+                    runtimeCreator = { _, _ -> error("runtimeCreator should not run for a missing program") },
+                    compilerMetricsCollector = NoOpCompilerMetricsCollector,
+                    runtimeMetricsCollector = metrics,
+                    nativeProcessBridge = bridge,
+                )
+
+            try {
+                val pid = manager.spawn("missing.ck", "", "")
+                runBlocking { withTimeout(5_000) { manager.wait(pid) } }
+
+                assertEquals(listOf(Triple(2, 1, "missing.ck")), bridge.registrations)
+                assertEquals(listOf(2 to 1), bridge.completions)
+                assertEquals(1, metrics.snapshot().vm.nativeProcessRegistrations)
+                assertEquals(1, metrics.snapshot().vm.nativeProcessCompletions)
+                assertEquals(0, metrics.snapshot().vm.nativeProcessStaleCompletions)
+            } finally {
+                runBlocking { manager.cancelAll() }
+                scope.cancel()
+            }
+        }
+    }
+
+    @Test
+    fun spawnRecordsStaleNativeProcessCompletionWhenBridgeRejectsCompletion() {
+        runtimeTestWorkspace("vm-process-manager-native-bridge-stale-completion") { workspace ->
+            val bridge = RecordingNativeProcessBridge().apply { completeResult = false }
+            val metrics = RecordingRuntimeMetricsCollector()
+            val ctx = StubVmContext()
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val manager =
+                VmProcessManager(
+                    scope = scope,
+                    ctx = ctx,
+                    deviceId = 1,
+                    programLoader = WorkspaceProgramLoader(workspace.host),
+                    profile = runtimeProfile(),
+                    runtimeCreator = { _, _ -> error("runtimeCreator should not run for a missing program") },
+                    compilerMetricsCollector = NoOpCompilerMetricsCollector,
+                    runtimeMetricsCollector = metrics,
+                    nativeProcessBridge = bridge,
+                )
+
+            try {
+                val pid = manager.spawn("missing.ck", "", "")
+                runBlocking { withTimeout(5_000) { manager.wait(pid) } }
+
+                assertEquals(1, metrics.snapshot().vm.nativeProcessRegistrations)
+                assertEquals(0, metrics.snapshot().vm.nativeProcessCompletions)
+                assertEquals(1, metrics.snapshot().vm.nativeProcessStaleCompletions)
             } finally {
                 runBlocking { manager.cancelAll() }
                 scope.cancel()

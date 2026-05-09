@@ -27,6 +27,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import ru.lazyhat.compukterkraft.core.device.runtime.ComputerProgramCompiler
+import ru.lazyhat.compukterkraft.core.device.runtime.NoOpRuntimeMetricsCollector
+import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeMetricsCollector
 import ru.lazyhat.compukterkraft.core.device.runtime.WorkspaceProgramLoader
 import ru.lazyhat.compukterkraft.lang.frontend.CompilerMetricsCollector
 import ru.lazyhat.compukterkraft.lang.frontend.NoOpCompilerMetricsCollector
@@ -43,6 +45,7 @@ internal class VmProcessManager(
     private val profile: DeviceProfile,
     private val runtimeCreator: (String, String) -> DeviceRuntime,
     private val compilerMetricsCollector: CompilerMetricsCollector = NoOpCompilerMetricsCollector,
+    private val runtimeMetricsCollector: RuntimeMetricsCollector = NoOpRuntimeMetricsCollector,
     private val nativeProcessBridge: NativeProcessBridge = NoOpNativeProcessBridge,
 ) {
     private val nextPid = AtomicInteger(2)
@@ -55,14 +58,23 @@ internal class VmProcessManager(
     ): Int {
         val pid = nextPid.getAndIncrement()
         val exitCode = CompletableDeferred<Int>()
+        val nativeRegistered = nativeProcessBridge.registerProcess(pid = pid, parentPid = 1, programPath = path)
+        if (nativeRegistered) {
+            runtimeMetricsCollector.recordNativeProcessRegistration()
+        }
         val job =
             scope.launch(start = CoroutineStart.LAZY) {
                 val code = execute(path, argument, workingDirectory)
-                nativeProcessBridge.completeProcess(pid, code)
+                if (nativeRegistered) {
+                    if (nativeProcessBridge.completeProcess(pid, code)) {
+                        runtimeMetricsCollector.recordNativeProcessCompletion()
+                    } else {
+                        runtimeMetricsCollector.recordNativeProcessStaleCompletion()
+                    }
+                }
                 exitCode.complete(code)
             }
         processes[pid] = ProcessHandle(job, exitCode)
-        nativeProcessBridge.registerProcess(pid = pid, parentPid = 1, programPath = path)
         job.start()
         job.invokeOnCompletion { failure ->
             if (failure != null && !exitCode.isCompleted) {
