@@ -213,6 +213,10 @@ class RomScriptCompileTest {
             "terminal.ck should render typed input with access to the previous overlay text",
         )
         assertTrue(
+            source.contains("i = startIndex"),
+            "terminal.ck should resume incremental input rendering from the appended suffix",
+        )
+        assertTrue(
             source.contains("if (x >= cols)"),
             "terminal.ck should wrap typed input when it reaches the right display bound",
         )

@@ -563,6 +563,7 @@ fun renderInputLineAppend(displayId: Int, buffer: TerminalBuffer, line: String, 
         }
         i = i + 1
     }
+    i = startIndex
     while i < strings::length(line) {
         if (x >= cols) {
             drawGlyphRun(displayId, runX, runY, run, 2016)
