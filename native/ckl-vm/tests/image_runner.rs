@@ -64,10 +64,7 @@ fn native_kernel_pulls_filtered_events_and_reads_arguments() {
     let mut kernel = DeviceRuntimeKernel::new(8, 64);
     assert!(kernel.enqueue_event(
         "mouse",
-        vec![
-            VmValue::Int(4),
-            VmValue::String("left".to_string()),
-        ],
+        vec![VmValue::Int(4), VmValue::String("left".to_string()),],
     ));
     assert!(kernel.enqueue_event("key", vec![VmValue::Bool(true)]));
 
@@ -180,7 +177,10 @@ fn attached_kernel_handles_display_fill_rect_and_present_imports() {
 
     let signal = vm.run_until_signal();
 
-    assert_eq!(signal[0], 0, "program should halt instead of emitting display host calls");
+    assert_eq!(
+        signal[0], 0,
+        "program should halt instead of emitting display host calls"
+    );
     assert_eq!(kernel.lock().unwrap().displays.drain_frames().len(), 1);
 }
 
@@ -252,9 +252,127 @@ fn attached_kernel_handles_display_text_run_import() {
     let signal = vm.run_until_signal();
     let frames = kernel.lock().unwrap().displays.drain_frames();
 
-    assert_eq!(signal[0], 0, "program should halt instead of emitting display host calls");
+    assert_eq!(
+        signal[0], 0,
+        "program should halt instead of emitting display host calls"
+    );
     assert_eq!(frames.len(), 1);
     assert!(!frames[0].tiles.is_empty());
+}
+
+#[test]
+fn attached_kernel_handles_ipc_events_and_display_metadata_imports() {
+    let kernel = Arc::new(Mutex::new(DeviceRuntimeKernel::new(8, 64)));
+    {
+        let mut kernel = kernel.lock().unwrap();
+        kernel
+            .displays
+            .attach(7, 20, 10, ckl_vm::display::PixelFormat::Rgb565)
+            .unwrap();
+        kernel.enqueue_event("char", vec![VmValue::String("a".to_string())]);
+    }
+
+    let mut code = Vec::new();
+    call_host(&mut code, 5000, 0);
+    store_local(&mut code, 1);
+    load_local(&mut code, 1);
+    push_constant(&mut code, 0);
+    call_host(&mut code, 5001, 2);
+    load_local(&mut code, 1);
+    call_host(&mut code, 5003, 1);
+    code.push(OP_POP);
+    call_host(&mut code, 4002, 0);
+    store_local(&mut code, 0);
+    load_local(&mut code, 0);
+    push_constant(&mut code, 1);
+    call_host(&mut code, 4007, 2);
+    code.push(OP_POP);
+    call_host(&mut code, 1000, 0);
+    call_host(&mut code, 1002, 1);
+    code.push(OP_POP);
+    push_constant(&mut code, 2);
+    call_host(&mut code, 1003, 1);
+    code.push(OP_RETURN);
+
+    let mut vm = ImageVmHandle::create(
+        &image_with_constants_host_imports_and_code(
+            vec![
+                ConstantFixture::String("hello".to_string()),
+                ConstantFixture::Int(0),
+                ConstantFixture::Int(7),
+            ],
+            vec![
+                HostImportFixture {
+                    id: 5000,
+                    module_name: "ipc".to_string(),
+                    function_name: "open".to_string(),
+                    parameter_types: vec![],
+                    return_type: "Int".to_string(),
+                },
+                HostImportFixture {
+                    id: 5001,
+                    module_name: "ipc".to_string(),
+                    function_name: "write".to_string(),
+                    parameter_types: vec!["Int".to_string(), "String".to_string()],
+                    return_type: "Unit".to_string(),
+                },
+                HostImportFixture {
+                    id: 5003,
+                    module_name: "ipc".to_string(),
+                    function_name: "tryRead".to_string(),
+                    parameter_types: vec!["Int".to_string()],
+                    return_type: "String".to_string(),
+                },
+                HostImportFixture {
+                    id: 4002,
+                    module_name: "events".to_string(),
+                    function_name: "tryPull".to_string(),
+                    parameter_types: vec![],
+                    return_type: "Event".to_string(),
+                },
+                HostImportFixture {
+                    id: 4007,
+                    module_name: "events".to_string(),
+                    function_name: "argString".to_string(),
+                    parameter_types: vec!["Event".to_string(), "Int".to_string()],
+                    return_type: "String".to_string(),
+                },
+                HostImportFixture {
+                    id: 1000,
+                    module_name: "display".to_string(),
+                    function_name: "primary".to_string(),
+                    parameter_types: vec![],
+                    return_type: "Int".to_string(),
+                },
+                HostImportFixture {
+                    id: 1002,
+                    module_name: "display".to_string(),
+                    function_name: "width".to_string(),
+                    parameter_types: vec!["Int".to_string()],
+                    return_type: "Int".to_string(),
+                },
+                HostImportFixture {
+                    id: 1003,
+                    module_name: "display".to_string(),
+                    function_name: "height".to_string(),
+                    parameter_types: vec!["Int".to_string()],
+                    return_type: "Int".to_string(),
+                },
+            ],
+            2,
+            code,
+        ),
+        4096,
+    )
+    .unwrap();
+    vm.attach_device_kernel(Arc::clone(&kernel)).unwrap();
+
+    let signal = vm.run_until_signal();
+
+    assert_eq!(
+        signal[0], 0,
+        "program should halt instead of emitting native-kernel host calls",
+    );
 }
 
 #[test]

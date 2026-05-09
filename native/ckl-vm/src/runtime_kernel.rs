@@ -170,7 +170,9 @@ impl IpcRegistry {
         if channel.closed {
             return Err(format!("IPC channel is closed: {channel_id}"));
         }
-        let remaining = channel.max_buffered_bytes.saturating_sub(channel.buffer.len());
+        let remaining = channel
+            .max_buffered_bytes
+            .saturating_sub(channel.buffer.len());
         channel
             .buffer
             .push_str(&text.chars().take(remaining).collect::<String>());
