@@ -15,7 +15,8 @@ pub struct TerminalEventResult {
     buffer: TerminalBuffer,
     line: String,
     renderedLine: String,
-    renderInput: Bool
+    renderInput: Bool,
+    submittedLine: Bool
 }
 
 fun unknownGlyphBits(): Long {
@@ -703,13 +704,14 @@ fun dropLast(text: String): String {
     return result
 }
 
-fun eventResult(displayId: Int, buffer: TerminalBuffer, line: String, renderedLine: String, renderInput: Bool): TerminalEventResult {
+fun eventResult(displayId: Int, buffer: TerminalBuffer, line: String, renderedLine: String, renderInput: Bool, submittedLine: Bool): TerminalEventResult {
     return TerminalEventResult(
         displayId = displayId,
         buffer = buffer,
         line = line,
         renderedLine = renderedLine,
-        renderInput = renderInput
+        renderInput = renderInput,
+        submittedLine = submittedLine
     )
 }
 
@@ -720,20 +722,20 @@ fun handleTerminalEvent(input: Int, displayId: Int, buffer: TerminalBuffer, line
             renderViewport(nextDisplayId, buffer)
             if (buffer.viewportOffset == 0 && line != "") {
                 renderInputLine(nextDisplayId, buffer, renderedLine, line)
-                return eventResult(nextDisplayId, buffer, line, line, false)
+                return eventResult(nextDisplayId, buffer, line, line, false, false)
             }
-            return eventResult(nextDisplayId, buffer, line, renderedLine, false)
+            return eventResult(nextDisplayId, buffer, line, renderedLine, false, false)
         }
         display::clear(nextDisplayId, 0)
         display::present(nextDisplayId)
-        return eventResult(nextDisplayId, newTerminalBuffer(nextDisplayId), "", "", false)
+        return eventResult(nextDisplayId, newTerminalBuffer(nextDisplayId), "", "", false, false)
     }
     if (event.name == "char" || event.name == "paste") {
         val typed: String = events::argString(event, 0)
         if (typed != "") {
-            return eventResult(displayId, followBottom(displayId, buffer), line + typed, renderedLine, true)
+            return eventResult(displayId, followBottom(displayId, buffer), line + typed, renderedLine, true, false)
         }
-        return eventResult(displayId, buffer, line, renderedLine, false)
+        return eventResult(displayId, buffer, line, renderedLine, false, false)
     }
     if (event.name == "key") {
         val key: Int = events::argInt(event, 0)
@@ -744,31 +746,31 @@ fun handleTerminalEvent(input: Int, displayId: Int, buffer: TerminalBuffer, line
             val nextBuffer: TerminalBuffer = followBottom(displayId, buffer)
             val committedBuffer: TerminalBuffer = appendText(displayId, nextBuffer, line + "\n")
             ipc::write(input, line + "\n")
-            return eventResult(displayId, committedBuffer, "", "", false)
+            return eventResult(displayId, committedBuffer, "", "", false, true)
         }
         if (key == 259) {
             if (line != "") {
-                return eventResult(displayId, followBottom(displayId, buffer), dropLast(line), renderedLine, true)
+                return eventResult(displayId, followBottom(displayId, buffer), dropLast(line), renderedLine, true, false)
             }
-            return eventResult(displayId, buffer, line, renderedLine, false)
+            return eventResult(displayId, buffer, line, renderedLine, false, false)
         }
         if (key == 266) {
             var pageRows: Int = rows(displayId) - 1
             if (pageRows <= 0) {
                 pageRows = 1
             }
-            return eventResult(displayId, scrollViewportBy(displayId, buffer, pageRows), line, renderedLine, false)
+            return eventResult(displayId, scrollViewportBy(displayId, buffer, pageRows), line, renderedLine, false, false)
         }
         if (key == 265) {
-            return eventResult(displayId, scrollViewportBy(displayId, buffer, 1), line, renderedLine, false)
+            return eventResult(displayId, scrollViewportBy(displayId, buffer, 1), line, renderedLine, false, false)
         }
         if (key == 264) {
             val nextBuffer: TerminalBuffer = scrollViewportBy(displayId, buffer, 0 - 1)
             if (nextBuffer.viewportOffset == 0 && line != "") {
                 renderInputLine(displayId, nextBuffer, renderedLine, line)
-                return eventResult(displayId, nextBuffer, line, line, false)
+                return eventResult(displayId, nextBuffer, line, line, false, false)
             }
-            return eventResult(displayId, nextBuffer, line, renderedLine, false)
+            return eventResult(displayId, nextBuffer, line, renderedLine, false, false)
         }
         if (key == 267) {
             var pageRows: Int = rows(displayId) - 1
@@ -778,12 +780,12 @@ fun handleTerminalEvent(input: Int, displayId: Int, buffer: TerminalBuffer, line
             val nextBuffer: TerminalBuffer = scrollViewportBy(displayId, buffer, 0 - pageRows)
             if (nextBuffer.viewportOffset == 0 && line != "") {
                 renderInputLine(displayId, nextBuffer, renderedLine, line)
-                return eventResult(displayId, nextBuffer, line, line, false)
+                return eventResult(displayId, nextBuffer, line, line, false, false)
             }
-            return eventResult(displayId, nextBuffer, line, renderedLine, false)
+            return eventResult(displayId, nextBuffer, line, renderedLine, false, false)
         }
     }
-    return eventResult(displayId, buffer, line, renderedLine, false)
+    return eventResult(displayId, buffer, line, renderedLine, false, false)
 }
 
 pub fun main() {
