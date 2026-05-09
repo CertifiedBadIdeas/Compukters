@@ -43,6 +43,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.VmEvent
 import ru.lazyhat.compukterkraft.lang.runtime.VmState
 import ru.lazyhat.compukterkraft.lang.runtime.VmStopReason
 import java.util.UUID
+import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -81,6 +82,7 @@ class RuntimeDeviceImpl(
 
     private var vmHandle: BackgroundDeviceVm? = null
     private var displayPumpJob: Job? = null
+    private val pendingNativeDisplayFrameBytes = ConcurrentLinkedQueue<ByteArray>()
 
     private val serverScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -167,7 +169,7 @@ class RuntimeDeviceImpl(
         val (flushedFrames, flushNanos) =
             measureNanos {
                 if (displayPumpJob?.isActive == true) {
-                    0
+                    flushPendingNativeDisplayFrameBytes() + flushDisplaySessions(handle)
                 } else {
                     flushDisplaySessions(handle)
                 }
@@ -272,9 +274,9 @@ class RuntimeDeviceImpl(
     private fun startNativeDisplayPump(handle: BackgroundDeviceVm) {
         stopNativeDisplayPump()
         if (!handle.supportsNativeDisplayFramePump()) return
+        collectNativeDisplayFrameBytes(handle)
         displayPumpJob =
             serverScope.launch {
-                flushNativeDisplayFrameBytes(handle)
                 var observed = handle.nativeDisplayWakeSequence() ?: return@launch
                 while (isActive && vmHandle === handle) {
                     val started = System.nanoTime()
@@ -290,7 +292,7 @@ class RuntimeDeviceImpl(
                         delay(1)
                         continue
                     }
-                    flushNativeDisplayFrameBytes(handle)
+                    collectNativeDisplayFrameBytes(handle)
                 }
             }
     }
@@ -300,23 +302,36 @@ class RuntimeDeviceImpl(
         displayPumpJob = null
     }
 
-    private fun flushNativeDisplayFrameBytes(handle: BackgroundDeviceVm): Int {
-        if (displaySessions.isEmpty()) return 0
+    private fun collectNativeDisplayFrameBytes(handle: BackgroundDeviceVm): Int {
         val payload = handle.drainNativeDisplayFrameBytes() ?: return 0
         if (payload.size <= EMPTY_NATIVE_FRAME_BATCH_BYTES) return 0
         runtimeMetricsCollector.recordNativeDisplayFrameBytes(payload.size)
+        pendingNativeDisplayFrameBytes.add(payload)
+        return 1
+    }
 
-        val toDetach = mutableListOf<Pair<UUID, Int>>()
-        val sessions = displaySessions.values.toList()
-        for (session in sessions) {
-            if (!displayNetwork.isDisplaySessionStillBound(session.playerUuid, session.containerId, deviceId, session.displayId)) {
-                toDetach += session.playerUuid to session.displayId
-                continue
+    private fun flushPendingNativeDisplayFrameBytes(): Int {
+        if (displaySessions.isEmpty()) return 0
+        var flushed = 0
+        while (true) {
+            val payload = pendingNativeDisplayFrameBytes.poll() ?: break
+            val sessions = displaySessions.values.toList()
+            if (sessions.isEmpty()) {
+                pendingNativeDisplayFrameBytes.add(payload)
+                break
             }
-            displayNetwork.sendNativeDisplayFrameBytes(session.playerUuid, session.containerId, payload)
+            val toDetach = mutableListOf<Pair<UUID, Int>>()
+            for (session in sessions) {
+                if (!displayNetwork.isDisplaySessionStillBound(session.playerUuid, session.containerId, deviceId, session.displayId)) {
+                    toDetach += session.playerUuid to session.displayId
+                    continue
+                }
+                displayNetwork.sendNativeDisplayFrameBytes(session.playerUuid, session.containerId, payload)
+            }
+            toDetach.forEach { (playerUuid, displayId) -> detachDisplaySession(playerUuid, displayId) }
+            flushed += 1
         }
-        toDetach.forEach { (playerUuid, displayId) -> detachDisplaySession(playerUuid, displayId) }
-        return sessions.size
+        return flushed
     }
 
     private companion object {
