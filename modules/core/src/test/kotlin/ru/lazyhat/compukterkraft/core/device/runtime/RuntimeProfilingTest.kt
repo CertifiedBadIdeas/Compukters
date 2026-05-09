@@ -55,6 +55,8 @@ class RuntimeProfilingTest {
         collector.recordVmHostCall("display", "blitMono5x7Packed", nanos = 100)
         collector.recordVmHostCall("display", "blitMono5x7Packed", nanos = 50)
         collector.recordVmHostCall("events", "tryPull", nanos = 30)
+        collector.recordNativeWait("runtime.poll", nanos = 100)
+        collector.recordNativeWait("runtime.poll", nanos = 50, woke = false)
         collector.recordVmInstruction(VmInstructionKind.CALL_BUILTIN, nanos = 40)
         collector.recordVmInstruction(VmInstructionKind.CALL_BUILTIN, nanos = 60)
         collector.recordVmInstruction(VmInstructionKind.PUSH_INT, nanos = 10)
@@ -97,6 +99,10 @@ class RuntimeProfilingTest {
         assertEquals(1, snapshot.vm.waitPollSignals)
         assertEquals(1, snapshot.vm.hostCallSignals)
         assertEquals(1, snapshot.vm.haltSignals)
+        assertEquals(2, snapshot.vm.nativeWaitCalls)
+        assertEquals(150, snapshot.vm.nativeWaitNanos)
+        assertEquals(1, snapshot.vm.nativeWaitWakeups)
+        assertEquals(1, snapshot.vm.nativeWaitTimeouts)
         val blitCall = snapshot.hostCalls.first { it.moduleName == "display" && it.functionName == "blitMono5x7Packed" }
         assertEquals(2, blitCall.calls)
         assertEquals(150, blitCall.nanos)
@@ -146,6 +152,7 @@ class RuntimeProfilingTest {
         collector.recordVmSignal(VmSignalKind.PAUSE)
         collector.recordVmHostCallWait("display", "present", nanos = 50)
         collector.recordVmHostCall("display", "present", nanos = 80)
+        collector.recordNativeWait("runtime.poll", nanos = 100)
         collector.recordVmInstruction(VmInstructionKind.CALL_BUILTIN, nanos = 90)
 
         assertEquals(RuntimeProfilingSnapshot(), collector.snapshot())
