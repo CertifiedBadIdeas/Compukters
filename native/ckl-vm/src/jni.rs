@@ -4,6 +4,7 @@ use jni::objects::{JByteArray, JClass, JString};
 use jni::sys::{jboolean, jbyteArray, jint, jlong};
 use jni::JNIEnv;
 
+use crate::display::PixelFormat;
 use crate::image_runner::ImageVmHandle;
 use crate::runtime_kernel::DeviceRuntimeKernel;
 
@@ -188,6 +189,91 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
     }
 }
 
+#[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_attachNativeDisplayNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    kernel_handle: jlong,
+    display_id: jint,
+    width: jint,
+    height: jint,
+) {
+    let kernel = match kernel_handle_mut(&mut env, kernel_handle) {
+        Some(kernel) => kernel,
+        None => return,
+    };
+    if let Err(error) = kernel
+        .displays
+        .attach(display_id, width, height, PixelFormat::Rgb565)
+    {
+        let _ = env.throw_new("java/lang/IllegalArgumentException", error);
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_detachNativeDisplayNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    kernel_handle: jlong,
+    display_id: jint,
+) {
+    let kernel = match kernel_handle_mut(&mut env, kernel_handle) {
+        Some(kernel) => kernel,
+        None => return,
+    };
+    kernel.displays.detach(display_id);
+}
+
+#[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_nativeDisplayFillRectNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    kernel_handle: jlong,
+    display_id: jint,
+    x: jint,
+    y: jint,
+    width: jint,
+    height: jint,
+    rgb565: jint,
+) {
+    let kernel = match kernel_handle_mut(&mut env, kernel_handle) {
+        Some(kernel) => kernel,
+        None => return,
+    };
+    kernel
+        .displays
+        .fill_rect(display_id, x, y, width, height, rgb565 as u16);
+}
+
+#[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_nativeDisplayPresentNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    kernel_handle: jlong,
+    display_id: jint,
+) {
+    let kernel = match kernel_handle_mut(&mut env, kernel_handle) {
+        Some(kernel) => kernel,
+        None => return,
+    };
+    kernel.displays.present(display_id);
+}
+
+#[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_drainNativeDisplayFramesNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    kernel_handle: jlong,
+) -> jbyteArray {
+    let kernel = match kernel_handle_mut(&mut env, kernel_handle) {
+        Some(kernel) => kernel,
+        None => return null_mut(),
+    };
+    let frames = kernel.displays.drain_frames();
+    let bytes = encode_display_frames(&frames);
+    byte_array_or_throw(&mut env, &bytes)
+}
+
 fn image_handle_mut(env: &mut JNIEnv<'_>, handle: jlong) -> Option<&'static mut ImageVmHandle> {
     if handle == 0 {
         let _ = env.throw_new(
@@ -240,4 +326,31 @@ fn byte_array_or_throw(env: &mut JNIEnv<'_>, bytes: &[u8]) -> jbyteArray {
             null_mut()
         }
     }
+}
+
+fn encode_display_frames(frames: &[crate::display::DisplayFrameDelta]) -> Vec<u8> {
+    let mut out = Vec::new();
+    out.extend_from_slice(&(frames.len() as i32).to_le_bytes());
+    for frame in frames {
+        out.extend_from_slice(&frame.display_id.to_le_bytes());
+        out.extend_from_slice(&frame.sequence.to_le_bytes());
+        out.extend_from_slice(&frame.width.to_le_bytes());
+        out.extend_from_slice(&frame.height.to_le_bytes());
+        out.push(match frame.pixel_format {
+            PixelFormat::Rgb565 => 0,
+        });
+        out.push(if frame.full_refresh { 1 } else { 0 });
+        out.extend_from_slice(&(frame.tiles.len() as i32).to_le_bytes());
+        for tile in &frame.tiles {
+            out.extend_from_slice(&tile.tile_x.to_le_bytes());
+            out.extend_from_slice(&tile.tile_y.to_le_bytes());
+            out.extend_from_slice(&tile.x.to_le_bytes());
+            out.extend_from_slice(&tile.y.to_le_bytes());
+            out.extend_from_slice(&tile.width.to_le_bytes());
+            out.extend_from_slice(&tile.height.to_le_bytes());
+            out.extend_from_slice(&(tile.payload.len() as i32).to_le_bytes());
+            out.extend_from_slice(&tile.payload);
+        }
+    }
+    out
 }
