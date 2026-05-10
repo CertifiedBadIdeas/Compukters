@@ -1009,7 +1009,7 @@ git commit -m "feat: bridge native daemon host requests"
 - Create: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/NativeDeviceDaemonRuntime.kt`
 - Modify: `modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVmTest.kt`
 
-- [ ] **Step 1: Add failing daemon runtime unit test**
+- [x] **Step 1: Add failing daemon runtime unit test**
 
 Add a focused test with a fake binding facade if needed:
 
@@ -1030,7 +1030,7 @@ fun nativeDaemonRuntimeBootsCompiledBootImageAndTicksDaemon() =
     }
 ```
 
-- [ ] **Step 2: Run the test and verify it fails**
+- [x] **Step 2: Run the test and verify it fails**
 
 ```bash
 ./gradlew :core:test --tests '*BackgroundDeviceVmTest.*nativeDaemon*' --rerun-tasks
@@ -1038,7 +1038,7 @@ fun nativeDaemonRuntimeBootsCompiledBootImageAndTicksDaemon() =
 
 Expected: FAIL because `NativeDeviceDaemonRuntime` does not exist.
 
-- [ ] **Step 3: Add runtime bridge skeleton**
+- [x] **Step 3: Add runtime bridge skeleton**
 
 Create `NativeDeviceDaemonRuntime.kt`:
 
@@ -1080,7 +1080,7 @@ internal class NativeDeviceDaemonRuntime(
 
 Define `NativeDaemonBindings` as an internal interface implemented by an adapter over `NativeVmBindings`.
 
-- [ ] **Step 4: Run focused core tests**
+- [x] **Step 4: Run focused core tests**
 
 ```bash
 ./gradlew :core:test --tests '*BackgroundDeviceVmTest.*nativeDaemon*' --rerun-tasks
@@ -1088,7 +1088,7 @@ Define `NativeDaemonBindings` as an internal interface implemented by an adapter
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit Task 9**
+- [x] **Step 5: Commit Task 9**
 
 ```bash
 git add modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/NativeDeviceDaemonRuntime.kt modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVmTest.kt docs/superpowers/plans/2026-05-10-rust-owned-device-daemon.md

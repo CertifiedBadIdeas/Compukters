@@ -1,0 +1,113 @@
+/*
+ * The Compukter Kraft Developers
+ *
+ * Copyright (C) 2026 Vsevolod Petrov (lazyhat)
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+package ru.lazyhat.compukterkraft.core.device.vm
+
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceProfile
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeDeviceDaemonBootSummary
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeDeviceDaemonHostRequest
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeDeviceDaemonTickSummary
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeVmBindings
+
+internal class NativeDeviceDaemonRuntime(
+    private val daemonHandle: Long,
+    private val profile: DeviceProfile,
+    private val bindings: NativeDaemonBindings = NativeVmDaemonBindings,
+    private val hostBridge: suspend (NativeDeviceDaemonHostRequest) -> ByteArray,
+) {
+    fun boot(
+        image: ByteArray,
+        programPath: String,
+        argument: String,
+        workingDirectory: String,
+    ): NativeDeviceDaemonBootSummary =
+        bindings.bootDeviceDaemon(daemonHandle, image, programPath, argument, workingDirectory)
+
+    suspend fun requestSlice(serverTick: Long): NativeDeviceDaemonTickSummary {
+        val summary =
+            bindings.tickDeviceDaemon(
+                daemonHandle = daemonHandle,
+                instructions = profile.resources.cpu.instructionsPerSlice.toLong(),
+                wallNanos = profile.resources.cpu.wallTimeGuardNanosPerSlice,
+                serverTick = serverTick,
+            )
+        serviceHostRequests()
+        return summary
+    }
+
+    private suspend fun serviceHostRequests() {
+        for (request in bindings.drainDeviceDaemonHostRequests(daemonHandle)) {
+            val result = hostBridge(request)
+            bindings.completeDeviceDaemonHostRequest(daemonHandle, request.requestId, result)
+        }
+    }
+}
+
+internal interface NativeDaemonBindings {
+    fun bootDeviceDaemon(
+        daemonHandle: Long,
+        image: ByteArray,
+        programPath: String,
+        argument: String,
+        workingDirectory: String,
+    ): NativeDeviceDaemonBootSummary
+
+    fun tickDeviceDaemon(
+        daemonHandle: Long,
+        instructions: Long,
+        wallNanos: Long,
+        serverTick: Long,
+    ): NativeDeviceDaemonTickSummary
+
+    fun drainDeviceDaemonHostRequests(daemonHandle: Long): List<NativeDeviceDaemonHostRequest>
+
+    fun completeDeviceDaemonHostRequest(
+        daemonHandle: Long,
+        requestId: Long,
+        value: ByteArray,
+    ): Boolean
+}
+
+private object NativeVmDaemonBindings : NativeDaemonBindings {
+    override fun bootDeviceDaemon(
+        daemonHandle: Long,
+        image: ByteArray,
+        programPath: String,
+        argument: String,
+        workingDirectory: String,
+    ): NativeDeviceDaemonBootSummary =
+        NativeVmBindings.bootDeviceDaemon(daemonHandle, image, programPath, argument, workingDirectory)
+
+    override fun tickDeviceDaemon(
+        daemonHandle: Long,
+        instructions: Long,
+        wallNanos: Long,
+        serverTick: Long,
+    ): NativeDeviceDaemonTickSummary =
+        NativeVmBindings.tickDeviceDaemon(daemonHandle, instructions, wallNanos, serverTick)
+
+    override fun drainDeviceDaemonHostRequests(daemonHandle: Long): List<NativeDeviceDaemonHostRequest> =
+        NativeVmBindings.drainDeviceDaemonHostRequests(daemonHandle)
+
+    override fun completeDeviceDaemonHostRequest(
+        daemonHandle: Long,
+        requestId: Long,
+        value: ByteArray,
+    ): Boolean = NativeVmBindings.completeDeviceDaemonHostRequest(daemonHandle, requestId, value)
+}
