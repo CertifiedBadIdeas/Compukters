@@ -145,23 +145,7 @@ internal object RuntimeProfilingWorkload {
     fun <T> withNativeDaemonMode(
         enabled: Boolean,
         block: () -> T,
-    ): T {
-        val previous = System.getProperty("ckl.vm.native.daemon")
-        if (enabled) {
-            System.setProperty("ckl.vm.native.daemon", "true")
-        } else {
-            System.clearProperty("ckl.vm.native.daemon")
-        }
-        return try {
-            block()
-        } finally {
-            if (previous == null) {
-                System.clearProperty("ckl.vm.native.daemon")
-            } else {
-                System.setProperty("ckl.vm.native.daemon", previous)
-            }
-        }
-    }
+    ): T = block()
 
     fun runNativeDaemonSmokeWorkload(ticks: Int): NativeDaemonSmokeProfilingRun =
         NativeDaemonSmokeProfilingRun(
