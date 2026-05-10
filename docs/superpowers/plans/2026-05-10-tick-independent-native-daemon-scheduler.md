@@ -45,7 +45,7 @@ operations for the new executor.
 **Files:**
 - Modify: `native/ckl-vm/src/device_daemon.rs`
 
-- [ ] **Step 1: Add failing Rust test for same-pass terminal/shell handoff**
+- [x] **Step 1: Add failing Rust test for same-pass terminal/shell handoff**
 
 Add a unit test near existing daemon process tests in `native/ckl-vm/src/device_daemon.rs`:
 
@@ -95,7 +95,7 @@ fn attach_child_image_for_test(
 }
 ```
 
-- [ ] **Step 2: Run the Rust daemon test and confirm it fails**
+- [x] **Step 2: Run the Rust daemon test and confirm it fails**
 
 Run:
 
@@ -105,7 +105,7 @@ cargo test --manifest-path native/ckl-vm/Cargo.toml daemon_run_ready_until_block
 
 Expected: fail to compile because `refill_execution_quota` and `run_ready_until_blocked` do not exist.
 
-- [ ] **Step 3: Implement split refill and multi-turn run**
+- [x] **Step 3: Implement split refill and multi-turn run**
 
 In `impl DeviceDaemon`, add:
 
@@ -198,7 +198,7 @@ pub fn tick(
 }
 ```
 
-- [ ] **Step 4: Run Rust daemon tests**
+- [x] **Step 4: Run Rust daemon tests**
 
 Run:
 
@@ -208,7 +208,7 @@ cargo test --manifest-path native/ckl-vm/Cargo.toml device_daemon
 
 Expected: all `device_daemon` tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add native/ckl-vm/src/device_daemon.rs
@@ -224,7 +224,7 @@ git commit -m "feat: run daemon processes until blocked"
 - Modify: `modules/compiler/src/main/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeVmBindings.kt`
 - Test: `modules/compiler/src/test/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeImageVmBindingsJniTest.kt`
 
-- [ ] **Step 1: Add JNI test for split refill/run API**
+- [x] **Step 1: Add JNI test for split refill/run API**
 
 Add a test in `NativeImageVmBindingsJniTest.kt`:
 
@@ -252,7 +252,7 @@ fun nativeDeviceDaemonCanRefillQuotaAndRunReadyProcessesSeparately() {
 }
 ```
 
-- [ ] **Step 2: Run the JNI test and confirm it fails**
+- [x] **Step 2: Run the JNI test and confirm it fails**
 
 Run:
 
@@ -262,7 +262,7 @@ Run:
 
 Expected: fail to compile because the Kotlin binding methods do not exist.
 
-- [ ] **Step 3: Add JNI native functions**
+- [x] **Step 3: Add JNI native functions**
 
 In `native/ckl-vm/src/jni.rs`, add functions next to `tickDeviceDaemonNative`:
 
@@ -308,7 +308,7 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
 }
 ```
 
-- [ ] **Step 4: Add Kotlin binding methods**
+- [x] **Step 4: Add Kotlin binding methods**
 
 In `NativeVmBindings.kt`, add public methods:
 
@@ -348,7 +348,7 @@ private external fun runDeviceDaemonReadyNative(
 ): LongArray
 ```
 
-- [ ] **Step 5: Extend `NativeDaemonBindings` facade**
+- [x] **Step 5: Extend `NativeDaemonBindings` facade**
 
 In `NativeDeviceDaemonRuntime.kt`, add to `NativeDaemonBindings`:
 
@@ -368,7 +368,7 @@ fun runDeviceDaemonReady(
 
 Implement them in `NativeVmDaemonBindings` by delegating to `NativeVmBindings`.
 
-- [ ] **Step 6: Run JNI test**
+- [x] **Step 6: Run JNI test**
 
 Run:
 
@@ -378,7 +378,7 @@ Run:
 
 Expected: pass.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add native/ckl-vm/src/jni.rs modules/compiler/src/main/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeVmBindings.kt modules/compiler/src/test/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeImageVmBindingsJniTest.kt modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/NativeDeviceDaemonRuntime.kt
@@ -394,7 +394,7 @@ git commit -m "feat: expose split daemon scheduler api"
 - Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVm.kt`
 - Test: `modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVmTest.kt`
 
-- [ ] **Step 1: Add a core test for event-triggered daemon execution**
+- [x] **Step 1: Add a core test for event-triggered daemon execution**
 
 Add a fake-binding test that boots a daemon device, calls `enqueueEvent`, and verifies the fake binding saw
 `runDeviceDaemonReady` without a following `requestSlice`.
@@ -421,7 +421,7 @@ fun nativeDaemonExecutorRunsAfterAcceptedEventWithoutWaitingForNextSlice() = run
 If `BackgroundDeviceVmTest` uses a different helper name, add the same assertion to the existing native daemon fake test
 class instead of creating a parallel fixture.
 
-- [ ] **Step 2: Run core test and confirm it fails**
+- [x] **Step 2: Run core test and confirm it fails**
 
 Run:
 
@@ -431,7 +431,7 @@ Run:
 
 Expected: fail because accepted events only enqueue into Rust and do not wake a daemon executor.
 
-- [ ] **Step 3: Split runtime methods**
+- [x] **Step 3: Split runtime methods**
 
 In `NativeDeviceDaemonRuntime.kt`, replace `requestSlice(serverTick)` implementation with:
 
@@ -473,7 +473,7 @@ suspend fun requestSlice(serverTick: Long): NativeDeviceDaemonTickSummary {
 }
 ```
 
-- [ ] **Step 4: Add serialized daemon executor in `BackgroundDeviceVm`**
+- [x] **Step 4: Add serialized daemon executor in `BackgroundDeviceVm`**
 
 Add fields:
 
@@ -513,7 +513,7 @@ private fun startNativeDaemonExecutor() {
 
 Call `startNativeDaemonExecutor()` from daemon boot path after boot image is attached.
 
-- [ ] **Step 5: Wake executor from slice and event paths**
+- [x] **Step 5: Wake executor from slice and event paths**
 
 In `requestSlice(serverTick)`, daemon branch becomes:
 
@@ -533,7 +533,7 @@ wakeNativeDaemonExecutor()
 
 In the daemon boot path, after `enqueueEvent(VmEvent("boot"))`, call `wakeNativeDaemonExecutor()`.
 
-- [ ] **Step 6: Run core test**
+- [x] **Step 6: Run core test**
 
 Run:
 
@@ -543,7 +543,7 @@ Run:
 
 Expected: pass.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/NativeDeviceDaemonRuntime.kt modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVm.kt modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVmTest.kt
@@ -559,7 +559,7 @@ git commit -m "feat: run native daemon from event-driven executor"
 - Modify: `modules/v1_21_1/v1_21_1-neoforge/src/test/kotlin/ru/lazyhat/compukterkraft/impl/computer/vm/RuntimeVmProfilingReportTest.kt`
 - Modify profiling report writer files located by `rg -n "nativeDaemon|recordNativeDaemonTick|RuntimeVmProfile" modules`.
 
-- [ ] **Step 1: Add profiling assertion for multi-turn daemon passes**
+- [x] **Step 1: Add profiling assertion for multi-turn daemon passes**
 
 In `RuntimeVmProfilingReportTest.kt`, add to daemon smoke or terminal workload assertions:
 
@@ -572,7 +572,7 @@ assertTrue(
 
 Use the existing metric names if `RuntimeMetricsSnapshot` already exposes different fields.
 
-- [ ] **Step 2: Run profiling test and confirm it fails**
+- [x] **Step 2: Run profiling test and confirm it fails**
 
 Run:
 
@@ -582,7 +582,7 @@ Run:
 
 Expected: fail until daemon executor metrics expose the needed counts or until the workload observes multi-turn passes.
 
-- [ ] **Step 3: Record executor pass metrics**
+- [x] **Step 3: Record executor pass metrics**
 
 Extend runtime metrics so each daemon executor pass records:
 
@@ -604,7 +604,7 @@ native daemon executor:
   host requests
 ```
 
-- [ ] **Step 4: Run profiling comparison**
+- [x] **Step 4: Run profiling comparison**
 
 Run:
 
@@ -614,7 +614,7 @@ Run:
 
 Expected: task passes and Markdown report shows daemon executor pass/turn counts.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add modules docs
@@ -628,7 +628,19 @@ git commit -m "test: profile tick-independent daemon scheduling"
 **Files:**
 - Modify: `docs/superpowers/plans/2026-05-10-tick-independent-native-daemon-scheduler.md`
 
-- [ ] **Step 1: Run Rust tests**
+Verification notes:
+
+- `cargo test --manifest-path native/ckl-vm/Cargo.toml` passes.
+- `./gradlew -Dckl.vm.native.library=/home/lazyhat/IdeaProjects/Compukter-Kraft/native/ckl-vm/target/debug/libckl_vm.so :compiler:test --tests "*NativeImageVmBindingsJniTest" --rerun-tasks` passes.
+- `./gradlew -Dckl.vm.native.library=/home/lazyhat/IdeaProjects/Compukter-Kraft/native/ckl-vm/target/debug/libckl_vm.so :core:test` passes.
+- `./gradlew -Dckl.vm.native.library=/home/lazyhat/IdeaProjects/Compukter-Kraft/native/ckl-vm/target/debug/libckl_vm.so -Dckl.vm.native.display=true -Dckl.vm.native.daemon=true :v1_21_1-neoforge:test` passes.
+- `./gradlew profileRuntimeVmComparison` passes.
+- `./gradlew :core:test` without a native library still does not prove this slice because the current image backend requires
+  `-Dckl.vm.native.library` for image runner tests.
+- Non-daemon `-Dckl.vm.native.display=true` terminal display failures are tracked as a separate display/runtime mode concern;
+  this plan verifies the daemon scheduler path.
+
+- [x] **Step 1: Run Rust tests**
 
 Run:
 
@@ -638,7 +650,7 @@ cargo test --manifest-path native/ckl-vm/Cargo.toml
 
 Expected: all Rust tests pass.
 
-- [ ] **Step 2: Run compiler JNI tests**
+- [x] **Step 2: Run compiler JNI tests**
 
 Run:
 
@@ -648,7 +660,7 @@ Run:
 
 Expected: all selected compiler JNI tests pass.
 
-- [ ] **Step 3: Run core tests**
+- [x] **Step 3: Run core tests**
 
 Run:
 
@@ -658,7 +670,7 @@ Run:
 
 Expected: all core tests pass.
 
-- [ ] **Step 4: Run NeoForge tests**
+- [x] **Step 4: Run NeoForge tests**
 
 Run:
 
@@ -668,11 +680,11 @@ Run:
 
 Expected: all NeoForge tests pass.
 
-- [ ] **Step 5: Mark completed plan tasks**
+- [x] **Step 5: Mark completed plan tasks**
 
 Change each completed task checkbox in this file from `- [ ]` to `- [x]`.
 
-- [ ] **Step 6: Commit plan completion**
+- [x] **Step 6: Commit plan completion**
 
 ```bash
 git add docs/superpowers/plans/2026-05-10-tick-independent-native-daemon-scheduler.md
