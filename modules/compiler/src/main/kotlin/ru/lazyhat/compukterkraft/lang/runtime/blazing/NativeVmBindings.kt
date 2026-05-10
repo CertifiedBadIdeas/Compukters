@@ -21,6 +21,12 @@ package ru.lazyhat.compukterkraft.lang.runtime.blazing
 
 import ru.lazyhat.compukterkraft.lang.runtime.VmValue
 
+data class NativeProcessSchedulerTick(
+    val currentTick: Long,
+    val selectedPid: Int?,
+    val wokenPids: List<Int>,
+)
+
 internal interface NativeVmBindingsFacade {
     fun createImage(
         libraryPath: String,
@@ -199,6 +205,49 @@ object NativeVmBindings : NativeVmBindingsFacade {
         return completeProcessNative(kernelHandle, pid, exitCode)
     }
 
+    fun markProcessRunnable(
+        kernelHandle: Long,
+        pid: Int,
+    ): Boolean {
+        require(kernelHandle != 0L) { "Native device runtime kernel handle is zero" }
+        return markProcessRunnableNative(kernelHandle, pid)
+    }
+
+    fun markProcessWaitingForProcess(
+        kernelHandle: Long,
+        pid: Int,
+        targetPid: Int,
+    ): Boolean {
+        require(kernelHandle != 0L) { "Native device runtime kernel handle is zero" }
+        return markProcessWaitingForProcessNative(kernelHandle, pid, targetPid)
+    }
+
+    fun markProcessSleeping(
+        kernelHandle: Long,
+        pid: Int,
+        untilTick: Long,
+    ): Boolean {
+        require(kernelHandle != 0L) { "Native device runtime kernel handle is zero" }
+        return markProcessSleepingNative(kernelHandle, pid, untilTick)
+    }
+
+    fun markProcessCrashed(
+        kernelHandle: Long,
+        pid: Int,
+        message: String,
+    ): Boolean {
+        require(kernelHandle != 0L) { "Native device runtime kernel handle is zero" }
+        return markProcessCrashedNative(kernelHandle, pid, message)
+    }
+
+    fun processSchedulerTick(
+        kernelHandle: Long,
+        currentTick: Long,
+    ): NativeProcessSchedulerTick {
+        require(kernelHandle != 0L) { "Native device runtime kernel handle is zero" }
+        return processSchedulerTickNative(kernelHandle, currentTick).toNativeProcessSchedulerTick()
+    }
+
     override fun attachImageToKernel(
         imageHandle: Long,
         kernelHandle: Long,
@@ -327,6 +376,27 @@ object NativeVmBindings : NativeVmBindingsFacade {
             else -> VmValue.StringValue(toString())
         }
 
+    private fun LongArray.toNativeProcessSchedulerTick(): NativeProcessSchedulerTick {
+        val currentTick = getOrElse(0) { 0L }
+        val selectedPid =
+            getOrElse(1) { 0L }
+                .toInt()
+                .takeIf { it > 0 }
+        val wokenCount =
+            getOrElse(2) { 0L }
+                .toInt()
+                .coerceAtLeast(0)
+        val wokenPids =
+            drop(3)
+                .take(wokenCount)
+                .map { it.toInt() }
+        return NativeProcessSchedulerTick(
+            currentTick = currentTick,
+            selectedPid = selectedPid,
+            wokenPids = wokenPids,
+        )
+    }
+
     @JvmStatic
     private external fun createImageNative(
         image: ByteArray,
@@ -403,6 +473,34 @@ object NativeVmBindings : NativeVmBindingsFacade {
         pid: Int,
         exitCode: Int,
     ): Boolean
+
+    private external fun markProcessRunnableNative(
+        kernelHandle: Long,
+        pid: Int,
+    ): Boolean
+
+    private external fun markProcessWaitingForProcessNative(
+        kernelHandle: Long,
+        pid: Int,
+        targetPid: Int,
+    ): Boolean
+
+    private external fun markProcessSleepingNative(
+        kernelHandle: Long,
+        pid: Int,
+        untilTick: Long,
+    ): Boolean
+
+    private external fun markProcessCrashedNative(
+        kernelHandle: Long,
+        pid: Int,
+        message: String,
+    ): Boolean
+
+    private external fun processSchedulerTickNative(
+        kernelHandle: Long,
+        currentTick: Long,
+    ): LongArray
 
     @JvmStatic
     private external fun displayWakeSequenceNative(handle: Long): Long

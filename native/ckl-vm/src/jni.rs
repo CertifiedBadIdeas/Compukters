@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 use std::time::Duration;
 
 use jni::objects::{JByteArray, JClass, JString};
-use jni::sys::{jboolean, jbyteArray, jint, jlong, jstring};
+use jni::sys::{jboolean, jbyteArray, jint, jlong, jlongArray, jstring};
 use jni::JNIEnv;
 
 use crate::display::PixelFormat;
@@ -440,6 +440,128 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
 }
 
 #[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_markProcessRunnableNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    kernel_handle: jlong,
+    pid: jint,
+) -> jboolean {
+    let kernel_handle = match shared_kernel_handle(&mut env, kernel_handle) {
+        Some(kernel) => kernel,
+        None => return false as jboolean,
+    };
+    match kernel_handle.with_kernel_mut(|kernel| kernel.mark_process_runnable(pid)) {
+        Ok(updated) => updated as jboolean,
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalStateException", error);
+            false as jboolean
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_markProcessWaitingForProcessNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    kernel_handle: jlong,
+    pid: jint,
+    target_pid: jint,
+) -> jboolean {
+    let kernel_handle = match shared_kernel_handle(&mut env, kernel_handle) {
+        Some(kernel) => kernel,
+        None => return false as jboolean,
+    };
+    match kernel_handle
+        .with_kernel_mut(|kernel| kernel.mark_process_waiting_for_process(pid, target_pid))
+    {
+        Ok(updated) => updated as jboolean,
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalStateException", error);
+            false as jboolean
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_markProcessSleepingNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    kernel_handle: jlong,
+    pid: jint,
+    until_tick: jlong,
+) -> jboolean {
+    let kernel_handle = match shared_kernel_handle(&mut env, kernel_handle) {
+        Some(kernel) => kernel,
+        None => return false as jboolean,
+    };
+    match kernel_handle.with_kernel_mut(|kernel| kernel.mark_process_sleeping(pid, until_tick)) {
+        Ok(updated) => updated as jboolean,
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalStateException", error);
+            false as jboolean
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_markProcessCrashedNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    kernel_handle: jlong,
+    pid: jint,
+    message: JString<'_>,
+) -> jboolean {
+    let kernel_handle = match shared_kernel_handle(&mut env, kernel_handle) {
+        Some(kernel) => kernel,
+        None => return false as jboolean,
+    };
+    let message: String = match env.get_string(&message) {
+        Ok(value) => value.into(),
+        Err(error) => {
+            let _ = env.throw_new(
+                "java/lang/IllegalArgumentException",
+                format!("Cannot read native process crash message: {error}"),
+            );
+            return false as jboolean;
+        }
+    };
+    match kernel_handle.with_kernel_mut(|kernel| kernel.mark_process_crashed(pid, message)) {
+        Ok(updated) => updated as jboolean,
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalStateException", error);
+            false as jboolean
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_processSchedulerTickNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    kernel_handle: jlong,
+    current_tick: jlong,
+) -> jlongArray {
+    let kernel_handle = match shared_kernel_handle(&mut env, kernel_handle) {
+        Some(kernel) => kernel,
+        None => return long_array_or_throw(&mut env, &[]),
+    };
+    match kernel_handle.with_kernel_mut(|kernel| kernel.scheduler_tick(current_tick)) {
+        Ok(tick) => {
+            let mut values = Vec::with_capacity(3 + tick.woken_pids.len());
+            values.push(tick.current_tick);
+            values.push(tick.selected_pid.unwrap_or(0) as jlong);
+            values.push(tick.woken_pids.len() as jlong);
+            values.extend(tick.woken_pids.into_iter().map(|pid| pid as jlong));
+            long_array_or_throw(&mut env, &values)
+        }
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalStateException", error);
+            long_array_or_throw(&mut env, &[])
+        }
+    }
+}
+
+#[no_mangle]
 pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_setImageWorkingDirectoryNative(
     mut env: JNIEnv<'_>,
     _class: JClass<'_>,
@@ -689,6 +811,27 @@ fn byte_array_or_throw(env: &mut JNIEnv<'_>, bytes: &[u8]) -> jbyteArray {
             null_mut()
         }
     }
+}
+
+fn long_array_or_throw(env: &mut JNIEnv<'_>, values: &[jlong]) -> jlongArray {
+    let array = match env.new_long_array(values.len() as i32) {
+        Ok(array) => array,
+        Err(error) => {
+            let _ = env.throw_new(
+                "java/lang/IllegalStateException",
+                format!("Cannot allocate native process scheduler tick: {error}"),
+            );
+            return null_mut();
+        }
+    };
+    if let Err(error) = env.set_long_array_region(&array, 0, values) {
+        let _ = env.throw_new(
+            "java/lang/IllegalStateException",
+            format!("Cannot write native process scheduler tick: {error}"),
+        );
+        return null_mut();
+    }
+    array.into_raw()
 }
 
 fn encode_display_frames(frames: &[crate::display::DisplayFrameDelta]) -> Vec<u8> {
