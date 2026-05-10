@@ -788,6 +788,32 @@ fun handleTerminalEvent(input: Int, displayId: Int, buffer: TerminalBuffer, line
     return eventResult(displayId, buffer, line, renderedLine, false, false)
 }
 
+fun drainQueuedCharInput(input: Int, displayId: Int, buffer: TerminalBuffer, line: String, renderedLine: String, renderInput: Bool, submittedLine: Bool): TerminalEventResult {
+    var currentDisplayId: Int = displayId
+    var currentBuffer: TerminalBuffer = buffer
+    var currentLine: String = line
+    var currentRenderedLine: String = renderedLine
+    var currentRenderInput: Bool = renderInput
+    var currentSubmittedLine: Bool = submittedLine
+    var keepDraining: Bool = currentRenderInput && !currentSubmittedLine
+    while keepDraining == true {
+        val event: Event = events::tryPull("char")
+        if (event.name == "char") {
+            val result: TerminalEventResult = handleTerminalEvent(input, currentDisplayId, currentBuffer, currentLine, currentRenderedLine, event)
+            currentDisplayId = result.displayId
+            currentBuffer = result.buffer
+            currentLine = result.line
+            currentRenderedLine = result.renderedLine
+            currentRenderInput = result.renderInput
+            currentSubmittedLine = result.submittedLine
+            keepDraining = currentRenderInput && !currentSubmittedLine
+        } else {
+            keepDraining = false
+        }
+    }
+    return eventResult(currentDisplayId, currentBuffer, currentLine, currentRenderedLine, currentRenderInput, currentSubmittedLine)
+}
+
 pub fun main() {
     val input: Int = ipc::open()
     val stream: Int = ipc::open()
@@ -811,15 +837,16 @@ pub fun main() {
         } else if (signal.kind == "event") {
             val event: Event = signal.event
             val first: TerminalEventResult = handleTerminalEvent(input, displayId, buffer, line, renderedLine, event)
-            displayId = first.displayId
-            buffer = first.buffer
-            line = first.line
-            renderedLine = first.renderedLine
-            if (first.renderInput && buffer.viewportOffset == 0) {
+            val batched: TerminalEventResult = drainQueuedCharInput(input, first.displayId, first.buffer, first.line, first.renderedLine, first.renderInput, first.submittedLine)
+            displayId = batched.displayId
+            buffer = batched.buffer
+            line = batched.line
+            renderedLine = batched.renderedLine
+            if (batched.renderInput && buffer.viewportOffset == 0) {
                 renderInputLine(displayId, buffer, renderedLine, line)
                 renderedLine = line
             }
-            if (first.submittedLine) {
+            if (batched.submittedLine) {
                 yield()
             }
         }
