@@ -63,6 +63,17 @@ data class NativeDeviceDaemonBootSummary(
     val imageAttached: Boolean,
 )
 
+data class NativeDeviceDaemonHostRequest(
+    val requestId: Long,
+    val pid: Int,
+    val kind: String,
+    val moduleName: String?,
+    val functionName: String?,
+    val arguments: List<VmValue>,
+    val path: String?,
+    val workingDirectory: String?,
+)
+
 internal interface NativeVmBindingsFacade {
     fun createImage(
         libraryPath: String,
@@ -224,6 +235,20 @@ object NativeVmBindings : NativeVmBindingsFacade {
             argument,
             workingDirectory,
         ).toNativeDeviceDaemonBootSummary()
+    }
+
+    fun drainDeviceDaemonHostRequests(daemonHandle: Long): List<NativeDeviceDaemonHostRequest> {
+        require(daemonHandle != 0L) { "Native device daemon handle is zero" }
+        return drainDeviceDaemonHostRequestsNative(daemonHandle).toNativeDeviceDaemonHostRequests()
+    }
+
+    fun completeDeviceDaemonHostRequest(
+        daemonHandle: Long,
+        requestId: Long,
+        value: ByteArray,
+    ): Boolean {
+        require(daemonHandle != 0L) { "Native device daemon handle is zero" }
+        return completeDeviceDaemonHostRequestNative(daemonHandle, requestId, value)
     }
 
     fun enqueueDeviceEvent(
@@ -617,6 +642,39 @@ object NativeVmBindings : NativeVmBindingsFacade {
             imageAttached = getOrElse(1) { 0L } != 0L,
         )
 
+    private fun ByteArray.toNativeDeviceDaemonHostRequests(): List<NativeDeviceDaemonHostRequest> {
+        val reader = NativeDeviceDaemonHostRequestReader(this)
+        return List(reader.i32()) {
+            val requestId = reader.i64()
+            val pid = reader.i32()
+            val kind =
+                when (reader.u8()) {
+                    0 -> "hostCall"
+                    1 -> "compileProgram"
+                    2 -> "crash"
+                    else -> "unknown"
+                }
+            val moduleName = reader.string().takeIf { it.isNotEmpty() }
+            val functionName = reader.string().takeIf { it.isNotEmpty() }
+            val arguments =
+                List(reader.i32()) {
+                    reader.value().toVmValue(moduleName.orEmpty(), functionName.orEmpty())
+                }
+            val path = reader.string().takeIf { it.isNotEmpty() }
+            val workingDirectory = reader.string().takeIf { it.isNotEmpty() }
+            NativeDeviceDaemonHostRequest(
+                requestId = requestId,
+                pid = pid,
+                kind = kind,
+                moduleName = moduleName,
+                functionName = functionName,
+                arguments = arguments,
+                path = path,
+                workingDirectory = workingDirectory,
+            )
+        }
+    }
+
     @JvmStatic
     private external fun createImageNative(
         image: ByteArray,
@@ -670,6 +728,16 @@ object NativeVmBindings : NativeVmBindingsFacade {
         argument: String,
         workingDirectory: String,
     ): LongArray
+
+    @JvmStatic
+    private external fun drainDeviceDaemonHostRequestsNative(daemonHandle: Long): ByteArray
+
+    @JvmStatic
+    private external fun completeDeviceDaemonHostRequestNative(
+        daemonHandle: Long,
+        requestId: Long,
+        value: ByteArray,
+    ): Boolean
 
     @JvmStatic
     private external fun enqueueDeviceEventNative(
@@ -843,4 +911,65 @@ object NativeVmBindings : NativeVmBindingsFacade {
 
     @JvmStatic
     private external fun drainNativeDisplayFramesNative(kernelHandle: Long): ByteArray
+}
+
+private class NativeDeviceDaemonHostRequestReader(
+    private val bytes: ByteArray,
+) {
+    private var offset = 0
+
+    fun u8(): Int {
+        require(offset < bytes.size) { "Unexpected end of native device daemon host request payload" }
+        return bytes[offset++].toInt() and 0xff
+    }
+
+    fun i32(): Int {
+        val b0 = u8()
+        val b1 = u8()
+        val b2 = u8()
+        val b3 = u8()
+        return b0 or (b1 shl 8) or (b2 shl 16) or (b3 shl 24)
+    }
+
+    fun i64(): Long {
+        var value = 0L
+        repeat(8) { index ->
+            value = value or ((u8().toLong() and 0xffL) shl (index * 8))
+        }
+        return value
+    }
+
+    fun string(): String {
+        val length = i32()
+        require(length >= 0) { "Negative native device daemon string length $length" }
+        require(offset + length <= bytes.size) { "Unexpected end of native device daemon string" }
+        val value = bytes.decodeToString(offset, offset + length)
+        offset += length
+        return value
+    }
+
+    fun value(): NativeVmValue =
+        when (val tag = u8()) {
+            0 -> NativeVmValue.UnitValue
+            1 -> NativeVmValue.NullValue
+            2 -> NativeVmValue.BoolValue(u8() != 0)
+            3 -> NativeVmValue.IntValue(i32())
+            4 -> NativeVmValue.LongValue(i64())
+            5 -> NativeVmValue.StringValue(string())
+            6 -> {
+                val typeName = string()
+                val fieldCount = i32()
+                require(fieldCount >= 0) { "Negative native VM record field count $fieldCount" }
+                NativeVmValue.RecordValue(
+                    typeName = typeName,
+                    fields =
+                        LinkedHashMap<String, NativeVmValue>().apply {
+                            repeat(fieldCount) {
+                                this[string()] = value()
+                            }
+                        },
+                )
+            }
+            else -> error("Unknown native VM value tag $tag")
+        }
 }

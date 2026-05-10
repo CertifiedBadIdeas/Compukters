@@ -907,7 +907,7 @@ git commit -m "feat: boot images in native daemon"
 - Modify: `modules/compiler/src/main/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeVmBindings.kt`
 - Modify: `modules/compiler/src/test/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeImageVmBindingsJniTest.kt`
 
-- [ ] **Step 1: Add failing host request JNI test**
+- [x] **Step 1: Add failing host request JNI test**
 
 Add a Kotlin test that boots an image with `system.log("hi")`, ticks until a request appears, drains it, completes it
 with `Unit`, and ticks to halt:
@@ -934,7 +934,7 @@ fun nativeDeviceDaemonHostRequestsRoundTripWhenLibraryIsConfigured() {
 }
 ```
 
-- [ ] **Step 2: Run the Kotlin test and verify it fails**
+- [x] **Step 2: Run the Kotlin test and verify it fails**
 
 ```bash
 ./gradlew -Dckl.vm.native.library=/home/lazyhat/IdeaProjects/Compukter-Kraft/native/ckl-vm/target/debug/libckl_vm.so :compiler:test --tests '*NativeImageVmBindingsJniTest.nativeDeviceDaemonHostRequestsRoundTripWhenLibraryIsConfigured' --rerun-tasks
@@ -942,7 +942,7 @@ fun nativeDeviceDaemonHostRequestsRoundTripWhenLibraryIsConfigured() {
 
 Expected: FAIL because host request JNI methods do not exist.
 
-- [ ] **Step 3: Add compact request byte encoding**
+- [x] **Step 3: Add compact request byte encoding**
 
 Encode drained requests as a byte array:
 
@@ -962,7 +962,7 @@ repeat requestCount:
 
 Use empty strings for absent optional strings in this first ABI. Kotlin decodes empty strings to `null`.
 
-- [ ] **Step 4: Add complete request binding**
+- [x] **Step 4: Add complete request binding**
 
 Rust:
 
@@ -985,7 +985,7 @@ data class NativeDeviceDaemonHostRequest(
 )
 ```
 
-- [ ] **Step 5: Run focused checks**
+- [x] **Step 5: Run focused checks**
 
 ```bash
 ./gradlew :v1_21_1-neoforge:buildRustVmNativeLibrary
@@ -994,7 +994,7 @@ data class NativeDeviceDaemonHostRequest(
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit Task 8**
+- [x] **Step 6: Commit Task 8**
 
 ```bash
 git add native/ckl-vm/src/jni.rs native/ckl-vm/src/device_daemon.rs modules/compiler/src/main/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeVmBindings.kt modules/compiler/src/test/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeImageVmBindingsJniTest.kt docs/superpowers/plans/2026-05-10-rust-owned-device-daemon.md

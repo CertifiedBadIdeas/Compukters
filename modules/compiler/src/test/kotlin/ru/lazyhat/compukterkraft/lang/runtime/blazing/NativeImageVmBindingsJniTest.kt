@@ -303,6 +303,30 @@ class NativeImageVmBindingsJniTest {
     }
 
     @Test
+    fun nativeDeviceDaemonHostRequestsRoundTripWhenLibraryIsConfigured() {
+        System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val image = assertNotNull(LanguageFrontend().compileImage("main.ck", "pub fun main() { system::log(\"hi\"); }").image)
+        val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 128)
+        try {
+            NativeVmBindings.bootDeviceDaemon(handle, CkVmImageAbi.encode(image), "/rom/host.ck", "", "")
+            val first = NativeVmBindings.tickDeviceDaemon(handle, 128, 1_000_000, 1)
+            val requests = NativeVmBindings.drainDeviceDaemonHostRequests(handle)
+            assertEquals(1, first.hostRequests)
+            assertEquals("system", requests.single().moduleName)
+            assertEquals("log", requests.single().functionName)
+
+            NativeVmBindings.completeDeviceDaemonHostRequest(
+                handle,
+                requests.single().requestId,
+                VmValue.UnitValue.toNativeBytes("system", "log"),
+            )
+            assertEquals(1, NativeVmBindings.tickDeviceDaemon(handle, 128, 1_000_000, 2).halted)
+        } finally {
+            NativeVmBindings.freeDeviceDaemon(handle)
+        }
+    }
+
+    @Test
     fun nativeDeviceSchedulerDryRunRunsWhenLibraryIsConfigured() {
         System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val kernelHandle = NativeVmBindings.createDeviceKernel(maxEventQueueSize = 64, maxBufferedBytesPerChannel = 4096)
