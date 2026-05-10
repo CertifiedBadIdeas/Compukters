@@ -90,6 +90,49 @@ class VmProcessTableTest {
     }
 
     @Test
+    fun wakeSleepersMovesDueProcessesBackToRunnableQueue() {
+        val table = VmProcessTable()
+        table.registerProcess(pid = 3, parentPid = 1, programPath = "late.ck", argument = "", workingDirectory = "")
+        table.registerProcess(pid = 1, parentPid = 0, programPath = "bios.ck", argument = "", workingDirectory = "")
+        table.registerProcess(pid = 2, parentPid = 1, programPath = "early.ck", argument = "", workingDirectory = "")
+
+        table.markSleeping(pid = 3, untilTick = 12)
+        table.markSleeping(pid = 1, untilTick = 10)
+        table.markSleeping(pid = 2, untilTick = 10)
+
+        assertEquals(emptyList(), table.wakeSleepers(currentTick = 9))
+        assertEquals(emptyList(), table.runnableSnapshot())
+
+        assertEquals(listOf(1, 2), table.wakeSleepers(currentTick = 10))
+        assertEquals(VmProcessState.Runnable, table.snapshot(1)?.state)
+        assertEquals(VmProcessState.Runnable, table.snapshot(2)?.state)
+        assertEquals(VmProcessState.Sleeping(12), table.snapshot(3)?.state)
+        assertEquals(listOf(1, 2), table.runnableSnapshot())
+
+        assertEquals(listOf(3), table.wakeSleepers(currentTick = 12))
+        assertEquals(VmProcessState.Runnable, table.snapshot(3)?.state)
+        assertEquals(listOf(1, 2, 3), table.runnableSnapshot())
+    }
+
+    @Test
+    fun wakeSleepersLeavesNonSleepingStatesUnchanged() {
+        val table = VmProcessTable()
+        table.registerProcess(pid = 1, parentPid = 0, programPath = "bios.ck", argument = "", workingDirectory = "")
+        table.registerProcess(pid = 2, parentPid = 1, programPath = "child.ck", argument = "", workingDirectory = "")
+        table.registerProcess(pid = 3, parentPid = 1, programPath = "done.ck", argument = "", workingDirectory = "")
+
+        table.markWaitingEvent(pid = 1, filter = null)
+        table.markWaitingIpc(pid = 2, channelId = 4)
+        table.markExited(pid = 3, exitCode = 0)
+
+        assertEquals(emptyList(), table.wakeSleepers(currentTick = 100))
+        assertEquals(VmProcessState.WaitingEvent(null), table.snapshot(1)?.state)
+        assertEquals(VmProcessState.WaitingIpc(4), table.snapshot(2)?.state)
+        assertEquals(VmProcessState.Exited(0), table.snapshot(3)?.state)
+        assertEquals(emptyList(), table.runnableSnapshot())
+    }
+
+    @Test
     fun processCanMoveThroughWaitingAndExitedStates() {
         val table = VmProcessTable()
         table.registerProcess(pid = 1, parentPid = 0, programPath = "bios.ck", argument = "", workingDirectory = "")

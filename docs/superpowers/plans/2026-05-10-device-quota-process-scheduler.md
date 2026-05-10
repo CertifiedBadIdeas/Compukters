@@ -568,3 +568,39 @@ git add docs/superpowers/plans/2026-05-10-device-quota-process-scheduler.md \
   modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessTableTest.kt
 git commit -m "feat: add VM process runnable queue"
 ```
+
+## Task 9: Process Table Sleeper Wakeups
+
+**Files:**
+- Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessTable.kt`
+- Test: `modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessTableTest.kt`
+
+- [x] **Step 1: Add failing sleeper wake tests**
+
+Add tests proving `wakeSleepers(currentTick)`:
+
+- wakes only processes in `Sleeping(untilTick)` with `untilTick <= currentTick`;
+- returns woken pids in deterministic pid order;
+- moves woken processes back to `Runnable` and runnable queue membership;
+- leaves future sleepers and non-sleeping states unchanged.
+
+- [x] **Step 2: Implement sleeper wakeups**
+
+Scan process records, find due sleepers, mark each due pid runnable, and return the woken pid list.
+
+- [x] **Step 3: Run focused tests**
+
+```bash
+./gradlew :core:test --tests '*VmProcessTableTest' --rerun-tasks
+```
+
+Expected: PASS.
+
+- [x] **Step 4: Commit Task 9**
+
+```bash
+git add docs/superpowers/plans/2026-05-10-device-quota-process-scheduler.md \
+  modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessTable.kt \
+  modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessTableTest.kt
+git commit -m "feat: wake VM process sleepers by tick"
+```

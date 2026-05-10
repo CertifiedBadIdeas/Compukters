@@ -234,6 +234,21 @@ internal class VmProcessTable : VmProcessStateReporter {
             null
         }
 
+    fun wakeSleepers(currentTick: Long): List<Int> {
+        val duePids =
+            records.values
+                .asSequence()
+                .filter { record ->
+                    val state = record.state
+                    state is VmProcessState.Sleeping && state.untilTick <= currentTick
+                }
+                .map { it.pid }
+                .sorted()
+                .toList()
+        duePids.forEach(::markRunnable)
+        return duePids
+    }
+
     private fun updateState(
         pid: Int,
         state: VmProcessState,
