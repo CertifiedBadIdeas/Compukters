@@ -105,6 +105,8 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
     max_event_queue_size: jint,
     max_buffered_bytes_per_channel: jint,
     instruction_budget: jint,
+    device_id: jint,
+    profile_name: JString<'_>,
 ) -> jlong {
     let max_event_queue_size = match usize::try_from(max_event_queue_size.max(1)) {
         Ok(value) => value,
@@ -137,10 +139,22 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
             return 0;
         }
     };
+    let profile_name: String = match env.get_string(&profile_name) {
+        Ok(value) => value.into(),
+        Err(error) => {
+            let _ = env.throw_new(
+                "java/lang/IllegalArgumentException",
+                format!("Cannot read native device daemon profile name: {error}"),
+            );
+            return 0;
+        }
+    };
     let daemon = DeviceDaemon::new(
         max_event_queue_size,
         max_buffered_bytes_per_channel,
         instruction_budget,
+        device_id,
+        profile_name,
     );
     match register_device_daemon_handle(daemon) {
         Ok(handle) => handle,
@@ -270,12 +284,11 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
     _class: JClass<'_>,
     handle: jlong,
 ) -> jbyteArray {
-    let requests = match with_device_daemon_mut(&mut env, handle, |daemon| {
-        daemon.drain_host_requests()
-    }) {
-        Some(requests) => requests,
-        None => return null_mut(),
-    };
+    let requests =
+        match with_device_daemon_mut(&mut env, handle, |daemon| daemon.drain_host_requests()) {
+            Some(requests) => requests,
+            None => return null_mut(),
+        };
     byte_array_or_throw(&mut env, &encode_device_daemon_host_requests(&requests))
 }
 
@@ -449,9 +462,7 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
     handle: jlong,
     display_id: jint,
 ) {
-    match with_device_daemon_mut(&mut env, handle, |daemon| {
-        daemon.detach_display(display_id)
-    }) {
+    match with_device_daemon_mut(&mut env, handle, |daemon| daemon.detach_display(display_id)) {
         Some(Ok(())) | None => {}
         Some(Err(error)) => {
             let _ = env.throw_new("java/lang/IllegalStateException", error);
@@ -465,16 +476,15 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
     _class: JClass<'_>,
     handle: jlong,
 ) -> jbyteArray {
-    let frames = match with_device_daemon_mut(&mut env, handle, |daemon| {
-        daemon.drain_display_frames()
-    }) {
-        Some(Ok(frames)) => frames,
-        Some(Err(error)) => {
-            let _ = env.throw_new("java/lang/IllegalStateException", error);
-            return null_mut();
-        }
-        None => return null_mut(),
-    };
+    let frames =
+        match with_device_daemon_mut(&mut env, handle, |daemon| daemon.drain_display_frames()) {
+            Some(Ok(frames)) => frames,
+            Some(Err(error)) => {
+                let _ = env.throw_new("java/lang/IllegalStateException", error);
+                return null_mut();
+            }
+            None => return null_mut(),
+        };
     byte_array_or_throw(&mut env, &encode_display_frames(&frames))
 }
 

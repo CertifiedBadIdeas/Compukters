@@ -149,6 +149,8 @@ interface NativeDaemonBindings {
         maxEventQueueSize: Int,
         maxBufferedBytesPerChannel: Int,
         instructionBudget: Int,
+        deviceId: Int,
+        profileName: String,
     ): Long
 
     fun freeDeviceDaemon(daemonHandle: Long)
@@ -228,8 +230,16 @@ object NativeVmDaemonBindings : NativeDaemonBindings {
         maxEventQueueSize: Int,
         maxBufferedBytesPerChannel: Int,
         instructionBudget: Int,
+        deviceId: Int,
+        profileName: String,
     ): Long =
-        NativeVmBindings.createDeviceDaemon(maxEventQueueSize, maxBufferedBytesPerChannel, instructionBudget)
+        NativeVmBindings.createDeviceDaemon(
+            maxEventQueueSize,
+            maxBufferedBytesPerChannel,
+            instructionBudget,
+            deviceId,
+            profileName,
+        )
 
     override fun freeDeviceDaemon(daemonHandle: Long) = NativeVmBindings.freeDeviceDaemon(daemonHandle)
 

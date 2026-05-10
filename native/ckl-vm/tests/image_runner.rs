@@ -565,6 +565,55 @@ fn attached_kernel_parks_on_running_process_wait() {
 }
 
 #[test]
+fn attached_kernel_handles_system_identity_without_generic_host_call() {
+    let kernel = Arc::new(DeviceRuntimeKernelHandle::new_with_system_identity(
+        8,
+        64,
+        7,
+        "Normal".to_string(),
+    ));
+
+    let mut code = Vec::new();
+    call_host(&mut code, 3000, 0);
+    call_host(&mut code, 3003, 0);
+    code.push(OP_BINARY);
+    code.push(0);
+    code.push(OP_RETURN);
+
+    let mut vm = ImageVmHandle::create(
+        &image_with_constants_host_imports_and_code(
+            vec![],
+            vec![
+                HostImportFixture {
+                    id: 3000,
+                    module_name: "system".to_string(),
+                    function_name: "deviceId".to_string(),
+                    parameter_types: vec![],
+                    return_type: "Int".to_string(),
+                },
+                HostImportFixture {
+                    id: 3003,
+                    module_name: "system".to_string(),
+                    function_name: "profileName".to_string(),
+                    parameter_types: vec![],
+                    return_type: "String".to_string(),
+                },
+            ],
+            0,
+            code,
+        ),
+        4096,
+    )
+    .unwrap();
+    vm.attach_device_kernel(Arc::clone(&kernel)).unwrap();
+
+    assert_eq!(
+        vm.run_until_signal(),
+        halt_signal(&VmValue::String("7Normal".to_string()))
+    );
+}
+
+#[test]
 fn process_registration_and_completion_report_success() {
     let mut kernel = ckl_vm::runtime_kernel::DeviceRuntimeKernel::new(8, 64);
 

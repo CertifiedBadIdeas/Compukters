@@ -84,7 +84,15 @@ class BackgroundDeviceVmTest {
     }
 
     private open class RecordingNativeDaemonBindings : NativeDaemonBindings {
-        val createdDaemons = mutableListOf<Triple<Int, Int, Int>>()
+        data class CreatedDaemon(
+            val maxEventQueueSize: Int,
+            val maxBufferedBytesPerChannel: Int,
+            val instructionBudget: Int,
+            val deviceId: Int,
+            val profileName: String,
+        )
+
+        val createdDaemons = mutableListOf<CreatedDaemon>()
         val freedDaemons = mutableListOf<Long>()
         val bootedImages = mutableListOf<ByteArray>()
         val refillQuotaCalls = mutableListOf<Triple<Long, Long, Long>>()
@@ -105,8 +113,17 @@ class BackgroundDeviceVmTest {
             maxEventQueueSize: Int,
             maxBufferedBytesPerChannel: Int,
             instructionBudget: Int,
+            deviceId: Int,
+            profileName: String,
         ): Long {
-            createdDaemons += Triple(maxEventQueueSize, maxBufferedBytesPerChannel, instructionBudget)
+            createdDaemons +=
+                CreatedDaemon(
+                    maxEventQueueSize = maxEventQueueSize,
+                    maxBufferedBytesPerChannel = maxBufferedBytesPerChannel,
+                    instructionBudget = instructionBudget,
+                    deviceId = deviceId,
+                    profileName = profileName,
+                )
             return 77
         }
 
@@ -229,6 +246,8 @@ class BackgroundDeviceVmTest {
             maxEventQueueSize: Int,
             maxBufferedBytesPerChannel: Int,
             instructionBudget: Int,
+            deviceId: Int,
+            profileName: String,
         ): Long = error("native daemon unavailable")
     }
 
@@ -404,6 +423,8 @@ class BackgroundDeviceVmTest {
             }
 
             assertTrue(daemonBindings.createdDaemons.isNotEmpty())
+            assertEquals(1, daemonBindings.createdDaemons.single().deviceId)
+            assertEquals(firmwareTestProfile().displayName, daemonBindings.createdDaemons.single().profileName)
             assertTrue(daemonBindings.bootedImages.isNotEmpty())
             assertTrue(daemonBindings.refillQuotaCalls.isNotEmpty())
             assertTrue(daemonBindings.runReadyMaxTurns.isNotEmpty())

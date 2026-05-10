@@ -79,6 +79,8 @@ enum ProcessState {
 }
 
 pub struct DeviceRuntimeKernel {
+    device_id: i32,
+    profile_name: String,
     event_queue: VecDeque<QueuedEvent>,
     deferred_events: VecDeque<QueuedEvent>,
     captured_events: BTreeMap<i32, Vec<VmValue>>,
@@ -97,7 +99,23 @@ pub struct DeviceRuntimeKernel {
 
 impl DeviceRuntimeKernel {
     pub fn new(max_event_queue_size: usize, max_buffered_bytes_per_channel: usize) -> Self {
+        Self::new_with_system_identity(
+            max_event_queue_size,
+            max_buffered_bytes_per_channel,
+            0,
+            String::new(),
+        )
+    }
+
+    pub fn new_with_system_identity(
+        max_event_queue_size: usize,
+        max_buffered_bytes_per_channel: usize,
+        device_id: i32,
+        profile_name: String,
+    ) -> Self {
         Self {
+            device_id,
+            profile_name,
             event_queue: VecDeque::new(),
             deferred_events: VecDeque::new(),
             captured_events: BTreeMap::new(),
@@ -117,6 +135,14 @@ impl DeviceRuntimeKernel {
                 server_tick: 0,
             },
         }
+    }
+
+    pub fn device_id(&self) -> i32 {
+        self.device_id
+    }
+
+    pub fn profile_name(&self) -> &str {
+        &self.profile_name
     }
 
     pub fn add_execution_quota(
@@ -549,10 +575,26 @@ pub struct DeviceRuntimeKernelHandle {
 
 impl DeviceRuntimeKernelHandle {
     pub fn new(max_event_queue_size: usize, max_buffered_bytes_per_channel: usize) -> Self {
+        Self::new_with_system_identity(
+            max_event_queue_size,
+            max_buffered_bytes_per_channel,
+            0,
+            String::new(),
+        )
+    }
+
+    pub fn new_with_system_identity(
+        max_event_queue_size: usize,
+        max_buffered_bytes_per_channel: usize,
+        device_id: i32,
+        profile_name: String,
+    ) -> Self {
         Self {
-            kernel: Mutex::new(DeviceRuntimeKernel::new(
+            kernel: Mutex::new(DeviceRuntimeKernel::new_with_system_identity(
                 max_event_queue_size,
                 max_buffered_bytes_per_channel,
+                device_id,
+                profile_name,
             )),
             wake: Condvar::new(),
             display_wake: Condvar::new(),
@@ -1032,10 +1074,7 @@ mod tests {
                 selected_pids: vec![1, 1],
             }
         );
-        assert_eq!(
-            kernel.process_status(1),
-            ProcessStatus::Running,
-        );
+        assert_eq!(kernel.process_status(1), ProcessStatus::Running,);
         assert_eq!(
             kernel.scheduler_tick(4),
             ProcessSchedulerTick {

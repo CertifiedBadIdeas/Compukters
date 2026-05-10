@@ -92,11 +92,15 @@ impl DeviceDaemon {
         max_event_queue_size: usize,
         max_buffered_bytes_per_channel: usize,
         instruction_budget: usize,
+        device_id: i32,
+        profile_name: String,
     ) -> Self {
         Self {
-            kernel: Arc::new(DeviceRuntimeKernelHandle::new(
+            kernel: Arc::new(DeviceRuntimeKernelHandle::new_with_system_identity(
                 max_event_queue_size,
                 max_buffered_bytes_per_channel,
+                device_id,
+                profile_name,
             )),
             images: BTreeMap::new(),
             image_handles: BTreeMap::new(),
@@ -253,7 +257,10 @@ impl DeviceDaemon {
 
         match (pending.mode, success) {
             (PendingCompileMode::Spawn, true) => {
-                self.resume_process_with_value(pending.parent_pid, VmValue::Int(pending.child_pid))?;
+                self.resume_process_with_value(
+                    pending.parent_pid,
+                    VmValue::Int(pending.child_pid),
+                )?;
             }
             (PendingCompileMode::Spawn, false) => {
                 self.kernel.with_kernel_mut(|kernel| {
@@ -270,7 +277,10 @@ impl DeviceDaemon {
                     kernel.complete_process(pending.child_pid, exit_code.max(1));
                     kernel.mark_process_runnable(pending.parent_pid)
                 })?;
-                self.resume_process_with_value(pending.parent_pid, VmValue::Int(pending.child_pid))?;
+                self.resume_process_with_value(
+                    pending.parent_pid,
+                    VmValue::Int(pending.child_pid),
+                )?;
             }
             (PendingCompileMode::Run, true) => {
                 self.pending_run_parents
@@ -286,12 +296,7 @@ impl DeviceDaemon {
         Ok(())
     }
 
-    pub fn refill_execution_quota(
-        &mut self,
-        instructions: i64,
-        wall_nanos: i64,
-        server_tick: i64,
-    ) {
+    pub fn refill_execution_quota(&mut self, instructions: i64, wall_nanos: i64, server_tick: i64) {
         self.kernel
             .with_kernel_mut(|kernel| {
                 kernel.add_execution_quota(instructions, wall_nanos, server_tick);
@@ -577,9 +582,13 @@ mod tests {
         daemon.run_ready_until_blocked(instructions.max(1))
     }
 
+    fn new_test_daemon() -> DeviceDaemon {
+        DeviceDaemon::new(16, 1024, 128, 0, String::new())
+    }
+
     #[test]
     fn daemon_registers_boot_process_with_owned_kernel() {
-        let mut daemon = DeviceDaemon::new(16, 1024, 128);
+        let mut daemon = new_test_daemon();
 
         let summary = daemon.boot_image(&ckim_empty_main(), "/rom/bios.ck", "", "");
 
@@ -595,7 +604,7 @@ mod tests {
 
     #[test]
     fn daemon_refill_and_run_ready_runs_boot_image_to_halt() {
-        let mut daemon = DeviceDaemon::new(16, 1024, 128);
+        let mut daemon = new_test_daemon();
         daemon.boot_image(&ckim_empty_main(), "/rom/bios.ck", "", "");
 
         let summary = run_daemon_slice(&mut daemon, 128, 1_000_000, 7);
@@ -619,7 +628,7 @@ mod tests {
 
     #[test]
     fn daemon_handles_yield_by_resuming_unit_and_requeueing_process() {
-        let mut daemon = DeviceDaemon::new(16, 1024, 128);
+        let mut daemon = new_test_daemon();
         daemon.boot_image(&ckim_yields_then_halts(), "/rom/yield.ck", "", "");
 
         let first = run_daemon_slice(&mut daemon, 1, 1_000_000, 10);
@@ -636,7 +645,7 @@ mod tests {
 
     #[test]
     fn daemon_moves_sleeping_process_until_due_tick() {
-        let mut daemon = DeviceDaemon::new(16, 1024, 128);
+        let mut daemon = new_test_daemon();
         daemon.boot_image(&ckim_sleeps_one_tick_then_halts(), "/rom/sleep.ck", "", "");
 
         let first = run_daemon_slice(&mut daemon, 1, 1_000_000, 20);
@@ -650,7 +659,7 @@ mod tests {
 
     #[test]
     fn daemon_handles_wait_poll_by_parking_process() {
-        let mut daemon = DeviceDaemon::new(16, 1024, 128);
+        let mut daemon = new_test_daemon();
         let channel = daemon
             .kernel()
             .with_kernel_mut(|kernel| kernel.open_ipc_channel())
@@ -673,7 +682,7 @@ mod tests {
 
     #[test]
     fn daemon_handles_wait_process_by_parking_process() {
-        let mut daemon = DeviceDaemon::new(16, 1024, 128);
+        let mut daemon = new_test_daemon();
         daemon.boot_image(&ckim_waits_for_pid_then_halts(2), "/rom/wait.ck", "", "");
         daemon
             .kernel()
@@ -693,7 +702,7 @@ mod tests {
 
     #[test]
     fn daemon_handles_wait_event_by_parking_process() {
-        let mut daemon = DeviceDaemon::new(16, 1024, 128);
+        let mut daemon = new_test_daemon();
         daemon.boot_image(&ckim_empty_main(), "/rom/event.ck", "", "");
 
         let outcome = daemon
@@ -708,7 +717,7 @@ mod tests {
 
     #[test]
     fn daemon_host_call_parks_process_and_can_resume_with_value() {
-        let mut daemon = DeviceDaemon::new(16, 1024, 128);
+        let mut daemon = new_test_daemon();
         daemon.boot_image(&ckim_calls_system_log_then_halts(), "/rom/host.ck", "", "");
 
         let first = run_daemon_slice(&mut daemon, 4, 1_000_000, 1);
@@ -734,7 +743,7 @@ mod tests {
 
     #[test]
     fn daemon_process_spawn_emits_compile_program_request() {
-        let mut daemon = DeviceDaemon::new(16, 1024, 128);
+        let mut daemon = new_test_daemon();
         daemon.boot_image(
             &ckim_spawns_child_then_halts("child.ck", "stdio-v1"),
             "/rom/parent.ck",
@@ -747,7 +756,10 @@ mod tests {
 
         assert_eq!(first.host_requests, 1);
         assert_eq!(requests.len(), 1);
-        assert_eq!(requests[0].kind, DeviceDaemonHostRequestKind::CompileProgram);
+        assert_eq!(
+            requests[0].kind,
+            DeviceDaemonHostRequestKind::CompileProgram
+        );
         assert_eq!(requests[0].module_name.as_deref(), Some("process"));
         assert_eq!(requests[0].function_name.as_deref(), Some("spawn"));
         assert_eq!(requests[0].path.as_deref(), Some("child.ck"));
@@ -760,7 +772,7 @@ mod tests {
 
     #[test]
     fn daemon_process_spawn_compile_failure_resumes_parent_with_child_pid() {
-        let mut daemon = DeviceDaemon::new(16, 1024, 128);
+        let mut daemon = new_test_daemon();
         daemon.boot_image(
             &ckim_spawns_child_then_halts("missing.ck", ""),
             "/rom/parent.ck",
@@ -790,18 +802,13 @@ mod tests {
 
     #[test]
     fn daemon_ipc_read_waits_until_channel_has_text() {
-        let mut daemon = DeviceDaemon::new(16, 1024, 128);
+        let mut daemon = new_test_daemon();
         let channel = daemon
             .kernel()
             .with_kernel_mut(|kernel| kernel.open_ipc_channel())
             .unwrap()
             .unwrap();
-        daemon.boot_image(
-            &ckim_reads_ipc_then_logs(channel),
-            "/rom/read.ck",
-            "",
-            "",
-        );
+        daemon.boot_image(&ckim_reads_ipc_then_logs(channel), "/rom/read.ck", "", "");
 
         let waiting = run_daemon_slice(&mut daemon, 8, 1_000_000, 1);
         let idle = run_daemon_slice(&mut daemon, 8, 1_000_000, 2);
@@ -818,12 +825,15 @@ mod tests {
         assert_eq!(woke.host_requests, 1);
         assert_eq!(request.module_name.as_deref(), Some("system"));
         assert_eq!(request.function_name.as_deref(), Some("log"));
-        assert_eq!(request.arguments, vec![VmValue::String("hello\n".to_string())]);
+        assert_eq!(
+            request.arguments,
+            vec![VmValue::String("hello\n".to_string())]
+        );
     }
 
     #[test]
     fn daemon_run_ready_until_blocked_runs_multiple_processes_in_one_pass() {
-        let mut daemon = DeviceDaemon::new(16, 1024, 128);
+        let mut daemon = new_test_daemon();
         daemon.boot_image(&ckim_yields_then_halts(), "/rom/terminal.ck", "", "");
         daemon
             .attach_child_image_for_test(2, 1, "/rom/shell.ck", &ckim_yields_then_halts(), "")

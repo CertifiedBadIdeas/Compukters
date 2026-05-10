@@ -186,13 +186,25 @@ impl ImageVmHandle {
     ) -> Result<NativeHostImportResult, String> {
         if !matches!(
             module_name,
-            "display" | "filesystem" | "events" | "ipc" | "runtime" | "process"
+            "display" | "filesystem" | "system" | "events" | "ipc" | "runtime" | "process"
         ) {
             return Ok(NativeHostImportResult::Fallback(arguments));
         }
         let Some(kernel_handle) = self.attached_kernel.as_ref() else {
             return Ok(NativeHostImportResult::Fallback(arguments));
         };
+        if module_name == "system" {
+            let kernel = kernel_handle.lock()?;
+            return match function_name {
+                "deviceId" => Ok(NativeHostImportResult::Handled(VmValue::Int(
+                    kernel.device_id(),
+                ))),
+                "profileName" => Ok(NativeHostImportResult::Handled(VmValue::String(
+                    kernel.profile_name().to_string(),
+                ))),
+                _ => Ok(NativeHostImportResult::Fallback(arguments)),
+            };
+        }
         if module_name == "filesystem" {
             let kernel = kernel_handle.lock()?;
             let Some(filesystem) = kernel.filesystem.as_ref() else {

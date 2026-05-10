@@ -101,6 +101,8 @@ object NativeVmBindings : NativeVmBindingsFacade {
         maxEventQueueSize: Int,
         maxBufferedBytesPerChannel: Int,
         instructionBudget: Int,
+        deviceId: Int = 0,
+        profileName: String = "",
     ): Long {
         load(NativeLibraryLocator.requireLibraryPath())
         val handle =
@@ -108,6 +110,8 @@ object NativeVmBindings : NativeVmBindingsFacade {
                 maxEventQueueSize.coerceAtLeast(1),
                 maxBufferedBytesPerChannel.coerceAtLeast(1),
                 instructionBudget.coerceAtLeast(1),
+                deviceId,
+                profileName,
             )
         check(handle != 0L) { "Native device daemon create returned a zero handle" }
         return handle
@@ -360,6 +364,8 @@ object NativeVmBindings : NativeVmBindingsFacade {
         maxEventQueueSize: Int,
         maxBufferedBytesPerChannel: Int,
         instructionBudget: Int,
+        deviceId: Int,
+        profileName: String,
     ): Long
 
     @JvmStatic
