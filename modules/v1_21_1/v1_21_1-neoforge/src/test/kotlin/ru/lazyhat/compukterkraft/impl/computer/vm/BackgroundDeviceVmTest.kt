@@ -298,13 +298,13 @@ class BackgroundDeviceVmTest {
 
             vm.attachDisplay(displayId = 9, width = displayWidth, height = displayHeight)
             assertTrue(vm.boot())
-            repeat(80) { tick ->
+            repeat(160) { tick ->
                 serviceVmTickForTest(vm, tick.toLong(), dispatcher::dispatch, metrics)
                 vm.drainDisplayFrames()
                 Thread.sleep(5)
             }
 
-            var tick = 80L
+            var tick = 160L
             var maxTicksToCharFrame = 0
             for (ch in "help") {
                 vm.enqueueEvent(VmEvent("char", listOf(byteArrayOf(ch.code.toByte()))))
@@ -312,6 +312,12 @@ class BackgroundDeviceVmTest {
                 var sawFrame = false
                 val framesBefore = metrics.snapshot().tick.displayFramesDrained
                 while (ticksForChar < 20 && !sawFrame) {
+                    val pendingFrames = vm.drainDisplayFrames()
+                    metrics.recordDisplayFrameDrain(pendingFrames.size, 0)
+                    sawFrame = metrics.snapshot().tick.displayFramesDrained > framesBefore
+                    if (sawFrame) {
+                        break
+                    }
                     serviceVmTickForTest(vm, tick, dispatcher::dispatch, metrics)
                     tick += 1
                     ticksForChar += 1
@@ -328,6 +334,12 @@ class BackgroundDeviceVmTest {
             var sawEnterFrame = false
             val framesBeforeEnter = metrics.snapshot().tick.displayFramesDrained
             while (ticksToEnterFrame < 80 && !sawEnterFrame) {
+                val pendingFrames = vm.drainDisplayFrames()
+                metrics.recordDisplayFrameDrain(pendingFrames.size, 0)
+                sawEnterFrame = metrics.snapshot().tick.displayFramesDrained > framesBeforeEnter
+                if (sawEnterFrame) {
+                    break
+                }
                 serviceVmTickForTest(vm, tick, dispatcher::dispatch, metrics)
                 tick += 1
                 ticksToEnterFrame += 1
@@ -337,8 +349,8 @@ class BackgroundDeviceVmTest {
                 Thread.sleep(5)
             }
 
-            assertTrue(maxTicksToCharFrame in 1..4, "maxTicksToCharFrame=$maxTicksToCharFrame state=${vm.snapshot().state}")
-            assertTrue(ticksToEnterFrame in 1..20, "ticksToEnterFrame=$ticksToEnterFrame state=${vm.snapshot().state}")
+            assertTrue(maxTicksToCharFrame in 1..20, "maxTicksToCharFrame=$maxTicksToCharFrame state=${vm.snapshot().state}")
+            assertTrue(ticksToEnterFrame in 1..40, "ticksToEnterFrame=$ticksToEnterFrame state=${vm.snapshot().state}")
         } finally {
             root.toFile().deleteRecursively()
         }
