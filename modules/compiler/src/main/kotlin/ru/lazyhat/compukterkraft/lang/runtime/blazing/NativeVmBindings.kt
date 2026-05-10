@@ -266,6 +266,29 @@ object NativeVmBindings : NativeVmBindingsFacade {
         return enqueueDeviceDaemonEventNative(daemonHandle, eventName, payload)
     }
 
+    fun attachDeviceDaemonDisplay(
+        daemonHandle: Long,
+        displayId: Int,
+        width: Int,
+        height: Int,
+    ) {
+        require(daemonHandle != 0L) { "Native device daemon handle is zero" }
+        attachDeviceDaemonDisplayNative(daemonHandle, displayId, width, height)
+    }
+
+    fun detachDeviceDaemonDisplay(
+        daemonHandle: Long,
+        displayId: Int,
+    ) {
+        require(daemonHandle != 0L) { "Native device daemon handle is zero" }
+        detachDeviceDaemonDisplayNative(daemonHandle, displayId)
+    }
+
+    fun drainDeviceDaemonDisplayFrames(daemonHandle: Long): ByteArray {
+        require(daemonHandle != 0L) { "Native device daemon handle is zero" }
+        return drainDeviceDaemonDisplayFramesNative(daemonHandle)
+    }
+
     fun enqueueDeviceEvent(
         handle: Long,
         eventName: String,
@@ -760,6 +783,23 @@ object NativeVmBindings : NativeVmBindingsFacade {
         eventName: String,
         payload: ByteArray,
     ): Boolean
+
+    @JvmStatic
+    private external fun attachDeviceDaemonDisplayNative(
+        daemonHandle: Long,
+        displayId: Int,
+        width: Int,
+        height: Int,
+    )
+
+    @JvmStatic
+    private external fun detachDeviceDaemonDisplayNative(
+        daemonHandle: Long,
+        displayId: Int,
+    )
+
+    @JvmStatic
+    private external fun drainDeviceDaemonDisplayFramesNative(daemonHandle: Long): ByteArray
 
     @JvmStatic
     private external fun enqueueDeviceEventNative(
