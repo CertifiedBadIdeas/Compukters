@@ -142,6 +142,8 @@ class BackgroundDeviceVm(
                 maxEventQueueSize = profile.resources.queues.eventQueueSlots,
                 maxBufferedBytesPerChannel = profile.resources.queues.ipcChannelBytes,
                 instructionBudget = profile.resources.cpu.instructionsPerSlice,
+                deviceId = deviceId,
+                profileName = profile.displayName,
             )
             .also { handle ->
                 effectiveNativeFilesystemRoot?.let { root ->
