@@ -38,6 +38,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.DeviceQueueResources
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceResources
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceStorageResources
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspace
+import ru.lazyhat.compukterkraft.lang.runtime.VmEvent
 import ru.lazyhat.compukterkraft.lang.runtime.VmState
 import ru.lazyhat.compukterkraft.lang.runtime.VmStopReason
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeDeviceDaemonBootSummary
@@ -65,6 +66,7 @@ class BackgroundDeviceVmTest {
         val tickInstructions = mutableListOf<Long>()
         val tickWallNanos = mutableListOf<Long>()
         val completedRequestIds = mutableListOf<Long>()
+        val enqueuedEvents = mutableListOf<Pair<String, List<Any?>>>()
         var tickSummary: NativeDeviceDaemonTickSummary? = null
 
         override fun createDeviceDaemon(
@@ -119,6 +121,15 @@ class BackgroundDeviceVmTest {
             value: ByteArray,
         ): Boolean {
             completedRequestIds += requestId
+            return true
+        }
+
+        override fun enqueueDeviceDaemonEvent(
+            daemonHandle: Long,
+            eventName: String,
+            arguments: List<Any?>,
+        ): Boolean {
+            enqueuedEvents += eventName to arguments
             return true
         }
     }
@@ -237,6 +248,23 @@ class BackgroundDeviceVmTest {
 
                 assertTrue(daemonBindings.bootedImages.isNotEmpty())
                 assertTrue(daemonBindings.tickServerTicks.isNotEmpty())
+            } finally {
+                System.clearProperty("ckl.vm.native.daemon")
+            }
+        }
+    }
+
+    @Test
+    fun enqueueEventForwardsAcceptedEventsToNativeDaemon() {
+        runtimeTestWorkspace("vm-native-daemon-event-ingress") { workspace ->
+            System.setProperty("ckl.vm.native.daemon", "true")
+            try {
+                val daemonBindings = RecordingNativeDaemonBindings()
+                val vm = backgroundVmWithNativeDaemonBindings(workspace.host, daemonBindings)
+
+                assertTrue(vm.enqueueEvent(VmEvent("char", listOf("x"))))
+
+                assertEquals(listOf("char" to listOf<Any?>("x")), daemonBindings.enqueuedEvents)
             } finally {
                 System.clearProperty("ckl.vm.native.daemon")
             }

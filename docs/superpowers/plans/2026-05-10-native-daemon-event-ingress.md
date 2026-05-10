@@ -59,12 +59,12 @@ git commit -m "feat: add native daemon event ingress"
 - Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVm.kt`
 - Modify: `modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVmTest.kt`
 
-- [ ] **Step 1: Write failing Kotlin wiring test**
+- [x] **Step 1: Write failing Kotlin wiring test**
 
 Extend the fake daemon bindings to record event enqueue calls, then assert `BackgroundDeviceVm.enqueueEvent` forwards
 accepted events to the daemon when `ckl.vm.native.daemon=true`.
 
-- [ ] **Step 2: Run test and verify it fails**
+- [x] **Step 2: Run test and verify it fails**
 
 Run:
 
@@ -74,12 +74,12 @@ Run:
 
 Expected: FAIL because `NativeDaemonBindings` has no event enqueue method and `BackgroundDeviceVm` does not call it.
 
-- [ ] **Step 3: Implement Kotlin wiring**
+- [x] **Step 3: Implement Kotlin wiring**
 
 Add `enqueueEvent` to `NativeDeviceDaemonRuntime` and `NativeDaemonBindings`, delegate to `NativeVmBindings`, and call
 it from `BackgroundDeviceVm.enqueueEvent`.
 
-- [ ] **Step 4: Run verification**
+- [x] **Step 4: Run verification**
 
 Run:
 
@@ -90,7 +90,7 @@ Run:
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/NativeDeviceDaemonRuntime.kt modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVm.kt modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVmTest.kt docs/superpowers/plans/2026-05-10-native-daemon-event-ingress.md
