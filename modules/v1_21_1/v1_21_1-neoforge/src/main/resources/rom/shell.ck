@@ -16,17 +16,45 @@ fun commandArgument(line: String): String {
     return strings::afterSpace(strings::trim(line))
 }
 
+fun stripCkSuffix(name: String): String {
+    val length: Int = strings::length(name)
+    if (length <= 3) {
+        return name
+    }
+    if (strings::slice(name, length - 3, length) != ".ck") {
+        return name
+    }
+    return strings::slice(name, 0, length - 3)
+}
+
+fun commandListFromBin(listing: String): String {
+    var rest: String = strings::trim(listing)
+    var result: String = ""
+    while !strings::isBlank(rest) {
+        val entry: String = strings::beforeSpace(rest)
+        rest = strings::afterSpace(rest)
+        if (strings::slice(entry, strings::length(entry) - 1, strings::length(entry)) != "/") {
+            if (result != "") {
+                result = result + " "
+            }
+            result = result + stripCkSuffix(entry)
+        }
+    }
+    return result
+}
+
 fun printHelp(ctx: Stdio) {
-    println(ctx, "Builtins: help cd pwd reboot shutdown")
-    println(ctx, "Programs: ls mkdir rmdir nano yes")
+    println(ctx, "Builtins: help cd reboot shutdown")
+    println(ctx, "Programs: " + commandListFromBin(filesystem::list("bin")))
 }
 
 fun runExternal(ctx: Stdio, command: String, argument: String) {
-    if (!exists(command + ".ck")) {
+    val path: String = "bin/" + command + ".ck"
+    if (!exists(path)) {
         error(ctx, "Unknown command: " + command)
         return
     }
-    val code: Int = process::run(command + ".ck", encode(ctx, argument))
+    val code: Int = process::run(path, encode(ctx, argument))
     if (code != 0) {
         error(ctx, "Command failed: " + command)
     }
@@ -58,8 +86,6 @@ pub fun main() {
                 printHelp(ctx)
             } else if (name == "cd") {
                 handleCd(ctx, argument)
-            } else if (name == "pwd") {
-                runExternal(ctx, "pwd", argument)
             } else if (name == "reboot") {
                 system::reboot()
             } else if (name == "shutdown") {

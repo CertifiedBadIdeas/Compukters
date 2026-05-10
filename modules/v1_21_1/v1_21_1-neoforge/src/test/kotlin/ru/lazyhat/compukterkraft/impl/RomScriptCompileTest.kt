@@ -390,7 +390,8 @@ class RomScriptCompileTest {
         val source = resourceText("rom/shell.ck")
 
         assertTrue(source.contains("import filesystem { exists }"), "shell.ck should query filesystem before external command launch")
-        assertTrue(source.contains("exists(command + \".ck\")"), "shell.ck should reject missing commands before process::run")
+        assertTrue(source.contains("exists(path)"), "shell.ck should reject missing commands before process::run")
+        assertTrue(source.contains("val path: String = \"bin/\" + command + \".ck\""), "shell.ck should resolve commands from bin")
         assertFalse(
             source.contains("if (process::run(command + \".ck\""),
             "shell.ck must not call process::run directly for unknown commands",
@@ -408,9 +409,9 @@ class RomScriptCompileTest {
     @Test
     fun bundledRomIncludesYesProgram() {
         val index = resourceText("rom/rom.index")
-        assertContains(index.lineSequence().map { it.trim() }.toList(), "yes.ck")
+        assertContains(index.lineSequence().map { it.trim() }.toList(), "bin/yes.ck")
 
-        val source = resourceText("rom/yes.ck")
+        val source = resourceText("rom/bin/yes.ck")
         assertTrue(source.contains("fromArgument(process::argument())"), "yes.ck should use stdio-v1 descriptors")
         assertTrue(source.contains("while true"), "yes.ck should keep writing until the VM stops the process")
         assertTrue(source.contains("\"y\""), "yes.ck should default to Unix-like 'y' output")
@@ -420,12 +421,33 @@ class RomScriptCompileTest {
     @Test
     fun bundledRomIncludesIdProgram() {
         val index = resourceText("rom/rom.index")
-        assertContains(index.lineSequence().map { it.trim() }.toList(), "id.ck")
+        assertContains(index.lineSequence().map { it.trim() }.toList(), "bin/id.ck")
 
-        val source = resourceText("rom/id.ck")
+        val source = resourceText("rom/bin/id.ck")
         assertTrue(source.contains("fromArgument(process::argument())"), "id.ck should use stdio-v1 descriptors")
         assertTrue(source.contains("system::deviceId()"), "id.ck should read the current device id from the system API")
         assertTrue(source.contains("println(ctx,"), "id.ck should write the device id to stdout")
+    }
+
+    @Test
+    fun bundledRomCoreProgramsLiveUnderBinAndShellDiscoversThem() {
+        val romFiles =
+            resourceText("rom/rom.index")
+                .lineSequence()
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .toList()
+        val expectedPrograms = listOf("cp", "id", "ls", "mkdir", "mv", "nano", "pwd", "rename", "rm", "rmdir", "touch", "yes")
+
+        expectedPrograms.forEach { command ->
+            assertContains(romFiles, "bin/$command.ck")
+        }
+        assertFalse("ls.ck" in romFiles, "core commands should not live at the ROM root")
+        assertFalse("mkdir.ck" in romFiles, "core commands should not live at the ROM root")
+
+        val shell = resourceText("rom/shell.ck")
+        assertTrue(shell.contains("filesystem::list(\"bin\")"), "shell help should be based on bin directory contents")
+        assertTrue(shell.contains("\"bin/\" + command + \".ck\""), "shell should launch commands from bin")
     }
 
     @Test
@@ -447,7 +469,7 @@ class RomScriptCompileTest {
                 .toList()
 
         assertContains(romFiles, "boot.ck")
-        assertContains(romFiles, "yes.ck")
+        assertContains(romFiles, "bin/yes.ck")
         assertContains(firmwareFiles, "bios.ck")
         assertTrue(romFiles.all { it.endsWith(".ck") }, "rom.index should contain CKL source paths only")
         assertTrue(firmwareFiles.all { it.endsWith(".ck") }, "firmware.index should contain CKL source paths only")

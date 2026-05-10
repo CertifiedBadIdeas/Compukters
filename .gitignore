@@ -1,5 +1,7 @@
 # eclipse
 bin
+!modules/v1_21_1/v1_21_1-neoforge/src/main/resources/rom/bin/
+!modules/v1_21_1/v1_21_1-neoforge/src/main/resources/rom/bin/*.ck
 *.launch
 .settings
 .metadata

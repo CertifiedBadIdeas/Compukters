@@ -1,4 +1,4 @@
-import "stdio.ck" { Stdio, fromArgument, println };
+import "../stdio.ck" { Stdio, fromArgument, println };
 
 pub fun main() {
     val ctx: Stdio = fromArgument(process::argument())
