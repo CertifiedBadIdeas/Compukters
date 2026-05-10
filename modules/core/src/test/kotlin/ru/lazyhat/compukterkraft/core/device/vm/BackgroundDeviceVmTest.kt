@@ -52,6 +52,7 @@ import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -60,6 +61,16 @@ class BackgroundDeviceVmTest {
         private val source: String,
     ) : FirmwareProgramLoader {
         override fun load(path: String): LoadedFirmwareProgramSource = LoadedFirmwareProgramSource(path, source)
+    }
+
+    @Test
+    fun backgroundDeviceVmConstructorDoesNotExposeStrictNativeSchedulerFlag() {
+        val hasBooleanConstructorParameter =
+            BackgroundDeviceVm::class.java.declaredConstructors.any { constructor ->
+                constructor.parameterTypes.any { type -> type == Boolean::class.javaPrimitiveType }
+            }
+
+        assertFalse(hasBooleanConstructorParameter)
     }
 
     private open class RecordingNativeDaemonBindings : NativeDaemonBindings {
