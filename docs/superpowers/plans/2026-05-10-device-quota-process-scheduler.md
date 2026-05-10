@@ -604,3 +604,51 @@ git add docs/superpowers/plans/2026-05-10-device-quota-process-scheduler.md \
   modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessTableTest.kt
 git commit -m "feat: wake VM process sleepers by tick"
 ```
+
+## Task 10: Kotlin Scheduler Tick Facade
+
+**Files:**
+- Create: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessScheduler.kt`
+- Create: `modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessSchedulerTest.kt`
+- Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessManager.kt`
+- Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVm.kt`
+- Test: `modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessManagerTest.kt`
+
+- [x] **Step 1: Add failing scheduler tick tests**
+
+Add tests proving a scheduler tick:
+
+- wakes due sleepers through `VmProcessTable.wakeSleepers(currentTick)`;
+- selects the next runnable pid through round-robin order;
+- returns both the woken pid list and selected runnable pid;
+- leaves no selected pid when all processes are waiting, sleeping in the future, exited, or crashed.
+
+- [x] **Step 2: Implement `VmProcessScheduler`**
+
+Create a small Kotlin-first scheduler facade over `VmProcessTable`. It should not execute process bytecode yet; it only
+centralizes tick-time process table decisions.
+
+- [x] **Step 3: Wire tick facade into `VmProcessManager` and `BackgroundDeviceVm.requestSlice`**
+
+`VmProcessManager` should own the scheduler and expose `schedulerTick(currentTick)`. `BackgroundDeviceVm.requestSlice`
+should call it after updating current tick and before refilling execution quota.
+
+- [x] **Step 4: Run focused tests**
+
+```bash
+./gradlew :core:test --tests '*VmProcessSchedulerTest' --tests '*VmProcessManagerTest' --rerun-tasks
+```
+
+Expected: PASS.
+
+- [x] **Step 5: Commit Task 10**
+
+```bash
+git add docs/superpowers/plans/2026-05-10-device-quota-process-scheduler.md \
+  modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessScheduler.kt \
+  modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessManager.kt \
+  modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVm.kt \
+  modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessSchedulerTest.kt \
+  modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessManagerTest.kt
+git commit -m "feat: add VM process scheduler tick facade"
+```

@@ -51,6 +51,7 @@ internal class VmProcessManager(
     private val nextPid = AtomicInteger(2)
     private val processes = ConcurrentHashMap<Int, ProcessHandle>()
     private val processTable = VmProcessTable()
+    private val processScheduler = VmProcessScheduler(processTable)
 
     init {
         processTable.registerProcess(
@@ -63,6 +64,8 @@ internal class VmProcessManager(
     }
 
     fun processSnapshot(pid: Int): VmProcessRecord? = processTable.snapshot(pid)
+
+    fun schedulerTick(currentTick: Long): VmProcessSchedulerTick = processScheduler.tick(currentTick)
 
     override fun markRunnable(pid: Int) {
         processTable.markRunnable(pid)
