@@ -91,6 +91,8 @@ class RuntimeVmProfilingReportFormatterTest {
                             nativeProcessSchedulerComparisons = 12,
                             nativeProcessSchedulerMatches = 11,
                             nativeProcessSchedulerMismatches = 1,
+                            nativeProcessSchedulerAcceptedTicks = 11,
+                            nativeProcessSchedulerFallbackTicks = 1,
                             hostCallSignals = 2,
                             hostCalls =
                                 listOf(
@@ -141,6 +143,8 @@ class RuntimeVmProfilingReportFormatterTest {
         assertTrue(markdown.contains("| Native scheduler comparisons | 12 | 0 |"), markdown)
         assertTrue(markdown.contains("| Native scheduler matches | 11 | 0 |"), markdown)
         assertTrue(markdown.contains("| Native scheduler mismatches | 1 | 0 |"), markdown)
+        assertTrue(markdown.contains("| Native scheduler accepted ticks | 11 | 0 |"), markdown)
+        assertTrue(markdown.contains("| Native scheduler fallback ticks | 1 | 0 |"), markdown)
         assertTrue(markdown.contains("| Host-call signals | 2 | 10 |"), markdown)
         assertTrue(markdown.contains("| Host-call active time | 30 ms | 50.01 us |"), markdown)
         assertTrue(markdown.contains("| Host-call wait time | 60 ms | 0 ns |"), markdown)
@@ -210,6 +214,8 @@ class RuntimeVmProfilingReportFormatterTest {
                             nativeProcessSchedulerComparisons = 15,
                             nativeProcessSchedulerMatches = 15,
                             nativeProcessSchedulerMismatches = 0,
+                            nativeProcessSchedulerAcceptedTicks = 15,
+                            nativeProcessSchedulerFallbackTicks = 0,
                             hostCallSignals = 2,
                         ),
                     ),
@@ -243,6 +249,8 @@ class RuntimeVmProfilingReportFormatterTest {
         assertTrue(markdown.contains("| Native scheduler comparisons | 15 |"), markdown)
         assertTrue(markdown.contains("| Native scheduler matches | 15 |"), markdown)
         assertTrue(markdown.contains("| Native scheduler mismatches | 0 |"), markdown)
+        assertTrue(markdown.contains("| Native scheduler accepted ticks | 15 |"), markdown)
+        assertTrue(markdown.contains("| Native scheduler fallback ticks | 0 |"), markdown)
         assertTrue(markdown.contains("| Host-call signals | 4 |"), markdown)
         assertTrue(markdown.contains("| Host-call active time | 0 ns |"), markdown)
         assertTrue(markdown.contains("| Host-call wait time | 0 ns |"), markdown)
@@ -297,6 +305,8 @@ class RuntimeVmProfilingReportFormatterTest {
         nativeProcessSchedulerComparisons: Long = 0,
         nativeProcessSchedulerMatches: Long = 0,
         nativeProcessSchedulerMismatches: Long = 0,
+        nativeProcessSchedulerAcceptedTicks: Long = 0,
+        nativeProcessSchedulerFallbackTicks: Long = 0,
         hostCallSignals: Long,
         hostCalls: List<RuntimeHostCallMetrics> = emptyList(),
     ): RuntimeWorkloadProfile =
@@ -361,6 +371,8 @@ class RuntimeVmProfilingReportFormatterTest {
                             nativeProcessSchedulerComparisons = nativeProcessSchedulerComparisons,
                             nativeProcessSchedulerMatches = nativeProcessSchedulerMatches,
                             nativeProcessSchedulerMismatches = nativeProcessSchedulerMismatches,
+                            nativeProcessSchedulerAcceptedTicks = nativeProcessSchedulerAcceptedTicks,
+                            nativeProcessSchedulerFallbackTicks = nativeProcessSchedulerFallbackTicks,
                             hostCallSignals = hostCallSignals,
                         ),
                     hostCalls = hostCalls,
