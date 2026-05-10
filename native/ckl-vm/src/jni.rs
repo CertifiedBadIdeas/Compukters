@@ -360,6 +360,42 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
 }
 
 #[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_completeDeviceDaemonCompileProgramNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    handle: jlong,
+    request_id: jlong,
+    image: JByteArray<'_>,
+    exit_code: jint,
+) -> jboolean {
+    let image = match env.convert_byte_array(&image) {
+        Ok(value) => value,
+        Err(error) => {
+            let _ = env.throw_new(
+                "java/lang/IllegalArgumentException",
+                format!("Cannot read native device daemon compiled image: {error}"),
+            );
+            return false as jboolean;
+        }
+    };
+    let image = if image.is_empty() {
+        None
+    } else {
+        Some(image.as_slice())
+    };
+    match with_device_daemon_mut(&mut env, handle, |daemon| {
+        daemon.complete_compile_program(request_id, image, exit_code)
+    }) {
+        Some(Ok(())) => true as jboolean,
+        Some(Err(error)) => {
+            let _ = env.throw_new("java/lang/IllegalStateException", error);
+            false as jboolean
+        }
+        None => false as jboolean,
+    }
+}
+
+#[no_mangle]
 pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_enqueueDeviceDaemonEventNative(
     mut env: JNIEnv<'_>,
     _class: JClass<'_>,

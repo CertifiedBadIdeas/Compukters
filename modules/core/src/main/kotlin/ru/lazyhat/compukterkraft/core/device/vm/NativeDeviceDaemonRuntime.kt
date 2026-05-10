@@ -38,6 +38,9 @@ internal class NativeDeviceDaemonRuntime(
     private val bindings: NativeDaemonBindings = NativeVmDaemonBindings,
     private val runtimeMetricsCollector: RuntimeMetricsCollector = NoOpRuntimeMetricsCollector,
     private val hostBridge: suspend (NativeDeviceDaemonHostRequest) -> ByteArray,
+    private val compileBridge: suspend (NativeDeviceDaemonHostRequest) -> NativeDaemonCompileResult = {
+        NativeDaemonCompileResult(image = null, exitCode = 1)
+    },
 ) {
     fun boot(
         image: ByteArray,
@@ -99,11 +102,29 @@ internal class NativeDeviceDaemonRuntime(
 
     private suspend fun serviceHostRequests() {
         for (request in bindings.drainDeviceDaemonHostRequests(daemonHandle)) {
-            val result = hostBridge(request)
-            bindings.completeDeviceDaemonHostRequest(daemonHandle, request.requestId, result)
+            when (request.kind) {
+                "hostCall" -> {
+                    val result = hostBridge(request)
+                    bindings.completeDeviceDaemonHostRequest(daemonHandle, request.requestId, result)
+                }
+                "compileProgram" -> {
+                    val result = compileBridge(request)
+                    bindings.completeDeviceDaemonCompileProgram(
+                        daemonHandle,
+                        request.requestId,
+                        result.image,
+                        result.exitCode,
+                    )
+                }
+            }
         }
     }
 }
+
+internal data class NativeDaemonCompileResult(
+    val image: ByteArray?,
+    val exitCode: Int,
+)
 
 interface NativeDaemonBindings {
     fun createDeviceDaemon(
@@ -135,6 +156,13 @@ interface NativeDaemonBindings {
         daemonHandle: Long,
         requestId: Long,
         value: ByteArray,
+    ): Boolean
+
+    fun completeDeviceDaemonCompileProgram(
+        daemonHandle: Long,
+        requestId: Long,
+        image: ByteArray?,
+        exitCode: Int,
     ): Boolean
 
     fun enqueueDeviceDaemonEvent(
@@ -207,6 +235,13 @@ object NativeVmDaemonBindings : NativeDaemonBindings {
         requestId: Long,
         value: ByteArray,
     ): Boolean = NativeVmBindings.completeDeviceDaemonHostRequest(daemonHandle, requestId, value)
+
+    override fun completeDeviceDaemonCompileProgram(
+        daemonHandle: Long,
+        requestId: Long,
+        image: ByteArray?,
+        exitCode: Int,
+    ): Boolean = NativeVmBindings.completeDeviceDaemonCompileProgram(daemonHandle, requestId, image, exitCode)
 
     override fun enqueueDeviceDaemonEvent(
         daemonHandle: Long,

@@ -169,6 +169,7 @@ class BackgroundDeviceVm(
                 bindings = nativeDaemonBindings,
                 runtimeMetricsCollector = runtimeMetricsCollector,
                 hostBridge = ::handleNativeDaemonHostRequest,
+                compileBridge = ::handleNativeDaemonCompileProgram,
             )
         }
     private val nativeDeviceKernelHandle: Long? =
@@ -692,6 +693,35 @@ class BackgroundDeviceVm(
             return byteArrayOf(0)
         }
         return byteArrayOf(1)
+    }
+
+    private suspend fun handleNativeDaemonCompileProgram(request: NativeDeviceDaemonHostRequest): NativeDaemonCompileResult {
+        val path =
+            request.path
+                ?: return NativeDaemonCompileResult(image = null, exitCode = 1)
+        val source =
+            programLoader.load(deviceId, path)
+                ?: return NativeDaemonCompileResult(image = null, exitCode = 1)
+        val artifact =
+            LanguageFrontend(runtimeRegistryProfile.baseRegistry, compilerMetricsCollector)
+                .compileImage(
+                    source.path,
+                    source.source,
+                    programLoader.sourceLoader(deviceId),
+                )
+        val image = artifact.image
+        val errorMessage =
+            artifact.bytecode.analysis.diagnostics
+                .filter { it.severity == FrontendSeverity.ERROR }
+                .joinToString { it.message }
+        if (image == null || errorMessage.isNotEmpty()) {
+            return NativeDaemonCompileResult(image = null, exitCode = 1)
+        }
+        val imageBytes = CkVmImageAbi.encode(image)
+        if (imageBytes.size.toLong() > profile.resources.storage.programRomBytes) {
+            return NativeDaemonCompileResult(image = null, exitCode = 1)
+        }
+        return NativeDaemonCompileResult(image = imageBytes, exitCode = 0)
     }
 
     private fun finishExecutionWindow() {

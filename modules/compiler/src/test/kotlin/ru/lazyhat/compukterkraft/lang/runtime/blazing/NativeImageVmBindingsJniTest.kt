@@ -270,6 +270,7 @@ class NativeImageVmBindingsJniTest {
         assertTrue("detachDeviceDaemonDisplay" in memberNames)
         assertTrue("drainDeviceDaemonDisplayFrames" in memberNames)
         assertTrue("attachDeviceDaemonFilesystem" in memberNames)
+        assertTrue("completeDeviceDaemonCompileProgram" in memberNames)
     }
 
     @Test
@@ -506,6 +507,87 @@ class NativeImageVmBindingsJniTest {
             assertEquals("system", request.moduleName)
             assertEquals("log", request.functionName)
             assertEquals(listOf(VmValue.StringValue("true:rom/bin")), request.arguments)
+        } finally {
+            NativeVmBindings.freeDeviceDaemon(handle)
+        }
+    }
+
+    @Test
+    fun nativeDeviceDaemonProcessSpawnRequestsCompilationWhenLibraryIsConfigured() {
+        System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val parent =
+            assertNotNull(
+                LanguageFrontend()
+                    .compileImage("main.ck", "pub fun main() { process::spawn(\"child.ck\", \"arg\"); }")
+                    .image,
+            )
+        val child = assertNotNull(LanguageFrontend().compileImage("child.ck", "pub fun main() { }").image)
+        val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 128)
+        try {
+            NativeVmBindings.bootDeviceDaemon(handle, CkVmImageAbi.encode(parent), "/rom/parent.ck", "", "rom")
+
+            val first = NativeVmBindings.tickDeviceDaemon(handle, 128, 1_000_000, 1)
+            val request = NativeVmBindings.drainDeviceDaemonHostRequests(handle).single()
+
+            assertEquals(1, first.hostRequests)
+            assertEquals("compileProgram", request.kind)
+            assertEquals("process", request.moduleName)
+            assertEquals("spawn", request.functionName)
+            assertEquals("child.ck", request.path)
+            assertEquals("rom", request.workingDirectory)
+            assertEquals(listOf(VmValue.IntValue(2), VmValue.StringValue("arg")), request.arguments)
+
+            assertTrue(
+                NativeVmBindings.completeDeviceDaemonCompileProgram(
+                    handle,
+                    request.requestId,
+                    CkVmImageAbi.encode(child),
+                    exitCode = 0,
+                ),
+            )
+            assertEquals(1, NativeVmBindings.tickDeviceDaemon(handle, 128, 1_000_000, 2).halted)
+        } finally {
+            NativeVmBindings.freeDeviceDaemon(handle)
+        }
+    }
+
+    @Test
+    fun nativeDeviceDaemonProcessRunResumesParentWithExitCodeWhenLibraryIsConfigured() {
+        System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val parent =
+            assertNotNull(
+                LanguageFrontend()
+                    .compileImage(
+                        "main.ck",
+                        "pub fun main() { system::log(\"exit=\" + process::run(\"child.ck\", \"arg\")); }",
+                    ).image,
+            )
+        val child = assertNotNull(LanguageFrontend().compileImage("child.ck", "pub fun main() { }").image)
+        val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 128)
+        try {
+            NativeVmBindings.bootDeviceDaemon(handle, CkVmImageAbi.encode(parent), "/rom/parent.ck", "", "rom")
+
+            NativeVmBindings.tickDeviceDaemon(handle, 128, 1_000_000, 1)
+            val compileRequest = NativeVmBindings.drainDeviceDaemonHostRequests(handle).single()
+            assertEquals("compileProgram", compileRequest.kind)
+            assertEquals("run", compileRequest.functionName)
+            assertTrue(
+                NativeVmBindings.completeDeviceDaemonCompileProgram(
+                    handle,
+                    compileRequest.requestId,
+                    CkVmImageAbi.encode(child),
+                    exitCode = 0,
+                ),
+            )
+
+            assertEquals(1, NativeVmBindings.tickDeviceDaemon(handle, 128, 1_000_000, 2).halted)
+            val parentResumed = NativeVmBindings.tickDeviceDaemon(handle, 128, 1_000_000, 3)
+            val logRequest = NativeVmBindings.drainDeviceDaemonHostRequests(handle).single()
+
+            assertEquals(1, parentResumed.hostRequests)
+            assertEquals("system", logRequest.moduleName)
+            assertEquals("log", logRequest.functionName)
+            assertEquals(listOf(VmValue.StringValue("exit=0")), logRequest.arguments)
         } finally {
             NativeVmBindings.freeDeviceDaemon(handle)
         }
