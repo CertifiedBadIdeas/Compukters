@@ -52,90 +52,18 @@ import ru.lazyhat.compukterkraft.lang.runtime.VmStopReason
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class VmProcessManagerTest {
-    private class RecordingNativeProcessBridge : NativeProcessBridge {
-        val registrations = mutableListOf<Triple<Int, Int, String>>()
-        val completions = mutableListOf<Pair<Int, Int>>()
-        val runnablePids = mutableListOf<Int>()
-        val waitingEvents = mutableListOf<Pair<Int, String?>>()
-        val waitingIpc = mutableListOf<Pair<Int, Int>>()
-        val waitingProcesses = mutableListOf<Pair<Int, Int>>()
-        val sleepingProcesses = mutableListOf<Pair<Int, Long>>()
-        val crashedProcesses = mutableListOf<Pair<Int, String>>()
-        val schedulerTicks = mutableListOf<Long>()
-        var schedulerTickResult: VmProcessSchedulerTick? = null
-        var registerResult: Boolean = true
-        var completeResult: Boolean = true
+    @Test
+    fun vmProcessManagerConstructorDoesNotExposeNativeProcessBridgeOrStrictParityFlag() {
+        val constructorParameterTypes =
+            VmProcessManager::class.java.declaredConstructors
+                .flatMap { it.parameterTypes.toList() }
 
-        override fun registerProcess(
-            pid: Int,
-            parentPid: Int,
-            programPath: String,
-        ): Boolean {
-            registrations += Triple(pid, parentPid, programPath)
-            return registerResult
-        }
-
-        override fun completeProcess(
-            pid: Int,
-            exitCode: Int,
-        ): Boolean {
-            completions += pid to exitCode
-            return completeResult
-        }
-
-        override fun markRunnable(pid: Int): Boolean {
-            runnablePids += pid
-            return true
-        }
-
-        override fun markWaitingEvent(
-            pid: Int,
-            filter: String?,
-        ): Boolean {
-            waitingEvents += pid to filter
-            return true
-        }
-
-        override fun markWaitingIpc(
-            pid: Int,
-            channelId: Int,
-        ): Boolean {
-            waitingIpc += pid to channelId
-            return true
-        }
-
-        override fun markWaitingProcess(
-            pid: Int,
-            targetPid: Int,
-        ): Boolean {
-            waitingProcesses += pid to targetPid
-            return true
-        }
-
-        override fun markSleeping(
-            pid: Int,
-            untilTick: Long,
-        ): Boolean {
-            sleepingProcesses += pid to untilTick
-            return true
-        }
-
-        override fun markCrashed(
-            pid: Int,
-            message: String,
-        ): Boolean {
-            crashedProcesses += pid to message
-            return true
-        }
-
-        override fun schedulerTick(currentTick: Long): VmProcessSchedulerTick? {
-            schedulerTicks += currentTick
-            return schedulerTickResult
-        }
+        assertFalse(constructorParameterTypes.any { it.simpleName == "NativeProcessBridge" })
+        assertFalse(constructorParameterTypes.any { it == Boolean::class.javaPrimitiveType })
     }
 
     private class StubVmContext : VmContext {
@@ -242,39 +170,9 @@ class VmProcessManagerTest {
     }
 
     @Test
-    fun initRegistersNativeRootProcess() {
-        runtimeTestWorkspace("vm-process-manager-native-root") { workspace ->
-            val bridge = RecordingNativeProcessBridge()
+    fun spawnMissingProgramReportsErrorAndExitCode() {
+        runtimeTestWorkspace("vm-process-manager-missing-program") { workspace ->
             val ctx = StubVmContext()
-            val profile = runtimeProfile()
-            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-            val manager =
-                VmProcessManager(
-                    scope = scope,
-                    ctx = ctx,
-                    deviceId = 1,
-                    programLoader = WorkspaceProgramLoader(workspace.host),
-                    profile = profile,
-                    runtimeCreator = { _, _, _, _ -> error("runtimeCreator should not run") },
-                    compilerMetricsCollector = NoOpCompilerMetricsCollector,
-                    nativeProcessBridge = bridge,
-                )
-
-            try {
-                assertEquals(listOf(Triple(1, 0, profile.bootScriptName)), bridge.registrations)
-            } finally {
-                runBlocking { manager.cancelAll() }
-                scope.cancel()
-            }
-        }
-    }
-
-    @Test
-    fun spawnRegistersAndCompletesNativeProcess() {
-        runtimeTestWorkspace("vm-process-manager-native-bridge") { workspace ->
-            val bridge = RecordingNativeProcessBridge()
-            val ctx = StubVmContext()
-            val metrics = RecordingRuntimeMetricsCollector()
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
             val manager =
                 VmProcessManager(
@@ -285,7 +183,6 @@ class VmProcessManagerTest {
                     profile = runtimeProfile(),
                     runtimeCreator = { _, _, _, _ -> error("runtimeCreator should not run for a missing program") },
                     compilerMetricsCollector = NoOpCompilerMetricsCollector,
-                    nativeProcessBridge = bridge,
                 )
 
             try {
@@ -293,11 +190,6 @@ class VmProcessManagerTest {
                 val code = runBlocking { withTimeout(5_000) { manager.wait(pid) } }
 
                 assertEquals(2, pid)
-                assertEquals(
-                    listOf(Triple(1, 0, runtimeProfile().bootScriptName), Triple(2, 1, "missing.ck")),
-                    bridge.registrations,
-                )
-                assertEquals(listOf(2 to 1), bridge.completions)
                 assertEquals(1, code)
                 assertTrue(ctx.logs.any { it.contains("Program not found: missing.ck") }, ctx.logs.toString())
             } finally {
@@ -308,84 +200,8 @@ class VmProcessManagerTest {
     }
 
     @Test
-    fun spawnRegistersProvidedParentPid() {
-        runtimeTestWorkspace("vm-process-manager-native-bridge-parent-pid") { workspace ->
-            val bridge = RecordingNativeProcessBridge()
-            val ctx = StubVmContext()
-            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-            val manager =
-                VmProcessManager(
-                    scope = scope,
-                    ctx = ctx,
-                    deviceId = 1,
-                    programLoader = WorkspaceProgramLoader(workspace.host),
-                    profile = runtimeProfile(),
-                    runtimeCreator = { _, _, _, _ -> error("runtimeCreator should not run for a missing program") },
-                    compilerMetricsCollector = NoOpCompilerMetricsCollector,
-                    nativeProcessBridge = bridge,
-                )
-
-            try {
-                val pid = manager.spawn("missing.ck", "", "", parentPid = 42)
-                val code = runBlocking { withTimeout(5_000) { manager.wait(pid) } }
-
-                assertEquals(2, pid)
-                assertEquals(
-                    listOf(Triple(1, 0, runtimeProfile().bootScriptName), Triple(2, 42, "missing.ck")),
-                    bridge.registrations,
-                )
-                assertEquals(listOf(2 to 1), bridge.completions)
-                assertEquals(1, code)
-            } finally {
-                runBlocking { manager.cancelAll() }
-                scope.cancel()
-            }
-        }
-    }
-
-    @Test
-    fun spawnRecordsAcceptedNativeProcessLifecycleMetrics() {
-        runtimeTestWorkspace("vm-process-manager-native-bridge-metrics") { workspace ->
-            val bridge = RecordingNativeProcessBridge()
-            val metrics = RecordingRuntimeMetricsCollector()
-            val ctx = StubVmContext()
-            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-            val manager =
-                VmProcessManager(
-                    scope = scope,
-                    ctx = ctx,
-                    deviceId = 1,
-                    programLoader = WorkspaceProgramLoader(workspace.host),
-                    profile = runtimeProfile(),
-                    runtimeCreator = { _, _, _, _ -> error("runtimeCreator should not run for a missing program") },
-                    compilerMetricsCollector = NoOpCompilerMetricsCollector,
-                    runtimeMetricsCollector = metrics,
-                    nativeProcessBridge = bridge,
-                )
-
-            try {
-                val pid = manager.spawn("missing.ck", "", "")
-                runBlocking { withTimeout(5_000) { manager.wait(pid) } }
-
-                assertEquals(
-                    listOf(Triple(1, 0, runtimeProfile().bootScriptName), Triple(2, 1, "missing.ck")),
-                    bridge.registrations,
-                )
-                assertEquals(listOf(2 to 1), bridge.completions)
-                assertEquals(2, metrics.snapshot().vm.nativeProcessRegistrations)
-                assertEquals(1, metrics.snapshot().vm.nativeProcessCompletions)
-                assertEquals(0, metrics.snapshot().vm.nativeProcessStaleCompletions)
-            } finally {
-                runBlocking { manager.cancelAll() }
-                scope.cancel()
-            }
-        }
-    }
-
-    @Test
     fun spawnRecordsChildLifecycleInProcessTable() {
         runtimeTestWorkspace("vm-process-manager-process-table") { workspace ->
-            val bridge = RecordingNativeProcessBridge()
             val ctx = StubVmContext()
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
             val manager =
@@ -397,7 +213,6 @@ class VmProcessManagerTest {
                     profile = runtimeProfile(),
                     runtimeCreator = { _, _, _, _ -> error("runtimeCreator should not run for a missing program") },
                     compilerMetricsCollector = NoOpCompilerMetricsCollector,
-                    nativeProcessBridge = bridge,
                 )
 
             try {
@@ -432,7 +247,6 @@ class VmProcessManagerTest {
                 }
                 """.trimIndent(),
             )
-            val bridge = RecordingNativeProcessBridge()
             val ctx = StubVmContext()
             val release = CompletableDeferred<VmEvent>()
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -445,7 +259,6 @@ class VmProcessManagerTest {
                     profile = runtimeProfile(),
                     runtimeCreator = { _, _, _, _ -> BlockingEventRuntime(release) },
                     compilerMetricsCollector = NoOpCompilerMetricsCollector,
-                    nativeProcessBridge = bridge,
                 )
 
             try {
@@ -546,190 +359,6 @@ class VmProcessManagerTest {
     }
 
     @Test
-    fun schedulerTickRecordsMatchingNativeDecision() {
-        runtimeTestWorkspace("vm-process-manager-native-scheduler-match") { workspace ->
-            val bridge = RecordingNativeProcessBridge()
-            val ctx = StubVmContext()
-            val metrics = RecordingRuntimeMetricsCollector()
-            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-            val manager =
-                VmProcessManager(
-                    scope = scope,
-                    ctx = ctx,
-                    deviceId = 1,
-                    programLoader = WorkspaceProgramLoader(workspace.host),
-                    profile = runtimeProfile(),
-                    runtimeCreator = { _, _, _, _ -> error("runtimeCreator should not run") },
-                    compilerMetricsCollector = NoOpCompilerMetricsCollector,
-                    runtimeMetricsCollector = metrics,
-                    nativeProcessBridge = bridge,
-                    strictNativeSchedulerParity = true,
-                )
-
-            try {
-                bridge.schedulerTickResult = VmProcessSchedulerTick(currentTick = 4, wokenPids = emptyList(), selectedPid = 1)
-
-                assertEquals(VmProcessSchedulerTick(currentTick = 4, wokenPids = emptyList(), selectedPid = 1), manager.schedulerTick(4))
-                assertEquals(1, metrics.snapshot().vm.nativeProcessSchedulerComparisons)
-                assertEquals(1, metrics.snapshot().vm.nativeProcessSchedulerMatches)
-                assertEquals(0, metrics.snapshot().vm.nativeProcessSchedulerMismatches)
-                assertEquals(1, metrics.snapshot().vm.nativeProcessSchedulerAcceptedTicks)
-                assertEquals(0, metrics.snapshot().vm.nativeProcessSchedulerFallbackTicks)
-            } finally {
-                runBlocking { manager.cancelAll() }
-                scope.cancel()
-            }
-        }
-    }
-
-    @Test
-    fun schedulerTickRecordsMismatchedNativeDecision() {
-        runtimeTestWorkspace("vm-process-manager-native-scheduler-mismatch") { workspace ->
-            val bridge = RecordingNativeProcessBridge()
-            val ctx = StubVmContext()
-            val metrics = RecordingRuntimeMetricsCollector()
-            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-            val manager =
-                VmProcessManager(
-                    scope = scope,
-                    ctx = ctx,
-                    deviceId = 1,
-                    programLoader = WorkspaceProgramLoader(workspace.host),
-                    profile = runtimeProfile(),
-                    runtimeCreator = { _, _, _, _ -> error("runtimeCreator should not run") },
-                    compilerMetricsCollector = NoOpCompilerMetricsCollector,
-                    runtimeMetricsCollector = metrics,
-                    nativeProcessBridge = bridge,
-                )
-
-            try {
-                bridge.schedulerTickResult = VmProcessSchedulerTick(currentTick = 4, wokenPids = emptyList(), selectedPid = null)
-
-                assertEquals(VmProcessSchedulerTick(currentTick = 4, wokenPids = emptyList(), selectedPid = 1), manager.schedulerTick(4))
-                assertEquals(1, metrics.snapshot().vm.nativeProcessSchedulerComparisons)
-                assertEquals(0, metrics.snapshot().vm.nativeProcessSchedulerMatches)
-                assertEquals(1, metrics.snapshot().vm.nativeProcessSchedulerMismatches)
-                assertEquals(0, metrics.snapshot().vm.nativeProcessSchedulerAcceptedTicks)
-                assertEquals(1, metrics.snapshot().vm.nativeProcessSchedulerFallbackTicks)
-            } finally {
-                runBlocking { manager.cancelAll() }
-                scope.cancel()
-            }
-        }
-    }
-
-    @Test
-    fun strictNativeSchedulerParityRejectsMismatchedNativeDecision() {
-        runtimeTestWorkspace("vm-process-manager-native-scheduler-strict-mismatch") { workspace ->
-            val bridge = RecordingNativeProcessBridge()
-            val ctx = StubVmContext()
-            val metrics = RecordingRuntimeMetricsCollector()
-            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-            val manager =
-                VmProcessManager(
-                    scope = scope,
-                    ctx = ctx,
-                    deviceId = 1,
-                    programLoader = WorkspaceProgramLoader(workspace.host),
-                    profile = runtimeProfile(),
-                    runtimeCreator = { _, _, _, _ -> error("runtimeCreator should not run") },
-                    compilerMetricsCollector = NoOpCompilerMetricsCollector,
-                    runtimeMetricsCollector = metrics,
-                    nativeProcessBridge = bridge,
-                    strictNativeSchedulerParity = true,
-                )
-
-            try {
-                bridge.schedulerTickResult = VmProcessSchedulerTick(currentTick = 4, wokenPids = emptyList(), selectedPid = null)
-
-                val error = assertFailsWith<IllegalStateException> { manager.schedulerTick(4) }
-                assertTrue(error.message.orEmpty().contains("Native process scheduler mismatch"), error.message)
-                assertEquals(1, metrics.snapshot().vm.nativeProcessSchedulerComparisons)
-                assertEquals(0, metrics.snapshot().vm.nativeProcessSchedulerMatches)
-                assertEquals(1, metrics.snapshot().vm.nativeProcessSchedulerMismatches)
-                assertEquals(0, metrics.snapshot().vm.nativeProcessSchedulerAcceptedTicks)
-                assertEquals(1, metrics.snapshot().vm.nativeProcessSchedulerFallbackTicks)
-            } finally {
-                runBlocking { manager.cancelAll() }
-                scope.cancel()
-            }
-        }
-    }
-
-    @Test
-    fun schedulerTickWithoutNativeDecisionDoesNotRecordNativeSchedulerSource() {
-        runtimeTestWorkspace("vm-process-manager-no-native-scheduler-source") { workspace ->
-            val bridge = RecordingNativeProcessBridge()
-            val ctx = StubVmContext()
-            val metrics = RecordingRuntimeMetricsCollector()
-            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-            val manager =
-                VmProcessManager(
-                    scope = scope,
-                    ctx = ctx,
-                    deviceId = 1,
-                    programLoader = WorkspaceProgramLoader(workspace.host),
-                    profile = runtimeProfile(),
-                    runtimeCreator = { _, _, _, _ -> error("runtimeCreator should not run") },
-                    compilerMetricsCollector = NoOpCompilerMetricsCollector,
-                    runtimeMetricsCollector = metrics,
-                    nativeProcessBridge = bridge,
-                )
-
-            try {
-                assertEquals(VmProcessSchedulerTick(currentTick = 4, wokenPids = emptyList(), selectedPid = 1), manager.schedulerTick(4))
-                assertEquals(0, metrics.snapshot().vm.nativeProcessSchedulerComparisons)
-                assertEquals(0, metrics.snapshot().vm.nativeProcessSchedulerAcceptedTicks)
-                assertEquals(0, metrics.snapshot().vm.nativeProcessSchedulerFallbackTicks)
-            } finally {
-                runBlocking { manager.cancelAll() }
-                scope.cancel()
-            }
-        }
-    }
-
-    @Test
-    fun processStateTransitionsAreMirroredToNativeBridge() {
-        runtimeTestWorkspace("vm-process-manager-native-state-bridge") { workspace ->
-            val bridge = RecordingNativeProcessBridge()
-            val ctx = StubVmContext()
-            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-            val manager =
-                VmProcessManager(
-                    scope = scope,
-                    ctx = ctx,
-                    deviceId = 1,
-                    programLoader = WorkspaceProgramLoader(workspace.host),
-                    profile = runtimeProfile(),
-                    runtimeCreator = { _, _, _, _ -> error("runtimeCreator should not run") },
-                    compilerMetricsCollector = NoOpCompilerMetricsCollector,
-                    nativeProcessBridge = bridge,
-                )
-
-            try {
-                manager.markWaitingEvent(pid = 1, filter = "key")
-                manager.markWaitingIpc(pid = 1, channelId = 7)
-                manager.markWaitingProcess(pid = 1, targetPid = 2)
-                manager.markSleeping(pid = 1, untilTick = 9)
-                manager.markRunnable(pid = 1)
-                manager.markCrashed(pid = 1, message = "boom")
-                manager.schedulerTick(11)
-
-                assertEquals(listOf(Pair<Int, String?>(1, "key")), bridge.waitingEvents)
-                assertEquals(listOf(1 to 7), bridge.waitingIpc)
-                assertEquals(listOf(1 to 2), bridge.waitingProcesses)
-                assertEquals(listOf(1 to 9L), bridge.sleepingProcesses)
-                assertEquals(listOf(1), bridge.runnablePids)
-                assertEquals(listOf(1 to "boom"), bridge.crashedProcesses)
-                assertEquals(listOf(11L), bridge.schedulerTicks)
-            } finally {
-                runBlocking { manager.cancelAll() }
-                scope.cancel()
-            }
-        }
-    }
-
-    @Test
     fun crashedChildKeepsCrashedProcessState() {
         runtimeTestWorkspace("vm-process-manager-crashed-state") { workspace ->
             workspace.writeProgram(
@@ -740,7 +369,6 @@ class VmProcessManagerTest {
                 }
                 """.trimIndent(),
             )
-            val bridge = RecordingNativeProcessBridge()
             val ctx = StubVmContext()
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
             val manager =
@@ -752,7 +380,6 @@ class VmProcessManagerTest {
                     profile = runtimeProfile(),
                     runtimeCreator = { _, _, _, _ -> error("runtime exploded") },
                     compilerMetricsCollector = NoOpCompilerMetricsCollector,
-                    nativeProcessBridge = bridge,
                 )
 
             try {
@@ -761,41 +388,6 @@ class VmProcessManagerTest {
 
                 assertEquals(1, code)
                 assertEquals(VmProcessState.Crashed("Program error in crash.ck: runtime exploded"), manager.processSnapshot(pid)?.state)
-                assertEquals(listOf(2 to 1), bridge.completions)
-            } finally {
-                runBlocking { manager.cancelAll() }
-                scope.cancel()
-            }
-        }
-    }
-
-    @Test
-    fun spawnRecordsStaleNativeProcessCompletionWhenBridgeRejectsCompletion() {
-        runtimeTestWorkspace("vm-process-manager-native-bridge-stale-completion") { workspace ->
-            val bridge = RecordingNativeProcessBridge().apply { completeResult = false }
-            val metrics = RecordingRuntimeMetricsCollector()
-            val ctx = StubVmContext()
-            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-            val manager =
-                VmProcessManager(
-                    scope = scope,
-                    ctx = ctx,
-                    deviceId = 1,
-                    programLoader = WorkspaceProgramLoader(workspace.host),
-                    profile = runtimeProfile(),
-                    runtimeCreator = { _, _, _, _ -> error("runtimeCreator should not run for a missing program") },
-                    compilerMetricsCollector = NoOpCompilerMetricsCollector,
-                    runtimeMetricsCollector = metrics,
-                    nativeProcessBridge = bridge,
-                )
-
-            try {
-                val pid = manager.spawn("missing.ck", "", "")
-                runBlocking { withTimeout(5_000) { manager.wait(pid) } }
-
-                assertEquals(2, metrics.snapshot().vm.nativeProcessRegistrations)
-                assertEquals(0, metrics.snapshot().vm.nativeProcessCompletions)
-                assertEquals(1, metrics.snapshot().vm.nativeProcessStaleCompletions)
             } finally {
                 runBlocking { manager.cancelAll() }
                 scope.cancel()
