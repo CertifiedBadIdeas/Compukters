@@ -4,6 +4,7 @@ use std::sync::Arc;
 use crate::image_runner::ImageVmHandle;
 use crate::runtime_kernel::{DeviceRuntimeKernelHandle, ProcessStatus};
 use crate::signal::VmSignal;
+use crate::value::VmValue;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DeviceDaemonBootSummary {
@@ -26,6 +27,13 @@ pub enum DeviceDaemonProcessStatus {
     Running,
     Completed(i32),
     Missing,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DaemonSignalOutcome {
+    Runnable,
+    Waiting,
+    Halted,
 }
 
 pub struct DeviceDaemon {
@@ -140,18 +148,17 @@ impl DeviceDaemon {
         };
         let mut halted = 0;
         match signal {
-            Ok(VmSignal::Halt(_value)) => {
-                halted = 1;
-                let _ = self
-                    .kernel
-                    .with_kernel_mut(|kernel| kernel.complete_process(pid, 0));
-                self.images.remove(&pid);
-                self.image_handles.remove(&pid);
-            }
-            Ok(VmSignal::Pause) => {}
-            Ok(other) => {
-                panic!("daemon received deferred Task 4 signal during Task 3: {other:?}");
-            }
+            Ok(signal) => match self.handle_signal(pid, signal, server_tick) {
+                Ok(DaemonSignalOutcome::Halted) => halted = 1,
+                Ok(DaemonSignalOutcome::Runnable | DaemonSignalOutcome::Waiting) => {}
+                Err(message) => {
+                    let _ = self
+                        .kernel
+                        .with_kernel_mut(|kernel| kernel.mark_process_crashed(pid, message));
+                    self.images.remove(&pid);
+                    self.image_handles.remove(&pid);
+                }
+            },
             Err(message) => {
                 let _ = self
                     .kernel
@@ -169,11 +176,75 @@ impl DeviceDaemon {
             host_requests: 0,
         }
     }
+
+    fn handle_signal(
+        &mut self,
+        pid: i32,
+        signal: VmSignal,
+        server_tick: i64,
+    ) -> Result<DaemonSignalOutcome, String> {
+        match signal {
+            VmSignal::Halt(_value) => {
+                self.kernel
+                    .with_kernel_mut(|kernel| kernel.complete_process(pid, 0))?;
+                self.images.remove(&pid);
+                self.image_handles.remove(&pid);
+                Ok(DaemonSignalOutcome::Halted)
+            }
+            VmSignal::Pause => Ok(DaemonSignalOutcome::Runnable),
+            VmSignal::Yield => {
+                if let Some(image) = self.images.get_mut(&pid) {
+                    image.resume_with_value(VmValue::Unit)?;
+                }
+                self.kernel
+                    .with_kernel_mut(|kernel| kernel.mark_process_runnable(pid))?;
+                Ok(DaemonSignalOutcome::Runnable)
+            }
+            VmSignal::Sleep(ticks) => {
+                if let Some(image) = self.images.get_mut(&pid) {
+                    image.resume_with_value(VmValue::Unit)?;
+                }
+                let until_tick = server_tick.saturating_add(ticks.max(1));
+                self.kernel
+                    .with_kernel_mut(|kernel| kernel.mark_process_sleeping(pid, until_tick))?;
+                Ok(DaemonSignalOutcome::Waiting)
+            }
+            VmSignal::WaitEvent(filter) => {
+                self.kernel
+                    .with_kernel_mut(|kernel| kernel.mark_process_waiting_for_event(pid, filter))?;
+                Ok(DaemonSignalOutcome::Waiting)
+            }
+            VmSignal::WaitPoll {
+                channel,
+                wake_sequence: _wake_sequence,
+            } => {
+                self.kernel
+                    .with_kernel_mut(|kernel| kernel.mark_process_waiting_for_ipc(pid, channel))?;
+                Ok(DaemonSignalOutcome::Waiting)
+            }
+            VmSignal::WaitProcess {
+                pid: target_pid,
+                wake_sequence: _wake_sequence,
+            } => {
+                self.kernel.with_kernel_mut(|kernel| {
+                    kernel.mark_process_waiting_for_process(pid, target_pid)
+                })?;
+                Ok(DaemonSignalOutcome::Waiting)
+            }
+            other => panic!("daemon received deferred Task 4 signal during Task 3: {other:?}"),
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const OP_RETURN: u8 = 2;
+    const OP_PUSH_CONSTANT: u8 = 3;
+    const OP_CALL_HOST: u8 = 4;
+    const OP_YIELD: u8 = 24;
+    const OP_SLEEP: u8 = 25;
 
     #[test]
     fn daemon_registers_boot_process_with_owned_kernel() {
@@ -215,19 +286,176 @@ mod tests {
         );
     }
 
+    #[test]
+    fn daemon_handles_yield_by_resuming_unit_and_requeueing_process() {
+        let mut daemon = DeviceDaemon::new(16, 1024, 128);
+        daemon.boot_image(&ckim_yields_then_halts(), "/rom/yield.ck", "", "");
+
+        let first = daemon.tick(1, 1_000_000, 10);
+        assert_eq!(first.turns, 1);
+        assert_eq!(daemon.process_status(1), DeviceDaemonProcessStatus::Running);
+
+        let second = daemon.tick(1, 1_000_000, 11);
+        assert_eq!(second.halted, 1);
+        assert_eq!(
+            daemon.process_status(1),
+            DeviceDaemonProcessStatus::Completed(0),
+        );
+    }
+
+    #[test]
+    fn daemon_moves_sleeping_process_until_due_tick() {
+        let mut daemon = DeviceDaemon::new(16, 1024, 128);
+        daemon.boot_image(&ckim_sleeps_one_tick_then_halts(), "/rom/sleep.ck", "", "");
+
+        let first = daemon.tick(1, 1_000_000, 20);
+        let second = daemon.tick(1, 1_000_000, 20);
+        let third = daemon.tick(1, 1_000_000, 21);
+
+        assert_eq!(first.turns, 1);
+        assert!(second.idle);
+        assert_eq!(third.halted, 1);
+    }
+
+    #[test]
+    fn daemon_handles_wait_poll_by_parking_process() {
+        let mut daemon = DeviceDaemon::new(16, 1024, 128);
+        let channel = daemon
+            .kernel()
+            .with_kernel_mut(|kernel| kernel.open_ipc_channel())
+            .unwrap()
+            .unwrap();
+        daemon.boot_image(
+            &ckim_polls_empty_channel_then_halts(channel),
+            "/rom/poll.ck",
+            "",
+            "",
+        );
+
+        let first = daemon.tick(1, 1_000_000, 30);
+        let second = daemon.tick(1, 1_000_000, 31);
+
+        assert_eq!(first.turns, 1);
+        assert!(second.idle);
+        assert_eq!(daemon.process_status(1), DeviceDaemonProcessStatus::Running);
+    }
+
+    #[test]
+    fn daemon_handles_wait_process_by_parking_process() {
+        let mut daemon = DeviceDaemon::new(16, 1024, 128);
+        daemon.boot_image(&ckim_waits_for_pid_then_halts(2), "/rom/wait.ck", "", "");
+        daemon
+            .kernel()
+            .with_kernel_mut(|kernel| {
+                assert!(kernel.register_process(2, 1, "/rom/child.ck".to_string()));
+                assert!(kernel.mark_process_sleeping(2, 10_000));
+            })
+            .unwrap();
+
+        let first = daemon.tick(1, 1_000_000, 40);
+        let second = daemon.tick(1, 1_000_000, 41);
+
+        assert_eq!(first.turns, 1);
+        assert!(second.idle);
+        assert_eq!(daemon.process_status(1), DeviceDaemonProcessStatus::Running);
+    }
+
+    #[test]
+    fn daemon_handles_wait_event_by_parking_process() {
+        let mut daemon = DeviceDaemon::new(16, 1024, 128);
+        daemon.boot_image(&ckim_empty_main(), "/rom/event.ck", "", "");
+
+        let outcome = daemon
+            .handle_signal(1, VmSignal::WaitEvent(Some("key".to_string())), 50)
+            .unwrap();
+        let summary = daemon.tick(1, 1_000_000, 51);
+
+        assert_eq!(outcome, DaemonSignalOutcome::Waiting);
+        assert!(summary.idle);
+        assert_eq!(daemon.process_status(1), DeviceDaemonProcessStatus::Running);
+    }
+
     fn ckim_empty_main() -> Vec<u8> {
-        image_with_code(0, vec![2])
+        image_with_code(0, vec![OP_RETURN])
+    }
+
+    fn ckim_yields_then_halts() -> Vec<u8> {
+        image_with_code(0, vec![OP_YIELD, OP_RETURN])
+    }
+
+    fn ckim_sleeps_one_tick_then_halts() -> Vec<u8> {
+        let mut code = Vec::new();
+        code.push(OP_PUSH_CONSTANT);
+        i32(&mut code, 0);
+        code.push(OP_SLEEP);
+        code.push(OP_RETURN);
+        image_with_constants_and_code(vec![ConstantFixture::Long(1)], 0, code)
+    }
+
+    fn ckim_polls_empty_channel_then_halts(channel: i32) -> Vec<u8> {
+        let mut code = Vec::new();
+        code.push(OP_PUSH_CONSTANT);
+        i32(&mut code, 0);
+        code.push(OP_CALL_HOST);
+        i32(&mut code, 1);
+        i32(&mut code, 1);
+        code.push(OP_RETURN);
+        image_with_constants_imports_and_code(
+            vec![ConstantFixture::Int(channel)],
+            vec![HostImportFixture::new(1, "runtime", "poll")],
+            0,
+            code,
+        )
+    }
+
+    fn ckim_waits_for_pid_then_halts(pid: i32) -> Vec<u8> {
+        let mut code = Vec::new();
+        code.push(OP_PUSH_CONSTANT);
+        i32(&mut code, 0);
+        code.push(OP_CALL_HOST);
+        i32(&mut code, 1);
+        i32(&mut code, 1);
+        code.push(OP_RETURN);
+        image_with_constants_imports_and_code(
+            vec![ConstantFixture::Int(pid)],
+            vec![HostImportFixture::new(1, "process", "wait")],
+            0,
+            code,
+        )
     }
 
     fn image_with_code(frame_size: i32, code: Vec<u8>) -> Vec<u8> {
+        image_with_constants_and_code(Vec::new(), frame_size, code)
+    }
+
+    fn image_with_constants_and_code(
+        constants: Vec<ConstantFixture>,
+        frame_size: i32,
+        code: Vec<u8>,
+    ) -> Vec<u8> {
+        image_with_constants_imports_and_code(constants, Vec::new(), frame_size, code)
+    }
+
+    fn image_with_constants_imports_and_code(
+        constants: Vec<ConstantFixture>,
+        host_imports: Vec<HostImportFixture>,
+        frame_size: i32,
+        code: Vec<u8>,
+    ) -> Vec<u8> {
         let mut out = Vec::new();
         out.extend_from_slice(b"CKIM");
         out.push(1);
         string(&mut out, "ckl-1");
         out.extend_from_slice(&1u16.to_le_bytes());
         i32(&mut out, 0);
-        i32(&mut out, 0);
-        i32(&mut out, 0);
+        i32(&mut out, constants.len() as i32);
+        for constant in constants {
+            constant.write_to(&mut out);
+        }
+        i32(&mut out, host_imports.len() as i32);
+        for host_import in host_imports {
+            host_import.write_to(&mut out);
+        }
         i32(&mut out, 0);
         i32(&mut out, 1);
         string(&mut out, "main");
@@ -235,6 +463,51 @@ mod tests {
         i32(&mut out, code.len() as i32);
         out.extend_from_slice(&code);
         out
+    }
+
+    enum ConstantFixture {
+        Int(i32),
+        Long(i64),
+    }
+
+    impl ConstantFixture {
+        fn write_to(self, out: &mut Vec<u8>) {
+            match self {
+                ConstantFixture::Int(value) => {
+                    out.push(2);
+                    i32(out, value);
+                }
+                ConstantFixture::Long(value) => {
+                    out.push(3);
+                    out.extend_from_slice(&value.to_le_bytes());
+                }
+            }
+        }
+    }
+
+    struct HostImportFixture {
+        id: i32,
+        module_name: &'static str,
+        function_name: &'static str,
+    }
+
+    impl HostImportFixture {
+        fn new(id: i32, module_name: &'static str, function_name: &'static str) -> Self {
+            Self {
+                id,
+                module_name,
+                function_name,
+            }
+        }
+
+        fn write_to(self, out: &mut Vec<u8>) {
+            i32(out, self.id);
+            string(out, self.module_name);
+            string(out, self.function_name);
+            i32(out, 1);
+            string(out, "Int");
+            string(out, "Any");
+        }
     }
 
     fn string(out: &mut Vec<u8>, value: &str) {
