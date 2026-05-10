@@ -1538,3 +1538,45 @@ git add docs/superpowers/plans/2026-05-10-device-quota-process-scheduler.md \
   modules/compiler/src/test/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeImageVmBindingsJniTest.kt
 git commit -m "feat: add native scheduler consume step"
 ```
+
+## Task 31: Native Scheduler Step Process Image Handle
+
+**Files:**
+- Modify: `native/ckl-vm/src/runtime_kernel.rs`
+- Modify: `native/ckl-vm/src/jni.rs`
+- Modify: `modules/compiler/src/main/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeVmBindings.kt`
+- Modify: `modules/compiler/src/test/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeImageVmBindingsJniTest.kt`
+
+- [x] **Step 1: Add failing process-image handle tests**
+
+Add Rust and Kotlin JNI tests proving a native process can be associated with an existing native image handle, and that
+`runDeviceSchedulerStep` returns the selected process image handle together with the selected pid.
+
+- [x] **Step 2: Store process image handles in the native process table**
+
+Add optional image-handle metadata to native process entries and a guarded `attach_process_image(...)` API. This is
+metadata only; the scheduler still must not execute images in this task.
+
+- [x] **Step 3: Extend scheduler-step ABI**
+
+Add `selectedImageHandle` to `DeviceSchedulerStep`, encode it through JNI, and decode it in Kotlin.
+
+- [x] **Step 4: Run focused tests**
+
+```bash
+cargo test --manifest-path native/ckl-vm/Cargo.toml scheduler_step
+./gradlew -Dckl.vm.native.library=/home/lazyhat/IdeaProjects/Compukter-Kraft/native/ckl-vm/target/debug/libckl_vm.so :compiler:test --tests '*NativeImageVmBindingsJniTest' --rerun-tasks
+```
+
+Expected: PASS.
+
+- [x] **Step 5: Commit Task 31**
+
+```bash
+git add docs/superpowers/plans/2026-05-10-device-quota-process-scheduler.md \
+  native/ckl-vm/src/runtime_kernel.rs \
+  native/ckl-vm/src/jni.rs \
+  modules/compiler/src/main/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeVmBindings.kt \
+  modules/compiler/src/test/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeImageVmBindingsJniTest.kt
+git commit -m "feat: attach native process image handles"
+```

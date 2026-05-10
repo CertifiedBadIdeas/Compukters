@@ -43,6 +43,7 @@ data class NativeDeviceSchedulerDryRun(
 data class NativeDeviceSchedulerStep(
     val serverTick: Long,
     val selectedPid: Int?,
+    val selectedImageHandle: Long?,
     val remainingInstructions: Long,
     val quotaExhausted: Boolean,
     val wokenPids: List<Int>,
@@ -318,6 +319,15 @@ object NativeVmBindings : NativeVmBindingsFacade {
         return runDeviceSchedulerStepNative(kernelHandle).toNativeDeviceSchedulerStep()
     }
 
+    fun attachProcessImage(
+        kernelHandle: Long,
+        pid: Int,
+        imageHandle: Long,
+    ): Boolean {
+        require(kernelHandle != 0L) { "Native device runtime kernel handle is zero" }
+        return attachProcessImageNative(kernelHandle, pid, imageHandle)
+    }
+
     override fun attachImageToKernel(
         imageHandle: Long,
         kernelHandle: Long,
@@ -495,17 +505,21 @@ object NativeVmBindings : NativeVmBindingsFacade {
             getOrElse(1) { 0L }
                 .toInt()
                 .takeIf { it > 0 }
+        val selectedImageHandle =
+            getOrElse(2) { 0L }
+                .takeIf { it > 0L }
         val wokenCount =
-            getOrElse(4) { 0L }
+            getOrElse(5) { 0L }
                 .toInt()
                 .coerceAtLeast(0)
         return NativeDeviceSchedulerStep(
             serverTick = getOrElse(0) { 0L },
             selectedPid = selectedPid,
-            remainingInstructions = getOrElse(2) { 0L },
-            quotaExhausted = getOrElse(3) { 0L } != 0L,
+            selectedImageHandle = selectedImageHandle,
+            remainingInstructions = getOrElse(3) { 0L },
+            quotaExhausted = getOrElse(4) { 0L } != 0L,
             wokenPids =
-                drop(5)
+                drop(6)
                     .take(wokenCount)
                     .map { it.toInt() },
         )
@@ -580,6 +594,12 @@ object NativeVmBindings : NativeVmBindingsFacade {
         pid: Int,
         parentPid: Int,
         programPath: String,
+    ): Boolean
+
+    private external fun attachProcessImageNative(
+        kernelHandle: Long,
+        pid: Int,
+        imageHandle: Long,
     ): Boolean
 
     private external fun completeProcessNative(

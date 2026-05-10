@@ -71,6 +71,10 @@ class NativeImageVmBindingsJniTest {
             "NativeVmBindings must expose native process registration",
         )
         assertTrue(
+            "attachProcessImage" in memberNames,
+            "NativeVmBindings must expose native process image attachment",
+        )
+        assertTrue(
             "completeProcess" in memberNames,
             "NativeVmBindings must expose native process completion",
         )
@@ -218,6 +222,16 @@ class NativeImageVmBindingsJniTest {
                     Long::class.javaPrimitiveType,
                 ).returnType,
         )
+        assertEquals(
+            Boolean::class.javaPrimitiveType,
+            NativeVmBindings::class.java
+                .getDeclaredMethod(
+                    "attachProcessImageNative",
+                    Long::class.javaPrimitiveType,
+                    Int::class.javaPrimitiveType,
+                    Long::class.javaPrimitiveType,
+                ).returnType,
+        )
     }
 
     @Test
@@ -261,6 +275,8 @@ class NativeImageVmBindingsJniTest {
         try {
             assertTrue(NativeVmBindings.registerProcess(kernelHandle, pid = 1, parentPid = 0, programPath = "/rom/a.ck"))
             assertTrue(NativeVmBindings.registerProcess(kernelHandle, pid = 2, parentPid = 0, programPath = "/rom/b.ck"))
+            assertTrue(NativeVmBindings.attachProcessImage(kernelHandle, pid = 1, imageHandle = 101))
+            assertTrue(NativeVmBindings.attachProcessImage(kernelHandle, pid = 2, imageHandle = 202))
             NativeVmBindings.addDeviceExecutionQuota(
                 kernelHandle = kernelHandle,
                 instructions = 2,
@@ -272,6 +288,7 @@ class NativeImageVmBindingsJniTest {
                 NativeDeviceSchedulerStep(
                     serverTick = 42,
                     selectedPid = 1,
+                    selectedImageHandle = 101,
                     remainingInstructions = 1,
                     quotaExhausted = false,
                     wokenPids = emptyList(),
@@ -282,6 +299,7 @@ class NativeImageVmBindingsJniTest {
                 NativeDeviceSchedulerStep(
                     serverTick = 42,
                     selectedPid = 2,
+                    selectedImageHandle = 202,
                     remainingInstructions = 0,
                     quotaExhausted = true,
                     wokenPids = emptyList(),
@@ -292,6 +310,7 @@ class NativeImageVmBindingsJniTest {
                 NativeDeviceSchedulerStep(
                     serverTick = 42,
                     selectedPid = null,
+                    selectedImageHandle = null,
                     remainingInstructions = 0,
                     quotaExhausted = true,
                     wokenPids = emptyList(),
