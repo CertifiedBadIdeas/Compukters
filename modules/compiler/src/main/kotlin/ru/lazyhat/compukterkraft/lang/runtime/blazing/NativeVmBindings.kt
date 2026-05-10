@@ -40,6 +40,14 @@ data class NativeDeviceSchedulerDryRun(
     val selectedPids: List<Int>,
 )
 
+data class NativeDeviceSchedulerStep(
+    val serverTick: Long,
+    val selectedPid: Int?,
+    val remainingInstructions: Long,
+    val quotaExhausted: Boolean,
+    val wokenPids: List<Int>,
+)
+
 internal interface NativeVmBindingsFacade {
     fun createImage(
         libraryPath: String,
@@ -305,6 +313,11 @@ object NativeVmBindings : NativeVmBindingsFacade {
         ).toNativeDeviceSchedulerDryRun()
     }
 
+    fun runDeviceSchedulerStep(kernelHandle: Long): NativeDeviceSchedulerStep {
+        require(kernelHandle != 0L) { "Native device runtime kernel handle is zero" }
+        return runDeviceSchedulerStepNative(kernelHandle).toNativeDeviceSchedulerStep()
+    }
+
     override fun attachImageToKernel(
         imageHandle: Long,
         kernelHandle: Long,
@@ -477,6 +490,27 @@ object NativeVmBindings : NativeVmBindingsFacade {
         )
     }
 
+    private fun LongArray.toNativeDeviceSchedulerStep(): NativeDeviceSchedulerStep {
+        val selectedPid =
+            getOrElse(1) { 0L }
+                .toInt()
+                .takeIf { it > 0 }
+        val wokenCount =
+            getOrElse(4) { 0L }
+                .toInt()
+                .coerceAtLeast(0)
+        return NativeDeviceSchedulerStep(
+            serverTick = getOrElse(0) { 0L },
+            selectedPid = selectedPid,
+            remainingInstructions = getOrElse(2) { 0L },
+            quotaExhausted = getOrElse(3) { 0L } != 0L,
+            wokenPids =
+                drop(5)
+                    .take(wokenCount)
+                    .map { it.toInt() },
+        )
+    }
+
     @JvmStatic
     private external fun createImageNative(
         image: ByteArray,
@@ -605,6 +639,8 @@ object NativeVmBindings : NativeVmBindingsFacade {
         kernelHandle: Long,
         maxTurns: Int,
     ): LongArray
+
+    private external fun runDeviceSchedulerStepNative(kernelHandle: Long): LongArray
 
     @JvmStatic
     private external fun displayWakeSequenceNative(handle: Long): Long

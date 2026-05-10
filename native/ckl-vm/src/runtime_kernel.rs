@@ -49,6 +49,15 @@ pub struct DeviceSchedulerDryRun {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeviceSchedulerStep {
+    pub server_tick: i64,
+    pub selected_pid: Option<i32>,
+    pub remaining_instructions: i64,
+    pub quota_exhausted: bool,
+    pub woken_pids: Vec<i32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct ProcessEntry {
     parent_pid: i32,
     program_path: String,
@@ -168,6 +177,27 @@ impl DeviceRuntimeKernel {
             turns: selected_pids.len() as i64,
             remaining_instructions,
             selected_pids,
+        }
+    }
+
+    pub fn run_scheduler_step(&mut self) -> DeviceSchedulerStep {
+        let server_tick = self.execution_quota.server_tick;
+        let woken_pids = self.wake_sleepers(server_tick);
+        let selected_pid = if self.execution_quota.instructions > 0 {
+            self.next_runnable_pid()
+        } else {
+            None
+        };
+        if selected_pid.is_some() {
+            self.execution_quota.instructions = self.execution_quota.instructions.saturating_sub(1);
+        }
+        let remaining_instructions = self.execution_quota.instructions.max(0);
+        DeviceSchedulerStep {
+            server_tick,
+            selected_pid,
+            remaining_instructions,
+            quota_exhausted: remaining_instructions == 0,
+            woken_pids,
         }
     }
 
@@ -959,6 +989,64 @@ mod tests {
                 current_tick: 5,
                 woken_pids: vec![1],
                 selected_pid: Some(1),
+            }
+        );
+    }
+
+    #[test]
+    fn scheduler_step_consumes_quota_and_rotates_round_robin() {
+        let mut kernel = DeviceRuntimeKernel::new(16, 1024);
+        assert!(kernel.register_process(1, 0, "/rom/a.ck".to_string()));
+        assert!(kernel.register_process(2, 0, "/rom/b.ck".to_string()));
+        assert!(kernel.add_execution_quota(2, 1_000, 42).instructions == 2);
+
+        assert_eq!(
+            kernel.run_scheduler_step(),
+            DeviceSchedulerStep {
+                server_tick: 42,
+                selected_pid: Some(1),
+                remaining_instructions: 1,
+                quota_exhausted: false,
+                woken_pids: Vec::new(),
+            }
+        );
+        assert_eq!(
+            kernel.run_scheduler_step(),
+            DeviceSchedulerStep {
+                server_tick: 42,
+                selected_pid: Some(2),
+                remaining_instructions: 0,
+                quota_exhausted: true,
+                woken_pids: Vec::new(),
+            }
+        );
+        assert_eq!(
+            kernel.run_scheduler_step(),
+            DeviceSchedulerStep {
+                server_tick: 42,
+                selected_pid: None,
+                remaining_instructions: 0,
+                quota_exhausted: true,
+                woken_pids: Vec::new(),
+            }
+        );
+    }
+
+    #[test]
+    fn scheduler_step_wakes_due_sleepers_before_selecting() {
+        let mut kernel = DeviceRuntimeKernel::new(16, 1024);
+        assert!(kernel.register_process(1, 0, "/rom/a.ck".to_string()));
+        assert!(kernel.mark_process_sleeping(1, 5));
+        assert!(kernel.add_execution_quota(1, 1_000, 5).instructions == 1);
+
+        assert_eq!(
+            kernel.run_scheduler_step(),
+            DeviceSchedulerStep {
+                server_tick: 5,
+                selected_pid: Some(1),
+                remaining_instructions: 0,
+                quota_exhausted: true,
+                woken_pids: vec![1],
             }
         );
     }

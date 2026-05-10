@@ -210,6 +210,14 @@ class NativeImageVmBindingsJniTest {
                     Int::class.javaPrimitiveType,
                 ).returnType,
         )
+        assertEquals(
+            LongArray::class.java,
+            NativeVmBindings::class.java
+                .getDeclaredMethod(
+                    "runDeviceSchedulerStepNative",
+                    Long::class.javaPrimitiveType,
+                ).returnType,
+        )
     }
 
     @Test
@@ -239,6 +247,56 @@ class NativeImageVmBindingsJniTest {
             assertEquals(
                 NativeProcessSchedulerTick(currentTick = 42, selectedPid = 1, wokenPids = emptyList()),
                 NativeVmBindings.processSchedulerTick(kernelHandle, currentTick = 42),
+            )
+        } finally {
+            NativeVmBindings.freeDeviceKernel(kernelHandle)
+        }
+    }
+
+    @Test
+    fun nativeDeviceSchedulerStepRunsWhenLibraryIsConfigured() {
+        System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val kernelHandle = NativeVmBindings.createDeviceKernel(maxEventQueueSize = 64, maxBufferedBytesPerChannel = 4096)
+
+        try {
+            assertTrue(NativeVmBindings.registerProcess(kernelHandle, pid = 1, parentPid = 0, programPath = "/rom/a.ck"))
+            assertTrue(NativeVmBindings.registerProcess(kernelHandle, pid = 2, parentPid = 0, programPath = "/rom/b.ck"))
+            NativeVmBindings.addDeviceExecutionQuota(
+                kernelHandle = kernelHandle,
+                instructions = 2,
+                wallNanos = 1_000,
+                serverTick = 42,
+            )
+
+            assertEquals(
+                NativeDeviceSchedulerStep(
+                    serverTick = 42,
+                    selectedPid = 1,
+                    remainingInstructions = 1,
+                    quotaExhausted = false,
+                    wokenPids = emptyList(),
+                ),
+                NativeVmBindings.runDeviceSchedulerStep(kernelHandle),
+            )
+            assertEquals(
+                NativeDeviceSchedulerStep(
+                    serverTick = 42,
+                    selectedPid = 2,
+                    remainingInstructions = 0,
+                    quotaExhausted = true,
+                    wokenPids = emptyList(),
+                ),
+                NativeVmBindings.runDeviceSchedulerStep(kernelHandle),
+            )
+            assertEquals(
+                NativeDeviceSchedulerStep(
+                    serverTick = 42,
+                    selectedPid = null,
+                    remainingInstructions = 0,
+                    quotaExhausted = true,
+                    wokenPids = emptyList(),
+                ),
+                NativeVmBindings.runDeviceSchedulerStep(kernelHandle),
             )
         } finally {
             NativeVmBindings.freeDeviceKernel(kernelHandle)
