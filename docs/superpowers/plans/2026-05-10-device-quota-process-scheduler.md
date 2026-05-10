@@ -530,3 +530,41 @@ git add docs/superpowers/plans/2026-05-10-device-quota-process-scheduler.md \
   modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVmTest.kt
 git commit -m "feat: stop gating device quota on process sleep"
 ```
+
+## Task 8: Process Table Runnable Queue
+
+**Files:**
+- Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessTable.kt`
+- Test: `modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessTableTest.kt`
+
+- [x] **Step 1: Add failing runnable queue tests**
+
+Add tests proving:
+
+- registered runnable processes are visible in insertion order;
+- `nextRunnablePid()` rotates runnable processes round-robin;
+- waiting, sleeping, exited, and crashed states remove pids from the runnable queue;
+- `markRunnable(pid)` requeues an existing process once and does not create duplicates;
+- unknown pids are ignored.
+
+- [x] **Step 2: Implement runnable queue in `VmProcessTable`**
+
+Maintain a small synchronized queue plus membership set next to the record map. State transitions should keep queue
+membership in sync with `VmProcessState.Runnable`.
+
+- [x] **Step 3: Run focused tests**
+
+```bash
+./gradlew :core:test --tests '*VmProcessTableTest' --rerun-tasks
+```
+
+Expected: PASS.
+
+- [x] **Step 4: Commit Task 8**
+
+```bash
+git add docs/superpowers/plans/2026-05-10-device-quota-process-scheduler.md \
+  modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessTable.kt \
+  modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessTableTest.kt
+git commit -m "feat: add VM process runnable queue"
+```

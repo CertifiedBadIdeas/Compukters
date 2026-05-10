@@ -41,6 +41,55 @@ class VmProcessTableTest {
     }
 
     @Test
+    fun registeredRunnableProcessesRotateRoundRobin() {
+        val table = VmProcessTable()
+        table.registerProcess(pid = 2, parentPid = 1, programPath = "a.ck", argument = "", workingDirectory = "")
+        table.registerProcess(pid = 3, parentPid = 1, programPath = "b.ck", argument = "", workingDirectory = "")
+
+        assertEquals(listOf(2, 3), table.runnableSnapshot())
+        assertEquals(2, table.nextRunnablePid())
+        assertEquals(listOf(3, 2), table.runnableSnapshot())
+        assertEquals(3, table.nextRunnablePid())
+        assertEquals(listOf(2, 3), table.runnableSnapshot())
+    }
+
+    @Test
+    fun nonRunnableStatesRemoveProcessesFromRunnableQueue() {
+        val table = VmProcessTable()
+        table.registerProcess(pid = 1, parentPid = 0, programPath = "bios.ck", argument = "", workingDirectory = "")
+        table.registerProcess(pid = 2, parentPid = 1, programPath = "child.ck", argument = "", workingDirectory = "")
+
+        table.markWaitingEvent(pid = 1, filter = null)
+        assertEquals(listOf(2), table.runnableSnapshot())
+
+        table.markSleeping(pid = 2, untilTick = 12)
+        assertEquals(emptyList(), table.runnableSnapshot())
+        assertNull(table.nextRunnablePid())
+
+        table.markRunnable(pid = 1)
+        table.markRunnable(pid = 2)
+        assertEquals(listOf(1, 2), table.runnableSnapshot())
+
+        table.markExited(pid = 1, exitCode = 0)
+        table.markCrashed(pid = 2, message = "boom")
+        assertEquals(emptyList(), table.runnableSnapshot())
+    }
+
+    @Test
+    fun markRunnableRequeuesExistingProcessOnce() {
+        val table = VmProcessTable()
+        table.registerProcess(pid = 1, parentPid = 0, programPath = "bios.ck", argument = "", workingDirectory = "")
+
+        table.markWaitingIpc(pid = 1, channelId = 7)
+        table.markRunnable(pid = 1)
+        table.markRunnable(pid = 1)
+
+        assertEquals(listOf(1), table.runnableSnapshot())
+        assertEquals(1, table.nextRunnablePid())
+        assertEquals(listOf(1), table.runnableSnapshot())
+    }
+
+    @Test
     fun processCanMoveThroughWaitingAndExitedStates() {
         val table = VmProcessTable()
         table.registerProcess(pid = 1, parentPid = 0, programPath = "bios.ck", argument = "", workingDirectory = "")
@@ -80,6 +129,8 @@ class VmProcessTableTest {
         table.markExited(pid = 99, exitCode = 1)
 
         assertNull(table.snapshot(99))
+        assertEquals(emptyList(), table.runnableSnapshot())
+        assertNull(table.nextRunnablePid())
     }
 
     @Test
