@@ -205,6 +205,43 @@ class VmProcessManagerTest {
     }
 
     @Test
+    fun spawnRecordsChildLifecycleInProcessTable() {
+        runtimeTestWorkspace("vm-process-manager-process-table") { workspace ->
+            val bridge = RecordingNativeProcessBridge()
+            val ctx = StubVmContext()
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val manager =
+                VmProcessManager(
+                    scope = scope,
+                    ctx = ctx,
+                    deviceId = 1,
+                    programLoader = WorkspaceProgramLoader(workspace.host),
+                    profile = runtimeProfile(),
+                    runtimeCreator = { _, _, _, _ -> error("runtimeCreator should not run for a missing program") },
+                    compilerMetricsCollector = NoOpCompilerMetricsCollector,
+                    nativeProcessBridge = bridge,
+                )
+
+            try {
+                val pid = manager.spawn("missing.ck", "arg", "bin", parentPid = 41)
+                val code = runBlocking { withTimeout(5_000) { manager.wait(pid) } }
+
+                val record = manager.processSnapshot(pid)
+                assertEquals(1, code)
+                assertEquals(pid, record?.pid)
+                assertEquals(41, record?.parentPid)
+                assertEquals("missing.ck", record?.programPath)
+                assertEquals("arg", record?.argument)
+                assertEquals("bin", record?.workingDirectory)
+                assertEquals(VmProcessState.Exited(1), record?.state)
+            } finally {
+                runBlocking { manager.cancelAll() }
+                scope.cancel()
+            }
+        }
+    }
+
+    @Test
     fun spawnRecordsStaleNativeProcessCompletionWhenBridgeRejectsCompletion() {
         runtimeTestWorkspace("vm-process-manager-native-bridge-stale-completion") { workspace ->
             val bridge = RecordingNativeProcessBridge().apply { completeResult = false }

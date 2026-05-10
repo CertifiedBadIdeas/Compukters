@@ -50,6 +50,19 @@ internal class VmProcessManager(
 ) {
     private val nextPid = AtomicInteger(2)
     private val processes = ConcurrentHashMap<Int, ProcessHandle>()
+    private val processTable = VmProcessTable()
+
+    init {
+        processTable.registerProcess(
+            pid = 1,
+            parentPid = 0,
+            programPath = profile.bootScriptName,
+            argument = "",
+            workingDirectory = "",
+        )
+    }
+
+    fun processSnapshot(pid: Int): VmProcessRecord? = processTable.snapshot(pid)
 
     fun spawn(
         path: String,
@@ -59,6 +72,13 @@ internal class VmProcessManager(
     ): Int {
         val pid = nextPid.getAndIncrement()
         val exitCode = CompletableDeferred<Int>()
+        processTable.registerProcess(
+            pid = pid,
+            parentPid = parentPid,
+            programPath = path,
+            argument = argument,
+            workingDirectory = workingDirectory,
+        )
         val nativeRegistered = nativeProcessBridge.registerProcess(pid = pid, parentPid = parentPid, programPath = path)
         if (nativeRegistered) {
             runtimeMetricsCollector.recordNativeProcessRegistration()
@@ -66,6 +86,7 @@ internal class VmProcessManager(
         val job =
             scope.launch(start = CoroutineStart.LAZY) {
                 val code = execute(pid, parentPid, path, argument, workingDirectory)
+                processTable.markExited(pid, code)
                 if (nativeRegistered) {
                     if (nativeProcessBridge.completeProcess(pid, code)) {
                         runtimeMetricsCollector.recordNativeProcessCompletion()
@@ -79,6 +100,7 @@ internal class VmProcessManager(
         job.start()
         job.invokeOnCompletion { failure ->
             if (failure != null && !exitCode.isCompleted) {
+                processTable.markExited(pid, 1)
                 exitCode.complete(1)
             }
         }
