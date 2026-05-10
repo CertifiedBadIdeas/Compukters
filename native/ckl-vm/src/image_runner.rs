@@ -303,6 +303,22 @@ impl ImageVmHandle {
                     kernel_handle.with_kernel_mut(|kernel| kernel.write_ipc(channel, text))??;
                     Ok(NativeHostImportResult::Handled(VmValue::Unit))
                 }
+                "read" => {
+                    let channel = int_argument(&arguments, 0, "ipc.read channel")?;
+                    let mut kernel = kernel_handle.lock()?;
+                    let text = kernel.try_read_ipc(channel)?;
+                    if !text.is_empty() {
+                        return Ok(NativeHostImportResult::Handled(VmValue::String(text)));
+                    }
+                    let wake_sequence = kernel.wake_sequence();
+                    Ok(NativeHostImportResult::SignalNoResume {
+                        signal: VmSignal::WaitPoll {
+                            channel,
+                            wake_sequence,
+                        },
+                        arguments,
+                    })
+                }
                 "tryRead" => {
                     let channel = int_argument(&arguments, 0, "ipc.tryRead channel")?;
                     let mut kernel = kernel_handle.lock()?;
