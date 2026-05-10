@@ -38,11 +38,11 @@ standalone native kernel path. Kotlin will decode daemon frames with `NativeDisp
 - [x] Drain daemon frames from `BackgroundDeviceVm.drainDisplayFrames` and stopped-frame collection.
 - [x] Add a daemon display test around `BackgroundDeviceVm` proving frames are drained from the daemon path.
 - [x] Run focused core tests.
-- [ ] Commit Task 2.
+- [x] Commit Task 2.
 
 ## Task 3: Verification
 
-- [ ] Run Rust native tests.
-- [ ] Run focused compiler/core tests with the native library.
-- [ ] Run the daemon smoke profiling test.
-- [ ] Update this plan checklist with completed tasks.
+- [x] Run Rust native tests.
+- [x] Run focused compiler/core tests with the native library.
+- [x] Run the daemon smoke profiling test.
+- [x] Update this plan checklist with completed tasks.
