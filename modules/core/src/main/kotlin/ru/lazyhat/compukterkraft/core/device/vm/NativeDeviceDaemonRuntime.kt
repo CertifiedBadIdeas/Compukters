@@ -70,6 +70,12 @@ internal class NativeDeviceDaemonRuntime(
     fun drainDisplayFrames(): List<DisplayFrameDelta> =
         NativeDisplayFrameCodec.decodeFrames(drainDisplayFrameBytes())
 
+    fun displayWakeSequence(): Long = bindings.deviceDaemonDisplayWakeSequence(daemonHandle)
+
+    fun waitForDisplayWake(
+        observedWakeSequence: Long,
+        timeoutMillis: Long,
+    ): Long = bindings.waitForDeviceDaemonDisplayWake(daemonHandle, observedWakeSequence, timeoutMillis)
 
     suspend fun requestSlice(serverTick: Long): NativeDeviceDaemonTickSummary {
         val started = System.nanoTime()
@@ -150,6 +156,14 @@ interface NativeDaemonBindings {
     )
 
     fun drainDeviceDaemonDisplayFrames(daemonHandle: Long): ByteArray
+
+    fun deviceDaemonDisplayWakeSequence(daemonHandle: Long): Long
+
+    fun waitForDeviceDaemonDisplayWake(
+        daemonHandle: Long,
+        observedWakeSequence: Long,
+        timeoutMillis: Long,
+    ): Long
 }
 
 object NativeVmDaemonBindings : NativeDaemonBindings {
@@ -212,4 +226,14 @@ object NativeVmDaemonBindings : NativeDaemonBindings {
 
     override fun drainDeviceDaemonDisplayFrames(daemonHandle: Long): ByteArray =
         NativeVmBindings.drainDeviceDaemonDisplayFrames(daemonHandle)
+
+    override fun deviceDaemonDisplayWakeSequence(daemonHandle: Long): Long =
+        NativeVmBindings.deviceDaemonDisplayWakeSequence(daemonHandle)
+
+    override fun waitForDeviceDaemonDisplayWake(
+        daemonHandle: Long,
+        observedWakeSequence: Long,
+        timeoutMillis: Long,
+    ): Long =
+        NativeVmBindings.waitForDeviceDaemonDisplayWake(daemonHandle, observedWakeSequence, timeoutMillis)
 }

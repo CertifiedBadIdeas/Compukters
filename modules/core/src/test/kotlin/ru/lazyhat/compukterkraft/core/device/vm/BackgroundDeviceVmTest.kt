@@ -72,6 +72,9 @@ class BackgroundDeviceVmTest {
         val attachedDisplays = mutableListOf<Triple<Int, Int, Int>>()
         val detachedDisplays = mutableListOf<Int>()
         val displayFramePayloads = ArrayDeque<ByteArray>()
+        val displayWakeWaits = mutableListOf<Pair<Long, Long>>()
+        var displayWakeSequence: Long = 0
+        var displayWakeWaitResult: Long = 0
         var tickSummary: NativeDeviceDaemonTickSummary? = null
 
         override fun createDeviceDaemon(
@@ -161,6 +164,17 @@ class BackgroundDeviceVmTest {
                     .order(ByteOrder.LITTLE_ENDIAN)
                     .putInt(0)
                     .array()
+
+        override fun deviceDaemonDisplayWakeSequence(daemonHandle: Long): Long = displayWakeSequence
+
+        override fun waitForDeviceDaemonDisplayWake(
+            daemonHandle: Long,
+            observedWakeSequence: Long,
+            timeoutMillis: Long,
+        ): Long {
+            displayWakeWaits += observedWakeSequence to timeoutMillis
+            return displayWakeWaitResult
+        }
     }
 
     private fun backgroundVmWithNativeDaemonBindings(
@@ -346,6 +360,28 @@ class BackgroundDeviceVmTest {
                 assertEquals(1, frames.size)
                 assertEquals(9, frames.single().displayId)
                 assertTrue(frames.single().fullRefresh)
+            } finally {
+                System.clearProperty("ckl.vm.native.daemon")
+            }
+        }
+    }
+
+    @Test
+    fun nativeDaemonDisplayWakePumpIsSupportedAndDelegatesWakeCalls() {
+        runtimeTestWorkspace("vm-native-daemon-display-wake") { workspace ->
+            System.setProperty("ckl.vm.native.daemon", "true")
+            try {
+                val daemonBindings = RecordingNativeDaemonBindings()
+                daemonBindings.displayWakeSequence = 7
+                daemonBindings.displayWakeWaitResult = 9
+                val vm = backgroundVmWithNativeDaemonBindings(workspace.host, daemonBindings)
+
+                vm.attachDisplay(displayId = 4, width = 16, height = 12)
+
+                assertTrue(vm.supportsNativeDisplayFramePump())
+                assertEquals(7, vm.nativeDisplayWakeSequence())
+                assertEquals(9, vm.waitForNativeDisplayWake(observedWakeSequence = 7, timeoutMillis = 25))
+                assertEquals(listOf(7L to 25L), daemonBindings.displayWakeWaits)
             } finally {
                 System.clearProperty("ckl.vm.native.daemon")
             }
