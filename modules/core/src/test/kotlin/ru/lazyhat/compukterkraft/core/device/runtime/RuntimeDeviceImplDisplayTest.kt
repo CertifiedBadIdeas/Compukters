@@ -43,9 +43,25 @@ import java.util.UUID
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class RuntimeDeviceImplDisplayTest {
+    @Test
+    fun keepsSharedDisplayEndpointAttachedUntilLastSessionDetaches() {
+        val tracker = DisplaySessionTracker()
+        val firstPlayer = UUID.randomUUID()
+        val secondPlayer = UUID.randomUUID()
+
+        assertEquals(DisplayEndpoint(1, 32, 16), tracker.attach(firstPlayer, containerId = 11, displayId = 1, width = 32, height = 16))
+        assertEquals(DisplayEndpoint(1, 32, 16), tracker.attach(secondPlayer, containerId = 12, displayId = 1, width = 32, height = 16))
+        assertNull(tracker.detach(firstPlayer, displayId = 1))
+
+        assertEquals(listOf(DisplayEndpoint(1, 32, 16)), tracker.activeEndpoints())
+        assertEquals(1, tracker.detach(secondPlayer, displayId = 1))
+        assertEquals(emptyList(), tracker.activeEndpoints())
+    }
+
     @Test
     fun servicesSequentialHostCallChainWithinSingleServerTick() {
         val metrics = RecordingRuntimeMetricsCollector()

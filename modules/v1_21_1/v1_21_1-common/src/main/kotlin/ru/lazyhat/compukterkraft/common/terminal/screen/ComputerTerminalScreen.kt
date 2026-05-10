@@ -83,7 +83,7 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
 ) : DslContainerScreen<T>(container, player, title) {
     private val inputHandler = ClientInputHandler(container)
     private val terminalInput = WorkbenchTerminalInputController(inputHandler, MinecraftInputProvider)
-    private val displayId: Int = (player.player.uuid.hashCode() and 0x3FFFFFFF) + 1
+    private val displayId: Int = SHARED_TERMINAL_DISPLAY_ID
     private val displayTexture = DisplayTextureCache(displayId)
 
     private val powerHover = HoverState()
@@ -394,6 +394,7 @@ class ComputerTerminalScreen<T : AbstractComputerMenu>(
     }
 
     private companion object {
+        private const val SHARED_TERMINAL_DISPLAY_ID = 1
         private val DEFAULT_COLS = Config.DEFAULT_COMPUTER_TERM_WIDTH
         private val DEFAULT_ROWS = Config.DEFAULT_COMPUTER_TERM_HEIGHT
         private const val COMPUTER_CONTENT_TOP = 8

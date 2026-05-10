@@ -44,7 +44,6 @@ import ru.lazyhat.compukterkraft.lang.runtime.VmState
 import ru.lazyhat.compukterkraft.lang.runtime.VmStopReason
 import java.util.UUID
 import java.util.concurrent.ConcurrentLinkedQueue
-import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Platform-neutral runtime device implementation.
@@ -86,15 +85,7 @@ class RuntimeDeviceImpl(
 
     private val serverScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    private data class DisplaySession(
-        val playerUuid: UUID,
-        var containerId: Int,
-        val displayId: Int,
-        var width: Int,
-        var height: Int,
-    )
-
-    private val displaySessions = ConcurrentHashMap<Pair<UUID, Int>, DisplaySession>()
+    private val displaySessions = DisplaySessionTracker()
 
     private val hostCallDispatcher by lazy {
         HostCallDispatcher(deviceId, manager.workspace)
@@ -155,7 +146,7 @@ class RuntimeDeviceImpl(
     override fun close() {
         LOGGER.debug { "DeviceID: $deviceId close" }
         stopNativeDisplayPump()
-        displaySessions.keys.toList().forEach { (playerUuid, displayId) -> detachDisplaySession(playerUuid, displayId) }
+        displaySessions.sessionKeysSnapshot().forEach { (playerUuid, displayId) -> detachDisplaySession(playerUuid, displayId) }
         manager.removeVm(deviceId, VmStopReason.CLOSED)
         vmHandle = null
         serverScope.cancel()
@@ -219,8 +210,8 @@ class RuntimeDeviceImpl(
         width: Int,
         height: Int,
     ) {
-        displaySessions[playerUuid to displayId] = DisplaySession(playerUuid, containerId, displayId, width, height)
-        vmHandle?.attachDisplay(displayId, width, height)
+        val endpoint = displaySessions.attach(playerUuid, containerId, displayId, width, height)
+        vmHandle?.attachDisplay(endpoint.displayId, endpoint.width, endpoint.height)
     }
 
     override fun resizeDisplaySession(
@@ -229,23 +220,21 @@ class RuntimeDeviceImpl(
         width: Int,
         height: Int,
     ) {
-        val session = displaySessions[playerUuid to displayId] ?: return
-        session.width = width
-        session.height = height
-        vmHandle?.resizeDisplay(displayId, width, height)
+        val endpoint = displaySessions.resize(playerUuid, displayId, width, height) ?: return
+        vmHandle?.resizeDisplay(endpoint.displayId, endpoint.width, endpoint.height)
     }
 
     override fun detachDisplaySession(
         playerUuid: UUID,
         displayId: Int,
     ) {
-        displaySessions.remove(playerUuid to displayId)
-        vmHandle?.detachDisplay(displayId)
+        val detachedDisplayId = displaySessions.detach(playerUuid, displayId) ?: return
+        vmHandle?.detachDisplay(detachedDisplayId)
     }
 
     private fun reattachDisplaySessions(handle: BackgroundDeviceVm) {
-        for (session in displaySessions.values) {
-            handle.attachDisplay(session.displayId, session.width, session.height)
+        for (endpoint in displaySessions.activeEndpoints()) {
+            handle.attachDisplay(endpoint.displayId, endpoint.width, endpoint.height)
         }
     }
 
@@ -255,7 +244,7 @@ class RuntimeDeviceImpl(
         runtimeMetricsCollector.recordDisplayFrameDrain(frames.size, drainNanos)
         if (frames.isEmpty()) return 0
 
-        val sessionsByDisplay = displaySessions.values.groupBy { it.displayId }
+        val sessionsByDisplay = displaySessions.sessionsSnapshot().groupBy { it.displayId }
         val toDetach = mutableListOf<Pair<UUID, Int>>()
         for (frame in frames) {
             val sessions = sessionsByDisplay[frame.displayId].orEmpty()
@@ -315,7 +304,7 @@ class RuntimeDeviceImpl(
         var flushed = 0
         while (true) {
             val payload = pendingNativeDisplayFrameBytes.poll() ?: break
-            val sessions = displaySessions.values.toList()
+            val sessions = displaySessions.sessionsSnapshot()
             if (sessions.isEmpty()) {
                 pendingNativeDisplayFrameBytes.add(payload)
                 break
