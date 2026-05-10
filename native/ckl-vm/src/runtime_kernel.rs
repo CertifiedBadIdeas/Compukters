@@ -52,6 +52,7 @@ pub struct DeviceSchedulerDryRun {
 pub struct DeviceSchedulerStep {
     pub server_tick: i64,
     pub selected_pid: Option<i32>,
+    pub selected_image_handle: Option<i64>,
     pub remaining_instructions: i64,
     pub quota_exhausted: bool,
     pub woken_pids: Vec<i32>,
@@ -61,6 +62,7 @@ pub struct DeviceSchedulerStep {
 struct ProcessEntry {
     parent_pid: i32,
     program_path: String,
+    image_handle: Option<i64>,
     state: ProcessState,
 }
 
@@ -188,6 +190,9 @@ impl DeviceRuntimeKernel {
         } else {
             None
         };
+        let selected_image_handle = selected_pid
+            .and_then(|pid| self.processes.get(&pid))
+            .and_then(|entry| entry.image_handle);
         if selected_pid.is_some() {
             self.execution_quota.instructions = self.execution_quota.instructions.saturating_sub(1);
         }
@@ -195,6 +200,7 @@ impl DeviceRuntimeKernel {
         DeviceSchedulerStep {
             server_tick,
             selected_pid,
+            selected_image_handle,
             remaining_instructions,
             quota_exhausted: remaining_instructions == 0,
             woken_pids,
@@ -215,10 +221,22 @@ impl DeviceRuntimeKernel {
             ProcessEntry {
                 parent_pid,
                 program_path,
+                image_handle: None,
                 state: ProcessState::Runnable,
             },
         );
         self.enqueue_runnable(pid);
+        true
+    }
+
+    pub fn attach_process_image(&mut self, pid: i32, image_handle: i64) -> bool {
+        if image_handle <= 0 {
+            return false;
+        }
+        let Some(entry) = self.processes.get_mut(&pid) else {
+            return false;
+        };
+        entry.image_handle = Some(image_handle);
         true
     }
 
@@ -998,6 +1016,8 @@ mod tests {
         let mut kernel = DeviceRuntimeKernel::new(16, 1024);
         assert!(kernel.register_process(1, 0, "/rom/a.ck".to_string()));
         assert!(kernel.register_process(2, 0, "/rom/b.ck".to_string()));
+        assert!(kernel.attach_process_image(1, 101));
+        assert!(kernel.attach_process_image(2, 202));
         assert!(kernel.add_execution_quota(2, 1_000, 42).instructions == 2);
 
         assert_eq!(
@@ -1005,6 +1025,7 @@ mod tests {
             DeviceSchedulerStep {
                 server_tick: 42,
                 selected_pid: Some(1),
+                selected_image_handle: Some(101),
                 remaining_instructions: 1,
                 quota_exhausted: false,
                 woken_pids: Vec::new(),
@@ -1015,6 +1036,7 @@ mod tests {
             DeviceSchedulerStep {
                 server_tick: 42,
                 selected_pid: Some(2),
+                selected_image_handle: Some(202),
                 remaining_instructions: 0,
                 quota_exhausted: true,
                 woken_pids: Vec::new(),
@@ -1025,6 +1047,7 @@ mod tests {
             DeviceSchedulerStep {
                 server_tick: 42,
                 selected_pid: None,
+                selected_image_handle: None,
                 remaining_instructions: 0,
                 quota_exhausted: true,
                 woken_pids: Vec::new(),
@@ -1044,9 +1067,34 @@ mod tests {
             DeviceSchedulerStep {
                 server_tick: 5,
                 selected_pid: Some(1),
+                selected_image_handle: None,
                 remaining_instructions: 0,
                 quota_exhausted: true,
                 woken_pids: vec![1],
+            }
+        );
+    }
+
+    #[test]
+    fn process_image_handle_attachment_rejects_missing_processes_and_invalid_handles() {
+        let mut kernel = DeviceRuntimeKernel::new(16, 1024);
+
+        assert!(!kernel.attach_process_image(1, 101));
+        assert!(kernel.register_process(1, 0, "/rom/a.ck".to_string()));
+        assert!(!kernel.attach_process_image(1, 0));
+        assert!(!kernel.attach_process_image(1, -1));
+        assert!(kernel.attach_process_image(1, 101));
+        assert!(kernel.add_execution_quota(1, 1_000, 42).instructions == 1);
+
+        assert_eq!(
+            kernel.run_scheduler_step(),
+            DeviceSchedulerStep {
+                server_tick: 42,
+                selected_pid: Some(1),
+                selected_image_handle: Some(101),
+                remaining_instructions: 0,
+                quota_exhausted: true,
+                woken_pids: Vec::new(),
             }
         );
     }
