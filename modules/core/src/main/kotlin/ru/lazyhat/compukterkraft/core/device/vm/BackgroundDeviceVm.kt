@@ -298,12 +298,6 @@ class BackgroundDeviceVm(
 
     override fun requestSlice(serverTick: Long) {
         stateManager.updateCurrentTick(serverTick)
-        val wakeTick = stateManager.sleepUntilTick
-        if (wakeTick != null && serverTick < wakeTick) {
-            runtimeMetricsCollector.recordSliceRequest(sent = false, sleepGated = true)
-            runtimeMetricsCollector.recordExecutionQuotaRefill(accepted = false, unavailable = true)
-            return
-        }
         val sent = executionQuota.refill(available = true)
         runtimeMetricsCollector.recordSliceRequest(sent = sent, sleepGated = false)
         runtimeMetricsCollector.recordExecutionQuotaRefill(accepted = sent, unavailable = false)
