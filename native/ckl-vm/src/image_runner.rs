@@ -376,9 +376,15 @@ impl ImageVmHandle {
                     })
                     .map(Ok)
                     .unwrap_or_else(|| Ok(NativeHostImportResult::Fallback(arguments))),
-                "currentDirectory" => Ok(NativeHostImportResult::Handled(VmValue::String(
-                    self.working_directory.clone(),
-                ))),
+                "currentDirectory" => {
+                    let kernel = kernel_handle.lock()?;
+                    if kernel.filesystem.is_none() {
+                        return Ok(NativeHostImportResult::Fallback(arguments));
+                    }
+                    Ok(NativeHostImportResult::Handled(VmValue::String(
+                        self.working_directory.clone(),
+                    )))
+                }
                 "changeDirectory" => {
                     let path = string_argument(&arguments, 0, "process.changeDirectory path")?;
                     let candidate = resolve_working_directory(&self.working_directory, path);
@@ -2057,6 +2063,29 @@ mod tests {
     fn resolves_relative_native_process_working_directory() {
         assert_eq!(resolve_working_directory("rom/bin", "../lib"), "rom/lib");
         assert_eq!(resolve_working_directory("rom/bin", "/tmp/./tools"), "tmp/tools");
+    }
+
+    #[test]
+    fn process_current_directory_falls_back_without_native_filesystem() {
+        let image = encode_empty_main_image();
+        let mut handle = ImageVmHandle::create(&image, 128).unwrap();
+        handle
+            .attach_device_kernel(Arc::new(DeviceRuntimeKernelHandle::new(16, 1024)))
+            .unwrap();
+
+        let result = handle
+            .try_native_host_import(6000, "process", "currentDirectory", Vec::new())
+            .unwrap();
+
+        match result {
+            NativeHostImportResult::Fallback(arguments) => assert!(arguments.is_empty()),
+            NativeHostImportResult::Handled(value) => {
+                panic!("expected currentDirectory fallback without native filesystem, got {value:?}")
+            }
+            NativeHostImportResult::SignalNoResume { .. } => {
+                panic!("expected currentDirectory fallback without native filesystem")
+            }
+        }
     }
 
     fn encode_empty_main_image() -> Vec<u8> {
