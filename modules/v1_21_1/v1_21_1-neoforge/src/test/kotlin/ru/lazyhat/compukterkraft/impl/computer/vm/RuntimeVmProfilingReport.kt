@@ -133,7 +133,7 @@ internal object RuntimeVmProfileCodec {
                     }
                     workload.runtime.vm.run {
                         appendLine(
-                            "runtimeVm\t$sliceRequests\t$slicePermitsSent\t$sleepGatedSliceRequests\t$slicePermitsReceived\t$schedulingPoints\t$yieldSchedulingPoints\t$waitForSliceSchedulingPoints\t$executionWindows\t$executionWindowNanos\t$haltSignals\t$pauseSignals\t$yieldSignals\t$sleepSignals\t$waitEventSignals\t$waitPollSignals\t$waitProcessSignals\t$nativeProcessRegistrations\t$nativeProcessCompletions\t$nativeProcessStaleCompletions\t$hostCallSignals\t$nativeFastPathCalls\t$nativeWaitCalls\t$nativeWaitNanos\t$nativeWaitWakeups\t$nativeWaitTimeouts\t$nativeDisplayPumpWaitCalls\t$nativeDisplayPumpWaitNanos\t$nativeDisplayPumpWakeups\t$nativeDisplayPumpTimeouts\t$nativeDisplayFrameByteBatches\t$nativeDisplayFrameBytes",
+                            "runtimeVm\t$sliceRequests\t$slicePermitsSent\t$sleepGatedSliceRequests\t$slicePermitsReceived\t$schedulingPoints\t$yieldSchedulingPoints\t$waitForSliceSchedulingPoints\t$executionWindows\t$executionWindowNanos\t$haltSignals\t$pauseSignals\t$yieldSignals\t$sleepSignals\t$waitEventSignals\t$waitPollSignals\t$waitProcessSignals\t$nativeProcessRegistrations\t$nativeProcessCompletions\t$nativeProcessStaleCompletions\t$hostCallSignals\t$nativeFastPathCalls\t$nativeWaitCalls\t$nativeWaitNanos\t$nativeWaitWakeups\t$nativeWaitTimeouts\t$nativeDisplayPumpWaitCalls\t$nativeDisplayPumpWaitNanos\t$nativeDisplayPumpWakeups\t$nativeDisplayPumpTimeouts\t$nativeDisplayFrameByteBatches\t$nativeDisplayFrameBytes\t$executionQuotaRefills\t$executionQuotaAcceptedRefills\t$executionQuotaUnavailableRefills\t$executionQuotaPermitsConsumed",
                         )
                     }
                     workload.runtime.hostCalls.forEach { call ->
@@ -273,6 +273,7 @@ internal object RuntimeVmProfileCodec {
                     current.requireCurrent().vm =
                         parts.longs().let { v ->
                             val hasProcessLifecycleFields = v.size >= 31
+                            val hasQuotaFields = v.size >= 35
                             val hasProcessWaitField = v.size >= 28
                             val hasNativeWaitFields = v.size >= 27
                             val legacyHostCallSignals = v.getOrElse(14) { 0 }
@@ -281,6 +282,10 @@ internal object RuntimeVmProfileCodec {
                                 slicePermitsSent = v.getOrElse(1) { 0 },
                                 sleepGatedSliceRequests = v.getOrElse(2) { 0 },
                                 slicePermitsReceived = v.getOrElse(3) { 0 },
+                                executionQuotaRefills = if (hasQuotaFields) v[31] else 0,
+                                executionQuotaAcceptedRefills = if (hasQuotaFields) v[32] else 0,
+                                executionQuotaUnavailableRefills = if (hasQuotaFields) v[33] else 0,
+                                executionQuotaPermitsConsumed = if (hasQuotaFields) v[34] else 0,
                                 schedulingPoints = v.getOrElse(4) { 0 },
                                 yieldSchedulingPoints = v.getOrElse(5) { 0 },
                                 waitForSliceSchedulingPoints = v.getOrElse(6) { 0 },
@@ -660,6 +665,10 @@ internal object RuntimeVmProfilingReportFormatter {
         appendLine("| Client snapshot pixels | ${workload.client.snapshotPixels} |")
         appendLine("| Runtime all ticks | ${formatNanos(workload.runtime.tick.allNanos)} |")
         appendLine("| VM execution time | ${formatNanos(workload.runtime.vm.executionWindowNanos)} |")
+        appendLine("| Execution quota refills | ${workload.runtime.vm.executionQuotaRefills} |")
+        appendLine("| Execution quota accepted refills | ${workload.runtime.vm.executionQuotaAcceptedRefills} |")
+        appendLine("| Execution quota unavailable refills | ${workload.runtime.vm.executionQuotaUnavailableRefills} |")
+        appendLine("| Execution quota permits consumed | ${workload.runtime.vm.executionQuotaPermitsConsumed} |")
         appendLine("| Native wait signals | ${workload.runtime.vm.nativeWaitSignals} |")
         appendLine("| Native process wait signals | ${workload.runtime.vm.waitProcessSignals} |")
         appendLine("| Native process registrations | ${workload.runtime.vm.nativeProcessRegistrations} |")
@@ -739,6 +748,10 @@ internal object RuntimeVmProfilingReportFormatter {
         appendHistoricalMetricRow("Client snapshot pixels", columns) { workload -> workload.client.snapshotPixels.toString() }
         appendHistoricalMetricRow("Runtime all ticks", columns) { workload -> formatNanos(workload.runtime.tick.allNanos) }
         appendHistoricalMetricRow("VM execution time", columns) { workload -> formatNanos(workload.runtime.vm.executionWindowNanos) }
+        appendHistoricalMetricRow("Execution quota refills", columns) { workload -> workload.runtime.vm.executionQuotaRefills.toString() }
+        appendHistoricalMetricRow("Execution quota accepted refills", columns) { workload -> workload.runtime.vm.executionQuotaAcceptedRefills.toString() }
+        appendHistoricalMetricRow("Execution quota unavailable refills", columns) { workload -> workload.runtime.vm.executionQuotaUnavailableRefills.toString() }
+        appendHistoricalMetricRow("Execution quota permits consumed", columns) { workload -> workload.runtime.vm.executionQuotaPermitsConsumed.toString() }
         appendHistoricalMetricRow("Native wait signals", columns) { workload -> workload.runtime.vm.nativeWaitSignals.toString() }
         appendHistoricalMetricRow("Native process wait signals", columns) { workload -> workload.runtime.vm.waitProcessSignals.toString() }
         appendHistoricalMetricRow("Native process registrations", columns) { workload -> workload.runtime.vm.nativeProcessRegistrations.toString() }
