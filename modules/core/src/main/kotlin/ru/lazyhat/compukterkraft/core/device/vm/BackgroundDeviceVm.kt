@@ -656,8 +656,6 @@ class BackgroundDeviceVm(
             eventApi = VmEventApi(eventPayloadStore),
             peripheralsApi = peripheralsApi,
             metricsApi = RuntimeMetricsApi(),
-            nativeDeviceKernelHandle = 0L,
-            nativeWorkingDirectory = workingDirectory,
             processStateReporter = processManager,
         )
     }

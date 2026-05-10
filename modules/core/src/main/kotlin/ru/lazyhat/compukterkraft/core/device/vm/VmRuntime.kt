@@ -31,7 +31,6 @@ import ru.lazyhat.compukterkraft.lang.runtime.DeviceRedstoneApi
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceRuntime
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceRuntimeMetrics
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceSystemApi
-import ru.lazyhat.compukterkraft.lang.runtime.NativeDeviceKernelProvider
 import ru.lazyhat.compukterkraft.lang.runtime.NoopDeviceDisplayApi
 import ru.lazyhat.compukterkraft.lang.runtime.NoopDeviceEventApi
 import ru.lazyhat.compukterkraft.lang.runtime.NoopDeviceIpcApi
@@ -55,12 +54,8 @@ internal class VmRuntime(
     private val redstoneApi: DeviceRedstoneApi = object : DeviceRedstoneApi {},
     private val peripheralsApi: DevicePeripheralApi = object : DevicePeripheralApi {},
     private val metricsApi: DeviceRuntimeMetrics = NoopDeviceRuntimeMetrics,
-    override val nativeDeviceKernelHandle: Long = 0L,
-    override val nativeWorkingDirectory: String = "",
     private val processStateReporter: VmProcessStateReporter = NoOpVmProcessStateReporter,
-) : DeviceRuntime,
-    NativeDeviceKernelProvider {
-    override val nativeProcessId: Int = processId
+) : DeviceRuntime {
     override val profile: DeviceProfile = initialProfile
     override val metrics: DeviceRuntimeMetrics = metricsApi
     override val system: DeviceSystemApi = systemApi
