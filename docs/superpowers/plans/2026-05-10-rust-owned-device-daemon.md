@@ -296,7 +296,7 @@ git commit -m "feat: expose decoded native image signals"
 - Modify: `native/ckl-vm/src/device_daemon.rs`
 - Modify: `native/ckl-vm/src/runtime_kernel.rs`
 
-- [ ] **Step 1: Write failing daemon tick tests**
+- [x] **Step 1: Write failing daemon tick tests**
 
 Add tests to `native/ckl-vm/src/device_daemon.rs`:
 
@@ -323,7 +323,7 @@ fn daemon_tick_runs_boot_image_to_halt() {
 }
 ```
 
-- [ ] **Step 2: Run the Rust test and verify it fails**
+- [x] **Step 2: Run the Rust test and verify it fails**
 
 ```bash
 cargo test --manifest-path native/ckl-vm/Cargo.toml daemon_tick_runs_boot_image_to_halt
@@ -331,7 +331,7 @@ cargo test --manifest-path native/ckl-vm/Cargo.toml daemon_tick_runs_boot_image_
 
 Expected: FAIL because `DeviceDaemon::tick` and daemon process status APIs do not exist.
 
-- [ ] **Step 3: Implement tick for `Halt` and `Pause`**
+- [x] **Step 3: Implement tick for `Halt` and `Pause`**
 
 In `native/ckl-vm/src/device_daemon.rs`, add:
 
@@ -420,7 +420,7 @@ impl DeviceDaemon {
 
 The implementation may use a helper method to build the summary; keep the fields and behavior above.
 
-- [ ] **Step 4: Run focused Rust tests**
+- [x] **Step 4: Run focused Rust tests**
 
 ```bash
 cargo test --manifest-path native/ckl-vm/Cargo.toml daemon_tick_runs_boot_image_to_halt
@@ -429,7 +429,7 @@ cargo test --manifest-path native/ckl-vm/Cargo.toml scheduler_step
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit Task 3**
+- [x] **Step 5: Commit Task 3**
 
 ```bash
 git add native/ckl-vm/src/device_daemon.rs native/ckl-vm/src/runtime_kernel.rs docs/superpowers/plans/2026-05-10-rust-owned-device-daemon.md
