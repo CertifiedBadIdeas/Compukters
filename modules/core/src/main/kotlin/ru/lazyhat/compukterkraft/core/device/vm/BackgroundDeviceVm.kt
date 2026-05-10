@@ -142,12 +142,12 @@ class BackgroundDeviceVm(
     private val hostCallManager = HostCallManager(profile.resources.queues.hostCallQueueSlots)
     private val programLoader = WorkspaceProgramLoader(workspace)
     private val pathResolver = VmPathResolver()
-    private val nativeLibraryPath: String? = System.getProperty("ckl.vm.native.library")
+    private val nativeLibraryAvailable: Boolean = NativeImageVmRunner.isDefaultLibraryAvailable()
     private val effectiveNativeFilesystemRoot: Path? =
         nativeFilesystemRoot ?: (workspace as? DeviceWorkspaceHost)?.computerRoot(deviceId)
     private val nativeDaemonEnabled: Boolean =
         System.getProperty("ckl.vm.native.daemon") == "true" &&
-            (nativeDaemonBindings !== NativeVmDaemonBindings || NativeImageVmRunner.isAvailable(nativeLibraryPath))
+            (nativeDaemonBindings !== NativeVmDaemonBindings || nativeLibraryAvailable)
     private val nativeDeviceDaemonHandle: Long? =
         if (nativeDaemonEnabled) {
             val handle = nativeDaemonBindings.createDeviceDaemon(
@@ -181,13 +181,11 @@ class BackgroundDeviceVm(
         if (nativeDaemonEnabled) {
             null
         } else {
-            nativeLibraryPath
-            ?.takeIf(NativeImageVmRunner::isAvailable)
-            ?.let {
+            if (nativeLibraryAvailable) {
                 val handle =
                     NativeVmBindings.createDeviceKernel(
                         maxEventQueueSize = profile.resources.queues.eventQueueSlots,
-                    maxBufferedBytesPerChannel = profile.resources.queues.ipcChannelBytes,
+                        maxBufferedBytesPerChannel = profile.resources.queues.ipcChannelBytes,
                     )
                 effectiveNativeFilesystemRoot?.let { root ->
                     NativeVmBindings.attachNativeFilesystem(
@@ -197,6 +195,8 @@ class BackgroundDeviceVm(
                     )
                 }
                 handle
+            } else {
+                null
             }
         }
     private val nativeDisplayRegistry: NativeDisplayRegistry? =

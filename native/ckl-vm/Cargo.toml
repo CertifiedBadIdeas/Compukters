@@ -9,3 +9,8 @@ crate-type = ["rlib", "cdylib"]
 [dependencies]
 jni = "0.21"
 thiserror = "1.0"
+
+[profile.release]
+codegen-units = 1
+lto = "thin"
+strip = "symbols"
