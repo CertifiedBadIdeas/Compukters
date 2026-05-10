@@ -376,6 +376,35 @@ class VmProcessManagerTest {
     }
 
     @Test
+    fun schedulerTickWakesSleepingRootAndSelectsRunnableProcess() {
+        runtimeTestWorkspace("vm-process-manager-scheduler-tick") { workspace ->
+            val ctx = StubVmContext()
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val manager =
+                VmProcessManager(
+                    scope = scope,
+                    ctx = ctx,
+                    deviceId = 1,
+                    programLoader = WorkspaceProgramLoader(workspace.host),
+                    profile = runtimeProfile(),
+                    runtimeCreator = { _, _, _, _ -> error("runtimeCreator should not run") },
+                    compilerMetricsCollector = NoOpCompilerMetricsCollector,
+                )
+
+            try {
+                manager.markSleeping(pid = 1, untilTick = 5)
+
+                assertEquals(VmProcessSchedulerTick(currentTick = 4, wokenPids = emptyList(), selectedPid = null), manager.schedulerTick(4))
+                assertEquals(VmProcessSchedulerTick(currentTick = 5, wokenPids = listOf(1), selectedPid = 1), manager.schedulerTick(5))
+                assertEquals(VmProcessState.Runnable, manager.processSnapshot(1)?.state)
+            } finally {
+                runBlocking { manager.cancelAll() }
+                scope.cancel()
+            }
+        }
+    }
+
+    @Test
     fun crashedChildKeepsCrashedProcessState() {
         runtimeTestWorkspace("vm-process-manager-crashed-state") { workspace ->
             workspace.writeProgram(
