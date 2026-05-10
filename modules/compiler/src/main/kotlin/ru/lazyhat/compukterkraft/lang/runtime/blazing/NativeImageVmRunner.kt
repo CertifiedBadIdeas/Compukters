@@ -20,7 +20,6 @@
 package ru.lazyhat.compukterkraft.lang.runtime.blazing
 
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceRuntime
-import ru.lazyhat.compukterkraft.lang.runtime.NativeDeviceKernelProvider
 import ru.lazyhat.compukterkraft.lang.runtime.RuntimeHostBridge
 import ru.lazyhat.compukterkraft.lang.runtime.VmSignalKind
 import ru.lazyhat.compukterkraft.lang.runtime.VmValue
@@ -46,15 +45,6 @@ class NativeImageVmRunner internal constructor(
         val bridge = RuntimeHostBridge(runtime)
         val handle = bindings.createImage(libraryPath, imageBytes, runtime.profile.resources.cpu.instructionsPerSlice)
         try {
-            nativeWorkingDirectoryOrNull(runtime)?.let { bindings.setImageWorkingDirectory(handle, it) }
-            nativeKernelProviderOrNull(runtime)?.let { provider ->
-                bindings.attachImageToKernel(handle, provider.nativeDeviceKernelHandle)
-                if (provider.nativeProcessId > 0) {
-                    check(bindings.attachProcessImage(provider.nativeDeviceKernelHandle, provider.nativeProcessId, handle)) {
-                        "Native image VM failed to attach image handle $handle to process ${provider.nativeProcessId}"
-                    }
-                }
-            }
             while (true) {
                 val signal = NativeVmSignal.decode(bindings.runImageUntilSignal(handle))
                 if (signal !is NativeVmSignal.Error) {
@@ -89,50 +79,11 @@ class NativeImageVmRunner internal constructor(
                     }
 
                     is NativeVmSignal.WaitPoll -> {
-                        val kernelHandle = kernelHandleOrNull(runtime)
-                        if (kernelHandle == null) {
-                            runtime.yield()
-                        } else {
-                            val started = System.nanoTime()
-                            val latest =
-                                bindings.waitForDeviceWake(
-                                    kernelHandle,
-                                    signal.wakeSequence,
-                                    NATIVE_POLL_WAIT_TIMEOUT_MILLIS,
-                                )
-                            runtime.metrics.recordNativeWait(
-                                kind = "runtime.poll",
-                                nanos = System.nanoTime() - started,
-                                woke = latest > signal.wakeSequence,
-                            )
-                            if (latest <= signal.wakeSequence) {
-                                runtime.yield()
-                            }
-                        }
+                        runtime.yield()
                     }
 
                     is NativeVmSignal.WaitProcess -> {
-                        val kernelHandle = kernelHandleOrNull(runtime)
-                        if (kernelHandle == null) {
-                            runtime.yield()
-                        } else {
-                            val started = System.nanoTime()
-                            val latest =
-                                bindings.waitForProcessWake(
-                                    kernelHandle,
-                                    signal.pid,
-                                    signal.wakeSequence,
-                                    NATIVE_PROCESS_WAIT_TIMEOUT_MILLIS,
-                                )
-                            runtime.metrics.recordNativeWait(
-                                kind = "process.wait",
-                                nanos = System.nanoTime() - started,
-                                woke = latest > signal.wakeSequence,
-                            )
-                            if (latest <= signal.wakeSequence) {
-                                runtime.yield()
-                            }
-                        }
+                        runtime.yield()
                     }
 
                     is NativeVmSignal.HostCall -> {
@@ -145,15 +96,6 @@ class NativeImageVmRunner internal constructor(
             bindings.freeImage(handle)
         }
     }
-
-    private fun kernelHandleOrNull(runtime: DeviceRuntime): Long? =
-        nativeKernelProviderOrNull(runtime)?.nativeDeviceKernelHandle
-
-    private fun nativeKernelProviderOrNull(runtime: DeviceRuntime): NativeDeviceKernelProvider? =
-        (runtime as? NativeDeviceKernelProvider)?.takeIf { it.nativeDeviceKernelHandle != 0L }
-
-    private fun nativeWorkingDirectoryOrNull(runtime: DeviceRuntime): String? =
-        (runtime as? NativeDeviceKernelProvider)?.nativeWorkingDirectory
 
     private suspend fun invokeHostCall(
         runtime: DeviceRuntime,
@@ -184,9 +126,6 @@ class NativeImageVmRunner internal constructor(
         fun fromDefaultLibrary(): NativeImageVmRunner? = NativeLibraryLocator.resolve()?.let { fromLibraryPath(it.path) }
     }
 }
-
-private const val NATIVE_POLL_WAIT_TIMEOUT_MILLIS = 50L
-private const val NATIVE_PROCESS_WAIT_TIMEOUT_MILLIS = 50L
 
 private val NativeVmSignal.kind: VmSignalKind
     get() =
