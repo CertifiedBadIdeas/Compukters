@@ -46,6 +46,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeDeviceDaemonHostRequ
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeDeviceDaemonTickSummary
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.nio.file.Path
 import kotlin.io.path.createDirectories
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
@@ -69,6 +70,7 @@ class BackgroundDeviceVmTest {
         val tickWallNanos = mutableListOf<Long>()
         val completedRequestIds = mutableListOf<Long>()
         val enqueuedEvents = mutableListOf<Pair<String, List<Any?>>>()
+        val attachedFilesystems = mutableListOf<Pair<String, Long>>()
         val attachedDisplays = mutableListOf<Triple<Int, Int, Int>>()
         val detachedDisplays = mutableListOf<Int>()
         val displayFramePayloads = ArrayDeque<ByteArray>()
@@ -141,6 +143,14 @@ class BackgroundDeviceVmTest {
             return true
         }
 
+        override fun attachDeviceDaemonFilesystem(
+            daemonHandle: Long,
+            rootPath: String,
+            quotaBytes: Long,
+        ) {
+            attachedFilesystems += rootPath to quotaBytes
+        }
+
         override fun attachDeviceDaemonDisplay(
             daemonHandle: Long,
             displayId: Int,
@@ -180,6 +190,7 @@ class BackgroundDeviceVmTest {
     private fun backgroundVmWithNativeDaemonBindings(
         workspace: DeviceWorkspace,
         daemonBindings: RecordingNativeDaemonBindings,
+        nativeFilesystemRoot: Path? = null,
     ): BackgroundDeviceVm =
         BackgroundDeviceVm(
             deviceId = 1,
@@ -189,6 +200,7 @@ class BackgroundDeviceVmTest {
             logger = DeviceVmLogger { },
             workspace = workspace,
             firmwareLoader = StaticFirmwareLoader("pub fun main() { }"),
+            nativeFilesystemRoot = nativeFilesystemRoot,
             nativeDaemonBindings = daemonBindings,
         )
 
@@ -311,6 +323,32 @@ class BackgroundDeviceVmTest {
 
                 assertTrue(daemonBindings.bootedImages.isNotEmpty())
                 assertTrue(daemonBindings.tickServerTicks.isNotEmpty())
+            } finally {
+                System.clearProperty("ckl.vm.native.daemon")
+            }
+        }
+    }
+
+    @Test
+    fun nativeDaemonAttachesFilesystemRootWhenConfigured() {
+        runtimeTestWorkspace("vm-native-daemon-filesystem") { workspace ->
+            System.setProperty("ckl.vm.native.daemon", "true")
+            try {
+                val daemonBindings = RecordingNativeDaemonBindings()
+                val root = createTempDirectory("ck-daemon-fs")
+                val vm =
+                    backgroundVmWithNativeDaemonBindings(
+                        workspace.host,
+                        daemonBindings,
+                        nativeFilesystemRoot = root,
+                    )
+
+                assertTrue(vm.boot())
+
+                assertEquals(
+                    listOf(root.toAbsolutePath().normalize().toString() to firmwareTestProfile().resources.storage.diskBytes),
+                    daemonBindings.attachedFilesystems,
+                )
             } finally {
                 System.clearProperty("ckl.vm.native.daemon")
             }

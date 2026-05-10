@@ -359,6 +359,20 @@ impl ImageVmHandle {
                 "currentDirectory" => Ok(NativeHostImportResult::Handled(VmValue::String(
                     self.working_directory.clone(),
                 ))),
+                "changeDirectory" => {
+                    let path = string_argument(&arguments, 0, "process.changeDirectory path")?;
+                    let candidate = resolve_working_directory(&self.working_directory, path);
+                    let kernel = kernel_handle.lock()?;
+                    let Some(filesystem) = kernel.filesystem.as_ref() else {
+                        return Ok(NativeHostImportResult::Fallback(arguments));
+                    };
+                    if filesystem.is_directory("", &candidate)? {
+                        self.working_directory = candidate;
+                        Ok(NativeHostImportResult::Handled(VmValue::Bool(true)))
+                    } else {
+                        Ok(NativeHostImportResult::Handled(VmValue::Bool(false)))
+                    }
+                }
                 "wait" => {
                     let kernel = kernel_handle.lock()?;
                     let pid = int_argument(&arguments, 0, "process.wait pid")?;
@@ -1973,6 +1987,21 @@ fn normalize_working_directory(path: &str) -> String {
     segments.join("/")
 }
 
+fn resolve_working_directory(working_directory: &str, path: &str) -> String {
+    let trimmed = path.trim();
+    if trimmed.starts_with('/') {
+        normalize_working_directory(trimmed)
+    } else {
+        normalize_working_directory(
+            &[working_directory.trim_matches('/'), trimmed]
+                .into_iter()
+                .filter(|part| !part.is_empty())
+                .collect::<Vec<_>>()
+                .join("/"),
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2002,6 +2031,12 @@ mod tests {
     #[test]
     fn normalizes_native_filesystem_working_directory() {
         assert_eq!(normalize_working_directory("/a/./b/../c/"), "a/c");
+    }
+
+    #[test]
+    fn resolves_relative_native_process_working_directory() {
+        assert_eq!(resolve_working_directory("rom/bin", "../lib"), "rom/lib");
+        assert_eq!(resolve_working_directory("rom/bin", "/tmp/./tools"), "tmp/tools");
     }
 
     fn encode_empty_main_image() -> Vec<u8> {
