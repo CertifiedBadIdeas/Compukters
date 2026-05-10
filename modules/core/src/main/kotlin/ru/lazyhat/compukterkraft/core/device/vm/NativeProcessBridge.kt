@@ -19,8 +19,6 @@
 
 package ru.lazyhat.compukterkraft.core.device.vm
 
-import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeVmBindings
-
 internal interface NativeProcessBridge {
     fun registerProcess(
         pid: Int,
@@ -103,99 +101,4 @@ internal object NoOpNativeProcessBridge : NativeProcessBridge {
     ): Boolean = false
 
     override fun schedulerTick(currentTick: Long): VmProcessSchedulerTick? = null
-}
-
-internal class NativeVmProcessBridge(
-    private val kernelHandle: Long,
-) : NativeProcessBridge {
-    override fun registerProcess(
-        pid: Int,
-        parentPid: Int,
-        programPath: String,
-    ): Boolean =
-        NativeVmBindings.registerProcess(
-            kernelHandle = kernelHandle,
-            pid = pid,
-            parentPid = parentPid,
-            programPath = programPath,
-        )
-
-    override fun completeProcess(
-        pid: Int,
-        exitCode: Int,
-    ): Boolean =
-        NativeVmBindings.completeProcess(
-            kernelHandle = kernelHandle,
-            pid = pid,
-            exitCode = exitCode,
-        )
-
-    override fun markRunnable(pid: Int): Boolean =
-        NativeVmBindings.markProcessRunnable(
-            kernelHandle = kernelHandle,
-            pid = pid,
-        )
-
-    override fun markWaitingEvent(
-        pid: Int,
-        filter: String?,
-    ): Boolean =
-        NativeVmBindings.markProcessWaitingForEvent(
-            kernelHandle = kernelHandle,
-            pid = pid,
-            filter = filter,
-        )
-
-    override fun markWaitingIpc(
-        pid: Int,
-        channelId: Int,
-    ): Boolean =
-        NativeVmBindings.markProcessWaitingForIpc(
-            kernelHandle = kernelHandle,
-            pid = pid,
-            channelId = channelId,
-        )
-
-    override fun markWaitingProcess(
-        pid: Int,
-        targetPid: Int,
-    ): Boolean =
-        NativeVmBindings.markProcessWaitingForProcess(
-            kernelHandle = kernelHandle,
-            pid = pid,
-            targetPid = targetPid,
-        )
-
-    override fun markSleeping(
-        pid: Int,
-        untilTick: Long,
-    ): Boolean =
-        NativeVmBindings.markProcessSleeping(
-            kernelHandle = kernelHandle,
-            pid = pid,
-            untilTick = untilTick,
-        )
-
-    override fun markCrashed(
-        pid: Int,
-        message: String,
-    ): Boolean =
-        NativeVmBindings.markProcessCrashed(
-            kernelHandle = kernelHandle,
-            pid = pid,
-            message = message,
-        )
-
-    override fun schedulerTick(currentTick: Long): VmProcessSchedulerTick {
-        val tick =
-            NativeVmBindings.processSchedulerTick(
-                kernelHandle = kernelHandle,
-                currentTick = currentTick,
-            )
-        return VmProcessSchedulerTick(
-            currentTick = tick.currentTick,
-            wokenPids = tick.wokenPids,
-            selectedPid = tick.selectedPid,
-        )
-    }
 }
