@@ -1268,7 +1268,7 @@ git commit -m "feat: report native daemon metrics"
 - Modify: `modules/v1_21_1/v1_21_1-neoforge/src/test/kotlin/ru/lazyhat/compukterkraft/impl/computer/vm/RuntimeVmProfilingReportTest.kt`
 - Modify: `modules/v1_21_1/v1_21_1-neoforge/src/test/kotlin/ru/lazyhat/compukterkraft/impl/computer/vm/RuntimeProfilingWorkload.kt`
 
-- [ ] **Step 1: Add failing daemon smoke workload**
+- [x] **Step 1: Add failing daemon smoke workload**
 
 Add a small workload that boots an empty or logging firmware with `ckl.vm.native.daemon=true` and asserts:
 
@@ -1276,7 +1276,7 @@ Add a small workload that boots an empty or logging firmware with `ckl.vm.native
 - native daemon turns are greater than zero;
 - Kotlin process scheduler permit waits are zero or lower than the non-daemon baseline for the same workload.
 
-- [ ] **Step 2: Run the profiling smoke test and verify it fails**
+- [x] **Step 2: Run the profiling smoke test and verify it fails**
 
 ```bash
 ./gradlew -Dckl.vm.native.library=/home/lazyhat/IdeaProjects/Compukter-Kraft/native/ckl-vm/target/debug/libckl_vm.so -Dckl.vm.native.daemon=true :v1_21_1-neoforge:test --tests '*RuntimeVmProfilingReportTest' --rerun-tasks
@@ -1284,12 +1284,12 @@ Add a small workload that boots an empty or logging firmware with `ckl.vm.native
 
 Expected: FAIL until daemon runtime is wired into the profiling test harness.
 
-- [ ] **Step 3: Wire daemon mode into profiling harness**
+- [x] **Step 3: Wire daemon mode into profiling harness**
 
 Ensure the workload sets and clears `ckl.vm.native.daemon` locally around the daemon profile run. Keep existing profile
 runs unchanged.
 
-- [ ] **Step 4: Run profile smoke checks**
+- [x] **Step 4: Run profile smoke checks**
 
 ```bash
 ./gradlew -Dckl.vm.native.library=/home/lazyhat/IdeaProjects/Compukter-Kraft/native/ckl-vm/target/debug/libckl_vm.so -Dckl.vm.native.daemon=true :v1_21_1-neoforge:test --tests '*RuntimeVmProfilingReportTest' --rerun-tasks
@@ -1297,7 +1297,7 @@ runs unchanged.
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit Task 12**
+- [x] **Step 5: Commit Task 12**
 
 ```bash
 git add modules/v1_21_1/v1_21_1-neoforge/src/test/kotlin/ru/lazyhat/compukterkraft/impl/computer/vm/RuntimeVmProfilingReportTest.kt modules/v1_21_1/v1_21_1-neoforge/src/test/kotlin/ru/lazyhat/compukterkraft/impl/computer/vm/RuntimeProfilingWorkload.kt docs/superpowers/plans/2026-05-10-rust-owned-device-daemon.md

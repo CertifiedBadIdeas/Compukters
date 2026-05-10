@@ -31,6 +31,11 @@ import kotlin.test.assertTrue
 
 class RuntimeVmProfilingReportTest {
     @Test
+    fun nativeDaemonSmokeWorkloadRecordsDaemonMetrics() {
+        assertNativeDaemonSmokeRun(RuntimeProfilingWorkload.runNativeDaemonSmokeWorkload(ticks = 20))
+    }
+
+    @Test
     fun writesCurrentRuntimeProfile() {
         val profilePathValue = System.getProperty(PROFILE_PATH_PROPERTY)
         assumeTrue(!profilePathValue.isNullOrBlank(), "Report profile path is only provided by profiling Gradle tasks")
@@ -77,45 +82,49 @@ class RuntimeVmProfilingReportTest {
     }
 
     private fun warmUpRuntime() {
-        RuntimeProfilingWorkload.runTerminalWorkload(
-            delayMillis = 0,
-            bootTicks = 40,
-            inputTicks = 10,
-            enterTicks = 20,
-        )
+        RuntimeProfilingWorkload.withNativeDaemonMode(enabled = false) {
+            RuntimeProfilingWorkload.runTerminalWorkload(
+                delayMillis = 0,
+                bootTicks = 40,
+                inputTicks = 10,
+                enterTicks = 20,
+            )
+        }
     }
 
     private fun profileRuntime(runtimeName: String): RuntimeVmProfile =
         RuntimeVmProfile(
             runtimeName = runtimeName,
             workloads =
-                listOf(
-                    terminalWorkload(
-                        name = "sustained terminal no-delay",
-                        delayMillis = 0,
-                        bootTicks = 120,
-                        inputTicks = 40,
-                        enterTicks = 80,
-                    ),
-                    terminalWorkload(
-                        name = "bundled terminal",
-                        delayMillis = 10,
-                        bootTicks = 80,
-                        inputTicks = 20,
-                        enterTicks = 40,
-                    ),
-                    terminalWorkload(
-                        name = "default-size terminal",
-                        delayMillis = 10,
-                        bootTicks = 80,
-                        inputTicks = 20,
-                        enterTicks = 40,
-                        displayWidth = Config.DEFAULT_COMPUTER_TERM_WIDTH * TerminalFontConstants.FONT_WIDTH,
-                        displayHeight = Config.DEFAULT_COMPUTER_TERM_HEIGHT * TerminalFontConstants.FONT_HEIGHT,
-                    ),
-                    heldEnterWorkload(),
-                    enterAutoscrollWorkload(),
-                ),
+                RuntimeProfilingWorkload.withNativeDaemonMode(enabled = false) {
+                    listOf(
+                        terminalWorkload(
+                            name = "sustained terminal no-delay",
+                            delayMillis = 0,
+                            bootTicks = 120,
+                            inputTicks = 40,
+                            enterTicks = 80,
+                        ),
+                        terminalWorkload(
+                            name = "bundled terminal",
+                            delayMillis = 10,
+                            bootTicks = 80,
+                            inputTicks = 20,
+                            enterTicks = 40,
+                        ),
+                        terminalWorkload(
+                            name = "default-size terminal",
+                            delayMillis = 10,
+                            bootTicks = 80,
+                            inputTicks = 20,
+                            enterTicks = 40,
+                            displayWidth = Config.DEFAULT_COMPUTER_TERM_WIDTH * TerminalFontConstants.FONT_WIDTH,
+                            displayHeight = Config.DEFAULT_COMPUTER_TERM_HEIGHT * TerminalFontConstants.FONT_HEIGHT,
+                        ),
+                        heldEnterWorkload(),
+                        enterAutoscrollWorkload(),
+                    )
+                } + nativeDaemonSmokeWorkload(),
         )
 
     private fun terminalWorkload(
@@ -172,6 +181,29 @@ class RuntimeVmProfilingReportTest {
             runtime = run.profiling.runtimeMetrics.snapshot(),
             compiler = run.profiling.compilerMetrics.snapshot(),
             enterAutoscroll = run.summaryMetrics,
+        )
+    }
+
+    private fun nativeDaemonSmokeWorkload(): RuntimeWorkloadProfile {
+        val run = RuntimeProfilingWorkload.runNativeDaemonSmokeWorkload(ticks = 20)
+        assertNativeDaemonSmokeRun(run)
+        return RuntimeWorkloadProfile(
+            name = "native daemon smoke",
+            display = run.daemon.displayMetrics.snapshot(),
+            client = run.daemon.clientMetrics.snapshot(),
+            runtime = run.daemon.runtimeMetrics.snapshot(),
+            compiler = run.daemon.compilerMetrics.snapshot(),
+        )
+    }
+
+    private fun assertNativeDaemonSmokeRun(run: RuntimeProfilingWorkload.NativeDaemonSmokeProfilingRun) {
+        val baselineVm = run.baseline.runtimeMetrics.snapshot().vm
+        val daemonVm = run.daemon.runtimeMetrics.snapshot().vm
+        assertTrue(daemonVm.nativeDaemonTicks > 0, "expected native daemon ticks in smoke workload")
+        assertTrue(daemonVm.nativeDaemonTurns > 0, "expected native daemon turns in smoke workload")
+        assertTrue(
+            daemonVm.waitForSliceSchedulingPoints <= baselineVm.waitForSliceSchedulingPoints,
+            "expected daemon wait-for-slice points to be <= baseline; daemon=${daemonVm.waitForSliceSchedulingPoints} baseline=${baselineVm.waitForSliceSchedulingPoints}",
         )
     }
 
