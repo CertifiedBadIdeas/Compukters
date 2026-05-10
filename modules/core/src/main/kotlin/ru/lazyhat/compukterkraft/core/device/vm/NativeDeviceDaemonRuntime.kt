@@ -59,7 +59,15 @@ internal class NativeDeviceDaemonRuntime(
     }
 }
 
-internal interface NativeDaemonBindings {
+interface NativeDaemonBindings {
+    fun createDeviceDaemon(
+        maxEventQueueSize: Int,
+        maxBufferedBytesPerChannel: Int,
+        instructionBudget: Int,
+    ): Long
+
+    fun freeDeviceDaemon(daemonHandle: Long)
+
     fun bootDeviceDaemon(
         daemonHandle: Long,
         image: ByteArray,
@@ -84,7 +92,16 @@ internal interface NativeDaemonBindings {
     ): Boolean
 }
 
-private object NativeVmDaemonBindings : NativeDaemonBindings {
+object NativeVmDaemonBindings : NativeDaemonBindings {
+    override fun createDeviceDaemon(
+        maxEventQueueSize: Int,
+        maxBufferedBytesPerChannel: Int,
+        instructionBudget: Int,
+    ): Long =
+        NativeVmBindings.createDeviceDaemon(maxEventQueueSize, maxBufferedBytesPerChannel, instructionBudget)
+
+    override fun freeDeviceDaemon(daemonHandle: Long) = NativeVmBindings.freeDeviceDaemon(daemonHandle)
+
     override fun bootDeviceDaemon(
         daemonHandle: Long,
         image: ByteArray,
