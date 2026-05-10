@@ -19,15 +19,12 @@
 
 package ru.lazyhat.compukterkraft.core.device.vm.api
 
-import ru.lazyhat.compukterkraft.core.device.vm.VmContext
 import ru.lazyhat.compukterkraft.core.device.vm.VmPathResolver
 import ru.lazyhat.compukterkraft.core.device.vm.VmProcessManager
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceProcessApi
 
 internal class VmProcessApi(
-    private val ctx: VmContext,
     private val initialArgument: String,
-    private val deviceId: Int,
     private val pathResolver: VmPathResolver,
     private val filesystemApi: VmFileSystemApi,
     private val processManager: VmProcessManager,
@@ -36,7 +33,7 @@ internal class VmProcessApi(
     override val workingDirectory: String get() = pathResolver.workingDirectory
 
     override suspend fun changeDirectory(path: String): Boolean {
-        val resolved = ctx.resolvePath(path)
+        val resolved = pathResolver.resolve(path)
         return filesystemApi.isDirectory(resolved).also { isDir ->
             if (isDir) pathResolver.updateWorkingDirectory(resolved)
         }
