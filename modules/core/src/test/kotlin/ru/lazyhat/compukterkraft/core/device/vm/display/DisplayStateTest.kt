@@ -176,6 +176,18 @@ class DisplayStateTest {
         assertTrue(payload.containsRgb565(0x07E0), "text run should draw foreground pixels")
     }
 
+    @Test
+    fun mono5x7FontUsesDistinctLowercaseGlyphs() {
+        assertFalse(
+            Mono5x7Font.packedBits('a') == Mono5x7Font.packedBits('A'),
+            "lowercase glyphs should not be aliases of uppercase glyphs",
+        )
+        assertEquals(
+            0b00000000000111000001011111000101111L,
+            Mono5x7Font.packedBits('a'),
+        )
+    }
+
     private fun ByteArray.containsRgb565(rgb565: Int): Boolean {
         var i = 0
         val hi = (rgb565 ushr 8).toByte()
