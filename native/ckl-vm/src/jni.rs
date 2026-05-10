@@ -592,6 +592,37 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
 }
 
 #[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_addDeviceExecutionQuotaNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    kernel_handle: jlong,
+    instructions: jlong,
+    wall_nanos: jlong,
+    server_tick: jlong,
+) -> jlongArray {
+    let kernel_handle = match shared_kernel_handle(&mut env, kernel_handle) {
+        Some(kernel) => kernel,
+        None => return long_array_or_throw(&mut env, &[]),
+    };
+    match kernel_handle.with_kernel_mut(|kernel| {
+        kernel.add_execution_quota(instructions, wall_nanos, server_tick)
+    }) {
+        Ok(snapshot) => long_array_or_throw(
+            &mut env,
+            &[
+                snapshot.instructions,
+                snapshot.wall_nanos,
+                snapshot.server_tick,
+            ],
+        ),
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalStateException", error);
+            long_array_or_throw(&mut env, &[])
+        }
+    }
+}
+
+#[no_mangle]
 pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_processSchedulerTickNative(
     mut env: JNIEnv<'_>,
     _class: JClass<'_>,

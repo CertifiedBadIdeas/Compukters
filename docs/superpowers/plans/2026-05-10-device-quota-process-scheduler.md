@@ -1232,3 +1232,49 @@ git add docs/superpowers/plans/2026-05-10-device-quota-process-scheduler.md \
   modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessManagerTest.kt
 git commit -m "feat: guard native scheduler parity"
 ```
+
+## Task 24: Native Device Execution Quota Snapshot
+
+**Files:**
+- Modify: `native/ckl-vm/src/runtime_kernel.rs`
+- Modify: `native/ckl-vm/src/jni.rs`
+- Modify: `modules/compiler/src/main/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeVmBindings.kt`
+- Modify: `modules/compiler/src/test/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeImageVmBindingsJniTest.kt`
+
+- [x] **Step 1: Add failing native quota tests**
+
+Add tests proving:
+
+- Rust kernel accepts an execution quota snapshot with instruction budget, wall-clock budget, and server tick;
+- repeated quota refills replace the previous per-tick budget instead of accumulating CPU debt;
+- Kotlin JNI bindings expose `addDeviceExecutionQuota(...)` and decode the returned snapshot.
+
+- [x] **Step 2: Add Rust kernel quota state**
+
+Store a bounded `DeviceExecutionQuotaSnapshot` in `DeviceRuntimeKernel`. Clamp negative budgets to zero and replace the
+previous budget on each refill.
+
+- [x] **Step 3: Add JNI and Kotlin bindings**
+
+Expose `addDeviceExecutionQuotaNative(...)` returning a `LongArray` snapshot, and a Kotlin wrapper returning a typed
+`NativeDeviceExecutionQuota`.
+
+- [x] **Step 4: Run focused native quota tests**
+
+```bash
+cargo test --manifest-path native/ckl-vm/Cargo.toml execution_quota
+./gradlew -Dckl.vm.native.library=/home/lazyhat/IdeaProjects/Compukter-Kraft/native/ckl-vm/target/debug/libckl_vm.so :compiler:test --tests '*NativeImageVmBindingsJniTest' --rerun-tasks
+```
+
+Expected: PASS.
+
+- [x] **Step 5: Commit Task 24**
+
+```bash
+git add docs/superpowers/plans/2026-05-10-device-quota-process-scheduler.md \
+  native/ckl-vm/src/runtime_kernel.rs \
+  native/ckl-vm/src/jni.rs \
+  modules/compiler/src/main/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeVmBindings.kt \
+  modules/compiler/src/test/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeImageVmBindingsJniTest.kt
+git commit -m "feat: add native device execution quota"
+```

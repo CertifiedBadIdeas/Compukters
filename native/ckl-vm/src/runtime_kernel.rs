@@ -33,6 +33,13 @@ pub struct ProcessSchedulerTick {
     pub selected_pid: Option<i32>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DeviceExecutionQuotaSnapshot {
+    pub instructions: i64,
+    pub wall_nanos: i64,
+    pub server_tick: i64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ProcessEntry {
     parent_pid: i32,
@@ -65,6 +72,7 @@ pub struct DeviceRuntimeKernel {
     wake_sequence: i64,
     display_wake_sequence: i64,
     max_event_queue_size: usize,
+    execution_quota: DeviceExecutionQuotaSnapshot,
 }
 
 impl DeviceRuntimeKernel {
@@ -83,7 +91,30 @@ impl DeviceRuntimeKernel {
             wake_sequence: 0,
             display_wake_sequence: 0,
             max_event_queue_size: max_event_queue_size.max(1),
+            execution_quota: DeviceExecutionQuotaSnapshot {
+                instructions: 0,
+                wall_nanos: 0,
+                server_tick: 0,
+            },
         }
+    }
+
+    pub fn add_execution_quota(
+        &mut self,
+        instructions: i64,
+        wall_nanos: i64,
+        server_tick: i64,
+    ) -> DeviceExecutionQuotaSnapshot {
+        self.execution_quota = DeviceExecutionQuotaSnapshot {
+            instructions: instructions.max(0),
+            wall_nanos: wall_nanos.max(0),
+            server_tick,
+        };
+        self.execution_quota
+    }
+
+    pub fn execution_quota_snapshot(&self) -> DeviceExecutionQuotaSnapshot {
+        self.execution_quota
     }
 
     pub fn attach_filesystem(&mut self, root_path: String, quota_bytes: i64) -> Result<(), String> {
@@ -718,6 +749,50 @@ mod tests {
                 current_tick: 13,
                 woken_pids: Vec::new(),
                 selected_pid: Some(1),
+            }
+        );
+    }
+
+    #[test]
+    fn execution_quota_refill_replaces_previous_budget() {
+        let mut kernel = DeviceRuntimeKernel::new(16, 1024);
+
+        assert_eq!(
+            kernel.add_execution_quota(1_024, 2_000, 7),
+            DeviceExecutionQuotaSnapshot {
+                instructions: 1_024,
+                wall_nanos: 2_000,
+                server_tick: 7,
+            }
+        );
+        assert_eq!(
+            kernel.add_execution_quota(512, 750, 8),
+            DeviceExecutionQuotaSnapshot {
+                instructions: 512,
+                wall_nanos: 750,
+                server_tick: 8,
+            }
+        );
+        assert_eq!(
+            kernel.execution_quota_snapshot(),
+            DeviceExecutionQuotaSnapshot {
+                instructions: 512,
+                wall_nanos: 750,
+                server_tick: 8,
+            }
+        );
+    }
+
+    #[test]
+    fn execution_quota_refill_clamps_negative_budgets() {
+        let mut kernel = DeviceRuntimeKernel::new(16, 1024);
+
+        assert_eq!(
+            kernel.add_execution_quota(-1, -2, 9),
+            DeviceExecutionQuotaSnapshot {
+                instructions: 0,
+                wall_nanos: 0,
+                server_tick: 9,
             }
         );
     }
