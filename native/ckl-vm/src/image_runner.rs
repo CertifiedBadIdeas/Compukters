@@ -130,6 +130,10 @@ impl ImageVmHandle {
         self.process_argument = Some(argument);
     }
 
+    pub fn working_directory(&self) -> &str {
+        &self.working_directory
+    }
+
     pub fn run_until_signal(&mut self) -> Vec<u8> {
         match catch_unwind(AssertUnwindSafe(|| self.run_until_signal_inner())) {
             Ok(Ok(signal)) => encode_signal(&signal),

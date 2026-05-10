@@ -47,11 +47,11 @@ semantics. Kotlin serves typed daemon requests for source compilation and unreso
 - Modify: `native/ckl-vm/src/jni.rs`
 - Modify: `modules/compiler/src/main/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeVmBindings.kt`
 
-- [ ] Convert daemon `process.spawn/run` signals into `CompileProgram` requests.
-- [ ] Include parent pid, reserved child pid, mode, argument, path, and working directory in the request.
-- [ ] Add JNI decode coverage for `compileProgram` request payloads.
-- [ ] Keep parent parked while Kotlin compiles.
-- [ ] Commit as `feat: request daemon child program compilation`.
+- [x] Convert daemon `process.spawn/run` signals into `CompileProgram` requests.
+- [x] Include parent pid, reserved child pid, mode, argument, path, and working directory in the request.
+- [x] Add JNI decode coverage for `compileProgram` request payloads.
+- [x] Keep parent parked while Kotlin compiles.
+- [x] Commit as `feat: request daemon child program compilation`.
 
 ## Task 4: Compile Completion and Child Scheduling
 
@@ -62,13 +62,13 @@ semantics. Kotlin serves typed daemon requests for source compilation and unreso
 - Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/NativeDeviceDaemonRuntime.kt`
 - Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVm.kt`
 
-- [ ] Add `completeDeviceDaemonCompileProgram(...)`.
-- [ ] Register child process and attach compiled image on success.
-- [ ] Resume `spawn` parent with child pid.
-- [ ] Park `run` parent as child waiter and resume it with child exit code.
-- [ ] Return exit code `1` for load/compile failures.
-- [ ] Add integration tests for daemon spawn, wait, and run.
-- [ ] Commit as `feat: schedule daemon child processes`.
+- [x] Add `completeDeviceDaemonCompileProgram(...)`.
+- [x] Register child process and attach compiled image on success.
+- [x] Resume `spawn` parent with child pid.
+- [x] Park `run` parent as child waiter and resume it with child exit code.
+- [x] Return exit code `1` for load/compile failures.
+- [x] Add integration tests for daemon spawn, wait, and run.
+- [x] Commit as `feat: schedule daemon child processes`.
 
 ## Task 5: Terminal Daemon Profiling
 

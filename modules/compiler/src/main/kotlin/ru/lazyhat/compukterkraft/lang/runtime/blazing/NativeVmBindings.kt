@@ -251,6 +251,16 @@ object NativeVmBindings : NativeVmBindingsFacade {
         return completeDeviceDaemonHostRequestNative(daemonHandle, requestId, value)
     }
 
+    fun completeDeviceDaemonCompileProgram(
+        daemonHandle: Long,
+        requestId: Long,
+        image: ByteArray?,
+        exitCode: Int,
+    ): Boolean {
+        require(daemonHandle != 0L) { "Native device daemon handle is zero" }
+        return completeDeviceDaemonCompileProgramNative(daemonHandle, requestId, image ?: ByteArray(0), exitCode)
+    }
+
     fun enqueueDeviceDaemonEvent(
         daemonHandle: Long,
         eventName: String,
@@ -798,6 +808,14 @@ object NativeVmBindings : NativeVmBindingsFacade {
         daemonHandle: Long,
         requestId: Long,
         value: ByteArray,
+    ): Boolean
+
+    @JvmStatic
+    private external fun completeDeviceDaemonCompileProgramNative(
+        daemonHandle: Long,
+        requestId: Long,
+        image: ByteArray,
+        exitCode: Int,
     ): Boolean
 
     @JvmStatic

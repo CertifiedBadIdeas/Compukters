@@ -57,14 +57,33 @@ enum DaemonSignalOutcome {
     HostRequest,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PendingCompileMode {
+    Spawn,
+    Run,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct PendingCompile {
+    parent_pid: i32,
+    child_pid: i32,
+    path: String,
+    argument: String,
+    working_directory: String,
+    mode: PendingCompileMode,
+}
+
 pub struct DeviceDaemon {
     kernel: Arc<DeviceRuntimeKernelHandle>,
     images: BTreeMap<i32, ImageVmHandle>,
     image_handles: BTreeMap<i32, i64>,
     next_image_handle: i64,
+    next_pid: i32,
     instruction_budget: usize,
     host_requests: VecDeque<DeviceDaemonHostRequest>,
     pending_host_requests: BTreeMap<i64, i32>,
+    pending_compiles: BTreeMap<i64, PendingCompile>,
+    pending_run_parents: BTreeMap<i32, i32>,
     next_host_request_id: i64,
 }
 
@@ -82,9 +101,12 @@ impl DeviceDaemon {
             images: BTreeMap::new(),
             image_handles: BTreeMap::new(),
             next_image_handle: 1,
+            next_pid: 2,
             instruction_budget: instruction_budget.max(1),
             host_requests: VecDeque::new(),
             pending_host_requests: BTreeMap::new(),
+            pending_compiles: BTreeMap::new(),
+            pending_run_parents: BTreeMap::new(),
             next_host_request_id: 1,
         }
     }
@@ -193,6 +215,56 @@ impl DeviceDaemon {
         Ok(())
     }
 
+    pub fn complete_compile_program(
+        &mut self,
+        request_id: i64,
+        image_bytes: Option<&[u8]>,
+        exit_code: i32,
+    ) -> Result<(), String> {
+        let pending = self
+            .pending_compiles
+            .remove(&request_id)
+            .ok_or_else(|| format!("daemon compile request not found: {request_id}"))?;
+        let success = image_bytes
+            .map(|bytes| self.attach_child_image(&pending, bytes))
+            .transpose()?
+            .unwrap_or(false);
+
+        match (pending.mode, success) {
+            (PendingCompileMode::Spawn, true) => {
+                self.resume_process_with_value(pending.parent_pid, VmValue::Int(pending.child_pid))?;
+            }
+            (PendingCompileMode::Spawn, false) => {
+                self.kernel.with_kernel_mut(|kernel| {
+                    if matches!(
+                        kernel.process_status(pending.child_pid),
+                        ProcessStatus::Missing
+                    ) {
+                        let _ = kernel.register_process(
+                            pending.child_pid,
+                            pending.parent_pid,
+                            pending.path.clone(),
+                        );
+                    }
+                    kernel.complete_process(pending.child_pid, exit_code.max(1));
+                    kernel.mark_process_runnable(pending.parent_pid)
+                })?;
+                self.resume_process_with_value(pending.parent_pid, VmValue::Int(pending.child_pid))?;
+            }
+            (PendingCompileMode::Run, true) => {
+                self.pending_run_parents
+                    .insert(pending.child_pid, pending.parent_pid);
+                self.kernel.with_kernel_mut(|kernel| {
+                    kernel.mark_process_waiting_for_process(pending.parent_pid, pending.child_pid)
+                })?;
+            }
+            (PendingCompileMode::Run, false) => {
+                self.resume_process_with_value(pending.parent_pid, VmValue::Int(exit_code.max(1)))?;
+            }
+        }
+        Ok(())
+    }
+
     pub fn tick(
         &mut self,
         instructions: i64,
@@ -263,10 +335,14 @@ impl DeviceDaemon {
     ) -> Result<DaemonSignalOutcome, String> {
         match signal {
             VmSignal::Halt(_value) => {
+                let exit_code = 0;
                 self.kernel
-                    .with_kernel_mut(|kernel| kernel.complete_process(pid, 0))?;
+                    .with_kernel_mut(|kernel| kernel.complete_process(pid, exit_code))?;
                 self.images.remove(&pid);
                 self.image_handles.remove(&pid);
+                if let Some(parent_pid) = self.pending_run_parents.remove(&pid) {
+                    self.resume_process_with_value(parent_pid, VmValue::Int(exit_code))?;
+                }
                 Ok(DaemonSignalOutcome::Halted)
             }
             VmSignal::Pause => Ok(DaemonSignalOutcome::Runnable),
@@ -314,6 +390,10 @@ impl DeviceDaemon {
                 function_name,
                 arguments,
             } => {
+                if module_name == "process" && (function_name == "spawn" || function_name == "run")
+                {
+                    return self.request_compile_program(pid, &function_name, arguments);
+                }
                 let request_id = self.next_host_request_id;
                 self.next_host_request_id = self.next_host_request_id.saturating_add(1).max(1);
                 self.host_requests.push_back(DeviceDaemonHostRequest {
@@ -333,6 +413,113 @@ impl DeviceDaemon {
                 Ok(DaemonSignalOutcome::HostRequest)
             }
         }
+    }
+
+    fn request_compile_program(
+        &mut self,
+        parent_pid: i32,
+        function_name: &str,
+        arguments: Vec<VmValue>,
+    ) -> Result<DaemonSignalOutcome, String> {
+        let path = string_argument(&arguments, 0, "process path")?.to_string();
+        let argument = arguments
+            .get(1)
+            .map(|_| string_argument(&arguments, 1, "process argument"))
+            .transpose()?
+            .unwrap_or("")
+            .to_string();
+        let working_directory = self
+            .images
+            .get(&parent_pid)
+            .map(|image| image.working_directory().to_string())
+            .unwrap_or_default();
+        let child_pid = self.allocate_pid();
+        let mode = if function_name == "run" {
+            PendingCompileMode::Run
+        } else {
+            PendingCompileMode::Spawn
+        };
+        let request_id = self.next_host_request_id;
+        self.next_host_request_id = self.next_host_request_id.saturating_add(1).max(1);
+        self.pending_compiles.insert(
+            request_id,
+            PendingCompile {
+                parent_pid,
+                child_pid,
+                path: path.clone(),
+                argument: argument.clone(),
+                working_directory: working_directory.clone(),
+                mode,
+            },
+        );
+        self.host_requests.push_back(DeviceDaemonHostRequest {
+            request_id,
+            pid: parent_pid,
+            kind: DeviceDaemonHostRequestKind::CompileProgram,
+            module_name: Some("process".to_string()),
+            function_name: Some(function_name.to_string()),
+            arguments: vec![VmValue::Int(child_pid), VmValue::String(argument)],
+            path: Some(path),
+            working_directory: Some(working_directory),
+        });
+        self.kernel.with_kernel_mut(|kernel| {
+            kernel.mark_process_waiting_for_host_request(parent_pid, request_id)
+        })?;
+        Ok(DaemonSignalOutcome::HostRequest)
+    }
+
+    fn allocate_pid(&mut self) -> i32 {
+        let pid = self.next_pid.max(2);
+        self.next_pid = self.next_pid.saturating_add(1).max(2);
+        pid
+    }
+
+    fn attach_child_image(
+        &mut self,
+        pending: &PendingCompile,
+        image_bytes: &[u8],
+    ) -> Result<bool, String> {
+        if image_bytes.is_empty() {
+            return Ok(false);
+        }
+        let mut image = ImageVmHandle::create(image_bytes, self.instruction_budget)?;
+        image.attach_device_kernel(self.kernel.clone())?;
+        image.set_working_directory(pending.working_directory.clone());
+        image.set_process_argument(pending.argument.clone());
+        let image_handle = self.next_image_handle;
+        self.next_image_handle = self.next_image_handle.saturating_add(1);
+        let registered = self.kernel.with_kernel_mut(|kernel| {
+            kernel.register_process(pending.child_pid, pending.parent_pid, pending.path.clone())
+                && kernel.attach_process_image(pending.child_pid, image_handle)
+        })?;
+        if registered {
+            self.images.insert(pending.child_pid, image);
+            self.image_handles.insert(pending.child_pid, image_handle);
+        }
+        Ok(registered)
+    }
+
+    fn resume_process_with_value(&mut self, pid: i32, value: VmValue) -> Result<(), String> {
+        let image = self
+            .images
+            .get_mut(&pid)
+            .ok_or_else(|| format!("daemon pid has no image: {pid}"))?;
+        image.resume_with_value(value)?;
+        self.kernel
+            .with_kernel_mut(|kernel| kernel.mark_process_runnable(pid))?;
+        Ok(())
+    }
+}
+
+fn string_argument<'a>(
+    arguments: &'a [VmValue],
+    index: usize,
+    label: &str,
+) -> Result<&'a str, String> {
+    match arguments.get(index) {
+        Some(VmValue::String(value)) => Ok(value.as_str()),
+        Some(value) => Err(format!("{label} must be String but found {value:?}")),
+        None => Err(format!("{label} is missing")),
     }
 }
 
@@ -501,6 +688,62 @@ mod tests {
         );
     }
 
+    #[test]
+    fn daemon_process_spawn_emits_compile_program_request() {
+        let mut daemon = DeviceDaemon::new(16, 1024, 128);
+        daemon.boot_image(
+            &ckim_spawns_child_then_halts("child.ck", "stdio-v1"),
+            "/rom/parent.ck",
+            "",
+            "rom",
+        );
+
+        let first = daemon.tick(8, 1_000_000, 1);
+        let requests = daemon.drain_host_requests();
+
+        assert_eq!(first.host_requests, 1);
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].kind, DeviceDaemonHostRequestKind::CompileProgram);
+        assert_eq!(requests[0].module_name.as_deref(), Some("process"));
+        assert_eq!(requests[0].function_name.as_deref(), Some("spawn"));
+        assert_eq!(requests[0].path.as_deref(), Some("child.ck"));
+        assert_eq!(requests[0].working_directory.as_deref(), Some("rom"));
+        assert_eq!(
+            requests[0].arguments,
+            vec![VmValue::Int(2), VmValue::String("stdio-v1".to_string())],
+        );
+    }
+
+    #[test]
+    fn daemon_process_spawn_compile_failure_resumes_parent_with_child_pid() {
+        let mut daemon = DeviceDaemon::new(16, 1024, 128);
+        daemon.boot_image(
+            &ckim_spawns_child_then_halts("missing.ck", ""),
+            "/rom/parent.ck",
+            "",
+            "",
+        );
+
+        daemon.tick(8, 1_000_000, 1);
+        let mut requests = daemon.drain_host_requests();
+        assert_eq!(requests.len(), 1);
+        let request = requests.pop().unwrap();
+        daemon
+            .complete_compile_program(request.request_id, None, 1)
+            .unwrap();
+        let second = daemon.tick(8, 1_000_000, 2);
+
+        assert_eq!(second.halted, 1);
+        assert_eq!(
+            daemon.process_status(1),
+            DeviceDaemonProcessStatus::Completed(0),
+        );
+        assert_eq!(
+            daemon.process_status(2),
+            DeviceDaemonProcessStatus::Completed(1),
+        );
+    }
+
     fn ckim_empty_main() -> Vec<u8> {
         image_with_code(0, vec![OP_RETURN])
     }
@@ -561,6 +804,27 @@ mod tests {
         image_with_constants_imports_and_code(
             vec![ConstantFixture::String("hello".to_string())],
             vec![HostImportFixture::new(1, "system", "log")],
+            0,
+            code,
+        )
+    }
+
+    fn ckim_spawns_child_then_halts(path: &str, argument: &str) -> Vec<u8> {
+        let mut code = Vec::new();
+        code.push(OP_PUSH_CONSTANT);
+        i32(&mut code, 0);
+        code.push(OP_PUSH_CONSTANT);
+        i32(&mut code, 1);
+        code.push(OP_CALL_HOST);
+        i32(&mut code, 1);
+        i32(&mut code, 2);
+        code.push(OP_RETURN);
+        image_with_constants_imports_and_code(
+            vec![
+                ConstantFixture::String(path.to_string()),
+                ConstantFixture::String(argument.to_string()),
+            ],
+            vec![HostImportFixture::new(1, "process", "spawn")],
             0,
             code,
         )

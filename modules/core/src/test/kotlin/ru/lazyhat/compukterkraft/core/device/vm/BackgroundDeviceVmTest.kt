@@ -69,6 +69,7 @@ class BackgroundDeviceVmTest {
         val tickInstructions = mutableListOf<Long>()
         val tickWallNanos = mutableListOf<Long>()
         val completedRequestIds = mutableListOf<Long>()
+        val completedCompileRequests = mutableListOf<Pair<Long, Int>>()
         val enqueuedEvents = mutableListOf<Pair<String, List<Any?>>>()
         val attachedFilesystems = mutableListOf<Pair<String, Long>>()
         val attachedDisplays = mutableListOf<Triple<Int, Int, Int>>()
@@ -131,6 +132,16 @@ class BackgroundDeviceVmTest {
             value: ByteArray,
         ): Boolean {
             completedRequestIds += requestId
+            return true
+        }
+
+        override fun completeDeviceDaemonCompileProgram(
+            daemonHandle: Long,
+            requestId: Long,
+            image: ByteArray?,
+            exitCode: Int,
+        ): Boolean {
+            completedCompileRequests += requestId to exitCode
             return true
         }
 
