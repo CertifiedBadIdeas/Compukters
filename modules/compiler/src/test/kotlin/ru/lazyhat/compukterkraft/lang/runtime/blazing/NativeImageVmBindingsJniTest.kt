@@ -272,6 +272,17 @@ class NativeImageVmBindingsJniTest {
     }
 
     @Test
+    fun nativeDeviceDaemonDisplayBindingsExposeWakeWait() {
+        val memberNames =
+            NativeVmBindings::class.java.declaredMethods
+                .map { it.name }
+                .toSet()
+
+        assertTrue("deviceDaemonDisplayWakeSequence" in memberNames)
+        assertTrue("waitForDeviceDaemonDisplayWake" in memberNames)
+    }
+
+    @Test
     fun nativeDeviceDaemonCreateTickFreeRunsWhenLibraryIsConfigured() {
         System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 128)
@@ -343,6 +354,44 @@ class NativeImageVmBindingsJniTest {
 
             val dirty = NativeVmBindings.drainDeviceDaemonDisplayFrames(handle)
             assertTrue(dirty.isNotEmpty(), "daemon present should queue a dirty frame")
+        } finally {
+            NativeVmBindings.freeDeviceDaemon(handle)
+        }
+    }
+
+    @Test
+    fun nativeDeviceDaemonDisplayWaitReturnsAfterPresentWhenLibraryIsConfigured() {
+        System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val image =
+            assertNotNull(
+                LanguageFrontend()
+                    .compileImage(
+                        "main.ck",
+                        """
+                        pub fun main() {
+                            val displayId: Int = display::primary();
+                            display::fillRect(displayId, 0, 0, 2, 2, 2016);
+                            display::present(displayId);
+                        }
+                        """.trimIndent(),
+                    ).image,
+            )
+        val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 256)
+        try {
+            NativeVmBindings.attachDeviceDaemonDisplay(handle, displayId = 6, width = 18, height = 18)
+            NativeVmBindings.drainDeviceDaemonDisplayFrames(handle)
+            val observed = NativeVmBindings.deviceDaemonDisplayWakeSequence(handle)
+
+            val waiter =
+                java.util.concurrent.CompletableFuture.supplyAsync {
+                    NativeVmBindings.waitForDeviceDaemonDisplayWake(handle, observed, timeoutMillis = 500)
+                }
+
+            Thread.sleep(25)
+            NativeVmBindings.bootDeviceDaemon(handle, CkVmImageAbi.encode(image), "/rom/display.ck", "", "")
+            assertEquals(1, NativeVmBindings.tickDeviceDaemon(handle, 256, 1_000_000, 1).halted)
+
+            assertTrue(waiter.get(1, java.util.concurrent.TimeUnit.SECONDS) > observed)
         } finally {
             NativeVmBindings.freeDeviceDaemon(handle)
         }

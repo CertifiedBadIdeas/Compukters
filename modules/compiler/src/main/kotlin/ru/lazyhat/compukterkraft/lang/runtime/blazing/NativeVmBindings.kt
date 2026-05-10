@@ -289,6 +289,20 @@ object NativeVmBindings : NativeVmBindingsFacade {
         return drainDeviceDaemonDisplayFramesNative(daemonHandle)
     }
 
+    fun deviceDaemonDisplayWakeSequence(daemonHandle: Long): Long {
+        require(daemonHandle != 0L) { "Native device daemon handle is zero" }
+        return deviceDaemonDisplayWakeSequenceNative(daemonHandle)
+    }
+
+    fun waitForDeviceDaemonDisplayWake(
+        daemonHandle: Long,
+        observedWakeSequence: Long,
+        timeoutMillis: Long,
+    ): Long {
+        require(daemonHandle != 0L) { "Native device daemon handle is zero" }
+        return waitForDeviceDaemonDisplayWakeNative(daemonHandle, observedWakeSequence, timeoutMillis.coerceAtLeast(0))
+    }
+
     fun enqueueDeviceEvent(
         handle: Long,
         eventName: String,
@@ -800,6 +814,16 @@ object NativeVmBindings : NativeVmBindingsFacade {
 
     @JvmStatic
     private external fun drainDeviceDaemonDisplayFramesNative(daemonHandle: Long): ByteArray
+
+    @JvmStatic
+    private external fun deviceDaemonDisplayWakeSequenceNative(daemonHandle: Long): Long
+
+    @JvmStatic
+    private external fun waitForDeviceDaemonDisplayWakeNative(
+        daemonHandle: Long,
+        observedWakeSequence: Long,
+        timeoutMillis: Long,
+    ): Long
 
     @JvmStatic
     private external fun enqueueDeviceEventNative(

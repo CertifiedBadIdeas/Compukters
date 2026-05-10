@@ -458,6 +458,47 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
 }
 
 #[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_deviceDaemonDisplayWakeSequenceNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    handle: jlong,
+) -> jlong {
+    let kernel = match shared_device_daemon_kernel_handle(&mut env, handle) {
+        Some(kernel) => kernel,
+        None => return 0,
+    };
+    match kernel.display_wake_sequence() {
+        Ok(sequence) => sequence as jlong,
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalStateException", error);
+            0
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_waitForDeviceDaemonDisplayWakeNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    handle: jlong,
+    observed_wake_sequence: jlong,
+    timeout_millis: jlong,
+) -> jlong {
+    let kernel = match shared_device_daemon_kernel_handle(&mut env, handle) {
+        Some(kernel) => kernel,
+        None => return observed_wake_sequence,
+    };
+    let timeout = Duration::from_millis(timeout_millis.max(0) as u64);
+    match kernel.wait_for_display_wake(observed_wake_sequence, timeout) {
+        Ok(sequence) => sequence as jlong,
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalStateException", error);
+            observed_wake_sequence
+        }
+    }
+}
+
+#[no_mangle]
 pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_enqueueDeviceEventNative(
     mut env: JNIEnv<'_>,
     _class: JClass<'_>,
@@ -1269,6 +1310,38 @@ fn with_device_daemon_mut<T>(
     match device_daemon_handles().lock() {
         Ok(mut handles) => match handles.get_mut(&handle) {
             Some(daemon) => Some(action(daemon)),
+            None => {
+                let _ = env.throw_new(
+                    "java/lang/IllegalStateException",
+                    format!("Native device daemon handle not found: {handle}"),
+                );
+                None
+            }
+        },
+        Err(error) => {
+            let _ = env.throw_new(
+                "java/lang/IllegalStateException",
+                format!("Native device daemon registry lock failed: {error}"),
+            );
+            None
+        }
+    }
+}
+
+fn shared_device_daemon_kernel_handle(
+    env: &mut JNIEnv<'_>,
+    handle: jlong,
+) -> Option<SharedDeviceRuntimeKernel> {
+    if handle == 0 {
+        let _ = env.throw_new(
+            "java/lang/IllegalStateException",
+            "Native device daemon handle is zero",
+        );
+        return None;
+    }
+    match device_daemon_handles().lock() {
+        Ok(handles) => match handles.get(&handle) {
+            Some(daemon) => Some(daemon.kernel()),
             None => {
                 let _ = env.throw_new(
                     "java/lang/IllegalStateException",

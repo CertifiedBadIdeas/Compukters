@@ -489,7 +489,8 @@ impl ImageVmHandle {
             }
             "present" => {
                 let display_id = int_argument(&arguments, 0, "display.present displayId")?;
-                kernel.displays.present(display_id);
+                drop(kernel);
+                kernel_handle.present_display(display_id)?;
                 Ok(NativeHostImportResult::Handled(VmValue::Unit))
             }
             "blitMono5x7Text" => {
