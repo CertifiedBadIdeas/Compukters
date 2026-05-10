@@ -425,9 +425,9 @@ Host calls нужны для операций, которые выполняют
 
 `rom/rom.index` и `firmware/firmware.index` генерируются Gradle-таской из `src/main/resources/rom/**/*.ck` и
 `src/main/resources/firmware/**/*.ck`, поэтому вложенные ROM/firmware файлы попадают в manifest автоматически.
-Тесты подтверждают, что в новый workspace копируются пользовательские ROM-программы вроде `boot.ck`, `shell.ck`,
-`ls.ck`, `mkdir.ck`, `rmdir.ck`, `pwd.ck`, `nano.ck` и `yes.ck`, firmware `bios.ck` не копируется в пользовательский
-workspace, а повторная инициализация не трогает уже измененные файлы.
+Тесты подтверждают, что в новый workspace копируются пользовательские ROM-программы вроде `boot.ck`, `shell.ck`
+и команд из `bin/*.ck`, firmware `bios.ck` не копируется в пользовательский workspace, а повторная инициализация
+не трогает уже измененные файлы.
 
 ### 10.4. Root jail и защита от path traversal
 
@@ -1065,16 +1065,16 @@ ROM-файл `shell.ck` показывает, как предполагаетс�
 - builtin-команды обрабатывает сам:
   - `help`
   - `cd`
-  - `pwd`
   - `reboot`
   - `shutdown`
-- остальные команды запускает через `process.run(command + ".ck", encode(ctx, argument))`, где `encode` импортирован из `stdio.ck`.
+- остальные команды обнаруживает в `bin/` и запускает через `process.run("bin/" + command + ".ck", encode(ctx, argument))`,
+  где `encode` импортирован из `stdio.ck`.
 
 Команда `cd` использует `process.changeDirectory(...)`.
 
-Команда `pwd` запускает `pwd.ck`, который печатает `process.currentDirectory()`.
+Команда `pwd` запускает `bin/pwd.ck`, который печатает `process.currentDirectory()`.
 
-Команда `ls` запускает `ls.ck`, который печатает `filesystem.list(...)`.
+Команда `ls` запускает `bin/ls.ck`, который печатает `filesystem.list(...)`.
 
 То есть shell здесь не встроен в движок VM. Это обычная программа на том же языке, которая использует тот же API, что и пользовательский код.
 

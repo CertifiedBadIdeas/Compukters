@@ -1,4 +1,4 @@
-import "stdio.ck" { Stdio, error, fromArgument, println, readLine, write };
+import "../stdio.ck" { Stdio, error, fromArgument, println, readLine, write };
 
 // Toy line-based "nano". Each line typed at the prompt is appended to the
 // in-memory buffer; commands starting with ':' control the editor.
