@@ -43,6 +43,8 @@ import ru.lazyhat.compukterkraft.lang.runtime.VmState
 class VmRuntime(
     private val ctx: VmContext,
     private val initialProfile: DeviceProfile,
+    val processId: Int = 1,
+    val parentProcessId: Int = 0,
     val runtimeRegistry: BuiltinRegistry,
     private val systemApi: DeviceSystemApi,
     private val displayApi: DeviceDisplayApi = NoopDeviceDisplayApi,

@@ -162,7 +162,7 @@ class BackgroundDeviceVm(
             deviceId = deviceId,
             programLoader = programLoader,
             profile = profile,
-            runtimeCreator = { wd, arg -> createRuntime(wd, arg) },
+            runtimeCreator = { pid, parentPid, wd, arg -> createRuntime(pid, parentPid, wd, arg) },
             compilerMetricsCollector = compilerMetricsCollector,
             runtimeMetricsCollector = runtimeMetricsCollector,
             nativeProcessBridge = nativeProcessBridge,
@@ -224,7 +224,7 @@ class BackgroundDeviceVm(
             .shareIn(scope, SharingStarted.Eagerly)
 
     private var runner: Job? = null
-    private val runtime: VmRuntime = createRuntime("", "")
+    private val runtime: VmRuntime = createRuntime(processId = 1, parentProcessId = 0, workingDirectory = "", argument = "")
 
     // ── DeviceVmHandle ────────────────────────────────────────────
 
@@ -567,6 +567,8 @@ class BackgroundDeviceVm(
     }
 
     private fun createRuntime(
+        processId: Int,
+        parentProcessId: Int,
         workingDirectory: String,
         argument: String,
     ): VmRuntime {
@@ -583,6 +585,7 @@ class BackgroundDeviceVm(
         val peripheralsApi = VmPeripheralRuntimeApi(peripheralRegistry)
         val processApi =
             VmProcessApi(
+                processId = processId,
                 initialArgument = argument,
                 pathResolver = runtimePathResolver,
                 filesystemApi = filesystemApi,
@@ -592,6 +595,8 @@ class BackgroundDeviceVm(
         return VmRuntime(
             ctx = this,
             initialProfile = profile,
+            processId = processId,
+            parentProcessId = parentProcessId,
             runtimeRegistry = runtimeRegistryProfile.baseRegistry,
             systemApi = systemApi,
             displayApi = VmDisplayApi(displayRegistry),

@@ -24,6 +24,7 @@ import ru.lazyhat.compukterkraft.core.device.vm.VmProcessManager
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceProcessApi
 
 internal class VmProcessApi(
+    private val processId: Int,
     private val initialArgument: String,
     private val pathResolver: VmPathResolver,
     private val filesystemApi: VmFileSystemApi,
@@ -47,7 +48,7 @@ internal class VmProcessApi(
     override suspend fun spawn(
         path: String,
         argument: String,
-    ): Int = processManager.spawn(path, argument, workingDirectory)
+    ): Int = processManager.spawn(path, argument, workingDirectory, parentPid = processId)
 
     override suspend fun wait(pid: Int): Int = processManager.wait(pid)
 }
