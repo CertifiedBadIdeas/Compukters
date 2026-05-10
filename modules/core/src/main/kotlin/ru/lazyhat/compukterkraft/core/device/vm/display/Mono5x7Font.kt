@@ -104,7 +104,22 @@ internal object Mono5x7Font {
             glyphs[122] = 0b00000000001111100010001000100011111L
         }
 
-    fun packedBits(ch: Char): Long = if (ch.code in glyphs.indices) glyphs[ch.code] else UNKNOWN
+    private val extendedGlyphs: Map<Char, Long> =
+        mapOf(
+            '─' to 0b00000000000000011111000000000000000L,
+            '│' to 0b00100001000010000100001000010000100L,
+            '┌' to 0b00000000000011100100001000010000100L,
+            '┐' to 0b00000000001110000100001000010000100L,
+            '└' to 0b00100001000010000111000000000000000L,
+            '┘' to 0b00100001000010011100000000000000000L,
+            '┼' to 0b00100001000010011111001000010000100L,
+        )
+
+    fun packedBits(ch: Char): Long =
+        when {
+            ch.code in glyphs.indices -> glyphs[ch.code]
+            else -> extendedGlyphs[ch] ?: UNKNOWN
+        }
 
     fun rowBits(
         ch: Char,

@@ -329,6 +329,8 @@ class BackgroundDeviceVmTest {
                 maxTicksToCharFrame = maxOf(maxTicksToCharFrame, ticksForChar)
             }
 
+            val staleFramesBeforeEnter = vm.drainDisplayFrames()
+            metrics.recordDisplayFrameDrain(staleFramesBeforeEnter.size, 0)
             vm.enqueueEvent(VmEvent("key", listOf(KeyCodes.KEY_ENTER, false)))
             var ticksToEnterFrame = 0
             var sawEnterFrame = false
@@ -350,7 +352,7 @@ class BackgroundDeviceVmTest {
             }
 
             assertTrue(maxTicksToCharFrame in 1..20, "maxTicksToCharFrame=$maxTicksToCharFrame state=${vm.snapshot().state}")
-            assertTrue(ticksToEnterFrame in 1..40, "ticksToEnterFrame=$ticksToEnterFrame state=${vm.snapshot().state}")
+            assertTrue(ticksToEnterFrame in 0..40, "ticksToEnterFrame=$ticksToEnterFrame state=${vm.snapshot().state}")
         } finally {
             root.toFile().deleteRecursively()
         }

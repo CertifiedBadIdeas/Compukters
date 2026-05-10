@@ -217,6 +217,24 @@ class DisplayStateTest {
         }
     }
 
+    @Test
+    fun mono5x7FontIncludesBoxDrawingGlyphs() {
+        val expected =
+            mapOf(
+                '─' to 0b00000000000000011111000000000000000L,
+                '│' to 0b00100001000010000100001000010000100L,
+                '┌' to 0b00000000000011100100001000010000100L,
+                '┐' to 0b00000000001110000100001000010000100L,
+                '└' to 0b00100001000010000111000000000000000L,
+                '┘' to 0b00100001000010011100000000000000000L,
+                '┼' to 0b00100001000010011111001000010000100L,
+            )
+
+        expected.forEach { (ch, glyph) ->
+            assertEquals(glyph, Mono5x7Font.packedBits(ch), "unexpected glyph for `$ch`")
+        }
+    }
+
     private fun ByteArray.containsRgb565(rgb565: Int): Boolean {
         var i = 0
         val hi = (rgb565 ushr 8).toByte()
