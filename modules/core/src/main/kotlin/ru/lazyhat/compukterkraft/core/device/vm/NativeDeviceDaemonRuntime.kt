@@ -43,8 +43,8 @@ internal class NativeDeviceDaemonRuntime(
     },
 ) {
     private val schedulerTurnsPerRefill: Long =
-        ((profile.resources.cpu.instructionsPerSlice.toLong() + SCHEDULER_TURN_INSTRUCTION_GRANULARITY - 1) /
-            SCHEDULER_TURN_INSTRUCTION_GRANULARITY)
+        profile.resources.cpu.instructionsPerSlice
+            .toLong()
             .coerceAtLeast(1)
             .coerceAtMost(MAX_SCHEDULER_TURNS_PER_REFILL)
 
@@ -145,9 +145,8 @@ internal data class NativeDaemonCompileResult(
 )
 
 // The native kernel currently spends quota per scheduler turn, while each turn runs an image until it blocks,
-// yields, or reaches its per-image instruction budget. Convert the profile instruction budget into a bounded
-// turn budget so yielding programs cannot flood the device with thousands of process turns per server tick.
-private const val SCHEDULER_TURN_INSTRUCTION_GRANULARITY = 64L
+// yields, or reaches its per-image instruction budget. Keep the profile budget as the turn quota, with a safety
+// cap so yielding programs cannot flood the device with thousands of process turns per server tick.
 private const val MAX_SCHEDULER_TURNS_PER_REFILL = 128L
 
 interface NativeDaemonBindings {

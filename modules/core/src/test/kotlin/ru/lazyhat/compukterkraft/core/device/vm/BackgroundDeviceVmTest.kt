@@ -347,8 +347,8 @@ class BackgroundDeviceVmTest {
             )
             runtime.requestSlice(serverTick = 42)
 
-            assertEquals(listOf(Triple(2L, 456L, 42L)), bindings.refillQuotaCalls)
-            assertEquals(listOf(2L), bindings.runReadyMaxTurns)
+            assertEquals(listOf(Triple(123L, 456L, 42L)), bindings.refillQuotaCalls)
+            assertEquals(listOf(123L), bindings.runReadyMaxTurns)
             assertTrue(bindings.bootedImages.isNotEmpty())
             runtimeMetricsCollector.snapshot().vm.run {
                 assertEquals(1, nativeDaemonTicks)
@@ -385,8 +385,8 @@ class BackgroundDeviceVmTest {
 
             runtime.requestSlice(serverTick = 12)
 
-            assertEquals(listOf(Triple(32L, 1_000_000L, 12L)), bindings.refillQuotaCalls)
-            assertEquals(listOf(32L), bindings.runReadyMaxTurns)
+            assertEquals(listOf(Triple(128L, 1_000_000L, 12L)), bindings.refillQuotaCalls)
+            assertEquals(listOf(128L), bindings.runReadyMaxTurns)
         }
 
     @Test
@@ -603,7 +603,7 @@ class BackgroundDeviceVmTest {
             assertEquals(
                 listOf(
                     Triple(
-                        1L,
+                        firmwareTestProfile().resources.cpu.instructionsPerSlice.toLong(),
                         firmwareTestProfile().resources.cpu.wallTimeGuardNanosPerSlice,
                         1L,
                     ),
