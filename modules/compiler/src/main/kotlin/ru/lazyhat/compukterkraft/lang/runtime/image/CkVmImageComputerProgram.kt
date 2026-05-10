@@ -27,8 +27,11 @@ import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeImageVmRunner
 class CkVmImageComputerProgram(
     private val image: CkVmImage,
     private val runnerFactory: () -> NativeImageRuntimeRunner = {
-        NativeImageVmRunner.fromSystemProperty()
-            ?: error("Rust image VM runner requires -Dckl.vm.native.library=/absolute/path/to/libckl_vm.so")
+        NativeImageVmRunner.fromDefaultLibrary()
+            ?: error(
+                "Rust image VM runner requires -Dckl.vm.native.library=/absolute/path/to/libckl_vm.so " +
+                    "or a bundled native VM library resource",
+            )
     },
 ) : DeviceProgram {
     override suspend fun run(runtime: DeviceRuntime) {

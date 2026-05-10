@@ -171,7 +171,7 @@ object NativeVmBindings : NativeVmBindingsFacade {
         maxEventQueueSize: Int,
         maxBufferedBytesPerChannel: Int,
     ): Long {
-        load(requireConfiguredLibraryPath())
+        load(NativeLibraryLocator.requireLibraryPath())
         val handle = createDeviceKernelNative(maxEventQueueSize.coerceAtLeast(1), maxBufferedBytesPerChannel.coerceAtLeast(1))
         check(handle != 0L) { "Native device runtime kernel create returned a zero handle" }
         return handle
@@ -188,7 +188,7 @@ object NativeVmBindings : NativeVmBindingsFacade {
         maxBufferedBytesPerChannel: Int,
         instructionBudget: Int,
     ): Long {
-        load(requireConfiguredLibraryPath())
+        load(NativeLibraryLocator.requireLibraryPath())
         val handle =
             createDeviceDaemonNative(
                 maxEventQueueSize.coerceAtLeast(1),
@@ -621,11 +621,6 @@ object NativeVmBindings : NativeVmBindingsFacade {
             loadedPath = libraryPath
         }
     }
-
-    private fun requireConfiguredLibraryPath(): String =
-        System.getProperty("ckl.vm.native.library")
-            ?.takeIf { it.isNotBlank() }
-            ?: error("Rust image VM runner requires -Dckl.vm.native.library=/absolute/path/to/libckl_vm.so")
 
     private fun nativeEventPayload(arguments: List<Any?>): ByteArray =
         VmValue

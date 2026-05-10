@@ -53,8 +53,11 @@ fun RunConfigSettings.applyShared() {
 
 private val DEV_CLIENT_USERNAMES = listOf("DevA", "DevB", "DevC")
 
-val rustVmCrateDir = rootProject.layout.projectDirectory.dir("native/ckl-vm")
-val rustVmNativeLibrary = rustVmCrateDir.file("target/debug/libckl_vm.so")
+private val rustVmCrateDir = rootProject.layout.projectDirectory.dir("native/ckl-vm")
+private val rustVmNativeLibrary = rustVmCrateDir.file("target/debug/libckl_vm.so")
+private val rustVmNativePlatform = currentRustVmNativePlatform()
+private val rustVmReleaseNativeLibrary = rustVmCrateDir.file("target/release/${rustVmNativePlatform.libraryName}")
+private val rustVmNativeDistDir = rustVmCrateDir.dir("dist/natives")
 
 val buildRustVmNativeLibrary =
     tasks.register<Exec>("buildRustVmNativeLibrary") {
@@ -67,6 +70,39 @@ val buildRustVmNativeLibrary =
         inputs.dir(rustVmCrateDir.dir("src"))
         outputs.file(rustVmNativeLibrary)
     }
+
+val buildRustVmNativeLibraryRelease =
+    tasks.register<Exec>("buildRustVmNativeLibraryRelease") {
+        group = "build"
+        description = "Build the release Rust CKL VM JNI library for bundling into production mod jars."
+        workingDir = rustVmCrateDir.asFile
+        commandLine("cargo", "build", "--release")
+        inputs.file(rustVmCrateDir.file("Cargo.toml"))
+        inputs.file(rustVmCrateDir.file("Cargo.lock"))
+        inputs.dir(rustVmCrateDir.dir("src"))
+        outputs.file(rustVmReleaseNativeLibrary)
+    }
+
+val prepareBundledRustVmNativeLibraries =
+    tasks.register<Sync>("prepareBundledRustVmNativeLibraries") {
+        group = "build"
+        description = "Stage Rust CKL VM native libraries under natives/<os-arch>/ for universal mod jars."
+        dependsOn(buildRustVmNativeLibraryRelease)
+
+        from(rustVmReleaseNativeLibrary) {
+            into("natives/${rustVmNativePlatform.id}")
+            rename { rustVmNativePlatform.libraryName }
+        }
+        from(rustVmNativeDistDir) {
+            include("**/*")
+        }
+        into(layout.buildDirectory.dir("generated/rust-vm-native-resources"))
+    }
+
+tasks.named<ProcessResources>("processResources") {
+    dependsOn(prepareBundledRustVmNativeLibraries)
+    from(prepareBundledRustVmNativeLibraries)
+}
 
 fun RunConfigSettings.applyRustVm() {
     property("ckl.vm.native.library", rustVmNativeLibrary.asFile.absolutePath)
@@ -346,4 +382,28 @@ private fun seedOpsJson(file: File) {
   }"""
         }
     file.writeText("[\n$entries\n]\n")
+}
+
+private data class RustVmNativePlatform(
+    val id: String,
+    val libraryName: String,
+)
+
+private fun currentRustVmNativePlatform(): RustVmNativePlatform {
+    val osName = System.getProperty("os.name").lowercase()
+    val osArch =
+        when (System.getProperty("os.arch").lowercase()) {
+            "amd64", "x86_64" -> "x86_64"
+            "aarch64", "arm64" -> "aarch64"
+            else -> error("Unsupported Rust VM native architecture: ${System.getProperty("os.arch")}")
+        }
+    return when {
+        osName.startsWith("linux") ->
+            RustVmNativePlatform(id = "linux-$osArch", libraryName = "libckl_vm.so")
+        osName.startsWith("windows") ->
+            RustVmNativePlatform(id = "windows-$osArch", libraryName = "ckl_vm.dll")
+        osName.startsWith("mac") || osName.startsWith("darwin") ->
+            RustVmNativePlatform(id = "macos-$osArch", libraryName = "libckl_vm.dylib")
+        else -> error("Unsupported Rust VM native OS: ${System.getProperty("os.name")}")
+    }
 }

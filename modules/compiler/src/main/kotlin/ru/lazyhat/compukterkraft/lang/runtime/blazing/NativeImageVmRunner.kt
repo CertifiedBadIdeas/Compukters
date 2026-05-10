@@ -177,10 +177,11 @@ class NativeImageVmRunner internal constructor(
 
         fun fromLibraryPath(libraryPath: String): NativeImageVmRunner = NativeImageVmRunner(libraryPath)
 
-        fun fromSystemProperty(): NativeImageVmRunner? {
-            val path = System.getProperty("ckl.vm.native.library")
-            return if (isAvailable(path)) fromLibraryPath(requireNotNull(path)) else null
-        }
+        fun isDefaultLibraryAvailable(): Boolean = NativeLibraryLocator.resolve() != null
+
+        fun fromSystemProperty(): NativeImageVmRunner? = fromDefaultLibrary()
+
+        fun fromDefaultLibrary(): NativeImageVmRunner? = NativeLibraryLocator.resolve()?.let { fromLibraryPath(it.path) }
     }
 }
 
