@@ -61,6 +61,10 @@ private val rustVmWindowsX64Target = "x86_64-pc-windows-gnu"
 private val rustVmWindowsX64NativeLibrary = rustVmCrateDir.file("target/$rustVmWindowsX64Target/release/ckl_vm.dll")
 private val rustVmNativeDistDir = rustVmCrateDir.dir("dist/natives")
 private val productionRustVmNativeResources = layout.buildDirectory.dir("generated/production-rust-vm-native-resources")
+private val isProductionUniversalJarRequested =
+    gradle.startParameter.taskNames.any { taskName ->
+        taskName == "buildProductionUniversalJar" || taskName.endsWith(":buildProductionUniversalJar")
+    }
 
 val buildRustVmNativeLibrary =
     tasks.register<Exec>("buildRustVmNativeLibrary") {
@@ -144,9 +148,11 @@ val stageProductionRustVmNativeLibraries =
 
 tasks.named<ProcessResources>("processResources") {
     dependsOn(prepareBundledRustVmNativeLibraries)
-    mustRunAfter(stageProductionRustVmNativeLibraries)
     from(prepareBundledRustVmNativeLibraries)
-    from(productionRustVmNativeResources)
+    if (isProductionUniversalJarRequested) {
+        dependsOn(stageProductionRustVmNativeLibraries)
+        from(productionRustVmNativeResources)
+    }
 }
 
 tasks.register("buildProductionUniversalJar") {

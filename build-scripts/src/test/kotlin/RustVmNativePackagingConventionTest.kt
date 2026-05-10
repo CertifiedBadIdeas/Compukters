@@ -41,8 +41,16 @@ class RustVmNativePackagingConventionTest {
             "Production packaging should expose one task that stages cross-platform natives and builds the jar.",
         )
         assertTrue(
-            source.contains("mustRunAfter(stageProductionRustVmNativeLibraries)"),
-            "Production native staging should run before processResources only for the production task path.",
+            source.contains("isProductionUniversalJarRequested"),
+            "Production native resources must be gated to production builds so stale staged natives cannot shadow dev natives.",
+        )
+        assertTrue(
+            source.contains("dependsOn(stageProductionRustVmNativeLibraries)"),
+            "Production resource processing should depend on production native staging only for the production task path.",
+        )
+        assertTrue(
+            source.contains("from(productionRustVmNativeResources)"),
+            "Production jars should still include staged cross-platform native resources.",
         )
     }
 
