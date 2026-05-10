@@ -44,6 +44,14 @@ class RuntimeVmProfilingReportTest {
 
         warmUpRuntime()
         val profile = profileRuntime(runtimeName)
+        assertTrue(
+            profile.workloads.any { it.name == "native daemon terminal" },
+            "expected runtime profile to include native daemon terminal workload",
+        )
+        assertTrue(
+            profile.workloads.any { it.name == "native daemon default-size terminal" },
+            "expected runtime profile to include native daemon default-size terminal workload",
+        )
         val runsDirValue = System.getProperty(RUNS_DIR_PROPERTY)
         if (runsDirValue.isNullOrBlank()) {
             RuntimeVmProfileCodec.write(profile, profilePath)
@@ -123,6 +131,25 @@ class RuntimeVmProfilingReportTest {
                         ),
                         heldEnterWorkload(),
                         enterAutoscrollWorkload(),
+                    )
+                } + RuntimeProfilingWorkload.withNativeDaemonMode(enabled = true) {
+                    listOf(
+                        terminalWorkload(
+                            name = "native daemon terminal",
+                            delayMillis = 10,
+                            bootTicks = 80,
+                            inputTicks = 20,
+                            enterTicks = 40,
+                        ),
+                        terminalWorkload(
+                            name = "native daemon default-size terminal",
+                            delayMillis = 10,
+                            bootTicks = 80,
+                            inputTicks = 20,
+                            enterTicks = 40,
+                            displayWidth = Config.DEFAULT_COMPUTER_TERM_WIDTH * TerminalFontConstants.FONT_WIDTH,
+                            displayHeight = Config.DEFAULT_COMPUTER_TERM_HEIGHT * TerminalFontConstants.FONT_HEIGHT,
+                        ),
                     )
                 } + nativeDaemonSmokeWorkload(),
         )
