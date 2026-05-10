@@ -40,6 +40,9 @@ import ru.lazyhat.compukterkraft.lang.runtime.DeviceStorageResources
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.VmState
 import ru.lazyhat.compukterkraft.lang.runtime.VmStopReason
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeDeviceDaemonBootSummary
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeDeviceDaemonHostRequest
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeDeviceDaemonTickSummary
 import kotlin.io.path.createDirectories
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
@@ -52,6 +55,55 @@ class BackgroundDeviceVmTest {
         private val source: String,
     ) : FirmwareProgramLoader {
         override fun load(path: String): LoadedFirmwareProgramSource = LoadedFirmwareProgramSource(path, source)
+    }
+
+    private class RecordingNativeDaemonBindings : NativeDaemonBindings {
+        val bootedImages = mutableListOf<ByteArray>()
+        val tickServerTicks = mutableListOf<Long>()
+        val tickInstructions = mutableListOf<Long>()
+        val tickWallNanos = mutableListOf<Long>()
+        val completedRequestIds = mutableListOf<Long>()
+
+        override fun bootDeviceDaemon(
+            daemonHandle: Long,
+            image: ByteArray,
+            programPath: String,
+            argument: String,
+            workingDirectory: String,
+        ): NativeDeviceDaemonBootSummary {
+            bootedImages += image
+            return NativeDeviceDaemonBootSummary(pid = 1, imageAttached = true)
+        }
+
+        override fun tickDeviceDaemon(
+            daemonHandle: Long,
+            instructions: Long,
+            wallNanos: Long,
+            serverTick: Long,
+        ): NativeDeviceDaemonTickSummary {
+            tickServerTicks += serverTick
+            tickInstructions += instructions
+            tickWallNanos += wallNanos
+            return NativeDeviceDaemonTickSummary(
+                serverTick = serverTick,
+                turns = 0,
+                remainingInstructions = instructions,
+                idle = true,
+                halted = 0,
+                hostRequests = 0,
+            )
+        }
+
+        override fun drainDeviceDaemonHostRequests(daemonHandle: Long): List<NativeDeviceDaemonHostRequest> = emptyList()
+
+        override fun completeDeviceDaemonHostRequest(
+            daemonHandle: Long,
+            requestId: Long,
+            value: ByteArray,
+        ): Boolean {
+            completedRequestIds += requestId
+            return true
+        }
     }
 
     private fun runVmTicks(
@@ -83,6 +135,43 @@ class BackgroundDeviceVmTest {
     }
 
     private fun firmwareTestProfile(): DeviceProfile = runtimeProfile()
+
+    @Test
+    fun nativeDaemonRuntimeBootsCompiledBootImageAndTicksDaemon() =
+        runBlocking {
+            val bindings = RecordingNativeDaemonBindings()
+            val profile =
+                firmwareTestProfile().copy(
+                    resources =
+                        firmwareTestProfile().resources.copy(
+                            cpu =
+                                DeviceCpuResources(
+                                    instructionsPerSlice = 123,
+                                    wallTimeGuardNanosPerSlice = 456,
+                                ),
+                        ),
+                )
+            val runtime =
+                NativeDeviceDaemonRuntime(
+                    daemonHandle = 7,
+                    profile = profile,
+                    bindings = bindings,
+                    hostBridge = { byteArrayOf(0) },
+                )
+
+            runtime.boot(
+                image = byteArrayOf(1, 2, 3),
+                programPath = "/rom/bios.ck",
+                argument = "",
+                workingDirectory = "",
+            )
+            runtime.requestSlice(serverTick = 42)
+
+            assertEquals(listOf(42L), bindings.tickServerTicks)
+            assertEquals(listOf(123L), bindings.tickInstructions)
+            assertEquals(listOf(456L), bindings.tickWallNanos)
+            assertTrue(bindings.bootedImages.isNotEmpty())
+        }
 
     @Test
     fun recordsRuntimeSchedulingMetrics() {
