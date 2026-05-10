@@ -84,6 +84,10 @@ class RuntimeVmProfilingReportFormatterTest {
                             nativeDisplayPumpTimeouts = 2,
                             nativeDisplayFrameByteBatches = 5,
                             nativeDisplayFrameBytes = 4096,
+                            processSchedulerTicks = 12,
+                            processSchedulerSelectedTicks = 10,
+                            processSchedulerIdleTicks = 2,
+                            processSchedulerWokenProcesses = 3,
                             hostCallSignals = 2,
                             hostCalls =
                                 listOf(
@@ -127,6 +131,10 @@ class RuntimeVmProfilingReportFormatterTest {
         assertTrue(markdown.contains("| Native display pump timeouts | 2 | 0 |"), markdown)
         assertTrue(markdown.contains("| Native display frame byte batches | 5 | 0 |"), markdown)
         assertTrue(markdown.contains("| Native display frame bytes | 4096 | 0 |"), markdown)
+        assertTrue(markdown.contains("| Process scheduler ticks | 12 | 0 |"), markdown)
+        assertTrue(markdown.contains("| Process scheduler selected ticks | 10 | 0 |"), markdown)
+        assertTrue(markdown.contains("| Process scheduler idle ticks | 2 | 0 |"), markdown)
+        assertTrue(markdown.contains("| Process scheduler woken processes | 3 | 0 |"), markdown)
         assertTrue(markdown.contains("| Host-call signals | 2 | 10 |"), markdown)
         assertTrue(markdown.contains("| Host-call active time | 30 ms | 50.01 us |"), markdown)
         assertTrue(markdown.contains("| Host-call wait time | 60 ms | 0 ns |"), markdown)
@@ -189,6 +197,10 @@ class RuntimeVmProfilingReportFormatterTest {
                             nativeDisplayPumpTimeouts = 1,
                             nativeDisplayFrameByteBatches = 4,
                             nativeDisplayFrameBytes = 2048,
+                            processSchedulerTicks = 15,
+                            processSchedulerSelectedTicks = 14,
+                            processSchedulerIdleTicks = 1,
+                            processSchedulerWokenProcesses = 6,
                             hostCallSignals = 2,
                         ),
                     ),
@@ -215,6 +227,10 @@ class RuntimeVmProfilingReportFormatterTest {
         assertTrue(markdown.contains("| Native display pump timeouts | 1 |"), markdown)
         assertTrue(markdown.contains("| Native display frame byte batches | 4 |"), markdown)
         assertTrue(markdown.contains("| Native display frame bytes | 2048 |"), markdown)
+        assertTrue(markdown.contains("| Process scheduler ticks | 15 |"), markdown)
+        assertTrue(markdown.contains("| Process scheduler selected ticks | 14 |"), markdown)
+        assertTrue(markdown.contains("| Process scheduler idle ticks | 1 |"), markdown)
+        assertTrue(markdown.contains("| Process scheduler woken processes | 6 |"), markdown)
         assertTrue(markdown.contains("| Host-call signals | 4 |"), markdown)
         assertTrue(markdown.contains("| Host-call active time | 0 ns |"), markdown)
         assertTrue(markdown.contains("| Host-call wait time | 0 ns |"), markdown)
@@ -262,6 +278,10 @@ class RuntimeVmProfilingReportFormatterTest {
         nativeDisplayPumpTimeouts: Long = 0,
         nativeDisplayFrameByteBatches: Long = 0,
         nativeDisplayFrameBytes: Long = 0,
+        processSchedulerTicks: Long = 0,
+        processSchedulerSelectedTicks: Long = 0,
+        processSchedulerIdleTicks: Long = 0,
+        processSchedulerWokenProcesses: Long = 0,
         hostCallSignals: Long,
         hostCalls: List<RuntimeHostCallMetrics> = emptyList(),
     ): RuntimeWorkloadProfile =
@@ -319,6 +339,10 @@ class RuntimeVmProfilingReportFormatterTest {
                             nativeDisplayPumpTimeouts = nativeDisplayPumpTimeouts,
                             nativeDisplayFrameByteBatches = nativeDisplayFrameByteBatches,
                             nativeDisplayFrameBytes = nativeDisplayFrameBytes,
+                            processSchedulerTicks = processSchedulerTicks,
+                            processSchedulerSelectedTicks = processSchedulerSelectedTicks,
+                            processSchedulerIdleTicks = processSchedulerIdleTicks,
+                            processSchedulerWokenProcesses = processSchedulerWokenProcesses,
                             hostCallSignals = hostCallSignals,
                         ),
                     hostCalls = hostCalls,

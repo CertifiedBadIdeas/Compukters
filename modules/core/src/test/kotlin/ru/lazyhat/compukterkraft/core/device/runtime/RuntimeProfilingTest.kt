@@ -42,6 +42,8 @@ class RuntimeProfilingTest {
         collector.recordExecutionQuotaRefill(accepted = true, unavailable = false)
         collector.recordExecutionQuotaRefill(accepted = false, unavailable = true)
         collector.recordExecutionQuotaPermitConsumed()
+        collector.recordProcessSchedulerTick(wokenProcesses = 2, selected = true)
+        collector.recordProcessSchedulerTick(wokenProcesses = 0, selected = false)
         collector.recordSlicePermitReceived()
         collector.recordSchedulingPoint(waitedForSlice = false)
         collector.recordSchedulingPoint(waitedForSlice = true)
@@ -98,6 +100,10 @@ class RuntimeProfilingTest {
         assertEquals(1, snapshot.vm.executionQuotaAcceptedRefills)
         assertEquals(1, snapshot.vm.executionQuotaUnavailableRefills)
         assertEquals(1, snapshot.vm.executionQuotaPermitsConsumed)
+        assertEquals(2, snapshot.vm.processSchedulerTicks)
+        assertEquals(1, snapshot.vm.processSchedulerSelectedTicks)
+        assertEquals(1, snapshot.vm.processSchedulerIdleTicks)
+        assertEquals(2, snapshot.vm.processSchedulerWokenProcesses)
         assertEquals(1, snapshot.vm.slicePermitsReceived)
         assertEquals(2, snapshot.vm.schedulingPoints)
         assertEquals(1, snapshot.vm.yieldSchedulingPoints)
@@ -152,6 +158,10 @@ class RuntimeProfilingTest {
             summary,
         )
         assertTrue(
+            summary.contains("    processScheduler: ticks=2, selected=1, idle=1, woken=2"),
+            summary,
+        )
+        assertTrue(
             summary.contains("  process: registrations=1, completions=1, staleCompletions=1"),
             summary,
         )
@@ -178,6 +188,7 @@ class RuntimeProfilingTest {
         collector.recordSliceRequest(sent = true, sleepGated = false)
         collector.recordExecutionQuotaRefill(accepted = true, unavailable = false)
         collector.recordExecutionQuotaPermitConsumed()
+        collector.recordProcessSchedulerTick(wokenProcesses = 1, selected = true)
         collector.recordSlicePermitReceived()
         collector.recordSchedulingPoint(waitedForSlice = true)
         collector.recordVmExecutionWindow(nanos = 70)
