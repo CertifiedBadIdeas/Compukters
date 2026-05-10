@@ -403,6 +403,34 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
 }
 
 #[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_attachDeviceDaemonFilesystemNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    handle: jlong,
+    root_path: JString<'_>,
+    quota_bytes: jlong,
+) {
+    let root_path: String = match env.get_string(&root_path) {
+        Ok(value) => value.into(),
+        Err(error) => {
+            let _ = env.throw_new(
+                "java/lang/IllegalArgumentException",
+                format!("Cannot read native daemon filesystem root path: {error}"),
+            );
+            return;
+        }
+    };
+    match with_device_daemon_mut(&mut env, handle, |daemon| {
+        daemon.attach_filesystem(root_path, quota_bytes)
+    }) {
+        Some(Ok(())) | None => {}
+        Some(Err(error)) => {
+            let _ = env.throw_new("java/lang/IllegalArgumentException", error);
+        }
+    }
+}
+
+#[no_mangle]
 pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_attachDeviceDaemonDisplayNative(
     mut env: JNIEnv<'_>,
     _class: JClass<'_>,

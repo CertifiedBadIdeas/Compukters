@@ -266,6 +266,15 @@ object NativeVmBindings : NativeVmBindingsFacade {
         return enqueueDeviceDaemonEventNative(daemonHandle, eventName, payload)
     }
 
+    fun attachDeviceDaemonFilesystem(
+        daemonHandle: Long,
+        rootPath: String,
+        quotaBytes: Long,
+    ) {
+        require(daemonHandle != 0L) { "Native device daemon handle is zero" }
+        attachDeviceDaemonFilesystemNative(daemonHandle, rootPath, quotaBytes)
+    }
+
     fun attachDeviceDaemonDisplay(
         daemonHandle: Long,
         displayId: Int,
@@ -797,6 +806,13 @@ object NativeVmBindings : NativeVmBindingsFacade {
         eventName: String,
         payload: ByteArray,
     ): Boolean
+
+    @JvmStatic
+    private external fun attachDeviceDaemonFilesystemNative(
+        daemonHandle: Long,
+        rootPath: String,
+        quotaBytes: Long,
+    )
 
     @JvmStatic
     private external fun attachDeviceDaemonDisplayNative(

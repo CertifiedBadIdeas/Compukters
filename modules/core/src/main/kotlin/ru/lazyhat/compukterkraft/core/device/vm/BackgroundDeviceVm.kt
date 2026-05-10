@@ -145,11 +145,19 @@ class BackgroundDeviceVm(
             (nativeDaemonBindings !== NativeVmDaemonBindings || NativeImageVmRunner.isAvailable(nativeLibraryPath))
     private val nativeDeviceDaemonHandle: Long? =
         if (nativeDaemonEnabled) {
-            nativeDaemonBindings.createDeviceDaemon(
+            val handle = nativeDaemonBindings.createDeviceDaemon(
                 maxEventQueueSize = profile.resources.queues.eventQueueSlots,
                 maxBufferedBytesPerChannel = profile.resources.queues.ipcChannelBytes,
                 instructionBudget = profile.resources.cpu.instructionsPerSlice,
             )
+            nativeFilesystemRoot?.let { root ->
+                nativeDaemonBindings.attachDeviceDaemonFilesystem(
+                    daemonHandle = handle,
+                    rootPath = root.toAbsolutePath().normalize().toString(),
+                    quotaBytes = profile.resources.storage.diskBytes,
+                )
+            }
+            handle
         } else {
             null
         }

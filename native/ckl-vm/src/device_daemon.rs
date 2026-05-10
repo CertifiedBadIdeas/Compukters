@@ -150,6 +150,11 @@ impl DeviceDaemon {
             .unwrap_or(false)
     }
 
+    pub fn attach_filesystem(&mut self, root_path: String, quota_bytes: i64) -> Result<(), String> {
+        self.kernel
+            .with_kernel_mut(|kernel| kernel.attach_filesystem(root_path, quota_bytes))?
+    }
+
     pub fn attach_display(
         &mut self,
         display_id: i32,

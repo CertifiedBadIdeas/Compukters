@@ -143,6 +143,12 @@ interface NativeDaemonBindings {
         arguments: List<Any?>,
     ): Boolean
 
+    fun attachDeviceDaemonFilesystem(
+        daemonHandle: Long,
+        rootPath: String,
+        quotaBytes: Long,
+    )
+
     fun attachDeviceDaemonDisplay(
         daemonHandle: Long,
         displayId: Int,
@@ -207,6 +213,14 @@ object NativeVmDaemonBindings : NativeDaemonBindings {
         eventName: String,
         arguments: List<Any?>,
     ): Boolean = NativeVmBindings.enqueueDeviceDaemonEvent(daemonHandle, eventName, arguments)
+
+    override fun attachDeviceDaemonFilesystem(
+        daemonHandle: Long,
+        rootPath: String,
+        quotaBytes: Long,
+    ) {
+        NativeVmBindings.attachDeviceDaemonFilesystem(daemonHandle, rootPath, quotaBytes)
+    }
 
     override fun attachDeviceDaemonDisplay(
         daemonHandle: Long,

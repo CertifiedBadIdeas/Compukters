@@ -269,6 +269,7 @@ class NativeImageVmBindingsJniTest {
         assertTrue("attachDeviceDaemonDisplay" in memberNames)
         assertTrue("detachDeviceDaemonDisplay" in memberNames)
         assertTrue("drainDeviceDaemonDisplayFrames" in memberNames)
+        assertTrue("attachDeviceDaemonFilesystem" in memberNames)
     }
 
     @Test
@@ -466,6 +467,45 @@ class NativeImageVmBindingsJniTest {
             assertEquals("system", request.moduleName)
             assertEquals("log", request.functionName)
             assertEquals(listOf(VmValue.StringValue("rom")), request.arguments)
+        } finally {
+            NativeVmBindings.freeDeviceDaemon(handle)
+        }
+    }
+
+    @Test
+    fun nativeDeviceDaemonChangeDirectoryStaysInDaemonWhenLibraryIsConfigured() {
+        System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val root = createTempDirectory("ck-daemon-fs")
+        root.resolve("rom").resolve("bin").createDirectories()
+        val image =
+            assertNotNull(
+                LanguageFrontend()
+                    .compileImage(
+                        "main.ck",
+                        """
+                        pub fun main() {
+                            val changed: Bool = process::changeDirectory("bin");
+                            system::log("" + changed + ":" + process::currentDirectory());
+                        }
+                        """.trimIndent(),
+                    ).image,
+            )
+        val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 128)
+        try {
+            NativeVmBindings.attachDeviceDaemonFilesystem(
+                handle,
+                root.toAbsolutePath().normalize().toString(),
+                quotaBytes = 1_048_576,
+            )
+            NativeVmBindings.bootDeviceDaemon(handle, CkVmImageAbi.encode(image), "/rom/cd.ck", "", "rom")
+
+            val first = NativeVmBindings.tickDeviceDaemon(handle, 128, 1_000_000, 1)
+            val request = NativeVmBindings.drainDeviceDaemonHostRequests(handle).single()
+
+            assertEquals(1, first.hostRequests)
+            assertEquals("system", request.moduleName)
+            assertEquals("log", request.functionName)
+            assertEquals(listOf(VmValue.StringValue("true:rom/bin")), request.arguments)
         } finally {
             NativeVmBindings.freeDeviceDaemon(handle)
         }

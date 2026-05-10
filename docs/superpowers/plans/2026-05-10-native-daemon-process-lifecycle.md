@@ -34,11 +34,11 @@ semantics. Kotlin serves typed daemon requests for source compilation and unreso
 - Modify: `modules/compiler/src/main/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeVmBindings.kt`
 - Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVm.kt`
 
-- [ ] Add daemon-native filesystem attach JNI binding.
-- [ ] Attach `nativeFilesystemRoot` to daemon kernels during `BackgroundDeviceVm` construction.
-- [ ] Fast-path `process.changeDirectory` by validating directories through the attached native filesystem.
-- [ ] Add tests for daemon `currentDirectory/changeDirectory`.
-- [ ] Commit as `feat: attach filesystem to native daemon`.
+- [x] Add daemon-native filesystem attach JNI binding.
+- [x] Attach `nativeFilesystemRoot` to daemon kernels during `BackgroundDeviceVm` construction.
+- [x] Fast-path `process.changeDirectory` by validating directories through the attached native filesystem.
+- [x] Add tests for daemon `currentDirectory/changeDirectory`.
+- [x] Commit as `feat: attach filesystem to native daemon`.
 
 ## Task 3: Typed CompileProgram Request
 
