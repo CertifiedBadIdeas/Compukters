@@ -142,6 +142,8 @@ class BackgroundDeviceVm(
     private val programLoader = WorkspaceProgramLoader(workspace)
     private val pathResolver = VmPathResolver()
     private val nativeLibraryPath: String? = System.getProperty("ckl.vm.native.library")
+    private val effectiveNativeFilesystemRoot: Path? =
+        nativeFilesystemRoot ?: (workspace as? DeviceWorkspaceHost)?.computerRoot(deviceId)
     private val nativeDaemonEnabled: Boolean =
         System.getProperty("ckl.vm.native.daemon") == "true" &&
             (nativeDaemonBindings !== NativeVmDaemonBindings || NativeImageVmRunner.isAvailable(nativeLibraryPath))
@@ -152,7 +154,7 @@ class BackgroundDeviceVm(
                 maxBufferedBytesPerChannel = profile.resources.queues.ipcChannelBytes,
                 instructionBudget = profile.resources.cpu.instructionsPerSlice,
             )
-            nativeFilesystemRoot?.let { root ->
+            effectiveNativeFilesystemRoot?.let { root ->
                 nativeDaemonBindings.attachDeviceDaemonFilesystem(
                     daemonHandle = handle,
                     rootPath = root.toAbsolutePath().normalize().toString(),
@@ -186,7 +188,7 @@ class BackgroundDeviceVm(
                         maxEventQueueSize = profile.resources.queues.eventQueueSlots,
                     maxBufferedBytesPerChannel = profile.resources.queues.ipcChannelBytes,
                     )
-                nativeFilesystemRoot?.let { root ->
+                effectiveNativeFilesystemRoot?.let { root ->
                     NativeVmBindings.attachNativeFilesystem(
                         kernelHandle = handle,
                         rootPath = root.toAbsolutePath().normalize().toString(),
