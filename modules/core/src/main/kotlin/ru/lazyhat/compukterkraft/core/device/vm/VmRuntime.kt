@@ -79,7 +79,7 @@ internal class VmRuntime(
             if (filter == null || event.name == filter) {
                 ctx.setState(VmState.Running)
                 processStateReporter.markRunnable(processId)
-                ctx.schedulingPoint()
+                ctx.schedulingPoint(processId)
                 return event
             }
         }
@@ -94,7 +94,7 @@ internal class VmRuntime(
             return event
         }
         ctx.deferEvent(event)
-        ctx.schedulingPoint()
+        ctx.schedulingPoint(processId)
         return null
     }
 
@@ -103,14 +103,14 @@ internal class VmRuntime(
         ctx.setSleepUntil(targetTick)
         processStateReporter.markSleeping(processId, targetTick)
         while (system.currentTick < targetTick) {
-            ctx.schedulingPoint()
+            ctx.schedulingPoint(processId)
         }
         ctx.setSleepUntil(null)
         processStateReporter.markRunnable(processId)
     }
 
     override suspend fun yield() {
-        ctx.schedulingPoint()
+        ctx.schedulingPoint(processId)
     }
 
     override suspend fun poll(channelId: Int): VmPollResult {

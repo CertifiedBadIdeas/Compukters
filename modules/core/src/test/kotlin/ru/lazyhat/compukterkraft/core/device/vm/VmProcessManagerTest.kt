@@ -150,7 +150,7 @@ class VmProcessManagerTest {
 
         override fun setSleepUntil(tick: Long?) = Unit
 
-        override suspend fun schedulingPoint() = Unit
+        override suspend fun schedulingPoint(processId: Int) = Unit
 
         override suspend fun <T> awaitHostCall(callFactory: (Long) -> HostCall): T =
             error("not used")

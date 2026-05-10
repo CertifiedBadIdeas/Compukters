@@ -100,6 +100,18 @@ class VmRuntimeProcessStateTest {
             assertEquals(VmProcessState.Runnable, table.snapshot(ProcessId)?.state)
         }
 
+    @Test
+    fun yieldPassesProcessIdToSchedulingPoint() =
+        runBlocking {
+            val table = registeredTable()
+            val ctx = BlockingRuntimeContext()
+            val runtime = runtime(ctx = ctx, table = table)
+
+            runtime.yield()
+
+            assertEquals(listOf(ProcessId), ctx.schedulingProcessIds)
+        }
+
     private fun registeredTable(): VmProcessTable =
         VmProcessTable().also {
             it.registerProcess(
@@ -142,6 +154,7 @@ class VmRuntimeProcessStateTest {
     private class BlockingRuntimeContext : VmContext {
         val nextEvent = CompletableDeferred<VmEvent>()
         val nextPoll = CompletableDeferred<VmPollResult>()
+        val schedulingProcessIds = mutableListOf<Int>()
 
         override suspend fun receiveEvent(): VmEvent = nextEvent.await()
 
@@ -153,7 +166,8 @@ class VmRuntimeProcessStateTest {
 
         override fun setSleepUntil(tick: Long?) = Unit
 
-        override suspend fun schedulingPoint() {
+        override suspend fun schedulingPoint(processId: Int) {
+            schedulingProcessIds += processId
             yield()
         }
 

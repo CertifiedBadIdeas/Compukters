@@ -984,3 +984,45 @@ git add docs/superpowers/plans/2026-05-10-device-quota-process-scheduler.md \
   modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessManagerTest.kt
 git commit -m "feat: compare native process scheduler decisions"
 ```
+
+## Task 18: PID-Aware Scheduling Point Plumbing
+
+**Files:**
+- Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmContext.kt`
+- Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmRuntime.kt`
+- Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVm.kt`
+- Modify: `modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmRuntimeProcessStateTest.kt`
+- Modify: `modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessManagerTest.kt`
+
+- [x] **Step 1: Add failing process-id scheduling test**
+
+Add a runtime test proving `VmRuntime.yield()` calls the VM context scheduling point with the runtime process id.
+
+- [x] **Step 2: Add process id to `VmContext.schedulingPoint`**
+
+Change the scheduling point signature to accept `processId: Int`, and update runtime call sites to pass their process id.
+
+- [x] **Step 3: Thread process id through `BackgroundDeviceVm` scheduling helpers**
+
+Change `applySchedulingPoint` and `awaitSlicePermit` to accept a process id. The quota may still ignore the pid in this
+task; this is plumbing for the next task.
+
+- [x] **Step 4: Run focused tests**
+
+```bash
+./gradlew :core:test --tests '*VmRuntimeProcessStateTest' --tests '*VmProcessManagerTest' --rerun-tasks
+```
+
+Expected: PASS.
+
+- [x] **Step 5: Commit Task 18**
+
+```bash
+git add docs/superpowers/plans/2026-05-10-device-quota-process-scheduler.md \
+  modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmContext.kt \
+  modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmRuntime.kt \
+  modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVm.kt \
+  modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmRuntimeProcessStateTest.kt \
+  modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessManagerTest.kt
+git commit -m "feat: pass process id through scheduling points"
+```

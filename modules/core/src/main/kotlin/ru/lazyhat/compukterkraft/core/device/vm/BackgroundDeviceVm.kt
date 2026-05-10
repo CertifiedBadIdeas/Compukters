@@ -260,7 +260,7 @@ class BackgroundDeviceVm(
                                 return@launch
                             }
 
-                    awaitSlicePermit()
+                    awaitSlicePermit(processId = 1)
                     logger.log("VM[$deviceId] boot program started")
                     program.run(runtime)
                     stopInternal(VmStopReason.REQUESTED)
@@ -431,7 +431,7 @@ class BackgroundDeviceVm(
 
     override fun setSleepUntil(tick: Long?) = stateManager.setSleepUntil(tick)
 
-    override suspend fun schedulingPoint() = applySchedulingPoint()
+    override suspend fun schedulingPoint(processId: Int) = applySchedulingPoint(processId)
 
     override suspend fun <T> awaitHostCall(callFactory: (Long) -> HostCall): T = hostCallManager.awaitHostCall(callFactory)
 
@@ -536,7 +536,7 @@ class BackgroundDeviceVm(
         runtimeMetricsCollector.recordVmExecutionWindow(System.nanoTime() - started)
     }
 
-    private suspend fun awaitSlicePermit() {
+    private suspend fun awaitSlicePermit(processId: Int) {
         finishExecutionWindow()
         stateManager.setState(
             when {
@@ -553,11 +553,11 @@ class BackgroundDeviceVm(
         stateManager.setState(VmState.Running)
     }
 
-    private suspend fun applySchedulingPoint() {
+    private suspend fun applySchedulingPoint(processId: Int) {
         coroutineContext.ensureActive()
         if (System.nanoTime() >= stateManager.sliceDeadlineNanos) {
             runtimeMetricsCollector.recordSchedulingPoint(waitedForSlice = true)
-            awaitSlicePermit()
+            awaitSlicePermit(processId)
         } else {
             runtimeMetricsCollector.recordSchedulingPoint(waitedForSlice = false)
             coroutineYield()

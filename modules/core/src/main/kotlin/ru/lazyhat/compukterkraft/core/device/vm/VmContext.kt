@@ -47,7 +47,7 @@ interface VmContext {
     fun setSleepUntil(tick: Long?)
 
     /** Cooperative scheduling point — yields the time-slice when the budget is exhausted. */
-    suspend fun schedulingPoint()
+    suspend fun schedulingPoint(processId: Int)
 
     /** Post a [HostCall] to the server main thread and suspend until the result arrives. */
     suspend fun <T> awaitHostCall(callFactory: (Long) -> HostCall): T
