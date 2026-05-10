@@ -108,11 +108,6 @@ class RuntimeVmProfilingProfileCodecTest {
                                             processSchedulerSelectedTicks = 66,
                                             processSchedulerIdleTicks = 67,
                                             processSchedulerWokenProcesses = 68,
-                                            nativeProcessSchedulerComparisons = 69,
-                                            nativeProcessSchedulerMatches = 70,
-                                            nativeProcessSchedulerMismatches = 71,
-                                            nativeProcessSchedulerAcceptedTicks = 72,
-                                            nativeProcessSchedulerFallbackTicks = 73,
                                             nativeExecutionQuotaRefills = 74,
                                             nativeExecutionQuotaInstructions = 75,
                                             nativeExecutionQuotaWallNanos = 76,
@@ -131,9 +126,6 @@ class RuntimeVmProfilingProfileCodecTest {
                                             nativeDaemonHostRequests = 89,
                                             waitPollSignals = 34,
                                             waitProcessSignals = 35,
-                                            nativeProcessRegistrations = 36,
-                                            nativeProcessCompletions = 37,
-                                            nativeProcessStaleCompletions = 38,
                                             hostCallSignals = 39,
                                             nativeFastPathCalls = 40,
                                             nativeWaitCalls = 41,
@@ -230,9 +222,6 @@ class RuntimeVmProfilingProfileCodecTest {
         assertEquals(36, decoded.workloads.single().runtime.hostCalls.single().activeNanos)
         assertEquals(0, decoded.workloads.single().runtime.vm.waitPollSignals)
         assertEquals(0, decoded.workloads.single().runtime.vm.waitProcessSignals)
-        assertEquals(0, decoded.workloads.single().runtime.vm.nativeProcessRegistrations)
-        assertEquals(0, decoded.workloads.single().runtime.vm.nativeProcessCompletions)
-        assertEquals(0, decoded.workloads.single().runtime.vm.nativeProcessStaleCompletions)
         assertEquals(0, decoded.workloads.single().runtime.vm.nativeDaemonTicks)
         assertEquals(0, decoded.workloads.single().runtime.vm.nativeDaemonActiveNanos)
         assertEquals(0, decoded.workloads.single().runtime.vm.nativeDaemonIdleTicks)
