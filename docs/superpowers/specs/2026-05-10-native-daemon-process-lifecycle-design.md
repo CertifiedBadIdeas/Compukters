@@ -33,6 +33,7 @@ Included:
   - `process.currentDirectory`
   - `process.changeDirectory`
 - Convert `process.spawn` and `process.run` into daemon compile requests instead of generic host calls.
+- Keep `ipc.read` daemon-native because shell/stdin waits move into Rust once child processes are daemon-owned.
 - Keep source loading and compilation in Kotlin.
 - Add a compile-completion JNI bridge so Kotlin can return a compiled CKIM image to the Rust daemon.
 - Register child processes, attach child image handles, and schedule children in the Rust daemon process table.
@@ -82,6 +83,10 @@ For `spawn`, the parent resumes with the child pid after the child is registered
 For `run`, the parent becomes a waiter for the child pid. When the child exits, Rust resumes the parent with the child
 exit code.
 
+For stdio, `terminal.ck` writes submitted lines with `ipc.write(input, line + "\n")`, while `shell.ck` calls
+`stdio.readLine(ctx)`, which uses `ipc.read(ctx.input)`. Since both terminal and shell are native daemon processes,
+`ipc.read` must park the shell as a native IPC waiter and wake it from the Rust IPC registry when terminal writes stdin.
+
 ## Failure Semantics
 
 If Kotlin cannot load or compile a child program:
@@ -97,5 +102,6 @@ If Kotlin cannot load or compile a child program:
 - `process.spawn` and `process.run` emit typed `compileProgram` daemon requests, not generic `hostCall` requests.
 - A completed compile request registers and schedules a real child process in Rust.
 - `process.run` returns the child exit code after Rust observes child completion.
+- `ipc.read` blocks as native scheduler state, not as a generic host call.
 - Boot, terminal, and shell can run inside the daemon without Kotlin-owned child process coroutines.
 - Existing non-daemon native and interpreter paths keep their Kotlin fallback behavior.

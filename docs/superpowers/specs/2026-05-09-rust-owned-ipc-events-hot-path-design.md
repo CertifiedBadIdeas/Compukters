@@ -37,6 +37,7 @@ Included:
   - `events.argString`
   - `ipc.open`
   - `ipc.write`
+  - `ipc.read`
   - `ipc.tryRead`
   - `ipc.close`
   - `runtime.poll`
@@ -131,15 +132,18 @@ The native kernel should implement channel operations equivalent to the Kotlin `
 
 - `ipc.open()` allocates a channel id.
 - `ipc.write(channel, text)` appends text up to the configured per-channel byte limit.
+- `ipc.read(channel)` returns available buffered text, or parks the current native process as an IPC waiter until text is
+  written.
 - `ipc.tryRead(channel)` returns and clears available buffered text, or `""`.
 - `ipc.close(channel)` closes the channel.
 
-`ipc.read(channel)` is intentionally not the first blocking primitive to migrate unless needed by the implementation.
-The primary terminal loop uses `runtime.poll(channel)`, so migrating poll first is the smaller and more valuable step.
+`runtime.poll(channel)` remains the terminal multiplexing primitive for stdout/events. `ipc.read(channel)` is also native
+because shell/user programs use `stdio.readLine(ctx)`, and after process scheduling moves into the daemon those programs
+must not fall back to Kotlin host calls for stdin.
 
 ## Native Poll Wait Protocol
 
-`runtime.poll(channel)` should be handled in Rust without the generic host-call bridge.
+`runtime.poll(channel)` and `ipc.read(channel)` should be handled in Rust without the generic host-call bridge.
 
 If IPC text or an event is immediately available, the image runner returns a `Poll` record directly to CKL.
 
@@ -155,9 +159,9 @@ Kotlin should park that process until either:
 - IPC data is written to the requested channel;
 - the normal scheduler wakes it for cancellation/stop.
 
-After wake-up, Kotlin resumes the image with a unit-like resume value. The image runner rechecks native IPC/event state
-and returns the `Poll` record. Waiting time should be recorded separately as native wait time, not as generic host-call
-active time.
+After wake-up, the daemon scheduler reruns the same native instruction. The image runner rechecks native IPC/event state
+and returns either the `Poll` record or the text for `ipc.read`. Waiting time should be recorded separately as native wait
+time, not as generic host-call active time.
 
 ## Display Metadata Fast Path
 

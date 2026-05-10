@@ -594,6 +594,75 @@ class NativeImageVmBindingsJniTest {
     }
 
     @Test
+    fun nativeDeviceDaemonIpcReadWaitsForChildWriteWhenLibraryIsConfigured() {
+        System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val parent =
+            assertNotNull(
+                LanguageFrontend()
+                    .compileImage(
+                        "parent.ck",
+                        """
+                        pub fun main() {
+                            val channel: Int = ipc::open();
+                            process::spawn("child.ck", "" + channel);
+                            system::log(ipc::read(channel));
+                        }
+                        """.trimIndent(),
+                    ).image,
+            )
+        val child =
+            assertNotNull(
+                LanguageFrontend()
+                    .compileImage(
+                        "child.ck",
+                        """
+                        pub fun main() {
+                            ipc::write(strings::toInt(process::argument()), "ready\n");
+                        }
+                        """.trimIndent(),
+                    ).image,
+            )
+        val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 128)
+        try {
+            NativeVmBindings.bootDeviceDaemon(handle, CkVmImageAbi.encode(parent), "/rom/parent.ck", "", "rom")
+            var logRequest: NativeDeviceDaemonHostRequest? = null
+
+            repeat(10) {
+                NativeVmBindings.tickDeviceDaemon(handle, 128, 1_000_000, it.toLong() + 1)
+                for (request in NativeVmBindings.drainDeviceDaemonHostRequests(handle)) {
+                    when {
+                        request.kind == "compileProgram" -> {
+                            assertEquals("child.ck", request.path)
+                            assertTrue(
+                                NativeVmBindings.completeDeviceDaemonCompileProgram(
+                                    handle,
+                                    request.requestId,
+                                    CkVmImageAbi.encode(child),
+                                    exitCode = 0,
+                                ),
+                            )
+                        }
+                        request.moduleName == "system" && request.functionName == "log" -> {
+                            logRequest = request
+                        }
+                        else -> {
+                            assertTrue(
+                                false,
+                                "unexpected daemon host request while validating ipc.read: $request",
+                            )
+                        }
+                    }
+                }
+            }
+
+            val observed = assertNotNull(logRequest)
+            assertEquals(listOf(VmValue.StringValue("ready\n")), observed.arguments)
+        } finally {
+            NativeVmBindings.freeDeviceDaemon(handle)
+        }
+    }
+
+    @Test
     fun nativeDeviceDaemonEventsWakeImagesWhenLibraryIsConfigured() {
         System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val image =
