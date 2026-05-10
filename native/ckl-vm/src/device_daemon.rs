@@ -115,6 +115,27 @@ impl DeviceDaemon {
         self.kernel.clone()
     }
 
+    #[cfg(test)]
+    fn attach_child_image_for_test(
+        &mut self,
+        pid: i32,
+        parent_pid: i32,
+        path: &str,
+        image_bytes: &[u8],
+        argument: &str,
+    ) -> Result<(), String> {
+        let pending = PendingCompile {
+            parent_pid,
+            child_pid: pid,
+            path: path.to_string(),
+            argument: argument.to_string(),
+            working_directory: String::new(),
+            mode: PendingCompileMode::Spawn,
+        };
+        self.attach_child_image(&pending, image_bytes)?;
+        Ok(())
+    }
+
     pub fn boot_image(
         &mut self,
         image_bytes: &[u8],
@@ -271,60 +292,83 @@ impl DeviceDaemon {
         wall_nanos: i64,
         server_tick: i64,
     ) -> DeviceDaemonTickSummary {
+        self.refill_execution_quota(instructions, wall_nanos, server_tick);
+        self.run_ready_until_blocked(self.instruction_budget as i64)
+    }
+
+    pub fn refill_execution_quota(
+        &mut self,
+        instructions: i64,
+        wall_nanos: i64,
+        server_tick: i64,
+    ) {
         self.kernel
             .with_kernel_mut(|kernel| {
                 kernel.add_execution_quota(instructions, wall_nanos, server_tick);
             })
             .expect("daemon kernel must be lockable");
-        let step = self
-            .kernel
-            .with_kernel_mut(|kernel| kernel.run_scheduler_step())
-            .expect("daemon kernel must be lockable");
-        let Some(pid) = step.selected_pid else {
-            return DeviceDaemonTickSummary {
-                server_tick,
-                turns: 0,
-                remaining_instructions: step.remaining_instructions,
-                idle: true,
-                halted: 0,
-                host_requests: 0,
-            };
-        };
-        let signal = match self.images.get_mut(&pid) {
-            Some(image) => image.run_until_signal_decoded(),
-            None => Err(format!("daemon selected pid {pid} without image")),
-        };
+    }
+
+    pub fn run_ready_until_blocked(&mut self, max_turns: i64) -> DeviceDaemonTickSummary {
+        let mut turns = 0;
         let mut halted = 0;
         let mut host_requests = 0;
-        match signal {
-            Ok(signal) => match self.handle_signal(pid, signal, server_tick) {
-                Ok(DaemonSignalOutcome::Halted) => halted = 1,
-                Ok(DaemonSignalOutcome::HostRequest) => host_requests = 1,
-                Ok(DaemonSignalOutcome::Runnable | DaemonSignalOutcome::Waiting) => {}
+        let mut remaining_instructions = 0;
+        let mut server_tick = 0;
+        let max_turns = max_turns.max(1);
+
+        while turns < max_turns {
+            let step = self
+                .kernel
+                .with_kernel_mut(|kernel| kernel.run_scheduler_step())
+                .expect("daemon kernel must be lockable");
+            server_tick = step.server_tick;
+            remaining_instructions = step.remaining_instructions;
+            let Some(pid) = step.selected_pid else {
+                return DeviceDaemonTickSummary {
+                    server_tick,
+                    turns,
+                    remaining_instructions,
+                    idle: true,
+                    halted,
+                    host_requests,
+                };
+            };
+
+            turns += 1;
+            let signal = match self.images.get_mut(&pid) {
+                Some(image) => image.run_until_signal_decoded(),
+                None => Err(format!("daemon selected pid {pid} without image")),
+            };
+            match signal {
+                Ok(signal) => match self.handle_signal(pid, signal, server_tick) {
+                    Ok(DaemonSignalOutcome::Halted) => halted += 1,
+                    Ok(DaemonSignalOutcome::HostRequest) => host_requests += 1,
+                    Ok(DaemonSignalOutcome::Runnable | DaemonSignalOutcome::Waiting) => {}
+                    Err(message) => self.crash_process(pid, message),
+                },
                 Err(message) => {
-                    let _ = self
-                        .kernel
-                        .with_kernel_mut(|kernel| kernel.mark_process_crashed(pid, message));
-                    self.images.remove(&pid);
-                    self.image_handles.remove(&pid);
+                    self.crash_process(pid, message);
                 }
-            },
-            Err(message) => {
-                let _ = self
-                    .kernel
-                    .with_kernel_mut(|kernel| kernel.mark_process_crashed(pid, message));
-                self.images.remove(&pid);
-                self.image_handles.remove(&pid);
             }
         }
+
         DeviceDaemonTickSummary {
             server_tick,
-            turns: 1,
-            remaining_instructions: step.remaining_instructions,
+            turns,
+            remaining_instructions,
             idle: false,
             halted,
             host_requests,
         }
+    }
+
+    fn crash_process(&mut self, pid: i32, message: String) {
+        let _ = self
+            .kernel
+            .with_kernel_mut(|kernel| kernel.mark_process_crashed(pid, message));
+        self.images.remove(&pid);
+        self.image_handles.remove(&pid);
     }
 
     fn handle_signal(
@@ -562,7 +606,7 @@ mod tests {
                 server_tick: 7,
                 turns: 1,
                 remaining_instructions: 127,
-                idle: false,
+                idle: true,
                 halted: 1,
                 host_requests: 0,
             }
@@ -775,6 +819,31 @@ mod tests {
         assert_eq!(request.module_name.as_deref(), Some("system"));
         assert_eq!(request.function_name.as_deref(), Some("log"));
         assert_eq!(request.arguments, vec![VmValue::String("hello\n".to_string())]);
+    }
+
+    #[test]
+    fn daemon_run_ready_until_blocked_runs_multiple_processes_in_one_pass() {
+        let mut daemon = DeviceDaemon::new(16, 1024, 128);
+        daemon.boot_image(&ckim_yields_then_halts(), "/rom/terminal.ck", "", "");
+        daemon
+            .attach_child_image_for_test(2, 1, "/rom/shell.ck", &ckim_yields_then_halts(), "")
+            .expect("child image should attach");
+
+        daemon.refill_execution_quota(16, 1_000_000, 70);
+        let summary = daemon.run_ready_until_blocked(16);
+
+        assert_eq!(summary.server_tick, 70);
+        assert_eq!(summary.turns, 4);
+        assert_eq!(summary.halted, 2);
+        assert!(summary.idle);
+        assert_eq!(
+            daemon.process_status(1),
+            DeviceDaemonProcessStatus::Completed(0),
+        );
+        assert_eq!(
+            daemon.process_status(2),
+            DeviceDaemonProcessStatus::Completed(0),
+        );
     }
 
     fn ckim_empty_main() -> Vec<u8> {
