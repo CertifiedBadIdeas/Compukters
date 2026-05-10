@@ -906,3 +906,36 @@ git add docs/superpowers/plans/2026-05-10-device-quota-process-scheduler.md \
   native/ckl-vm/src/jni.rs
 git commit -m "feat: mirror process scheduler state to native"
 ```
+
+## Task 16: Native Root Process Registration
+
+**Files:**
+- Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessManager.kt`
+- Modify: `modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessManagerTest.kt`
+
+- [x] **Step 1: Add failing root registration expectation**
+
+Update process manager tests so a native bridge sees pid `1` registered with parent pid `0` and the boot script path
+during manager initialization.
+
+- [x] **Step 2: Register root process in the native bridge**
+
+After the Kotlin process table registers pid `1`, call `nativeProcessBridge.registerProcess(...)` for the same process.
+Record the native process registration metric if the bridge accepts it.
+
+- [x] **Step 3: Run focused tests**
+
+```bash
+./gradlew :core:test --tests '*VmProcessManagerTest' --rerun-tasks
+```
+
+Expected: PASS.
+
+- [x] **Step 4: Commit Task 16**
+
+```bash
+git add docs/superpowers/plans/2026-05-10-device-quota-process-scheduler.md \
+  modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessManager.kt \
+  modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessManagerTest.kt
+git commit -m "feat: register root process in native scheduler"
+```

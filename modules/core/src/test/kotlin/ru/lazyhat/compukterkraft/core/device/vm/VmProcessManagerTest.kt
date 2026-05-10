@@ -240,6 +240,34 @@ class VmProcessManagerTest {
     }
 
     @Test
+    fun initRegistersNativeRootProcess() {
+        runtimeTestWorkspace("vm-process-manager-native-root") { workspace ->
+            val bridge = RecordingNativeProcessBridge()
+            val ctx = StubVmContext()
+            val profile = runtimeProfile()
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val manager =
+                VmProcessManager(
+                    scope = scope,
+                    ctx = ctx,
+                    deviceId = 1,
+                    programLoader = WorkspaceProgramLoader(workspace.host),
+                    profile = profile,
+                    runtimeCreator = { _, _, _, _ -> error("runtimeCreator should not run") },
+                    compilerMetricsCollector = NoOpCompilerMetricsCollector,
+                    nativeProcessBridge = bridge,
+                )
+
+            try {
+                assertEquals(listOf(Triple(1, 0, profile.bootScriptName)), bridge.registrations)
+            } finally {
+                runBlocking { manager.cancelAll() }
+                scope.cancel()
+            }
+        }
+    }
+
+    @Test
     fun spawnRegistersAndCompletesNativeProcess() {
         runtimeTestWorkspace("vm-process-manager-native-bridge") { workspace ->
             val bridge = RecordingNativeProcessBridge()
@@ -263,7 +291,10 @@ class VmProcessManagerTest {
                 val code = runBlocking { withTimeout(5_000) { manager.wait(pid) } }
 
                 assertEquals(2, pid)
-                assertEquals(listOf(Triple(2, 1, "missing.ck")), bridge.registrations)
+                assertEquals(
+                    listOf(Triple(1, 0, runtimeProfile().bootScriptName), Triple(2, 1, "missing.ck")),
+                    bridge.registrations,
+                )
                 assertEquals(listOf(2 to 1), bridge.completions)
                 assertEquals(1, code)
                 assertTrue(ctx.logs.any { it.contains("Program not found: missing.ck") }, ctx.logs.toString())
@@ -297,7 +328,10 @@ class VmProcessManagerTest {
                 val code = runBlocking { withTimeout(5_000) { manager.wait(pid) } }
 
                 assertEquals(2, pid)
-                assertEquals(listOf(Triple(2, 42, "missing.ck")), bridge.registrations)
+                assertEquals(
+                    listOf(Triple(1, 0, runtimeProfile().bootScriptName), Triple(2, 42, "missing.ck")),
+                    bridge.registrations,
+                )
                 assertEquals(listOf(2 to 1), bridge.completions)
                 assertEquals(1, code)
             } finally {
@@ -331,9 +365,12 @@ class VmProcessManagerTest {
                 val pid = manager.spawn("missing.ck", "", "")
                 runBlocking { withTimeout(5_000) { manager.wait(pid) } }
 
-                assertEquals(listOf(Triple(2, 1, "missing.ck")), bridge.registrations)
+                assertEquals(
+                    listOf(Triple(1, 0, runtimeProfile().bootScriptName), Triple(2, 1, "missing.ck")),
+                    bridge.registrations,
+                )
                 assertEquals(listOf(2 to 1), bridge.completions)
-                assertEquals(1, metrics.snapshot().vm.nativeProcessRegistrations)
+                assertEquals(2, metrics.snapshot().vm.nativeProcessRegistrations)
                 assertEquals(1, metrics.snapshot().vm.nativeProcessCompletions)
                 assertEquals(0, metrics.snapshot().vm.nativeProcessStaleCompletions)
             } finally {
@@ -611,7 +648,7 @@ class VmProcessManagerTest {
                 val pid = manager.spawn("missing.ck", "", "")
                 runBlocking { withTimeout(5_000) { manager.wait(pid) } }
 
-                assertEquals(1, metrics.snapshot().vm.nativeProcessRegistrations)
+                assertEquals(2, metrics.snapshot().vm.nativeProcessRegistrations)
                 assertEquals(0, metrics.snapshot().vm.nativeProcessCompletions)
                 assertEquals(1, metrics.snapshot().vm.nativeProcessStaleCompletions)
             } finally {
