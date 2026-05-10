@@ -366,6 +366,22 @@ class RomScriptCompileTest {
     }
 
     @Test
+    fun bundledRomTerminalDefinesLowercaseGlyphs() {
+        val source = resourceText("rom/terminal.ck")
+
+        for (code in 'a'.code..'z'.code) {
+            assertTrue(
+                source.contains("glyphs[$code] ="),
+                "terminal.ck should define a lowercase glyph for ${code.toChar()}",
+            )
+        }
+        assertFalse(
+            source.contains("glyphs[code + 32] = glyphs[code]"),
+            "terminal.ck should not render lowercase letters by copying uppercase glyphs",
+        )
+    }
+
+    @Test
     fun bundledRomShellChecksExternalCommandBeforeRun() {
         val source = resourceText("rom/shell.ck")
 
@@ -395,6 +411,17 @@ class RomScriptCompileTest {
         assertTrue(source.contains("while true"), "yes.ck should keep writing until the VM stops the process")
         assertTrue(source.contains("\"y\""), "yes.ck should default to Unix-like 'y' output")
         assertTrue(source.contains("println(ctx, text)"), "yes.ck should emit one line per iteration")
+    }
+
+    @Test
+    fun bundledRomIncludesIdProgram() {
+        val index = resourceText("rom/rom.index")
+        assertContains(index.lineSequence().map { it.trim() }.toList(), "id.ck")
+
+        val source = resourceText("rom/id.ck")
+        assertTrue(source.contains("fromArgument(process::argument())"), "id.ck should use stdio-v1 descriptors")
+        assertTrue(source.contains("system::deviceId()"), "id.ck should read the current device id from the system API")
+        assertTrue(source.contains("println(ctx,"), "id.ck should write the device id to stdout")
     }
 
     @Test
