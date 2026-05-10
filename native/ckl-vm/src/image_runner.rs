@@ -132,11 +132,21 @@ impl ImageVmHandle {
         }
     }
 
+    pub fn run_until_signal_decoded(&mut self) -> Result<VmSignal, String> {
+        match catch_unwind(AssertUnwindSafe(|| self.run_until_signal_inner())) {
+            Ok(result) => result,
+            Err(payload) => Err(panic_message(payload)),
+        }
+    }
+
     pub fn resume_with_value_bytes(&mut self, value: &[u8]) -> Result<(), String> {
+        self.resume_with_value(decode_value(value)?)
+    }
+
+    pub fn resume_with_value(&mut self, value: VmValue) -> Result<(), String> {
         if self.state != ImageVmState::WaitingForResume {
             return Err("native image VM is not waiting for resume".to_string());
         }
-        let value = decode_value(value)?;
         self.stack.push(value);
         self.state = ImageVmState::Ready;
         Ok(())
@@ -1951,6 +1961,16 @@ mod tests {
     use super::*;
 
     #[test]
+    fn image_runner_can_return_decoded_signal_for_daemon() {
+        let image = encode_empty_main_image();
+        let mut handle = ImageVmHandle::create(&image, 128).unwrap();
+
+        let signal = handle.run_until_signal_decoded().unwrap();
+
+        assert_eq!(signal, VmSignal::Halt(VmValue::Unit));
+    }
+
+    #[test]
     fn rejects_string_concatenation_with_object_value() {
         let error = apply_binary_operator(
             0,
@@ -1965,6 +1985,37 @@ mod tests {
     #[test]
     fn normalizes_native_filesystem_working_directory() {
         assert_eq!(normalize_working_directory("/a/./b/../c/"), "a/c");
+    }
+
+    fn encode_empty_main_image() -> Vec<u8> {
+        image_with_code(0, vec![OP_RETURN])
+    }
+
+    fn image_with_code(frame_size: i32, code: Vec<u8>) -> Vec<u8> {
+        let mut out = Vec::new();
+        out.extend_from_slice(b"CKIM");
+        out.push(1);
+        string(&mut out, "ckl-1");
+        out.extend_from_slice(&1u16.to_le_bytes());
+        i32(&mut out, 0);
+        i32(&mut out, 0);
+        i32(&mut out, 0);
+        i32(&mut out, 0);
+        i32(&mut out, 1);
+        string(&mut out, "main");
+        i32(&mut out, frame_size);
+        i32(&mut out, code.len() as i32);
+        out.extend_from_slice(&code);
+        out
+    }
+
+    fn string(out: &mut Vec<u8>, value: &str) {
+        i32(out, value.len() as i32);
+        out.extend_from_slice(value.as_bytes());
+    }
+
+    fn i32(out: &mut Vec<u8>, value: i32) {
+        out.extend_from_slice(&value.to_le_bytes());
     }
 }
 
