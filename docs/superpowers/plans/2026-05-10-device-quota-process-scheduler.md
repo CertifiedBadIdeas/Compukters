@@ -1110,3 +1110,47 @@ git add docs/superpowers/plans/2026-05-10-device-quota-process-scheduler.md \
   modules/v1_21_1/v1_21_1-neoforge/src/test/kotlin/ru/lazyhat/compukterkraft/impl/computer/vm/RuntimeVmProfilingReportFormatterTest.kt
 git commit -m "feat: report native scheduler comparison metrics"
 ```
+
+## Task 21: Guarded Native Scheduler Source
+
+**Files:**
+- Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/runtime/RuntimeProfiling.kt`
+- Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessManager.kt`
+- Modify: `modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/runtime/RuntimeProfilingTest.kt`
+- Modify: `modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessManagerTest.kt`
+
+- [x] **Step 1: Add failing native scheduler source metric tests**
+
+Add tests proving:
+
+- matching native scheduler ticks are counted as accepted native scheduler ticks;
+- mismatched native scheduler ticks are counted as Kotlin fallback ticks;
+- no native tick leaves both counters unchanged.
+
+- [x] **Step 2: Add native scheduler source metrics**
+
+Extend runtime VM metrics with accepted native scheduler ticks and Kotlin fallback scheduler ticks.
+
+- [x] **Step 3: Use native tick only when it matches**
+
+Keep executing the Kotlin scheduler tick for state-table parity, but when native tick equals the Kotlin tick, return the
+native tick as the effective scheduler decision. On mismatch, return Kotlin tick.
+
+- [x] **Step 4: Run focused tests**
+
+```bash
+./gradlew :core:test --tests '*RuntimeProfilingTest' --tests '*VmProcessManagerTest' --rerun-tasks
+```
+
+Expected: PASS.
+
+- [x] **Step 5: Commit Task 21**
+
+```bash
+git add docs/superpowers/plans/2026-05-10-device-quota-process-scheduler.md \
+  modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/runtime/RuntimeProfiling.kt \
+  modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessManager.kt \
+  modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/runtime/RuntimeProfilingTest.kt \
+  modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessManagerTest.kt
+git commit -m "feat: use guarded native scheduler decisions"
+```
