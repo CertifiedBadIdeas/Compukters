@@ -623,6 +623,34 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
 }
 
 #[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_runDeviceSchedulerDryRunNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    kernel_handle: jlong,
+    max_turns: jint,
+) -> jlongArray {
+    let kernel_handle = match shared_kernel_handle(&mut env, kernel_handle) {
+        Some(kernel) => kernel,
+        None => return long_array_or_throw(&mut env, &[]),
+    };
+    match kernel_handle.with_kernel_mut(|kernel| kernel.run_scheduler_dry_run(max_turns as i64)) {
+        Ok(result) => {
+            let mut values = Vec::with_capacity(4 + result.selected_pids.len());
+            values.push(result.server_tick);
+            values.push(result.turns);
+            values.push(result.remaining_instructions);
+            values.push(result.selected_pids.len() as jlong);
+            values.extend(result.selected_pids.into_iter().map(|pid| pid as jlong));
+            long_array_or_throw(&mut env, &values)
+        }
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalStateException", error);
+            long_array_or_throw(&mut env, &[])
+        }
+    }
+}
+
+#[no_mangle]
 pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_processSchedulerTickNative(
     mut env: JNIEnv<'_>,
     _class: JClass<'_>,

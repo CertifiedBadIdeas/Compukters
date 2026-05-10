@@ -1358,3 +1358,49 @@ git add docs/superpowers/plans/2026-05-10-device-quota-process-scheduler.md \
   modules/v1_21_1/v1_21_1-neoforge/src/test/kotlin/ru/lazyhat/compukterkraft/impl/computer/vm/RuntimeVmProfilingReportFormatterTest.kt
 git commit -m "feat: report native execution quota metrics"
 ```
+
+## Task 27: Native Device Scheduler Dry Run
+
+**Files:**
+- Modify: `native/ckl-vm/src/runtime_kernel.rs`
+- Modify: `native/ckl-vm/src/jni.rs`
+- Modify: `modules/compiler/src/main/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeVmBindings.kt`
+- Modify: `modules/compiler/src/test/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeImageVmBindingsJniTest.kt`
+
+- [x] **Step 1: Add failing dry-run scheduler tests**
+
+Add tests proving:
+
+- Rust can produce a bounded device scheduler plan from the current execution quota;
+- the dry run uses round-robin runnable pids;
+- the dry run does not mutate the real native process scheduler state;
+- Kotlin JNI bindings expose and decode the dry-run result.
+
+- [x] **Step 2: Add Rust dry-run result and algorithm**
+
+Add `DeviceSchedulerDryRun` with server tick, turn count, remaining instructions, and selected pids. Treat one dry-run
+turn as one instruction for now.
+
+- [x] **Step 3: Add JNI and Kotlin bindings**
+
+Expose `runDeviceSchedulerDryRunNative(...)` returning a `LongArray`, and decode it into `NativeDeviceSchedulerDryRun`.
+
+- [x] **Step 4: Run focused dry-run tests**
+
+```bash
+cargo test --manifest-path native/ckl-vm/Cargo.toml scheduler_dry_run
+./gradlew -Dckl.vm.native.library=/home/lazyhat/IdeaProjects/Compukter-Kraft/native/ckl-vm/target/debug/libckl_vm.so :compiler:test --tests '*NativeImageVmBindingsJniTest' --rerun-tasks
+```
+
+Expected: PASS.
+
+- [x] **Step 5: Commit Task 27**
+
+```bash
+git add docs/superpowers/plans/2026-05-10-device-quota-process-scheduler.md \
+  native/ckl-vm/src/runtime_kernel.rs \
+  native/ckl-vm/src/jni.rs \
+  modules/compiler/src/main/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeVmBindings.kt \
+  modules/compiler/src/test/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeImageVmBindingsJniTest.kt
+git commit -m "feat: add native scheduler dry run"
+```

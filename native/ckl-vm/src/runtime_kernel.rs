@@ -41,6 +41,14 @@ pub struct DeviceExecutionQuotaSnapshot {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeviceSchedulerDryRun {
+    pub server_tick: i64,
+    pub turns: i64,
+    pub remaining_instructions: i64,
+    pub selected_pids: Vec<i32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct ProcessEntry {
     parent_pid: i32,
     program_path: String,
@@ -115,6 +123,31 @@ impl DeviceRuntimeKernel {
 
     pub fn execution_quota_snapshot(&self) -> DeviceExecutionQuotaSnapshot {
         self.execution_quota
+    }
+
+    pub fn run_scheduler_dry_run(&self, max_turns: i64) -> DeviceSchedulerDryRun {
+        let max_turns = max_turns.max(0);
+        let mut remaining_instructions = self.execution_quota.instructions.max(0);
+        let mut runnable_queue = self.runnable_queue.clone();
+        let mut runnable_pids = self.runnable_pids.clone();
+        let mut selected_pids = Vec::new();
+
+        while remaining_instructions > 0 && (selected_pids.len() as i64) < max_turns {
+            let Some(pid) =
+                Self::next_runnable_pid_from(&mut runnable_queue, &mut runnable_pids, &self.processes)
+            else {
+                break;
+            };
+            selected_pids.push(pid);
+            remaining_instructions = remaining_instructions.saturating_sub(1);
+        }
+
+        DeviceSchedulerDryRun {
+            server_tick: self.execution_quota.server_tick,
+            turns: selected_pids.len() as i64,
+            remaining_instructions,
+            selected_pids,
+        }
     }
 
     pub fn attach_filesystem(&mut self, root_path: String, quota_bytes: i64) -> Result<(), String> {
@@ -267,15 +300,29 @@ impl DeviceRuntimeKernel {
     }
 
     fn next_runnable_pid(&mut self) -> Option<i32> {
-        while let Some(pid) = self.runnable_queue.pop_front() {
-            if !self.runnable_pids.remove(&pid) {
+        Self::next_runnable_pid_from(
+            &mut self.runnable_queue,
+            &mut self.runnable_pids,
+            &self.processes,
+        )
+    }
+
+    fn next_runnable_pid_from(
+        runnable_queue: &mut VecDeque<i32>,
+        runnable_pids: &mut BTreeSet<i32>,
+        processes: &BTreeMap<i32, ProcessEntry>,
+    ) -> Option<i32> {
+        while let Some(pid) = runnable_queue.pop_front() {
+            if !runnable_pids.remove(&pid) {
                 continue;
             }
             if matches!(
-                self.processes.get(&pid).map(|entry| &entry.state),
+                processes.get(&pid).map(|entry| &entry.state),
                 Some(ProcessState::Runnable)
             ) {
-                self.enqueue_runnable(pid);
+                if runnable_pids.insert(pid) {
+                    runnable_queue.push_back(pid);
+                }
                 return Some(pid);
             }
         }
@@ -793,6 +840,66 @@ mod tests {
                 instructions: 0,
                 wall_nanos: 0,
                 server_tick: 9,
+            }
+        );
+    }
+
+    #[test]
+    fn scheduler_dry_run_uses_quota_and_round_robin_without_mutating_scheduler() {
+        let mut kernel = DeviceRuntimeKernel::new(16, 1024);
+        assert!(kernel.register_process(1, 0, "/rom/a.ck".to_string()));
+        assert!(kernel.register_process(2, 0, "/rom/b.ck".to_string()));
+        assert!(kernel.add_execution_quota(3, 1_000, 42).instructions == 3);
+
+        assert_eq!(
+            kernel.run_scheduler_dry_run(8),
+            DeviceSchedulerDryRun {
+                server_tick: 42,
+                turns: 3,
+                remaining_instructions: 0,
+                selected_pids: vec![1, 2, 1],
+            }
+        );
+        assert_eq!(
+            kernel.scheduler_tick(42),
+            ProcessSchedulerTick {
+                current_tick: 42,
+                woken_pids: Vec::new(),
+                selected_pid: Some(1),
+            }
+        );
+    }
+
+    #[test]
+    fn scheduler_dry_run_stops_at_turn_limit() {
+        let mut kernel = DeviceRuntimeKernel::new(16, 1024);
+        assert!(kernel.register_process(1, 0, "/rom/a.ck".to_string()));
+        assert!(kernel.register_process(2, 0, "/rom/b.ck".to_string()));
+        assert!(kernel.add_execution_quota(5, 1_000, 43).instructions == 5);
+
+        assert_eq!(
+            kernel.run_scheduler_dry_run(2),
+            DeviceSchedulerDryRun {
+                server_tick: 43,
+                turns: 2,
+                remaining_instructions: 3,
+                selected_pids: vec![1, 2],
+            }
+        );
+    }
+
+    #[test]
+    fn scheduler_dry_run_stops_when_no_runnable_processes() {
+        let mut kernel = DeviceRuntimeKernel::new(16, 1024);
+        assert!(kernel.add_execution_quota(5, 1_000, 44).instructions == 5);
+
+        assert_eq!(
+            kernel.run_scheduler_dry_run(8),
+            DeviceSchedulerDryRun {
+                server_tick: 44,
+                turns: 0,
+                remaining_instructions: 5,
+                selected_pids: Vec::new(),
             }
         );
     }

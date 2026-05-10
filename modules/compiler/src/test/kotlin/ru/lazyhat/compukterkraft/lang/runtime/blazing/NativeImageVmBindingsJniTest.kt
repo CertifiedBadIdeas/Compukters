@@ -201,6 +201,48 @@ class NativeImageVmBindingsJniTest {
                     Long::class.javaPrimitiveType,
                 ).returnType,
         )
+        assertEquals(
+            LongArray::class.java,
+            NativeVmBindings::class.java
+                .getDeclaredMethod(
+                    "runDeviceSchedulerDryRunNative",
+                    Long::class.javaPrimitiveType,
+                    Int::class.javaPrimitiveType,
+                ).returnType,
+        )
+    }
+
+    @Test
+    fun nativeDeviceSchedulerDryRunRunsWhenLibraryIsConfigured() {
+        System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val kernelHandle = NativeVmBindings.createDeviceKernel(maxEventQueueSize = 64, maxBufferedBytesPerChannel = 4096)
+
+        try {
+            assertTrue(NativeVmBindings.registerProcess(kernelHandle, pid = 1, parentPid = 0, programPath = "/rom/a.ck"))
+            assertTrue(NativeVmBindings.registerProcess(kernelHandle, pid = 2, parentPid = 0, programPath = "/rom/b.ck"))
+            NativeVmBindings.addDeviceExecutionQuota(
+                kernelHandle = kernelHandle,
+                instructions = 3,
+                wallNanos = 1_000,
+                serverTick = 42,
+            )
+
+            assertEquals(
+                NativeDeviceSchedulerDryRun(
+                    serverTick = 42,
+                    turns = 3,
+                    remainingInstructions = 0,
+                    selectedPids = listOf(1, 2, 1),
+                ),
+                NativeVmBindings.runDeviceSchedulerDryRun(kernelHandle = kernelHandle, maxTurns = 8),
+            )
+            assertEquals(
+                NativeProcessSchedulerTick(currentTick = 42, selectedPid = 1, wokenPids = emptyList()),
+                NativeVmBindings.processSchedulerTick(kernelHandle, currentTick = 42),
+            )
+        } finally {
+            NativeVmBindings.freeDeviceKernel(kernelHandle)
+        }
     }
 
     @Test
