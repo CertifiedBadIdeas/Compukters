@@ -744,6 +744,39 @@ mod tests {
         );
     }
 
+    #[test]
+    fn daemon_ipc_read_waits_until_channel_has_text() {
+        let mut daemon = DeviceDaemon::new(16, 1024, 128);
+        let channel = daemon
+            .kernel()
+            .with_kernel_mut(|kernel| kernel.open_ipc_channel())
+            .unwrap()
+            .unwrap();
+        daemon.boot_image(
+            &ckim_reads_ipc_then_logs(channel),
+            "/rom/read.ck",
+            "",
+            "",
+        );
+
+        let waiting = daemon.tick(8, 1_000_000, 1);
+        let idle = daemon.tick(8, 1_000_000, 2);
+        daemon
+            .kernel()
+            .with_kernel_mut(|kernel| kernel.write_ipc(channel, "hello\n"))
+            .unwrap()
+            .unwrap();
+        let woke = daemon.tick(8, 1_000_000, 3);
+        let request = daemon.drain_host_requests().pop().unwrap();
+
+        assert_eq!(waiting.host_requests, 0);
+        assert!(idle.idle);
+        assert_eq!(woke.host_requests, 1);
+        assert_eq!(request.module_name.as_deref(), Some("system"));
+        assert_eq!(request.function_name.as_deref(), Some("log"));
+        assert_eq!(request.arguments, vec![VmValue::String("hello\n".to_string())]);
+    }
+
     fn ckim_empty_main() -> Vec<u8> {
         image_with_code(0, vec![OP_RETURN])
     }
@@ -825,6 +858,28 @@ mod tests {
                 ConstantFixture::String(argument.to_string()),
             ],
             vec![HostImportFixture::new(1, "process", "spawn")],
+            0,
+            code,
+        )
+    }
+
+    fn ckim_reads_ipc_then_logs(channel: i32) -> Vec<u8> {
+        let mut code = Vec::new();
+        code.push(OP_PUSH_CONSTANT);
+        i32(&mut code, 0);
+        code.push(OP_CALL_HOST);
+        i32(&mut code, 1);
+        i32(&mut code, 1);
+        code.push(OP_CALL_HOST);
+        i32(&mut code, 2);
+        i32(&mut code, 1);
+        code.push(OP_RETURN);
+        image_with_constants_imports_and_code(
+            vec![ConstantFixture::Int(channel)],
+            vec![
+                HostImportFixture::new(1, "ipc", "read"),
+                HostImportFixture::new(2, "system", "log"),
+            ],
             0,
             code,
         )
