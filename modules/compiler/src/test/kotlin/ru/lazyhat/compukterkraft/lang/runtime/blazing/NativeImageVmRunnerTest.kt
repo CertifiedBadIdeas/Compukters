@@ -93,47 +93,5 @@ class NativeImageVmRunnerTest {
         }
 
         override fun freeImage(handle: Long) = Unit
-
-        override fun attachImageToKernel(
-            imageHandle: Long,
-            kernelHandle: Long,
-        ) = Unit
-
-        override fun attachProcessImage(
-            kernelHandle: Long,
-            pid: Int,
-            imageHandle: Long,
-        ): Boolean = false
-
-        override fun setImageWorkingDirectory(
-            imageHandle: Long,
-            workingDirectory: String,
-        ) = Unit
-
-        override fun waitForDeviceWake(
-            handle: Long,
-            observedWakeSequence: Long,
-            timeoutMillis: Long,
-        ): Long = observedWakeSequence
-
-        override fun waitForProcessWake(
-            handle: Long,
-            pid: Int,
-            observedWakeSequence: Long,
-            timeoutMillis: Long,
-        ): Long = observedWakeSequence
-
-        override fun registerProcess(
-            kernelHandle: Long,
-            pid: Int,
-            parentPid: Int,
-            programPath: String,
-        ): Boolean = false
-
-        override fun completeProcess(
-            kernelHandle: Long,
-            pid: Int,
-            exitCode: Int,
-        ): Boolean = false
     }
 }
