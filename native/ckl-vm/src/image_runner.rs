@@ -69,6 +69,7 @@ pub struct ImageVmHandle {
     next_object_id: u32,
     attached_kernel: Option<Arc<DeviceRuntimeKernelHandle>>,
     working_directory: String,
+    process_argument: Option<String>,
     instruction_budget: usize,
     instructions_since_pause: usize,
     state: ImageVmState,
@@ -106,6 +107,7 @@ impl ImageVmHandle {
             next_object_id: 1,
             attached_kernel: None,
             working_directory: String::new(),
+            process_argument: None,
             instruction_budget: instruction_budget.max(1),
             instructions_since_pause: 0,
             state: ImageVmState::Ready,
@@ -122,6 +124,10 @@ impl ImageVmHandle {
 
     pub fn set_working_directory(&mut self, working_directory: String) {
         self.working_directory = normalize_working_directory(&working_directory);
+    }
+
+    pub fn set_process_argument(&mut self, argument: String) {
+        self.process_argument = Some(argument);
     }
 
     pub fn run_until_signal(&mut self) -> Vec<u8> {
@@ -341,22 +347,32 @@ impl ImageVmHandle {
             };
         }
         if module_name == "process" {
-            let kernel = kernel_handle.lock()?;
             return match function_name {
+                "argument" => self
+                    .process_argument
+                    .as_ref()
+                    .map(|argument| {
+                        NativeHostImportResult::Handled(VmValue::String(argument.clone()))
+                    })
+                    .map(Ok)
+                    .unwrap_or_else(|| Ok(NativeHostImportResult::Fallback(arguments))),
+                "currentDirectory" => Ok(NativeHostImportResult::Handled(VmValue::String(
+                    self.working_directory.clone(),
+                ))),
                 "wait" => {
+                    let kernel = kernel_handle.lock()?;
                     let pid = int_argument(&arguments, 0, "process.wait pid")?;
                     match kernel.process_status(pid) {
                         ProcessStatus::Completed(exit_code) => {
                             Ok(NativeHostImportResult::Handled(VmValue::Int(exit_code)))
                         }
-                        ProcessStatus::Missing => Ok(NativeHostImportResult::Handled(VmValue::Int(1))),
+                        ProcessStatus::Missing => {
+                            Ok(NativeHostImportResult::Handled(VmValue::Int(1)))
+                        }
                         ProcessStatus::Running => {
                             let wake_sequence = kernel.wake_sequence();
                             Ok(NativeHostImportResult::SignalNoResume {
-                                signal: VmSignal::WaitProcess {
-                                    pid,
-                                    wake_sequence,
-                                },
+                                signal: VmSignal::WaitProcess { pid, wake_sequence },
                                 arguments,
                             })
                         }

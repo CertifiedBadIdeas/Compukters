@@ -18,13 +18,13 @@ semantics. Kotlin serves typed daemon requests for source compilation and unreso
 - Test: `native/ckl-vm/src/device_daemon.rs`
 - Test: `modules/compiler/src/test/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeImageVmBindingsJniTest.kt`
 
-- [ ] Add process argument storage to `ImageVmHandle`.
-- [ ] Set boot image argument in `DeviceDaemon::boot_image`.
-- [ ] Fast-path `process.argument` when an image has a native process argument.
-- [ ] Fast-path `process.currentDirectory` from image-local working directory.
-- [ ] Keep fallback behavior for non-daemon native images without a process argument.
-- [ ] Add tests showing daemon `process.argument` reaches `system.log` without an intermediate process host request.
-- [ ] Commit as `feat: add daemon process metadata fast path`.
+- [x] Add process argument storage to `ImageVmHandle`.
+- [x] Set boot image argument in `DeviceDaemon::boot_image`.
+- [x] Fast-path `process.argument` when an image has a native process argument.
+- [x] Fast-path `process.currentDirectory` from image-local working directory.
+- [x] Keep fallback behavior for non-daemon native images without a process argument.
+- [x] Add tests showing daemon `process.argument` reaches `system.log` without an intermediate process host request.
+- [x] Commit as `feat: add daemon process metadata fast path`.
 
 ## Task 2: Daemon Filesystem Attachment
 

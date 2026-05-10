@@ -107,6 +107,7 @@ impl DeviceDaemon {
             .attach_device_kernel(self.kernel.clone())
             .expect("boot image must attach to daemon kernel");
         image.set_working_directory(working_directory.to_string());
+        image.set_process_argument(argument.to_string());
         let image_handle = self.next_image_handle;
         self.next_image_handle = self.next_image_handle.saturating_add(1);
         let registered = self
@@ -120,7 +121,6 @@ impl DeviceDaemon {
             self.images.insert(pid, image);
             self.image_handles.insert(pid, image_handle);
         }
-        let _ = argument;
         DeviceDaemonBootSummary {
             pid,
             image_attached: registered,

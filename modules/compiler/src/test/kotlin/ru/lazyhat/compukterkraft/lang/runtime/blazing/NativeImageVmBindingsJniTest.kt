@@ -422,6 +422,56 @@ class NativeImageVmBindingsJniTest {
     }
 
     @Test
+    fun nativeDeviceDaemonProcessArgumentStaysInDaemonWhenLibraryIsConfigured() {
+        System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val image =
+            assertNotNull(
+                LanguageFrontend()
+                    .compileImage("main.ck", "pub fun main() { system::log(process::argument()); }")
+                    .image,
+            )
+        val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 128)
+        try {
+            NativeVmBindings.bootDeviceDaemon(handle, CkVmImageAbi.encode(image), "/rom/argument.ck", "stdio-v1 1 2 3", "")
+
+            val first = NativeVmBindings.tickDeviceDaemon(handle, 128, 1_000_000, 1)
+            val request = NativeVmBindings.drainDeviceDaemonHostRequests(handle).single()
+
+            assertEquals(1, first.hostRequests)
+            assertEquals("system", request.moduleName)
+            assertEquals("log", request.functionName)
+            assertEquals(listOf(VmValue.StringValue("stdio-v1 1 2 3")), request.arguments)
+        } finally {
+            NativeVmBindings.freeDeviceDaemon(handle)
+        }
+    }
+
+    @Test
+    fun nativeDeviceDaemonCurrentDirectoryStaysInDaemonWhenLibraryIsConfigured() {
+        System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val image =
+            assertNotNull(
+                LanguageFrontend()
+                    .compileImage("main.ck", "pub fun main() { system::log(process::currentDirectory()); }")
+                    .image,
+            )
+        val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 128)
+        try {
+            NativeVmBindings.bootDeviceDaemon(handle, CkVmImageAbi.encode(image), "/rom/cwd.ck", "", "/rom")
+
+            val first = NativeVmBindings.tickDeviceDaemon(handle, 128, 1_000_000, 1)
+            val request = NativeVmBindings.drainDeviceDaemonHostRequests(handle).single()
+
+            assertEquals(1, first.hostRequests)
+            assertEquals("system", request.moduleName)
+            assertEquals("log", request.functionName)
+            assertEquals(listOf(VmValue.StringValue("rom")), request.arguments)
+        } finally {
+            NativeVmBindings.freeDeviceDaemon(handle)
+        }
+    }
+
+    @Test
     fun nativeDeviceDaemonEventsWakeImagesWhenLibraryIsConfigured() {
         System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val image =
