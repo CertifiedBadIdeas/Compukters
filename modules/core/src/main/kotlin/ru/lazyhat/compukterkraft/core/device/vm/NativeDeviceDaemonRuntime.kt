@@ -113,11 +113,6 @@ internal class NativeDeviceDaemonRuntime(
         return summary
     }
 
-    suspend fun requestSlice(serverTick: Long): NativeDeviceDaemonTickSummary {
-        refillQuota(serverTick)
-        return runReadyUntilBlocked()
-    }
-
     private suspend fun serviceHostRequests() {
         for (request in bindings.drainDeviceDaemonHostRequests(daemonHandle)) {
             when (request.kind) {
