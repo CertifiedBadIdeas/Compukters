@@ -47,6 +47,7 @@ class NativeImageVmRunnerTest {
                 RecordingRuntime(metrics = NoopDeviceRuntimeMetrics),
                 kernelHandle = 77L,
                 nativeWorkingDirectory = "bin",
+                nativeProcessId = 5,
         )
         val runner = NativeImageVmRunner(libraryPath = "/unused/libckl_vm.so", bindings = bindings)
 
@@ -55,6 +56,7 @@ class NativeImageVmRunnerTest {
         }
 
         assertEquals(listOf(11L to 77L), bindings.attachments)
+        assertEquals(listOf(ProcessImageAttachment(kernelHandle = 77L, pid = 5, imageHandle = 11L)), bindings.processImageAttachments)
         assertEquals(listOf(11L to "bin"), bindings.workingDirectories)
     }
 
@@ -156,6 +158,7 @@ class NativeImageVmRunnerTest {
         val delegate: RecordingRuntime,
         kernelHandle: Long,
         override val nativeWorkingDirectory: String,
+        override val nativeProcessId: Int = 0,
     ) : DeviceRuntime by delegate, NativeDeviceKernelProvider {
         override val nativeDeviceKernelHandle: Long = kernelHandle
     }
@@ -186,6 +189,12 @@ class NativeImageVmRunnerTest {
         val exitCode: Int,
     )
 
+    private data class ProcessImageAttachment(
+        val kernelHandle: Long,
+        val pid: Int,
+        val imageHandle: Long,
+    )
+
     private class RecordingBindings : NativeVmBindingsFacade {
         constructor(
             signals: ArrayDeque<ByteArray> = ArrayDeque(listOf(byteArrayOf(0, 0))),
@@ -207,6 +216,7 @@ class NativeImageVmRunnerTest {
         val waitForProcessWakeCalls = mutableListOf<WaitProcessCall>()
         val registerProcessCalls = mutableListOf<ProcessRegistration>()
         val completeProcessCalls = mutableListOf<ProcessCompletion>()
+        val processImageAttachments = mutableListOf<ProcessImageAttachment>()
 
         override fun createImage(
             libraryPath: String,
@@ -230,6 +240,15 @@ class NativeImageVmRunnerTest {
             kernelHandle: Long,
         ) {
             attachments += imageHandle to kernelHandle
+        }
+
+        override fun attachProcessImage(
+            kernelHandle: Long,
+            pid: Int,
+            imageHandle: Long,
+        ): Boolean {
+            processImageAttachments += ProcessImageAttachment(kernelHandle, pid, imageHandle)
+            return true
         }
 
         override fun setImageWorkingDirectory(

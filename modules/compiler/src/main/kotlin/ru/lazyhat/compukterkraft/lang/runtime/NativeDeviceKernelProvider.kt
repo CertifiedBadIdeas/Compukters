@@ -21,6 +21,8 @@ package ru.lazyhat.compukterkraft.lang.runtime
 
 interface NativeDeviceKernelProvider {
     val nativeDeviceKernelHandle: Long
+    val nativeProcessId: Int
+        get() = 0
     val nativeWorkingDirectory: String
         get() = ""
 }

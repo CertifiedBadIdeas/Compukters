@@ -47,7 +47,14 @@ class NativeImageVmRunner internal constructor(
         val handle = bindings.createImage(libraryPath, imageBytes, runtime.profile.resources.cpu.instructionsPerSlice)
         try {
             nativeWorkingDirectoryOrNull(runtime)?.let { bindings.setImageWorkingDirectory(handle, it) }
-            kernelHandleOrNull(runtime)?.let { bindings.attachImageToKernel(handle, it) }
+            nativeKernelProviderOrNull(runtime)?.let { provider ->
+                bindings.attachImageToKernel(handle, provider.nativeDeviceKernelHandle)
+                if (provider.nativeProcessId > 0) {
+                    check(bindings.attachProcessImage(provider.nativeDeviceKernelHandle, provider.nativeProcessId, handle)) {
+                        "Native image VM failed to attach image handle $handle to process ${provider.nativeProcessId}"
+                    }
+                }
+            }
             while (true) {
                 val signal = NativeVmSignal.decode(bindings.runImageUntilSignal(handle))
                 if (signal !is NativeVmSignal.Error) {
@@ -140,7 +147,10 @@ class NativeImageVmRunner internal constructor(
     }
 
     private fun kernelHandleOrNull(runtime: DeviceRuntime): Long? =
-        (runtime as? NativeDeviceKernelProvider)?.nativeDeviceKernelHandle?.takeIf { it != 0L }
+        nativeKernelProviderOrNull(runtime)?.nativeDeviceKernelHandle
+
+    private fun nativeKernelProviderOrNull(runtime: DeviceRuntime): NativeDeviceKernelProvider? =
+        (runtime as? NativeDeviceKernelProvider)?.takeIf { it.nativeDeviceKernelHandle != 0L }
 
     private fun nativeWorkingDirectoryOrNull(runtime: DeviceRuntime): String? =
         (runtime as? NativeDeviceKernelProvider)?.nativeWorkingDirectory

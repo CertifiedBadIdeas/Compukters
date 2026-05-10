@@ -60,6 +60,7 @@ internal class VmRuntime(
     private val processStateReporter: VmProcessStateReporter = NoOpVmProcessStateReporter,
 ) : DeviceRuntime,
     NativeDeviceKernelProvider {
+    override val nativeProcessId: Int = processId
     override val profile: DeviceProfile = initialProfile
     override val metrics: DeviceRuntimeMetrics = metricsApi
     override val system: DeviceSystemApi = systemApi

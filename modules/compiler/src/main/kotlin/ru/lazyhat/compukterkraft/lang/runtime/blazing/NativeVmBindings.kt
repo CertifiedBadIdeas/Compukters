@@ -70,6 +70,12 @@ internal interface NativeVmBindingsFacade {
         kernelHandle: Long,
     )
 
+    fun attachProcessImage(
+        kernelHandle: Long,
+        pid: Int,
+        imageHandle: Long,
+    ): Boolean = false
+
     fun setImageWorkingDirectory(
         imageHandle: Long,
         workingDirectory: String,
@@ -319,7 +325,7 @@ object NativeVmBindings : NativeVmBindingsFacade {
         return runDeviceSchedulerStepNative(kernelHandle).toNativeDeviceSchedulerStep()
     }
 
-    fun attachProcessImage(
+    override fun attachProcessImage(
         kernelHandle: Long,
         pid: Int,
         imageHandle: Long,
