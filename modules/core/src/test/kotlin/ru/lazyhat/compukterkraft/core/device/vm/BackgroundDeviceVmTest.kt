@@ -152,6 +152,43 @@ class BackgroundDeviceVmTest {
     }
 
     @Test
+    fun requestSliceMirrorsExecutionQuotaToNativeKernelWhenConfigured() {
+        System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        runtimeTestWorkspace("vm-native-quota-refill") { workspace ->
+            val metrics = RecordingRuntimeMetricsCollector()
+            val profile =
+                firmwareTestProfile().copy(
+                    resources =
+                        firmwareTestProfile().resources.copy(
+                            cpu =
+                                DeviceCpuResources(
+                                    instructionsPerSlice = 321,
+                                    wallTimeGuardNanosPerSlice = 654,
+                                ),
+                        ),
+                )
+            val vm =
+                BackgroundDeviceVm(
+                    deviceId = 1,
+                    profile = profile,
+                    dispatcher = Dispatchers.Default,
+                    labelProvider = { null },
+                    logger = DeviceVmLogger { },
+                    workspace = workspace.host,
+                    runtimeMetricsCollector = metrics,
+                )
+
+            vm.requestSlice(serverTick = 42)
+
+            val snapshot = metrics.snapshot()
+            assertEquals(1, snapshot.vm.nativeExecutionQuotaRefills)
+            assertEquals(321, snapshot.vm.nativeExecutionQuotaInstructions)
+            assertEquals(654, snapshot.vm.nativeExecutionQuotaWallNanos)
+            assertEquals(42, snapshot.vm.nativeExecutionQuotaLastServerTick)
+        }
+    }
+
+    @Test
     fun ownsDisplayRegistryFrames() {
         runtimeTestWorkspace("vm-display-registry") { workspace ->
             val vm =

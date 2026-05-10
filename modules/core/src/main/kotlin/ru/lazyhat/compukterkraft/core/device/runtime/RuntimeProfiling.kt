@@ -66,6 +66,12 @@ interface RuntimeMetricsCollector {
 
     fun recordExecutionQuotaPermitConsumed()
 
+    fun recordNativeExecutionQuotaRefill(
+        instructions: Long,
+        wallNanos: Long,
+        serverTick: Long,
+    )
+
     fun recordProcessSchedulerTick(
         wokenProcesses: Int,
         selected: Boolean,
@@ -175,6 +181,10 @@ data class RuntimeVmMetrics(
     val executionQuotaAcceptedRefills: Long = 0,
     val executionQuotaUnavailableRefills: Long = 0,
     val executionQuotaPermitsConsumed: Long = 0,
+    val nativeExecutionQuotaRefills: Long = 0,
+    val nativeExecutionQuotaInstructions: Long = 0,
+    val nativeExecutionQuotaWallNanos: Long = 0,
+    val nativeExecutionQuotaLastServerTick: Long = 0,
     val processSchedulerTicks: Long = 0,
     val processSchedulerSelectedTicks: Long = 0,
     val processSchedulerIdleTicks: Long = 0,
@@ -273,6 +283,9 @@ data class RuntimeProfilingSnapshot(
             )
             appendLine(
                 "    quota: refills=${vm.executionQuotaRefills}, accepted=${vm.executionQuotaAcceptedRefills}, unavailable=${vm.executionQuotaUnavailableRefills}, consumed=${vm.executionQuotaPermitsConsumed}",
+            )
+            appendLine(
+                "    nativeQuota: refills=${vm.nativeExecutionQuotaRefills}, instructions=${vm.nativeExecutionQuotaInstructions}, wallNanos=${vm.nativeExecutionQuotaWallNanos}, lastTick=${vm.nativeExecutionQuotaLastServerTick}",
             )
             appendLine(
                 "    processScheduler: ticks=${vm.processSchedulerTicks}, selected=${vm.processSchedulerSelectedTicks}, idle=${vm.processSchedulerIdleTicks}, woken=${vm.processSchedulerWokenProcesses}",
@@ -386,6 +399,12 @@ object NoOpRuntimeMetricsCollector : RuntimeMetricsCollector {
 
     override fun recordExecutionQuotaPermitConsumed() = Unit
 
+    override fun recordNativeExecutionQuotaRefill(
+        instructions: Long,
+        wallNanos: Long,
+        serverTick: Long,
+    ) = Unit
+
     override fun recordProcessSchedulerTick(
         wokenProcesses: Int,
         selected: Boolean,
@@ -485,6 +504,10 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
     private val executionQuotaAcceptedRefills = AtomicLong()
     private val executionQuotaUnavailableRefills = AtomicLong()
     private val executionQuotaPermitsConsumed = AtomicLong()
+    private val nativeExecutionQuotaRefills = AtomicLong()
+    private val nativeExecutionQuotaInstructions = AtomicLong()
+    private val nativeExecutionQuotaWallNanos = AtomicLong()
+    private val nativeExecutionQuotaLastServerTick = AtomicLong()
     private val processSchedulerTicks = AtomicLong()
     private val processSchedulerSelectedTicks = AtomicLong()
     private val processSchedulerIdleTicks = AtomicLong()
@@ -599,6 +622,17 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
 
     override fun recordExecutionQuotaPermitConsumed() {
         executionQuotaPermitsConsumed.incrementAndGet()
+    }
+
+    override fun recordNativeExecutionQuotaRefill(
+        instructions: Long,
+        wallNanos: Long,
+        serverTick: Long,
+    ) {
+        nativeExecutionQuotaRefills.incrementAndGet()
+        nativeExecutionQuotaInstructions.addAndGet(instructions.coerceAtLeast(0))
+        nativeExecutionQuotaWallNanos.addAndGet(wallNanos.coerceAtLeast(0))
+        nativeExecutionQuotaLastServerTick.set(serverTick)
     }
 
     override fun recordProcessSchedulerTick(
@@ -762,6 +796,10 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
                     executionQuotaAcceptedRefills = executionQuotaAcceptedRefills.get(),
                     executionQuotaUnavailableRefills = executionQuotaUnavailableRefills.get(),
                     executionQuotaPermitsConsumed = executionQuotaPermitsConsumed.get(),
+                    nativeExecutionQuotaRefills = nativeExecutionQuotaRefills.get(),
+                    nativeExecutionQuotaInstructions = nativeExecutionQuotaInstructions.get(),
+                    nativeExecutionQuotaWallNanos = nativeExecutionQuotaWallNanos.get(),
+                    nativeExecutionQuotaLastServerTick = nativeExecutionQuotaLastServerTick.get(),
                     processSchedulerTicks = processSchedulerTicks.get(),
                     processSchedulerSelectedTicks = processSchedulerSelectedTicks.get(),
                     processSchedulerIdleTicks = processSchedulerIdleTicks.get(),

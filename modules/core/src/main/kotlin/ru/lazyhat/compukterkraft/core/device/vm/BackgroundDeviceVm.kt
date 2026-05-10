@@ -300,6 +300,24 @@ class BackgroundDeviceVm(
 
     override fun requestSlice(serverTick: Long) {
         stateManager.updateCurrentTick(serverTick)
+        nativeDeviceKernelLock.read {
+            if (!nativeDeviceKernelFreed) {
+                nativeDeviceKernelHandle?.let { handle ->
+                    val snapshot =
+                        NativeVmBindings.addDeviceExecutionQuota(
+                            kernelHandle = handle,
+                            instructions = profile.resources.cpu.instructionsPerSlice.toLong(),
+                            wallNanos = profile.resources.cpu.wallTimeGuardNanosPerSlice,
+                            serverTick = serverTick,
+                        )
+                    runtimeMetricsCollector.recordNativeExecutionQuotaRefill(
+                        instructions = snapshot.instructions,
+                        wallNanos = snapshot.wallNanos,
+                        serverTick = snapshot.serverTick,
+                    )
+                }
+            }
+        }
         val schedulerTick = processManager.schedulerTick(serverTick)
         val sent = executionQuota.refill(selectedPid = schedulerTick.selectedPid)
         runtimeMetricsCollector.recordSliceRequest(sent = sent, sleepGated = false)
