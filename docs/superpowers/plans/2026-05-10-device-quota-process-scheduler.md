@@ -1491,3 +1491,50 @@ git add docs/superpowers/plans/2026-05-10-device-quota-process-scheduler.md \
   modules/v1_21_1/v1_21_1-neoforge/src/test/kotlin/ru/lazyhat/compukterkraft/impl/computer/vm/RuntimeVmProfilingReportFormatterTest.kt
 git commit -m "feat: report native scheduler dry run metrics"
 ```
+
+## Task 30: Native Scheduler Consume Step
+
+**Files:**
+- Modify: `native/ckl-vm/src/runtime_kernel.rs`
+- Modify: `native/ckl-vm/src/jni.rs`
+- Modify: `modules/compiler/src/main/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeVmBindings.kt`
+- Modify: `modules/compiler/src/test/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeImageVmBindingsJniTest.kt`
+
+- [x] **Step 1: Add failing consume-step tests**
+
+Add Rust and Kotlin JNI tests proving a native scheduler step:
+
+- wakes sleepers due at the current quota server tick;
+- selects a runnable pid using the native round-robin queue;
+- consumes one instruction when a pid is selected;
+- reports remaining instructions and exhausted state;
+- exposes the result through `NativeVmBindings`.
+
+- [x] **Step 2: Add Rust scheduler step result**
+
+Add `DeviceSchedulerStep` and `run_scheduler_step()`. The first version should only mutate native process scheduling
+state and quota accounting; it should not execute process images yet.
+
+- [x] **Step 3: Add JNI and Kotlin bindings**
+
+Expose `runDeviceSchedulerStepNative(...)` as a `LongArray` and decode it into a Kotlin `NativeDeviceSchedulerStep`.
+
+- [x] **Step 4: Run focused scheduler-step tests**
+
+```bash
+cargo test --manifest-path native/ckl-vm/Cargo.toml scheduler_step
+./gradlew -Dckl.vm.native.library=/home/lazyhat/IdeaProjects/Compukter-Kraft/native/ckl-vm/target/debug/libckl_vm.so :compiler:test --tests '*NativeImageVmBindingsJniTest' --rerun-tasks
+```
+
+Expected: PASS.
+
+- [x] **Step 5: Commit Task 30**
+
+```bash
+git add docs/superpowers/plans/2026-05-10-device-quota-process-scheduler.md \
+  native/ckl-vm/src/runtime_kernel.rs \
+  native/ckl-vm/src/jni.rs \
+  modules/compiler/src/main/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeVmBindings.kt \
+  modules/compiler/src/test/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeImageVmBindingsJniTest.kt
+git commit -m "feat: add native scheduler consume step"
+```
