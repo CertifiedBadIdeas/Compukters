@@ -719,10 +719,11 @@ internal object RuntimeVmProfilingReportFormatter {
         appendLine("| Native scheduler dry-run remaining instructions | ${workload.runtime.vm.nativeSchedulerDryRunRemainingInstructions} |")
         appendLine("| Native scheduler dry-run first-selection matches | ${workload.runtime.vm.nativeSchedulerDryRunFirstSelectionMatches} |")
         appendLine("| Native scheduler dry-run first-selection mismatches | ${workload.runtime.vm.nativeSchedulerDryRunFirstSelectionMismatches} |")
-        appendLine("| Native daemon ticks | ${workload.runtime.vm.nativeDaemonTicks} |")
+        appendLine("| Native daemon executor passes | ${workload.runtime.vm.nativeDaemonTicks} |")
         appendLine("| Native daemon active time | ${formatNanos(workload.runtime.vm.nativeDaemonActiveNanos)} |")
-        appendLine("| Native daemon idle ticks | ${workload.runtime.vm.nativeDaemonIdleTicks} |")
+        appendLine("| Native daemon idle passes | ${workload.runtime.vm.nativeDaemonIdleTicks} |")
         appendLine("| Native daemon turns | ${workload.runtime.vm.nativeDaemonTurns} |")
+        appendLine("| Native daemon turns/pass | ${formatRatio(workload.runtime.vm.nativeDaemonTurns, workload.runtime.vm.nativeDaemonTicks)} |")
         appendLine("| Native daemon halted processes | ${workload.runtime.vm.nativeDaemonHaltedProcesses} |")
         appendLine("| Native daemon host requests | ${workload.runtime.vm.nativeDaemonHostRequests} |")
         appendLine("| Native wait signals | ${workload.runtime.vm.nativeWaitSignals} |")
@@ -827,10 +828,13 @@ internal object RuntimeVmProfilingReportFormatter {
         appendHistoricalMetricRow("Native scheduler dry-run remaining instructions", columns) { workload -> workload.runtime.vm.nativeSchedulerDryRunRemainingInstructions.toString() }
         appendHistoricalMetricRow("Native scheduler dry-run first-selection matches", columns) { workload -> workload.runtime.vm.nativeSchedulerDryRunFirstSelectionMatches.toString() }
         appendHistoricalMetricRow("Native scheduler dry-run first-selection mismatches", columns) { workload -> workload.runtime.vm.nativeSchedulerDryRunFirstSelectionMismatches.toString() }
-        appendHistoricalMetricRow("Native daemon ticks", columns) { workload -> workload.runtime.vm.nativeDaemonTicks.toString() }
+        appendHistoricalMetricRow("Native daemon executor passes", columns) { workload -> workload.runtime.vm.nativeDaemonTicks.toString() }
         appendHistoricalMetricRow("Native daemon active time", columns) { workload -> formatNanos(workload.runtime.vm.nativeDaemonActiveNanos) }
-        appendHistoricalMetricRow("Native daemon idle ticks", columns) { workload -> workload.runtime.vm.nativeDaemonIdleTicks.toString() }
+        appendHistoricalMetricRow("Native daemon idle passes", columns) { workload -> workload.runtime.vm.nativeDaemonIdleTicks.toString() }
         appendHistoricalMetricRow("Native daemon turns", columns) { workload -> workload.runtime.vm.nativeDaemonTurns.toString() }
+        appendHistoricalMetricRow("Native daemon turns/pass", columns) { workload ->
+            formatRatio(workload.runtime.vm.nativeDaemonTurns, workload.runtime.vm.nativeDaemonTicks)
+        }
         appendHistoricalMetricRow("Native daemon halted processes", columns) { workload -> workload.runtime.vm.nativeDaemonHaltedProcesses.toString() }
         appendHistoricalMetricRow("Native daemon host requests", columns) { workload -> workload.runtime.vm.nativeDaemonHostRequests.toString() }
         appendHistoricalMetricRow("Native wait signals", columns) { workload -> workload.runtime.vm.nativeWaitSignals.toString() }
@@ -974,4 +978,17 @@ internal object RuntimeVmProfilingReportFormatter {
             .format(Locale.ROOT, "%.2f", nanos / scale)
             .trimEnd('0')
             .trimEnd('.')
+
+    private fun formatRatio(
+        numerator: Long,
+        denominator: Long,
+    ): String =
+        if (denominator == 0L) {
+            "0"
+        } else {
+            String
+                .format(Locale.ROOT, "%.2f", numerator.toDouble() / denominator.toDouble())
+                .trimEnd('0')
+                .trimEnd('.')
+        }
 }
