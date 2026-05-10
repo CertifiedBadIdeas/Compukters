@@ -46,8 +46,6 @@ class RuntimeVmProfilingReportFormatterTest {
                             executionNanos = 40,
                             waitPollSignals = 3,
                             waitProcessSignals = 1,
-                            nativeProcessRegistrations = 1,
-                            nativeProcessCompletions = 1,
                             nativeWaitCalls = 4,
                             nativeWaitNanos = 55_000,
                             nativeWaitWakeups = 3,
@@ -72,8 +70,6 @@ class RuntimeVmProfilingReportFormatterTest {
                             executionNanos = 20,
                             waitPollSignals = 7,
                             waitProcessSignals = 2,
-                            nativeProcessRegistrations = 2,
-                            nativeProcessCompletions = 2,
                             nativeWaitCalls = 8,
                             nativeWaitNanos = 2_000_000,
                             nativeWaitWakeups = 6,
@@ -88,11 +84,6 @@ class RuntimeVmProfilingReportFormatterTest {
                             processSchedulerSelectedTicks = 10,
                             processSchedulerIdleTicks = 2,
                             processSchedulerWokenProcesses = 3,
-                            nativeProcessSchedulerComparisons = 12,
-                            nativeProcessSchedulerMatches = 11,
-                            nativeProcessSchedulerMismatches = 1,
-                            nativeProcessSchedulerAcceptedTicks = 11,
-                            nativeProcessSchedulerFallbackTicks = 1,
                             nativeExecutionQuotaRefills = 12,
                             nativeExecutionQuotaInstructions = 3_852,
                             nativeExecutionQuotaWallNanos = 7_848,
@@ -138,9 +129,6 @@ class RuntimeVmProfilingReportFormatterTest {
         assertTrue(markdown.contains("| VM execution time | 20 ns | 40 ns |"), markdown)
         assertTrue(markdown.contains("| Native wait signals | 7 | 3 |"), markdown)
         assertTrue(markdown.contains("| Native process wait signals | 2 | 1 |"), markdown)
-        assertTrue(markdown.contains("| Native process registrations | 2 | 1 |"), markdown)
-        assertTrue(markdown.contains("| Native process completions | 2 | 1 |"), markdown)
-        assertTrue(markdown.contains("| Native process stale completions | 0 | 0 |"), markdown)
         assertTrue(markdown.contains("| Native fast-path calls | 0 | 0 |"), markdown)
         assertTrue(markdown.contains("| Native wait calls | 8 | 4 |"), markdown)
         assertTrue(markdown.contains("| Native wait time | 2 ms | 55 us |"), markdown)
@@ -156,11 +144,6 @@ class RuntimeVmProfilingReportFormatterTest {
         assertTrue(markdown.contains("| Process scheduler selected ticks | 10 | 0 |"), markdown)
         assertTrue(markdown.contains("| Process scheduler idle ticks | 2 | 0 |"), markdown)
         assertTrue(markdown.contains("| Process scheduler woken processes | 3 | 0 |"), markdown)
-        assertTrue(markdown.contains("| Native scheduler comparisons | 12 | 0 |"), markdown)
-        assertTrue(markdown.contains("| Native scheduler matches | 11 | 0 |"), markdown)
-        assertTrue(markdown.contains("| Native scheduler mismatches | 1 | 0 |"), markdown)
-        assertTrue(markdown.contains("| Native scheduler accepted ticks | 11 | 0 |"), markdown)
-        assertTrue(markdown.contains("| Native scheduler fallback ticks | 1 | 0 |"), markdown)
         assertTrue(markdown.contains("| Native execution quota refills | 12 | 0 |"), markdown)
         assertTrue(markdown.contains("| Native execution quota instructions | 3852 | 0 |"), markdown)
         assertTrue(markdown.contains("| Native execution quota wall time | 7.85 us | 0 ns |"), markdown)
@@ -227,9 +210,6 @@ class RuntimeVmProfilingReportFormatterTest {
                             executionNanos = 20,
                             waitPollSignals = 6,
                             waitProcessSignals = 3,
-                            nativeProcessRegistrations = 4,
-                            nativeProcessCompletions = 3,
-                            nativeProcessStaleCompletions = 1,
                             nativeWaitCalls = 5,
                             nativeWaitNanos = 700_000,
                             nativeWaitWakeups = 4,
@@ -244,11 +224,6 @@ class RuntimeVmProfilingReportFormatterTest {
                             processSchedulerSelectedTicks = 14,
                             processSchedulerIdleTicks = 1,
                             processSchedulerWokenProcesses = 6,
-                            nativeProcessSchedulerComparisons = 15,
-                            nativeProcessSchedulerMatches = 15,
-                            nativeProcessSchedulerMismatches = 0,
-                            nativeProcessSchedulerAcceptedTicks = 15,
-                            nativeProcessSchedulerFallbackTicks = 0,
                             nativeExecutionQuotaRefills = 16,
                             nativeExecutionQuotaInstructions = 5_136,
                             nativeExecutionQuotaWallNanos = 10_464,
@@ -277,9 +252,6 @@ class RuntimeVmProfilingReportFormatterTest {
         assertTrue(markdown.contains("held Enter backlog"), markdown)
         assertTrue(markdown.contains("| Native wait signals | 6 |"), markdown)
         assertTrue(markdown.contains("| Native process wait signals | 3 |"), markdown)
-        assertTrue(markdown.contains("| Native process registrations | 4 |"), markdown)
-        assertTrue(markdown.contains("| Native process completions | 3 |"), markdown)
-        assertTrue(markdown.contains("| Native process stale completions | 1 |"), markdown)
         assertTrue(markdown.contains("| Native fast-path calls | 0 |"), markdown)
         assertTrue(markdown.contains("| Native wait calls | 5 |"), markdown)
         assertTrue(markdown.contains("| Native wait time | 700 us |"), markdown)
@@ -295,11 +267,6 @@ class RuntimeVmProfilingReportFormatterTest {
         assertTrue(markdown.contains("| Process scheduler selected ticks | 14 |"), markdown)
         assertTrue(markdown.contains("| Process scheduler idle ticks | 1 |"), markdown)
         assertTrue(markdown.contains("| Process scheduler woken processes | 6 |"), markdown)
-        assertTrue(markdown.contains("| Native scheduler comparisons | 15 |"), markdown)
-        assertTrue(markdown.contains("| Native scheduler matches | 15 |"), markdown)
-        assertTrue(markdown.contains("| Native scheduler mismatches | 0 |"), markdown)
-        assertTrue(markdown.contains("| Native scheduler accepted ticks | 15 |"), markdown)
-        assertTrue(markdown.contains("| Native scheduler fallback ticks | 0 |"), markdown)
         assertTrue(markdown.contains("| Native execution quota refills | 16 |"), markdown)
         assertTrue(markdown.contains("| Native execution quota instructions | 5136 |"), markdown)
         assertTrue(markdown.contains("| Native execution quota wall time | 10.46 us |"), markdown)
@@ -351,9 +318,6 @@ class RuntimeVmProfilingReportFormatterTest {
         executionNanos: Long,
         waitPollSignals: Long = 0,
         waitProcessSignals: Long = 0,
-        nativeProcessRegistrations: Long = 0,
-        nativeProcessCompletions: Long = 0,
-        nativeProcessStaleCompletions: Long = 0,
         nativeWaitCalls: Long = 0,
         nativeWaitNanos: Long = 0,
         nativeWaitWakeups: Long = 0,
@@ -368,11 +332,6 @@ class RuntimeVmProfilingReportFormatterTest {
         processSchedulerSelectedTicks: Long = 0,
         processSchedulerIdleTicks: Long = 0,
         processSchedulerWokenProcesses: Long = 0,
-        nativeProcessSchedulerComparisons: Long = 0,
-        nativeProcessSchedulerMatches: Long = 0,
-        nativeProcessSchedulerMismatches: Long = 0,
-        nativeProcessSchedulerAcceptedTicks: Long = 0,
-        nativeProcessSchedulerFallbackTicks: Long = 0,
         nativeExecutionQuotaRefills: Long = 0,
         nativeExecutionQuotaInstructions: Long = 0,
         nativeExecutionQuotaWallNanos: Long = 0,
@@ -433,9 +392,6 @@ class RuntimeVmProfilingReportFormatterTest {
                             executionWindowNanos = executionNanos,
                             waitPollSignals = waitPollSignals,
                             waitProcessSignals = waitProcessSignals,
-                            nativeProcessRegistrations = nativeProcessRegistrations,
-                            nativeProcessCompletions = nativeProcessCompletions,
-                            nativeProcessStaleCompletions = nativeProcessStaleCompletions,
                             nativeWaitCalls = nativeWaitCalls,
                             nativeWaitNanos = nativeWaitNanos,
                             nativeWaitWakeups = nativeWaitWakeups,
@@ -450,11 +406,6 @@ class RuntimeVmProfilingReportFormatterTest {
                             processSchedulerSelectedTicks = processSchedulerSelectedTicks,
                             processSchedulerIdleTicks = processSchedulerIdleTicks,
                             processSchedulerWokenProcesses = processSchedulerWokenProcesses,
-                            nativeProcessSchedulerComparisons = nativeProcessSchedulerComparisons,
-                            nativeProcessSchedulerMatches = nativeProcessSchedulerMatches,
-                            nativeProcessSchedulerMismatches = nativeProcessSchedulerMismatches,
-                            nativeProcessSchedulerAcceptedTicks = nativeProcessSchedulerAcceptedTicks,
-                            nativeProcessSchedulerFallbackTicks = nativeProcessSchedulerFallbackTicks,
                             nativeExecutionQuotaRefills = nativeExecutionQuotaRefills,
                             nativeExecutionQuotaInstructions = nativeExecutionQuotaInstructions,
                             nativeExecutionQuotaWallNanos = nativeExecutionQuotaWallNanos,

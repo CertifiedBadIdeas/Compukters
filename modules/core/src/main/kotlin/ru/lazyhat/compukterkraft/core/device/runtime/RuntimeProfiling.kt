@@ -84,10 +84,6 @@ interface RuntimeMetricsCollector {
         selected: Boolean,
     )
 
-    fun recordNativeProcessSchedulerComparison(matched: Boolean)
-
-    fun recordNativeProcessSchedulerSource(acceptedNative: Boolean)
-
     fun recordSlicePermitReceived()
 
     fun recordSchedulingPoint(waitedForSlice: Boolean)
@@ -125,12 +121,6 @@ interface RuntimeMetricsCollector {
     )
 
     fun recordNativeDisplayFrameBytes(bytes: Int)
-
-    fun recordNativeProcessRegistration()
-
-    fun recordNativeProcessCompletion()
-
-    fun recordNativeProcessStaleCompletion()
 
     fun recordNativeDaemonTick(
         activeNanos: Long,
@@ -210,11 +200,6 @@ data class RuntimeVmMetrics(
     val processSchedulerSelectedTicks: Long = 0,
     val processSchedulerIdleTicks: Long = 0,
     val processSchedulerWokenProcesses: Long = 0,
-    val nativeProcessSchedulerComparisons: Long = 0,
-    val nativeProcessSchedulerMatches: Long = 0,
-    val nativeProcessSchedulerMismatches: Long = 0,
-    val nativeProcessSchedulerAcceptedTicks: Long = 0,
-    val nativeProcessSchedulerFallbackTicks: Long = 0,
     val slicePermitsReceived: Long = 0,
     val schedulingPoints: Long = 0,
     val yieldSchedulingPoints: Long = 0,
@@ -240,9 +225,6 @@ data class RuntimeVmMetrics(
     val nativeDisplayPumpTimeouts: Long = 0,
     val nativeDisplayFrameByteBatches: Long = 0,
     val nativeDisplayFrameBytes: Long = 0,
-    val nativeProcessRegistrations: Long = 0,
-    val nativeProcessCompletions: Long = 0,
-    val nativeProcessStaleCompletions: Long = 0,
     val nativeDaemonTicks: Long = 0,
     val nativeDaemonActiveNanos: Long = 0,
     val nativeDaemonIdleTicks: Long = 0,
@@ -321,9 +303,6 @@ data class RuntimeProfilingSnapshot(
                 "    processScheduler: ticks=${vm.processSchedulerTicks}, selected=${vm.processSchedulerSelectedTicks}, idle=${vm.processSchedulerIdleTicks}, woken=${vm.processSchedulerWokenProcesses}",
             )
             appendLine(
-                "    nativeProcessScheduler: comparisons=${vm.nativeProcessSchedulerComparisons}, matches=${vm.nativeProcessSchedulerMatches}, mismatches=${vm.nativeProcessSchedulerMismatches}, accepted=${vm.nativeProcessSchedulerAcceptedTicks}, fallback=${vm.nativeProcessSchedulerFallbackTicks}",
-            )
-            appendLine(
                 "    nativeDaemon: ticks=${vm.nativeDaemonTicks}, active=${vm.nativeDaemonActiveNanos.nanos()}, idle=${vm.nativeDaemonIdleTicks}, turns=${vm.nativeDaemonTurns}, halted=${vm.nativeDaemonHaltedProcesses}, hostRequests=${vm.nativeDaemonHostRequests}",
             )
             appendLine(
@@ -337,9 +316,6 @@ data class RuntimeProfilingSnapshot(
             )
             appendLine(
                 "    nativeDisplayPump: waits=${vm.nativeDisplayPumpWaitCalls}, waitTime=${vm.nativeDisplayPumpWaitNanos.nanos()}, wakeups=${vm.nativeDisplayPumpWakeups}, timeouts=${vm.nativeDisplayPumpTimeouts}, byteBatches=${vm.nativeDisplayFrameByteBatches}, bytes=${vm.nativeDisplayFrameBytes}",
-            )
-            appendLine(
-                "  process: registrations=${vm.nativeProcessRegistrations}, completions=${vm.nativeProcessCompletions}, staleCompletions=${vm.nativeProcessStaleCompletions}",
             )
             appendHostCallSummary()
             appendInstructionSummary()
@@ -450,10 +426,6 @@ object NoOpRuntimeMetricsCollector : RuntimeMetricsCollector {
         selected: Boolean,
     ) = Unit
 
-    override fun recordNativeProcessSchedulerComparison(matched: Boolean) = Unit
-
-    override fun recordNativeProcessSchedulerSource(acceptedNative: Boolean) = Unit
-
     override fun recordSlicePermitReceived() = Unit
 
     override fun recordSchedulingPoint(waitedForSlice: Boolean) = Unit
@@ -491,12 +463,6 @@ object NoOpRuntimeMetricsCollector : RuntimeMetricsCollector {
     ) = Unit
 
     override fun recordNativeDisplayFrameBytes(bytes: Int) = Unit
-
-    override fun recordNativeProcessRegistration() = Unit
-
-    override fun recordNativeProcessCompletion() = Unit
-
-    override fun recordNativeProcessStaleCompletion() = Unit
 
     override fun recordNativeDaemonTick(
         activeNanos: Long,
@@ -566,11 +532,6 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
     private val processSchedulerSelectedTicks = AtomicLong()
     private val processSchedulerIdleTicks = AtomicLong()
     private val processSchedulerWokenProcesses = AtomicLong()
-    private val nativeProcessSchedulerComparisons = AtomicLong()
-    private val nativeProcessSchedulerMatches = AtomicLong()
-    private val nativeProcessSchedulerMismatches = AtomicLong()
-    private val nativeProcessSchedulerAcceptedTicks = AtomicLong()
-    private val nativeProcessSchedulerFallbackTicks = AtomicLong()
     private val slicePermitsReceived = AtomicLong()
     private val schedulingPoints = AtomicLong()
     private val yieldSchedulingPoints = AtomicLong()
@@ -595,9 +556,6 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
     private val nativeDisplayPumpTimeouts = AtomicLong()
     private val nativeDisplayFrameByteBatches = AtomicLong()
     private val nativeDisplayFrameBytes = AtomicLong()
-    private val nativeProcessRegistrations = AtomicLong()
-    private val nativeProcessCompletions = AtomicLong()
-    private val nativeProcessStaleCompletions = AtomicLong()
     private val nativeDaemonTicks = AtomicLong()
     private val nativeDaemonActiveNanos = AtomicLong()
     private val nativeDaemonIdleTicks = AtomicLong()
@@ -725,23 +683,6 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
         }
     }
 
-    override fun recordNativeProcessSchedulerComparison(matched: Boolean) {
-        nativeProcessSchedulerComparisons.incrementAndGet()
-        if (matched) {
-            nativeProcessSchedulerMatches.incrementAndGet()
-        } else {
-            nativeProcessSchedulerMismatches.incrementAndGet()
-        }
-    }
-
-    override fun recordNativeProcessSchedulerSource(acceptedNative: Boolean) {
-        if (acceptedNative) {
-            nativeProcessSchedulerAcceptedTicks.incrementAndGet()
-        } else {
-            nativeProcessSchedulerFallbackTicks.incrementAndGet()
-        }
-    }
-
     override fun recordSlicePermitReceived() {
         slicePermitsReceived.incrementAndGet()
     }
@@ -828,18 +769,6 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
         nativeDisplayFrameBytes.addAndGet(bytes.coerceAtLeast(0).toLong())
     }
 
-    override fun recordNativeProcessRegistration() {
-        nativeProcessRegistrations.incrementAndGet()
-    }
-
-    override fun recordNativeProcessCompletion() {
-        nativeProcessCompletions.incrementAndGet()
-    }
-
-    override fun recordNativeProcessStaleCompletion() {
-        nativeProcessStaleCompletions.incrementAndGet()
-    }
-
     override fun recordNativeDaemonTick(
         activeNanos: Long,
         turns: Long,
@@ -902,11 +831,6 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
                     processSchedulerSelectedTicks = processSchedulerSelectedTicks.get(),
                     processSchedulerIdleTicks = processSchedulerIdleTicks.get(),
                     processSchedulerWokenProcesses = processSchedulerWokenProcesses.get(),
-                    nativeProcessSchedulerComparisons = nativeProcessSchedulerComparisons.get(),
-                    nativeProcessSchedulerMatches = nativeProcessSchedulerMatches.get(),
-                    nativeProcessSchedulerMismatches = nativeProcessSchedulerMismatches.get(),
-                    nativeProcessSchedulerAcceptedTicks = nativeProcessSchedulerAcceptedTicks.get(),
-                    nativeProcessSchedulerFallbackTicks = nativeProcessSchedulerFallbackTicks.get(),
                     slicePermitsReceived = slicePermitsReceived.get(),
                     schedulingPoints = schedulingPoints.get(),
                     yieldSchedulingPoints = yieldSchedulingPoints.get(),
@@ -931,9 +855,6 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
                     nativeDisplayPumpTimeouts = nativeDisplayPumpTimeouts.get(),
                     nativeDisplayFrameByteBatches = nativeDisplayFrameByteBatches.get(),
                     nativeDisplayFrameBytes = nativeDisplayFrameBytes.get(),
-                    nativeProcessRegistrations = nativeProcessRegistrations.get(),
-                    nativeProcessCompletions = nativeProcessCompletions.get(),
-                    nativeProcessStaleCompletions = nativeProcessStaleCompletions.get(),
                     nativeDaemonTicks = nativeDaemonTicks.get(),
                     nativeDaemonActiveNanos = nativeDaemonActiveNanos.get(),
                     nativeDaemonIdleTicks = nativeDaemonIdleTicks.get(),

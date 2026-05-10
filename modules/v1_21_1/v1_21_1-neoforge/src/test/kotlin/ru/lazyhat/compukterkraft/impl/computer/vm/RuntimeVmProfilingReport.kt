@@ -133,7 +133,7 @@ internal object RuntimeVmProfileCodec {
                     }
                     workload.runtime.vm.run {
                         appendLine(
-                            "runtimeVm\t$sliceRequests\t$slicePermitsSent\t$sleepGatedSliceRequests\t$slicePermitsReceived\t$schedulingPoints\t$yieldSchedulingPoints\t$waitForSliceSchedulingPoints\t$executionWindows\t$executionWindowNanos\t$haltSignals\t$pauseSignals\t$yieldSignals\t$sleepSignals\t$waitEventSignals\t$waitPollSignals\t$waitProcessSignals\t$nativeProcessRegistrations\t$nativeProcessCompletions\t$nativeProcessStaleCompletions\t$hostCallSignals\t$nativeFastPathCalls\t$nativeWaitCalls\t$nativeWaitNanos\t$nativeWaitWakeups\t$nativeWaitTimeouts\t$nativeDisplayPumpWaitCalls\t$nativeDisplayPumpWaitNanos\t$nativeDisplayPumpWakeups\t$nativeDisplayPumpTimeouts\t$nativeDisplayFrameByteBatches\t$nativeDisplayFrameBytes\t$executionQuotaRefills\t$executionQuotaAcceptedRefills\t$executionQuotaUnavailableRefills\t$executionQuotaPermitsConsumed\t$processSchedulerTicks\t$processSchedulerSelectedTicks\t$processSchedulerIdleTicks\t$processSchedulerWokenProcesses\t$nativeProcessSchedulerComparisons\t$nativeProcessSchedulerMatches\t$nativeProcessSchedulerMismatches\t$nativeProcessSchedulerAcceptedTicks\t$nativeProcessSchedulerFallbackTicks\t$nativeExecutionQuotaRefills\t$nativeExecutionQuotaInstructions\t$nativeExecutionQuotaWallNanos\t$nativeExecutionQuotaLastServerTick\t$nativeSchedulerDryRuns\t$nativeSchedulerDryRunTurns\t$nativeSchedulerDryRunSelectedPids\t$nativeSchedulerDryRunRemainingInstructions\t$nativeSchedulerDryRunFirstSelectionMatches\t$nativeSchedulerDryRunFirstSelectionMismatches\t$nativeDaemonTicks\t$nativeDaemonActiveNanos\t$nativeDaemonIdleTicks\t$nativeDaemonTurns\t$nativeDaemonHaltedProcesses\t$nativeDaemonHostRequests",
+                            "runtimeVm\t$sliceRequests\t$slicePermitsSent\t$sleepGatedSliceRequests\t$slicePermitsReceived\t$schedulingPoints\t$yieldSchedulingPoints\t$waitForSliceSchedulingPoints\t$executionWindows\t$executionWindowNanos\t$haltSignals\t$pauseSignals\t$yieldSignals\t$sleepSignals\t$waitEventSignals\t$waitPollSignals\t$waitProcessSignals\t$hostCallSignals\t$nativeFastPathCalls\t$nativeWaitCalls\t$nativeWaitNanos\t$nativeWaitWakeups\t$nativeWaitTimeouts\t$nativeDisplayPumpWaitCalls\t$nativeDisplayPumpWaitNanos\t$nativeDisplayPumpWakeups\t$nativeDisplayPumpTimeouts\t$nativeDisplayFrameByteBatches\t$nativeDisplayFrameBytes\t$executionQuotaRefills\t$executionQuotaAcceptedRefills\t$executionQuotaUnavailableRefills\t$executionQuotaPermitsConsumed\t$processSchedulerTicks\t$processSchedulerSelectedTicks\t$processSchedulerIdleTicks\t$processSchedulerWokenProcesses\t$nativeExecutionQuotaRefills\t$nativeExecutionQuotaInstructions\t$nativeExecutionQuotaWallNanos\t$nativeExecutionQuotaLastServerTick\t$nativeSchedulerDryRuns\t$nativeSchedulerDryRunTurns\t$nativeSchedulerDryRunSelectedPids\t$nativeSchedulerDryRunRemainingInstructions\t$nativeSchedulerDryRunFirstSelectionMatches\t$nativeSchedulerDryRunFirstSelectionMismatches\t$nativeDaemonTicks\t$nativeDaemonActiveNanos\t$nativeDaemonIdleTicks\t$nativeDaemonTurns\t$nativeDaemonHaltedProcesses\t$nativeDaemonHostRequests",
                         )
                     }
                     workload.runtime.hostCalls.forEach { call ->
@@ -272,51 +272,43 @@ internal object RuntimeVmProfileCodec {
                 "runtimeVm" -> {
                     current.requireCurrent().vm =
                         parts.longs().let { v ->
-                            val hasProcessLifecycleFields = v.size >= 31
-                            val hasQuotaFields = v.size >= 35
-                            val hasSchedulerFields = v.size >= 39
-                            val hasNativeSchedulerComparisonFields = v.size >= 42
-                            val hasNativeSchedulerSourceFields = v.size >= 44
-                            val hasNativeExecutionQuotaFields = v.size >= 48
-                            val hasNativeSchedulerDryRunFields = v.size >= 54
-                            val hasNativeDaemonFields = v.size >= 60
-                            val hasProcessWaitField = v.size >= 28
-                            val hasNativeWaitFields = v.size >= 27
+                            val hasNativeWaitFields = v.size >= 22
+                            val hasDisplayPumpFields = v.size >= 28
+                            val hasQuotaFields = v.size >= 32
+                            val hasSchedulerFields = v.size >= 36
+                            val hasNativeExecutionQuotaFields = v.size >= 40
+                            val hasNativeSchedulerDryRunFields = v.size >= 46
+                            val hasNativeDaemonFields = v.size >= 52
                             val legacyHostCallSignals = v.getOrElse(14) { 0 }
                             RuntimeVmMetrics(
                                 sliceRequests = v.getOrElse(0) { 0 },
                                 slicePermitsSent = v.getOrElse(1) { 0 },
                                 sleepGatedSliceRequests = v.getOrElse(2) { 0 },
                                 slicePermitsReceived = v.getOrElse(3) { 0 },
-                                executionQuotaRefills = if (hasQuotaFields) v[31] else 0,
-                                executionQuotaAcceptedRefills = if (hasQuotaFields) v[32] else 0,
-                                executionQuotaUnavailableRefills = if (hasQuotaFields) v[33] else 0,
-                                executionQuotaPermitsConsumed = if (hasQuotaFields) v[34] else 0,
-                                processSchedulerTicks = if (hasSchedulerFields) v[35] else 0,
-                                processSchedulerSelectedTicks = if (hasSchedulerFields) v[36] else 0,
-                                processSchedulerIdleTicks = if (hasSchedulerFields) v[37] else 0,
-                                processSchedulerWokenProcesses = if (hasSchedulerFields) v[38] else 0,
-                                nativeProcessSchedulerComparisons = if (hasNativeSchedulerComparisonFields) v[39] else 0,
-                                nativeProcessSchedulerMatches = if (hasNativeSchedulerComparisonFields) v[40] else 0,
-                                nativeProcessSchedulerMismatches = if (hasNativeSchedulerComparisonFields) v[41] else 0,
-                                nativeProcessSchedulerAcceptedTicks = if (hasNativeSchedulerSourceFields) v[42] else 0,
-                                nativeProcessSchedulerFallbackTicks = if (hasNativeSchedulerSourceFields) v[43] else 0,
-                                nativeExecutionQuotaRefills = if (hasNativeExecutionQuotaFields) v[44] else 0,
-                                nativeExecutionQuotaInstructions = if (hasNativeExecutionQuotaFields) v[45] else 0,
-                                nativeExecutionQuotaWallNanos = if (hasNativeExecutionQuotaFields) v[46] else 0,
-                                nativeExecutionQuotaLastServerTick = if (hasNativeExecutionQuotaFields) v[47] else 0,
-                                nativeSchedulerDryRuns = if (hasNativeSchedulerDryRunFields) v[48] else 0,
-                                nativeSchedulerDryRunTurns = if (hasNativeSchedulerDryRunFields) v[49] else 0,
-                                nativeSchedulerDryRunSelectedPids = if (hasNativeSchedulerDryRunFields) v[50] else 0,
-                                nativeSchedulerDryRunRemainingInstructions = if (hasNativeSchedulerDryRunFields) v[51] else 0,
-                                nativeSchedulerDryRunFirstSelectionMatches = if (hasNativeSchedulerDryRunFields) v[52] else 0,
-                                nativeSchedulerDryRunFirstSelectionMismatches = if (hasNativeSchedulerDryRunFields) v[53] else 0,
-                                nativeDaemonTicks = if (hasNativeDaemonFields) v[54] else 0,
-                                nativeDaemonActiveNanos = if (hasNativeDaemonFields) v[55] else 0,
-                                nativeDaemonIdleTicks = if (hasNativeDaemonFields) v[56] else 0,
-                                nativeDaemonTurns = if (hasNativeDaemonFields) v[57] else 0,
-                                nativeDaemonHaltedProcesses = if (hasNativeDaemonFields) v[58] else 0,
-                                nativeDaemonHostRequests = if (hasNativeDaemonFields) v[59] else 0,
+                                executionQuotaRefills = if (hasQuotaFields) v[28] else 0,
+                                executionQuotaAcceptedRefills = if (hasQuotaFields) v[29] else 0,
+                                executionQuotaUnavailableRefills = if (hasQuotaFields) v[30] else 0,
+                                executionQuotaPermitsConsumed = if (hasQuotaFields) v[31] else 0,
+                                processSchedulerTicks = if (hasSchedulerFields) v[32] else 0,
+                                processSchedulerSelectedTicks = if (hasSchedulerFields) v[33] else 0,
+                                processSchedulerIdleTicks = if (hasSchedulerFields) v[34] else 0,
+                                processSchedulerWokenProcesses = if (hasSchedulerFields) v[35] else 0,
+                                nativeExecutionQuotaRefills = if (hasNativeExecutionQuotaFields) v[36] else 0,
+                                nativeExecutionQuotaInstructions = if (hasNativeExecutionQuotaFields) v[37] else 0,
+                                nativeExecutionQuotaWallNanos = if (hasNativeExecutionQuotaFields) v[38] else 0,
+                                nativeExecutionQuotaLastServerTick = if (hasNativeExecutionQuotaFields) v[39] else 0,
+                                nativeSchedulerDryRuns = if (hasNativeSchedulerDryRunFields) v[40] else 0,
+                                nativeSchedulerDryRunTurns = if (hasNativeSchedulerDryRunFields) v[41] else 0,
+                                nativeSchedulerDryRunSelectedPids = if (hasNativeSchedulerDryRunFields) v[42] else 0,
+                                nativeSchedulerDryRunRemainingInstructions = if (hasNativeSchedulerDryRunFields) v[43] else 0,
+                                nativeSchedulerDryRunFirstSelectionMatches = if (hasNativeSchedulerDryRunFields) v[44] else 0,
+                                nativeSchedulerDryRunFirstSelectionMismatches = if (hasNativeSchedulerDryRunFields) v[45] else 0,
+                                nativeDaemonTicks = if (hasNativeDaemonFields) v[46] else 0,
+                                nativeDaemonActiveNanos = if (hasNativeDaemonFields) v[47] else 0,
+                                nativeDaemonIdleTicks = if (hasNativeDaemonFields) v[48] else 0,
+                                nativeDaemonTurns = if (hasNativeDaemonFields) v[49] else 0,
+                                nativeDaemonHaltedProcesses = if (hasNativeDaemonFields) v[50] else 0,
+                                nativeDaemonHostRequests = if (hasNativeDaemonFields) v[51] else 0,
                                 schedulingPoints = v.getOrElse(4) { 0 },
                                 yieldSchedulingPoints = v.getOrElse(5) { 0 },
                                 waitForSliceSchedulingPoints = v.getOrElse(6) { 0 },
@@ -328,94 +320,19 @@ internal object RuntimeVmProfileCodec {
                                 sleepSignals = v.getOrElse(12) { 0 },
                                 waitEventSignals = v.getOrElse(13) { 0 },
                                 waitPollSignals = if (hasNativeWaitFields) v[14] else 0,
-                                waitProcessSignals = if (hasProcessWaitField) v[15] else 0,
-                                nativeProcessRegistrations = if (hasProcessLifecycleFields) v[16] else 0,
-                                nativeProcessCompletions = if (hasProcessLifecycleFields) v[17] else 0,
-                                nativeProcessStaleCompletions = if (hasProcessLifecycleFields) v[18] else 0,
-                                hostCallSignals =
-                                    when {
-                                        hasProcessLifecycleFields -> v[19]
-                                        hasProcessWaitField -> v[16]
-                                        hasNativeWaitFields -> v[15]
-                                        else -> legacyHostCallSignals
-                                    },
-                                nativeFastPathCalls =
-                                    when {
-                                        hasProcessLifecycleFields -> v[20]
-                                        hasProcessWaitField -> v[17]
-                                        hasNativeWaitFields -> v[16]
-                                        else -> 0
-                                    },
-                                nativeWaitCalls =
-                                    when {
-                                        hasProcessLifecycleFields -> v[21]
-                                        hasProcessWaitField -> v[18]
-                                        hasNativeWaitFields -> v[17]
-                                        else -> 0
-                                    },
-                                nativeWaitNanos =
-                                    when {
-                                        hasProcessLifecycleFields -> v[22]
-                                        hasProcessWaitField -> v[19]
-                                        hasNativeWaitFields -> v[18]
-                                        else -> 0
-                                    },
-                                nativeWaitWakeups =
-                                    when {
-                                        hasProcessLifecycleFields -> v[23]
-                                        hasProcessWaitField -> v[20]
-                                        hasNativeWaitFields -> v[19]
-                                        else -> 0
-                                    },
-                                nativeWaitTimeouts =
-                                    when {
-                                        hasProcessLifecycleFields -> v[24]
-                                        hasProcessWaitField -> v[21]
-                                        hasNativeWaitFields -> v[20]
-                                        else -> 0
-                                    },
-                                nativeDisplayPumpWaitCalls =
-                                    when {
-                                        hasProcessLifecycleFields -> v[25]
-                                        hasProcessWaitField -> v[22]
-                                        hasNativeWaitFields -> v[21]
-                                        else -> 0
-                                    },
-                                nativeDisplayPumpWaitNanos =
-                                    when {
-                                        hasProcessLifecycleFields -> v[26]
-                                        hasProcessWaitField -> v[23]
-                                        hasNativeWaitFields -> v[22]
-                                        else -> 0
-                                    },
-                                nativeDisplayPumpWakeups =
-                                    when {
-                                        hasProcessLifecycleFields -> v[27]
-                                        hasProcessWaitField -> v[24]
-                                        hasNativeWaitFields -> v[23]
-                                        else -> 0
-                                    },
-                                nativeDisplayPumpTimeouts =
-                                    when {
-                                        hasProcessLifecycleFields -> v[28]
-                                        hasProcessWaitField -> v[25]
-                                        hasNativeWaitFields -> v[24]
-                                        else -> 0
-                                    },
-                                nativeDisplayFrameByteBatches =
-                                    when {
-                                        hasProcessLifecycleFields -> v[29]
-                                        hasProcessWaitField -> v[26]
-                                        hasNativeWaitFields -> v[25]
-                                        else -> 0
-                                    },
-                                nativeDisplayFrameBytes =
-                                    when {
-                                        hasProcessLifecycleFields -> v[30]
-                                        hasProcessWaitField -> v[27]
-                                        hasNativeWaitFields -> v[26]
-                                        else -> 0
-                                    },
+                                waitProcessSignals = if (hasNativeWaitFields) v[15] else 0,
+                                hostCallSignals = if (hasNativeWaitFields) v[16] else legacyHostCallSignals,
+                                nativeFastPathCalls = if (hasNativeWaitFields) v[17] else 0,
+                                nativeWaitCalls = if (hasNativeWaitFields) v[18] else 0,
+                                nativeWaitNanos = if (hasNativeWaitFields) v[19] else 0,
+                                nativeWaitWakeups = if (hasNativeWaitFields) v[20] else 0,
+                                nativeWaitTimeouts = if (hasNativeWaitFields) v[21] else 0,
+                                nativeDisplayPumpWaitCalls = if (hasDisplayPumpFields) v[22] else 0,
+                                nativeDisplayPumpWaitNanos = if (hasDisplayPumpFields) v[23] else 0,
+                                nativeDisplayPumpWakeups = if (hasDisplayPumpFields) v[24] else 0,
+                                nativeDisplayPumpTimeouts = if (hasDisplayPumpFields) v[25] else 0,
+                                nativeDisplayFrameByteBatches = if (hasDisplayPumpFields) v[26] else 0,
+                                nativeDisplayFrameBytes = if (hasDisplayPumpFields) v[27] else 0,
                             )
                         }
                 }
@@ -704,11 +621,6 @@ internal object RuntimeVmProfilingReportFormatter {
         appendLine("| Process scheduler selected ticks | ${workload.runtime.vm.processSchedulerSelectedTicks} |")
         appendLine("| Process scheduler idle ticks | ${workload.runtime.vm.processSchedulerIdleTicks} |")
         appendLine("| Process scheduler woken processes | ${workload.runtime.vm.processSchedulerWokenProcesses} |")
-        appendLine("| Native scheduler comparisons | ${workload.runtime.vm.nativeProcessSchedulerComparisons} |")
-        appendLine("| Native scheduler matches | ${workload.runtime.vm.nativeProcessSchedulerMatches} |")
-        appendLine("| Native scheduler mismatches | ${workload.runtime.vm.nativeProcessSchedulerMismatches} |")
-        appendLine("| Native scheduler accepted ticks | ${workload.runtime.vm.nativeProcessSchedulerAcceptedTicks} |")
-        appendLine("| Native scheduler fallback ticks | ${workload.runtime.vm.nativeProcessSchedulerFallbackTicks} |")
         appendLine("| Native execution quota refills | ${workload.runtime.vm.nativeExecutionQuotaRefills} |")
         appendLine("| Native execution quota instructions | ${workload.runtime.vm.nativeExecutionQuotaInstructions} |")
         appendLine("| Native execution quota wall time | ${formatNanos(workload.runtime.vm.nativeExecutionQuotaWallNanos)} |")
@@ -728,9 +640,6 @@ internal object RuntimeVmProfilingReportFormatter {
         appendLine("| Native daemon host requests | ${workload.runtime.vm.nativeDaemonHostRequests} |")
         appendLine("| Native wait signals | ${workload.runtime.vm.nativeWaitSignals} |")
         appendLine("| Native process wait signals | ${workload.runtime.vm.waitProcessSignals} |")
-        appendLine("| Native process registrations | ${workload.runtime.vm.nativeProcessRegistrations} |")
-        appendLine("| Native process completions | ${workload.runtime.vm.nativeProcessCompletions} |")
-        appendLine("| Native process stale completions | ${workload.runtime.vm.nativeProcessStaleCompletions} |")
         appendLine("| Native fast-path calls | ${workload.runtime.vm.nativeFastPathCalls} |")
         appendLine("| Native wait calls | ${workload.runtime.vm.nativeWaitCalls} |")
         appendLine("| Native wait time | ${formatNanos(workload.runtime.vm.nativeWaitNanos)} |")
@@ -813,11 +722,6 @@ internal object RuntimeVmProfilingReportFormatter {
         appendHistoricalMetricRow("Process scheduler selected ticks", columns) { workload -> workload.runtime.vm.processSchedulerSelectedTicks.toString() }
         appendHistoricalMetricRow("Process scheduler idle ticks", columns) { workload -> workload.runtime.vm.processSchedulerIdleTicks.toString() }
         appendHistoricalMetricRow("Process scheduler woken processes", columns) { workload -> workload.runtime.vm.processSchedulerWokenProcesses.toString() }
-        appendHistoricalMetricRow("Native scheduler comparisons", columns) { workload -> workload.runtime.vm.nativeProcessSchedulerComparisons.toString() }
-        appendHistoricalMetricRow("Native scheduler matches", columns) { workload -> workload.runtime.vm.nativeProcessSchedulerMatches.toString() }
-        appendHistoricalMetricRow("Native scheduler mismatches", columns) { workload -> workload.runtime.vm.nativeProcessSchedulerMismatches.toString() }
-        appendHistoricalMetricRow("Native scheduler accepted ticks", columns) { workload -> workload.runtime.vm.nativeProcessSchedulerAcceptedTicks.toString() }
-        appendHistoricalMetricRow("Native scheduler fallback ticks", columns) { workload -> workload.runtime.vm.nativeProcessSchedulerFallbackTicks.toString() }
         appendHistoricalMetricRow("Native execution quota refills", columns) { workload -> workload.runtime.vm.nativeExecutionQuotaRefills.toString() }
         appendHistoricalMetricRow("Native execution quota instructions", columns) { workload -> workload.runtime.vm.nativeExecutionQuotaInstructions.toString() }
         appendHistoricalMetricRow("Native execution quota wall time", columns) { workload -> formatNanos(workload.runtime.vm.nativeExecutionQuotaWallNanos) }
@@ -839,9 +743,6 @@ internal object RuntimeVmProfilingReportFormatter {
         appendHistoricalMetricRow("Native daemon host requests", columns) { workload -> workload.runtime.vm.nativeDaemonHostRequests.toString() }
         appendHistoricalMetricRow("Native wait signals", columns) { workload -> workload.runtime.vm.nativeWaitSignals.toString() }
         appendHistoricalMetricRow("Native process wait signals", columns) { workload -> workload.runtime.vm.waitProcessSignals.toString() }
-        appendHistoricalMetricRow("Native process registrations", columns) { workload -> workload.runtime.vm.nativeProcessRegistrations.toString() }
-        appendHistoricalMetricRow("Native process completions", columns) { workload -> workload.runtime.vm.nativeProcessCompletions.toString() }
-        appendHistoricalMetricRow("Native process stale completions", columns) { workload -> workload.runtime.vm.nativeProcessStaleCompletions.toString() }
         appendHistoricalMetricRow("Native fast-path calls", columns) { workload -> workload.runtime.vm.nativeFastPathCalls.toString() }
         appendHistoricalMetricRow("Native wait calls", columns) { workload -> workload.runtime.vm.nativeWaitCalls.toString() }
         appendHistoricalMetricRow("Native wait time", columns) { workload -> formatNanos(workload.runtime.vm.nativeWaitNanos) }

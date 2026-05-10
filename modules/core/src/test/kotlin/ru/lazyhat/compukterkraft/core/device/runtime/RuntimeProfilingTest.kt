@@ -27,6 +27,21 @@ import kotlin.test.assertTrue
 
 class RuntimeProfilingTest {
     @Test
+    fun runtimeProfilingDoesNotExposeRemovedNativeProcessBridgeMetrics() {
+        val collectorMethodNames =
+            RuntimeMetricsCollector::class.java.methods
+                .map { it.name }
+                .toSet()
+        val vmMetricFields =
+            RuntimeVmMetrics::class.java.declaredFields
+                .map { it.name }
+                .toSet()
+
+        assertTrue(collectorMethodNames.none { it.contains("NativeProcess") }, collectorMethodNames.toString())
+        assertTrue(vmMetricFields.none { it.startsWith("nativeProcess") }, vmMetricFields.toString())
+    }
+
+    @Test
     fun recordingCollectorAccumulatesRuntimeAndVmMetrics() {
         val collector = RecordingRuntimeMetricsCollector()
 
@@ -48,10 +63,6 @@ class RuntimeProfilingTest {
         collector.recordNativeSchedulerDryRun(turns = 1, selectedPids = 1, remainingInstructions = 3, firstSelectionMatched = false)
         collector.recordProcessSchedulerTick(wokenProcesses = 2, selected = true)
         collector.recordProcessSchedulerTick(wokenProcesses = 0, selected = false)
-        collector.recordNativeProcessSchedulerComparison(matched = true)
-        collector.recordNativeProcessSchedulerComparison(matched = false)
-        collector.recordNativeProcessSchedulerSource(acceptedNative = true)
-        collector.recordNativeProcessSchedulerSource(acceptedNative = false)
         collector.recordSlicePermitReceived()
         collector.recordSchedulingPoint(waitedForSlice = false)
         collector.recordSchedulingPoint(waitedForSlice = true)
@@ -73,9 +84,6 @@ class RuntimeProfilingTest {
         collector.recordNativeDisplayPumpWait(nanos = 100)
         collector.recordNativeDisplayPumpWait(nanos = 50, woke = false)
         collector.recordNativeDisplayFrameBytes(bytes = 128)
-        collector.recordNativeProcessRegistration()
-        collector.recordNativeProcessCompletion()
-        collector.recordNativeProcessStaleCompletion()
         collector.recordNativeDaemonTick(activeNanos = 100, turns = 2, halted = 1, hostRequests = 3, idle = false)
         collector.recordNativeDaemonTick(activeNanos = 50, turns = 0, halted = 0, hostRequests = 0, idle = true)
         collector.recordVmInstruction(VmInstructionKind.CALL_BUILTIN, nanos = 40)
@@ -124,11 +132,6 @@ class RuntimeProfilingTest {
         assertEquals(1, snapshot.vm.processSchedulerSelectedTicks)
         assertEquals(1, snapshot.vm.processSchedulerIdleTicks)
         assertEquals(2, snapshot.vm.processSchedulerWokenProcesses)
-        assertEquals(2, snapshot.vm.nativeProcessSchedulerComparisons)
-        assertEquals(1, snapshot.vm.nativeProcessSchedulerMatches)
-        assertEquals(1, snapshot.vm.nativeProcessSchedulerMismatches)
-        assertEquals(1, snapshot.vm.nativeProcessSchedulerAcceptedTicks)
-        assertEquals(1, snapshot.vm.nativeProcessSchedulerFallbackTicks)
         assertEquals(1, snapshot.vm.slicePermitsReceived)
         assertEquals(2, snapshot.vm.schedulingPoints)
         assertEquals(1, snapshot.vm.yieldSchedulingPoints)
@@ -153,9 +156,6 @@ class RuntimeProfilingTest {
         assertEquals(1, snapshot.vm.nativeDisplayPumpTimeouts)
         assertEquals(1, snapshot.vm.nativeDisplayFrameByteBatches)
         assertEquals(128, snapshot.vm.nativeDisplayFrameBytes)
-        assertEquals(1, snapshot.vm.nativeProcessRegistrations)
-        assertEquals(1, snapshot.vm.nativeProcessCompletions)
-        assertEquals(1, snapshot.vm.nativeProcessStaleCompletions)
         assertEquals(2, snapshot.vm.nativeDaemonTicks)
         assertEquals(150, snapshot.vm.nativeDaemonActiveNanos)
         assertEquals(1, snapshot.vm.nativeDaemonIdleTicks)
@@ -196,10 +196,6 @@ class RuntimeProfilingTest {
             summary.contains("    nativeDaemon: ticks=2, active=150 ns, idle=1, turns=2, halted=1, hostRequests=3"),
             summary,
         )
-        assertTrue(
-            summary.contains("  process: registrations=1, completions=1, staleCompletions=1"),
-            summary,
-        )
         assertTrue(summary.contains("  host-calls: calls="), summary)
         assertTrue(
             summary.contains("    display.blitMono5x7Packed: count=2, total=150 ns, wait=100 ns, active=50 ns, avgActive=25 ns"),
@@ -233,9 +229,6 @@ class RuntimeProfilingTest {
         collector.recordNativeWait("runtime.poll", nanos = 100)
         collector.recordNativeDisplayPumpWait(nanos = 100)
         collector.recordNativeDisplayFrameBytes(bytes = 128)
-        collector.recordNativeProcessRegistration()
-        collector.recordNativeProcessCompletion()
-        collector.recordNativeProcessStaleCompletion()
         collector.recordNativeDaemonTick(activeNanos = 100, turns = 2, halted = 1, hostRequests = 3, idle = false)
         collector.recordVmInstruction(VmInstructionKind.CALL_BUILTIN, nanos = 90)
 
