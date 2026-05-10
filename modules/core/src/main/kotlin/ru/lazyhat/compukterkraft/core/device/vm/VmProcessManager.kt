@@ -68,16 +68,25 @@ internal class VmProcessManager(
 
     fun processSnapshot(pid: Int): VmProcessRecord? = processTable.snapshot(pid)
 
-    fun schedulerTick(currentTick: Long): VmProcessSchedulerTick =
-        processScheduler.tick(currentTick).also { tick ->
-            nativeProcessBridge.schedulerTick(currentTick)?.let { nativeTick ->
-                runtimeMetricsCollector.recordNativeProcessSchedulerComparison(nativeTick == tick)
+    fun schedulerTick(currentTick: Long): VmProcessSchedulerTick {
+        val kotlinTick = processScheduler.tick(currentTick)
+        val nativeTick = nativeProcessBridge.schedulerTick(currentTick)
+        val effectiveTick =
+            if (nativeTick == null) {
+                kotlinTick
+            } else {
+                val matched = nativeTick == kotlinTick
+                runtimeMetricsCollector.recordNativeProcessSchedulerComparison(matched)
+                runtimeMetricsCollector.recordNativeProcessSchedulerSource(acceptedNative = matched)
+                if (matched) nativeTick else kotlinTick
             }
+        return effectiveTick.also { tick ->
             runtimeMetricsCollector.recordProcessSchedulerTick(
                 wokenProcesses = tick.wokenPids.size,
                 selected = tick.selectedPid != null,
             )
         }
+    }
 
     override fun markRunnable(pid: Int) {
         processTable.markRunnable(pid)
