@@ -133,7 +133,7 @@ internal object RuntimeVmProfileCodec {
                     }
                     workload.runtime.vm.run {
                         appendLine(
-                            "runtimeVm\t$sliceRequests\t$slicePermitsSent\t$sleepGatedSliceRequests\t$slicePermitsReceived\t$schedulingPoints\t$yieldSchedulingPoints\t$waitForSliceSchedulingPoints\t$executionWindows\t$executionWindowNanos\t$haltSignals\t$pauseSignals\t$yieldSignals\t$sleepSignals\t$waitEventSignals\t$waitPollSignals\t$waitProcessSignals\t$nativeProcessRegistrations\t$nativeProcessCompletions\t$nativeProcessStaleCompletions\t$hostCallSignals\t$nativeFastPathCalls\t$nativeWaitCalls\t$nativeWaitNanos\t$nativeWaitWakeups\t$nativeWaitTimeouts\t$nativeDisplayPumpWaitCalls\t$nativeDisplayPumpWaitNanos\t$nativeDisplayPumpWakeups\t$nativeDisplayPumpTimeouts\t$nativeDisplayFrameByteBatches\t$nativeDisplayFrameBytes\t$executionQuotaRefills\t$executionQuotaAcceptedRefills\t$executionQuotaUnavailableRefills\t$executionQuotaPermitsConsumed\t$processSchedulerTicks\t$processSchedulerSelectedTicks\t$processSchedulerIdleTicks\t$processSchedulerWokenProcesses\t$nativeProcessSchedulerComparisons\t$nativeProcessSchedulerMatches\t$nativeProcessSchedulerMismatches\t$nativeProcessSchedulerAcceptedTicks\t$nativeProcessSchedulerFallbackTicks",
+                            "runtimeVm\t$sliceRequests\t$slicePermitsSent\t$sleepGatedSliceRequests\t$slicePermitsReceived\t$schedulingPoints\t$yieldSchedulingPoints\t$waitForSliceSchedulingPoints\t$executionWindows\t$executionWindowNanos\t$haltSignals\t$pauseSignals\t$yieldSignals\t$sleepSignals\t$waitEventSignals\t$waitPollSignals\t$waitProcessSignals\t$nativeProcessRegistrations\t$nativeProcessCompletions\t$nativeProcessStaleCompletions\t$hostCallSignals\t$nativeFastPathCalls\t$nativeWaitCalls\t$nativeWaitNanos\t$nativeWaitWakeups\t$nativeWaitTimeouts\t$nativeDisplayPumpWaitCalls\t$nativeDisplayPumpWaitNanos\t$nativeDisplayPumpWakeups\t$nativeDisplayPumpTimeouts\t$nativeDisplayFrameByteBatches\t$nativeDisplayFrameBytes\t$executionQuotaRefills\t$executionQuotaAcceptedRefills\t$executionQuotaUnavailableRefills\t$executionQuotaPermitsConsumed\t$processSchedulerTicks\t$processSchedulerSelectedTicks\t$processSchedulerIdleTicks\t$processSchedulerWokenProcesses\t$nativeProcessSchedulerComparisons\t$nativeProcessSchedulerMatches\t$nativeProcessSchedulerMismatches\t$nativeProcessSchedulerAcceptedTicks\t$nativeProcessSchedulerFallbackTicks\t$nativeExecutionQuotaRefills\t$nativeExecutionQuotaInstructions\t$nativeExecutionQuotaWallNanos\t$nativeExecutionQuotaLastServerTick",
                         )
                     }
                     workload.runtime.hostCalls.forEach { call ->
@@ -277,6 +277,7 @@ internal object RuntimeVmProfileCodec {
                             val hasSchedulerFields = v.size >= 39
                             val hasNativeSchedulerComparisonFields = v.size >= 42
                             val hasNativeSchedulerSourceFields = v.size >= 44
+                            val hasNativeExecutionQuotaFields = v.size >= 48
                             val hasProcessWaitField = v.size >= 28
                             val hasNativeWaitFields = v.size >= 27
                             val legacyHostCallSignals = v.getOrElse(14) { 0 }
@@ -298,6 +299,10 @@ internal object RuntimeVmProfileCodec {
                                 nativeProcessSchedulerMismatches = if (hasNativeSchedulerComparisonFields) v[41] else 0,
                                 nativeProcessSchedulerAcceptedTicks = if (hasNativeSchedulerSourceFields) v[42] else 0,
                                 nativeProcessSchedulerFallbackTicks = if (hasNativeSchedulerSourceFields) v[43] else 0,
+                                nativeExecutionQuotaRefills = if (hasNativeExecutionQuotaFields) v[44] else 0,
+                                nativeExecutionQuotaInstructions = if (hasNativeExecutionQuotaFields) v[45] else 0,
+                                nativeExecutionQuotaWallNanos = if (hasNativeExecutionQuotaFields) v[46] else 0,
+                                nativeExecutionQuotaLastServerTick = if (hasNativeExecutionQuotaFields) v[47] else 0,
                                 schedulingPoints = v.getOrElse(4) { 0 },
                                 yieldSchedulingPoints = v.getOrElse(5) { 0 },
                                 waitForSliceSchedulingPoints = v.getOrElse(6) { 0 },
@@ -690,6 +695,10 @@ internal object RuntimeVmProfilingReportFormatter {
         appendLine("| Native scheduler mismatches | ${workload.runtime.vm.nativeProcessSchedulerMismatches} |")
         appendLine("| Native scheduler accepted ticks | ${workload.runtime.vm.nativeProcessSchedulerAcceptedTicks} |")
         appendLine("| Native scheduler fallback ticks | ${workload.runtime.vm.nativeProcessSchedulerFallbackTicks} |")
+        appendLine("| Native execution quota refills | ${workload.runtime.vm.nativeExecutionQuotaRefills} |")
+        appendLine("| Native execution quota instructions | ${workload.runtime.vm.nativeExecutionQuotaInstructions} |")
+        appendLine("| Native execution quota wall time | ${formatNanos(workload.runtime.vm.nativeExecutionQuotaWallNanos)} |")
+        appendLine("| Native execution quota last tick | ${workload.runtime.vm.nativeExecutionQuotaLastServerTick} |")
         appendLine("| Native wait signals | ${workload.runtime.vm.nativeWaitSignals} |")
         appendLine("| Native process wait signals | ${workload.runtime.vm.waitProcessSignals} |")
         appendLine("| Native process registrations | ${workload.runtime.vm.nativeProcessRegistrations} |")
@@ -782,6 +791,10 @@ internal object RuntimeVmProfilingReportFormatter {
         appendHistoricalMetricRow("Native scheduler mismatches", columns) { workload -> workload.runtime.vm.nativeProcessSchedulerMismatches.toString() }
         appendHistoricalMetricRow("Native scheduler accepted ticks", columns) { workload -> workload.runtime.vm.nativeProcessSchedulerAcceptedTicks.toString() }
         appendHistoricalMetricRow("Native scheduler fallback ticks", columns) { workload -> workload.runtime.vm.nativeProcessSchedulerFallbackTicks.toString() }
+        appendHistoricalMetricRow("Native execution quota refills", columns) { workload -> workload.runtime.vm.nativeExecutionQuotaRefills.toString() }
+        appendHistoricalMetricRow("Native execution quota instructions", columns) { workload -> workload.runtime.vm.nativeExecutionQuotaInstructions.toString() }
+        appendHistoricalMetricRow("Native execution quota wall time", columns) { workload -> formatNanos(workload.runtime.vm.nativeExecutionQuotaWallNanos) }
+        appendHistoricalMetricRow("Native execution quota last tick", columns) { workload -> workload.runtime.vm.nativeExecutionQuotaLastServerTick.toString() }
         appendHistoricalMetricRow("Native wait signals", columns) { workload -> workload.runtime.vm.nativeWaitSignals.toString() }
         appendHistoricalMetricRow("Native process wait signals", columns) { workload -> workload.runtime.vm.waitProcessSignals.toString() }
         appendHistoricalMetricRow("Native process registrations", columns) { workload -> workload.runtime.vm.nativeProcessRegistrations.toString() }

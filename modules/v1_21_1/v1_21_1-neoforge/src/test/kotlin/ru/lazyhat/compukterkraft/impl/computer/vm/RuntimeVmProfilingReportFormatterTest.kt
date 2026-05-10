@@ -93,6 +93,10 @@ class RuntimeVmProfilingReportFormatterTest {
                             nativeProcessSchedulerMismatches = 1,
                             nativeProcessSchedulerAcceptedTicks = 11,
                             nativeProcessSchedulerFallbackTicks = 1,
+                            nativeExecutionQuotaRefills = 12,
+                            nativeExecutionQuotaInstructions = 3_852,
+                            nativeExecutionQuotaWallNanos = 7_848,
+                            nativeExecutionQuotaLastServerTick = 42,
                             hostCallSignals = 2,
                             hostCalls =
                                 listOf(
@@ -145,6 +149,10 @@ class RuntimeVmProfilingReportFormatterTest {
         assertTrue(markdown.contains("| Native scheduler mismatches | 1 | 0 |"), markdown)
         assertTrue(markdown.contains("| Native scheduler accepted ticks | 11 | 0 |"), markdown)
         assertTrue(markdown.contains("| Native scheduler fallback ticks | 1 | 0 |"), markdown)
+        assertTrue(markdown.contains("| Native execution quota refills | 12 | 0 |"), markdown)
+        assertTrue(markdown.contains("| Native execution quota instructions | 3852 | 0 |"), markdown)
+        assertTrue(markdown.contains("| Native execution quota wall time | 7.85 us | 0 ns |"), markdown)
+        assertTrue(markdown.contains("| Native execution quota last tick | 42 | 0 |"), markdown)
         assertTrue(markdown.contains("| Host-call signals | 2 | 10 |"), markdown)
         assertTrue(markdown.contains("| Host-call active time | 30 ms | 50.01 us |"), markdown)
         assertTrue(markdown.contains("| Host-call wait time | 60 ms | 0 ns |"), markdown)
@@ -216,6 +224,10 @@ class RuntimeVmProfilingReportFormatterTest {
                             nativeProcessSchedulerMismatches = 0,
                             nativeProcessSchedulerAcceptedTicks = 15,
                             nativeProcessSchedulerFallbackTicks = 0,
+                            nativeExecutionQuotaRefills = 16,
+                            nativeExecutionQuotaInstructions = 5_136,
+                            nativeExecutionQuotaWallNanos = 10_464,
+                            nativeExecutionQuotaLastServerTick = 43,
                             hostCallSignals = 2,
                         ),
                     ),
@@ -251,6 +263,10 @@ class RuntimeVmProfilingReportFormatterTest {
         assertTrue(markdown.contains("| Native scheduler mismatches | 0 |"), markdown)
         assertTrue(markdown.contains("| Native scheduler accepted ticks | 15 |"), markdown)
         assertTrue(markdown.contains("| Native scheduler fallback ticks | 0 |"), markdown)
+        assertTrue(markdown.contains("| Native execution quota refills | 16 |"), markdown)
+        assertTrue(markdown.contains("| Native execution quota instructions | 5136 |"), markdown)
+        assertTrue(markdown.contains("| Native execution quota wall time | 10.46 us |"), markdown)
+        assertTrue(markdown.contains("| Native execution quota last tick | 43 |"), markdown)
         assertTrue(markdown.contains("| Host-call signals | 4 |"), markdown)
         assertTrue(markdown.contains("| Host-call active time | 0 ns |"), markdown)
         assertTrue(markdown.contains("| Host-call wait time | 0 ns |"), markdown)
@@ -307,6 +323,10 @@ class RuntimeVmProfilingReportFormatterTest {
         nativeProcessSchedulerMismatches: Long = 0,
         nativeProcessSchedulerAcceptedTicks: Long = 0,
         nativeProcessSchedulerFallbackTicks: Long = 0,
+        nativeExecutionQuotaRefills: Long = 0,
+        nativeExecutionQuotaInstructions: Long = 0,
+        nativeExecutionQuotaWallNanos: Long = 0,
+        nativeExecutionQuotaLastServerTick: Long = 0,
         hostCallSignals: Long,
         hostCalls: List<RuntimeHostCallMetrics> = emptyList(),
     ): RuntimeWorkloadProfile =
@@ -373,6 +393,10 @@ class RuntimeVmProfilingReportFormatterTest {
                             nativeProcessSchedulerMismatches = nativeProcessSchedulerMismatches,
                             nativeProcessSchedulerAcceptedTicks = nativeProcessSchedulerAcceptedTicks,
                             nativeProcessSchedulerFallbackTicks = nativeProcessSchedulerFallbackTicks,
+                            nativeExecutionQuotaRefills = nativeExecutionQuotaRefills,
+                            nativeExecutionQuotaInstructions = nativeExecutionQuotaInstructions,
+                            nativeExecutionQuotaWallNanos = nativeExecutionQuotaWallNanos,
+                            nativeExecutionQuotaLastServerTick = nativeExecutionQuotaLastServerTick,
                             hostCallSignals = hostCallSignals,
                         ),
                     hostCalls = hostCalls,
