@@ -360,6 +360,49 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
 }
 
 #[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_enqueueDeviceDaemonEventNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    handle: jlong,
+    event_name: JString<'_>,
+    payload: JByteArray<'_>,
+) -> jboolean {
+    let event_name: String = match env.get_string(&event_name) {
+        Ok(name) => name.into(),
+        Err(error) => {
+            let _ = env.throw_new(
+                "java/lang/IllegalArgumentException",
+                format!("Cannot read native device daemon event name: {error}"),
+            );
+            return 0;
+        }
+    };
+    let payload = match env.convert_byte_array(&payload) {
+        Ok(payload) => payload,
+        Err(error) => {
+            let _ = env.throw_new(
+                "java/lang/IllegalArgumentException",
+                format!("Cannot read native device daemon event payload: {error}"),
+            );
+            return 0;
+        }
+    };
+    let arguments = match event_arguments_from_payload(&payload) {
+        Ok(arguments) => arguments,
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalArgumentException", error);
+            return 0;
+        }
+    };
+    match with_device_daemon_mut(&mut env, handle, |daemon| {
+        daemon.enqueue_event(&event_name, arguments)
+    }) {
+        Some(true) => 1,
+        Some(false) | None => 0,
+    }
+}
+
+#[no_mangle]
 pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_enqueueDeviceEventNative(
     mut env: JNIEnv<'_>,
     _class: JClass<'_>,
