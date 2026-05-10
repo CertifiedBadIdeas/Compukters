@@ -376,6 +376,44 @@ class VmProcessManagerTest {
     }
 
     @Test
+    fun childCompletionWakesParentProcessWaiter() {
+        runtimeTestWorkspace("vm-process-manager-process-waiter-wakeup") { workspace ->
+            workspace.writeProgram(
+                1,
+                "child.ck",
+                """
+                pub fun main() {
+                }
+                """.trimIndent(),
+            )
+            val ctx = StubVmContext()
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val manager =
+                VmProcessManager(
+                    scope = scope,
+                    ctx = ctx,
+                    deviceId = 1,
+                    programLoader = WorkspaceProgramLoader(workspace.host),
+                    profile = runtimeProfile(),
+                    runtimeCreator = { _, _, _, _ -> BlockingEventRuntime(CompletableDeferred(VmEvent("unused"))) },
+                    compilerMetricsCollector = NoOpCompilerMetricsCollector,
+                )
+
+            try {
+                val pid = manager.spawn("child.ck", "", "", parentPid = 1)
+                manager.markWaitingProcess(pid = 1, targetPid = pid)
+
+                runBlocking { withTimeout(5_000) { manager.wait(pid) } }
+
+                assertEquals(VmProcessState.Runnable, manager.processSnapshot(1)?.state)
+            } finally {
+                runBlocking { manager.cancelAll() }
+                scope.cancel()
+            }
+        }
+    }
+
+    @Test
     fun schedulerTickWakesSleepingRootAndSelectsRunnableProcess() {
         runtimeTestWorkspace("vm-process-manager-scheduler-tick") { workspace ->
             val ctx = StubVmContext()

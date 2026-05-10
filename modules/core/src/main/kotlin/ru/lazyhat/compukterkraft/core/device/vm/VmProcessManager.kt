@@ -140,6 +140,7 @@ internal class VmProcessManager(
                 } else {
                     markExited(pid, result.exitCode)
                 }
+                processTable.wakeProcessWaiters(pid)
                 if (nativeRegistered) {
                     if (nativeProcessBridge.completeProcess(pid, result.exitCode)) {
                         runtimeMetricsCollector.recordNativeProcessCompletion()
