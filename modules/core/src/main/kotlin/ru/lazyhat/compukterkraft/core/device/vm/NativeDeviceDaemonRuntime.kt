@@ -150,6 +150,18 @@ interface NativeDaemonBindings {
         serverTick: Long,
     ): NativeDeviceDaemonTickSummary
 
+    fun refillDeviceDaemonQuota(
+        daemonHandle: Long,
+        instructions: Long,
+        wallNanos: Long,
+        serverTick: Long,
+    )
+
+    fun runDeviceDaemonReady(
+        daemonHandle: Long,
+        maxTurns: Long,
+    ): NativeDeviceDaemonTickSummary
+
     fun drainDeviceDaemonHostRequests(daemonHandle: Long): List<NativeDeviceDaemonHostRequest>
 
     fun completeDeviceDaemonHostRequest(
@@ -226,6 +238,21 @@ object NativeVmDaemonBindings : NativeDaemonBindings {
         serverTick: Long,
     ): NativeDeviceDaemonTickSummary =
         NativeVmBindings.tickDeviceDaemon(daemonHandle, instructions, wallNanos, serverTick)
+
+    override fun refillDeviceDaemonQuota(
+        daemonHandle: Long,
+        instructions: Long,
+        wallNanos: Long,
+        serverTick: Long,
+    ) {
+        NativeVmBindings.refillDeviceDaemonQuota(daemonHandle, instructions, wallNanos, serverTick)
+    }
+
+    override fun runDeviceDaemonReady(
+        daemonHandle: Long,
+        maxTurns: Long,
+    ): NativeDeviceDaemonTickSummary =
+        NativeVmBindings.runDeviceDaemonReady(daemonHandle, maxTurns)
 
     override fun drainDeviceDaemonHostRequests(daemonHandle: Long): List<NativeDeviceDaemonHostRequest> =
         NativeVmBindings.drainDeviceDaemonHostRequests(daemonHandle)
