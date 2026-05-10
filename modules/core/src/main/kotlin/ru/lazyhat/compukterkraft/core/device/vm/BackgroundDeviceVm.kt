@@ -19,7 +19,6 @@
 
 package ru.lazyhat.compukterkraft.core.device.vm
 
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -36,7 +35,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.selects.select
 import ru.lazyhat.compukterkraft.core.LOGGER
 import ru.lazyhat.compukterkraft.core.device.runtime.ClasspathFirmwareProgramLoader
-import ru.lazyhat.compukterkraft.core.device.runtime.ComputerProgramCompiler
 import ru.lazyhat.compukterkraft.core.device.runtime.FirmwareProgramLoader
 import ru.lazyhat.compukterkraft.core.device.runtime.NoOpRuntimeMetricsCollector
 import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeMetricsCollector
@@ -51,7 +49,6 @@ import ru.lazyhat.compukterkraft.core.device.vm.api.VmProcessApi
 import ru.lazyhat.compukterkraft.core.device.vm.api.VmSystemApi
 import ru.lazyhat.compukterkraft.core.device.vm.display.DisplayMetricsCollector
 import ru.lazyhat.compukterkraft.core.device.vm.display.DisplayRegistry
-import ru.lazyhat.compukterkraft.core.device.vm.display.NativeDisplayRegistry
 import ru.lazyhat.compukterkraft.core.device.vm.display.NoOpDisplayMetricsCollector
 import ru.lazyhat.compukterkraft.lang.api.BuiltinModule
 import ru.lazyhat.compukterkraft.lang.api.BuiltinRegistry
@@ -76,8 +73,6 @@ import ru.lazyhat.compukterkraft.lang.runtime.VmState
 import ru.lazyhat.compukterkraft.lang.runtime.VmStopReason
 import ru.lazyhat.compukterkraft.lang.runtime.VmValue
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeDeviceDaemonHostRequest
-import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeImageVmRunner
-import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeVmBindings
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayInfo
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayPixelFormat
@@ -88,7 +83,6 @@ import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
 import kotlin.concurrent.write
 import kotlin.coroutines.coroutineContext
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.yield as coroutineYield
 
 fun interface DeviceVmLogger {
@@ -127,7 +121,6 @@ class BackgroundDeviceVm(
     private val displayMetricsCollector: DisplayMetricsCollector = NoOpDisplayMetricsCollector,
     private val runtimeMetricsCollector: RuntimeMetricsCollector = NoOpRuntimeMetricsCollector,
     private val compilerMetricsCollector: CompilerMetricsCollector = NoOpCompilerMetricsCollector,
-    private val nativeDisplayEnabled: Boolean = System.getProperty("ckl.vm.native.display") == "true",
     private val strictNativeSchedulerParity: Boolean = System.getProperty("ckl.vm.native.scheduler.strict") == "true",
     private val nativeFilesystemRoot: Path? = null,
     private val nativeDaemonBindings: NativeDaemonBindings = NativeVmDaemonBindings,
@@ -142,69 +135,33 @@ class BackgroundDeviceVm(
     private val hostCallManager = HostCallManager(profile.resources.queues.hostCallQueueSlots)
     private val programLoader = WorkspaceProgramLoader(workspace)
     private val pathResolver = VmPathResolver()
-    private val nativeLibraryAvailable: Boolean = NativeImageVmRunner.isDefaultLibraryAvailable()
     private val effectiveNativeFilesystemRoot: Path? =
         nativeFilesystemRoot ?: (workspace as? DeviceWorkspaceHost)?.computerRoot(deviceId)
-    private val nativeDaemonEnabled: Boolean =
-        System.getProperty("ckl.vm.native.daemon") == "true" &&
-            (nativeDaemonBindings !== NativeVmDaemonBindings || nativeLibraryAvailable)
-    private val nativeDeviceDaemonHandle: Long? =
-        if (nativeDaemonEnabled) {
-            val handle = nativeDaemonBindings.createDeviceDaemon(
+    private val nativeDeviceDaemonHandle: Long =
+        nativeDaemonBindings
+            .createDeviceDaemon(
                 maxEventQueueSize = profile.resources.queues.eventQueueSlots,
                 maxBufferedBytesPerChannel = profile.resources.queues.ipcChannelBytes,
                 instructionBudget = profile.resources.cpu.instructionsPerSlice,
             )
-            effectiveNativeFilesystemRoot?.let { root ->
-                nativeDaemonBindings.attachDeviceDaemonFilesystem(
-                    daemonHandle = handle,
-                    rootPath = root.toAbsolutePath().normalize().toString(),
-                    quotaBytes = profile.resources.storage.diskBytes,
-                )
-            }
-            handle
-        } else {
-            null
-        }
-    private val nativeDaemonRuntime: NativeDeviceDaemonRuntime? =
-        nativeDeviceDaemonHandle?.let { handle ->
-            NativeDeviceDaemonRuntime(
-                daemonHandle = handle,
-                profile = profile,
-                bindings = nativeDaemonBindings,
-                runtimeMetricsCollector = runtimeMetricsCollector,
-                hostBridge = ::handleNativeDaemonHostRequest,
-                compileBridge = ::handleNativeDaemonCompileProgram,
-            )
-        }
-    private val nativeDeviceKernelHandle: Long? =
-        if (nativeDaemonEnabled) {
-            null
-        } else {
-            if (nativeLibraryAvailable) {
-                val handle =
-                    NativeVmBindings.createDeviceKernel(
-                        maxEventQueueSize = profile.resources.queues.eventQueueSlots,
-                        maxBufferedBytesPerChannel = profile.resources.queues.ipcChannelBytes,
-                    )
+            .also { handle ->
                 effectiveNativeFilesystemRoot?.let { root ->
-                    NativeVmBindings.attachNativeFilesystem(
-                        kernelHandle = handle,
+                    nativeDaemonBindings.attachDeviceDaemonFilesystem(
+                        daemonHandle = handle,
                         rootPath = root.toAbsolutePath().normalize().toString(),
                         quotaBytes = profile.resources.storage.diskBytes,
                     )
                 }
-                handle
-            } else {
-                null
             }
-        }
-    private val nativeDisplayRegistry: NativeDisplayRegistry? =
-        nativeDeviceKernelHandle
-            ?.takeIf { nativeDisplayEnabled }
-            ?.let(::NativeDisplayRegistry)
-    private val nativeProcessBridge: NativeProcessBridge =
-        nativeDeviceKernelHandle?.let(::NativeVmProcessBridge) ?: NoOpNativeProcessBridge
+    private val nativeDaemonRuntime: NativeDeviceDaemonRuntime =
+        NativeDeviceDaemonRuntime(
+            daemonHandle = nativeDeviceDaemonHandle,
+            profile = profile,
+            bindings = nativeDaemonBindings,
+            runtimeMetricsCollector = runtimeMetricsCollector,
+            hostBridge = ::handleNativeDaemonHostRequest,
+            compileBridge = ::handleNativeDaemonCompileProgram,
+        )
     private val processManager =
         VmProcessManager(
             scope = scope,
@@ -215,7 +172,7 @@ class BackgroundDeviceVm(
             runtimeCreator = { pid, parentPid, wd, arg -> createRuntime(pid, parentPid, wd, arg) },
             compilerMetricsCollector = compilerMetricsCollector,
             runtimeMetricsCollector = runtimeMetricsCollector,
-            nativeProcessBridge = nativeProcessBridge,
+            nativeProcessBridge = NoOpNativeProcessBridge,
             strictNativeSchedulerParity = strictNativeSchedulerParity,
         )
     private val displayRegistry = DisplayRegistry(displayMetricsCollector)
@@ -276,60 +233,9 @@ class BackgroundDeviceVm(
             .filter { it.isTerminal }
             .shareIn(scope, SharingStarted.Eagerly)
 
-    private var runner: Job? = null
-    private val runtime: VmRuntime = createRuntime(processId = 1, parentProcessId = 0, workingDirectory = "", argument = "")
-
     // ── DeviceVmHandle ────────────────────────────────────────────
 
-    override fun boot(): Boolean {
-        nativeDaemonRuntime?.let {
-            return bootNativeDaemon(it)
-        }
-        if (runner?.isActive == true) return false
-
-        stateManager.setState(VmState.Booting)
-
-        runner =
-            scope.launch {
-                try {
-                    val source =
-                        firmwareLoader.load(profile.bootScriptName)
-                            ?: run {
-                                stopInternal(errorMessage = "Missing firmware script: ${profile.bootScriptName}")
-                                return@launch
-                            }
-
-                    val compiled =
-                        ComputerProgramCompiler.compile(
-                            source.path,
-                            source.source,
-                            profile,
-                            runtimeRegistryProfile.baseRegistry,
-                            programLoader.sourceLoader(deviceId),
-                            compilerMetricsCollector,
-                        )
-
-                    val program =
-                        compiled.program
-                            ?: run {
-                                stopInternal(errorMessage = "Boot compilation failed: ${compiled.errorMessage.orEmpty()}")
-                                return@launch
-                            }
-
-                    awaitSlicePermit(processId = 1)
-                    logger.log("VM[$deviceId] boot program started")
-                    program.run(runtime)
-                    stopInternal(VmStopReason.REQUESTED)
-                } catch (cancelled: CancellationException) {
-                    throw cancelled
-                } catch (failure: Throwable) {
-                    stopInternal(errorMessage = failure.message ?: failure.javaClass.simpleName)
-                }
-            }
-
-        enqueueEvent(VmEvent("boot"))
-        return true
-    }
+    override fun boot(): Boolean = bootNativeDaemon(nativeDaemonRuntime)
 
     override fun stop(reason: VmStopReason) {
         scope.launch {
@@ -342,13 +248,8 @@ class BackgroundDeviceVm(
         val accepted = eventManager.enqueueEvent(event)
         if (accepted) {
             nativeDeviceKernelLock.read {
-                if (!nativeDeviceKernelFreed) {
-                    nativeDeviceKernelHandle?.let { handle ->
-                        NativeVmBindings.enqueueDeviceEvent(handle, event.name, event.arguments)
-                    }
-                    if (nativeDaemonRuntime?.enqueueEvent(event) == true) {
-                        wakeNativeDaemonExecutor()
-                    }
+                if (!nativeDeviceKernelFreed && nativeDaemonRuntime.enqueueEvent(event)) {
+                    wakeNativeDaemonExecutor()
                 }
             }
         }
@@ -357,56 +258,8 @@ class BackgroundDeviceVm(
 
     override fun requestSlice(serverTick: Long) {
         stateManager.updateCurrentTick(serverTick)
-        nativeDaemonRuntime?.let { daemon ->
-            daemon.refillQuota(serverTick)
-            wakeNativeDaemonExecutor()
-            return
-        }
-        var nativeDryRunFirstSelectedPid: Int? = null
-        var nativeDryRunSelectedCount = 0L
-        var nativeDryRunTurns = 0L
-        var nativeDryRunRemainingInstructions = 0L
-        var nativeDryRunObserved = false
-        nativeDeviceKernelLock.read {
-            if (!nativeDeviceKernelFreed) {
-                nativeDeviceKernelHandle?.let { handle ->
-                    val snapshot =
-                        NativeVmBindings.addDeviceExecutionQuota(
-                            kernelHandle = handle,
-                            instructions = profile.resources.cpu.instructionsPerSlice.toLong(),
-                            wallNanos = profile.resources.cpu.wallTimeGuardNanosPerSlice,
-                            serverTick = serverTick,
-                        )
-                    runtimeMetricsCollector.recordNativeExecutionQuotaRefill(
-                        instructions = snapshot.instructions,
-                        wallNanos = snapshot.wallNanos,
-                        serverTick = snapshot.serverTick,
-                    )
-                    val dryRun =
-                        NativeVmBindings.runDeviceSchedulerDryRun(
-                            kernelHandle = handle,
-                            maxTurns = profile.resources.cpu.instructionsPerSlice,
-                        )
-                    nativeDryRunFirstSelectedPid = dryRun.selectedPids.firstOrNull()
-                    nativeDryRunSelectedCount = dryRun.selectedPids.size.toLong()
-                    nativeDryRunTurns = dryRun.turns
-                    nativeDryRunRemainingInstructions = dryRun.remainingInstructions
-                    nativeDryRunObserved = true
-                }
-            }
-        }
-        val schedulerTick = processManager.schedulerTick(serverTick)
-        if (nativeDryRunObserved) {
-            runtimeMetricsCollector.recordNativeSchedulerDryRun(
-                turns = nativeDryRunTurns,
-                selectedPids = nativeDryRunSelectedCount,
-                remainingInstructions = nativeDryRunRemainingInstructions,
-                firstSelectionMatched = nativeDryRunFirstSelectedPid == schedulerTick.selectedPid,
-            )
-        }
-        val sent = executionQuota.refill(selectedPid = schedulerTick.selectedPid)
-        runtimeMetricsCollector.recordSliceRequest(sent = sent, sleepGated = false)
-        runtimeMetricsCollector.recordExecutionQuotaRefill(accepted = sent, unavailable = schedulerTick.selectedPid == null)
+        nativeDaemonRuntime.refillQuota(serverTick)
+        wakeNativeDaemonExecutor()
     }
 
     override fun drainHostCalls(): List<HostCall> = hostCallManager.drainHostCalls()
@@ -434,8 +287,7 @@ class BackgroundDeviceVm(
         displayRegistry.attach(displayId, width, height, pixelFormat).also {
             nativeDeviceKernelLock.read {
                 if (!nativeDeviceKernelFreed) {
-                    nativeDisplayRegistry?.attach(displayId, width, height, pixelFormat)
-                    nativeDaemonRuntime?.attachDisplay(displayId, width, height, pixelFormat)
+                    nativeDaemonRuntime.attachDisplay(displayId, width, height, pixelFormat)
                 }
             }
             if (stateManager.state.isActive) {
@@ -452,8 +304,7 @@ class BackgroundDeviceVm(
         displayRegistry.resize(displayId, width, height, pixelFormat).also {
             nativeDeviceKernelLock.read {
                 if (!nativeDeviceKernelFreed) {
-                    nativeDisplayRegistry?.attach(displayId, width, height, pixelFormat)
-                    nativeDaemonRuntime?.attachDisplay(displayId, width, height, pixelFormat)
+                    nativeDaemonRuntime.attachDisplay(displayId, width, height, pixelFormat)
                 }
             }
             enqueueEvent(VmEvent("display_resize", listOf(displayId, width, height)))
@@ -463,8 +314,7 @@ class BackgroundDeviceVm(
         displayRegistry.detach(displayId)
         nativeDeviceKernelLock.read {
             if (!nativeDeviceKernelFreed) {
-                nativeDisplayRegistry?.detach(displayId)
-                nativeDaemonRuntime?.detachDisplay(displayId)
+                nativeDaemonRuntime.detachDisplay(displayId)
             }
         }
         enqueueEvent(VmEvent("display_detach", listOf(displayId)))
@@ -474,35 +324,28 @@ class BackgroundDeviceVm(
         val nativeFrames =
             nativeDeviceKernelLock.read {
                 if (!nativeDeviceKernelFreed) {
-                    nativeDisplayRegistry?.drainFrames()
-                        ?: nativeDaemonRuntime?.drainDisplayFrames()
+                    nativeDaemonRuntime.drainDisplayFrames()
                 } else {
-                    null
+                    emptyList()
                 }
             }
-        if (nativeFrames != null || stoppedNativeDisplayFrames.isNotEmpty()) {
-            displayRegistry.drainFrames()
-            return buildList {
-                addAll(stoppedNativeDisplayFrames)
-                stoppedNativeDisplayFrames.clear()
-                if (nativeFrames != null) {
-                    addAll(nativeFrames)
-                }
-            }
+        displayRegistry.drainFrames()
+        return buildList {
+            addAll(stoppedNativeDisplayFrames)
+            stoppedNativeDisplayFrames.clear()
+            addAll(nativeFrames)
         }
-        return displayRegistry.drainFrames()
     }
 
     fun supportsNativeDisplayFramePump(): Boolean =
         nativeDeviceKernelLock.read {
-            (nativeDisplayRegistry != null || nativeDaemonRuntime != null) && !nativeDeviceKernelFreed
+            !nativeDeviceKernelFreed
         }
 
     fun nativeDisplayWakeSequence(): Long? =
         nativeDeviceKernelLock.read {
             if (!nativeDeviceKernelFreed) {
-                nativeDisplayRegistry?.displayWakeSequence()
-                    ?: nativeDaemonRuntime?.displayWakeSequence()
+                nativeDaemonRuntime.displayWakeSequence()
             } else {
                 null
             }
@@ -514,8 +357,7 @@ class BackgroundDeviceVm(
     ): Long? =
         nativeDeviceKernelLock.read {
             if (!nativeDeviceKernelFreed) {
-                nativeDisplayRegistry?.waitForDisplayWake(observedWakeSequence, timeoutMillis)
-                    ?: nativeDaemonRuntime?.waitForDisplayWake(observedWakeSequence, timeoutMillis)
+                nativeDaemonRuntime.waitForDisplayWake(observedWakeSequence, timeoutMillis)
             } else {
                 null
             }
@@ -524,8 +366,7 @@ class BackgroundDeviceVm(
     fun drainNativeDisplayFrameBytes(): ByteArray? =
         nativeDeviceKernelLock.read {
             if (!nativeDeviceKernelFreed) {
-                nativeDisplayRegistry?.drainFrameBytes()
-                    ?: nativeDaemonRuntime?.drainDisplayFrameBytes()
+                nativeDaemonRuntime.drainDisplayFrameBytes()
             } else {
                 null
             }
@@ -555,19 +396,6 @@ class BackgroundDeviceVm(
         channel: Int,
         text: String,
     ) {
-        val wroteNative =
-            nativeDeviceKernelLock.read {
-                if (!nativeDeviceKernelFreed) {
-                    nativeDeviceKernelHandle?.let { handle ->
-                        NativeVmBindings.writeDeviceIpc(handle, channel, text)
-                    } == true
-                } else {
-                    false
-                }
-            }
-        if (wroteNative) {
-            return
-        }
         ipcRegistry.write(channel, text)
     }
 
@@ -624,17 +452,12 @@ class BackgroundDeviceVm(
         if (!nativeDeviceKernelFreed) {
             nativeDeviceKernelLock.read {
                 if (!nativeDeviceKernelFreed) {
-                    val nativeFrames =
-                        nativeDisplayRegistry?.drainFrames()
-                            ?: nativeDaemonRuntime?.drainDisplayFrames()
-                    nativeFrames?.let(stoppedNativeDisplayFrames::addAll)
+                    stoppedNativeDisplayFrames.addAll(nativeDaemonRuntime.drainDisplayFrames())
                 }
             }
         }
         processManager.cancelAll()
         stateManager.stopVm(reason, errorMessage)
-        runner?.cancel()
-        runner = null
         daemonExecutor?.let { executor ->
             daemonExecutor = null
             if (executor == coroutineContext[Job]) {
@@ -646,8 +469,7 @@ class BackgroundDeviceVm(
         daemonWakeSignal.close()
         nativeDeviceKernelLock.write {
             if (!nativeDeviceKernelFreed) {
-                nativeDeviceKernelHandle?.let(NativeVmBindings::freeDeviceKernel)
-                nativeDeviceDaemonHandle?.let(nativeDaemonBindings::freeDeviceDaemon)
+                nativeDaemonBindings.freeDeviceDaemon(nativeDeviceDaemonHandle)
                 nativeDeviceKernelFreed = true
             }
         }
@@ -704,7 +526,7 @@ class BackgroundDeviceVm(
     }
 
     private fun startNativeDaemonExecutor() {
-        if (nativeDaemonRuntime == null || daemonExecutor?.isActive == true) return
+        if (daemonExecutor?.isActive == true) return
         daemonExecutor =
             scope.launch {
                 for (ignored in daemonWakeSignal) {
@@ -719,9 +541,7 @@ class BackgroundDeviceVm(
     }
 
     private fun wakeNativeDaemonExecutor() {
-        if (nativeDaemonRuntime != null) {
-            daemonWakeSignal.trySend(Unit)
-        }
+        daemonWakeSignal.trySend(Unit)
     }
 
     private suspend fun handleNativeDaemonHostRequest(request: NativeDeviceDaemonHostRequest): ByteArray {
@@ -836,7 +656,7 @@ class BackgroundDeviceVm(
             eventApi = VmEventApi(eventPayloadStore),
             peripheralsApi = peripheralsApi,
             metricsApi = RuntimeMetricsApi(),
-            nativeDeviceKernelHandle = nativeDeviceKernelHandle ?: 0L,
+            nativeDeviceKernelHandle = 0L,
             nativeWorkingDirectory = workingDirectory,
             processStateReporter = processManager,
         )

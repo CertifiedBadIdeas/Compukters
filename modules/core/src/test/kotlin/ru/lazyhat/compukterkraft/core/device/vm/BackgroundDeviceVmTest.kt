@@ -51,6 +51,7 @@ import kotlin.io.path.createDirectories
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -61,7 +62,7 @@ class BackgroundDeviceVmTest {
         override fun load(path: String): LoadedFirmwareProgramSource = LoadedFirmwareProgramSource(path, source)
     }
 
-    private class RecordingNativeDaemonBindings : NativeDaemonBindings {
+    private open class RecordingNativeDaemonBindings : NativeDaemonBindings {
         val createdDaemons = mutableListOf<Triple<Int, Int, Int>>()
         val freedDaemons = mutableListOf<Long>()
         val bootedImages = mutableListOf<ByteArray>()
@@ -83,7 +84,7 @@ class BackgroundDeviceVmTest {
         var tickSummary: NativeDeviceDaemonTickSummary? = null
         var runReadySummary: NativeDeviceDaemonTickSummary? = null
 
-        override fun createDeviceDaemon(
+        override open fun createDeviceDaemon(
             maxEventQueueSize: Int,
             maxBufferedBytesPerChannel: Int,
             instructionBudget: Int,
@@ -224,6 +225,14 @@ class BackgroundDeviceVmTest {
             displayWakeWaits += observedWakeSequence to timeoutMillis
             return displayWakeWaitResult
         }
+    }
+
+    private class FailingNativeDaemonBindings : RecordingNativeDaemonBindings() {
+        override fun createDeviceDaemon(
+            maxEventQueueSize: Int,
+            maxBufferedBytesPerChannel: Int,
+            instructionBudget: Int,
+        ): Long = error("native daemon unavailable")
     }
 
     private fun backgroundVmWithNativeDaemonBindings(
@@ -378,158 +387,150 @@ class BackgroundDeviceVmTest {
         }
 
     @Test
-    fun bootUsesNativeDaemonWhenConfigured() {
+    fun bootUsesNativeDaemonByDefault() {
         runtimeTestWorkspace("vm-native-daemon-boot") { workspace ->
-            System.setProperty("ckl.vm.native.daemon", "true")
-            try {
-                val daemonBindings = RecordingNativeDaemonBindings()
-                val vm = backgroundVmWithNativeDaemonBindings(workspace.host, daemonBindings)
+            val daemonBindings = RecordingNativeDaemonBindings()
+            val vm = backgroundVmWithNativeDaemonBindings(workspace.host, daemonBindings)
 
-                assertTrue(vm.boot())
-                vm.requestSlice(serverTick = 1)
-                runBlocking {
-                    repeat(20) {
-                        if (daemonBindings.runReadyMaxTurns.isNotEmpty()) return@runBlocking
-                        kotlinx.coroutines.delay(5)
-                    }
+            assertTrue(vm.boot())
+            vm.requestSlice(serverTick = 1)
+            runBlocking {
+                repeat(20) {
+                    if (daemonBindings.runReadyMaxTurns.isNotEmpty()) return@runBlocking
+                    kotlinx.coroutines.delay(5)
                 }
-
-                assertTrue(daemonBindings.bootedImages.isNotEmpty())
-                assertTrue(daemonBindings.refillQuotaCalls.isNotEmpty())
-                assertTrue(daemonBindings.runReadyMaxTurns.isNotEmpty())
-            } finally {
-                System.clearProperty("ckl.vm.native.daemon")
             }
+
+            assertTrue(daemonBindings.createdDaemons.isNotEmpty())
+            assertTrue(daemonBindings.bootedImages.isNotEmpty())
+            assertTrue(daemonBindings.refillQuotaCalls.isNotEmpty())
+            assertTrue(daemonBindings.runReadyMaxTurns.isNotEmpty())
         }
     }
 
     @Test
-    fun nativeDaemonAttachesFilesystemRootWhenConfigured() {
-        runtimeTestWorkspace("vm-native-daemon-filesystem") { workspace ->
-            System.setProperty("ckl.vm.native.daemon", "true")
-            try {
-                val daemonBindings = RecordingNativeDaemonBindings()
-                val root = createTempDirectory("ck-daemon-fs")
-                val vm =
-                    backgroundVmWithNativeDaemonBindings(
-                        workspace.host,
-                        daemonBindings,
-                        nativeFilesystemRoot = root,
+    fun constructionFailsFastWhenNativeDaemonCannotBeCreated() {
+        runtimeTestWorkspace("vm-native-daemon-fail-fast") { workspace ->
+            val failure =
+                assertFailsWith<IllegalStateException> {
+                    BackgroundDeviceVm(
+                        deviceId = 1,
+                        profile = firmwareTestProfile(),
+                        dispatcher = Dispatchers.Default,
+                        labelProvider = { null },
+                        logger = DeviceVmLogger { },
+                        workspace = workspace.host,
+                        firmwareLoader = StaticFirmwareLoader("pub fun main() { }"),
+                        nativeDaemonBindings = FailingNativeDaemonBindings(),
                     )
+                }
 
-                assertTrue(vm.boot())
+            assertTrue(failure.message?.contains("native daemon unavailable") == true)
+        }
+    }
 
-                assertEquals(
-                    listOf(root.toAbsolutePath().normalize().toString() to firmwareTestProfile().resources.storage.diskBytes),
-                    daemonBindings.attachedFilesystems,
+    @Test
+    fun nativeDaemonAttachesFilesystemRootByDefault() {
+        runtimeTestWorkspace("vm-native-daemon-filesystem") { workspace ->
+            val daemonBindings = RecordingNativeDaemonBindings()
+            val root = createTempDirectory("ck-daemon-fs")
+            val vm =
+                backgroundVmWithNativeDaemonBindings(
+                    workspace.host,
+                    daemonBindings,
+                    nativeFilesystemRoot = root,
                 )
-            } finally {
-                System.clearProperty("ckl.vm.native.daemon")
-            }
+
+            assertTrue(vm.boot())
+
+            assertEquals(
+                listOf(root.toAbsolutePath().normalize().toString() to firmwareTestProfile().resources.storage.diskBytes),
+                daemonBindings.attachedFilesystems,
+            )
         }
     }
 
     @Test
     fun enqueueEventForwardsAcceptedEventsToNativeDaemon() {
         runtimeTestWorkspace("vm-native-daemon-event-ingress") { workspace ->
-            System.setProperty("ckl.vm.native.daemon", "true")
-            try {
-                val daemonBindings = RecordingNativeDaemonBindings()
-                val vm = backgroundVmWithNativeDaemonBindings(workspace.host, daemonBindings)
+            val daemonBindings = RecordingNativeDaemonBindings()
+            val vm = backgroundVmWithNativeDaemonBindings(workspace.host, daemonBindings)
 
-                assertTrue(vm.enqueueEvent(VmEvent("char", listOf("x"))))
+            assertTrue(vm.enqueueEvent(VmEvent("char", listOf("x"))))
 
-                assertEquals(listOf("char" to listOf<Any?>("x")), daemonBindings.enqueuedEvents)
-            } finally {
-                System.clearProperty("ckl.vm.native.daemon")
-            }
+            assertEquals(listOf("char" to listOf<Any?>("x")), daemonBindings.enqueuedEvents)
         }
     }
 
     @Test
     fun nativeDaemonExecutorRunsAfterAcceptedEventWithoutWaitingForNextSlice() {
         runtimeTestWorkspace("vm-native-daemon-event-executor") { workspace ->
-            System.setProperty("ckl.vm.native.daemon", "true")
-            try {
-                val daemonBindings = RecordingNativeDaemonBindings()
-                val vm = backgroundVmWithNativeDaemonBindings(workspace.host, daemonBindings)
+            val daemonBindings = RecordingNativeDaemonBindings()
+            val vm = backgroundVmWithNativeDaemonBindings(workspace.host, daemonBindings)
 
-                assertTrue(vm.boot())
-                runBlocking {
-                    repeat(20) {
-                        if (daemonBindings.runReadyMaxTurns.isNotEmpty()) return@runBlocking
-                        kotlinx.coroutines.delay(5)
-                    }
+            assertTrue(vm.boot())
+            runBlocking {
+                repeat(20) {
+                    if (daemonBindings.runReadyMaxTurns.isNotEmpty()) return@runBlocking
+                    kotlinx.coroutines.delay(5)
                 }
-                daemonBindings.runReadyMaxTurns.clear()
-
-                assertTrue(vm.enqueueEvent(VmEvent("char", listOf("a"))))
-                runBlocking {
-                    repeat(20) {
-                        if (daemonBindings.runReadyMaxTurns.isNotEmpty()) return@runBlocking
-                        kotlinx.coroutines.delay(5)
-                    }
-                }
-
-                assertTrue(daemonBindings.runReadyMaxTurns.isNotEmpty())
-                assertTrue(daemonBindings.refillQuotaCalls.isEmpty())
-            } finally {
-                System.clearProperty("ckl.vm.native.daemon")
             }
+            daemonBindings.runReadyMaxTurns.clear()
+
+            assertTrue(vm.enqueueEvent(VmEvent("char", listOf("a"))))
+            runBlocking {
+                repeat(20) {
+                    if (daemonBindings.runReadyMaxTurns.isNotEmpty()) return@runBlocking
+                    kotlinx.coroutines.delay(5)
+                }
+            }
+
+            assertTrue(daemonBindings.runReadyMaxTurns.isNotEmpty())
+            assertTrue(daemonBindings.refillQuotaCalls.isEmpty())
         }
     }
 
     @Test
     fun nativeDaemonDisplayFramesAreMirroredAndDrained() {
         runtimeTestWorkspace("vm-native-daemon-display") { workspace ->
-            System.setProperty("ckl.vm.native.daemon", "true")
-            try {
-                val daemonBindings = RecordingNativeDaemonBindings()
-                daemonBindings.displayFramePayloads +=
-                    nativeDisplayFramePayload(
-                        displayId = 9,
-                        sequence = 1,
-                        width = 16,
-                        height = 12,
-                        fullRefresh = true,
-                    )
-                val vm = backgroundVmWithNativeDaemonBindings(workspace.host, daemonBindings)
+            val daemonBindings = RecordingNativeDaemonBindings()
+            daemonBindings.displayFramePayloads +=
+                nativeDisplayFramePayload(
+                    displayId = 9,
+                    sequence = 1,
+                    width = 16,
+                    height = 12,
+                    fullRefresh = true,
+                )
+            val vm = backgroundVmWithNativeDaemonBindings(workspace.host, daemonBindings)
 
-                val info = vm.attachDisplay(displayId = 9, width = 16, height = 12)
-                val frames = vm.drainDisplayFrames()
-                vm.detachDisplay(displayId = 9)
+            val info = vm.attachDisplay(displayId = 9, width = 16, height = 12)
+            val frames = vm.drainDisplayFrames()
+            vm.detachDisplay(displayId = 9)
 
-                assertEquals(9, info.displayId)
-                assertEquals(listOf(Triple(9, 16, 12)), daemonBindings.attachedDisplays)
-                assertEquals(listOf(9), daemonBindings.detachedDisplays)
-                assertEquals(1, frames.size)
-                assertEquals(9, frames.single().displayId)
-                assertTrue(frames.single().fullRefresh)
-            } finally {
-                System.clearProperty("ckl.vm.native.daemon")
-            }
+            assertEquals(9, info.displayId)
+            assertEquals(listOf(Triple(9, 16, 12)), daemonBindings.attachedDisplays)
+            assertEquals(listOf(9), daemonBindings.detachedDisplays)
+            assertEquals(1, frames.size)
+            assertEquals(9, frames.single().displayId)
+            assertTrue(frames.single().fullRefresh)
         }
     }
 
     @Test
     fun nativeDaemonDisplayWakePumpIsSupportedAndDelegatesWakeCalls() {
         runtimeTestWorkspace("vm-native-daemon-display-wake") { workspace ->
-            System.setProperty("ckl.vm.native.daemon", "true")
-            try {
-                val daemonBindings = RecordingNativeDaemonBindings()
-                daemonBindings.displayWakeSequence = 7
-                daemonBindings.displayWakeWaitResult = 9
-                val vm = backgroundVmWithNativeDaemonBindings(workspace.host, daemonBindings)
+            val daemonBindings = RecordingNativeDaemonBindings()
+            daemonBindings.displayWakeSequence = 7
+            daemonBindings.displayWakeWaitResult = 9
+            val vm = backgroundVmWithNativeDaemonBindings(workspace.host, daemonBindings)
 
-                vm.attachDisplay(displayId = 4, width = 16, height = 12)
+            vm.attachDisplay(displayId = 4, width = 16, height = 12)
 
-                assertTrue(vm.supportsNativeDisplayFramePump())
-                assertEquals(7, vm.nativeDisplayWakeSequence())
-                assertEquals(9, vm.waitForNativeDisplayWake(observedWakeSequence = 7, timeoutMillis = 25))
-                assertEquals(listOf(7L to 25L), daemonBindings.displayWakeWaits)
-            } finally {
-                System.clearProperty("ckl.vm.native.daemon")
-            }
+            assertTrue(vm.supportsNativeDisplayFramePump())
+            assertEquals(7, vm.nativeDisplayWakeSequence())
+            assertEquals(9, vm.waitForNativeDisplayWake(observedWakeSequence = 7, timeoutMillis = 25))
+            assertEquals(listOf(7L to 25L), daemonBindings.displayWakeWaits)
         }
     }
 
@@ -575,7 +576,7 @@ class BackgroundDeviceVmTest {
     @Test
     fun requestSliceDoesNotGateSharedQuotaOnSleepState() {
         runtimeTestWorkspace("vm-runtime-sleep-shared-quota") { workspace ->
-            val metrics = RecordingRuntimeMetricsCollector()
+            val daemonBindings = RecordingNativeDaemonBindings()
             val vm =
                 BackgroundDeviceVm(
                     deviceId = 1,
@@ -584,95 +585,22 @@ class BackgroundDeviceVmTest {
                     labelProvider = { null },
                     logger = DeviceVmLogger { },
                     workspace = workspace.host,
-                    runtimeMetricsCollector = metrics,
+                    nativeDaemonBindings = daemonBindings,
                 )
 
             vm.setSleepUntil(10)
             vm.requestSlice(serverTick = 1)
 
-            val snapshot = metrics.snapshot()
-            assertEquals(1, snapshot.vm.sliceRequests)
-            assertEquals(1, snapshot.vm.slicePermitsSent)
-            assertEquals(0, snapshot.vm.sleepGatedSliceRequests)
-            assertEquals(1, snapshot.vm.executionQuotaRefills)
-            assertEquals(1, snapshot.vm.executionQuotaAcceptedRefills)
-            assertEquals(0, snapshot.vm.executionQuotaUnavailableRefills)
-        }
-    }
-
-    @Test
-    fun requestSliceMirrorsExecutionQuotaToNativeKernelWhenConfigured() {
-        System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
-        runtimeTestWorkspace("vm-native-quota-refill") { workspace ->
-            val metrics = RecordingRuntimeMetricsCollector()
-            val profile =
-                firmwareTestProfile().copy(
-                    resources =
-                        firmwareTestProfile().resources.copy(
-                            cpu =
-                                DeviceCpuResources(
-                                    instructionsPerSlice = 321,
-                                    wallTimeGuardNanosPerSlice = 654,
-                                ),
-                        ),
-                )
-            val vm =
-                BackgroundDeviceVm(
-                    deviceId = 1,
-                    profile = profile,
-                    dispatcher = Dispatchers.Default,
-                    labelProvider = { null },
-                    logger = DeviceVmLogger { },
-                    workspace = workspace.host,
-                    runtimeMetricsCollector = metrics,
-                )
-
-            vm.requestSlice(serverTick = 42)
-
-            val snapshot = metrics.snapshot()
-            assertEquals(1, snapshot.vm.nativeExecutionQuotaRefills)
-            assertEquals(321, snapshot.vm.nativeExecutionQuotaInstructions)
-            assertEquals(654, snapshot.vm.nativeExecutionQuotaWallNanos)
-            assertEquals(42, snapshot.vm.nativeExecutionQuotaLastServerTick)
-        }
-    }
-
-    @Test
-    fun requestSliceRecordsNativeSchedulerDryRunWhenConfigured() {
-        System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
-        runtimeTestWorkspace("vm-native-scheduler-dry-run") { workspace ->
-            val metrics = RecordingRuntimeMetricsCollector()
-            val profile =
-                firmwareTestProfile().copy(
-                    resources =
-                        firmwareTestProfile().resources.copy(
-                            cpu =
-                                DeviceCpuResources(
-                                    instructionsPerSlice = 3,
-                                    wallTimeGuardNanosPerSlice = 654,
-                                ),
-                        ),
-                )
-            val vm =
-                BackgroundDeviceVm(
-                    deviceId = 1,
-                    profile = profile,
-                    dispatcher = Dispatchers.Default,
-                    labelProvider = { null },
-                    logger = DeviceVmLogger { },
-                    workspace = workspace.host,
-                    runtimeMetricsCollector = metrics,
-                )
-
-            vm.requestSlice(serverTick = 42)
-
-            val snapshot = metrics.snapshot()
-            assertEquals(1, snapshot.vm.nativeSchedulerDryRuns)
-            assertEquals(3, snapshot.vm.nativeSchedulerDryRunTurns)
-            assertEquals(3, snapshot.vm.nativeSchedulerDryRunSelectedPids)
-            assertEquals(0, snapshot.vm.nativeSchedulerDryRunRemainingInstructions)
-            assertEquals(1, snapshot.vm.nativeSchedulerDryRunFirstSelectionMatches)
-            assertEquals(0, snapshot.vm.nativeSchedulerDryRunFirstSelectionMismatches)
+            assertEquals(
+                listOf(
+                    Triple(
+                        1L,
+                        firmwareTestProfile().resources.cpu.wallTimeGuardNanosPerSlice,
+                        1L,
+                    ),
+                ),
+                daemonBindings.refillQuotaCalls,
+            )
         }
     }
 
@@ -734,7 +662,6 @@ class BackgroundDeviceVmTest {
                             }
                             """.trimIndent(),
                         ),
-                    nativeDisplayEnabled = true,
                 )
 
             val info = vm.attachDisplay(displayId = 4, width = 18, height = 18)
@@ -767,7 +694,6 @@ class BackgroundDeviceVmTest {
                             }
                             """.trimIndent(),
                         ),
-                    nativeDisplayEnabled = true,
                 )
 
             vm.attachDisplay(displayId = 4, width = 18, height = 18)
