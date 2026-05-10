@@ -100,6 +100,10 @@ class RuntimeVmProfilingProfileCodecTest {
                                         RuntimeVmMetrics(
                                             executionWindows = 32,
                                             executionWindowNanos = 33,
+                                            executionQuotaRefills = 61,
+                                            executionQuotaAcceptedRefills = 62,
+                                            executionQuotaUnavailableRefills = 63,
+                                            executionQuotaPermitsConsumed = 64,
                                             waitPollSignals = 34,
                                             waitProcessSignals = 35,
                                             nativeProcessRegistrations = 36,

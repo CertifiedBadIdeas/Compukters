@@ -59,6 +59,13 @@ interface RuntimeMetricsCollector {
         sleepGated: Boolean,
     )
 
+    fun recordExecutionQuotaRefill(
+        accepted: Boolean,
+        unavailable: Boolean,
+    )
+
+    fun recordExecutionQuotaPermitConsumed()
+
     fun recordSlicePermitReceived()
 
     fun recordSchedulingPoint(waitedForSlice: Boolean)
@@ -155,6 +162,10 @@ data class RuntimeVmMetrics(
     val sliceRequests: Long = 0,
     val slicePermitsSent: Long = 0,
     val sleepGatedSliceRequests: Long = 0,
+    val executionQuotaRefills: Long = 0,
+    val executionQuotaAcceptedRefills: Long = 0,
+    val executionQuotaUnavailableRefills: Long = 0,
+    val executionQuotaPermitsConsumed: Long = 0,
     val slicePermitsReceived: Long = 0,
     val schedulingPoints: Long = 0,
     val yieldSchedulingPoints: Long = 0,
@@ -241,6 +252,9 @@ data class RuntimeProfilingSnapshot(
             appendLine("  vm:")
             appendLine(
                 "    slices: requests=${vm.sliceRequests}, permitsSent=${vm.slicePermitsSent}, sleepGated=${vm.sleepGatedSliceRequests}, permitsReceived=${vm.slicePermitsReceived}",
+            )
+            appendLine(
+                "    quota: refills=${vm.executionQuotaRefills}, accepted=${vm.executionQuotaAcceptedRefills}, unavailable=${vm.executionQuotaUnavailableRefills}, consumed=${vm.executionQuotaPermitsConsumed}",
             )
             appendLine(
                 "    scheduling: points=${vm.schedulingPoints}, yieldPoints=${vm.yieldSchedulingPoints}, waitPoints=${vm.waitForSliceSchedulingPoints}",
@@ -341,6 +355,13 @@ object NoOpRuntimeMetricsCollector : RuntimeMetricsCollector {
         sleepGated: Boolean,
     ) = Unit
 
+    override fun recordExecutionQuotaRefill(
+        accepted: Boolean,
+        unavailable: Boolean,
+    ) = Unit
+
+    override fun recordExecutionQuotaPermitConsumed() = Unit
+
     override fun recordSlicePermitReceived() = Unit
 
     override fun recordSchedulingPoint(waitedForSlice: Boolean) = Unit
@@ -427,6 +448,10 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
     private val sliceRequests = AtomicLong()
     private val slicePermitsSent = AtomicLong()
     private val sleepGatedSliceRequests = AtomicLong()
+    private val executionQuotaRefills = AtomicLong()
+    private val executionQuotaAcceptedRefills = AtomicLong()
+    private val executionQuotaUnavailableRefills = AtomicLong()
+    private val executionQuotaPermitsConsumed = AtomicLong()
     private val slicePermitsReceived = AtomicLong()
     private val schedulingPoints = AtomicLong()
     private val yieldSchedulingPoints = AtomicLong()
@@ -519,6 +544,19 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
         sliceRequests.incrementAndGet()
         if (sent) slicePermitsSent.incrementAndGet()
         if (sleepGated) sleepGatedSliceRequests.incrementAndGet()
+    }
+
+    override fun recordExecutionQuotaRefill(
+        accepted: Boolean,
+        unavailable: Boolean,
+    ) {
+        executionQuotaRefills.incrementAndGet()
+        if (accepted) executionQuotaAcceptedRefills.incrementAndGet()
+        if (unavailable) executionQuotaUnavailableRefills.incrementAndGet()
+    }
+
+    override fun recordExecutionQuotaPermitConsumed() {
+        executionQuotaPermitsConsumed.incrementAndGet()
     }
 
     override fun recordSlicePermitReceived() {
@@ -648,6 +686,10 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
                     sliceRequests = sliceRequests.get(),
                     slicePermitsSent = slicePermitsSent.get(),
                     sleepGatedSliceRequests = sleepGatedSliceRequests.get(),
+                    executionQuotaRefills = executionQuotaRefills.get(),
+                    executionQuotaAcceptedRefills = executionQuotaAcceptedRefills.get(),
+                    executionQuotaUnavailableRefills = executionQuotaUnavailableRefills.get(),
+                    executionQuotaPermitsConsumed = executionQuotaPermitsConsumed.get(),
                     slicePermitsReceived = slicePermitsReceived.get(),
                     schedulingPoints = schedulingPoints.get(),
                     yieldSchedulingPoints = yieldSchedulingPoints.get(),

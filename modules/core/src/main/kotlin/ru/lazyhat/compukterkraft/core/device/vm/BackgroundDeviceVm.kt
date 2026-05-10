@@ -301,10 +301,12 @@ class BackgroundDeviceVm(
         val wakeTick = stateManager.sleepUntilTick
         if (wakeTick != null && serverTick < wakeTick) {
             runtimeMetricsCollector.recordSliceRequest(sent = false, sleepGated = true)
+            runtimeMetricsCollector.recordExecutionQuotaRefill(accepted = false, unavailable = true)
             return
         }
         val sent = executionQuota.refill(available = true)
         runtimeMetricsCollector.recordSliceRequest(sent = sent, sleepGated = false)
+        runtimeMetricsCollector.recordExecutionQuotaRefill(accepted = sent, unavailable = false)
     }
 
     override fun drainHostCalls(): List<HostCall> = hostCallManager.drainHostCalls()
@@ -550,6 +552,7 @@ class BackgroundDeviceVm(
         )
         executionQuota.awaitPermit()
         runtimeMetricsCollector.recordSlicePermitReceived()
+        runtimeMetricsCollector.recordExecutionQuotaPermitConsumed()
         executionWindowStartedNanos = System.nanoTime()
         stateManager.updateSliceDeadlineNanos(profile.resources.cpu.wallTimeGuardNanosPerSlice)
         stateManager.setState(VmState.Running)
