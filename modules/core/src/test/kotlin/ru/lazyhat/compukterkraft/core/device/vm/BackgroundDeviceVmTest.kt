@@ -335,8 +335,8 @@ class BackgroundDeviceVmTest {
             )
             runtime.requestSlice(serverTick = 42)
 
-            assertEquals(listOf(Triple(123L, 456L, 42L)), bindings.refillQuotaCalls)
-            assertEquals(listOf(123L), bindings.runReadyMaxTurns)
+            assertEquals(listOf(Triple(2L, 456L, 42L)), bindings.refillQuotaCalls)
+            assertEquals(listOf(2L), bindings.runReadyMaxTurns)
             assertTrue(bindings.bootedImages.isNotEmpty())
             runtimeMetricsCollector.snapshot().vm.run {
                 assertEquals(1, nativeDaemonTicks)
@@ -349,6 +349,35 @@ class BackgroundDeviceVmTest {
         }
 
     @Test
+    fun nativeDaemonRuntimeCapsSchedulerTurnsForYieldingPrograms() =
+        runBlocking {
+            val bindings = RecordingNativeDaemonBindings()
+            val profile =
+                firmwareTestProfile().copy(
+                    resources =
+                        firmwareTestProfile().resources.copy(
+                            cpu =
+                                DeviceCpuResources(
+                                    instructionsPerSlice = 2_048,
+                                    wallTimeGuardNanosPerSlice = 1_000_000,
+                                ),
+                        ),
+                )
+            val runtime =
+                NativeDeviceDaemonRuntime(
+                    daemonHandle = 7,
+                    profile = profile,
+                    bindings = bindings,
+                    hostBridge = { byteArrayOf(0) },
+                )
+
+            runtime.requestSlice(serverTick = 12)
+
+            assertEquals(listOf(Triple(32L, 1_000_000L, 12L)), bindings.refillQuotaCalls)
+            assertEquals(listOf(32L), bindings.runReadyMaxTurns)
+        }
+
+    @Test
     fun bootUsesNativeDaemonWhenConfigured() {
         runtimeTestWorkspace("vm-native-daemon-boot") { workspace ->
             System.setProperty("ckl.vm.native.daemon", "true")
@@ -358,6 +387,12 @@ class BackgroundDeviceVmTest {
 
                 assertTrue(vm.boot())
                 vm.requestSlice(serverTick = 1)
+                runBlocking {
+                    repeat(20) {
+                        if (daemonBindings.runReadyMaxTurns.isNotEmpty()) return@runBlocking
+                        kotlinx.coroutines.delay(5)
+                    }
+                }
 
                 assertTrue(daemonBindings.bootedImages.isNotEmpty())
                 assertTrue(daemonBindings.refillQuotaCalls.isNotEmpty())
