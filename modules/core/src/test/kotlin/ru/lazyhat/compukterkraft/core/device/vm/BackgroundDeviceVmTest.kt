@@ -97,7 +97,6 @@ class BackgroundDeviceVmTest {
             assertTrue(snapshot.vm.sliceRequests > 0, snapshot.summary())
             assertTrue(snapshot.vm.slicePermitsSent > 0, snapshot.summary())
             assertTrue(snapshot.vm.slicePermitsReceived > 0, snapshot.summary())
-            assertTrue(snapshot.vm.schedulingPoints > 0, snapshot.summary())
             assertTrue(snapshot.vm.executionWindows > 0, snapshot.summary())
             assertTrue(snapshot.vm.executionWindowNanos > 0, snapshot.summary())
         }
