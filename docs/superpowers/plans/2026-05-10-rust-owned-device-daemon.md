@@ -822,7 +822,7 @@ git commit -m "feat: expose native device daemon tick"
 - Modify: `modules/compiler/src/main/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeVmBindings.kt`
 - Modify: `modules/compiler/src/test/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeImageVmBindingsJniTest.kt`
 
-- [ ] **Step 1: Add failing boot image JNI test**
+- [x] **Step 1: Add failing boot image JNI test**
 
 Add to `NativeImageVmBindingsJniTest`:
 
@@ -850,7 +850,7 @@ fun nativeDeviceDaemonBootImageRunsWhenLibraryIsConfigured() {
 }
 ```
 
-- [ ] **Step 2: Run the Kotlin test and verify it fails**
+- [x] **Step 2: Run the Kotlin test and verify it fails**
 
 ```bash
 ./gradlew -Dckl.vm.native.library=/home/lazyhat/IdeaProjects/Compukter-Kraft/native/ckl-vm/target/debug/libckl_vm.so :compiler:test --tests '*NativeImageVmBindingsJniTest.nativeDeviceDaemonBootImageRunsWhenLibraryIsConfigured' --rerun-tasks
@@ -858,7 +858,7 @@ fun nativeDeviceDaemonBootImageRunsWhenLibraryIsConfigured() {
 
 Expected: FAIL because boot daemon JNI API does not exist.
 
-- [ ] **Step 3: Add Rust and Kotlin boot binding**
+- [x] **Step 3: Add Rust and Kotlin boot binding**
 
 Rust JNI method:
 
@@ -881,7 +881,7 @@ data class NativeDeviceDaemonBootSummary(
 )
 ```
 
-- [ ] **Step 4: Run focused checks**
+- [x] **Step 4: Run focused checks**
 
 ```bash
 ./gradlew :v1_21_1-neoforge:buildRustVmNativeLibrary
@@ -890,7 +890,7 @@ data class NativeDeviceDaemonBootSummary(
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit Task 7**
+- [x] **Step 5: Commit Task 7**
 
 ```bash
 git add native/ckl-vm/src/jni.rs modules/compiler/src/main/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeVmBindings.kt modules/compiler/src/test/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeImageVmBindingsJniTest.kt docs/superpowers/plans/2026-05-10-rust-owned-device-daemon.md

@@ -58,6 +58,11 @@ data class NativeDeviceDaemonTickSummary(
     val hostRequests: Long,
 )
 
+data class NativeDeviceDaemonBootSummary(
+    val pid: Int,
+    val imageAttached: Boolean,
+)
+
 internal interface NativeVmBindingsFacade {
     fun createImage(
         libraryPath: String,
@@ -202,6 +207,23 @@ object NativeVmBindings : NativeVmBindingsFacade {
             wallNanos,
             serverTick,
         ).toNativeDeviceDaemonTickSummary()
+    }
+
+    fun bootDeviceDaemon(
+        daemonHandle: Long,
+        image: ByteArray,
+        programPath: String,
+        argument: String,
+        workingDirectory: String,
+    ): NativeDeviceDaemonBootSummary {
+        require(daemonHandle != 0L) { "Native device daemon handle is zero" }
+        return bootDeviceDaemonNative(
+            daemonHandle,
+            image,
+            programPath,
+            argument,
+            workingDirectory,
+        ).toNativeDeviceDaemonBootSummary()
     }
 
     fun enqueueDeviceEvent(
@@ -587,6 +609,14 @@ object NativeVmBindings : NativeVmBindingsFacade {
             hostRequests = getOrElse(5) { 0L },
         )
 
+    private fun LongArray.toNativeDeviceDaemonBootSummary(): NativeDeviceDaemonBootSummary =
+        NativeDeviceDaemonBootSummary(
+            pid =
+                getOrElse(0) { 0L }
+                    .toInt(),
+            imageAttached = getOrElse(1) { 0L } != 0L,
+        )
+
     @JvmStatic
     private external fun createImageNative(
         image: ByteArray,
@@ -630,6 +660,15 @@ object NativeVmBindings : NativeVmBindingsFacade {
         instructions: Long,
         wallNanos: Long,
         serverTick: Long,
+    ): LongArray
+
+    @JvmStatic
+    private external fun bootDeviceDaemonNative(
+        daemonHandle: Long,
+        image: ByteArray,
+        programPath: String,
+        argument: String,
+        workingDirectory: String,
     ): LongArray
 
     @JvmStatic

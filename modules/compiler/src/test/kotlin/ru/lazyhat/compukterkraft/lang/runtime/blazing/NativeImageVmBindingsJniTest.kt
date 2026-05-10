@@ -281,6 +281,28 @@ class NativeImageVmBindingsJniTest {
     }
 
     @Test
+    fun nativeDeviceDaemonBootImageRunsWhenLibraryIsConfigured() {
+        System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val image = assertNotNull(LanguageFrontend().compileImage("main.ck", "pub fun main() { }").image)
+        val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 128)
+        try {
+            assertEquals(
+                NativeDeviceDaemonBootSummary(pid = 1, imageAttached = true),
+                NativeVmBindings.bootDeviceDaemon(
+                    daemonHandle = handle,
+                    image = CkVmImageAbi.encode(image),
+                    programPath = "/rom/bios.ck",
+                    argument = "",
+                    workingDirectory = "",
+                ),
+            )
+            assertEquals(1, NativeVmBindings.tickDeviceDaemon(handle, 128, 1_000_000, 1).halted)
+        } finally {
+            NativeVmBindings.freeDeviceDaemon(handle)
+        }
+    }
+
+    @Test
     fun nativeDeviceSchedulerDryRunRunsWhenLibraryIsConfigured() {
         System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val kernelHandle = NativeVmBindings.createDeviceKernel(maxEventQueueSize = 64, maxBufferedBytesPerChannel = 4096)
