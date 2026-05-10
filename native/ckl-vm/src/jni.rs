@@ -246,6 +246,46 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
 }
 
 #[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_refillDeviceDaemonQuotaNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    handle: jlong,
+    instructions: jlong,
+    wall_nanos: jlong,
+    server_tick: jlong,
+) {
+    let _ = with_device_daemon_mut(&mut env, handle, |daemon| {
+        daemon.refill_execution_quota(instructions, wall_nanos, server_tick);
+    });
+}
+
+#[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_runDeviceDaemonReadyNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    handle: jlong,
+    max_turns: jlong,
+) -> jlongArray {
+    let summary = match with_device_daemon_mut(&mut env, handle, |daemon| {
+        daemon.run_ready_until_blocked(max_turns)
+    }) {
+        Some(summary) => summary,
+        None => return null_mut(),
+    };
+    long_array_or_throw(
+        &mut env,
+        &[
+            summary.server_tick,
+            summary.turns,
+            summary.remaining_instructions,
+            i64::from(summary.idle),
+            summary.halted,
+            summary.host_requests,
+        ],
+    )
+}
+
+#[no_mangle]
 pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_bootDeviceDaemonNative(
     mut env: JNIEnv<'_>,
     _class: JClass<'_>,

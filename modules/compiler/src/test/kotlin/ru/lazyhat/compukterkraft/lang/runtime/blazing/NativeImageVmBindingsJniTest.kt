@@ -257,6 +257,26 @@ class NativeImageVmBindingsJniTest {
                     Long::class.javaPrimitiveType,
                 ).returnType,
         )
+        assertEquals(
+            Void.TYPE,
+            NativeVmBindings::class.java
+                .getDeclaredMethod(
+                    "refillDeviceDaemonQuotaNative",
+                    Long::class.javaPrimitiveType,
+                    Long::class.javaPrimitiveType,
+                    Long::class.javaPrimitiveType,
+                    Long::class.javaPrimitiveType,
+                ).returnType,
+        )
+        assertEquals(
+            LongArray::class.java,
+            NativeVmBindings::class.java
+                .getDeclaredMethod(
+                    "runDeviceDaemonReadyNative",
+                    Long::class.javaPrimitiveType,
+                    Long::class.javaPrimitiveType,
+                ).returnType,
+        )
     }
 
     @Test
@@ -300,6 +320,27 @@ class NativeImageVmBindingsJniTest {
                 ),
                 NativeVmBindings.tickDeviceDaemon(handle, 128, 1_000_000, 5),
             )
+        } finally {
+            NativeVmBindings.freeDeviceDaemon(handle)
+        }
+    }
+
+    @Test
+    fun nativeDeviceDaemonCanRefillQuotaAndRunReadyProcessesSeparately() {
+        System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val image = assertNotNull(LanguageFrontend().compileImage("main.ck", "pub fun main() { yield(); }").image)
+        val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 64)
+        try {
+            NativeVmBindings.bootDeviceDaemon(handle, CkVmImageAbi.encode(image), "/rom/boot.ck", "", "")
+
+            NativeVmBindings.refillDeviceDaemonQuota(handle, instructions = 8, wallNanos = 1_000_000, serverTick = 91)
+            val first = NativeVmBindings.runDeviceDaemonReady(handle, maxTurns = 8)
+
+            assertEquals(91, first.serverTick)
+            assertEquals(2, first.turns)
+            assertEquals(1, first.halted)
+            assertTrue(first.idle)
+            assertTrue(first.remainingInstructions >= 0)
         } finally {
             NativeVmBindings.freeDeviceDaemon(handle)
         }

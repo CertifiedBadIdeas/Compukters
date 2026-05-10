@@ -220,6 +220,32 @@ object NativeVmBindings : NativeVmBindingsFacade {
         ).toNativeDeviceDaemonTickSummary()
     }
 
+    fun refillDeviceDaemonQuota(
+        daemonHandle: Long,
+        instructions: Long,
+        wallNanos: Long,
+        serverTick: Long,
+    ) {
+        require(daemonHandle != 0L) { "Native device daemon handle is zero" }
+        refillDeviceDaemonQuotaNative(
+            daemonHandle,
+            instructions,
+            wallNanos,
+            serverTick,
+        )
+    }
+
+    fun runDeviceDaemonReady(
+        daemonHandle: Long,
+        maxTurns: Long,
+    ): NativeDeviceDaemonTickSummary {
+        require(daemonHandle != 0L) { "Native device daemon handle is zero" }
+        return runDeviceDaemonReadyNative(
+            daemonHandle,
+            maxTurns.coerceAtLeast(1),
+        ).toNativeDeviceDaemonTickSummary()
+    }
+
     fun bootDeviceDaemon(
         daemonHandle: Long,
         image: ByteArray,
@@ -789,6 +815,20 @@ object NativeVmBindings : NativeVmBindingsFacade {
         instructions: Long,
         wallNanos: Long,
         serverTick: Long,
+    ): LongArray
+
+    @JvmStatic
+    private external fun refillDeviceDaemonQuotaNative(
+        daemonHandle: Long,
+        instructions: Long,
+        wallNanos: Long,
+        serverTick: Long,
+    )
+
+    @JvmStatic
+    private external fun runDeviceDaemonReadyNative(
+        daemonHandle: Long,
+        maxTurns: Long,
     ): LongArray
 
     @JvmStatic
