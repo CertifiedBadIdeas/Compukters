@@ -652,3 +652,48 @@ git add docs/superpowers/plans/2026-05-10-device-quota-process-scheduler.md \
   modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessManagerTest.kt
 git commit -m "feat: add VM process scheduler tick facade"
 ```
+
+## Task 11: Process Waiter Wakeups
+
+**Files:**
+- Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessTable.kt`
+- Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessManager.kt`
+- Test: `modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessTableTest.kt`
+- Test: `modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessManagerTest.kt`
+
+- [x] **Step 1: Add failing process waiter wake tests**
+
+Add tests proving `wakeProcessWaiters(targetPid)`:
+
+- wakes only processes in `WaitingProcess(targetPid)`;
+- returns woken pids in deterministic pid order;
+- moves woken processes back to `Runnable` and runnable queue membership;
+- leaves waiters for other pids unchanged.
+
+- [x] **Step 2: Implement waiter wakeups**
+
+Scan process records for `WaitingProcess(targetPid)`, mark matching waiters runnable, and return the woken pid list.
+
+- [x] **Step 3: Use waiter wakeups on process completion**
+
+When `VmProcessManager` records child exit/crash, call `wakeProcessWaiters(pid)`. The existing coroutine `wait(...)`
+fallback should remain as a safety net.
+
+- [x] **Step 4: Run focused tests**
+
+```bash
+./gradlew :core:test --tests '*VmProcessTableTest' --tests '*VmProcessManagerTest' --rerun-tasks
+```
+
+Expected: PASS.
+
+- [x] **Step 5: Commit Task 11**
+
+```bash
+git add docs/superpowers/plans/2026-05-10-device-quota-process-scheduler.md \
+  modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessTable.kt \
+  modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessManager.kt \
+  modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessTableTest.kt \
+  modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessManagerTest.kt
+git commit -m "feat: wake VM process waiters on completion"
+```

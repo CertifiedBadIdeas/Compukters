@@ -133,6 +133,38 @@ class VmProcessTableTest {
     }
 
     @Test
+    fun wakeProcessWaitersMovesMatchingWaitersBackToRunnableQueue() {
+        val table = VmProcessTable()
+        table.registerProcess(pid = 1, parentPid = 0, programPath = "bios.ck", argument = "", workingDirectory = "")
+        table.registerProcess(pid = 2, parentPid = 1, programPath = "child.ck", argument = "", workingDirectory = "")
+        table.registerProcess(pid = 3, parentPid = 1, programPath = "other.ck", argument = "", workingDirectory = "")
+        table.registerProcess(pid = 4, parentPid = 1, programPath = "sibling.ck", argument = "", workingDirectory = "")
+
+        table.markWaitingProcess(pid = 3, targetPid = 2)
+        table.markWaitingProcess(pid = 1, targetPid = 2)
+        table.markWaitingProcess(pid = 4, targetPid = 99)
+
+        assertEquals(listOf(1, 3), table.wakeProcessWaiters(targetPid = 2))
+        assertEquals(VmProcessState.Runnable, table.snapshot(1)?.state)
+        assertEquals(VmProcessState.Runnable, table.snapshot(3)?.state)
+        assertEquals(VmProcessState.WaitingProcess(99), table.snapshot(4)?.state)
+        assertEquals(listOf(2, 1, 3), table.runnableSnapshot())
+    }
+
+    @Test
+    fun wakeProcessWaitersIgnoresUnknownOrNonMatchingTargets() {
+        val table = VmProcessTable()
+        table.registerProcess(pid = 1, parentPid = 0, programPath = "bios.ck", argument = "", workingDirectory = "")
+        table.registerProcess(pid = 2, parentPid = 1, programPath = "child.ck", argument = "", workingDirectory = "")
+
+        table.markWaitingProcess(pid = 1, targetPid = 2)
+
+        assertEquals(emptyList(), table.wakeProcessWaiters(targetPid = 99))
+        assertEquals(VmProcessState.WaitingProcess(2), table.snapshot(1)?.state)
+        assertEquals(listOf(2), table.runnableSnapshot())
+    }
+
+    @Test
     fun processCanMoveThroughWaitingAndExitedStates() {
         val table = VmProcessTable()
         table.registerProcess(pid = 1, parentPid = 0, programPath = "bios.ck", argument = "", workingDirectory = "")
