@@ -556,7 +556,7 @@ class BackgroundDeviceVmTest {
     }
 
     @Test
-    fun bundledRomTerminalUsesNativeDisplayTextRunsWhenEnabled() {
+    fun bundledRomTerminalUsesNativeDisplayTextRunsByDefault() {
         System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val root = createTempDirectory("compukterkraft-rom-terminal-native-display")
 
@@ -572,7 +572,6 @@ class BackgroundDeviceVmTest {
                     logger = DeviceVmLogger { },
                     workspace = workspace,
                     firmwareLoader = ClasspathFirmwareLoader(),
-                    nativeDisplayEnabled = true,
                 )
 
             vm.attachDisplay(displayId = 9, width = 96, height = 48)

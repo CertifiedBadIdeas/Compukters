@@ -68,6 +68,8 @@ class RuntimeDeviceImplDisplayTest {
 
     @Test
     fun recordsServerTickRuntimeMetrics() {
+        if (System.getProperty("ckl.vm.native.library")?.isNotBlank() != true) return
+
         val supervisor = DeviceVmSupervisor(ServerWorldAccess { createTempDirectory("runtime-profiling-test") })
         val manager = DeviceManager(supervisor)
         val displayNetwork = RecordingDisplayNetworkBridge()
@@ -103,40 +105,8 @@ class RuntimeDeviceImplDisplayTest {
     }
 
     @Test
-    fun flushesDisplayFramesToAttachedSession() {
-        val supervisor = DeviceVmSupervisor(ServerWorldAccess { createTempDirectory("runtime-display-test") })
-        val manager = DeviceManager(supervisor)
-        val displayNetwork = RecordingDisplayNetworkBridge()
-        val device =
-            RuntimeDeviceImpl(
-                deviceId = 42,
-                properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
-                manager = manager,
-                gameTime = { 0L },
-                displayNetwork = displayNetwork,
-                stateSink = {},
-            )
-        val playerUuid = UUID.randomUUID()
-
-        device.attachDisplaySession(playerUuid, containerId = 11, displayId = 1, width = 32, height = 16)
-        device.turnOn()
-        device.serverTick()
-
-        assertTrue(displayNetwork.sentFrames.isNotEmpty())
-        val (_, containerId, frame) = displayNetwork.sentFrames.single()
-        assertEquals(11, containerId)
-        assertEquals(1, frame.displayId)
-        assertEquals(32, frame.width)
-        assertEquals(16, frame.height)
-
-        device.close()
-        manager.close()
-    }
-
-    @Test
-    fun flushesNativeDisplayFrameBytesThroughServerTickWhenNativePumpIsEnabled() {
+    fun flushesNativeDisplayFrameBytesThroughServerTickWhenNativeLibraryIsConfigured() {
         if (System.getProperty("ckl.vm.native.library")?.isNotBlank() != true) return
-        if (System.getProperty("ckl.vm.native.display") != "true") return
 
         val supervisor = DeviceVmSupervisor(ServerWorldAccess { createTempDirectory("runtime-native-display-test") })
         val manager = DeviceManager(supervisor)
