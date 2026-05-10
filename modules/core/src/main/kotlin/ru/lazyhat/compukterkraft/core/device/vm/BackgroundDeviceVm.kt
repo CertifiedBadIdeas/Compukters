@@ -480,13 +480,14 @@ class BackgroundDeviceVm(
 
     fun supportsNativeDisplayFramePump(): Boolean =
         nativeDeviceKernelLock.read {
-            nativeDisplayRegistry != null && !nativeDeviceKernelFreed
+            (nativeDisplayRegistry != null || nativeDaemonRuntime != null) && !nativeDeviceKernelFreed
         }
 
     fun nativeDisplayWakeSequence(): Long? =
         nativeDeviceKernelLock.read {
             if (!nativeDeviceKernelFreed) {
                 nativeDisplayRegistry?.displayWakeSequence()
+                    ?: nativeDaemonRuntime?.displayWakeSequence()
             } else {
                 null
             }
@@ -499,6 +500,7 @@ class BackgroundDeviceVm(
         nativeDeviceKernelLock.read {
             if (!nativeDeviceKernelFreed) {
                 nativeDisplayRegistry?.waitForDisplayWake(observedWakeSequence, timeoutMillis)
+                    ?: nativeDaemonRuntime?.waitForDisplayWake(observedWakeSequence, timeoutMillis)
             } else {
                 null
             }
