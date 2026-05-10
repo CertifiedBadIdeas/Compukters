@@ -8,11 +8,11 @@ use jni::objects::{JByteArray, JClass, JString};
 use jni::sys::{jboolean, jbyteArray, jint, jlong, jlongArray, jstring};
 use jni::JNIEnv;
 
-use crate::device_daemon::DeviceDaemon;
+use crate::device_daemon::{DeviceDaemon, DeviceDaemonHostRequest, DeviceDaemonHostRequestKind};
 use crate::display::PixelFormat;
 use crate::image_runner::ImageVmHandle;
 use crate::runtime_kernel::{DeviceRuntimeKernel, DeviceRuntimeKernelHandle};
-use crate::signal::decode_value;
+use crate::signal::{decode_value, encode_value};
 use crate::value::VmValue;
 
 type SharedDeviceRuntimeKernel = Arc<DeviceRuntimeKernelHandle>;
@@ -305,6 +305,58 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
         &mut env,
         &[summary.pid as i64, i64::from(summary.image_attached)],
     )
+}
+
+#[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_drainDeviceDaemonHostRequestsNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    handle: jlong,
+) -> jbyteArray {
+    let requests = match with_device_daemon_mut(&mut env, handle, |daemon| {
+        daemon.drain_host_requests()
+    }) {
+        Some(requests) => requests,
+        None => return null_mut(),
+    };
+    byte_array_or_throw(&mut env, &encode_device_daemon_host_requests(&requests))
+}
+
+#[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_completeDeviceDaemonHostRequestNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    handle: jlong,
+    request_id: jlong,
+    value: JByteArray<'_>,
+) -> jboolean {
+    let value = match env.convert_byte_array(&value) {
+        Ok(value) => value,
+        Err(error) => {
+            let _ = env.throw_new(
+                "java/lang/IllegalArgumentException",
+                format!("Cannot read native device daemon host request value: {error}"),
+            );
+            return false as jboolean;
+        }
+    };
+    let value = match decode_value(&value) {
+        Ok(value) => value,
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalArgumentException", error);
+            return false as jboolean;
+        }
+    };
+    match with_device_daemon_mut(&mut env, handle, |daemon| {
+        daemon.complete_host_request(request_id, value)
+    }) {
+        Some(Ok(())) => true as jboolean,
+        Some(Err(error)) => {
+            let _ = env.throw_new("java/lang/IllegalStateException", error);
+            false as jboolean
+        }
+        None => false as jboolean,
+    }
 }
 
 #[no_mangle]
@@ -1168,6 +1220,42 @@ fn lock_kernel_handle<'a>(
             None
         }
     }
+}
+
+fn encode_device_daemon_host_requests(requests: &[DeviceDaemonHostRequest]) -> Vec<u8> {
+    let mut out = Vec::new();
+    push_i32(&mut out, requests.len() as i32);
+    for request in requests {
+        push_i64(&mut out, request.request_id);
+        push_i32(&mut out, request.pid);
+        out.push(match request.kind {
+            DeviceDaemonHostRequestKind::HostCall => 0,
+            DeviceDaemonHostRequestKind::CompileProgram => 1,
+            DeviceDaemonHostRequestKind::Crash => 2,
+        });
+        push_string(&mut out, request.module_name.as_deref().unwrap_or(""));
+        push_string(&mut out, request.function_name.as_deref().unwrap_or(""));
+        push_i32(&mut out, request.arguments.len() as i32);
+        for argument in &request.arguments {
+            out.extend_from_slice(&encode_value(argument));
+        }
+        push_string(&mut out, request.path.as_deref().unwrap_or(""));
+        push_string(&mut out, request.working_directory.as_deref().unwrap_or(""));
+    }
+    out
+}
+
+fn push_i32(out: &mut Vec<u8>, value: i32) {
+    out.extend_from_slice(&value.to_le_bytes());
+}
+
+fn push_i64(out: &mut Vec<u8>, value: i64) {
+    out.extend_from_slice(&value.to_le_bytes());
+}
+
+fn push_string(out: &mut Vec<u8>, value: &str) {
+    push_i32(out, value.len() as i32);
+    out.extend_from_slice(value.as_bytes());
 }
 
 fn event_arguments_from_payload(payload: &[u8]) -> Result<Vec<VmValue>, String> {
