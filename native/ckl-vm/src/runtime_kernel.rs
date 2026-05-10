@@ -128,13 +128,34 @@ impl DeviceRuntimeKernel {
     pub fn run_scheduler_dry_run(&self, max_turns: i64) -> DeviceSchedulerDryRun {
         let max_turns = max_turns.max(0);
         let mut remaining_instructions = self.execution_quota.instructions.max(0);
+        let mut processes = self.processes.clone();
         let mut runnable_queue = self.runnable_queue.clone();
         let mut runnable_pids = self.runnable_pids.clone();
         let mut selected_pids = Vec::new();
 
+        let due_sleepers = processes
+            .iter()
+            .filter_map(|(pid, entry)| match entry.state {
+                ProcessState::Sleeping { until_tick }
+                    if until_tick <= self.execution_quota.server_tick =>
+                {
+                    Some(*pid)
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        for pid in due_sleepers {
+            if let Some(entry) = processes.get_mut(&pid) {
+                entry.state = ProcessState::Runnable;
+            }
+            if runnable_pids.insert(pid) {
+                runnable_queue.push_back(pid);
+            }
+        }
+
         while remaining_instructions > 0 && (selected_pids.len() as i64) < max_turns {
             let Some(pid) =
-                Self::next_runnable_pid_from(&mut runnable_queue, &mut runnable_pids, &self.processes)
+                Self::next_runnable_pid_from(&mut runnable_queue, &mut runnable_pids, &processes)
             else {
                 break;
             };
@@ -900,6 +921,44 @@ mod tests {
                 turns: 0,
                 remaining_instructions: 5,
                 selected_pids: Vec::new(),
+            }
+        );
+    }
+
+    #[test]
+    fn scheduler_dry_run_treats_due_sleepers_as_runnable_without_mutating_state() {
+        let mut kernel = DeviceRuntimeKernel::new(16, 1024);
+        assert!(kernel.register_process(1, 0, "/rom/a.ck".to_string()));
+        assert!(kernel.mark_process_sleeping(1, 5));
+        assert!(kernel.add_execution_quota(2, 1_000, 5).instructions == 2);
+
+        assert_eq!(
+            kernel.run_scheduler_dry_run(4),
+            DeviceSchedulerDryRun {
+                server_tick: 5,
+                turns: 2,
+                remaining_instructions: 0,
+                selected_pids: vec![1, 1],
+            }
+        );
+        assert_eq!(
+            kernel.process_status(1),
+            ProcessStatus::Running,
+        );
+        assert_eq!(
+            kernel.scheduler_tick(4),
+            ProcessSchedulerTick {
+                current_tick: 4,
+                woken_pids: Vec::new(),
+                selected_pid: None,
+            }
+        );
+        assert_eq!(
+            kernel.scheduler_tick(5),
+            ProcessSchedulerTick {
+                current_tick: 5,
+                woken_pids: vec![1],
+                selected_pid: Some(1),
             }
         );
     }

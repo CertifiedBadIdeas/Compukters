@@ -1404,3 +1404,52 @@ git add docs/superpowers/plans/2026-05-10-device-quota-process-scheduler.md \
   modules/compiler/src/test/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeImageVmBindingsJniTest.kt
 git commit -m "feat: add native scheduler dry run"
 ```
+
+## Task 28: Observe Native Scheduler Dry Run From Request Slice
+
+**Files:**
+- Modify: `native/ckl-vm/src/runtime_kernel.rs`
+- Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/runtime/RuntimeProfiling.kt`
+- Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVm.kt`
+- Modify: `modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/runtime/RuntimeProfilingTest.kt`
+- Modify: `modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVmTest.kt`
+
+- [x] **Step 1: Add failing dry-run observation tests**
+
+Add tests proving `requestSlice` records native dry-run turns, selected pid count, remaining instructions, and first-pid
+match/mismatch against the effective scheduler decision.
+
+- [x] **Step 2: Make dry-run account for due sleepers without mutating state**
+
+When simulating the scheduler plan, treat sleepers whose `untilTick <= quota.serverTick` as runnable in the copied
+state.
+
+- [x] **Step 3: Add runtime metrics for observed dry-run plans**
+
+Track dry-run calls, total turns, selected pid count, remaining instructions, first-selection matches, and mismatches.
+
+- [x] **Step 4: Wire `requestSlice` observation**
+
+After native quota refill and before/around Kotlin scheduler decision, run dry-run with a bounded max turn count and
+record the comparison. Keep execution behavior unchanged.
+
+- [x] **Step 5: Run focused tests**
+
+```bash
+cargo test --manifest-path native/ckl-vm/Cargo.toml scheduler_dry_run
+./gradlew -Dckl.vm.native.library=/home/lazyhat/IdeaProjects/Compukter-Kraft/native/ckl-vm/target/debug/libckl_vm.so :core:test --tests '*RuntimeProfilingTest' --tests '*BackgroundDeviceVmTest.requestSliceRecordsNativeSchedulerDryRunWhenConfigured' --rerun-tasks
+```
+
+Expected: PASS.
+
+- [x] **Step 6: Commit Task 28**
+
+```bash
+git add docs/superpowers/plans/2026-05-10-device-quota-process-scheduler.md \
+  native/ckl-vm/src/runtime_kernel.rs \
+  modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/runtime/RuntimeProfiling.kt \
+  modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVm.kt \
+  modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/runtime/RuntimeProfilingTest.kt \
+  modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVmTest.kt
+git commit -m "feat: observe native scheduler dry run"
+```

@@ -300,6 +300,11 @@ class BackgroundDeviceVm(
 
     override fun requestSlice(serverTick: Long) {
         stateManager.updateCurrentTick(serverTick)
+        var nativeDryRunFirstSelectedPid: Int? = null
+        var nativeDryRunSelectedCount = 0L
+        var nativeDryRunTurns = 0L
+        var nativeDryRunRemainingInstructions = 0L
+        var nativeDryRunObserved = false
         nativeDeviceKernelLock.read {
             if (!nativeDeviceKernelFreed) {
                 nativeDeviceKernelHandle?.let { handle ->
@@ -315,10 +320,28 @@ class BackgroundDeviceVm(
                         wallNanos = snapshot.wallNanos,
                         serverTick = snapshot.serverTick,
                     )
+                    val dryRun =
+                        NativeVmBindings.runDeviceSchedulerDryRun(
+                            kernelHandle = handle,
+                            maxTurns = profile.resources.cpu.instructionsPerSlice,
+                        )
+                    nativeDryRunFirstSelectedPid = dryRun.selectedPids.firstOrNull()
+                    nativeDryRunSelectedCount = dryRun.selectedPids.size.toLong()
+                    nativeDryRunTurns = dryRun.turns
+                    nativeDryRunRemainingInstructions = dryRun.remainingInstructions
+                    nativeDryRunObserved = true
                 }
             }
         }
         val schedulerTick = processManager.schedulerTick(serverTick)
+        if (nativeDryRunObserved) {
+            runtimeMetricsCollector.recordNativeSchedulerDryRun(
+                turns = nativeDryRunTurns,
+                selectedPids = nativeDryRunSelectedCount,
+                remainingInstructions = nativeDryRunRemainingInstructions,
+                firstSelectionMatched = nativeDryRunFirstSelectedPid == schedulerTick.selectedPid,
+            )
+        }
         val sent = executionQuota.refill(selectedPid = schedulerTick.selectedPid)
         runtimeMetricsCollector.recordSliceRequest(sent = sent, sleepGated = false)
         runtimeMetricsCollector.recordExecutionQuotaRefill(accepted = sent, unavailable = schedulerTick.selectedPid == null)

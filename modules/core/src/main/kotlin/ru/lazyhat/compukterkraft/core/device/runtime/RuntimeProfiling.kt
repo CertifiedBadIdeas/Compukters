@@ -72,6 +72,13 @@ interface RuntimeMetricsCollector {
         serverTick: Long,
     )
 
+    fun recordNativeSchedulerDryRun(
+        turns: Long,
+        selectedPids: Long,
+        remainingInstructions: Long,
+        firstSelectionMatched: Boolean,
+    )
+
     fun recordProcessSchedulerTick(
         wokenProcesses: Int,
         selected: Boolean,
@@ -185,6 +192,12 @@ data class RuntimeVmMetrics(
     val nativeExecutionQuotaInstructions: Long = 0,
     val nativeExecutionQuotaWallNanos: Long = 0,
     val nativeExecutionQuotaLastServerTick: Long = 0,
+    val nativeSchedulerDryRuns: Long = 0,
+    val nativeSchedulerDryRunTurns: Long = 0,
+    val nativeSchedulerDryRunSelectedPids: Long = 0,
+    val nativeSchedulerDryRunRemainingInstructions: Long = 0,
+    val nativeSchedulerDryRunFirstSelectionMatches: Long = 0,
+    val nativeSchedulerDryRunFirstSelectionMismatches: Long = 0,
     val processSchedulerTicks: Long = 0,
     val processSchedulerSelectedTicks: Long = 0,
     val processSchedulerIdleTicks: Long = 0,
@@ -286,6 +299,9 @@ data class RuntimeProfilingSnapshot(
             )
             appendLine(
                 "    nativeQuota: refills=${vm.nativeExecutionQuotaRefills}, instructions=${vm.nativeExecutionQuotaInstructions}, wallNanos=${vm.nativeExecutionQuotaWallNanos}, lastTick=${vm.nativeExecutionQuotaLastServerTick}",
+            )
+            appendLine(
+                "    nativeSchedulerDryRun: calls=${vm.nativeSchedulerDryRuns}, turns=${vm.nativeSchedulerDryRunTurns}, selected=${vm.nativeSchedulerDryRunSelectedPids}, remaining=${vm.nativeSchedulerDryRunRemainingInstructions}, matches=${vm.nativeSchedulerDryRunFirstSelectionMatches}, mismatches=${vm.nativeSchedulerDryRunFirstSelectionMismatches}",
             )
             appendLine(
                 "    processScheduler: ticks=${vm.processSchedulerTicks}, selected=${vm.processSchedulerSelectedTicks}, idle=${vm.processSchedulerIdleTicks}, woken=${vm.processSchedulerWokenProcesses}",
@@ -405,6 +421,13 @@ object NoOpRuntimeMetricsCollector : RuntimeMetricsCollector {
         serverTick: Long,
     ) = Unit
 
+    override fun recordNativeSchedulerDryRun(
+        turns: Long,
+        selectedPids: Long,
+        remainingInstructions: Long,
+        firstSelectionMatched: Boolean,
+    ) = Unit
+
     override fun recordProcessSchedulerTick(
         wokenProcesses: Int,
         selected: Boolean,
@@ -508,6 +531,12 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
     private val nativeExecutionQuotaInstructions = AtomicLong()
     private val nativeExecutionQuotaWallNanos = AtomicLong()
     private val nativeExecutionQuotaLastServerTick = AtomicLong()
+    private val nativeSchedulerDryRuns = AtomicLong()
+    private val nativeSchedulerDryRunTurns = AtomicLong()
+    private val nativeSchedulerDryRunSelectedPids = AtomicLong()
+    private val nativeSchedulerDryRunRemainingInstructions = AtomicLong()
+    private val nativeSchedulerDryRunFirstSelectionMatches = AtomicLong()
+    private val nativeSchedulerDryRunFirstSelectionMismatches = AtomicLong()
     private val processSchedulerTicks = AtomicLong()
     private val processSchedulerSelectedTicks = AtomicLong()
     private val processSchedulerIdleTicks = AtomicLong()
@@ -633,6 +662,23 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
         nativeExecutionQuotaInstructions.addAndGet(instructions.coerceAtLeast(0))
         nativeExecutionQuotaWallNanos.addAndGet(wallNanos.coerceAtLeast(0))
         nativeExecutionQuotaLastServerTick.set(serverTick)
+    }
+
+    override fun recordNativeSchedulerDryRun(
+        turns: Long,
+        selectedPids: Long,
+        remainingInstructions: Long,
+        firstSelectionMatched: Boolean,
+    ) {
+        nativeSchedulerDryRuns.incrementAndGet()
+        nativeSchedulerDryRunTurns.addAndGet(turns.coerceAtLeast(0))
+        nativeSchedulerDryRunSelectedPids.addAndGet(selectedPids.coerceAtLeast(0))
+        nativeSchedulerDryRunRemainingInstructions.addAndGet(remainingInstructions.coerceAtLeast(0))
+        if (firstSelectionMatched) {
+            nativeSchedulerDryRunFirstSelectionMatches.incrementAndGet()
+        } else {
+            nativeSchedulerDryRunFirstSelectionMismatches.incrementAndGet()
+        }
     }
 
     override fun recordProcessSchedulerTick(
@@ -800,6 +846,12 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
                     nativeExecutionQuotaInstructions = nativeExecutionQuotaInstructions.get(),
                     nativeExecutionQuotaWallNanos = nativeExecutionQuotaWallNanos.get(),
                     nativeExecutionQuotaLastServerTick = nativeExecutionQuotaLastServerTick.get(),
+                    nativeSchedulerDryRuns = nativeSchedulerDryRuns.get(),
+                    nativeSchedulerDryRunTurns = nativeSchedulerDryRunTurns.get(),
+                    nativeSchedulerDryRunSelectedPids = nativeSchedulerDryRunSelectedPids.get(),
+                    nativeSchedulerDryRunRemainingInstructions = nativeSchedulerDryRunRemainingInstructions.get(),
+                    nativeSchedulerDryRunFirstSelectionMatches = nativeSchedulerDryRunFirstSelectionMatches.get(),
+                    nativeSchedulerDryRunFirstSelectionMismatches = nativeSchedulerDryRunFirstSelectionMismatches.get(),
                     processSchedulerTicks = processSchedulerTicks.get(),
                     processSchedulerSelectedTicks = processSchedulerSelectedTicks.get(),
                     processSchedulerIdleTicks = processSchedulerIdleTicks.get(),
