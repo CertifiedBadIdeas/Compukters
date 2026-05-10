@@ -49,6 +49,15 @@ data class NativeDeviceSchedulerStep(
     val wokenPids: List<Int>,
 )
 
+data class NativeDeviceDaemonTickSummary(
+    val serverTick: Long,
+    val turns: Long,
+    val remainingInstructions: Long,
+    val idle: Boolean,
+    val halted: Long,
+    val hostRequests: Long,
+)
+
 internal interface NativeVmBindingsFacade {
     fun createImage(
         libraryPath: String,
@@ -156,6 +165,43 @@ object NativeVmBindings : NativeVmBindingsFacade {
         if (handle != 0L) {
             freeDeviceKernelNative(handle)
         }
+    }
+
+    fun createDeviceDaemon(
+        maxEventQueueSize: Int,
+        maxBufferedBytesPerChannel: Int,
+        instructionBudget: Int,
+    ): Long {
+        load(requireConfiguredLibraryPath())
+        val handle =
+            createDeviceDaemonNative(
+                maxEventQueueSize.coerceAtLeast(1),
+                maxBufferedBytesPerChannel.coerceAtLeast(1),
+                instructionBudget.coerceAtLeast(1),
+            )
+        check(handle != 0L) { "Native device daemon create returned a zero handle" }
+        return handle
+    }
+
+    fun freeDeviceDaemon(handle: Long) {
+        if (handle != 0L) {
+            freeDeviceDaemonNative(handle)
+        }
+    }
+
+    fun tickDeviceDaemon(
+        daemonHandle: Long,
+        instructions: Long,
+        wallNanos: Long,
+        serverTick: Long,
+    ): NativeDeviceDaemonTickSummary {
+        require(daemonHandle != 0L) { "Native device daemon handle is zero" }
+        return tickDeviceDaemonNative(
+            daemonHandle,
+            instructions,
+            wallNanos,
+            serverTick,
+        ).toNativeDeviceDaemonTickSummary()
     }
 
     fun enqueueDeviceEvent(
@@ -531,6 +577,16 @@ object NativeVmBindings : NativeVmBindingsFacade {
         )
     }
 
+    private fun LongArray.toNativeDeviceDaemonTickSummary(): NativeDeviceDaemonTickSummary =
+        NativeDeviceDaemonTickSummary(
+            serverTick = getOrElse(0) { 0L },
+            turns = getOrElse(1) { 0L },
+            remainingInstructions = getOrElse(2) { 0L },
+            idle = getOrElse(3) { 0L } != 0L,
+            halted = getOrElse(4) { 0L },
+            hostRequests = getOrElse(5) { 0L },
+        )
+
     @JvmStatic
     private external fun createImageNative(
         image: ByteArray,
@@ -557,6 +613,24 @@ object NativeVmBindings : NativeVmBindingsFacade {
 
     @JvmStatic
     private external fun freeDeviceKernelNative(handle: Long)
+
+    @JvmStatic
+    private external fun createDeviceDaemonNative(
+        maxEventQueueSize: Int,
+        maxBufferedBytesPerChannel: Int,
+        instructionBudget: Int,
+    ): Long
+
+    @JvmStatic
+    private external fun freeDeviceDaemonNative(handle: Long)
+
+    @JvmStatic
+    private external fun tickDeviceDaemonNative(
+        daemonHandle: Long,
+        instructions: Long,
+        wallNanos: Long,
+        serverTick: Long,
+    ): LongArray
 
     @JvmStatic
     private external fun enqueueDeviceEventNative(

@@ -8,6 +8,7 @@ use jni::objects::{JByteArray, JClass, JString};
 use jni::sys::{jboolean, jbyteArray, jint, jlong, jlongArray, jstring};
 use jni::JNIEnv;
 
+use crate::device_daemon::DeviceDaemon;
 use crate::display::PixelFormat;
 use crate::image_runner::ImageVmHandle;
 use crate::runtime_kernel::{DeviceRuntimeKernel, DeviceRuntimeKernelHandle};
@@ -19,6 +20,8 @@ type SharedDeviceRuntimeKernel = Arc<DeviceRuntimeKernelHandle>;
 static NEXT_DEVICE_KERNEL_HANDLE: AtomicI64 = AtomicI64::new(1);
 static DEVICE_KERNEL_HANDLES: OnceLock<Mutex<HashMap<jlong, SharedDeviceRuntimeKernel>>> =
     OnceLock::new();
+static NEXT_DEVICE_DAEMON_HANDLE: AtomicI64 = AtomicI64::new(1);
+static DEVICE_DAEMON_HANDLES: OnceLock<Mutex<HashMap<jlong, DeviceDaemon>>> = OnceLock::new();
 
 #[no_mangle]
 pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_createImageNative(
@@ -148,6 +151,98 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
     if handle != 0 {
         let _ = unregister_device_kernel_handle(handle);
     }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_createDeviceDaemonNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    max_event_queue_size: jint,
+    max_buffered_bytes_per_channel: jint,
+    instruction_budget: jint,
+) -> jlong {
+    let max_event_queue_size = match usize::try_from(max_event_queue_size.max(1)) {
+        Ok(value) => value,
+        Err(error) => {
+            let _ = env.throw_new(
+                "java/lang/IllegalArgumentException",
+                format!("Invalid native device daemon event queue size: {error}"),
+            );
+            return 0;
+        }
+    };
+    let max_buffered_bytes_per_channel =
+        match usize::try_from(max_buffered_bytes_per_channel.max(1)) {
+            Ok(value) => value,
+            Err(error) => {
+                let _ = env.throw_new(
+                    "java/lang/IllegalArgumentException",
+                    format!("Invalid native device daemon IPC buffer size: {error}"),
+                );
+                return 0;
+            }
+        };
+    let instruction_budget = match usize::try_from(instruction_budget.max(1)) {
+        Ok(value) => value,
+        Err(error) => {
+            let _ = env.throw_new(
+                "java/lang/IllegalArgumentException",
+                format!("Invalid native device daemon instruction budget: {error}"),
+            );
+            return 0;
+        }
+    };
+    let daemon = DeviceDaemon::new(
+        max_event_queue_size,
+        max_buffered_bytes_per_channel,
+        instruction_budget,
+    );
+    match register_device_daemon_handle(daemon) {
+        Ok(handle) => handle,
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalStateException", error);
+            0
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_freeDeviceDaemonNative(
+    _env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    handle: jlong,
+) {
+    if handle != 0 {
+        let _ = unregister_device_daemon_handle(handle);
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_tickDeviceDaemonNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    handle: jlong,
+    instructions: jlong,
+    wall_nanos: jlong,
+    server_tick: jlong,
+) -> jlongArray {
+    let summary = match with_device_daemon_mut(&mut env, handle, |daemon| {
+        daemon.tick(instructions, wall_nanos, server_tick)
+    }) {
+        Some(summary) => summary,
+        None => return null_mut(),
+    };
+    long_array_or_throw(
+        &mut env,
+        &[
+            summary.server_tick,
+            summary.turns,
+            summary.remaining_instructions,
+            i64::from(summary.idle),
+            summary.halted,
+            summary.host_requests,
+        ],
+    )
 }
 
 #[no_mangle]
@@ -921,6 +1016,63 @@ fn unregister_device_kernel_handle(handle: jlong) -> Result<(), String> {
 
 fn device_kernel_handles() -> &'static Mutex<HashMap<jlong, SharedDeviceRuntimeKernel>> {
     DEVICE_KERNEL_HANDLES.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn register_device_daemon_handle(daemon: DeviceDaemon) -> Result<jlong, String> {
+    let handle = NEXT_DEVICE_DAEMON_HANDLE.fetch_add(1, Ordering::Relaxed);
+    if handle <= 0 {
+        return Err(format!("Invalid native device daemon handle id: {handle}"));
+    }
+    let mut handles = device_daemon_handles()
+        .lock()
+        .map_err(|error| format!("Native device daemon registry lock failed: {error}"))?;
+    handles.insert(handle, daemon);
+    Ok(handle)
+}
+
+fn unregister_device_daemon_handle(handle: jlong) -> Result<(), String> {
+    let mut handles = device_daemon_handles()
+        .lock()
+        .map_err(|error| format!("Native device daemon registry lock failed: {error}"))?;
+    handles.remove(&handle);
+    Ok(())
+}
+
+fn device_daemon_handles() -> &'static Mutex<HashMap<jlong, DeviceDaemon>> {
+    DEVICE_DAEMON_HANDLES.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn with_device_daemon_mut<T>(
+    env: &mut JNIEnv<'_>,
+    handle: jlong,
+    action: impl FnOnce(&mut DeviceDaemon) -> T,
+) -> Option<T> {
+    if handle == 0 {
+        let _ = env.throw_new(
+            "java/lang/IllegalStateException",
+            "Native device daemon handle is zero",
+        );
+        return None;
+    }
+    match device_daemon_handles().lock() {
+        Ok(mut handles) => match handles.get_mut(&handle) {
+            Some(daemon) => Some(action(daemon)),
+            None => {
+                let _ = env.throw_new(
+                    "java/lang/IllegalStateException",
+                    format!("Native device daemon handle not found: {handle}"),
+                );
+                None
+            }
+        },
+        Err(error) => {
+            let _ = env.throw_new(
+                "java/lang/IllegalStateException",
+                format!("Native device daemon registry lock failed: {error}"),
+            );
+            None
+        }
+    }
 }
 
 fn shared_kernel_handle(env: &mut JNIEnv<'_>, handle: jlong) -> Option<SharedDeviceRuntimeKernel> {

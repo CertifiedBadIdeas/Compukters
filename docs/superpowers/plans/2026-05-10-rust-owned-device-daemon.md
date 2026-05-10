@@ -682,7 +682,7 @@ git commit -m "feat: add daemon host request queue"
 - Modify: `modules/compiler/src/main/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeVmBindings.kt`
 - Modify: `modules/compiler/src/test/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeImageVmBindingsJniTest.kt`
 
-- [ ] **Step 1: Add failing Kotlin ABI reflection tests**
+- [x] **Step 1: Add failing Kotlin ABI reflection tests**
 
 Add to `NativeImageVmBindingsJniTest`:
 
@@ -713,7 +713,7 @@ fun nativeDeviceDaemonMethodsExposeCompactAbi() {
 }
 ```
 
-- [ ] **Step 2: Run the Kotlin test and verify it fails**
+- [x] **Step 2: Run the Kotlin test and verify it fails**
 
 ```bash
 ./gradlew :compiler:test --tests '*NativeImageVmBindingsJniTest.nativeDeviceDaemonMethodsExposeCompactAbi' --rerun-tasks
@@ -721,7 +721,7 @@ fun nativeDeviceDaemonMethodsExposeCompactAbi() {
 
 Expected: FAIL because daemon JNI methods do not exist.
 
-- [ ] **Step 3: Add Rust JNI handle registry**
+- [x] **Step 3: Add Rust JNI handle registry**
 
 In `native/ckl-vm/src/jni.rs`, add:
 
@@ -738,7 +738,7 @@ Add `createDeviceDaemonNative`, `freeDeviceDaemonNative`, and `tickDeviceDaemonN
 [serverTick, turns, remainingInstructions, idleFlag, halted, hostRequests]
 ```
 
-- [ ] **Step 4: Add Kotlin binding data classes**
+- [x] **Step 4: Add Kotlin binding data classes**
 
 Add to `NativeVmBindings.kt`:
 
@@ -770,7 +770,7 @@ fun tickDeviceDaemon(
 ): NativeDeviceDaemonTickSummary
 ```
 
-- [ ] **Step 5: Add JNI integration test**
+- [x] **Step 5: Add JNI integration test**
 
 Add:
 
@@ -797,7 +797,7 @@ fun nativeDeviceDaemonCreateTickFreeRunsWhenLibraryIsConfigured() {
 }
 ```
 
-- [ ] **Step 6: Run focused checks**
+- [x] **Step 6: Run focused checks**
 
 ```bash
 ./gradlew :v1_21_1-neoforge:buildRustVmNativeLibrary
@@ -806,7 +806,7 @@ fun nativeDeviceDaemonCreateTickFreeRunsWhenLibraryIsConfigured() {
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit Task 6**
+- [x] **Step 7: Commit Task 6**
 
 ```bash
 git add native/ckl-vm/src/jni.rs modules/compiler/src/main/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeVmBindings.kt modules/compiler/src/test/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeImageVmBindingsJniTest.kt docs/superpowers/plans/2026-05-10-rust-owned-device-daemon.md
