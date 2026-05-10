@@ -1026,3 +1026,48 @@ git add docs/superpowers/plans/2026-05-10-device-quota-process-scheduler.md \
   modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessManagerTest.kt
 git commit -m "feat: pass process id through scheduling points"
 ```
+
+## Task 19: PID-Aware Device Execution Quota
+
+**Files:**
+- Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/DeviceExecutionQuota.kt`
+- Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVm.kt`
+- Modify: `modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/DeviceExecutionQuotaTest.kt`
+- Modify: `modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVmTest.kt`
+
+- [x] **Step 1: Add failing pid-aware quota tests**
+
+Add tests proving:
+
+- a permit is consumed only by the selected pid;
+- a waiter for another pid remains suspended;
+- a null selected pid does not refill quota.
+
+- [x] **Step 2: Make `DeviceExecutionQuota` pid-aware**
+
+Change `refill(...)` to accept `selectedPid: Int?` and `awaitPermit(...)` to accept `processId: Int`.
+Keep the one-pending-per-device cap.
+
+- [x] **Step 3: Refill quota from scheduler selected pid**
+
+In `BackgroundDeviceVm.requestSlice`, use `processManager.schedulerTick(serverTick).selectedPid` as the selected pid
+for quota refill. Pass process ids into `awaitSlicePermit`.
+
+- [x] **Step 4: Run focused tests**
+
+```bash
+./gradlew :core:test --tests '*DeviceExecutionQuotaTest' --tests '*BackgroundDeviceVmTest.requestSliceDoesNotGateSharedQuotaOnSleepState' --rerun-tasks
+```
+
+Expected: PASS.
+
+- [x] **Step 5: Commit Task 19**
+
+```bash
+git add docs/superpowers/plans/2026-05-10-device-quota-process-scheduler.md \
+  modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/DeviceExecutionQuota.kt \
+  modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVm.kt \
+  modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/DeviceExecutionQuotaTest.kt \
+  modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVmTest.kt
+git commit -m "feat: make device execution quota pid-aware"
+```

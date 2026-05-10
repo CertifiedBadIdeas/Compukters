@@ -298,10 +298,10 @@ class BackgroundDeviceVm(
 
     override fun requestSlice(serverTick: Long) {
         stateManager.updateCurrentTick(serverTick)
-        processManager.schedulerTick(serverTick)
-        val sent = executionQuota.refill(available = true)
+        val schedulerTick = processManager.schedulerTick(serverTick)
+        val sent = executionQuota.refill(selectedPid = schedulerTick.selectedPid)
         runtimeMetricsCollector.recordSliceRequest(sent = sent, sleepGated = false)
-        runtimeMetricsCollector.recordExecutionQuotaRefill(accepted = sent, unavailable = false)
+        runtimeMetricsCollector.recordExecutionQuotaRefill(accepted = sent, unavailable = schedulerTick.selectedPid == null)
     }
 
     override fun drainHostCalls(): List<HostCall> = hostCallManager.drainHostCalls()
@@ -545,7 +545,7 @@ class BackgroundDeviceVm(
                 else -> VmState.Running
             },
         )
-        executionQuota.awaitPermit()
+        executionQuota.awaitPermit(processId)
         runtimeMetricsCollector.recordSlicePermitReceived()
         runtimeMetricsCollector.recordExecutionQuotaPermitConsumed()
         executionWindowStartedNanos = System.nanoTime()
