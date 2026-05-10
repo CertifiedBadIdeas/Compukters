@@ -55,6 +55,11 @@ internal object RuntimeProfilingWorkload {
         val pipeline: TerminalPipelineSummary? = null,
     )
 
+    data class NativeDaemonSmokeProfilingRun(
+        val baseline: ProfilingRun,
+        val daemon: ProfilingRun,
+    )
+
     data class TickObservation(
         val maxQueuedEvents: Int,
         val finalQueuedEvents: Int,
@@ -136,6 +141,33 @@ internal object RuntimeProfilingWorkload {
             return LoadedFirmwareProgramSource(path, source)
         }
     }
+
+    fun <T> withNativeDaemonMode(
+        enabled: Boolean,
+        block: () -> T,
+    ): T {
+        val previous = System.getProperty("ckl.vm.native.daemon")
+        if (enabled) {
+            System.setProperty("ckl.vm.native.daemon", "true")
+        } else {
+            System.clearProperty("ckl.vm.native.daemon")
+        }
+        return try {
+            block()
+        } finally {
+            if (previous == null) {
+                System.clearProperty("ckl.vm.native.daemon")
+            } else {
+                System.setProperty("ckl.vm.native.daemon", previous)
+            }
+        }
+    }
+
+    fun runNativeDaemonSmokeWorkload(ticks: Int): NativeDaemonSmokeProfilingRun =
+        NativeDaemonSmokeProfilingRun(
+            baseline = runBootOnlyWorkload(ticks = ticks, nativeDaemon = false),
+            daemon = runBootOnlyWorkload(ticks = ticks, nativeDaemon = true),
+        )
 
     fun runTerminalWorkload(
         delayMillis: Long,
@@ -221,6 +253,50 @@ internal object RuntimeProfilingWorkload {
             root.toFile().deleteRecursively()
         }
     }
+
+    private fun runBootOnlyWorkload(
+        ticks: Int,
+        nativeDaemon: Boolean,
+    ): ProfilingRun =
+        withNativeDaemonMode(enabled = nativeDaemon) {
+            val root = createTempDirectory("compukterkraft-native-daemon-smoke-profiling")
+            var vm: BackgroundDeviceVm? = null
+            try {
+                DeviceWorkspaceInitializer(root).ensureInitialized(1)
+                val workspace = DeviceWorkspaceHost(root)
+                val displayMetrics = RecordingDisplayMetricsCollector()
+                val runtimeMetrics = RecordingRuntimeMetricsCollector()
+                val compilerMetrics = RecordingCompilerMetricsCollector()
+                val clientMetrics = RecordingClientDisplayMetricsCollector()
+                val client = ClientFrameSink(ClientDisplayBuffer(displayId = 9, width = 96, height = 48, metricsCollector = clientMetrics))
+                vm =
+                    BackgroundDeviceVm(
+                        deviceId = 1,
+                        profile = profile(),
+                        dispatcher = Dispatchers.Default,
+                        labelProvider = { null },
+                        logger = DeviceVmLogger { },
+                        workspace = workspace,
+                        firmwareLoader = ClasspathFirmwareLoader(),
+                        displayMetricsCollector = displayMetrics,
+                        runtimeMetricsCollector = runtimeMetrics,
+                        compilerMetricsCollector = compilerMetrics,
+                        nativeFilesystemRoot = workspace.computerRoot(1),
+                    )
+                val dispatcher = HostCallDispatcher(deviceId = 1, workspace = workspace)
+
+                vm.attachDisplay(displayId = 9, width = 96, height = 48)
+                assertTrue(vm.boot())
+                waitForBootCompile(compilerMetrics)
+                runTicks(vm, dispatcher, runtimeMetrics, ticks = ticks, delayMillis = 0, client = client)
+                client.drain(vm, runtimeMetrics)
+
+                ProfilingRun(displayMetrics, runtimeMetrics, compilerMetrics, clientMetrics)
+            } finally {
+                vm?.stopAndSettle()
+                root.toFile().deleteRecursively()
+            }
+        }
 
     fun runHeldEnterWorkload(
         repeatEnterEvents: Int,
