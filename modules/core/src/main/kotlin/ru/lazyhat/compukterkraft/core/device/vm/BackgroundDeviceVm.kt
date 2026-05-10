@@ -24,6 +24,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.SharedFlow
@@ -634,6 +635,15 @@ class BackgroundDeviceVm(
         stateManager.stopVm(reason, errorMessage)
         runner?.cancel()
         runner = null
+        daemonExecutor?.let { executor ->
+            daemonExecutor = null
+            if (executor == coroutineContext[Job]) {
+                executor.cancel()
+            } else {
+                executor.cancelAndJoin()
+            }
+        }
+        daemonWakeSignal.close()
         nativeDeviceKernelLock.write {
             if (!nativeDeviceKernelFreed) {
                 nativeDeviceKernelHandle?.let(NativeVmBindings::freeDeviceKernel)
