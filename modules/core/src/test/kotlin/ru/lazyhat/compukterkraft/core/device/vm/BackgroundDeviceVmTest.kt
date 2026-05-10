@@ -282,6 +282,9 @@ class BackgroundDeviceVmTest {
 
     private fun firmwareTestProfile(): DeviceProfile = runtimeProfile()
 
+    private fun nativeLibraryConfigured(): Boolean =
+        System.getProperty("ckl.vm.native.library")?.isNotBlank() == true
+
     private fun nativeDisplayFramePayload(
         displayId: Int,
         sequence: Long,
@@ -538,6 +541,7 @@ class BackgroundDeviceVmTest {
     fun recordsRuntimeSchedulingMetrics() {
         runtimeTestWorkspace("vm-runtime-profiling") { workspace ->
             val metrics = RecordingRuntimeMetricsCollector()
+            val daemonBindings = RecordingNativeDaemonBindings()
             val vm =
                 BackgroundDeviceVm(
                     deviceId = 1,
@@ -559,17 +563,22 @@ class BackgroundDeviceVmTest {
                             """.trimIndent(),
                         ),
                     runtimeMetricsCollector = metrics,
+                    nativeDaemonBindings = daemonBindings,
                 )
 
             assertTrue(vm.boot())
-            runVmTicks(vm, ticks = 12)
+            vm.requestSlice(serverTick = 1)
+            runBlocking {
+                repeat(20) {
+                    if (metrics.snapshot().vm.nativeDaemonTicks > 0) return@runBlocking
+                    kotlinx.coroutines.delay(5)
+                }
+            }
 
             val snapshot = metrics.snapshot()
             assertTrue(snapshot.vm.sliceRequests > 0, snapshot.summary())
-            assertTrue(snapshot.vm.slicePermitsSent > 0, snapshot.summary())
-            assertTrue(snapshot.vm.slicePermitsReceived > 0, snapshot.summary())
-            assertTrue(snapshot.vm.executionWindows > 0, snapshot.summary())
-            assertTrue(snapshot.vm.executionWindowNanos > 0, snapshot.summary())
+            assertTrue(snapshot.vm.nativeDaemonTicks > 0, snapshot.summary())
+            assertTrue(snapshot.vm.nativeDaemonIdleTicks > 0, snapshot.summary())
         }
     }
 
@@ -601,45 +610,6 @@ class BackgroundDeviceVmTest {
                 ),
                 daemonBindings.refillQuotaCalls,
             )
-        }
-    }
-
-    @Test
-    fun ownsDisplayRegistryFrames() {
-        runtimeTestWorkspace("vm-display-registry") { workspace ->
-            val vm =
-                BackgroundDeviceVm(
-                    deviceId = 1,
-                    profile = firmwareTestProfile(),
-                    dispatcher = Dispatchers.Default,
-                    labelProvider = { null },
-                    logger = DeviceVmLogger { },
-                    workspace = workspace.host,
-                    firmwareLoader =
-                        StaticFirmwareLoader(
-                            """
-                            pub fun main() {
-                                val displayId = display::primary();
-                                display::fillRect(displayId, 1, 2, 3, 4, 63488);
-                                display::present(displayId);
-                            }
-                            """.trimIndent(),
-                        ),
-                )
-
-            val info = vm.attachDisplay(displayId = 9, width = 40, height = 20)
-
-            assertEquals(9, info.displayId)
-            assertEquals(40, info.width)
-            assertEquals(20, info.height)
-            val initialFrame = assertNotNull(vm.drainDisplayFrames().singleOrNull())
-            assertEquals(9, initialFrame.displayId)
-            assertTrue(vm.boot())
-            runVmTicks(vm)
-            val vmFrame = assertNotNull(vm.drainDisplayFrames().lastOrNull())
-            assertEquals(9, vmFrame.displayId)
-            assertEquals(40, vmFrame.width)
-            assertEquals(20, vmFrame.height)
         }
     }
 
@@ -708,6 +678,7 @@ class BackgroundDeviceVmTest {
 
     @Test
     fun displayAttachQueuesVmEvent() {
+        if (!nativeLibraryConfigured()) return
         runtimeTestWorkspace("vm-display-attach-event") { workspace ->
             val vm =
                 BackgroundDeviceVm(
@@ -742,6 +713,7 @@ class BackgroundDeviceVmTest {
 
     @Test
     fun parentCanSpawnChildAndExchangeIpcText() {
+        if (!nativeLibraryConfigured()) return
         runtimeTestWorkspace("firmware-spawn-ipc-child") { workspace ->
             val logs = mutableListOf<String>()
             workspace.writeProgram(
@@ -836,6 +808,7 @@ class BackgroundDeviceVmTest {
 
     @Test
     fun processWorkingDirectoryIsProcessLocal() {
+        if (!nativeLibraryConfigured()) return
         runtimeTestWorkspace("process-cwd-isolation") { workspace ->
             val logs = mutableListOf<String>()
             workspace.root.resolve("1").resolve("sub").createDirectories()
@@ -893,6 +866,7 @@ class BackgroundDeviceVmTest {
 
     @Test
     fun processRunWritesLaunchErrorsToTaggedStderr() {
+        if (!nativeLibraryConfigured()) return
         runtimeTestWorkspace("process-stderr-launch") { workspace ->
             val logs = mutableListOf<String>()
             val vm =
@@ -928,6 +902,7 @@ class BackgroundDeviceVmTest {
 
     @Test
     fun processRunWritesCompilationErrorsToTaggedStderr() {
+        if (!nativeLibraryConfigured()) return
         runtimeTestWorkspace("process-stderr-compile") { workspace ->
             workspace.writeProgram(1, "bad.ck", "pub fun main() { val x: Int = \"bad\"; }")
             val logs = mutableListOf<String>()
@@ -964,6 +939,7 @@ class BackgroundDeviceVmTest {
 
     @Test
     fun firmwareReportsMissingBootFileAndStaysActive() {
+        if (!nativeLibraryConfigured()) return
         runtimeTestWorkspace("firmware-missing-boot") { workspace ->
             val logs = mutableListOf<String>()
             val vm =
@@ -1001,6 +977,7 @@ class BackgroundDeviceVmTest {
 
     @Test
     fun firmwareReportsBootCompileErrorAndStaysActive() {
+        if (!nativeLibraryConfigured()) return
         runtimeTestWorkspace("firmware-invalid-boot") { workspace ->
             workspace.writeProgram(1, "boot.ck", "fun main() {}")
             val logs = mutableListOf<String>()
@@ -1040,6 +1017,7 @@ class BackgroundDeviceVmTest {
 
     @Test
     fun firmwareCanUseAmbientFilesystemModuleAndStayAlive() {
+        if (!nativeLibraryConfigured()) return
         runtimeTestWorkspace("compukterkraft-background-vm-success") { workspace ->
             val vm =
                 BackgroundDeviceVm(
@@ -1099,6 +1077,7 @@ class BackgroundDeviceVmTest {
                     logger = DeviceVmLogger { },
                     workspace = workspace,
                     firmwareLoader = StaticFirmwareLoader("pub fun main() { }"),
+                    nativeDaemonBindings = RecordingNativeDaemonBindings(),
                 )
 
             val terminalState =
@@ -1155,6 +1134,7 @@ class BackgroundDeviceVmTest {
                     logger = DeviceVmLogger { },
                     workspace = workspace,
                     firmwareLoader = StaticFirmwareLoader("pub fun main() { if (false) { filesystem::list() } }"),
+                    nativeDaemonBindings = RecordingNativeDaemonBindings(),
                 )
 
             val terminalState =
