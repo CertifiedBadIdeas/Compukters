@@ -497,3 +497,36 @@ git add docs/superpowers/plans/2026-05-10-device-quota-process-scheduler.md \
   modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmRuntimeProcessStateTest.kt
 git commit -m "feat: expose explicit VM runtime wait states"
 ```
+
+## Task 7: Stop Device-Wide Sleep Gating
+
+**Files:**
+- Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVm.kt`
+- Test: `modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVmTest.kt`
+
+- [x] **Step 1: Add failing shared-quota sleep test**
+
+Add a test proving that a process sleep marker no longer prevents the device from accepting a tick quota refill. This is
+important before round-robin scheduling because one sleeping process must not freeze runnable siblings.
+
+- [x] **Step 2: Remove `requestSlice` sleep gate**
+
+`requestSlice(serverTick)` should always offer quota to `DeviceExecutionQuota` when the device is ticked. Sleep remains a
+process/runtime state reported by `VmRuntime.sleep(...)`, not a device-global quota gate.
+
+- [x] **Step 3: Run focused tests**
+
+```bash
+./gradlew :core:test --tests '*BackgroundDeviceVmTest.requestSliceDoesNotGateSharedQuotaOnSleepState' --tests '*BackgroundDeviceVmTest.recordsRuntimeSchedulingMetrics' --rerun-tasks
+```
+
+Expected: PASS.
+
+- [x] **Step 4: Commit Task 7**
+
+```bash
+git add docs/superpowers/plans/2026-05-10-device-quota-process-scheduler.md \
+  modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVm.kt \
+  modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVmTest.kt
+git commit -m "feat: stop gating device quota on process sleep"
+```

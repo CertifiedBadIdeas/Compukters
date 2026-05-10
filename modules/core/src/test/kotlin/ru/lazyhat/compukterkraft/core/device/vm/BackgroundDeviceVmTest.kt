@@ -124,6 +124,34 @@ class BackgroundDeviceVmTest {
     }
 
     @Test
+    fun requestSliceDoesNotGateSharedQuotaOnSleepState() {
+        runtimeTestWorkspace("vm-runtime-sleep-shared-quota") { workspace ->
+            val metrics = RecordingRuntimeMetricsCollector()
+            val vm =
+                BackgroundDeviceVm(
+                    deviceId = 1,
+                    profile = firmwareTestProfile(),
+                    dispatcher = Dispatchers.Default,
+                    labelProvider = { null },
+                    logger = DeviceVmLogger { },
+                    workspace = workspace.host,
+                    runtimeMetricsCollector = metrics,
+                )
+
+            vm.setSleepUntil(10)
+            vm.requestSlice(serverTick = 1)
+
+            val snapshot = metrics.snapshot()
+            assertEquals(1, snapshot.vm.sliceRequests)
+            assertEquals(1, snapshot.vm.slicePermitsSent)
+            assertEquals(0, snapshot.vm.sleepGatedSliceRequests)
+            assertEquals(1, snapshot.vm.executionQuotaRefills)
+            assertEquals(1, snapshot.vm.executionQuotaAcceptedRefills)
+            assertEquals(0, snapshot.vm.executionQuotaUnavailableRefills)
+        }
+    }
+
+    @Test
     fun ownsDisplayRegistryFrames() {
         runtimeTestWorkspace("vm-display-registry") { workspace ->
             val vm =
