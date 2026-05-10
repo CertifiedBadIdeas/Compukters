@@ -30,13 +30,13 @@ across blocking waits. Kotlin exposes daemon wake methods through the existing `
 
 ## Task 1: Daemon Display Wake JNI Surface
 
-- [ ] Add failing compiler JNI tests:
+- [x] Add failing compiler JNI tests:
   - `nativeDeviceDaemonDisplayBindingsExposeWakeWait`
   - `nativeDeviceDaemonDisplayWaitReturnsAfterPresentWhenLibraryIsConfigured`
-- [ ] Verify RED with focused compiler tests.
-- [ ] Add `displayWakeSequenceDeviceDaemon` and `waitForDeviceDaemonDisplayWake` Kotlin bindings.
-- [ ] Add JNI functions that clone the daemon kernel handle and call `display_wake_sequence` / `wait_for_display_wake`.
-- [ ] Rebuild native library and verify focused compiler tests pass.
+- [x] Verify RED with focused compiler tests.
+- [x] Add `displayWakeSequenceDeviceDaemon` and `waitForDeviceDaemonDisplayWake` Kotlin bindings.
+- [x] Add JNI functions that clone the daemon kernel handle and call `display_wake_sequence` / `wait_for_display_wake`.
+- [x] Rebuild native library and verify focused compiler tests pass.
 - [ ] Commit Task 1.
 
 ## Task 2: Background VM Daemon Pump Wiring
