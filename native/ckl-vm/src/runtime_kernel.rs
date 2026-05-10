@@ -347,6 +347,41 @@ impl DeviceRuntimeKernel {
         waiting_pids
     }
 
+    pub fn wake_event_waiters(&mut self, name: &str) -> Vec<i32> {
+        let waiting_pids = self
+            .processes
+            .iter()
+            .filter_map(|(pid, entry)| match &entry.state {
+                ProcessState::WaitingEvent { filter }
+                    if filter.as_deref().map_or(true, |expected| expected == name) =>
+                {
+                    Some(*pid)
+                }
+                ProcessState::WaitingIpc { .. } => Some(*pid),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        for pid in &waiting_pids {
+            let _ = self.mark_process_runnable(*pid);
+        }
+        waiting_pids
+    }
+
+    pub fn wake_ipc_waiters(&mut self, channel: i32) -> Vec<i32> {
+        let waiting_pids = self
+            .processes
+            .iter()
+            .filter_map(|(pid, entry)| match entry.state {
+                ProcessState::WaitingIpc { channel_id } if channel_id == channel => Some(*pid),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        for pid in &waiting_pids {
+            let _ = self.mark_process_runnable(*pid);
+        }
+        waiting_pids
+    }
+
     fn update_process_state(&mut self, pid: i32, state: ProcessState) -> bool {
         if !self.processes.contains_key(&pid) {
             return false;
@@ -412,6 +447,7 @@ impl DeviceRuntimeKernel {
             name: name.to_string(),
             arguments,
         });
+        self.wake_event_waiters(name);
         self.wake_sequence = self.wake_sequence.saturating_add(1);
         true
     }
@@ -473,6 +509,7 @@ impl DeviceRuntimeKernel {
 
     pub fn write_ipc(&mut self, channel: i32, text: &str) -> Result<(), String> {
         self.ipc.write(channel, text)?;
+        self.wake_ipc_waiters(channel);
         self.wake_sequence = self.wake_sequence.saturating_add(1);
         Ok(())
     }

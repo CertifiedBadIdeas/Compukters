@@ -327,6 +327,84 @@ class NativeImageVmBindingsJniTest {
     }
 
     @Test
+    fun nativeDeviceDaemonEventsWakeImagesWhenLibraryIsConfigured() {
+        System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val image =
+            assertNotNull(
+                LanguageFrontend()
+                    .compileImage(
+                        "main.ck",
+                        """
+                        pub fun main() {
+                            val event: Event = events::tryPull("char");
+                            system::log(event.name + ":" + events::argString(event, 0));
+                        }
+                        """.trimIndent(),
+                    ).image,
+            )
+        val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 128)
+        try {
+            NativeVmBindings.bootDeviceDaemon(handle, CkVmImageAbi.encode(image), "/rom/events.ck", "", "")
+            assertTrue(
+                NativeVmBindings.enqueueDeviceDaemonEvent(
+                    handle,
+                    "char",
+                    VmValue
+                        .RecordValue(
+                            typeName = "EventPayload",
+                            fields = linkedMapOf("arg0" to VmValue.StringValue("x")),
+                        ).toNativeBytes("events", "enqueue"),
+                ),
+            )
+
+            val woke = NativeVmBindings.tickDeviceDaemon(handle, 128, 1_000_000, 1)
+            assertEquals(1, woke.hostRequests)
+            val request = NativeVmBindings.drainDeviceDaemonHostRequests(handle).single()
+            assertEquals("system", request.moduleName)
+            assertEquals("log", request.functionName)
+            assertEquals(listOf(VmValue.StringValue("char:x")), request.arguments)
+        } finally {
+            NativeVmBindings.freeDeviceDaemon(handle)
+        }
+    }
+
+    @Test
+    fun nativeDeviceDaemonPollWakesOnEventsWhenLibraryIsConfigured() {
+        System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val image =
+            assertNotNull(
+                LanguageFrontend()
+                    .compileImage(
+                        "main.ck",
+                        """
+                        pub fun main() {
+                            val channel: Int = ipc::open();
+                            val result: Poll = runtime::poll(channel);
+                            system::log(result.kind + ":" + result.event.name + ":" + events::argString(result.event, 0));
+                        }
+                        """.trimIndent(),
+                    ).image,
+            )
+        val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 128)
+        try {
+            NativeVmBindings.bootDeviceDaemon(handle, CkVmImageAbi.encode(image), "/rom/poll-events.ck", "", "")
+            val waiting = NativeVmBindings.tickDeviceDaemon(handle, 128, 1_000_000, 1)
+            assertEquals(0, waiting.hostRequests)
+
+            assertTrue(NativeVmBindings.enqueueDeviceDaemonEvent(handle, "char", listOf("x")))
+
+            val woke = NativeVmBindings.tickDeviceDaemon(handle, 128, 1_000_000, 2)
+            assertEquals(1, woke.hostRequests)
+            val request = NativeVmBindings.drainDeviceDaemonHostRequests(handle).single()
+            assertEquals("system", request.moduleName)
+            assertEquals("log", request.functionName)
+            assertEquals(listOf(VmValue.StringValue("event:char:x")), request.arguments)
+        } finally {
+            NativeVmBindings.freeDeviceDaemon(handle)
+        }
+    }
+
+    @Test
     fun nativeDeviceSchedulerDryRunRunsWhenLibraryIsConfigured() {
         System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val kernelHandle = NativeVmBindings.createDeviceKernel(maxEventQueueSize = 64, maxBufferedBytesPerChannel = 4096)

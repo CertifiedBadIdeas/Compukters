@@ -143,6 +143,12 @@ impl DeviceDaemon {
         }
     }
 
+    pub fn enqueue_event(&mut self, name: &str, arguments: Vec<VmValue>) -> bool {
+        self.kernel
+            .with_kernel_mut(|kernel| kernel.enqueue_event(name, arguments))
+            .unwrap_or(false)
+    }
+
     pub fn drain_host_requests(&mut self) -> Vec<DeviceDaemonHostRequest> {
         self.host_requests.drain(..).collect()
     }
