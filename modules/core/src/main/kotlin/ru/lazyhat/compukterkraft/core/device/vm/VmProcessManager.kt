@@ -46,8 +46,6 @@ internal class VmProcessManager(
     private val runtimeCreator: (Int, Int, String, String) -> DeviceRuntime,
     private val compilerMetricsCollector: CompilerMetricsCollector = NoOpCompilerMetricsCollector,
     private val runtimeMetricsCollector: RuntimeMetricsCollector = NoOpRuntimeMetricsCollector,
-    private val nativeProcessBridge: NativeProcessBridge = NoOpNativeProcessBridge,
-    private val strictNativeSchedulerParity: Boolean = false,
 ) : VmProcessStateReporter {
     private val nextPid = AtomicInteger(2)
     private val processes = ConcurrentHashMap<Int, ProcessHandle>()
@@ -62,33 +60,12 @@ internal class VmProcessManager(
             argument = "",
             workingDirectory = "",
         )
-        if (nativeProcessBridge.registerProcess(pid = 1, parentPid = 0, programPath = profile.bootScriptName)) {
-            runtimeMetricsCollector.recordNativeProcessRegistration()
-        }
     }
 
     fun processSnapshot(pid: Int): VmProcessRecord? = processTable.snapshot(pid)
 
     fun schedulerTick(currentTick: Long): VmProcessSchedulerTick {
-        val kotlinTick = processScheduler.tick(currentTick)
-        val nativeTick = nativeProcessBridge.schedulerTick(currentTick)
-        val effectiveTick =
-            if (nativeTick == null) {
-                kotlinTick
-            } else {
-                val matched = nativeTick == kotlinTick
-                runtimeMetricsCollector.recordNativeProcessSchedulerComparison(matched)
-                runtimeMetricsCollector.recordNativeProcessSchedulerSource(acceptedNative = matched)
-                if (matched) {
-                    nativeTick
-                } else {
-                    if (strictNativeSchedulerParity) {
-                        error("Native process scheduler mismatch at tick $currentTick: kotlin=$kotlinTick native=$nativeTick")
-                    }
-                    kotlinTick
-                }
-            }
-        return effectiveTick.also { tick ->
+        return processScheduler.tick(currentTick).also { tick ->
             runtimeMetricsCollector.recordProcessSchedulerTick(
                 wokenProcesses = tick.wokenPids.size,
                 selected = tick.selectedPid != null,
@@ -98,7 +75,6 @@ internal class VmProcessManager(
 
     override fun markRunnable(pid: Int) {
         processTable.markRunnable(pid)
-        nativeProcessBridge.markRunnable(pid)
     }
 
     override fun markWaitingEvent(
@@ -106,7 +82,6 @@ internal class VmProcessManager(
         filter: String?,
     ) {
         processTable.markWaitingEvent(pid, filter)
-        nativeProcessBridge.markWaitingEvent(pid, filter)
     }
 
     override fun markWaitingIpc(
@@ -114,7 +89,6 @@ internal class VmProcessManager(
         channelId: Int,
     ) {
         processTable.markWaitingIpc(pid, channelId)
-        nativeProcessBridge.markWaitingIpc(pid, channelId)
     }
 
     override fun markWaitingProcess(
@@ -122,7 +96,6 @@ internal class VmProcessManager(
         targetPid: Int,
     ) {
         processTable.markWaitingProcess(pid, targetPid)
-        nativeProcessBridge.markWaitingProcess(pid, targetPid)
     }
 
     override fun markSleeping(
@@ -130,7 +103,6 @@ internal class VmProcessManager(
         untilTick: Long,
     ) {
         processTable.markSleeping(pid, untilTick)
-        nativeProcessBridge.markSleeping(pid, untilTick)
     }
 
     override fun markExited(
@@ -145,7 +117,6 @@ internal class VmProcessManager(
         message: String,
     ) {
         processTable.markCrashed(pid, message)
-        nativeProcessBridge.markCrashed(pid, message)
     }
 
     fun spawn(
@@ -163,10 +134,6 @@ internal class VmProcessManager(
             argument = argument,
             workingDirectory = workingDirectory,
         )
-        val nativeRegistered = nativeProcessBridge.registerProcess(pid = pid, parentPid = parentPid, programPath = path)
-        if (nativeRegistered) {
-            runtimeMetricsCollector.recordNativeProcessRegistration()
-        }
         val job =
             scope.launch(start = CoroutineStart.LAZY) {
                 val result = execute(pid, parentPid, path, argument, workingDirectory)
@@ -176,13 +143,6 @@ internal class VmProcessManager(
                     markExited(pid, result.exitCode)
                 }
                 processTable.wakeProcessWaiters(pid)
-                if (nativeRegistered) {
-                    if (nativeProcessBridge.completeProcess(pid, result.exitCode)) {
-                        runtimeMetricsCollector.recordNativeProcessCompletion()
-                    } else {
-                        runtimeMetricsCollector.recordNativeProcessStaleCompletion()
-                    }
-                }
                 exitCode.complete(result.exitCode)
             }
         processes[pid] = ProcessHandle(job, exitCode)
