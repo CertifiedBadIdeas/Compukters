@@ -57,7 +57,10 @@ private val rustVmCrateDir = rootProject.layout.projectDirectory.dir("native/ckl
 private val rustVmNativeLibrary = rustVmCrateDir.file("target/debug/libckl_vm.so")
 private val rustVmNativePlatform = currentRustVmNativePlatform()
 private val rustVmReleaseNativeLibrary = rustVmCrateDir.file("target/release/${rustVmNativePlatform.libraryName}")
+private val rustVmWindowsX64Target = "x86_64-pc-windows-gnu"
+private val rustVmWindowsX64NativeLibrary = rustVmCrateDir.file("target/$rustVmWindowsX64Target/release/ckl_vm.dll")
 private val rustVmNativeDistDir = rustVmCrateDir.dir("dist/natives")
+private val productionRustVmNativeResources = layout.buildDirectory.dir("generated/production-rust-vm-native-resources")
 
 val buildRustVmNativeLibrary =
     tasks.register<Exec>("buildRustVmNativeLibrary") {
@@ -83,6 +86,25 @@ val buildRustVmNativeLibraryRelease =
         outputs.file(rustVmReleaseNativeLibrary)
     }
 
+val buildRustVmWindowsX64NativeLibraryRelease =
+    tasks.register<Exec>("buildRustVmWindowsX64NativeLibraryRelease") {
+        group = "build"
+        description = "Cross-build the release Rust CKL VM JNI library for Windows x64 production jars."
+        workingDir = rustVmCrateDir.asFile
+        commandLine("cargo", "build", "--release", "--target", rustVmWindowsX64Target)
+        environment("CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER", "x86_64-w64-mingw32-gcc")
+        inputs.file(rustVmCrateDir.file("Cargo.toml"))
+        inputs.file(rustVmCrateDir.file("Cargo.lock"))
+        inputs.dir(rustVmCrateDir.dir("src"))
+        outputs.file(rustVmWindowsX64NativeLibrary)
+        doFirst {
+            require(commandAvailable("x86_64-w64-mingw32-gcc")) {
+                "Missing x86_64-w64-mingw32-gcc. Install MinGW-w64 and run " +
+                    "`rustup target add $rustVmWindowsX64Target` before building a production universal jar."
+            }
+        }
+    }
+
 val prepareBundledRustVmNativeLibraries =
     tasks.register<Sync>("prepareBundledRustVmNativeLibraries") {
         group = "build"
@@ -99,9 +121,39 @@ val prepareBundledRustVmNativeLibraries =
         into(layout.buildDirectory.dir("generated/rust-vm-native-resources"))
     }
 
+val stageProductionRustVmNativeLibraries =
+    tasks.register<Sync>("stageProductionRustVmNativeLibraries") {
+        group = "build"
+        description = "Stage current-platform and Windows x64 Rust CKL VM natives for production universal jars."
+        dependsOn(buildRustVmNativeLibraryRelease)
+        dependsOn(buildRustVmWindowsX64NativeLibraryRelease)
+
+        from(rustVmReleaseNativeLibrary) {
+            into("natives/${rustVmNativePlatform.id}")
+            rename { rustVmNativePlatform.libraryName }
+        }
+        from(rustVmWindowsX64NativeLibrary) {
+            into("natives/windows-x86_64")
+            rename { "ckl_vm.dll" }
+        }
+        from(rustVmNativeDistDir) {
+            include("**/*")
+        }
+        into(productionRustVmNativeResources)
+    }
+
 tasks.named<ProcessResources>("processResources") {
     dependsOn(prepareBundledRustVmNativeLibraries)
+    mustRunAfter(stageProductionRustVmNativeLibraries)
     from(prepareBundledRustVmNativeLibraries)
+    from(productionRustVmNativeResources)
+}
+
+tasks.register("buildProductionUniversalJar") {
+    group = "build"
+    description = "Build a production mod jar with current-platform and Windows x64 Rust CKL VM natives bundled."
+    dependsOn(stageProductionRustVmNativeLibraries)
+    dependsOn(tasks.named("remapJar"))
 }
 
 fun RunConfigSettings.applyRustVm() {
@@ -383,6 +435,15 @@ private fun seedOpsJson(file: File) {
         }
     file.writeText("[\n$entries\n]\n")
 }
+
+private fun commandAvailable(command: String): Boolean =
+    runCatching {
+        ProcessBuilder(command, "--version")
+            .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+            .redirectError(ProcessBuilder.Redirect.DISCARD)
+            .start()
+            .waitFor() == 0
+    }.getOrDefault(false)
 
 private data class RustVmNativePlatform(
     val id: String,
