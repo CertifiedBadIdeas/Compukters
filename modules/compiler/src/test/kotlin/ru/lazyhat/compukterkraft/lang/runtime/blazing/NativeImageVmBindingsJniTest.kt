@@ -87,6 +87,14 @@ class NativeImageVmBindingsJniTest {
             "NativeVmBindings must expose native process scheduler state",
         )
         assertTrue(
+            "markProcessWaitingForEvent" in memberNames,
+            "NativeVmBindings must expose native process scheduler state",
+        )
+        assertTrue(
+            "markProcessWaitingForIpc" in memberNames,
+            "NativeVmBindings must expose native process scheduler state",
+        )
+        assertTrue(
             "markProcessSleeping" in memberNames,
             "NativeVmBindings must expose native process scheduler state",
         )
@@ -128,6 +136,26 @@ class NativeImageVmBindingsJniTest {
             NativeVmBindings::class.java
                 .getDeclaredMethod(
                     "markProcessWaitingForProcessNative",
+                    Long::class.javaPrimitiveType,
+                    Int::class.javaPrimitiveType,
+                    Int::class.javaPrimitiveType,
+                ).returnType,
+        )
+        assertEquals(
+            Boolean::class.javaPrimitiveType,
+            NativeVmBindings::class.java
+                .getDeclaredMethod(
+                    "markProcessWaitingForEventNative",
+                    Long::class.javaPrimitiveType,
+                    Int::class.javaPrimitiveType,
+                    String::class.java,
+                ).returnType,
+        )
+        assertEquals(
+            Boolean::class.javaPrimitiveType,
+            NativeVmBindings::class.java
+                .getDeclaredMethod(
+                    "markProcessWaitingForIpcNative",
                     Long::class.javaPrimitiveType,
                     Int::class.javaPrimitiveType,
                     Int::class.javaPrimitiveType,

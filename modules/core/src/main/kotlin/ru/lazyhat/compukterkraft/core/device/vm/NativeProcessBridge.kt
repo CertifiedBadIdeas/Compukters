@@ -32,6 +32,35 @@ internal interface NativeProcessBridge {
         pid: Int,
         exitCode: Int,
     ): Boolean
+
+    fun markRunnable(pid: Int): Boolean
+
+    fun markWaitingEvent(
+        pid: Int,
+        filter: String?,
+    ): Boolean
+
+    fun markWaitingIpc(
+        pid: Int,
+        channelId: Int,
+    ): Boolean
+
+    fun markWaitingProcess(
+        pid: Int,
+        targetPid: Int,
+    ): Boolean
+
+    fun markSleeping(
+        pid: Int,
+        untilTick: Long,
+    ): Boolean
+
+    fun markCrashed(
+        pid: Int,
+        message: String,
+    ): Boolean
+
+    fun schedulerTick(currentTick: Long): VmProcessSchedulerTick?
 }
 
 internal object NoOpNativeProcessBridge : NativeProcessBridge {
@@ -45,6 +74,35 @@ internal object NoOpNativeProcessBridge : NativeProcessBridge {
         pid: Int,
         exitCode: Int,
     ): Boolean = false
+
+    override fun markRunnable(pid: Int): Boolean = false
+
+    override fun markWaitingEvent(
+        pid: Int,
+        filter: String?,
+    ): Boolean = false
+
+    override fun markWaitingIpc(
+        pid: Int,
+        channelId: Int,
+    ): Boolean = false
+
+    override fun markWaitingProcess(
+        pid: Int,
+        targetPid: Int,
+    ): Boolean = false
+
+    override fun markSleeping(
+        pid: Int,
+        untilTick: Long,
+    ): Boolean = false
+
+    override fun markCrashed(
+        pid: Int,
+        message: String,
+    ): Boolean = false
+
+    override fun schedulerTick(currentTick: Long): VmProcessSchedulerTick? = null
 }
 
 internal class NativeVmProcessBridge(
@@ -71,4 +129,73 @@ internal class NativeVmProcessBridge(
             pid = pid,
             exitCode = exitCode,
         )
+
+    override fun markRunnable(pid: Int): Boolean =
+        NativeVmBindings.markProcessRunnable(
+            kernelHandle = kernelHandle,
+            pid = pid,
+        )
+
+    override fun markWaitingEvent(
+        pid: Int,
+        filter: String?,
+    ): Boolean =
+        NativeVmBindings.markProcessWaitingForEvent(
+            kernelHandle = kernelHandle,
+            pid = pid,
+            filter = filter,
+        )
+
+    override fun markWaitingIpc(
+        pid: Int,
+        channelId: Int,
+    ): Boolean =
+        NativeVmBindings.markProcessWaitingForIpc(
+            kernelHandle = kernelHandle,
+            pid = pid,
+            channelId = channelId,
+        )
+
+    override fun markWaitingProcess(
+        pid: Int,
+        targetPid: Int,
+    ): Boolean =
+        NativeVmBindings.markProcessWaitingForProcess(
+            kernelHandle = kernelHandle,
+            pid = pid,
+            targetPid = targetPid,
+        )
+
+    override fun markSleeping(
+        pid: Int,
+        untilTick: Long,
+    ): Boolean =
+        NativeVmBindings.markProcessSleeping(
+            kernelHandle = kernelHandle,
+            pid = pid,
+            untilTick = untilTick,
+        )
+
+    override fun markCrashed(
+        pid: Int,
+        message: String,
+    ): Boolean =
+        NativeVmBindings.markProcessCrashed(
+            kernelHandle = kernelHandle,
+            pid = pid,
+            message = message,
+        )
+
+    override fun schedulerTick(currentTick: Long): VmProcessSchedulerTick {
+        val tick =
+            NativeVmBindings.processSchedulerTick(
+                kernelHandle = kernelHandle,
+                currentTick = currentTick,
+            )
+        return VmProcessSchedulerTick(
+            currentTick = tick.currentTick,
+            wokenPids = tick.wokenPids,
+            selectedPid = tick.selectedPid,
+        )
+    }
 }

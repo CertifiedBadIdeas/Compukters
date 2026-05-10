@@ -854,3 +854,55 @@ git add docs/superpowers/plans/2026-05-10-device-quota-process-scheduler.md \
   native/ckl-vm/src/jni.rs
 git commit -m "feat: expose native process scheduler bindings"
 ```
+
+## Task 15: Core Native Process State Bridge
+
+**Files:**
+- Modify: `modules/compiler/src/main/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeVmBindings.kt`
+- Modify: `modules/compiler/src/test/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeImageVmBindingsJniTest.kt`
+- Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/NativeProcessBridge.kt`
+- Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessManager.kt`
+- Modify: `modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessManagerTest.kt`
+- Modify: `native/ckl-vm/src/jni.rs`
+
+- [x] **Step 1: Add failing bridge sync tests**
+
+Add tests proving process state transitions in `VmProcessManager` are mirrored into `NativeProcessBridge`, and each
+manager scheduler tick is also sent to the native bridge.
+
+- [x] **Step 2: Complete native waiting state bindings**
+
+Expose native event-wait and IPC-wait process states through `NativeVmBindings` and JNI so the bridge can mirror all
+non-terminal process states.
+
+- [x] **Step 3: Extend `NativeProcessBridge`**
+
+Add bridge methods for runnable, event wait, IPC wait, process wait, sleep, crash, and scheduler tick. The no-op bridge
+should keep fallback behavior unchanged.
+
+- [x] **Step 4: Wire `VmProcessManager` state reporting into the native bridge**
+
+After each Kotlin process table state transition, call the matching native bridge method. Keep Kotlin as the source of
+truth for this task; native scheduler ticks are mirrored but not used to decide execution yet.
+
+- [x] **Step 5: Run focused tests**
+
+```bash
+./gradlew -Dckl.vm.native.library=/home/lazyhat/IdeaProjects/Compukter-Kraft/native/ckl-vm/target/debug/libckl_vm.so :compiler:test --tests '*NativeImageVmBindingsJniTest' --rerun-tasks
+./gradlew :core:test --tests '*VmProcessManagerTest' --rerun-tasks
+```
+
+Expected: PASS.
+
+- [x] **Step 6: Commit Task 15**
+
+```bash
+git add docs/superpowers/plans/2026-05-10-device-quota-process-scheduler.md \
+  modules/compiler/src/main/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeVmBindings.kt \
+  modules/compiler/src/test/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeImageVmBindingsJniTest.kt \
+  modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/NativeProcessBridge.kt \
+  modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessManager.kt \
+  modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessManagerTest.kt \
+  native/ckl-vm/src/jni.rs
+git commit -m "feat: mirror process scheduler state to native"
+```

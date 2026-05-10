@@ -67,6 +67,7 @@ internal class VmProcessManager(
 
     fun schedulerTick(currentTick: Long): VmProcessSchedulerTick =
         processScheduler.tick(currentTick).also { tick ->
+            nativeProcessBridge.schedulerTick(currentTick)
             runtimeMetricsCollector.recordProcessSchedulerTick(
                 wokenProcesses = tick.wokenPids.size,
                 selected = tick.selectedPid != null,
@@ -75,6 +76,7 @@ internal class VmProcessManager(
 
     override fun markRunnable(pid: Int) {
         processTable.markRunnable(pid)
+        nativeProcessBridge.markRunnable(pid)
     }
 
     override fun markWaitingEvent(
@@ -82,6 +84,7 @@ internal class VmProcessManager(
         filter: String?,
     ) {
         processTable.markWaitingEvent(pid, filter)
+        nativeProcessBridge.markWaitingEvent(pid, filter)
     }
 
     override fun markWaitingIpc(
@@ -89,6 +92,7 @@ internal class VmProcessManager(
         channelId: Int,
     ) {
         processTable.markWaitingIpc(pid, channelId)
+        nativeProcessBridge.markWaitingIpc(pid, channelId)
     }
 
     override fun markWaitingProcess(
@@ -96,6 +100,7 @@ internal class VmProcessManager(
         targetPid: Int,
     ) {
         processTable.markWaitingProcess(pid, targetPid)
+        nativeProcessBridge.markWaitingProcess(pid, targetPid)
     }
 
     override fun markSleeping(
@@ -103,6 +108,7 @@ internal class VmProcessManager(
         untilTick: Long,
     ) {
         processTable.markSleeping(pid, untilTick)
+        nativeProcessBridge.markSleeping(pid, untilTick)
     }
 
     override fun markExited(
@@ -117,6 +123,7 @@ internal class VmProcessManager(
         message: String,
     ) {
         processTable.markCrashed(pid, message)
+        nativeProcessBridge.markCrashed(pid, message)
     }
 
     fun spawn(

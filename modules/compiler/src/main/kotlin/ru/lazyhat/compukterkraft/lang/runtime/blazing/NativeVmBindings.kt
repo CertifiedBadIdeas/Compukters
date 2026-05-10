@@ -222,6 +222,24 @@ object NativeVmBindings : NativeVmBindingsFacade {
         return markProcessWaitingForProcessNative(kernelHandle, pid, targetPid)
     }
 
+    fun markProcessWaitingForEvent(
+        kernelHandle: Long,
+        pid: Int,
+        filter: String?,
+    ): Boolean {
+        require(kernelHandle != 0L) { "Native device runtime kernel handle is zero" }
+        return markProcessWaitingForEventNative(kernelHandle, pid, filter)
+    }
+
+    fun markProcessWaitingForIpc(
+        kernelHandle: Long,
+        pid: Int,
+        channelId: Int,
+    ): Boolean {
+        require(kernelHandle != 0L) { "Native device runtime kernel handle is zero" }
+        return markProcessWaitingForIpcNative(kernelHandle, pid, channelId)
+    }
+
     fun markProcessSleeping(
         kernelHandle: Long,
         pid: Int,
@@ -483,6 +501,18 @@ object NativeVmBindings : NativeVmBindingsFacade {
         kernelHandle: Long,
         pid: Int,
         targetPid: Int,
+    ): Boolean
+
+    private external fun markProcessWaitingForEventNative(
+        kernelHandle: Long,
+        pid: Int,
+        filter: String?,
+    ): Boolean
+
+    private external fun markProcessWaitingForIpcNative(
+        kernelHandle: Long,
+        pid: Int,
+        channelId: Int,
     ): Boolean
 
     private external fun markProcessSleepingNative(

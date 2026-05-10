@@ -58,6 +58,13 @@ class VmProcessManagerTest {
     private class RecordingNativeProcessBridge : NativeProcessBridge {
         val registrations = mutableListOf<Triple<Int, Int, String>>()
         val completions = mutableListOf<Pair<Int, Int>>()
+        val runnablePids = mutableListOf<Int>()
+        val waitingEvents = mutableListOf<Pair<Int, String?>>()
+        val waitingIpc = mutableListOf<Pair<Int, Int>>()
+        val waitingProcesses = mutableListOf<Pair<Int, Int>>()
+        val sleepingProcesses = mutableListOf<Pair<Int, Long>>()
+        val crashedProcesses = mutableListOf<Pair<Int, String>>()
+        val schedulerTicks = mutableListOf<Long>()
         var registerResult: Boolean = true
         var completeResult: Boolean = true
 
@@ -76,6 +83,56 @@ class VmProcessManagerTest {
         ): Boolean {
             completions += pid to exitCode
             return completeResult
+        }
+
+        override fun markRunnable(pid: Int): Boolean {
+            runnablePids += pid
+            return true
+        }
+
+        override fun markWaitingEvent(
+            pid: Int,
+            filter: String?,
+        ): Boolean {
+            waitingEvents += pid to filter
+            return true
+        }
+
+        override fun markWaitingIpc(
+            pid: Int,
+            channelId: Int,
+        ): Boolean {
+            waitingIpc += pid to channelId
+            return true
+        }
+
+        override fun markWaitingProcess(
+            pid: Int,
+            targetPid: Int,
+        ): Boolean {
+            waitingProcesses += pid to targetPid
+            return true
+        }
+
+        override fun markSleeping(
+            pid: Int,
+            untilTick: Long,
+        ): Boolean {
+            sleepingProcesses += pid to untilTick
+            return true
+        }
+
+        override fun markCrashed(
+            pid: Int,
+            message: String,
+        ): Boolean {
+            crashedProcesses += pid to message
+            return true
+        }
+
+        override fun schedulerTick(currentTick: Long): VmProcessSchedulerTick? {
+            schedulerTicks += currentTick
+            return null
         }
     }
 
@@ -442,6 +499,47 @@ class VmProcessManagerTest {
                 assertEquals(1, metrics.snapshot().vm.processSchedulerSelectedTicks)
                 assertEquals(1, metrics.snapshot().vm.processSchedulerIdleTicks)
                 assertEquals(1, metrics.snapshot().vm.processSchedulerWokenProcesses)
+            } finally {
+                runBlocking { manager.cancelAll() }
+                scope.cancel()
+            }
+        }
+    }
+
+    @Test
+    fun processStateTransitionsAreMirroredToNativeBridge() {
+        runtimeTestWorkspace("vm-process-manager-native-state-bridge") { workspace ->
+            val bridge = RecordingNativeProcessBridge()
+            val ctx = StubVmContext()
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val manager =
+                VmProcessManager(
+                    scope = scope,
+                    ctx = ctx,
+                    deviceId = 1,
+                    programLoader = WorkspaceProgramLoader(workspace.host),
+                    profile = runtimeProfile(),
+                    runtimeCreator = { _, _, _, _ -> error("runtimeCreator should not run") },
+                    compilerMetricsCollector = NoOpCompilerMetricsCollector,
+                    nativeProcessBridge = bridge,
+                )
+
+            try {
+                manager.markWaitingEvent(pid = 1, filter = "key")
+                manager.markWaitingIpc(pid = 1, channelId = 7)
+                manager.markWaitingProcess(pid = 1, targetPid = 2)
+                manager.markSleeping(pid = 1, untilTick = 9)
+                manager.markRunnable(pid = 1)
+                manager.markCrashed(pid = 1, message = "boom")
+                manager.schedulerTick(11)
+
+                assertEquals(listOf(Pair<Int, String?>(1, "key")), bridge.waitingEvents)
+                assertEquals(listOf(1 to 7), bridge.waitingIpc)
+                assertEquals(listOf(1 to 2), bridge.waitingProcesses)
+                assertEquals(listOf(1 to 9L), bridge.sleepingProcesses)
+                assertEquals(listOf(1), bridge.runnablePids)
+                assertEquals(listOf(1 to "boom"), bridge.crashedProcesses)
+                assertEquals(listOf(11L), bridge.schedulerTicks)
             } finally {
                 runBlocking { manager.cancelAll() }
                 scope.cancel()
