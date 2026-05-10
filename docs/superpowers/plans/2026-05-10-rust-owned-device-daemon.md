@@ -224,7 +224,7 @@ git commit -m "feat: add rust device daemon skeleton"
 - Modify: `native/ckl-vm/src/image_runner.rs`
 - Modify: `native/ckl-vm/src/device_daemon.rs`
 
-- [ ] **Step 1: Write the failing decoded signal test**
+- [x] **Step 1: Write the failing decoded signal test**
 
 Add this test to `native/ckl-vm/src/image_runner.rs` tests or a nearby image runner test module:
 
@@ -240,7 +240,7 @@ fn image_runner_can_return_decoded_signal_for_daemon() {
 }
 ```
 
-- [ ] **Step 2: Run the Rust test and verify it fails**
+- [x] **Step 2: Run the Rust test and verify it fails**
 
 ```bash
 cargo test --manifest-path native/ckl-vm/Cargo.toml image_runner_can_return_decoded_signal_for_daemon
@@ -248,7 +248,7 @@ cargo test --manifest-path native/ckl-vm/Cargo.toml image_runner_can_return_deco
 
 Expected: FAIL because `run_until_signal_decoded` is not public.
 
-- [ ] **Step 3: Add decoded run and typed resume helpers**
+- [x] **Step 3: Add decoded run and typed resume helpers**
 
 In `native/ckl-vm/src/image_runner.rs`, add public methods near `run_until_signal`:
 
@@ -272,7 +272,7 @@ pub fn resume_with_value(&mut self, value: VmValue) -> Result<(), String> {
 
 Refactor `resume_with_value_bytes` to decode bytes and call `resume_with_value(value)`.
 
-- [ ] **Step 4: Run focused Rust tests**
+- [x] **Step 4: Run focused Rust tests**
 
 ```bash
 cargo test --manifest-path native/ckl-vm/Cargo.toml image_runner_can_return_decoded_signal_for_daemon
@@ -281,7 +281,7 @@ cargo test --manifest-path native/ckl-vm/Cargo.toml image_runner
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit Task 2**
+- [x] **Step 5: Commit Task 2**
 
 ```bash
 git add native/ckl-vm/src/image_runner.rs native/ckl-vm/src/device_daemon.rs docs/superpowers/plans/2026-05-10-rust-owned-device-daemon.md
