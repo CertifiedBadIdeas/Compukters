@@ -42,7 +42,7 @@
 - Create: `native/ckl-vm/src/device_daemon.rs`
 - Modify: `native/ckl-vm/src/lib.rs`
 
-- [ ] **Step 1: Write the failing daemon skeleton tests**
+- [x] **Step 1: Write the failing daemon skeleton tests**
 
 Add tests at the bottom of `native/ckl-vm/src/device_daemon.rs`:
 
@@ -100,7 +100,7 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: Run the Rust test and verify it fails**
+- [x] **Step 2: Run the Rust test and verify it fails**
 
 ```bash
 cargo test --manifest-path native/ckl-vm/Cargo.toml daemon_registers_boot_process_with_owned_kernel
@@ -108,7 +108,7 @@ cargo test --manifest-path native/ckl-vm/Cargo.toml daemon_registers_boot_proces
 
 Expected: FAIL because `device_daemon` and `DeviceDaemon` do not exist.
 
-- [ ] **Step 3: Add the daemon module and minimal structs**
+- [x] **Step 3: Add the daemon module and minimal structs**
 
 Add to `native/ckl-vm/src/lib.rs`:
 
@@ -201,7 +201,7 @@ impl DeviceDaemon {
 }
 ```
 
-- [ ] **Step 4: Run the Rust test and verify it passes**
+- [x] **Step 4: Run the Rust test and verify it passes**
 
 ```bash
 cargo test --manifest-path native/ckl-vm/Cargo.toml daemon_registers_boot_process_with_owned_kernel
@@ -209,7 +209,7 @@ cargo test --manifest-path native/ckl-vm/Cargo.toml daemon_registers_boot_proces
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit Task 1**
+- [x] **Step 5: Commit Task 1**
 
 ```bash
 git add native/ckl-vm/src/device_daemon.rs native/ckl-vm/src/lib.rs docs/superpowers/plans/2026-05-10-rust-owned-device-daemon.md
