@@ -47,12 +47,12 @@ across blocking waits. Kotlin exposes daemon wake methods through the existing `
 - [x] Update `BackgroundDeviceVm.supportsNativeDisplayFramePump`, `nativeDisplayWakeSequence`, and
   `waitForNativeDisplayWake` to use daemon runtime when standalone native registry is absent.
 - [x] Verify focused core test passes.
-- [ ] Commit Task 2.
+- [x] Commit Task 2.
 
 ## Task 3: Verification
 
-- [ ] Run Rust native tests.
-- [ ] Run focused compiler daemon display tests with native library.
-- [ ] Run focused core daemon display tests.
-- [ ] Run daemon smoke profiling test.
+- [x] Run Rust native tests.
+- [x] Run focused compiler daemon display tests with native library.
+- [x] Run focused core daemon display tests.
+- [x] Run daemon smoke profiling test.
 - [ ] Commit checklist completion.
