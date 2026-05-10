@@ -19,25 +19,40 @@
 
 package ru.lazyhat.compukterkraft.core.device.vm
 
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeout
 import ru.lazyhat.compukterkraft.core.device.runtime.RecordingRuntimeMetricsCollector
 import ru.lazyhat.compukterkraft.core.device.runtime.WorkspaceProgramLoader
 import ru.lazyhat.compukterkraft.core.device.runtime.test.runtimeProfile
 import ru.lazyhat.compukterkraft.core.device.runtime.test.runtimeTestWorkspace
 import ru.lazyhat.compukterkraft.lang.frontend.NoOpCompilerMetricsCollector
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceEventApi
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceFileSystemApi
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceIpcApi
+import ru.lazyhat.compukterkraft.lang.runtime.DevicePeripheralApi
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceProcessApi
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceProfile
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceRedstoneApi
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceRuntime
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceSystemApi
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspaceEntry
 import ru.lazyhat.compukterkraft.lang.runtime.HostCall
+import ru.lazyhat.compukterkraft.lang.runtime.NoopDeviceEventApi
+import ru.lazyhat.compukterkraft.lang.runtime.NoopDeviceIpcApi
 import ru.lazyhat.compukterkraft.lang.runtime.VmEvent
 import ru.lazyhat.compukterkraft.lang.runtime.VmPollResult
 import ru.lazyhat.compukterkraft.lang.runtime.VmState
 import ru.lazyhat.compukterkraft.lang.runtime.VmStopReason
+import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
-import kotlinx.coroutines.runBlocking
 
 class VmProcessManagerTest {
     private class RecordingNativeProcessBridge : NativeProcessBridge {
@@ -99,6 +114,72 @@ class VmProcessManagerTest {
 
         override suspend fun pollIpcOrEvent(channel: Int): VmPollResult =
             error("not used")
+    }
+
+    private class BlockingEventRuntime(
+        private val release: CompletableDeferred<VmEvent>,
+        override val profile: DeviceProfile = runtimeProfile(),
+    ) : DeviceRuntime {
+        override val system: DeviceSystemApi =
+            object : DeviceSystemApi {
+                override val deviceId: Int = 1
+                override val label: String? = null
+                override val currentTick: Long = 0L
+
+                override fun queueEvent(
+                    name: String,
+                    arguments: List<Any?>,
+                ) = Unit
+
+                override fun shutdown() = Unit
+
+                override fun reboot() = Unit
+
+                override fun log(message: String) = Unit
+            }
+        override val filesystem: DeviceFileSystemApi =
+            object : DeviceFileSystemApi {
+                override suspend fun exists(path: String): Boolean = false
+
+                override suspend fun isDirectory(path: String): Boolean = false
+
+                override suspend fun readText(path: String): String? = null
+
+                override suspend fun writeText(
+                    path: String,
+                    text: String,
+                ) = Unit
+
+                override suspend fun makeDirectory(path: String): Boolean = false
+
+                override suspend fun remove(path: String): Boolean = false
+
+                override suspend fun list(path: String): List<DeviceWorkspaceEntry> = emptyList()
+            }
+        override val process: DeviceProcessApi =
+            object : DeviceProcessApi {
+                override val workingDirectory: String = ""
+                override val argument: String = ""
+
+                override suspend fun changeDirectory(path: String): Boolean = false
+
+                override suspend fun spawn(
+                    path: String,
+                    argument: String,
+                ): Int = 0
+
+                override suspend fun wait(pid: Int): Int = 0
+            }
+        override val ipc: DeviceIpcApi = NoopDeviceIpcApi
+        override val events: DeviceEventApi = NoopDeviceEventApi
+        override val redstone: DeviceRedstoneApi = object : DeviceRedstoneApi {}
+        override val peripherals: DevicePeripheralApi = object : DevicePeripheralApi {}
+
+        override suspend fun pullEvent(filter: String?): VmEvent = release.await()
+
+        override suspend fun sleep(ticks: Long) = Unit
+
+        override suspend fun yield() = Unit
     }
 
     @Test
@@ -234,6 +315,59 @@ class VmProcessManagerTest {
                 assertEquals("arg", record?.argument)
                 assertEquals("bin", record?.workingDirectory)
                 assertEquals(VmProcessState.Exited(1), record?.state)
+            } finally {
+                runBlocking { manager.cancelAll() }
+                scope.cancel()
+            }
+        }
+    }
+
+    @Test
+    fun waitMarksParentAsWaitingProcessUntilChildExits() {
+        System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        runtimeTestWorkspace("vm-process-manager-parent-wait-state") { workspace ->
+            workspace.writeProgram(
+                1,
+                "child.ck",
+                """
+                pub fun main() {
+                    events::pull("release")
+                }
+                """.trimIndent(),
+            )
+            val bridge = RecordingNativeProcessBridge()
+            val ctx = StubVmContext()
+            val release = CompletableDeferred<VmEvent>()
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val manager =
+                VmProcessManager(
+                    scope = scope,
+                    ctx = ctx,
+                    deviceId = 1,
+                    programLoader = WorkspaceProgramLoader(workspace.host),
+                    profile = runtimeProfile(),
+                    runtimeCreator = { _, _, _, _ -> BlockingEventRuntime(release) },
+                    compilerMetricsCollector = NoOpCompilerMetricsCollector,
+                    nativeProcessBridge = bridge,
+                )
+
+            try {
+                val pid = manager.spawn("child.ck", "", "", parentPid = 1)
+                runBlocking {
+                    val waiter = async { manager.wait(pid, waiterPid = 1) }
+                    withTimeout(5_000) {
+                        while (manager.processSnapshot(1)?.state != VmProcessState.WaitingProcess(pid)) {
+                            delay(10)
+                        }
+                    }
+
+                    assertEquals(VmProcessState.WaitingProcess(pid), manager.processSnapshot(1)?.state)
+                    release.complete(VmEvent("release"))
+                    assertEquals(0, withTimeout(5_000) { waiter.await() })
+                }
+
+                assertEquals(VmProcessState.Runnable, manager.processSnapshot(1)?.state)
+                assertEquals(VmProcessState.Exited(0), manager.processSnapshot(pid)?.state)
             } finally {
                 runBlocking { manager.cancelAll() }
                 scope.cancel()

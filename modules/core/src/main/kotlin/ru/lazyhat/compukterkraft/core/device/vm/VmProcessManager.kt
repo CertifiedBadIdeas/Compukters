@@ -107,9 +107,22 @@ internal class VmProcessManager(
         return pid
     }
 
-    suspend fun wait(pid: Int): Int {
+    suspend fun wait(
+        pid: Int,
+        waiterPid: Int? = null,
+    ): Int {
         val handle = processes[pid] ?: return 1
-        val code = handle.exitCode.await()
+        if (waiterPid != null) {
+            processTable.markWaitingProcess(waiterPid, pid)
+        }
+        val code =
+            try {
+                handle.exitCode.await()
+            } finally {
+                if (waiterPid != null && processTable.snapshot(waiterPid)?.state == VmProcessState.WaitingProcess(pid)) {
+                    processTable.markRunnable(waiterPid)
+                }
+            }
         processes.remove(pid, handle)
         return code
     }

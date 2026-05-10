@@ -50,5 +50,5 @@ internal class VmProcessApi(
         argument: String,
     ): Int = processManager.spawn(path, argument, workingDirectory, parentPid = processId)
 
-    override suspend fun wait(pid: Int): Int = processManager.wait(pid)
+    override suspend fun wait(pid: Int): Int = processManager.wait(pid, waiterPid = processId)
 }
