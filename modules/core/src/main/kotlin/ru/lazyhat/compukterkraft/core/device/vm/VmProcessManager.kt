@@ -61,6 +61,9 @@ internal class VmProcessManager(
             argument = "",
             workingDirectory = "",
         )
+        if (nativeProcessBridge.registerProcess(pid = 1, parentPid = 0, programPath = profile.bootScriptName)) {
+            runtimeMetricsCollector.recordNativeProcessRegistration()
+        }
     }
 
     fun processSnapshot(pid: Int): VmProcessRecord? = processTable.snapshot(pid)
