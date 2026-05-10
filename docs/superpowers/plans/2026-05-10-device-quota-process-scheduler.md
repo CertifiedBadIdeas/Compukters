@@ -1278,3 +1278,45 @@ git add docs/superpowers/plans/2026-05-10-device-quota-process-scheduler.md \
   modules/compiler/src/test/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeImageVmBindingsJniTest.kt
 git commit -m "feat: add native device execution quota"
 ```
+
+## Task 25: Mirror JVM Tick Quota To Native Kernel
+
+**Files:**
+- Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/runtime/RuntimeProfiling.kt`
+- Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVm.kt`
+- Modify: `modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/runtime/RuntimeProfilingTest.kt`
+- Modify: `modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVmTest.kt`
+
+- [x] **Step 1: Add failing native quota refill tests**
+
+Add tests proving `BackgroundDeviceVm.requestSlice(serverTick)` mirrors the profile CPU instruction budget,
+wall-clock budget, and server tick into the native device kernel when one is attached.
+
+- [x] **Step 2: Add native quota refill metrics**
+
+Track native execution quota refill count, total returned instruction budget, total returned wall-clock budget, and last
+returned server tick in `RuntimeVmMetrics`.
+
+- [x] **Step 3: Wire `requestSlice` to native quota**
+
+Before the scheduler decision, call `NativeVmBindings.addDeviceExecutionQuota(...)` under the native kernel read lock
+and record the returned snapshot.
+
+- [x] **Step 4: Run focused tests**
+
+```bash
+./gradlew -Dckl.vm.native.library=/home/lazyhat/IdeaProjects/Compukter-Kraft/native/ckl-vm/target/debug/libckl_vm.so :core:test --tests '*RuntimeProfilingTest' --tests '*BackgroundDeviceVmTest.requestSliceMirrorsExecutionQuotaToNativeKernelWhenConfigured' --rerun-tasks
+```
+
+Expected: PASS.
+
+- [x] **Step 5: Commit Task 25**
+
+```bash
+git add docs/superpowers/plans/2026-05-10-device-quota-process-scheduler.md \
+  modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/runtime/RuntimeProfiling.kt \
+  modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVm.kt \
+  modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/runtime/RuntimeProfilingTest.kt \
+  modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVmTest.kt
+git commit -m "feat: mirror device quota to native kernel"
+```
