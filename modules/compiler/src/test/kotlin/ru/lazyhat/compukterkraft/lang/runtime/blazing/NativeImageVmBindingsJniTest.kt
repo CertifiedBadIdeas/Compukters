@@ -586,7 +586,7 @@ class NativeImageVmBindingsJniTest {
                     exitCode = 0,
                 ),
             )
-            assertEquals(1, NativeVmBindings.tickDeviceDaemon(handle, 128, 1_000_000, 2).halted)
+            assertEquals(2, NativeVmBindings.tickDeviceDaemon(handle, 128, 1_000_000, 2).halted)
         } finally {
             NativeVmBindings.freeDeviceDaemon(handle)
         }
@@ -621,11 +621,11 @@ class NativeImageVmBindingsJniTest {
                 ),
             )
 
-            assertEquals(1, NativeVmBindings.tickDeviceDaemon(handle, 128, 1_000_000, 2).halted)
-            val parentResumed = NativeVmBindings.tickDeviceDaemon(handle, 128, 1_000_000, 3)
+            val parentResumed = NativeVmBindings.tickDeviceDaemon(handle, 128, 1_000_000, 2)
             val logRequest = NativeVmBindings.drainDeviceDaemonHostRequests(handle).single()
 
             assertEquals(1, parentResumed.hostRequests)
+            assertEquals(1, parentResumed.halted)
             assertEquals("system", logRequest.moduleName)
             assertEquals("log", logRequest.functionName)
             assertEquals(listOf(VmValue.StringValue("exit=0")), logRequest.arguments)
