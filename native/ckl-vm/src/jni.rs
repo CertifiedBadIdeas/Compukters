@@ -246,6 +246,68 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
 }
 
 #[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_bootDeviceDaemonNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    handle: jlong,
+    image: JByteArray<'_>,
+    program_path: JString<'_>,
+    argument: JString<'_>,
+    working_directory: JString<'_>,
+) -> jlongArray {
+    let image = match env.convert_byte_array(&image) {
+        Ok(image) => image,
+        Err(error) => {
+            let _ = env.throw_new(
+                "java/lang/IllegalArgumentException",
+                format!("Cannot read native device daemon boot image: {error}"),
+            );
+            return null_mut();
+        }
+    };
+    let program_path: String = match env.get_string(&program_path) {
+        Ok(value) => value.into(),
+        Err(error) => {
+            let _ = env.throw_new(
+                "java/lang/IllegalArgumentException",
+                format!("Cannot read native device daemon program path: {error}"),
+            );
+            return null_mut();
+        }
+    };
+    let argument: String = match env.get_string(&argument) {
+        Ok(value) => value.into(),
+        Err(error) => {
+            let _ = env.throw_new(
+                "java/lang/IllegalArgumentException",
+                format!("Cannot read native device daemon argument: {error}"),
+            );
+            return null_mut();
+        }
+    };
+    let working_directory: String = match env.get_string(&working_directory) {
+        Ok(value) => value.into(),
+        Err(error) => {
+            let _ = env.throw_new(
+                "java/lang/IllegalArgumentException",
+                format!("Cannot read native device daemon working directory: {error}"),
+            );
+            return null_mut();
+        }
+    };
+    let summary = match with_device_daemon_mut(&mut env, handle, |daemon| {
+        daemon.boot_image(&image, &program_path, &argument, &working_directory)
+    }) {
+        Some(summary) => summary,
+        None => return null_mut(),
+    };
+    long_array_or_throw(
+        &mut env,
+        &[summary.pid as i64, i64::from(summary.image_attached)],
+    )
+}
+
+#[no_mangle]
 pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_enqueueDeviceEventNative(
     mut env: JNIEnv<'_>,
     _class: JClass<'_>,
