@@ -19,23 +19,50 @@
 
 package ru.lazyhat.compukterkraft.core.device.vm
 
-import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.CompletableDeferred
+import java.util.ArrayDeque
 
 /**
  * Bounded device-level execution quota.
  *
- * This intentionally preserves the old one-pending-slice behavior while making the quota a named runtime primitive
- * instead of an anonymous channel. Later scheduler slices can add numeric instruction/time accounting here.
+ * The quota remains one pending permit per device, but the permit is now owned by a selected process. That lets the
+ * device scheduler choose which process may resume while preserving the old bounded back-pressure behavior.
  */
 internal class DeviceExecutionQuota {
-    private val permits = Channel<Unit>(capacity = 1)
+    private val lock = Any()
+    private val waiters = mutableMapOf<Int, ArrayDeque<CompletableDeferred<Unit>>>()
+    private var pendingPid: Int? = null
 
-    fun refill(available: Boolean): Boolean {
-        if (!available) return false
-        return permits.trySend(Unit).isSuccess
+    fun refill(selectedPid: Int?): Boolean {
+        selectedPid ?: return false
+        var waiter: CompletableDeferred<Unit>? = null
+        synchronized(lock) {
+            if (pendingPid != null) {
+                return false
+            }
+            waiter = waiters[selectedPid]?.pollFirst()
+            if (waiters[selectedPid]?.isEmpty() == true) {
+                waiters.remove(selectedPid)
+            }
+            if (waiter == null) {
+                pendingPid = selectedPid
+            }
+        }
+        waiter?.complete(Unit)
+        return true
     }
 
-    suspend fun awaitPermit() {
-        permits.receive()
+    suspend fun awaitPermit(processId: Int) {
+        val waiter =
+            synchronized(lock) {
+                if (pendingPid == processId) {
+                    pendingPid = null
+                    return
+                }
+                CompletableDeferred<Unit>().also { deferred ->
+                    waiters.getOrPut(processId) { ArrayDeque() }.addLast(deferred)
+                }
+            }
+        waiter.await()
     }
 }

@@ -32,29 +32,48 @@ class DeviceExecutionQuotaTest {
         runBlocking {
             val quota = DeviceExecutionQuota()
 
-            assertTrue(quota.refill(available = true))
-            assertFalse(quota.refill(available = true))
+            assertTrue(quota.refill(selectedPid = 2))
+            assertFalse(quota.refill(selectedPid = 2))
 
-            quota.awaitPermit()
+            quota.awaitPermit(processId = 2)
 
-            assertTrue(quota.refill(available = true))
+            assertTrue(quota.refill(selectedPid = 2))
         }
 
     @Test
-    fun refillDoesNotAddQuotaWhenUnavailable() {
+    fun refillDoesNotAddQuotaWhenNoProcessIsSelected() {
         val quota = DeviceExecutionQuota()
 
-        assertFalse(quota.refill(available = false))
+        assertFalse(quota.refill(selectedPid = null))
     }
 
     @Test
     fun awaitPermitResumesWhenQuotaArrives() =
         runBlocking {
             val quota = DeviceExecutionQuota()
-            val waiter = async { quota.awaitPermit() }
+            val waiter = async { quota.awaitPermit(processId = 2) }
 
             assertFalse(waiter.isCompleted)
-            assertTrue(quota.refill(available = true))
+            assertTrue(quota.refill(selectedPid = 2))
+
+            withTimeout(1_000) {
+                waiter.await()
+            }
+        }
+
+    @Test
+    fun awaitPermitDoesNotResumeDifferentProcess() =
+        runBlocking {
+            val quota = DeviceExecutionQuota()
+            val waiter = async { quota.awaitPermit(processId = 3) }
+
+            assertFalse(waiter.isCompleted)
+            assertTrue(quota.refill(selectedPid = 2))
+            assertFalse(waiter.isCompleted)
+
+            assertFalse(quota.refill(selectedPid = 3))
+            quota.awaitPermit(processId = 2)
+            assertTrue(quota.refill(selectedPid = 3))
 
             withTimeout(1_000) {
                 waiter.await()
