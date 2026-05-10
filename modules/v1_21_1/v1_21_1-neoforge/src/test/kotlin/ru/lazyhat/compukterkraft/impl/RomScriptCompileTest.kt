@@ -81,13 +81,26 @@ class RomScriptCompileTest {
     }
 
     @Test
-    fun bundledRomTerminalUsesAsciiGlyphTableFastPath() {
+    fun bundledRomTerminalDelegatesGlyphRenderingToDisplayIntrinsic() {
         val source = resourceText("rom/terminal.ck")
 
-        assertTrue(source.contains("glyphs: Array<Long>"), "terminal buffer should keep a reusable ASCII glyph table")
-        assertTrue(source.contains("Array<Long>(size = 128"), "terminal should allocate the ASCII glyph table once per buffer")
-        assertTrue(source.contains("strings::charCodeAt(ch, 0)"), "terminal glyph lookup should index by character code")
-        assertFalse(source.contains("if (ch == \"A\""), "terminal should not linearly scan glyph names for ASCII")
+        assertTrue(
+            source.contains("display::blitMono5x7Text"),
+            "terminal.ck should delegate text glyph rendering to the display intrinsic",
+        )
+        assertFalse(
+            source.contains("glyphs: Array<Long>"),
+            "terminal buffer should not duplicate intrinsic font tables",
+        )
+        assertFalse(
+            source.contains("fun asciiGlyphs()"),
+            "terminal.ck should not allocate a CKL-side ASCII glyph table",
+        )
+        assertFalse(source.contains("fun glyphBits("), "terminal.ck should not own glyph lookup")
+        assertFalse(
+            source.contains("display::blitMono5x7Packed"),
+            "terminal.ck should not bypass intrinsic text rendering with packed glyphs",
+        )
     }
 
     @Test
@@ -327,26 +340,25 @@ class RomScriptCompileTest {
     }
 
     @Test
-    fun bundledRomTerminalHasSymmetricAngleGlyphs() {
+    fun bundledRomTerminalDoesNotDuplicateAngleGlyphs() {
         val source = resourceText("rom/terminal.ck")
 
-        assertTrue(source.contains("glyphs[60]"), "terminal.ck should define a '<' glyph")
-        assertTrue(
-            source.contains("glyphs[62] = 0b10000010000010000010001000100010000L"),
-            "terminal.ck should use a balanced packed seven-row '>' glyph",
-        )
-        assertTrue(
-            source.contains("glyphs[60] = 0b00001000100010001000001000001000001L"),
-            "terminal.ck should use a balanced packed seven-row '<' glyph",
-        )
+        assertFalse(source.contains("glyphs[60]"), "terminal.ck should leave '<' glyph bits to the display intrinsic")
+        assertFalse(source.contains("glyphs[62]"), "terminal.ck should leave '>' glyph bits to the display intrinsic")
     }
 
     @Test
-    fun bundledRomTerminalUsesPackedBitwiseGlyphs() {
+    fun bundledRomTerminalDoesNotOwnPackedBitwiseGlyphs() {
         val source = resourceText("rom/terminal.ck")
 
-        assertTrue(source.contains("fun glyphBits(glyphs: Array<Long>, ch: String): Long"), "terminal.ck should map characters to packed glyph bits")
-        assertTrue(source.contains("display::blitMono5x7Packed"), "terminal.ck should render glyphs through the packed display API")
+        assertFalse(
+            source.contains("fun glyphBits(glyphs: Array<Long>, ch: String): Long"),
+            "terminal.ck should not map characters to packed glyph bits",
+        )
+        assertFalse(
+            source.contains("display::blitMono5x7Packed"),
+            "terminal.ck should render text through the intrinsic text API",
+        )
         assertFalse(source.contains("pub struct Glyph5x7"), "terminal.ck should not allocate glyph row structs")
         assertFalse(source.contains("fun glyphRows(ch: String): Glyph5x7"), "terminal.ck should not return glyph row structs")
         assertFalse(source.contains("Glyph5x7("), "terminal.ck should not construct glyph row structs")
@@ -355,24 +367,16 @@ class RomScriptCompileTest {
             Regex("return \\\"[01]{35}\\\"").containsMatchIn(source),
             "terminal.ck should not return 35-character string glyph masks",
         )
-        assertTrue(
-            source.contains("glyphs[62] = 0b10000010000010000010001000100010000L"),
-            "terminal.ck should preserve the balanced '>' glyph as packed bits",
-        )
-        assertTrue(
-            source.contains("glyphs[60] = 0b00001000100010001000001000001000001L"),
-            "terminal.ck should preserve the balanced '<' glyph as packed bits",
-        )
     }
 
     @Test
-    fun bundledRomTerminalDefinesLowercaseGlyphs() {
+    fun bundledRomTerminalDoesNotDefineLowercaseGlyphs() {
         val source = resourceText("rom/terminal.ck")
 
         for (code in 'a'.code..'z'.code) {
-            assertTrue(
+            assertFalse(
                 source.contains("glyphs[$code] ="),
-                "terminal.ck should define a lowercase glyph for ${code.toChar()}",
+                "terminal.ck should leave lowercase glyph ${code.toChar()} to the display intrinsic",
             )
         }
         assertFalse(

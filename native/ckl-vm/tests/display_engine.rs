@@ -102,8 +102,8 @@ fn text_run_supports_digits_lowercase_and_punctuation() {
             .collect::<Vec<_>>()
     }
 
-    assert_eq!(single_text_payload("a"), single_text_payload("A"));
-    assert_eq!(single_text_payload("x"), single_text_payload("X"));
+    assert_ne!(single_text_payload("a"), single_text_payload("A"));
+    assert_ne!(single_text_payload("x"), single_text_payload("X"));
     assert_ne!(single_text_payload("1"), single_text_payload("@"));
     assert_ne!(single_text_payload("-"), single_text_payload("@"));
 }

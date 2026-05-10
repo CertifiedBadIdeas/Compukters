@@ -1,7 +1,6 @@
 pub struct TerminalBuffer {
     cellsText: String,
     historyCells: String,
-    glyphs: Array<Long>,
     cursorRow: Int,
     cursorColumn: Int,
     displayColumns: Int,
@@ -19,106 +18,14 @@ pub struct TerminalEventResult {
     submittedLine: Bool
 }
 
-fun unknownGlyphBits(): Long {
-    return 0b11111100011000110001100011000111111L
-}
-
-fun asciiGlyphs(): Array<Long> {
-    val glyphs: Array<Long> = Array<Long>(size = 128, default = unknownGlyphBits())
-    glyphs[33] = 0b00100001000010000100001000000000100L
-    glyphs[35] = 0b01010111110101011111010100000000000L
-    glyphs[39] = 0b00100001000000000000000000000000000L
-    glyphs[45] = 0b00000000000000011111000000000000000L
-    glyphs[46] = 0b00000000000000000000000000000000100L
-    glyphs[47] = 0b00001000100001000100010000100010000L
-    glyphs[48] = 0b01110100011001110101110011000101110L
-    glyphs[49] = 0b00100011000010000100001000010001110L
-    glyphs[50] = 0b01110100010000100010001000100011111L
-    glyphs[51] = 0b11110000010000100110000010000111110L
-    glyphs[52] = 0b00010001100101010010111110001000010L
-    glyphs[53] = 0b11111100001111000001000010000111110L
-    glyphs[54] = 0b01111100001000011110100011000101110L
-    glyphs[55] = 0b11111000010001000100010000100001000L
-    glyphs[56] = 0b01110100011000101110100011000101110L
-    glyphs[57] = 0b01110100011000101111000010000111110L
-    glyphs[58] = 0b00000001000010000000001000010000000L
-    glyphs[60] = 0b00001000100010001000001000001000001L
-    glyphs[62] = 0b10000010000010000010001000100010000L
-    glyphs[63] = 0b01110100010000100010001000000000100L
-    glyphs[65] = 0b01110100011000111111100011000110001L
-    glyphs[66] = 0b11110100011000111110100011000111110L
-    glyphs[67] = 0b01111100001000010000100001000001111L
-    glyphs[68] = 0b11110100011000110001100011000111110L
-    glyphs[69] = 0b11111100001000011110100001000011111L
-    glyphs[70] = 0b11111100001000011110100001000010000L
-    glyphs[71] = 0b01111100001000010011100011000101111L
-    glyphs[72] = 0b10001100011000111111100011000110001L
-    glyphs[73] = 0b11111001000010000100001000010011111L
-    glyphs[74] = 0b00111000100001000010100101001001100L
-    glyphs[75] = 0b10001100101010011000101001001010001L
-    glyphs[76] = 0b10000100001000010000100001000011111L
-    glyphs[77] = 0b10001110111010110101100011000110001L
-    glyphs[78] = 0b10001110011010110011100011000110001L
-    glyphs[79] = 0b01110100011000110001100011000101110L
-    glyphs[80] = 0b11110100011000111110100001000010000L
-    glyphs[81] = 0b01110100011000110001101011001001101L
-    glyphs[82] = 0b11110100011000111110101001001010001L
-    glyphs[83] = 0b01111100001000001110000010000111110L
-    glyphs[84] = 0b11111001000010000100001000010000100L
-    glyphs[85] = 0b10001100011000110001100011000101110L
-    glyphs[86] = 0b10001100011000110001100010101000100L
-    glyphs[87] = 0b10001100011000110101101011010101010L
-    glyphs[88] = 0b10001010100010000100001000101010001L
-    glyphs[89] = 0b10001010100010000100001000010000100L
-    glyphs[90] = 0b11111000010001000100010001000011111L
-    glyphs[95] = 0b00000000000000000000000000000011111L
-    glyphs[96] = 0b00100001000000000000000000000000000L
-    glyphs[97] = 0b00000000000111000001011111000101111L
-    glyphs[98] = 0b10000100001011011001100011000111110L
-    glyphs[99] = 0b00000000000111110000100001000001111L
-    glyphs[100] = 0b00001000010110110011100011000101111L
-    glyphs[101] = 0b00000000000111010001111111000001110L
-    glyphs[102] = 0b00110010010100011100010000100001000L
-    glyphs[103] = 0b00000011111000110001011110000101110L
-    glyphs[104] = 0b10000100001011011001100011000110001L
-    glyphs[105] = 0b00100000000110000100001000010001110L
-    glyphs[106] = 0b00010000000011000010000101001001100L
-    glyphs[107] = 0b10000100001001010100110001010010010L
-    glyphs[108] = 0b01100001000010000100001000010001110L
-    glyphs[109] = 0b00000000001101010101101011010110101L
-    glyphs[110] = 0b00000000001011011001100011000110001L
-    glyphs[111] = 0b00000000000111010001100011000101110L
-    glyphs[112] = 0b00000111101000111110100001000010000L
-    glyphs[113] = 0b00000011111000101111000010000100001L
-    glyphs[114] = 0b00000000001011011001100001000010000L
-    glyphs[115] = 0b00000000000111110000011100000111110L
-    glyphs[116] = 0b01000010001110001000010000100100110L
-    glyphs[117] = 0b00000000001000110001100011001101101L
-    glyphs[118] = 0b00000000001000110001100010101000100L
-    glyphs[119] = 0b00000000001000110001101011010101010L
-    glyphs[120] = 0b00000000001000101010001000101010001L
-    glyphs[121] = 0b00000100011000101111000010001011100L
-    glyphs[122] = 0b00000000001111100010001000100011111L
-    return glyphs
-}
-
-fun glyphBits(glyphs: Array<Long>, ch: String): Long {
-    val code: Int = strings::charCodeAt(ch, 0)
-    if (code >= 0 && code < 128) {
-        return glyphs[code]
-    }
-    return unknownGlyphBits()
-}
-
-fun drawGlyph(displayId: Int, glyphs: Array<Long>, column: Int, row: Int, ch: String, color: Int) {
+fun drawGlyph(displayId: Int, column: Int, row: Int, ch: String, color: Int) {
     val x: Int = column * 6
     val y: Int = row * 9
     if (ch == " ") {
         display::fillRect(displayId, x, y, 6, 9, 0)
         return
     }
-    val glyph: Long = glyphBits(glyphs, ch)
-    display::blitMono5x7Packed(displayId, x, y, glyph, color, -1)
+    display::blitMono5x7Text(displayId, x, y, ch, color, -1)
 }
 
 fun drawGlyphRun(displayId: Int, column: Int, row: Int, text: String, color: Int) {
@@ -162,7 +69,6 @@ fun newTerminalBuffer(displayId: Int): TerminalBuffer {
     return TerminalBuffer(
         cellsText = cells,
         historyCells = cells,
-        glyphs = asciiGlyphs(),
         cursorRow = 0,
         cursorColumn = 0,
         displayColumns = columns(displayId),
@@ -187,7 +93,7 @@ fun clearTextRow(displayId: Int, row: Int) {
     display::fillRect(displayId, 0, row * 9, columns(displayId) * 6, 9, 0)
 }
 
-fun renderRowCells(displayId: Int, glyphs: Array<Long>, row: Int, rowCells: String) {
+fun renderRowCells(displayId: Int, row: Int, rowCells: String) {
     clearTextRow(displayId, row)
     var col: Int = 0
     val cols: Int = columns(displayId)
@@ -209,23 +115,23 @@ fun renderRowCells(displayId: Int, glyphs: Array<Long>, row: Int, rowCells: Stri
     drawGlyphRun(displayId, runColumn, row, run, 2016)
 }
 
-fun renderTextRow(displayId: Int, glyphs: Array<Long>, cells: String, row: Int) {
+fun renderTextRow(displayId: Int, cells: String, row: Int) {
     val cols: Int = columns(displayId)
-    renderRowCells(displayId, glyphs, row, strings::slice(cells, row * cols, (row + 1) * cols))
+    renderRowCells(displayId, row, strings::slice(cells, row * cols, (row + 1) * cols))
 }
 
-fun renderAllRows(displayId: Int, glyphs: Array<Long>, cells: String) {
+fun renderAllRows(displayId: Int, cells: String) {
     display::clear(displayId, 0)
     var row: Int = 0
     val rs: Int = rows(displayId)
     while row < rs + 0 {
-        renderTextRow(displayId, glyphs, cells, row)
+        renderTextRow(displayId, cells, row)
         row = row + 1
     }
     display::present(displayId)
 }
 
-fun renderRows(displayId: Int, glyphs: Array<Long>, cells: String, startRow: Int, endRow: Int) {
+fun renderRows(displayId: Int, cells: String, startRow: Int, endRow: Int) {
     var row: Int = startRow
     if (row < 0) {
         row = 0
@@ -236,7 +142,7 @@ fun renderRows(displayId: Int, glyphs: Array<Long>, cells: String, startRow: Int
         last = rs - 1
     }
     while row < last + 1 {
-        renderTextRow(displayId, glyphs, cells, row)
+        renderTextRow(displayId, cells, row)
         row = row + 1
     }
     display::present(displayId)
@@ -252,7 +158,7 @@ fun renderAutoscrolledRows(displayId: Int, buffer: TerminalBuffer, startRow: Int
         row = rs - 1
     }
     while row < rs + 0 {
-        renderTextRow(displayId, buffer.glyphs, buffer.cellsText, row)
+        renderTextRow(displayId, buffer.cellsText, row)
         row = row + 1
     }
     display::present(displayId)
@@ -314,17 +220,16 @@ fun viewportRowCells(buffer: TerminalBuffer, row: Int): String {
 }
 
 fun renderViewportRow(displayId: Int, buffer: TerminalBuffer, row: Int) {
-    renderRowCells(displayId, buffer.glyphs, row, viewportRowCells(buffer, row))
+    renderRowCells(displayId, row, viewportRowCells(buffer, row))
 }
 
 fun renderViewport(displayId: Int, buffer: TerminalBuffer) {
     if (buffer.viewportOffset == 0) {
-        renderAllRows(displayId, buffer.glyphs, buffer.cellsText)
+        renderAllRows(displayId, buffer.cellsText)
         return
     }
     renderAllRows(
         displayId,
-        buffer.glyphs,
         viewportCells(
             buffer.historyCells,
             buffer.historyRows,
@@ -350,7 +255,6 @@ fun scrollViewportBy(displayId: Int, buffer: TerminalBuffer, deltaRows: Int): Te
     val updated: TerminalBuffer = TerminalBuffer(
         cellsText = buffer.cellsText,
         historyCells = buffer.historyCells,
-        glyphs = buffer.glyphs,
         cursorRow = buffer.cursorRow,
         cursorColumn = buffer.cursorColumn,
         displayColumns = buffer.displayColumns,
@@ -387,7 +291,6 @@ fun followBottom(displayId: Int, buffer: TerminalBuffer): TerminalBuffer {
     val updated: TerminalBuffer = TerminalBuffer(
         cellsText = buffer.cellsText,
         historyCells = buffer.historyCells,
-        glyphs = buffer.glyphs,
         cursorRow = buffer.cursorRow,
         cursorColumn = buffer.cursorColumn,
         displayColumns = buffer.displayColumns,
@@ -470,7 +373,6 @@ fun appendText(displayId: Int, buffer: TerminalBuffer, text: String): TerminalBu
     val updated: TerminalBuffer = TerminalBuffer(
         cellsText = cells,
         historyCells = history,
-        glyphs = buffer.glyphs,
         cursorRow = row,
         cursorColumn = col,
         displayColumns = cols,
@@ -484,7 +386,7 @@ fun appendText(displayId: Int, buffer: TerminalBuffer, text: String): TerminalBu
             renderAutoscrolledRows(displayId, updated, startRow)
         } else {
             val endVisibleRow: Int = row - historyRowStart(historyRows, rs, 0)
-            renderRows(displayId, buffer.glyphs, cells, startVisibleRow, endVisibleRow)
+            renderRows(displayId, cells, startVisibleRow, endVisibleRow)
         }
     }
     return updated
@@ -532,7 +434,7 @@ fun clearRenderedInputLine(displayId: Int, buffer: TerminalBuffer, previousLine:
         val row: Int = (buffer.cursorRow - historyRowStart(buffer.historyRows, buffer.displayRows, buffer.viewportOffset)) + rowOffset
         if (row >= 0 && row < rows(displayId)) {
             clearTextRow(displayId, row)
-            renderTextRow(displayId, buffer.glyphs, visibleCells, row)
+            renderTextRow(displayId, visibleCells, row)
         }
         rowOffset = rowOffset + 1
     }
@@ -597,7 +499,7 @@ fun renderInputLineAppend(displayId: Int, buffer: TerminalBuffer, line: String, 
         if (ch == " ") {
             drawGlyphRun(displayId, runX, runY, run, 2016)
             run = ""
-            drawGlyph(displayId, buffer.glyphs, x, y, ch, 2016)
+            drawGlyph(displayId, x, y, ch, 2016)
         } else {
             if (run == "") {
                 runX = x
@@ -649,7 +551,7 @@ fun restoreInputCell(displayId: Int, buffer: TerminalBuffer, lineIndex: Int) {
                 buffer.viewportOffset
             )
     }
-    drawGlyph(displayId, buffer.glyphs, x, y, cellAt(visibleCells, y * cols + x), 2016)
+    drawGlyph(displayId, x, y, cellAt(visibleCells, y * cols + x), 2016)
     display::present(displayId)
 }
 
@@ -700,7 +602,7 @@ fun renderInputLine(displayId: Int, buffer: TerminalBuffer, previousLine: String
         if (ch == " ") {
             drawGlyphRun(displayId, runX, runY, run, 2016)
             run = ""
-            drawGlyph(displayId, buffer.glyphs, x, y, ch, 2016)
+            drawGlyph(displayId, x, y, ch, 2016)
         } else {
             if (run == "") {
                 runX = x
