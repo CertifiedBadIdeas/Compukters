@@ -1071,3 +1071,42 @@ git add docs/superpowers/plans/2026-05-10-device-quota-process-scheduler.md \
   modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVmTest.kt
 git commit -m "feat: make device execution quota pid-aware"
 ```
+
+## Task 20: Native Scheduler Comparison In Profiling Reports
+
+**Files:**
+- Modify: `modules/v1_21_1/v1_21_1-neoforge/src/test/kotlin/ru/lazyhat/compukterkraft/impl/computer/vm/RuntimeVmProfilingReport.kt`
+- Modify: `modules/v1_21_1/v1_21_1-neoforge/src/test/kotlin/ru/lazyhat/compukterkraft/impl/computer/vm/RuntimeVmProfilingProfileCodecTest.kt`
+- Modify: `modules/v1_21_1/v1_21_1-neoforge/src/test/kotlin/ru/lazyhat/compukterkraft/impl/computer/vm/RuntimeVmProfilingReportFormatterTest.kt`
+
+- [x] **Step 1: Add failing report tests**
+
+Extend profile codec and Markdown formatter tests so native scheduler comparison, match, and mismatch counters are
+written, read, and displayed.
+
+- [x] **Step 2: Extend runtime VM TSV fields**
+
+Append native scheduler comparison fields after process scheduler fields. Preserve old-row compatibility by decoding
+missing values as zero.
+
+- [x] **Step 3: Extend Markdown reports**
+
+Add per-run and historical rows for native scheduler comparisons, matches, and mismatches.
+
+- [x] **Step 4: Run focused report tests**
+
+```bash
+./gradlew :v1_21_1-neoforge:test --tests '*RuntimeVmProfilingProfileCodecTest' --tests '*RuntimeVmProfilingReportFormatterTest' --rerun-tasks
+```
+
+Expected: PASS.
+
+- [x] **Step 5: Commit Task 20**
+
+```bash
+git add docs/superpowers/plans/2026-05-10-device-quota-process-scheduler.md \
+  modules/v1_21_1/v1_21_1-neoforge/src/test/kotlin/ru/lazyhat/compukterkraft/impl/computer/vm/RuntimeVmProfilingReport.kt \
+  modules/v1_21_1/v1_21_1-neoforge/src/test/kotlin/ru/lazyhat/compukterkraft/impl/computer/vm/RuntimeVmProfilingProfileCodecTest.kt \
+  modules/v1_21_1/v1_21_1-neoforge/src/test/kotlin/ru/lazyhat/compukterkraft/impl/computer/vm/RuntimeVmProfilingReportFormatterTest.kt
+git commit -m "feat: report native scheduler comparison metrics"
+```
