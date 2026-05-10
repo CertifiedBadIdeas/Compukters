@@ -47,6 +47,7 @@ internal class VmProcessManager(
     private val compilerMetricsCollector: CompilerMetricsCollector = NoOpCompilerMetricsCollector,
     private val runtimeMetricsCollector: RuntimeMetricsCollector = NoOpRuntimeMetricsCollector,
     private val nativeProcessBridge: NativeProcessBridge = NoOpNativeProcessBridge,
+    private val strictNativeSchedulerParity: Boolean = false,
 ) : VmProcessStateReporter {
     private val nextPid = AtomicInteger(2)
     private val processes = ConcurrentHashMap<Int, ProcessHandle>()
@@ -78,7 +79,14 @@ internal class VmProcessManager(
                 val matched = nativeTick == kotlinTick
                 runtimeMetricsCollector.recordNativeProcessSchedulerComparison(matched)
                 runtimeMetricsCollector.recordNativeProcessSchedulerSource(acceptedNative = matched)
-                if (matched) nativeTick else kotlinTick
+                if (matched) {
+                    nativeTick
+                } else {
+                    if (strictNativeSchedulerParity) {
+                        error("Native process scheduler mismatch at tick $currentTick: kotlin=$kotlinTick native=$nativeTick")
+                    }
+                    kotlinTick
+                }
             }
         return effectiveTick.also { tick ->
             runtimeMetricsCollector.recordProcessSchedulerTick(

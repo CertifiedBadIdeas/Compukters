@@ -1191,3 +1191,44 @@ git add docs/superpowers/plans/2026-05-10-device-quota-process-scheduler.md \
   modules/v1_21_1/v1_21_1-neoforge/src/test/kotlin/ru/lazyhat/compukterkraft/impl/computer/vm/RuntimeVmProfilingReportFormatterTest.kt
 git commit -m "feat: report native scheduler source metrics"
 ```
+
+## Task 23: Strict Native Scheduler Parity Guard
+
+**Files:**
+- Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVm.kt`
+- Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessManager.kt`
+- Modify: `modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessManagerTest.kt`
+
+- [x] **Step 1: Add failing strict parity tests**
+
+Add tests proving:
+
+- strict mode throws when Rust and Kotlin scheduler ticks differ;
+- strict mode still accepts matching native ticks;
+- default non-strict mode keeps Kotlin fallback behavior on mismatch.
+
+- [x] **Step 2: Add strict parity option**
+
+Add a `strictNativeSchedulerParity` option to `VmProcessManager`, defaulting to false.
+
+- [x] **Step 3: Wire system property from `BackgroundDeviceVm`**
+
+Pass `System.getProperty("ckl.vm.native.scheduler.strict") == "true"` into `VmProcessManager`.
+
+- [x] **Step 4: Run focused scheduler tests**
+
+```bash
+./gradlew :core:test --tests '*VmProcessManagerTest' --rerun-tasks
+```
+
+Expected: PASS.
+
+- [x] **Step 5: Commit Task 23**
+
+```bash
+git add docs/superpowers/plans/2026-05-10-device-quota-process-scheduler.md \
+  modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVm.kt \
+  modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessManager.kt \
+  modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessManagerTest.kt
+git commit -m "feat: guard native scheduler parity"
+```

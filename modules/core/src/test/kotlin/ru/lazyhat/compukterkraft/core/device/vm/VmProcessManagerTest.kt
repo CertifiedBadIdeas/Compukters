@@ -52,6 +52,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.VmStopReason
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class VmProcessManagerTest {
@@ -562,6 +563,7 @@ class VmProcessManagerTest {
                     compilerMetricsCollector = NoOpCompilerMetricsCollector,
                     runtimeMetricsCollector = metrics,
                     nativeProcessBridge = bridge,
+                    strictNativeSchedulerParity = true,
                 )
 
             try {
@@ -604,6 +606,44 @@ class VmProcessManagerTest {
                 bridge.schedulerTickResult = VmProcessSchedulerTick(currentTick = 4, wokenPids = emptyList(), selectedPid = null)
 
                 assertEquals(VmProcessSchedulerTick(currentTick = 4, wokenPids = emptyList(), selectedPid = 1), manager.schedulerTick(4))
+                assertEquals(1, metrics.snapshot().vm.nativeProcessSchedulerComparisons)
+                assertEquals(0, metrics.snapshot().vm.nativeProcessSchedulerMatches)
+                assertEquals(1, metrics.snapshot().vm.nativeProcessSchedulerMismatches)
+                assertEquals(0, metrics.snapshot().vm.nativeProcessSchedulerAcceptedTicks)
+                assertEquals(1, metrics.snapshot().vm.nativeProcessSchedulerFallbackTicks)
+            } finally {
+                runBlocking { manager.cancelAll() }
+                scope.cancel()
+            }
+        }
+    }
+
+    @Test
+    fun strictNativeSchedulerParityRejectsMismatchedNativeDecision() {
+        runtimeTestWorkspace("vm-process-manager-native-scheduler-strict-mismatch") { workspace ->
+            val bridge = RecordingNativeProcessBridge()
+            val ctx = StubVmContext()
+            val metrics = RecordingRuntimeMetricsCollector()
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val manager =
+                VmProcessManager(
+                    scope = scope,
+                    ctx = ctx,
+                    deviceId = 1,
+                    programLoader = WorkspaceProgramLoader(workspace.host),
+                    profile = runtimeProfile(),
+                    runtimeCreator = { _, _, _, _ -> error("runtimeCreator should not run") },
+                    compilerMetricsCollector = NoOpCompilerMetricsCollector,
+                    runtimeMetricsCollector = metrics,
+                    nativeProcessBridge = bridge,
+                    strictNativeSchedulerParity = true,
+                )
+
+            try {
+                bridge.schedulerTickResult = VmProcessSchedulerTick(currentTick = 4, wokenPids = emptyList(), selectedPid = null)
+
+                val error = assertFailsWith<IllegalStateException> { manager.schedulerTick(4) }
+                assertTrue(error.message.orEmpty().contains("Native process scheduler mismatch"), error.message)
                 assertEquals(1, metrics.snapshot().vm.nativeProcessSchedulerComparisons)
                 assertEquals(0, metrics.snapshot().vm.nativeProcessSchedulerMatches)
                 assertEquals(1, metrics.snapshot().vm.nativeProcessSchedulerMismatches)

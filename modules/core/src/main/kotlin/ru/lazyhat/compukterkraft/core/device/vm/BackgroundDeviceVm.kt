@@ -118,6 +118,7 @@ class BackgroundDeviceVm(
     private val runtimeMetricsCollector: RuntimeMetricsCollector = NoOpRuntimeMetricsCollector,
     private val compilerMetricsCollector: CompilerMetricsCollector = NoOpCompilerMetricsCollector,
     private val nativeDisplayEnabled: Boolean = System.getProperty("ckl.vm.native.display") == "true",
+    private val strictNativeSchedulerParity: Boolean = System.getProperty("ckl.vm.native.scheduler.strict") == "true",
     private val nativeFilesystemRoot: Path? = null,
 ) : DeviceVmHandle,
     VmContext {
@@ -166,6 +167,7 @@ class BackgroundDeviceVm(
             compilerMetricsCollector = compilerMetricsCollector,
             runtimeMetricsCollector = runtimeMetricsCollector,
             nativeProcessBridge = nativeProcessBridge,
+            strictNativeSchedulerParity = strictNativeSchedulerParity,
         )
     private val displayRegistry = DisplayRegistry(displayMetricsCollector)
     private val peripheralRegistry = VmPeripheralRegistry()
