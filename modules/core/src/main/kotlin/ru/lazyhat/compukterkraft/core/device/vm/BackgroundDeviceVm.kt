@@ -24,7 +24,6 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -123,7 +122,7 @@ class BackgroundDeviceVm(
 ) : DeviceVmHandle,
     VmContext {
     private val scope = CoroutineScope(SupervisorJob() + dispatcher)
-    private val slicePermits = Channel<Unit>(capacity = 1)
+    private val executionQuota = DeviceExecutionQuota()
     private val stateManager = VmStateManager()
     private val eventManager = EventManager(profile.resources.queues.eventQueueSlots)
     private val eventPayloadStore = EventPayloadStore(profile.resources.queues.eventQueueSlots)
@@ -304,8 +303,8 @@ class BackgroundDeviceVm(
             runtimeMetricsCollector.recordSliceRequest(sent = false, sleepGated = true)
             return
         }
-        val result = slicePermits.trySend(Unit)
-        runtimeMetricsCollector.recordSliceRequest(sent = result.isSuccess, sleepGated = false)
+        val sent = executionQuota.refill(available = true)
+        runtimeMetricsCollector.recordSliceRequest(sent = sent, sleepGated = false)
     }
 
     override fun drainHostCalls(): List<HostCall> = hostCallManager.drainHostCalls()
@@ -549,7 +548,7 @@ class BackgroundDeviceVm(
                 else -> VmState.Running
             },
         )
-        slicePermits.receive()
+        executionQuota.awaitPermit()
         runtimeMetricsCollector.recordSlicePermitReceived()
         executionWindowStartedNanos = System.nanoTime()
         stateManager.updateSliceDeadlineNanos(profile.resources.cpu.wallTimeGuardNanosPerSlice)
