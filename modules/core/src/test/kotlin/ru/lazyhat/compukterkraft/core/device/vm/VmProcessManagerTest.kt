@@ -187,6 +187,7 @@ class VmProcessManagerTest {
         runtimeTestWorkspace("vm-process-manager-native-bridge") { workspace ->
             val bridge = RecordingNativeProcessBridge()
             val ctx = StubVmContext()
+            val metrics = RecordingRuntimeMetricsCollector()
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
             val manager =
                 VmProcessManager(
@@ -417,6 +418,7 @@ class VmProcessManagerTest {
     fun schedulerTickWakesSleepingRootAndSelectsRunnableProcess() {
         runtimeTestWorkspace("vm-process-manager-scheduler-tick") { workspace ->
             val ctx = StubVmContext()
+            val metrics = RecordingRuntimeMetricsCollector()
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
             val manager =
                 VmProcessManager(
@@ -427,6 +429,7 @@ class VmProcessManagerTest {
                     profile = runtimeProfile(),
                     runtimeCreator = { _, _, _, _ -> error("runtimeCreator should not run") },
                     compilerMetricsCollector = NoOpCompilerMetricsCollector,
+                    runtimeMetricsCollector = metrics,
                 )
 
             try {
@@ -435,6 +438,10 @@ class VmProcessManagerTest {
                 assertEquals(VmProcessSchedulerTick(currentTick = 4, wokenPids = emptyList(), selectedPid = null), manager.schedulerTick(4))
                 assertEquals(VmProcessSchedulerTick(currentTick = 5, wokenPids = listOf(1), selectedPid = 1), manager.schedulerTick(5))
                 assertEquals(VmProcessState.Runnable, manager.processSnapshot(1)?.state)
+                assertEquals(2, metrics.snapshot().vm.processSchedulerTicks)
+                assertEquals(1, metrics.snapshot().vm.processSchedulerSelectedTicks)
+                assertEquals(1, metrics.snapshot().vm.processSchedulerIdleTicks)
+                assertEquals(1, metrics.snapshot().vm.processSchedulerWokenProcesses)
             } finally {
                 runBlocking { manager.cancelAll() }
                 scope.cancel()

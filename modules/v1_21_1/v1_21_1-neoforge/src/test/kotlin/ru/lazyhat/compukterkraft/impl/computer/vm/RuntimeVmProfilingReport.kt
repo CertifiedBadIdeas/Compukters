@@ -133,7 +133,7 @@ internal object RuntimeVmProfileCodec {
                     }
                     workload.runtime.vm.run {
                         appendLine(
-                            "runtimeVm\t$sliceRequests\t$slicePermitsSent\t$sleepGatedSliceRequests\t$slicePermitsReceived\t$schedulingPoints\t$yieldSchedulingPoints\t$waitForSliceSchedulingPoints\t$executionWindows\t$executionWindowNanos\t$haltSignals\t$pauseSignals\t$yieldSignals\t$sleepSignals\t$waitEventSignals\t$waitPollSignals\t$waitProcessSignals\t$nativeProcessRegistrations\t$nativeProcessCompletions\t$nativeProcessStaleCompletions\t$hostCallSignals\t$nativeFastPathCalls\t$nativeWaitCalls\t$nativeWaitNanos\t$nativeWaitWakeups\t$nativeWaitTimeouts\t$nativeDisplayPumpWaitCalls\t$nativeDisplayPumpWaitNanos\t$nativeDisplayPumpWakeups\t$nativeDisplayPumpTimeouts\t$nativeDisplayFrameByteBatches\t$nativeDisplayFrameBytes\t$executionQuotaRefills\t$executionQuotaAcceptedRefills\t$executionQuotaUnavailableRefills\t$executionQuotaPermitsConsumed",
+                            "runtimeVm\t$sliceRequests\t$slicePermitsSent\t$sleepGatedSliceRequests\t$slicePermitsReceived\t$schedulingPoints\t$yieldSchedulingPoints\t$waitForSliceSchedulingPoints\t$executionWindows\t$executionWindowNanos\t$haltSignals\t$pauseSignals\t$yieldSignals\t$sleepSignals\t$waitEventSignals\t$waitPollSignals\t$waitProcessSignals\t$nativeProcessRegistrations\t$nativeProcessCompletions\t$nativeProcessStaleCompletions\t$hostCallSignals\t$nativeFastPathCalls\t$nativeWaitCalls\t$nativeWaitNanos\t$nativeWaitWakeups\t$nativeWaitTimeouts\t$nativeDisplayPumpWaitCalls\t$nativeDisplayPumpWaitNanos\t$nativeDisplayPumpWakeups\t$nativeDisplayPumpTimeouts\t$nativeDisplayFrameByteBatches\t$nativeDisplayFrameBytes\t$executionQuotaRefills\t$executionQuotaAcceptedRefills\t$executionQuotaUnavailableRefills\t$executionQuotaPermitsConsumed\t$processSchedulerTicks\t$processSchedulerSelectedTicks\t$processSchedulerIdleTicks\t$processSchedulerWokenProcesses",
                         )
                     }
                     workload.runtime.hostCalls.forEach { call ->
@@ -274,6 +274,7 @@ internal object RuntimeVmProfileCodec {
                         parts.longs().let { v ->
                             val hasProcessLifecycleFields = v.size >= 31
                             val hasQuotaFields = v.size >= 35
+                            val hasSchedulerFields = v.size >= 39
                             val hasProcessWaitField = v.size >= 28
                             val hasNativeWaitFields = v.size >= 27
                             val legacyHostCallSignals = v.getOrElse(14) { 0 }
@@ -286,6 +287,10 @@ internal object RuntimeVmProfileCodec {
                                 executionQuotaAcceptedRefills = if (hasQuotaFields) v[32] else 0,
                                 executionQuotaUnavailableRefills = if (hasQuotaFields) v[33] else 0,
                                 executionQuotaPermitsConsumed = if (hasQuotaFields) v[34] else 0,
+                                processSchedulerTicks = if (hasSchedulerFields) v[35] else 0,
+                                processSchedulerSelectedTicks = if (hasSchedulerFields) v[36] else 0,
+                                processSchedulerIdleTicks = if (hasSchedulerFields) v[37] else 0,
+                                processSchedulerWokenProcesses = if (hasSchedulerFields) v[38] else 0,
                                 schedulingPoints = v.getOrElse(4) { 0 },
                                 yieldSchedulingPoints = v.getOrElse(5) { 0 },
                                 waitForSliceSchedulingPoints = v.getOrElse(6) { 0 },
@@ -669,6 +674,10 @@ internal object RuntimeVmProfilingReportFormatter {
         appendLine("| Execution quota accepted refills | ${workload.runtime.vm.executionQuotaAcceptedRefills} |")
         appendLine("| Execution quota unavailable refills | ${workload.runtime.vm.executionQuotaUnavailableRefills} |")
         appendLine("| Execution quota permits consumed | ${workload.runtime.vm.executionQuotaPermitsConsumed} |")
+        appendLine("| Process scheduler ticks | ${workload.runtime.vm.processSchedulerTicks} |")
+        appendLine("| Process scheduler selected ticks | ${workload.runtime.vm.processSchedulerSelectedTicks} |")
+        appendLine("| Process scheduler idle ticks | ${workload.runtime.vm.processSchedulerIdleTicks} |")
+        appendLine("| Process scheduler woken processes | ${workload.runtime.vm.processSchedulerWokenProcesses} |")
         appendLine("| Native wait signals | ${workload.runtime.vm.nativeWaitSignals} |")
         appendLine("| Native process wait signals | ${workload.runtime.vm.waitProcessSignals} |")
         appendLine("| Native process registrations | ${workload.runtime.vm.nativeProcessRegistrations} |")
@@ -752,6 +761,10 @@ internal object RuntimeVmProfilingReportFormatter {
         appendHistoricalMetricRow("Execution quota accepted refills", columns) { workload -> workload.runtime.vm.executionQuotaAcceptedRefills.toString() }
         appendHistoricalMetricRow("Execution quota unavailable refills", columns) { workload -> workload.runtime.vm.executionQuotaUnavailableRefills.toString() }
         appendHistoricalMetricRow("Execution quota permits consumed", columns) { workload -> workload.runtime.vm.executionQuotaPermitsConsumed.toString() }
+        appendHistoricalMetricRow("Process scheduler ticks", columns) { workload -> workload.runtime.vm.processSchedulerTicks.toString() }
+        appendHistoricalMetricRow("Process scheduler selected ticks", columns) { workload -> workload.runtime.vm.processSchedulerSelectedTicks.toString() }
+        appendHistoricalMetricRow("Process scheduler idle ticks", columns) { workload -> workload.runtime.vm.processSchedulerIdleTicks.toString() }
+        appendHistoricalMetricRow("Process scheduler woken processes", columns) { workload -> workload.runtime.vm.processSchedulerWokenProcesses.toString() }
         appendHistoricalMetricRow("Native wait signals", columns) { workload -> workload.runtime.vm.nativeWaitSignals.toString() }
         appendHistoricalMetricRow("Native process wait signals", columns) { workload -> workload.runtime.vm.waitProcessSignals.toString() }
         appendHistoricalMetricRow("Native process registrations", columns) { workload -> workload.runtime.vm.nativeProcessRegistrations.toString() }

@@ -65,7 +65,13 @@ internal class VmProcessManager(
 
     fun processSnapshot(pid: Int): VmProcessRecord? = processTable.snapshot(pid)
 
-    fun schedulerTick(currentTick: Long): VmProcessSchedulerTick = processScheduler.tick(currentTick)
+    fun schedulerTick(currentTick: Long): VmProcessSchedulerTick =
+        processScheduler.tick(currentTick).also { tick ->
+            runtimeMetricsCollector.recordProcessSchedulerTick(
+                wokenProcesses = tick.wokenPids.size,
+                selected = tick.selectedPid != null,
+            )
+        }
 
     override fun markRunnable(pid: Int) {
         processTable.markRunnable(pid)

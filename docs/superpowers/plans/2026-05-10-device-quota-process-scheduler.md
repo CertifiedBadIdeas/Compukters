@@ -697,3 +697,55 @@ git add docs/superpowers/plans/2026-05-10-device-quota-process-scheduler.md \
   modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessManagerTest.kt
 git commit -m "feat: wake VM process waiters on completion"
 ```
+
+## Task 12: Scheduler Tick Profiling
+
+**Files:**
+- Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/runtime/RuntimeProfiling.kt`
+- Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessManager.kt`
+- Modify: `modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/runtime/RuntimeProfilingTest.kt`
+- Modify: `modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessManagerTest.kt`
+- Modify: `modules/v1_21_1/v1_21_1-neoforge/src/test/kotlin/ru/lazyhat/compukterkraft/impl/computer/vm/RuntimeVmProfilingReport.kt`
+- Modify: `modules/v1_21_1/v1_21_1-neoforge/src/test/kotlin/ru/lazyhat/compukterkraft/impl/computer/vm/RuntimeVmProfilingProfileCodecTest.kt`
+- Modify: `modules/v1_21_1/v1_21_1-neoforge/src/test/kotlin/ru/lazyhat/compukterkraft/impl/computer/vm/RuntimeVmProfilingReportFormatterTest.kt`
+
+- [x] **Step 1: Add failing scheduler metric tests**
+
+Add metrics for:
+
+- scheduler ticks;
+- selected runnable ticks;
+- idle ticks with no runnable pid;
+- total woken processes.
+
+- [x] **Step 2: Record metrics from `VmProcessManager.schedulerTick(...)`**
+
+Record each scheduler tick after `VmProcessScheduler.tick(...)` returns.
+
+- [x] **Step 3: Include metrics in runtime profile reports**
+
+Append scheduler fields after existing execution quota fields in the TSV format. Old rows must decode with zero
+scheduler metrics.
+
+- [x] **Step 4: Run focused tests**
+
+```bash
+./gradlew :core:test --tests '*RuntimeProfilingTest' --tests '*VmProcessManagerTest.schedulerTickWakesSleepingRootAndSelectsRunnableProcess' --rerun-tasks
+./gradlew :v1_21_1-neoforge:test --tests '*RuntimeVmProfilingProfileCodecTest' --tests '*RuntimeVmProfilingReportFormatterTest' --rerun-tasks
+```
+
+Expected: PASS.
+
+- [x] **Step 5: Commit Task 12**
+
+```bash
+git add docs/superpowers/plans/2026-05-10-device-quota-process-scheduler.md \
+  modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/runtime/RuntimeProfiling.kt \
+  modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessManager.kt \
+  modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/runtime/RuntimeProfilingTest.kt \
+  modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessManagerTest.kt \
+  modules/v1_21_1/v1_21_1-neoforge/src/test/kotlin/ru/lazyhat/compukterkraft/impl/computer/vm/RuntimeVmProfilingReport.kt \
+  modules/v1_21_1/v1_21_1-neoforge/src/test/kotlin/ru/lazyhat/compukterkraft/impl/computer/vm/RuntimeVmProfilingProfileCodecTest.kt \
+  modules/v1_21_1/v1_21_1-neoforge/src/test/kotlin/ru/lazyhat/compukterkraft/impl/computer/vm/RuntimeVmProfilingReportFormatterTest.kt
+git commit -m "feat: report VM process scheduler metrics"
+```
