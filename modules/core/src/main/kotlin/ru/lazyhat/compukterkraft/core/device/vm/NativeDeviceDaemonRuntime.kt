@@ -21,12 +21,16 @@ package ru.lazyhat.compukterkraft.core.device.vm
 
 import ru.lazyhat.compukterkraft.core.device.runtime.NoOpRuntimeMetricsCollector
 import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeMetricsCollector
+import ru.lazyhat.compukterkraft.core.device.vm.display.NativeDisplayFrameCodec
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceProfile
 import ru.lazyhat.compukterkraft.lang.runtime.VmEvent
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeDeviceDaemonBootSummary
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeDeviceDaemonHostRequest
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeDeviceDaemonTickSummary
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeVmBindings
+import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
+import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayInfo
+import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayPixelFormat
 
 internal class NativeDeviceDaemonRuntime(
     private val daemonHandle: Long,
@@ -45,6 +49,27 @@ internal class NativeDeviceDaemonRuntime(
 
     fun enqueueEvent(event: VmEvent): Boolean =
         bindings.enqueueDeviceDaemonEvent(daemonHandle, event.name, event.arguments)
+
+    fun attachDisplay(
+        displayId: Int,
+        width: Int,
+        height: Int,
+        pixelFormat: DisplayPixelFormat,
+    ): DisplayInfo {
+        require(pixelFormat == DisplayPixelFormat.RGB565) { "Native daemon display supports RGB565 only" }
+        bindings.attachDeviceDaemonDisplay(daemonHandle, displayId, width, height)
+        return DisplayInfo(displayId, width, height, pixelFormat)
+    }
+
+    fun detachDisplay(displayId: Int) {
+        bindings.detachDeviceDaemonDisplay(daemonHandle, displayId)
+    }
+
+    fun drainDisplayFrameBytes(): ByteArray = bindings.drainDeviceDaemonDisplayFrames(daemonHandle)
+
+    fun drainDisplayFrames(): List<DisplayFrameDelta> =
+        NativeDisplayFrameCodec.decodeFrames(drainDisplayFrameBytes())
+
 
     suspend fun requestSlice(serverTick: Long): NativeDeviceDaemonTickSummary {
         val started = System.nanoTime()
@@ -111,6 +136,20 @@ interface NativeDaemonBindings {
         eventName: String,
         arguments: List<Any?>,
     ): Boolean
+
+    fun attachDeviceDaemonDisplay(
+        daemonHandle: Long,
+        displayId: Int,
+        width: Int,
+        height: Int,
+    )
+
+    fun detachDeviceDaemonDisplay(
+        daemonHandle: Long,
+        displayId: Int,
+    )
+
+    fun drainDeviceDaemonDisplayFrames(daemonHandle: Long): ByteArray
 }
 
 object NativeVmDaemonBindings : NativeDaemonBindings {
@@ -154,4 +193,23 @@ object NativeVmDaemonBindings : NativeDaemonBindings {
         eventName: String,
         arguments: List<Any?>,
     ): Boolean = NativeVmBindings.enqueueDeviceDaemonEvent(daemonHandle, eventName, arguments)
+
+    override fun attachDeviceDaemonDisplay(
+        daemonHandle: Long,
+        displayId: Int,
+        width: Int,
+        height: Int,
+    ) {
+        NativeVmBindings.attachDeviceDaemonDisplay(daemonHandle, displayId, width, height)
+    }
+
+    override fun detachDeviceDaemonDisplay(
+        daemonHandle: Long,
+        displayId: Int,
+    ) {
+        NativeVmBindings.detachDeviceDaemonDisplay(daemonHandle, displayId)
+    }
+
+    override fun drainDeviceDaemonDisplayFrames(daemonHandle: Long): ByteArray =
+        NativeVmBindings.drainDeviceDaemonDisplayFrames(daemonHandle)
 }

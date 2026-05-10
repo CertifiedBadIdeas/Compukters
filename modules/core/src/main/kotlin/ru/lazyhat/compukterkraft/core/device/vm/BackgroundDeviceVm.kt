@@ -420,6 +420,7 @@ class BackgroundDeviceVm(
             nativeDeviceKernelLock.read {
                 if (!nativeDeviceKernelFreed) {
                     nativeDisplayRegistry?.attach(displayId, width, height, pixelFormat)
+                    nativeDaemonRuntime?.attachDisplay(displayId, width, height, pixelFormat)
                 }
             }
             if (stateManager.state.isActive) {
@@ -437,6 +438,7 @@ class BackgroundDeviceVm(
             nativeDeviceKernelLock.read {
                 if (!nativeDeviceKernelFreed) {
                     nativeDisplayRegistry?.attach(displayId, width, height, pixelFormat)
+                    nativeDaemonRuntime?.attachDisplay(displayId, width, height, pixelFormat)
                 }
             }
             enqueueEvent(VmEvent("display_resize", listOf(displayId, width, height)))
@@ -447,6 +449,7 @@ class BackgroundDeviceVm(
         nativeDeviceKernelLock.read {
             if (!nativeDeviceKernelFreed) {
                 nativeDisplayRegistry?.detach(displayId)
+                nativeDaemonRuntime?.detachDisplay(displayId)
             }
         }
         enqueueEvent(VmEvent("display_detach", listOf(displayId)))
@@ -457,6 +460,7 @@ class BackgroundDeviceVm(
             nativeDeviceKernelLock.read {
                 if (!nativeDeviceKernelFreed) {
                     nativeDisplayRegistry?.drainFrames()
+                        ?: nativeDaemonRuntime?.drainDisplayFrames()
                 } else {
                     null
                 }
@@ -504,6 +508,7 @@ class BackgroundDeviceVm(
         nativeDeviceKernelLock.read {
             if (!nativeDeviceKernelFreed) {
                 nativeDisplayRegistry?.drainFrameBytes()
+                    ?: nativeDaemonRuntime?.drainDisplayFrameBytes()
             } else {
                 null
             }
@@ -602,7 +607,10 @@ class BackgroundDeviceVm(
         if (!nativeDeviceKernelFreed) {
             nativeDeviceKernelLock.read {
                 if (!nativeDeviceKernelFreed) {
-                    nativeDisplayRegistry?.drainFrames()?.let(stoppedNativeDisplayFrames::addAll)
+                    val nativeFrames =
+                        nativeDisplayRegistry?.drainFrames()
+                            ?: nativeDaemonRuntime?.drainDisplayFrames()
+                    nativeFrames?.let(stoppedNativeDisplayFrames::addAll)
                 }
             }
         }

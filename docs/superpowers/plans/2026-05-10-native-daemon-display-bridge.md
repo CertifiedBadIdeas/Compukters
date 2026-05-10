@@ -24,7 +24,7 @@ standalone native kernel path. Kotlin will decode daemon frames with `NativeDisp
   `drainDeviceDaemonDisplayFramesNative`.
 - [x] Add Kotlin binding methods with the same validation style as existing daemon bindings.
 - [x] Run the focused compiler JNI test.
-- [ ] Commit Task 1.
+- [x] Commit Task 1.
 
 ## Task 2: Background VM Daemon Display Wiring
 
@@ -33,11 +33,11 @@ standalone native kernel path. Kotlin will decode daemon frames with `NativeDisp
 - Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVm.kt`
 - Test: `modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVmTest.kt`
 
-- [ ] Extend `NativeDaemonBindings` and `NativeDeviceDaemonRuntime` with attach/detach/drain display operations.
-- [ ] Mirror `attachDisplay`, `resizeDisplay`, and `detachDisplay` into the daemon runtime when daemon mode is active.
-- [ ] Drain daemon frames from `BackgroundDeviceVm.drainDisplayFrames` and stopped-frame collection.
-- [ ] Add a daemon display test around `BackgroundDeviceVm` proving frames are drained from the daemon path.
-- [ ] Run focused core tests.
+- [x] Extend `NativeDaemonBindings` and `NativeDeviceDaemonRuntime` with attach/detach/drain display operations.
+- [x] Mirror `attachDisplay`, `resizeDisplay`, and `detachDisplay` into the daemon runtime when daemon mode is active.
+- [x] Drain daemon frames from `BackgroundDeviceVm.drainDisplayFrames` and stopped-frame collection.
+- [x] Add a daemon display test around `BackgroundDeviceVm` proving frames are drained from the daemon path.
+- [x] Run focused core tests.
 - [ ] Commit Task 2.
 
 ## Task 3: Verification
