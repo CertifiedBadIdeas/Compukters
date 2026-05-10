@@ -1453,3 +1453,41 @@ git add docs/superpowers/plans/2026-05-10-device-quota-process-scheduler.md \
   modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVmTest.kt
 git commit -m "feat: observe native scheduler dry run"
 ```
+
+## Task 29: Native Scheduler Dry Run In Profiling Reports
+
+**Files:**
+- Modify: `modules/v1_21_1/v1_21_1-neoforge/src/test/kotlin/ru/lazyhat/compukterkraft/impl/computer/vm/RuntimeVmProfilingReport.kt`
+- Modify: `modules/v1_21_1/v1_21_1-neoforge/src/test/kotlin/ru/lazyhat/compukterkraft/impl/computer/vm/RuntimeVmProfilingProfileCodecTest.kt`
+- Modify: `modules/v1_21_1/v1_21_1-neoforge/src/test/kotlin/ru/lazyhat/compukterkraft/impl/computer/vm/RuntimeVmProfilingReportFormatterTest.kt`
+
+- [x] **Step 1: Add failing report tests for dry-run metrics**
+
+Add codec and Markdown expectations for native scheduler dry-run calls, turns, selected pids, remaining instructions,
+first-selection matches, and first-selection mismatches.
+
+- [x] **Step 2: Extend profile TSV codec**
+
+Append dry-run metric fields to `runtimeVm` rows and keep old rows backward-compatible with zero defaults.
+
+- [x] **Step 3: Extend Markdown reports**
+
+Show dry-run metric rows in per-run and historical comparison reports.
+
+- [x] **Step 4: Run focused report tests**
+
+```bash
+./gradlew :v1_21_1-neoforge:test --tests '*RuntimeVmProfilingProfileCodecTest' --tests '*RuntimeVmProfilingReportFormatterTest' --rerun-tasks
+```
+
+Expected: PASS.
+
+- [x] **Step 5: Commit Task 29**
+
+```bash
+git add docs/superpowers/plans/2026-05-10-device-quota-process-scheduler.md \
+  modules/v1_21_1/v1_21_1-neoforge/src/test/kotlin/ru/lazyhat/compukterkraft/impl/computer/vm/RuntimeVmProfilingReport.kt \
+  modules/v1_21_1/v1_21_1-neoforge/src/test/kotlin/ru/lazyhat/compukterkraft/impl/computer/vm/RuntimeVmProfilingProfileCodecTest.kt \
+  modules/v1_21_1/v1_21_1-neoforge/src/test/kotlin/ru/lazyhat/compukterkraft/impl/computer/vm/RuntimeVmProfilingReportFormatterTest.kt
+git commit -m "feat: report native scheduler dry run metrics"
+```

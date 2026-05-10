@@ -97,6 +97,12 @@ class RuntimeVmProfilingReportFormatterTest {
                             nativeExecutionQuotaInstructions = 3_852,
                             nativeExecutionQuotaWallNanos = 7_848,
                             nativeExecutionQuotaLastServerTick = 42,
+                            nativeSchedulerDryRuns = 12,
+                            nativeSchedulerDryRunTurns = 30,
+                            nativeSchedulerDryRunSelectedPids = 28,
+                            nativeSchedulerDryRunRemainingInstructions = 6,
+                            nativeSchedulerDryRunFirstSelectionMatches = 11,
+                            nativeSchedulerDryRunFirstSelectionMismatches = 1,
                             hostCallSignals = 2,
                             hostCalls =
                                 listOf(
@@ -153,6 +159,12 @@ class RuntimeVmProfilingReportFormatterTest {
         assertTrue(markdown.contains("| Native execution quota instructions | 3852 | 0 |"), markdown)
         assertTrue(markdown.contains("| Native execution quota wall time | 7.85 us | 0 ns |"), markdown)
         assertTrue(markdown.contains("| Native execution quota last tick | 42 | 0 |"), markdown)
+        assertTrue(markdown.contains("| Native scheduler dry-run calls | 12 | 0 |"), markdown)
+        assertTrue(markdown.contains("| Native scheduler dry-run turns | 30 | 0 |"), markdown)
+        assertTrue(markdown.contains("| Native scheduler dry-run selected pids | 28 | 0 |"), markdown)
+        assertTrue(markdown.contains("| Native scheduler dry-run remaining instructions | 6 | 0 |"), markdown)
+        assertTrue(markdown.contains("| Native scheduler dry-run first-selection matches | 11 | 0 |"), markdown)
+        assertTrue(markdown.contains("| Native scheduler dry-run first-selection mismatches | 1 | 0 |"), markdown)
         assertTrue(markdown.contains("| Host-call signals | 2 | 10 |"), markdown)
         assertTrue(markdown.contains("| Host-call active time | 30 ms | 50.01 us |"), markdown)
         assertTrue(markdown.contains("| Host-call wait time | 60 ms | 0 ns |"), markdown)
@@ -228,6 +240,12 @@ class RuntimeVmProfilingReportFormatterTest {
                             nativeExecutionQuotaInstructions = 5_136,
                             nativeExecutionQuotaWallNanos = 10_464,
                             nativeExecutionQuotaLastServerTick = 43,
+                            nativeSchedulerDryRuns = 16,
+                            nativeSchedulerDryRunTurns = 40,
+                            nativeSchedulerDryRunSelectedPids = 37,
+                            nativeSchedulerDryRunRemainingInstructions = 8,
+                            nativeSchedulerDryRunFirstSelectionMatches = 15,
+                            nativeSchedulerDryRunFirstSelectionMismatches = 1,
                             hostCallSignals = 2,
                         ),
                     ),
@@ -267,6 +285,12 @@ class RuntimeVmProfilingReportFormatterTest {
         assertTrue(markdown.contains("| Native execution quota instructions | 5136 |"), markdown)
         assertTrue(markdown.contains("| Native execution quota wall time | 10.46 us |"), markdown)
         assertTrue(markdown.contains("| Native execution quota last tick | 43 |"), markdown)
+        assertTrue(markdown.contains("| Native scheduler dry-run calls | 16 |"), markdown)
+        assertTrue(markdown.contains("| Native scheduler dry-run turns | 40 |"), markdown)
+        assertTrue(markdown.contains("| Native scheduler dry-run selected pids | 37 |"), markdown)
+        assertTrue(markdown.contains("| Native scheduler dry-run remaining instructions | 8 |"), markdown)
+        assertTrue(markdown.contains("| Native scheduler dry-run first-selection matches | 15 |"), markdown)
+        assertTrue(markdown.contains("| Native scheduler dry-run first-selection mismatches | 1 |"), markdown)
         assertTrue(markdown.contains("| Host-call signals | 4 |"), markdown)
         assertTrue(markdown.contains("| Host-call active time | 0 ns |"), markdown)
         assertTrue(markdown.contains("| Host-call wait time | 0 ns |"), markdown)
@@ -327,6 +351,12 @@ class RuntimeVmProfilingReportFormatterTest {
         nativeExecutionQuotaInstructions: Long = 0,
         nativeExecutionQuotaWallNanos: Long = 0,
         nativeExecutionQuotaLastServerTick: Long = 0,
+        nativeSchedulerDryRuns: Long = 0,
+        nativeSchedulerDryRunTurns: Long = 0,
+        nativeSchedulerDryRunSelectedPids: Long = 0,
+        nativeSchedulerDryRunRemainingInstructions: Long = 0,
+        nativeSchedulerDryRunFirstSelectionMatches: Long = 0,
+        nativeSchedulerDryRunFirstSelectionMismatches: Long = 0,
         hostCallSignals: Long,
         hostCalls: List<RuntimeHostCallMetrics> = emptyList(),
     ): RuntimeWorkloadProfile =
@@ -397,6 +427,12 @@ class RuntimeVmProfilingReportFormatterTest {
                             nativeExecutionQuotaInstructions = nativeExecutionQuotaInstructions,
                             nativeExecutionQuotaWallNanos = nativeExecutionQuotaWallNanos,
                             nativeExecutionQuotaLastServerTick = nativeExecutionQuotaLastServerTick,
+                            nativeSchedulerDryRuns = nativeSchedulerDryRuns,
+                            nativeSchedulerDryRunTurns = nativeSchedulerDryRunTurns,
+                            nativeSchedulerDryRunSelectedPids = nativeSchedulerDryRunSelectedPids,
+                            nativeSchedulerDryRunRemainingInstructions = nativeSchedulerDryRunRemainingInstructions,
+                            nativeSchedulerDryRunFirstSelectionMatches = nativeSchedulerDryRunFirstSelectionMatches,
+                            nativeSchedulerDryRunFirstSelectionMismatches = nativeSchedulerDryRunFirstSelectionMismatches,
                             hostCallSignals = hostCallSignals,
                         ),
                     hostCalls = hostCalls,
