@@ -24,11 +24,13 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.shareIn
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.selects.select
 import ru.lazyhat.compukterkraft.core.LOGGER
@@ -217,7 +219,9 @@ class BackgroundDeviceVm(
     private val peripheralRegistry = VmPeripheralRegistry()
     private val runtimeRegistryProfile = createRuntimeRegistryProfile()
     private val stoppedNativeDisplayFrames = mutableListOf<DisplayFrameDelta>()
+    private val daemonWakeSignal = Channel<Unit>(capacity = Channel.CONFLATED)
     private var nativeDeviceKernelFreed: Boolean = false
+    private var daemonExecutor: Job? = null
     private val nativeDeviceKernelLock = ReentrantReadWriteLock()
     private var executionWindowStartedNanos: Long? = null
 
@@ -339,7 +343,9 @@ class BackgroundDeviceVm(
                     nativeDeviceKernelHandle?.let { handle ->
                         NativeVmBindings.enqueueDeviceEvent(handle, event.name, event.arguments)
                     }
-                    nativeDaemonRuntime?.enqueueEvent(event)
+                    if (nativeDaemonRuntime?.enqueueEvent(event) == true) {
+                        wakeNativeDaemonExecutor()
+                    }
                 }
             }
         }
@@ -349,11 +355,8 @@ class BackgroundDeviceVm(
     override fun requestSlice(serverTick: Long) {
         stateManager.updateCurrentTick(serverTick)
         nativeDaemonRuntime?.let { daemon ->
-            val summary =
-                runBlocking {
-                    daemon.requestSlice(serverTick)
-                }
-            runtimeMetricsCollector.recordSliceRequest(sent = !summary.idle, sleepGated = false)
+            daemon.refillQuota(serverTick)
+            wakeNativeDaemonExecutor()
             return
         }
         var nativeDryRunFirstSelectedPid: Int? = null
@@ -681,9 +684,32 @@ class BackgroundDeviceVm(
             argument = "",
             workingDirectory = "",
         )
+        startNativeDaemonExecutor()
         stateManager.setState(VmState.Running)
         enqueueEvent(VmEvent("boot"))
+        wakeNativeDaemonExecutor()
         return true
+    }
+
+    private fun startNativeDaemonExecutor() {
+        if (nativeDaemonRuntime == null || daemonExecutor?.isActive == true) return
+        daemonExecutor =
+            scope.launch {
+                for (ignored in daemonWakeSignal) {
+                    var keepRunning = true
+                    while (keepRunning && isActive) {
+                        val summary = nativeDaemonRuntime.runReadyUntilBlocked()
+                        runtimeMetricsCollector.recordSliceRequest(sent = !summary.idle, sleepGated = false)
+                        keepRunning = summary.turns > 0 || summary.hostRequests > 0
+                    }
+                }
+            }
+    }
+
+    private fun wakeNativeDaemonExecutor() {
+        if (nativeDaemonRuntime != null) {
+            daemonWakeSignal.trySend(Unit)
+        }
     }
 
     private suspend fun handleNativeDaemonHostRequest(request: NativeDeviceDaemonHostRequest): ByteArray {

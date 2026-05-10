@@ -68,6 +68,8 @@ class BackgroundDeviceVmTest {
         val tickServerTicks = mutableListOf<Long>()
         val tickInstructions = mutableListOf<Long>()
         val tickWallNanos = mutableListOf<Long>()
+        val refillQuotaCalls = mutableListOf<Triple<Long, Long, Long>>()
+        val runReadyMaxTurns = mutableListOf<Long>()
         val completedRequestIds = mutableListOf<Long>()
         val completedCompileRequests = mutableListOf<Pair<Long, Int>>()
         val enqueuedEvents = mutableListOf<Pair<String, List<Any?>>>()
@@ -79,6 +81,7 @@ class BackgroundDeviceVmTest {
         var displayWakeSequence: Long = 0
         var displayWakeWaitResult: Long = 0
         var tickSummary: NativeDeviceDaemonTickSummary? = null
+        var runReadySummary: NativeDeviceDaemonTickSummary? = null
 
         override fun createDeviceDaemon(
             maxEventQueueSize: Int,
@@ -118,6 +121,31 @@ class BackgroundDeviceVmTest {
                     serverTick = serverTick,
                     turns = 0,
                     remainingInstructions = instructions,
+                    idle = true,
+                    halted = 0,
+                    hostRequests = 0,
+                )
+        }
+
+        override fun refillDeviceDaemonQuota(
+            daemonHandle: Long,
+            instructions: Long,
+            wallNanos: Long,
+            serverTick: Long,
+        ) {
+            refillQuotaCalls += Triple(instructions, wallNanos, serverTick)
+        }
+
+        override fun runDeviceDaemonReady(
+            daemonHandle: Long,
+            maxTurns: Long,
+        ): NativeDeviceDaemonTickSummary {
+            runReadyMaxTurns += maxTurns
+            return runReadySummary
+                ?: NativeDeviceDaemonTickSummary(
+                    serverTick = 0,
+                    turns = 0,
+                    remainingInstructions = 0,
                     idle = true,
                     halted = 0,
                     hostRequests = 0,
@@ -269,7 +297,7 @@ class BackgroundDeviceVmTest {
     fun nativeDaemonRuntimeBootsCompiledBootImageAndTicksDaemon() =
         runBlocking {
             val bindings = RecordingNativeDaemonBindings()
-            bindings.tickSummary =
+            bindings.runReadySummary =
                 NativeDeviceDaemonTickSummary(
                     serverTick = 42,
                     turns = 2,
@@ -307,9 +335,8 @@ class BackgroundDeviceVmTest {
             )
             runtime.requestSlice(serverTick = 42)
 
-            assertEquals(listOf(42L), bindings.tickServerTicks)
-            assertEquals(listOf(123L), bindings.tickInstructions)
-            assertEquals(listOf(456L), bindings.tickWallNanos)
+            assertEquals(listOf(Triple(123L, 456L, 42L)), bindings.refillQuotaCalls)
+            assertEquals(listOf(123L), bindings.runReadyMaxTurns)
             assertTrue(bindings.bootedImages.isNotEmpty())
             runtimeMetricsCollector.snapshot().vm.run {
                 assertEquals(1, nativeDaemonTicks)
@@ -333,7 +360,8 @@ class BackgroundDeviceVmTest {
                 vm.requestSlice(serverTick = 1)
 
                 assertTrue(daemonBindings.bootedImages.isNotEmpty())
-                assertTrue(daemonBindings.tickServerTicks.isNotEmpty())
+                assertTrue(daemonBindings.refillQuotaCalls.isNotEmpty())
+                assertTrue(daemonBindings.runReadyMaxTurns.isNotEmpty())
             } finally {
                 System.clearProperty("ckl.vm.native.daemon")
             }
@@ -377,6 +405,39 @@ class BackgroundDeviceVmTest {
                 assertTrue(vm.enqueueEvent(VmEvent("char", listOf("x"))))
 
                 assertEquals(listOf("char" to listOf<Any?>("x")), daemonBindings.enqueuedEvents)
+            } finally {
+                System.clearProperty("ckl.vm.native.daemon")
+            }
+        }
+    }
+
+    @Test
+    fun nativeDaemonExecutorRunsAfterAcceptedEventWithoutWaitingForNextSlice() {
+        runtimeTestWorkspace("vm-native-daemon-event-executor") { workspace ->
+            System.setProperty("ckl.vm.native.daemon", "true")
+            try {
+                val daemonBindings = RecordingNativeDaemonBindings()
+                val vm = backgroundVmWithNativeDaemonBindings(workspace.host, daemonBindings)
+
+                assertTrue(vm.boot())
+                runBlocking {
+                    repeat(20) {
+                        if (daemonBindings.runReadyMaxTurns.isNotEmpty()) return@runBlocking
+                        kotlinx.coroutines.delay(5)
+                    }
+                }
+                daemonBindings.runReadyMaxTurns.clear()
+
+                assertTrue(vm.enqueueEvent(VmEvent("char", listOf("a"))))
+                runBlocking {
+                    repeat(20) {
+                        if (daemonBindings.runReadyMaxTurns.isNotEmpty()) return@runBlocking
+                        kotlinx.coroutines.delay(5)
+                    }
+                }
+
+                assertTrue(daemonBindings.runReadyMaxTurns.isNotEmpty())
+                assertTrue(daemonBindings.refillQuotaCalls.isEmpty())
             } finally {
                 System.clearProperty("ckl.vm.native.daemon")
             }
