@@ -73,6 +73,16 @@ class BackgroundDeviceVmTest {
         assertFalse(hasBooleanConstructorParameter)
     }
 
+    @Test
+    fun nativeDeviceDaemonRuntimeDoesNotExposeRequestSliceWrapper() {
+        val memberNames =
+            NativeDeviceDaemonRuntime::class.java.declaredMethods
+                .map { it.name }
+                .toSet()
+
+        assertFalse("requestSlice" in memberNames)
+    }
+
     private open class RecordingNativeDaemonBindings : NativeDaemonBindings {
         val createdDaemons = mutableListOf<Triple<Int, Int, Int>>()
         val freedDaemons = mutableListOf<Long>()
@@ -332,7 +342,8 @@ class BackgroundDeviceVmTest {
                 argument = "",
                 workingDirectory = "",
             )
-            runtime.requestSlice(serverTick = 42)
+            runtime.refillQuota(serverTick = 42)
+            runtime.runReadyUntilBlocked()
 
             assertEquals(listOf(Triple(123L, 456L, 42L)), bindings.refillQuotaCalls)
             assertEquals(listOf(123L), bindings.runReadyMaxTurns)
@@ -370,7 +381,8 @@ class BackgroundDeviceVmTest {
                     hostBridge = { byteArrayOf(0) },
                 )
 
-            runtime.requestSlice(serverTick = 12)
+            runtime.refillQuota(serverTick = 12)
+            runtime.runReadyUntilBlocked()
 
             assertEquals(listOf(Triple(128L, 1_000_000L, 12L)), bindings.refillQuotaCalls)
             assertEquals(listOf(128L), bindings.runReadyMaxTurns)
