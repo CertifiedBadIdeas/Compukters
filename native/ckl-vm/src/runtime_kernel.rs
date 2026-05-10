@@ -72,6 +72,7 @@ enum ProcessState {
     WaitingEvent { filter: Option<String> },
     WaitingIpc { channel_id: i32 },
     WaitingProcess { target_pid: i32 },
+    WaitingHost { request_id: i64 },
     Sleeping { until_tick: i64 },
     Completed { exit_code: i32 },
     Crashed { message: String },
@@ -267,6 +268,7 @@ impl DeviceRuntimeKernel {
                 | ProcessState::WaitingEvent { .. }
                 | ProcessState::WaitingIpc { .. }
                 | ProcessState::WaitingProcess { .. }
+                | ProcessState::WaitingHost { .. }
                 | ProcessState::Sleeping { .. } => ProcessStatus::Running,
                 ProcessState::Completed { exit_code } => ProcessStatus::Completed(exit_code),
                 ProcessState::Crashed { .. } => ProcessStatus::Completed(1),
@@ -289,6 +291,10 @@ impl DeviceRuntimeKernel {
 
     pub fn mark_process_waiting_for_process(&mut self, pid: i32, target_pid: i32) -> bool {
         self.update_process_state(pid, ProcessState::WaitingProcess { target_pid })
+    }
+
+    pub fn mark_process_waiting_for_host_request(&mut self, pid: i32, request_id: i64) -> bool {
+        self.update_process_state(pid, ProcessState::WaitingHost { request_id })
     }
 
     pub fn mark_process_sleeping(&mut self, pid: i32, until_tick: i64) -> bool {

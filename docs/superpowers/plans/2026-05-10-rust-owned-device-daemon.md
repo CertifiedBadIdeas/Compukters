@@ -557,7 +557,7 @@ git commit -m "feat: handle daemon scheduler signals"
 - Modify: `native/ckl-vm/src/device_daemon.rs`
 - Modify: `native/ckl-vm/src/signal.rs`
 
-- [ ] **Step 1: Add failing host request tests**
+- [x] **Step 1: Add failing host request tests**
 
 Add tests to `native/ckl-vm/src/device_daemon.rs`:
 
@@ -584,7 +584,7 @@ fn daemon_host_call_parks_process_and_can_resume_with_value() {
 }
 ```
 
-- [ ] **Step 2: Run the Rust test and verify it fails**
+- [x] **Step 2: Run the Rust test and verify it fails**
 
 ```bash
 cargo test --manifest-path native/ckl-vm/Cargo.toml daemon_host_call_parks_process_and_can_resume_with_value
@@ -592,7 +592,7 @@ cargo test --manifest-path native/ckl-vm/Cargo.toml daemon_host_call_parks_proce
 
 Expected: FAIL because daemon host request queue does not exist.
 
-- [ ] **Step 3: Add host request structs and queue**
+- [x] **Step 3: Add host request structs and queue**
 
 Add to `native/ckl-vm/src/device_daemon.rs`:
 
@@ -628,7 +628,7 @@ next_host_request_id: i64,
 Handle `VmSignal::HostCall` by pushing a `DeviceDaemonHostRequest`, parking the process with a new native state
 `WaitingHost { request_id }`, and incrementing `host_requests` in the tick summary.
 
-- [ ] **Step 4: Add host request completion**
+- [x] **Step 4: Add host request completion**
 
 Add:
 
@@ -657,7 +657,7 @@ pub fn complete_host_request(
 }
 ```
 
-- [ ] **Step 5: Run focused Rust tests**
+- [x] **Step 5: Run focused Rust tests**
 
 ```bash
 cargo test --manifest-path native/ckl-vm/Cargo.toml daemon_host_call_parks_process_and_can_resume_with_value
@@ -666,7 +666,7 @@ cargo test --manifest-path native/ckl-vm/Cargo.toml daemon_
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit Task 5**
+- [x] **Step 6: Commit Task 5**
 
 ```bash
 git add native/ckl-vm/src/device_daemon.rs native/ckl-vm/src/runtime_kernel.rs native/ckl-vm/src/signal.rs docs/superpowers/plans/2026-05-10-rust-owned-device-daemon.md
