@@ -44,6 +44,8 @@ import ru.lazyhat.compukterkraft.lang.runtime.VmStopReason
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeDeviceDaemonBootSummary
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeDeviceDaemonHostRequest
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeDeviceDaemonTickSummary
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import kotlin.io.path.createDirectories
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
@@ -67,6 +69,9 @@ class BackgroundDeviceVmTest {
         val tickWallNanos = mutableListOf<Long>()
         val completedRequestIds = mutableListOf<Long>()
         val enqueuedEvents = mutableListOf<Pair<String, List<Any?>>>()
+        val attachedDisplays = mutableListOf<Triple<Int, Int, Int>>()
+        val detachedDisplays = mutableListOf<Int>()
+        val displayFramePayloads = ArrayDeque<ByteArray>()
         var tickSummary: NativeDeviceDaemonTickSummary? = null
 
         override fun createDeviceDaemon(
@@ -132,6 +137,30 @@ class BackgroundDeviceVmTest {
             enqueuedEvents += eventName to arguments
             return true
         }
+
+        override fun attachDeviceDaemonDisplay(
+            daemonHandle: Long,
+            displayId: Int,
+            width: Int,
+            height: Int,
+        ) {
+            attachedDisplays += Triple(displayId, width, height)
+        }
+
+        override fun detachDeviceDaemonDisplay(
+            daemonHandle: Long,
+            displayId: Int,
+        ) {
+            detachedDisplays += displayId
+        }
+
+        override fun drainDeviceDaemonDisplayFrames(daemonHandle: Long): ByteArray =
+            displayFramePayloads.removeFirstOrNull()
+                ?: ByteBuffer
+                    .allocate(Int.SIZE_BYTES)
+                    .order(ByteOrder.LITTLE_ENDIAN)
+                    .putInt(0)
+                    .array()
     }
 
     private fun backgroundVmWithNativeDaemonBindings(
@@ -178,6 +207,26 @@ class BackgroundDeviceVmTest {
     }
 
     private fun firmwareTestProfile(): DeviceProfile = runtimeProfile()
+
+    private fun nativeDisplayFramePayload(
+        displayId: Int,
+        sequence: Long,
+        width: Int,
+        height: Int,
+        fullRefresh: Boolean,
+    ): ByteArray =
+        ByteBuffer
+            .allocate(Int.SIZE_BYTES + Int.SIZE_BYTES + Long.SIZE_BYTES + Int.SIZE_BYTES + Int.SIZE_BYTES + 1 + 1 + Int.SIZE_BYTES)
+            .order(ByteOrder.LITTLE_ENDIAN)
+            .putInt(1)
+            .putInt(displayId)
+            .putLong(sequence)
+            .putInt(width)
+            .putInt(height)
+            .put(0)
+            .put(if (fullRefresh) 1 else 0)
+            .putInt(0)
+            .array()
 
     @Test
     fun nativeDaemonRuntimeBootsCompiledBootImageAndTicksDaemon() =
@@ -265,6 +314,38 @@ class BackgroundDeviceVmTest {
                 assertTrue(vm.enqueueEvent(VmEvent("char", listOf("x"))))
 
                 assertEquals(listOf("char" to listOf<Any?>("x")), daemonBindings.enqueuedEvents)
+            } finally {
+                System.clearProperty("ckl.vm.native.daemon")
+            }
+        }
+    }
+
+    @Test
+    fun nativeDaemonDisplayFramesAreMirroredAndDrained() {
+        runtimeTestWorkspace("vm-native-daemon-display") { workspace ->
+            System.setProperty("ckl.vm.native.daemon", "true")
+            try {
+                val daemonBindings = RecordingNativeDaemonBindings()
+                daemonBindings.displayFramePayloads +=
+                    nativeDisplayFramePayload(
+                        displayId = 9,
+                        sequence = 1,
+                        width = 16,
+                        height = 12,
+                        fullRefresh = true,
+                    )
+                val vm = backgroundVmWithNativeDaemonBindings(workspace.host, daemonBindings)
+
+                val info = vm.attachDisplay(displayId = 9, width = 16, height = 12)
+                val frames = vm.drainDisplayFrames()
+                vm.detachDisplay(displayId = 9)
+
+                assertEquals(9, info.displayId)
+                assertEquals(listOf(Triple(9, 16, 12)), daemonBindings.attachedDisplays)
+                assertEquals(listOf(9), daemonBindings.detachedDisplays)
+                assertEquals(1, frames.size)
+                assertEquals(9, frames.single().displayId)
+                assertTrue(frames.single().fullRefresh)
             } finally {
                 System.clearProperty("ckl.vm.native.daemon")
             }
