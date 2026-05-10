@@ -71,6 +71,7 @@ val buildRustVmNativeLibrary =
 fun RunConfigSettings.applyRustVm() {
     property("ckl.vm.native.library", rustVmNativeLibrary.asFile.absolutePath)
     property("ckl.vm.native.display", "true")
+    property("ckl.vm.native.daemon", "true")
 }
 
 val loom = extensions.getByType<LoomGradleExtensionAPI>()
