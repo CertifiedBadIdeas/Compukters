@@ -443,7 +443,7 @@ git commit -m "feat: run daemon image turns"
 **Files:**
 - Modify: `native/ckl-vm/src/device_daemon.rs`
 
-- [ ] **Step 1: Add failing signal handling tests**
+- [x] **Step 1: Add failing signal handling tests**
 
 Add tests covering `Yield`, `Sleep`, `WaitProcess`, `WaitEvent`, and `WaitPoll`:
 
@@ -477,7 +477,7 @@ fn daemon_moves_sleeping_process_until_due_tick() {
 }
 ```
 
-- [ ] **Step 2: Run the Rust tests and verify they fail**
+- [x] **Step 2: Run the Rust tests and verify they fail**
 
 ```bash
 cargo test --manifest-path native/ckl-vm/Cargo.toml daemon_handles_yield_by_resuming_unit_and_requeueing_process
@@ -486,7 +486,7 @@ cargo test --manifest-path native/ckl-vm/Cargo.toml daemon_moves_sleeping_proces
 
 Expected: FAIL because daemon signal handling only supports `Halt` and `Pause`.
 
-- [ ] **Step 3: Implement native signal handling**
+- [x] **Step 3: Implement native signal handling**
 
 In the daemon signal match, implement:
 
@@ -532,7 +532,7 @@ fn handle_signal(
 ) -> Result<DaemonSignalOutcome, String>
 ```
 
-- [ ] **Step 4: Run focused Rust tests**
+- [x] **Step 4: Run focused Rust tests**
 
 ```bash
 cargo test --manifest-path native/ckl-vm/Cargo.toml daemon_handles_
@@ -542,7 +542,7 @@ cargo test --manifest-path native/ckl-vm/Cargo.toml scheduler_step
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit Task 4**
+- [x] **Step 5: Commit Task 4**
 
 ```bash
 git add native/ckl-vm/src/device_daemon.rs docs/superpowers/plans/2026-05-10-rust-owned-device-daemon.md
