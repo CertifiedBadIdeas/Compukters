@@ -2,12 +2,30 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use crate::image_runner::ImageVmHandle;
-use crate::runtime_kernel::DeviceRuntimeKernelHandle;
+use crate::runtime_kernel::{DeviceRuntimeKernelHandle, ProcessStatus};
+use crate::signal::VmSignal;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DeviceDaemonBootSummary {
     pub pid: i32,
     pub image_attached: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeviceDaemonTickSummary {
+    pub server_tick: i64,
+    pub turns: i64,
+    pub remaining_instructions: i64,
+    pub idle: bool,
+    pub halted: i64,
+    pub host_requests: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DeviceDaemonProcessStatus {
+    Running,
+    Completed(i32),
+    Missing,
 }
 
 pub struct DeviceDaemon {
@@ -77,6 +95,80 @@ impl DeviceDaemon {
     pub fn process_image_handle(&self, pid: i32) -> Option<i64> {
         self.image_handles.get(&pid).copied()
     }
+
+    pub fn process_status(&self, pid: i32) -> DeviceDaemonProcessStatus {
+        match self
+            .kernel
+            .lock()
+            .map(|kernel| kernel.process_status(pid))
+            .unwrap_or(ProcessStatus::Missing)
+        {
+            ProcessStatus::Running => DeviceDaemonProcessStatus::Running,
+            ProcessStatus::Completed(exit_code) => DeviceDaemonProcessStatus::Completed(exit_code),
+            ProcessStatus::Missing => DeviceDaemonProcessStatus::Missing,
+        }
+    }
+
+    pub fn tick(
+        &mut self,
+        instructions: i64,
+        wall_nanos: i64,
+        server_tick: i64,
+    ) -> DeviceDaemonTickSummary {
+        self.kernel
+            .with_kernel_mut(|kernel| {
+                kernel.add_execution_quota(instructions, wall_nanos, server_tick);
+            })
+            .expect("daemon kernel must be lockable");
+        let step = self
+            .kernel
+            .with_kernel_mut(|kernel| kernel.run_scheduler_step())
+            .expect("daemon kernel must be lockable");
+        let Some(pid) = step.selected_pid else {
+            return DeviceDaemonTickSummary {
+                server_tick,
+                turns: 0,
+                remaining_instructions: step.remaining_instructions,
+                idle: true,
+                halted: 0,
+                host_requests: 0,
+            };
+        };
+        let signal = match self.images.get_mut(&pid) {
+            Some(image) => image.run_until_signal_decoded(),
+            None => Err(format!("daemon selected pid {pid} without image")),
+        };
+        let mut halted = 0;
+        match signal {
+            Ok(VmSignal::Halt(_value)) => {
+                halted = 1;
+                let _ = self
+                    .kernel
+                    .with_kernel_mut(|kernel| kernel.complete_process(pid, 0));
+                self.images.remove(&pid);
+                self.image_handles.remove(&pid);
+            }
+            Ok(VmSignal::Pause) => {}
+            Ok(other) => {
+                panic!("daemon received deferred Task 4 signal during Task 3: {other:?}");
+            }
+            Err(message) => {
+                let _ = self
+                    .kernel
+                    .with_kernel_mut(|kernel| kernel.mark_process_crashed(pid, message));
+                self.images.remove(&pid);
+                self.image_handles.remove(&pid);
+            }
+        }
+        DeviceDaemonTickSummary {
+            server_tick,
+            turns: 1,
+            remaining_instructions: step.remaining_instructions,
+            idle: false,
+            halted,
+            host_requests: 0,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -97,6 +189,30 @@ mod tests {
             }
         );
         assert_eq!(daemon.process_image_handle(1), Some(1));
+    }
+
+    #[test]
+    fn daemon_tick_runs_boot_image_to_halt() {
+        let mut daemon = DeviceDaemon::new(16, 1024, 128);
+        daemon.boot_image(&ckim_empty_main(), "/rom/bios.ck", "", "");
+
+        let summary = daemon.tick(128, 1_000_000, 7);
+
+        assert_eq!(
+            summary,
+            DeviceDaemonTickSummary {
+                server_tick: 7,
+                turns: 1,
+                remaining_instructions: 127,
+                idle: false,
+                halted: 1,
+                host_requests: 0,
+            }
+        );
+        assert_eq!(
+            daemon.process_status(1),
+            DeviceDaemonProcessStatus::Completed(0),
+        );
     }
 
     fn ckim_empty_main() -> Vec<u8> {
