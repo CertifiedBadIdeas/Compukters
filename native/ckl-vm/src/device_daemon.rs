@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::Arc;
 
+use crate::display::{DisplayFrameDelta, PixelFormat};
 use crate::image_runner::ImageVmHandle;
 use crate::runtime_kernel::{DeviceRuntimeKernelHandle, ProcessStatus};
 use crate::signal::VmSignal;
@@ -147,6 +148,25 @@ impl DeviceDaemon {
         self.kernel
             .with_kernel_mut(|kernel| kernel.enqueue_event(name, arguments))
             .unwrap_or(false)
+    }
+
+    pub fn attach_display(
+        &mut self,
+        display_id: i32,
+        width: i32,
+        height: i32,
+        pixel_format: PixelFormat,
+    ) -> Result<(), String> {
+        self.kernel
+            .attach_display(display_id, width, height, pixel_format)
+    }
+
+    pub fn detach_display(&mut self, display_id: i32) -> Result<(), String> {
+        self.kernel.detach_display(display_id)
+    }
+
+    pub fn drain_display_frames(&mut self) -> Result<Vec<DisplayFrameDelta>, String> {
+        self.kernel.drain_display_frames()
     }
 
     pub fn drain_host_requests(&mut self) -> Vec<DeviceDaemonHostRequest> {

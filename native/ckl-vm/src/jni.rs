@@ -403,6 +403,61 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
 }
 
 #[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_attachDeviceDaemonDisplayNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    handle: jlong,
+    display_id: jint,
+    width: jint,
+    height: jint,
+) {
+    match with_device_daemon_mut(&mut env, handle, |daemon| {
+        daemon.attach_display(display_id, width, height, PixelFormat::Rgb565)
+    }) {
+        Some(Ok(())) | None => {}
+        Some(Err(error)) => {
+            let _ = env.throw_new("java/lang/IllegalArgumentException", error);
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_detachDeviceDaemonDisplayNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    handle: jlong,
+    display_id: jint,
+) {
+    match with_device_daemon_mut(&mut env, handle, |daemon| {
+        daemon.detach_display(display_id)
+    }) {
+        Some(Ok(())) | None => {}
+        Some(Err(error)) => {
+            let _ = env.throw_new("java/lang/IllegalStateException", error);
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_drainDeviceDaemonDisplayFramesNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    handle: jlong,
+) -> jbyteArray {
+    let frames = match with_device_daemon_mut(&mut env, handle, |daemon| {
+        daemon.drain_display_frames()
+    }) {
+        Some(Ok(frames)) => frames,
+        Some(Err(error)) => {
+            let _ = env.throw_new("java/lang/IllegalStateException", error);
+            return null_mut();
+        }
+        None => return null_mut(),
+    };
+    byte_array_or_throw(&mut env, &encode_display_frames(&frames))
+}
+
+#[no_mangle]
 pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_enqueueDeviceEventNative(
     mut env: JNIEnv<'_>,
     _class: JClass<'_>,

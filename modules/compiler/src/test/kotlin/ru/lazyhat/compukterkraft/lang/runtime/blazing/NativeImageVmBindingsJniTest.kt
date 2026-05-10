@@ -260,6 +260,18 @@ class NativeImageVmBindingsJniTest {
     }
 
     @Test
+    fun nativeDeviceDaemonDisplayBindingsExposeLifecycleAndFrameDrain() {
+        val memberNames =
+            NativeVmBindings::class.java.declaredMethods
+                .map { it.name }
+                .toSet()
+
+        assertTrue("attachDeviceDaemonDisplay" in memberNames)
+        assertTrue("detachDeviceDaemonDisplay" in memberNames)
+        assertTrue("drainDeviceDaemonDisplayFrames" in memberNames)
+    }
+
+    @Test
     fun nativeDeviceDaemonCreateTickFreeRunsWhenLibraryIsConfigured() {
         System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 128)
@@ -297,6 +309,40 @@ class NativeImageVmBindingsJniTest {
                 ),
             )
             assertEquals(1, NativeVmBindings.tickDeviceDaemon(handle, 128, 1_000_000, 1).halted)
+        } finally {
+            NativeVmBindings.freeDeviceDaemon(handle)
+        }
+    }
+
+    @Test
+    fun nativeDeviceDaemonDisplayFramesDrainWhenLibraryIsConfigured() {
+        System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val image =
+            assertNotNull(
+                LanguageFrontend()
+                    .compileImage(
+                        "main.ck",
+                        """
+                        pub fun main() {
+                            val displayId: Int = display::primary();
+                            display::fillRect(displayId, 0, 0, 2, 2, 2016);
+                            display::present(displayId);
+                        }
+                        """.trimIndent(),
+                    ).image,
+            )
+        val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 256)
+        try {
+            NativeVmBindings.attachDeviceDaemonDisplay(handle, displayId = 6, width = 18, height = 18)
+            val initial = NativeVmBindings.drainDeviceDaemonDisplayFrames(handle)
+            assertTrue(initial.isNotEmpty(), "daemon attach should queue a full refresh frame")
+
+            NativeVmBindings.bootDeviceDaemon(handle, CkVmImageAbi.encode(image), "/rom/display.ck", "", "")
+            val tick = NativeVmBindings.tickDeviceDaemon(handle, 256, 1_000_000, 1)
+            assertEquals(1, tick.halted)
+
+            val dirty = NativeVmBindings.drainDeviceDaemonDisplayFrames(handle)
+            assertTrue(dirty.isNotEmpty(), "daemon present should queue a dirty frame")
         } finally {
             NativeVmBindings.freeDeviceDaemon(handle)
         }

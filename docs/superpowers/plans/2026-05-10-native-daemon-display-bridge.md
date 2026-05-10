@@ -17,13 +17,13 @@ standalone native kernel path. Kotlin will decode daemon frames with `NativeDisp
 - Modify: `modules/compiler/src/main/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeVmBindings.kt`
 - Test: `modules/compiler/src/test/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeImageVmBindingsJniTest.kt`
 
-- [ ] Add a focused JNI test that creates a daemon, attaches a display, boots a small image that presents one frame,
+- [x] Add a focused JNI test that creates a daemon, attaches a display, boots a small image that presents one frame,
   ticks the daemon, drains daemon display frame bytes, and asserts an initial full refresh plus a program frame.
-- [ ] Add `DeviceDaemon.attach_display`, `detach_display`, and `drain_display_frames`.
-- [ ] Add JNI functions `attachDeviceDaemonDisplayNative`, `detachDeviceDaemonDisplayNative`, and
+- [x] Add `DeviceDaemon.attach_display`, `detach_display`, and `drain_display_frames`.
+- [x] Add JNI functions `attachDeviceDaemonDisplayNative`, `detachDeviceDaemonDisplayNative`, and
   `drainDeviceDaemonDisplayFramesNative`.
-- [ ] Add Kotlin binding methods with the same validation style as existing daemon bindings.
-- [ ] Run the focused compiler JNI test.
+- [x] Add Kotlin binding methods with the same validation style as existing daemon bindings.
+- [x] Run the focused compiler JNI test.
 - [ ] Commit Task 1.
 
 ## Task 2: Background VM Daemon Display Wiring
