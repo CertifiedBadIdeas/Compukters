@@ -27,11 +27,22 @@ import kotlin.io.path.createDirectories
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class NativeImageVmBindingsJniTest {
+    private fun runDaemonSlice(
+        handle: Long,
+        serverTick: Long,
+        instructions: Long = 128,
+        wallNanos: Long = 1_000_000,
+    ): NativeDeviceDaemonTickSummary {
+        NativeVmBindings.refillDeviceDaemonQuota(handle, instructions, wallNanos, serverTick)
+        return NativeVmBindings.runDeviceDaemonReady(handle, maxTurns = instructions)
+    }
+
     @Test
     fun nativeDeviceDaemonMethodsExposeCompactAbi() {
         assertEquals(
@@ -42,17 +53,6 @@ class NativeImageVmBindingsJniTest {
                     Int::class.javaPrimitiveType,
                     Int::class.javaPrimitiveType,
                     Int::class.javaPrimitiveType,
-                ).returnType,
-        )
-        assertEquals(
-            LongArray::class.java,
-            NativeVmBindings::class.java
-                .getDeclaredMethod(
-                    "tickDeviceDaemonNative",
-                    Long::class.javaPrimitiveType,
-                    Long::class.javaPrimitiveType,
-                    Long::class.javaPrimitiveType,
-                    Long::class.javaPrimitiveType,
                 ).returnType,
         )
         assertEquals(
@@ -75,6 +75,17 @@ class NativeImageVmBindingsJniTest {
                     Long::class.javaPrimitiveType,
                 ).returnType,
         )
+    }
+
+    @Test
+    fun nativeDeviceDaemonDoesNotExposeTickShapedApi() {
+        val memberNames =
+            NativeVmBindings::class.java.declaredMethods
+                .map { it.name }
+                .toSet()
+
+        assertFalse("tickDeviceDaemon" in memberNames)
+        assertFalse("tickDeviceDaemonNative" in memberNames)
     }
 
     @Test
@@ -103,10 +114,11 @@ class NativeImageVmBindingsJniTest {
     }
 
     @Test
-    fun nativeDeviceDaemonCreateTickFreeRunsWhenLibraryIsConfigured() {
+    fun nativeDeviceDaemonCreateRefillRunReadyFreeRunsWhenLibraryIsConfigured() {
         System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 128)
         try {
+            NativeVmBindings.refillDeviceDaemonQuota(handle, 128, 1_000_000, 5)
             assertEquals(
                 NativeDeviceDaemonTickSummary(
                     serverTick = 5,
@@ -116,7 +128,7 @@ class NativeImageVmBindingsJniTest {
                     halted = 0,
                     hostRequests = 0,
                 ),
-                NativeVmBindings.tickDeviceDaemon(handle, 128, 1_000_000, 5),
+                NativeVmBindings.runDeviceDaemonReady(handle, maxTurns = 128),
             )
         } finally {
             NativeVmBindings.freeDeviceDaemon(handle)
@@ -160,7 +172,7 @@ class NativeImageVmBindingsJniTest {
                     workingDirectory = "",
                 ),
             )
-            assertEquals(1, NativeVmBindings.tickDeviceDaemon(handle, 128, 1_000_000, 1).halted)
+            assertEquals(1, runDaemonSlice(handle, serverTick = 1).halted)
         } finally {
             NativeVmBindings.freeDeviceDaemon(handle)
         }
@@ -190,7 +202,7 @@ class NativeImageVmBindingsJniTest {
             assertTrue(initial.isNotEmpty(), "daemon attach should queue a full refresh frame")
 
             NativeVmBindings.bootDeviceDaemon(handle, CkVmImageAbi.encode(image), "/rom/display.ck", "", "")
-            val tick = NativeVmBindings.tickDeviceDaemon(handle, 256, 1_000_000, 1)
+            val tick = runDaemonSlice(handle, serverTick = 1, instructions = 256)
             assertEquals(1, tick.halted)
 
             val dirty = NativeVmBindings.drainDeviceDaemonDisplayFrames(handle)
@@ -230,7 +242,7 @@ class NativeImageVmBindingsJniTest {
 
             Thread.sleep(25)
             NativeVmBindings.bootDeviceDaemon(handle, CkVmImageAbi.encode(image), "/rom/display.ck", "", "")
-            assertEquals(1, NativeVmBindings.tickDeviceDaemon(handle, 256, 1_000_000, 1).halted)
+            assertEquals(1, runDaemonSlice(handle, serverTick = 1, instructions = 256).halted)
 
             assertTrue(waiter.get(1, java.util.concurrent.TimeUnit.SECONDS) > observed)
         } finally {
@@ -245,7 +257,7 @@ class NativeImageVmBindingsJniTest {
         val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 128)
         try {
             NativeVmBindings.bootDeviceDaemon(handle, CkVmImageAbi.encode(image), "/rom/host.ck", "", "")
-            val first = NativeVmBindings.tickDeviceDaemon(handle, 128, 1_000_000, 1)
+            val first = runDaemonSlice(handle, serverTick = 1)
             val requests = NativeVmBindings.drainDeviceDaemonHostRequests(handle)
             assertEquals(1, first.hostRequests)
             assertEquals("system", requests.single().moduleName)
@@ -256,7 +268,7 @@ class NativeImageVmBindingsJniTest {
                 requests.single().requestId,
                 VmValue.UnitValue.toNativeBytes("system", "log"),
             )
-            assertEquals(1, NativeVmBindings.tickDeviceDaemon(handle, 128, 1_000_000, 2).halted)
+            assertEquals(1, runDaemonSlice(handle, serverTick = 2).halted)
         } finally {
             NativeVmBindings.freeDeviceDaemon(handle)
         }
@@ -275,7 +287,7 @@ class NativeImageVmBindingsJniTest {
         try {
             NativeVmBindings.bootDeviceDaemon(handle, CkVmImageAbi.encode(image), "/rom/argument.ck", "stdio-v1 1 2 3", "")
 
-            val first = NativeVmBindings.tickDeviceDaemon(handle, 128, 1_000_000, 1)
+            val first = runDaemonSlice(handle, serverTick = 1)
             val request = NativeVmBindings.drainDeviceDaemonHostRequests(handle).single()
 
             assertEquals(1, first.hostRequests)
@@ -300,7 +312,7 @@ class NativeImageVmBindingsJniTest {
         try {
             NativeVmBindings.bootDeviceDaemon(handle, CkVmImageAbi.encode(image), "/rom/cwd.ck", "", "/rom")
 
-            val first = NativeVmBindings.tickDeviceDaemon(handle, 128, 1_000_000, 1)
+            val first = runDaemonSlice(handle, serverTick = 1)
             val request = NativeVmBindings.drainDeviceDaemonHostRequests(handle).single()
 
             assertEquals(1, first.hostRequests)
@@ -339,7 +351,7 @@ class NativeImageVmBindingsJniTest {
             )
             NativeVmBindings.bootDeviceDaemon(handle, CkVmImageAbi.encode(image), "/rom/cd.ck", "", "rom")
 
-            val first = NativeVmBindings.tickDeviceDaemon(handle, 128, 1_000_000, 1)
+            val first = runDaemonSlice(handle, serverTick = 1)
             val request = NativeVmBindings.drainDeviceDaemonHostRequests(handle).single()
 
             assertEquals(1, first.hostRequests)
@@ -365,7 +377,7 @@ class NativeImageVmBindingsJniTest {
         try {
             NativeVmBindings.bootDeviceDaemon(handle, CkVmImageAbi.encode(parent), "/rom/parent.ck", "", "rom")
 
-            val first = NativeVmBindings.tickDeviceDaemon(handle, 128, 1_000_000, 1)
+            val first = runDaemonSlice(handle, serverTick = 1)
             val request = NativeVmBindings.drainDeviceDaemonHostRequests(handle).single()
 
             assertEquals(1, first.hostRequests)
@@ -384,7 +396,7 @@ class NativeImageVmBindingsJniTest {
                     exitCode = 0,
                 ),
             )
-            assertEquals(2, NativeVmBindings.tickDeviceDaemon(handle, 128, 1_000_000, 2).halted)
+            assertEquals(2, runDaemonSlice(handle, serverTick = 2).halted)
         } finally {
             NativeVmBindings.freeDeviceDaemon(handle)
         }
@@ -406,7 +418,7 @@ class NativeImageVmBindingsJniTest {
         try {
             NativeVmBindings.bootDeviceDaemon(handle, CkVmImageAbi.encode(parent), "/rom/parent.ck", "", "rom")
 
-            NativeVmBindings.tickDeviceDaemon(handle, 128, 1_000_000, 1)
+            runDaemonSlice(handle, serverTick = 1)
             val compileRequest = NativeVmBindings.drainDeviceDaemonHostRequests(handle).single()
             assertEquals("compileProgram", compileRequest.kind)
             assertEquals("run", compileRequest.functionName)
@@ -419,7 +431,7 @@ class NativeImageVmBindingsJniTest {
                 ),
             )
 
-            val parentResumed = NativeVmBindings.tickDeviceDaemon(handle, 128, 1_000_000, 2)
+            val parentResumed = runDaemonSlice(handle, serverTick = 2)
             val logRequest = NativeVmBindings.drainDeviceDaemonHostRequests(handle).single()
 
             assertEquals(1, parentResumed.hostRequests)
@@ -467,7 +479,7 @@ class NativeImageVmBindingsJniTest {
             var logRequest: NativeDeviceDaemonHostRequest? = null
 
             repeat(10) {
-                NativeVmBindings.tickDeviceDaemon(handle, 128, 1_000_000, it.toLong() + 1)
+                runDaemonSlice(handle, serverTick = it.toLong() + 1)
                 for (request in NativeVmBindings.drainDeviceDaemonHostRequests(handle)) {
                     when {
                         request.kind == "compileProgram" -> {
@@ -532,7 +544,7 @@ class NativeImageVmBindingsJniTest {
                 ),
             )
 
-            val woke = NativeVmBindings.tickDeviceDaemon(handle, 128, 1_000_000, 1)
+            val woke = runDaemonSlice(handle, serverTick = 1)
             assertEquals(1, woke.hostRequests)
             val request = NativeVmBindings.drainDeviceDaemonHostRequests(handle).single()
             assertEquals("system", request.moduleName)
@@ -563,12 +575,12 @@ class NativeImageVmBindingsJniTest {
         val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 128)
         try {
             NativeVmBindings.bootDeviceDaemon(handle, CkVmImageAbi.encode(image), "/rom/poll-events.ck", "", "")
-            val waiting = NativeVmBindings.tickDeviceDaemon(handle, 128, 1_000_000, 1)
+            val waiting = runDaemonSlice(handle, serverTick = 1)
             assertEquals(0, waiting.hostRequests)
 
             assertTrue(NativeVmBindings.enqueueDeviceDaemonEvent(handle, "char", listOf("x")))
 
-            val woke = NativeVmBindings.tickDeviceDaemon(handle, 128, 1_000_000, 2)
+            val woke = runDaemonSlice(handle, serverTick = 2)
             assertEquals(1, woke.hostRequests)
             val request = NativeVmBindings.drainDeviceDaemonHostRequests(handle).single()
             assertEquals("system", request.moduleName)

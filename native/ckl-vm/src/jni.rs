@@ -163,34 +163,6 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
 }
 
 #[no_mangle]
-pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_tickDeviceDaemonNative(
-    mut env: JNIEnv<'_>,
-    _class: JClass<'_>,
-    handle: jlong,
-    instructions: jlong,
-    wall_nanos: jlong,
-    server_tick: jlong,
-) -> jlongArray {
-    let summary = match with_device_daemon_mut(&mut env, handle, |daemon| {
-        daemon.tick(instructions, wall_nanos, server_tick)
-    }) {
-        Some(summary) => summary,
-        None => return null_mut(),
-    };
-    long_array_or_throw(
-        &mut env,
-        &[
-            summary.server_tick,
-            summary.turns,
-            summary.remaining_instructions,
-            i64::from(summary.idle),
-            summary.halted,
-            summary.host_requests,
-        ],
-    )
-}
-
-#[no_mangle]
 pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_refillDeviceDaemonQuotaNative(
     mut env: JNIEnv<'_>,
     _class: JClass<'_>,

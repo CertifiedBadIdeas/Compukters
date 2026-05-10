@@ -66,9 +66,6 @@ class BackgroundDeviceVmTest {
         val createdDaemons = mutableListOf<Triple<Int, Int, Int>>()
         val freedDaemons = mutableListOf<Long>()
         val bootedImages = mutableListOf<ByteArray>()
-        val tickServerTicks = mutableListOf<Long>()
-        val tickInstructions = mutableListOf<Long>()
-        val tickWallNanos = mutableListOf<Long>()
         val refillQuotaCalls = mutableListOf<Triple<Long, Long, Long>>()
         val runReadyMaxTurns = mutableListOf<Long>()
         val completedRequestIds = mutableListOf<Long>()
@@ -81,7 +78,6 @@ class BackgroundDeviceVmTest {
         val displayWakeWaits = mutableListOf<Pair<Long, Long>>()
         var displayWakeSequence: Long = 0
         var displayWakeWaitResult: Long = 0
-        var tickSummary: NativeDeviceDaemonTickSummary? = null
         var runReadySummary: NativeDeviceDaemonTickSummary? = null
 
         override open fun createDeviceDaemon(
@@ -106,26 +102,6 @@ class BackgroundDeviceVmTest {
         ): NativeDeviceDaemonBootSummary {
             bootedImages += image
             return NativeDeviceDaemonBootSummary(pid = 1, imageAttached = true)
-        }
-
-        override fun tickDeviceDaemon(
-            daemonHandle: Long,
-            instructions: Long,
-            wallNanos: Long,
-            serverTick: Long,
-        ): NativeDeviceDaemonTickSummary {
-            tickServerTicks += serverTick
-            tickInstructions += instructions
-            tickWallNanos += wallNanos
-            return tickSummary
-                ?: NativeDeviceDaemonTickSummary(
-                    serverTick = serverTick,
-                    turns = 0,
-                    remainingInstructions = instructions,
-                    idle = true,
-                    halted = 0,
-                    hostRequests = 0,
-                )
         }
 
         override fun refillDeviceDaemonQuota(
