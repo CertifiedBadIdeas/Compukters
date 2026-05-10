@@ -189,6 +189,45 @@ class BackgroundDeviceVmTest {
     }
 
     @Test
+    fun requestSliceRecordsNativeSchedulerDryRunWhenConfigured() {
+        System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        runtimeTestWorkspace("vm-native-scheduler-dry-run") { workspace ->
+            val metrics = RecordingRuntimeMetricsCollector()
+            val profile =
+                firmwareTestProfile().copy(
+                    resources =
+                        firmwareTestProfile().resources.copy(
+                            cpu =
+                                DeviceCpuResources(
+                                    instructionsPerSlice = 3,
+                                    wallTimeGuardNanosPerSlice = 654,
+                                ),
+                        ),
+                )
+            val vm =
+                BackgroundDeviceVm(
+                    deviceId = 1,
+                    profile = profile,
+                    dispatcher = Dispatchers.Default,
+                    labelProvider = { null },
+                    logger = DeviceVmLogger { },
+                    workspace = workspace.host,
+                    runtimeMetricsCollector = metrics,
+                )
+
+            vm.requestSlice(serverTick = 42)
+
+            val snapshot = metrics.snapshot()
+            assertEquals(1, snapshot.vm.nativeSchedulerDryRuns)
+            assertEquals(3, snapshot.vm.nativeSchedulerDryRunTurns)
+            assertEquals(3, snapshot.vm.nativeSchedulerDryRunSelectedPids)
+            assertEquals(0, snapshot.vm.nativeSchedulerDryRunRemainingInstructions)
+            assertEquals(1, snapshot.vm.nativeSchedulerDryRunFirstSelectionMatches)
+            assertEquals(0, snapshot.vm.nativeSchedulerDryRunFirstSelectionMismatches)
+        }
+    }
+
+    @Test
     fun ownsDisplayRegistryFrames() {
         runtimeTestWorkspace("vm-display-registry") { workspace ->
             val vm =
