@@ -43,7 +43,7 @@ internal class VmProcessManager(
     private val deviceId: Int,
     private val programLoader: WorkspaceProgramLoader,
     private val profile: DeviceProfile,
-    private val runtimeCreator: (String, String) -> DeviceRuntime,
+    private val runtimeCreator: (Int, Int, String, String) -> DeviceRuntime,
     private val compilerMetricsCollector: CompilerMetricsCollector = NoOpCompilerMetricsCollector,
     private val runtimeMetricsCollector: RuntimeMetricsCollector = NoOpRuntimeMetricsCollector,
     private val nativeProcessBridge: NativeProcessBridge = NoOpNativeProcessBridge,
@@ -55,16 +55,17 @@ internal class VmProcessManager(
         path: String,
         argument: String,
         workingDirectory: String,
+        parentPid: Int = 1,
     ): Int {
         val pid = nextPid.getAndIncrement()
         val exitCode = CompletableDeferred<Int>()
-        val nativeRegistered = nativeProcessBridge.registerProcess(pid = pid, parentPid = 1, programPath = path)
+        val nativeRegistered = nativeProcessBridge.registerProcess(pid = pid, parentPid = parentPid, programPath = path)
         if (nativeRegistered) {
             runtimeMetricsCollector.recordNativeProcessRegistration()
         }
         val job =
             scope.launch(start = CoroutineStart.LAZY) {
-                val code = execute(path, argument, workingDirectory)
+                val code = execute(pid, parentPid, path, argument, workingDirectory)
                 if (nativeRegistered) {
                     if (nativeProcessBridge.completeProcess(pid, code)) {
                         runtimeMetricsCollector.recordNativeProcessCompletion()
@@ -99,6 +100,8 @@ internal class VmProcessManager(
     }
 
     private suspend fun execute(
+        pid: Int,
+        parentPid: Int,
         path: String,
         argument: String,
         workingDirectory: String,
@@ -135,7 +138,7 @@ internal class VmProcessManager(
         }
 
         return try {
-            program.run(runtimeCreator(workingDirectory, argument))
+            program.run(runtimeCreator(pid, parentPid, workingDirectory, argument))
             0
         } catch (cancelled: CancellationException) {
             throw cancelled

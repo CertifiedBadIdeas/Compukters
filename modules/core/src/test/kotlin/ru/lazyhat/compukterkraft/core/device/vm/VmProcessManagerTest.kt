@@ -114,7 +114,7 @@ class VmProcessManagerTest {
                     deviceId = 1,
                     programLoader = WorkspaceProgramLoader(workspace.host),
                     profile = runtimeProfile(),
-                    runtimeCreator = { _, _ -> error("runtimeCreator should not run for a missing program") },
+                    runtimeCreator = { _, _, _, _ -> error("runtimeCreator should not run for a missing program") },
                     compilerMetricsCollector = NoOpCompilerMetricsCollector,
                     nativeProcessBridge = bridge,
                 )
@@ -136,6 +136,39 @@ class VmProcessManagerTest {
     }
 
     @Test
+    fun spawnRegistersProvidedParentPid() {
+        runtimeTestWorkspace("vm-process-manager-native-bridge-parent-pid") { workspace ->
+            val bridge = RecordingNativeProcessBridge()
+            val ctx = StubVmContext()
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val manager =
+                VmProcessManager(
+                    scope = scope,
+                    ctx = ctx,
+                    deviceId = 1,
+                    programLoader = WorkspaceProgramLoader(workspace.host),
+                    profile = runtimeProfile(),
+                    runtimeCreator = { _, _, _, _ -> error("runtimeCreator should not run for a missing program") },
+                    compilerMetricsCollector = NoOpCompilerMetricsCollector,
+                    nativeProcessBridge = bridge,
+                )
+
+            try {
+                val pid = manager.spawn("missing.ck", "", "", parentPid = 42)
+                val code = runBlocking { withTimeout(5_000) { manager.wait(pid) } }
+
+                assertEquals(2, pid)
+                assertEquals(listOf(Triple(2, 42, "missing.ck")), bridge.registrations)
+                assertEquals(listOf(2 to 1), bridge.completions)
+                assertEquals(1, code)
+            } finally {
+                runBlocking { manager.cancelAll() }
+                scope.cancel()
+            }
+        }
+    }
+
+    @Test
     fun spawnRecordsAcceptedNativeProcessLifecycleMetrics() {
         runtimeTestWorkspace("vm-process-manager-native-bridge-metrics") { workspace ->
             val bridge = RecordingNativeProcessBridge()
@@ -149,7 +182,7 @@ class VmProcessManagerTest {
                     deviceId = 1,
                     programLoader = WorkspaceProgramLoader(workspace.host),
                     profile = runtimeProfile(),
-                    runtimeCreator = { _, _ -> error("runtimeCreator should not run for a missing program") },
+                    runtimeCreator = { _, _, _, _ -> error("runtimeCreator should not run for a missing program") },
                     compilerMetricsCollector = NoOpCompilerMetricsCollector,
                     runtimeMetricsCollector = metrics,
                     nativeProcessBridge = bridge,
@@ -185,7 +218,7 @@ class VmProcessManagerTest {
                     deviceId = 1,
                     programLoader = WorkspaceProgramLoader(workspace.host),
                     profile = runtimeProfile(),
-                    runtimeCreator = { _, _ -> error("runtimeCreator should not run for a missing program") },
+                    runtimeCreator = { _, _, _, _ -> error("runtimeCreator should not run for a missing program") },
                     compilerMetricsCollector = NoOpCompilerMetricsCollector,
                     runtimeMetricsCollector = metrics,
                     nativeProcessBridge = bridge,
