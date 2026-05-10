@@ -805,3 +805,52 @@ git add docs/superpowers/plans/2026-05-10-device-quota-process-scheduler.md \
   native/ckl-vm/src/runtime_kernel.rs
 git commit -m "feat: add native process scheduler mirror"
 ```
+
+## Task 14: Native Process Scheduler JNI Bridge
+
+**Files:**
+- Modify: `modules/compiler/src/main/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeVmBindings.kt`
+- Modify: `modules/compiler/src/test/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeImageVmBindingsJniTest.kt`
+- Modify: `native/ckl-vm/src/jni.rs`
+
+- [x] **Step 1: Add failing JNI binding tests**
+
+Add tests proving `NativeVmBindings` exposes:
+
+- process state transition methods for runnable, process wait, sleep, and crash;
+- a native process scheduler tick method;
+- a JVM-friendly `NativeProcessSchedulerTick` result with `currentTick`, `selectedPid`, and `wokenPids`.
+
+- [x] **Step 2: Add Kotlin binding surface**
+
+Add public object methods on `NativeVmBindings`:
+
+- `markProcessRunnable(...)`;
+- `markProcessWaitingForProcess(...)`;
+- `markProcessSleeping(...)`;
+- `markProcessCrashed(...)`;
+- `processSchedulerTick(...)`.
+
+Use a compact `LongArray` ABI for the native tick result: `[currentTick, selectedPidOrZero, wokenCount, ...wokenPids]`.
+
+- [x] **Step 3: Add JNI native functions**
+
+Forward the new methods into `DeviceRuntimeKernel` under `with_kernel_mut(...)`.
+
+- [x] **Step 4: Run focused tests**
+
+```bash
+./gradlew -Dckl.vm.native.library=/home/lazyhat/IdeaProjects/Compukter-Kraft/native/ckl-vm/target/debug/libckl_vm.so :compiler:test --tests '*NativeImageVmBindingsJniTest' --rerun-tasks
+```
+
+Expected: PASS.
+
+- [x] **Step 5: Commit Task 14**
+
+```bash
+git add docs/superpowers/plans/2026-05-10-device-quota-process-scheduler.md \
+  modules/compiler/src/main/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeVmBindings.kt \
+  modules/compiler/src/test/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeImageVmBindingsJniTest.kt \
+  native/ckl-vm/src/jni.rs
+git commit -m "feat: expose native process scheduler bindings"
+```

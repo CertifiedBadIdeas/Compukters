@@ -79,6 +79,26 @@ class NativeImageVmBindingsJniTest {
             "NativeVmBindings must expose native process waits",
         )
         assertTrue(
+            "markProcessRunnable" in memberNames,
+            "NativeVmBindings must expose native process scheduler state",
+        )
+        assertTrue(
+            "markProcessWaitingForProcess" in memberNames,
+            "NativeVmBindings must expose native process scheduler state",
+        )
+        assertTrue(
+            "markProcessSleeping" in memberNames,
+            "NativeVmBindings must expose native process scheduler state",
+        )
+        assertTrue(
+            "markProcessCrashed" in memberNames,
+            "NativeVmBindings must expose native process scheduler state",
+        )
+        assertTrue(
+            "processSchedulerTick" in memberNames,
+            "NativeVmBindings must expose native process scheduler ticks",
+        )
+        assertTrue(
             "attachImageToKernel" in memberNames,
             "NativeVmBindings must expose native device-kernel lifecycle",
         )
@@ -90,6 +110,85 @@ class NativeImageVmBindingsJniTest {
             "setImageWorkingDirectory" in memberNames,
             "NativeVmBindings must expose per-image working directory attachment",
         )
+    }
+
+    @Test
+    fun nativeProcessSchedulerBridgeMethodsExposeCompactAbi() {
+        assertEquals(
+            Boolean::class.javaPrimitiveType,
+            NativeVmBindings::class.java
+                .getDeclaredMethod(
+                    "markProcessRunnableNative",
+                    Long::class.javaPrimitiveType,
+                    Int::class.javaPrimitiveType,
+                ).returnType,
+        )
+        assertEquals(
+            Boolean::class.javaPrimitiveType,
+            NativeVmBindings::class.java
+                .getDeclaredMethod(
+                    "markProcessWaitingForProcessNative",
+                    Long::class.javaPrimitiveType,
+                    Int::class.javaPrimitiveType,
+                    Int::class.javaPrimitiveType,
+                ).returnType,
+        )
+        assertEquals(
+            Boolean::class.javaPrimitiveType,
+            NativeVmBindings::class.java
+                .getDeclaredMethod(
+                    "markProcessSleepingNative",
+                    Long::class.javaPrimitiveType,
+                    Int::class.javaPrimitiveType,
+                    Long::class.javaPrimitiveType,
+                ).returnType,
+        )
+        assertEquals(
+            Boolean::class.javaPrimitiveType,
+            NativeVmBindings::class.java
+                .getDeclaredMethod(
+                    "markProcessCrashedNative",
+                    Long::class.javaPrimitiveType,
+                    Int::class.javaPrimitiveType,
+                    String::class.java,
+                ).returnType,
+        )
+        assertEquals(
+            LongArray::class.java,
+            NativeVmBindings::class.java
+                .getDeclaredMethod(
+                    "processSchedulerTickNative",
+                    Long::class.javaPrimitiveType,
+                    Long::class.javaPrimitiveType,
+                ).returnType,
+        )
+    }
+
+    @Test
+    fun nativeProcessSchedulerTickRunsWhenLibraryIsConfigured() {
+        System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val kernelHandle = NativeVmBindings.createDeviceKernel(maxEventQueueSize = 64, maxBufferedBytesPerChannel = 4096)
+
+        try {
+            assertTrue(NativeVmBindings.registerProcess(kernelHandle, pid = 1, parentPid = 0, programPath = "/rom/bios.ck"))
+            assertTrue(NativeVmBindings.registerProcess(kernelHandle, pid = 2, parentPid = 1, programPath = "/rom/shell.ck"))
+            assertTrue(NativeVmBindings.markProcessSleeping(kernelHandle, pid = 1, untilTick = 5))
+
+            assertEquals(
+                NativeProcessSchedulerTick(currentTick = 4, selectedPid = 2, wokenPids = emptyList()),
+                NativeVmBindings.processSchedulerTick(kernelHandle, currentTick = 4),
+            )
+            assertEquals(
+                NativeProcessSchedulerTick(currentTick = 5, selectedPid = 2, wokenPids = listOf(1)),
+                NativeVmBindings.processSchedulerTick(kernelHandle, currentTick = 5),
+            )
+            assertEquals(
+                NativeProcessSchedulerTick(currentTick = 6, selectedPid = 1, wokenPids = emptyList()),
+                NativeVmBindings.processSchedulerTick(kernelHandle, currentTick = 6),
+            )
+        } finally {
+            NativeVmBindings.freeDeviceKernel(kernelHandle)
+        }
     }
 
     @Test
