@@ -119,21 +119,6 @@ object NativeVmBindings : NativeVmBindingsFacade {
         }
     }
 
-    fun tickDeviceDaemon(
-        daemonHandle: Long,
-        instructions: Long,
-        wallNanos: Long,
-        serverTick: Long,
-    ): NativeDeviceDaemonTickSummary {
-        require(daemonHandle != 0L) { "Native device daemon handle is zero" }
-        return tickDeviceDaemonNative(
-            daemonHandle,
-            instructions,
-            wallNanos,
-            serverTick,
-        ).toNativeDeviceDaemonTickSummary()
-    }
-
     fun refillDeviceDaemonQuota(
         daemonHandle: Long,
         instructions: Long,
@@ -379,14 +364,6 @@ object NativeVmBindings : NativeVmBindingsFacade {
 
     @JvmStatic
     private external fun freeDeviceDaemonNative(handle: Long)
-
-    @JvmStatic
-    private external fun tickDeviceDaemonNative(
-        daemonHandle: Long,
-        instructions: Long,
-        wallNanos: Long,
-        serverTick: Long,
-    ): LongArray
 
     @JvmStatic
     private external fun refillDeviceDaemonQuotaNative(

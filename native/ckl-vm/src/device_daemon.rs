@@ -286,16 +286,6 @@ impl DeviceDaemon {
         Ok(())
     }
 
-    pub fn tick(
-        &mut self,
-        instructions: i64,
-        wall_nanos: i64,
-        server_tick: i64,
-    ) -> DeviceDaemonTickSummary {
-        self.refill_execution_quota(instructions, wall_nanos, server_tick);
-        self.run_ready_until_blocked(self.instruction_budget as i64)
-    }
-
     pub fn refill_execution_quota(
         &mut self,
         instructions: i64,
@@ -577,6 +567,16 @@ mod tests {
     const OP_YIELD: u8 = 24;
     const OP_SLEEP: u8 = 25;
 
+    fn run_daemon_slice(
+        daemon: &mut DeviceDaemon,
+        instructions: i64,
+        wall_nanos: i64,
+        server_tick: i64,
+    ) -> DeviceDaemonTickSummary {
+        daemon.refill_execution_quota(instructions, wall_nanos, server_tick);
+        daemon.run_ready_until_blocked(instructions.max(1))
+    }
+
     #[test]
     fn daemon_registers_boot_process_with_owned_kernel() {
         let mut daemon = DeviceDaemon::new(16, 1024, 128);
@@ -594,11 +594,11 @@ mod tests {
     }
 
     #[test]
-    fn daemon_tick_runs_boot_image_to_halt() {
+    fn daemon_refill_and_run_ready_runs_boot_image_to_halt() {
         let mut daemon = DeviceDaemon::new(16, 1024, 128);
         daemon.boot_image(&ckim_empty_main(), "/rom/bios.ck", "", "");
 
-        let summary = daemon.tick(128, 1_000_000, 7);
+        let summary = run_daemon_slice(&mut daemon, 128, 1_000_000, 7);
 
         assert_eq!(
             summary,
@@ -622,11 +622,11 @@ mod tests {
         let mut daemon = DeviceDaemon::new(16, 1024, 128);
         daemon.boot_image(&ckim_yields_then_halts(), "/rom/yield.ck", "", "");
 
-        let first = daemon.tick(1, 1_000_000, 10);
+        let first = run_daemon_slice(&mut daemon, 1, 1_000_000, 10);
         assert_eq!(first.turns, 1);
         assert_eq!(daemon.process_status(1), DeviceDaemonProcessStatus::Running);
 
-        let second = daemon.tick(1, 1_000_000, 11);
+        let second = run_daemon_slice(&mut daemon, 1, 1_000_000, 11);
         assert_eq!(second.halted, 1);
         assert_eq!(
             daemon.process_status(1),
@@ -639,9 +639,9 @@ mod tests {
         let mut daemon = DeviceDaemon::new(16, 1024, 128);
         daemon.boot_image(&ckim_sleeps_one_tick_then_halts(), "/rom/sleep.ck", "", "");
 
-        let first = daemon.tick(1, 1_000_000, 20);
-        let second = daemon.tick(1, 1_000_000, 20);
-        let third = daemon.tick(1, 1_000_000, 21);
+        let first = run_daemon_slice(&mut daemon, 1, 1_000_000, 20);
+        let second = run_daemon_slice(&mut daemon, 1, 1_000_000, 20);
+        let third = run_daemon_slice(&mut daemon, 1, 1_000_000, 21);
 
         assert_eq!(first.turns, 1);
         assert!(second.idle);
@@ -663,8 +663,8 @@ mod tests {
             "",
         );
 
-        let first = daemon.tick(1, 1_000_000, 30);
-        let second = daemon.tick(1, 1_000_000, 31);
+        let first = run_daemon_slice(&mut daemon, 1, 1_000_000, 30);
+        let second = run_daemon_slice(&mut daemon, 1, 1_000_000, 31);
 
         assert_eq!(first.turns, 1);
         assert!(second.idle);
@@ -683,8 +683,8 @@ mod tests {
             })
             .unwrap();
 
-        let first = daemon.tick(1, 1_000_000, 40);
-        let second = daemon.tick(1, 1_000_000, 41);
+        let first = run_daemon_slice(&mut daemon, 1, 1_000_000, 40);
+        let second = run_daemon_slice(&mut daemon, 1, 1_000_000, 41);
 
         assert_eq!(first.turns, 1);
         assert!(second.idle);
@@ -699,7 +699,7 @@ mod tests {
         let outcome = daemon
             .handle_signal(1, VmSignal::WaitEvent(Some("key".to_string())), 50)
             .unwrap();
-        let summary = daemon.tick(1, 1_000_000, 51);
+        let summary = run_daemon_slice(&mut daemon, 1, 1_000_000, 51);
 
         assert_eq!(outcome, DaemonSignalOutcome::Waiting);
         assert!(summary.idle);
@@ -711,7 +711,7 @@ mod tests {
         let mut daemon = DeviceDaemon::new(16, 1024, 128);
         daemon.boot_image(&ckim_calls_system_log_then_halts(), "/rom/host.ck", "", "");
 
-        let first = daemon.tick(4, 1_000_000, 1);
+        let first = run_daemon_slice(&mut daemon, 4, 1_000_000, 1);
         let requests = daemon.drain_host_requests();
 
         assert_eq!(first.host_requests, 1);
@@ -723,7 +723,7 @@ mod tests {
         daemon
             .complete_host_request(requests[0].request_id, VmValue::Unit)
             .unwrap();
-        let second = daemon.tick(4, 1_000_000, 2);
+        let second = run_daemon_slice(&mut daemon, 4, 1_000_000, 2);
 
         assert_eq!(second.halted, 1);
         assert_eq!(
@@ -742,7 +742,7 @@ mod tests {
             "rom",
         );
 
-        let first = daemon.tick(8, 1_000_000, 1);
+        let first = run_daemon_slice(&mut daemon, 8, 1_000_000, 1);
         let requests = daemon.drain_host_requests();
 
         assert_eq!(first.host_requests, 1);
@@ -768,14 +768,14 @@ mod tests {
             "",
         );
 
-        daemon.tick(8, 1_000_000, 1);
+        run_daemon_slice(&mut daemon, 8, 1_000_000, 1);
         let mut requests = daemon.drain_host_requests();
         assert_eq!(requests.len(), 1);
         let request = requests.pop().unwrap();
         daemon
             .complete_compile_program(request.request_id, None, 1)
             .unwrap();
-        let second = daemon.tick(8, 1_000_000, 2);
+        let second = run_daemon_slice(&mut daemon, 8, 1_000_000, 2);
 
         assert_eq!(second.halted, 1);
         assert_eq!(
@@ -803,14 +803,14 @@ mod tests {
             "",
         );
 
-        let waiting = daemon.tick(8, 1_000_000, 1);
-        let idle = daemon.tick(8, 1_000_000, 2);
+        let waiting = run_daemon_slice(&mut daemon, 8, 1_000_000, 1);
+        let idle = run_daemon_slice(&mut daemon, 8, 1_000_000, 2);
         daemon
             .kernel()
             .with_kernel_mut(|kernel| kernel.write_ipc(channel, "hello\n"))
             .unwrap()
             .unwrap();
-        let woke = daemon.tick(8, 1_000_000, 3);
+        let woke = run_daemon_slice(&mut daemon, 8, 1_000_000, 3);
         let request = daemon.drain_host_requests().pop().unwrap();
 
         assert_eq!(waiting.host_requests, 0);

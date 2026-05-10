@@ -166,13 +166,6 @@ interface NativeDaemonBindings {
         workingDirectory: String,
     ): NativeDeviceDaemonBootSummary
 
-    fun tickDeviceDaemon(
-        daemonHandle: Long,
-        instructions: Long,
-        wallNanos: Long,
-        serverTick: Long,
-    ): NativeDeviceDaemonTickSummary
-
     fun refillDeviceDaemonQuota(
         daemonHandle: Long,
         instructions: Long,
@@ -253,14 +246,6 @@ object NativeVmDaemonBindings : NativeDaemonBindings {
         workingDirectory: String,
     ): NativeDeviceDaemonBootSummary =
         NativeVmBindings.bootDeviceDaemon(daemonHandle, image, programPath, argument, workingDirectory)
-
-    override fun tickDeviceDaemon(
-        daemonHandle: Long,
-        instructions: Long,
-        wallNanos: Long,
-        serverTick: Long,
-    ): NativeDeviceDaemonTickSummary =
-        NativeVmBindings.tickDeviceDaemon(daemonHandle, instructions, wallNanos, serverTick)
 
     override fun refillDeviceDaemonQuota(
         daemonHandle: Long,
