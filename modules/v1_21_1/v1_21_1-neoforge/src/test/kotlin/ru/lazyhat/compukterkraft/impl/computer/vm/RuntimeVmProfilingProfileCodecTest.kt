@@ -111,6 +111,8 @@ class RuntimeVmProfilingProfileCodecTest {
                                             nativeProcessSchedulerComparisons = 69,
                                             nativeProcessSchedulerMatches = 70,
                                             nativeProcessSchedulerMismatches = 71,
+                                            nativeProcessSchedulerAcceptedTicks = 72,
+                                            nativeProcessSchedulerFallbackTicks = 73,
                                             waitPollSignals = 34,
                                             waitProcessSignals = 35,
                                             nativeProcessRegistrations = 36,
