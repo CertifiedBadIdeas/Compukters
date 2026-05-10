@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 use std::sync::Arc;
 
 use crate::image_runner::ImageVmHandle;
@@ -29,11 +29,31 @@ pub enum DeviceDaemonProcessStatus {
     Missing,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DeviceDaemonHostRequestKind {
+    HostCall,
+    CompileProgram,
+    Crash,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeviceDaemonHostRequest {
+    pub request_id: i64,
+    pub pid: i32,
+    pub kind: DeviceDaemonHostRequestKind,
+    pub module_name: Option<String>,
+    pub function_name: Option<String>,
+    pub arguments: Vec<VmValue>,
+    pub path: Option<String>,
+    pub working_directory: Option<String>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum DaemonSignalOutcome {
     Runnable,
     Waiting,
     Halted,
+    HostRequest,
 }
 
 pub struct DeviceDaemon {
@@ -42,6 +62,9 @@ pub struct DeviceDaemon {
     image_handles: BTreeMap<i32, i64>,
     next_image_handle: i64,
     instruction_budget: usize,
+    host_requests: VecDeque<DeviceDaemonHostRequest>,
+    pending_host_requests: BTreeMap<i64, i32>,
+    next_host_request_id: i64,
 }
 
 impl DeviceDaemon {
@@ -59,6 +82,9 @@ impl DeviceDaemon {
             image_handles: BTreeMap::new(),
             next_image_handle: 1,
             instruction_budget: instruction_budget.max(1),
+            host_requests: VecDeque::new(),
+            pending_host_requests: BTreeMap::new(),
+            next_host_request_id: 1,
         }
     }
 
@@ -117,6 +143,25 @@ impl DeviceDaemon {
         }
     }
 
+    pub fn drain_host_requests(&mut self) -> Vec<DeviceDaemonHostRequest> {
+        self.host_requests.drain(..).collect()
+    }
+
+    pub fn complete_host_request(&mut self, request_id: i64, value: VmValue) -> Result<(), String> {
+        let pid = self
+            .pending_host_requests
+            .remove(&request_id)
+            .ok_or_else(|| format!("daemon host request not found: {request_id}"))?;
+        let image = self
+            .images
+            .get_mut(&pid)
+            .ok_or_else(|| format!("daemon host request pid has no image: {pid}"))?;
+        image.resume_with_value(value)?;
+        self.kernel
+            .with_kernel_mut(|kernel| kernel.mark_process_runnable(pid))?;
+        Ok(())
+    }
+
     pub fn tick(
         &mut self,
         instructions: i64,
@@ -147,9 +192,11 @@ impl DeviceDaemon {
             None => Err(format!("daemon selected pid {pid} without image")),
         };
         let mut halted = 0;
+        let mut host_requests = 0;
         match signal {
             Ok(signal) => match self.handle_signal(pid, signal, server_tick) {
                 Ok(DaemonSignalOutcome::Halted) => halted = 1,
+                Ok(DaemonSignalOutcome::HostRequest) => host_requests = 1,
                 Ok(DaemonSignalOutcome::Runnable | DaemonSignalOutcome::Waiting) => {}
                 Err(message) => {
                     let _ = self
@@ -173,7 +220,7 @@ impl DeviceDaemon {
             remaining_instructions: step.remaining_instructions,
             idle: false,
             halted,
-            host_requests: 0,
+            host_requests,
         }
     }
 
@@ -231,7 +278,29 @@ impl DeviceDaemon {
                 })?;
                 Ok(DaemonSignalOutcome::Waiting)
             }
-            other => panic!("daemon received deferred Task 4 signal during Task 3: {other:?}"),
+            VmSignal::HostCall {
+                module_name,
+                function_name,
+                arguments,
+            } => {
+                let request_id = self.next_host_request_id;
+                self.next_host_request_id = self.next_host_request_id.saturating_add(1).max(1);
+                self.host_requests.push_back(DeviceDaemonHostRequest {
+                    request_id,
+                    pid,
+                    kind: DeviceDaemonHostRequestKind::HostCall,
+                    module_name: Some(module_name),
+                    function_name: Some(function_name),
+                    arguments,
+                    path: None,
+                    working_directory: None,
+                });
+                self.pending_host_requests.insert(request_id, pid);
+                self.kernel.with_kernel_mut(|kernel| {
+                    kernel.mark_process_waiting_for_host_request(pid, request_id)
+                })?;
+                Ok(DaemonSignalOutcome::HostRequest)
+            }
         }
     }
 }
@@ -375,6 +444,32 @@ mod tests {
         assert_eq!(daemon.process_status(1), DeviceDaemonProcessStatus::Running);
     }
 
+    #[test]
+    fn daemon_host_call_parks_process_and_can_resume_with_value() {
+        let mut daemon = DeviceDaemon::new(16, 1024, 128);
+        daemon.boot_image(&ckim_calls_system_log_then_halts(), "/rom/host.ck", "", "");
+
+        let first = daemon.tick(4, 1_000_000, 1);
+        let requests = daemon.drain_host_requests();
+
+        assert_eq!(first.host_requests, 1);
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].pid, 1);
+        assert_eq!(requests[0].module_name.as_deref(), Some("system"));
+        assert_eq!(requests[0].function_name.as_deref(), Some("log"));
+
+        daemon
+            .complete_host_request(requests[0].request_id, VmValue::Unit)
+            .unwrap();
+        let second = daemon.tick(4, 1_000_000, 2);
+
+        assert_eq!(second.halted, 1);
+        assert_eq!(
+            daemon.process_status(1),
+            DeviceDaemonProcessStatus::Completed(0),
+        );
+    }
+
     fn ckim_empty_main() -> Vec<u8> {
         image_with_code(0, vec![OP_RETURN])
     }
@@ -424,6 +519,22 @@ mod tests {
         )
     }
 
+    fn ckim_calls_system_log_then_halts() -> Vec<u8> {
+        let mut code = Vec::new();
+        code.push(OP_PUSH_CONSTANT);
+        i32(&mut code, 0);
+        code.push(OP_CALL_HOST);
+        i32(&mut code, 1);
+        i32(&mut code, 1);
+        code.push(OP_RETURN);
+        image_with_constants_imports_and_code(
+            vec![ConstantFixture::String("hello".to_string())],
+            vec![HostImportFixture::new(1, "system", "log")],
+            0,
+            code,
+        )
+    }
+
     fn image_with_code(frame_size: i32, code: Vec<u8>) -> Vec<u8> {
         image_with_constants_and_code(Vec::new(), frame_size, code)
     }
@@ -468,6 +579,7 @@ mod tests {
     enum ConstantFixture {
         Int(i32),
         Long(i64),
+        String(String),
     }
 
     impl ConstantFixture {
@@ -480,6 +592,10 @@ mod tests {
                 ConstantFixture::Long(value) => {
                     out.push(3);
                     out.extend_from_slice(&value.to_le_bytes());
+                }
+                ConstantFixture::String(value) => {
+                    out.push(1);
+                    string(out, &value);
                 }
             }
         }
