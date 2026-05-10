@@ -19,6 +19,7 @@
 
 package ru.lazyhat.compukterkraft.core.device.vm
 
+import java.util.ArrayDeque
 import java.util.concurrent.ConcurrentHashMap
 
 internal sealed interface VmProcessState {
@@ -128,6 +129,9 @@ internal data class VmProcessRecord(
 
 internal class VmProcessTable : VmProcessStateReporter {
     private val records = ConcurrentHashMap<Int, VmProcessRecord>()
+    private val runnableLock = Any()
+    private val runnableQueue = ArrayDeque<Int>()
+    private val runnablePids = mutableSetOf<Int>()
 
     fun registerProcess(
         pid: Int,
@@ -145,62 +149,120 @@ internal class VmProcessTable : VmProcessStateReporter {
                 workingDirectory = workingDirectory,
                 state = VmProcessState.Runnable,
             )
+        enqueueRunnable(pid)
     }
 
     override fun markRunnable(pid: Int) {
-        updateState(pid, VmProcessState.Runnable)
+        if (updateState(pid, VmProcessState.Runnable)) {
+            enqueueRunnable(pid)
+        }
     }
 
     override fun markWaitingEvent(
         pid: Int,
         filter: String?,
     ) {
-        updateState(pid, VmProcessState.WaitingEvent(filter))
+        if (updateState(pid, VmProcessState.WaitingEvent(filter))) {
+            removeRunnable(pid)
+        }
     }
 
     override fun markWaitingIpc(
         pid: Int,
         channelId: Int,
     ) {
-        updateState(pid, VmProcessState.WaitingIpc(channelId))
+        if (updateState(pid, VmProcessState.WaitingIpc(channelId))) {
+            removeRunnable(pid)
+        }
     }
 
     override fun markWaitingProcess(
         pid: Int,
         targetPid: Int,
     ) {
-        updateState(pid, VmProcessState.WaitingProcess(targetPid))
+        if (updateState(pid, VmProcessState.WaitingProcess(targetPid))) {
+            removeRunnable(pid)
+        }
     }
 
     override fun markSleeping(
         pid: Int,
         untilTick: Long,
     ) {
-        updateState(pid, VmProcessState.Sleeping(untilTick))
+        if (updateState(pid, VmProcessState.Sleeping(untilTick))) {
+            removeRunnable(pid)
+        }
     }
 
     override fun markExited(
         pid: Int,
         exitCode: Int,
     ) {
-        updateState(pid, VmProcessState.Exited(exitCode))
+        if (updateState(pid, VmProcessState.Exited(exitCode))) {
+            removeRunnable(pid)
+        }
     }
 
     override fun markCrashed(
         pid: Int,
         message: String,
     ) {
-        updateState(pid, VmProcessState.Crashed(message))
+        if (updateState(pid, VmProcessState.Crashed(message))) {
+            removeRunnable(pid)
+        }
     }
 
     fun snapshot(pid: Int): VmProcessRecord? = records[pid]
 
     fun snapshot(): List<VmProcessRecord> = records.values.sortedBy { it.pid }
 
+    fun runnableSnapshot(): List<Int> =
+        synchronized(runnableLock) {
+            runnableQueue.toList()
+        }
+
+    fun nextRunnablePid(): Int? =
+        synchronized(runnableLock) {
+            while (runnableQueue.isNotEmpty()) {
+                val pid = runnableQueue.removeFirst()
+                runnablePids.remove(pid)
+                if (records[pid]?.state == VmProcessState.Runnable) {
+                    enqueueRunnableLocked(pid)
+                    return@synchronized pid
+                }
+            }
+            null
+        }
+
     private fun updateState(
         pid: Int,
         state: VmProcessState,
-    ) {
-        records.computeIfPresent(pid) { _, record -> record.copy(state = state) }
+    ): Boolean {
+        var updated = false
+        records.computeIfPresent(pid) { _, record ->
+            updated = true
+            record.copy(state = state)
+        }
+        return updated
+    }
+
+    private fun enqueueRunnable(pid: Int) {
+        synchronized(runnableLock) {
+            enqueueRunnableLocked(pid)
+        }
+    }
+
+    private fun enqueueRunnableLocked(pid: Int) {
+        if (records[pid]?.state == VmProcessState.Runnable && runnablePids.add(pid)) {
+            runnableQueue.addLast(pid)
+        }
+    }
+
+    private fun removeRunnable(pid: Int) {
+        synchronized(runnableLock) {
+            if (runnablePids.remove(pid)) {
+                runnableQueue.remove(pid)
+            }
+        }
     }
 }
