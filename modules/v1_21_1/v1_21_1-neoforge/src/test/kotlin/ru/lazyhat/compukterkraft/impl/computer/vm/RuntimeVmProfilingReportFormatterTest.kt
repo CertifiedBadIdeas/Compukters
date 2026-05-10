@@ -88,6 +88,9 @@ class RuntimeVmProfilingReportFormatterTest {
                             processSchedulerSelectedTicks = 10,
                             processSchedulerIdleTicks = 2,
                             processSchedulerWokenProcesses = 3,
+                            nativeProcessSchedulerComparisons = 12,
+                            nativeProcessSchedulerMatches = 11,
+                            nativeProcessSchedulerMismatches = 1,
                             hostCallSignals = 2,
                             hostCalls =
                                 listOf(
@@ -135,6 +138,9 @@ class RuntimeVmProfilingReportFormatterTest {
         assertTrue(markdown.contains("| Process scheduler selected ticks | 10 | 0 |"), markdown)
         assertTrue(markdown.contains("| Process scheduler idle ticks | 2 | 0 |"), markdown)
         assertTrue(markdown.contains("| Process scheduler woken processes | 3 | 0 |"), markdown)
+        assertTrue(markdown.contains("| Native scheduler comparisons | 12 | 0 |"), markdown)
+        assertTrue(markdown.contains("| Native scheduler matches | 11 | 0 |"), markdown)
+        assertTrue(markdown.contains("| Native scheduler mismatches | 1 | 0 |"), markdown)
         assertTrue(markdown.contains("| Host-call signals | 2 | 10 |"), markdown)
         assertTrue(markdown.contains("| Host-call active time | 30 ms | 50.01 us |"), markdown)
         assertTrue(markdown.contains("| Host-call wait time | 60 ms | 0 ns |"), markdown)
@@ -201,6 +207,9 @@ class RuntimeVmProfilingReportFormatterTest {
                             processSchedulerSelectedTicks = 14,
                             processSchedulerIdleTicks = 1,
                             processSchedulerWokenProcesses = 6,
+                            nativeProcessSchedulerComparisons = 15,
+                            nativeProcessSchedulerMatches = 15,
+                            nativeProcessSchedulerMismatches = 0,
                             hostCallSignals = 2,
                         ),
                     ),
@@ -231,6 +240,9 @@ class RuntimeVmProfilingReportFormatterTest {
         assertTrue(markdown.contains("| Process scheduler selected ticks | 14 |"), markdown)
         assertTrue(markdown.contains("| Process scheduler idle ticks | 1 |"), markdown)
         assertTrue(markdown.contains("| Process scheduler woken processes | 6 |"), markdown)
+        assertTrue(markdown.contains("| Native scheduler comparisons | 15 |"), markdown)
+        assertTrue(markdown.contains("| Native scheduler matches | 15 |"), markdown)
+        assertTrue(markdown.contains("| Native scheduler mismatches | 0 |"), markdown)
         assertTrue(markdown.contains("| Host-call signals | 4 |"), markdown)
         assertTrue(markdown.contains("| Host-call active time | 0 ns |"), markdown)
         assertTrue(markdown.contains("| Host-call wait time | 0 ns |"), markdown)
@@ -282,6 +294,9 @@ class RuntimeVmProfilingReportFormatterTest {
         processSchedulerSelectedTicks: Long = 0,
         processSchedulerIdleTicks: Long = 0,
         processSchedulerWokenProcesses: Long = 0,
+        nativeProcessSchedulerComparisons: Long = 0,
+        nativeProcessSchedulerMatches: Long = 0,
+        nativeProcessSchedulerMismatches: Long = 0,
         hostCallSignals: Long,
         hostCalls: List<RuntimeHostCallMetrics> = emptyList(),
     ): RuntimeWorkloadProfile =
@@ -343,6 +358,9 @@ class RuntimeVmProfilingReportFormatterTest {
                             processSchedulerSelectedTicks = processSchedulerSelectedTicks,
                             processSchedulerIdleTicks = processSchedulerIdleTicks,
                             processSchedulerWokenProcesses = processSchedulerWokenProcesses,
+                            nativeProcessSchedulerComparisons = nativeProcessSchedulerComparisons,
+                            nativeProcessSchedulerMatches = nativeProcessSchedulerMatches,
+                            nativeProcessSchedulerMismatches = nativeProcessSchedulerMismatches,
                             hostCallSignals = hostCallSignals,
                         ),
                     hostCalls = hostCalls,
