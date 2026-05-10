@@ -65,6 +65,7 @@ class VmProcessManagerTest {
         val sleepingProcesses = mutableListOf<Pair<Int, Long>>()
         val crashedProcesses = mutableListOf<Pair<Int, String>>()
         val schedulerTicks = mutableListOf<Long>()
+        var schedulerTickResult: VmProcessSchedulerTick? = null
         var registerResult: Boolean = true
         var completeResult: Boolean = true
 
@@ -132,7 +133,7 @@ class VmProcessManagerTest {
 
         override fun schedulerTick(currentTick: Long): VmProcessSchedulerTick? {
             schedulerTicks += currentTick
-            return null
+            return schedulerTickResult
         }
     }
 
@@ -536,6 +537,74 @@ class VmProcessManagerTest {
                 assertEquals(1, metrics.snapshot().vm.processSchedulerSelectedTicks)
                 assertEquals(1, metrics.snapshot().vm.processSchedulerIdleTicks)
                 assertEquals(1, metrics.snapshot().vm.processSchedulerWokenProcesses)
+            } finally {
+                runBlocking { manager.cancelAll() }
+                scope.cancel()
+            }
+        }
+    }
+
+    @Test
+    fun schedulerTickRecordsMatchingNativeDecision() {
+        runtimeTestWorkspace("vm-process-manager-native-scheduler-match") { workspace ->
+            val bridge = RecordingNativeProcessBridge()
+            val ctx = StubVmContext()
+            val metrics = RecordingRuntimeMetricsCollector()
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val manager =
+                VmProcessManager(
+                    scope = scope,
+                    ctx = ctx,
+                    deviceId = 1,
+                    programLoader = WorkspaceProgramLoader(workspace.host),
+                    profile = runtimeProfile(),
+                    runtimeCreator = { _, _, _, _ -> error("runtimeCreator should not run") },
+                    compilerMetricsCollector = NoOpCompilerMetricsCollector,
+                    runtimeMetricsCollector = metrics,
+                    nativeProcessBridge = bridge,
+                )
+
+            try {
+                bridge.schedulerTickResult = VmProcessSchedulerTick(currentTick = 4, wokenPids = emptyList(), selectedPid = 1)
+
+                assertEquals(VmProcessSchedulerTick(currentTick = 4, wokenPids = emptyList(), selectedPid = 1), manager.schedulerTick(4))
+                assertEquals(1, metrics.snapshot().vm.nativeProcessSchedulerComparisons)
+                assertEquals(1, metrics.snapshot().vm.nativeProcessSchedulerMatches)
+                assertEquals(0, metrics.snapshot().vm.nativeProcessSchedulerMismatches)
+            } finally {
+                runBlocking { manager.cancelAll() }
+                scope.cancel()
+            }
+        }
+    }
+
+    @Test
+    fun schedulerTickRecordsMismatchedNativeDecision() {
+        runtimeTestWorkspace("vm-process-manager-native-scheduler-mismatch") { workspace ->
+            val bridge = RecordingNativeProcessBridge()
+            val ctx = StubVmContext()
+            val metrics = RecordingRuntimeMetricsCollector()
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val manager =
+                VmProcessManager(
+                    scope = scope,
+                    ctx = ctx,
+                    deviceId = 1,
+                    programLoader = WorkspaceProgramLoader(workspace.host),
+                    profile = runtimeProfile(),
+                    runtimeCreator = { _, _, _, _ -> error("runtimeCreator should not run") },
+                    compilerMetricsCollector = NoOpCompilerMetricsCollector,
+                    runtimeMetricsCollector = metrics,
+                    nativeProcessBridge = bridge,
+                )
+
+            try {
+                bridge.schedulerTickResult = VmProcessSchedulerTick(currentTick = 4, wokenPids = emptyList(), selectedPid = null)
+
+                assertEquals(VmProcessSchedulerTick(currentTick = 4, wokenPids = emptyList(), selectedPid = 1), manager.schedulerTick(4))
+                assertEquals(1, metrics.snapshot().vm.nativeProcessSchedulerComparisons)
+                assertEquals(0, metrics.snapshot().vm.nativeProcessSchedulerMatches)
+                assertEquals(1, metrics.snapshot().vm.nativeProcessSchedulerMismatches)
             } finally {
                 runBlocking { manager.cancelAll() }
                 scope.cancel()

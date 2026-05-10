@@ -71,6 +71,8 @@ interface RuntimeMetricsCollector {
         selected: Boolean,
     )
 
+    fun recordNativeProcessSchedulerComparison(matched: Boolean)
+
     fun recordSlicePermitReceived()
 
     fun recordSchedulingPoint(waitedForSlice: Boolean)
@@ -175,6 +177,9 @@ data class RuntimeVmMetrics(
     val processSchedulerSelectedTicks: Long = 0,
     val processSchedulerIdleTicks: Long = 0,
     val processSchedulerWokenProcesses: Long = 0,
+    val nativeProcessSchedulerComparisons: Long = 0,
+    val nativeProcessSchedulerMatches: Long = 0,
+    val nativeProcessSchedulerMismatches: Long = 0,
     val slicePermitsReceived: Long = 0,
     val schedulingPoints: Long = 0,
     val yieldSchedulingPoints: Long = 0,
@@ -267,6 +272,9 @@ data class RuntimeProfilingSnapshot(
             )
             appendLine(
                 "    processScheduler: ticks=${vm.processSchedulerTicks}, selected=${vm.processSchedulerSelectedTicks}, idle=${vm.processSchedulerIdleTicks}, woken=${vm.processSchedulerWokenProcesses}",
+            )
+            appendLine(
+                "    nativeProcessScheduler: comparisons=${vm.nativeProcessSchedulerComparisons}, matches=${vm.nativeProcessSchedulerMatches}, mismatches=${vm.nativeProcessSchedulerMismatches}",
             )
             appendLine(
                 "    scheduling: points=${vm.schedulingPoints}, yieldPoints=${vm.yieldSchedulingPoints}, waitPoints=${vm.waitForSliceSchedulingPoints}",
@@ -379,6 +387,8 @@ object NoOpRuntimeMetricsCollector : RuntimeMetricsCollector {
         selected: Boolean,
     ) = Unit
 
+    override fun recordNativeProcessSchedulerComparison(matched: Boolean) = Unit
+
     override fun recordSlicePermitReceived() = Unit
 
     override fun recordSchedulingPoint(waitedForSlice: Boolean) = Unit
@@ -473,6 +483,9 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
     private val processSchedulerSelectedTicks = AtomicLong()
     private val processSchedulerIdleTicks = AtomicLong()
     private val processSchedulerWokenProcesses = AtomicLong()
+    private val nativeProcessSchedulerComparisons = AtomicLong()
+    private val nativeProcessSchedulerMatches = AtomicLong()
+    private val nativeProcessSchedulerMismatches = AtomicLong()
     private val slicePermitsReceived = AtomicLong()
     private val schedulingPoints = AtomicLong()
     private val yieldSchedulingPoints = AtomicLong()
@@ -590,6 +603,15 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
             processSchedulerSelectedTicks.incrementAndGet()
         } else {
             processSchedulerIdleTicks.incrementAndGet()
+        }
+    }
+
+    override fun recordNativeProcessSchedulerComparison(matched: Boolean) {
+        nativeProcessSchedulerComparisons.incrementAndGet()
+        if (matched) {
+            nativeProcessSchedulerMatches.incrementAndGet()
+        } else {
+            nativeProcessSchedulerMismatches.incrementAndGet()
         }
     }
 
@@ -728,6 +750,9 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
                     processSchedulerSelectedTicks = processSchedulerSelectedTicks.get(),
                     processSchedulerIdleTicks = processSchedulerIdleTicks.get(),
                     processSchedulerWokenProcesses = processSchedulerWokenProcesses.get(),
+                    nativeProcessSchedulerComparisons = nativeProcessSchedulerComparisons.get(),
+                    nativeProcessSchedulerMatches = nativeProcessSchedulerMatches.get(),
+                    nativeProcessSchedulerMismatches = nativeProcessSchedulerMismatches.get(),
                     slicePermitsReceived = slicePermitsReceived.get(),
                     schedulingPoints = schedulingPoints.get(),
                     yieldSchedulingPoints = yieldSchedulingPoints.get(),

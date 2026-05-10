@@ -939,3 +939,48 @@ git add docs/superpowers/plans/2026-05-10-device-quota-process-scheduler.md \
   modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessManagerTest.kt
 git commit -m "feat: register root process in native scheduler"
 ```
+
+## Task 17: Native Scheduler Decision Comparison
+
+**Files:**
+- Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/runtime/RuntimeProfiling.kt`
+- Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessManager.kt`
+- Modify: `modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/runtime/RuntimeProfilingTest.kt`
+- Modify: `modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessManagerTest.kt`
+
+- [x] **Step 1: Add failing comparison metric tests**
+
+Add tests proving:
+
+- runtime metrics count native scheduler comparisons;
+- matching Kotlin/native scheduler ticks increment match count;
+- different Kotlin/native scheduler ticks increment mismatch count.
+
+- [x] **Step 2: Record native scheduler comparison metrics**
+
+When `NativeProcessBridge.schedulerTick(currentTick)` returns a tick, compare it with the Kotlin scheduler tick and
+record match or mismatch. Keep Kotlin as source of truth in this task.
+
+- [x] **Step 3: Include comparison metrics in runtime summary**
+
+Add the comparison counters to `RuntimeProfilingSnapshot.summary()` so native scheduler readiness is visible during
+manual profiling.
+
+- [x] **Step 4: Run focused tests**
+
+```bash
+./gradlew :core:test --tests '*RuntimeProfilingTest' --tests '*VmProcessManagerTest' --rerun-tasks
+```
+
+Expected: PASS.
+
+- [x] **Step 5: Commit Task 17**
+
+```bash
+git add docs/superpowers/plans/2026-05-10-device-quota-process-scheduler.md \
+  modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/runtime/RuntimeProfiling.kt \
+  modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessManager.kt \
+  modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/runtime/RuntimeProfilingTest.kt \
+  modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessManagerTest.kt
+git commit -m "feat: compare native process scheduler decisions"
+```

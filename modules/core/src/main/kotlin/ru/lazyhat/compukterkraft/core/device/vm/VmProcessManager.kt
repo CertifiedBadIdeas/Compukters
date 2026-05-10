@@ -70,7 +70,9 @@ internal class VmProcessManager(
 
     fun schedulerTick(currentTick: Long): VmProcessSchedulerTick =
         processScheduler.tick(currentTick).also { tick ->
-            nativeProcessBridge.schedulerTick(currentTick)
+            nativeProcessBridge.schedulerTick(currentTick)?.let { nativeTick ->
+                runtimeMetricsCollector.recordNativeProcessSchedulerComparison(nativeTick == tick)
+            }
             runtimeMetricsCollector.recordProcessSchedulerTick(
                 wokenProcesses = tick.wokenPids.size,
                 selected = tick.selectedPid != null,
