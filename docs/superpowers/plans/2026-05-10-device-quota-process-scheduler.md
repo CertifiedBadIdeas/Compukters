@@ -1,0 +1,439 @@
+# Device Quota Process Scheduler Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Replace the binary VM slice permit channel with a device execution quota foundation, make process runtime state process-local, and prepare process scheduling to move from Kotlin coroutine wake order toward an explicit VM-owned scheduler.
+
+**Architecture:** Implement this as Kotlin-first scheduler groundwork on `dev`. Server ticks refill a bounded device quota object instead of sending anonymous `Unit` permits. Each runtime receives process identity and process-local working directory state, so later scheduler work can reason about pids instead of ambient device-global state. Existing Rust process wait/registration remains in place and is used by the new pid-aware process bridge.
+
+**Tech Stack:** Kotlin/JVM coroutines, existing CKVM native image runner, Rust native process table through JNI, Gradle tests, runtime profiling reports.
+
+---
+
+## File Structure
+
+- Create `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/DeviceExecutionQuota.kt`
+  - Owns bounded per-device execution quota.
+  - Replaces anonymous `Channel<Unit>` semantics with explicit `refill(...)` and `awaitPermit(...)`.
+- Create `modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/DeviceExecutionQuotaTest.kt`
+  - Covers refill cap, sleep-gated requests, and waiting consumers.
+- Modify `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVm.kt`
+  - Replace `slicePermits` with `DeviceExecutionQuota`.
+  - Pass `processId`, parent id, working directory, and argument into runtime creation.
+  - Remove shared path resolver mutation from runtime creation.
+- Modify `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmRuntime.kt`
+  - Store `processId`.
+  - Use process-local path resolver through process/filesystem APIs.
+- Modify `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmContext.kt`
+  - Keep compatibility for device-wide operations.
+  - Add pid-aware scheduling if needed by later tasks.
+- Modify `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/api/VmFileSystemApi.kt`
+  - Resolve paths through a process-local `VmPathResolver`.
+- Modify `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/api/VmProcessApi.kt`
+  - Use process-local cwd.
+  - Pass the parent pid into `VmProcessManager.spawn(...)`.
+- Modify `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessManager.kt`
+  - Accept parent pid for spawn.
+  - Create child runtimes with their real pid and parent pid.
+  - Register native processes with real parent pid instead of hardcoded pid 1.
+- Modify `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/runtime/RuntimeProfiling.kt`
+  - Add quota refill/consume counters.
+  - Keep existing historical fields readable.
+- Modify `modules/v1_21_1/v1_21_1-neoforge/src/test/kotlin/ru/lazyhat/compukterkraft/impl/computer/vm/RuntimeVmProfilingReport.kt`
+  - Include new quota metrics in TSV/Markdown.
+
+## Task 1: Device Execution Quota Foundation
+
+**Files:**
+- Create: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/DeviceExecutionQuota.kt`
+- Create: `modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/DeviceExecutionQuotaTest.kt`
+- Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVm.kt`
+
+- [ ] **Step 1: Write failing quota tests**
+
+Create `DeviceExecutionQuotaTest.kt` with tests for these behaviors:
+
+```kotlin
+@Test
+fun refillCapsPendingQuotaAtSingleTickBudget() = runBlocking {
+    val quota = DeviceExecutionQuota()
+
+    assertTrue(quota.refill(available = true))
+    assertFalse(quota.refill(available = true))
+
+    quota.awaitPermit()
+
+    assertTrue(quota.refill(available = true))
+}
+
+@Test
+fun refillDoesNotAddQuotaWhenUnavailable() {
+    val quota = DeviceExecutionQuota()
+
+    assertFalse(quota.refill(available = false))
+}
+
+@Test
+fun awaitPermitResumesWhenQuotaArrives() = runBlocking {
+    val quota = DeviceExecutionQuota()
+    val waiter = async { quota.awaitPermit() }
+
+    assertFalse(waiter.isCompleted)
+    assertTrue(quota.refill(available = true))
+
+    withTimeout(1_000) { waiter.await() }
+}
+```
+
+- [ ] **Step 2: Run focused test and verify RED**
+
+Run:
+
+```bash
+./gradlew :core:test --tests '*DeviceExecutionQuotaTest' --rerun-tasks
+```
+
+Expected: FAIL because `DeviceExecutionQuota` does not exist.
+
+- [ ] **Step 3: Implement `DeviceExecutionQuota`**
+
+Create `DeviceExecutionQuota.kt`:
+
+```kotlin
+package ru.lazyhat.compukterkraft.core.device.vm
+
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+
+internal class DeviceExecutionQuota {
+    private val permits = Channel<Unit>(capacity = 1)
+    private val lock = Mutex()
+    private var pending: Boolean = false
+
+    suspend fun awaitPermit() {
+        permits.receive()
+        lock.withLock {
+            pending = false
+        }
+    }
+
+    fun refill(available: Boolean): Boolean {
+        if (!available) return false
+        if (pending) return false
+        val result = permits.trySend(Unit)
+        if (result.isSuccess) {
+            pending = true
+            return true
+        }
+        return false
+    }
+}
+```
+
+If `pending` needs stricter synchronization after tests, replace it with `AtomicBoolean`.
+
+- [ ] **Step 4: Replace `slicePermits` in `BackgroundDeviceVm`**
+
+Replace:
+
+```kotlin
+private val slicePermits = Channel<Unit>(capacity = 1)
+```
+
+with:
+
+```kotlin
+private val executionQuota = DeviceExecutionQuota()
+```
+
+Update `requestSlice`:
+
+```kotlin
+val sent = executionQuota.refill(available = true)
+runtimeMetricsCollector.recordSliceRequest(sent = sent, sleepGated = false)
+```
+
+Update `awaitSlicePermit`:
+
+```kotlin
+executionQuota.awaitPermit()
+```
+
+Keep metric names `slicePermitsSent` and `slicePermitsReceived` for historical compatibility in this task.
+
+- [ ] **Step 5: Run focused tests**
+
+Run:
+
+```bash
+./gradlew :core:test --tests '*DeviceExecutionQuotaTest' --tests '*BackgroundDeviceVmTest.recordsRuntimeSchedulingMetrics' --rerun-tasks
+```
+
+Expected: PASS.
+
+- [ ] **Step 6: Commit Task 1**
+
+```bash
+git add modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/DeviceExecutionQuota.kt \
+  modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/DeviceExecutionQuotaTest.kt \
+  modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVm.kt
+git commit -m "feat: add device execution quota"
+```
+
+## Task 2: Process-Local Path Resolver
+
+**Files:**
+- Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmRuntime.kt`
+- Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVm.kt`
+- Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/api/VmFileSystemApi.kt`
+- Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/api/VmProcessApi.kt`
+- Test: `modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVmTest.kt`
+
+- [ ] **Step 1: Add failing cwd isolation test**
+
+Add a test where one child changes directory and a second child still sees the parent cwd unchanged. The parent should log
+`parent=`, `a=sub`, and `b=` after both children run.
+
+- [ ] **Step 2: Run focused test and verify RED**
+
+Run:
+
+```bash
+./gradlew :core:test --tests '*BackgroundDeviceVmTest.processWorkingDirectoryIsProcessLocal' --rerun-tasks
+```
+
+Expected: FAIL because the shared path resolver is mutated during runtime creation.
+
+- [ ] **Step 3: Make filesystem/process APIs use a process-local resolver**
+
+Change `VmFileSystemApi` to accept `pathResolver: VmPathResolver` and resolve paths through it instead of
+`ctx.resolvePath(path)`.
+
+Change `VmProcessApi` to use the same process-local resolver for `workingDirectory` and `changeDirectory`.
+
+Change `BackgroundDeviceVm.createRuntime(...)` to instantiate a new `VmPathResolver(workingDirectory)` per runtime
+instead of mutating the device-level resolver.
+
+- [ ] **Step 4: Run focused test**
+
+Run:
+
+```bash
+./gradlew :core:test --tests '*BackgroundDeviceVmTest.processWorkingDirectoryIsProcessLocal' --rerun-tasks
+```
+
+Expected: PASS.
+
+- [ ] **Step 5: Run core VM tests**
+
+Run:
+
+```bash
+./gradlew :core:test --tests '*BackgroundDeviceVmTest' --tests '*VmProcessManagerTest' --rerun-tasks
+```
+
+Expected: PASS.
+
+- [ ] **Step 6: Commit Task 2**
+
+```bash
+git add modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmRuntime.kt \
+  modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVm.kt \
+  modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/api/VmFileSystemApi.kt \
+  modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/api/VmProcessApi.kt \
+  modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVmTest.kt
+git commit -m "feat: make VM runtime paths process-local"
+```
+
+## Task 3: PID-Aware Runtime Creation and Native Registration
+
+**Files:**
+- Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmRuntime.kt`
+- Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessManager.kt`
+- Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/api/VmProcessApi.kt`
+- Test: `modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessManagerTest.kt`
+
+- [ ] **Step 1: Add failing parent pid registration test**
+
+Extend `VmProcessManagerTest` so a spawned child can be registered with a non-root parent pid:
+
+```kotlin
+val pid = manager.spawn(path = "missing.ck", argument = "", workingDirectory = "", parentPid = 41)
+assertEquals(listOf(Triple(2, 41, "missing.ck")), bridge.registrations)
+```
+
+- [ ] **Step 2: Run focused test and verify RED**
+
+Run:
+
+```bash
+./gradlew :core:test --tests '*VmProcessManagerTest*' --rerun-tasks
+```
+
+Expected: FAIL because spawn currently hardcodes parent pid 1.
+
+- [ ] **Step 3: Thread pid through runtime creation**
+
+Change `VmProcessManager` constructor from:
+
+```kotlin
+runtimeCreator: (String, String) -> DeviceRuntime
+```
+
+to:
+
+```kotlin
+runtimeCreator: (Int, Int, String, String) -> DeviceRuntime
+```
+
+where parameters are `pid`, `parentPid`, `workingDirectory`, and `argument`.
+
+Add `processId` and `parentProcessId` to `VmRuntime`.
+
+Change `VmProcessApi.spawn(...)` to call:
+
+```kotlin
+processManager.spawn(path, argument, workingDirectory, parentPid = processId)
+```
+
+Register native process with the real parent pid.
+
+- [ ] **Step 4: Run focused tests**
+
+Run:
+
+```bash
+./gradlew :core:test --tests '*VmProcessManagerTest*' --tests '*BackgroundDeviceVmTest.parentCanSpawnChildAndExchangeIpcText' --rerun-tasks
+```
+
+Expected: PASS.
+
+- [ ] **Step 5: Commit Task 3**
+
+```bash
+git add modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmRuntime.kt \
+  modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessManager.kt \
+  modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/api/VmProcessApi.kt \
+  modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessManagerTest.kt
+git commit -m "feat: thread process identity through runtimes"
+```
+
+## Task 4: Quota Profiling Surface
+
+**Files:**
+- Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/runtime/RuntimeProfiling.kt`
+- Modify: `modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/runtime/RuntimeProfilingTest.kt`
+- Modify: `modules/v1_21_1/v1_21_1-neoforge/src/test/kotlin/ru/lazyhat/compukterkraft/impl/computer/vm/RuntimeVmProfilingReport.kt`
+- Modify: `modules/v1_21_1/v1_21_1-neoforge/src/test/kotlin/ru/lazyhat/compukterkraft/impl/computer/vm/RuntimeVmProfilingReportFormatterTest.kt`
+
+- [ ] **Step 1: Add failing profiling assertions**
+
+Add runtime VM metrics:
+
+- `quotaRefills`;
+- `quotaAcceptedRefills`;
+- `quotaDeniedRefills`;
+- `quotaWaits`.
+
+Add summary line:
+
+```text
+  quota: refills=2, accepted=1, denied=1, waits=1
+```
+
+- [ ] **Step 2: Run focused tests and verify RED**
+
+Run:
+
+```bash
+./gradlew :core:test --tests '*RuntimeProfilingTest' --rerun-tasks
+```
+
+Expected: FAIL because quota metrics do not exist.
+
+- [ ] **Step 3: Implement quota profiling**
+
+Add methods to `RuntimeMetricsCollector`:
+
+```kotlin
+fun recordExecutionQuotaRefill(accepted: Boolean)
+fun recordExecutionQuotaWait()
+```
+
+Record accepted/denied refills from `BackgroundDeviceVm.requestSlice(...)`.
+
+Record waits from `BackgroundDeviceVm.awaitSlicePermit()`.
+
+- [ ] **Step 4: Update report serialization**
+
+Append quota fields after existing process lifecycle fields to preserve historical TSV compatibility. Parsing old rows
+must default missing quota fields to zero.
+
+- [ ] **Step 5: Run focused profiling tests**
+
+Run:
+
+```bash
+./gradlew :core:test --tests '*RuntimeProfilingTest' --rerun-tasks
+./gradlew :v1_21_1-neoforge:test --tests '*RuntimeVmProfilingReportFormatterTest' --tests '*RuntimeVmProfilingProfileCodecTest' --rerun-tasks
+```
+
+Expected: PASS.
+
+- [ ] **Step 6: Commit Task 4**
+
+```bash
+git add modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/runtime/RuntimeProfiling.kt \
+  modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVm.kt \
+  modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/runtime/RuntimeProfilingTest.kt \
+  modules/v1_21_1/v1_21_1-neoforge/src/test/kotlin/ru/lazyhat/compukterkraft/impl/computer/vm/RuntimeVmProfilingReport.kt \
+  modules/v1_21_1/v1_21_1-neoforge/src/test/kotlin/ru/lazyhat/compukterkraft/impl/computer/vm/RuntimeVmProfilingReportFormatterTest.kt \
+  modules/v1_21_1/v1_21_1-neoforge/src/test/kotlin/ru/lazyhat/compukterkraft/impl/computer/vm/RuntimeVmProfilingProfileCodecTest.kt
+git commit -m "test: report execution quota metrics"
+```
+
+## Task 5: Verification and Runtime Profile
+
+**Files:**
+- No production file changes expected unless verification reveals a bug.
+
+- [ ] **Step 1: Run core tests**
+
+```bash
+./gradlew :core:test --rerun-tasks
+```
+
+Expected: PASS.
+
+- [ ] **Step 2: Run native-enabled focused suite**
+
+```bash
+./gradlew :v1_21_1-neoforge:buildRustVmNativeLibrary
+./gradlew -Dckl.vm.native.library=/home/lazyhat/IdeaProjects/Compukter-Kraft/native/ckl-vm/target/debug/libckl_vm.so -Dckl.vm.native.display=true --no-parallel :compiler:test :core:test :v1_21_1-common:test :v1_21_1-neoforge:test --rerun-tasks
+```
+
+Expected: PASS.
+
+- [ ] **Step 3: Run runtime profile**
+
+```bash
+./gradlew -Dckl.vm.native.library=/home/lazyhat/IdeaProjects/Compukter-Kraft/native/ckl-vm/target/debug/libckl_vm.so -Dckl.vm.native.display=true --no-parallel profileRuntimeVmImage
+```
+
+Expected: PASS and emit a fresh profiling run path.
+
+- [ ] **Step 4: Commit any verification fixes**
+
+If verification required fixes, commit them with:
+
+```bash
+git add modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm \
+  modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/runtime \
+  modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm \
+  modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/runtime \
+  modules/v1_21_1/v1_21_1-neoforge/src/test/kotlin/ru/lazyhat/compukterkraft/impl/computer/vm
+git commit -m "fix: stabilize device quota scheduler"
+```
+
+If there were no changes, do not create an empty commit.
