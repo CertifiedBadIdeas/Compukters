@@ -235,6 +235,52 @@ class NativeImageVmBindingsJniTest {
     }
 
     @Test
+    fun nativeDeviceDaemonMethodsExposeCompactAbi() {
+        assertEquals(
+            Long::class.javaPrimitiveType,
+            NativeVmBindings::class.java
+                .getDeclaredMethod(
+                    "createDeviceDaemonNative",
+                    Int::class.javaPrimitiveType,
+                    Int::class.javaPrimitiveType,
+                    Int::class.javaPrimitiveType,
+                ).returnType,
+        )
+        assertEquals(
+            LongArray::class.java,
+            NativeVmBindings::class.java
+                .getDeclaredMethod(
+                    "tickDeviceDaemonNative",
+                    Long::class.javaPrimitiveType,
+                    Long::class.javaPrimitiveType,
+                    Long::class.javaPrimitiveType,
+                    Long::class.javaPrimitiveType,
+                ).returnType,
+        )
+    }
+
+    @Test
+    fun nativeDeviceDaemonCreateTickFreeRunsWhenLibraryIsConfigured() {
+        System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 128)
+        try {
+            assertEquals(
+                NativeDeviceDaemonTickSummary(
+                    serverTick = 5,
+                    turns = 0,
+                    remainingInstructions = 128,
+                    idle = true,
+                    halted = 0,
+                    hostRequests = 0,
+                ),
+                NativeVmBindings.tickDeviceDaemon(handle, 128, 1_000_000, 5),
+            )
+        } finally {
+            NativeVmBindings.freeDeviceDaemon(handle)
+        }
+    }
+
+    @Test
     fun nativeDeviceSchedulerDryRunRunsWhenLibraryIsConfigured() {
         System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val kernelHandle = NativeVmBindings.createDeviceKernel(maxEventQueueSize = 64, maxBufferedBytesPerChannel = 4096)
