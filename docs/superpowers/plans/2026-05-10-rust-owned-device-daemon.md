@@ -1103,7 +1103,7 @@ git commit -m "feat: add kotlin native daemon runtime bridge"
 - Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVm.kt`
 - Modify: `modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVmTest.kt`
 
-- [ ] **Step 1: Add failing opt-in boot test**
+- [x] **Step 1: Add failing opt-in boot test**
 
 Add a test proving `ckl.vm.native.daemon=true` routes boot through the daemon bridge:
 
@@ -1127,7 +1127,7 @@ fun bootUsesNativeDaemonWhenConfigured() =
     }
 ```
 
-- [ ] **Step 2: Run the test and verify it fails**
+- [x] **Step 2: Run the test and verify it fails**
 
 ```bash
 ./gradlew :core:test --tests '*BackgroundDeviceVmTest.bootUsesNativeDaemonWhenConfigured' --rerun-tasks
@@ -1135,7 +1135,7 @@ fun bootUsesNativeDaemonWhenConfigured() =
 
 Expected: FAIL because `BackgroundDeviceVm` has no daemon path.
 
-- [ ] **Step 3: Wire daemon path behind the flag**
+- [x] **Step 3: Wire daemon path behind the flag**
 
 In `BackgroundDeviceVm`, add:
 
@@ -1152,15 +1152,15 @@ When enabled and native library exists:
 - in `requestSlice`, call `nativeDaemonRuntime.requestSlice(serverTick)` and skip `executionQuota.refill(selectedPid)` for daemon mode;
 - keep the existing path unchanged when the flag is absent.
 
-- [ ] **Step 4: Run focused tests**
+- [x] **Step 4: Run focused tests**
 
 ```bash
-./gradlew :core:test --tests '*BackgroundDeviceVmTest.bootUsesNativeDaemonWhenConfigured' --tests '*BackgroundDeviceVmTest.parentCanSpawnChildAndExchangeIpcText' --rerun-tasks
+./gradlew -Dckl.vm.native.library=/home/lazyhat/IdeaProjects/Compukter-Kraft/native/ckl-vm/target/debug/libckl_vm.so :core:test --tests '*BackgroundDeviceVmTest.bootUsesNativeDaemonWhenConfigured' --tests '*BackgroundDeviceVmTest.parentCanSpawnChildAndExchangeIpcText' --rerun-tasks
 ```
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit Task 10**
+- [x] **Step 5: Commit Task 10**
 
 ```bash
 git add modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVm.kt modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVmTest.kt docs/superpowers/plans/2026-05-10-rust-owned-device-daemon.md

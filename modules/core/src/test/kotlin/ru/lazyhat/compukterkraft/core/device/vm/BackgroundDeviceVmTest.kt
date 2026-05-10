@@ -58,11 +58,26 @@ class BackgroundDeviceVmTest {
     }
 
     private class RecordingNativeDaemonBindings : NativeDaemonBindings {
+        val createdDaemons = mutableListOf<Triple<Int, Int, Int>>()
+        val freedDaemons = mutableListOf<Long>()
         val bootedImages = mutableListOf<ByteArray>()
         val tickServerTicks = mutableListOf<Long>()
         val tickInstructions = mutableListOf<Long>()
         val tickWallNanos = mutableListOf<Long>()
         val completedRequestIds = mutableListOf<Long>()
+
+        override fun createDeviceDaemon(
+            maxEventQueueSize: Int,
+            maxBufferedBytesPerChannel: Int,
+            instructionBudget: Int,
+        ): Long {
+            createdDaemons += Triple(maxEventQueueSize, maxBufferedBytesPerChannel, instructionBudget)
+            return 77
+        }
+
+        override fun freeDeviceDaemon(daemonHandle: Long) {
+            freedDaemons += daemonHandle
+        }
 
         override fun bootDeviceDaemon(
             daemonHandle: Long,
@@ -105,6 +120,21 @@ class BackgroundDeviceVmTest {
             return true
         }
     }
+
+    private fun backgroundVmWithNativeDaemonBindings(
+        workspace: DeviceWorkspace,
+        daemonBindings: RecordingNativeDaemonBindings,
+    ): BackgroundDeviceVm =
+        BackgroundDeviceVm(
+            deviceId = 1,
+            profile = firmwareTestProfile(),
+            dispatcher = Dispatchers.Default,
+            labelProvider = { null },
+            logger = DeviceVmLogger { },
+            workspace = workspace,
+            firmwareLoader = StaticFirmwareLoader("pub fun main() { }"),
+            nativeDaemonBindings = daemonBindings,
+        )
 
     private fun runVmTicks(
         vm: BackgroundDeviceVm,
@@ -172,6 +202,25 @@ class BackgroundDeviceVmTest {
             assertEquals(listOf(456L), bindings.tickWallNanos)
             assertTrue(bindings.bootedImages.isNotEmpty())
         }
+
+    @Test
+    fun bootUsesNativeDaemonWhenConfigured() {
+        runtimeTestWorkspace("vm-native-daemon-boot") { workspace ->
+            System.setProperty("ckl.vm.native.daemon", "true")
+            try {
+                val daemonBindings = RecordingNativeDaemonBindings()
+                val vm = backgroundVmWithNativeDaemonBindings(workspace.host, daemonBindings)
+
+                assertTrue(vm.boot())
+                vm.requestSlice(serverTick = 1)
+
+                assertTrue(daemonBindings.bootedImages.isNotEmpty())
+                assertTrue(daemonBindings.tickServerTicks.isNotEmpty())
+            } finally {
+                System.clearProperty("ckl.vm.native.daemon")
+            }
+        }
+    }
 
     @Test
     fun recordsRuntimeSchedulingMetrics() {
