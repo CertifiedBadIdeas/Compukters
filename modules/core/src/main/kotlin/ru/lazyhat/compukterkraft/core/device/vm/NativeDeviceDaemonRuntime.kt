@@ -22,6 +22,7 @@ package ru.lazyhat.compukterkraft.core.device.vm
 import ru.lazyhat.compukterkraft.core.device.runtime.NoOpRuntimeMetricsCollector
 import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeMetricsCollector
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceProfile
+import ru.lazyhat.compukterkraft.lang.runtime.VmEvent
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeDeviceDaemonBootSummary
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeDeviceDaemonHostRequest
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeDeviceDaemonTickSummary
@@ -41,6 +42,9 @@ internal class NativeDeviceDaemonRuntime(
         workingDirectory: String,
     ): NativeDeviceDaemonBootSummary =
         bindings.bootDeviceDaemon(daemonHandle, image, programPath, argument, workingDirectory)
+
+    fun enqueueEvent(event: VmEvent): Boolean =
+        bindings.enqueueDeviceDaemonEvent(daemonHandle, event.name, event.arguments)
 
     suspend fun requestSlice(serverTick: Long): NativeDeviceDaemonTickSummary {
         val started = System.nanoTime()
@@ -101,6 +105,12 @@ interface NativeDaemonBindings {
         requestId: Long,
         value: ByteArray,
     ): Boolean
+
+    fun enqueueDeviceDaemonEvent(
+        daemonHandle: Long,
+        eventName: String,
+        arguments: List<Any?>,
+    ): Boolean
 }
 
 object NativeVmDaemonBindings : NativeDaemonBindings {
@@ -138,4 +148,10 @@ object NativeVmDaemonBindings : NativeDaemonBindings {
         requestId: Long,
         value: ByteArray,
     ): Boolean = NativeVmBindings.completeDeviceDaemonHostRequest(daemonHandle, requestId, value)
+
+    override fun enqueueDeviceDaemonEvent(
+        daemonHandle: Long,
+        eventName: String,
+        arguments: List<Any?>,
+    ): Boolean = NativeVmBindings.enqueueDeviceDaemonEvent(daemonHandle, eventName, arguments)
 }

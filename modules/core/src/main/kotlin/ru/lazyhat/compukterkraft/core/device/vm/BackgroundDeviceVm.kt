@@ -330,6 +330,7 @@ class BackgroundDeviceVm(
                     nativeDeviceKernelHandle?.let { handle ->
                         NativeVmBindings.enqueueDeviceEvent(handle, event.name, event.arguments)
                     }
+                    nativeDaemonRuntime?.enqueueEvent(event)
                 }
             }
         }
