@@ -33,6 +33,13 @@ data class NativeDeviceExecutionQuota(
     val serverTick: Long,
 )
 
+data class NativeDeviceSchedulerDryRun(
+    val serverTick: Long,
+    val turns: Long,
+    val remainingInstructions: Long,
+    val selectedPids: List<Int>,
+)
+
 internal interface NativeVmBindingsFacade {
     fun createImage(
         libraryPath: String,
@@ -287,6 +294,17 @@ object NativeVmBindings : NativeVmBindingsFacade {
         ).toNativeDeviceExecutionQuota()
     }
 
+    fun runDeviceSchedulerDryRun(
+        kernelHandle: Long,
+        maxTurns: Int,
+    ): NativeDeviceSchedulerDryRun {
+        require(kernelHandle != 0L) { "Native device runtime kernel handle is zero" }
+        return runDeviceSchedulerDryRunNative(
+            kernelHandle,
+            maxTurns.coerceAtLeast(0),
+        ).toNativeDeviceSchedulerDryRun()
+    }
+
     override fun attachImageToKernel(
         imageHandle: Long,
         kernelHandle: Long,
@@ -443,6 +461,22 @@ object NativeVmBindings : NativeVmBindingsFacade {
             serverTick = getOrElse(2) { 0L },
         )
 
+    private fun LongArray.toNativeDeviceSchedulerDryRun(): NativeDeviceSchedulerDryRun {
+        val selectedCount =
+            getOrElse(3) { 0L }
+                .toInt()
+                .coerceAtLeast(0)
+        return NativeDeviceSchedulerDryRun(
+            serverTick = getOrElse(0) { 0L },
+            turns = getOrElse(1) { 0L },
+            remainingInstructions = getOrElse(2) { 0L },
+            selectedPids =
+                drop(4)
+                    .take(selectedCount)
+                    .map { it.toInt() },
+        )
+    }
+
     @JvmStatic
     private external fun createImageNative(
         image: ByteArray,
@@ -565,6 +599,11 @@ object NativeVmBindings : NativeVmBindingsFacade {
         instructions: Long,
         wallNanos: Long,
         serverTick: Long,
+    ): LongArray
+
+    private external fun runDeviceSchedulerDryRunNative(
+        kernelHandle: Long,
+        maxTurns: Int,
     ): LongArray
 
     @JvmStatic
