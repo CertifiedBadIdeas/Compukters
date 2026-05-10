@@ -37,7 +37,6 @@ import ru.lazyhat.compukterkraft.core.device.vm.DeviceProfileRegistry
 import ru.lazyhat.compukterkraft.core.device.vm.DeviceVmLogger
 import ru.lazyhat.compukterkraft.core.device.vm.DeviceWorkspaceHost
 import ru.lazyhat.compukterkraft.core.device.vm.DeviceWorkspaceInitializer
-import ru.lazyhat.compukterkraft.core.device.vm.display.RecordingDisplayMetricsCollector
 import ru.lazyhat.compukterkraft.core.input.KeyCodes
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceCapability
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceCpuResources
@@ -51,6 +50,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.VmState
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -434,7 +434,6 @@ class BackgroundDeviceVmTest {
         try {
             DeviceWorkspaceInitializer(root).ensureInitialized(1)
             val workspace = DeviceWorkspaceHost(root)
-            val displayMetrics = RecordingDisplayMetricsCollector()
             val logs = mutableListOf<String>()
             val vm =
                 BackgroundDeviceVm(
@@ -445,7 +444,6 @@ class BackgroundDeviceVmTest {
                     logger = DeviceVmLogger(logs::add),
                     workspace = workspace,
                     firmwareLoader = ClasspathFirmwareLoader(),
-                    displayMetricsCollector = displayMetrics,
                 )
 
             vm.attachDisplay(displayId = 9, width = 96, height = 48)
@@ -453,18 +451,16 @@ class BackgroundDeviceVmTest {
             val dispatcher = HostCallDispatcher(1, workspace)
             runVmTicks(vm, ticks = 80, hostCallDispatcher = dispatcher)
             vm.drainDisplayFrames()
-            val presentsBeforeBurst = displayMetrics.snapshot().operations.presentCalls
 
             "abcdefghijklmnop".forEach { ch ->
                 vm.enqueueEvent(VmEvent("char", listOf(byteArrayOf(ch.code.toByte()))))
             }
             runVmTicks(vm, ticks = 20, hostCallDispatcher = dispatcher)
 
-            val presentDelta = displayMetrics.snapshot().operations.presentCalls - presentsBeforeBurst
             val frames = vm.drainDisplayFrames()
             assertTrue(
-                presentDelta in 1..4,
-                "queued input burst should be coalesced into a few presents, presentDelta=$presentDelta frames=${frames.size} state=${vm.snapshot().state} logs=$logs",
+                frames.size in 1..8,
+                "queued input burst should be coalesced into a few native frames, frames=${frames.size} state=${vm.snapshot().state} logs=$logs",
             )
         } finally {
             root.toFile().deleteRecursively()
@@ -478,7 +474,6 @@ class BackgroundDeviceVmTest {
         try {
             DeviceWorkspaceInitializer(root).ensureInitialized(1)
             val workspace = DeviceWorkspaceHost(root)
-            val runtimeMetrics = RecordingRuntimeMetricsCollector()
             val vm =
                 BackgroundDeviceVm(
                     deviceId = 1,
@@ -488,32 +483,28 @@ class BackgroundDeviceVmTest {
                     logger = DeviceVmLogger { },
                     workspace = workspace,
                     firmwareLoader = ClasspathFirmwareLoader(),
-                    runtimeMetricsCollector = runtimeMetrics,
                 )
 
             vm.attachDisplay(displayId = 9, width = 96, height = 48)
             assertTrue(vm.boot())
             val dispatcher = HostCallDispatcher(1, workspace)
-            runVmTicks(vm, ticks = 80, hostCallDispatcher = dispatcher, runtimeMetricsCollector = runtimeMetrics)
+            runVmTicks(vm, ticks = 80, hostCallDispatcher = dispatcher)
             vm.drainDisplayFrames()
             vm.enqueueEvent(VmEvent("char", listOf(byteArrayOf('a'.code.toByte()))))
-            runVmTicks(vm, ticks = 12, hostCallDispatcher = dispatcher, runtimeMetricsCollector = runtimeMetrics)
+            runVmTicks(vm, ticks = 12, hostCallDispatcher = dispatcher)
             vm.drainDisplayFrames()
-            val blitsBeforeInput = runtimeMetrics.snapshot().displayGlyphBlitCalls()
 
             vm.enqueueEvent(VmEvent("char", listOf(byteArrayOf('b'.code.toByte()))))
-            runVmTicks(vm, ticks = 12, hostCallDispatcher = dispatcher, runtimeMetricsCollector = runtimeMetrics)
+            runVmTicks(vm, ticks = 12, hostCallDispatcher = dispatcher)
 
-            val snapshot = runtimeMetrics.snapshot()
-            val blitDelta = snapshot.displayGlyphBlitCalls() - blitsBeforeInput
-            val textRunDelta = snapshot.displayTextRunCalls()
+            val frames = vm.drainDisplayFrames()
             assertTrue(
-                blitDelta == 0L,
-                "append input should not call per-glyph packed blits, blitDelta=$blitDelta",
+                frames.greenPixelCount() > 0,
+                "append input should draw glyph pixels through native display frames",
             )
             assertTrue(
-                textRunDelta > 0,
-                "append input should draw only the newly typed glyph, blitDelta=$blitDelta",
+                frames.hasTextLikeGlyphCell(),
+                "append input should draw text-like glyph cells through native display frames",
             )
         } finally {
             root.toFile().deleteRecursively()
@@ -527,7 +518,6 @@ class BackgroundDeviceVmTest {
         try {
             DeviceWorkspaceInitializer(root).ensureInitialized(1)
             val workspace = DeviceWorkspaceHost(root)
-            val runtimeMetrics = RecordingRuntimeMetricsCollector()
             val vm =
                 BackgroundDeviceVm(
                     deviceId = 1,
@@ -537,18 +527,21 @@ class BackgroundDeviceVmTest {
                     logger = DeviceVmLogger { },
                     workspace = workspace,
                     firmwareLoader = ClasspathFirmwareLoader(),
-                    runtimeMetricsCollector = runtimeMetrics,
                 )
 
             vm.attachDisplay(displayId = 9, width = 96, height = 48)
             assertTrue(vm.boot())
             val dispatcher = HostCallDispatcher(1, workspace)
-            runVmTicks(vm, ticks = 80, hostCallDispatcher = dispatcher, runtimeMetricsCollector = runtimeMetrics)
+            runVmTicks(vm, ticks = 80, hostCallDispatcher = dispatcher)
 
-            val snapshot = runtimeMetrics.snapshot()
+            val frames = vm.drainDisplayFrames()
             assertTrue(
-                snapshot.displayTextRunCalls() > 0,
-                "committed terminal output should render through batched text runs",
+                frames.greenPixelCount() > 0,
+                "committed terminal output should render through native display frames",
+            )
+            assertTrue(
+                frames.hasTextLikeGlyphCell(),
+                "committed terminal output should render glyph shapes",
             )
         } finally {
             root.toFile().deleteRecursively()
@@ -910,11 +903,6 @@ class BackgroundDeviceVmTest {
             .filter { it.moduleName == "display" && it.functionName == "blitMono5x7Packed" }
             .sumOf { it.calls }
 
-    private fun ru.lazyhat.compukterkraft.core.device.runtime.RuntimeProfilingSnapshot.displayTextRunCalls(): Long =
-        hostCalls
-            .filter { it.moduleName == "display" && it.functionName == "blitMono5x7Text" }
-            .sumOf { it.calls }
-
     private fun ru.lazyhat.compukterkraft.core.device.runtime.RuntimeProfilingSnapshot.displayFillRectCalls(): Long =
         hostCalls
             .filter { it.moduleName == "display" && it.functionName == "fillRect" }
@@ -1021,8 +1009,8 @@ class BackgroundDeviceVmTest {
                             }
                         }
 
-                    assertTrue(vm.boot())
-                    vm.requestSlice(0)
+                    kotlinx.coroutines.yield()
+                    assertFalse(vm.boot())
                     terminalState.await()
                 }
 

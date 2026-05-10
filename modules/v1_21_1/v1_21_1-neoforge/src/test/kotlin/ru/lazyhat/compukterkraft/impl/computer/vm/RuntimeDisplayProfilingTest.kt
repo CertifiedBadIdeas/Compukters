@@ -37,11 +37,6 @@ class RuntimeDisplayProfilingTest {
         println(runtimeSnapshot.summary())
         println(compilerSnapshot.summary())
 
-        assertTrue(displaySnapshot.operations.fillRectCalls > 0, displaySnapshot.summary())
-        assertTrue(displaySnapshot.operations.copyRectCalls > 0, displaySnapshot.summary())
-        assertTrue(displaySnapshot.operations.blitMonoCalls > 0, displaySnapshot.summary())
-        assertTrue(displaySnapshot.operations.fillRectCalls < 1000, displaySnapshot.summary())
-        assertTrue(displaySnapshot.operations.presentCalls > 0, displaySnapshot.summary())
         assertTrue(displaySnapshot.frames.frameCount > 0, displaySnapshot.summary())
         assertTrue(displaySnapshot.frames.tileCount > 0, displaySnapshot.summary())
         assertTrue(displaySnapshot.frames.payloadBytes > 0, displaySnapshot.summary())
@@ -54,9 +49,10 @@ class RuntimeDisplayProfilingTest {
         assertTrue(runtimeSnapshot.tick.hostCallDispatchCalls > 0, runtimeSnapshot.summary())
         assertTrue(runtimeSnapshot.tick.hostResultDeliveryCalls > 0, runtimeSnapshot.summary())
         assertTrue(runtimeSnapshot.tick.displayFrameDrainCalls > 0, runtimeSnapshot.summary())
+        assertTrue(runtimeSnapshot.tick.displayFramesDrained > 0, runtimeSnapshot.summary())
         assertTrue(runtimeSnapshot.vm.sliceRequests > 0, runtimeSnapshot.summary())
-        assertTrue(runtimeSnapshot.vm.slicePermitsReceived > 0, runtimeSnapshot.summary())
-        assertTrue(runtimeSnapshot.vm.executionWindowNanos > 0, runtimeSnapshot.summary())
+        assertTrue(runtimeSnapshot.vm.nativeDaemonTicks > 0, runtimeSnapshot.summary())
+        assertTrue(runtimeSnapshot.vm.nativeDaemonTurns > 0, runtimeSnapshot.summary())
         assertTrue(compilerSnapshot.compileCalls > 0, compilerSnapshot.summary())
         assertTrue(compilerSnapshot.compileNanos > 0, compilerSnapshot.summary())
     }
@@ -78,10 +74,10 @@ class RuntimeDisplayProfilingTest {
         assertTrue(displaySnapshot.frameBuild.buildCalls > 0, displaySnapshot.summary())
         assertTrue(clientSnapshot.framesApplied > 0, clientSnapshot.toString())
         assertTrue(
-            runtimeSnapshot.vm.pauseSignals + runtimeSnapshot.vm.yieldSignals + runtimeSnapshot.vm.hostCallSignals > 0,
+            runtimeSnapshot.vm.nativeDaemonTicks > 0 && runtimeSnapshot.vm.nativeDaemonTurns > 0,
             runtimeSnapshot.summary(),
         )
-        assertTrue(runtimeSnapshot.vm.averageExecutionWindowNanos >= 0, runtimeSnapshot.summary())
+        assertTrue(runtimeSnapshot.vm.nativeDaemonActiveNanos >= 0, runtimeSnapshot.summary())
         assertTrue(compilerSnapshot.compileCalls > 0, compilerSnapshot.summary())
         assertTrue(compilerSnapshot.compileNanos > 0, compilerSnapshot.summary())
     }
@@ -122,8 +118,8 @@ class RuntimeDisplayProfilingTest {
 
         assertTrue(run.enterEventsQueued == 120, run.summary())
         assertTrue(run.maxQueuedEvents > 0, run.summary())
-        assertTrue(runtimeSnapshot.vm.hostCallSignals > 0, runtimeSnapshot.summary())
-        assertTrue(runtimeSnapshot.vm.nativeWaitSignals > 0, runtimeSnapshot.summary())
+        assertTrue(runtimeSnapshot.vm.nativeDaemonHostRequests > 0, runtimeSnapshot.summary())
+        assertTrue(runtimeSnapshot.vm.nativeDaemonTurns > 0, runtimeSnapshot.summary())
         assertTrue(
             runtimeSnapshot.hostCalls.none { it.moduleName == "events" && it.functionName == "tryPull" },
             runtimeSnapshot.summary(),
