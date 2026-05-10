@@ -123,6 +123,12 @@ class RuntimeVmProfilingProfileCodecTest {
                                             nativeSchedulerDryRunRemainingInstructions = 81,
                                             nativeSchedulerDryRunFirstSelectionMatches = 82,
                                             nativeSchedulerDryRunFirstSelectionMismatches = 83,
+                                            nativeDaemonTicks = 84,
+                                            nativeDaemonActiveNanos = 85,
+                                            nativeDaemonIdleTicks = 86,
+                                            nativeDaemonTurns = 87,
+                                            nativeDaemonHaltedProcesses = 88,
+                                            nativeDaemonHostRequests = 89,
                                             waitPollSignals = 34,
                                             waitProcessSignals = 35,
                                             nativeProcessRegistrations = 36,
@@ -227,6 +233,12 @@ class RuntimeVmProfilingProfileCodecTest {
         assertEquals(0, decoded.workloads.single().runtime.vm.nativeProcessRegistrations)
         assertEquals(0, decoded.workloads.single().runtime.vm.nativeProcessCompletions)
         assertEquals(0, decoded.workloads.single().runtime.vm.nativeProcessStaleCompletions)
+        assertEquals(0, decoded.workloads.single().runtime.vm.nativeDaemonTicks)
+        assertEquals(0, decoded.workloads.single().runtime.vm.nativeDaemonActiveNanos)
+        assertEquals(0, decoded.workloads.single().runtime.vm.nativeDaemonIdleTicks)
+        assertEquals(0, decoded.workloads.single().runtime.vm.nativeDaemonTurns)
+        assertEquals(0, decoded.workloads.single().runtime.vm.nativeDaemonHaltedProcesses)
+        assertEquals(0, decoded.workloads.single().runtime.vm.nativeDaemonHostRequests)
         assertEquals(12, decoded.workloads.single().runtime.vm.hostCallSignals)
         assertEquals(0, decoded.workloads.single().runtime.vm.nativeWaitCalls)
         assertEquals(0, decoded.workloads.single().runtime.vm.nativeWaitNanos)

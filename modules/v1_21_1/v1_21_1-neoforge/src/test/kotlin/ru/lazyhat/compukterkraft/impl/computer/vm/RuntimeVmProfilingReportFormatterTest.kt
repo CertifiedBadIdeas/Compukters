@@ -103,6 +103,12 @@ class RuntimeVmProfilingReportFormatterTest {
                             nativeSchedulerDryRunRemainingInstructions = 6,
                             nativeSchedulerDryRunFirstSelectionMatches = 11,
                             nativeSchedulerDryRunFirstSelectionMismatches = 1,
+                            nativeDaemonTicks = 13,
+                            nativeDaemonActiveNanos = 2_500_000,
+                            nativeDaemonIdleTicks = 3,
+                            nativeDaemonTurns = 31,
+                            nativeDaemonHaltedProcesses = 4,
+                            nativeDaemonHostRequests = 5,
                             hostCallSignals = 2,
                             hostCalls =
                                 listOf(
@@ -165,6 +171,12 @@ class RuntimeVmProfilingReportFormatterTest {
         assertTrue(markdown.contains("| Native scheduler dry-run remaining instructions | 6 | 0 |"), markdown)
         assertTrue(markdown.contains("| Native scheduler dry-run first-selection matches | 11 | 0 |"), markdown)
         assertTrue(markdown.contains("| Native scheduler dry-run first-selection mismatches | 1 | 0 |"), markdown)
+        assertTrue(markdown.contains("| Native daemon ticks | 13 | 0 |"), markdown)
+        assertTrue(markdown.contains("| Native daemon active time | 2.5 ms | 0 ns |"), markdown)
+        assertTrue(markdown.contains("| Native daemon idle ticks | 3 | 0 |"), markdown)
+        assertTrue(markdown.contains("| Native daemon turns | 31 | 0 |"), markdown)
+        assertTrue(markdown.contains("| Native daemon halted processes | 4 | 0 |"), markdown)
+        assertTrue(markdown.contains("| Native daemon host requests | 5 | 0 |"), markdown)
         assertTrue(markdown.contains("| Host-call signals | 2 | 10 |"), markdown)
         assertTrue(markdown.contains("| Host-call active time | 30 ms | 50.01 us |"), markdown)
         assertTrue(markdown.contains("| Host-call wait time | 60 ms | 0 ns |"), markdown)
@@ -246,6 +258,12 @@ class RuntimeVmProfilingReportFormatterTest {
                             nativeSchedulerDryRunRemainingInstructions = 8,
                             nativeSchedulerDryRunFirstSelectionMatches = 15,
                             nativeSchedulerDryRunFirstSelectionMismatches = 1,
+                            nativeDaemonTicks = 17,
+                            nativeDaemonActiveNanos = 3_500_000,
+                            nativeDaemonIdleTicks = 2,
+                            nativeDaemonTurns = 41,
+                            nativeDaemonHaltedProcesses = 5,
+                            nativeDaemonHostRequests = 6,
                             hostCallSignals = 2,
                         ),
                     ),
@@ -291,6 +309,12 @@ class RuntimeVmProfilingReportFormatterTest {
         assertTrue(markdown.contains("| Native scheduler dry-run remaining instructions | 8 |"), markdown)
         assertTrue(markdown.contains("| Native scheduler dry-run first-selection matches | 15 |"), markdown)
         assertTrue(markdown.contains("| Native scheduler dry-run first-selection mismatches | 1 |"), markdown)
+        assertTrue(markdown.contains("| Native daemon ticks | 17 |"), markdown)
+        assertTrue(markdown.contains("| Native daemon active time | 3.5 ms |"), markdown)
+        assertTrue(markdown.contains("| Native daemon idle ticks | 2 |"), markdown)
+        assertTrue(markdown.contains("| Native daemon turns | 41 |"), markdown)
+        assertTrue(markdown.contains("| Native daemon halted processes | 5 |"), markdown)
+        assertTrue(markdown.contains("| Native daemon host requests | 6 |"), markdown)
         assertTrue(markdown.contains("| Host-call signals | 4 |"), markdown)
         assertTrue(markdown.contains("| Host-call active time | 0 ns |"), markdown)
         assertTrue(markdown.contains("| Host-call wait time | 0 ns |"), markdown)
@@ -357,6 +381,12 @@ class RuntimeVmProfilingReportFormatterTest {
         nativeSchedulerDryRunRemainingInstructions: Long = 0,
         nativeSchedulerDryRunFirstSelectionMatches: Long = 0,
         nativeSchedulerDryRunFirstSelectionMismatches: Long = 0,
+        nativeDaemonTicks: Long = 0,
+        nativeDaemonActiveNanos: Long = 0,
+        nativeDaemonIdleTicks: Long = 0,
+        nativeDaemonTurns: Long = 0,
+        nativeDaemonHaltedProcesses: Long = 0,
+        nativeDaemonHostRequests: Long = 0,
         hostCallSignals: Long,
         hostCalls: List<RuntimeHostCallMetrics> = emptyList(),
     ): RuntimeWorkloadProfile =
@@ -433,6 +463,12 @@ class RuntimeVmProfilingReportFormatterTest {
                             nativeSchedulerDryRunRemainingInstructions = nativeSchedulerDryRunRemainingInstructions,
                             nativeSchedulerDryRunFirstSelectionMatches = nativeSchedulerDryRunFirstSelectionMatches,
                             nativeSchedulerDryRunFirstSelectionMismatches = nativeSchedulerDryRunFirstSelectionMismatches,
+                            nativeDaemonTicks = nativeDaemonTicks,
+                            nativeDaemonActiveNanos = nativeDaemonActiveNanos,
+                            nativeDaemonIdleTicks = nativeDaemonIdleTicks,
+                            nativeDaemonTurns = nativeDaemonTurns,
+                            nativeDaemonHaltedProcesses = nativeDaemonHaltedProcesses,
+                            nativeDaemonHostRequests = nativeDaemonHostRequests,
                             hostCallSignals = hostCallSignals,
                         ),
                     hostCalls = hostCalls,

@@ -1173,12 +1173,15 @@ git commit -m "feat: add opt-in native daemon boot path"
 
 **Files:**
 - Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/runtime/RuntimeProfiling.kt`
+- Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVm.kt`
+- Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/NativeDeviceDaemonRuntime.kt`
 - Modify: `modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/runtime/RuntimeProfilingTest.kt`
+- Modify: `modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVmTest.kt`
 - Modify: `modules/v1_21_1/v1_21_1-neoforge/src/test/kotlin/ru/lazyhat/compukterkraft/impl/computer/vm/RuntimeVmProfilingReport.kt`
 - Modify: `modules/v1_21_1/v1_21_1-neoforge/src/test/kotlin/ru/lazyhat/compukterkraft/impl/computer/vm/RuntimeVmProfilingProfileCodecTest.kt`
 - Modify: `modules/v1_21_1/v1_21_1-neoforge/src/test/kotlin/ru/lazyhat/compukterkraft/impl/computer/vm/RuntimeVmProfilingReportFormatterTest.kt`
 
-- [ ] **Step 1: Add failing profiling tests**
+- [x] **Step 1: Add failing profiling tests**
 
 Add metrics expectations for:
 
@@ -1191,7 +1194,7 @@ Add metrics expectations for:
 
 Use `RuntimeProfilingTest` to assert collector snapshots and report tests to assert TSV/Markdown rows.
 
-- [ ] **Step 2: Run profiling tests and verify they fail**
+- [x] **Step 2: Run profiling tests and verify they fail**
 
 ```bash
 ./gradlew :core:test --tests '*RuntimeProfilingTest' --rerun-tasks
@@ -1200,7 +1203,7 @@ Use `RuntimeProfilingTest` to assert collector snapshots and report tests to ass
 
 Expected: FAIL because daemon metrics do not exist.
 
-- [ ] **Step 3: Add metrics fields and collector method**
+- [x] **Step 3: Add metrics fields and collector method**
 
 Add to `RuntimeMetricsCollector`:
 
@@ -1225,12 +1228,12 @@ val nativeDaemonHaltedProcesses: Long = 0
 val nativeDaemonHostRequests: Long = 0
 ```
 
-- [ ] **Step 4: Wire daemon runtime metrics**
+- [x] **Step 4: Wire daemon runtime metrics**
 
 In `NativeDeviceDaemonRuntime.requestSlice`, measure active time around `tickDeviceDaemon`, record daemon tick metrics,
 then service host requests.
 
-- [ ] **Step 5: Extend TSV and Markdown reports**
+- [x] **Step 5: Extend TSV and Markdown reports**
 
 Append daemon fields to runtime VM TSV rows with zero defaults for old profiles. Add Markdown rows:
 
@@ -1241,7 +1244,7 @@ Append daemon fields to runtime VM TSV rows with zero defaults for old profiles.
 - `Native daemon halted processes`
 - `Native daemon host requests`
 
-- [ ] **Step 6: Run profiling tests**
+- [x] **Step 6: Run profiling tests**
 
 ```bash
 ./gradlew :core:test --tests '*RuntimeProfilingTest' --rerun-tasks
@@ -1250,7 +1253,7 @@ Append daemon fields to runtime VM TSV rows with zero defaults for old profiles.
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit Task 11**
+- [x] **Step 7: Commit Task 11**
 
 ```bash
 git add modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/runtime/RuntimeProfiling.kt modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/runtime/RuntimeProfilingTest.kt modules/v1_21_1/v1_21_1-neoforge/src/test/kotlin/ru/lazyhat/compukterkraft/impl/computer/vm/RuntimeVmProfilingReport.kt modules/v1_21_1/v1_21_1-neoforge/src/test/kotlin/ru/lazyhat/compukterkraft/impl/computer/vm/RuntimeVmProfilingProfileCodecTest.kt modules/v1_21_1/v1_21_1-neoforge/src/test/kotlin/ru/lazyhat/compukterkraft/impl/computer/vm/RuntimeVmProfilingReportFormatterTest.kt docs/superpowers/plans/2026-05-10-rust-owned-device-daemon.md

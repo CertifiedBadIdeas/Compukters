@@ -65,6 +65,7 @@ class BackgroundDeviceVmTest {
         val tickInstructions = mutableListOf<Long>()
         val tickWallNanos = mutableListOf<Long>()
         val completedRequestIds = mutableListOf<Long>()
+        var tickSummary: NativeDeviceDaemonTickSummary? = null
 
         override fun createDeviceDaemon(
             maxEventQueueSize: Int,
@@ -99,14 +100,15 @@ class BackgroundDeviceVmTest {
             tickServerTicks += serverTick
             tickInstructions += instructions
             tickWallNanos += wallNanos
-            return NativeDeviceDaemonTickSummary(
-                serverTick = serverTick,
-                turns = 0,
-                remainingInstructions = instructions,
-                idle = true,
-                halted = 0,
-                hostRequests = 0,
-            )
+            return tickSummary
+                ?: NativeDeviceDaemonTickSummary(
+                    serverTick = serverTick,
+                    turns = 0,
+                    remainingInstructions = instructions,
+                    idle = true,
+                    halted = 0,
+                    hostRequests = 0,
+                )
         }
 
         override fun drainDeviceDaemonHostRequests(daemonHandle: Long): List<NativeDeviceDaemonHostRequest> = emptyList()
@@ -170,6 +172,16 @@ class BackgroundDeviceVmTest {
     fun nativeDaemonRuntimeBootsCompiledBootImageAndTicksDaemon() =
         runBlocking {
             val bindings = RecordingNativeDaemonBindings()
+            bindings.tickSummary =
+                NativeDeviceDaemonTickSummary(
+                    serverTick = 42,
+                    turns = 2,
+                    remainingInstructions = 12,
+                    idle = false,
+                    halted = 1,
+                    hostRequests = 3,
+                )
+            val runtimeMetricsCollector = RecordingRuntimeMetricsCollector()
             val profile =
                 firmwareTestProfile().copy(
                     resources =
@@ -186,6 +198,7 @@ class BackgroundDeviceVmTest {
                     daemonHandle = 7,
                     profile = profile,
                     bindings = bindings,
+                    runtimeMetricsCollector = runtimeMetricsCollector,
                     hostBridge = { byteArrayOf(0) },
                 )
 
@@ -201,6 +214,14 @@ class BackgroundDeviceVmTest {
             assertEquals(listOf(123L), bindings.tickInstructions)
             assertEquals(listOf(456L), bindings.tickWallNanos)
             assertTrue(bindings.bootedImages.isNotEmpty())
+            runtimeMetricsCollector.snapshot().vm.run {
+                assertEquals(1, nativeDaemonTicks)
+                assertTrue(nativeDaemonActiveNanos >= 0)
+                assertEquals(0, nativeDaemonIdleTicks)
+                assertEquals(2, nativeDaemonTurns)
+                assertEquals(1, nativeDaemonHaltedProcesses)
+                assertEquals(3, nativeDaemonHostRequests)
+            }
         }
 
     @Test

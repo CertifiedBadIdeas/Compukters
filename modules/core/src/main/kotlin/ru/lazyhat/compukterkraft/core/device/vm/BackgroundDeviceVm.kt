@@ -159,6 +159,7 @@ class BackgroundDeviceVm(
                 daemonHandle = handle,
                 profile = profile,
                 bindings = nativeDaemonBindings,
+                runtimeMetricsCollector = runtimeMetricsCollector,
                 hostBridge = ::handleNativeDaemonHostRequest,
             )
         }
