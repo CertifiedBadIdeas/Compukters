@@ -40,7 +40,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.VmEvent
 import ru.lazyhat.compukterkraft.lang.runtime.VmPollResult
 import ru.lazyhat.compukterkraft.lang.runtime.VmState
 
-class VmRuntime(
+internal class VmRuntime(
     private val ctx: VmContext,
     private val initialProfile: DeviceProfile,
     val processId: Int = 1,
@@ -57,6 +57,7 @@ class VmRuntime(
     private val metricsApi: DeviceRuntimeMetrics = NoopDeviceRuntimeMetrics,
     override val nativeDeviceKernelHandle: Long = 0L,
     override val nativeWorkingDirectory: String = "",
+    private val processStateReporter: VmProcessStateReporter = NoOpVmProcessStateReporter,
 ) : DeviceRuntime,
     NativeDeviceKernelProvider {
     override val profile: DeviceProfile = initialProfile
@@ -73,9 +74,11 @@ class VmRuntime(
     override suspend fun pullEvent(filter: String?): VmEvent {
         while (true) {
             ctx.setState(VmState.WaitingEvent)
+            processStateReporter.markWaitingEvent(processId, filter)
             val event = ctx.receiveEvent()
             if (filter == null || event.name == filter) {
                 ctx.setState(VmState.Running)
+                processStateReporter.markRunnable(processId)
                 ctx.schedulingPoint()
                 return event
             }
@@ -98,15 +101,22 @@ class VmRuntime(
     override suspend fun sleep(ticks: Long) {
         val targetTick = system.currentTick + ticks.coerceAtLeast(1)
         ctx.setSleepUntil(targetTick)
+        processStateReporter.markSleeping(processId, targetTick)
         while (system.currentTick < targetTick) {
             ctx.schedulingPoint()
         }
         ctx.setSleepUntil(null)
+        processStateReporter.markRunnable(processId)
     }
 
     override suspend fun yield() {
         ctx.schedulingPoint()
     }
 
-    override suspend fun poll(channelId: Int): VmPollResult = ctx.pollIpcOrEvent(channelId)
+    override suspend fun poll(channelId: Int): VmPollResult {
+        processStateReporter.markWaitingIpc(processId, channelId)
+        return ctx.pollIpcOrEvent(channelId).also {
+            processStateReporter.markRunnable(processId)
+        }
+    }
 }
