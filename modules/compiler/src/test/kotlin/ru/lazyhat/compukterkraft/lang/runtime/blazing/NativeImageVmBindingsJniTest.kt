@@ -190,6 +190,55 @@ class NativeImageVmBindingsJniTest {
                     Long::class.javaPrimitiveType,
                 ).returnType,
         )
+        assertEquals(
+            LongArray::class.java,
+            NativeVmBindings::class.java
+                .getDeclaredMethod(
+                    "addDeviceExecutionQuotaNative",
+                    Long::class.javaPrimitiveType,
+                    Long::class.javaPrimitiveType,
+                    Long::class.javaPrimitiveType,
+                    Long::class.javaPrimitiveType,
+                ).returnType,
+        )
+    }
+
+    @Test
+    fun nativeDeviceExecutionQuotaRefillRunsWhenLibraryIsConfigured() {
+        System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val kernelHandle = NativeVmBindings.createDeviceKernel(maxEventQueueSize = 64, maxBufferedBytesPerChannel = 4096)
+
+        try {
+            assertEquals(
+                NativeDeviceExecutionQuota(instructions = 1_024, wallNanos = 2_000, serverTick = 7),
+                NativeVmBindings.addDeviceExecutionQuota(
+                    kernelHandle = kernelHandle,
+                    instructions = 1_024,
+                    wallNanos = 2_000,
+                    serverTick = 7,
+                ),
+            )
+            assertEquals(
+                NativeDeviceExecutionQuota(instructions = 512, wallNanos = 750, serverTick = 8),
+                NativeVmBindings.addDeviceExecutionQuota(
+                    kernelHandle = kernelHandle,
+                    instructions = 512,
+                    wallNanos = 750,
+                    serverTick = 8,
+                ),
+            )
+            assertEquals(
+                NativeDeviceExecutionQuota(instructions = 0, wallNanos = 0, serverTick = 9),
+                NativeVmBindings.addDeviceExecutionQuota(
+                    kernelHandle = kernelHandle,
+                    instructions = -1,
+                    wallNanos = -2,
+                    serverTick = 9,
+                ),
+            )
+        } finally {
+            NativeVmBindings.freeDeviceKernel(kernelHandle)
+        }
     }
 
     @Test

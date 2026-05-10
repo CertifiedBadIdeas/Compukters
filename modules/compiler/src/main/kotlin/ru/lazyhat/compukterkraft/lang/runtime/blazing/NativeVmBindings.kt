@@ -27,6 +27,12 @@ data class NativeProcessSchedulerTick(
     val wokenPids: List<Int>,
 )
 
+data class NativeDeviceExecutionQuota(
+    val instructions: Long,
+    val wallNanos: Long,
+    val serverTick: Long,
+)
+
 internal interface NativeVmBindingsFacade {
     fun createImage(
         libraryPath: String,
@@ -266,6 +272,21 @@ object NativeVmBindings : NativeVmBindingsFacade {
         return processSchedulerTickNative(kernelHandle, currentTick).toNativeProcessSchedulerTick()
     }
 
+    fun addDeviceExecutionQuota(
+        kernelHandle: Long,
+        instructions: Long,
+        wallNanos: Long,
+        serverTick: Long,
+    ): NativeDeviceExecutionQuota {
+        require(kernelHandle != 0L) { "Native device runtime kernel handle is zero" }
+        return addDeviceExecutionQuotaNative(
+            kernelHandle,
+            instructions,
+            wallNanos,
+            serverTick,
+        ).toNativeDeviceExecutionQuota()
+    }
+
     override fun attachImageToKernel(
         imageHandle: Long,
         kernelHandle: Long,
@@ -415,6 +436,13 @@ object NativeVmBindings : NativeVmBindingsFacade {
         )
     }
 
+    private fun LongArray.toNativeDeviceExecutionQuota(): NativeDeviceExecutionQuota =
+        NativeDeviceExecutionQuota(
+            instructions = getOrElse(0) { 0L },
+            wallNanos = getOrElse(1) { 0L },
+            serverTick = getOrElse(2) { 0L },
+        )
+
     @JvmStatic
     private external fun createImageNative(
         image: ByteArray,
@@ -530,6 +558,13 @@ object NativeVmBindings : NativeVmBindingsFacade {
     private external fun processSchedulerTickNative(
         kernelHandle: Long,
         currentTick: Long,
+    ): LongArray
+
+    private external fun addDeviceExecutionQuotaNative(
+        kernelHandle: Long,
+        instructions: Long,
+        wallNanos: Long,
+        serverTick: Long,
     ): LongArray
 
     @JvmStatic
