@@ -483,6 +483,63 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
 }
 
 #[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_markProcessWaitingForEventNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    kernel_handle: jlong,
+    pid: jint,
+    filter: JString<'_>,
+) -> jboolean {
+    let kernel_handle = match shared_kernel_handle(&mut env, kernel_handle) {
+        Some(kernel) => kernel,
+        None => return false as jboolean,
+    };
+    let filter = if filter.is_null() {
+        None
+    } else {
+        match env.get_string(&filter) {
+            Ok(value) => Some(String::from(value)),
+            Err(error) => {
+                let _ = env.throw_new(
+                    "java/lang/IllegalArgumentException",
+                    format!("Cannot read native process event filter: {error}"),
+                );
+                return false as jboolean;
+            }
+        }
+    };
+    match kernel_handle.with_kernel_mut(|kernel| kernel.mark_process_waiting_for_event(pid, filter))
+    {
+        Ok(updated) => updated as jboolean,
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalStateException", error);
+            false as jboolean
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_markProcessWaitingForIpcNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    kernel_handle: jlong,
+    pid: jint,
+    channel_id: jint,
+) -> jboolean {
+    let kernel_handle = match shared_kernel_handle(&mut env, kernel_handle) {
+        Some(kernel) => kernel,
+        None => return false as jboolean,
+    };
+    match kernel_handle.with_kernel_mut(|kernel| kernel.mark_process_waiting_for_ipc(pid, channel_id)) {
+        Ok(updated) => updated as jboolean,
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalStateException", error);
+            false as jboolean
+        }
+    }
+}
+
+#[no_mangle]
 pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_markProcessSleepingNative(
     mut env: JNIEnv<'_>,
     _class: JClass<'_>,
