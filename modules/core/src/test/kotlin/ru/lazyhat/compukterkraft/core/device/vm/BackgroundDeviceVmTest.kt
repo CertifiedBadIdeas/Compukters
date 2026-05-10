@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import ru.lazyhat.compukterkraft.core.device.runtime.FirmwareProgramLoader
+import ru.lazyhat.compukterkraft.core.device.runtime.HostCallDispatcher
 import ru.lazyhat.compukterkraft.core.device.runtime.LoadedFirmwareProgramSource
 import ru.lazyhat.compukterkraft.core.device.runtime.RecordingRuntimeMetricsCollector
 import ru.lazyhat.compukterkraft.core.device.runtime.test.runtimeProfile
@@ -36,8 +37,10 @@ import ru.lazyhat.compukterkraft.lang.runtime.DeviceProfile
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceQueueResources
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceResources
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceStorageResources
+import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.VmState
 import ru.lazyhat.compukterkraft.lang.runtime.VmStopReason
+import kotlin.io.path.createDirectories
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -58,6 +61,24 @@ class BackgroundDeviceVmTest {
         repeat(ticks) { tick ->
             vm.requestSlice(tick.toLong())
             kotlinx.coroutines.delay(10)
+        }
+    }
+
+    private fun runVmTicksWithHostCalls(
+        vm: BackgroundDeviceVm,
+        workspace: DeviceWorkspace,
+        ticks: Int = 8,
+    ) = runBlocking {
+        val dispatcher = HostCallDispatcher(vm.deviceId, workspace)
+        repeat(ticks) { tick ->
+            vm.requestSlice(tick.toLong())
+            repeat(8) {
+                kotlinx.coroutines.delay(2)
+                val calls = vm.drainHostCalls()
+                if (calls.isNotEmpty()) {
+                    vm.deliverHostResults(calls.map(dispatcher::dispatch))
+                }
+            }
         }
     }
 
@@ -331,6 +352,63 @@ class BackgroundDeviceVmTest {
 
             assertTrue(logs.any { it.contains("child-running") }, logs.toString())
             assertTrue(logs.any { it.contains("child-code=0") }, logs.toString())
+        }
+    }
+
+    @Test
+    fun processWorkingDirectoryIsProcessLocal() {
+        runtimeTestWorkspace("process-cwd-isolation") { workspace ->
+            val logs = mutableListOf<String>()
+            workspace.root.resolve("1").resolve("sub").createDirectories()
+            workspace.writeProgram(
+                1,
+                "child-a.ck",
+                """
+                pub fun main() {
+                    process::changeDirectory("sub")
+                    system::log("a=" + process::currentDirectory())
+                }
+                """.trimIndent(),
+            )
+            workspace.writeProgram(
+                1,
+                "child-b.ck",
+                """
+                pub fun main() {
+                    system::log("b=" + process::currentDirectory())
+                }
+                """.trimIndent(),
+            )
+            val vm =
+                BackgroundDeviceVm(
+                    deviceId = 1,
+                    profile = firmwareTestProfile(),
+                    dispatcher = Dispatchers.Default,
+                    labelProvider = { null },
+                    logger = DeviceVmLogger(logs::add),
+                    workspace = workspace.host,
+                    firmwareLoader =
+                        StaticFirmwareLoader(
+                            """
+                            pub fun main() {
+                                process::run("child-a.ck", "")
+                                system::log("parent=" + process::currentDirectory())
+                                process::run("child-b.ck", "")
+                                while true { sleep(20L) }
+                            }
+                            """.trimIndent(),
+                        ),
+                )
+
+            assertTrue(vm.boot())
+            runVmTicksWithHostCalls(vm, workspace.host, ticks = 64)
+
+            val debugState = "state=${vm.snapshot()} logs=$logs"
+            assertTrue(logs.any { it.contains("a=sub") }, debugState)
+            assertTrue(logs.any { it.contains("parent=") }, debugState)
+            assertTrue(logs.none { it.contains("parent=sub") }, debugState)
+            assertTrue(logs.any { it.contains("b=") }, debugState)
+            assertTrue(logs.none { it.contains("b=sub") }, debugState)
         }
     }
 

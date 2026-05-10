@@ -570,7 +570,7 @@ class BackgroundDeviceVm(
         workingDirectory: String,
         argument: String,
     ): VmRuntime {
-        pathResolver.updateWorkingDirectory(workingDirectory)
+        val runtimePathResolver = VmPathResolver(workingDirectory)
 
         val systemApi =
             VmSystemApi(
@@ -579,14 +579,12 @@ class BackgroundDeviceVm(
                 currentTickProvider = { stateManager.currentTick },
                 labelProvider = labelProvider,
             )
-        val filesystemApi = VmFileSystemApi(ctx = this)
+        val filesystemApi = VmFileSystemApi(ctx = this, pathResolver = runtimePathResolver)
         val peripheralsApi = VmPeripheralRuntimeApi(peripheralRegistry)
         val processApi =
             VmProcessApi(
-                ctx = this,
                 initialArgument = argument,
-                deviceId = deviceId,
-                pathResolver = pathResolver,
+                pathResolver = runtimePathResolver,
                 filesystemApi = filesystemApi,
                 processManager = processManager,
             )

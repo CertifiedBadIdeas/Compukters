@@ -20,29 +20,33 @@
 package ru.lazyhat.compukterkraft.core.device.vm.api
 
 import ru.lazyhat.compukterkraft.core.device.vm.VmContext
+import ru.lazyhat.compukterkraft.core.device.vm.VmPathResolver
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceFileSystemApi
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspaceEntry
 import ru.lazyhat.compukterkraft.lang.runtime.HostCall
 
-class VmFileSystemApi(
+internal class VmFileSystemApi(
     private val ctx: VmContext,
+    private val pathResolver: VmPathResolver = VmPathResolver(),
 ) : DeviceFileSystemApi {
-    override suspend fun exists(path: String): Boolean = ctx.awaitHostCall { HostCall.FileExists(it, ctx.resolvePath(path)) }
+    private fun resolve(path: String): String = pathResolver.resolve(path)
 
-    override suspend fun isDirectory(path: String): Boolean = ctx.awaitHostCall { HostCall.FileIsDirectory(it, ctx.resolvePath(path)) }
+    override suspend fun exists(path: String): Boolean = ctx.awaitHostCall { HostCall.FileExists(it, resolve(path)) }
 
-    override suspend fun readText(path: String): String? = ctx.awaitHostCall { HostCall.FileReadText(it, ctx.resolvePath(path)) }
+    override suspend fun isDirectory(path: String): Boolean = ctx.awaitHostCall { HostCall.FileIsDirectory(it, resolve(path)) }
+
+    override suspend fun readText(path: String): String? = ctx.awaitHostCall { HostCall.FileReadText(it, resolve(path)) }
 
     override suspend fun writeText(
         path: String,
         text: String,
     ) {
-        ctx.awaitHostCall<Unit> { HostCall.FileWriteText(it, ctx.resolvePath(path), text) }
+        ctx.awaitHostCall<Unit> { HostCall.FileWriteText(it, resolve(path), text) }
     }
 
-    override suspend fun makeDirectory(path: String): Boolean = ctx.awaitHostCall { HostCall.FileMakeDirectory(it, ctx.resolvePath(path)) }
+    override suspend fun makeDirectory(path: String): Boolean = ctx.awaitHostCall { HostCall.FileMakeDirectory(it, resolve(path)) }
 
-    override suspend fun remove(path: String): Boolean = ctx.awaitHostCall { HostCall.FileRemove(it, ctx.resolvePath(path)) }
+    override suspend fun remove(path: String): Boolean = ctx.awaitHostCall { HostCall.FileRemove(it, resolve(path)) }
 
-    override suspend fun list(path: String): List<DeviceWorkspaceEntry> = ctx.awaitHostCall { HostCall.FileList(it, ctx.resolvePath(path)) }
+    override suspend fun list(path: String): List<DeviceWorkspaceEntry> = ctx.awaitHostCall { HostCall.FileList(it, resolve(path)) }
 }
