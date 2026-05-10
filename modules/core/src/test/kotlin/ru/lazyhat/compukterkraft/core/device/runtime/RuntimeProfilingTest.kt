@@ -76,6 +76,8 @@ class RuntimeProfilingTest {
         collector.recordNativeProcessRegistration()
         collector.recordNativeProcessCompletion()
         collector.recordNativeProcessStaleCompletion()
+        collector.recordNativeDaemonTick(activeNanos = 100, turns = 2, halted = 1, hostRequests = 3, idle = false)
+        collector.recordNativeDaemonTick(activeNanos = 50, turns = 0, halted = 0, hostRequests = 0, idle = true)
         collector.recordVmInstruction(VmInstructionKind.CALL_BUILTIN, nanos = 40)
         collector.recordVmInstruction(VmInstructionKind.CALL_BUILTIN, nanos = 60)
         collector.recordVmInstruction(VmInstructionKind.PUSH_INT, nanos = 10)
@@ -154,6 +156,12 @@ class RuntimeProfilingTest {
         assertEquals(1, snapshot.vm.nativeProcessRegistrations)
         assertEquals(1, snapshot.vm.nativeProcessCompletions)
         assertEquals(1, snapshot.vm.nativeProcessStaleCompletions)
+        assertEquals(2, snapshot.vm.nativeDaemonTicks)
+        assertEquals(150, snapshot.vm.nativeDaemonActiveNanos)
+        assertEquals(1, snapshot.vm.nativeDaemonIdleTicks)
+        assertEquals(2, snapshot.vm.nativeDaemonTurns)
+        assertEquals(1, snapshot.vm.nativeDaemonHaltedProcesses)
+        assertEquals(3, snapshot.vm.nativeDaemonHostRequests)
         val blitCall = snapshot.hostCalls.first { it.moduleName == "display" && it.functionName == "blitMono5x7Packed" }
         assertEquals(2, blitCall.calls)
         assertEquals(150, blitCall.nanos)
@@ -182,6 +190,10 @@ class RuntimeProfilingTest {
         )
         assertTrue(
             summary.contains("    processScheduler: ticks=2, selected=1, idle=1, woken=2"),
+            summary,
+        )
+        assertTrue(
+            summary.contains("    nativeDaemon: ticks=2, active=150 ns, idle=1, turns=2, halted=1, hostRequests=3"),
             summary,
         )
         assertTrue(
@@ -224,6 +236,7 @@ class RuntimeProfilingTest {
         collector.recordNativeProcessRegistration()
         collector.recordNativeProcessCompletion()
         collector.recordNativeProcessStaleCompletion()
+        collector.recordNativeDaemonTick(activeNanos = 100, turns = 2, halted = 1, hostRequests = 3, idle = false)
         collector.recordVmInstruction(VmInstructionKind.CALL_BUILTIN, nanos = 90)
 
         assertEquals(RuntimeProfilingSnapshot(), collector.snapshot())

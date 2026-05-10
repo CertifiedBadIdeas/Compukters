@@ -19,6 +19,8 @@
 
 package ru.lazyhat.compukterkraft.core.device.vm
 
+import ru.lazyhat.compukterkraft.core.device.runtime.NoOpRuntimeMetricsCollector
+import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeMetricsCollector
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceProfile
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeDeviceDaemonBootSummary
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeDeviceDaemonHostRequest
@@ -29,6 +31,7 @@ internal class NativeDeviceDaemonRuntime(
     private val daemonHandle: Long,
     private val profile: DeviceProfile,
     private val bindings: NativeDaemonBindings = NativeVmDaemonBindings,
+    private val runtimeMetricsCollector: RuntimeMetricsCollector = NoOpRuntimeMetricsCollector,
     private val hostBridge: suspend (NativeDeviceDaemonHostRequest) -> ByteArray,
 ) {
     fun boot(
@@ -40,6 +43,7 @@ internal class NativeDeviceDaemonRuntime(
         bindings.bootDeviceDaemon(daemonHandle, image, programPath, argument, workingDirectory)
 
     suspend fun requestSlice(serverTick: Long): NativeDeviceDaemonTickSummary {
+        val started = System.nanoTime()
         val summary =
             bindings.tickDeviceDaemon(
                 daemonHandle = daemonHandle,
@@ -47,6 +51,13 @@ internal class NativeDeviceDaemonRuntime(
                 wallNanos = profile.resources.cpu.wallTimeGuardNanosPerSlice,
                 serverTick = serverTick,
             )
+        runtimeMetricsCollector.recordNativeDaemonTick(
+            activeNanos = System.nanoTime() - started,
+            turns = summary.turns,
+            halted = summary.halted,
+            hostRequests = summary.hostRequests,
+            idle = summary.idle,
+        )
         serviceHostRequests()
         return summary
     }

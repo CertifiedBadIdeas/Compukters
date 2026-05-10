@@ -132,6 +132,14 @@ interface RuntimeMetricsCollector {
 
     fun recordNativeProcessStaleCompletion()
 
+    fun recordNativeDaemonTick(
+        activeNanos: Long,
+        turns: Long,
+        halted: Long,
+        hostRequests: Long,
+        idle: Boolean,
+    )
+
     fun snapshot(): RuntimeProfilingSnapshot
 }
 
@@ -235,6 +243,12 @@ data class RuntimeVmMetrics(
     val nativeProcessRegistrations: Long = 0,
     val nativeProcessCompletions: Long = 0,
     val nativeProcessStaleCompletions: Long = 0,
+    val nativeDaemonTicks: Long = 0,
+    val nativeDaemonActiveNanos: Long = 0,
+    val nativeDaemonIdleTicks: Long = 0,
+    val nativeDaemonTurns: Long = 0,
+    val nativeDaemonHaltedProcesses: Long = 0,
+    val nativeDaemonHostRequests: Long = 0,
 ) {
     val averageExecutionWindowNanos: Long get() = if (executionWindows <= 0) 0 else executionWindowNanos / executionWindows
     val nativeWaitSignals: Long get() = waitPollSignals
@@ -308,6 +322,9 @@ data class RuntimeProfilingSnapshot(
             )
             appendLine(
                 "    nativeProcessScheduler: comparisons=${vm.nativeProcessSchedulerComparisons}, matches=${vm.nativeProcessSchedulerMatches}, mismatches=${vm.nativeProcessSchedulerMismatches}, accepted=${vm.nativeProcessSchedulerAcceptedTicks}, fallback=${vm.nativeProcessSchedulerFallbackTicks}",
+            )
+            appendLine(
+                "    nativeDaemon: ticks=${vm.nativeDaemonTicks}, active=${vm.nativeDaemonActiveNanos.nanos()}, idle=${vm.nativeDaemonIdleTicks}, turns=${vm.nativeDaemonTurns}, halted=${vm.nativeDaemonHaltedProcesses}, hostRequests=${vm.nativeDaemonHostRequests}",
             )
             appendLine(
                 "    scheduling: points=${vm.schedulingPoints}, yieldPoints=${vm.yieldSchedulingPoints}, waitPoints=${vm.waitForSliceSchedulingPoints}",
@@ -481,6 +498,14 @@ object NoOpRuntimeMetricsCollector : RuntimeMetricsCollector {
 
     override fun recordNativeProcessStaleCompletion() = Unit
 
+    override fun recordNativeDaemonTick(
+        activeNanos: Long,
+        turns: Long,
+        halted: Long,
+        hostRequests: Long,
+        idle: Boolean,
+    ) = Unit
+
     override fun snapshot(): RuntimeProfilingSnapshot = RuntimeProfilingSnapshot()
 }
 
@@ -573,6 +598,12 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
     private val nativeProcessRegistrations = AtomicLong()
     private val nativeProcessCompletions = AtomicLong()
     private val nativeProcessStaleCompletions = AtomicLong()
+    private val nativeDaemonTicks = AtomicLong()
+    private val nativeDaemonActiveNanos = AtomicLong()
+    private val nativeDaemonIdleTicks = AtomicLong()
+    private val nativeDaemonTurns = AtomicLong()
+    private val nativeDaemonHaltedProcesses = AtomicLong()
+    private val nativeDaemonHostRequests = AtomicLong()
     private val hostCalls = ConcurrentHashMap<Pair<String, String>, RuntimeCounter>()
     private val instructions = ConcurrentHashMap<VmInstructionKind, RuntimeCounter>()
 
@@ -809,6 +840,21 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
         nativeProcessStaleCompletions.incrementAndGet()
     }
 
+    override fun recordNativeDaemonTick(
+        activeNanos: Long,
+        turns: Long,
+        halted: Long,
+        hostRequests: Long,
+        idle: Boolean,
+    ) {
+        nativeDaemonTicks.incrementAndGet()
+        nativeDaemonActiveNanos.addAndGet(activeNanos.coerceAtLeast(0))
+        nativeDaemonTurns.addAndGet(turns.coerceAtLeast(0))
+        nativeDaemonHaltedProcesses.addAndGet(halted.coerceAtLeast(0))
+        nativeDaemonHostRequests.addAndGet(hostRequests.coerceAtLeast(0))
+        if (idle) nativeDaemonIdleTicks.incrementAndGet()
+    }
+
     override fun snapshot(): RuntimeProfilingSnapshot =
         RuntimeProfilingSnapshot(
             tick =
@@ -888,6 +934,12 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
                     nativeProcessRegistrations = nativeProcessRegistrations.get(),
                     nativeProcessCompletions = nativeProcessCompletions.get(),
                     nativeProcessStaleCompletions = nativeProcessStaleCompletions.get(),
+                    nativeDaemonTicks = nativeDaemonTicks.get(),
+                    nativeDaemonActiveNanos = nativeDaemonActiveNanos.get(),
+                    nativeDaemonIdleTicks = nativeDaemonIdleTicks.get(),
+                    nativeDaemonTurns = nativeDaemonTurns.get(),
+                    nativeDaemonHaltedProcesses = nativeDaemonHaltedProcesses.get(),
+                    nativeDaemonHostRequests = nativeDaemonHostRequests.get(),
                 ),
             hostCalls =
                 hostCalls
