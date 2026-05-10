@@ -1580,3 +1580,46 @@ git add docs/superpowers/plans/2026-05-10-device-quota-process-scheduler.md \
   modules/compiler/src/test/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeImageVmBindingsJniTest.kt
 git commit -m "feat: attach native process image handles"
 ```
+
+## Task 32: Attach Native Image Handles From Runtime Runner
+
+**Files:**
+- Modify: `modules/compiler/src/main/kotlin/ru/lazyhat/compukterkraft/lang/runtime/NativeDeviceKernelProvider.kt`
+- Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmRuntime.kt`
+- Modify: `modules/compiler/src/main/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeVmBindings.kt`
+- Modify: `modules/compiler/src/main/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeImageVmRunner.kt`
+- Modify: `modules/compiler/src/test/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeImageVmRunnerTest.kt`
+
+- [x] **Step 1: Add failing runner attachment test**
+
+Add a runner test proving that when a runtime exposes a native kernel handle and native process id, the created native
+image handle is attached to the same pid in the native process table.
+
+- [x] **Step 2: Expose native process id to compiler runtime code**
+
+Extend `NativeDeviceKernelProvider` with a default `nativeProcessId`, and have `VmRuntime` return its current process id.
+
+- [x] **Step 3: Wire runner attachment**
+
+Add `attachProcessImage(...)` to `NativeVmBindingsFacade` and call it from `NativeImageVmRunner` after attaching the
+image to the kernel.
+
+- [x] **Step 4: Run focused runner tests**
+
+```bash
+./gradlew :compiler:test --tests '*NativeImageVmRunnerTest' --rerun-tasks
+```
+
+Expected: PASS.
+
+- [x] **Step 5: Commit Task 32**
+
+```bash
+git add docs/superpowers/plans/2026-05-10-device-quota-process-scheduler.md \
+  modules/compiler/src/main/kotlin/ru/lazyhat/compukterkraft/lang/runtime/NativeDeviceKernelProvider.kt \
+  modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmRuntime.kt \
+  modules/compiler/src/main/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeVmBindings.kt \
+  modules/compiler/src/main/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeImageVmRunner.kt \
+  modules/compiler/src/test/kotlin/ru/lazyhat/compukterkraft/lang/runtime/blazing/NativeImageVmRunnerTest.kt
+git commit -m "feat: attach native runner images to processes"
+```
