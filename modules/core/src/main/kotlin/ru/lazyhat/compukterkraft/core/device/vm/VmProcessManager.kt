@@ -47,7 +47,7 @@ internal class VmProcessManager(
     private val compilerMetricsCollector: CompilerMetricsCollector = NoOpCompilerMetricsCollector,
     private val runtimeMetricsCollector: RuntimeMetricsCollector = NoOpRuntimeMetricsCollector,
     private val nativeProcessBridge: NativeProcessBridge = NoOpNativeProcessBridge,
-) {
+) : VmProcessStateReporter {
     private val nextPid = AtomicInteger(2)
     private val processes = ConcurrentHashMap<Int, ProcessHandle>()
     private val processTable = VmProcessTable()
@@ -63,6 +63,52 @@ internal class VmProcessManager(
     }
 
     fun processSnapshot(pid: Int): VmProcessRecord? = processTable.snapshot(pid)
+
+    override fun markRunnable(pid: Int) {
+        processTable.markRunnable(pid)
+    }
+
+    override fun markWaitingEvent(
+        pid: Int,
+        filter: String?,
+    ) {
+        processTable.markWaitingEvent(pid, filter)
+    }
+
+    override fun markWaitingIpc(
+        pid: Int,
+        channelId: Int,
+    ) {
+        processTable.markWaitingIpc(pid, channelId)
+    }
+
+    override fun markWaitingProcess(
+        pid: Int,
+        targetPid: Int,
+    ) {
+        processTable.markWaitingProcess(pid, targetPid)
+    }
+
+    override fun markSleeping(
+        pid: Int,
+        untilTick: Long,
+    ) {
+        processTable.markSleeping(pid, untilTick)
+    }
+
+    override fun markExited(
+        pid: Int,
+        exitCode: Int,
+    ) {
+        processTable.markExited(pid, exitCode)
+    }
+
+    override fun markCrashed(
+        pid: Int,
+        message: String,
+    ) {
+        processTable.markCrashed(pid, message)
+    }
 
     fun spawn(
         path: String,
@@ -85,22 +131,26 @@ internal class VmProcessManager(
         }
         val job =
             scope.launch(start = CoroutineStart.LAZY) {
-                val code = execute(pid, parentPid, path, argument, workingDirectory)
-                processTable.markExited(pid, code)
+                val result = execute(pid, parentPid, path, argument, workingDirectory)
+                if (result.crashMessage != null) {
+                    markCrashed(pid, result.crashMessage)
+                } else {
+                    markExited(pid, result.exitCode)
+                }
                 if (nativeRegistered) {
-                    if (nativeProcessBridge.completeProcess(pid, code)) {
+                    if (nativeProcessBridge.completeProcess(pid, result.exitCode)) {
                         runtimeMetricsCollector.recordNativeProcessCompletion()
                     } else {
                         runtimeMetricsCollector.recordNativeProcessStaleCompletion()
                     }
                 }
-                exitCode.complete(code)
+                exitCode.complete(result.exitCode)
             }
         processes[pid] = ProcessHandle(job, exitCode)
         job.start()
         job.invokeOnCompletion { failure ->
             if (failure != null && !exitCode.isCompleted) {
-                processTable.markExited(pid, 1)
+                markCrashed(pid, failure.message ?: failure.javaClass.simpleName)
                 exitCode.complete(1)
             }
         }
@@ -113,14 +163,14 @@ internal class VmProcessManager(
     ): Int {
         val handle = processes[pid] ?: return 1
         if (waiterPid != null) {
-            processTable.markWaitingProcess(waiterPid, pid)
+            markWaitingProcess(waiterPid, pid)
         }
         val code =
             try {
                 handle.exitCode.await()
             } finally {
                 if (waiterPid != null && processTable.snapshot(waiterPid)?.state == VmProcessState.WaitingProcess(pid)) {
-                    processTable.markRunnable(waiterPid)
+                    markRunnable(waiterPid)
                 }
             }
         processes.remove(pid, handle)
@@ -140,7 +190,7 @@ internal class VmProcessManager(
         path: String,
         argument: String,
         workingDirectory: String,
-    ): Int {
+    ): ProcessExecutionResult {
         val stderr = StdioDescriptor.decode(argument)?.stderr
 
         suspend fun reportError(message: String) {
@@ -155,7 +205,7 @@ internal class VmProcessManager(
             programLoader.load(deviceId, resolved) ?: run {
                 val message = "Program not found: $resolved"
                 reportError(message)
-                return 1
+                return ProcessExecutionResult(exitCode = 1)
             }
         val compiledProgram =
             ComputerProgramCompiler.compile(
@@ -169,19 +219,25 @@ internal class VmProcessManager(
         if (program == null) {
             val message = compiledProgram.errorMessage.orEmpty().ifEmpty { "Compilation failed." }
             reportError("Compilation Error in ${programSource.path}: $message")
-            return 1
+            return ProcessExecutionResult(exitCode = 1)
         }
 
         return try {
             program.run(runtimeCreator(pid, parentPid, workingDirectory, argument))
-            0
+            ProcessExecutionResult(exitCode = 0)
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (failure: Throwable) {
-            reportError("Program error in ${programSource.path}: ${failure.message ?: failure.javaClass.simpleName}")
-            1
+            val message = "Program error in ${programSource.path}: ${failure.message ?: failure.javaClass.simpleName}"
+            reportError(message)
+            ProcessExecutionResult(exitCode = 1, crashMessage = message)
         }
     }
+
+    private data class ProcessExecutionResult(
+        val exitCode: Int,
+        val crashMessage: String? = null,
+    )
 
     private data class ProcessHandle(
         val job: Job,

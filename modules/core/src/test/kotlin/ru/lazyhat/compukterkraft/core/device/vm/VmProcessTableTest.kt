@@ -45,11 +45,23 @@ class VmProcessTableTest {
         val table = VmProcessTable()
         table.registerProcess(pid = 1, parentPid = 0, programPath = "bios.ck", argument = "", workingDirectory = "")
 
+        table.markWaitingEvent(pid = 1, filter = "key")
+        assertEquals(VmProcessState.WaitingEvent("key"), table.snapshot(1)?.state)
+
+        table.markWaitingIpc(pid = 1, channelId = 7)
+        assertEquals(VmProcessState.WaitingIpc(7), table.snapshot(1)?.state)
+
         table.markWaitingProcess(pid = 1, targetPid = 2)
         assertEquals(VmProcessState.WaitingProcess(2), table.snapshot(1)?.state)
 
+        table.markSleeping(pid = 1, untilTick = 42)
+        assertEquals(VmProcessState.Sleeping(42), table.snapshot(1)?.state)
+
         table.markRunnable(pid = 1)
         assertEquals(VmProcessState.Runnable, table.snapshot(1)?.state)
+
+        table.markCrashed(pid = 1, message = "boom")
+        assertEquals(VmProcessState.Crashed("boom"), table.snapshot(1)?.state)
 
         table.markExited(pid = 1, exitCode = 7)
         assertEquals(VmProcessState.Exited(7), table.snapshot(1)?.state)
@@ -59,8 +71,12 @@ class VmProcessTableTest {
     fun unknownProcessTransitionsAreIgnored() {
         val table = VmProcessTable()
 
+        table.markWaitingEvent(pid = 99, filter = null)
+        table.markWaitingIpc(pid = 99, channelId = 1)
         table.markWaitingProcess(pid = 99, targetPid = 2)
+        table.markSleeping(pid = 99, untilTick = 1)
         table.markRunnable(pid = 99)
+        table.markCrashed(pid = 99, message = "boom")
         table.markExited(pid = 99, exitCode = 1)
 
         assertNull(table.snapshot(99))

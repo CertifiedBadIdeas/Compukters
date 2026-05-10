@@ -376,6 +376,46 @@ class VmProcessManagerTest {
     }
 
     @Test
+    fun crashedChildKeepsCrashedProcessState() {
+        runtimeTestWorkspace("vm-process-manager-crashed-state") { workspace ->
+            workspace.writeProgram(
+                1,
+                "crash.ck",
+                """
+                pub fun main() {
+                }
+                """.trimIndent(),
+            )
+            val bridge = RecordingNativeProcessBridge()
+            val ctx = StubVmContext()
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val manager =
+                VmProcessManager(
+                    scope = scope,
+                    ctx = ctx,
+                    deviceId = 1,
+                    programLoader = WorkspaceProgramLoader(workspace.host),
+                    profile = runtimeProfile(),
+                    runtimeCreator = { _, _, _, _ -> error("runtime exploded") },
+                    compilerMetricsCollector = NoOpCompilerMetricsCollector,
+                    nativeProcessBridge = bridge,
+                )
+
+            try {
+                val pid = manager.spawn("crash.ck", "", "", parentPid = 1)
+                val code = runBlocking { withTimeout(5_000) { manager.wait(pid) } }
+
+                assertEquals(1, code)
+                assertEquals(VmProcessState.Crashed("Program error in crash.ck: runtime exploded"), manager.processSnapshot(pid)?.state)
+                assertEquals(listOf(2 to 1), bridge.completions)
+            } finally {
+                runBlocking { manager.cancelAll() }
+                scope.cancel()
+            }
+        }
+    }
+
+    @Test
     fun spawnRecordsStaleNativeProcessCompletionWhenBridgeRejectsCompletion() {
         runtimeTestWorkspace("vm-process-manager-native-bridge-stale-completion") { workspace ->
             val bridge = RecordingNativeProcessBridge().apply { completeResult = false }

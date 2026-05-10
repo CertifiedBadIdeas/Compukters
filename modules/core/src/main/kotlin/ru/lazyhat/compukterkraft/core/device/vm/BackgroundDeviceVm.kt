@@ -611,6 +611,7 @@ class BackgroundDeviceVm(
             metricsApi = RuntimeMetricsApi(),
             nativeDeviceKernelHandle = nativeDeviceKernelHandle ?: 0L,
             nativeWorkingDirectory = workingDirectory,
+            processStateReporter = processManager,
         )
     }
 

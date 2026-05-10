@@ -24,13 +24,97 @@ import java.util.concurrent.ConcurrentHashMap
 internal sealed interface VmProcessState {
     data object Runnable : VmProcessState
 
+    data class WaitingEvent(
+        val filter: String?,
+    ) : VmProcessState
+
+    data class WaitingIpc(
+        val channelId: Int,
+    ) : VmProcessState
+
     data class WaitingProcess(
         val targetPid: Int,
+    ) : VmProcessState
+
+    data class Sleeping(
+        val untilTick: Long,
     ) : VmProcessState
 
     data class Exited(
         val exitCode: Int,
     ) : VmProcessState
+
+    data class Crashed(
+        val message: String,
+    ) : VmProcessState
+}
+
+internal interface VmProcessStateReporter {
+    fun markRunnable(pid: Int)
+
+    fun markWaitingEvent(
+        pid: Int,
+        filter: String?,
+    )
+
+    fun markWaitingIpc(
+        pid: Int,
+        channelId: Int,
+    )
+
+    fun markWaitingProcess(
+        pid: Int,
+        targetPid: Int,
+    )
+
+    fun markSleeping(
+        pid: Int,
+        untilTick: Long,
+    )
+
+    fun markExited(
+        pid: Int,
+        exitCode: Int,
+    )
+
+    fun markCrashed(
+        pid: Int,
+        message: String,
+    )
+}
+
+internal object NoOpVmProcessStateReporter : VmProcessStateReporter {
+    override fun markRunnable(pid: Int) = Unit
+
+    override fun markWaitingEvent(
+        pid: Int,
+        filter: String?,
+    ) = Unit
+
+    override fun markWaitingIpc(
+        pid: Int,
+        channelId: Int,
+    ) = Unit
+
+    override fun markWaitingProcess(
+        pid: Int,
+        targetPid: Int,
+    ) = Unit
+
+    override fun markSleeping(
+        pid: Int,
+        untilTick: Long,
+    ) = Unit
+
+    override fun markExited(
+        pid: Int,
+        exitCode: Int,
+    ) = Unit
+
+    override fun markCrashed(
+        pid: Int,
+        message: String,
+    ) = Unit
 }
 
 internal data class VmProcessRecord(
@@ -42,7 +126,7 @@ internal data class VmProcessRecord(
     val state: VmProcessState,
 )
 
-internal class VmProcessTable {
+internal class VmProcessTable : VmProcessStateReporter {
     private val records = ConcurrentHashMap<Int, VmProcessRecord>()
 
     fun registerProcess(
@@ -63,22 +147,50 @@ internal class VmProcessTable {
             )
     }
 
-    fun markRunnable(pid: Int) {
+    override fun markRunnable(pid: Int) {
         updateState(pid, VmProcessState.Runnable)
     }
 
-    fun markWaitingProcess(
+    override fun markWaitingEvent(
+        pid: Int,
+        filter: String?,
+    ) {
+        updateState(pid, VmProcessState.WaitingEvent(filter))
+    }
+
+    override fun markWaitingIpc(
+        pid: Int,
+        channelId: Int,
+    ) {
+        updateState(pid, VmProcessState.WaitingIpc(channelId))
+    }
+
+    override fun markWaitingProcess(
         pid: Int,
         targetPid: Int,
     ) {
         updateState(pid, VmProcessState.WaitingProcess(targetPid))
     }
 
-    fun markExited(
+    override fun markSleeping(
+        pid: Int,
+        untilTick: Long,
+    ) {
+        updateState(pid, VmProcessState.Sleeping(untilTick))
+    }
+
+    override fun markExited(
         pid: Int,
         exitCode: Int,
     ) {
         updateState(pid, VmProcessState.Exited(exitCode))
+    }
+
+    override fun markCrashed(
+        pid: Int,
+        message: String,
+    ) {
+        updateState(pid, VmProcessState.Crashed(message))
     }
 
     fun snapshot(pid: Int): VmProcessRecord? = records[pid]

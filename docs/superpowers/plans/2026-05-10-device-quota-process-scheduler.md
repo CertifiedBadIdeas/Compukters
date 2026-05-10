@@ -437,3 +437,63 @@ git commit -m "fix: stabilize device quota scheduler"
 ```
 
 If there were no changes, do not create an empty commit.
+
+## Task 6: Explicit Runtime Wait States
+
+**Files:**
+- Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessTable.kt`
+- Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmRuntime.kt`
+- Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVm.kt`
+- Modify: `modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessManager.kt`
+- Test: `modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessTableTest.kt`
+- Create: `modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmRuntimeProcessStateTest.kt`
+
+- [x] **Step 1: Add process table wait/sleep/crash states**
+
+Extend `VmProcessState` with:
+
+```kotlin
+WaitingEvent(filter: String?)
+WaitingIpc(channelId: Int)
+Sleeping(untilTick: Long)
+Crashed(message: String)
+```
+
+Add mark methods and table tests for all new transitions.
+
+- [x] **Step 2: Add runtime state reporter tests**
+
+Add tests proving:
+
+- `pullEvent(filter)` marks the process as `WaitingEvent(filter)` while blocked and returns it to `Runnable` after a
+  matching event arrives;
+- `sleep(ticks)` marks the process as `Sleeping(untilTick)` while blocked and returns it to `Runnable` after the target
+  tick is reached;
+- `poll(channel)` marks the process as `WaitingIpc(channel)` while blocked and returns it to `Runnable` after IPC/event
+  wakeup.
+
+- [x] **Step 3: Wire runtime state reporter**
+
+Introduce a small process-state reporter passed into each `VmRuntime`. `VmProcessManager` should delegate reporter
+updates to `VmProcessTable`, and `BackgroundDeviceVm.createRuntime(...)` should pass the manager to child runtimes.
+
+- [x] **Step 4: Run focused tests**
+
+```bash
+./gradlew :core:test --tests '*VmProcessTableTest' --tests '*VmRuntimeProcessStateTest' --tests '*VmProcessManagerTest' --rerun-tasks
+```
+
+Expected: PASS.
+
+- [x] **Step 5: Commit Task 6**
+
+```bash
+git add docs/superpowers/plans/2026-05-10-device-quota-process-scheduler.md \
+  modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessTable.kt \
+  modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmRuntime.kt \
+  modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/BackgroundDeviceVm.kt \
+  modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessManager.kt \
+  modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmProcessTableTest.kt \
+  modules/core/src/test/kotlin/ru/lazyhat/compukterkraft/core/device/vm/VmRuntimeProcessStateTest.kt
+git commit -m "feat: expose explicit VM runtime wait states"
+```
