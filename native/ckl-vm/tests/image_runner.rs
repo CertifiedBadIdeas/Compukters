@@ -2302,28 +2302,80 @@ fn native_strings_whitespace_helpers_handle_ascii_without_host_signal() {
 }
 
 #[test]
-fn native_strings_falls_back_to_host_signal_for_non_ascii() {
+fn native_strings_handle_unicode_scalars_without_host_signal() {
     let mut code = Vec::new();
     push_constant(&mut code, 0);
     call_host(&mut code, STRINGS_LENGTH_IMPORT_ID, 1);
+    push_constant(&mut code, 0);
+    push_constant(&mut code, 1);
+    call_host(&mut code, STRINGS_CHAR_AT_IMPORT_ID, 2);
+    code.push(OP_BINARY);
+    code.push(0);
+    push_constant(&mut code, 0);
+    push_constant(&mut code, 2);
+    push_constant(&mut code, 3);
+    call_host(&mut code, STRINGS_SLICE_IMPORT_ID, 3);
+    code.push(OP_BINARY);
+    code.push(0);
+    push_constant(&mut code, 0);
+    push_constant(&mut code, 1);
+    push_constant(&mut code, 4);
+    call_host(&mut code, STRINGS_REPLACE_RANGE_IMPORT_ID, 3);
+    code.push(OP_BINARY);
+    code.push(0);
+    push_constant(&mut code, 0);
+    push_constant(&mut code, 1);
+    call_host(&mut code, STRINGS_CHAR_CODE_AT_IMPORT_ID, 2);
+    code.push(OP_BINARY);
+    code.push(0);
     code.push(OP_RETURN);
     let mut vm = ImageVmHandle::create(
         &image_with_constants_host_imports_and_code(
-            vec![ConstantFixture::String("é".to_string())],
-            vec![strings_import(
-                STRINGS_LENGTH_IMPORT_ID,
-                "length",
-                vec!["String"],
-                "Int",
-            )],
+            vec![
+                ConstantFixture::String("Aя🦀Z".to_string()),
+                ConstantFixture::Int(2),
+                ConstantFixture::Int(1),
+                ConstantFixture::Int(3),
+                ConstantFixture::String("中".to_string()),
+            ],
+            vec![
+                strings_import(STRINGS_LENGTH_IMPORT_ID, "length", vec!["String"], "Int"),
+                strings_import(
+                    STRINGS_CHAR_AT_IMPORT_ID,
+                    "charAt",
+                    vec!["String", "Int"],
+                    "String",
+                ),
+                strings_import(
+                    STRINGS_SLICE_IMPORT_ID,
+                    "slice",
+                    vec!["String", "Int", "Int"],
+                    "String",
+                ),
+                strings_import(
+                    STRINGS_REPLACE_RANGE_IMPORT_ID,
+                    "replaceRange",
+                    vec!["String", "Int", "String"],
+                    "String",
+                ),
+                strings_import(
+                    STRINGS_CHAR_CODE_AT_IMPORT_ID,
+                    "charCodeAt",
+                    vec!["String", "Int"],
+                    "Int",
+                ),
+            ],
             0,
             code,
         ),
-        64,
+        256,
     )
     .unwrap();
 
-    assert_eq!(vm.run_until_signal()[0], 4);
+    assert_eq!(
+        vm.run_until_signal(),
+        halt_signal(&VmValue::String("4🦀я🦀Aя中Z129408".to_string()))
+    );
 }
 
 #[test]

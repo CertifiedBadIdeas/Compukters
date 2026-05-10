@@ -1596,41 +1596,44 @@ fn try_builtin_native_host_import(
 
     match import_id {
         STRINGS_TRIM_IMPORT_ID => native_string_unary(arguments, |text| {
-            VmValue::String(
-                text.trim_matches(|ch: char| ch.is_ascii_whitespace())
-                    .to_string(),
-            )
+            VmValue::String(text.trim_matches(|ch: char| ch.is_whitespace()).to_string())
         }),
         STRINGS_BEFORE_SPACE_IMPORT_ID => native_string_unary(arguments, |text| {
-            let text = text.trim_start_matches(|ch: char| ch.is_ascii_whitespace());
-            let before_space = match text.find(|ch: char| ch.is_ascii_whitespace()) {
+            let text = text.trim_start_matches(|ch: char| ch.is_whitespace());
+            let before_space = match text.find(|ch: char| ch.is_whitespace()) {
                 Some(index) => &text[..index],
                 None => text,
             };
             VmValue::String(before_space.to_string())
         }),
         STRINGS_AFTER_SPACE_IMPORT_ID => native_string_unary(arguments, |text| {
-            let text = text.trim_start_matches(|ch: char| ch.is_ascii_whitespace());
-            let after_space = match text.find(|ch: char| ch.is_ascii_whitespace()) {
+            let text = text.trim_start_matches(|ch: char| ch.is_whitespace());
+            let after_space = match text.find(|ch: char| ch.is_whitespace()) {
                 Some(index) => {
-                    text[index + 1..].trim_start_matches(|ch: char| ch.is_ascii_whitespace())
+                    let after = index
+                        + text[index..]
+                            .chars()
+                            .next()
+                            .map(char::len_utf8)
+                            .unwrap_or(0);
+                    text[after..].trim_start_matches(|ch: char| ch.is_whitespace())
                 }
                 None => "",
             };
             VmValue::String(after_space.to_string())
         }),
         STRINGS_IS_BLANK_IMPORT_ID => native_string_unary(arguments, |text| {
-            VmValue::Bool(text.bytes().all(|byte| byte.is_ascii_whitespace()))
+            VmValue::Bool(text.chars().all(|ch| ch.is_whitespace()))
         }),
         STRINGS_TO_INT_IMPORT_ID => native_string_unary(arguments, |text| {
             let value = text
-                .trim_matches(|ch: char| ch.is_ascii_whitespace())
+                .trim_matches(|ch: char| ch.is_whitespace())
                 .parse::<i32>()
                 .unwrap_or(0);
             VmValue::Int(value)
         }),
         STRINGS_LENGTH_IMPORT_ID => {
-            native_string_unary(arguments, |text| VmValue::Int(text.len() as i32))
+            native_string_unary(arguments, |text| VmValue::Int(text.chars().count() as i32))
         }
         STRINGS_CHAR_AT_IMPORT_ID => native_string_char_at(arguments),
         STRINGS_REPEAT_IMPORT_ID => native_string_repeat(arguments),
@@ -1726,9 +1729,7 @@ fn native_string_unary(
         return Ok(NativeHostImportResult::Fallback(arguments));
     }
     match &arguments[0] {
-        VmValue::String(text) if text.is_ascii() => {
-            Ok(NativeHostImportResult::Handled(operation(text)))
-        }
+        VmValue::String(text) => Ok(NativeHostImportResult::Handled(operation(text))),
         _ => Ok(NativeHostImportResult::Fallback(arguments)),
     }
 }
@@ -1738,7 +1739,7 @@ fn native_string_char_at(arguments: Vec<VmValue>) -> Result<NativeHostImportResu
         return Ok(NativeHostImportResult::Fallback(arguments));
     }
     let text = match &arguments[0] {
-        VmValue::String(text) if text.is_ascii() => text,
+        VmValue::String(text) => text,
         _ => return Ok(NativeHostImportResult::Fallback(arguments)),
     };
     let index = match &arguments[1] {
@@ -1749,9 +1750,9 @@ fn native_string_char_at(arguments: Vec<VmValue>) -> Result<NativeHostImportResu
     let value = if index < 0 {
         String::new()
     } else {
-        text.as_bytes()
-            .get(index as usize)
-            .map(|byte| (*byte as char).to_string())
+        text.chars()
+            .nth(index as usize)
+            .map(|ch| ch.to_string())
             .unwrap_or_default()
     };
     Ok(NativeHostImportResult::Handled(VmValue::String(value)))
@@ -1762,7 +1763,7 @@ fn native_string_char_code_at(arguments: Vec<VmValue>) -> Result<NativeHostImpor
         return Ok(NativeHostImportResult::Fallback(arguments));
     }
     let text = match &arguments[0] {
-        VmValue::String(text) if text.is_ascii() => text,
+        VmValue::String(text) => text,
         _ => return Ok(NativeHostImportResult::Fallback(arguments)),
     };
     let index = match &arguments[1] {
@@ -1773,9 +1774,9 @@ fn native_string_char_code_at(arguments: Vec<VmValue>) -> Result<NativeHostImpor
     let value = if index < 0 {
         -1
     } else {
-        text.as_bytes()
-            .get(index as usize)
-            .map(|byte| *byte as i32)
+        text.chars()
+            .nth(index as usize)
+            .map(|ch| ch as i32)
             .unwrap_or(-1)
     };
     Ok(NativeHostImportResult::Handled(VmValue::Int(value)))
@@ -1786,7 +1787,7 @@ fn native_string_repeat(arguments: Vec<VmValue>) -> Result<NativeHostImportResul
         return Ok(NativeHostImportResult::Fallback(arguments));
     }
     let text = match &arguments[0] {
-        VmValue::String(text) if text.is_ascii() => text,
+        VmValue::String(text) => text,
         _ => return Ok(NativeHostImportResult::Fallback(arguments)),
     };
     let count = match &arguments[1] {
@@ -1807,7 +1808,7 @@ fn native_string_slice(arguments: Vec<VmValue>) -> Result<NativeHostImportResult
         return Ok(NativeHostImportResult::Fallback(arguments));
     }
     let text = match &arguments[0] {
-        VmValue::String(text) if text.is_ascii() => text,
+        VmValue::String(text) => text,
         _ => return Ok(NativeHostImportResult::Fallback(arguments)),
     };
     let start = match &arguments[1] {
@@ -1820,11 +1821,11 @@ fn native_string_slice(arguments: Vec<VmValue>) -> Result<NativeHostImportResult
         VmValue::Long(value) => *value as i32,
         _ => return Ok(NativeHostImportResult::Fallback(arguments)),
     };
-    let len = text.len() as i32;
+    let len = text.chars().count() as i32;
     let start = start.clamp(0, len) as usize;
     let end = end.clamp(start as i32, len) as usize;
     Ok(NativeHostImportResult::Handled(VmValue::String(
-        text[start..end].to_string(),
+        text.chars().skip(start).take(end - start).collect(),
     )))
 }
 
@@ -1833,7 +1834,7 @@ fn native_string_replace_range(arguments: Vec<VmValue>) -> Result<NativeHostImpo
         return Ok(NativeHostImportResult::Fallback(arguments));
     }
     let text = match &arguments[0] {
-        VmValue::String(text) if text.is_ascii() => text,
+        VmValue::String(text) => text,
         _ => return Ok(NativeHostImportResult::Fallback(arguments)),
     };
     let start = match &arguments[1] {
@@ -1842,17 +1843,27 @@ fn native_string_replace_range(arguments: Vec<VmValue>) -> Result<NativeHostImpo
         _ => return Ok(NativeHostImportResult::Fallback(arguments)),
     };
     let replacement = match &arguments[2] {
-        VmValue::String(value) if value.is_ascii() => value,
+        VmValue::String(value) => value,
         _ => return Ok(NativeHostImportResult::Fallback(arguments)),
     };
-    let len = text.len() as i32;
+    let len = text.chars().count() as i32;
     let start = start.clamp(0, len) as usize;
-    let end = (start + replacement.len()).min(text.len());
-    let mut value = String::with_capacity(text.len().max(start + replacement.len()));
-    value.push_str(&text[..start]);
+    let replacement_len = replacement.chars().count();
+    let end = (start + replacement_len).min(len as usize);
+    let start_byte = scalar_to_byte_index(text, start);
+    let end_byte = scalar_to_byte_index(text, end);
+    let mut value = String::with_capacity(text.len().max(start_byte + replacement.len()));
+    value.push_str(&text[..start_byte]);
     value.push_str(replacement);
-    value.push_str(&text[end..]);
+    value.push_str(&text[end_byte..]);
     Ok(NativeHostImportResult::Handled(VmValue::String(value)))
+}
+
+fn scalar_to_byte_index(text: &str, scalar_index: usize) -> usize {
+    text.char_indices()
+        .nth(scalar_index)
+        .map(|(byte_index, _)| byte_index)
+        .unwrap_or(text.len())
 }
 
 fn binary_add(left: VmValue, right: VmValue) -> Result<VmValue, String> {
@@ -2062,7 +2073,10 @@ mod tests {
     #[test]
     fn resolves_relative_native_process_working_directory() {
         assert_eq!(resolve_working_directory("rom/bin", "../lib"), "rom/lib");
-        assert_eq!(resolve_working_directory("rom/bin", "/tmp/./tools"), "tmp/tools");
+        assert_eq!(
+            resolve_working_directory("rom/bin", "/tmp/./tools"),
+            "tmp/tools"
+        );
     }
 
     #[test]
@@ -2080,7 +2094,9 @@ mod tests {
         match result {
             NativeHostImportResult::Fallback(arguments) => assert!(arguments.is_empty()),
             NativeHostImportResult::Handled(value) => {
-                panic!("expected currentDirectory fallback without native filesystem, got {value:?}")
+                panic!(
+                    "expected currentDirectory fallback without native filesystem, got {value:?}"
+                )
             }
             NativeHostImportResult::SignalNoResume { .. } => {
                 panic!("expected currentDirectory fallback without native filesystem")
