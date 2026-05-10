@@ -80,14 +80,21 @@ internal class NativeDeviceDaemonRuntime(
         timeoutMillis: Long,
     ): Long = bindings.waitForDeviceDaemonDisplayWake(daemonHandle, observedWakeSequence, timeoutMillis)
 
-    suspend fun requestSlice(serverTick: Long): NativeDeviceDaemonTickSummary {
+    fun refillQuota(serverTick: Long) {
+        bindings.refillDeviceDaemonQuota(
+            daemonHandle = daemonHandle,
+            instructions = profile.resources.cpu.instructionsPerSlice.toLong(),
+            wallNanos = profile.resources.cpu.wallTimeGuardNanosPerSlice,
+            serverTick = serverTick,
+        )
+    }
+
+    suspend fun runReadyUntilBlocked(): NativeDeviceDaemonTickSummary {
         val started = System.nanoTime()
         val summary =
-            bindings.tickDeviceDaemon(
+            bindings.runDeviceDaemonReady(
                 daemonHandle = daemonHandle,
-                instructions = profile.resources.cpu.instructionsPerSlice.toLong(),
-                wallNanos = profile.resources.cpu.wallTimeGuardNanosPerSlice,
-                serverTick = serverTick,
+                maxTurns = profile.resources.cpu.instructionsPerSlice.toLong(),
             )
         runtimeMetricsCollector.recordNativeDaemonTick(
             activeNanos = System.nanoTime() - started,
@@ -98,6 +105,11 @@ internal class NativeDeviceDaemonRuntime(
         )
         serviceHostRequests()
         return summary
+    }
+
+    suspend fun requestSlice(serverTick: Long): NativeDeviceDaemonTickSummary {
+        refillQuota(serverTick)
+        return runReadyUntilBlocked()
     }
 
     private suspend fun serviceHostRequests() {
