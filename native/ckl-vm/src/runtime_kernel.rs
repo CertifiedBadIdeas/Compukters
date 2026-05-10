@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::{Condvar, Mutex, MutexGuard};
 use std::time::Duration;
 
@@ -27,16 +27,28 @@ pub enum ProcessStatus {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProcessSchedulerTick {
+    pub current_tick: i64,
+    pub woken_pids: Vec<i32>,
+    pub selected_pid: Option<i32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct ProcessEntry {
     parent_pid: i32,
     program_path: String,
     state: ProcessState,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum ProcessState {
-    Running,
+    Runnable,
+    WaitingEvent { filter: Option<String> },
+    WaitingIpc { channel_id: i32 },
+    WaitingProcess { target_pid: i32 },
+    Sleeping { until_tick: i64 },
     Completed { exit_code: i32 },
+    Crashed { message: String },
 }
 
 pub struct DeviceRuntimeKernel {
@@ -44,6 +56,8 @@ pub struct DeviceRuntimeKernel {
     deferred_events: VecDeque<QueuedEvent>,
     captured_events: BTreeMap<i32, Vec<VmValue>>,
     processes: BTreeMap<i32, ProcessEntry>,
+    runnable_queue: VecDeque<i32>,
+    runnable_pids: BTreeSet<i32>,
     ipc: IpcRegistry,
     pub displays: DeviceDisplayRegistry,
     pub filesystem: Option<DeviceFilesystem>,
@@ -60,6 +74,8 @@ impl DeviceRuntimeKernel {
             deferred_events: VecDeque::new(),
             captured_events: BTreeMap::new(),
             processes: BTreeMap::new(),
+            runnable_queue: VecDeque::new(),
+            runnable_pids: BTreeSet::new(),
             ipc: IpcRegistry::new(max_buffered_bytes_per_channel),
             displays: DeviceDisplayRegistry::new(),
             filesystem: None,
@@ -75,12 +91,7 @@ impl DeviceRuntimeKernel {
         Ok(())
     }
 
-    pub fn register_process(
-        &mut self,
-        pid: i32,
-        parent_pid: i32,
-        program_path: String,
-    ) -> bool {
+    pub fn register_process(&mut self, pid: i32, parent_pid: i32, program_path: String) -> bool {
         if pid <= 0 || self.processes.contains_key(&pid) {
             return false;
         }
@@ -89,9 +100,10 @@ impl DeviceRuntimeKernel {
             ProcessEntry {
                 parent_pid,
                 program_path,
-                state: ProcessState::Running,
+                state: ProcessState::Runnable,
             },
         );
+        self.enqueue_runnable(pid);
         true
     }
 
@@ -99,10 +111,18 @@ impl DeviceRuntimeKernel {
         let Some(entry) = self.processes.get_mut(&pid) else {
             return false;
         };
-        if !matches!(entry.state, ProcessState::Running) {
+        if matches!(
+            entry.state,
+            ProcessState::Completed { .. } | ProcessState::Crashed { .. }
+        ) {
             return false;
         }
+        self.remove_runnable(pid);
+        let Some(entry) = self.processes.get_mut(&pid) else {
+            return false;
+        };
         entry.state = ProcessState::Completed { exit_code };
+        self.wake_process_waiters(pid);
         self.wake_sequence = self.wake_sequence.saturating_add(1);
         true
     }
@@ -110,11 +130,125 @@ impl DeviceRuntimeKernel {
     pub fn process_status(&self, pid: i32) -> ProcessStatus {
         match self.processes.get(&pid) {
             Some(entry) => match entry.state {
-                ProcessState::Running => ProcessStatus::Running,
+                ProcessState::Runnable
+                | ProcessState::WaitingEvent { .. }
+                | ProcessState::WaitingIpc { .. }
+                | ProcessState::WaitingProcess { .. }
+                | ProcessState::Sleeping { .. } => ProcessStatus::Running,
                 ProcessState::Completed { exit_code } => ProcessStatus::Completed(exit_code),
+                ProcessState::Crashed { .. } => ProcessStatus::Completed(1),
             },
             None => ProcessStatus::Missing,
         }
+    }
+
+    pub fn mark_process_runnable(&mut self, pid: i32) -> bool {
+        self.update_process_state(pid, ProcessState::Runnable)
+    }
+
+    pub fn mark_process_waiting_for_event(&mut self, pid: i32, filter: Option<String>) -> bool {
+        self.update_process_state(pid, ProcessState::WaitingEvent { filter })
+    }
+
+    pub fn mark_process_waiting_for_ipc(&mut self, pid: i32, channel_id: i32) -> bool {
+        self.update_process_state(pid, ProcessState::WaitingIpc { channel_id })
+    }
+
+    pub fn mark_process_waiting_for_process(&mut self, pid: i32, target_pid: i32) -> bool {
+        self.update_process_state(pid, ProcessState::WaitingProcess { target_pid })
+    }
+
+    pub fn mark_process_sleeping(&mut self, pid: i32, until_tick: i64) -> bool {
+        self.update_process_state(pid, ProcessState::Sleeping { until_tick })
+    }
+
+    pub fn mark_process_crashed(&mut self, pid: i32, message: String) -> bool {
+        self.update_process_state(pid, ProcessState::Crashed { message })
+    }
+
+    pub fn scheduler_tick(&mut self, current_tick: i64) -> ProcessSchedulerTick {
+        let woken_pids = self.wake_sleepers(current_tick);
+        let selected_pid = self.next_runnable_pid();
+        ProcessSchedulerTick {
+            current_tick,
+            woken_pids,
+            selected_pid,
+        }
+    }
+
+    pub fn wake_sleepers(&mut self, current_tick: i64) -> Vec<i32> {
+        let due_pids = self
+            .processes
+            .iter()
+            .filter_map(|(pid, entry)| match entry.state {
+                ProcessState::Sleeping { until_tick } if until_tick <= current_tick => Some(*pid),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        for pid in &due_pids {
+            let _ = self.mark_process_runnable(*pid);
+        }
+        due_pids
+    }
+
+    pub fn wake_process_waiters(&mut self, target_pid: i32) -> Vec<i32> {
+        let waiting_pids = self
+            .processes
+            .iter()
+            .filter_map(|(pid, entry)| match entry.state {
+                ProcessState::WaitingProcess {
+                    target_pid: waiting_for,
+                } if waiting_for == target_pid => Some(*pid),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        for pid in &waiting_pids {
+            let _ = self.mark_process_runnable(*pid);
+        }
+        waiting_pids
+    }
+
+    fn update_process_state(&mut self, pid: i32, state: ProcessState) -> bool {
+        if !self.processes.contains_key(&pid) {
+            return false;
+        }
+        let runnable = matches!(state, ProcessState::Runnable);
+        if runnable {
+            self.enqueue_runnable(pid);
+        } else {
+            self.remove_runnable(pid);
+        }
+        let Some(entry) = self.processes.get_mut(&pid) else {
+            return false;
+        };
+        entry.state = state;
+        true
+    }
+
+    fn enqueue_runnable(&mut self, pid: i32) {
+        if self.runnable_pids.insert(pid) {
+            self.runnable_queue.push_back(pid);
+        }
+    }
+
+    fn remove_runnable(&mut self, pid: i32) {
+        self.runnable_pids.remove(&pid);
+    }
+
+    fn next_runnable_pid(&mut self) -> Option<i32> {
+        while let Some(pid) = self.runnable_queue.pop_front() {
+            if !self.runnable_pids.remove(&pid) {
+                continue;
+            }
+            if matches!(
+                self.processes.get(&pid).map(|entry| &entry.state),
+                Some(ProcessState::Runnable)
+            ) {
+                self.enqueue_runnable(pid);
+                return Some(pid);
+            }
+        }
+        None
     }
 
     pub fn enqueue_event(&mut self, name: &str, arguments: Vec<VmValue>) -> bool {
@@ -523,5 +657,68 @@ mod tests {
             .unwrap();
 
         assert_eq!(observed, after);
+    }
+
+    #[test]
+    fn process_scheduler_tick_wakes_sleepers_and_selects_round_robin() {
+        let mut kernel = DeviceRuntimeKernel::new(16, 1024);
+        assert!(kernel.register_process(1, 0, "/rom/bios.ck".to_string()));
+        assert!(kernel.register_process(2, 1, "/rom/shell.ck".to_string()));
+        assert!(kernel.mark_process_sleeping(1, 5));
+
+        assert_eq!(
+            kernel.scheduler_tick(4),
+            ProcessSchedulerTick {
+                current_tick: 4,
+                woken_pids: Vec::new(),
+                selected_pid: Some(2),
+            }
+        );
+        assert_eq!(
+            kernel.scheduler_tick(5),
+            ProcessSchedulerTick {
+                current_tick: 5,
+                woken_pids: vec![1],
+                selected_pid: Some(2),
+            }
+        );
+        assert_eq!(
+            kernel.scheduler_tick(6),
+            ProcessSchedulerTick {
+                current_tick: 6,
+                woken_pids: Vec::new(),
+                selected_pid: Some(1),
+            }
+        );
+    }
+
+    #[test]
+    fn completing_process_wakes_native_process_waiters() {
+        let mut kernel = DeviceRuntimeKernel::new(16, 1024);
+        assert!(kernel.register_process(1, 0, "/rom/parent.ck".to_string()));
+        assert!(kernel.register_process(2, 1, "/rom/child.ck".to_string()));
+        assert!(kernel.register_process(3, 1, "/rom/other.ck".to_string()));
+        assert!(kernel.mark_process_waiting_for_process(1, 2));
+        assert!(kernel.mark_process_waiting_for_process(3, 99));
+
+        assert!(kernel.complete_process(2, 0));
+
+        assert_eq!(kernel.process_status(2), ProcessStatus::Completed(0));
+        assert_eq!(
+            kernel.scheduler_tick(12),
+            ProcessSchedulerTick {
+                current_tick: 12,
+                woken_pids: Vec::new(),
+                selected_pid: Some(1),
+            }
+        );
+        assert_eq!(
+            kernel.scheduler_tick(13),
+            ProcessSchedulerTick {
+                current_tick: 13,
+                woken_pids: Vec::new(),
+                selected_pid: Some(1),
+            }
+        );
     }
 }

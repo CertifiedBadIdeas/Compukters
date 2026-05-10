@@ -749,3 +749,59 @@ git add docs/superpowers/plans/2026-05-10-device-quota-process-scheduler.md \
   modules/v1_21_1/v1_21_1-neoforge/src/test/kotlin/ru/lazyhat/compukterkraft/impl/computer/vm/RuntimeVmProfilingReportFormatterTest.kt
 git commit -m "feat: report VM process scheduler metrics"
 ```
+
+## Task 13: Native Process Scheduler Mirror
+
+**Files:**
+- Modify: `native/ckl-vm/src/runtime_kernel.rs`
+
+- [x] **Step 1: Add failing Rust scheduler mirror tests**
+
+Add native kernel tests proving:
+
+- registered processes enter a native runnable queue;
+- `scheduler_tick(currentTick)` wakes due sleepers and selects runnable pids round-robin;
+- process waiters move back to runnable when the watched pid completes;
+- completed processes are removed from native runnable scheduling.
+
+- [x] **Step 2: Implement native process states and runnable queue**
+
+Replace the native `Running` process state with explicit process states matching the Kotlin table shape:
+
+- `Runnable`;
+- `WaitingEvent`;
+- `WaitingIpc`;
+- `WaitingProcess`;
+- `Sleeping`;
+- `Completed`;
+- `Crashed`.
+
+Maintain a native runnable queue plus membership set so state transitions keep scheduling deterministic and duplicate-free.
+
+- [x] **Step 3: Implement native scheduler tick**
+
+Add `ProcessSchedulerTick` and `DeviceRuntimeKernel.scheduler_tick(currentTick)`:
+
+- wake sleepers with `untilTick <= currentTick`;
+- select the next runnable pid through round-robin order;
+- return current tick, woken pids, and selected pid.
+
+`complete_process(pid, exitCode)` should remove the completed pid from runnable scheduling and wake native process
+waiters for that pid.
+
+- [x] **Step 4: Run native tests**
+
+```bash
+cargo test --manifest-path native/ckl-vm/Cargo.toml runtime_kernel
+./gradlew :v1_21_1-neoforge:buildRustVmNativeLibrary
+```
+
+Expected: PASS.
+
+- [x] **Step 5: Commit Task 13**
+
+```bash
+git add docs/superpowers/plans/2026-05-10-device-quota-process-scheduler.md \
+  native/ckl-vm/src/runtime_kernel.rs
+git commit -m "feat: add native process scheduler mirror"
+```
