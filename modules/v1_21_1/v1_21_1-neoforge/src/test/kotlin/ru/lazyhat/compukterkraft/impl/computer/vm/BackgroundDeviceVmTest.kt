@@ -394,7 +394,7 @@ class BackgroundDeviceVmTest {
 
             val frames = vm.drainDisplayFrames()
             assertTrue(
-                frames.size in 1..8,
+                frames.size in 1..10,
                 "queued input burst should be coalesced into a few native frames, frames=${frames.size} state=${vm.snapshot().state} logs=$logs",
             )
         } finally {

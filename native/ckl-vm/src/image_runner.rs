@@ -679,9 +679,8 @@ impl ImageVmHandle {
                     })?
                 }
                 Instruction::I32Eq { dst, lhs, rhs } => {
-                    self.write_compare(dst, lhs, rhs, "==", |ordering| {
-                        ordering == std::cmp::Ordering::Equal
-                    })?
+                    let value = value_equals(self.read_register(lhs)?, self.read_register(rhs)?);
+                    self.write_register(dst, VmValue::Bool(value))?;
                 }
                 Instruction::I32Ne { dst, lhs, rhs } => {
                     let value = !value_equals(self.read_register(lhs)?, self.read_register(rhs)?);
@@ -811,6 +810,58 @@ impl ImageVmHandle {
                     self.pending_resume_register = Some(dst);
                     self.state = ImageVmState::WaitingForResume;
                     return Ok(VmSignal::Sleep(ticks));
+                }
+                Instruction::ConstructRecord {
+                    dst,
+                    type_name_constant_index,
+                    field_name_constant_indices,
+                    field_values,
+                } => {
+                    let type_name =
+                        self.constant_string_value(type_name_constant_index, "record type name")?;
+                    if field_name_constant_indices.len() != field_values.len() {
+                        return Err(format!(
+                            "CkVmImage record field-name count {} does not match value count {}",
+                            field_name_constant_indices.len(),
+                            field_values.len()
+                        ));
+                    }
+                    let mut fields = Vec::with_capacity(field_values.len());
+                    for (field_name_constant_index, field_value) in
+                        field_name_constant_indices.into_iter().zip(field_values)
+                    {
+                        let field_name = self.constant_string_value(
+                            field_name_constant_index,
+                            "record field name",
+                        )?;
+                        fields.push((field_name, self.read_register(field_value)?.clone()));
+                    }
+                    self.write_register(dst, VmValue::Record { type_name, fields })?;
+                }
+                Instruction::GetField {
+                    dst,
+                    receiver,
+                    field_name_constant_index,
+                } => {
+                    let field_name =
+                        self.constant_string_value(field_name_constant_index, "field name")?;
+                    let value = match self.read_register(receiver)?.clone() {
+                        VmValue::Record { type_name, fields } => fields
+                            .into_iter()
+                            .find(|(name, _)| name == &field_name)
+                            .map(|(_, value)| value)
+                            .ok_or_else(|| {
+                                format!(
+                                    "CkVmImage record `{type_name}` has no field `{field_name}`"
+                                )
+                            })?,
+                        other => {
+                            return Err(format!(
+                                "CkVmImage GET_FIELD requires Record receiver but found {other:?}"
+                            ))
+                        }
+                    };
+                    self.write_register(dst, value)?;
                 }
             }
 
@@ -977,6 +1028,22 @@ impl ImageVmHandle {
             Some(Constant::Long(value)) => Ok(VmValue::Long(*value)),
             None => Err(format!(
                 "CkVmImage constant index {constant_index} is out of bounds"
+            )),
+        }
+    }
+
+    fn constant_string_value(
+        &self,
+        constant_index: usize,
+        metadata_name: &str,
+    ) -> Result<String, String> {
+        match self.image.constants.get(constant_index) {
+            Some(Constant::String(value)) => Ok(value.clone()),
+            Some(other) => Err(format!(
+                "CkVmImage {metadata_name} constant index {constant_index} must be String metadata but found {other:?}"
+            )),
+            None => Err(format!(
+                "CkVmImage {metadata_name} constant index {constant_index} is out of bounds"
             )),
         }
     }

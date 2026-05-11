@@ -65,6 +65,8 @@ object CkVmImageAbi {
         const val CALL_HOST = 32
         const val YIELD = 33
         const val SLEEP = 34
+        const val CONSTRUCT_RECORD = 35
+        const val GET_FIELD = 36
     }
 
     fun encode(image: CkVmImage): ByteArray {
@@ -190,6 +192,28 @@ object CkVmImageAbi {
 
             is CkVmInstruction.Yield -> requireRegister(instruction.dst)
             is CkVmInstruction.Sleep -> requirePairRegisters(instruction.dst, instruction.ticks, ::requireRegister)
+            is CkVmInstruction.ConstructRecord -> {
+                requireRegister(instruction.dst)
+                require(instruction.typeNameConstantIndex in image.constants.indices) {
+                    "Record type-name constant index ${instruction.typeNameConstantIndex} at instruction $index is outside constant pool."
+                }
+                require(instruction.fieldNameConstantIndices.size == instruction.fieldValues.size) {
+                    "Record field-name and value counts differ at instruction $index."
+                }
+                instruction.fieldNameConstantIndices.forEach { constantIndex ->
+                    require(constantIndex in image.constants.indices) {
+                        "Record field-name constant index $constantIndex at instruction $index is outside constant pool."
+                    }
+                }
+                requireArguments(instruction.fieldValues)
+            }
+
+            is CkVmInstruction.GetField -> {
+                requirePairRegisters(instruction.dst, instruction.receiver, ::requireRegister)
+                require(instruction.fieldNameConstantIndex in image.constants.indices) {
+                    "Field-name constant index ${instruction.fieldNameConstantIndex} at instruction $index is outside constant pool."
+                }
+            }
         }
     }
 
@@ -385,6 +409,22 @@ object CkVmImageAbi {
                     u8(InstructionTags.SLEEP)
                     register(instruction.dst)
                     register(instruction.ticks)
+                }
+
+                is CkVmInstruction.ConstructRecord -> {
+                    u8(InstructionTags.CONSTRUCT_RECORD)
+                    register(instruction.dst)
+                    i32(instruction.typeNameConstantIndex)
+                    i32(instruction.fieldNameConstantIndices.size)
+                    instruction.fieldNameConstantIndices.forEach(::i32)
+                    registerList(instruction.fieldValues)
+                }
+
+                is CkVmInstruction.GetField -> {
+                    u8(InstructionTags.GET_FIELD)
+                    register(instruction.dst)
+                    register(instruction.receiver)
+                    i32(instruction.fieldNameConstantIndex)
                 }
             }
         }
