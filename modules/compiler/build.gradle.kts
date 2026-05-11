@@ -36,13 +36,6 @@ val rustVmReleaseNativeLibrary = rootProject.layout.projectDirectory.file("nativ
 val rustVmCrateDir = rootProject.layout.projectDirectory.dir("native/ckl-vm")
 val computeVmBenchmarkReports = layout.buildDirectory.dir("reports/profiling")
 val computeVmBenchmarkTsv = computeVmBenchmarkReports.map { it.file("compute-vm-benchmark.tsv") }
-val computeVmBenchmarkReportTimestamp =
-    System.getProperty("ckl.benchmark.report.timestamp")
-        ?: DateTimeFormatter
-            .ofPattern("yyyyMMdd-HHmmss")
-            .withZone(ZoneOffset.UTC)
-            .format(Instant.now())
-val computeVmBenchmarkMarkdown = computeVmBenchmarkReports.map { it.file("compute-vm-benchmark-$computeVmBenchmarkReportTimestamp.md") }
 
 tasks.register<Test>("profileComputeVmBenchmark") {
     group = "verification"
@@ -60,12 +53,20 @@ tasks.register<Test>("profileComputeVmBenchmark") {
     systemProperty("ckl.benchmark.rust.crate.dir", rustVmCrateDir.asFile.absolutePath)
     systemProperty("ckl.benchmark.python.command", System.getProperty("ckl.benchmark.python.command") ?: "python3")
     systemProperty("ckl.benchmark.compute.tsv.path", computeVmBenchmarkTsv.get().asFile.absolutePath)
-    systemProperty("ckl.benchmark.compute.markdown.path", computeVmBenchmarkMarkdown.get().asFile.absolutePath)
     systemProperty("ckl.benchmark.iterations", System.getProperty("ckl.benchmark.iterations") ?: "500000")
     systemProperty("ckl.benchmark.warmup.iterations", System.getProperty("ckl.benchmark.warmup.iterations") ?: "50000")
     systemProperty("ckl.benchmark.samples", System.getProperty("ckl.benchmark.samples") ?: "5")
+    doFirst {
+        val timestamp =
+            DateTimeFormatter
+                .ofPattern("yyyyMMdd-HHmmss")
+                .withZone(ZoneOffset.UTC)
+                .format(Instant.now())
+        val markdownPath = computeVmBenchmarkReports.get().file("compute-vm-benchmark-$timestamp.md")
+        systemProperty("ckl.benchmark.compute.markdown.path", markdownPath.asFile.absolutePath)
+    }
     outputs.file(computeVmBenchmarkTsv)
-    outputs.file(computeVmBenchmarkMarkdown)
+    outputs.dir(computeVmBenchmarkReports)
 }
 
 tasks.test {
