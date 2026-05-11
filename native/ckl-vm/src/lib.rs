@@ -1,5 +1,5 @@
-pub mod display;
 pub mod device_daemon;
+pub mod display;
 pub mod filesystem;
 pub mod image;
 pub mod image_runner;
