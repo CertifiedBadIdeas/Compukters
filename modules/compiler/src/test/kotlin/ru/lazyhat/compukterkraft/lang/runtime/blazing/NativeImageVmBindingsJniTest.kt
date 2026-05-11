@@ -129,6 +129,7 @@ class NativeImageVmBindingsJniTest {
 
         assertTrue("createLowImageNative" in memberNames)
         assertTrue("runLowImageUntilSignalNative" in memberNames)
+        assertTrue("lowImageMetricsNative" in memberNames)
         assertTrue("freeLowImageNative" in memberNames)
     }
 
@@ -662,6 +663,12 @@ class NativeImageVmBindingsJniTest {
 
         try {
             assertEquals(NativeLowImageVmSignal.HaltI32(42), NativeVmBindings.runLowImageUntilSignal(handle))
+
+            val metrics = NativeVmBindings.lowImageMetrics(handle)
+            assertEquals(4, metrics.executedInstructions)
+            assertEquals(1, metrics.functionReturns)
+            assertEquals(1, metrics.opcodeCount(6))
+            assertEquals(1, metrics.opcodeCount(20))
         } finally {
             NativeVmBindings.freeLowImage(handle)
         }
