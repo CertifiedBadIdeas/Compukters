@@ -118,10 +118,9 @@ impl LowProgram {
         ))
     }
 
-    fn function(&self, function_index: usize) -> Result<&crate::low_image::Function, String> {
-        self.functions
-            .get(function_index)
-            .ok_or_else(|| format!("function index {function_index} is out of bounds"))
+    fn function(&self, function_index: usize) -> &Function {
+        // Function indices are image-validated before execution.
+        &self.functions[function_index]
     }
 
     fn validate(image: &Image) -> Result<(), String> {
@@ -298,22 +297,14 @@ impl LowImageVm {
     pub fn run_until_signal(&mut self) -> Result<LowImageSignal, String> {
         loop {
             let (function_index, instruction_pointer) = {
-                let frame = self.state.current_frame_mut()?;
+                let frame = self.state.current_frame_mut();
                 let instruction_pointer = frame.instruction_pointer;
                 frame.instruction_pointer += 1;
                 (frame.function_index, instruction_pointer)
             };
-            let function = self.program.function(function_index)?;
-            let instruction = function
-                .instructions
-                .get(instruction_pointer)
-                .ok_or_else(|| {
-                    format!(
-                        "instruction pointer {instruction_pointer} is outside function {} instruction count {}",
-                        function.name,
-                        function.instructions.len(),
-                    )
-                })?;
+            let function = self.program.function(function_index);
+            // Instruction pointers and jump targets are image-validated before execution.
+            let instruction = &function.instructions[instruction_pointer];
             self.state.instructions_since_pause += 1;
             self.state.record_instruction(instruction);
             match instruction {
@@ -407,10 +398,10 @@ impl LowImageVm {
                     };
                     self.state.write_addr(*dst, value);
                 }
-                Instruction::Jump { target } => self.state.jump(*target)?,
+                Instruction::Jump { target } => self.state.jump(*target),
                 Instruction::JumpIfFalse { cond, target } => {
                     if !self.state.read_bool(*cond) {
-                        self.state.jump(*target)?;
+                        self.state.jump(*target);
                     }
                 }
                 Instruction::ReturnI32 { src } => {
@@ -447,7 +438,7 @@ impl LowImageVm {
                     *return_register,
                     *function_index,
                     arguments,
-                )?,
+                ),
             }
             if self.state.instructions_since_pause >= self.instruction_budget {
                 self.state.instructions_since_pause = 0;
@@ -466,16 +457,12 @@ impl LowState {
         self.metrics.opcode_counts[opcode] = self.metrics.opcode_counts[opcode].saturating_add(1);
     }
 
-    fn current_frame(&self) -> Result<&LowFrame, String> {
-        self.frames
-            .last()
-            .ok_or_else(|| "low VM call stack is empty".to_string())
+    fn current_frame(&self) -> &LowFrame {
+        self.frames.last().expect("low VM call stack is empty")
     }
 
-    fn current_frame_mut(&mut self) -> Result<&mut LowFrame, String> {
-        self.frames
-            .last_mut()
-            .ok_or_else(|| "low VM call stack is empty".to_string())
+    fn current_frame_mut(&mut self) -> &mut LowFrame {
+        self.frames.last_mut().expect("low VM call stack is empty")
     }
 
     fn return_i32(&mut self, register: u16) -> Result<Option<LowImageSignal>, String> {
@@ -512,10 +499,7 @@ impl LowState {
         if self.frames.len() == 1 {
             return Ok(Some(root_signal));
         }
-        let frame = self
-            .frames
-            .pop()
-            .ok_or_else(|| "low VM call stack is empty".to_string())?;
+        let frame = self.frames.pop().expect("low VM call stack is empty");
         self.registers.truncate(frame.register_base);
         if let Some(return_register) = frame.return_register {
             self.write_raw(return_register, value);
@@ -532,10 +516,7 @@ impl LowState {
         if self.frames.len() == 1 {
             return Ok(Some(LowImageSignal::HaltUnit));
         }
-        let frame = self
-            .frames
-            .pop()
-            .ok_or_else(|| "low VM call stack is empty".to_string())?;
+        let frame = self.frames.pop().expect("low VM call stack is empty");
         self.registers.truncate(frame.register_base);
         if let Some(return_register) = frame.return_register {
             return Err(format!(
@@ -551,9 +532,9 @@ impl LowState {
         return_register: Option<u16>,
         function_index: usize,
         arguments: &[u16],
-    ) -> Result<(), String> {
-        let caller_register_base = self.current_frame()?.register_base;
-        let function = program.function(function_index)?;
+    ) {
+        let caller_register_base = self.current_frame().register_base;
+        let function = program.function(function_index);
         let register_base = self.registers.len();
         self.registers
             .resize(register_base + function.register_count, 0);
@@ -564,7 +545,6 @@ impl LowState {
         }
         self.metrics.function_calls = self.metrics.function_calls.saturating_add(1);
         self.frames.push(frame);
-        Ok(())
     }
 
     fn read_i32(&self, register: u16) -> i32 {
@@ -612,9 +592,8 @@ impl LowState {
         self.registers[index] = value;
     }
 
-    fn jump(&mut self, target: usize) -> Result<(), String> {
-        self.current_frame_mut()?.instruction_pointer = target;
-        Ok(())
+    fn jump(&mut self, target: usize) {
+        self.current_frame_mut().instruction_pointer = target;
     }
 
     fn memory_range(&self, address: u32, size: usize) -> Result<&[u8], String> {
