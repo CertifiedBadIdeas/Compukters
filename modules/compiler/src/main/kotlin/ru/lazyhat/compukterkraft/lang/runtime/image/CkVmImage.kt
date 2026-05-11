@@ -32,17 +32,12 @@ data class CkVmHostImport(
 
 data class CkVmFunction(
     val name: String,
-    val registerCount: Int,
-    val parameterCount: Int,
+    val i32RegisterCount: Int,
+    val i64RegisterCount: Int,
+    val boolRegisterCount: Int,
+    val refRegisterCount: Int,
+    val parameters: List<CkVmTypedRegister>,
     val instructions: List<CkVmInstruction>,
-    val i32RegisterCount: Int = registerCount,
-    val i64RegisterCount: Int = 0,
-    val boolRegisterCount: Int = 0,
-    val refRegisterCount: Int = 0,
-    val parameters: List<CkVmTypedRegister> =
-        List(parameterCount) { index ->
-            CkVmTypedRegister.Ref(index)
-        },
 )
 
 sealed interface CkVmTypedRegister {
@@ -66,7 +61,22 @@ sealed interface CkVmTypedRegister {
 }
 
 sealed interface CkVmInstruction {
-    data class LoadConst(
+    data class I32Const(
+        val dst: Int,
+        val constantIndex: Int,
+    ) : CkVmInstruction
+
+    data class I64Const(
+        val dst: Int,
+        val constantIndex: Int,
+    ) : CkVmInstruction
+
+    data class BoolConst(
+        val dst: Int,
+        val value: Boolean,
+    ) : CkVmInstruction
+
+    data class RefConst(
         val dst: Int,
         val constantIndex: Int,
     ) : CkVmInstruction
@@ -79,12 +89,22 @@ sealed interface CkVmInstruction {
         val dst: Int,
     ) : CkVmInstruction
 
-    data class LoadBool(
+    data class I32Move(
         val dst: Int,
-        val value: Boolean,
+        val src: Int,
     ) : CkVmInstruction
 
-    data class Move(
+    data class I64Move(
+        val dst: Int,
+        val src: Int,
+    ) : CkVmInstruction
+
+    data class BoolMove(
+        val dst: Int,
+        val src: Int,
+    ) : CkVmInstruction
+
+    data class RefMove(
         val dst: Int,
         val src: Int,
     ) : CkVmInstruction
@@ -221,21 +241,21 @@ sealed interface CkVmInstruction {
     ) : CkVmInstruction
 
     data class CallStatic(
-        val returnRegister: Int?,
+        val returnRegister: CkVmTypedRegister?,
         val functionIndex: Int,
-        val arguments: List<Int>,
+        val arguments: List<CkVmTypedRegister>,
     ) : CkVmInstruction
 
     data class Return(
-        val src: Int,
+        val src: CkVmTypedRegister,
     ) : CkVmInstruction
 
     data object ReturnUnit : CkVmInstruction
 
     data class CallHost(
-        val returnRegister: Int?,
+        val returnRegister: CkVmTypedRegister?,
         val importId: Int,
-        val arguments: List<Int>,
+        val arguments: List<CkVmTypedRegister>,
     ) : CkVmInstruction
 
     data class Yield(
@@ -244,18 +264,18 @@ sealed interface CkVmInstruction {
 
     data class Sleep(
         val dst: Int,
-        val ticks: Int,
+        val ticks: CkVmTypedRegister,
     ) : CkVmInstruction
 
     data class ConstructRecord(
         val dst: Int,
         val typeNameConstantIndex: Int,
         val fieldNameConstantIndices: List<Int>,
-        val fieldValues: List<Int>,
+        val fieldValues: List<CkVmTypedRegister>,
     ) : CkVmInstruction
 
     data class GetField(
-        val dst: Int,
+        val dst: CkVmTypedRegister,
         val receiver: Int,
         val fieldNameConstantIndex: Int,
     ) : CkVmInstruction
