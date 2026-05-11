@@ -54,7 +54,7 @@ fun LanguageFrontend.compileImage(
 object CkVmImageCompiler {
     fun compile(module: BytecodeModule): CkVmImage {
         val hostImports = collectHostImports(module)
-        val context = LoweringContext(hostImports)
+        val context = LoweringContext(module, hostImports)
         val functions = module.functions.map { function -> context.lower(function) }
         return CkVmImage(
             languageVersion = "ckl-1",
@@ -101,6 +101,7 @@ object CkVmImageCompiler {
     }
 
     private class LoweringContext(
+        private val module: BytecodeModule,
         hostImports: List<CkVmHostImport>,
     ) {
         private val hostImportIds = hostImports.associateBy { Triple(it.moduleName, it.functionName, it.parameterTypes.size) }
@@ -114,10 +115,17 @@ object CkVmImageCompiler {
         private inner class FunctionLowerer(
             private val function: BytecodeFunction,
         ) {
-            private val stack = ArrayDeque<Int>()
+            private var nextI32 = 0
+            private var nextI64 = 0
+            private var nextBool = 0
+            private var nextRef = 0
+            private val locals: List<CkVmTypedRegister> =
+                function.locals.map { local ->
+                    tempForType(local.typeName)
+                }
+            private val stack = ArrayDeque<CkVmTypedRegister>()
             private val pending = mutableListOf<PendingInstruction>()
             private val bytecodeToInstruction = MutableList(function.instructions.size + 1) { 0 }
-            private var nextRegister = function.locals.size
 
             fun lower(): CkVmFunction {
                 function.instructions.forEachIndexed { index, instruction ->
@@ -132,8 +140,11 @@ object CkVmImageCompiler {
                     }
                 return CkVmFunction(
                     name = function.name,
-                    registerCount = nextRegister,
-                    parameterCount = function.parameters.size,
+                    i32RegisterCount = nextI32,
+                    i64RegisterCount = nextI64,
+                    boolRegisterCount = nextBool,
+                    refRegisterCount = nextRef,
+                    parameters = locals.take(function.parameters.size),
                     instructions = instructions,
                 )
             }
@@ -141,32 +152,32 @@ object CkVmImageCompiler {
             private fun lowerInstruction(instruction: Instruction) {
                 when (instruction) {
                     Instruction.PushUnit -> {
-                        val dst = temp()
+                        val dst = tempRef()
                         emit(CkVmInstruction.LoadUnit(dst))
-                        stack.addLast(dst)
+                        stack.addLast(CkVmTypedRegister.Ref(dst))
                     }
 
                     Instruction.PushNull -> {
-                        val dst = temp()
+                        val dst = tempRef()
                         emit(CkVmInstruction.LoadNull(dst))
-                        stack.addLast(dst)
+                        stack.addLast(CkVmTypedRegister.Ref(dst))
                     }
 
                     is Instruction.PushBool -> {
-                        val dst = temp()
-                        emit(CkVmInstruction.LoadBool(dst, instruction.value))
-                        stack.addLast(dst)
+                        val dst = tempBool()
+                        emit(CkVmInstruction.BoolConst(dst, instruction.value))
+                        stack.addLast(CkVmTypedRegister.Bool(dst))
                     }
 
                     is Instruction.PushString -> pushConstant(CkVmConstant.StringConstant(instruction.value))
                     is Instruction.PushInt -> pushConstant(CkVmConstant.IntConstant(instruction.value))
                     is Instruction.PushLong -> pushConstant(CkVmConstant.LongConstant(instruction.value))
-                    is Instruction.LoadLocal -> stack.addLast(instruction.slot)
-                    is Instruction.StoreLocal -> emit(CkVmInstruction.Move(instruction.slot, pop("store local")))
+                    is Instruction.LoadLocal -> stack.addLast(local(instruction.slot))
+                    is Instruction.StoreLocal -> emitMove(local(instruction.slot), pop("store local"))
                     Instruction.Pop -> pop("pop")
                     is Instruction.Jump -> pending += PendingInstruction.Jump(instruction.target)
-                    is Instruction.JumpIfFalse -> pending += PendingInstruction.JumpIfFalse(pop("jump-if-false"), instruction.target)
-                    is Instruction.JumpIfTrue -> pending += PendingInstruction.JumpIfTrue(pop("jump-if-true"), instruction.target)
+                    is Instruction.JumpIfFalse -> pending += PendingInstruction.JumpIfFalse(requireBool(pop("jump-if-false"), "jump-if-false"), instruction.target)
+                    is Instruction.JumpIfTrue -> pending += PendingInstruction.JumpIfTrue(requireBool(pop("jump-if-true"), "jump-if-true"), instruction.target)
                     is Instruction.Binary -> lowerBinary(instruction.operator)
                     is Instruction.Unary -> lowerUnary(instruction.operator)
                     is Instruction.ConstructRecord -> lowerConstructRecord(instruction)
@@ -181,55 +192,78 @@ object CkVmImageCompiler {
             }
 
             private fun pushConstant(constant: CkVmConstant) {
-                val dst = temp()
-                emit(CkVmInstruction.LoadConst(dst, constantIndex(constant)))
-                stack.addLast(dst)
+                val constantIndex = constantIndex(constant)
+                when (constant) {
+                    is CkVmConstant.IntConstant -> {
+                        val dst = tempI32()
+                        emit(CkVmInstruction.I32Const(dst, constantIndex))
+                        stack.addLast(CkVmTypedRegister.I32(dst))
+                    }
+
+                    is CkVmConstant.LongConstant -> {
+                        val dst = tempI64()
+                        emit(CkVmInstruction.I64Const(dst, constantIndex))
+                        stack.addLast(CkVmTypedRegister.I64(dst))
+                    }
+
+                    is CkVmConstant.StringConstant -> {
+                        val dst = tempRef()
+                        emit(CkVmInstruction.RefConst(dst, constantIndex))
+                        stack.addLast(CkVmTypedRegister.Ref(dst))
+                    }
+                }
             }
 
             private fun lowerBinary(operator: BinaryOperator) {
                 val rhs = pop("binary rhs")
                 val lhs = pop("binary lhs")
-                val dst = temp()
-                emit(
-                    when (operator) {
-                        BinaryOperator.ADD -> CkVmInstruction.I32Add(dst, lhs, rhs)
-                        BinaryOperator.SUBTRACT -> CkVmInstruction.I32Sub(dst, lhs, rhs)
-                        BinaryOperator.MULTIPLY -> CkVmInstruction.I32Mul(dst, lhs, rhs)
-                        BinaryOperator.DIVIDE -> CkVmInstruction.I32Div(dst, lhs, rhs)
-                        BinaryOperator.EQUALS -> CkVmInstruction.I32Eq(dst, lhs, rhs)
-                        BinaryOperator.NOT_EQUALS -> CkVmInstruction.I32Ne(dst, lhs, rhs)
-                        BinaryOperator.LESS -> CkVmInstruction.I32Lt(dst, lhs, rhs)
-                        BinaryOperator.LESS_EQUALS -> CkVmInstruction.I32Le(dst, lhs, rhs)
-                        BinaryOperator.GREATER -> CkVmInstruction.I32Gt(dst, lhs, rhs)
-                        BinaryOperator.GREATER_EQUALS -> CkVmInstruction.I32Ge(dst, lhs, rhs)
-                        BinaryOperator.AND -> CkVmInstruction.BoolAnd(dst, lhs, rhs)
-                        BinaryOperator.OR -> CkVmInstruction.BoolOr(dst, lhs, rhs)
-                        BinaryOperator.BIT_AND -> CkVmInstruction.I32BitAnd(dst, lhs, rhs)
-                        BinaryOperator.BIT_OR -> CkVmInstruction.I32BitOr(dst, lhs, rhs)
-                        BinaryOperator.BIT_XOR -> CkVmInstruction.I32BitXor(dst, lhs, rhs)
-                        BinaryOperator.SHIFT_LEFT -> CkVmInstruction.I32Shl(dst, lhs, rhs)
-                        BinaryOperator.SHIFT_RIGHT -> CkVmInstruction.I32Shr(dst, lhs, rhs)
-                    },
-                )
-                stack.addLast(dst)
+                when (operator) {
+                    BinaryOperator.ADD -> emitI32Binary(lhs, rhs, CkVmInstruction::I32Add)
+                    BinaryOperator.SUBTRACT -> emitI32Binary(lhs, rhs, CkVmInstruction::I32Sub)
+                    BinaryOperator.MULTIPLY -> emitI32Binary(lhs, rhs, CkVmInstruction::I32Mul)
+                    BinaryOperator.DIVIDE -> emitI32Binary(lhs, rhs, CkVmInstruction::I32Div)
+                    BinaryOperator.BIT_AND -> emitI32Binary(lhs, rhs, CkVmInstruction::I32BitAnd)
+                    BinaryOperator.BIT_OR -> emitI32Binary(lhs, rhs, CkVmInstruction::I32BitOr)
+                    BinaryOperator.BIT_XOR -> emitI32Binary(lhs, rhs, CkVmInstruction::I32BitXor)
+                    BinaryOperator.SHIFT_LEFT -> emitI32Binary(lhs, rhs, CkVmInstruction::I32Shl)
+                    BinaryOperator.SHIFT_RIGHT -> emitI32Binary(lhs, rhs, CkVmInstruction::I32Shr)
+                    BinaryOperator.EQUALS -> emitI32Compare(lhs, rhs, CkVmInstruction::I32Eq)
+                    BinaryOperator.NOT_EQUALS -> emitI32Compare(lhs, rhs, CkVmInstruction::I32Ne)
+                    BinaryOperator.LESS -> emitI32Compare(lhs, rhs, CkVmInstruction::I32Lt)
+                    BinaryOperator.LESS_EQUALS -> emitI32Compare(lhs, rhs, CkVmInstruction::I32Le)
+                    BinaryOperator.GREATER -> emitI32Compare(lhs, rhs, CkVmInstruction::I32Gt)
+                    BinaryOperator.GREATER_EQUALS -> emitI32Compare(lhs, rhs, CkVmInstruction::I32Ge)
+                    BinaryOperator.AND -> emitBoolBinary(lhs, rhs, CkVmInstruction::BoolAnd)
+                    BinaryOperator.OR -> emitBoolBinary(lhs, rhs, CkVmInstruction::BoolOr)
+                }
             }
 
             private fun lowerUnary(operator: UnaryOperator) {
                 val src = pop("unary operand")
-                val dst = temp()
-                emit(
-                    when (operator) {
-                        UnaryOperator.NEGATE -> CkVmInstruction.I32Neg(dst, src)
-                        UnaryOperator.NOT -> CkVmInstruction.BoolNot(dst, src)
-                        UnaryOperator.BIT_NOT -> CkVmInstruction.I32BitNot(dst, src)
-                    },
-                )
-                stack.addLast(dst)
+                when (operator) {
+                    UnaryOperator.NEGATE -> {
+                        val dst = tempI32()
+                        emit(CkVmInstruction.I32Neg(dst, requireI32(src, "unary minus")))
+                        stack.addLast(CkVmTypedRegister.I32(dst))
+                    }
+
+                    UnaryOperator.NOT -> {
+                        val dst = tempBool()
+                        emit(CkVmInstruction.BoolNot(dst, requireBool(src, "boolean not")))
+                        stack.addLast(CkVmTypedRegister.Bool(dst))
+                    }
+
+                    UnaryOperator.BIT_NOT -> {
+                        val dst = tempI32()
+                        emit(CkVmInstruction.I32BitNot(dst, requireI32(src, "bit not")))
+                        stack.addLast(CkVmTypedRegister.I32(dst))
+                    }
+                }
             }
 
             private fun lowerConstructRecord(instruction: Instruction.ConstructRecord) {
                 val values = popArguments(instruction.fieldNames.size)
-                val dst = temp()
+                val dst = tempRef()
                 emit(
                     CkVmInstruction.ConstructRecord(
                         dst = dst,
@@ -241,25 +275,25 @@ object CkVmImageCompiler {
                         fieldValues = values,
                     ),
                 )
-                stack.addLast(dst)
+                stack.addLast(CkVmTypedRegister.Ref(dst))
             }
 
             private fun lowerGetField(instruction: Instruction.GetField) {
-                val receiver = pop("get field receiver")
-                val dst = temp()
+                val receiver = requireRef(pop("get field receiver"), "get field receiver")
+                val dst = tempRef()
                 emit(
                     CkVmInstruction.GetField(
-                        dst = dst,
+                        dst = CkVmTypedRegister.Ref(dst),
                         receiver = receiver,
                         fieldNameConstantIndex = constantIndex(CkVmConstant.StringConstant(instruction.fieldName)),
                     ),
                 )
-                stack.addLast(dst)
+                stack.addLast(CkVmTypedRegister.Ref(dst))
             }
 
             private fun lowerCallFunction(instruction: Instruction.CallFunction) {
                 val arguments = popArguments(instruction.argumentCount)
-                val dst = temp()
+                val dst = tempForType(module.functions[instruction.functionIndex].returnType)
                 emit(CkVmInstruction.CallStatic(dst, instruction.functionIndex, arguments))
                 stack.addLast(dst)
             }
@@ -272,7 +306,7 @@ object CkVmImageCompiler {
 
                 val arguments = popArguments(instruction.argumentCount)
                 val import = hostImportIds.getValue(Triple(instruction.moduleName, instruction.functionName, instruction.argumentCount))
-                val dst = temp()
+                val dst = tempForType(import.returnType)
                 emit(CkVmInstruction.CallHost(dst, import.id, arguments))
                 stack.addLast(dst)
             }
@@ -280,16 +314,16 @@ object CkVmImageCompiler {
             private fun lowerGlobalBuiltin(instruction: Instruction.CallBuiltin) {
                 when {
                     instruction.functionName == "yield" && instruction.argumentCount == 0 -> {
-                        val dst = temp()
+                        val dst = tempRef()
                         emit(CkVmInstruction.Yield(dst))
-                        stack.addLast(dst)
+                        stack.addLast(CkVmTypedRegister.Ref(dst))
                     }
 
                     instruction.functionName == "sleep" && instruction.argumentCount == 1 -> {
                         val ticks = pop("sleep ticks")
-                        val dst = temp()
+                        val dst = tempRef()
                         emit(CkVmInstruction.Sleep(dst, ticks))
-                        stack.addLast(dst)
+                        stack.addLast(CkVmTypedRegister.Ref(dst))
                     }
 
                     else -> throw UnsupportedOperationException(
@@ -307,14 +341,96 @@ object CkVmImageCompiler {
                 }
             }
 
-            private fun popArguments(argumentCount: Int): List<Int> =
+            private fun popArguments(argumentCount: Int): List<CkVmTypedRegister> =
                 List(argumentCount) { pop("call argument") }.asReversed()
 
-            private fun pop(context: String): Int =
+            private fun pop(context: String): CkVmTypedRegister =
                 stack.removeLastOrNull()
                     ?: throw IllegalStateException("CkVmImage register backend stack underflow while lowering $context in ${function.name}.")
 
-            private fun temp(): Int = nextRegister++
+            private fun local(slot: Int): CkVmTypedRegister =
+                locals.getOrNull(slot)
+                    ?: throw IllegalStateException("CkVmImage register backend local slot $slot is outside ${function.name}.")
+
+            private fun tempForType(typeName: String): CkVmTypedRegister =
+                when (typeName.removeSuffix("?")) {
+                    "Int" -> CkVmTypedRegister.I32(tempI32())
+                    "Long" -> CkVmTypedRegister.I64(tempI64())
+                    "Bool" -> CkVmTypedRegister.Bool(tempBool())
+                    else -> CkVmTypedRegister.Ref(tempRef())
+                }
+
+            private fun tempI32(): Int = nextI32++
+
+            private fun tempI64(): Int = nextI64++
+
+            private fun tempBool(): Int = nextBool++
+
+            private fun tempRef(): Int = nextRef++
+
+            private fun emitMove(
+                dst: CkVmTypedRegister,
+                src: CkVmTypedRegister,
+            ) {
+                when {
+                    dst is CkVmTypedRegister.I32 && src is CkVmTypedRegister.I32 -> emit(CkVmInstruction.I32Move(dst.index, src.index))
+                    dst is CkVmTypedRegister.I64 && src is CkVmTypedRegister.I64 -> emit(CkVmInstruction.I64Move(dst.index, src.index))
+                    dst is CkVmTypedRegister.Bool && src is CkVmTypedRegister.Bool -> emit(CkVmInstruction.BoolMove(dst.index, src.index))
+                    dst is CkVmTypedRegister.Ref && src is CkVmTypedRegister.Ref -> emit(CkVmInstruction.RefMove(dst.index, src.index))
+                    else -> throw UnsupportedOperationException("CkVmImage register backend cannot move $src into $dst in ${function.name}.")
+                }
+            }
+
+            private fun emitI32Binary(
+                lhs: CkVmTypedRegister,
+                rhs: CkVmTypedRegister,
+                factory: (Int, Int, Int) -> CkVmInstruction,
+            ) {
+                val dst = tempI32()
+                emit(factory(dst, requireI32(lhs, "i32 binary lhs"), requireI32(rhs, "i32 binary rhs")))
+                stack.addLast(CkVmTypedRegister.I32(dst))
+            }
+
+            private fun emitI32Compare(
+                lhs: CkVmTypedRegister,
+                rhs: CkVmTypedRegister,
+                factory: (Int, Int, Int) -> CkVmInstruction,
+            ) {
+                val dst = tempBool()
+                emit(factory(dst, requireI32(lhs, "i32 comparison lhs"), requireI32(rhs, "i32 comparison rhs")))
+                stack.addLast(CkVmTypedRegister.Bool(dst))
+            }
+
+            private fun emitBoolBinary(
+                lhs: CkVmTypedRegister,
+                rhs: CkVmTypedRegister,
+                factory: (Int, Int, Int) -> CkVmInstruction,
+            ) {
+                val dst = tempBool()
+                emit(factory(dst, requireBool(lhs, "bool binary lhs"), requireBool(rhs, "bool binary rhs")))
+                stack.addLast(CkVmTypedRegister.Bool(dst))
+            }
+
+            private fun requireI32(
+                register: CkVmTypedRegister,
+                context: String,
+            ): Int =
+                (register as? CkVmTypedRegister.I32)?.index
+                    ?: throw UnsupportedOperationException("CkVmImage register backend requires I32 for $context but found $register in ${function.name}.")
+
+            private fun requireBool(
+                register: CkVmTypedRegister,
+                context: String,
+            ): Int =
+                (register as? CkVmTypedRegister.Bool)?.index
+                    ?: throw UnsupportedOperationException("CkVmImage register backend requires Bool for $context but found $register in ${function.name}.")
+
+            private fun requireRef(
+                register: CkVmTypedRegister,
+                context: String,
+            ): Int =
+                (register as? CkVmTypedRegister.Ref)?.index
+                    ?: throw UnsupportedOperationException("CkVmImage register backend requires Ref for $context but found $register in ${function.name}.")
 
             private fun emit(instruction: CkVmInstruction) {
                 pending += PendingInstruction.Resolved(instruction)

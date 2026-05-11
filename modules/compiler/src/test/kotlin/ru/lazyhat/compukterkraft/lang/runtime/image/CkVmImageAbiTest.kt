@@ -33,7 +33,7 @@ class CkVmImageAbiTest {
             byteArrayOf('C'.code.toByte(), 'K'.code.toByte(), 'I'.code.toByte(), 'M'.code.toByte()),
             bytes.copyOfRange(0, 4),
         )
-        assertEquals(2, bytes[4].toInt())
+        assertEquals(3, bytes[4].toInt())
     }
 
     @Test
@@ -49,7 +49,7 @@ class CkVmImageAbiTest {
         val reader = TestReader(bytes)
 
         assertEquals("CKIM", reader.ascii(4))
-        assertEquals(2, reader.u8())
+        assertEquals(3, reader.u8())
         assertEquals("ckl-1", reader.string())
         assertEquals(3, reader.i32())
         assertEquals(1, reader.u8())
@@ -67,11 +67,14 @@ class CkVmImageAbiTest {
         assertEquals(0, reader.i32())
         assertEquals(1, reader.i32())
         assertEquals("main", reader.string())
-        assertEquals(4, reader.u16())
+        assertEquals(3, reader.u16())
+        assertEquals(0, reader.u16())
+        assertEquals(0, reader.u16())
         assertEquals(1, reader.u16())
+        assertEquals(listOf(CkVmTypedRegister.I32(0)), reader.typedRegisterList())
         assertEquals(4, reader.i32())
-        assertEquals(CkVmImageAbi.InstructionTags.LOAD_CONST, reader.u8())
-        assertEquals(1, reader.u16())
+        assertEquals(CkVmImageAbi.InstructionTags.REF_CONST, reader.u8())
+        assertEquals(0, reader.u16())
         assertEquals(0, reader.i32())
         assertEquals(CkVmImageAbi.InstructionTags.I32_ADD, reader.u8())
         assertEquals(2, reader.u16())
@@ -79,9 +82,9 @@ class CkVmImageAbiTest {
         assertEquals(1, reader.u16())
         assertEquals(CkVmImageAbi.InstructionTags.CALL_HOST, reader.u8())
         assertEquals(1, reader.u8())
-        assertEquals(3, reader.u16())
+        assertEquals(CkVmTypedRegister.Ref(0), reader.typedRegister())
         assertEquals(42, reader.i32())
-        assertEquals(listOf(2), reader.registerList())
+        assertEquals(listOf(CkVmTypedRegister.I32(2)), reader.typedRegisterList())
         assertEquals(CkVmImageAbi.InstructionTags.RETURN_UNIT, reader.u8())
         assertEquals(bytes.size, reader.offset)
     }
@@ -103,11 +106,15 @@ class CkVmImageAbiTest {
                     listOf(
                         CkVmFunction(
                             name = "main",
-                            registerCount = 1,
-                            parameterCount = 0,
-                            instructions = listOf(CkVmInstruction.LoadUnit(1)),
+                            i32RegisterCount = 1,
+                            i64RegisterCount = 0,
+                            boolRegisterCount = 0,
+                            refRegisterCount = 0,
+                            parameters = emptyList(),
+                            instructions = listOf(CkVmInstruction.I32Const(1, 0)),
                         ),
                     ),
+                constants = listOf(CkVmConstant.IntConstant(0)),
             )
 
         assertFailsWith<IllegalArgumentException> {
@@ -137,7 +144,18 @@ class CkVmImageAbiTest {
         CkVmImage(
             languageVersion = "ckl-1",
             entryFunctionIndex = 0,
-            functions = listOf(CkVmFunction("main", registerCount = 0, parameterCount = 0, instructions = emptyList())),
+            functions =
+                listOf(
+                    CkVmFunction(
+                        name = "main",
+                        i32RegisterCount = 0,
+                        i64RegisterCount = 0,
+                        boolRegisterCount = 0,
+                        refRegisterCount = 0,
+                        parameters = emptyList(),
+                        instructions = emptyList(),
+                    ),
+                ),
         )
 
     private fun representativeImage(): CkVmImage =
@@ -155,13 +173,16 @@ class CkVmImageAbiTest {
                 listOf(
                     CkVmFunction(
                         name = "main",
-                        registerCount = 4,
-                        parameterCount = 1,
+                        i32RegisterCount = 3,
+                        i64RegisterCount = 0,
+                        boolRegisterCount = 0,
+                        refRegisterCount = 1,
+                        parameters = listOf(CkVmTypedRegister.I32(0)),
                         instructions =
                             listOf(
-                                CkVmInstruction.LoadConst(1, 0),
+                                CkVmInstruction.RefConst(0, 0),
                                 CkVmInstruction.I32Add(2, 0, 1),
-                                CkVmInstruction.CallHost(3, 42, listOf(2)),
+                                CkVmInstruction.CallHost(CkVmTypedRegister.Ref(0), 42, listOf(CkVmTypedRegister.I32(2))),
                                 CkVmInstruction.ReturnUnit,
                             ),
                     ),
@@ -197,6 +218,15 @@ class CkVmImageAbiTest {
 
         fun stringList(): List<String> = List(i32()) { string() }
 
-        fun registerList(): List<Int> = List(i32()) { u16() }
+        fun typedRegister(): CkVmTypedRegister =
+            when (val tag = u8()) {
+                CkVmImageAbi.RegisterTags.I32 -> CkVmTypedRegister.I32(u16())
+                CkVmImageAbi.RegisterTags.I64 -> CkVmTypedRegister.I64(u16())
+                CkVmImageAbi.RegisterTags.BOOL -> CkVmTypedRegister.Bool(u16())
+                CkVmImageAbi.RegisterTags.REF -> CkVmTypedRegister.Ref(u16())
+                else -> error("Unexpected register tag $tag")
+            }
+
+        fun typedRegisterList(): List<CkVmTypedRegister> = List(i32()) { typedRegister() }
     }
 }

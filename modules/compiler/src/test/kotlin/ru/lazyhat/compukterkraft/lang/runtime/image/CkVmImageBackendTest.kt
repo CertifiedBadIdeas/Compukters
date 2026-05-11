@@ -39,11 +39,11 @@ class CkVmImageBackendTest {
         assertEquals("ckl-1", image.languageVersion)
         assertEquals(0, image.entryFunctionIndex)
         assertEquals("main.ck#main", function.name)
-        assertEquals(0, function.parameterCount)
+        assertEquals(0, function.parameters.size)
         assertEquals(
             listOf(
                 CkVmInstruction.LoadUnit(0),
-                CkVmInstruction.Return(0),
+                CkVmInstruction.Return(CkVmTypedRegister.Ref(0)),
             ),
             function.instructions,
         )
@@ -78,7 +78,7 @@ class CkVmImageBackendTest {
         assertTrue(mainFunction.refRegisterCount >= 0)
         assertTrue(mainFunction.instructions.any { instruction -> instruction is CkVmInstruction.I32Mul })
         assertTrue(mainFunction.instructions.any { instruction -> instruction is CkVmInstruction.I32Add })
-        assertTrue(mainFunction.instructions.any { instruction -> instruction is CkVmInstruction.Move && instruction.dst == 0 })
+        assertTrue(mainFunction.instructions.any { instruction -> instruction is CkVmInstruction.I32Move && instruction.dst == 0 })
     }
 
     @Test
@@ -147,7 +147,7 @@ class CkVmImageBackendTest {
         val call = mainFunction.instructions.filterIsInstance<CkVmInstruction.CallStatic>().single()
 
         assertTrue(addIndex >= 0)
-        assertEquals(2, addFunction.parameterCount)
+        assertEquals(2, addFunction.parameters.size)
         assertTrue(addFunction.instructions.any { instruction -> instruction is CkVmInstruction.I32Add })
         assertEquals(addIndex, call.functionIndex)
         assertEquals(2, call.arguments.size)
