@@ -19,9 +19,6 @@
 
 package ru.lazyhat.compukterkraft.lang.runtime.blazing
 
-import ru.lazyhat.compukterkraft.lang.frontend.LanguageFrontend
-import ru.lazyhat.compukterkraft.lang.runtime.image.CkVmImageAbi
-import ru.lazyhat.compukterkraft.lang.runtime.image.compileImage
 import ru.lazyhat.compukterkraft.lang.runtime.image.low.CkLowVmFunction
 import ru.lazyhat.compukterkraft.lang.runtime.image.low.CkLowVmImage
 import ru.lazyhat.compukterkraft.lang.runtime.image.low.CkLowVmImageAbi
@@ -34,12 +31,10 @@ import kotlin.system.measureNanoTime
 internal data class ComputeVmBenchmarkRunResult(
     val checksum: Int,
     val bestNanos: Long,
-    val ckVmMetrics: NativeImageVmMetrics = NativeImageVmMetrics.EMPTY,
 )
 
 private data class ComputeVmBenchmarkSampleResult(
     val checksum: Int,
-    val ckVmMetrics: NativeImageVmMetrics = NativeImageVmMetrics.EMPTY,
 )
 
 internal interface ComputeVmBenchmarkWorkloadRunner {
@@ -61,83 +56,10 @@ internal interface ComputeVmBenchmarkWorkloadRunner {
     ): ComputeVmBenchmarkRunResult
 }
 
-internal class CkVmComputeBenchmarkRunner(
-    private val libraryPath: String,
-) : ComputeVmBenchmarkWorkloadRunner {
-    override val name: String = "CK VM"
-
-    override fun run(
-        workload: ComputeVmBenchmarkWorkloadSpec,
-        iterations: Int,
-        samples: Int,
-    ): ComputeVmBenchmarkRunResult {
-        val image = compileWorkload(workload, iterations)
-        return bestOf(samples, workload) {
-            runImageWithMetrics(image)
-        }
-    }
-
-    private fun compileWorkload(
-        workload: ComputeVmBenchmarkWorkloadSpec,
-        iterations: Int,
-    ): ByteArray {
-        val artifact =
-            LanguageFrontend()
-                .compileImage("${workload.name}.ck", workload.source(iterations))
-        val image =
-            artifact.image
-                ?: error(
-                    "Compute benchmark ${workload.name} CKL source did not compile:\n" +
-                        artifact.bytecode.analysis.diagnostics
-                            .joinToString("\n"),
-                )
-        return CkVmImageAbi.encode(image)
-    }
-
-    private fun runImageWithMetrics(image: ByteArray): ComputeVmBenchmarkSampleResult {
-        val handle = NativeVmBindings.createImage(libraryPath, image, INSTRUCTION_BUDGET)
-        try {
-            while (true) {
-                when (val signal = NativeVmSignal.decode(NativeVmBindings.runImageUntilSignal(handle))) {
-                    is NativeVmSignal.Halt -> {
-                        val checksum =
-                            when (val value = signal.value) {
-                                is NativeVmValue.IntValue -> value.value
-                                else -> error("Compute benchmark halted with non-Int value: $value")
-                            }
-                        return ComputeVmBenchmarkSampleResult(
-                            checksum = checksum,
-                            ckVmMetrics = NativeVmBindings.imageMetrics(handle),
-                        )
-                    }
-
-                    NativeVmSignal.Pause -> {
-                        Unit
-                    }
-
-                    is NativeVmSignal.Error -> {
-                        error(signal.message)
-                    }
-
-                    else -> {
-                        error("Compute benchmark unexpectedly yielded signal: $signal")
-                    }
-                }
-            }
-        } finally {
-            NativeVmBindings.freeImage(handle)
-        }
-    }
-
-    private companion object {
-        const val INSTRUCTION_BUDGET = Int.MAX_VALUE
-    }
-}
-
 internal class LowVmComputeBenchmarkRunner(
     private val libraryPath: String,
-) {
-    val name: String = "Low-level VM"
+) : ComputeVmBenchmarkWorkloadRunner {
+    override val name: String = "Low-level VM"
 
     fun supports(workload: ComputeVmBenchmarkWorkloadSpec): Boolean =
         workload.name == "integer-mix" ||
@@ -145,7 +67,7 @@ internal class LowVmComputeBenchmarkRunner(
             workload.name == "branch-div" ||
             workload.name == "recursive-fib"
 
-    fun warmUp(
+    override fun warmUp(
         workload: ComputeVmBenchmarkWorkloadSpec,
         iterations: Int,
     ) {
@@ -154,7 +76,7 @@ internal class LowVmComputeBenchmarkRunner(
         }
     }
 
-    fun run(
+    override fun run(
         workload: ComputeVmBenchmarkWorkloadSpec,
         iterations: Int,
         samples: Int,
@@ -576,7 +498,6 @@ private fun bestOf(
 ): ComputeVmBenchmarkRunResult {
     require(samples > 0) { "Benchmark samples must be positive." }
     var checksum = 0
-    var bestMetrics = NativeImageVmMetrics.EMPTY
     var bestNanos = Long.MAX_VALUE
     repeat(samples) { sampleIndex ->
         var sampleResult = ComputeVmBenchmarkSampleResult(0)
@@ -593,10 +514,9 @@ private fun bestOf(
         }
         if (elapsed < bestNanos) {
             bestNanos = elapsed
-            bestMetrics = sampleResult.ckVmMetrics
         }
     }
-    return ComputeVmBenchmarkRunResult(checksum, bestNanos, bestMetrics)
+    return ComputeVmBenchmarkRunResult(checksum, bestNanos)
 }
 
 private fun runProcessBackedBaseline(

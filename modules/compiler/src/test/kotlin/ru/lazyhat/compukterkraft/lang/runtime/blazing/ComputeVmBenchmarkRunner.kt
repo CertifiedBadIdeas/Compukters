@@ -35,7 +35,6 @@ internal object ComputeVmBenchmarkRunner {
         require(warmupIterations >= 0) { "Benchmark warmup iterations must be non-negative." }
         require(samples > 0) { "Benchmark samples must be positive." }
 
-        val ckVmRunner = CkVmComputeBenchmarkRunner(libraryPath)
         val lowVmRunner = LowVmComputeBenchmarkRunner(libraryPath)
         val kotlinJvmRunner = KotlinJvmComputeBenchmarkRunner
         val pythonRunner = PythonComputeBenchmarkRunner(pythonCommand, pythonScriptPath)
@@ -47,7 +46,6 @@ internal object ComputeVmBenchmarkRunner {
                 ComputeVmBenchmarkWorkloads.all.map { workload ->
                     runWorkload(
                         workload = workload,
-                        ckVmRunner = ckVmRunner,
                         lowVmRunner = lowVmRunner,
                         kotlinJvmRunner = kotlinJvmRunner,
                         pythonRunner = pythonRunner,
@@ -62,7 +60,6 @@ internal object ComputeVmBenchmarkRunner {
 
     private fun runWorkload(
         workload: ComputeVmBenchmarkWorkloadSpec,
-        ckVmRunner: ComputeVmBenchmarkWorkloadRunner,
         lowVmRunner: LowVmComputeBenchmarkRunner,
         kotlinJvmRunner: ComputeVmBenchmarkWorkloadRunner,
         pythonRunner: ComputeVmBenchmarkWorkloadRunner,
@@ -71,47 +68,33 @@ internal object ComputeVmBenchmarkRunner {
         warmupIterations: Int,
         samples: Int,
     ): ComputeVmBenchmarkWorkloadReport {
-        val runners = listOf(ckVmRunner, kotlinJvmRunner, pythonRunner, rustNativeRunner)
+        val runners = listOf(lowVmRunner, kotlinJvmRunner, pythonRunner, rustNativeRunner)
         runners.forEach { runner -> runner.warmUp(workload, warmupIterations) }
-        lowVmRunner.warmUp(workload, warmupIterations)
 
-        val ckVm = ckVmRunner.run(workload, iterations, samples)
-        val lowVm =
-            if (lowVmRunner.supports(workload)) {
-                lowVmRunner.run(workload, iterations, samples)
-            } else {
-                null
-            }
-        if (lowVm != null) {
-            check(lowVm.checksum == ckVm.checksum) {
-                "${lowVmRunner.name} ${workload.name} checksum ${lowVm.checksum} does not match CK VM checksum ${ckVm.checksum}"
-            }
-        }
+        val lowVm = lowVmRunner.run(workload, iterations, samples)
         val kotlinJvm = kotlinJvmRunner.run(workload, iterations, samples)
-        check(kotlinJvm.checksum == ckVm.checksum) {
-            "${kotlinJvmRunner.name} ${workload.name} checksum ${kotlinJvm.checksum} does not match CK VM checksum ${ckVm.checksum}"
+        check(kotlinJvm.checksum == lowVm.checksum) {
+            "${kotlinJvmRunner.name} ${workload.name} checksum ${kotlinJvm.checksum} does not match ${lowVmRunner.name} checksum ${lowVm.checksum}"
         }
 
         val python = pythonRunner.run(workload, iterations, samples)
-        check(python.checksum == ckVm.checksum) {
-            "${pythonRunner.name} ${workload.name} checksum ${python.checksum} does not match CK VM checksum ${ckVm.checksum}"
+        check(python.checksum == lowVm.checksum) {
+            "${pythonRunner.name} ${workload.name} checksum ${python.checksum} does not match ${lowVmRunner.name} checksum ${lowVm.checksum}"
         }
 
         val rustNative = rustNativeRunner.run(workload, iterations, samples)
-        check(rustNative.checksum == ckVm.checksum) {
-            "${rustNativeRunner.name} ${workload.name} checksum ${rustNative.checksum} does not match CK VM checksum ${ckVm.checksum}"
+        check(rustNative.checksum == lowVm.checksum) {
+            "${rustNativeRunner.name} ${workload.name} checksum ${rustNative.checksum} does not match ${lowVmRunner.name} checksum ${lowVm.checksum}"
         }
 
         return ComputeVmBenchmarkWorkloadReport(
             workloadName = workload.name,
             iterations = iterations,
-            checksum = ckVm.checksum,
-            ckVmBestNanos = ckVm.bestNanos,
-            lowVmBestNanos = lowVm?.bestNanos,
+            checksum = lowVm.checksum,
+            lowVmBestNanos = lowVm.bestNanos,
             kotlinJvmBestNanos = kotlinJvm.bestNanos,
             pythonBestNanos = python.bestNanos,
             rustNativeBestNanos = rustNative.bestNanos,
-            ckVmMetrics = ckVm.ckVmMetrics,
         )
     }
 }

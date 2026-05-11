@@ -30,47 +30,26 @@ internal data class ComputeVmBenchmarkReport(
     fun toTsv(): String =
         buildString {
             appendLine(
-                "workload\titerations\tchecksum\tsamples\tck_vm_best_ns\tlow_vm_best_ns\tkotlin_jvm_best_ns\tpython_best_ns\trust_native_best_ns\tck_vm_iters_per_sec\tlow_vm_iters_per_sec\tkotlin_jvm_iters_per_sec\tpython_iters_per_sec\trust_native_iters_per_sec\tck_vm_vs_low_vm_slowdown\tck_vm_vs_kotlin_slowdown\tck_vm_vs_python_slowdown\tck_vm_vs_rust_slowdown\tlow_vm_vs_kotlin_slowdown\tlow_vm_vs_rust_slowdown\tck_vm_instructions\tck_vm_ns_per_instruction\tck_vm_instructions_per_iteration\tck_vm_value_clones\tck_vm_register_reads\tck_vm_register_writes\tck_vm_function_calls\tck_vm_function_returns\tck_vm_host_call_attempts\tck_vm_native_host_calls\tck_vm_jvm_host_signals\tck_vm_pauses\tck_vm_string_allocations\tck_vm_record_allocations\tck_vm_opcode_counts",
+                "workload\titerations\tchecksum\tsamples\tlow_vm_best_ns\tkotlin_jvm_best_ns\tpython_best_ns\trust_native_best_ns\tlow_vm_iters_per_sec\tkotlin_jvm_iters_per_sec\tpython_iters_per_sec\trust_native_iters_per_sec\tlow_vm_vs_kotlin_slowdown\tlow_vm_vs_python_slowdown\tlow_vm_vs_rust_slowdown",
             )
             workloads.forEach { workload ->
-                val metrics = workload.ckVmMetrics
                 appendLine(
                     listOf(
                         workload.workloadName,
                         workload.iterations,
                         workload.checksum,
                         samples,
-                        workload.ckVmBestNanos,
-                        formatNullableInteger(workload.lowVmBestNanos),
+                        workload.lowVmBestNanos,
                         workload.kotlinJvmBestNanos,
                         workload.pythonBestNanos,
                         workload.rustNativeBestNanos,
-                        formatPlain(workload.ckVmIterationsPerSecond),
-                        formatNullablePlain(workload.lowVmIterationsPerSecond),
+                        formatPlain(workload.lowVmIterationsPerSecond),
                         formatPlain(workload.kotlinJvmIterationsPerSecond),
                         formatPlain(workload.pythonIterationsPerSecond),
                         formatPlain(workload.rustNativeIterationsPerSecond),
-                        formatNullablePlain(workload.ckVmVsLowVmSlowdown),
-                        formatPlain(workload.ckVmVsKotlinSlowdown),
-                        formatPlain(workload.ckVmVsPythonSlowdown),
-                        formatPlain(workload.ckVmVsRustSlowdown),
-                        formatNullablePlain(workload.lowVmVsKotlinSlowdown),
-                        formatNullablePlain(workload.lowVmVsRustSlowdown),
-                        metrics.executedInstructions,
-                        formatPlain(workload.ckVmNanosPerInstruction),
-                        formatPlain(workload.ckVmInstructionsPerIteration),
-                        metrics.valueClones,
-                        metrics.registerReads,
-                        metrics.registerWrites,
-                        metrics.functionCalls,
-                        metrics.functionReturns,
-                        metrics.hostCallAttempts,
-                        metrics.nativeHostCalls,
-                        metrics.jvmHostCallSignals,
-                        metrics.pauseSignals,
-                        metrics.stringAllocations,
-                        metrics.recordAllocations,
-                        metrics.opcodeSummary(),
+                        formatPlain(workload.lowVmVsKotlinSlowdown),
+                        formatPlain(workload.lowVmVsPythonSlowdown),
+                        formatPlain(workload.lowVmVsRustSlowdown),
                     ).joinToString("\t"),
                 )
             }
@@ -81,43 +60,21 @@ internal data class ComputeVmBenchmarkReport(
             appendLine("# CKL Compute VM Benchmark")
             appendLine()
             appendLine(
-                "CPU-only workloads. The CKL VM runs are timed through the native image VM, with the same work measured through the low-level CKIM v4 VM, Kotlin/JVM, Python, and optimized native Rust baselines.",
+                "CPU-only workloads. The CKL low-level CKIM v4 VM is the measured VM baseline; Kotlin/JVM, Python, and optimized native Rust are comparison baselines.",
             )
             appendLine()
             appendLine(
-                "| Workload | Iterations | Checksum | CK VM iter/s | Low-level VM iter/s | Kotlin/JVM iter/s | Python iter/s | Rust native iter/s | CK VM vs Low VM | CK VM vs Kotlin | Low VM vs Kotlin | CK VM vs Rust | Low VM vs Rust |",
+                "| Workload | Iterations | Checksum | Low-level VM iter/s | Kotlin/JVM iter/s | Python iter/s | Rust native iter/s | Low VM vs Kotlin | Low VM vs Python | Low VM vs Rust |",
             )
-            appendLine("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
+            appendLine("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
             workloads.forEach { workload ->
                 appendLine(
                     "| ${workload.workloadName} | ${formatInteger(workload.iterations)} | ${workload.checksum} | " +
-                        "${formatGrouped(workload.ckVmIterationsPerSecond)} | ${formatNullableGrouped(workload.lowVmIterationsPerSecond)} | " +
+                        "${formatGrouped(workload.lowVmIterationsPerSecond)} | " +
                         "${formatGrouped(workload.kotlinJvmIterationsPerSecond)} | " +
                         "${formatGrouped(workload.pythonIterationsPerSecond)} | ${formatGrouped(workload.rustNativeIterationsPerSecond)} | " +
-                        "${formatNullableRatio(workload.ckVmVsLowVmSlowdown)} | ${formatPlain(workload.ckVmVsKotlinSlowdown)}x | " +
-                        "${formatNullableRatio(workload.lowVmVsKotlinSlowdown)} | ${formatPlain(workload.ckVmVsRustSlowdown)}x | " +
-                        "${formatNullableRatio(workload.lowVmVsRustSlowdown)} |",
-                )
-            }
-            appendLine()
-            appendLine("## CK VM Internal Counters")
-            appendLine()
-            appendLine(
-                "| Workload | Instructions | ns/instruction | Instructions/iteration | Value clones | Register reads | Register writes | Function calls | Function returns | Host call attempts | Native host calls | JVM host signals | Pauses | String allocations | Record allocations | Opcode counts |",
-            )
-            appendLine("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |")
-            workloads.forEach { workload ->
-                val metrics = workload.ckVmMetrics
-                appendLine(
-                    "| ${workload.workloadName} | ${formatInteger(metrics.executedInstructions)} | " +
-                        "${formatPlain(workload.ckVmNanosPerInstruction)} | " +
-                        "${formatPlain(workload.ckVmInstructionsPerIteration)} | " +
-                        "${formatInteger(metrics.valueClones)} | ${formatInteger(metrics.registerReads)} | " +
-                        "${formatInteger(metrics.registerWrites)} | ${formatInteger(metrics.functionCalls)} | " +
-                        "${formatInteger(metrics.functionReturns)} | ${formatInteger(metrics.hostCallAttempts)} | " +
-                        "${formatInteger(metrics.nativeHostCalls)} | ${formatInteger(metrics.jvmHostCallSignals)} | " +
-                        "${formatInteger(metrics.pauseSignals)} | ${formatInteger(metrics.stringAllocations)} | " +
-                        "${formatInteger(metrics.recordAllocations)} | ${metrics.opcodeSummary()} |",
+                        "${formatPlain(workload.lowVmVsKotlinSlowdown)}x | ${formatPlain(workload.lowVmVsPythonSlowdown)}x | " +
+                        "${formatPlain(workload.lowVmVsRustSlowdown)}x |",
                 )
             }
             appendLine()
@@ -132,14 +89,6 @@ internal data class ComputeVmBenchmarkReport(
         fun formatInteger(value: Int): String = "%,d".format(java.util.Locale.US, value)
 
         fun formatInteger(value: Long): String = "%,d".format(java.util.Locale.US, value)
-
-        fun formatNullablePlain(value: Double?): String = value?.let(::formatPlain) ?: "n/a"
-
-        fun formatNullableGrouped(value: Double?): String = value?.let(::formatGrouped) ?: "n/a"
-
-        fun formatNullableInteger(value: Long?): String = value?.toString() ?: "n/a"
-
-        fun formatNullableRatio(value: Double?): String = value?.let { "${formatPlain(it)}x" } ?: "n/a"
     }
 }
 
@@ -147,21 +96,16 @@ internal data class ComputeVmBenchmarkWorkloadReport(
     val workloadName: String,
     val iterations: Int,
     val checksum: Int,
-    val ckVmBestNanos: Long,
-    val lowVmBestNanos: Long? = null,
+    val lowVmBestNanos: Long,
     val kotlinJvmBestNanos: Long,
     val pythonBestNanos: Long,
     val rustNativeBestNanos: Long,
-    val ckVmMetrics: NativeImageVmMetrics = NativeImageVmMetrics.EMPTY,
 ) {
-    val ckVmIterationsPerSecond: Double
-        get() = iterationsPerSecond(ckVmBestNanos)
-
     val kotlinJvmIterationsPerSecond: Double
         get() = iterationsPerSecond(kotlinJvmBestNanos)
 
-    val lowVmIterationsPerSecond: Double?
-        get() = lowVmBestNanos?.let(::iterationsPerSecond)
+    val lowVmIterationsPerSecond: Double
+        get() = iterationsPerSecond(lowVmBestNanos)
 
     val pythonIterationsPerSecond: Double
         get() = iterationsPerSecond(pythonBestNanos)
@@ -169,39 +113,14 @@ internal data class ComputeVmBenchmarkWorkloadReport(
     val rustNativeIterationsPerSecond: Double
         get() = iterationsPerSecond(rustNativeBestNanos)
 
-    val ckVmVsKotlinSlowdown: Double
-        get() = ckVmBestNanos.toDouble() / kotlinJvmBestNanos.toDouble()
+    val lowVmVsKotlinSlowdown: Double
+        get() = lowVmBestNanos.toDouble() / kotlinJvmBestNanos.toDouble()
 
-    val ckVmVsLowVmSlowdown: Double?
-        get() = lowVmBestNanos?.let { ckVmBestNanos.toDouble() / it.toDouble() }
+    val lowVmVsPythonSlowdown: Double
+        get() = lowVmBestNanos.toDouble() / pythonBestNanos.toDouble()
 
-    val ckVmVsPythonSlowdown: Double
-        get() = ckVmBestNanos.toDouble() / pythonBestNanos.toDouble()
-
-    val ckVmVsRustSlowdown: Double
-        get() = ckVmBestNanos.toDouble() / rustNativeBestNanos.toDouble()
-
-    val lowVmVsKotlinSlowdown: Double?
-        get() = lowVmBestNanos?.let { it.toDouble() / kotlinJvmBestNanos.toDouble() }
-
-    val lowVmVsRustSlowdown: Double?
-        get() = lowVmBestNanos?.let { it.toDouble() / rustNativeBestNanos.toDouble() }
-
-    val ckVmNanosPerInstruction: Double
-        get() =
-            if (ckVmMetrics.executedInstructions > 0) {
-                ckVmBestNanos.toDouble() / ckVmMetrics.executedInstructions.toDouble()
-            } else {
-                0.0
-            }
-
-    val ckVmInstructionsPerIteration: Double
-        get() =
-            if (iterations > 0) {
-                ckVmMetrics.executedInstructions.toDouble() / iterations.toDouble()
-            } else {
-                0.0
-            }
+    val lowVmVsRustSlowdown: Double
+        get() = lowVmBestNanos.toDouble() / rustNativeBestNanos.toDouble()
 
     private fun iterationsPerSecond(nanos: Long): Double = iterations.toDouble() * NANOS_PER_SECOND / nanos.toDouble()
 
