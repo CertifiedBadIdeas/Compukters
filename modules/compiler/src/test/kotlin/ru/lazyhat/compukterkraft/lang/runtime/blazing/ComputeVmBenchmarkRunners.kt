@@ -29,6 +29,12 @@ import kotlin.system.measureNanoTime
 internal data class ComputeVmBenchmarkRunResult(
     val checksum: Int,
     val bestNanos: Long,
+    val ckVmMetrics: NativeImageVmMetrics = NativeImageVmMetrics.EMPTY,
+)
+
+private data class ComputeVmBenchmarkSampleResult(
+    val checksum: Int,
+    val ckVmMetrics: NativeImageVmMetrics = NativeImageVmMetrics.EMPTY,
 )
 
 internal interface ComputeVmBenchmarkWorkloadRunner {
@@ -62,7 +68,7 @@ internal class CkVmComputeBenchmarkRunner(
     ): ComputeVmBenchmarkRunResult {
         val image = compileWorkload(workload, iterations)
         return bestOf(samples, workload) {
-            runImage(image)
+            runImageWithMetrics(image)
         }
     }
 
@@ -83,16 +89,21 @@ internal class CkVmComputeBenchmarkRunner(
         return CkVmImageAbi.encode(image)
     }
 
-    private fun runImage(image: ByteArray): Int {
+    private fun runImageWithMetrics(image: ByteArray): ComputeVmBenchmarkSampleResult {
         val handle = NativeVmBindings.createImage(libraryPath, image, INSTRUCTION_BUDGET)
         try {
             while (true) {
                 when (val signal = NativeVmSignal.decode(NativeVmBindings.runImageUntilSignal(handle))) {
                     is NativeVmSignal.Halt -> {
-                        return when (val value = signal.value) {
-                            is NativeVmValue.IntValue -> value.value
-                            else -> error("Compute benchmark halted with non-Int value: $value")
-                        }
+                        val checksum =
+                            when (val value = signal.value) {
+                                is NativeVmValue.IntValue -> value.value
+                                else -> error("Compute benchmark halted with non-Int value: $value")
+                            }
+                        return ComputeVmBenchmarkSampleResult(
+                            checksum = checksum,
+                            ckVmMetrics = NativeVmBindings.imageMetrics(handle),
+                        )
                     }
 
                     NativeVmSignal.Pause -> {
@@ -127,7 +138,7 @@ internal object KotlinJvmComputeBenchmarkRunner : ComputeVmBenchmarkWorkloadRunn
         samples: Int,
     ): ComputeVmBenchmarkRunResult =
         bestOf(samples, workload) {
-            workload.runKotlinJvm(iterations)
+            ComputeVmBenchmarkSampleResult(workload.runKotlinJvm(iterations))
         }
 }
 
@@ -188,27 +199,31 @@ internal class RustNativeComputeBenchmarkRunner(
 private fun bestOf(
     samples: Int,
     workload: ComputeVmBenchmarkWorkloadSpec,
-    runSample: () -> Int,
+    runSample: () -> ComputeVmBenchmarkSampleResult,
 ): ComputeVmBenchmarkRunResult {
     require(samples > 0) { "Benchmark samples must be positive." }
     var checksum = 0
-    val bestNanos =
-        List(samples) { sampleIndex ->
-            var sampleChecksum = 0
-            val elapsed =
-                measureNanoTime {
-                    sampleChecksum = runSample()
-                }
-            if (sampleIndex == 0) {
-                checksum = sampleChecksum
-            } else {
-                check(checksum == sampleChecksum) {
-                    "${workload.name} checksum changed between samples: $checksum != $sampleChecksum"
-                }
+    var bestMetrics = NativeImageVmMetrics.EMPTY
+    var bestNanos = Long.MAX_VALUE
+    repeat(samples) { sampleIndex ->
+        var sampleResult = ComputeVmBenchmarkSampleResult(0)
+        val elapsed =
+            measureNanoTime {
+                sampleResult = runSample()
             }
-            elapsed
-        }.min()
-    return ComputeVmBenchmarkRunResult(checksum, bestNanos)
+        if (sampleIndex == 0) {
+            checksum = sampleResult.checksum
+        } else {
+            check(checksum == sampleResult.checksum) {
+                "${workload.name} checksum changed between samples: $checksum != ${sampleResult.checksum}"
+            }
+        }
+        if (elapsed < bestNanos) {
+            bestNanos = elapsed
+            bestMetrics = sampleResult.ckVmMetrics
+        }
+    }
+    return ComputeVmBenchmarkRunResult(checksum, bestNanos, bestMetrics)
 }
 
 private fun runProcessBackedBaseline(

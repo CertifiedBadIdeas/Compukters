@@ -610,6 +610,44 @@ class NativeImageVmBindingsJniTest {
     }
 
     @Test
+    fun imageRunnerExposesExecutionMetricsWhenLibraryIsConfigured() {
+        val libraryPath = System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val image =
+            assertNotNull(
+                LanguageFrontend()
+                    .compileImage(
+                        "main.ck",
+                        """
+                        fun add(a: Int, b: Int): Int {
+                            return a + b;
+                        }
+
+                        pub fun main(): Int {
+                            return add(2, 5);
+                        }
+                        """.trimIndent(),
+                    ).image,
+            )
+        val handle = NativeVmBindings.createImage(libraryPath, CkVmImageAbi.encode(image), instructionBudget = 128)
+
+        try {
+            val halt = assertIs<NativeVmSignal.Halt>(NativeVmSignal.decode(NativeVmBindings.runImageUntilSignal(handle)))
+            assertEquals(NativeVmValue.IntValue(7), halt.value)
+
+            val metrics = NativeVmBindings.imageMetrics(handle)
+            assertTrue(metrics.executedInstructions > 0, metrics.toString())
+            assertEquals(1, metrics.opcodeCount(6))
+            assertTrue(metrics.valueClones > 0, metrics.toString())
+            assertTrue(metrics.registerReads > 0, metrics.toString())
+            assertTrue(metrics.registerWrites > 0, metrics.toString())
+            assertTrue(metrics.functionCalls > 0, metrics.toString())
+            assertTrue(metrics.functionReturns > 0, metrics.toString())
+        } finally {
+            NativeVmBindings.freeImage(handle)
+        }
+    }
+
+    @Test
     fun imageRunnerEmitsHostCallAndResumesWhenLibraryIsConfigured() {
         val libraryPath = System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val image = assertNotNull(LanguageFrontend().compileImage("main.ck", "pub fun main() { system::log(\"hi\"); }").image)
