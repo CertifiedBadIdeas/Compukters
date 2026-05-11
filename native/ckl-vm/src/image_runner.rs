@@ -1,37 +1,10 @@
-use std::collections::HashMap;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::Arc;
 
-use crate::image::{decode_image, Constant, Function, HostImport, Image};
+use crate::image::{decode_image, Constant, Function, HostImport, Image, Instruction};
 use crate::runtime_kernel::{DeviceRuntimeKernelHandle, ProcessStatus};
 use crate::signal::{decode_value, encode_error, encode_signal, VmSignal};
 use crate::value::VmValue;
-
-const OP_PUSH_UNIT: u8 = 1;
-const OP_RETURN: u8 = 2;
-const OP_PUSH_CONSTANT: u8 = 3;
-const OP_CALL_HOST: u8 = 4;
-const OP_POP: u8 = 5;
-const OP_PUSH_BOOL: u8 = 6;
-const OP_PUSH_NULL: u8 = 7;
-const OP_LOAD_LOCAL: u8 = 8;
-const OP_STORE_LOCAL: u8 = 9;
-const OP_JUMP: u8 = 10;
-const OP_JUMP_IF_FALSE: u8 = 11;
-const OP_JUMP_IF_TRUE: u8 = 12;
-const OP_BINARY: u8 = 13;
-const OP_UNARY: u8 = 14;
-const OP_CALL_FUNCTION: u8 = 15;
-const OP_CONSTRUCT_RECORD: u8 = 16;
-const OP_GET_FIELD: u8 = 17;
-const OP_CONSTRUCT_ARRAY: u8 = 18;
-const OP_CONSTRUCT_LIST: u8 = 19;
-const OP_CONSTRUCT_MAP: u8 = 20;
-const OP_INDEX_GET: u8 = 21;
-const OP_INDEX_SET: u8 = 22;
-const OP_CALL_COLLECTION_METHOD: u8 = 23;
-const OP_YIELD: u8 = 24;
-const OP_SLEEP: u8 = 25;
 
 const STRINGS_TRIM_IMPORT_ID: i32 = 7000;
 const STRINGS_BEFORE_SPACE_IMPORT_ID: i32 = 7001;
@@ -48,30 +21,23 @@ const STRINGS_CHAR_CODE_AT_IMPORT_ID: i32 = 7010;
 struct CallFrame {
     function_index: usize,
     instruction_pointer: usize,
-    locals: Vec<VmValue>,
-}
-
-#[derive(Debug, Clone)]
-enum HeapObject {
-    Array(Vec<VmValue>),
-    List(Vec<VmValue>),
-    Map(Vec<(VmValue, VmValue)>),
+    base_register: usize,
+    return_register: Option<u16>,
 }
 
 pub struct ImageVmHandle {
     image: Image,
     function_index: usize,
     instruction_pointer: usize,
-    stack: Vec<VmValue>,
-    locals: Vec<VmValue>,
+    base_register: usize,
+    registers: Vec<VmValue>,
     call_stack: Vec<CallFrame>,
-    objects: HashMap<u32, HeapObject>,
-    next_object_id: u32,
     attached_kernel: Option<Arc<DeviceRuntimeKernelHandle>>,
     working_directory: String,
     process_argument: Option<String>,
     instruction_budget: usize,
     instructions_since_pause: usize,
+    pending_resume_register: Option<u16>,
     state: ImageVmState,
 }
 
@@ -95,21 +61,20 @@ impl ImageVmHandle {
     pub fn create(image: &[u8], instruction_budget: usize) -> Result<Self, String> {
         let image = decode_image(image).map_err(|error| error.to_string())?;
         let function_index = checked_entry_function_index(&image)?;
-        let frame_size = checked_frame_size(&image, function_index)?;
+        let register_count = checked_register_count(&image, function_index)?;
         Ok(Self {
             image,
             function_index,
             instruction_pointer: 0,
-            stack: Vec::new(),
-            locals: vec![VmValue::Unit; frame_size],
+            base_register: 0,
+            registers: vec![VmValue::Unit; register_count],
             call_stack: Vec::new(),
-            objects: HashMap::new(),
-            next_object_id: 1,
             attached_kernel: None,
             working_directory: String::new(),
             process_argument: None,
             instruction_budget: instruction_budget.max(1),
             instructions_since_pause: 0,
+            pending_resume_register: None,
             state: ImageVmState::Ready,
         })
     }
@@ -157,7 +122,9 @@ impl ImageVmHandle {
         if self.state != ImageVmState::WaitingForResume {
             return Err("native image VM is not waiting for resume".to_string());
         }
-        self.stack.push(value);
+        if let Some(register) = self.pending_resume_register.take() {
+            self.write_register(register, value)?;
+        }
         self.state = ImageVmState::Ready;
         Ok(())
     }
@@ -593,34 +560,208 @@ impl ImageVmHandle {
 
         loop {
             let instruction_start = self.instruction_pointer;
-            let opcode = match self.read_u8()? {
-                Some(opcode) => opcode,
+            let instruction = match self
+                .current_function()?
+                .instructions
+                .get(self.instruction_pointer)
+                .cloned()
+            {
+                Some(instruction) => instruction,
                 None => return self.halt(VmValue::Unit),
             };
+            self.instruction_pointer += 1;
             self.instructions_since_pause += 1;
 
-            match opcode {
-                OP_PUSH_UNIT => self.stack.push(VmValue::Unit),
-                OP_RETURN => {
-                    let result = self.stack.pop().unwrap_or(VmValue::Unit);
-                    if let Some(frame) = self.call_stack.pop() {
-                        self.function_index = frame.function_index;
-                        self.instruction_pointer = frame.instruction_pointer;
-                        self.locals = frame.locals;
-                        self.stack.push(result);
-                    } else {
-                        return self.halt(result);
+            match instruction {
+                Instruction::LoadConst {
+                    dst,
+                    constant_index,
+                } => {
+                    let value = self.constant_value(constant_index)?;
+                    self.write_register(dst, value)?;
+                }
+                Instruction::LoadUnit { dst } => self.write_register(dst, VmValue::Unit)?,
+                Instruction::LoadNull { dst } => self.write_register(dst, VmValue::Null)?,
+                Instruction::LoadBool { dst, value } => {
+                    self.write_register(dst, VmValue::Bool(value))?
+                }
+                Instruction::Move { dst, src } => {
+                    let value = self.read_register(src)?.clone();
+                    self.write_register(dst, value)?;
+                }
+                Instruction::I32Add { dst, lhs, rhs } => {
+                    self.write_binary(dst, lhs, rhs, binary_add)?
+                }
+                Instruction::I32Sub { dst, lhs, rhs } => {
+                    self.write_binary(dst, lhs, rhs, |left, right| {
+                        numeric_binary(
+                            left,
+                            right,
+                            "-",
+                            |a, b| a.wrapping_sub(b),
+                            |a, b| a.wrapping_sub(b),
+                        )
+                    })?
+                }
+                Instruction::I32Mul { dst, lhs, rhs } => {
+                    self.write_binary(dst, lhs, rhs, |left, right| {
+                        numeric_binary(
+                            left,
+                            right,
+                            "*",
+                            |a, b| a.wrapping_mul(b),
+                            |a, b| a.wrapping_mul(b),
+                        )
+                    })?
+                }
+                Instruction::I32Div { dst, lhs, rhs } => {
+                    self.write_binary(dst, lhs, rhs, binary_divide)?
+                }
+                Instruction::I32Neg { dst, src } => {
+                    let value = match self.read_register(src)?.clone() {
+                        VmValue::Int(value) => VmValue::Int(value.wrapping_neg()),
+                        VmValue::Long(value) => VmValue::Long(value.wrapping_neg()),
+                        other => {
+                            return Err(format!(
+                                "CkVmImage I32_NEG requires Int or Long but found {other:?}"
+                            ))
+                        }
+                    };
+                    self.write_register(dst, value)?;
+                }
+                Instruction::I32BitAnd { dst, lhs, rhs } => {
+                    self.write_binary(dst, lhs, rhs, |left, right| {
+                        numeric_binary(left, right, "&", |a, b| a & b, |a, b| a & b)
+                    })?
+                }
+                Instruction::I32BitOr { dst, lhs, rhs } => {
+                    self.write_binary(dst, lhs, rhs, |left, right| {
+                        numeric_binary(left, right, "|", |a, b| a | b, |a, b| a | b)
+                    })?
+                }
+                Instruction::I32BitXor { dst, lhs, rhs } => {
+                    self.write_binary(dst, lhs, rhs, |left, right| {
+                        numeric_binary(left, right, "^", |a, b| a ^ b, |a, b| a ^ b)
+                    })?
+                }
+                Instruction::I32BitNot { dst, src } => {
+                    let value = match self.read_register(src)?.clone() {
+                        VmValue::Int(value) => VmValue::Int(!value),
+                        VmValue::Long(value) => VmValue::Long(!value),
+                        other => {
+                            return Err(format!(
+                                "CkVmImage I32_BIT_NOT requires Int or Long but found {other:?}"
+                            ))
+                        }
+                    };
+                    self.write_register(dst, value)?;
+                }
+                Instruction::I32Shl { dst, lhs, rhs } => {
+                    self.write_binary(dst, lhs, rhs, |left, right| {
+                        shift_binary(
+                            left,
+                            right,
+                            "<<",
+                            |a, b| a.wrapping_shl(b),
+                            |a, b| a.wrapping_shl(b),
+                        )
+                    })?
+                }
+                Instruction::I32Shr { dst, lhs, rhs } => {
+                    self.write_binary(dst, lhs, rhs, |left, right| {
+                        shift_binary(
+                            left,
+                            right,
+                            ">>",
+                            |a, b| a.wrapping_shr(b),
+                            |a, b| a.wrapping_shr(b),
+                        )
+                    })?
+                }
+                Instruction::I32Eq { dst, lhs, rhs } => {
+                    self.write_compare(dst, lhs, rhs, "==", |ordering| {
+                        ordering == std::cmp::Ordering::Equal
+                    })?
+                }
+                Instruction::I32Ne { dst, lhs, rhs } => {
+                    let value = !value_equals(self.read_register(lhs)?, self.read_register(rhs)?);
+                    self.write_register(dst, VmValue::Bool(value))?;
+                }
+                Instruction::I32Lt { dst, lhs, rhs } => {
+                    self.write_compare(dst, lhs, rhs, "<", |ordering| {
+                        ordering == std::cmp::Ordering::Less
+                    })?
+                }
+                Instruction::I32Le { dst, lhs, rhs } => {
+                    self.write_compare(dst, lhs, rhs, "<=", |ordering| {
+                        ordering != std::cmp::Ordering::Greater
+                    })?
+                }
+                Instruction::I32Gt { dst, lhs, rhs } => {
+                    self.write_compare(dst, lhs, rhs, ">", |ordering| {
+                        ordering == std::cmp::Ordering::Greater
+                    })?
+                }
+                Instruction::I32Ge { dst, lhs, rhs } => {
+                    self.write_compare(dst, lhs, rhs, ">=", |ordering| {
+                        ordering != std::cmp::Ordering::Less
+                    })?
+                }
+                Instruction::BoolNot { dst, src } => {
+                    let value = match self.read_register(src)? {
+                        VmValue::Bool(value) => VmValue::Bool(!value),
+                        other => {
+                            return Err(format!(
+                                "CkVmImage BOOL_NOT requires Bool but found {other:?}"
+                            ))
+                        }
+                    };
+                    self.write_register(dst, value)?;
+                }
+                Instruction::BoolAnd { dst, lhs, rhs } => {
+                    self.write_binary(dst, lhs, rhs, |left, right| {
+                        bool_binary(left, right, "&&", |a, b| a && b)
+                    })?
+                }
+                Instruction::BoolOr { dst, lhs, rhs } => {
+                    self.write_binary(dst, lhs, rhs, |left, right| {
+                        bool_binary(left, right, "||", |a, b| a || b)
+                    })?
+                }
+                Instruction::Jump { target } => self.jump_instruction(target)?,
+                Instruction::JumpIfFalse { cond, target } => {
+                    if !self.bool_register(cond, "JUMP_IF_FALSE")? {
+                        self.jump_instruction(target)?;
                     }
                 }
-                OP_PUSH_CONSTANT => {
-                    let constant_index = self.read_i32()?;
-                    let value = self.constant_value(constant_index)?;
-                    self.stack.push(value);
+                Instruction::JumpIfTrue { cond, target } => {
+                    if self.bool_register(cond, "JUMP_IF_TRUE")? {
+                        self.jump_instruction(target)?;
+                    }
                 }
-                OP_CALL_HOST => {
-                    let import_id = self.read_i32()?;
-                    let argument_count = self.read_i32()?;
-                    let arguments = self.pop_many(argument_count)?;
+                Instruction::CallStatic {
+                    return_register,
+                    function_index,
+                    arguments,
+                } => self.call_static(function_index, return_register, &arguments)?,
+                Instruction::Return { src } => {
+                    let result = self.read_register(src)?.clone();
+                    if let Some(signal) = self.return_value(result)? {
+                        return Ok(signal);
+                    }
+                }
+                Instruction::ReturnUnit => {
+                    if let Some(signal) = self.return_value(VmValue::Unit)? {
+                        return Ok(signal);
+                    }
+                }
+                Instruction::CallHost {
+                    return_register,
+                    import_id,
+                    arguments,
+                } => {
+                    let argument_registers = arguments;
+                    let arguments = self.register_arguments(&argument_registers)?;
                     let import = self.host_import(import_id)?;
                     let module_name = import.module_name.clone();
                     let function_name = import.function_name.clone();
@@ -631,7 +772,9 @@ impl ImageVmHandle {
                         arguments,
                     )? {
                         NativeHostImportResult::Handled(value) => {
-                            self.stack.push(value);
+                            if let Some(register) = return_register {
+                                self.write_register(register, value)?;
+                            }
                         }
                         NativeHostImportResult::Fallback(arguments) => {
                             if !allows_kotlin_hostcall_fallback(&module_name, &function_name) {
@@ -639,6 +782,7 @@ impl ImageVmHandle {
                                     "native host import {module_name}.{function_name} is not implemented; Kotlin fallback is disabled for native-owned hostcalls"
                                 ));
                             }
+                            self.pending_resume_register = return_register;
                             self.state = ImageVmState::WaitingForResume;
                             return Ok(VmSignal::HostCall {
                                 module_name,
@@ -648,96 +792,26 @@ impl ImageVmHandle {
                         }
                         NativeHostImportResult::SignalNoResume { signal, arguments } => {
                             self.instruction_pointer = instruction_start;
-                            self.stack.extend(arguments);
+                            for (register, value) in
+                                argument_registers.iter().copied().zip(arguments)
+                            {
+                                self.write_register(register, value)?;
+                            }
                             return Ok(signal);
                         }
                     }
                 }
-                OP_POP => {
-                    let _ = self.stack.pop();
-                }
-                OP_PUSH_BOOL => {
-                    let value = self.read_u8()?.ok_or_else(|| {
-                        "unexpected end of CkVmImage instruction stream".to_string()
-                    })?;
-                    match value {
-                        0 => self.stack.push(VmValue::Bool(false)),
-                        1 => self.stack.push(VmValue::Bool(true)),
-                        other => return Err(format!("invalid CkVmImage bool byte {other}")),
-                    }
-                }
-                OP_PUSH_NULL => self.stack.push(VmValue::Null),
-                OP_LOAD_LOCAL => {
-                    let slot = self.read_i32()?;
-                    let value = self.local(slot)?.clone();
-                    self.stack.push(value);
-                }
-                OP_STORE_LOCAL => {
-                    let slot = self.read_i32()?;
-                    let value = self.pop_one("store local")?;
-                    *self.local_mut(slot)? = value;
-                }
-                OP_JUMP => {
-                    let target = self.read_i32()?;
-                    self.jump(target)?;
-                }
-                OP_JUMP_IF_FALSE => {
-                    let target = self.read_i32()?;
-                    if !self.pop_bool_condition("JUMP_IF_FALSE")? {
-                        self.jump(target)?;
-                    }
-                }
-                OP_JUMP_IF_TRUE => {
-                    let target = self.read_i32()?;
-                    if self.pop_bool_condition("JUMP_IF_TRUE")? {
-                        self.jump(target)?;
-                    }
-                }
-                OP_BINARY => {
-                    let operator = self.read_u8()?.ok_or_else(|| {
-                        "unexpected end of CkVmImage instruction stream".to_string()
-                    })?;
-                    let right = self.pop_one("binary right operand")?;
-                    let left = self.pop_one("binary left operand")?;
-                    self.stack
-                        .push(apply_binary_operator(operator, left, right)?);
-                }
-                OP_UNARY => {
-                    let operator = self.read_u8()?.ok_or_else(|| {
-                        "unexpected end of CkVmImage instruction stream".to_string()
-                    })?;
-                    let operand = self.pop_one("unary operand")?;
-                    self.stack.push(apply_unary_operator(operator, operand)?);
-                }
-                OP_CALL_FUNCTION => {
-                    let function_index = self.read_i32()?;
-                    let argument_count = self.read_i32()?;
-                    self.call_function(function_index, argument_count)?;
-                }
-                OP_CONSTRUCT_RECORD => self.construct_record()?,
-                OP_GET_FIELD => self.get_field()?,
-                OP_CONSTRUCT_ARRAY => self.construct_array()?,
-                OP_CONSTRUCT_LIST => self.construct_list()?,
-                OP_CONSTRUCT_MAP => self.construct_map()?,
-                OP_INDEX_GET => self.index_get()?,
-                OP_INDEX_SET => self.index_set()?,
-                OP_CALL_COLLECTION_METHOD => {
-                    let method_name_index = self.read_i32()?;
-                    let method_name =
-                        self.constant_string_metadata(method_name_index, "collection method name")?;
-                    let argument_count = self.read_i32()?;
-                    self.call_collection_method(method_name, argument_count)?;
-                }
-                OP_YIELD => {
+                Instruction::Yield { dst } => {
+                    self.pending_resume_register = Some(dst);
                     self.state = ImageVmState::WaitingForResume;
                     return Ok(VmSignal::Yield);
                 }
-                OP_SLEEP => {
-                    let ticks = self.sleep_ticks()?;
+                Instruction::Sleep { dst, ticks } => {
+                    let ticks = self.sleep_ticks_register(ticks)?;
+                    self.pending_resume_register = Some(dst);
                     self.state = ImageVmState::WaitingForResume;
                     return Ok(VmSignal::Sleep(ticks));
                 }
-                other => return Err(format!("unknown CkVmImage opcode {other}")),
             }
 
             if self.instructions_since_pause >= self.instruction_budget {
@@ -752,38 +826,152 @@ impl ImageVmHandle {
         Ok(VmSignal::Halt(value))
     }
 
-    fn read_u8(&mut self) -> Result<Option<u8>, String> {
-        let code = &self.current_function()?.code;
-        if self.instruction_pointer >= code.len() {
-            return Ok(None);
+    fn read_register(&self, register: u16) -> Result<&VmValue, String> {
+        let index = self.register_index(register)?;
+        self.registers.get(index).ok_or_else(|| {
+            format!("CkVmImage register {register} is out of bounds for current register window")
+        })
+    }
+
+    fn write_register(&mut self, register: u16, value: VmValue) -> Result<(), String> {
+        let index = self.register_index(register)?;
+        let register_count = self.registers.len().saturating_sub(self.base_register);
+        let slot = self.registers.get_mut(index).ok_or_else(|| {
+            format!(
+                "CkVmImage register {register} is out of bounds for current register window of {register_count} registers"
+            )
+        })?;
+        *slot = value;
+        Ok(())
+    }
+
+    fn register_index(&self, register: u16) -> Result<usize, String> {
+        self.base_register
+            .checked_add(usize::from(register))
+            .ok_or_else(|| format!("CkVmImage register {register} offset overflow"))
+    }
+
+    fn register_arguments(&self, registers: &[u16]) -> Result<Vec<VmValue>, String> {
+        registers
+            .iter()
+            .map(|register| self.read_register(*register).cloned())
+            .collect()
+    }
+
+    fn write_binary(
+        &mut self,
+        dst: u16,
+        lhs: u16,
+        rhs: u16,
+        op: fn(VmValue, VmValue) -> Result<VmValue, String>,
+    ) -> Result<(), String> {
+        let left = self.read_register(lhs)?.clone();
+        let right = self.read_register(rhs)?.clone();
+        let value = op(left, right)?;
+        self.write_register(dst, value)
+    }
+
+    fn write_compare(
+        &mut self,
+        dst: u16,
+        lhs: u16,
+        rhs: u16,
+        symbol: &str,
+        predicate: fn(std::cmp::Ordering) -> bool,
+    ) -> Result<(), String> {
+        let left = self.read_register(lhs)?.clone();
+        let right = self.read_register(rhs)?.clone();
+        let value = compare_values(left, right, symbol, predicate)?;
+        self.write_register(dst, value)
+    }
+
+    fn bool_register(&self, register: u16, operation: &str) -> Result<bool, String> {
+        match self.read_register(register)? {
+            VmValue::Bool(value) => Ok(*value),
+            other => Err(format!(
+                "CkVmImage {operation} requires Bool condition but found {other:?}"
+            )),
         }
-        let value = code[self.instruction_pointer];
-        self.instruction_pointer += 1;
-        Ok(Some(value))
     }
 
-    fn read_i32(&mut self) -> Result<i32, String> {
-        let code = &self.current_function()?.code;
-        let end = self
-            .instruction_pointer
-            .checked_add(4)
-            .ok_or_else(|| "CkVmImage instruction offset overflow".to_string())?;
-        let bytes = code
-            .get(self.instruction_pointer..end)
-            .ok_or_else(|| "unexpected end of CkVmImage instruction stream".to_string())?;
-        let mut buffer = [0u8; 4];
-        buffer.copy_from_slice(bytes);
-        self.instruction_pointer = end;
-        Ok(i32::from_le_bytes(buffer))
-    }
-
-    fn constant_value(&self, constant_index: i32) -> Result<VmValue, String> {
-        if constant_index < 0 {
+    fn jump_instruction(&mut self, target: usize) -> Result<(), String> {
+        let instruction_count = self.current_function()?.instructions.len();
+        if target > instruction_count {
             return Err(format!(
-                "negative CkVmImage constant index {constant_index}"
+                "CkVmImage jump target {target} is outside function instruction count {instruction_count}"
             ));
         }
-        match self.image.constants.get(constant_index as usize) {
+        self.instruction_pointer = target;
+        Ok(())
+    }
+
+    fn call_static(
+        &mut self,
+        function_index: usize,
+        return_register: Option<u16>,
+        argument_registers: &[u16],
+    ) -> Result<(), String> {
+        if function_index >= self.image.functions.len() {
+            return Err(format!(
+                "CkVmImage function index {function_index} is out of bounds for {} functions",
+                self.image.functions.len()
+            ));
+        }
+        let arguments = self.register_arguments(argument_registers)?;
+        let callee = &self.image.functions[function_index];
+        if arguments.len() != callee.parameter_count {
+            return Err(format!(
+                "CkVmImage function {function_index} expects {} arguments but got {}",
+                callee.parameter_count,
+                arguments.len()
+            ));
+        }
+        let caller_frame = CallFrame {
+            function_index: self.function_index,
+            instruction_pointer: self.instruction_pointer,
+            base_register: self.base_register,
+            return_register,
+        };
+        self.call_stack.push(caller_frame);
+        self.function_index = function_index;
+        self.instruction_pointer = 0;
+        self.base_register = self.registers.len();
+        self.registers
+            .resize(self.base_register + callee.register_count, VmValue::Unit);
+        for (slot, argument) in arguments.into_iter().enumerate() {
+            self.registers[self.base_register + slot] = argument;
+        }
+        Ok(())
+    }
+
+    fn return_value(&mut self, result: VmValue) -> Result<Option<VmSignal>, String> {
+        let callee_base = self.base_register;
+        if let Some(frame) = self.call_stack.pop() {
+            self.registers.truncate(callee_base);
+            self.function_index = frame.function_index;
+            self.instruction_pointer = frame.instruction_pointer;
+            self.base_register = frame.base_register;
+            if let Some(return_register) = frame.return_register {
+                self.write_register(return_register, result)?;
+            }
+            Ok(None)
+        } else {
+            Ok(Some(self.halt(result)?))
+        }
+    }
+
+    fn sleep_ticks_register(&self, register: u16) -> Result<i64, String> {
+        match self.read_register(register)? {
+            VmValue::Int(ticks) => Ok(i64::from(*ticks)),
+            VmValue::Long(ticks) => Ok(*ticks),
+            other => Err(format!(
+                "CkVmImage SLEEP requires Long ticks but found {other:?}"
+            )),
+        }
+    }
+
+    fn constant_value(&self, constant_index: usize) -> Result<VmValue, String> {
+        match self.image.constants.get(constant_index) {
             Some(Constant::String(value)) => Ok(VmValue::String(value.clone())),
             Some(Constant::Int(value)) => Ok(VmValue::Int(*value)),
             Some(Constant::Long(value)) => Ok(VmValue::Long(*value)),
@@ -793,701 +981,12 @@ impl ImageVmHandle {
         }
     }
 
-    fn constant_string_metadata(
-        &self,
-        constant_index: i32,
-        metadata_name: &str,
-    ) -> Result<String, String> {
-        if constant_index < 0 {
-            return Err(format!(
-                "negative CkVmImage {metadata_name} constant index {constant_index}"
-            ));
-        }
-        match self.image.constants.get(constant_index as usize) {
-            Some(Constant::String(value)) => Ok(value.clone()),
-            Some(other) => Err(format!(
-                "CkVmImage {metadata_name} constant index {constant_index} must be String metadata but found {other:?}"
-            )),
-            None => Err(format!(
-                "CkVmImage {metadata_name} constant index {constant_index} is out of bounds"
-            )),
-        }
-    }
-
-    fn construct_record(&mut self) -> Result<(), String> {
-        let type_name_index = self.read_i32()?;
-        let type_name = self.constant_string_metadata(type_name_index, "record type name")?;
-        let field_count = self.read_i32()?;
-        if field_count < 0 {
-            return Err(format!(
-                "negative CkVmImage record field count {field_count}"
-            ));
-        }
-        let field_count = field_count as usize;
-        let mut field_names = Vec::with_capacity(field_count);
-        for _ in 0..field_count {
-            let field_name_index = self.read_i32()?;
-            field_names.push(self.constant_string_metadata(field_name_index, "record field name")?);
-        }
-        let values = self.pop_many(field_count as i32)?;
-        let fields = field_names.into_iter().zip(values).collect();
-        self.stack.push(VmValue::Record { type_name, fields });
-        Ok(())
-    }
-
-    fn get_field(&mut self) -> Result<(), String> {
-        let field_name_index = self.read_i32()?;
-        let field_name = self.constant_string_metadata(field_name_index, "field name")?;
-        let receiver = self.pop_one("get field receiver")?;
-        match receiver {
-            VmValue::Record { type_name, fields } => {
-                if let Some((_, value)) = fields.into_iter().find(|(name, _)| name == &field_name) {
-                    self.stack.push(value);
-                    Ok(())
-                } else {
-                    Err(format!(
-                        "CkVmImage record `{type_name}` has no field `{field_name}`"
-                    ))
-                }
-            }
-            other => Err(format!(
-                "CkVmImage GET_FIELD requires Record receiver but found {other:?}"
-            )),
-        }
-    }
-
-    fn construct_array(&mut self) -> Result<(), String> {
-        let default = self.pop_one("construct array default")?;
-        let size = Self::require_int(self.pop_one("construct array size")?, "array size")?;
-        if size < 0 {
-            return Err(format!("negative CkVmImage array size {size}"));
-        }
-        let object_ref = self.allocate_object(HeapObject::Array(vec![default; size as usize]))?;
-        self.stack.push(object_ref);
-        Ok(())
-    }
-
-    fn construct_list(&mut self) -> Result<(), String> {
-        let element_count = self.read_i32()?;
-        if element_count < 0 {
-            return Err(format!(
-                "negative CkVmImage list element count {element_count}"
-            ));
-        }
-        let values = self.pop_many(element_count)?;
-        let object_ref = self.allocate_object(HeapObject::List(values))?;
-        self.stack.push(object_ref);
-        Ok(())
-    }
-
-    fn construct_map(&mut self) -> Result<(), String> {
-        let entry_count = self.read_i32()?;
-        if entry_count < 0 {
-            return Err(format!("negative CkVmImage map entry count {entry_count}"));
-        }
-        let value_count = entry_count.checked_mul(2).ok_or_else(|| {
-            format!("CkVmImage map entry count {entry_count} overflows value count")
-        })?;
-        let values = self.pop_many(value_count)?;
-        let mut entries = Vec::with_capacity(entry_count as usize);
-        let mut values = values.into_iter();
-        while let Some(key) = values.next() {
-            let value = values
-                .next()
-                .ok_or_else(|| "CkVmImage map construction missing value".to_string())?;
-            Self::map_set(&mut entries, Self::require_non_null_key(key)?, value);
-        }
-        let object_ref = self.allocate_object(HeapObject::Map(entries))?;
-        self.stack.push(object_ref);
-        Ok(())
-    }
-
-    fn index_get(&mut self) -> Result<(), String> {
-        let index_or_key = self.pop_one("index get key")?;
-        let receiver = self.pop_one("index get receiver")?;
-        let result = match self.collection_object(receiver, "INDEX_GET")? {
-            HeapObject::Array(values) => {
-                let index = Self::checked_index(
-                    Self::require_int(index_or_key, "array index get")?,
-                    values.len(),
-                    "array index get",
-                )?;
-                values[index].clone()
-            }
-            HeapObject::List(values) => {
-                let index = Self::checked_index(
-                    Self::require_int(index_or_key, "list index get")?,
-                    values.len(),
-                    "list index get",
-                )?;
-                values[index].clone()
-            }
-            HeapObject::Map(entries) => {
-                let key = Self::require_non_null_key(index_or_key)?;
-                Self::map_find_index(entries, &key)
-                    .map(|index| entries[index].1.clone())
-                    .unwrap_or(VmValue::Null)
-            }
-        };
-        self.stack.push(result);
-        Ok(())
-    }
-
-    fn index_set(&mut self) -> Result<(), String> {
-        let value = self.pop_one("index set value")?;
-        let index_or_key = self.pop_one("index set key")?;
-        let receiver = self.pop_one("index set receiver")?;
-        match self.collection_object_mut(receiver, "INDEX_SET")? {
-            HeapObject::Array(values) => {
-                let index = Self::checked_index(
-                    Self::require_int(index_or_key, "array index set")?,
-                    values.len(),
-                    "array index set",
-                )?;
-                values[index] = value;
-            }
-            HeapObject::List(values) => {
-                let index = Self::checked_index(
-                    Self::require_int(index_or_key, "list index set")?,
-                    values.len(),
-                    "list index set",
-                )?;
-                values[index] = value;
-            }
-            HeapObject::Map(entries) => {
-                Self::map_set(entries, Self::require_non_null_key(index_or_key)?, value);
-            }
-        }
-        self.stack.push(VmValue::Unit);
-        Ok(())
-    }
-
-    fn call_collection_method(
-        &mut self,
-        method_name: String,
-        argument_count: i32,
-    ) -> Result<(), String> {
-        let arguments = self.pop_many(argument_count)?;
-        let receiver = self.pop_one("collection method receiver")?;
-        let id = Self::require_object_ref(receiver, "CALL_COLLECTION_METHOD")?;
-        let result = match self.objects.get(&id) {
-            Some(HeapObject::Array(_)) => self.call_array_method(id, &method_name, arguments)?,
-            Some(HeapObject::List(_)) => self.call_list_method(id, &method_name, arguments)?,
-            Some(HeapObject::Map(_)) => self.call_map_method(id, &method_name, arguments)?,
-            None => {
-                return Err(format!(
-                    "CkVmImage CALL_COLLECTION_METHOD object id {id} does not exist"
-                ))
-            }
-        };
-        self.stack.push(result);
-        Ok(())
-    }
-
-    fn call_array_method(
-        &mut self,
-        id: u32,
-        method_name: &str,
-        arguments: Vec<VmValue>,
-    ) -> Result<VmValue, String> {
-        match method_name {
-            "size" => {
-                Self::expect_argument_count(method_name, arguments.len(), 0)?;
-                let values = self.array_values(id, method_name)?;
-                Ok(VmValue::Int(values.len() as i32))
-            }
-            "get" => {
-                Self::expect_argument_count(method_name, arguments.len(), 1)?;
-                let index = Self::require_int(arguments[0].clone(), "array get index")?;
-                let values = self.array_values(id, method_name)?;
-                let index = Self::checked_index(index, values.len(), "array get")?;
-                Ok(values[index].clone())
-            }
-            "set" => {
-                Self::expect_argument_count(method_name, arguments.len(), 2)?;
-                let index = Self::require_int(arguments[0].clone(), "array set index")?;
-                let values = self.array_values_mut(id, method_name)?;
-                let index = Self::checked_index(index, values.len(), "array set")?;
-                values[index] = arguments[1].clone();
-                Ok(VmValue::Unit)
-            }
-            "getOrNull" => {
-                Self::expect_argument_count(method_name, arguments.len(), 1)?;
-                let index = Self::require_int(arguments[0].clone(), "array getOrNull index")?;
-                let values = self.array_values(id, method_name)?;
-                if index < 0 || index as usize >= values.len() {
-                    Ok(VmValue::Null)
-                } else {
-                    Ok(values[index as usize].clone())
-                }
-            }
-            other => Err(format!(
-                "CkVmImage Array has no collection method `{other}`"
-            )),
-        }
-    }
-
-    fn call_list_method(
-        &mut self,
-        id: u32,
-        method_name: &str,
-        arguments: Vec<VmValue>,
-    ) -> Result<VmValue, String> {
-        match method_name {
-            "size" => {
-                Self::expect_argument_count(method_name, arguments.len(), 0)?;
-                let values = self.list_values(id, method_name)?;
-                Ok(VmValue::Int(values.len() as i32))
-            }
-            "isEmpty" => {
-                Self::expect_argument_count(method_name, arguments.len(), 0)?;
-                let values = self.list_values(id, method_name)?;
-                Ok(VmValue::Bool(values.is_empty()))
-            }
-            "get" => {
-                Self::expect_argument_count(method_name, arguments.len(), 1)?;
-                let index = Self::require_int(arguments[0].clone(), "list get index")?;
-                let values = self.list_values(id, method_name)?;
-                let index = Self::checked_index(index, values.len(), "list get")?;
-                Ok(values[index].clone())
-            }
-            "set" => {
-                Self::expect_argument_count(method_name, arguments.len(), 2)?;
-                let index = Self::require_int(arguments[0].clone(), "list set index")?;
-                let values = self.list_values_mut(id, method_name)?;
-                let index = Self::checked_index(index, values.len(), "list set")?;
-                values[index] = arguments[1].clone();
-                Ok(VmValue::Unit)
-            }
-            "getOrNull" => {
-                Self::expect_argument_count(method_name, arguments.len(), 1)?;
-                let index = Self::require_int(arguments[0].clone(), "list getOrNull index")?;
-                let values = self.list_values(id, method_name)?;
-                if index < 0 || index as usize >= values.len() {
-                    Ok(VmValue::Null)
-                } else {
-                    Ok(values[index as usize].clone())
-                }
-            }
-            "add" => {
-                Self::expect_argument_count(method_name, arguments.len(), 1)?;
-                let values = self.list_values_mut(id, method_name)?;
-                values.push(arguments[0].clone());
-                Ok(VmValue::Unit)
-            }
-            "insert" => {
-                Self::expect_argument_count(method_name, arguments.len(), 2)?;
-                let index = Self::require_int(arguments[0].clone(), "list insert index")?;
-                let values = self.list_values_mut(id, method_name)?;
-                if index < 0 || index as usize > values.len() {
-                    return Err(format!(
-                        "CkVmImage list insert index {index} is out of bounds for length {}",
-                        values.len()
-                    ));
-                }
-                values.insert(index as usize, arguments[1].clone());
-                Ok(VmValue::Unit)
-            }
-            "removeAt" => {
-                Self::expect_argument_count(method_name, arguments.len(), 1)?;
-                let index = Self::require_int(arguments[0].clone(), "list removeAt index")?;
-                let values = self.list_values_mut(id, method_name)?;
-                let index = Self::checked_index(index, values.len(), "list removeAt")?;
-                Ok(values.remove(index))
-            }
-            "clear" => {
-                Self::expect_argument_count(method_name, arguments.len(), 0)?;
-                let values = self.list_values_mut(id, method_name)?;
-                values.clear();
-                Ok(VmValue::Unit)
-            }
-            other => Err(format!("CkVmImage List has no collection method `{other}`")),
-        }
-    }
-
-    fn call_map_method(
-        &mut self,
-        id: u32,
-        method_name: &str,
-        arguments: Vec<VmValue>,
-    ) -> Result<VmValue, String> {
-        match method_name {
-            "size" => {
-                Self::expect_argument_count(method_name, arguments.len(), 0)?;
-                let entries = self.map_entries(id, method_name)?;
-                Ok(VmValue::Int(entries.len() as i32))
-            }
-            "isEmpty" => {
-                Self::expect_argument_count(method_name, arguments.len(), 0)?;
-                let entries = self.map_entries(id, method_name)?;
-                Ok(VmValue::Bool(entries.is_empty()))
-            }
-            "containsKey" => {
-                Self::expect_argument_count(method_name, arguments.len(), 1)?;
-                let key = Self::require_non_null_key(arguments[0].clone())?;
-                let entries = self.map_entries(id, method_name)?;
-                Ok(VmValue::Bool(Self::map_find_index(entries, &key).is_some()))
-            }
-            "get" => {
-                Self::expect_argument_count(method_name, arguments.len(), 1)?;
-                let key = Self::require_non_null_key(arguments[0].clone())?;
-                let entries = self.map_entries(id, method_name)?;
-                Ok(Self::map_find_index(entries, &key)
-                    .map(|index| entries[index].1.clone())
-                    .unwrap_or(VmValue::Null))
-            }
-            "getOrDefault" => {
-                Self::expect_argument_count(method_name, arguments.len(), 2)?;
-                let key = Self::require_non_null_key(arguments[0].clone())?;
-                let entries = self.map_entries(id, method_name)?;
-                Ok(Self::map_find_index(entries, &key)
-                    .map(|index| entries[index].1.clone())
-                    .unwrap_or_else(|| arguments[1].clone()))
-            }
-            "set" => {
-                Self::expect_argument_count(method_name, arguments.len(), 2)?;
-                let key = Self::require_non_null_key(arguments[0].clone())?;
-                let entries = self.map_entries_mut(id, method_name)?;
-                Self::map_set(entries, key, arguments[1].clone());
-                Ok(VmValue::Unit)
-            }
-            "remove" => {
-                Self::expect_argument_count(method_name, arguments.len(), 1)?;
-                let key = Self::require_non_null_key(arguments[0].clone())?;
-                let entries = self.map_entries_mut(id, method_name)?;
-                if let Some(index) = Self::map_find_index(entries, &key) {
-                    Ok(entries.remove(index).1)
-                } else {
-                    Ok(VmValue::Null)
-                }
-            }
-            "clear" => {
-                Self::expect_argument_count(method_name, arguments.len(), 0)?;
-                let entries = self.map_entries_mut(id, method_name)?;
-                entries.clear();
-                Ok(VmValue::Unit)
-            }
-            "keys" => {
-                Self::expect_argument_count(method_name, arguments.len(), 0)?;
-                let values = self
-                    .map_entries(id, method_name)?
-                    .iter()
-                    .map(|(key, _)| key.clone())
-                    .collect();
-                self.allocate_object(HeapObject::List(values))
-            }
-            "values" => {
-                Self::expect_argument_count(method_name, arguments.len(), 0)?;
-                let values = self
-                    .map_entries(id, method_name)?
-                    .iter()
-                    .map(|(_, value)| value.clone())
-                    .collect();
-                self.allocate_object(HeapObject::List(values))
-            }
-            other => Err(format!("CkVmImage Map has no collection method `{other}`")),
-        }
-    }
-
-    fn allocate_object(&mut self, object: HeapObject) -> Result<VmValue, String> {
-        let id = self.next_object_id;
-        self.next_object_id = self
-            .next_object_id
-            .checked_add(1)
-            .ok_or_else(|| "CkVmImage object id overflow".to_string())?;
-        self.objects.insert(id, object);
-        Ok(VmValue::ObjectRef(id))
-    }
-
-    fn require_object_ref(receiver: VmValue, operation: &str) -> Result<u32, String> {
-        match receiver {
-            VmValue::ObjectRef(id) => Ok(id),
-            other => Err(format!(
-                "CkVmImage {operation} requires collection ObjectRef receiver but found {other:?}"
-            )),
-        }
-    }
-
-    fn collection_object(&self, receiver: VmValue, operation: &str) -> Result<&HeapObject, String> {
-        let id = Self::require_object_ref(receiver, operation)?;
-        self.objects
-            .get(&id)
-            .ok_or_else(|| format!("CkVmImage {operation} object id {id} does not exist"))
-    }
-
-    fn collection_object_mut(
-        &mut self,
-        receiver: VmValue,
-        operation: &str,
-    ) -> Result<&mut HeapObject, String> {
-        let id = Self::require_object_ref(receiver, operation)?;
-        self.objects
-            .get_mut(&id)
-            .ok_or_else(|| format!("CkVmImage {operation} object id {id} does not exist"))
-    }
-
-    fn array_values(&self, id: u32, operation: &str) -> Result<&Vec<VmValue>, String> {
-        match self.objects.get(&id) {
-            Some(HeapObject::Array(values)) => Ok(values),
-            Some(other) => Err(format!(
-                "CkVmImage Array method `{operation}` found non-array object {other:?}"
-            )),
-            None => Err(format!(
-                "CkVmImage Array method `{operation}` object id {id} does not exist"
-            )),
-        }
-    }
-
-    fn array_values_mut(&mut self, id: u32, operation: &str) -> Result<&mut Vec<VmValue>, String> {
-        match self.objects.get_mut(&id) {
-            Some(HeapObject::Array(values)) => Ok(values),
-            Some(other) => Err(format!(
-                "CkVmImage Array method `{operation}` found non-array object {other:?}"
-            )),
-            None => Err(format!(
-                "CkVmImage Array method `{operation}` object id {id} does not exist"
-            )),
-        }
-    }
-
-    fn list_values(&self, id: u32, operation: &str) -> Result<&Vec<VmValue>, String> {
-        match self.objects.get(&id) {
-            Some(HeapObject::List(values)) => Ok(values),
-            Some(other) => Err(format!(
-                "CkVmImage List method `{operation}` found non-list object {other:?}"
-            )),
-            None => Err(format!(
-                "CkVmImage List method `{operation}` object id {id} does not exist"
-            )),
-        }
-    }
-
-    fn list_values_mut(&mut self, id: u32, operation: &str) -> Result<&mut Vec<VmValue>, String> {
-        match self.objects.get_mut(&id) {
-            Some(HeapObject::List(values)) => Ok(values),
-            Some(other) => Err(format!(
-                "CkVmImage List method `{operation}` found non-list object {other:?}"
-            )),
-            None => Err(format!(
-                "CkVmImage List method `{operation}` object id {id} does not exist"
-            )),
-        }
-    }
-
-    fn map_entries(&self, id: u32, operation: &str) -> Result<&Vec<(VmValue, VmValue)>, String> {
-        match self.objects.get(&id) {
-            Some(HeapObject::Map(entries)) => Ok(entries),
-            Some(other) => Err(format!(
-                "CkVmImage Map method `{operation}` found non-map object {other:?}"
-            )),
-            None => Err(format!(
-                "CkVmImage Map method `{operation}` object id {id} does not exist"
-            )),
-        }
-    }
-
-    fn map_entries_mut(
-        &mut self,
-        id: u32,
-        operation: &str,
-    ) -> Result<&mut Vec<(VmValue, VmValue)>, String> {
-        match self.objects.get_mut(&id) {
-            Some(HeapObject::Map(entries)) => Ok(entries),
-            Some(other) => Err(format!(
-                "CkVmImage Map method `{operation}` found non-map object {other:?}"
-            )),
-            None => Err(format!(
-                "CkVmImage Map method `{operation}` object id {id} does not exist"
-            )),
-        }
-    }
-
-    fn expect_argument_count(
-        method_name: &str,
-        actual: usize,
-        expected: usize,
-    ) -> Result<(), String> {
-        if actual == expected {
-            Ok(())
-        } else {
-            Err(format!(
-                "CkVmImage collection method `{method_name}` expected {expected} arguments but got {actual}"
-            ))
-        }
-    }
-
-    fn require_int(value: VmValue, operation: &str) -> Result<i32, String> {
-        match value {
-            VmValue::Int(value) => Ok(value),
-            other => Err(format!(
-                "CkVmImage {operation} requires Int but found {other:?}"
-            )),
-        }
-    }
-
-    fn checked_index(index: i32, length: usize, operation: &str) -> Result<usize, String> {
-        if index < 0 || index as usize >= length {
-            Err(format!(
-                "CkVmImage {operation} index {index} is out of bounds for length {length}"
-            ))
-        } else {
-            Ok(index as usize)
-        }
-    }
-
-    fn require_non_null_key(key: VmValue) -> Result<VmValue, String> {
-        if key == VmValue::Null {
-            Err("CkVmImage Map keys cannot be null".to_string())
-        } else {
-            Ok(key)
-        }
-    }
-
-    fn map_find_index(entries: &[(VmValue, VmValue)], key: &VmValue) -> Option<usize> {
-        entries
-            .iter()
-            .position(|(entry_key, _)| value_equals(entry_key, key))
-    }
-
-    fn map_set(entries: &mut Vec<(VmValue, VmValue)>, key: VmValue, value: VmValue) {
-        if let Some(index) = Self::map_find_index(entries, &key) {
-            entries[index].1 = value;
-        } else {
-            entries.push((key, value));
-        }
-    }
-
     fn host_import(&self, import_id: i32) -> Result<&HostImport, String> {
         self.image
             .host_imports
             .iter()
             .find(|import| import.id == import_id)
             .ok_or_else(|| format!("CkVmImage host import id {import_id} is not declared"))
-    }
-
-    fn pop_many(&mut self, argument_count: i32) -> Result<Vec<VmValue>, String> {
-        if argument_count < 0 {
-            return Err(format!(
-                "negative CkVmImage argument count {argument_count}"
-            ));
-        }
-        let argument_count = argument_count as usize;
-        if self.stack.len() < argument_count {
-            return Err(format!(
-                "CkVmImage stack underflow: need {argument_count} arguments but stack has {}",
-                self.stack.len()
-            ));
-        }
-        let start = self.stack.len() - argument_count;
-        Ok(self.stack.split_off(start))
-    }
-
-    fn pop_one(&mut self, operation: &str) -> Result<VmValue, String> {
-        self.stack
-            .pop()
-            .ok_or_else(|| format!("CkVmImage stack underflow during {operation}"))
-    }
-
-    fn sleep_ticks(&mut self) -> Result<i64, String> {
-        match self.pop_one("sleep ticks")? {
-            VmValue::Int(ticks) => Ok(i64::from(ticks)),
-            VmValue::Long(ticks) => Ok(ticks),
-            other => Err(format!(
-                "CkVmImage SLEEP requires Long ticks but found {other:?}"
-            )),
-        }
-    }
-
-    fn pop_bool_condition(&mut self, opcode_name: &str) -> Result<bool, String> {
-        match self.pop_one(opcode_name)? {
-            VmValue::Bool(value) => Ok(value),
-            other => Err(format!(
-                "CkVmImage {opcode_name} requires Bool condition but found {other:?}"
-            )),
-        }
-    }
-
-    fn local(&self, slot: i32) -> Result<&VmValue, String> {
-        if slot < 0 {
-            return Err(format!("CkVmImage local slot {slot} is negative"));
-        }
-        self.locals.get(slot as usize).ok_or_else(|| {
-            format!(
-                "CkVmImage local slot {slot} is out of bounds for {} locals",
-                self.locals.len()
-            )
-        })
-    }
-
-    fn local_mut(&mut self, slot: i32) -> Result<&mut VmValue, String> {
-        if slot < 0 {
-            return Err(format!("CkVmImage local slot {slot} is negative"));
-        }
-        let local_count = self.locals.len();
-        self.locals.get_mut(slot as usize).ok_or_else(|| {
-            format!("CkVmImage local slot {slot} is out of bounds for {local_count} locals")
-        })
-    }
-
-    fn jump(&mut self, target: i32) -> Result<(), String> {
-        if target < 0 {
-            return Err(format!("CkVmImage jump target {target} is negative"));
-        }
-        let target = target as usize;
-        let code_len = self.current_function()?.code.len();
-        if target > code_len {
-            return Err(format!(
-                "CkVmImage jump target {target} is outside function code length {code_len}"
-            ));
-        }
-        self.instruction_pointer = target;
-        Ok(())
-    }
-
-    fn call_function(&mut self, function_index: i32, argument_count: i32) -> Result<(), String> {
-        let function_index = self.checked_function_index(function_index)?;
-        if argument_count < 0 {
-            return Err(format!(
-                "negative CkVmImage argument count {argument_count}"
-            ));
-        }
-        let argument_count = argument_count as usize;
-        let frame_size = checked_frame_size(&self.image, function_index)?;
-        if argument_count > frame_size {
-            return Err(format!(
-                "CkVmImage argument count {argument_count} exceeds frame size {frame_size} for function {function_index}"
-            ));
-        }
-        let arguments = self.pop_many(argument_count as i32)?;
-        let caller_frame = CallFrame {
-            function_index: self.function_index,
-            instruction_pointer: self.instruction_pointer,
-            locals: std::mem::take(&mut self.locals),
-        };
-        self.call_stack.push(caller_frame);
-        self.function_index = function_index;
-        self.instruction_pointer = 0;
-        self.locals = vec![VmValue::Unit; frame_size];
-        for (slot, argument) in arguments.into_iter().enumerate() {
-            self.locals[slot] = argument;
-        }
-        Ok(())
-    }
-
-    fn checked_function_index(&self, function_index: i32) -> Result<usize, String> {
-        if function_index < 0 {
-            return Err(format!(
-                "negative CkVmImage function index {function_index}"
-            ));
-        }
-        let function_index = function_index as usize;
-        if function_index >= self.image.functions.len() {
-            return Err(format!(
-                "CkVmImage function index {function_index} is out of bounds for {} functions",
-                self.image.functions.len()
-            ));
-        }
-        Ok(function_index)
     }
 
     fn current_function(&self) -> Result<&Function, String> {
@@ -1504,13 +1003,7 @@ impl ImageVmHandle {
 }
 
 fn checked_entry_function_index(image: &Image) -> Result<usize, String> {
-    if image.entry_function_index < 0 {
-        return Err(format!(
-            "negative CkVmImage entry function index {}",
-            image.entry_function_index
-        ));
-    }
-    let index = image.entry_function_index as usize;
+    let index = image.entry_function_index;
     if index >= image.functions.len() {
         return Err(format!(
             "CkVmImage entry function index {} is out of bounds for {} functions",
@@ -1521,85 +1014,8 @@ fn checked_entry_function_index(image: &Image) -> Result<usize, String> {
     Ok(index)
 }
 
-fn checked_frame_size(image: &Image, function_index: usize) -> Result<usize, String> {
-    let frame_size = image.functions[function_index].frame_size;
-    if frame_size < 0 {
-        return Err(format!("negative CkVmImage frame size {frame_size}"));
-    }
-    Ok(frame_size as usize)
-}
-
-fn apply_binary_operator(operator: u8, left: VmValue, right: VmValue) -> Result<VmValue, String> {
-    match operator {
-        0 => binary_add(left, right),
-        1 => numeric_binary(
-            left,
-            right,
-            "-",
-            |a, b| a.wrapping_sub(b),
-            |a, b| a.wrapping_sub(b),
-        ),
-        2 => numeric_binary(
-            left,
-            right,
-            "*",
-            |a, b| a.wrapping_mul(b),
-            |a, b| a.wrapping_mul(b),
-        ),
-        3 => binary_divide(left, right),
-        4 => Ok(VmValue::Bool(value_equals(&left, &right))),
-        5 => Ok(VmValue::Bool(!value_equals(&left, &right))),
-        6 => compare_values(left, right, "<", |ordering| ordering.is_lt()),
-        7 => compare_values(left, right, "<=", |ordering| !ordering.is_gt()),
-        8 => compare_values(left, right, ">", |ordering| ordering.is_gt()),
-        9 => compare_values(left, right, ">=", |ordering| !ordering.is_lt()),
-        10 => bool_binary(left, right, "&&", |a, b| a && b),
-        11 => bool_binary(left, right, "||", |a, b| a || b),
-        12 => numeric_binary(left, right, "&", |a, b| a & b, |a, b| a & b),
-        13 => numeric_binary(left, right, "|", |a, b| a | b, |a, b| a | b),
-        14 => numeric_binary(left, right, "^", |a, b| a ^ b, |a, b| a ^ b),
-        15 => shift_binary(
-            left,
-            right,
-            "<<",
-            |a, b| a.wrapping_shl(b),
-            |a, b| a.wrapping_shl(b),
-        ),
-        16 => shift_binary(
-            left,
-            right,
-            ">>",
-            |a, b| a.wrapping_shr(b),
-            |a, b| a.wrapping_shr(b),
-        ),
-        other => Err(format!("unknown CkVmImage binary operator tag {other}")),
-    }
-}
-
-fn apply_unary_operator(operator: u8, operand: VmValue) -> Result<VmValue, String> {
-    match operator {
-        0 => match operand {
-            VmValue::Int(value) => Ok(VmValue::Int(value.wrapping_neg())),
-            VmValue::Long(value) => Ok(VmValue::Long(value.wrapping_neg())),
-            other => Err(format!(
-                "CkVmImage unary - requires Int or Long but found {other:?}"
-            )),
-        },
-        1 => match operand {
-            VmValue::Bool(value) => Ok(VmValue::Bool(!value)),
-            other => Err(format!(
-                "CkVmImage unary ! requires Bool but found {other:?}"
-            )),
-        },
-        2 => match operand {
-            VmValue::Int(value) => Ok(VmValue::Int(!value)),
-            VmValue::Long(value) => Ok(VmValue::Long(!value)),
-            other => Err(format!(
-                "CkVmImage unary ~ requires Int or Long but found {other:?}"
-            )),
-        },
-        other => Err(format!("unknown CkVmImage unary operator tag {other}")),
-    }
+fn checked_register_count(image: &Image, function_index: usize) -> Result<usize, String> {
+    Ok(image.functions[function_index].register_count)
 }
 
 fn allows_kotlin_hostcall_fallback(module_name: &str, function_name: &str) -> bool {
@@ -2086,8 +1502,7 @@ mod tests {
 
     #[test]
     fn rejects_string_concatenation_with_object_value() {
-        let error = apply_binary_operator(
-            0,
+        let error = binary_add(
             VmValue::ObjectRef(42),
             VmValue::String("suffix".to_string()),
         )
@@ -2175,24 +1590,30 @@ mod tests {
     }
 
     fn encode_empty_main_image() -> Vec<u8> {
-        image_with_code(0, vec![OP_RETURN])
+        image_with_instructions(0, |out| {
+            out.push(31);
+        })
     }
 
-    fn image_with_code(frame_size: i32, code: Vec<u8>) -> Vec<u8> {
+    fn image_with_instructions(
+        register_count: u16,
+        write_instructions: impl FnOnce(&mut Vec<u8>),
+    ) -> Vec<u8> {
+        let mut instructions = Vec::new();
+        write_instructions(&mut instructions);
         let mut out = Vec::new();
         out.extend_from_slice(b"CKIM");
-        out.push(1);
+        out.push(2);
         string(&mut out, "ckl-1");
-        out.extend_from_slice(&1u16.to_le_bytes());
-        i32(&mut out, 0);
         i32(&mut out, 0);
         i32(&mut out, 0);
         i32(&mut out, 0);
         i32(&mut out, 1);
         string(&mut out, "main");
-        i32(&mut out, frame_size);
-        i32(&mut out, code.len() as i32);
-        out.extend_from_slice(&code);
+        out.extend_from_slice(&register_count.to_le_bytes());
+        out.extend_from_slice(&0u16.to_le_bytes());
+        i32(&mut out, 1);
+        out.extend_from_slice(&instructions);
         out
     }
 
