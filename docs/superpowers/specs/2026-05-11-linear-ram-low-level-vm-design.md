@@ -143,6 +143,8 @@ Returns:
 3. truncate register windows;
 4. write the primitive return register.
 
+Functions do not have an implicit return instruction at the end. A function must reach an explicit `Return*` or `ReturnUnit` instruction. Falling past the last instruction is a VM error. Jump targets must point to an existing instruction; jumping to `instructions.len()` is invalid rather than a hidden `ReturnUnit`.
+
 ## Ownership, RAII, And Move Semantics
 
 Ownership is a language/compiler property, not a VM garbage collector.
