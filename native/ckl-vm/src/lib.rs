@@ -5,6 +5,7 @@ pub mod image;
 pub mod image_runner;
 pub mod jni;
 pub mod low_image;
+pub mod low_image_runner;
 pub mod runtime_kernel;
 pub mod signal;
 pub mod value;
