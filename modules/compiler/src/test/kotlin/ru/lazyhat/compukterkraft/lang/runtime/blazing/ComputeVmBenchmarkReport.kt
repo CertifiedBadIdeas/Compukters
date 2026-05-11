@@ -30,7 +30,7 @@ internal data class ComputeVmBenchmarkReport(
     fun toTsv(): String =
         buildString {
             appendLine(
-                "workload\titerations\tchecksum\tsamples\tck_vm_best_ns\tkotlin_jvm_best_ns\tpython_best_ns\trust_native_best_ns\tck_vm_iters_per_sec\tkotlin_jvm_iters_per_sec\tpython_iters_per_sec\trust_native_iters_per_sec\tck_vm_vs_kotlin_slowdown\tck_vm_vs_python_slowdown\tck_vm_vs_rust_slowdown\tck_vm_instructions\tck_vm_value_clones\tck_vm_register_reads\tck_vm_register_writes\tck_vm_function_calls\tck_vm_function_returns\tck_vm_host_call_attempts\tck_vm_native_host_calls\tck_vm_jvm_host_signals\tck_vm_pauses\tck_vm_string_allocations\tck_vm_record_allocations\tck_vm_opcode_counts",
+                "workload\titerations\tchecksum\tsamples\tck_vm_best_ns\tkotlin_jvm_best_ns\tpython_best_ns\trust_native_best_ns\tck_vm_iters_per_sec\tkotlin_jvm_iters_per_sec\tpython_iters_per_sec\trust_native_iters_per_sec\tck_vm_vs_kotlin_slowdown\tck_vm_vs_python_slowdown\tck_vm_vs_rust_slowdown\tck_vm_instructions\tck_vm_ns_per_instruction\tck_vm_instructions_per_iteration\tck_vm_value_clones\tck_vm_register_reads\tck_vm_register_writes\tck_vm_function_calls\tck_vm_function_returns\tck_vm_host_call_attempts\tck_vm_native_host_calls\tck_vm_jvm_host_signals\tck_vm_pauses\tck_vm_string_allocations\tck_vm_record_allocations\tck_vm_opcode_counts",
             )
             workloads.forEach { workload ->
                 val metrics = workload.ckVmMetrics
@@ -52,6 +52,8 @@ internal data class ComputeVmBenchmarkReport(
                         formatPlain(workload.ckVmVsPythonSlowdown),
                         formatPlain(workload.ckVmVsRustSlowdown),
                         metrics.executedInstructions,
+                        formatPlain(workload.ckVmNanosPerInstruction),
+                        formatPlain(workload.ckVmInstructionsPerIteration),
                         metrics.valueClones,
                         metrics.registerReads,
                         metrics.registerWrites,
@@ -94,13 +96,15 @@ internal data class ComputeVmBenchmarkReport(
             appendLine("## CK VM Internal Counters")
             appendLine()
             appendLine(
-                "| Workload | Instructions | Value clones | Register reads | Register writes | Function calls | Function returns | Host call attempts | Native host calls | JVM host signals | Pauses | String allocations | Record allocations | Opcode counts |",
+                "| Workload | Instructions | ns/instruction | Instructions/iteration | Value clones | Register reads | Register writes | Function calls | Function returns | Host call attempts | Native host calls | JVM host signals | Pauses | String allocations | Record allocations | Opcode counts |",
             )
-            appendLine("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |")
+            appendLine("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |")
             workloads.forEach { workload ->
                 val metrics = workload.ckVmMetrics
                 appendLine(
                     "| ${workload.workloadName} | ${formatInteger(metrics.executedInstructions)} | " +
+                        "${formatPlain(workload.ckVmNanosPerInstruction)} | " +
+                        "${formatPlain(workload.ckVmInstructionsPerIteration)} | " +
                         "${formatInteger(metrics.valueClones)} | ${formatInteger(metrics.registerReads)} | " +
                         "${formatInteger(metrics.registerWrites)} | ${formatInteger(metrics.functionCalls)} | " +
                         "${formatInteger(metrics.functionReturns)} | ${formatInteger(metrics.hostCallAttempts)} | " +
@@ -154,6 +158,22 @@ internal data class ComputeVmBenchmarkWorkloadReport(
 
     val ckVmVsRustSlowdown: Double
         get() = ckVmBestNanos.toDouble() / rustNativeBestNanos.toDouble()
+
+    val ckVmNanosPerInstruction: Double
+        get() =
+            if (ckVmMetrics.executedInstructions > 0) {
+                ckVmBestNanos.toDouble() / ckVmMetrics.executedInstructions.toDouble()
+            } else {
+                0.0
+            }
+
+    val ckVmInstructionsPerIteration: Double
+        get() =
+            if (iterations > 0) {
+                ckVmMetrics.executedInstructions.toDouble() / iterations.toDouble()
+            } else {
+                0.0
+            }
 
     private fun iterationsPerSecond(nanos: Long): Double = iterations.toDouble() * NANOS_PER_SECOND / nanos.toDouble()
 
