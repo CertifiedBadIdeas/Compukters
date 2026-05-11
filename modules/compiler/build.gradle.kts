@@ -33,7 +33,7 @@ tasks.register<Test>("profileComputeVmBenchmark") {
     testClassesDirs = sourceSets.test.get().output.classesDirs
     classpath = sourceSets.test.get().runtimeClasspath
     useJUnitPlatform()
-    jvmArgs("-Xss64m")
+    jvmArgs("-Xss256m")
     systemProperty(
         "ckl.benchmark.iterations",
         providers.gradleProperty("ckl.benchmark.iterations").orElse(System.getProperty("ckl.benchmark.iterations") ?: "10000").get(),
