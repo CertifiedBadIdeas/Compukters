@@ -26,3 +26,33 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
     testImplementation(kotlin("test"))
 }
+
+val rustVmNativePlatform = currentRustVmNativePlatform()
+val rustVmReleaseNativeLibrary = rootProject.layout.projectDirectory.file("native/ckl-vm/target/release/${rustVmNativePlatform.libraryName}")
+val rustVmCrateDir = rootProject.layout.projectDirectory.dir("native/ckl-vm")
+val computeVmBenchmarkReports = layout.buildDirectory.dir("reports/profiling")
+val computeVmBenchmarkTsv = computeVmBenchmarkReports.map { it.file("compute-vm-benchmark.tsv") }
+val computeVmBenchmarkMarkdown = computeVmBenchmarkReports.map { it.file("compute-vm-benchmark.md") }
+
+tasks.register<Test>("profileComputeVmBenchmark") {
+    group = "verification"
+    description = "Run a CPU-only CKL VM benchmark against the same workload compiled as optimized Rust."
+    dependsOn(":v1_21_1-neoforge:buildRustVmNativeLibraryRelease")
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    useJUnitPlatform()
+    testLogging.showStandardStreams = true
+    outputs.upToDateWhen { false }
+    filter {
+        includeTestsMatching("ru.lazyhat.compukterkraft.lang.runtime.blazing.ComputeVmBenchmarkProfileTest")
+    }
+    systemProperty("ckl.vm.native.library", rustVmReleaseNativeLibrary.asFile.absolutePath)
+    systemProperty("ckl.benchmark.rust.crate.dir", rustVmCrateDir.asFile.absolutePath)
+    systemProperty("ckl.benchmark.compute.tsv.path", computeVmBenchmarkTsv.get().asFile.absolutePath)
+    systemProperty("ckl.benchmark.compute.markdown.path", computeVmBenchmarkMarkdown.get().asFile.absolutePath)
+    systemProperty("ckl.benchmark.iterations", System.getProperty("ckl.benchmark.iterations") ?: "500000")
+    systemProperty("ckl.benchmark.warmup.iterations", System.getProperty("ckl.benchmark.warmup.iterations") ?: "50000")
+    systemProperty("ckl.benchmark.samples", System.getProperty("ckl.benchmark.samples") ?: "5")
+    outputs.file(computeVmBenchmarkTsv)
+    outputs.file(computeVmBenchmarkMarkdown)
+}
