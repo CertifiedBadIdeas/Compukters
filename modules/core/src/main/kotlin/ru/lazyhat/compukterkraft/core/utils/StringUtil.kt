@@ -43,12 +43,11 @@ object StringUtil {
         if (chr >= 0x1FB00 && chr <= 0x1FB13) return chr + (129 - 0x1fb00)
         if (chr >= 0x1FB14 && chr <= 0x1FB1D) return chr + (150 - 0x1fb14)
 
-        // Everything else is just a manual lookup. For now, we just use a big switch statement, which we spin into a
-        // separate function to hopefully avoid inlining it here.
-        return unicodeToCraftOsFallback(chr)
+        // Everything else is a manual lookup into CC/CraftOS's terminal symbol page.
+        return unicodeToCraftOsSymbol(chr)
     }
 
-    private fun unicodeToCraftOsFallback(c: Int): Int =
+    private fun unicodeToCraftOsSymbol(c: Int): Int =
         when (c) {
             0x263A -> 1
             0x263B -> 2
