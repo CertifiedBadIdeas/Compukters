@@ -22,24 +22,27 @@ use std::time::Instant;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    let iterations = parse_arg(&args, 1, "iterations");
-    let samples = parse_arg(&args, 2, "samples");
-    let warmup_iterations = parse_arg(&args, 3, "warmup_iterations");
+    let workload = args
+        .get(1)
+        .unwrap_or_else(|| panic!("missing workload argument"));
+    let iterations = parse_arg(&args, 2, "iterations");
+    let samples = parse_arg(&args, 3, "samples");
+    let warmup_iterations = parse_arg(&args, 4, "warmup_iterations");
 
     if warmup_iterations > 0 {
-        integer_mix(warmup_iterations);
+        run_workload(workload, warmup_iterations);
     }
 
     let mut checksum = None;
     let mut best_nanos = u128::MAX;
     for _ in 0..samples {
         let started = Instant::now();
-        let sample_checksum = integer_mix(iterations);
+        let sample_checksum = run_workload(workload, iterations);
         let elapsed = started.elapsed().as_nanos();
         if let Some(expected) = checksum {
             assert_eq!(
                 expected, sample_checksum,
-                "native benchmark checksum changed between samples"
+                "{workload} native benchmark checksum changed between samples"
             );
         } else {
             checksum = Some(sample_checksum);
@@ -62,6 +65,16 @@ fn parse_arg(args: &[String], index: usize, name: &str) -> i32 {
         .unwrap_or_else(|error| panic!("invalid {name} argument: {error}"))
 }
 
+fn run_workload(workload: &str, iterations: i32) -> i32 {
+    match workload {
+        "integer-mix" => integer_mix(iterations),
+        "function-mix" => function_mix(iterations),
+        "branch-div" => branch_div(iterations),
+        "recursive-fib" => recursive_fib_workload(iterations),
+        _ => panic!("unknown workload: {workload}"),
+    }
+}
+
 fn integer_mix(iterations: i32) -> i32 {
     assert!(iterations >= 0, "iterations must be non-negative");
     let mut state: i32 = 305_419_896;
@@ -76,4 +89,62 @@ fn integer_mix(iterations: i32) -> i32 {
         i += 1;
     }
     acc
+}
+
+fn function_mix(iterations: i32) -> i32 {
+    assert!(iterations >= 0, "iterations must be non-negative");
+    let mut acc: i32 = 324_508_639;
+    let mut i: i32 = 0;
+    while i < iterations {
+        acc = function_mix_b(function_mix_a(acc, i), i);
+        i += 1;
+    }
+    acc
+}
+
+fn function_mix_a(value: i32, index: i32) -> i32 {
+    (value.wrapping_add(index.wrapping_mul(17)) ^ value.wrapping_shl(3)).wrapping_add(index >> 1)
+}
+
+fn function_mix_b(value: i32, index: i32) -> i32 {
+    (value ^ index.wrapping_mul(131)).wrapping_add(value >> 2) ^ index.wrapping_shl(4)
+}
+
+fn branch_div(iterations: i32) -> i32 {
+    assert!(iterations >= 0, "iterations must be non-negative");
+    let mut acc: i32 = 7;
+    let mut i: i32 = 1;
+    while i < iterations + 1 {
+        let modulo = i % 11;
+        acc = if modulo == 0 {
+            acc.wrapping_add(i / 3)
+        } else if modulo < 5 {
+            (acc ^ i.wrapping_mul(17)).wrapping_add(i % 7)
+        } else {
+            acc.wrapping_sub(i / (modulo + 1))
+                .wrapping_add(acc.wrapping_shl(1))
+        };
+        i += 1;
+    }
+    acc
+}
+
+fn recursive_fib_workload(iterations: i32) -> i32 {
+    assert!(iterations >= 0, "iterations must be non-negative");
+    let mut acc: i32 = 0;
+    let mut i: i32 = 0;
+    while i < iterations {
+        let n = 10 + (i % 6);
+        acc = acc.wrapping_add(recursive_fib(n) ^ i.wrapping_mul(31));
+        i += 1;
+    }
+    acc
+}
+
+fn recursive_fib(value: i32) -> i32 {
+    if value < 2 {
+        value
+    } else {
+        recursive_fib(value - 1).wrapping_add(recursive_fib(value - 2))
+    }
 }
