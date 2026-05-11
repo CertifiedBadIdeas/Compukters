@@ -31,10 +31,12 @@ import kotlin.system.measureNanoTime
 internal data class ComputeVmBenchmarkRunResult(
     val checksum: Int,
     val bestNanos: Long,
+    val lowVmMetrics: NativeLowImageVmMetrics = NativeLowImageVmMetrics.EMPTY,
 )
 
 private data class ComputeVmBenchmarkSampleResult(
     val checksum: Int,
+    val lowVmMetrics: NativeLowImageVmMetrics = NativeLowImageVmMetrics.EMPTY,
 )
 
 internal interface ComputeVmBenchmarkWorkloadRunner {
@@ -105,7 +107,11 @@ internal class LowVmComputeBenchmarkRunner(
         try {
             while (true) {
                 when (val signal = NativeVmBindings.runLowImageUntilSignal(handle)) {
-                    is NativeLowImageVmSignal.HaltI32 -> return ComputeVmBenchmarkSampleResult(signal.value)
+                    is NativeLowImageVmSignal.HaltI32 ->
+                        return ComputeVmBenchmarkSampleResult(
+                            checksum = signal.value,
+                            lowVmMetrics = NativeVmBindings.lowImageMetrics(handle),
+                        )
                     NativeLowImageVmSignal.Pause -> Unit
                     else -> error("Low-level compute benchmark unexpectedly halted with signal: $signal")
                 }
@@ -499,6 +505,7 @@ private fun bestOf(
     require(samples > 0) { "Benchmark samples must be positive." }
     var checksum = 0
     var bestNanos = Long.MAX_VALUE
+    var bestLowVmMetrics = NativeLowImageVmMetrics.EMPTY
     repeat(samples) { sampleIndex ->
         var sampleResult = ComputeVmBenchmarkSampleResult(0)
         val elapsed =
@@ -514,9 +521,10 @@ private fun bestOf(
         }
         if (elapsed < bestNanos) {
             bestNanos = elapsed
+            bestLowVmMetrics = sampleResult.lowVmMetrics
         }
     }
-    return ComputeVmBenchmarkRunResult(checksum, bestNanos)
+    return ComputeVmBenchmarkRunResult(checksum, bestNanos, bestLowVmMetrics)
 }
 
 private fun runProcessBackedBaseline(

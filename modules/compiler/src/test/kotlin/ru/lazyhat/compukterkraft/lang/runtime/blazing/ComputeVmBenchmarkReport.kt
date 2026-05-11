@@ -30,7 +30,7 @@ internal data class ComputeVmBenchmarkReport(
     fun toTsv(): String =
         buildString {
             appendLine(
-                "workload\titerations\tchecksum\tsamples\tlow_vm_best_ns\tkotlin_jvm_best_ns\tpython_best_ns\trust_native_best_ns\tlow_vm_iters_per_sec\tkotlin_jvm_iters_per_sec\tpython_iters_per_sec\trust_native_iters_per_sec\tlow_vm_vs_kotlin_slowdown\tlow_vm_vs_python_slowdown\tlow_vm_vs_rust_slowdown",
+                "workload\titerations\tchecksum\tsamples\tlow_vm_best_ns\tkotlin_jvm_best_ns\tpython_best_ns\trust_native_best_ns\tlow_vm_instructions\tlow_vm_ns_per_instruction\tlow_vm_instructions_per_iteration\tlow_vm_function_calls\tlow_vm_function_returns\tlow_vm_pauses\tlow_vm_memory_loads\tlow_vm_memory_stores\tlow_vm_opcode_counts\tlow_vm_iters_per_sec\tkotlin_jvm_iters_per_sec\tpython_iters_per_sec\trust_native_iters_per_sec\tlow_vm_vs_kotlin_slowdown\tlow_vm_vs_python_slowdown\tlow_vm_vs_rust_slowdown",
             )
             workloads.forEach { workload ->
                 appendLine(
@@ -43,6 +43,15 @@ internal data class ComputeVmBenchmarkReport(
                         workload.kotlinJvmBestNanos,
                         workload.pythonBestNanos,
                         workload.rustNativeBestNanos,
+                        workload.lowVmMetrics.executedInstructions,
+                        formatPlain(workload.lowVmNanosPerInstruction),
+                        formatPlain(workload.lowVmInstructionsPerIteration),
+                        workload.lowVmMetrics.functionCalls,
+                        workload.lowVmMetrics.functionReturns,
+                        workload.lowVmMetrics.pauseSignals,
+                        workload.lowVmMetrics.memoryLoads,
+                        workload.lowVmMetrics.memoryStores,
+                        workload.lowVmMetrics.opcodeSummary(),
                         formatPlain(workload.lowVmIterationsPerSecond),
                         formatPlain(workload.kotlinJvmIterationsPerSecond),
                         formatPlain(workload.pythonIterationsPerSecond),
@@ -79,6 +88,20 @@ internal data class ComputeVmBenchmarkReport(
             }
             appendLine()
             appendLine("Best of $samples samples. Higher iter/s is better; lower slowdown is better.")
+            appendLine()
+            appendLine("## Low VM Metrics")
+            appendLine()
+            appendLine("| Workload | Instructions | ns/instruction | instructions/iteration | Calls | Returns | Pauses | Load32 | Store32 | Opcode counts |")
+            appendLine("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |")
+            workloads.forEach { workload ->
+                appendLine(
+                    "| ${workload.workloadName} | ${formatInteger(workload.lowVmMetrics.executedInstructions)} | " +
+                        "${formatPlain(workload.lowVmNanosPerInstruction)} | ${formatPlain(workload.lowVmInstructionsPerIteration)} | " +
+                        "${workload.lowVmMetrics.functionCalls} | ${workload.lowVmMetrics.functionReturns} | " +
+                        "${workload.lowVmMetrics.pauseSignals} | ${workload.lowVmMetrics.memoryLoads} | " +
+                        "${workload.lowVmMetrics.memoryStores} | ${workload.lowVmMetrics.opcodeSummary()} |",
+                )
+            }
         }
 
     private companion object {
@@ -100,6 +123,7 @@ internal data class ComputeVmBenchmarkWorkloadReport(
     val kotlinJvmBestNanos: Long,
     val pythonBestNanos: Long,
     val rustNativeBestNanos: Long,
+    val lowVmMetrics: NativeLowImageVmMetrics = NativeLowImageVmMetrics.EMPTY,
 ) {
     val kotlinJvmIterationsPerSecond: Double
         get() = iterationsPerSecond(kotlinJvmBestNanos)
@@ -121,6 +145,17 @@ internal data class ComputeVmBenchmarkWorkloadReport(
 
     val lowVmVsRustSlowdown: Double
         get() = lowVmBestNanos.toDouble() / rustNativeBestNanos.toDouble()
+
+    val lowVmNanosPerInstruction: Double
+        get() =
+            if (lowVmMetrics.executedInstructions == 0L) {
+                0.0
+            } else {
+                lowVmBestNanos.toDouble() / lowVmMetrics.executedInstructions.toDouble()
+            }
+
+    val lowVmInstructionsPerIteration: Double
+        get() = lowVmMetrics.executedInstructions.toDouble() / iterations.toDouble()
 
     private fun iterationsPerSecond(nanos: Long): Double = iterations.toDouble() * NANOS_PER_SECOND / nanos.toDouble()
 

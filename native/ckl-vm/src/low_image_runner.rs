@@ -1,5 +1,31 @@
 use crate::low_image::{Image, Instruction, Register};
 
+pub const LOW_OPCODE_COUNT: usize = low_opcode::RETURN_UNIT + 1;
+
+pub mod low_opcode {
+    pub const I32_CONST: usize = 1;
+    pub const I64_CONST: usize = 2;
+    pub const ADDR_CONST: usize = 3;
+    pub const I32_MOVE: usize = 4;
+    pub const ADDR_MOVE: usize = 5;
+    pub const I32_ADD: usize = 6;
+    pub const I32_SUB: usize = 7;
+    pub const I32_MUL: usize = 8;
+    pub const I32_DIV: usize = 9;
+    pub const I32_BIT_XOR: usize = 10;
+    pub const I32_SHL: usize = 11;
+    pub const I32_SHR: usize = 12;
+    pub const I32_LT: usize = 13;
+    pub const LOAD32: usize = 14;
+    pub const STORE32: usize = 15;
+    pub const ADDR_ADD: usize = 16;
+    pub const JUMP: usize = 17;
+    pub const JUMP_IF_FALSE: usize = 18;
+    pub const CALL_STATIC: usize = 19;
+    pub const RETURN: usize = 20;
+    pub const RETURN_UNIT: usize = 21;
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LowImageSignal {
     HaltUnit,
@@ -16,6 +42,31 @@ enum LowRegisterValue {
     I64(i64),
     Addr(u32),
     Bool(bool),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LowImageVmMetrics {
+    pub executed_instructions: u64,
+    pub function_calls: u64,
+    pub function_returns: u64,
+    pub pause_signals: u64,
+    pub memory_loads: u64,
+    pub memory_stores: u64,
+    pub opcode_counts: [u64; LOW_OPCODE_COUNT],
+}
+
+impl Default for LowImageVmMetrics {
+    fn default() -> Self {
+        Self {
+            executed_instructions: 0,
+            function_calls: 0,
+            function_returns: 0,
+            pause_signals: 0,
+            memory_loads: 0,
+            memory_stores: 0,
+            opcode_counts: [0; LOW_OPCODE_COUNT],
+        }
+    }
 }
 
 struct LowFrame {
@@ -71,6 +122,7 @@ impl LowProgram {
                 frames: vec![entry_frame],
                 memory,
                 instructions_since_pause: 0,
+                metrics: LowImageVmMetrics::default(),
             },
         ))
     }
@@ -104,6 +156,7 @@ struct LowState {
     frames: Vec<LowFrame>,
     memory: Vec<u8>,
     instructions_since_pause: usize,
+    metrics: LowImageVmMetrics,
 }
 
 pub struct LowImageVm {
@@ -126,6 +179,10 @@ impl LowImageVm {
         &self.state.memory
     }
 
+    pub fn metrics_snapshot(&self) -> LowImageVmMetrics {
+        self.state.metrics.clone()
+    }
+
     pub fn run_until_signal(&mut self) -> Result<LowImageSignal, String> {
         loop {
             let (function_index, instruction_pointer) = {
@@ -141,6 +198,7 @@ impl LowImageVm {
                 .get(instruction_pointer)
                 .unwrap_or(&Instruction::ReturnUnit);
             self.state.instructions_since_pause += 1;
+            self.state.record_instruction(instruction);
             match instruction {
                 Instruction::I32Const { dst, value } => self.state.write_i32(*dst, *value)?,
                 Instruction::I64Const { dst, value } => self.state.write_i64(*dst, *value)?,
@@ -210,6 +268,8 @@ impl LowImageVm {
                     let mut raw = [0_u8; 4];
                     raw.copy_from_slice(bytes);
                     self.state.write_i32(*dst, i32::from_le_bytes(raw))?;
+                    self.state.metrics.memory_loads =
+                        self.state.metrics.memory_loads.saturating_add(1);
                 }
                 Instruction::Store32 { addr, src } => {
                     let address = self.state.read_addr(*addr)?;
@@ -217,6 +277,8 @@ impl LowImageVm {
                     self.state
                         .memory_range_mut(address, 4)?
                         .copy_from_slice(&value);
+                    self.state.metrics.memory_stores =
+                        self.state.metrics.memory_stores.saturating_add(1);
                 }
                 Instruction::AddrAdd { dst, base, offset } => {
                     let base = self.state.read_addr(*base)?;
@@ -257,6 +319,8 @@ impl LowImageVm {
             }
             if self.state.instructions_since_pause >= self.instruction_budget {
                 self.state.instructions_since_pause = 0;
+                self.state.metrics.pause_signals =
+                    self.state.metrics.pause_signals.saturating_add(1);
                 return Ok(LowImageSignal::Pause);
             }
         }
@@ -264,6 +328,13 @@ impl LowImageVm {
 }
 
 impl LowState {
+    fn record_instruction(&mut self, instruction: &Instruction) {
+        self.metrics.executed_instructions =
+            self.metrics.executed_instructions.saturating_add(1);
+        let opcode = opcode_index(instruction);
+        self.metrics.opcode_counts[opcode] = self.metrics.opcode_counts[opcode].saturating_add(1);
+    }
+
     fn current_function<'a>(
         &self,
         program: &'a LowProgram,
@@ -285,6 +356,7 @@ impl LowState {
     }
 
     fn return_value(&mut self, register: Register) -> Result<Option<LowImageSignal>, String> {
+        self.metrics.function_returns = self.metrics.function_returns.saturating_add(1);
         let value = self.read_register_value(register)?;
         if self.frames.len() == 1 {
             return Ok(Some(Self::signal_from_value(value)?));
@@ -298,6 +370,7 @@ impl LowState {
     }
 
     fn return_unit(&mut self) -> Result<Option<LowImageSignal>, String> {
+        self.metrics.function_returns = self.metrics.function_returns.saturating_add(1);
         if self.frames.len() == 1 {
             return Ok(Some(LowImageSignal::HaltUnit));
         }
@@ -335,6 +408,7 @@ impl LowState {
         for (parameter, value) in function.parameters.iter().copied().zip(values) {
             Self::write_register_value_to_frame(&mut frame, parameter, value)?;
         }
+        self.metrics.function_calls = self.metrics.function_calls.saturating_add(1);
         self.frames.push(frame);
         Ok(())
     }
@@ -510,5 +584,31 @@ impl LowState {
         self.memory
             .get_mut(start..end)
             .ok_or_else(|| format!("memory access {start}..{end} is outside {len} bytes"))
+    }
+}
+
+fn opcode_index(instruction: &Instruction) -> usize {
+    match instruction {
+        Instruction::I32Const { .. } => low_opcode::I32_CONST,
+        Instruction::I64Const { .. } => low_opcode::I64_CONST,
+        Instruction::AddrConst { .. } => low_opcode::ADDR_CONST,
+        Instruction::I32Move { .. } => low_opcode::I32_MOVE,
+        Instruction::AddrMove { .. } => low_opcode::ADDR_MOVE,
+        Instruction::I32Add { .. } => low_opcode::I32_ADD,
+        Instruction::I32Sub { .. } => low_opcode::I32_SUB,
+        Instruction::I32Mul { .. } => low_opcode::I32_MUL,
+        Instruction::I32Div { .. } => low_opcode::I32_DIV,
+        Instruction::I32BitXor { .. } => low_opcode::I32_BIT_XOR,
+        Instruction::I32Shl { .. } => low_opcode::I32_SHL,
+        Instruction::I32Shr { .. } => low_opcode::I32_SHR,
+        Instruction::I32Lt { .. } => low_opcode::I32_LT,
+        Instruction::Load32 { .. } => low_opcode::LOAD32,
+        Instruction::Store32 { .. } => low_opcode::STORE32,
+        Instruction::AddrAdd { .. } => low_opcode::ADDR_ADD,
+        Instruction::Jump { .. } => low_opcode::JUMP,
+        Instruction::JumpIfFalse { .. } => low_opcode::JUMP_IF_FALSE,
+        Instruction::CallStatic { .. } => low_opcode::CALL_STATIC,
+        Instruction::Return { .. } => low_opcode::RETURN,
+        Instruction::ReturnUnit => low_opcode::RETURN_UNIT,
     }
 }

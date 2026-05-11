@@ -146,6 +146,72 @@ data class NativeImageVmMetrics(
     }
 }
 
+data class NativeLowImageVmMetrics(
+    val executedInstructions: Long = 0,
+    val functionCalls: Long = 0,
+    val functionReturns: Long = 0,
+    val pauseSignals: Long = 0,
+    val memoryLoads: Long = 0,
+    val memoryStores: Long = 0,
+    val opcodeCounts: List<Long> = List(OPCODE_COUNT_SIZE) { 0L },
+) {
+    fun opcodeCount(opcode: Int): Long = opcodeCounts.getOrElse(opcode) { 0L }
+
+    fun opcodeSummary(): String =
+        opcodeCounts
+            .mapIndexedNotNull { opcode, count ->
+                if (count > 0) "${opcodeName(opcode)}=$count" else null
+            }.joinToString(",")
+
+    companion object {
+        const val OPCODE_COUNT_SIZE: Int = 22
+
+        val EMPTY = NativeLowImageVmMetrics()
+
+        fun from(values: LongArray): NativeLowImageVmMetrics =
+            NativeLowImageVmMetrics(
+                executedInstructions = values.getOrElse(0) { 0L },
+                functionCalls = values.getOrElse(1) { 0L },
+                functionReturns = values.getOrElse(2) { 0L },
+                pauseSignals = values.getOrElse(3) { 0L },
+                memoryLoads = values.getOrElse(4) { 0L },
+                memoryStores = values.getOrElse(5) { 0L },
+                opcodeCounts =
+                    List(OPCODE_COUNT_SIZE) { index ->
+                        values.getOrElse(OPCODE_OFFSET + index) { 0L }
+                    },
+            )
+
+        private const val OPCODE_OFFSET: Int = 6
+
+        private fun opcodeName(opcode: Int): String =
+            when (opcode) {
+                1 -> "I32Const"
+                2 -> "I64Const"
+                3 -> "AddrConst"
+                4 -> "I32Move"
+                5 -> "AddrMove"
+                6 -> "I32Add"
+                7 -> "I32Sub"
+                8 -> "I32Mul"
+                9 -> "I32Div"
+                10 -> "I32BitXor"
+                11 -> "I32Shl"
+                12 -> "I32Shr"
+                13 -> "I32Lt"
+                14 -> "Load32"
+                15 -> "Store32"
+                16 -> "AddrAdd"
+                17 -> "Jump"
+                18 -> "JumpIfFalse"
+                19 -> "CallStatic"
+                20 -> "Return"
+                21 -> "ReturnUnit"
+                else -> "Opcode$opcode"
+            }
+    }
+}
+
 sealed interface NativeLowImageVmSignal {
     data object HaltUnit : NativeLowImageVmSignal
 
@@ -245,6 +311,11 @@ object NativeVmBindings : NativeVmBindingsFacade {
     fun runLowImageUntilSignal(handle: Long): NativeLowImageVmSignal {
         require(handle != 0L) { "Native low image VM handle is zero" }
         return NativeLowImageVmSignal.from(runLowImageUntilSignalNative(handle))
+    }
+
+    fun lowImageMetrics(handle: Long): NativeLowImageVmMetrics {
+        require(handle != 0L) { "Native low image VM handle is zero" }
+        return NativeLowImageVmMetrics.from(lowImageMetricsNative(handle))
     }
 
     fun freeLowImage(handle: Long) {
@@ -526,6 +597,9 @@ object NativeVmBindings : NativeVmBindingsFacade {
 
     @JvmStatic
     private external fun runLowImageUntilSignalNative(handle: Long): LongArray
+
+    @JvmStatic
+    private external fun lowImageMetricsNative(handle: Long): LongArray
 
     @JvmStatic
     private external fun freeLowImageNative(handle: Long)
