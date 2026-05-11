@@ -23,6 +23,11 @@ import ru.lazyhat.compukterkraft.lang.frontend.LanguageFrontend
 import ru.lazyhat.compukterkraft.lang.runtime.VmValue
 import ru.lazyhat.compukterkraft.lang.runtime.image.CkVmImageAbi
 import ru.lazyhat.compukterkraft.lang.runtime.image.compileImage
+import ru.lazyhat.compukterkraft.lang.runtime.image.low.CkLowVmFunction
+import ru.lazyhat.compukterkraft.lang.runtime.image.low.CkLowVmImage
+import ru.lazyhat.compukterkraft.lang.runtime.image.low.CkLowVmImageAbi
+import ru.lazyhat.compukterkraft.lang.runtime.image.low.CkLowVmInstruction
+import ru.lazyhat.compukterkraft.lang.runtime.image.low.CkLowVmRegister
 import kotlin.io.path.createDirectories
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
@@ -113,6 +118,18 @@ class NativeImageVmBindingsJniTest {
 
         assertTrue("deviceDaemonDisplayWakeSequence" in memberNames)
         assertTrue("waitForDeviceDaemonDisplayWake" in memberNames)
+    }
+
+    @Test
+    fun nativeLowImageVmBindingsExposeCompactAbi() {
+        val memberNames =
+            NativeVmBindings::class.java.declaredMethods
+                .map { it.name }
+                .toSet()
+
+        assertTrue("createLowImageNative" in memberNames)
+        assertTrue("runLowImageUntilSignalNative" in memberNames)
+        assertTrue("freeLowImageNative" in memberNames)
     }
 
     @Test
@@ -606,6 +623,47 @@ class NativeImageVmBindingsJniTest {
             assertEquals(NativeVmValue.UnitValue, halt.value)
         } finally {
             NativeVmBindings.freeImage(handle)
+        }
+    }
+
+    @Test
+    fun lowImageRunnerHaltsWithI32WhenLibraryIsConfigured() {
+        val libraryPath = System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val image =
+            CkLowVmImage(
+                languageVersion = "ckl-low-1",
+                memorySize = 1024u,
+                entryFunctionIndex = 0,
+                functions =
+                    listOf(
+                        CkLowVmFunction(
+                            name = "main",
+                            i32RegisterCount = 3,
+                            i64RegisterCount = 0,
+                            addrRegisterCount = 0,
+                            boolRegisterCount = 0,
+                            parameters = emptyList(),
+                            instructions =
+                                listOf(
+                                    CkLowVmInstruction.I32Const(dst = 0, value = 40),
+                                    CkLowVmInstruction.I32Const(dst = 1, value = 2),
+                                    CkLowVmInstruction.I32Add(dst = 2, lhs = 0, rhs = 1),
+                                    CkLowVmInstruction.Return(CkLowVmRegister.I32(2)),
+                                ),
+                        ),
+                    ),
+            )
+        val handle =
+            NativeVmBindings.createLowImage(
+                libraryPath = libraryPath,
+                image = CkLowVmImageAbi.encode(image),
+                instructionBudget = 128,
+            )
+
+        try {
+            assertEquals(NativeLowImageVmSignal.HaltI32(42), NativeVmBindings.runLowImageUntilSignal(handle))
+        } finally {
+            NativeVmBindings.freeLowImage(handle)
         }
     }
 

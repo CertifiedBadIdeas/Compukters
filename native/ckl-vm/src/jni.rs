@@ -11,6 +11,8 @@ use jni::JNIEnv;
 use crate::device_daemon::{DeviceDaemon, DeviceDaemonHostRequest, DeviceDaemonHostRequestKind};
 use crate::display::PixelFormat;
 use crate::image_runner::ImageVmHandle;
+use crate::low_image::decode_image as decode_low_image;
+use crate::low_image_runner::{LowImageSignal, LowImageVm};
 use crate::runtime_kernel::DeviceRuntimeKernelHandle;
 use crate::signal::{decode_value, encode_value};
 use crate::value::VmValue;
@@ -125,6 +127,73 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
 ) {
     if handle != 0 {
         unsafe { drop(Box::from_raw(handle as *mut ImageVmHandle)) };
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_createLowImageNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    image: JByteArray<'_>,
+    instruction_budget: jint,
+) -> jlong {
+    let image = match env.convert_byte_array(&image) {
+        Ok(image) => image,
+        Err(error) => {
+            let _ = env.throw_new(
+                "java/lang/IllegalArgumentException",
+                format!("Cannot read CKIM v4 low image: {error}"),
+            );
+            return 0;
+        }
+    };
+    let image = match decode_low_image(&image) {
+        Ok(image) => image,
+        Err(error) => {
+            let _ = env.throw_new(
+                "java/lang/IllegalArgumentException",
+                format!("Cannot decode CKIM v4 low image: {error}"),
+            );
+            return 0;
+        }
+    };
+    match LowImageVm::create(image, instruction_budget.max(1) as usize) {
+        Ok(vm) => Box::into_raw(Box::new(vm)) as jlong,
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalArgumentException", error);
+            0
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_runLowImageUntilSignalNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    handle: jlong,
+) -> jlongArray {
+    let handle = match low_image_handle_mut(&mut env, handle) {
+        Some(handle) => handle,
+        None => return null_mut(),
+    };
+    let signal = match handle.run_until_signal() {
+        Ok(signal) => signal,
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalStateException", error);
+            return null_mut();
+        }
+    };
+    long_array_or_throw(&mut env, &low_image_signal_values(signal))
+}
+
+#[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_freeLowImageNative(
+    _env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    handle: jlong,
+) {
+    if handle != 0 {
+        unsafe { drop(Box::from_raw(handle as *mut LowImageVm)) };
     }
 }
 
@@ -576,6 +645,36 @@ fn image_handle_mut(env: &mut JNIEnv<'_>, handle: jlong) -> Option<&'static mut 
         return None;
     }
     Some(unsafe { &mut *pointer })
+}
+
+fn low_image_handle_mut(env: &mut JNIEnv<'_>, handle: jlong) -> Option<&'static mut LowImageVm> {
+    if handle == 0 {
+        let _ = env.throw_new(
+            "java/lang/IllegalStateException",
+            "Native low image VM handle is zero",
+        );
+        return None;
+    }
+    let pointer = handle as *mut LowImageVm;
+    if pointer.is_null() {
+        let _ = env.throw_new(
+            "java/lang/IllegalStateException",
+            "Native low image VM handle is null",
+        );
+        return None;
+    }
+    Some(unsafe { &mut *pointer })
+}
+
+fn low_image_signal_values(signal: LowImageSignal) -> [jlong; 2] {
+    match signal {
+        LowImageSignal::HaltUnit => [1, 0],
+        LowImageSignal::HaltI32(value) => [2, value as jlong],
+        LowImageSignal::HaltI64(value) => [3, value as jlong],
+        LowImageSignal::HaltAddr(value) => [4, value as jlong],
+        LowImageSignal::HaltBool(value) => [5, i64::from(value) as jlong],
+        LowImageSignal::Pause => [6, 0],
+    }
 }
 
 fn register_device_daemon_handle(daemon: DeviceDaemon) -> Result<jlong, String> {
