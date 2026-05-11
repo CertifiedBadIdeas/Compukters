@@ -22,6 +22,11 @@ package ru.lazyhat.compukterkraft.lang.runtime.blazing
 import ru.lazyhat.compukterkraft.lang.frontend.LanguageFrontend
 import ru.lazyhat.compukterkraft.lang.runtime.image.CkVmImageAbi
 import ru.lazyhat.compukterkraft.lang.runtime.image.compileImage
+import ru.lazyhat.compukterkraft.lang.runtime.image.low.CkLowVmFunction
+import ru.lazyhat.compukterkraft.lang.runtime.image.low.CkLowVmImage
+import ru.lazyhat.compukterkraft.lang.runtime.image.low.CkLowVmImageAbi
+import ru.lazyhat.compukterkraft.lang.runtime.image.low.CkLowVmInstruction
+import ru.lazyhat.compukterkraft.lang.runtime.image.low.CkLowVmRegister
 import java.nio.file.Path
 import kotlin.io.path.absolutePathString
 import kotlin.system.measureNanoTime
@@ -122,6 +127,116 @@ internal class CkVmComputeBenchmarkRunner(
         } finally {
             NativeVmBindings.freeImage(handle)
         }
+    }
+
+    private companion object {
+        const val INSTRUCTION_BUDGET = Int.MAX_VALUE
+    }
+}
+
+internal class LowVmComputeBenchmarkRunner(
+    private val libraryPath: String,
+) {
+    val name: String = "Low-level VM"
+
+    fun supports(workload: ComputeVmBenchmarkWorkloadSpec): Boolean = workload.name == "integer-mix"
+
+    fun warmUp(
+        workload: ComputeVmBenchmarkWorkloadSpec,
+        iterations: Int,
+    ) {
+        if (iterations > 0 && supports(workload)) {
+            run(workload, iterations, samples = 1)
+        }
+    }
+
+    fun run(
+        workload: ComputeVmBenchmarkWorkloadSpec,
+        iterations: Int,
+        samples: Int,
+    ): ComputeVmBenchmarkRunResult {
+        require(supports(workload)) { "Low-level VM benchmark does not support ${workload.name} yet." }
+        val image = lowImageFor(workload, iterations)
+        return bestOf(samples, workload) {
+            runImage(image)
+        }
+    }
+
+    private fun lowImageFor(
+        workload: ComputeVmBenchmarkWorkloadSpec,
+        iterations: Int,
+    ): ByteArray =
+        when (workload.name) {
+            "integer-mix" -> CkLowVmImageAbi.encode(integerMixImage(iterations))
+            else -> error("Low-level VM benchmark does not support ${workload.name} yet.")
+        }
+
+    private fun runImage(image: ByteArray): ComputeVmBenchmarkSampleResult {
+        val handle = NativeVmBindings.createLowImage(libraryPath, image, INSTRUCTION_BUDGET)
+        try {
+            while (true) {
+                when (val signal = NativeVmBindings.runLowImageUntilSignal(handle)) {
+                    is NativeLowImageVmSignal.HaltI32 -> return ComputeVmBenchmarkSampleResult(signal.value)
+                    NativeLowImageVmSignal.Pause -> Unit
+                    else -> error("Low-level compute benchmark unexpectedly halted with signal: $signal")
+                }
+            }
+        } finally {
+            NativeVmBindings.freeLowImage(handle)
+        }
+    }
+
+    private fun integerMixImage(iterations: Int): CkLowVmImage {
+        val instructions = mutableListOf<CkLowVmInstruction>()
+        instructions += CkLowVmInstruction.I32Const(dst = 0, value = iterations)
+        instructions += CkLowVmInstruction.I32Const(dst = 1, value = 305_419_896)
+        instructions += CkLowVmInstruction.I32Const(dst = 2, value = -1_640_531_527)
+        instructions += CkLowVmInstruction.I32Const(dst = 3, value = 0)
+        instructions += CkLowVmInstruction.I32Const(dst = 4, value = 1)
+        instructions += CkLowVmInstruction.I32Const(dst = 5, value = 1_664_525)
+        instructions += CkLowVmInstruction.I32Const(dst = 6, value = 1_013_904_223)
+        instructions += CkLowVmInstruction.I32Const(dst = 7, value = 16)
+        instructions += CkLowVmInstruction.I32Const(dst = 8, value = 5)
+        instructions += CkLowVmInstruction.I32Const(dst = 9, value = 31)
+        instructions += CkLowVmInstruction.I32Const(dst = 10, value = 3)
+
+        val loopStart = instructions.size
+        instructions += CkLowVmInstruction.I32Lt(dst = 0, lhs = 3, rhs = 0)
+        val exitJumpIndex = instructions.size
+        instructions += CkLowVmInstruction.JumpIfFalse(cond = 0, target = -1)
+        instructions += CkLowVmInstruction.I32Mul(dst = 11, lhs = 1, rhs = 5)
+        instructions += CkLowVmInstruction.I32Add(dst = 1, lhs = 11, rhs = 6)
+        instructions += CkLowVmInstruction.I32Shr(dst = 12, lhs = 1, rhs = 7)
+        instructions += CkLowVmInstruction.I32BitXor(dst = 13, lhs = 1, rhs = 12)
+        instructions += CkLowVmInstruction.I32Add(dst = 14, lhs = 2, rhs = 13)
+        instructions += CkLowVmInstruction.I32Shl(dst = 15, lhs = 2, rhs = 8)
+        instructions += CkLowVmInstruction.I32BitXor(dst = 2, lhs = 14, rhs = 15)
+        instructions += CkLowVmInstruction.I32Mul(dst = 16, lhs = 3, rhs = 9)
+        instructions += CkLowVmInstruction.I32Shr(dst = 17, lhs = 13, rhs = 10)
+        instructions += CkLowVmInstruction.I32BitXor(dst = 18, lhs = 16, rhs = 17)
+        instructions += CkLowVmInstruction.I32Add(dst = 2, lhs = 2, rhs = 18)
+        instructions += CkLowVmInstruction.I32Add(dst = 3, lhs = 3, rhs = 4)
+        instructions += CkLowVmInstruction.Jump(target = loopStart)
+        instructions[exitJumpIndex] = CkLowVmInstruction.JumpIfFalse(cond = 0, target = instructions.size)
+        instructions += CkLowVmInstruction.Return(CkLowVmRegister.I32(2))
+
+        return CkLowVmImage(
+            languageVersion = "ckl-low-1",
+            memorySize = 1024u,
+            entryFunctionIndex = 0,
+            functions =
+                listOf(
+                    CkLowVmFunction(
+                        name = "main",
+                        i32RegisterCount = 19,
+                        i64RegisterCount = 0,
+                        addrRegisterCount = 0,
+                        boolRegisterCount = 1,
+                        parameters = emptyList(),
+                        instructions = instructions,
+                    ),
+                ),
+        )
     }
 
     private companion object {
