@@ -81,7 +81,8 @@ dependencies {
     add(gameTest.implementationConfigurationName, project(path = projects.v1211Common.path, configuration = "namedElements"))
 }
 
-val rustVmNativeLibrary = rootProject.layout.projectDirectory.file("native/ckl-vm/target/debug/libckl_vm.so")
+val rustVmNativePlatform = currentRustVmNativePlatform()
+val rustVmNativeLibrary = rootProject.layout.projectDirectory.file("native/ckl-vm/target/debug/${rustVmNativePlatform.libraryName}")
 val runtimeVmProfilingReports = layout.buildDirectory.dir("reports/profiling")
 val runtimeVmImageProfile = runtimeVmProfilingReports.map { it.file("runtime-vm-image.tsv") }
 val runtimeVmProfileRuns = runtimeVmProfilingReports.map { it.dir("runs") }
