@@ -10,15 +10,17 @@ Add an opt-in CPU-only benchmark for the CKL image VM so VM execution speed can 
 - Do not change runtime quotas or gameplay behavior.
 - Do not make the benchmark part of normal test runs.
 
-## Workload
+## Workloads
 
-Use a deterministic `integer-mix` loop:
+Use deterministic CPU-only workloads:
 
-- 32-bit signed integer arithmetic.
-- Multiply/add/xor/shift operations.
-- A checksum returned from `main()` so the CKL VM, Kotlin/JVM baseline, and Rust baseline must agree.
+- `integer-mix`: 32-bit multiply/add/xor/shift hot loop.
+- `function-mix`: repeated user function calls with local frames and return values.
+- `branch-div`: branches, comparisons, integer division, and derived remainder operations.
+- `recursive-fib`: recursive function calls with a bounded Fibonacci input range.
+- Each workload returns a checksum from `main()` so the CKL VM, Kotlin/JVM baseline, and Rust baseline must agree.
 
-This is intentionally small and boring: the point is to measure interpreter/native image VM hot-loop cost without hostcalls.
+The point is to measure several VM costs without hostcalls: arithmetic, call frames, branches/division, and recursive call stack behavior.
 
 ## Execution
 
@@ -28,6 +30,7 @@ This is intentionally small and boring: the point is to measure interpreter/nati
 - The Kotlin/JVM baseline runs the same arithmetic loop in the profiling test process.
 - The native baseline is a Rust example with the same algorithm, run through `cargo run --release --example compute_benchmark_baseline`.
 - All implementations run warmup and multiple samples; reports use the best sample.
+- `ckl.benchmark.iterations` is a base scale. Heavier workloads derive smaller iteration counts from it.
 
 ## Gradle Entry Point
 
