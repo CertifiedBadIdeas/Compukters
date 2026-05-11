@@ -62,8 +62,6 @@ import ru.lazyhat.compukterkraft.lang.runtime.DeviceProfile
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceRuntimeMetrics
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceVmHandle
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspace
-import ru.lazyhat.compukterkraft.lang.runtime.HostCall
-import ru.lazyhat.compukterkraft.lang.runtime.HostResult
 import ru.lazyhat.compukterkraft.lang.runtime.VmEvent
 import ru.lazyhat.compukterkraft.lang.runtime.VmInstructionKind
 import ru.lazyhat.compukterkraft.lang.runtime.VmPollResult
@@ -101,10 +99,9 @@ private data class RuntimeApiRegistryProfile(
  * programs through display APIs.
  *
  * ## Thread model
- * - **VM coroutine:** calls `runtime.display.*()`, `runtime.filesystem.*()`, etc.
- *   Filesystem ops go through [HostCallManager].
- * - **Server tick thread:** calls [requestSlice], [drainHostCalls], [deliverHostResults],
- *   [drainDisplayFrames], and [snapshot]. These are the cross-thread entry points.
+ * - **VM coroutine:** drives daemon-local runtime APIs and host bridges.
+ * - **Server tick thread:** calls [requestSlice], [drainDisplayFrames], and [snapshot].
+ *   These are the cross-thread entry points.
  *
  * ## Lifecycle
  * Created by `DeviceManager`, started with [boot], stopped with [stop]. On reboot, the old VM
@@ -131,7 +128,6 @@ class BackgroundDeviceVm(
     private val eventManager = EventManager(profile.resources.queues.eventQueueSlots)
     private val eventPayloadStore = EventPayloadStore(profile.resources.queues.eventQueueSlots)
     private val ipcRegistry = IpcChannelRegistry(profile.resources.queues.ipcChannelBytes)
-    private val hostCallManager = HostCallManager(profile.resources.queues.hostCallQueueSlots)
     private val programLoader = WorkspaceProgramLoader(workspace)
     private val pathResolver = VmPathResolver()
     private val effectiveNativeFilesystemRoot: Path? =
@@ -261,12 +257,6 @@ class BackgroundDeviceVm(
         wakeNativeDaemonExecutor()
     }
 
-    override fun drainHostCalls(): List<HostCall> = hostCallManager.drainHostCalls()
-
-    override fun deliverHostResults(results: List<HostResult>) {
-        hostCallManager.deliverHostResults(results)
-    }
-
     override fun snapshot(): VmSnapshot =
         VmSnapshot(
             deviceId = deviceId,
@@ -274,7 +264,7 @@ class BackgroundDeviceVm(
             state = stateManager.state,
             currentTick = stateManager.currentTick,
             queuedEvents = eventManager.queuedCount(),
-            pendingHostCalls = hostCallManager.pendingCallsCount(),
+            pendingHostCalls = 0,
         )
 
     override fun attachDisplay(
@@ -384,8 +374,6 @@ class BackgroundDeviceVm(
     override fun setSleepUntil(tick: Long?) = stateManager.setSleepUntil(tick)
 
     override suspend fun schedulingPoint(processId: Int) = applySchedulingPoint(processId)
-
-    override suspend fun <T> awaitHostCall(callFactory: (Long) -> HostCall): T = hostCallManager.awaitHostCall(callFactory)
 
     override fun resolvePath(path: String): String = pathResolver.resolve(path)
 
@@ -630,7 +618,7 @@ class BackgroundDeviceVm(
                 currentTickProvider = { stateManager.currentTick },
                 labelProvider = labelProvider,
             )
-        val filesystemApi = VmFileSystemApi(ctx = this, pathResolver = runtimePathResolver)
+        val filesystemApi = VmFileSystemApi(pathResolver = runtimePathResolver)
         val peripheralsApi = VmPeripheralRuntimeApi(peripheralRegistry)
         val processApi =
             VmProcessApi(

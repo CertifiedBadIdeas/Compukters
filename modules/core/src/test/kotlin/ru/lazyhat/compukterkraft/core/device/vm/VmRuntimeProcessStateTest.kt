@@ -30,7 +30,6 @@ import ru.lazyhat.compukterkraft.lang.runtime.DeviceFileSystemApi
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceProcessApi
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceSystemApi
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspaceEntry
-import ru.lazyhat.compukterkraft.lang.runtime.HostCall
 import ru.lazyhat.compukterkraft.lang.runtime.VmEvent
 import ru.lazyhat.compukterkraft.lang.runtime.VmPollResult
 import ru.lazyhat.compukterkraft.lang.runtime.VmState
@@ -170,8 +169,6 @@ class VmRuntimeProcessStateTest {
             schedulingProcessIds += processId
             yield()
         }
-
-        override suspend fun <T> awaitHostCall(callFactory: (Long) -> HostCall): T = error("not used")
 
         override fun resolvePath(path: String): String = path
 

@@ -87,10 +87,6 @@ class RuntimeDeviceImpl(
 
     private val displaySessions = DisplaySessionTracker()
 
-    private val hostCallDispatcher by lazy {
-        HostCallDispatcher(deviceId, manager.workspace)
-    }
-
     init {
         LOGGER.debug { "DeviceID: $deviceId init" }
     }
@@ -155,7 +151,7 @@ class RuntimeDeviceImpl(
     override fun serverTick() {
         val handle = vmHandle ?: return
         val tickStarted = System.nanoTime()
-        serviceVmTick(handle, gameTime.gameTime(), hostCallDispatcher::dispatch, runtimeMetricsCollector)
+        serviceVmTick(handle, gameTime.gameTime(), runtimeMetricsCollector)
 
         val (flushedFrames, flushNanos) =
             measureNanos {
@@ -332,59 +328,10 @@ class RuntimeDeviceImpl(
 internal fun serviceVmTick(
     handle: DeviceVmHandle,
     serverTick: Long,
-    dispatchHostCall: (ru.lazyhat.compukterkraft.lang.runtime.HostCall) -> ru.lazyhat.compukterkraft.lang.runtime.HostResult,
     runtimeMetricsCollector: RuntimeMetricsCollector,
 ) {
     val (_, requestNanos) = measureNanos { handle.requestSlice(serverTick) }
     runtimeMetricsCollector.recordRequestSlice(requestNanos)
-
-    val spinDeadline =
-        System.nanoTime() +
-            handle.profile.resources.cpu.wallTimeGuardNanosPerSlice
-                .coerceAtLeast(1L)
-    var remainingIdlePolls = 8
-    var drainedCalls = 0
-    var dispatchedCalls = 0
-    var deliveredResults = 0
-    var totalDrainNanos = 0L
-    var totalDispatchNanos = 0L
-    var totalDeliverNanos = 0L
-
-    while (true) {
-        val (calls, drainNanos) = measureNanos { handle.drainHostCalls() }
-        totalDrainNanos += drainNanos
-        drainedCalls += calls.size
-        if (calls.isEmpty()) {
-            if (remainingIdlePolls <= 0 || System.nanoTime() >= spinDeadline) {
-                break
-            }
-            remainingIdlePolls -= 1
-            Thread.onSpinWait()
-            continue
-        }
-
-        remainingIdlePolls = 8
-        val (results, dispatchNanos) = measureNanos { calls.map(dispatchHostCall) }
-        totalDispatchNanos += dispatchNanos
-        dispatchedCalls += calls.size
-
-        val (_, deliverNanos) =
-            measureNanos {
-                if (results.isNotEmpty()) {
-                    handle.deliverHostResults(results)
-                }
-            }
-        totalDeliverNanos += deliverNanos
-        deliveredResults += results.size
-
-        if (System.nanoTime() >= spinDeadline) {
-            break
-        }
-    }
-
-    runtimeMetricsCollector.recordHostCallDrain(drainedCalls, totalDrainNanos)
-    runtimeMetricsCollector.recordHostCallDispatch(dispatchedCalls, totalDispatchNanos)
-    runtimeMetricsCollector.recordHostResultDelivery(deliveredResults, totalDeliverNanos)
 }
 
 private inline fun <T> measureNanos(block: () -> T): Pair<T, Long> {

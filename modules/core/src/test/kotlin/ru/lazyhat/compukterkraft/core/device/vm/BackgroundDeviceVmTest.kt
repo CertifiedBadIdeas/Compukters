@@ -25,7 +25,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import ru.lazyhat.compukterkraft.core.device.runtime.FirmwareProgramLoader
-import ru.lazyhat.compukterkraft.core.device.runtime.HostCallDispatcher
 import ru.lazyhat.compukterkraft.core.device.runtime.LoadedFirmwareProgramSource
 import ru.lazyhat.compukterkraft.core.device.runtime.RecordingRuntimeMetricsCollector
 import ru.lazyhat.compukterkraft.core.device.runtime.test.runtimeProfile
@@ -71,6 +70,16 @@ class BackgroundDeviceVmTest {
             }
 
         assertFalse(hasBooleanConstructorParameter)
+    }
+
+    @Test
+    fun backgroundDeviceVmDoesNotOwnKotlinHostCallQueue() {
+        val hasHostCallManagerField =
+            BackgroundDeviceVm::class.java.declaredFields.any { field ->
+                field.type.simpleName.contains("HostCall")
+            }
+
+        assertFalse(hasHostCallManagerField)
     }
 
     @Test
@@ -275,24 +284,6 @@ class BackgroundDeviceVmTest {
         repeat(ticks) { tick ->
             vm.requestSlice(tick.toLong())
             kotlinx.coroutines.delay(10)
-        }
-    }
-
-    private fun runVmTicksWithHostCalls(
-        vm: BackgroundDeviceVm,
-        workspace: DeviceWorkspace,
-        ticks: Int = 8,
-    ) = runBlocking {
-        val dispatcher = HostCallDispatcher(vm.deviceId, workspace)
-        repeat(ticks) { tick ->
-            vm.requestSlice(tick.toLong())
-            repeat(8) {
-                kotlinx.coroutines.delay(2)
-                val calls = vm.drainHostCalls()
-                if (calls.isNotEmpty()) {
-                    vm.deliverHostResults(calls.map(dispatcher::dispatch))
-                }
-            }
         }
     }
 
@@ -870,10 +861,10 @@ class BackgroundDeviceVmTest {
                             }
                             """.trimIndent(),
                         ),
-                )
+            )
 
             assertTrue(vm.boot())
-            runVmTicksWithHostCalls(vm, workspace.host, ticks = 64)
+            runVmTicks(vm, ticks = 64)
 
             val debugState = "state=${vm.snapshot()} logs=$logs"
             assertTrue(logs.any { it.contains("a=sub") }, debugState)

@@ -19,34 +19,30 @@
 
 package ru.lazyhat.compukterkraft.core.device.vm.api
 
-import ru.lazyhat.compukterkraft.core.device.vm.VmContext
 import ru.lazyhat.compukterkraft.core.device.vm.VmPathResolver
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceFileSystemApi
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspaceEntry
-import ru.lazyhat.compukterkraft.lang.runtime.HostCall
 
 internal class VmFileSystemApi(
-    private val ctx: VmContext,
     private val pathResolver: VmPathResolver = VmPathResolver(),
 ) : DeviceFileSystemApi {
-    private fun resolve(path: String): String = pathResolver.resolve(path)
+    private fun disabled(path: String): Nothing =
+        error("Kotlin filesystem API is disabled for the native daemon VM: ${pathResolver.resolve(path)}")
 
-    override suspend fun exists(path: String): Boolean = ctx.awaitHostCall { HostCall.FileExists(it, resolve(path)) }
+    override suspend fun exists(path: String): Boolean = disabled(path)
 
-    override suspend fun isDirectory(path: String): Boolean = ctx.awaitHostCall { HostCall.FileIsDirectory(it, resolve(path)) }
+    override suspend fun isDirectory(path: String): Boolean = disabled(path)
 
-    override suspend fun readText(path: String): String? = ctx.awaitHostCall { HostCall.FileReadText(it, resolve(path)) }
+    override suspend fun readText(path: String): String? = disabled(path)
 
     override suspend fun writeText(
         path: String,
         text: String,
-    ) {
-        ctx.awaitHostCall<Unit> { HostCall.FileWriteText(it, resolve(path), text) }
-    }
+    ) = disabled(path)
 
-    override suspend fun makeDirectory(path: String): Boolean = ctx.awaitHostCall { HostCall.FileMakeDirectory(it, resolve(path)) }
+    override suspend fun makeDirectory(path: String): Boolean = disabled(path)
 
-    override suspend fun remove(path: String): Boolean = ctx.awaitHostCall { HostCall.FileRemove(it, resolve(path)) }
+    override suspend fun remove(path: String): Boolean = disabled(path)
 
-    override suspend fun list(path: String): List<DeviceWorkspaceEntry> = ctx.awaitHostCall { HostCall.FileList(it, resolve(path)) }
+    override suspend fun list(path: String): List<DeviceWorkspaceEntry> = disabled(path)
 }

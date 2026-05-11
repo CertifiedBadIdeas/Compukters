@@ -18,19 +18,12 @@
  */
 package ru.lazyhat.compukterkraft.core.device.vm
 
-import kotlinx.coroutines.CoroutineStart
-import kotlinx.coroutines.async
-import kotlinx.coroutines.runBlocking
-import ru.lazyhat.compukterkraft.lang.runtime.HostCall
-import ru.lazyhat.compukterkraft.lang.runtime.HostResult
 import ru.lazyhat.compukterkraft.lang.runtime.VmEvent
 import java.nio.ByteBuffer
 import kotlin.io.resolve
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
-import kotlin.test.assertTrue
 
 class VmRuntimeSupportTest {
     @Test
@@ -52,30 +45,4 @@ class VmRuntimeSupportTest {
         assertNull(VmEventTextDecoder.typedText(VmEvent("char")))
     }
 
-    @Test
-    fun rejectsHostCallsWhenQueueIsFull() =
-        runBlocking {
-            val manager = HostCallManager(maxQueueSize = 1)
-
-            val first =
-                async(start = CoroutineStart.UNDISPATCHED) {
-                    manager.awaitHostCall<Boolean> { id ->
-                        HostCall.FileExists(id, "boot.ck")
-                    }
-                }
-
-            assertEquals(1, manager.pendingCallsCount())
-
-            val failure =
-                assertFailsWith<IllegalStateException> {
-                    manager.awaitHostCall<Boolean> { id ->
-                        HostCall.FileExists(id, "shell.ck")
-                    }
-                }
-
-            assertTrue(failure.message?.contains("Host call queue is full") == true)
-
-            manager.deliverHostResults(listOf(HostResult.Success(1L, true)))
-            assertTrue(first.await())
-        }
 }
