@@ -28,34 +28,12 @@ struct LowFrame {
     bool_registers: Vec<bool>,
 }
 
-impl LowFrame {
-    fn create(
-        function_index: usize,
-        function: &crate::low_image::Function,
-        return_register: Option<Register>,
-    ) -> Self {
-        Self {
-            function_index,
-            instruction_pointer: 0,
-            return_register,
-            i32_registers: vec![0; function.i32_register_count],
-            i64_registers: vec![0; function.i64_register_count],
-            addr_registers: vec![0; function.addr_register_count],
-            bool_registers: vec![false; function.bool_register_count],
-        }
-    }
+struct LowProgram {
+    functions: Vec<crate::low_image::Function>,
 }
 
-pub struct LowImageVm {
-    image: Image,
-    frames: Vec<LowFrame>,
-    memory: Vec<u8>,
-    instruction_budget: usize,
-    instructions_since_pause: usize,
-}
-
-impl LowImageVm {
-    pub fn create(image: Image, instruction_budget: usize) -> Result<Self, String> {
+impl LowProgram {
+    fn create(image: Image) -> Result<(Self, LowState), String> {
         if image.entry_function_index >= image.functions.len() {
             return Err(format!(
                 "entry function index {} is out of bounds",
@@ -85,120 +63,184 @@ impl LowImageVm {
             &image.functions[entry_function_index],
             None,
         );
+        Ok((
+            Self {
+                functions: image.functions,
+            },
+            LowState {
+                frames: vec![entry_frame],
+                memory,
+                instructions_since_pause: 0,
+            },
+        ))
+    }
+
+    fn function(&self, function_index: usize) -> Result<&crate::low_image::Function, String> {
+        self.functions
+            .get(function_index)
+            .ok_or_else(|| format!("function index {function_index} is out of bounds"))
+    }
+}
+
+impl LowFrame {
+    fn create(
+        function_index: usize,
+        function: &crate::low_image::Function,
+        return_register: Option<Register>,
+    ) -> Self {
+        Self {
+            function_index,
+            instruction_pointer: 0,
+            return_register,
+            i32_registers: vec![0; function.i32_register_count],
+            i64_registers: vec![0; function.i64_register_count],
+            addr_registers: vec![0; function.addr_register_count],
+            bool_registers: vec![false; function.bool_register_count],
+        }
+    }
+}
+
+struct LowState {
+    frames: Vec<LowFrame>,
+    memory: Vec<u8>,
+    instructions_since_pause: usize,
+}
+
+pub struct LowImageVm {
+    program: LowProgram,
+    state: LowState,
+    instruction_budget: usize,
+}
+
+impl LowImageVm {
+    pub fn create(image: Image, instruction_budget: usize) -> Result<Self, String> {
+        let (program, state) = LowProgram::create(image)?;
         Ok(Self {
-            frames: vec![entry_frame],
-            image,
-            memory,
+            program,
+            state,
             instruction_budget: instruction_budget.max(1),
-            instructions_since_pause: 0,
         })
     }
 
     pub fn memory_bytes(&self) -> &[u8] {
-        &self.memory
+        &self.state.memory
     }
 
     pub fn run_until_signal(&mut self) -> Result<LowImageSignal, String> {
         loop {
             let (function_index, instruction_pointer) = {
-                let frame = self.current_frame_mut()?;
+                let frame = self.state.current_frame_mut()?;
                 let instruction_pointer = frame.instruction_pointer;
                 frame.instruction_pointer += 1;
                 (frame.function_index, instruction_pointer)
             };
             let instruction = self
-                .image
-                .functions
-                .get(function_index)
-                .ok_or_else(|| format!("function index {function_index} is out of bounds"))?
+                .program
+                .function(function_index)?
                 .instructions
                 .get(instruction_pointer)
-                .cloned()
-                .unwrap_or(Instruction::ReturnUnit);
-            self.instructions_since_pause += 1;
+                .unwrap_or(&Instruction::ReturnUnit);
+            self.state.instructions_since_pause += 1;
             match instruction {
-                Instruction::I32Const { dst, value } => self.write_i32(dst, value)?,
-                Instruction::I64Const { dst, value } => self.write_i64(dst, value)?,
-                Instruction::AddrConst { dst, value } => self.write_addr(dst, value)?,
+                Instruction::I32Const { dst, value } => self.state.write_i32(*dst, *value)?,
+                Instruction::I64Const { dst, value } => self.state.write_i64(*dst, *value)?,
+                Instruction::AddrConst { dst, value } => self.state.write_addr(*dst, *value)?,
                 Instruction::I32Move { dst, src } => {
-                    let value = self.read_i32(src)?;
-                    self.write_i32(dst, value)?;
+                    let value = self.state.read_i32(*src)?;
+                    self.state.write_i32(*dst, value)?;
                 }
                 Instruction::AddrMove { dst, src } => {
-                    let value = self.read_addr(src)?;
-                    self.write_addr(dst, value)?;
+                    let value = self.state.read_addr(*src)?;
+                    self.state.write_addr(*dst, value)?;
                 }
                 Instruction::I32Add { dst, lhs, rhs } => {
-                    let value = self.read_i32(lhs)?.wrapping_add(self.read_i32(rhs)?);
-                    self.write_i32(dst, value)?;
+                    let value = self
+                        .state
+                        .read_i32(*lhs)?
+                        .wrapping_add(self.state.read_i32(*rhs)?);
+                    self.state.write_i32(*dst, value)?;
                 }
                 Instruction::I32Sub { dst, lhs, rhs } => {
-                    let value = self.read_i32(lhs)?.wrapping_sub(self.read_i32(rhs)?);
-                    self.write_i32(dst, value)?;
+                    let value = self
+                        .state
+                        .read_i32(*lhs)?
+                        .wrapping_sub(self.state.read_i32(*rhs)?);
+                    self.state.write_i32(*dst, value)?;
                 }
                 Instruction::I32Mul { dst, lhs, rhs } => {
-                    let value = self.read_i32(lhs)?.wrapping_mul(self.read_i32(rhs)?);
-                    self.write_i32(dst, value)?;
+                    let value = self
+                        .state
+                        .read_i32(*lhs)?
+                        .wrapping_mul(self.state.read_i32(*rhs)?);
+                    self.state.write_i32(*dst, value)?;
                 }
                 Instruction::I32Div { dst, lhs, rhs } => {
-                    let rhs = self.read_i32(rhs)?;
+                    let rhs = self.state.read_i32(*rhs)?;
                     if rhs == 0 {
                         return Err("division by zero".to_string());
                     }
-                    let value = self.read_i32(lhs)?.wrapping_div(rhs);
-                    self.write_i32(dst, value)?;
+                    let value = self.state.read_i32(*lhs)?.wrapping_div(rhs);
+                    self.state.write_i32(*dst, value)?;
                 }
                 Instruction::I32BitXor { dst, lhs, rhs } => {
-                    let value = self.read_i32(lhs)? ^ self.read_i32(rhs)?;
-                    self.write_i32(dst, value)?;
+                    let value = self.state.read_i32(*lhs)? ^ self.state.read_i32(*rhs)?;
+                    self.state.write_i32(*dst, value)?;
                 }
                 Instruction::I32Shl { dst, lhs, rhs } => {
-                    let value = self.read_i32(lhs)?.wrapping_shl(self.read_i32(rhs)? as u32);
-                    self.write_i32(dst, value)?;
+                    let value = self
+                        .state
+                        .read_i32(*lhs)?
+                        .wrapping_shl(self.state.read_i32(*rhs)? as u32);
+                    self.state.write_i32(*dst, value)?;
                 }
                 Instruction::I32Shr { dst, lhs, rhs } => {
-                    let value = self.read_i32(lhs)?.wrapping_shr(self.read_i32(rhs)? as u32);
-                    self.write_i32(dst, value)?;
+                    let value = self
+                        .state
+                        .read_i32(*lhs)?
+                        .wrapping_shr(self.state.read_i32(*rhs)? as u32);
+                    self.state.write_i32(*dst, value)?;
                 }
                 Instruction::I32Lt { dst, lhs, rhs } => {
-                    let value = self.read_i32(lhs)? < self.read_i32(rhs)?;
-                    self.write_bool(dst, value)?;
+                    let value = self.state.read_i32(*lhs)? < self.state.read_i32(*rhs)?;
+                    self.state.write_bool(*dst, value)?;
                 }
                 Instruction::Load32 { dst, addr } => {
-                    let address = self.read_addr(addr)?;
-                    let bytes = self.memory_range(address, 4)?;
+                    let address = self.state.read_addr(*addr)?;
+                    let bytes = self.state.memory_range(address, 4)?;
                     let mut raw = [0_u8; 4];
                     raw.copy_from_slice(bytes);
-                    self.write_i32(dst, i32::from_le_bytes(raw))?;
+                    self.state.write_i32(*dst, i32::from_le_bytes(raw))?;
                 }
                 Instruction::Store32 { addr, src } => {
-                    let address = self.read_addr(addr)?;
-                    let value = self.read_i32(src)?.to_le_bytes();
-                    self.memory_range_mut(address, 4)?.copy_from_slice(&value);
+                    let address = self.state.read_addr(*addr)?;
+                    let value = self.state.read_i32(*src)?.to_le_bytes();
+                    self.state
+                        .memory_range_mut(address, 4)?
+                        .copy_from_slice(&value);
                 }
                 Instruction::AddrAdd { dst, base, offset } => {
-                    let base = self.read_addr(base)?;
-                    let offset = self.read_i32(offset)?;
+                    let base = self.state.read_addr(*base)?;
+                    let offset = self.state.read_i32(*offset)?;
                     let value = if offset >= 0 {
                         base.wrapping_add(offset as u32)
                     } else {
                         base.wrapping_sub(offset.wrapping_abs() as u32)
                     };
-                    self.write_addr(dst, value)?;
+                    self.state.write_addr(*dst, value)?;
                 }
-                Instruction::Jump { target } => self.jump(target)?,
+                Instruction::Jump { target } => self.state.jump(&self.program, *target)?,
                 Instruction::JumpIfFalse { cond, target } => {
-                    if !self.read_bool(cond)? {
-                        self.jump(target)?;
+                    if !self.state.read_bool(*cond)? {
+                        self.state.jump(&self.program, *target)?;
                     }
                 }
                 Instruction::Return { src } => {
-                    if let Some(signal) = self.return_value(src)? {
+                    if let Some(signal) = self.state.return_value(*src)? {
                         return Ok(signal);
                     }
                 }
                 Instruction::ReturnUnit => {
-                    if let Some(signal) = self.return_unit()? {
+                    if let Some(signal) = self.state.return_unit()? {
                         return Ok(signal);
                     }
                 }
@@ -206,21 +248,28 @@ impl LowImageVm {
                     return_register,
                     function_index,
                     arguments,
-                } => self.call_static(return_register, function_index, arguments)?,
+                } => self.state.call_static(
+                    &self.program,
+                    *return_register,
+                    *function_index,
+                    arguments,
+                )?,
             }
-            if self.instructions_since_pause >= self.instruction_budget {
-                self.instructions_since_pause = 0;
+            if self.state.instructions_since_pause >= self.instruction_budget {
+                self.state.instructions_since_pause = 0;
                 return Ok(LowImageSignal::Pause);
             }
         }
     }
+}
 
-    fn current_function(&self) -> Result<&crate::low_image::Function, String> {
+impl LowState {
+    fn current_function<'a>(
+        &self,
+        program: &'a LowProgram,
+    ) -> Result<&'a crate::low_image::Function, String> {
         let function_index = self.current_frame()?.function_index;
-        self.image
-            .functions
-            .get(function_index)
-            .ok_or_else(|| format!("function index {function_index} is out of bounds"))
+        program.function(function_index)
     }
 
     fn current_frame(&self) -> Result<&LowFrame, String> {
@@ -238,7 +287,7 @@ impl LowImageVm {
     fn return_value(&mut self, register: Register) -> Result<Option<LowImageSignal>, String> {
         let value = self.read_register_value(register)?;
         if self.frames.len() == 1 {
-            return Ok(Some(self.signal_from_value(value)?));
+            return Ok(Some(Self::signal_from_value(value)?));
         }
         let return_register = self.current_frame()?.return_register;
         self.frames.pop();
@@ -264,19 +313,17 @@ impl LowImageVm {
 
     fn call_static(
         &mut self,
+        program: &LowProgram,
         return_register: Option<Register>,
         function_index: usize,
-        arguments: Vec<Register>,
+        arguments: &[Register],
     ) -> Result<(), String> {
         let values = arguments
-            .into_iter()
+            .iter()
+            .copied()
             .map(|argument| self.read_register_value(argument))
             .collect::<Result<Vec<_>, _>>()?;
-        let function = self
-            .image
-            .functions
-            .get(function_index)
-            .ok_or_else(|| format!("function index {function_index} is out of bounds"))?;
+        let function = program.function(function_index)?;
         if values.len() != function.parameters.len() {
             return Err(format!(
                 "function {function_index} expects {} arguments but call provided {}",
@@ -284,16 +331,15 @@ impl LowImageVm {
                 values.len(),
             ));
         }
-        let parameters = function.parameters.clone();
         let mut frame = LowFrame::create(function_index, function, return_register);
-        for (parameter, value) in parameters.into_iter().zip(values) {
+        for (parameter, value) in function.parameters.iter().copied().zip(values) {
             Self::write_register_value_to_frame(&mut frame, parameter, value)?;
         }
         self.frames.push(frame);
         Ok(())
     }
 
-    fn signal_from_value(&self, value: LowRegisterValue) -> Result<LowImageSignal, String> {
+    fn signal_from_value(value: LowRegisterValue) -> Result<LowImageSignal, String> {
         match value {
             LowRegisterValue::I32(value) => Ok(LowImageSignal::HaltI32(value)),
             LowRegisterValue::I64(value) => Ok(LowImageSignal::HaltI64(value)),
@@ -431,8 +477,8 @@ impl LowImageVm {
         Ok(())
     }
 
-    fn jump(&mut self, target: usize) -> Result<(), String> {
-        let instruction_count = self.current_function()?.instructions.len();
+    fn jump(&mut self, program: &LowProgram, target: usize) -> Result<(), String> {
+        let instruction_count = self.current_function(program)?.instructions.len();
         if target > instruction_count {
             return Err(format!(
                 "jump target {target} is outside function instruction count {instruction_count}",
