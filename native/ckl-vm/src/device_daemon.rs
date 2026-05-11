@@ -851,35 +851,51 @@ mod tests {
     }
 
     fn ckim_empty_main() -> Vec<u8> {
-        image_with_instructions(Vec::new(), Vec::new(), 0, |out| {
+        image_with_instructions(Vec::new(), Vec::new(), 0, 0, 0, 0, |out| {
             return_unit(out);
         })
     }
 
     fn ckim_yields_then_halts() -> Vec<u8> {
-        image_with_instructions(Vec::new(), Vec::new(), 1, |out| {
+        image_with_instructions(Vec::new(), Vec::new(), 0, 0, 0, 1, |out| {
             yield_instruction(out, 0);
             return_unit(out);
         })
     }
 
     fn ckim_sleeps_one_tick_then_halts() -> Vec<u8> {
-        image_with_instructions(vec![ConstantFixture::Long(1)], Vec::new(), 2, |out| {
-            load_const(out, 0, 0);
-            sleep_instruction(out, 1, 0);
-            return_unit(out);
-        })
+        image_with_instructions(
+            vec![ConstantFixture::Long(1)],
+            Vec::new(),
+            0,
+            1,
+            0,
+            1,
+            |out| {
+                load_i64_const(out, 0, 0);
+                sleep_instruction(out, 0, TypedRegisterFixture::I64(0));
+                return_unit(out);
+            },
+        )
     }
 
     fn ckim_polls_empty_channel_then_halts(channel: i32) -> Vec<u8> {
         image_with_instructions(
             vec![ConstantFixture::Int(channel)],
             vec![HostImportFixture::new(8000, "runtime", "poll")],
-            2,
+            1,
+            0,
+            0,
+            1,
             |out| {
-                load_const(out, 0, 0);
-                call_host(out, Some(1), 8000, &[0]);
-                return_register(out, 1);
+                load_i32_const(out, 0, 0);
+                call_host(
+                    out,
+                    Some(TypedRegisterFixture::Ref(0)),
+                    8000,
+                    &[TypedRegisterFixture::I32(0)],
+                );
+                return_register(out, TypedRegisterFixture::Ref(0));
             },
         )
     }
@@ -889,10 +905,18 @@ mod tests {
             vec![ConstantFixture::Int(pid)],
             vec![HostImportFixture::new(6007, "process", "wait")],
             2,
+            0,
+            0,
+            0,
             |out| {
-                load_const(out, 0, 0);
-                call_host(out, Some(1), 6007, &[0]);
-                return_register(out, 1);
+                load_i32_const(out, 0, 0);
+                call_host(
+                    out,
+                    Some(TypedRegisterFixture::I32(1)),
+                    6007,
+                    &[TypedRegisterFixture::I32(0)],
+                );
+                return_register(out, TypedRegisterFixture::I32(1));
             },
         )
     }
@@ -901,10 +925,18 @@ mod tests {
         image_with_instructions(
             vec![ConstantFixture::String("hello".to_string())],
             vec![HostImportFixture::new(3004, "system", "log")],
+            0,
+            0,
+            0,
             2,
             |out| {
-                load_const(out, 0, 0);
-                call_host(out, Some(1), 3004, &[0]);
+                load_ref_const(out, 0, 0);
+                call_host(
+                    out,
+                    Some(TypedRegisterFixture::Ref(1)),
+                    3004,
+                    &[TypedRegisterFixture::Ref(0)],
+                );
                 return_unit(out);
             },
         )
@@ -917,11 +949,19 @@ mod tests {
                 ConstantFixture::String(argument.to_string()),
             ],
             vec![HostImportFixture::new(6006, "process", "spawn")],
-            3,
+            1,
+            0,
+            0,
+            2,
             |out| {
-                load_const(out, 0, 0);
-                load_const(out, 1, 1);
-                call_host(out, Some(2), 6006, &[0, 1]);
+                load_ref_const(out, 0, 0);
+                load_ref_const(out, 1, 1);
+                call_host(
+                    out,
+                    Some(TypedRegisterFixture::I32(0)),
+                    6006,
+                    &[TypedRegisterFixture::Ref(0), TypedRegisterFixture::Ref(1)],
+                );
                 return_unit(out);
             },
         )
@@ -934,11 +974,24 @@ mod tests {
                 HostImportFixture::new(5002, "ipc", "read"),
                 HostImportFixture::new(3004, "system", "log"),
             ],
-            3,
+            1,
+            0,
+            0,
+            2,
             |out| {
-                load_const(out, 0, 0);
-                call_host(out, Some(1), 5002, &[0]);
-                call_host(out, Some(2), 3004, &[1]);
+                load_i32_const(out, 0, 0);
+                call_host(
+                    out,
+                    Some(TypedRegisterFixture::Ref(0)),
+                    5002,
+                    &[TypedRegisterFixture::I32(0)],
+                );
+                call_host(
+                    out,
+                    Some(TypedRegisterFixture::Ref(1)),
+                    3004,
+                    &[TypedRegisterFixture::Ref(0)],
+                );
                 return_unit(out);
             },
         )
@@ -947,14 +1000,17 @@ mod tests {
     fn image_with_instructions(
         constants: Vec<ConstantFixture>,
         host_imports: Vec<HostImportFixture>,
-        register_count: u16,
+        i32_register_count: u16,
+        i64_register_count: u16,
+        bool_register_count: u16,
+        ref_register_count: u16,
         write_instructions: impl FnOnce(&mut Vec<u8>),
     ) -> Vec<u8> {
         let mut instructions = Vec::new();
         write_instructions(&mut instructions);
         let mut out = Vec::new();
         out.extend_from_slice(b"CKIM");
-        out.push(2);
+        out.push(3);
         string(&mut out, "ckl-1");
         i32(&mut out, constants.len() as i32);
         for constant in constants {
@@ -967,61 +1023,93 @@ mod tests {
         i32(&mut out, 0);
         i32(&mut out, 1);
         string(&mut out, "main");
-        u16(&mut out, register_count);
-        u16(&mut out, 0);
+        u16(&mut out, i32_register_count);
+        u16(&mut out, i64_register_count);
+        u16(&mut out, bool_register_count);
+        u16(&mut out, ref_register_count);
+        i32(&mut out, 0);
         i32(&mut out, instruction_count(&instructions));
         out.extend_from_slice(&instructions);
         out
     }
 
-    fn load_const(out: &mut Vec<u8>, dst: u16, constant_index: i32) {
+    fn load_i32_const(out: &mut Vec<u8>, dst: u16, constant_index: i32) {
         out.push(1);
+        u16(out, dst);
+        i32(out, constant_index);
+    }
+
+    fn load_i64_const(out: &mut Vec<u8>, dst: u16, constant_index: i32) {
+        out.push(2);
+        u16(out, dst);
+        i32(out, constant_index);
+    }
+
+    fn load_ref_const(out: &mut Vec<u8>, dst: u16, constant_index: i32) {
+        out.push(4);
         u16(out, dst);
         i32(out, constant_index);
     }
 
     fn call_host(
         out: &mut Vec<u8>,
-        return_register: Option<u16>,
+        return_register: Option<TypedRegisterFixture>,
         import_id: i32,
-        arguments: &[u16],
+        arguments: &[TypedRegisterFixture],
     ) {
-        out.push(32);
-        optional_register(out, return_register);
+        out.push(37);
+        optional_typed_register(out, return_register);
         i32(out, import_id);
         i32(out, arguments.len() as i32);
         for argument in arguments {
-            u16(out, *argument);
+            typed_register(out, *argument);
         }
     }
 
     fn yield_instruction(out: &mut Vec<u8>, dst: u16) {
-        out.push(33);
+        out.push(38);
         u16(out, dst);
     }
 
-    fn sleep_instruction(out: &mut Vec<u8>, dst: u16, ticks: u16) {
-        out.push(34);
+    fn sleep_instruction(out: &mut Vec<u8>, dst: u16, ticks: TypedRegisterFixture) {
+        out.push(39);
         u16(out, dst);
-        u16(out, ticks);
+        typed_register(out, ticks);
     }
 
-    fn return_register(out: &mut Vec<u8>, src: u16) {
-        out.push(30);
-        u16(out, src);
+    fn return_register(out: &mut Vec<u8>, src: TypedRegisterFixture) {
+        out.push(35);
+        typed_register(out, src);
     }
 
     fn return_unit(out: &mut Vec<u8>) {
-        out.push(31);
+        out.push(36);
     }
 
-    fn optional_register(out: &mut Vec<u8>, register: Option<u16>) {
+    fn optional_typed_register(out: &mut Vec<u8>, register: Option<TypedRegisterFixture>) {
         match register {
             Some(register) => {
                 out.push(1);
-                u16(out, register);
+                typed_register(out, register);
             }
             None => out.push(0),
+        }
+    }
+
+    fn typed_register(out: &mut Vec<u8>, register: TypedRegisterFixture) {
+        match register {
+            TypedRegisterFixture::I32(index) => {
+                out.push(1);
+                u16(out, index);
+            }
+            TypedRegisterFixture::I64(index) => {
+                out.push(2);
+                u16(out, index);
+            }
+            TypedRegisterFixture::Ref(index) => {
+                out.push(4);
+                u16(out, index);
+            }
         }
     }
 
@@ -1037,19 +1125,27 @@ mod tests {
 
     fn instruction_len(instruction: &[u8]) -> usize {
         match instruction[0] {
-            1 => 1 + 2 + 4,
-            30 | 33 => 1 + 2,
-            31 => 1,
-            32 => {
-                let return_len = if instruction[1] == 0 { 1 } else { 3 };
+            1 | 2 | 4 => 1 + 2 + 4,
+            35 => 1 + 3,
+            36 => 1,
+            37 => {
+                let return_len = if instruction[1] == 0 { 1 } else { 4 };
                 let arg_count_offset = 1 + return_len + 4;
                 let mut count_bytes = [0u8; 4];
                 count_bytes.copy_from_slice(&instruction[arg_count_offset..arg_count_offset + 4]);
-                1 + return_len + 4 + 4 + i32::from_le_bytes(count_bytes) as usize * 2
+                1 + return_len + 4 + 4 + i32::from_le_bytes(count_bytes) as usize * 3
             }
-            34 => 1 + 2 + 2,
+            38 => 1 + 2,
+            39 => 1 + 2 + 3,
             other => panic!("unknown register instruction tag in test fixture: {other}"),
         }
+    }
+
+    #[derive(Clone, Copy)]
+    enum TypedRegisterFixture {
+        I32(u16),
+        I64(u16),
+        Ref(u16),
     }
 
     enum ConstantFixture {

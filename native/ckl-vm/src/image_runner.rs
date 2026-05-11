@@ -1,7 +1,9 @@
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::Arc;
 
-use crate::image::{decode_image, Constant, Function, HostImport, Image, Instruction};
+use crate::image::{
+    decode_image, Constant, Function, HostImport, Image, Instruction, TypedRegister,
+};
 use crate::runtime_kernel::{DeviceRuntimeKernelHandle, ProcessStatus};
 use crate::signal::{decode_value, encode_error, encode_signal, VmSignal};
 use crate::value::VmValue;
@@ -73,7 +75,7 @@ const STRINGS_CHAR_CODE_AT_IMPORT_ID: i32 = 7010;
 
 const RUNTIME_POLL_IMPORT_ID: i32 = 8000;
 
-pub const IMAGE_OPCODE_METRIC_COUNT: usize = 37;
+pub const IMAGE_OPCODE_METRIC_COUNT: usize = 42;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImageVmMetrics {
@@ -133,23 +135,32 @@ impl ImageVmMetrics {
 struct CallFrame {
     function_index: usize,
     instruction_pointer: usize,
-    base_register: usize,
-    return_register: Option<u16>,
+    i32_base: usize,
+    i64_base: usize,
+    bool_base: usize,
+    ref_base: usize,
+    return_register: Option<TypedRegister>,
 }
 
 pub struct ImageVmHandle {
     image: Image,
     function_index: usize,
     instruction_pointer: usize,
-    base_register: usize,
-    registers: Vec<VmValue>,
+    i32_base: usize,
+    i64_base: usize,
+    bool_base: usize,
+    ref_base: usize,
+    i32_registers: Vec<i32>,
+    i64_registers: Vec<i64>,
+    bool_registers: Vec<bool>,
+    ref_registers: Vec<VmValue>,
     call_stack: Vec<CallFrame>,
     attached_kernel: Option<Arc<DeviceRuntimeKernelHandle>>,
     working_directory: String,
     process_argument: Option<String>,
     instruction_budget: usize,
     instructions_since_pause: usize,
-    pending_resume_register: Option<u16>,
+    pending_resume_register: Option<TypedRegister>,
     state: ImageVmState,
     metrics: ImageVmMetrics,
 }
@@ -163,7 +174,7 @@ enum ImageVmState {
 
 enum NativeHostImportResult {
     Handled(VmValue),
-    Fallback(Vec<VmValue>),
+    ExternalHostCall(Vec<VmValue>),
     SignalNoResume {
         signal: VmSignal,
         arguments: Vec<VmValue>,
@@ -174,13 +185,23 @@ impl ImageVmHandle {
     pub fn create(image: &[u8], instruction_budget: usize) -> Result<Self, String> {
         let image = decode_image(image).map_err(|error| error.to_string())?;
         let function_index = checked_entry_function_index(&image)?;
-        let register_count = checked_register_count(&image, function_index)?;
+        let entry_function = &image.functions[function_index];
+        let i32_register_count = entry_function.i32_register_count;
+        let i64_register_count = entry_function.i64_register_count;
+        let bool_register_count = entry_function.bool_register_count;
+        let ref_register_count = entry_function.ref_register_count;
         Ok(Self {
             image,
             function_index,
             instruction_pointer: 0,
-            base_register: 0,
-            registers: vec![VmValue::Unit; register_count],
+            i32_base: 0,
+            i64_base: 0,
+            bool_base: 0,
+            ref_base: 0,
+            i32_registers: vec![0; i32_register_count],
+            i64_registers: vec![0; i64_register_count],
+            bool_registers: vec![false; bool_register_count],
+            ref_registers: vec![VmValue::Unit; ref_register_count],
             call_stack: Vec::new(),
             attached_kernel: None,
             working_directory: String::new(),
@@ -237,7 +258,7 @@ impl ImageVmHandle {
             return Err("native image VM is not waiting for resume".to_string());
         }
         if let Some(register) = self.pending_resume_register.take() {
-            self.write_register(register, value)?;
+            self.write_typed_register(register, value)?;
         }
         self.state = ImageVmState::Ready;
         Ok(())
@@ -254,7 +275,7 @@ impl ImageVmHandle {
     ) -> Result<NativeHostImportResult, String> {
         match self.try_attached_kernel_host_import(import_id, arguments)? {
             NativeHostImportResult::Handled(value) => Ok(NativeHostImportResult::Handled(value)),
-            NativeHostImportResult::Fallback(arguments) => {
+            NativeHostImportResult::ExternalHostCall(arguments) => {
                 try_builtin_native_host_import(import_id, arguments)
             }
             signal @ NativeHostImportResult::SignalNoResume { .. } => Ok(signal),
@@ -267,7 +288,7 @@ impl ImageVmHandle {
         arguments: Vec<VmValue>,
     ) -> Result<NativeHostImportResult, String> {
         let Some(kernel_handle) = self.attached_kernel.as_ref() else {
-            return Ok(NativeHostImportResult::Fallback(arguments));
+            return Ok(NativeHostImportResult::ExternalHostCall(arguments));
         };
 
         match import_id {
@@ -293,7 +314,7 @@ impl ImageVmHandle {
             | FILESYSTEM_LIST_PATH_IMPORT_ID => {
                 let kernel = kernel_handle.lock()?;
                 let Some(filesystem) = kernel.filesystem.as_ref() else {
-                    return Ok(NativeHostImportResult::Fallback(arguments));
+                    return Ok(NativeHostImportResult::ExternalHostCall(arguments));
                 };
                 match import_id {
                     FILESYSTEM_EXISTS_IMPORT_ID => {
@@ -457,11 +478,11 @@ impl ImageVmHandle {
                 .as_ref()
                 .map(|argument| NativeHostImportResult::Handled(VmValue::String(argument.clone())))
                 .map(Ok)
-                .unwrap_or_else(|| Ok(NativeHostImportResult::Fallback(arguments))),
+                .unwrap_or_else(|| Ok(NativeHostImportResult::ExternalHostCall(arguments))),
             PROCESS_CURRENT_DIRECTORY_IMPORT_ID => {
                 let kernel = kernel_handle.lock()?;
                 if kernel.filesystem.is_none() {
-                    return Ok(NativeHostImportResult::Fallback(arguments));
+                    return Ok(NativeHostImportResult::ExternalHostCall(arguments));
                 }
                 Ok(NativeHostImportResult::Handled(VmValue::String(
                     self.working_directory.clone(),
@@ -472,7 +493,7 @@ impl ImageVmHandle {
                 let candidate = resolve_working_directory(&self.working_directory, path);
                 let kernel = kernel_handle.lock()?;
                 let Some(filesystem) = kernel.filesystem.as_ref() else {
-                    return Ok(NativeHostImportResult::Fallback(arguments));
+                    return Ok(NativeHostImportResult::ExternalHostCall(arguments));
                 };
                 if filesystem.is_directory("", &candidate)? {
                     self.working_directory = candidate;
@@ -513,7 +534,7 @@ impl ImageVmHandle {
             | DISPLAY_BLIT_MONO_5X7_TEXT_IMPORT_ID => {
                 let mut kernel = kernel_handle.lock()?;
                 if kernel.displays.first_display_id().is_none() {
-                    return Ok(NativeHostImportResult::Fallback(arguments));
+                    return Ok(NativeHostImportResult::ExternalHostCall(arguments));
                 }
                 match import_id {
                     DISPLAY_PRIMARY_IMPORT_ID => Ok(NativeHostImportResult::Handled(VmValue::Int(
@@ -674,7 +695,7 @@ impl ImageVmHandle {
                     _ => unreachable!("display import id was pre-matched"),
                 }
             }
-            _ => Ok(NativeHostImportResult::Fallback(arguments)),
+            _ => Ok(NativeHostImportResult::ExternalHostCall(arguments)),
         }
     }
 
@@ -704,170 +725,122 @@ impl ImageVmHandle {
             self.metrics.record_opcode(instruction_opcode(&instruction));
 
             match instruction {
-                Instruction::LoadConst {
+                Instruction::I32Const {
                     dst,
                     constant_index,
                 } => {
-                    let value = self.constant_value(constant_index)?;
-                    self.write_register(dst, value)?;
+                    let value = self.constant_i32(constant_index)?;
+                    self.write_i32_register(dst, value)?;
                 }
-                Instruction::LoadUnit { dst } => self.write_register(dst, VmValue::Unit)?,
-                Instruction::LoadNull { dst } => self.write_register(dst, VmValue::Null)?,
-                Instruction::LoadBool { dst, value } => {
-                    self.write_register(dst, VmValue::Bool(value))?
+                Instruction::I64Const {
+                    dst,
+                    constant_index,
+                } => {
+                    let value = self.constant_i64(constant_index)?;
+                    self.write_i64_register(dst, value)?;
                 }
-                Instruction::Move { dst, src } => {
-                    let value = self.clone_register(src)?;
-                    self.write_register(dst, value)?;
+                Instruction::BoolConst { dst, value } => self.write_bool_register(dst, value)?,
+                Instruction::RefConst {
+                    dst,
+                    constant_index,
+                } => {
+                    let value = self.constant_ref_value(constant_index)?;
+                    self.write_ref_register(dst, value)?;
+                }
+                Instruction::LoadUnit { dst } => self.write_ref_register(dst, VmValue::Unit)?,
+                Instruction::LoadNull { dst } => self.write_ref_register(dst, VmValue::Null)?,
+                Instruction::I32Move { dst, src } => {
+                    let value = self.clone_i32_register(src)?;
+                    self.write_i32_register(dst, value)?;
+                }
+                Instruction::I64Move { dst, src } => {
+                    let value = self.clone_i64_register(src)?;
+                    self.write_i64_register(dst, value)?;
+                }
+                Instruction::BoolMove { dst, src } => {
+                    let value = self.clone_bool_register(src)?;
+                    self.write_bool_register(dst, value)?;
+                }
+                Instruction::RefMove { dst, src } => {
+                    let value = self.clone_ref_register(src)?;
+                    self.write_ref_register(dst, value)?;
                 }
                 Instruction::I32Add { dst, lhs, rhs } => {
-                    self.write_binary(dst, lhs, rhs, binary_add)?
+                    self.write_i32_binary(dst, lhs, rhs, |a, b| a.wrapping_add(b))?
                 }
                 Instruction::I32Sub { dst, lhs, rhs } => {
-                    self.write_binary(dst, lhs, rhs, |left, right| {
-                        numeric_binary(
-                            left,
-                            right,
-                            "-",
-                            |a, b| a.wrapping_sub(b),
-                            |a, b| a.wrapping_sub(b),
-                        )
-                    })?
+                    self.write_i32_binary(dst, lhs, rhs, |a, b| a.wrapping_sub(b))?
                 }
                 Instruction::I32Mul { dst, lhs, rhs } => {
-                    self.write_binary(dst, lhs, rhs, |left, right| {
-                        numeric_binary(
-                            left,
-                            right,
-                            "*",
-                            |a, b| a.wrapping_mul(b),
-                            |a, b| a.wrapping_mul(b),
-                        )
-                    })?
+                    self.write_i32_binary(dst, lhs, rhs, |a, b| a.wrapping_mul(b))?
                 }
                 Instruction::I32Div { dst, lhs, rhs } => {
-                    self.write_binary(dst, lhs, rhs, binary_divide)?
+                    let right = self.clone_i32_register(rhs)?;
+                    if right == 0 {
+                        return Err("CkVmImage division by zero".to_string());
+                    }
+                    let left = self.clone_i32_register(lhs)?;
+                    self.write_i32_register(dst, left.wrapping_div(right))?;
                 }
                 Instruction::I32Neg { dst, src } => {
-                    let value = match self.clone_register(src)? {
-                        VmValue::Int(value) => VmValue::Int(value.wrapping_neg()),
-                        VmValue::Long(value) => VmValue::Long(value.wrapping_neg()),
-                        other => {
-                            return Err(format!(
-                                "CkVmImage I32_NEG requires Int or Long but found {other:?}"
-                            ))
-                        }
-                    };
-                    self.write_register(dst, value)?;
+                    let value = self.clone_i32_register(src)?.wrapping_neg();
+                    self.write_i32_register(dst, value)?;
                 }
                 Instruction::I32BitAnd { dst, lhs, rhs } => {
-                    self.write_binary(dst, lhs, rhs, |left, right| {
-                        numeric_binary(left, right, "&", |a, b| a & b, |a, b| a & b)
-                    })?
+                    self.write_i32_binary(dst, lhs, rhs, |a, b| a & b)?
                 }
                 Instruction::I32BitOr { dst, lhs, rhs } => {
-                    self.write_binary(dst, lhs, rhs, |left, right| {
-                        numeric_binary(left, right, "|", |a, b| a | b, |a, b| a | b)
-                    })?
+                    self.write_i32_binary(dst, lhs, rhs, |a, b| a | b)?
                 }
                 Instruction::I32BitXor { dst, lhs, rhs } => {
-                    self.write_binary(dst, lhs, rhs, |left, right| {
-                        numeric_binary(left, right, "^", |a, b| a ^ b, |a, b| a ^ b)
-                    })?
+                    self.write_i32_binary(dst, lhs, rhs, |a, b| a ^ b)?
                 }
                 Instruction::I32BitNot { dst, src } => {
-                    let value = match self.clone_register(src)? {
-                        VmValue::Int(value) => VmValue::Int(!value),
-                        VmValue::Long(value) => VmValue::Long(!value),
-                        other => {
-                            return Err(format!(
-                                "CkVmImage I32_BIT_NOT requires Int or Long but found {other:?}"
-                            ))
-                        }
-                    };
-                    self.write_register(dst, value)?;
+                    let value = !self.clone_i32_register(src)?;
+                    self.write_i32_register(dst, value)?;
                 }
                 Instruction::I32Shl { dst, lhs, rhs } => {
-                    self.write_binary(dst, lhs, rhs, |left, right| {
-                        shift_binary(
-                            left,
-                            right,
-                            "<<",
-                            |a, b| a.wrapping_shl(b),
-                            |a, b| a.wrapping_shl(b),
-                        )
-                    })?
+                    self.write_i32_binary(dst, lhs, rhs, |a, b| a.wrapping_shl(b as u32))?
                 }
                 Instruction::I32Shr { dst, lhs, rhs } => {
-                    self.write_binary(dst, lhs, rhs, |left, right| {
-                        shift_binary(
-                            left,
-                            right,
-                            ">>",
-                            |a, b| a.wrapping_shr(b),
-                            |a, b| a.wrapping_shr(b),
-                        )
-                    })?
+                    self.write_i32_binary(dst, lhs, rhs, |a, b| a.wrapping_shr(b as u32))?
                 }
                 Instruction::I32Eq { dst, lhs, rhs } => {
-                    self.metrics.register_reads = self.metrics.register_reads.saturating_add(2);
-                    let value = value_equals(self.read_register(lhs)?, self.read_register(rhs)?);
-                    self.write_register(dst, VmValue::Bool(value))?;
+                    self.write_i32_compare(dst, lhs, rhs, |a, b| a == b)?
                 }
                 Instruction::I32Ne { dst, lhs, rhs } => {
-                    self.metrics.register_reads = self.metrics.register_reads.saturating_add(2);
-                    let value = !value_equals(self.read_register(lhs)?, self.read_register(rhs)?);
-                    self.write_register(dst, VmValue::Bool(value))?;
+                    self.write_i32_compare(dst, lhs, rhs, |a, b| a != b)?
                 }
                 Instruction::I32Lt { dst, lhs, rhs } => {
-                    self.write_compare(dst, lhs, rhs, "<", |ordering| {
-                        ordering == std::cmp::Ordering::Less
-                    })?
+                    self.write_i32_compare(dst, lhs, rhs, |a, b| a < b)?
                 }
                 Instruction::I32Le { dst, lhs, rhs } => {
-                    self.write_compare(dst, lhs, rhs, "<=", |ordering| {
-                        ordering != std::cmp::Ordering::Greater
-                    })?
+                    self.write_i32_compare(dst, lhs, rhs, |a, b| a <= b)?
                 }
                 Instruction::I32Gt { dst, lhs, rhs } => {
-                    self.write_compare(dst, lhs, rhs, ">", |ordering| {
-                        ordering == std::cmp::Ordering::Greater
-                    })?
+                    self.write_i32_compare(dst, lhs, rhs, |a, b| a > b)?
                 }
                 Instruction::I32Ge { dst, lhs, rhs } => {
-                    self.write_compare(dst, lhs, rhs, ">=", |ordering| {
-                        ordering != std::cmp::Ordering::Less
-                    })?
+                    self.write_i32_compare(dst, lhs, rhs, |a, b| a >= b)?
                 }
                 Instruction::BoolNot { dst, src } => {
-                    let value = match self.read_register(src)? {
-                        VmValue::Bool(value) => VmValue::Bool(!value),
-                        other => {
-                            return Err(format!(
-                                "CkVmImage BOOL_NOT requires Bool but found {other:?}"
-                            ))
-                        }
-                    };
-                    self.write_register(dst, value)?;
+                    let value = !self.clone_bool_register(src)?;
+                    self.write_bool_register(dst, value)?;
                 }
                 Instruction::BoolAnd { dst, lhs, rhs } => {
-                    self.write_binary(dst, lhs, rhs, |left, right| {
-                        bool_binary(left, right, "&&", |a, b| a && b)
-                    })?
+                    self.write_bool_binary(dst, lhs, rhs, |a, b| a && b)?
                 }
                 Instruction::BoolOr { dst, lhs, rhs } => {
-                    self.write_binary(dst, lhs, rhs, |left, right| {
-                        bool_binary(left, right, "||", |a, b| a || b)
-                    })?
+                    self.write_bool_binary(dst, lhs, rhs, |a, b| a || b)?
                 }
                 Instruction::Jump { target } => self.jump_instruction(target)?,
                 Instruction::JumpIfFalse { cond, target } => {
-                    if !self.bool_register(cond, "JUMP_IF_FALSE")? {
+                    if !self.clone_bool_register(cond)? {
                         self.jump_instruction(target)?;
                     }
                 }
                 Instruction::JumpIfTrue { cond, target } => {
-                    if self.bool_register(cond, "JUMP_IF_TRUE")? {
+                    if self.clone_bool_register(cond)? {
                         self.jump_instruction(target)?;
                     }
                 }
@@ -877,7 +850,7 @@ impl ImageVmHandle {
                     arguments,
                 } => self.call_static(function_index, return_register, &arguments)?,
                 Instruction::Return { src } => {
-                    let result = self.clone_register(src)?;
+                    let result = self.clone_typed_register(src)?;
                     if let Some(signal) = self.return_value(result)? {
                         return Ok(signal);
                     }
@@ -893,7 +866,7 @@ impl ImageVmHandle {
                     arguments,
                 } => {
                     let argument_registers = arguments;
-                    let arguments = self.register_arguments(&argument_registers)?;
+                    let arguments = self.typed_register_arguments(&argument_registers)?;
                     let import = self.host_import(import_id)?;
                     let module_name = import.module_name.clone();
                     let function_name = import.function_name.clone();
@@ -904,13 +877,13 @@ impl ImageVmHandle {
                             self.metrics.native_host_calls =
                                 self.metrics.native_host_calls.saturating_add(1);
                             if let Some(register) = return_register {
-                                self.write_register(register, value)?;
+                                self.write_typed_register(register, value)?;
                             }
                         }
-                        NativeHostImportResult::Fallback(arguments) => {
-                            if !allows_kotlin_hostcall_fallback(import_id) {
+                        NativeHostImportResult::ExternalHostCall(arguments) => {
+                            if !requires_external_host_call(import_id) {
                                 return Err(format!(
-                                    "native host import {module_name}.{function_name} is not implemented; Kotlin fallback is disabled for native-owned hostcalls"
+                                    "native host import {module_name}.{function_name} id {import_id} is not implemented; external hostcall fallback is disabled"
                                 ));
                             }
                             self.metrics.jvm_host_call_signals =
@@ -930,20 +903,20 @@ impl ImageVmHandle {
                             for (register, value) in
                                 argument_registers.iter().copied().zip(arguments)
                             {
-                                self.write_register(register, value)?;
+                                self.write_typed_register(register, value)?;
                             }
                             return Ok(signal);
                         }
                     }
                 }
                 Instruction::Yield { dst } => {
-                    self.pending_resume_register = Some(dst);
+                    self.pending_resume_register = Some(TypedRegister::Ref(dst));
                     self.state = ImageVmState::WaitingForResume;
                     return Ok(VmSignal::Yield);
                 }
                 Instruction::Sleep { dst, ticks } => {
                     let ticks = self.sleep_ticks_register(ticks)?;
-                    self.pending_resume_register = Some(dst);
+                    self.pending_resume_register = Some(TypedRegister::Ref(dst));
                     self.state = ImageVmState::WaitingForResume;
                     return Ok(VmSignal::Sleep(ticks));
                 }
@@ -970,11 +943,11 @@ impl ImageVmHandle {
                             field_name_constant_index,
                             "record field name",
                         )?;
-                        fields.push((field_name, self.clone_register(field_value)?));
+                        fields.push((field_name, self.clone_typed_register(field_value)?));
                     }
                     self.metrics.record_allocations =
                         self.metrics.record_allocations.saturating_add(1);
-                    self.write_register(dst, VmValue::Record { type_name, fields })?;
+                    self.write_ref_register(dst, VmValue::Record { type_name, fields })?;
                 }
                 Instruction::GetField {
                     dst,
@@ -983,7 +956,7 @@ impl ImageVmHandle {
                 } => {
                     let field_name =
                         self.constant_string_value(field_name_constant_index, "field name")?;
-                    let value = match self.clone_register(receiver)? {
+                    let value = match self.clone_ref_register(receiver)? {
                         VmValue::Record { type_name, fields } => fields
                             .into_iter()
                             .find(|(name, _)| name == &field_name)
@@ -999,7 +972,7 @@ impl ImageVmHandle {
                             ))
                         }
                     };
-                    self.write_register(dst, value)?;
+                    self.write_typed_register(dst, value)?;
                 }
             }
 
@@ -1016,19 +989,22 @@ impl ImageVmHandle {
         Ok(VmSignal::Halt(value))
     }
 
-    fn read_register(&self, register: u16) -> Result<&VmValue, String> {
-        let index = self.register_index(register)?;
-        self.registers.get(index).ok_or_else(|| {
-            format!("CkVmImage register {register} is out of bounds for current register window")
+    fn clone_i32_register(&mut self, register: u16) -> Result<i32, String> {
+        self.metrics.register_reads = self.metrics.register_reads.saturating_add(1);
+        let index = self.i32_register_index(register)?;
+        self.i32_registers.get(index).copied().ok_or_else(|| {
+            format!(
+                "CkVmImage i32 register {register} is out of bounds for current register window"
+            )
         })
     }
 
-    fn write_register(&mut self, register: u16, value: VmValue) -> Result<(), String> {
-        let index = self.register_index(register)?;
-        let register_count = self.registers.len().saturating_sub(self.base_register);
-        let slot = self.registers.get_mut(index).ok_or_else(|| {
+    fn write_i32_register(&mut self, register: u16, value: i32) -> Result<(), String> {
+        let index = self.i32_register_index(register)?;
+        let register_count = self.i32_registers.len().saturating_sub(self.i32_base);
+        let slot = self.i32_registers.get_mut(index).ok_or_else(|| {
             format!(
-                "CkVmImage register {register} is out of bounds for current register window of {register_count} registers"
+                "CkVmImage i32 register {register} is out of bounds for current register window of {register_count} registers"
             )
         })?;
         self.metrics.register_writes = self.metrics.register_writes.saturating_add(1);
@@ -1036,60 +1012,180 @@ impl ImageVmHandle {
         Ok(())
     }
 
-    fn register_index(&self, register: u16) -> Result<usize, String> {
-        self.base_register
-            .checked_add(usize::from(register))
-            .ok_or_else(|| format!("CkVmImage register {register} offset overflow"))
+    fn clone_i64_register(&mut self, register: u16) -> Result<i64, String> {
+        self.metrics.register_reads = self.metrics.register_reads.saturating_add(1);
+        let index = self.i64_register_index(register)?;
+        self.i64_registers.get(index).copied().ok_or_else(|| {
+            format!(
+                "CkVmImage i64 register {register} is out of bounds for current register window"
+            )
+        })
     }
 
-    fn clone_register(&mut self, register: u16) -> Result<VmValue, String> {
+    fn write_i64_register(&mut self, register: u16, value: i64) -> Result<(), String> {
+        let index = self.i64_register_index(register)?;
+        let register_count = self.i64_registers.len().saturating_sub(self.i64_base);
+        let slot = self.i64_registers.get_mut(index).ok_or_else(|| {
+            format!(
+                "CkVmImage i64 register {register} is out of bounds for current register window of {register_count} registers"
+            )
+        })?;
+        self.metrics.register_writes = self.metrics.register_writes.saturating_add(1);
+        *slot = value;
+        Ok(())
+    }
+
+    fn clone_bool_register(&mut self, register: u16) -> Result<bool, String> {
+        self.metrics.register_reads = self.metrics.register_reads.saturating_add(1);
+        let index = self.bool_register_index(register)?;
+        self.bool_registers.get(index).copied().ok_or_else(|| {
+            format!(
+                "CkVmImage bool register {register} is out of bounds for current register window"
+            )
+        })
+    }
+
+    fn write_bool_register(&mut self, register: u16, value: bool) -> Result<(), String> {
+        let index = self.bool_register_index(register)?;
+        let register_count = self.bool_registers.len().saturating_sub(self.bool_base);
+        let slot = self.bool_registers.get_mut(index).ok_or_else(|| {
+            format!(
+                "CkVmImage bool register {register} is out of bounds for current register window of {register_count} registers"
+            )
+        })?;
+        self.metrics.register_writes = self.metrics.register_writes.saturating_add(1);
+        *slot = value;
+        Ok(())
+    }
+
+    fn clone_ref_register(&mut self, register: u16) -> Result<VmValue, String> {
         self.metrics.register_reads = self.metrics.register_reads.saturating_add(1);
         self.metrics.value_clones = self.metrics.value_clones.saturating_add(1);
-        self.read_register(register).cloned()
+        let index = self.ref_register_index(register)?;
+        self.ref_registers.get(index).cloned().ok_or_else(|| {
+            format!(
+                "CkVmImage ref register {register} is out of bounds for current register window"
+            )
+        })
     }
 
-    fn register_arguments(&mut self, registers: &[u16]) -> Result<Vec<VmValue>, String> {
+    fn write_ref_register(&mut self, register: u16, value: VmValue) -> Result<(), String> {
+        if matches!(value, VmValue::Int(_) | VmValue::Long(_) | VmValue::Bool(_)) {
+            return Err(format!(
+                "CkVmImage ref register {register} cannot store scalar value {value:?}"
+            ));
+        }
+        let index = self.ref_register_index(register)?;
+        let register_count = self.ref_registers.len().saturating_sub(self.ref_base);
+        let slot = self.ref_registers.get_mut(index).ok_or_else(|| {
+            format!(
+                "CkVmImage ref register {register} is out of bounds for current register window of {register_count} registers"
+            )
+        })?;
+        self.metrics.register_writes = self.metrics.register_writes.saturating_add(1);
+        *slot = value;
+        Ok(())
+    }
+
+    fn clone_typed_register(&mut self, register: TypedRegister) -> Result<VmValue, String> {
+        match register {
+            TypedRegister::I32(index) => Ok(VmValue::Int(self.clone_i32_register(index)?)),
+            TypedRegister::I64(index) => Ok(VmValue::Long(self.clone_i64_register(index)?)),
+            TypedRegister::Bool(index) => Ok(VmValue::Bool(self.clone_bool_register(index)?)),
+            TypedRegister::Ref(index) => self.clone_ref_register(index),
+        }
+    }
+
+    fn write_typed_register(
+        &mut self,
+        register: TypedRegister,
+        value: VmValue,
+    ) -> Result<(), String> {
+        match (register, value) {
+            (TypedRegister::I32(index), VmValue::Int(value)) => {
+                self.write_i32_register(index, value)
+            }
+            (TypedRegister::I64(index), VmValue::Long(value)) => {
+                self.write_i64_register(index, value)
+            }
+            (TypedRegister::Bool(index), VmValue::Bool(value)) => {
+                self.write_bool_register(index, value)
+            }
+            (TypedRegister::Ref(index), value) => self.write_ref_register(index, value),
+            (register, value) => Err(format!(
+                "CkVmImage cannot write value {value:?} into typed register {register:?}"
+            )),
+        }
+    }
+
+    fn typed_register_arguments(
+        &mut self,
+        registers: &[TypedRegister],
+    ) -> Result<Vec<VmValue>, String> {
         registers
             .iter()
-            .map(|register| self.clone_register(*register))
+            .map(|register| self.clone_typed_register(*register))
             .collect()
     }
 
-    fn write_binary(
+    fn i32_register_index(&self, register: u16) -> Result<usize, String> {
+        self.i32_base
+            .checked_add(usize::from(register))
+            .ok_or_else(|| format!("CkVmImage i32 register {register} offset overflow"))
+    }
+
+    fn i64_register_index(&self, register: u16) -> Result<usize, String> {
+        self.i64_base
+            .checked_add(usize::from(register))
+            .ok_or_else(|| format!("CkVmImage i64 register {register} offset overflow"))
+    }
+
+    fn bool_register_index(&self, register: u16) -> Result<usize, String> {
+        self.bool_base
+            .checked_add(usize::from(register))
+            .ok_or_else(|| format!("CkVmImage bool register {register} offset overflow"))
+    }
+
+    fn ref_register_index(&self, register: u16) -> Result<usize, String> {
+        self.ref_base
+            .checked_add(usize::from(register))
+            .ok_or_else(|| format!("CkVmImage ref register {register} offset overflow"))
+    }
+
+    fn write_i32_binary(
         &mut self,
         dst: u16,
         lhs: u16,
         rhs: u16,
-        op: fn(VmValue, VmValue) -> Result<VmValue, String>,
+        op: fn(i32, i32) -> i32,
     ) -> Result<(), String> {
-        let left = self.clone_register(lhs)?;
-        let right = self.clone_register(rhs)?;
-        let value = op(left, right)?;
-        self.write_register(dst, value)
+        let left = self.clone_i32_register(lhs)?;
+        let right = self.clone_i32_register(rhs)?;
+        self.write_i32_register(dst, op(left, right))
     }
 
-    fn write_compare(
+    fn write_i32_compare(
         &mut self,
         dst: u16,
         lhs: u16,
         rhs: u16,
-        symbol: &str,
-        predicate: fn(std::cmp::Ordering) -> bool,
+        op: fn(i32, i32) -> bool,
     ) -> Result<(), String> {
-        let left = self.clone_register(lhs)?;
-        let right = self.clone_register(rhs)?;
-        let value = compare_values(left, right, symbol, predicate)?;
-        self.write_register(dst, value)
+        let left = self.clone_i32_register(lhs)?;
+        let right = self.clone_i32_register(rhs)?;
+        self.write_bool_register(dst, op(left, right))
     }
 
-    fn bool_register(&mut self, register: u16, operation: &str) -> Result<bool, String> {
-        self.metrics.register_reads = self.metrics.register_reads.saturating_add(1);
-        match self.read_register(register)? {
-            VmValue::Bool(value) => Ok(*value),
-            other => Err(format!(
-                "CkVmImage {operation} requires Bool condition but found {other:?}"
-            )),
-        }
+    fn write_bool_binary(
+        &mut self,
+        dst: u16,
+        lhs: u16,
+        rhs: u16,
+        op: fn(bool, bool) -> bool,
+    ) -> Result<(), String> {
+        let left = self.clone_bool_register(lhs)?;
+        let right = self.clone_bool_register(rhs)?;
+        self.write_bool_register(dst, op(left, right))
     }
 
     fn jump_instruction(&mut self, target: usize) -> Result<(), String> {
@@ -1106,8 +1202,8 @@ impl ImageVmHandle {
     fn call_static(
         &mut self,
         function_index: usize,
-        return_register: Option<u16>,
-        argument_registers: &[u16],
+        return_register: Option<TypedRegister>,
+        argument_registers: &[TypedRegister],
     ) -> Result<(), String> {
         if function_index >= self.image.functions.len() {
             return Err(format!(
@@ -1115,44 +1211,70 @@ impl ImageVmHandle {
                 self.image.functions.len()
             ));
         }
-        let arguments = self.register_arguments(argument_registers)?;
+        let arguments = self.typed_register_arguments(argument_registers)?;
         let callee = &self.image.functions[function_index];
-        if arguments.len() != callee.parameter_count {
+        if arguments.len() != callee.parameters.len() {
             return Err(format!(
                 "CkVmImage function {function_index} expects {} arguments but got {}",
-                callee.parameter_count,
+                callee.parameters.len(),
                 arguments.len()
             ));
         }
+        let parameter_registers = callee.parameters.clone();
+        let i32_register_count = callee.i32_register_count;
+        let i64_register_count = callee.i64_register_count;
+        let bool_register_count = callee.bool_register_count;
+        let ref_register_count = callee.ref_register_count;
         let caller_frame = CallFrame {
             function_index: self.function_index,
             instruction_pointer: self.instruction_pointer,
-            base_register: self.base_register,
+            i32_base: self.i32_base,
+            i64_base: self.i64_base,
+            bool_base: self.bool_base,
+            ref_base: self.ref_base,
             return_register,
         };
         self.call_stack.push(caller_frame);
         self.metrics.function_calls = self.metrics.function_calls.saturating_add(1);
         self.function_index = function_index;
         self.instruction_pointer = 0;
-        self.base_register = self.registers.len();
-        self.registers
-            .resize(self.base_register + callee.register_count, VmValue::Unit);
-        for (slot, argument) in arguments.into_iter().enumerate() {
-            self.registers[self.base_register + slot] = argument;
+        self.i32_base = self.i32_registers.len();
+        self.i64_base = self.i64_registers.len();
+        self.bool_base = self.bool_registers.len();
+        self.ref_base = self.ref_registers.len();
+        self.i32_registers
+            .resize(self.i32_base + i32_register_count, 0);
+        self.i64_registers
+            .resize(self.i64_base + i64_register_count, 0);
+        self.bool_registers
+            .resize(self.bool_base + bool_register_count, false);
+        self.ref_registers
+            .resize(self.ref_base + ref_register_count, VmValue::Unit);
+        for (register, argument) in parameter_registers.into_iter().zip(arguments) {
+            self.write_typed_register(register, argument)?;
         }
         Ok(())
     }
 
     fn return_value(&mut self, result: VmValue) -> Result<Option<VmSignal>, String> {
         self.metrics.function_returns = self.metrics.function_returns.saturating_add(1);
-        let callee_base = self.base_register;
+        let callee_i32_base = self.i32_base;
+        let callee_i64_base = self.i64_base;
+        let callee_bool_base = self.bool_base;
+        let callee_ref_base = self.ref_base;
         if let Some(frame) = self.call_stack.pop() {
-            self.registers.truncate(callee_base);
+            self.i32_registers.truncate(callee_i32_base);
+            self.i64_registers.truncate(callee_i64_base);
+            self.bool_registers.truncate(callee_bool_base);
+            self.ref_registers.truncate(callee_ref_base);
             self.function_index = frame.function_index;
             self.instruction_pointer = frame.instruction_pointer;
-            self.base_register = frame.base_register;
+            self.i32_base = frame.i32_base;
+            self.i64_base = frame.i64_base;
+            self.bool_base = frame.bool_base;
+            self.ref_base = frame.ref_base;
             if let Some(return_register) = frame.return_register {
-                self.write_register(return_register, result)?;
+                self.write_typed_register(return_register, result)?;
             }
             Ok(None)
         } else {
@@ -1160,25 +1282,49 @@ impl ImageVmHandle {
         }
     }
 
-    fn sleep_ticks_register(&mut self, register: u16) -> Result<i64, String> {
-        self.metrics.register_reads = self.metrics.register_reads.saturating_add(1);
-        match self.read_register(register)? {
-            VmValue::Int(ticks) => Ok(i64::from(*ticks)),
-            VmValue::Long(ticks) => Ok(*ticks),
+    fn sleep_ticks_register(&mut self, register: TypedRegister) -> Result<i64, String> {
+        match register {
+            TypedRegister::I32(index) => Ok(i64::from(self.clone_i32_register(index)?)),
+            TypedRegister::I64(index) => self.clone_i64_register(index),
             other => Err(format!(
-                "CkVmImage SLEEP requires Long ticks but found {other:?}"
+                "CkVmImage SLEEP requires i32 or i64 ticks register but found {other:?}"
             )),
         }
     }
 
-    fn constant_value(&mut self, constant_index: usize) -> Result<VmValue, String> {
+    fn constant_i32(&self, constant_index: usize) -> Result<i32, String> {
+        match self.image.constants.get(constant_index) {
+            Some(Constant::Int(value)) => Ok(*value),
+            Some(other) => Err(format!(
+                "CkVmImage constant index {constant_index} must be Int but found {other:?}"
+            )),
+            None => Err(format!(
+                "CkVmImage constant index {constant_index} is out of bounds"
+            )),
+        }
+    }
+
+    fn constant_i64(&self, constant_index: usize) -> Result<i64, String> {
+        match self.image.constants.get(constant_index) {
+            Some(Constant::Long(value)) => Ok(*value),
+            Some(other) => Err(format!(
+                "CkVmImage constant index {constant_index} must be Long but found {other:?}"
+            )),
+            None => Err(format!(
+                "CkVmImage constant index {constant_index} is out of bounds"
+            )),
+        }
+    }
+
+    fn constant_ref_value(&mut self, constant_index: usize) -> Result<VmValue, String> {
         match self.image.constants.get(constant_index) {
             Some(Constant::String(value)) => {
                 self.metrics.string_allocations = self.metrics.string_allocations.saturating_add(1);
                 Ok(VmValue::String(value.clone()))
             }
-            Some(Constant::Int(value)) => Ok(VmValue::Int(*value)),
-            Some(Constant::Long(value)) => Ok(VmValue::Long(*value)),
+            Some(other) => Err(format!(
+                "CkVmImage constant index {constant_index} must be reference-compatible but found {other:?}"
+            )),
             None => Err(format!(
                 "CkVmImage constant index {constant_index} is out of bounds"
             )),
@@ -1234,52 +1380,53 @@ fn checked_entry_function_index(image: &Image) -> Result<usize, String> {
     Ok(index)
 }
 
-fn checked_register_count(image: &Image, function_index: usize) -> Result<usize, String> {
-    Ok(image.functions[function_index].register_count)
-}
-
 fn instruction_opcode(instruction: &Instruction) -> u8 {
     match instruction {
-        Instruction::LoadConst { .. } => 1,
-        Instruction::LoadUnit { .. } => 2,
-        Instruction::LoadNull { .. } => 3,
-        Instruction::LoadBool { .. } => 4,
-        Instruction::Move { .. } => 5,
-        Instruction::I32Add { .. } => 6,
-        Instruction::I32Sub { .. } => 7,
-        Instruction::I32Mul { .. } => 8,
-        Instruction::I32Div { .. } => 9,
-        Instruction::I32Neg { .. } => 10,
-        Instruction::I32BitAnd { .. } => 11,
-        Instruction::I32BitOr { .. } => 12,
-        Instruction::I32BitXor { .. } => 13,
-        Instruction::I32BitNot { .. } => 14,
-        Instruction::I32Shl { .. } => 15,
-        Instruction::I32Shr { .. } => 16,
-        Instruction::I32Eq { .. } => 17,
-        Instruction::I32Ne { .. } => 18,
-        Instruction::I32Lt { .. } => 19,
-        Instruction::I32Le { .. } => 20,
-        Instruction::I32Gt { .. } => 21,
-        Instruction::I32Ge { .. } => 22,
-        Instruction::BoolNot { .. } => 23,
-        Instruction::BoolAnd { .. } => 24,
-        Instruction::BoolOr { .. } => 25,
-        Instruction::Jump { .. } => 26,
-        Instruction::JumpIfFalse { .. } => 27,
-        Instruction::JumpIfTrue { .. } => 28,
-        Instruction::CallStatic { .. } => 29,
-        Instruction::Return { .. } => 30,
-        Instruction::ReturnUnit => 31,
-        Instruction::CallHost { .. } => 32,
-        Instruction::Yield { .. } => 33,
-        Instruction::Sleep { .. } => 34,
-        Instruction::ConstructRecord { .. } => 35,
-        Instruction::GetField { .. } => 36,
+        Instruction::I32Const { .. } => 1,
+        Instruction::I64Const { .. } => 2,
+        Instruction::BoolConst { .. } => 3,
+        Instruction::RefConst { .. } => 4,
+        Instruction::LoadUnit { .. } => 5,
+        Instruction::LoadNull { .. } => 6,
+        Instruction::I32Move { .. } => 7,
+        Instruction::I64Move { .. } => 8,
+        Instruction::BoolMove { .. } => 9,
+        Instruction::RefMove { .. } => 10,
+        Instruction::I32Add { .. } => 11,
+        Instruction::I32Sub { .. } => 12,
+        Instruction::I32Mul { .. } => 13,
+        Instruction::I32Div { .. } => 14,
+        Instruction::I32Neg { .. } => 15,
+        Instruction::I32BitAnd { .. } => 16,
+        Instruction::I32BitOr { .. } => 17,
+        Instruction::I32BitXor { .. } => 18,
+        Instruction::I32BitNot { .. } => 19,
+        Instruction::I32Shl { .. } => 20,
+        Instruction::I32Shr { .. } => 21,
+        Instruction::I32Eq { .. } => 22,
+        Instruction::I32Ne { .. } => 23,
+        Instruction::I32Lt { .. } => 24,
+        Instruction::I32Le { .. } => 25,
+        Instruction::I32Gt { .. } => 26,
+        Instruction::I32Ge { .. } => 27,
+        Instruction::BoolNot { .. } => 28,
+        Instruction::BoolAnd { .. } => 29,
+        Instruction::BoolOr { .. } => 30,
+        Instruction::Jump { .. } => 31,
+        Instruction::JumpIfFalse { .. } => 32,
+        Instruction::JumpIfTrue { .. } => 33,
+        Instruction::CallStatic { .. } => 34,
+        Instruction::Return { .. } => 35,
+        Instruction::ReturnUnit => 36,
+        Instruction::CallHost { .. } => 37,
+        Instruction::Yield { .. } => 38,
+        Instruction::Sleep { .. } => 39,
+        Instruction::ConstructRecord { .. } => 40,
+        Instruction::GetField { .. } => 41,
     }
 }
 
-fn allows_kotlin_hostcall_fallback(import_id: i32) -> bool {
+fn requires_external_host_call(import_id: i32) -> bool {
     matches!(
         import_id,
         SYSTEM_CURRENT_TICK_IMPORT_ID
@@ -1344,7 +1491,7 @@ fn try_builtin_native_host_import(
         STRINGS_SLICE_IMPORT_ID => native_string_slice(arguments),
         STRINGS_REPLACE_RANGE_IMPORT_ID => native_string_replace_range(arguments),
         STRINGS_CHAR_CODE_AT_IMPORT_ID => native_string_char_code_at(arguments),
-        _ => Ok(NativeHostImportResult::Fallback(arguments)),
+        _ => Ok(NativeHostImportResult::ExternalHostCall(arguments)),
     }
 }
 
@@ -1430,26 +1577,26 @@ fn native_string_unary(
     operation: fn(&str) -> VmValue,
 ) -> Result<NativeHostImportResult, String> {
     if arguments.len() != 1 {
-        return Ok(NativeHostImportResult::Fallback(arguments));
+        return Ok(NativeHostImportResult::ExternalHostCall(arguments));
     }
     match &arguments[0] {
         VmValue::String(text) => Ok(NativeHostImportResult::Handled(operation(text))),
-        _ => Ok(NativeHostImportResult::Fallback(arguments)),
+        _ => Ok(NativeHostImportResult::ExternalHostCall(arguments)),
     }
 }
 
 fn native_string_char_at(arguments: Vec<VmValue>) -> Result<NativeHostImportResult, String> {
     if arguments.len() != 2 {
-        return Ok(NativeHostImportResult::Fallback(arguments));
+        return Ok(NativeHostImportResult::ExternalHostCall(arguments));
     }
     let text = match &arguments[0] {
         VmValue::String(text) => text,
-        _ => return Ok(NativeHostImportResult::Fallback(arguments)),
+        _ => return Ok(NativeHostImportResult::ExternalHostCall(arguments)),
     };
     let index = match &arguments[1] {
         VmValue::Int(value) => *value,
         VmValue::Long(value) => *value as i32,
-        _ => return Ok(NativeHostImportResult::Fallback(arguments)),
+        _ => return Ok(NativeHostImportResult::ExternalHostCall(arguments)),
     };
     let value = if index < 0 {
         String::new()
@@ -1464,16 +1611,16 @@ fn native_string_char_at(arguments: Vec<VmValue>) -> Result<NativeHostImportResu
 
 fn native_string_char_code_at(arguments: Vec<VmValue>) -> Result<NativeHostImportResult, String> {
     if arguments.len() != 2 {
-        return Ok(NativeHostImportResult::Fallback(arguments));
+        return Ok(NativeHostImportResult::ExternalHostCall(arguments));
     }
     let text = match &arguments[0] {
         VmValue::String(text) => text,
-        _ => return Ok(NativeHostImportResult::Fallback(arguments)),
+        _ => return Ok(NativeHostImportResult::ExternalHostCall(arguments)),
     };
     let index = match &arguments[1] {
         VmValue::Int(value) => *value,
         VmValue::Long(value) => *value as i32,
-        _ => return Ok(NativeHostImportResult::Fallback(arguments)),
+        _ => return Ok(NativeHostImportResult::ExternalHostCall(arguments)),
     };
     let value = if index < 0 {
         -1
@@ -1488,16 +1635,16 @@ fn native_string_char_code_at(arguments: Vec<VmValue>) -> Result<NativeHostImpor
 
 fn native_string_repeat(arguments: Vec<VmValue>) -> Result<NativeHostImportResult, String> {
     if arguments.len() != 2 {
-        return Ok(NativeHostImportResult::Fallback(arguments));
+        return Ok(NativeHostImportResult::ExternalHostCall(arguments));
     }
     let text = match &arguments[0] {
         VmValue::String(text) => text,
-        _ => return Ok(NativeHostImportResult::Fallback(arguments)),
+        _ => return Ok(NativeHostImportResult::ExternalHostCall(arguments)),
     };
     let count = match &arguments[1] {
         VmValue::Int(value) => *value,
         VmValue::Long(value) => *value as i32,
-        _ => return Ok(NativeHostImportResult::Fallback(arguments)),
+        _ => return Ok(NativeHostImportResult::ExternalHostCall(arguments)),
     };
     let value = if count <= 0 {
         String::new()
@@ -1509,21 +1656,21 @@ fn native_string_repeat(arguments: Vec<VmValue>) -> Result<NativeHostImportResul
 
 fn native_string_slice(arguments: Vec<VmValue>) -> Result<NativeHostImportResult, String> {
     if arguments.len() != 3 {
-        return Ok(NativeHostImportResult::Fallback(arguments));
+        return Ok(NativeHostImportResult::ExternalHostCall(arguments));
     }
     let text = match &arguments[0] {
         VmValue::String(text) => text,
-        _ => return Ok(NativeHostImportResult::Fallback(arguments)),
+        _ => return Ok(NativeHostImportResult::ExternalHostCall(arguments)),
     };
     let start = match &arguments[1] {
         VmValue::Int(value) => *value,
         VmValue::Long(value) => *value as i32,
-        _ => return Ok(NativeHostImportResult::Fallback(arguments)),
+        _ => return Ok(NativeHostImportResult::ExternalHostCall(arguments)),
     };
     let end = match &arguments[2] {
         VmValue::Int(value) => *value,
         VmValue::Long(value) => *value as i32,
-        _ => return Ok(NativeHostImportResult::Fallback(arguments)),
+        _ => return Ok(NativeHostImportResult::ExternalHostCall(arguments)),
     };
     let len = text.chars().count() as i32;
     let start = start.clamp(0, len) as usize;
@@ -1535,20 +1682,20 @@ fn native_string_slice(arguments: Vec<VmValue>) -> Result<NativeHostImportResult
 
 fn native_string_replace_range(arguments: Vec<VmValue>) -> Result<NativeHostImportResult, String> {
     if arguments.len() != 3 {
-        return Ok(NativeHostImportResult::Fallback(arguments));
+        return Ok(NativeHostImportResult::ExternalHostCall(arguments));
     }
     let text = match &arguments[0] {
         VmValue::String(text) => text,
-        _ => return Ok(NativeHostImportResult::Fallback(arguments)),
+        _ => return Ok(NativeHostImportResult::ExternalHostCall(arguments)),
     };
     let start = match &arguments[1] {
         VmValue::Int(value) => *value,
         VmValue::Long(value) => *value as i32,
-        _ => return Ok(NativeHostImportResult::Fallback(arguments)),
+        _ => return Ok(NativeHostImportResult::ExternalHostCall(arguments)),
     };
     let replacement = match &arguments[2] {
         VmValue::String(value) => value,
-        _ => return Ok(NativeHostImportResult::Fallback(arguments)),
+        _ => return Ok(NativeHostImportResult::ExternalHostCall(arguments)),
     };
     let len = text.chars().count() as i32;
     let start = start.clamp(0, len) as usize;
@@ -1568,150 +1715,6 @@ fn scalar_to_byte_index(text: &str, scalar_index: usize) -> usize {
         .nth(scalar_index)
         .map(|(byte_index, _)| byte_index)
         .unwrap_or(text.len())
-}
-
-fn binary_add(left: VmValue, right: VmValue) -> Result<VmValue, String> {
-    match (left, right) {
-        (VmValue::String(left), right) => Ok(VmValue::String(left + &value_to_string(&right)?)),
-        (left, VmValue::String(right)) => Ok(VmValue::String(value_to_string(&left)? + &right)),
-        (VmValue::Int(left), VmValue::Int(right)) => Ok(VmValue::Int(left.wrapping_add(right))),
-        (VmValue::Long(left), VmValue::Long(right)) => Ok(VmValue::Long(left.wrapping_add(right))),
-        (VmValue::Int(left), VmValue::Long(right)) => {
-            Ok(VmValue::Long((left as i64).wrapping_add(right)))
-        }
-        (VmValue::Long(left), VmValue::Int(right)) => {
-            Ok(VmValue::Long(left.wrapping_add(right as i64)))
-        }
-        (left, right) => Err(format!(
-            "CkVmImage binary + requires numbers or strings but found {left:?} and {right:?}"
-        )),
-    }
-}
-
-fn binary_divide(left: VmValue, right: VmValue) -> Result<VmValue, String> {
-    match (left, right) {
-        (_, VmValue::Int(0)) | (_, VmValue::Long(0)) => {
-            Err("CkVmImage division by zero".to_string())
-        }
-        (VmValue::Int(left), VmValue::Int(right)) => Ok(VmValue::Int(left.wrapping_div(right))),
-        (VmValue::Long(left), VmValue::Long(right)) => Ok(VmValue::Long(left.wrapping_div(right))),
-        (VmValue::Int(left), VmValue::Long(right)) => {
-            Ok(VmValue::Long((left as i64).wrapping_div(right)))
-        }
-        (VmValue::Long(left), VmValue::Int(right)) => {
-            Ok(VmValue::Long(left.wrapping_div(right as i64)))
-        }
-        (left, right) => Err(format!(
-            "CkVmImage binary / requires Int or Long but found {left:?} and {right:?}"
-        )),
-    }
-}
-
-fn numeric_binary(
-    left: VmValue,
-    right: VmValue,
-    symbol: &str,
-    int_op: fn(i32, i32) -> i32,
-    long_op: fn(i64, i64) -> i64,
-) -> Result<VmValue, String> {
-    match (left, right) {
-        (VmValue::Int(left), VmValue::Int(right)) => Ok(VmValue::Int(int_op(left, right))),
-        (VmValue::Long(left), VmValue::Long(right)) => Ok(VmValue::Long(long_op(left, right))),
-        (VmValue::Int(left), VmValue::Long(right)) => {
-            Ok(VmValue::Long(long_op(left as i64, right)))
-        }
-        (VmValue::Long(left), VmValue::Int(right)) => {
-            Ok(VmValue::Long(long_op(left, right as i64)))
-        }
-        (left, right) => Err(format!(
-            "CkVmImage binary {symbol} requires Int or Long but found {left:?} and {right:?}"
-        )),
-    }
-}
-
-fn shift_binary(
-    left: VmValue,
-    right: VmValue,
-    symbol: &str,
-    int_op: fn(i32, u32) -> i32,
-    long_op: fn(i64, u32) -> i64,
-) -> Result<VmValue, String> {
-    let shift = match right {
-        VmValue::Int(value) => value as u32,
-        VmValue::Long(value) => value as u32,
-        other => {
-            return Err(format!(
-                "CkVmImage binary {symbol} shift count requires Int or Long but found {other:?}"
-            ));
-        }
-    };
-    match left {
-        VmValue::Int(value) => Ok(VmValue::Int(int_op(value, shift))),
-        VmValue::Long(value) => Ok(VmValue::Long(long_op(value, shift))),
-        other => Err(format!(
-            "CkVmImage binary {symbol} requires Int or Long left operand but found {other:?}"
-        )),
-    }
-}
-
-fn bool_binary(
-    left: VmValue,
-    right: VmValue,
-    symbol: &str,
-    op: fn(bool, bool) -> bool,
-) -> Result<VmValue, String> {
-    match (left, right) {
-        (VmValue::Bool(left), VmValue::Bool(right)) => Ok(VmValue::Bool(op(left, right))),
-        (left, right) => Err(format!(
-            "CkVmImage binary {symbol} requires Bool but found {left:?} and {right:?}"
-        )),
-    }
-}
-
-fn compare_values(
-    left: VmValue,
-    right: VmValue,
-    symbol: &str,
-    predicate: fn(std::cmp::Ordering) -> bool,
-) -> Result<VmValue, String> {
-    let ordering = match (left, right) {
-        (VmValue::Int(left), VmValue::Int(right)) => left.cmp(&right),
-        (VmValue::Long(left), VmValue::Long(right)) => left.cmp(&right),
-        (VmValue::Int(left), VmValue::Long(right)) => (left as i64).cmp(&right),
-        (VmValue::Long(left), VmValue::Int(right)) => left.cmp(&(right as i64)),
-        (VmValue::String(left), VmValue::String(right)) => left.cmp(&right),
-        (left, right) => {
-            return Err(format!(
-                "CkVmImage binary {symbol} requires comparable values but found {left:?} and {right:?}"
-            ));
-        }
-    };
-    Ok(VmValue::Bool(predicate(ordering)))
-}
-
-fn value_equals(left: &VmValue, right: &VmValue) -> bool {
-    match (left, right) {
-        (VmValue::Int(left), VmValue::Long(right)) => i64::from(*left) == *right,
-        (VmValue::Long(left), VmValue::Int(right)) => *left == i64::from(*right),
-        _ => left == right,
-    }
-}
-
-fn value_to_string(value: &VmValue) -> Result<String, String> {
-    match value {
-        VmValue::Unit => Ok("unit".to_string()),
-        VmValue::Null => Ok("null".to_string()),
-        VmValue::Bool(value) => Ok(value.to_string()),
-        VmValue::Int(value) => Ok(value.to_string()),
-        VmValue::Long(value) => Ok(value.to_string()),
-        VmValue::String(value) => Ok(value.clone()),
-        VmValue::Record { .. } => {
-            Err("CkVmImage string concatenation with records is not supported".to_string())
-        }
-        VmValue::ObjectRef(_) => {
-            Err("CkVmImage string concatenation with objects is not supported".to_string())
-        }
-    }
 }
 
 fn normalize_working_directory(path: &str) -> String {
@@ -1758,17 +1761,6 @@ mod tests {
     }
 
     #[test]
-    fn rejects_string_concatenation_with_object_value() {
-        let error = binary_add(
-            VmValue::ObjectRef(42),
-            VmValue::String("suffix".to_string()),
-        )
-        .unwrap_err();
-
-        assert!(error.contains("string concatenation with objects"));
-    }
-
-    #[test]
     fn normalizes_native_filesystem_working_directory() {
         assert_eq!(normalize_working_directory("/a/./b/../c/"), "a/c");
     }
@@ -1783,99 +1775,91 @@ mod tests {
     }
 
     #[test]
-    fn process_current_directory_falls_back_without_native_filesystem() {
-        let image = encode_empty_main_image();
+    fn unsupported_host_import_errors_instead_of_signaling_external_hostcall() {
+        let image = image_with_host_import_and_instructions(42, "legacy", "fallback", |out| {
+            out.push(37);
+            out.push(0);
+            i32(out, 42);
+            i32(out, 0);
+        });
         let mut handle = ImageVmHandle::create(&image, 128).unwrap();
-        handle
-            .attach_device_kernel(Arc::new(DeviceRuntimeKernelHandle::new(16, 1024)))
-            .unwrap();
 
-        let result = handle
-            .try_native_host_import(PROCESS_CURRENT_DIRECTORY_IMPORT_ID, Vec::new())
-            .unwrap();
+        let error = handle.run_until_signal_decoded().unwrap_err();
 
-        match result {
-            NativeHostImportResult::Fallback(arguments) => assert!(arguments.is_empty()),
-            NativeHostImportResult::Handled(value) => {
-                panic!(
-                    "expected currentDirectory fallback without native filesystem, got {value:?}"
-                )
-            }
-            NativeHostImportResult::SignalNoResume { .. } => {
-                panic!("expected currentDirectory fallback without native filesystem")
-            }
-        }
-    }
-
-    #[test]
-    fn native_owned_host_imports_do_not_allow_kotlin_fallback() {
-        for (import_id, name) in [
-            (FILESYSTEM_EXISTS_IMPORT_ID, "filesystem.exists"),
-            (DISPLAY_PRIMARY_IMPORT_ID, "display.primary"),
-            (EVENTS_TRY_PULL_IMPORT_ID, "events.tryPull"),
-            (IPC_OPEN_IMPORT_ID, "ipc.open"),
-            (RUNTIME_POLL_IMPORT_ID, "runtime.poll"),
-            (STRINGS_TRIM_IMPORT_ID, "strings.trim"),
-            (
-                PROCESS_CURRENT_DIRECTORY_IMPORT_ID,
-                "process.currentDirectory",
-            ),
-            (
-                PROCESS_CHANGE_DIRECTORY_IMPORT_ID,
-                "process.changeDirectory",
-            ),
-            (PROCESS_WAIT_IMPORT_ID, "process.wait"),
-        ] {
-            assert!(
-                !allows_kotlin_hostcall_fallback(import_id),
-                "{name} must fail fast instead of falling back to Kotlin",
-            );
-        }
-    }
-
-    #[test]
-    fn jvm_owned_host_imports_keep_explicit_kotlin_fallback() {
-        for (import_id, name) in [
-            (SYSTEM_CURRENT_TICK_IMPORT_ID, "system.currentTick"),
-            (SYSTEM_LABEL_IMPORT_ID, "system.label"),
-            (SYSTEM_LOG_IMPORT_ID, "system.log"),
-            (SYSTEM_SHUTDOWN_IMPORT_ID, "system.shutdown"),
-            (SYSTEM_REBOOT_IMPORT_ID, "system.reboot"),
-            (PROCESS_RUN_IMPORT_ID, "process.run"),
-            (PROCESS_RUN_WITH_ARGUMENT_IMPORT_ID, "process.run/2"),
-            (PROCESS_SPAWN_IMPORT_ID, "process.spawn"),
-            (PROCESS_SPAWN_WITH_ARGUMENT_IMPORT_ID, "process.spawn/2"),
-        ] {
-            assert!(
-                allows_kotlin_hostcall_fallback(import_id),
-                "{name} should remain Kotlin-owned for now",
-            );
-        }
+        assert!(error.contains("external hostcall fallback is disabled"));
+        assert!(error.contains("legacy.fallback"));
     }
 
     fn encode_empty_main_image() -> Vec<u8> {
-        image_with_instructions(0, |out| {
-            out.push(31);
+        image_with_instructions(0, 0, 0, 0, |out| {
+            out.push(36);
         })
     }
 
     fn image_with_instructions(
-        register_count: u16,
+        i32_register_count: u16,
+        i64_register_count: u16,
+        bool_register_count: u16,
+        ref_register_count: u16,
+        write_instructions: impl FnOnce(&mut Vec<u8>),
+    ) -> Vec<u8> {
+        image_with_sections(
+            |out| i32(out, 0),
+            i32_register_count,
+            i64_register_count,
+            bool_register_count,
+            ref_register_count,
+            write_instructions,
+        )
+    }
+
+    fn image_with_host_import_and_instructions(
+        import_id: i32,
+        module_name: &str,
+        function_name: &str,
+        write_instructions: impl FnOnce(&mut Vec<u8>),
+    ) -> Vec<u8> {
+        image_with_sections(
+            |out| {
+                i32(out, 1);
+                i32(out, import_id);
+                string(out, module_name);
+                string(out, function_name);
+                i32(out, 0);
+                string(out, "Unit");
+            },
+            0,
+            0,
+            0,
+            0,
+            write_instructions,
+        )
+    }
+
+    fn image_with_sections(
+        write_host_imports: impl FnOnce(&mut Vec<u8>),
+        i32_register_count: u16,
+        i64_register_count: u16,
+        bool_register_count: u16,
+        ref_register_count: u16,
         write_instructions: impl FnOnce(&mut Vec<u8>),
     ) -> Vec<u8> {
         let mut instructions = Vec::new();
         write_instructions(&mut instructions);
         let mut out = Vec::new();
         out.extend_from_slice(b"CKIM");
-        out.push(2);
+        out.push(3);
         string(&mut out, "ckl-1");
         i32(&mut out, 0);
-        i32(&mut out, 0);
+        write_host_imports(&mut out);
         i32(&mut out, 0);
         i32(&mut out, 1);
         string(&mut out, "main");
-        out.extend_from_slice(&register_count.to_le_bytes());
-        out.extend_from_slice(&0u16.to_le_bytes());
+        out.extend_from_slice(&i32_register_count.to_le_bytes());
+        out.extend_from_slice(&i64_register_count.to_le_bytes());
+        out.extend_from_slice(&bool_register_count.to_le_bytes());
+        out.extend_from_slice(&ref_register_count.to_le_bytes());
+        i32(&mut out, 0);
         i32(&mut out, 1);
         out.extend_from_slice(&instructions);
         out

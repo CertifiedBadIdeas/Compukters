@@ -57,3 +57,12 @@ tasks.register<Test>("profileComputeVmBenchmark") {
     outputs.file(computeVmBenchmarkTsv)
     outputs.file(computeVmBenchmarkMarkdown)
 }
+
+tasks.test {
+    System.getProperty("ckl.image.golden.path")?.takeIf { it.isNotBlank() }?.let { path ->
+        systemProperty("ckl.image.golden.path", path)
+    }
+    System.getProperty("ckl.image.backend.fixture.path")?.takeIf { it.isNotBlank() }?.let { path ->
+        systemProperty("ckl.image.backend.fixture.path", path)
+    }
+}
