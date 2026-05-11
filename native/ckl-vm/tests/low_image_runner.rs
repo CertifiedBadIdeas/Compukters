@@ -1,5 +1,5 @@
 use ckl_vm::low_image::{Function, Image, Instruction};
-use ckl_vm::low_image_runner::{low_opcode, LowImageSignal, LowImageVm};
+use ckl_vm::low_image_runner::{LowImageSignal, LowImageVm};
 
 #[test]
 fn runner_executes_i32_arithmetic_without_value_objects() {
@@ -404,19 +404,22 @@ fn runner_records_execution_metrics() {
     assert_eq!(vm.run_until_signal().unwrap(), LowImageSignal::HaltI32(12));
 
     let metrics = vm.metrics_snapshot();
-    assert_eq!(metrics.executed_instructions, 9);
-    assert_eq!(metrics.function_calls, 1);
-    assert_eq!(metrics.function_returns, 2);
+    assert_eq!(metrics.run_invocations, 1);
+    assert!(metrics.elapsed_nanos > 0, "{metrics:?}");
     assert_eq!(metrics.pause_signals, 0);
-    assert_eq!(metrics.memory_loads, 1);
-    assert_eq!(metrics.memory_stores, 1);
-    assert_eq!(metrics.opcode_counts[low_opcode::I32_CONST], 2);
-    assert_eq!(metrics.opcode_counts[low_opcode::ADDR_CONST], 1);
-    assert_eq!(metrics.opcode_counts[low_opcode::STORE32], 1);
-    assert_eq!(metrics.opcode_counts[low_opcode::LOAD32], 1);
-    assert_eq!(metrics.opcode_counts[low_opcode::I32_ADD], 1);
-    assert_eq!(metrics.opcode_counts[low_opcode::CALL_STATIC], 1);
-    assert_eq!(metrics.opcode_counts[low_opcode::RETURN_I32], 2);
+}
+
+#[test]
+fn runner_pauses_after_time_slice_budget() {
+    let image = image(vec![Instruction::Jump { target: 0 }], 0);
+    let mut vm = LowImageVm::create(image, 1).unwrap();
+
+    assert_eq!(vm.run_until_signal().unwrap(), LowImageSignal::Pause);
+
+    let metrics = vm.metrics_snapshot();
+    assert_eq!(metrics.run_invocations, 1);
+    assert_eq!(metrics.pause_signals, 1);
+    assert!(metrics.elapsed_nanos > 0, "{metrics:?}");
 }
 
 fn image(instructions: Vec<Instruction>, register_count: usize) -> Image {
