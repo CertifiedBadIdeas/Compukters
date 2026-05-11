@@ -71,8 +71,8 @@ class RuntimeDisplayProfilingTest {
         println(runtimeSnapshot.summary())
         println(compilerSnapshot.summary())
 
-        assertTrue(displaySnapshot.operations.blitMonoNanos >= 0, displaySnapshot.summary())
-        assertTrue(displaySnapshot.frameBuild.buildCalls > 0, displaySnapshot.summary())
+        assertEquals(0, displaySnapshot.operations.allCalls, displaySnapshot.summary())
+        assertEquals(0, displaySnapshot.frameBuild.buildCalls, displaySnapshot.summary())
         assertTrue(clientSnapshot.framesApplied > 0, clientSnapshot.toString())
         assertTrue(
             runtimeSnapshot.vm.nativeDaemonTicks > 0 && runtimeSnapshot.vm.nativeDaemonTurns > 0,

@@ -136,7 +136,7 @@ class BackgroundDeviceVm(
             hostBridge = ::handleNativeDaemonHostRequest,
             compileBridge = ::handleNativeDaemonCompileProgram,
         )
-    private val displayRegistry = DisplayRegistry(displayMetricsCollector)
+    private val displayRegistry = DisplayRegistry()
     private val runtimeRegistryProfile = createRuntimeRegistryProfile()
     private val stoppedNativeDisplayFrames = mutableListOf<DisplayFrameDelta>()
     private val daemonWakeSignal = Channel<Unit>(capacity = Channel.CONFLATED)
@@ -244,7 +244,7 @@ class BackgroundDeviceVm(
                     emptyList()
                 }
             }
-        displayRegistry.drainFrames()
+        displayMetricsCollector.recordFrameDrain(nativeFrames)
         return buildList {
             addAll(stoppedNativeDisplayFrames)
             stoppedNativeDisplayFrames.clear()
