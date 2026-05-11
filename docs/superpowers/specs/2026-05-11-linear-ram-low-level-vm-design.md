@@ -309,7 +309,7 @@ The initial implementation can keep a typed decoded enum. A later optimization p
 Introduce a new active image ABI:
 
 ```text
-CKIM version 4: linear-RAM low-level VM image
+CKIM version 5: linear-RAM low-level VM image with unified `u64` registers
 ```
 
 The Rust decoder rejects previous versions. There is no runtime dispatch to `CKIM v1`, `v2`, or `v3`.
@@ -327,6 +327,23 @@ The image contains:
 - optional debug/type metadata.
 
 Debug/type metadata is optional and must not be required for execution.
+
+## Image Validation
+
+The Rust loader validates low-level images before constructing mutable VM state. This keeps malformed binaries fail-fast and lets the interpreter hot path rely on structural invariants.
+
+The validator checks:
+
+- entry function index exists;
+- memory sections fit inside requested linear RAM;
+- every function has at least one instruction;
+- every function ends with `Jump` or explicit `Return*`/`ReturnUnit`;
+- parameter, operand, argument, and return register indices are inside the function register window;
+- jump targets point to existing instructions;
+- static call targets point to existing functions;
+- static call argument count matches the callee parameter count.
+
+Runtime checks still remain for data-dependent behavior such as division by zero and linear-memory bounds. The validator is not a Kotlin fallback or compatibility layer; invalid images are rejected before execution.
 
 ## Compiler Direction
 

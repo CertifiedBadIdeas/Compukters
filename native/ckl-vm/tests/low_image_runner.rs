@@ -71,12 +71,11 @@ fn runner_rejects_out_of_bounds_memory_access() {
 #[test]
 fn runner_rejects_fallthrough_past_last_instruction() {
     let image = image(vec![Instruction::I32Const { dst: 0, value: 7 }], 1);
-    let mut vm = LowImageVm::create(image, 128).unwrap();
 
-    let error = vm.run_until_signal().unwrap_err();
+    let error = create_error(image);
 
     assert!(
-        error.contains("instruction pointer 1 is outside function main instruction count 1"),
+        error.contains("function main must end with Jump or Return* instruction"),
         "{error}",
     );
 }
@@ -84,12 +83,156 @@ fn runner_rejects_fallthrough_past_last_instruction() {
 #[test]
 fn runner_rejects_jump_to_instruction_count() {
     let image = image(vec![Instruction::Jump { target: 1 }], 1);
-    let mut vm = LowImageVm::create(image, 128).unwrap();
 
-    let error = vm.run_until_signal().unwrap_err();
+    let error = create_error(image);
 
     assert!(
-        error.contains("jump target 1 is outside function instruction count 1"),
+        error.contains("function main instruction 0 jump target 1 is outside instruction count 1"),
+        "{error}",
+    );
+}
+
+#[test]
+fn runner_rejects_invalid_register_indices_at_create_time() {
+    let image = image(
+        vec![
+            Instruction::I32Const { dst: 1, value: 7 },
+            Instruction::ReturnUnit,
+        ],
+        1,
+    );
+
+    let error = create_error(image);
+
+    assert!(
+        error.contains("function main instruction 0 writes register 1 outside register count 1"),
+        "{error}",
+    );
+}
+
+#[test]
+fn runner_rejects_invalid_call_target_at_create_time() {
+    let image = image(
+        vec![
+            Instruction::CallStatic {
+                return_register: None,
+                function_index: 1,
+                arguments: Vec::new(),
+            },
+            Instruction::ReturnUnit,
+        ],
+        1,
+    );
+
+    let error = create_error(image);
+
+    assert!(
+        error.contains("function main instruction 0 calls function 1 outside function count 1"),
+        "{error}",
+    );
+}
+
+#[test]
+fn runner_rejects_static_call_argument_count_at_create_time() {
+    let image = Image {
+        language_version: "ckl-low-1".to_string(),
+        memory_size: 1024,
+        rodata: Vec::new(),
+        data: Vec::new(),
+        bss_size: 0,
+        entry_function_index: 0,
+        functions: vec![
+            Function {
+                name: "main".to_string(),
+                register_count: 1,
+                parameters: Vec::new(),
+                instructions: vec![
+                    Instruction::CallStatic {
+                        return_register: None,
+                        function_index: 1,
+                        arguments: vec![0],
+                    },
+                    Instruction::ReturnUnit,
+                ],
+            },
+            Function {
+                name: "callee".to_string(),
+                register_count: 1,
+                parameters: vec![0, 0],
+                instructions: vec![Instruction::ReturnUnit],
+            },
+        ],
+    };
+
+    let error = create_error(image);
+
+    assert!(
+        error.contains("function main instruction 0 calls function callee with 1 arguments but callee expects 2"),
+        "{error}",
+    );
+}
+
+#[test]
+fn runner_rejects_invalid_parameter_register_at_create_time() {
+    let image = Image {
+        language_version: "ckl-low-1".to_string(),
+        memory_size: 1024,
+        rodata: Vec::new(),
+        data: Vec::new(),
+        bss_size: 0,
+        entry_function_index: 0,
+        functions: vec![Function {
+            name: "main".to_string(),
+            register_count: 1,
+            parameters: vec![1],
+            instructions: vec![Instruction::ReturnUnit],
+        }],
+    };
+
+    let error = create_error(image);
+
+    assert!(
+        error.contains("function main parameter 0 register 1 outside register count 1"),
+        "{error}",
+    );
+}
+
+#[test]
+fn runner_rejects_invalid_return_register_at_create_time() {
+    let image = Image {
+        language_version: "ckl-low-1".to_string(),
+        memory_size: 1024,
+        rodata: Vec::new(),
+        data: Vec::new(),
+        bss_size: 0,
+        entry_function_index: 0,
+        functions: vec![
+            Function {
+                name: "main".to_string(),
+                register_count: 1,
+                parameters: Vec::new(),
+                instructions: vec![
+                    Instruction::CallStatic {
+                        return_register: Some(1),
+                        function_index: 1,
+                        arguments: Vec::new(),
+                    },
+                    Instruction::ReturnUnit,
+                ],
+            },
+            Function {
+                name: "callee".to_string(),
+                register_count: 0,
+                parameters: Vec::new(),
+                instructions: vec![Instruction::ReturnUnit],
+            },
+        ],
+    };
+
+    let error = create_error(image);
+
+    assert!(
+        error.contains("function main instruction 0 return register 1 outside register count 1"),
         "{error}",
     );
 }
@@ -276,10 +419,7 @@ fn runner_records_execution_metrics() {
     assert_eq!(metrics.opcode_counts[low_opcode::RETURN_I32], 2);
 }
 
-fn image(
-    instructions: Vec<Instruction>,
-    register_count: usize,
-) -> Image {
+fn image(instructions: Vec<Instruction>, register_count: usize) -> Image {
     Image {
         language_version: "ckl-low-1".to_string(),
         memory_size: 1024,
@@ -293,5 +433,12 @@ fn image(
             parameters: Vec::new(),
             instructions,
         }],
+    }
+}
+
+fn create_error(image: Image) -> String {
+    match LowImageVm::create(image, 128) {
+        Ok(_) => panic!("expected low VM image creation to fail"),
+        Err(error) => error,
     }
 }

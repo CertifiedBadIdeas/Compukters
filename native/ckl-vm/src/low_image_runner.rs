@@ -1,4 +1,4 @@
-use crate::low_image::{Image, Instruction};
+use crate::low_image::{Function, Image, Instruction};
 
 pub const LOW_OPCODE_COUNT: usize = low_opcode::RETURN_BOOL + 1;
 
@@ -73,7 +73,7 @@ struct LowFrame {
 }
 
 struct LowProgram {
-    functions: Vec<crate::low_image::Function>,
+    functions: Vec<Function>,
 }
 
 impl LowProgram {
@@ -97,6 +97,7 @@ impl LowProgram {
                 "memory sections require {initialized} bytes but memory size is {memory_size}",
             ));
         }
+        Self::validate(&image)?;
         let mut memory = vec![0_u8; memory_size];
         memory[..image.rodata.len()].copy_from_slice(&image.rodata);
         let data_start = image.rodata.len();
@@ -128,12 +129,139 @@ impl LowProgram {
             .get(function_index)
             .ok_or_else(|| format!("function index {function_index} is out of bounds"))
     }
+
+    fn validate(image: &Image) -> Result<(), String> {
+        for (function_index, function) in image.functions.iter().enumerate() {
+            Self::validate_function(image, function_index, function)?;
+        }
+        Ok(())
+    }
+
+    fn validate_function(
+        image: &Image,
+        _function_index: usize,
+        function: &Function,
+    ) -> Result<(), String> {
+        if function.instructions.is_empty() {
+            return Err(format!("function {} has no instructions", function.name));
+        }
+        for (parameter_index, register) in function.parameters.iter().copied().enumerate() {
+            if register as usize >= function.register_count {
+                return Err(format!(
+                    "function {} parameter {parameter_index} register {register} outside register count {}",
+                    function.name,
+                    function.register_count,
+                ));
+            }
+        }
+        let last_instruction = function
+            .instructions
+            .last()
+            .expect("empty functions return before this point");
+        if !instruction_terminates_linear_flow(last_instruction) {
+            return Err(format!(
+                "function {} must end with Jump or Return* instruction",
+                function.name,
+            ));
+        }
+        for (instruction_index, instruction) in function.instructions.iter().enumerate() {
+            Self::validate_instruction(image, function, instruction_index, instruction)?;
+        }
+        Ok(())
+    }
+
+    fn validate_instruction(
+        image: &Image,
+        function: &Function,
+        instruction_index: usize,
+        instruction: &Instruction,
+    ) -> Result<(), String> {
+        match instruction {
+            Instruction::I32Const { dst, .. }
+            | Instruction::I64Const { dst, .. }
+            | Instruction::AddrConst { dst, .. } => {
+                validate_register(function, instruction_index, "writes", *dst)?;
+            }
+            Instruction::I32Move { dst, src } | Instruction::AddrMove { dst, src } => {
+                validate_register(function, instruction_index, "writes", *dst)?;
+                validate_register(function, instruction_index, "reads", *src)?;
+            }
+            Instruction::I32Add { dst, lhs, rhs }
+            | Instruction::I32Sub { dst, lhs, rhs }
+            | Instruction::I32Mul { dst, lhs, rhs }
+            | Instruction::I32Div { dst, lhs, rhs }
+            | Instruction::I32BitXor { dst, lhs, rhs }
+            | Instruction::I32Shl { dst, lhs, rhs }
+            | Instruction::I32Shr { dst, lhs, rhs }
+            | Instruction::I32Lt { dst, lhs, rhs } => {
+                validate_register(function, instruction_index, "writes", *dst)?;
+                validate_register(function, instruction_index, "reads", *lhs)?;
+                validate_register(function, instruction_index, "reads", *rhs)?;
+            }
+            Instruction::Load32 { dst, addr } => {
+                validate_register(function, instruction_index, "writes", *dst)?;
+                validate_register(function, instruction_index, "reads", *addr)?;
+            }
+            Instruction::Store32 { addr, src } => {
+                validate_register(function, instruction_index, "reads", *addr)?;
+                validate_register(function, instruction_index, "reads", *src)?;
+            }
+            Instruction::AddrAdd { dst, base, offset } => {
+                validate_register(function, instruction_index, "writes", *dst)?;
+                validate_register(function, instruction_index, "reads", *base)?;
+                validate_register(function, instruction_index, "reads", *offset)?;
+            }
+            Instruction::Jump { target } => {
+                validate_jump_target(function, instruction_index, *target)?;
+            }
+            Instruction::JumpIfFalse { cond, target } => {
+                validate_register(function, instruction_index, "reads", *cond)?;
+                validate_jump_target(function, instruction_index, *target)?;
+            }
+            Instruction::CallStatic {
+                return_register,
+                function_index,
+                arguments,
+            } => {
+                if let Some(return_register) = return_register {
+                    validate_register(function, instruction_index, "return", *return_register)?;
+                }
+                for argument in arguments {
+                    validate_register(function, instruction_index, "argument", *argument)?;
+                }
+                let callee = image.functions.get(*function_index).ok_or_else(|| {
+                    format!(
+                        "function {} instruction {instruction_index} calls function {function_index} outside function count {}",
+                        function.name,
+                        image.functions.len(),
+                    )
+                })?;
+                if arguments.len() != callee.parameters.len() {
+                    return Err(format!(
+                        "function {} instruction {instruction_index} calls function {} with {} arguments but callee expects {}",
+                        function.name,
+                        callee.name,
+                        arguments.len(),
+                        callee.parameters.len(),
+                    ));
+                }
+            }
+            Instruction::ReturnI32 { src }
+            | Instruction::ReturnI64 { src }
+            | Instruction::ReturnAddr { src }
+            | Instruction::ReturnBool { src } => {
+                validate_register(function, instruction_index, "reads", *src)?;
+            }
+            Instruction::ReturnUnit => {}
+        }
+        Ok(())
+    }
 }
 
 impl LowFrame {
     fn create(
         function_index: usize,
-        function: &crate::low_image::Function,
+        function: &Function,
         return_register: Option<u16>,
         register_base: usize,
     ) -> Self {
@@ -345,8 +473,7 @@ impl LowImageVm {
 
 impl LowState {
     fn record_instruction(&mut self, instruction: &Instruction) {
-        self.metrics.executed_instructions =
-            self.metrics.executed_instructions.saturating_add(1);
+        self.metrics.executed_instructions = self.metrics.executed_instructions.saturating_add(1);
         let opcode = opcode_index(instruction);
         self.metrics.opcode_counts[opcode] = self.metrics.opcode_counts[opcode].saturating_add(1);
     }
@@ -373,7 +500,11 @@ impl LowState {
 
     fn return_i32(&mut self, register: u16) -> Result<Option<LowImageSignal>, String> {
         let value = self.read_i32(register)?;
-        self.return_raw(register, value as u32 as u64, LowImageSignal::HaltI32(value))
+        self.return_raw(
+            register,
+            value as u32 as u64,
+            LowImageSignal::HaltI32(value),
+        )
     }
 
     fn return_i64(&mut self, register: u16) -> Result<Option<LowImageSignal>, String> {
@@ -592,4 +723,47 @@ fn opcode_index(instruction: &Instruction) -> usize {
         Instruction::ReturnAddr { .. } => low_opcode::RETURN_ADDR,
         Instruction::ReturnBool { .. } => low_opcode::RETURN_BOOL,
     }
+}
+
+fn validate_register(
+    function: &Function,
+    instruction_index: usize,
+    role: &str,
+    register: u16,
+) -> Result<(), String> {
+    if register as usize >= function.register_count {
+        return Err(format!(
+            "function {} instruction {instruction_index} {role} register {register} outside register count {}",
+            function.name,
+            function.register_count,
+        ));
+    }
+    Ok(())
+}
+
+fn validate_jump_target(
+    function: &Function,
+    instruction_index: usize,
+    target: usize,
+) -> Result<(), String> {
+    if target >= function.instructions.len() {
+        return Err(format!(
+            "function {} instruction {instruction_index} jump target {target} is outside instruction count {}",
+            function.name,
+            function.instructions.len(),
+        ));
+    }
+    Ok(())
+}
+
+fn instruction_terminates_linear_flow(instruction: &Instruction) -> bool {
+    matches!(
+        instruction,
+        Instruction::Jump { .. }
+            | Instruction::ReturnI32 { .. }
+            | Instruction::ReturnI64 { .. }
+            | Instruction::ReturnAddr { .. }
+            | Instruction::ReturnBool { .. }
+            | Instruction::ReturnUnit
+    )
 }
