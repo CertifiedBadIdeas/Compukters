@@ -146,6 +146,33 @@ data class NativeImageVmMetrics(
     }
 }
 
+sealed interface NativeLowImageVmSignal {
+    data object HaltUnit : NativeLowImageVmSignal
+
+    data class HaltI32(val value: Int) : NativeLowImageVmSignal
+
+    data class HaltI64(val value: Long) : NativeLowImageVmSignal
+
+    data class HaltAddr(val value: UInt) : NativeLowImageVmSignal
+
+    data class HaltBool(val value: Boolean) : NativeLowImageVmSignal
+
+    data object Pause : NativeLowImageVmSignal
+
+    companion object {
+        fun from(values: LongArray): NativeLowImageVmSignal =
+            when (val tag = values.getOrElse(0) { 0L }) {
+                1L -> HaltUnit
+                2L -> HaltI32(values.getOrElse(1) { 0L }.toInt())
+                3L -> HaltI64(values.getOrElse(1) { 0L })
+                4L -> HaltAddr(values.getOrElse(1) { 0L }.toUInt())
+                5L -> HaltBool(values.getOrElse(1) { 0L } != 0L)
+                6L -> Pause
+                else -> error("Unknown native low image VM signal tag: $tag")
+            }
+    }
+}
+
 internal interface NativeVmBindingsFacade {
     fun createImage(
         libraryPath: String,
@@ -201,6 +228,28 @@ object NativeVmBindings : NativeVmBindingsFacade {
     override fun freeImage(handle: Long) {
         if (handle != 0L) {
             freeImageNative(handle)
+        }
+    }
+
+    fun createLowImage(
+        libraryPath: String,
+        image: ByteArray,
+        instructionBudget: Int,
+    ): Long {
+        load(libraryPath)
+        val handle = createLowImageNative(image, instructionBudget.coerceAtLeast(1))
+        check(handle != 0L) { "Native low image VM create returned a zero handle" }
+        return handle
+    }
+
+    fun runLowImageUntilSignal(handle: Long): NativeLowImageVmSignal {
+        require(handle != 0L) { "Native low image VM handle is zero" }
+        return NativeLowImageVmSignal.from(runLowImageUntilSignalNative(handle))
+    }
+
+    fun freeLowImage(handle: Long) {
+        if (handle != 0L) {
+            freeLowImageNative(handle)
         }
     }
 
@@ -468,6 +517,18 @@ object NativeVmBindings : NativeVmBindingsFacade {
 
     @JvmStatic
     private external fun freeImageNative(handle: Long)
+
+    @JvmStatic
+    private external fun createLowImageNative(
+        image: ByteArray,
+        instructionBudget: Int,
+    ): Long
+
+    @JvmStatic
+    private external fun runLowImageUntilSignalNative(handle: Long): LongArray
+
+    @JvmStatic
+    private external fun freeLowImageNative(handle: Long)
 
     @JvmStatic
     private external fun createDeviceDaemonNative(
