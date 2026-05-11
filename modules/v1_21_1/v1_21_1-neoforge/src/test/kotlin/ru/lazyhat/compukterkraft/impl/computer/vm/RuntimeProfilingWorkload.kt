@@ -488,9 +488,8 @@ internal object RuntimeProfilingWorkload {
             repeat(ticks) { tick ->
                 val tickStarted = System.nanoTime()
                 val requestStarted = System.nanoTime()
-                val permitsSentBefore = metrics.snapshot().vm.slicePermitsSent
+                val daemonTurnsBefore = metrics.snapshot().vm.nativeDaemonTurns
                 vm.requestSlice(tick.toLong())
-                val permitsSentAfter = metrics.snapshot().vm.slicePermitsSent
                 metrics.recordRequestSlice(System.nanoTime() - requestStarted)
 
                 displayFramesDrained += client?.drain(vm, metrics) ?: 0
@@ -500,10 +499,7 @@ internal object RuntimeProfilingWorkload {
                     kotlinx.coroutines.delay(delayMillis)
                 } else {
                     var yields = 0
-                    while (permitsSentAfter > permitsSentBefore &&
-                        metrics.snapshot().vm.slicePermitsReceived < permitsSentAfter &&
-                        yields < 32
-                    ) {
+                    while (metrics.snapshot().vm.nativeDaemonTurns <= daemonTurnsBefore && yields < 32) {
                         kotlinx.coroutines.yield()
                         yields += 1
                     }
@@ -557,7 +553,7 @@ internal object RuntimeProfilingWorkload {
         runBlocking(Dispatchers.Default) {
             repeat(1_000) {
                 val vm = metrics.snapshot().vm
-                if (vm.executionWindows > 0 && vm.pauseSignals + vm.yieldSignals + vm.hostCallSignals > 0) return@runBlocking
+                if (vm.nativeDaemonTurns > 0 && vm.pauseSignals + vm.yieldSignals + vm.hostCallSignals > 0) return@runBlocking
                 kotlinx.coroutines.delay(1)
             }
         }

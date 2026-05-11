@@ -80,20 +80,10 @@ class RuntimeVmProfilingReportFormatterTest {
                             nativeDisplayPumpTimeouts = 2,
                             nativeDisplayFrameByteBatches = 5,
                             nativeDisplayFrameBytes = 4096,
-                            processSchedulerTicks = 12,
-                            processSchedulerSelectedTicks = 10,
-                            processSchedulerIdleTicks = 2,
-                            processSchedulerWokenProcesses = 3,
                             nativeExecutionQuotaRefills = 12,
                             nativeExecutionQuotaInstructions = 3_852,
                             nativeExecutionQuotaWallNanos = 7_848,
                             nativeExecutionQuotaLastServerTick = 42,
-                            nativeSchedulerDryRuns = 12,
-                            nativeSchedulerDryRunTurns = 30,
-                            nativeSchedulerDryRunSelectedPids = 28,
-                            nativeSchedulerDryRunRemainingInstructions = 6,
-                            nativeSchedulerDryRunFirstSelectionMatches = 11,
-                            nativeSchedulerDryRunFirstSelectionMismatches = 1,
                             nativeDaemonTicks = 13,
                             nativeDaemonActiveNanos = 2_500_000,
                             nativeDaemonIdleTicks = 3,
@@ -126,7 +116,6 @@ class RuntimeVmProfilingReportFormatterTest {
             markdown,
         )
         assertTrue(markdown.contains("| Runtime all ticks | 1.5 ms | 100 us |"), markdown)
-        assertTrue(markdown.contains("| VM execution time | 20 ns | 40 ns |"), markdown)
         assertTrue(markdown.contains("| Native wait signals | 7 | 3 |"), markdown)
         assertTrue(markdown.contains("| Native process wait signals | 2 | 1 |"), markdown)
         assertTrue(markdown.contains("| Native fast-path calls | 0 | 0 |"), markdown)
@@ -140,20 +129,10 @@ class RuntimeVmProfilingReportFormatterTest {
         assertTrue(markdown.contains("| Native display pump timeouts | 2 | 0 |"), markdown)
         assertTrue(markdown.contains("| Native display frame byte batches | 5 | 0 |"), markdown)
         assertTrue(markdown.contains("| Native display frame bytes | 4096 | 0 |"), markdown)
-        assertTrue(markdown.contains("| Process scheduler ticks | 12 | 0 |"), markdown)
-        assertTrue(markdown.contains("| Process scheduler selected ticks | 10 | 0 |"), markdown)
-        assertTrue(markdown.contains("| Process scheduler idle ticks | 2 | 0 |"), markdown)
-        assertTrue(markdown.contains("| Process scheduler woken processes | 3 | 0 |"), markdown)
         assertTrue(markdown.contains("| Native execution quota refills | 12 | 0 |"), markdown)
         assertTrue(markdown.contains("| Native execution quota instructions | 3852 | 0 |"), markdown)
         assertTrue(markdown.contains("| Native execution quota wall time | 7.85 us | 0 ns |"), markdown)
         assertTrue(markdown.contains("| Native execution quota last tick | 42 | 0 |"), markdown)
-        assertTrue(markdown.contains("| Native scheduler dry-run calls | 12 | 0 |"), markdown)
-        assertTrue(markdown.contains("| Native scheduler dry-run turns | 30 | 0 |"), markdown)
-        assertTrue(markdown.contains("| Native scheduler dry-run selected pids | 28 | 0 |"), markdown)
-        assertTrue(markdown.contains("| Native scheduler dry-run remaining instructions | 6 | 0 |"), markdown)
-        assertTrue(markdown.contains("| Native scheduler dry-run first-selection matches | 11 | 0 |"), markdown)
-        assertTrue(markdown.contains("| Native scheduler dry-run first-selection mismatches | 1 | 0 |"), markdown)
         assertTrue(markdown.contains("| Native daemon executor passes | 13 | 0 |"), markdown)
         assertTrue(markdown.contains("| Native daemon active time | 2.5 ms | 0 ns |"), markdown)
         assertTrue(markdown.contains("| Native daemon idle passes | 3 | 0 |"), markdown)
@@ -220,20 +199,10 @@ class RuntimeVmProfilingReportFormatterTest {
                             nativeDisplayPumpTimeouts = 1,
                             nativeDisplayFrameByteBatches = 4,
                             nativeDisplayFrameBytes = 2048,
-                            processSchedulerTicks = 15,
-                            processSchedulerSelectedTicks = 14,
-                            processSchedulerIdleTicks = 1,
-                            processSchedulerWokenProcesses = 6,
                             nativeExecutionQuotaRefills = 16,
                             nativeExecutionQuotaInstructions = 5_136,
                             nativeExecutionQuotaWallNanos = 10_464,
                             nativeExecutionQuotaLastServerTick = 43,
-                            nativeSchedulerDryRuns = 16,
-                            nativeSchedulerDryRunTurns = 40,
-                            nativeSchedulerDryRunSelectedPids = 37,
-                            nativeSchedulerDryRunRemainingInstructions = 8,
-                            nativeSchedulerDryRunFirstSelectionMatches = 15,
-                            nativeSchedulerDryRunFirstSelectionMismatches = 1,
                             nativeDaemonTicks = 17,
                             nativeDaemonActiveNanos = 3_500_000,
                             nativeDaemonIdleTicks = 2,
@@ -263,20 +232,10 @@ class RuntimeVmProfilingReportFormatterTest {
         assertTrue(markdown.contains("| Native display pump timeouts | 1 |"), markdown)
         assertTrue(markdown.contains("| Native display frame byte batches | 4 |"), markdown)
         assertTrue(markdown.contains("| Native display frame bytes | 2048 |"), markdown)
-        assertTrue(markdown.contains("| Process scheduler ticks | 15 |"), markdown)
-        assertTrue(markdown.contains("| Process scheduler selected ticks | 14 |"), markdown)
-        assertTrue(markdown.contains("| Process scheduler idle ticks | 1 |"), markdown)
-        assertTrue(markdown.contains("| Process scheduler woken processes | 6 |"), markdown)
         assertTrue(markdown.contains("| Native execution quota refills | 16 |"), markdown)
         assertTrue(markdown.contains("| Native execution quota instructions | 5136 |"), markdown)
         assertTrue(markdown.contains("| Native execution quota wall time | 10.46 us |"), markdown)
         assertTrue(markdown.contains("| Native execution quota last tick | 43 |"), markdown)
-        assertTrue(markdown.contains("| Native scheduler dry-run calls | 16 |"), markdown)
-        assertTrue(markdown.contains("| Native scheduler dry-run turns | 40 |"), markdown)
-        assertTrue(markdown.contains("| Native scheduler dry-run selected pids | 37 |"), markdown)
-        assertTrue(markdown.contains("| Native scheduler dry-run remaining instructions | 8 |"), markdown)
-        assertTrue(markdown.contains("| Native scheduler dry-run first-selection matches | 15 |"), markdown)
-        assertTrue(markdown.contains("| Native scheduler dry-run first-selection mismatches | 1 |"), markdown)
         assertTrue(markdown.contains("| Native daemon executor passes | 17 |"), markdown)
         assertTrue(markdown.contains("| Native daemon active time | 3.5 ms |"), markdown)
         assertTrue(markdown.contains("| Native daemon idle passes | 2 |"), markdown)
@@ -328,20 +287,10 @@ class RuntimeVmProfilingReportFormatterTest {
         nativeDisplayPumpTimeouts: Long = 0,
         nativeDisplayFrameByteBatches: Long = 0,
         nativeDisplayFrameBytes: Long = 0,
-        processSchedulerTicks: Long = 0,
-        processSchedulerSelectedTicks: Long = 0,
-        processSchedulerIdleTicks: Long = 0,
-        processSchedulerWokenProcesses: Long = 0,
         nativeExecutionQuotaRefills: Long = 0,
         nativeExecutionQuotaInstructions: Long = 0,
         nativeExecutionQuotaWallNanos: Long = 0,
         nativeExecutionQuotaLastServerTick: Long = 0,
-        nativeSchedulerDryRuns: Long = 0,
-        nativeSchedulerDryRunTurns: Long = 0,
-        nativeSchedulerDryRunSelectedPids: Long = 0,
-        nativeSchedulerDryRunRemainingInstructions: Long = 0,
-        nativeSchedulerDryRunFirstSelectionMatches: Long = 0,
-        nativeSchedulerDryRunFirstSelectionMismatches: Long = 0,
         nativeDaemonTicks: Long = 0,
         nativeDaemonActiveNanos: Long = 0,
         nativeDaemonIdleTicks: Long = 0,
@@ -388,8 +337,6 @@ class RuntimeVmProfilingReportFormatterTest {
                     tick = RuntimeTickMetrics(serverTickCalls = 1, serverTickNanos = runtimeNanos),
                     vm =
                         RuntimeVmMetrics(
-                            executionWindows = 1,
-                            executionWindowNanos = executionNanos,
                             waitPollSignals = waitPollSignals,
                             waitProcessSignals = waitProcessSignals,
                             nativeWaitCalls = nativeWaitCalls,
@@ -402,20 +349,10 @@ class RuntimeVmProfilingReportFormatterTest {
                             nativeDisplayPumpTimeouts = nativeDisplayPumpTimeouts,
                             nativeDisplayFrameByteBatches = nativeDisplayFrameByteBatches,
                             nativeDisplayFrameBytes = nativeDisplayFrameBytes,
-                            processSchedulerTicks = processSchedulerTicks,
-                            processSchedulerSelectedTicks = processSchedulerSelectedTicks,
-                            processSchedulerIdleTicks = processSchedulerIdleTicks,
-                            processSchedulerWokenProcesses = processSchedulerWokenProcesses,
                             nativeExecutionQuotaRefills = nativeExecutionQuotaRefills,
                             nativeExecutionQuotaInstructions = nativeExecutionQuotaInstructions,
                             nativeExecutionQuotaWallNanos = nativeExecutionQuotaWallNanos,
                             nativeExecutionQuotaLastServerTick = nativeExecutionQuotaLastServerTick,
-                            nativeSchedulerDryRuns = nativeSchedulerDryRuns,
-                            nativeSchedulerDryRunTurns = nativeSchedulerDryRunTurns,
-                            nativeSchedulerDryRunSelectedPids = nativeSchedulerDryRunSelectedPids,
-                            nativeSchedulerDryRunRemainingInstructions = nativeSchedulerDryRunRemainingInstructions,
-                            nativeSchedulerDryRunFirstSelectionMatches = nativeSchedulerDryRunFirstSelectionMatches,
-                            nativeSchedulerDryRunFirstSelectionMismatches = nativeSchedulerDryRunFirstSelectionMismatches,
                             nativeDaemonTicks = nativeDaemonTicks,
                             nativeDaemonActiveNanos = nativeDaemonActiveNanos,
                             nativeDaemonIdleTicks = nativeDaemonIdleTicks,

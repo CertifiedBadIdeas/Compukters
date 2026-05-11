@@ -75,9 +75,6 @@ class RuntimeDeviceImplDisplayTest {
         assertEquals(42L, handle.lastServerTick)
         val snapshot = metrics.snapshot()
         assertEquals(1, snapshot.tick.requestSliceCalls)
-        assertEquals(0, snapshot.tick.hostCallDrainCalls)
-        assertEquals(0, snapshot.tick.hostCallDispatchCalls)
-        assertEquals(0, snapshot.tick.hostResultDeliveryCalls)
     }
 
     @Test
@@ -107,8 +104,6 @@ class RuntimeDeviceImplDisplayTest {
         val snapshot = metrics.snapshot()
         assertEquals(1, snapshot.tick.serverTickCalls)
         assertEquals(1, snapshot.tick.requestSliceCalls)
-        assertEquals(1, snapshot.tick.hostCallDrainCalls)
-        assertEquals(1, snapshot.tick.hostCallDispatchCalls)
         assertTrue(snapshot.tick.displayFrameDrainCalls > 0, snapshot.summary())
         assertTrue(snapshot.tick.displayFlushCalls > 0, snapshot.summary())
         assertTrue(snapshot.tick.serverTickNanos > 0, snapshot.summary())
