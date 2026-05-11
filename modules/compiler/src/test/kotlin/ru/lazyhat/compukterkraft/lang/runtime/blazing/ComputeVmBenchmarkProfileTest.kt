@@ -57,7 +57,7 @@ class ComputeVmBenchmarkProfileTest {
 
         assertTrue(report.workloads.isNotEmpty(), "expected at least one compute benchmark workload")
         report.workloads.forEach { workload ->
-            assertTrue(workload.ckVmBestNanos > 0, "expected ${workload.workloadName} CK VM sample to be timed")
+            assertTrue(workload.lowVmBestNanos > 0, "expected ${workload.workloadName} low-level VM sample to be timed")
             assertTrue(workload.kotlinJvmBestNanos > 0, "expected ${workload.workloadName} Kotlin/JVM sample to be timed")
             assertTrue(workload.pythonBestNanos > 0, "expected ${workload.workloadName} Python sample to be timed")
             assertTrue(workload.rustNativeBestNanos > 0, "expected ${workload.workloadName} Rust native sample to be timed")
