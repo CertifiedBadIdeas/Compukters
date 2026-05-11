@@ -26,3 +26,29 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
     testImplementation(kotlin("test"))
 }
+
+tasks.register<Test>("profileComputeVmBenchmark") {
+    group = "verification"
+    description = "Run CPU-only CKL workloads through the Kotlin bytecode VM and write a benchmark report."
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    useJUnitPlatform()
+    jvmArgs("-Xss64m")
+    systemProperty(
+        "ckl.benchmark.iterations",
+        providers.gradleProperty("ckl.benchmark.iterations").orElse(System.getProperty("ckl.benchmark.iterations") ?: "10000").get(),
+    )
+    systemProperty(
+        "ckl.benchmark.warmup.iterations",
+        providers.gradleProperty("ckl.benchmark.warmup.iterations").orElse(System.getProperty("ckl.benchmark.warmup.iterations") ?: "1000").get(),
+    )
+    systemProperty(
+        "ckl.benchmark.samples",
+        providers.gradleProperty("ckl.benchmark.samples").orElse(System.getProperty("ckl.benchmark.samples") ?: "3").get(),
+    )
+    filter {
+        includeTestsMatching("ru.lazyhat.compukterkraft.lang.runtime.KotlinVmComputeBenchmarkProfileTest")
+    }
+    outputs.file(layout.buildDirectory.file("reports/profiling/kotlin-vm-compute-benchmark.tsv"))
+    outputs.file(layout.buildDirectory.file("reports/profiling/kotlin-vm-compute-benchmark.md"))
+}

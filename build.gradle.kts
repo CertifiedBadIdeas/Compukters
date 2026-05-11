@@ -27,3 +27,9 @@ tasks.register("profileRuntimeVmComparison") {
     description = "Run JVM and Rust VM runtime profiling workloads and write a Markdown comparison report."
     dependsOn(":v1_21_1-neoforge:profileRuntimeVmComparison")
 }
+
+tasks.register("profileComputeVmBenchmark") {
+    group = "verification"
+    description = "Run CPU-only CKL workloads through the Kotlin bytecode VM and write a benchmark report."
+    dependsOn(":compiler:profileComputeVmBenchmark")
+}
