@@ -388,6 +388,8 @@ The low-level VM uses a hybrid time-slice model:
 - the fixed interval is timer amortization, not an instruction quota fallback;
 - `Pause` means the current wall-clock slice is exhausted and the scheduler should resume the same VM later.
 
+The device daemon uses the same wall-time model. Kotlin refills an execution window with `wallTimeGuardNanosPerSlice`; Rust keeps server tick state, wakes sleepers, and runs runnable processes until the wall-time window is exhausted, no runnable work remains, or a fixed scheduler-turn safety cap is reached. The turn cap is not a speed/quota knob and is not profile-configurable. It only prevents pathological yield loops from monopolizing the daemon executor.
+
 This keeps server-time control closer to real CPU cost than a raw instruction counter while avoiding `Instant::now()` on every instruction. Expensive instructions, memory operations, and future hostcall boundaries are naturally charged by elapsed time instead of by a synthetic opcode count.
 
 Runtime benchmark metrics stay time-based:

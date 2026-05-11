@@ -257,28 +257,16 @@ fn register_runner_records_execution_metrics() {
 }
 
 #[test]
-fn register_runner_pauses_after_instruction_budget() {
+fn register_runner_pauses_after_time_slice_budget() {
     let image = image(
-        vec![ConstantFixture::Int(7)],
         vec![],
-        vec![function_i32(
-            "main",
-            1,
-            0,
-            vec![
-                load_const(0, 0),
-                return_register(TypedRegisterFixture::I32(0)),
-            ],
-        )],
+        vec![],
+        vec![function_i32("main", 0, 0, vec![jump(0)])],
         0,
     );
     let mut handle = ImageVmHandle::create(&image, 1).unwrap();
 
     assert_eq!(handle.run_until_signal_decoded().unwrap(), VmSignal::Pause);
-    assert_eq!(
-        handle.run_until_signal_decoded().unwrap(),
-        VmSignal::Halt(VmValue::Int(7)),
-    );
 }
 
 #[test]
@@ -652,6 +640,12 @@ fn load_bool(dst: u16, value: bool) -> Vec<u8> {
 
 fn i32_add(dst: u16, lhs: u16, rhs: u16) -> Vec<u8> {
     binary(11, dst, lhs, rhs)
+}
+
+fn jump(target: i32) -> Vec<u8> {
+    let mut out = vec![31];
+    i32(&mut out, target);
+    out
 }
 
 fn jump_if_false(cond: u16, target: i32) -> Vec<u8> {

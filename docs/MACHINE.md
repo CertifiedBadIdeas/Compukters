@@ -1099,7 +1099,7 @@ VM не создает terminal snapshot и не рассылает stdout bytes
 
 ### 16.2. Частота кооперативной отдачи управления
 
-Есть. Основной CPU-лимит задается как `profile.resources.cpu.instructionsPerSlice`, а не как жестко зашитые 64 инструкции.
+Есть. Основной CPU-лимит задается wall-time окном `profile.resources.cpu.wallTimeGuardNanosPerSlice`; фиксированный turn cap используется только как safety guard executor'а.
 
 ### 16.3. Event queue size
 
@@ -1213,7 +1213,7 @@ BIOS и shell лежат в ROM как `.ck` файлы. Их можно чит�
 
 Подтверждает, что:
 
-- instruction budget берется из `profile.resources.cpu.instructionsPerSlice`;
+- execution window берется из `profile.resources.cpu.wallTimeGuardNanosPerSlice`;
 - VM RAM limit реально ограничивает выполнение;
 - существующие host/sleep/yield сценарии не сломаны новой моделью.
 

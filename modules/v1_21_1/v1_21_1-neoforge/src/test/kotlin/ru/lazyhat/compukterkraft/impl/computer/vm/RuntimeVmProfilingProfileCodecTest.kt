@@ -99,7 +99,6 @@ class RuntimeVmProfilingProfileCodecTest {
                                     vm =
                                         RuntimeVmMetrics(
                                             nativeExecutionQuotaRefills = 74,
-                                            nativeExecutionQuotaInstructions = 75,
                                             nativeExecutionQuotaWallNanos = 76,
                                             nativeExecutionQuotaLastServerTick = 77,
                                             nativeDaemonTicks = 84,

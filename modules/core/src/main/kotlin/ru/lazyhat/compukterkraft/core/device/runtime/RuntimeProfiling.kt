@@ -42,7 +42,6 @@ interface RuntimeMetricsCollector {
     fun recordSliceRequest()
 
     fun recordNativeExecutionQuotaRefill(
-        instructions: Long,
         wallNanos: Long,
         serverTick: Long,
     )
@@ -121,7 +120,6 @@ data class RuntimeTickMetrics(
 data class RuntimeVmMetrics(
     val sliceRequests: Long = 0,
     val nativeExecutionQuotaRefills: Long = 0,
-    val nativeExecutionQuotaInstructions: Long = 0,
     val nativeExecutionQuotaWallNanos: Long = 0,
     val nativeExecutionQuotaLastServerTick: Long = 0,
     val haltSignals: Long = 0,
@@ -196,7 +194,7 @@ data class RuntimeProfilingSnapshot(
             appendLine("  vm:")
             appendLine("    slices: requests=${vm.sliceRequests}")
             appendLine(
-                "    nativeQuota: refills=${vm.nativeExecutionQuotaRefills}, instructions=${vm.nativeExecutionQuotaInstructions}, wallNanos=${vm.nativeExecutionQuotaWallNanos}, lastTick=${vm.nativeExecutionQuotaLastServerTick}",
+                "    nativeQuota: refills=${vm.nativeExecutionQuotaRefills}, wallNanos=${vm.nativeExecutionQuotaWallNanos}, lastTick=${vm.nativeExecutionQuotaLastServerTick}",
             )
             appendLine(
                 "    nativeDaemon: ticks=${vm.nativeDaemonTicks}, active=${vm.nativeDaemonActiveNanos.nanos()}, idle=${vm.nativeDaemonIdleTicks}, turns=${vm.nativeDaemonTurns}, halted=${vm.nativeDaemonHaltedProcesses}, hostRequests=${vm.nativeDaemonHostRequests}",
@@ -274,7 +272,6 @@ object NoOpRuntimeMetricsCollector : RuntimeMetricsCollector {
     override fun recordSliceRequest() = Unit
 
     override fun recordNativeExecutionQuotaRefill(
-        instructions: Long,
         wallNanos: Long,
         serverTick: Long,
     ) = Unit
@@ -351,7 +348,6 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
     private val displayFlushNanos = AtomicLong()
     private val sliceRequests = AtomicLong()
     private val nativeExecutionQuotaRefills = AtomicLong()
-    private val nativeExecutionQuotaInstructions = AtomicLong()
     private val nativeExecutionQuotaWallNanos = AtomicLong()
     private val nativeExecutionQuotaLastServerTick = AtomicLong()
     private val haltSignals = AtomicLong()
@@ -414,12 +410,10 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
     }
 
     override fun recordNativeExecutionQuotaRefill(
-        instructions: Long,
         wallNanos: Long,
         serverTick: Long,
     ) {
         nativeExecutionQuotaRefills.incrementAndGet()
-        nativeExecutionQuotaInstructions.addAndGet(instructions.coerceAtLeast(0))
         nativeExecutionQuotaWallNanos.addAndGet(wallNanos.coerceAtLeast(0))
         nativeExecutionQuotaLastServerTick.set(serverTick)
     }
@@ -526,7 +520,6 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
                 RuntimeVmMetrics(
                     sliceRequests = sliceRequests.get(),
                     nativeExecutionQuotaRefills = nativeExecutionQuotaRefills.get(),
-                    nativeExecutionQuotaInstructions = nativeExecutionQuotaInstructions.get(),
                     nativeExecutionQuotaWallNanos = nativeExecutionQuotaWallNanos.get(),
                     nativeExecutionQuotaLastServerTick = nativeExecutionQuotaLastServerTick.get(),
                     haltSignals = haltSignals.get(),

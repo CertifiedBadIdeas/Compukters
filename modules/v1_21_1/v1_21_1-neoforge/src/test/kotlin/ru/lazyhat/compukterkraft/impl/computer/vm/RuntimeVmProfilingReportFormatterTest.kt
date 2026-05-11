@@ -81,7 +81,6 @@ class RuntimeVmProfilingReportFormatterTest {
                             nativeDisplayFrameByteBatches = 5,
                             nativeDisplayFrameBytes = 4096,
                             nativeExecutionQuotaRefills = 12,
-                            nativeExecutionQuotaInstructions = 3_852,
                             nativeExecutionQuotaWallNanos = 7_848,
                             nativeExecutionQuotaLastServerTick = 42,
                             nativeDaemonTicks = 13,
@@ -130,7 +129,6 @@ class RuntimeVmProfilingReportFormatterTest {
         assertTrue(markdown.contains("| Native display frame byte batches | 5 | 0 |"), markdown)
         assertTrue(markdown.contains("| Native display frame bytes | 4096 | 0 |"), markdown)
         assertTrue(markdown.contains("| Native execution quota refills | 12 | 0 |"), markdown)
-        assertTrue(markdown.contains("| Native execution quota instructions | 3852 | 0 |"), markdown)
         assertTrue(markdown.contains("| Native execution quota wall time | 7.85 us | 0 ns |"), markdown)
         assertTrue(markdown.contains("| Native execution quota last tick | 42 | 0 |"), markdown)
         assertTrue(markdown.contains("| Native daemon executor passes | 13 | 0 |"), markdown)
@@ -200,7 +198,6 @@ class RuntimeVmProfilingReportFormatterTest {
                             nativeDisplayFrameByteBatches = 4,
                             nativeDisplayFrameBytes = 2048,
                             nativeExecutionQuotaRefills = 16,
-                            nativeExecutionQuotaInstructions = 5_136,
                             nativeExecutionQuotaWallNanos = 10_464,
                             nativeExecutionQuotaLastServerTick = 43,
                             nativeDaemonTicks = 17,
@@ -233,7 +230,6 @@ class RuntimeVmProfilingReportFormatterTest {
         assertTrue(markdown.contains("| Native display frame byte batches | 4 |"), markdown)
         assertTrue(markdown.contains("| Native display frame bytes | 2048 |"), markdown)
         assertTrue(markdown.contains("| Native execution quota refills | 16 |"), markdown)
-        assertTrue(markdown.contains("| Native execution quota instructions | 5136 |"), markdown)
         assertTrue(markdown.contains("| Native execution quota wall time | 10.46 us |"), markdown)
         assertTrue(markdown.contains("| Native execution quota last tick | 43 |"), markdown)
         assertTrue(markdown.contains("| Native daemon executor passes | 17 |"), markdown)
@@ -288,7 +284,6 @@ class RuntimeVmProfilingReportFormatterTest {
         nativeDisplayFrameByteBatches: Long = 0,
         nativeDisplayFrameBytes: Long = 0,
         nativeExecutionQuotaRefills: Long = 0,
-        nativeExecutionQuotaInstructions: Long = 0,
         nativeExecutionQuotaWallNanos: Long = 0,
         nativeExecutionQuotaLastServerTick: Long = 0,
         nativeDaemonTicks: Long = 0,
@@ -350,7 +345,6 @@ class RuntimeVmProfilingReportFormatterTest {
                             nativeDisplayFrameByteBatches = nativeDisplayFrameByteBatches,
                             nativeDisplayFrameBytes = nativeDisplayFrameBytes,
                             nativeExecutionQuotaRefills = nativeExecutionQuotaRefills,
-                            nativeExecutionQuotaInstructions = nativeExecutionQuotaInstructions,
                             nativeExecutionQuotaWallNanos = nativeExecutionQuotaWallNanos,
                             nativeExecutionQuotaLastServerTick = nativeExecutionQuotaLastServerTick,
                             nativeDaemonTicks = nativeDaemonTicks,

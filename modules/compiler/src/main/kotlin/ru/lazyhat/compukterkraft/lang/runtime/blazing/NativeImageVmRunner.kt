@@ -43,7 +43,7 @@ class NativeImageVmRunner internal constructor(
     ) {
         val imageBytes = CkVmImageAbi.encode(image)
         val bridge = RuntimeHostBridge(runtime)
-        val handle = bindings.createImage(libraryPath, imageBytes, runtime.profile.resources.cpu.instructionsPerSlice)
+        val handle = bindings.createImage(libraryPath, imageBytes, runtime.profile.resources.cpu.wallTimeGuardNanosPerSlice)
         try {
             while (true) {
                 val signal = NativeVmSignal.decode(bindings.runImageUntilSignal(handle))

@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use crate::display::{DisplayFrameDelta, PixelFormat};
 use crate::image_runner::ImageVmHandle;
@@ -17,7 +18,7 @@ pub struct DeviceDaemonBootSummary {
 pub struct DeviceDaemonTickSummary {
     pub server_tick: i64,
     pub turns: i64,
-    pub remaining_instructions: i64,
+    pub remaining_wall_nanos: i64,
     pub idle: bool,
     pub halted: i64,
     pub host_requests: i64,
@@ -79,7 +80,7 @@ pub struct DeviceDaemon {
     image_handles: BTreeMap<i32, i64>,
     next_image_handle: i64,
     next_pid: i32,
-    instruction_budget: usize,
+    image_slice_budget_nanos: u64,
     host_requests: VecDeque<DeviceDaemonHostRequest>,
     pending_host_requests: BTreeMap<i64, i32>,
     pending_compiles: BTreeMap<i64, PendingCompile>,
@@ -91,7 +92,7 @@ impl DeviceDaemon {
     pub fn new(
         max_event_queue_size: usize,
         max_buffered_bytes_per_channel: usize,
-        instruction_budget: usize,
+        image_slice_budget_nanos: u64,
         device_id: i32,
         profile_name: String,
     ) -> Self {
@@ -106,7 +107,7 @@ impl DeviceDaemon {
             image_handles: BTreeMap::new(),
             next_image_handle: 1,
             next_pid: 2,
-            instruction_budget: instruction_budget.max(1),
+            image_slice_budget_nanos: image_slice_budget_nanos.max(1),
             host_requests: VecDeque::new(),
             pending_host_requests: BTreeMap::new(),
             pending_compiles: BTreeMap::new(),
@@ -148,7 +149,7 @@ impl DeviceDaemon {
         working_directory: &str,
     ) -> DeviceDaemonBootSummary {
         let pid = 1;
-        let mut image = ImageVmHandle::create(image_bytes, self.instruction_budget)
+        let mut image = ImageVmHandle::create(image_bytes, self.image_slice_budget_nanos)
             .expect("boot image must decode");
         image
             .attach_device_kernel(self.kernel.clone())
@@ -296,10 +297,10 @@ impl DeviceDaemon {
         Ok(())
     }
 
-    pub fn refill_execution_quota(&mut self, instructions: i64, wall_nanos: i64, server_tick: i64) {
+    pub fn refill_execution_quota(&mut self, wall_nanos: i64, server_tick: i64) {
         self.kernel
             .with_kernel_mut(|kernel| {
-                kernel.add_execution_quota(instructions, wall_nanos, server_tick);
+                kernel.add_execution_quota(wall_nanos, server_tick);
             })
             .expect("daemon kernel must be lockable");
     }
@@ -308,22 +309,33 @@ impl DeviceDaemon {
         let mut turns = 0;
         let mut halted = 0;
         let mut host_requests = 0;
-        let mut remaining_instructions = 0;
         let mut server_tick = 0;
         let max_turns = max_turns.max(1);
+        let slice_budget = self.execution_slice_budget();
+        let started = Instant::now();
 
         while turns < max_turns {
+            let elapsed = started.elapsed();
+            if elapsed >= slice_budget {
+                return DeviceDaemonTickSummary {
+                    server_tick,
+                    turns,
+                    remaining_wall_nanos: 0,
+                    idle: false,
+                    halted,
+                    host_requests,
+                };
+            }
             let step = self
                 .kernel
                 .with_kernel_mut(|kernel| kernel.run_scheduler_step())
                 .expect("daemon kernel must be lockable");
             server_tick = step.server_tick;
-            remaining_instructions = step.remaining_instructions;
             let Some(pid) = step.selected_pid else {
                 return DeviceDaemonTickSummary {
                     server_tick,
                     turns,
-                    remaining_instructions,
+                    remaining_wall_nanos: remaining_wall_nanos(slice_budget, started.elapsed()),
                     idle: true,
                     halted,
                     host_requests,
@@ -351,11 +363,20 @@ impl DeviceDaemon {
         DeviceDaemonTickSummary {
             server_tick,
             turns,
-            remaining_instructions,
+            remaining_wall_nanos: remaining_wall_nanos(slice_budget, started.elapsed()),
             idle: false,
             halted,
             host_requests,
         }
+    }
+
+    fn execution_slice_budget(&self) -> Duration {
+        let snapshot = self
+            .kernel
+            .lock()
+            .map(|kernel| kernel.execution_quota_snapshot())
+            .expect("daemon kernel must be lockable");
+        Duration::from_nanos(snapshot.wall_nanos.max(1) as u64)
     }
 
     fn crash_process(&mut self, pid: i32, message: String) {
@@ -521,7 +542,7 @@ impl DeviceDaemon {
         if image_bytes.is_empty() {
             return Ok(false);
         }
-        let mut image = ImageVmHandle::create(image_bytes, self.instruction_budget)?;
+        let mut image = ImageVmHandle::create(image_bytes, self.image_slice_budget_nanos)?;
         image.attach_device_kernel(self.kernel.clone())?;
         image.set_working_directory(pending.working_directory.clone());
         image.set_process_argument(pending.argument.clone());
@@ -562,18 +583,24 @@ fn string_argument<'a>(
     }
 }
 
+fn remaining_wall_nanos(slice_budget: Duration, elapsed: Duration) -> i64 {
+    slice_budget
+        .saturating_sub(elapsed)
+        .as_nanos()
+        .min(i64::MAX as u128) as i64
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn run_daemon_slice(
         daemon: &mut DeviceDaemon,
-        instructions: i64,
         wall_nanos: i64,
         server_tick: i64,
     ) -> DeviceDaemonTickSummary {
-        daemon.refill_execution_quota(instructions, wall_nanos, server_tick);
-        daemon.run_ready_until_blocked(instructions.max(1))
+        daemon.refill_execution_quota(wall_nanos, server_tick);
+        daemon.run_ready_until_blocked(128)
     }
 
     fn new_test_daemon() -> DeviceDaemon {
@@ -601,19 +628,20 @@ mod tests {
         let mut daemon = new_test_daemon();
         daemon.boot_image(&ckim_empty_main(), "/rom/bios.ck", "", "");
 
-        let summary = run_daemon_slice(&mut daemon, 128, 1_000_000, 7);
+        let summary = run_daemon_slice(&mut daemon, 1_000_000, 7);
 
         assert_eq!(
             summary,
             DeviceDaemonTickSummary {
                 server_tick: 7,
                 turns: 1,
-                remaining_instructions: 127,
+                remaining_wall_nanos: summary.remaining_wall_nanos,
                 idle: true,
                 halted: 1,
                 host_requests: 0,
             }
         );
+        assert!(summary.remaining_wall_nanos > 0);
         assert_eq!(
             daemon.process_status(1),
             DeviceDaemonProcessStatus::Completed(0),
@@ -625,12 +653,10 @@ mod tests {
         let mut daemon = new_test_daemon();
         daemon.boot_image(&ckim_yields_then_halts(), "/rom/yield.ck", "", "");
 
-        let first = run_daemon_slice(&mut daemon, 1, 1_000_000, 10);
-        assert_eq!(first.turns, 1);
-        assert_eq!(daemon.process_status(1), DeviceDaemonProcessStatus::Running);
+        let summary = run_daemon_slice(&mut daemon, 1_000_000, 10);
 
-        let second = run_daemon_slice(&mut daemon, 1, 1_000_000, 11);
-        assert_eq!(second.halted, 1);
+        assert_eq!(summary.turns, 2);
+        assert_eq!(summary.halted, 1);
         assert_eq!(
             daemon.process_status(1),
             DeviceDaemonProcessStatus::Completed(0),
@@ -642,9 +668,9 @@ mod tests {
         let mut daemon = new_test_daemon();
         daemon.boot_image(&ckim_sleeps_one_tick_then_halts(), "/rom/sleep.ck", "", "");
 
-        let first = run_daemon_slice(&mut daemon, 1, 1_000_000, 20);
-        let second = run_daemon_slice(&mut daemon, 1, 1_000_000, 20);
-        let third = run_daemon_slice(&mut daemon, 1, 1_000_000, 21);
+        let first = run_daemon_slice(&mut daemon, 1_000_000, 20);
+        let second = run_daemon_slice(&mut daemon, 1_000_000, 20);
+        let third = run_daemon_slice(&mut daemon, 1_000_000, 21);
 
         assert_eq!(first.turns, 1);
         assert!(second.idle);
@@ -666,8 +692,8 @@ mod tests {
             "",
         );
 
-        let first = run_daemon_slice(&mut daemon, 1, 1_000_000, 30);
-        let second = run_daemon_slice(&mut daemon, 1, 1_000_000, 31);
+        let first = run_daemon_slice(&mut daemon, 1_000_000, 30);
+        let second = run_daemon_slice(&mut daemon, 1_000_000, 31);
 
         assert_eq!(first.turns, 1);
         assert!(second.idle);
@@ -686,8 +712,8 @@ mod tests {
             })
             .unwrap();
 
-        let first = run_daemon_slice(&mut daemon, 1, 1_000_000, 40);
-        let second = run_daemon_slice(&mut daemon, 1, 1_000_000, 41);
+        let first = run_daemon_slice(&mut daemon, 1_000_000, 40);
+        let second = run_daemon_slice(&mut daemon, 1_000_000, 41);
 
         assert_eq!(first.turns, 1);
         assert!(second.idle);
@@ -702,7 +728,7 @@ mod tests {
         let outcome = daemon
             .handle_signal(1, VmSignal::WaitEvent(Some("key".to_string())), 50)
             .unwrap();
-        let summary = run_daemon_slice(&mut daemon, 1, 1_000_000, 51);
+        let summary = run_daemon_slice(&mut daemon, 1_000_000, 51);
 
         assert_eq!(outcome, DaemonSignalOutcome::Waiting);
         assert!(summary.idle);
@@ -714,7 +740,7 @@ mod tests {
         let mut daemon = new_test_daemon();
         daemon.boot_image(&ckim_calls_system_log_then_halts(), "/rom/host.ck", "", "");
 
-        let first = run_daemon_slice(&mut daemon, 4, 1_000_000, 1);
+        let first = run_daemon_slice(&mut daemon, 1_000_000, 1);
         let requests = daemon.drain_host_requests();
 
         assert_eq!(first.host_requests, 1);
@@ -726,7 +752,7 @@ mod tests {
         daemon
             .complete_host_request(requests[0].request_id, VmValue::Unit)
             .unwrap();
-        let second = run_daemon_slice(&mut daemon, 4, 1_000_000, 2);
+        let second = run_daemon_slice(&mut daemon, 1_000_000, 2);
 
         assert_eq!(second.halted, 1);
         assert_eq!(
@@ -745,7 +771,7 @@ mod tests {
             "rom",
         );
 
-        let first = run_daemon_slice(&mut daemon, 8, 1_000_000, 1);
+        let first = run_daemon_slice(&mut daemon, 1_000_000, 1);
         let requests = daemon.drain_host_requests();
 
         assert_eq!(first.host_requests, 1);
@@ -774,14 +800,14 @@ mod tests {
             "",
         );
 
-        run_daemon_slice(&mut daemon, 8, 1_000_000, 1);
+        run_daemon_slice(&mut daemon, 1_000_000, 1);
         let mut requests = daemon.drain_host_requests();
         assert_eq!(requests.len(), 1);
         let request = requests.pop().unwrap();
         daemon
             .complete_compile_program(request.request_id, None, 1)
             .unwrap();
-        let second = run_daemon_slice(&mut daemon, 8, 1_000_000, 2);
+        let second = run_daemon_slice(&mut daemon, 1_000_000, 2);
 
         assert_eq!(second.halted, 1);
         assert_eq!(
@@ -804,14 +830,14 @@ mod tests {
             .unwrap();
         daemon.boot_image(&ckim_reads_ipc_then_logs(channel), "/rom/read.ck", "", "");
 
-        let waiting = run_daemon_slice(&mut daemon, 8, 1_000_000, 1);
-        let idle = run_daemon_slice(&mut daemon, 8, 1_000_000, 2);
+        let waiting = run_daemon_slice(&mut daemon, 1_000_000, 1);
+        let idle = run_daemon_slice(&mut daemon, 1_000_000, 2);
         daemon
             .kernel()
             .with_kernel_mut(|kernel| kernel.write_ipc(channel, "hello\n"))
             .unwrap()
             .unwrap();
-        let woke = run_daemon_slice(&mut daemon, 8, 1_000_000, 3);
+        let woke = run_daemon_slice(&mut daemon, 1_000_000, 3);
         let request = daemon.drain_host_requests().pop().unwrap();
 
         assert_eq!(waiting.host_requests, 0);
@@ -833,7 +859,7 @@ mod tests {
             .attach_child_image_for_test(2, 1, "/rom/shell.ck", &ckim_yields_then_halts(), "")
             .expect("child image should attach");
 
-        daemon.refill_execution_quota(16, 1_000_000, 70);
+        daemon.refill_execution_quota(1_000_000, 70);
         let summary = daemon.run_ready_until_blocked(16);
 
         assert_eq!(summary.server_tick, 70);

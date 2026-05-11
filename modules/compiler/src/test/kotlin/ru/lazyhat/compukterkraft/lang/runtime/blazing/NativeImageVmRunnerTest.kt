@@ -80,7 +80,7 @@ class NativeImageVmRunnerTest {
         override fun createImage(
             libraryPath: String,
             image: ByteArray,
-            instructionBudget: Int,
+            sliceBudgetNanos: Long,
         ): Long = 11L
 
         override fun runImageUntilSignal(handle: Long): ByteArray = signals.removeFirst()

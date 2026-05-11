@@ -27,7 +27,7 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
     mut env: JNIEnv<'_>,
     _class: JClass<'_>,
     image: JByteArray<'_>,
-    instruction_budget: jint,
+    slice_budget_nanos: jlong,
 ) -> jlong {
     let image = match env.convert_byte_array(&image) {
         Ok(image) => image,
@@ -40,7 +40,7 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
         }
     };
 
-    match ImageVmHandle::create(&image, instruction_budget.max(1) as usize) {
+    match ImageVmHandle::create(&image, slice_budget_nanos.max(1) as u64) {
         Ok(handle) => Box::into_raw(Box::new(handle)) as jlong,
         Err(error) => {
             let _ = env.throw_new("java/lang/IllegalArgumentException", error);
@@ -222,7 +222,7 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
     _class: JClass<'_>,
     max_event_queue_size: jint,
     max_buffered_bytes_per_channel: jint,
-    instruction_budget: jint,
+    image_slice_budget_nanos: jlong,
     device_id: jint,
     profile_name: JString<'_>,
 ) -> jlong {
@@ -247,16 +247,7 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
                 return 0;
             }
         };
-    let instruction_budget = match usize::try_from(instruction_budget.max(1)) {
-        Ok(value) => value,
-        Err(error) => {
-            let _ = env.throw_new(
-                "java/lang/IllegalArgumentException",
-                format!("Invalid native device daemon instruction budget: {error}"),
-            );
-            return 0;
-        }
-    };
+    let image_slice_budget_nanos = image_slice_budget_nanos.max(1) as u64;
     let profile_name: String = match env.get_string(&profile_name) {
         Ok(value) => value.into(),
         Err(error) => {
@@ -270,7 +261,7 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
     let daemon = DeviceDaemon::new(
         max_event_queue_size,
         max_buffered_bytes_per_channel,
-        instruction_budget,
+        image_slice_budget_nanos,
         device_id,
         profile_name,
     );
@@ -299,12 +290,11 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
     mut env: JNIEnv<'_>,
     _class: JClass<'_>,
     handle: jlong,
-    instructions: jlong,
     wall_nanos: jlong,
     server_tick: jlong,
 ) {
     let _ = with_device_daemon_mut(&mut env, handle, |daemon| {
-        daemon.refill_execution_quota(instructions, wall_nanos, server_tick);
+        daemon.refill_execution_quota(wall_nanos, server_tick);
     });
 }
 
@@ -326,7 +316,7 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
         &[
             summary.server_tick,
             summary.turns,
-            summary.remaining_instructions,
+            summary.remaining_wall_nanos,
             i64::from(summary.idle),
             summary.halted,
             summary.host_requests,
