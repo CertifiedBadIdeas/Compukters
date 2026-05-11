@@ -65,4 +65,7 @@ tasks.test {
     System.getProperty("ckl.image.backend.fixture.path")?.takeIf { it.isNotBlank() }?.let { path ->
         systemProperty("ckl.image.backend.fixture.path", path)
     }
+    System.getProperty("ckl.low.image.golden.path")?.takeIf { it.isNotBlank() }?.let { path ->
+        systemProperty("ckl.low.image.golden.path", path)
+    }
 }

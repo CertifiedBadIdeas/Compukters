@@ -110,6 +110,42 @@ class CkLowVmImageAbiTest {
         assertEquals(bytes.size, reader.offset)
     }
 
+    @Test
+    fun writesLowGoldenFixtureWhenPathIsProvided() {
+        val path = System.getProperty("ckl.low.image.golden.path")?.takeIf(String::isNotBlank) ?: return
+        val image =
+            CkLowVmImage(
+                languageVersion = "ckl-low-1",
+                memorySize = 4096u,
+                rodata = byteArrayOf(1, 2, 3),
+                data = byteArrayOf(4, 5),
+                bssSize = 16u,
+                entryFunctionIndex = 0,
+                functions =
+                    listOf(
+                        CkLowVmFunction(
+                            name = "main",
+                            i32RegisterCount = 2,
+                            i64RegisterCount = 0,
+                            addrRegisterCount = 1,
+                            boolRegisterCount = 0,
+                            parameters = emptyList(),
+                            instructions =
+                                listOf(
+                                    CkLowVmInstruction.AddrConst(0, 128u),
+                                    CkLowVmInstruction.I32Const(0, 7),
+                                    CkLowVmInstruction.Store32(0, 0),
+                                    CkLowVmInstruction.Load32(1, 0),
+                                    CkLowVmInstruction.Return(CkLowVmRegister.I32(1)),
+                                ),
+                        ),
+                    ),
+            )
+
+        java.nio.file.Files.createDirectories(java.nio.file.Path.of(path).parent)
+        java.nio.file.Files.write(java.nio.file.Path.of(path), CkLowVmImageAbi.encode(image))
+    }
+
     private class LowTestReader(
         private val bytes: ByteArray,
     ) {
