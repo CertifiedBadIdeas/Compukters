@@ -46,8 +46,6 @@ class VmLifecycleState {
     /** Current lifecycle state (synchronous read). */
     val state: VmState get() = _state.value
 
-    val isBooting: Boolean get() = _state.value is VmState.Booting
-
     val isStopped: Boolean get() = _state.value.isTerminal
 
     fun setState(newState: VmState) {
@@ -70,12 +68,9 @@ class VmLifecycleState {
 }
 
 /**
- * Tracks tick-based scheduling data: current tick, sleep deadline, slice budget.
- *
- * All fields are backed by [MutableStateFlow] — atomic reads/writes, observable
- * via [StateFlow.collect]. Updated from a single writer (server tick thread or VM coroutine).
+ * Tracks the last server tick observed by the VM host.
  */
-class VmSchedulingState {
+class VmTickState {
     private val _currentTick = MutableStateFlow(0L)
 
     /** Observable current tick. */
@@ -84,52 +79,25 @@ class VmSchedulingState {
     /** Current tick (synchronous read). */
     val currentTick: Long get() = _currentTick.value
 
-    private val _sleepUntilTick = MutableStateFlow<Long?>(null)
-
-    /** Observable sleep-until tick. */
-    val sleepUntilTickFlow: StateFlow<Long?> = _sleepUntilTick.asStateFlow()
-
-    /** Sleep-until tick (synchronous read). */
-    val sleepUntilTick: Long? get() = _sleepUntilTick.value
-
-    private val _sliceDeadlineNanos = MutableStateFlow(0L)
-
-    /** Observable slice deadline (nanos). */
-    val sliceDeadlineNanosFlow: StateFlow<Long> = _sliceDeadlineNanos.asStateFlow()
-
-    /** Slice deadline in nanos (synchronous read). */
-    val sliceDeadlineNanos: Long get() = _sliceDeadlineNanos.value
-
     fun updateCurrentTick(tick: Long) {
         _currentTick.value = tick
     }
-
-    fun updateSliceDeadlineNanos(budgetNanos: Long) {
-        _sliceDeadlineNanos.value = System.nanoTime() + budgetNanos
-    }
-
-    fun setSleepUntil(tick: Long?) {
-        _sleepUntilTick.value = tick
-    }
-
-    fun shouldWake(tick: Long): Boolean = _sleepUntilTick.value?.let { tick >= it } ?: true
 }
 
 /**
- * Combined manager that delegates to [VmLifecycleState] and [VmSchedulingState].
+ * Combined manager that delegates to [VmLifecycleState] and [VmTickState].
  *
  * Exposes both synchronous value getters (e.g. [state]) and reactive [StateFlow]
  * properties (e.g. [stateFlow]) for each piece of state.
  */
 class VmStateManager {
     val lifecycle = VmLifecycleState()
-    val scheduling = VmSchedulingState()
+    val ticks = VmTickState()
 
     // ── Lifecycle delegates ─────────────────────────────────────────
 
     val state: VmState get() = lifecycle.state
     val stateFlow: StateFlow<VmState> get() = lifecycle.stateFlow
-    val isBooting: Boolean get() = lifecycle.isBooting
     val isStopped: Boolean get() = lifecycle.isStopped
 
     fun setState(newState: VmState) = lifecycle.setState(newState)
@@ -139,18 +107,10 @@ class VmStateManager {
         error: String? = null,
     ) = lifecycle.stopVm(reason, error)
 
-    // ── Scheduling delegates ────────────────────────────────────────
+    // ── Tick delegates ──────────────────────────────────────────────
 
-    val currentTick: Long get() = scheduling.currentTick
-    val currentTickFlow: StateFlow<Long> get() = scheduling.currentTickFlow
-    val sleepUntilTick: Long? get() = scheduling.sleepUntilTick
-    val sleepUntilTickFlow: StateFlow<Long?> get() = scheduling.sleepUntilTickFlow
-    val sliceDeadlineNanos: Long get() = scheduling.sliceDeadlineNanos
-    val sliceDeadlineNanosFlow: StateFlow<Long> get() = scheduling.sliceDeadlineNanosFlow
+    val currentTick: Long get() = ticks.currentTick
+    val currentTickFlow: StateFlow<Long> get() = ticks.currentTickFlow
 
-    fun updateCurrentTick(tick: Long) = scheduling.updateCurrentTick(tick)
-
-    fun updateSliceDeadlineNanos(budgetNanos: Long) = scheduling.updateSliceDeadlineNanos(budgetNanos)
-
-    fun setSleepUntil(tick: Long?) = scheduling.setSleepUntil(tick)
+    fun updateCurrentTick(tick: Long) = ticks.updateCurrentTick(tick)
 }
