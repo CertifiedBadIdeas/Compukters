@@ -58,8 +58,6 @@ object CkVmImageCompiler {
         val functions = module.functions.map { function -> context.lower(function) }
         return CkVmImage(
             languageVersion = "ckl-1",
-            targetAbiVersion = CkVmImageAbi.VERSION,
-            capabilities = if (hostImports.isEmpty()) emptyList() else listOf("host-import-ids"),
             constants = context.constants,
             hostImports = hostImports,
             entryFunctionIndex = module.entryFunctionIndex,
@@ -82,6 +80,26 @@ object CkVmImageCompiler {
             .sortedBy { import -> import.id }
             .toList()
 
+    private sealed interface PendingInstruction {
+        data class Resolved(
+            val instruction: CkVmInstruction,
+        ) : PendingInstruction
+
+        data class Jump(
+            val targetBytecodeIndex: Int,
+        ) : PendingInstruction
+
+        data class JumpIfFalse(
+            val cond: Int,
+            val targetBytecodeIndex: Int,
+        ) : PendingInstruction
+
+        data class JumpIfTrue(
+            val cond: Int,
+            val targetBytecodeIndex: Int,
+        ) : PendingInstruction
+    }
+
     private class LoweringContext(
         hostImports: List<CkVmHostImport>,
     ) {
@@ -89,265 +107,215 @@ object CkVmImageCompiler {
         val constants = mutableListOf<CkVmConstant>()
 
         fun lower(function: BytecodeFunction): CkVmFunction {
-            val offsets = instructionOffsets(function.instructions)
-            val code =
-                function.instructions.flatMapIndexed { index, instruction ->
-                    lowerInstruction(instruction, offsets, function.instructions.size, index)
-                }
-            return CkVmFunction(
-                name = function.name,
-                frameSize = function.locals.size,
-                code = code,
-            )
+            val lowerer = FunctionLowerer(function)
+            return lowerer.lower()
         }
 
-        private fun instructionOffsets(instructions: List<Instruction>): List<Int> {
-            val offsets = mutableListOf<Int>()
-            var offset = 0
-            instructions.forEach { instruction ->
-                offsets += offset
-                offset += instructionLength(instruction)
+        private inner class FunctionLowerer(
+            private val function: BytecodeFunction,
+        ) {
+            private val stack = ArrayDeque<Int>()
+            private val pending = mutableListOf<PendingInstruction>()
+            private val bytecodeToInstruction = MutableList(function.instructions.size + 1) { 0 }
+            private var nextRegister = function.locals.size
+
+            fun lower(): CkVmFunction {
+                function.instructions.forEachIndexed { index, instruction ->
+                    bytecodeToInstruction[index] = pending.size
+                    lowerInstruction(instruction)
+                }
+                bytecodeToInstruction[function.instructions.size] = pending.size
+
+                val instructions =
+                    pending.mapIndexed { index, instruction ->
+                        resolveInstruction(index, instruction)
+                    }
+                return CkVmFunction(
+                    name = function.name,
+                    registerCount = nextRegister,
+                    parameterCount = function.parameters.size,
+                    instructions = instructions,
+                )
             }
-            offsets += offset
-            return offsets
+
+            private fun lowerInstruction(instruction: Instruction) {
+                when (instruction) {
+                    Instruction.PushUnit -> {
+                        val dst = temp()
+                        emit(CkVmInstruction.LoadUnit(dst))
+                        stack.addLast(dst)
+                    }
+
+                    Instruction.PushNull -> {
+                        val dst = temp()
+                        emit(CkVmInstruction.LoadNull(dst))
+                        stack.addLast(dst)
+                    }
+
+                    is Instruction.PushBool -> {
+                        val dst = temp()
+                        emit(CkVmInstruction.LoadBool(dst, instruction.value))
+                        stack.addLast(dst)
+                    }
+
+                    is Instruction.PushString -> pushConstant(CkVmConstant.StringConstant(instruction.value))
+                    is Instruction.PushInt -> pushConstant(CkVmConstant.IntConstant(instruction.value))
+                    is Instruction.PushLong -> pushConstant(CkVmConstant.LongConstant(instruction.value))
+                    is Instruction.LoadLocal -> stack.addLast(instruction.slot)
+                    is Instruction.StoreLocal -> emit(CkVmInstruction.Move(instruction.slot, pop("store local")))
+                    Instruction.Pop -> pop("pop")
+                    is Instruction.Jump -> pending += PendingInstruction.Jump(instruction.target)
+                    is Instruction.JumpIfFalse -> pending += PendingInstruction.JumpIfFalse(pop("jump-if-false"), instruction.target)
+                    is Instruction.JumpIfTrue -> pending += PendingInstruction.JumpIfTrue(pop("jump-if-true"), instruction.target)
+                    is Instruction.Binary -> lowerBinary(instruction.operator)
+                    is Instruction.Unary -> lowerUnary(instruction.operator)
+                    is Instruction.CallFunction -> lowerCallFunction(instruction)
+                    is Instruction.CallBuiltin -> lowerCallBuiltin(instruction)
+                    Instruction.Return -> lowerReturn()
+                    else -> throw UnsupportedOperationException(
+                        "CkVmImage register backend does not support ${instruction::class.simpleName}",
+                    )
+                }
+            }
+
+            private fun pushConstant(constant: CkVmConstant) {
+                val dst = temp()
+                emit(CkVmInstruction.LoadConst(dst, constantIndex(constant)))
+                stack.addLast(dst)
+            }
+
+            private fun lowerBinary(operator: BinaryOperator) {
+                val rhs = pop("binary rhs")
+                val lhs = pop("binary lhs")
+                val dst = temp()
+                emit(
+                    when (operator) {
+                        BinaryOperator.ADD -> CkVmInstruction.I32Add(dst, lhs, rhs)
+                        BinaryOperator.SUBTRACT -> CkVmInstruction.I32Sub(dst, lhs, rhs)
+                        BinaryOperator.MULTIPLY -> CkVmInstruction.I32Mul(dst, lhs, rhs)
+                        BinaryOperator.DIVIDE -> CkVmInstruction.I32Div(dst, lhs, rhs)
+                        BinaryOperator.EQUALS -> CkVmInstruction.I32Eq(dst, lhs, rhs)
+                        BinaryOperator.NOT_EQUALS -> CkVmInstruction.I32Ne(dst, lhs, rhs)
+                        BinaryOperator.LESS -> CkVmInstruction.I32Lt(dst, lhs, rhs)
+                        BinaryOperator.LESS_EQUALS -> CkVmInstruction.I32Le(dst, lhs, rhs)
+                        BinaryOperator.GREATER -> CkVmInstruction.I32Gt(dst, lhs, rhs)
+                        BinaryOperator.GREATER_EQUALS -> CkVmInstruction.I32Ge(dst, lhs, rhs)
+                        BinaryOperator.AND -> CkVmInstruction.BoolAnd(dst, lhs, rhs)
+                        BinaryOperator.OR -> CkVmInstruction.BoolOr(dst, lhs, rhs)
+                        BinaryOperator.BIT_AND -> CkVmInstruction.I32BitAnd(dst, lhs, rhs)
+                        BinaryOperator.BIT_OR -> CkVmInstruction.I32BitOr(dst, lhs, rhs)
+                        BinaryOperator.BIT_XOR -> CkVmInstruction.I32BitXor(dst, lhs, rhs)
+                        BinaryOperator.SHIFT_LEFT -> CkVmInstruction.I32Shl(dst, lhs, rhs)
+                        BinaryOperator.SHIFT_RIGHT -> CkVmInstruction.I32Shr(dst, lhs, rhs)
+                    },
+                )
+                stack.addLast(dst)
+            }
+
+            private fun lowerUnary(operator: UnaryOperator) {
+                val src = pop("unary operand")
+                val dst = temp()
+                emit(
+                    when (operator) {
+                        UnaryOperator.NEGATE -> CkVmInstruction.I32Neg(dst, src)
+                        UnaryOperator.NOT -> CkVmInstruction.BoolNot(dst, src)
+                        UnaryOperator.BIT_NOT -> CkVmInstruction.I32BitNot(dst, src)
+                    },
+                )
+                stack.addLast(dst)
+            }
+
+            private fun lowerCallFunction(instruction: Instruction.CallFunction) {
+                val arguments = popArguments(instruction.argumentCount)
+                val dst = temp()
+                emit(CkVmInstruction.CallStatic(dst, instruction.functionIndex, arguments))
+                stack.addLast(dst)
+            }
+
+            private fun lowerCallBuiltin(instruction: Instruction.CallBuiltin) {
+                if (instruction.moduleName == null) {
+                    lowerGlobalBuiltin(instruction)
+                    return
+                }
+
+                val arguments = popArguments(instruction.argumentCount)
+                val import = hostImportIds.getValue(Triple(instruction.moduleName, instruction.functionName, instruction.argumentCount))
+                val dst = temp()
+                emit(CkVmInstruction.CallHost(dst, import.id, arguments))
+                stack.addLast(dst)
+            }
+
+            private fun lowerGlobalBuiltin(instruction: Instruction.CallBuiltin) {
+                when {
+                    instruction.functionName == "yield" && instruction.argumentCount == 0 -> {
+                        val dst = temp()
+                        emit(CkVmInstruction.Yield(dst))
+                        stack.addLast(dst)
+                    }
+
+                    instruction.functionName == "sleep" && instruction.argumentCount == 1 -> {
+                        val ticks = pop("sleep ticks")
+                        val dst = temp()
+                        emit(CkVmInstruction.Sleep(dst, ticks))
+                        stack.addLast(dst)
+                    }
+
+                    else -> throw UnsupportedOperationException(
+                        "CkVmImage register backend does not support global builtin ${instruction.functionName}",
+                    )
+                }
+            }
+
+            private fun lowerReturn() {
+                val src = stack.removeLastOrNull()
+                if (src == null) {
+                    emit(CkVmInstruction.ReturnUnit)
+                } else {
+                    emit(CkVmInstruction.Return(src))
+                }
+            }
+
+            private fun popArguments(argumentCount: Int): List<Int> =
+                List(argumentCount) { pop("call argument") }.asReversed()
+
+            private fun pop(context: String): Int =
+                stack.removeLastOrNull()
+                    ?: throw IllegalStateException("CkVmImage register backend stack underflow while lowering $context in ${function.name}.")
+
+            private fun temp(): Int = nextRegister++
+
+            private fun emit(instruction: CkVmInstruction) {
+                pending += PendingInstruction.Resolved(instruction)
+            }
+
+            private fun resolveInstruction(
+                index: Int,
+                instruction: PendingInstruction,
+            ): CkVmInstruction =
+                when (instruction) {
+                    is PendingInstruction.Resolved -> instruction.instruction
+                    is PendingInstruction.Jump -> CkVmInstruction.Jump(resolveJumpTarget(index, instruction.targetBytecodeIndex))
+                    is PendingInstruction.JumpIfFalse ->
+                        CkVmInstruction.JumpIfFalse(instruction.cond, resolveJumpTarget(index, instruction.targetBytecodeIndex))
+
+                    is PendingInstruction.JumpIfTrue ->
+                        CkVmInstruction.JumpIfTrue(instruction.cond, resolveJumpTarget(index, instruction.targetBytecodeIndex))
+                }
+
+            private fun resolveJumpTarget(
+                instructionIndex: Int,
+                targetBytecodeIndex: Int,
+            ): Int {
+                require(targetBytecodeIndex in bytecodeToInstruction.indices) {
+                    "CkVmImage jump target $targetBytecodeIndex at register instruction $instructionIndex is outside 0..${function.instructions.size}"
+                }
+                return bytecodeToInstruction[targetBytecodeIndex]
+            }
         }
-
-        private fun instructionLength(instruction: Instruction): Int =
-            when (instruction) {
-                Instruction.PushUnit,
-                Instruction.PushNull,
-                Instruction.Return,
-                Instruction.Pop,
-                Instruction.ConstructArray,
-                Instruction.IndexGet,
-                Instruction.IndexSet,
-                -> 1
-
-                is Instruction.PushBool -> 2
-
-                is Instruction.PushString,
-                is Instruction.PushInt,
-                is Instruction.PushLong,
-                is Instruction.LoadLocal,
-                is Instruction.StoreLocal,
-                is Instruction.Jump,
-                is Instruction.JumpIfFalse,
-                is Instruction.JumpIfTrue,
-                is Instruction.GetField,
-                is Instruction.ConstructList,
-                is Instruction.ConstructMap,
-                -> 5
-
-                is Instruction.ConstructRecord -> 9 + 4 * instruction.fieldNames.size
-
-                is Instruction.Binary,
-                is Instruction.Unary,
-                -> 2
-
-                is Instruction.CallFunction,
-                is Instruction.CallCollectionMethod,
-                -> 9
-
-                is Instruction.CallBuiltin -> callBuiltinLength(instruction)
-
-                else -> throw UnsupportedOperationException("CkVmImage backend does not support ${instruction::class.simpleName}")
-            }
-
-        private fun lowerInstruction(
-            instruction: Instruction,
-            offsets: List<Int>,
-            instructionCount: Int,
-            instructionIndex: Int,
-        ): List<Int> =
-            when (instruction) {
-                Instruction.PushUnit -> {
-                    listOf(CkVmImageOpcodes.PUSH_UNIT)
-                }
-
-                Instruction.PushNull -> {
-                    listOf(CkVmImageOpcodes.PUSH_NULL)
-                }
-
-                Instruction.Return -> {
-                    listOf(CkVmImageOpcodes.RETURN)
-                }
-
-                Instruction.Pop -> {
-                    listOf(CkVmImageOpcodes.POP)
-                }
-
-                is Instruction.PushBool -> {
-                    listOf(CkVmImageOpcodes.PUSH_BOOL, if (instruction.value) 1 else 0)
-                }
-
-                is Instruction.PushString -> {
-                    pushConstant(CkVmConstant.StringConstant(instruction.value))
-                }
-
-                is Instruction.PushInt -> {
-                    pushConstant(CkVmConstant.IntConstant(instruction.value))
-                }
-
-                is Instruction.PushLong -> {
-                    pushConstant(CkVmConstant.LongConstant(instruction.value))
-                }
-
-                is Instruction.LoadLocal -> {
-                    listOf(CkVmImageOpcodes.LOAD_LOCAL) + i32(instruction.slot)
-                }
-
-                is Instruction.StoreLocal -> {
-                    listOf(CkVmImageOpcodes.STORE_LOCAL) + i32(instruction.slot)
-                }
-
-                is Instruction.Jump -> {
-                    listOf(CkVmImageOpcodes.JUMP) +
-                        i32(resolveJumpTarget(instruction.target, offsets, instructionCount, instructionIndex))
-                }
-
-                is Instruction.JumpIfFalse -> {
-                    listOf(CkVmImageOpcodes.JUMP_IF_FALSE) +
-                        i32(resolveJumpTarget(instruction.target, offsets, instructionCount, instructionIndex))
-                }
-
-                is Instruction.JumpIfTrue -> {
-                    listOf(CkVmImageOpcodes.JUMP_IF_TRUE) +
-                        i32(resolveJumpTarget(instruction.target, offsets, instructionCount, instructionIndex))
-                }
-
-                is Instruction.Binary -> {
-                    listOf(CkVmImageOpcodes.BINARY, binaryOperatorTag(instruction.operator))
-                }
-
-                is Instruction.Unary -> {
-                    listOf(CkVmImageOpcodes.UNARY, unaryOperatorTag(instruction.operator))
-                }
-
-                is Instruction.ConstructRecord -> {
-                    listOf(CkVmImageOpcodes.CONSTRUCT_RECORD) +
-                        stringConstantIndexBytes(instruction.typeName) +
-                        i32(instruction.fieldNames.size) +
-                        instruction.fieldNames.flatMap(::stringConstantIndexBytes)
-                }
-
-                is Instruction.GetField -> {
-                    listOf(CkVmImageOpcodes.GET_FIELD) + stringConstantIndexBytes(instruction.fieldName)
-                }
-
-                Instruction.ConstructArray -> {
-                    listOf(CkVmImageOpcodes.CONSTRUCT_ARRAY)
-                }
-
-                is Instruction.ConstructList -> {
-                    listOf(CkVmImageOpcodes.CONSTRUCT_LIST) + i32(instruction.elementCount)
-                }
-
-                is Instruction.ConstructMap -> {
-                    listOf(CkVmImageOpcodes.CONSTRUCT_MAP) + i32(instruction.entryCount)
-                }
-
-                Instruction.IndexGet -> {
-                    listOf(CkVmImageOpcodes.INDEX_GET)
-                }
-
-                Instruction.IndexSet -> {
-                    listOf(CkVmImageOpcodes.INDEX_SET)
-                }
-
-                is Instruction.CallCollectionMethod -> {
-                    listOf(CkVmImageOpcodes.CALL_COLLECTION_METHOD) +
-                        stringConstantIndexBytes(instruction.methodName) +
-                        i32(instruction.argumentCount)
-                }
-
-                is Instruction.CallFunction -> {
-                    listOf(CkVmImageOpcodes.CALL_FUNCTION) + i32(instruction.functionIndex) +
-                        i32(instruction.argumentCount)
-                }
-
-                is Instruction.CallBuiltin -> {
-                    callBuiltin(instruction)
-                }
-
-                else -> {
-                    throw UnsupportedOperationException("CkVmImage backend does not support ${instruction::class.simpleName}")
-                }
-            }
-
-        private fun resolveJumpTarget(
-            target: Int,
-            offsets: List<Int>,
-            instructionCount: Int,
-            instructionIndex: Int,
-        ): Int {
-            require(target in 0..instructionCount) {
-                "CkVmImage jump target $target at instruction $instructionIndex is outside 0..$instructionCount"
-            }
-            return offsets[target]
-        }
-
-        private fun pushConstant(constant: CkVmConstant): List<Int> = listOf(CkVmImageOpcodes.PUSH_CONSTANT) + i32(constantIndex(constant))
-
-        private fun stringConstantIndexBytes(value: String): List<Int> = i32(constantIndex(CkVmConstant.StringConstant(value)))
 
         private fun constantIndex(constant: CkVmConstant): Int {
             val existing = constants.indexOf(constant)
             return if (existing >= 0) existing else constants.size.also { constants += constant }
         }
-
-        private fun callBuiltinLength(instruction: Instruction.CallBuiltin): Int =
-            when {
-                instruction.moduleName == null && instruction.functionName == "yield" && instruction.argumentCount == 0 -> 1
-                instruction.moduleName == null && instruction.functionName == "sleep" && instruction.argumentCount == 1 -> 1
-                instruction.moduleName != null -> 9
-                else -> throw UnsupportedOperationException("CkVmImage backend does not support global builtin ${instruction.functionName}")
-            }
-
-        private fun callBuiltin(instruction: Instruction.CallBuiltin): List<Int> {
-            if (instruction.moduleName == null) {
-                return when {
-                    instruction.functionName == "yield" && instruction.argumentCount == 0 -> listOf(CkVmImageOpcodes.YIELD)
-
-                    instruction.functionName == "sleep" && instruction.argumentCount == 1 -> listOf(CkVmImageOpcodes.SLEEP)
-
-                    else -> throw UnsupportedOperationException(
-                        "CkVmImage backend does not support global builtin ${instruction.functionName}",
-                    )
-                }
-            }
-            val import = hostImportIds.getValue(Triple(instruction.moduleName, instruction.functionName, instruction.argumentCount))
-            return listOf(CkVmImageOpcodes.CALL_HOST) + i32(import.id) + i32(instruction.argumentCount)
-        }
-
-        private fun binaryOperatorTag(operator: BinaryOperator): Int =
-            when (operator) {
-                BinaryOperator.ADD -> 0
-                BinaryOperator.SUBTRACT -> 1
-                BinaryOperator.MULTIPLY -> 2
-                BinaryOperator.DIVIDE -> 3
-                BinaryOperator.EQUALS -> 4
-                BinaryOperator.NOT_EQUALS -> 5
-                BinaryOperator.LESS -> 6
-                BinaryOperator.LESS_EQUALS -> 7
-                BinaryOperator.GREATER -> 8
-                BinaryOperator.GREATER_EQUALS -> 9
-                BinaryOperator.AND -> 10
-                BinaryOperator.OR -> 11
-                BinaryOperator.BIT_AND -> 12
-                BinaryOperator.BIT_OR -> 13
-                BinaryOperator.BIT_XOR -> 14
-                BinaryOperator.SHIFT_LEFT -> 15
-                BinaryOperator.SHIFT_RIGHT -> 16
-            }
-
-        private fun unaryOperatorTag(operator: UnaryOperator): Int =
-            when (operator) {
-                UnaryOperator.NEGATE -> 0
-                UnaryOperator.NOT -> 1
-                UnaryOperator.BIT_NOT -> 2
-            }
-
-        private fun i32(value: Int): List<Int> =
-            listOf(value and 0xff, (value ushr 8) and 0xff, (value ushr 16) and 0xff, (value ushr 24) and 0xff)
     }
 }

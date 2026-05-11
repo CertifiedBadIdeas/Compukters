@@ -26,14 +26,14 @@ import kotlin.test.assertFailsWith
 
 class CkVmImageAbiTest {
     @Test
-    fun encodedImageStartsWithMagicAndVersion() {
+    fun encodedImageStartsWithMagicAndRegisterAbiVersion() {
         val bytes = CkVmImageAbi.encode(minimalImage())
 
         assertContentEquals(
             byteArrayOf('C'.code.toByte(), 'K'.code.toByte(), 'I'.code.toByte(), 'M'.code.toByte()),
             bytes.copyOfRange(0, 4),
         )
-        assertEquals(1, bytes[4].toInt())
+        assertEquals(2, bytes[4].toInt())
     }
 
     @Test
@@ -44,15 +44,13 @@ class CkVmImageAbiTest {
     }
 
     @Test
-    fun encodedImageContainsSkeletonSections() {
+    fun encodedImageContainsTypedRegisterSections() {
         val bytes = CkVmImageAbi.encode(representativeImage())
         val reader = TestReader(bytes)
 
         assertEquals("CKIM", reader.ascii(4))
-        assertEquals(1, reader.u8())
+        assertEquals(2, reader.u8())
         assertEquals("ckl-1", reader.string())
-        assertEquals(1, reader.u16())
-        assertEquals(listOf("host-import-ids"), reader.stringList())
         assertEquals(3, reader.i32())
         assertEquals(1, reader.u8())
         assertEquals("hello", reader.string())
@@ -69,14 +67,48 @@ class CkVmImageAbiTest {
         assertEquals(0, reader.i32())
         assertEquals(1, reader.i32())
         assertEquals("main", reader.string())
-        assertEquals(8, reader.i32())
-        assertContentEquals(byteArrayOf(0x01, 0x02, 0x03), reader.byteArray())
+        assertEquals(4, reader.u16())
+        assertEquals(1, reader.u16())
+        assertEquals(4, reader.i32())
+        assertEquals(CkVmImageAbi.InstructionTags.LOAD_CONST, reader.u8())
+        assertEquals(1, reader.u16())
+        assertEquals(0, reader.i32())
+        assertEquals(CkVmImageAbi.InstructionTags.I32_ADD, reader.u8())
+        assertEquals(2, reader.u16())
+        assertEquals(0, reader.u16())
+        assertEquals(1, reader.u16())
+        assertEquals(CkVmImageAbi.InstructionTags.CALL_HOST, reader.u8())
+        assertEquals(1, reader.u8())
+        assertEquals(3, reader.u16())
+        assertEquals(42, reader.i32())
+        assertEquals(listOf(2), reader.registerList())
+        assertEquals(CkVmImageAbi.InstructionTags.RETURN_UNIT, reader.u8())
         assertEquals(bytes.size, reader.offset)
     }
 
     @Test
     fun negativeImportIdIsRejectedBeforeEncoding() {
         val image = minimalImage().copy(hostImports = listOf(CkVmHostImport(-1, "display", "present", listOf("Int"), "Unit")))
+
+        assertFailsWith<IllegalArgumentException> {
+            CkVmImageAbi.encode(image)
+        }
+    }
+
+    @Test
+    fun outOfRangeRegisterIsRejectedBeforeEncoding() {
+        val image =
+            minimalImage().copy(
+                functions =
+                    listOf(
+                        CkVmFunction(
+                            name = "main",
+                            registerCount = 1,
+                            parameterCount = 0,
+                            instructions = listOf(CkVmInstruction.LoadUnit(1)),
+                        ),
+                    ),
+            )
 
         assertFailsWith<IllegalArgumentException> {
             CkVmImageAbi.encode(image)
@@ -104,16 +136,13 @@ class CkVmImageAbiTest {
     private fun minimalImage(): CkVmImage =
         CkVmImage(
             languageVersion = "ckl-1",
-            targetAbiVersion = 1,
             entryFunctionIndex = 0,
-            functions = listOf(CkVmFunction("main", frameSize = 0, code = emptyList())),
+            functions = listOf(CkVmFunction("main", registerCount = 0, parameterCount = 0, instructions = emptyList())),
         )
 
     private fun representativeImage(): CkVmImage =
         CkVmImage(
             languageVersion = "ckl-1",
-            targetAbiVersion = 1,
-            capabilities = listOf("host-import-ids"),
             constants =
                 listOf(
                     CkVmConstant.StringConstant("hello"),
@@ -122,7 +151,21 @@ class CkVmImageAbiTest {
                 ),
             hostImports = listOf(CkVmHostImport(42, "display", "present", listOf("Int"), "Unit")),
             entryFunctionIndex = 0,
-            functions = listOf(CkVmFunction("main", frameSize = 8, code = listOf(0x01, 0x02, 0x03))),
+            functions =
+                listOf(
+                    CkVmFunction(
+                        name = "main",
+                        registerCount = 4,
+                        parameterCount = 1,
+                        instructions =
+                            listOf(
+                                CkVmInstruction.LoadConst(1, 0),
+                                CkVmInstruction.I32Add(2, 0, 1),
+                                CkVmInstruction.CallHost(3, 42, listOf(2)),
+                                CkVmInstruction.ReturnUnit,
+                            ),
+                    ),
+                ),
         )
 
     private class TestReader(
@@ -154,11 +197,6 @@ class CkVmImageAbiTest {
 
         fun stringList(): List<String> = List(i32()) { string() }
 
-        fun byteArray(): ByteArray {
-            val length = i32()
-            val value = bytes.copyOfRange(offset, offset + length)
-            offset += length
-            return value
-        }
+        fun registerList(): List<Int> = List(i32()) { u16() }
     }
 }
