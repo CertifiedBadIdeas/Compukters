@@ -566,12 +566,6 @@ fn string_argument<'a>(
 mod tests {
     use super::*;
 
-    const OP_RETURN: u8 = 2;
-    const OP_PUSH_CONSTANT: u8 = 3;
-    const OP_CALL_HOST: u8 = 4;
-    const OP_YIELD: u8 = 24;
-    const OP_SLEEP: u8 = 25;
-
     fn run_daemon_slice(
         daemon: &mut DeviceDaemon,
         instructions: i64,
@@ -857,137 +851,111 @@ mod tests {
     }
 
     fn ckim_empty_main() -> Vec<u8> {
-        image_with_code(0, vec![OP_RETURN])
+        image_with_instructions(Vec::new(), Vec::new(), 0, |out| {
+            return_unit(out);
+        })
     }
 
     fn ckim_yields_then_halts() -> Vec<u8> {
-        image_with_code(0, vec![OP_YIELD, OP_RETURN])
+        image_with_instructions(Vec::new(), Vec::new(), 1, |out| {
+            yield_instruction(out, 0);
+            return_unit(out);
+        })
     }
 
     fn ckim_sleeps_one_tick_then_halts() -> Vec<u8> {
-        let mut code = Vec::new();
-        code.push(OP_PUSH_CONSTANT);
-        i32(&mut code, 0);
-        code.push(OP_SLEEP);
-        code.push(OP_RETURN);
-        image_with_constants_and_code(vec![ConstantFixture::Long(1)], 0, code)
+        image_with_instructions(vec![ConstantFixture::Long(1)], Vec::new(), 2, |out| {
+            load_const(out, 0, 0);
+            sleep_instruction(out, 1, 0);
+            return_unit(out);
+        })
     }
 
     fn ckim_polls_empty_channel_then_halts(channel: i32) -> Vec<u8> {
-        let mut code = Vec::new();
-        code.push(OP_PUSH_CONSTANT);
-        i32(&mut code, 0);
-        code.push(OP_CALL_HOST);
-        i32(&mut code, 1);
-        i32(&mut code, 1);
-        code.push(OP_RETURN);
-        image_with_constants_imports_and_code(
+        image_with_instructions(
             vec![ConstantFixture::Int(channel)],
             vec![HostImportFixture::new(1, "runtime", "poll")],
-            0,
-            code,
+            2,
+            |out| {
+                load_const(out, 0, 0);
+                call_host(out, Some(1), 1, &[0]);
+                return_register(out, 1);
+            },
         )
     }
 
     fn ckim_waits_for_pid_then_halts(pid: i32) -> Vec<u8> {
-        let mut code = Vec::new();
-        code.push(OP_PUSH_CONSTANT);
-        i32(&mut code, 0);
-        code.push(OP_CALL_HOST);
-        i32(&mut code, 1);
-        i32(&mut code, 1);
-        code.push(OP_RETURN);
-        image_with_constants_imports_and_code(
+        image_with_instructions(
             vec![ConstantFixture::Int(pid)],
             vec![HostImportFixture::new(1, "process", "wait")],
-            0,
-            code,
+            2,
+            |out| {
+                load_const(out, 0, 0);
+                call_host(out, Some(1), 1, &[0]);
+                return_register(out, 1);
+            },
         )
     }
 
     fn ckim_calls_system_log_then_halts() -> Vec<u8> {
-        let mut code = Vec::new();
-        code.push(OP_PUSH_CONSTANT);
-        i32(&mut code, 0);
-        code.push(OP_CALL_HOST);
-        i32(&mut code, 1);
-        i32(&mut code, 1);
-        code.push(OP_RETURN);
-        image_with_constants_imports_and_code(
+        image_with_instructions(
             vec![ConstantFixture::String("hello".to_string())],
             vec![HostImportFixture::new(1, "system", "log")],
-            0,
-            code,
+            2,
+            |out| {
+                load_const(out, 0, 0);
+                call_host(out, Some(1), 1, &[0]);
+                return_unit(out);
+            },
         )
     }
 
     fn ckim_spawns_child_then_halts(path: &str, argument: &str) -> Vec<u8> {
-        let mut code = Vec::new();
-        code.push(OP_PUSH_CONSTANT);
-        i32(&mut code, 0);
-        code.push(OP_PUSH_CONSTANT);
-        i32(&mut code, 1);
-        code.push(OP_CALL_HOST);
-        i32(&mut code, 1);
-        i32(&mut code, 2);
-        code.push(OP_RETURN);
-        image_with_constants_imports_and_code(
+        image_with_instructions(
             vec![
                 ConstantFixture::String(path.to_string()),
                 ConstantFixture::String(argument.to_string()),
             ],
             vec![HostImportFixture::new(1, "process", "spawn")],
-            0,
-            code,
+            3,
+            |out| {
+                load_const(out, 0, 0);
+                load_const(out, 1, 1);
+                call_host(out, Some(2), 1, &[0, 1]);
+                return_unit(out);
+            },
         )
     }
 
     fn ckim_reads_ipc_then_logs(channel: i32) -> Vec<u8> {
-        let mut code = Vec::new();
-        code.push(OP_PUSH_CONSTANT);
-        i32(&mut code, 0);
-        code.push(OP_CALL_HOST);
-        i32(&mut code, 1);
-        i32(&mut code, 1);
-        code.push(OP_CALL_HOST);
-        i32(&mut code, 2);
-        i32(&mut code, 1);
-        code.push(OP_RETURN);
-        image_with_constants_imports_and_code(
+        image_with_instructions(
             vec![ConstantFixture::Int(channel)],
             vec![
                 HostImportFixture::new(1, "ipc", "read"),
                 HostImportFixture::new(2, "system", "log"),
             ],
-            0,
-            code,
+            3,
+            |out| {
+                load_const(out, 0, 0);
+                call_host(out, Some(1), 1, &[0]);
+                call_host(out, Some(2), 2, &[1]);
+                return_unit(out);
+            },
         )
     }
 
-    fn image_with_code(frame_size: i32, code: Vec<u8>) -> Vec<u8> {
-        image_with_constants_and_code(Vec::new(), frame_size, code)
-    }
-
-    fn image_with_constants_and_code(
-        constants: Vec<ConstantFixture>,
-        frame_size: i32,
-        code: Vec<u8>,
-    ) -> Vec<u8> {
-        image_with_constants_imports_and_code(constants, Vec::new(), frame_size, code)
-    }
-
-    fn image_with_constants_imports_and_code(
+    fn image_with_instructions(
         constants: Vec<ConstantFixture>,
         host_imports: Vec<HostImportFixture>,
-        frame_size: i32,
-        code: Vec<u8>,
+        register_count: u16,
+        write_instructions: impl FnOnce(&mut Vec<u8>),
     ) -> Vec<u8> {
+        let mut instructions = Vec::new();
+        write_instructions(&mut instructions);
         let mut out = Vec::new();
         out.extend_from_slice(b"CKIM");
-        out.push(1);
+        out.push(2);
         string(&mut out, "ckl-1");
-        out.extend_from_slice(&1u16.to_le_bytes());
-        i32(&mut out, 0);
         i32(&mut out, constants.len() as i32);
         for constant in constants {
             constant.write_to(&mut out);
@@ -999,10 +967,89 @@ mod tests {
         i32(&mut out, 0);
         i32(&mut out, 1);
         string(&mut out, "main");
-        i32(&mut out, frame_size);
-        i32(&mut out, code.len() as i32);
-        out.extend_from_slice(&code);
+        u16(&mut out, register_count);
+        u16(&mut out, 0);
+        i32(&mut out, instruction_count(&instructions));
+        out.extend_from_slice(&instructions);
         out
+    }
+
+    fn load_const(out: &mut Vec<u8>, dst: u16, constant_index: i32) {
+        out.push(1);
+        u16(out, dst);
+        i32(out, constant_index);
+    }
+
+    fn call_host(
+        out: &mut Vec<u8>,
+        return_register: Option<u16>,
+        import_id: i32,
+        arguments: &[u16],
+    ) {
+        out.push(32);
+        optional_register(out, return_register);
+        i32(out, import_id);
+        i32(out, arguments.len() as i32);
+        for argument in arguments {
+            u16(out, *argument);
+        }
+    }
+
+    fn yield_instruction(out: &mut Vec<u8>, dst: u16) {
+        out.push(33);
+        u16(out, dst);
+    }
+
+    fn sleep_instruction(out: &mut Vec<u8>, dst: u16, ticks: u16) {
+        out.push(34);
+        u16(out, dst);
+        u16(out, ticks);
+    }
+
+    fn return_register(out: &mut Vec<u8>, src: u16) {
+        out.push(30);
+        u16(out, src);
+    }
+
+    fn return_unit(out: &mut Vec<u8>) {
+        out.push(31);
+    }
+
+    fn optional_register(out: &mut Vec<u8>, register: Option<u16>) {
+        match register {
+            Some(register) => {
+                out.push(1);
+                u16(out, register);
+            }
+            None => out.push(0),
+        }
+    }
+
+    fn instruction_count(instructions: &[u8]) -> i32 {
+        let mut count = 0;
+        let mut offset = 0;
+        while offset < instructions.len() {
+            count += 1;
+            offset += instruction_len(&instructions[offset..]);
+        }
+        count
+    }
+
+    fn instruction_len(instruction: &[u8]) -> usize {
+        match instruction[0] {
+            1 => 1 + 2 + 4,
+            30 | 33 => 1 + 2,
+            31 => 1,
+            32 => {
+                let return_len = if instruction[1] == 0 { 1 } else { 3 };
+                let arg_count_offset = 1 + return_len + 4;
+                let mut count_bytes = [0u8; 4];
+                count_bytes.copy_from_slice(&instruction[arg_count_offset..arg_count_offset + 4]);
+                1 + return_len + 4 + 4 + i32::from_le_bytes(count_bytes) as usize * 2
+            }
+            34 => 1 + 2 + 2,
+            other => panic!("unknown register instruction tag in test fixture: {other}"),
+        }
     }
 
     enum ConstantFixture {
@@ -1058,6 +1105,10 @@ mod tests {
     fn string(out: &mut Vec<u8>, value: &str) {
         i32(out, value.len() as i32);
         out.extend_from_slice(value.as_bytes());
+    }
+
+    fn u16(out: &mut Vec<u8>, value: u16) {
+        out.extend_from_slice(&value.to_le_bytes());
     }
 
     fn i32(out: &mut Vec<u8>, value: i32) {
