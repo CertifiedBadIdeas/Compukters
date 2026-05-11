@@ -33,6 +33,11 @@ data class BuildContext(
     val javaVersion: Int,
 )
 
+data class RustVmNativePlatform(
+    val id: String,
+    val libraryName: String,
+)
+
 enum class LoaderKind(
     val lowercase: String,
 ) {
@@ -134,6 +139,27 @@ fun Project.effectiveBuildVersion(): String {
     val effective = computeEffectiveBuildVersion(baseVersion, headTags, shortHash)
     extra[EFFECTIVE_BUILD_VERSION_KEY] = effective
     return effective
+}
+
+fun currentRustVmNativePlatform(
+    osName: String = System.getProperty("os.name"),
+    osArch: String = System.getProperty("os.arch"),
+): RustVmNativePlatform {
+    val arch =
+        when (osArch.lowercase()) {
+            "amd64", "x86_64" -> "x86_64"
+            "aarch64", "arm64" -> "aarch64"
+            else -> error("Unsupported Rust VM native architecture: $osArch")
+        }
+    return when {
+        osName.startsWith("linux", ignoreCase = true) ->
+            RustVmNativePlatform(id = "linux-$arch", libraryName = "libckl_vm.so")
+        osName.startsWith("windows", ignoreCase = true) ->
+            RustVmNativePlatform(id = "windows-$arch", libraryName = "ckl_vm.dll")
+        osName.startsWith("mac", ignoreCase = true) || osName.startsWith("darwin", ignoreCase = true) ->
+            RustVmNativePlatform(id = "macos-$arch", libraryName = "libckl_vm.dylib")
+        else -> error("Unsupported Rust VM native OS: $osName")
+    }
 }
 
 private fun gitCaptureOrNull(
