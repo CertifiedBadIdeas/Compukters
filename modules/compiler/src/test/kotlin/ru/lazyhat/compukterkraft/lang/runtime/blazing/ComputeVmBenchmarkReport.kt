@@ -81,7 +81,7 @@ internal data class ComputeVmBenchmarkReport(
             appendLine("# CKL Compute VM Benchmark")
             appendLine()
             appendLine(
-                "CPU-only workloads. The CKL VM runs are timed through the native image VM. The low-level VM column is populated only for workloads covered by the current CKIM v4 primitive ISA.",
+                "CPU-only workloads. The CKL VM runs are timed through the native image VM, with the same work measured through the low-level CKIM v4 VM, Kotlin/JVM, Python, and optimized native Rust baselines.",
             )
             appendLine()
             appendLine(

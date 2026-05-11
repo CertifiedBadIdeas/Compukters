@@ -17,6 +17,10 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+import java.time.Instant
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
+
 plugins {
     alias(libs.plugins.kotlinConvention)
 }
@@ -32,7 +36,13 @@ val rustVmReleaseNativeLibrary = rootProject.layout.projectDirectory.file("nativ
 val rustVmCrateDir = rootProject.layout.projectDirectory.dir("native/ckl-vm")
 val computeVmBenchmarkReports = layout.buildDirectory.dir("reports/profiling")
 val computeVmBenchmarkTsv = computeVmBenchmarkReports.map { it.file("compute-vm-benchmark.tsv") }
-val computeVmBenchmarkMarkdown = computeVmBenchmarkReports.map { it.file("compute-vm-benchmark.md") }
+val computeVmBenchmarkReportTimestamp =
+    System.getProperty("ckl.benchmark.report.timestamp")
+        ?: DateTimeFormatter
+            .ofPattern("yyyyMMdd-HHmmss")
+            .withZone(ZoneOffset.UTC)
+            .format(Instant.now())
+val computeVmBenchmarkMarkdown = computeVmBenchmarkReports.map { it.file("compute-vm-benchmark-$computeVmBenchmarkReportTimestamp.md") }
 
 tasks.register<Test>("profileComputeVmBenchmark") {
     group = "verification"

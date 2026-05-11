@@ -83,6 +83,147 @@ fn runner_rejects_out_of_bounds_memory_access() {
     );
 }
 
+#[test]
+fn runner_calls_static_function_with_i32_arguments_and_return_value() {
+    let image = Image {
+        language_version: "ckl-low-1".to_string(),
+        memory_size: 1024,
+        rodata: Vec::new(),
+        data: Vec::new(),
+        bss_size: 0,
+        entry_function_index: 0,
+        functions: vec![
+            Function {
+                name: "main".to_string(),
+                i32_register_count: 3,
+                i64_register_count: 0,
+                addr_register_count: 0,
+                bool_register_count: 0,
+                parameters: Vec::new(),
+                instructions: vec![
+                    Instruction::I32Const { dst: 0, value: 7 },
+                    Instruction::I32Const { dst: 1, value: 5 },
+                    Instruction::CallStatic {
+                        return_register: Some(Register::I32(2)),
+                        function_index: 1,
+                        arguments: vec![Register::I32(0), Register::I32(1)],
+                    },
+                    Instruction::Return {
+                        src: Register::I32(2),
+                    },
+                ],
+            },
+            Function {
+                name: "add".to_string(),
+                i32_register_count: 3,
+                i64_register_count: 0,
+                addr_register_count: 0,
+                bool_register_count: 0,
+                parameters: vec![Register::I32(0), Register::I32(1)],
+                instructions: vec![
+                    Instruction::I32Add {
+                        dst: 2,
+                        lhs: 0,
+                        rhs: 1,
+                    },
+                    Instruction::Return {
+                        src: Register::I32(2),
+                    },
+                ],
+            },
+        ],
+    };
+    let mut vm = LowImageVm::create(image, 128).unwrap();
+
+    assert_eq!(vm.run_until_signal().unwrap(), LowImageSignal::HaltI32(12));
+}
+
+#[test]
+fn runner_supports_recursive_static_calls() {
+    let image = Image {
+        language_version: "ckl-low-1".to_string(),
+        memory_size: 1024,
+        rodata: Vec::new(),
+        data: Vec::new(),
+        bss_size: 0,
+        entry_function_index: 0,
+        functions: vec![
+            Function {
+                name: "main".to_string(),
+                i32_register_count: 2,
+                i64_register_count: 0,
+                addr_register_count: 0,
+                bool_register_count: 0,
+                parameters: Vec::new(),
+                instructions: vec![
+                    Instruction::I32Const { dst: 0, value: 6 },
+                    Instruction::CallStatic {
+                        return_register: Some(Register::I32(1)),
+                        function_index: 1,
+                        arguments: vec![Register::I32(0)],
+                    },
+                    Instruction::Return {
+                        src: Register::I32(1),
+                    },
+                ],
+            },
+            Function {
+                name: "fib".to_string(),
+                i32_register_count: 7,
+                i64_register_count: 0,
+                addr_register_count: 0,
+                bool_register_count: 1,
+                parameters: vec![Register::I32(0)],
+                instructions: vec![
+                    Instruction::I32Const { dst: 1, value: 2 },
+                    Instruction::I32Lt {
+                        dst: 0,
+                        lhs: 0,
+                        rhs: 1,
+                    },
+                    Instruction::JumpIfFalse { cond: 0, target: 4 },
+                    Instruction::Return {
+                        src: Register::I32(0),
+                    },
+                    Instruction::I32Const { dst: 2, value: 1 },
+                    Instruction::I32Sub {
+                        dst: 3,
+                        lhs: 0,
+                        rhs: 2,
+                    },
+                    Instruction::CallStatic {
+                        return_register: Some(Register::I32(4)),
+                        function_index: 1,
+                        arguments: vec![Register::I32(3)],
+                    },
+                    Instruction::I32Const { dst: 2, value: 2 },
+                    Instruction::I32Sub {
+                        dst: 3,
+                        lhs: 0,
+                        rhs: 2,
+                    },
+                    Instruction::CallStatic {
+                        return_register: Some(Register::I32(5)),
+                        function_index: 1,
+                        arguments: vec![Register::I32(3)],
+                    },
+                    Instruction::I32Add {
+                        dst: 6,
+                        lhs: 4,
+                        rhs: 5,
+                    },
+                    Instruction::Return {
+                        src: Register::I32(6),
+                    },
+                ],
+            },
+        ],
+    };
+    let mut vm = LowImageVm::create(image, 4096).unwrap();
+
+    assert_eq!(vm.run_until_signal().unwrap(), LowImageSignal::HaltI32(8));
+}
+
 fn image(
     instructions: Vec<Instruction>,
     i32_count: usize,
