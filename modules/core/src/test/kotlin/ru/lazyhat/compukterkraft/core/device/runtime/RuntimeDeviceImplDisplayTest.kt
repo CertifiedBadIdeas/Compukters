@@ -32,8 +32,6 @@ import ru.lazyhat.compukterkraft.lang.runtime.DeviceQueueResources
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceResources
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceStorageResources
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceVmHandle
-import ru.lazyhat.compukterkraft.lang.runtime.HostCall
-import ru.lazyhat.compukterkraft.lang.runtime.HostResult
 import ru.lazyhat.compukterkraft.lang.runtime.VmEvent
 import ru.lazyhat.compukterkraft.lang.runtime.VmSnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.VmState
@@ -63,23 +61,23 @@ class RuntimeDeviceImplDisplayTest {
     }
 
     @Test
-    fun servicesSequentialHostCallChainWithinSingleServerTick() {
+    fun serviceVmTickRequestsNativeDaemonSliceOnly() {
         val metrics = RecordingRuntimeMetricsCollector()
-        val handle = SequencedHostCallHandle(totalCalls = 3, delayedInitialDrains = 2)
+        val handle = RecordingVmHandle()
 
         serviceVmTick(
             handle = handle,
             serverTick = 42L,
-            dispatchHostCall = { HostResult.Success(it.id, true) },
             runtimeMetricsCollector = metrics,
         )
 
         assertEquals(1, handle.requestSliceCalls)
-        assertEquals(0, handle.remainingCalls)
+        assertEquals(42L, handle.lastServerTick)
         val snapshot = metrics.snapshot()
         assertEquals(1, snapshot.tick.requestSliceCalls)
-        assertEquals(3, snapshot.tick.hostCallsDrained)
-        assertEquals(3, snapshot.tick.hostResultsDelivered)
+        assertEquals(0, snapshot.tick.hostCallDrainCalls)
+        assertEquals(0, snapshot.tick.hostCallDispatchCalls)
+        assertEquals(0, snapshot.tick.hostResultDeliveryCalls)
     }
 
     @Test
@@ -182,10 +180,7 @@ class RuntimeDeviceImplDisplayTest {
         }
     }
 
-    private class SequencedHostCallHandle(
-        totalCalls: Int,
-        private var delayedInitialDrains: Int,
-    ) : DeviceVmHandle {
+    private class RecordingVmHandle : DeviceVmHandle {
         override val deviceId: Int = 42
         override val profile: DeviceProfile =
             DeviceProfile(
@@ -204,10 +199,8 @@ class RuntimeDeviceImplDisplayTest {
             )
         var requestSliceCalls: Int = 0
             private set
-        var remainingCalls: Int = totalCalls
+        var lastServerTick: Long? = null
             private set
-        private var pendingCall: HostCall? = null
-        private var nextId: Long = 1L
 
         override fun boot(): Boolean = true
 
@@ -217,31 +210,7 @@ class RuntimeDeviceImplDisplayTest {
 
         override fun requestSlice(serverTick: Long) {
             requestSliceCalls += 1
-            if (pendingCall == null && remainingCalls > 0 && delayedInitialDrains <= 0) {
-                pendingCall = HostCall.FileExists(nextId++, "/tmp/test-$remainingCalls")
-            }
-        }
-
-        override fun drainHostCalls(): List<HostCall> {
-            if (pendingCall == null && remainingCalls > 0 && delayedInitialDrains > 0) {
-                delayedInitialDrains -= 1
-                if (delayedInitialDrains == 0) {
-                    pendingCall = HostCall.FileExists(nextId++, "/tmp/test-$remainingCalls")
-                }
-                return emptyList()
-            }
-            val call = pendingCall ?: return emptyList()
-            pendingCall = null
-            return listOf(call)
-        }
-
-        override fun deliverHostResults(results: List<HostResult>) {
-            repeat(results.size.coerceAtMost(remainingCalls)) {
-                remainingCalls -= 1
-            }
-            if (pendingCall == null && remainingCalls > 0) {
-                pendingCall = HostCall.FileExists(nextId++, "/tmp/test-$remainingCalls")
-            }
+            lastServerTick = serverTick
         }
 
         override fun snapshot(): VmSnapshot =
@@ -251,7 +220,7 @@ class RuntimeDeviceImplDisplayTest {
                 state = VmState.Running,
                 currentTick = 0L,
                 queuedEvents = 0,
-                pendingHostCalls = if (pendingCall == null) 0 else 1,
+                pendingHostCalls = 0,
             )
     }
 }

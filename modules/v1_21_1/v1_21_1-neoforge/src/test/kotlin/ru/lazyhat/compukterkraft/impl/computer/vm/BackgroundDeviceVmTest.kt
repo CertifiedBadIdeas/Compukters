@@ -27,7 +27,6 @@ import kotlinx.coroutines.withTimeout
 import ru.lazyhat.compukterkraft.core.Config
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 import ru.lazyhat.compukterkraft.core.device.runtime.FirmwareProgramLoader
-import ru.lazyhat.compukterkraft.core.device.runtime.HostCallDispatcher
 import ru.lazyhat.compukterkraft.core.device.runtime.LoadedFirmwareProgramSource
 import ru.lazyhat.compukterkraft.core.device.runtime.NoOpRuntimeMetricsCollector
 import ru.lazyhat.compukterkraft.core.device.runtime.RecordingRuntimeMetricsCollector
@@ -76,15 +75,11 @@ class BackgroundDeviceVmTest {
     private fun runVmTicks(
         vm: BackgroundDeviceVm,
         ticks: Int = 16,
-        hostCallDispatcher: HostCallDispatcher? = null,
         runtimeMetricsCollector: RuntimeMetricsCollector = NoOpRuntimeMetricsCollector,
     ) = runBlocking {
         repeat(ticks) { tick ->
-            hostCallDispatcher?.let { dispatcher ->
-                serviceVmTickForTest(vm, tick.toLong(), dispatcher::dispatch, runtimeMetricsCollector)
-            } ?: run {
-                vm.requestSlice(tick.toLong())
-            }
+            val (_, requestNanos) = measureNanos { vm.requestSlice(tick.toLong()) }
+            runtimeMetricsCollector.recordRequestSlice(requestNanos)
             kotlinx.coroutines.delay(10)
         }
     }
@@ -111,64 +106,6 @@ class BackgroundDeviceVmTest {
                     queues = DeviceQueueResources(eventQueueSlots = 64, hostCallQueueSlots = 64),
                 ),
         )
-
-    private fun serviceVmTickForTest(
-        vm: BackgroundDeviceVm,
-        serverTick: Long,
-        dispatchHostCall: (ru.lazyhat.compukterkraft.lang.runtime.HostCall) -> ru.lazyhat.compukterkraft.lang.runtime.HostResult,
-        runtimeMetricsCollector: RuntimeMetricsCollector,
-    ) {
-        val (_, requestNanos) = measureNanos { vm.requestSlice(serverTick) }
-        runtimeMetricsCollector.recordRequestSlice(requestNanos)
-
-        val spinDeadline =
-            System.nanoTime() +
-                vm.profile.resources.cpu.wallTimeGuardNanosPerSlice
-                    .coerceAtLeast(1L)
-        var remainingIdlePolls: Int = 8
-        var drainedCalls: Int = 0
-        var dispatchedCalls: Int = 0
-        var deliveredResults: Int = 0
-        var totalDrainNanos: Long = 0L
-        var totalDispatchNanos: Long = 0L
-        var totalDeliverNanos: Long = 0L
-
-        while (true) {
-            val (calls, drainNanos) = measureNanos { vm.drainHostCalls() }
-            totalDrainNanos += drainNanos
-            drainedCalls += calls.size
-            if (calls.isEmpty()) {
-                if (remainingIdlePolls <= 0 || System.nanoTime() >= spinDeadline) {
-                    break
-                }
-                remainingIdlePolls -= 1
-                Thread.onSpinWait()
-                continue
-            }
-
-            remainingIdlePolls = 8
-            val (results, dispatchNanos) = measureNanos { calls.map(dispatchHostCall) }
-            totalDispatchNanos += dispatchNanos
-            dispatchedCalls += calls.size
-
-            val (_, deliverNanos) =
-                measureNanos {
-                    if (results.isNotEmpty()) {
-                        vm.deliverHostResults(results)
-                    }
-                }
-            totalDeliverNanos += deliverNanos
-            deliveredResults += results.size
-
-            if (System.nanoTime() >= spinDeadline) {
-                break
-            }
-        }
-
-        runtimeMetricsCollector.recordHostCallDrain(drainedCalls, totalDrainNanos)
-        runtimeMetricsCollector.recordHostCallDispatch(dispatchedCalls, totalDispatchNanos)
-        runtimeMetricsCollector.recordHostResultDelivery(deliveredResults, totalDeliverNanos)
-    }
 
     private inline fun <T> measureNanos(block: () -> T): Pair<T, Long> {
         val started = System.nanoTime()
@@ -199,7 +136,7 @@ class BackgroundDeviceVmTest {
 
             vm.attachDisplay(displayId = 9, width = 96, height = 48)
             assertTrue(vm.boot())
-            runVmTicks(vm, ticks = 80, hostCallDispatcher = HostCallDispatcher(1, workspace))
+            runVmTicks(vm, ticks = 80)
 
             val frames = vm.drainDisplayFrames()
             val rendered =
@@ -241,7 +178,6 @@ class BackgroundDeviceVmTest {
                     firmwareLoader = ClasspathFirmwareLoader(),
                     runtimeMetricsCollector = metrics,
                 )
-            val dispatcher = HostCallDispatcher(1, workspace)
             val displayWidth = Config.DEFAULT_COMPUTER_TERM_WIDTH * 6
             val displayHeight = Config.DEFAULT_COMPUTER_TERM_HEIGHT * 9
 
@@ -251,7 +187,7 @@ class BackgroundDeviceVmTest {
             var framesSeen = 0
             var tick = 0
             while (tick < 80 && ticksUntilGlyphFrame < 0) {
-                serviceVmTickForTest(vm, tick.toLong(), dispatcher::dispatch, metrics)
+                vm.requestSlice(tick.toLong())
                 val frames = vm.drainDisplayFrames()
                 framesSeen += frames.size
                 val hasGlyphFrame =
@@ -292,14 +228,13 @@ class BackgroundDeviceVmTest {
                     firmwareLoader = ClasspathFirmwareLoader(),
                     runtimeMetricsCollector = metrics,
                 )
-            val dispatcher = HostCallDispatcher(1, workspace)
             val displayWidth = Config.DEFAULT_COMPUTER_TERM_WIDTH * 6
             val displayHeight = Config.DEFAULT_COMPUTER_TERM_HEIGHT * 9
 
             vm.attachDisplay(displayId = 9, width = displayWidth, height = displayHeight)
             assertTrue(vm.boot())
             repeat(160) { tick ->
-                serviceVmTickForTest(vm, tick.toLong(), dispatcher::dispatch, metrics)
+                vm.requestSlice(tick.toLong())
                 vm.drainDisplayFrames()
                 Thread.sleep(5)
             }
@@ -318,7 +253,7 @@ class BackgroundDeviceVmTest {
                     if (sawFrame) {
                         break
                     }
-                    serviceVmTickForTest(vm, tick, dispatcher::dispatch, metrics)
+                    vm.requestSlice(tick)
                     tick += 1
                     ticksForChar += 1
                     val frames = vm.drainDisplayFrames()
@@ -342,7 +277,7 @@ class BackgroundDeviceVmTest {
                 if (sawEnterFrame) {
                     break
                 }
-                serviceVmTickForTest(vm, tick, dispatcher::dispatch, metrics)
+                vm.requestSlice(tick)
                 tick += 1
                 ticksToEnterFrame += 1
                 val frames = vm.drainDisplayFrames()
@@ -377,7 +312,7 @@ class BackgroundDeviceVmTest {
 
             vm.attachDisplay(displayId = 9, width = 96, height = 48)
             assertTrue(vm.boot())
-            runVmTicks(vm, ticks = 24, hostCallDispatcher = HostCallDispatcher(1, workspace))
+            runVmTicks(vm, ticks = 24)
 
             val frames = vm.drainDisplayFrames()
             assertTrue(frames.greenPixelCount() > 0, "firmware status should draw glyph pixels")
@@ -410,17 +345,16 @@ class BackgroundDeviceVmTest {
 
             vm.attachDisplay(displayId = 9, width = 96, height = 48)
             assertTrue(vm.boot())
-            val dispatcher = HostCallDispatcher(1, workspace)
-            runVmTicks(vm, ticks = 80, hostCallDispatcher = dispatcher)
+            runVmTicks(vm, ticks = 80)
 
             "help".forEach { ch -> vm.enqueueEvent(VmEvent("char", listOf(byteArrayOf(ch.code.toByte())))) }
-            runVmTicks(vm, ticks = 80, hostCallDispatcher = dispatcher)
+            runVmTicks(vm, ticks = 80)
             val typedFrames = vm.drainDisplayFrames()
             assertTrue(typedFrames.isNotEmpty(), "typed input should update display frames")
             assertTrue(typedFrames.greenPixelCount() > 0, "typed input should draw glyph pixels")
 
             vm.enqueueEvent(VmEvent("key", listOf(KeyCodes.KEY_ENTER, false)))
-            runVmTicks(vm, ticks = 40, hostCallDispatcher = dispatcher)
+            runVmTicks(vm, ticks = 40)
             val submittedFrames = vm.drainDisplayFrames()
             assertTrue(submittedFrames.isNotEmpty(), "submitted command should render shell output through display frames")
             assertTrue(submittedFrames.greenPixelCount() > 0, "shell output should draw glyph pixels")
@@ -450,14 +384,13 @@ class BackgroundDeviceVmTest {
 
             vm.attachDisplay(displayId = 9, width = 96, height = 48)
             assertTrue(vm.boot())
-            val dispatcher = HostCallDispatcher(1, workspace)
-            runVmTicks(vm, ticks = 80, hostCallDispatcher = dispatcher)
+            runVmTicks(vm, ticks = 80)
             vm.drainDisplayFrames()
 
             "abcdefghijklmnop".forEach { ch ->
                 vm.enqueueEvent(VmEvent("char", listOf(byteArrayOf(ch.code.toByte()))))
             }
-            runVmTicks(vm, ticks = 20, hostCallDispatcher = dispatcher)
+            runVmTicks(vm, ticks = 20)
 
             val frames = vm.drainDisplayFrames()
             assertTrue(
@@ -489,15 +422,14 @@ class BackgroundDeviceVmTest {
 
             vm.attachDisplay(displayId = 9, width = 96, height = 48)
             assertTrue(vm.boot())
-            val dispatcher = HostCallDispatcher(1, workspace)
-            runVmTicks(vm, ticks = 80, hostCallDispatcher = dispatcher)
+            runVmTicks(vm, ticks = 80)
             vm.drainDisplayFrames()
             vm.enqueueEvent(VmEvent("char", listOf(byteArrayOf('a'.code.toByte()))))
-            runVmTicks(vm, ticks = 12, hostCallDispatcher = dispatcher)
+            runVmTicks(vm, ticks = 12)
             vm.drainDisplayFrames()
 
             vm.enqueueEvent(VmEvent("char", listOf(byteArrayOf('b'.code.toByte()))))
-            runVmTicks(vm, ticks = 12, hostCallDispatcher = dispatcher)
+            runVmTicks(vm, ticks = 12)
 
             val frames = vm.drainDisplayFrames()
             assertTrue(
@@ -533,8 +465,7 @@ class BackgroundDeviceVmTest {
 
             vm.attachDisplay(displayId = 9, width = 96, height = 48)
             assertTrue(vm.boot())
-            val dispatcher = HostCallDispatcher(1, workspace)
-            runVmTicks(vm, ticks = 80, hostCallDispatcher = dispatcher)
+            runVmTicks(vm, ticks = 80)
 
             val frames = vm.drainDisplayFrames()
             assertTrue(
@@ -571,12 +502,11 @@ class BackgroundDeviceVmTest {
 
             vm.attachDisplay(displayId = 9, width = 96, height = 48)
             assertTrue(vm.boot())
-            val dispatcher = HostCallDispatcher(1, workspace)
-            runVmTicks(vm, ticks = 80, hostCallDispatcher = dispatcher)
+            runVmTicks(vm, ticks = 80)
             vm.drainDisplayFrames()
 
             "ab".forEach { ch -> vm.enqueueEvent(VmEvent("char", listOf(byteArrayOf(ch.code.toByte())))) }
-            runVmTicks(vm, ticks = 20, hostCallDispatcher = dispatcher)
+            runVmTicks(vm, ticks = 20)
             val frames = vm.drainDisplayFrames()
 
             assertTrue(frames.isNotEmpty(), "native display path should emit client-visible frames")
@@ -608,17 +538,16 @@ class BackgroundDeviceVmTest {
 
             vm.attachDisplay(displayId = 9, width = 96, height = 48)
             assertTrue(vm.boot())
-            val dispatcher = HostCallDispatcher(1, workspace)
-            runVmTicks(vm, ticks = 80, hostCallDispatcher = dispatcher, runtimeMetricsCollector = runtimeMetrics)
+            runVmTicks(vm, ticks = 80, runtimeMetricsCollector = runtimeMetrics)
             vm.drainDisplayFrames()
             "ab".forEach { ch -> vm.enqueueEvent(VmEvent("char", listOf(byteArrayOf(ch.code.toByte())))) }
-            runVmTicks(vm, ticks = 20, hostCallDispatcher = dispatcher, runtimeMetricsCollector = runtimeMetrics)
+            runVmTicks(vm, ticks = 20, runtimeMetricsCollector = runtimeMetrics)
             vm.drainDisplayFrames()
             val blitsBeforeBackspace = runtimeMetrics.snapshot().displayGlyphBlitCalls()
             val fillsBeforeBackspace = runtimeMetrics.snapshot().displayFillRectCalls()
 
             vm.enqueueEvent(VmEvent("key", listOf(KeyCodes.KEY_BACKSPACE, false)))
-            runVmTicks(vm, ticks = 12, hostCallDispatcher = dispatcher, runtimeMetricsCollector = runtimeMetrics)
+            runVmTicks(vm, ticks = 12, runtimeMetricsCollector = runtimeMetrics)
 
             val snapshot = runtimeMetrics.snapshot()
             val blitDelta = snapshot.displayGlyphBlitCalls() - blitsBeforeBackspace
@@ -656,12 +585,11 @@ class BackgroundDeviceVmTest {
 
             vm.attachDisplay(displayId = 9, width = 96, height = 48)
             assertTrue(vm.boot())
-            val dispatcher = HostCallDispatcher(1, workspace)
-            runVmTicks(vm, ticks = 80, hostCallDispatcher = dispatcher)
+            runVmTicks(vm, ticks = 80)
             val bootFrames = vm.drainDisplayFrames()
 
             vm.enqueueEvent(VmEvent("char", listOf(byteArrayOf('h'.code.toByte()))))
-            runVmTicks(vm, ticks = 12, hostCallDispatcher = dispatcher)
+            runVmTicks(vm, ticks = 12)
             val typedFrames = vm.drainDisplayFrames()
 
             val inputRow = bootFrames.lastGreenRow()
@@ -695,14 +623,13 @@ class BackgroundDeviceVmTest {
 
             vm.attachDisplay(displayId = 9, width = 96, height = 48)
             assertTrue(vm.boot())
-            val dispatcher = HostCallDispatcher(1, workspace)
-            runVmTicks(vm, ticks = 80, hostCallDispatcher = dispatcher)
+            runVmTicks(vm, ticks = 80)
             vm.drainDisplayFrames()
 
             "helx".forEach { ch -> vm.enqueueEvent(VmEvent("char", listOf(byteArrayOf(ch.code.toByte())))) }
             vm.enqueueEvent(VmEvent("key", listOf(KeyCodes.KEY_BACKSPACE, false)))
             vm.enqueueEvent(VmEvent("char", listOf(byteArrayOf('p'.code.toByte()))))
-            runVmTicks(vm, ticks = 30, hostCallDispatcher = dispatcher)
+            runVmTicks(vm, ticks = 30)
 
             val editFrames = vm.drainDisplayFrames()
             assertTrue(editFrames.isNotEmpty(), "typing should update the dirty input line")
@@ -713,7 +640,7 @@ class BackgroundDeviceVmTest {
             )
 
             vm.enqueueEvent(VmEvent("key", listOf(KeyCodes.KEY_ENTER, false)))
-            runVmTicks(vm, ticks = 40, hostCallDispatcher = dispatcher)
+            runVmTicks(vm, ticks = 40)
             val submittedFrames = vm.drainDisplayFrames()
             assertTrue(submittedFrames.isNotEmpty(), "submitted command should render shell output")
             assertTrue(submittedFrames.greenPixelCount() > 0, "shell output should draw glyph pixels")
@@ -750,7 +677,7 @@ class BackgroundDeviceVmTest {
                 )
 
             assertTrue(vm.boot())
-            runVmTicks(vm, ticks = 40, hostCallDispatcher = HostCallDispatcher(1, workspace))
+            runVmTicks(vm, ticks = 40)
 
             assertTrue(logs.any { it.endsWith("event:boot") }, "logs=$logs state=${vm.snapshot().state}")
         } finally {
@@ -802,7 +729,7 @@ class BackgroundDeviceVmTest {
                 )
 
             assertTrue(vm.boot())
-            runVmTicks(vm, ticks = 60, hostCallDispatcher = HostCallDispatcher(1, workspace))
+            runVmTicks(vm, ticks = 60)
 
             assertTrue(logs.any { it.endsWith("ipc:hello") }, "logs=$logs state=${vm.snapshot().state}")
         } finally {
@@ -839,9 +766,9 @@ class BackgroundDeviceVmTest {
                 )
 
             assertTrue(vm.boot())
-            runVmTicks(vm, ticks = 20, hostCallDispatcher = HostCallDispatcher(1, workspace))
+            runVmTicks(vm, ticks = 20)
             vm.enqueueEvent(VmEvent("char", listOf(byteArrayOf('x'.code.toByte()))))
-            runVmTicks(vm, ticks = 20, hostCallDispatcher = HostCallDispatcher(1, workspace))
+            runVmTicks(vm, ticks = 20)
 
             assertTrue(logs.any { it.endsWith("event:boot,event:char") }, "logs=$logs state=${vm.snapshot().state}")
         } finally {

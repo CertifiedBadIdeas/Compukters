@@ -127,60 +127,6 @@ data class VmSnapshot(
     val pendingHostCalls: Int,
 )
 
-sealed interface HostCall {
-    val id: Long
-
-    data class FileExists(
-        override val id: Long,
-        val path: String,
-    ) : HostCall
-
-    data class FileIsDirectory(
-        override val id: Long,
-        val path: String,
-    ) : HostCall
-
-    data class FileReadText(
-        override val id: Long,
-        val path: String,
-    ) : HostCall
-
-    data class FileWriteText(
-        override val id: Long,
-        val path: String,
-        val text: String,
-    ) : HostCall
-
-    data class FileMakeDirectory(
-        override val id: Long,
-        val path: String,
-    ) : HostCall
-
-    data class FileRemove(
-        override val id: Long,
-        val path: String,
-    ) : HostCall
-
-    data class FileList(
-        override val id: Long,
-        val path: String,
-    ) : HostCall
-}
-
-sealed interface HostResult {
-    val id: Long
-
-    data class Success(
-        override val id: Long,
-        val value: Any? = null,
-    ) : HostResult
-
-    data class Failure(
-        override val id: Long,
-        val message: String,
-    ) : HostResult
-}
-
 interface DeviceVmHandle : AutoCloseable {
     val deviceId: Int
     val profile: DeviceProfile
@@ -192,10 +138,6 @@ interface DeviceVmHandle : AutoCloseable {
     fun enqueueEvent(event: VmEvent): Boolean
 
     fun requestSlice(serverTick: Long)
-
-    fun drainHostCalls(): List<HostCall>
-
-    fun deliverHostResults(results: List<HostResult>)
 
     fun snapshot(): VmSnapshot
 

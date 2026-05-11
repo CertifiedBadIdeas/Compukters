@@ -22,6 +22,7 @@ package ru.lazyhat.compukterkraft.impl.computer.vm
 import ru.lazyhat.compukterkraft.core.Config
 import ru.lazyhat.compukterkraft.core.gui.TerminalFontConstants
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class RuntimeDisplayProfilingTest {
@@ -45,9 +46,9 @@ class RuntimeDisplayProfilingTest {
         assertTrue(clientSnapshot.snapshotPixels > 0, clientSnapshot.toString())
         assertTrue(runtimeSnapshot.tick.serverTickCalls > 0, runtimeSnapshot.summary())
         assertTrue(runtimeSnapshot.tick.requestSliceCalls > 0, runtimeSnapshot.summary())
-        assertTrue(runtimeSnapshot.tick.hostCallDrainCalls > 0, runtimeSnapshot.summary())
-        assertTrue(runtimeSnapshot.tick.hostCallDispatchCalls > 0, runtimeSnapshot.summary())
-        assertTrue(runtimeSnapshot.tick.hostResultDeliveryCalls > 0, runtimeSnapshot.summary())
+        assertEquals(0, runtimeSnapshot.tick.hostCallDrainCalls, runtimeSnapshot.summary())
+        assertEquals(0, runtimeSnapshot.tick.hostCallDispatchCalls, runtimeSnapshot.summary())
+        assertEquals(0, runtimeSnapshot.tick.hostResultDeliveryCalls, runtimeSnapshot.summary())
         assertTrue(runtimeSnapshot.tick.displayFrameDrainCalls > 0, runtimeSnapshot.summary())
         assertTrue(runtimeSnapshot.tick.displayFramesDrained > 0, runtimeSnapshot.summary())
         assertTrue(runtimeSnapshot.vm.sliceRequests > 0, runtimeSnapshot.summary())
