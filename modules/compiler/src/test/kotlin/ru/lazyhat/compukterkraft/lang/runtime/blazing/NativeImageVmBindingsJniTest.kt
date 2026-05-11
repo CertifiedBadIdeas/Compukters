@@ -636,8 +636,8 @@ class NativeImageVmBindingsJniTest {
 
             val metrics = NativeVmBindings.imageMetrics(handle)
             assertTrue(metrics.executedInstructions > 0, metrics.toString())
-            assertEquals(1, metrics.opcodeCount(6))
-            assertTrue(metrics.valueClones > 0, metrics.toString())
+            assertEquals(1, metrics.opcodeCount(11))
+            assertEquals(0, metrics.valueClones, metrics.toString())
             assertTrue(metrics.registerReads > 0, metrics.toString())
             assertTrue(metrics.registerWrites > 0, metrics.toString())
             assertTrue(metrics.functionCalls > 0, metrics.toString())

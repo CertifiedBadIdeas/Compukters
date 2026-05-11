@@ -1,4 +1,4 @@
-use ckl_vm::image::{decode_image, Constant, ImageError, Instruction};
+use ckl_vm::image::{decode_image, Constant, ImageError, Instruction, TypedRegister};
 
 #[test]
 fn decodes_representative_register_image() {
@@ -23,13 +23,16 @@ fn decodes_representative_register_image() {
     assert_eq!(image.entry_function_index, 0);
     assert_eq!(image.functions.len(), 1);
     assert_eq!(image.functions[0].name, "main");
-    assert_eq!(image.functions[0].register_count, 4);
-    assert_eq!(image.functions[0].parameter_count, 1);
+    assert_eq!(image.functions[0].i32_register_count, 3);
+    assert_eq!(image.functions[0].i64_register_count, 0);
+    assert_eq!(image.functions[0].bool_register_count, 0);
+    assert_eq!(image.functions[0].ref_register_count, 1);
+    assert_eq!(image.functions[0].parameters, vec![TypedRegister::I32(0)]);
     assert_eq!(
         image.functions[0].instructions,
         vec![
-            Instruction::LoadConst {
-                dst: 1,
+            Instruction::RefConst {
+                dst: 0,
                 constant_index: 0,
             },
             Instruction::I32Add {
@@ -38,9 +41,9 @@ fn decodes_representative_register_image() {
                 rhs: 1,
             },
             Instruction::CallHost {
-                return_register: Some(3),
+                return_register: Some(TypedRegister::Ref(0)),
                 import_id: 42,
-                arguments: vec![2],
+                arguments: vec![TypedRegister::I32(2)],
             },
             Instruction::ReturnUnit,
         ]
@@ -84,7 +87,8 @@ fn decodes_kotlin_generated_fixture() {
     let image = decode_image(bytes).expect("fixture decodes");
 
     assert_eq!(image.language_version, "ckl-1");
-    assert_eq!(image.functions[0].register_count, 4);
+    assert_eq!(image.functions[0].i32_register_count, 3);
+    assert_eq!(image.functions[0].parameters, vec![TypedRegister::I32(0)]);
     assert_eq!(
         image.functions[0].instructions[1],
         Instruction::I32Add {
@@ -121,7 +125,7 @@ fn decodes_backend_generated_system_log_fixture() {
 fn representative_image_bytes() -> Vec<u8> {
     let mut out = Vec::new();
     out.extend_from_slice(b"CKIM");
-    out.push(2);
+    out.push(3);
     string(&mut out, "ckl-1");
     list_len(&mut out, 3);
     out.push(1);
@@ -140,21 +144,24 @@ fn representative_image_bytes() -> Vec<u8> {
     i32(&mut out, 0);
     list_len(&mut out, 1);
     string(&mut out, "main");
-    u16(&mut out, 4);
+    u16(&mut out, 3);
+    u16(&mut out, 0);
+    u16(&mut out, 0);
     u16(&mut out, 1);
+    typed_register_list(&mut out, &[TypedRegister::I32(0)]);
     list_len(&mut out, 4);
-    out.push(1);
-    u16(&mut out, 1);
+    out.push(4);
+    u16(&mut out, 0);
     i32(&mut out, 0);
-    out.push(6);
+    out.push(11);
     u16(&mut out, 2);
     u16(&mut out, 0);
     u16(&mut out, 1);
-    out.push(32);
-    optional_register(&mut out, Some(3));
+    out.push(37);
+    optional_typed_register(&mut out, Some(TypedRegister::Ref(0)));
     i32(&mut out, 42);
-    register_list(&mut out, &[2]);
-    out.push(31);
+    typed_register_list(&mut out, &[TypedRegister::I32(2)]);
+    out.push(36);
     out
 }
 
@@ -167,20 +174,41 @@ fn string(out: &mut Vec<u8>, value: &str) {
     out.extend_from_slice(value.as_bytes());
 }
 
-fn optional_register(out: &mut Vec<u8>, value: Option<u16>) {
+fn optional_typed_register(out: &mut Vec<u8>, value: Option<TypedRegister>) {
     match value {
         Some(value) => {
             out.push(1);
-            u16(out, value);
+            typed_register(out, value);
         }
         None => out.push(0),
     }
 }
 
-fn register_list(out: &mut Vec<u8>, values: &[u16]) {
+fn typed_register_list(out: &mut Vec<u8>, values: &[TypedRegister]) {
     list_len(out, values.len() as i32);
     for value in values {
-        u16(out, *value);
+        typed_register(out, *value);
+    }
+}
+
+fn typed_register(out: &mut Vec<u8>, value: TypedRegister) {
+    match value {
+        TypedRegister::I32(index) => {
+            out.push(1);
+            u16(out, index);
+        }
+        TypedRegister::I64(index) => {
+            out.push(2);
+            u16(out, index);
+        }
+        TypedRegister::Bool(index) => {
+            out.push(3);
+            u16(out, index);
+        }
+        TypedRegister::Ref(index) => {
+            out.push(4);
+            u16(out, index);
+        }
     }
 }
 

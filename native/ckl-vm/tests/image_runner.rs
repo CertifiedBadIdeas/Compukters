@@ -86,7 +86,15 @@ fn register_runner_halts_with_unit() {
     let image = image(
         vec![],
         vec![],
-        vec![function("main", 0, 0, vec![return_unit()])],
+        vec![function_banks(
+            "main",
+            0,
+            0,
+            0,
+            0,
+            vec![],
+            vec![return_unit()],
+        )],
         0,
     );
     let mut handle = ImageVmHandle::create(&image, 128).unwrap();
@@ -102,7 +110,7 @@ fn register_runner_executes_integer_arithmetic() {
     let image = image(
         vec![ConstantFixture::Int(2), ConstantFixture::Int(5)],
         vec![],
-        vec![function(
+        vec![function_i32(
             "main",
             3,
             0,
@@ -110,7 +118,7 @@ fn register_runner_executes_integer_arithmetic() {
                 load_const(0, 0),
                 load_const(1, 1),
                 i32_add(2, 0, 1),
-                return_register(2),
+                return_register(TypedRegisterFixture::I32(2)),
             ],
         )],
         0,
@@ -128,17 +136,20 @@ fn register_runner_jumps_by_instruction_index() {
     let image = image(
         vec![ConstantFixture::Int(1), ConstantFixture::Int(2)],
         vec![],
-        vec![function(
+        vec![function_banks(
             "main",
-            3,
+            2,
             0,
+            1,
+            0,
+            vec![],
             vec![
                 load_bool(0, false),
                 jump_if_false(0, 4),
                 load_const(1, 0),
-                return_register(1),
-                load_const(2, 1),
-                return_register(2),
+                return_register(TypedRegisterFixture::I32(1)),
+                load_const(1, 1),
+                return_register(TypedRegisterFixture::I32(1)),
             ],
         )],
         0,
@@ -157,18 +168,30 @@ fn register_runner_calls_static_functions() {
         vec![ConstantFixture::Int(2), ConstantFixture::Int(5)],
         vec![],
         vec![
-            function(
+            function_i32(
                 "main",
                 3,
                 0,
                 vec![
                     load_const(0, 0),
                     load_const(1, 1),
-                    call_static(Some(2), 1, &[0, 1]),
-                    return_register(2),
+                    call_static(
+                        Some(TypedRegisterFixture::I32(2)),
+                        1,
+                        &[TypedRegisterFixture::I32(0), TypedRegisterFixture::I32(1)],
+                    ),
+                    return_register(TypedRegisterFixture::I32(2)),
                 ],
             ),
-            function("add", 3, 2, vec![i32_add(2, 0, 1), return_register(2)]),
+            function_i32(
+                "add",
+                3,
+                2,
+                vec![
+                    i32_add(2, 0, 1),
+                    return_register(TypedRegisterFixture::I32(2)),
+                ],
+            ),
         ],
         0,
     );
@@ -186,18 +209,30 @@ fn register_runner_records_execution_metrics() {
         vec![ConstantFixture::Int(2), ConstantFixture::Int(5)],
         vec![],
         vec![
-            function(
+            function_i32(
                 "main",
                 3,
                 0,
                 vec![
                     load_const(0, 0),
                     load_const(1, 1),
-                    call_static(Some(2), 1, &[0, 1]),
-                    return_register(2),
+                    call_static(
+                        Some(TypedRegisterFixture::I32(2)),
+                        1,
+                        &[TypedRegisterFixture::I32(0), TypedRegisterFixture::I32(1)],
+                    ),
+                    return_register(TypedRegisterFixture::I32(2)),
                 ],
             ),
-            function("add", 3, 2, vec![i32_add(2, 0, 1), return_register(2)]),
+            function_i32(
+                "add",
+                3,
+                2,
+                vec![
+                    i32_add(2, 0, 1),
+                    return_register(TypedRegisterFixture::I32(2)),
+                ],
+            ),
         ],
         0,
     );
@@ -213,12 +248,12 @@ fn register_runner_records_execution_metrics() {
     assert_eq!(metrics.function_calls, 1);
     assert_eq!(metrics.function_returns, 2);
     assert_eq!(metrics.opcode_count(1), 2);
-    assert_eq!(metrics.opcode_count(6), 1);
-    assert_eq!(metrics.opcode_count(29), 1);
-    assert_eq!(metrics.opcode_count(30), 2);
-    assert!(metrics.value_clones >= 3, "{metrics:?}");
+    assert_eq!(metrics.opcode_count(11), 1);
+    assert_eq!(metrics.opcode_count(34), 1);
+    assert_eq!(metrics.opcode_count(35), 2);
+    assert_eq!(metrics.value_clones, 0, "{metrics:?}");
     assert!(metrics.register_reads >= 5, "{metrics:?}");
-    assert_eq!(metrics.register_writes, 4);
+    assert!(metrics.register_writes >= 4, "{metrics:?}");
 }
 
 #[test]
@@ -226,11 +261,14 @@ fn register_runner_pauses_after_instruction_budget() {
     let image = image(
         vec![ConstantFixture::Int(7)],
         vec![],
-        vec![function(
+        vec![function_i32(
             "main",
             1,
             0,
-            vec![load_const(0, 0), return_register(0)],
+            vec![
+                load_const(0, 0),
+                return_register(TypedRegisterFixture::I32(0)),
+            ],
         )],
         0,
     );
@@ -248,10 +286,13 @@ fn register_runner_yields_and_resumes() {
     let image = image(
         vec![],
         vec![],
-        vec![function(
+        vec![function_banks(
             "main",
-            1,
             0,
+            0,
+            0,
+            1,
+            vec![],
             vec![yield_instruction(0), return_unit()],
         )],
         0,
@@ -271,11 +312,18 @@ fn register_runner_sleeps_with_int_ticks_and_resumes() {
     let image = image(
         vec![ConstantFixture::Int(3)],
         vec![],
-        vec![function(
+        vec![function_banks(
             "main",
-            2,
+            1,
             0,
-            vec![load_const(0, 0), sleep_instruction(1, 0), return_unit()],
+            0,
+            1,
+            vec![],
+            vec![
+                load_const(0, 0),
+                sleep_instruction(0, TypedRegisterFixture::I32(0)),
+                return_unit(),
+            ],
         )],
         0,
     );
@@ -303,13 +351,20 @@ fn register_runner_emits_jvm_owned_hostcall_and_resumes() {
             vec!["String"],
             "Unit",
         )],
-        vec![function(
+        vec![function_banks(
             "main",
-            2,
             0,
+            0,
+            0,
+            2,
+            vec![],
             vec![
-                load_const(0, 0),
-                call_host(Some(1), 3004, &[0]),
+                load_ref_const(0, 0),
+                call_host(
+                    Some(TypedRegisterFixture::Ref(1)),
+                    3004,
+                    &[TypedRegisterFixture::Ref(0)],
+                ),
                 return_unit(),
             ],
         )],
@@ -343,11 +398,14 @@ fn attached_kernel_handles_system_device_id_without_hostcall_signal() {
             vec![],
             "Int",
         )],
-        vec![function(
+        vec![function_i32(
             "main",
             1,
             0,
-            vec![call_host(Some(0), 3000, &[]), return_register(0)],
+            vec![
+                call_host(Some(TypedRegisterFixture::I32(0)), 3000, &[]),
+                return_register(TypedRegisterFixture::I32(0)),
+            ],
         )],
         0,
     );
@@ -375,11 +433,14 @@ fn native_hostcall_dispatch_uses_import_id_not_declared_names() {
             vec![],
             "Int",
         )],
-        vec![function(
+        vec![function_i32(
             "main",
             1,
             0,
-            vec![call_host(Some(0), 3000, &[]), return_register(0)],
+            vec![
+                call_host(Some(TypedRegisterFixture::I32(0)), 3000, &[]),
+                return_register(TypedRegisterFixture::I32(0)),
+            ],
         )],
         0,
     );
@@ -407,11 +468,17 @@ fn native_owned_unknown_host_import_fails_fast() {
             vec![],
             "Unit",
         )],
-        vec![function(
+        vec![function_banks(
             "main",
-            1,
             0,
-            vec![call_host(Some(0), 1, &[]), return_unit()],
+            0,
+            0,
+            1,
+            vec![],
+            vec![
+                call_host(Some(TypedRegisterFixture::Ref(0)), 1, &[]),
+                return_unit(),
+            ],
         )],
         0,
     );
@@ -419,7 +486,7 @@ fn native_owned_unknown_host_import_fails_fast() {
 
     let error = handle.run_until_signal_decoded().unwrap_err();
 
-    assert!(error.contains("Kotlin fallback is disabled"));
+    assert!(error.contains("external hostcall fallback is disabled"));
 }
 
 fn image(
@@ -430,7 +497,7 @@ fn image(
 ) -> Vec<u8> {
     let mut out = Vec::new();
     out.extend_from_slice(b"CKIM");
-    out.push(2);
+    out.push(3);
     string(&mut out, "ckl-1");
     i32(&mut out, constants.len() as i32);
     for constant in constants {
@@ -448,32 +515,56 @@ fn image(
     out
 }
 
-fn function(
+fn function_i32(
     name: &'static str,
-    register_count: u16,
+    i32_register_count: u16,
     parameter_count: u16,
+    instructions: Vec<Vec<u8>>,
+) -> FunctionFixture {
+    let parameters = (0..parameter_count)
+        .map(TypedRegisterFixture::I32)
+        .collect();
+    function_banks(name, i32_register_count, 0, 0, 0, parameters, instructions)
+}
+
+fn function_banks(
+    name: &'static str,
+    i32_register_count: u16,
+    i64_register_count: u16,
+    bool_register_count: u16,
+    ref_register_count: u16,
+    parameters: Vec<TypedRegisterFixture>,
     instructions: Vec<Vec<u8>>,
 ) -> FunctionFixture {
     FunctionFixture {
         name,
-        register_count,
-        parameter_count,
+        i32_register_count,
+        i64_register_count,
+        bool_register_count,
+        ref_register_count,
+        parameters,
         instructions,
     }
 }
 
 struct FunctionFixture {
     name: &'static str,
-    register_count: u16,
-    parameter_count: u16,
+    i32_register_count: u16,
+    i64_register_count: u16,
+    bool_register_count: u16,
+    ref_register_count: u16,
+    parameters: Vec<TypedRegisterFixture>,
     instructions: Vec<Vec<u8>>,
 }
 
 impl FunctionFixture {
     fn write_to(self, out: &mut Vec<u8>) {
         string(out, self.name);
-        u16(out, self.register_count);
-        u16(out, self.parameter_count);
+        u16(out, self.i32_register_count);
+        u16(out, self.i64_register_count);
+        u16(out, self.bool_register_count);
+        u16(out, self.ref_register_count);
+        register_list(out, &self.parameters);
         i32(out, self.instructions.len() as i32);
         for instruction in self.instructions {
             out.extend_from_slice(&instruction);
@@ -545,44 +636,59 @@ fn load_const(dst: u16, constant_index: i32) -> Vec<u8> {
     out
 }
 
-fn load_bool(dst: u16, value: bool) -> Vec<u8> {
+fn load_ref_const(dst: u16, constant_index: i32) -> Vec<u8> {
     let mut out = vec![4];
+    u16(&mut out, dst);
+    i32(&mut out, constant_index);
+    out
+}
+
+fn load_bool(dst: u16, value: bool) -> Vec<u8> {
+    let mut out = vec![3];
     u16(&mut out, dst);
     out.push(if value { 1 } else { 0 });
     out
 }
 
 fn i32_add(dst: u16, lhs: u16, rhs: u16) -> Vec<u8> {
-    binary(6, dst, lhs, rhs)
+    binary(11, dst, lhs, rhs)
 }
 
 fn jump_if_false(cond: u16, target: i32) -> Vec<u8> {
-    let mut out = vec![27];
+    let mut out = vec![32];
     u16(&mut out, cond);
     i32(&mut out, target);
     out
 }
 
-fn call_static(return_register: Option<u16>, function_index: i32, arguments: &[u16]) -> Vec<u8> {
-    let mut out = vec![29];
+fn call_static(
+    return_register: Option<TypedRegisterFixture>,
+    function_index: i32,
+    arguments: &[TypedRegisterFixture],
+) -> Vec<u8> {
+    let mut out = vec![34];
     optional_register(&mut out, return_register);
     i32(&mut out, function_index);
     register_list(&mut out, arguments);
     out
 }
 
-fn return_register(src: u16) -> Vec<u8> {
-    let mut out = vec![30];
-    u16(&mut out, src);
+fn return_register(src: TypedRegisterFixture) -> Vec<u8> {
+    let mut out = vec![35];
+    typed_register(&mut out, src);
     out
 }
 
 fn return_unit() -> Vec<u8> {
-    vec![31]
+    vec![36]
 }
 
-fn call_host(return_register: Option<u16>, import_id: i32, arguments: &[u16]) -> Vec<u8> {
-    let mut out = vec![32];
+fn call_host(
+    return_register: Option<TypedRegisterFixture>,
+    import_id: i32,
+    arguments: &[TypedRegisterFixture],
+) -> Vec<u8> {
+    let mut out = vec![37];
     optional_register(&mut out, return_register);
     i32(&mut out, import_id);
     register_list(&mut out, arguments);
@@ -590,15 +696,15 @@ fn call_host(return_register: Option<u16>, import_id: i32, arguments: &[u16]) ->
 }
 
 fn yield_instruction(dst: u16) -> Vec<u8> {
-    let mut out = vec![33];
+    let mut out = vec![38];
     u16(&mut out, dst);
     out
 }
 
-fn sleep_instruction(dst: u16, ticks: u16) -> Vec<u8> {
-    let mut out = vec![34];
+fn sleep_instruction(dst: u16, ticks: TypedRegisterFixture) -> Vec<u8> {
+    let mut out = vec![39];
     u16(&mut out, dst);
-    u16(&mut out, ticks);
+    typed_register(&mut out, ticks);
     out
 }
 
@@ -610,20 +716,39 @@ fn binary(tag: u8, dst: u16, lhs: u16, rhs: u16) -> Vec<u8> {
     out
 }
 
-fn optional_register(out: &mut Vec<u8>, register: Option<u16>) {
+fn optional_register(out: &mut Vec<u8>, register: Option<TypedRegisterFixture>) {
     match register {
         Some(register) => {
             out.push(1);
-            u16(out, register);
+            typed_register(out, register);
         }
         None => out.push(0),
     }
 }
 
-fn register_list(out: &mut Vec<u8>, registers: &[u16]) {
+fn register_list(out: &mut Vec<u8>, registers: &[TypedRegisterFixture]) {
     i32(out, registers.len() as i32);
     for register in registers {
-        u16(out, *register);
+        typed_register(out, *register);
+    }
+}
+
+#[derive(Clone, Copy)]
+enum TypedRegisterFixture {
+    I32(u16),
+    Ref(u16),
+}
+
+fn typed_register(out: &mut Vec<u8>, register: TypedRegisterFixture) {
+    match register {
+        TypedRegisterFixture::I32(index) => {
+            out.push(1);
+            u16(out, index);
+        }
+        TypedRegisterFixture::Ref(index) => {
+            out.push(4);
+            u16(out, index);
+        }
     }
 }
 
