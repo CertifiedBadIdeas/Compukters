@@ -33,6 +33,7 @@ internal data class ComputeVmBenchmarkReport(
     val iterations: Int,
     val checksum: Int,
     val ckVmBestNanos: Long,
+    val kotlinJvmBestNanos: Long,
     val rustNativeBestNanos: Long,
     val samples: Int,
 ) {
@@ -42,12 +43,18 @@ internal data class ComputeVmBenchmarkReport(
     private val rustNativeIterationsPerSecond: Double
         get() = iterationsPerSecond(rustNativeBestNanos)
 
-    private val slowdown: Double
+    private val kotlinJvmIterationsPerSecond: Double
+        get() = iterationsPerSecond(kotlinJvmBestNanos)
+
+    private val ckVmVsKotlinSlowdown: Double
+        get() = ckVmBestNanos.toDouble() / kotlinJvmBestNanos.toDouble()
+
+    private val ckVmVsRustSlowdown: Double
         get() = ckVmBestNanos.toDouble() / rustNativeBestNanos.toDouble()
 
     fun toTsv(): String =
         buildString {
-            appendLine("workload\titerations\tchecksum\tsamples\tck_vm_best_ns\trust_native_best_ns\tck_vm_iters_per_sec\trust_native_iters_per_sec\tslowdown")
+            appendLine("workload\titerations\tchecksum\tsamples\tck_vm_best_ns\tkotlin_jvm_best_ns\trust_native_best_ns\tck_vm_iters_per_sec\tkotlin_jvm_iters_per_sec\trust_native_iters_per_sec\tck_vm_vs_kotlin_slowdown\tck_vm_vs_rust_slowdown")
             appendLine(
                 listOf(
                     workloadName,
@@ -55,10 +62,13 @@ internal data class ComputeVmBenchmarkReport(
                     checksum,
                     samples,
                     ckVmBestNanos,
+                    kotlinJvmBestNanos,
                     rustNativeBestNanos,
                     formatPlain(ckVmIterationsPerSecond),
+                    formatPlain(kotlinJvmIterationsPerSecond),
                     formatPlain(rustNativeIterationsPerSecond),
-                    formatPlain(slowdown),
+                    formatPlain(ckVmVsKotlinSlowdown),
+                    formatPlain(ckVmVsRustSlowdown),
                 ).joinToString("\t"),
             )
         }
@@ -67,13 +77,15 @@ internal data class ComputeVmBenchmarkReport(
         buildString {
             appendLine("# CKL Compute VM Benchmark")
             appendLine()
-            appendLine("CPU-only workload. The CKL VM run is timed through the native image VM, and the baseline is the same integer workload compiled as optimized Rust.")
+            appendLine("CPU-only workload. The CKL VM run is timed through the native image VM, with the same integer workload measured as Kotlin/JVM and optimized native Rust baselines.")
             appendLine()
-            appendLine("| Workload | Iterations | Checksum | CK VM iter/s | Rust native iter/s | Slowdown |")
-            appendLine("| --- | ---: | ---: | ---: | ---: | ---: |")
+            appendLine("| Workload | Iterations | Checksum | CK VM iter/s | Kotlin/JVM iter/s | Rust native iter/s | CK VM vs Kotlin | CK VM vs Rust |")
+            appendLine("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
             appendLine(
                 "| $workloadName | ${formatInteger(iterations)} | $checksum | " +
-                    "${formatGrouped(ckVmIterationsPerSecond)} | ${formatGrouped(rustNativeIterationsPerSecond)} | ${formatPlain(slowdown)}x |",
+                    "${formatGrouped(ckVmIterationsPerSecond)} | ${formatGrouped(kotlinJvmIterationsPerSecond)} | " +
+                    "${formatGrouped(rustNativeIterationsPerSecond)} | ${formatPlain(ckVmVsKotlinSlowdown)}x | " +
+                    "${formatPlain(ckVmVsRustSlowdown)}x |",
             )
             appendLine()
             appendLine("Best of $samples samples. Higher iter/s is better; lower slowdown is better.")
@@ -134,6 +146,7 @@ internal object ComputeVmBenchmarkRunner {
 
         if (warmupIterations > 0) {
             runCkVmSample(libraryPath, warmupIterations)
+            runKotlinJvmSample(warmupIterations)
             runRustBaseline(rustCrateDir, warmupIterations, samples = 1, warmupIterations = 0)
         }
 
@@ -155,6 +168,11 @@ internal object ComputeVmBenchmarkRunner {
                 elapsed
             }.min()
 
+        val kotlinJvm = runKotlinJvmBaseline(iterations, samples)
+        check(kotlinJvm.checksum == checksum) {
+            "Kotlin/JVM benchmark checksum ${kotlinJvm.checksum} does not match CK VM checksum $checksum"
+        }
+
         val rustNative = runRustBaseline(rustCrateDir, iterations, samples, warmupIterations = 0)
         check(rustNative.checksum == checksum) {
             "Rust native benchmark checksum ${rustNative.checksum} does not match CK VM checksum $checksum"
@@ -165,6 +183,7 @@ internal object ComputeVmBenchmarkRunner {
             iterations = iterations,
             checksum = checksum,
             ckVmBestNanos = ckVmBestNanos,
+            kotlinJvmBestNanos = kotlinJvm.bestNanos,
             rustNativeBestNanos = rustNative.bestNanos,
             samples = samples,
         )
@@ -200,6 +219,44 @@ internal object ComputeVmBenchmarkRunner {
         } finally {
             NativeVmBindings.freeImage(handle)
         }
+    }
+
+    private fun runKotlinJvmBaseline(
+        iterations: Int,
+        samples: Int,
+    ): KotlinJvmBaselineResult {
+        var checksum = 0
+        val bestNanos =
+            List(samples) { sampleIndex ->
+                var sampleChecksum = 0
+                val elapsed =
+                    measureNanoTime {
+                        sampleChecksum = runKotlinJvmSample(iterations)
+                    }
+                if (sampleIndex == 0) {
+                    checksum = sampleChecksum
+                } else {
+                    check(checksum == sampleChecksum) {
+                        "Kotlin/JVM benchmark checksum changed between samples: $checksum != $sampleChecksum"
+                    }
+                }
+                elapsed
+            }.min()
+        return KotlinJvmBaselineResult(checksum, bestNanos)
+    }
+
+    private fun runKotlinJvmSample(iterations: Int): Int {
+        var state = 305_419_896
+        var acc = -1_640_531_527
+        var i = 0
+        while (i < iterations) {
+            state = state * 1_664_525 + 1_013_904_223
+            val x = state xor (state shr 16)
+            acc = (acc + x) xor (acc shl 5)
+            acc += (i * 31) xor (x shr 3)
+            i += 1
+        }
+        return acc
     }
 
     private fun runRustBaseline(
@@ -242,6 +299,11 @@ internal object ComputeVmBenchmarkRunner {
     }
 
     private data class RustBaselineResult(
+        val checksum: Int,
+        val bestNanos: Long,
+    )
+
+    private data class KotlinJvmBaselineResult(
         val checksum: Int,
         val bestNanos: Long,
     )
