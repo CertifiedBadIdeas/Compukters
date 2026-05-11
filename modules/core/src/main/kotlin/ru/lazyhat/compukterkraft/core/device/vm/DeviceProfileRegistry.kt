@@ -36,14 +36,14 @@ object DeviceProfileRegistry {
                 DeviceProfile(
                     id = "normal",
                     displayName = "Normal Computer",
-                    cpuBudgetNanosPerSlice = 1_000_000,
-                    maxEventQueueSize = 64,
+                    cpuBudgetNanosPerSlice = 10_000,
+                    maxEventQueueSize = 32,
                     allowedCapabilities = defaultCapabilities(),
                     resources =
                         defaultResources(
-                            instructionsPerSlice = 2_048,
-                            wallTimeGuardNanosPerSlice = 1_000_000,
-                            eventQueueSlots = 64,
+                            instructionsPerSlice = 32,
+                            wallTimeGuardNanosPerSlice = 10_000,
+                            eventQueueSlots = 32,
                             diskBytes = Config.computerSpaceLimit.toLong(),
                         ),
                 )
@@ -53,14 +53,14 @@ object DeviceProfileRegistry {
                 DeviceProfile(
                     id = "advanced",
                     displayName = "Advanced Computer",
-                    cpuBudgetNanosPerSlice = 2_000_000,
-                    maxEventQueueSize = 128,
+                    cpuBudgetNanosPerSlice = 100_000,
+                    maxEventQueueSize = 64,
                     allowedCapabilities = defaultCapabilities(),
                     resources =
                         defaultResources(
-                            instructionsPerSlice = 4_096,
-                            wallTimeGuardNanosPerSlice = 2_000_000,
-                            eventQueueSlots = 128,
+                            instructionsPerSlice = 64,
+                            wallTimeGuardNanosPerSlice = 100_000,
+                            eventQueueSlots = 32,
                             diskBytes = Config.computerSpaceLimit.toLong(),
                         ),
                 )
