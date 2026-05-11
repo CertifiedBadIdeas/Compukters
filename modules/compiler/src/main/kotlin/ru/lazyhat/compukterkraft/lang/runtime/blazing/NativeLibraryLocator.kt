@@ -67,7 +67,7 @@ internal object NativeLibraryLocator {
     fun requireLibraryPath(): String =
         resolve()?.path
             ?: error(
-                "Rust image VM runner requires -D$LIBRARY_PROPERTY=/absolute/path/to/libckl_vm.so " +
+                "Rust image VM runner requires -D$LIBRARY_PROPERTY=/absolute/path/to/${platform()?.libraryName ?: "libckl_vm.so"} " +
                     "or a bundled native resource for ${System.getProperty("os.name")}/${System.getProperty("os.arch")}",
             )
 
