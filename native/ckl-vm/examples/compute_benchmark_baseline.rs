@@ -27,11 +27,6 @@ fn main() {
         .unwrap_or_else(|| panic!("missing workload argument"));
     let iterations = parse_arg(&args, 2, "iterations");
     let samples = parse_arg(&args, 3, "samples");
-    let warmup_iterations = parse_arg(&args, 4, "warmup_iterations");
-
-    if warmup_iterations > 0 {
-        run_workload(workload, warmup_iterations);
-    }
 
     let mut checksum = None;
     let mut best_nanos = u128::MAX;
