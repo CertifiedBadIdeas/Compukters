@@ -135,7 +135,7 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
     mut env: JNIEnv<'_>,
     _class: JClass<'_>,
     image: JByteArray<'_>,
-    instruction_budget: jint,
+    slice_budget_nanos: jint,
 ) -> jlong {
     let image = match env.convert_byte_array(&image) {
         Ok(image) => image,
@@ -157,7 +157,7 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
             return 0;
         }
     };
-    match LowImageVm::create(image, instruction_budget.max(1) as usize) {
+    match LowImageVm::create(image, slice_budget_nanos.max(1) as u64) {
         Ok(vm) => Box::into_raw(Box::new(vm)) as jlong,
         Err(error) => {
             let _ = env.throw_new("java/lang/IllegalArgumentException", error);
@@ -197,15 +197,11 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
         None => return null_mut(),
     };
     let metrics = handle.metrics_snapshot();
-    let mut values = vec![
-        metrics.executed_instructions as jlong,
-        metrics.function_calls as jlong,
-        metrics.function_returns as jlong,
+    let values = vec![
+        metrics.run_invocations as jlong,
+        metrics.elapsed_nanos as jlong,
         metrics.pause_signals as jlong,
-        metrics.memory_loads as jlong,
-        metrics.memory_stores as jlong,
     ];
-    values.extend(metrics.opcode_counts.iter().map(|count| *count as jlong));
     long_array_or_throw(&mut env, &values)
 }
 

@@ -102,7 +102,7 @@ internal class LowVmComputeBenchmarkRunner(
         }
 
     private fun runImage(image: ByteArray): ComputeVmBenchmarkSampleResult {
-        val handle = NativeVmBindings.createLowImage(libraryPath, image, INSTRUCTION_BUDGET)
+        val handle = NativeVmBindings.createLowImage(libraryPath, image, LOW_VM_SLICE_BUDGET_NANOS)
         try {
             while (true) {
                 when (val signal = NativeVmBindings.runLowImageUntilSignal(handle)) {
@@ -404,7 +404,7 @@ internal class LowVmComputeBenchmarkRunner(
         )
 
     private companion object {
-        const val INSTRUCTION_BUDGET = Int.MAX_VALUE
+        const val LOW_VM_SLICE_BUDGET_NANOS = Int.MAX_VALUE
     }
 }
 

@@ -654,17 +654,16 @@ class NativeImageVmBindingsJniTest {
             NativeVmBindings.createLowImage(
                 libraryPath = libraryPath,
                 image = CkLowVmImageAbi.encode(image),
-                instructionBudget = 128,
+                sliceBudgetNanos = 1_000_000,
             )
 
         try {
             assertEquals(NativeLowImageVmSignal.HaltI32(42), NativeVmBindings.runLowImageUntilSignal(handle))
 
             val metrics = NativeVmBindings.lowImageMetrics(handle)
-            assertEquals(4, metrics.executedInstructions)
-            assertEquals(1, metrics.functionReturns)
-            assertEquals(1, metrics.opcodeCount(6))
-            assertEquals(1, metrics.opcodeCount(20))
+            assertEquals(1, metrics.runInvocations)
+            assertTrue(metrics.elapsedNanos > 0, metrics.toString())
+            assertEquals(0, metrics.pauseSignals)
         } finally {
             NativeVmBindings.freeLowImage(handle)
         }

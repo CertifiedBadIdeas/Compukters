@@ -379,6 +379,25 @@ The low-level VM targets performance through:
 
 Linear RAM alone does not remove interpreter dispatch overhead, but it removes the high-level object model cost and makes later packed IR, superinstructions, and AOT much easier.
 
+## Execution Slicing
+
+The low-level VM uses a hybrid time-slice model:
+
+- the public slice budget is wall-clock time, expressed in nanoseconds;
+- the interpreter checks elapsed time only every fixed instruction interval;
+- the fixed interval is timer amortization, not an instruction quota fallback;
+- `Pause` means the current wall-clock slice is exhausted and the scheduler should resume the same VM later.
+
+This keeps server-time control closer to real CPU cost than a raw instruction counter while avoiding `Instant::now()` on every instruction. Expensive instructions, memory operations, and future hostcall boundaries are naturally charged by elapsed time instead of by a synthetic opcode count.
+
+Runtime benchmark metrics stay time-based:
+
+- VM elapsed nanoseconds;
+- run invocations;
+- pause signals.
+
+Detailed opcode counters and instructions-per-iteration metrics are intentionally not part of the low-level VM hot path. If we need deep profiling later, it should be a separate profiling build or sampling tool, not production interpreter state.
+
 ## Migration Strategy
 
 This is a replacement architecture, not a compatibility layer.
@@ -399,5 +418,5 @@ This is a replacement architecture, not a compatibility layer.
 - Strings and records are represented as RAM layouts, not managed VM objects.
 - Hostcalls use import ids plus register/RAM ABI state.
 - Unsupported image versions and unsupported imports fail fast.
-- Benchmark reports show reduced instructions per iteration after compiler lowering/optimizer work.
+- Benchmark reports show elapsed VM time, run invocations, and pause counts without runtime opcode counters.
 - The VM remains safe under malicious guest code through bounds checks and fail-fast errors.
