@@ -383,7 +383,7 @@ class BackgroundDeviceVm(
                     var keepRunning = true
                     while (keepRunning && isActive) {
                         val summary = nativeDaemonRuntime.runReadyUntilBlocked()
-                        runtimeMetricsCollector.recordSliceRequest(sent = !summary.idle, sleepGated = false)
+                        runtimeMetricsCollector.recordSliceRequest()
                         keepRunning = summary.turns > 0 || summary.hostRequests > 0
                     }
                 }

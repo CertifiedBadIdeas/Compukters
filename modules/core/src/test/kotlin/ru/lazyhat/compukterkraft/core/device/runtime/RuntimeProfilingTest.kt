@@ -42,31 +42,80 @@ class RuntimeProfilingTest {
     }
 
     @Test
+    fun runtimeProfilingDoesNotExposeKotlinSchedulerOrHostQueueMetrics() {
+        val forbiddenNames =
+            listOf(
+                "recordHostCallDrain",
+                "recordHostCallDispatch",
+                "recordHostResultDelivery",
+                "recordExecutionQuotaRefill",
+                "recordExecutionQuotaPermitConsumed",
+                "recordNativeSchedulerDryRun",
+                "recordProcessSchedulerTick",
+                "recordSlicePermitReceived",
+                "recordSchedulingPoint",
+                "recordVmExecutionWindow",
+                "hostCallDrainCalls",
+                "hostCallsDrained",
+                "hostCallDrainNanos",
+                "hostCallDispatchCalls",
+                "hostCallsDispatched",
+                "hostCallDispatchNanos",
+                "hostResultDeliveryCalls",
+                "hostResultsDelivered",
+                "hostResultDeliveryNanos",
+                "slicePermitsSent",
+                "sleepGatedSliceRequests",
+                "executionQuotaRefills",
+                "executionQuotaAcceptedRefills",
+                "executionQuotaUnavailableRefills",
+                "executionQuotaPermitsConsumed",
+                "nativeSchedulerDryRuns",
+                "nativeSchedulerDryRunTurns",
+                "nativeSchedulerDryRunSelectedPids",
+                "nativeSchedulerDryRunRemainingInstructions",
+                "nativeSchedulerDryRunFirstSelectionMatches",
+                "nativeSchedulerDryRunFirstSelectionMismatches",
+                "processSchedulerTicks",
+                "processSchedulerSelectedTicks",
+                "processSchedulerIdleTicks",
+                "processSchedulerWokenProcesses",
+                "slicePermitsReceived",
+                "schedulingPoints",
+                "yieldSchedulingPoints",
+                "waitForSliceSchedulingPoints",
+                "executionWindows",
+                "executionWindowNanos",
+                "averageExecutionWindowNanos",
+            )
+        val collectorMethodNames =
+            RuntimeMetricsCollector::class.java.methods
+                .map { it.name }
+        val tickMetricFields =
+            RuntimeTickMetrics::class.java.declaredFields
+                .map { it.name }
+        val vmMetricFields =
+            RuntimeVmMetrics::class.java.declaredFields
+                .map { it.name }
+        val exposedStaleNames =
+            (collectorMethodNames + tickMetricFields + vmMetricFields)
+                .filter { name -> forbiddenNames.any { staleName -> name.equals(staleName, ignoreCase = true) } }
+
+        assertEquals(emptyList(), exposedStaleNames)
+    }
+
+    @Test
     fun recordingCollectorAccumulatesRuntimeAndVmMetrics() {
         val collector = RecordingRuntimeMetricsCollector()
 
         collector.recordServerTick(nanos = 100)
         collector.recordRequestSlice(nanos = 10)
-        collector.recordHostCallDrain(callCount = 2, nanos = 20)
-        collector.recordHostCallDispatch(callCount = 2, nanos = 30)
-        collector.recordHostResultDelivery(resultCount = 2, nanos = 40)
         collector.recordDisplayFrameDrain(frameCount = 3, nanos = 50)
         collector.recordDisplayFlush(frameCount = 3, nanos = 60)
-        collector.recordSliceRequest(sent = true, sleepGated = false)
-        collector.recordSliceRequest(sent = false, sleepGated = true)
-        collector.recordExecutionQuotaRefill(accepted = true, unavailable = false)
-        collector.recordExecutionQuotaRefill(accepted = false, unavailable = true)
-        collector.recordExecutionQuotaPermitConsumed()
+        collector.recordSliceRequest()
+        collector.recordSliceRequest()
         collector.recordNativeExecutionQuotaRefill(instructions = 128, wallNanos = 250, serverTick = 12)
         collector.recordNativeExecutionQuotaRefill(instructions = 64, wallNanos = 125, serverTick = 13)
-        collector.recordNativeSchedulerDryRun(turns = 2, selectedPids = 2, remainingInstructions = 4, firstSelectionMatched = true)
-        collector.recordNativeSchedulerDryRun(turns = 1, selectedPids = 1, remainingInstructions = 3, firstSelectionMatched = false)
-        collector.recordProcessSchedulerTick(wokenProcesses = 2, selected = true)
-        collector.recordProcessSchedulerTick(wokenProcesses = 0, selected = false)
-        collector.recordSlicePermitReceived()
-        collector.recordSchedulingPoint(waitedForSlice = false)
-        collector.recordSchedulingPoint(waitedForSlice = true)
-        collector.recordVmExecutionWindow(nanos = 70)
         collector.recordVmSignal(VmSignalKind.PAUSE)
         collector.recordVmSignal(VmSignalKind.YIELD)
         collector.recordVmSignal(VmSignalKind.SLEEP)
@@ -96,15 +145,6 @@ class RuntimeProfilingTest {
         assertEquals(100, snapshot.tick.serverTickNanos)
         assertEquals(1, snapshot.tick.requestSliceCalls)
         assertEquals(10, snapshot.tick.requestSliceNanos)
-        assertEquals(1, snapshot.tick.hostCallDrainCalls)
-        assertEquals(2, snapshot.tick.hostCallsDrained)
-        assertEquals(20, snapshot.tick.hostCallDrainNanos)
-        assertEquals(1, snapshot.tick.hostCallDispatchCalls)
-        assertEquals(2, snapshot.tick.hostCallsDispatched)
-        assertEquals(30, snapshot.tick.hostCallDispatchNanos)
-        assertEquals(1, snapshot.tick.hostResultDeliveryCalls)
-        assertEquals(2, snapshot.tick.hostResultsDelivered)
-        assertEquals(40, snapshot.tick.hostResultDeliveryNanos)
         assertEquals(1, snapshot.tick.displayFrameDrainCalls)
         assertEquals(3, snapshot.tick.displayFramesDrained)
         assertEquals(50, snapshot.tick.displayFrameDrainNanos)
@@ -112,33 +152,10 @@ class RuntimeProfilingTest {
         assertEquals(3, snapshot.tick.displayFramesFlushed)
         assertEquals(60, snapshot.tick.displayFlushNanos)
         assertEquals(2, snapshot.vm.sliceRequests)
-        assertEquals(1, snapshot.vm.slicePermitsSent)
-        assertEquals(1, snapshot.vm.sleepGatedSliceRequests)
-        assertEquals(2, snapshot.vm.executionQuotaRefills)
-        assertEquals(1, snapshot.vm.executionQuotaAcceptedRefills)
-        assertEquals(1, snapshot.vm.executionQuotaUnavailableRefills)
-        assertEquals(1, snapshot.vm.executionQuotaPermitsConsumed)
         assertEquals(2, snapshot.vm.nativeExecutionQuotaRefills)
         assertEquals(192, snapshot.vm.nativeExecutionQuotaInstructions)
         assertEquals(375, snapshot.vm.nativeExecutionQuotaWallNanos)
         assertEquals(13, snapshot.vm.nativeExecutionQuotaLastServerTick)
-        assertEquals(2, snapshot.vm.nativeSchedulerDryRuns)
-        assertEquals(3, snapshot.vm.nativeSchedulerDryRunTurns)
-        assertEquals(3, snapshot.vm.nativeSchedulerDryRunSelectedPids)
-        assertEquals(7, snapshot.vm.nativeSchedulerDryRunRemainingInstructions)
-        assertEquals(1, snapshot.vm.nativeSchedulerDryRunFirstSelectionMatches)
-        assertEquals(1, snapshot.vm.nativeSchedulerDryRunFirstSelectionMismatches)
-        assertEquals(2, snapshot.vm.processSchedulerTicks)
-        assertEquals(1, snapshot.vm.processSchedulerSelectedTicks)
-        assertEquals(1, snapshot.vm.processSchedulerIdleTicks)
-        assertEquals(2, snapshot.vm.processSchedulerWokenProcesses)
-        assertEquals(1, snapshot.vm.slicePermitsReceived)
-        assertEquals(2, snapshot.vm.schedulingPoints)
-        assertEquals(1, snapshot.vm.yieldSchedulingPoints)
-        assertEquals(1, snapshot.vm.waitForSliceSchedulingPoints)
-        assertEquals(1, snapshot.vm.executionWindows)
-        assertEquals(70, snapshot.vm.executionWindowNanos)
-        assertEquals(70, snapshot.vm.averageExecutionWindowNanos)
         assertEquals(1, snapshot.vm.pauseSignals)
         assertEquals(1, snapshot.vm.yieldSignals)
         assertEquals(1, snapshot.vm.sleepSignals)
@@ -189,10 +206,6 @@ class RuntimeProfilingTest {
             summary,
         )
         assertTrue(
-            summary.contains("    processScheduler: ticks=2, selected=1, idle=1, woken=2"),
-            summary,
-        )
-        assertTrue(
             summary.contains("    nativeDaemon: ticks=2, active=150 ns, idle=1, turns=2, halted=1, hostRequests=3"),
             summary,
         )
@@ -211,18 +224,9 @@ class RuntimeProfilingTest {
 
         collector.recordServerTick(nanos = 100)
         collector.recordRequestSlice(nanos = 10)
-        collector.recordHostCallDrain(callCount = 2, nanos = 20)
-        collector.recordHostCallDispatch(callCount = 2, nanos = 30)
-        collector.recordHostResultDelivery(resultCount = 2, nanos = 40)
         collector.recordDisplayFrameDrain(frameCount = 3, nanos = 50)
         collector.recordDisplayFlush(frameCount = 3, nanos = 60)
-        collector.recordSliceRequest(sent = true, sleepGated = false)
-        collector.recordExecutionQuotaRefill(accepted = true, unavailable = false)
-        collector.recordExecutionQuotaPermitConsumed()
-        collector.recordProcessSchedulerTick(wokenProcesses = 1, selected = true)
-        collector.recordSlicePermitReceived()
-        collector.recordSchedulingPoint(waitedForSlice = true)
-        collector.recordVmExecutionWindow(nanos = 70)
+        collector.recordSliceRequest()
         collector.recordVmSignal(VmSignalKind.PAUSE)
         collector.recordVmHostCallWait("display", "present", nanos = 50)
         collector.recordVmHostCall("display", "present", nanos = 80)

@@ -127,7 +127,7 @@ class RuntimeVmProfilingReportAggregationTest {
                         runtime =
                             RuntimeProfilingSnapshot(
                                 tick = RuntimeTickMetrics(serverTickCalls = 1, serverTickNanos = runtimeNanos),
-                                vm = RuntimeVmMetrics(executionWindows = 1, executionWindowNanos = 4, hostCallSignals = 5),
+                                vm = RuntimeVmMetrics(nativeDaemonTurns = 1, hostCallSignals = 5),
                             ),
                         compiler = CompilerProfilingSnapshot(compileCalls = 1, compileNanos = 6, compiledSources = 1),
                     ),

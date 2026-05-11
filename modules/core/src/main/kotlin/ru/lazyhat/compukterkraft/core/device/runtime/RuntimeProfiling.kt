@@ -29,21 +29,6 @@ interface RuntimeMetricsCollector {
 
     fun recordRequestSlice(nanos: Long)
 
-    fun recordHostCallDrain(
-        callCount: Int,
-        nanos: Long,
-    )
-
-    fun recordHostCallDispatch(
-        callCount: Int,
-        nanos: Long,
-    )
-
-    fun recordHostResultDelivery(
-        resultCount: Int,
-        nanos: Long,
-    )
-
     fun recordDisplayFrameDrain(
         frameCount: Int,
         nanos: Long,
@@ -54,41 +39,13 @@ interface RuntimeMetricsCollector {
         nanos: Long,
     )
 
-    fun recordSliceRequest(
-        sent: Boolean,
-        sleepGated: Boolean,
-    )
-
-    fun recordExecutionQuotaRefill(
-        accepted: Boolean,
-        unavailable: Boolean,
-    )
-
-    fun recordExecutionQuotaPermitConsumed()
+    fun recordSliceRequest()
 
     fun recordNativeExecutionQuotaRefill(
         instructions: Long,
         wallNanos: Long,
         serverTick: Long,
     )
-
-    fun recordNativeSchedulerDryRun(
-        turns: Long,
-        selectedPids: Long,
-        remainingInstructions: Long,
-        firstSelectionMatched: Boolean,
-    )
-
-    fun recordProcessSchedulerTick(
-        wokenProcesses: Int,
-        selected: Boolean,
-    )
-
-    fun recordSlicePermitReceived()
-
-    fun recordSchedulingPoint(waitedForSlice: Boolean)
-
-    fun recordVmExecutionWindow(nanos: Long)
 
     fun recordVmSignal(kind: VmSignalKind)
 
@@ -138,15 +95,6 @@ data class RuntimeTickMetrics(
     val serverTickNanos: Long = 0,
     val requestSliceCalls: Long = 0,
     val requestSliceNanos: Long = 0,
-    val hostCallDrainCalls: Long = 0,
-    val hostCallsDrained: Long = 0,
-    val hostCallDrainNanos: Long = 0,
-    val hostCallDispatchCalls: Long = 0,
-    val hostCallsDispatched: Long = 0,
-    val hostCallDispatchNanos: Long = 0,
-    val hostResultDeliveryCalls: Long = 0,
-    val hostResultsDelivered: Long = 0,
-    val hostResultDeliveryNanos: Long = 0,
     val displayFrameDrainCalls: Long = 0,
     val displayFramesDrained: Long = 0,
     val displayFrameDrainNanos: Long = 0,
@@ -157,55 +105,25 @@ data class RuntimeTickMetrics(
     val allCalls =
         serverTickCalls +
             requestSliceCalls +
-            hostCallDrainCalls +
-            hostCallDispatchCalls +
-            hostResultDeliveryCalls +
             displayFrameDrainCalls +
             displayFlushCalls
     val allNanos =
         serverTickNanos +
             requestSliceNanos +
-            hostCallDrainNanos +
-            hostCallDispatchNanos +
-            hostResultDeliveryNanos +
             displayFrameDrainNanos +
             displayFlushNanos
     val tickCalls = serverTickCalls + requestSliceCalls
     val tickNanos = serverTickNanos + requestSliceNanos
-    val hostCalls = hostCallDrainCalls + hostCallDispatchCalls + hostResultDeliveryCalls
-    val hostNanos = hostCallDrainCalls + hostCallDispatchCalls + hostResultDeliveryCalls
     val displayCalls = displayFrameDrainCalls + displayFlushCalls
     val displayNanos = displayFrameDrainNanos + displayFlushNanos
 }
 
 data class RuntimeVmMetrics(
     val sliceRequests: Long = 0,
-    val slicePermitsSent: Long = 0,
-    val sleepGatedSliceRequests: Long = 0,
-    val executionQuotaRefills: Long = 0,
-    val executionQuotaAcceptedRefills: Long = 0,
-    val executionQuotaUnavailableRefills: Long = 0,
-    val executionQuotaPermitsConsumed: Long = 0,
     val nativeExecutionQuotaRefills: Long = 0,
     val nativeExecutionQuotaInstructions: Long = 0,
     val nativeExecutionQuotaWallNanos: Long = 0,
     val nativeExecutionQuotaLastServerTick: Long = 0,
-    val nativeSchedulerDryRuns: Long = 0,
-    val nativeSchedulerDryRunTurns: Long = 0,
-    val nativeSchedulerDryRunSelectedPids: Long = 0,
-    val nativeSchedulerDryRunRemainingInstructions: Long = 0,
-    val nativeSchedulerDryRunFirstSelectionMatches: Long = 0,
-    val nativeSchedulerDryRunFirstSelectionMismatches: Long = 0,
-    val processSchedulerTicks: Long = 0,
-    val processSchedulerSelectedTicks: Long = 0,
-    val processSchedulerIdleTicks: Long = 0,
-    val processSchedulerWokenProcesses: Long = 0,
-    val slicePermitsReceived: Long = 0,
-    val schedulingPoints: Long = 0,
-    val yieldSchedulingPoints: Long = 0,
-    val waitForSliceSchedulingPoints: Long = 0,
-    val executionWindows: Long = 0,
-    val executionWindowNanos: Long = 0,
     val haltSignals: Long = 0,
     val pauseSignals: Long = 0,
     val yieldSignals: Long = 0,
@@ -232,7 +150,6 @@ data class RuntimeVmMetrics(
     val nativeDaemonHaltedProcesses: Long = 0,
     val nativeDaemonHostRequests: Long = 0,
 ) {
-    val averageExecutionWindowNanos: Long get() = if (executionWindows <= 0) 0 else executionWindowNanos / executionWindows
     val nativeWaitSignals: Long get() = waitPollSignals
 }
 
@@ -269,16 +186,6 @@ data class RuntimeProfilingSnapshot(
             appendLine("  tick: calls=${tick.tickCalls}, time=${tick.tickNanos.nanos()}")
             appendLine("    server: calls=${tick.serverTickCalls}, time=${tick.serverTickNanos.nanos()}")
             appendLine("    requestSlice: calls=${tick.requestSliceCalls}, time=${tick.requestSliceNanos.nanos()}")
-            appendLine("  host-queue: calls=${tick.hostCalls}, time=${tick.hostNanos.nanos()}")
-            appendLine(
-                "    drain: calls=${tick.hostCallDrainCalls}, items=${tick.hostCallsDrained}, time=${tick.hostCallDrainNanos.nanos()}",
-            )
-            appendLine(
-                "    dispatch: calls=${tick.hostCallDispatchCalls}, items=${tick.hostCallsDispatched}, time=${tick.hostCallDispatchNanos.nanos()}",
-            )
-            appendLine(
-                "    delivery: calls=${tick.hostResultDeliveryCalls}, items=${tick.hostResultsDelivered}, time=${tick.hostResultDeliveryNanos.nanos()}",
-            )
             appendLine("  display-runtime: calls=${tick.displayCalls}, time=${tick.displayNanos.nanos()}")
             appendLine(
                 "    drain: calls=${tick.displayFrameDrainCalls}, frames=${tick.displayFramesDrained}, time=${tick.displayFrameDrainNanos.nanos()}",
@@ -287,29 +194,12 @@ data class RuntimeProfilingSnapshot(
                 "    flush: calls=${tick.displayFlushCalls}, frames=${tick.displayFramesFlushed}, time=${tick.displayFlushNanos.nanos()}",
             )
             appendLine("  vm:")
-            appendLine(
-                "    slices: requests=${vm.sliceRequests}, permitsSent=${vm.slicePermitsSent}, sleepGated=${vm.sleepGatedSliceRequests}, permitsReceived=${vm.slicePermitsReceived}",
-            )
-            appendLine(
-                "    quota: refills=${vm.executionQuotaRefills}, accepted=${vm.executionQuotaAcceptedRefills}, unavailable=${vm.executionQuotaUnavailableRefills}, consumed=${vm.executionQuotaPermitsConsumed}",
-            )
+            appendLine("    slices: requests=${vm.sliceRequests}")
             appendLine(
                 "    nativeQuota: refills=${vm.nativeExecutionQuotaRefills}, instructions=${vm.nativeExecutionQuotaInstructions}, wallNanos=${vm.nativeExecutionQuotaWallNanos}, lastTick=${vm.nativeExecutionQuotaLastServerTick}",
             )
             appendLine(
-                "    nativeSchedulerDryRun: calls=${vm.nativeSchedulerDryRuns}, turns=${vm.nativeSchedulerDryRunTurns}, selected=${vm.nativeSchedulerDryRunSelectedPids}, remaining=${vm.nativeSchedulerDryRunRemainingInstructions}, matches=${vm.nativeSchedulerDryRunFirstSelectionMatches}, mismatches=${vm.nativeSchedulerDryRunFirstSelectionMismatches}",
-            )
-            appendLine(
-                "    processScheduler: ticks=${vm.processSchedulerTicks}, selected=${vm.processSchedulerSelectedTicks}, idle=${vm.processSchedulerIdleTicks}, woken=${vm.processSchedulerWokenProcesses}",
-            )
-            appendLine(
                 "    nativeDaemon: ticks=${vm.nativeDaemonTicks}, active=${vm.nativeDaemonActiveNanos.nanos()}, idle=${vm.nativeDaemonIdleTicks}, turns=${vm.nativeDaemonTurns}, halted=${vm.nativeDaemonHaltedProcesses}, hostRequests=${vm.nativeDaemonHostRequests}",
-            )
-            appendLine(
-                "    scheduling: points=${vm.schedulingPoints}, yieldPoints=${vm.yieldSchedulingPoints}, waitPoints=${vm.waitForSliceSchedulingPoints}",
-            )
-            appendLine(
-                "    execution: windows=${vm.executionWindows}, time=${vm.executionWindowNanos.nanos()}, avg=${vm.averageExecutionWindowNanos.nanos()}",
             )
             appendLine(
                 "  signals: halt=${vm.haltSignals}, pause=${vm.pauseSignals}, yield=${vm.yieldSignals}, sleep=${vm.sleepSignals}, waitEvent=${vm.waitEventSignals}, waitPoll=${vm.waitPollSignals}, waitProcess=${vm.waitProcessSignals}, hostCall=${vm.hostCallSignals}",
@@ -371,21 +261,6 @@ object NoOpRuntimeMetricsCollector : RuntimeMetricsCollector {
 
     override fun recordRequestSlice(nanos: Long) = Unit
 
-    override fun recordHostCallDrain(
-        callCount: Int,
-        nanos: Long,
-    ) = Unit
-
-    override fun recordHostCallDispatch(
-        callCount: Int,
-        nanos: Long,
-    ) = Unit
-
-    override fun recordHostResultDelivery(
-        resultCount: Int,
-        nanos: Long,
-    ) = Unit
-
     override fun recordDisplayFrameDrain(
         frameCount: Int,
         nanos: Long,
@@ -396,41 +271,13 @@ object NoOpRuntimeMetricsCollector : RuntimeMetricsCollector {
         nanos: Long,
     ) = Unit
 
-    override fun recordSliceRequest(
-        sent: Boolean,
-        sleepGated: Boolean,
-    ) = Unit
-
-    override fun recordExecutionQuotaRefill(
-        accepted: Boolean,
-        unavailable: Boolean,
-    ) = Unit
-
-    override fun recordExecutionQuotaPermitConsumed() = Unit
+    override fun recordSliceRequest() = Unit
 
     override fun recordNativeExecutionQuotaRefill(
         instructions: Long,
         wallNanos: Long,
         serverTick: Long,
     ) = Unit
-
-    override fun recordNativeSchedulerDryRun(
-        turns: Long,
-        selectedPids: Long,
-        remainingInstructions: Long,
-        firstSelectionMatched: Boolean,
-    ) = Unit
-
-    override fun recordProcessSchedulerTick(
-        wokenProcesses: Int,
-        selected: Boolean,
-    ) = Unit
-
-    override fun recordSlicePermitReceived() = Unit
-
-    override fun recordSchedulingPoint(waitedForSlice: Boolean) = Unit
-
-    override fun recordVmExecutionWindow(nanos: Long) = Unit
 
     override fun recordVmSignal(kind: VmSignalKind) = Unit
 
@@ -496,15 +343,6 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
     private val serverTickNanos = AtomicLong()
     private val requestSliceCalls = AtomicLong()
     private val requestSliceNanos = AtomicLong()
-    private val hostCallDrainCalls = AtomicLong()
-    private val hostCallsDrained = AtomicLong()
-    private val hostCallDrainNanos = AtomicLong()
-    private val hostCallDispatchCalls = AtomicLong()
-    private val hostCallsDispatched = AtomicLong()
-    private val hostCallDispatchNanos = AtomicLong()
-    private val hostResultDeliveryCalls = AtomicLong()
-    private val hostResultsDelivered = AtomicLong()
-    private val hostResultDeliveryNanos = AtomicLong()
     private val displayFrameDrainCalls = AtomicLong()
     private val displayFramesDrained = AtomicLong()
     private val displayFrameDrainNanos = AtomicLong()
@@ -512,32 +350,10 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
     private val displayFramesFlushed = AtomicLong()
     private val displayFlushNanos = AtomicLong()
     private val sliceRequests = AtomicLong()
-    private val slicePermitsSent = AtomicLong()
-    private val sleepGatedSliceRequests = AtomicLong()
-    private val executionQuotaRefills = AtomicLong()
-    private val executionQuotaAcceptedRefills = AtomicLong()
-    private val executionQuotaUnavailableRefills = AtomicLong()
-    private val executionQuotaPermitsConsumed = AtomicLong()
     private val nativeExecutionQuotaRefills = AtomicLong()
     private val nativeExecutionQuotaInstructions = AtomicLong()
     private val nativeExecutionQuotaWallNanos = AtomicLong()
     private val nativeExecutionQuotaLastServerTick = AtomicLong()
-    private val nativeSchedulerDryRuns = AtomicLong()
-    private val nativeSchedulerDryRunTurns = AtomicLong()
-    private val nativeSchedulerDryRunSelectedPids = AtomicLong()
-    private val nativeSchedulerDryRunRemainingInstructions = AtomicLong()
-    private val nativeSchedulerDryRunFirstSelectionMatches = AtomicLong()
-    private val nativeSchedulerDryRunFirstSelectionMismatches = AtomicLong()
-    private val processSchedulerTicks = AtomicLong()
-    private val processSchedulerSelectedTicks = AtomicLong()
-    private val processSchedulerIdleTicks = AtomicLong()
-    private val processSchedulerWokenProcesses = AtomicLong()
-    private val slicePermitsReceived = AtomicLong()
-    private val schedulingPoints = AtomicLong()
-    private val yieldSchedulingPoints = AtomicLong()
-    private val waitForSliceSchedulingPoints = AtomicLong()
-    private val executionWindows = AtomicLong()
-    private val executionWindowNanos = AtomicLong()
     private val haltSignals = AtomicLong()
     private val pauseSignals = AtomicLong()
     private val yieldSignals = AtomicLong()
@@ -575,33 +391,6 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
         requestSliceNanos.addAndGet(nanos.coerceAtLeast(0))
     }
 
-    override fun recordHostCallDrain(
-        callCount: Int,
-        nanos: Long,
-    ) {
-        hostCallDrainCalls.incrementAndGet()
-        hostCallsDrained.addAndGet(callCount.coerceAtLeast(0).toLong())
-        hostCallDrainNanos.addAndGet(nanos.coerceAtLeast(0))
-    }
-
-    override fun recordHostCallDispatch(
-        callCount: Int,
-        nanos: Long,
-    ) {
-        hostCallDispatchCalls.incrementAndGet()
-        hostCallsDispatched.addAndGet(callCount.coerceAtLeast(0).toLong())
-        hostCallDispatchNanos.addAndGet(nanos.coerceAtLeast(0))
-    }
-
-    override fun recordHostResultDelivery(
-        resultCount: Int,
-        nanos: Long,
-    ) {
-        hostResultDeliveryCalls.incrementAndGet()
-        hostResultsDelivered.addAndGet(resultCount.coerceAtLeast(0).toLong())
-        hostResultDeliveryNanos.addAndGet(nanos.coerceAtLeast(0))
-    }
-
     override fun recordDisplayFrameDrain(
         frameCount: Int,
         nanos: Long,
@@ -620,26 +409,8 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
         displayFlushNanos.addAndGet(nanos.coerceAtLeast(0))
     }
 
-    override fun recordSliceRequest(
-        sent: Boolean,
-        sleepGated: Boolean,
-    ) {
+    override fun recordSliceRequest() {
         sliceRequests.incrementAndGet()
-        if (sent) slicePermitsSent.incrementAndGet()
-        if (sleepGated) sleepGatedSliceRequests.incrementAndGet()
-    }
-
-    override fun recordExecutionQuotaRefill(
-        accepted: Boolean,
-        unavailable: Boolean,
-    ) {
-        executionQuotaRefills.incrementAndGet()
-        if (accepted) executionQuotaAcceptedRefills.incrementAndGet()
-        if (unavailable) executionQuotaUnavailableRefills.incrementAndGet()
-    }
-
-    override fun recordExecutionQuotaPermitConsumed() {
-        executionQuotaPermitsConsumed.incrementAndGet()
     }
 
     override fun recordNativeExecutionQuotaRefill(
@@ -651,54 +422,6 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
         nativeExecutionQuotaInstructions.addAndGet(instructions.coerceAtLeast(0))
         nativeExecutionQuotaWallNanos.addAndGet(wallNanos.coerceAtLeast(0))
         nativeExecutionQuotaLastServerTick.set(serverTick)
-    }
-
-    override fun recordNativeSchedulerDryRun(
-        turns: Long,
-        selectedPids: Long,
-        remainingInstructions: Long,
-        firstSelectionMatched: Boolean,
-    ) {
-        nativeSchedulerDryRuns.incrementAndGet()
-        nativeSchedulerDryRunTurns.addAndGet(turns.coerceAtLeast(0))
-        nativeSchedulerDryRunSelectedPids.addAndGet(selectedPids.coerceAtLeast(0))
-        nativeSchedulerDryRunRemainingInstructions.addAndGet(remainingInstructions.coerceAtLeast(0))
-        if (firstSelectionMatched) {
-            nativeSchedulerDryRunFirstSelectionMatches.incrementAndGet()
-        } else {
-            nativeSchedulerDryRunFirstSelectionMismatches.incrementAndGet()
-        }
-    }
-
-    override fun recordProcessSchedulerTick(
-        wokenProcesses: Int,
-        selected: Boolean,
-    ) {
-        processSchedulerTicks.incrementAndGet()
-        processSchedulerWokenProcesses.addAndGet(wokenProcesses.coerceAtLeast(0).toLong())
-        if (selected) {
-            processSchedulerSelectedTicks.incrementAndGet()
-        } else {
-            processSchedulerIdleTicks.incrementAndGet()
-        }
-    }
-
-    override fun recordSlicePermitReceived() {
-        slicePermitsReceived.incrementAndGet()
-    }
-
-    override fun recordSchedulingPoint(waitedForSlice: Boolean) {
-        schedulingPoints.incrementAndGet()
-        if (waitedForSlice) {
-            waitForSliceSchedulingPoints.incrementAndGet()
-        } else {
-            yieldSchedulingPoints.incrementAndGet()
-        }
-    }
-
-    override fun recordVmExecutionWindow(nanos: Long) {
-        executionWindows.incrementAndGet()
-        executionWindowNanos.addAndGet(nanos.coerceAtLeast(0))
     }
 
     override fun recordVmSignal(kind: VmSignalKind) {
@@ -792,15 +515,6 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
                     serverTickNanos = serverTickNanos.get(),
                     requestSliceCalls = requestSliceCalls.get(),
                     requestSliceNanos = requestSliceNanos.get(),
-                    hostCallDrainCalls = hostCallDrainCalls.get(),
-                    hostCallsDrained = hostCallsDrained.get(),
-                    hostCallDrainNanos = hostCallDrainNanos.get(),
-                    hostCallDispatchCalls = hostCallDispatchCalls.get(),
-                    hostCallsDispatched = hostCallsDispatched.get(),
-                    hostCallDispatchNanos = hostCallDispatchNanos.get(),
-                    hostResultDeliveryCalls = hostResultDeliveryCalls.get(),
-                    hostResultsDelivered = hostResultsDelivered.get(),
-                    hostResultDeliveryNanos = hostResultDeliveryNanos.get(),
                     displayFrameDrainCalls = displayFrameDrainCalls.get(),
                     displayFramesDrained = displayFramesDrained.get(),
                     displayFrameDrainNanos = displayFrameDrainNanos.get(),
@@ -811,32 +525,10 @@ class RecordingRuntimeMetricsCollector : RuntimeMetricsCollector {
             vm =
                 RuntimeVmMetrics(
                     sliceRequests = sliceRequests.get(),
-                    slicePermitsSent = slicePermitsSent.get(),
-                    sleepGatedSliceRequests = sleepGatedSliceRequests.get(),
-                    executionQuotaRefills = executionQuotaRefills.get(),
-                    executionQuotaAcceptedRefills = executionQuotaAcceptedRefills.get(),
-                    executionQuotaUnavailableRefills = executionQuotaUnavailableRefills.get(),
-                    executionQuotaPermitsConsumed = executionQuotaPermitsConsumed.get(),
                     nativeExecutionQuotaRefills = nativeExecutionQuotaRefills.get(),
                     nativeExecutionQuotaInstructions = nativeExecutionQuotaInstructions.get(),
                     nativeExecutionQuotaWallNanos = nativeExecutionQuotaWallNanos.get(),
                     nativeExecutionQuotaLastServerTick = nativeExecutionQuotaLastServerTick.get(),
-                    nativeSchedulerDryRuns = nativeSchedulerDryRuns.get(),
-                    nativeSchedulerDryRunTurns = nativeSchedulerDryRunTurns.get(),
-                    nativeSchedulerDryRunSelectedPids = nativeSchedulerDryRunSelectedPids.get(),
-                    nativeSchedulerDryRunRemainingInstructions = nativeSchedulerDryRunRemainingInstructions.get(),
-                    nativeSchedulerDryRunFirstSelectionMatches = nativeSchedulerDryRunFirstSelectionMatches.get(),
-                    nativeSchedulerDryRunFirstSelectionMismatches = nativeSchedulerDryRunFirstSelectionMismatches.get(),
-                    processSchedulerTicks = processSchedulerTicks.get(),
-                    processSchedulerSelectedTicks = processSchedulerSelectedTicks.get(),
-                    processSchedulerIdleTicks = processSchedulerIdleTicks.get(),
-                    processSchedulerWokenProcesses = processSchedulerWokenProcesses.get(),
-                    slicePermitsReceived = slicePermitsReceived.get(),
-                    schedulingPoints = schedulingPoints.get(),
-                    yieldSchedulingPoints = yieldSchedulingPoints.get(),
-                    waitForSliceSchedulingPoints = waitForSliceSchedulingPoints.get(),
-                    executionWindows = executionWindows.get(),
-                    executionWindowNanos = executionWindowNanos.get(),
                     haltSignals = haltSignals.get(),
                     pauseSignals = pauseSignals.get(),
                     yieldSignals = yieldSignals.get(),
