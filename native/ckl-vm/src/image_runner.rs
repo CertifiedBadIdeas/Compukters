@@ -73,6 +73,63 @@ const STRINGS_CHAR_CODE_AT_IMPORT_ID: i32 = 7010;
 
 const RUNTIME_POLL_IMPORT_ID: i32 = 8000;
 
+pub const IMAGE_OPCODE_METRIC_COUNT: usize = 37;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImageVmMetrics {
+    pub executed_instructions: u64,
+    pub instruction_clones: u64,
+    pub opcode_counts: [u64; IMAGE_OPCODE_METRIC_COUNT],
+    pub value_clones: u64,
+    pub register_reads: u64,
+    pub register_writes: u64,
+    pub function_calls: u64,
+    pub function_returns: u64,
+    pub host_call_attempts: u64,
+    pub native_host_calls: u64,
+    pub jvm_host_call_signals: u64,
+    pub pause_signals: u64,
+    pub string_allocations: u64,
+    pub record_allocations: u64,
+}
+
+impl Default for ImageVmMetrics {
+    fn default() -> Self {
+        Self {
+            executed_instructions: 0,
+            instruction_clones: 0,
+            opcode_counts: [0; IMAGE_OPCODE_METRIC_COUNT],
+            value_clones: 0,
+            register_reads: 0,
+            register_writes: 0,
+            function_calls: 0,
+            function_returns: 0,
+            host_call_attempts: 0,
+            native_host_calls: 0,
+            jvm_host_call_signals: 0,
+            pause_signals: 0,
+            string_allocations: 0,
+            record_allocations: 0,
+        }
+    }
+}
+
+impl ImageVmMetrics {
+    pub fn opcode_count(&self, opcode: u8) -> u64 {
+        self.opcode_counts
+            .get(usize::from(opcode))
+            .copied()
+            .unwrap_or(0)
+    }
+
+    fn record_opcode(&mut self, opcode: u8) {
+        self.executed_instructions = self.executed_instructions.saturating_add(1);
+        if let Some(count) = self.opcode_counts.get_mut(usize::from(opcode)) {
+            *count = count.saturating_add(1);
+        }
+    }
+}
+
 struct CallFrame {
     function_index: usize,
     instruction_pointer: usize,
@@ -94,6 +151,7 @@ pub struct ImageVmHandle {
     instructions_since_pause: usize,
     pending_resume_register: Option<u16>,
     state: ImageVmState,
+    metrics: ImageVmMetrics,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -131,6 +189,7 @@ impl ImageVmHandle {
             instructions_since_pause: 0,
             pending_resume_register: None,
             state: ImageVmState::Ready,
+            metrics: ImageVmMetrics::default(),
         })
     }
 
@@ -182,6 +241,10 @@ impl ImageVmHandle {
         }
         self.state = ImageVmState::Ready;
         Ok(())
+    }
+
+    pub fn metrics_snapshot(&self) -> ImageVmMetrics {
+        self.metrics.clone()
     }
 
     fn try_native_host_import(
@@ -637,6 +700,8 @@ impl ImageVmHandle {
             };
             self.instruction_pointer += 1;
             self.instructions_since_pause += 1;
+            self.metrics.instruction_clones = self.metrics.instruction_clones.saturating_add(1);
+            self.metrics.record_opcode(instruction_opcode(&instruction));
 
             match instruction {
                 Instruction::LoadConst {
@@ -652,7 +717,7 @@ impl ImageVmHandle {
                     self.write_register(dst, VmValue::Bool(value))?
                 }
                 Instruction::Move { dst, src } => {
-                    let value = self.read_register(src)?.clone();
+                    let value = self.clone_register(src)?;
                     self.write_register(dst, value)?;
                 }
                 Instruction::I32Add { dst, lhs, rhs } => {
@@ -684,7 +749,7 @@ impl ImageVmHandle {
                     self.write_binary(dst, lhs, rhs, binary_divide)?
                 }
                 Instruction::I32Neg { dst, src } => {
-                    let value = match self.read_register(src)?.clone() {
+                    let value = match self.clone_register(src)? {
                         VmValue::Int(value) => VmValue::Int(value.wrapping_neg()),
                         VmValue::Long(value) => VmValue::Long(value.wrapping_neg()),
                         other => {
@@ -711,7 +776,7 @@ impl ImageVmHandle {
                     })?
                 }
                 Instruction::I32BitNot { dst, src } => {
-                    let value = match self.read_register(src)?.clone() {
+                    let value = match self.clone_register(src)? {
                         VmValue::Int(value) => VmValue::Int(!value),
                         VmValue::Long(value) => VmValue::Long(!value),
                         other => {
@@ -745,10 +810,12 @@ impl ImageVmHandle {
                     })?
                 }
                 Instruction::I32Eq { dst, lhs, rhs } => {
+                    self.metrics.register_reads = self.metrics.register_reads.saturating_add(2);
                     let value = value_equals(self.read_register(lhs)?, self.read_register(rhs)?);
                     self.write_register(dst, VmValue::Bool(value))?;
                 }
                 Instruction::I32Ne { dst, lhs, rhs } => {
+                    self.metrics.register_reads = self.metrics.register_reads.saturating_add(2);
                     let value = !value_equals(self.read_register(lhs)?, self.read_register(rhs)?);
                     self.write_register(dst, VmValue::Bool(value))?;
                 }
@@ -810,7 +877,7 @@ impl ImageVmHandle {
                     arguments,
                 } => self.call_static(function_index, return_register, &arguments)?,
                 Instruction::Return { src } => {
-                    let result = self.read_register(src)?.clone();
+                    let result = self.clone_register(src)?;
                     if let Some(signal) = self.return_value(result)? {
                         return Ok(signal);
                     }
@@ -830,8 +897,12 @@ impl ImageVmHandle {
                     let import = self.host_import(import_id)?;
                     let module_name = import.module_name.clone();
                     let function_name = import.function_name.clone();
+                    self.metrics.host_call_attempts =
+                        self.metrics.host_call_attempts.saturating_add(1);
                     match self.try_native_host_import(import_id, arguments)? {
                         NativeHostImportResult::Handled(value) => {
+                            self.metrics.native_host_calls =
+                                self.metrics.native_host_calls.saturating_add(1);
                             if let Some(register) = return_register {
                                 self.write_register(register, value)?;
                             }
@@ -842,6 +913,8 @@ impl ImageVmHandle {
                                     "native host import {module_name}.{function_name} is not implemented; Kotlin fallback is disabled for native-owned hostcalls"
                                 ));
                             }
+                            self.metrics.jvm_host_call_signals =
+                                self.metrics.jvm_host_call_signals.saturating_add(1);
                             self.pending_resume_register = return_register;
                             self.state = ImageVmState::WaitingForResume;
                             return Ok(VmSignal::HostCall {
@@ -851,6 +924,8 @@ impl ImageVmHandle {
                             });
                         }
                         NativeHostImportResult::SignalNoResume { signal, arguments } => {
+                            self.metrics.native_host_calls =
+                                self.metrics.native_host_calls.saturating_add(1);
                             self.instruction_pointer = instruction_start;
                             for (register, value) in
                                 argument_registers.iter().copied().zip(arguments)
@@ -895,8 +970,10 @@ impl ImageVmHandle {
                             field_name_constant_index,
                             "record field name",
                         )?;
-                        fields.push((field_name, self.read_register(field_value)?.clone()));
+                        fields.push((field_name, self.clone_register(field_value)?));
                     }
+                    self.metrics.record_allocations =
+                        self.metrics.record_allocations.saturating_add(1);
                     self.write_register(dst, VmValue::Record { type_name, fields })?;
                 }
                 Instruction::GetField {
@@ -906,7 +983,7 @@ impl ImageVmHandle {
                 } => {
                     let field_name =
                         self.constant_string_value(field_name_constant_index, "field name")?;
-                    let value = match self.read_register(receiver)?.clone() {
+                    let value = match self.clone_register(receiver)? {
                         VmValue::Record { type_name, fields } => fields
                             .into_iter()
                             .find(|(name, _)| name == &field_name)
@@ -928,6 +1005,7 @@ impl ImageVmHandle {
 
             if self.instructions_since_pause >= self.instruction_budget {
                 self.instructions_since_pause = 0;
+                self.metrics.pause_signals = self.metrics.pause_signals.saturating_add(1);
                 return Ok(VmSignal::Pause);
             }
         }
@@ -953,6 +1031,7 @@ impl ImageVmHandle {
                 "CkVmImage register {register} is out of bounds for current register window of {register_count} registers"
             )
         })?;
+        self.metrics.register_writes = self.metrics.register_writes.saturating_add(1);
         *slot = value;
         Ok(())
     }
@@ -963,10 +1042,16 @@ impl ImageVmHandle {
             .ok_or_else(|| format!("CkVmImage register {register} offset overflow"))
     }
 
-    fn register_arguments(&self, registers: &[u16]) -> Result<Vec<VmValue>, String> {
+    fn clone_register(&mut self, register: u16) -> Result<VmValue, String> {
+        self.metrics.register_reads = self.metrics.register_reads.saturating_add(1);
+        self.metrics.value_clones = self.metrics.value_clones.saturating_add(1);
+        self.read_register(register).cloned()
+    }
+
+    fn register_arguments(&mut self, registers: &[u16]) -> Result<Vec<VmValue>, String> {
         registers
             .iter()
-            .map(|register| self.read_register(*register).cloned())
+            .map(|register| self.clone_register(*register))
             .collect()
     }
 
@@ -977,8 +1062,8 @@ impl ImageVmHandle {
         rhs: u16,
         op: fn(VmValue, VmValue) -> Result<VmValue, String>,
     ) -> Result<(), String> {
-        let left = self.read_register(lhs)?.clone();
-        let right = self.read_register(rhs)?.clone();
+        let left = self.clone_register(lhs)?;
+        let right = self.clone_register(rhs)?;
         let value = op(left, right)?;
         self.write_register(dst, value)
     }
@@ -991,13 +1076,14 @@ impl ImageVmHandle {
         symbol: &str,
         predicate: fn(std::cmp::Ordering) -> bool,
     ) -> Result<(), String> {
-        let left = self.read_register(lhs)?.clone();
-        let right = self.read_register(rhs)?.clone();
+        let left = self.clone_register(lhs)?;
+        let right = self.clone_register(rhs)?;
         let value = compare_values(left, right, symbol, predicate)?;
         self.write_register(dst, value)
     }
 
-    fn bool_register(&self, register: u16, operation: &str) -> Result<bool, String> {
+    fn bool_register(&mut self, register: u16, operation: &str) -> Result<bool, String> {
+        self.metrics.register_reads = self.metrics.register_reads.saturating_add(1);
         match self.read_register(register)? {
             VmValue::Bool(value) => Ok(*value),
             other => Err(format!(
@@ -1045,6 +1131,7 @@ impl ImageVmHandle {
             return_register,
         };
         self.call_stack.push(caller_frame);
+        self.metrics.function_calls = self.metrics.function_calls.saturating_add(1);
         self.function_index = function_index;
         self.instruction_pointer = 0;
         self.base_register = self.registers.len();
@@ -1057,6 +1144,7 @@ impl ImageVmHandle {
     }
 
     fn return_value(&mut self, result: VmValue) -> Result<Option<VmSignal>, String> {
+        self.metrics.function_returns = self.metrics.function_returns.saturating_add(1);
         let callee_base = self.base_register;
         if let Some(frame) = self.call_stack.pop() {
             self.registers.truncate(callee_base);
@@ -1072,7 +1160,8 @@ impl ImageVmHandle {
         }
     }
 
-    fn sleep_ticks_register(&self, register: u16) -> Result<i64, String> {
+    fn sleep_ticks_register(&mut self, register: u16) -> Result<i64, String> {
+        self.metrics.register_reads = self.metrics.register_reads.saturating_add(1);
         match self.read_register(register)? {
             VmValue::Int(ticks) => Ok(i64::from(*ticks)),
             VmValue::Long(ticks) => Ok(*ticks),
@@ -1082,9 +1171,12 @@ impl ImageVmHandle {
         }
     }
 
-    fn constant_value(&self, constant_index: usize) -> Result<VmValue, String> {
+    fn constant_value(&mut self, constant_index: usize) -> Result<VmValue, String> {
         match self.image.constants.get(constant_index) {
-            Some(Constant::String(value)) => Ok(VmValue::String(value.clone())),
+            Some(Constant::String(value)) => {
+                self.metrics.string_allocations = self.metrics.string_allocations.saturating_add(1);
+                Ok(VmValue::String(value.clone()))
+            }
             Some(Constant::Int(value)) => Ok(VmValue::Int(*value)),
             Some(Constant::Long(value)) => Ok(VmValue::Long(*value)),
             None => Err(format!(
@@ -1144,6 +1236,47 @@ fn checked_entry_function_index(image: &Image) -> Result<usize, String> {
 
 fn checked_register_count(image: &Image, function_index: usize) -> Result<usize, String> {
     Ok(image.functions[function_index].register_count)
+}
+
+fn instruction_opcode(instruction: &Instruction) -> u8 {
+    match instruction {
+        Instruction::LoadConst { .. } => 1,
+        Instruction::LoadUnit { .. } => 2,
+        Instruction::LoadNull { .. } => 3,
+        Instruction::LoadBool { .. } => 4,
+        Instruction::Move { .. } => 5,
+        Instruction::I32Add { .. } => 6,
+        Instruction::I32Sub { .. } => 7,
+        Instruction::I32Mul { .. } => 8,
+        Instruction::I32Div { .. } => 9,
+        Instruction::I32Neg { .. } => 10,
+        Instruction::I32BitAnd { .. } => 11,
+        Instruction::I32BitOr { .. } => 12,
+        Instruction::I32BitXor { .. } => 13,
+        Instruction::I32BitNot { .. } => 14,
+        Instruction::I32Shl { .. } => 15,
+        Instruction::I32Shr { .. } => 16,
+        Instruction::I32Eq { .. } => 17,
+        Instruction::I32Ne { .. } => 18,
+        Instruction::I32Lt { .. } => 19,
+        Instruction::I32Le { .. } => 20,
+        Instruction::I32Gt { .. } => 21,
+        Instruction::I32Ge { .. } => 22,
+        Instruction::BoolNot { .. } => 23,
+        Instruction::BoolAnd { .. } => 24,
+        Instruction::BoolOr { .. } => 25,
+        Instruction::Jump { .. } => 26,
+        Instruction::JumpIfFalse { .. } => 27,
+        Instruction::JumpIfTrue { .. } => 28,
+        Instruction::CallStatic { .. } => 29,
+        Instruction::Return { .. } => 30,
+        Instruction::ReturnUnit => 31,
+        Instruction::CallHost { .. } => 32,
+        Instruction::Yield { .. } => 33,
+        Instruction::Sleep { .. } => 34,
+        Instruction::ConstructRecord { .. } => 35,
+        Instruction::GetField { .. } => 36,
+    }
 }
 
 fn allows_kotlin_hostcall_fallback(import_id: i32) -> bool {

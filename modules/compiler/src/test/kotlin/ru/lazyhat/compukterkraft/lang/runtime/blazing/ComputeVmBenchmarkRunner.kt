@@ -95,6 +95,7 @@ internal object ComputeVmBenchmarkRunner {
             kotlinJvmBestNanos = kotlinJvm.bestNanos,
             pythonBestNanos = python.bestNanos,
             rustNativeBestNanos = rustNative.bestNanos,
+            ckVmMetrics = ckVm.ckVmMetrics,
         )
     }
 }

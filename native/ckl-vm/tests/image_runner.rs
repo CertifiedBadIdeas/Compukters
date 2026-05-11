@@ -181,6 +181,47 @@ fn register_runner_calls_static_functions() {
 }
 
 #[test]
+fn register_runner_records_execution_metrics() {
+    let image = image(
+        vec![ConstantFixture::Int(2), ConstantFixture::Int(5)],
+        vec![],
+        vec![
+            function(
+                "main",
+                3,
+                0,
+                vec![
+                    load_const(0, 0),
+                    load_const(1, 1),
+                    call_static(Some(2), 1, &[0, 1]),
+                    return_register(2),
+                ],
+            ),
+            function("add", 3, 2, vec![i32_add(2, 0, 1), return_register(2)]),
+        ],
+        0,
+    );
+    let mut handle = ImageVmHandle::create(&image, 128).unwrap();
+
+    assert_eq!(
+        handle.run_until_signal_decoded().unwrap(),
+        VmSignal::Halt(VmValue::Int(7)),
+    );
+
+    let metrics = handle.metrics_snapshot();
+    assert_eq!(metrics.executed_instructions, 6);
+    assert_eq!(metrics.function_calls, 1);
+    assert_eq!(metrics.function_returns, 2);
+    assert_eq!(metrics.opcode_count(1), 2);
+    assert_eq!(metrics.opcode_count(6), 1);
+    assert_eq!(metrics.opcode_count(29), 1);
+    assert_eq!(metrics.opcode_count(30), 2);
+    assert!(metrics.value_clones >= 3, "{metrics:?}");
+    assert!(metrics.register_reads >= 5, "{metrics:?}");
+    assert_eq!(metrics.register_writes, 4);
+}
+
+#[test]
 fn register_runner_pauses_after_instruction_budget() {
     let image = image(
         vec![ConstantFixture::Int(7)],

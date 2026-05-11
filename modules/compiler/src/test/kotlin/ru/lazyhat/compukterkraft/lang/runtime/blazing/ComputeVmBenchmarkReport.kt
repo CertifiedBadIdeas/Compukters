@@ -30,9 +30,10 @@ internal data class ComputeVmBenchmarkReport(
     fun toTsv(): String =
         buildString {
             appendLine(
-                "workload\titerations\tchecksum\tsamples\tck_vm_best_ns\tkotlin_jvm_best_ns\tpython_best_ns\trust_native_best_ns\tck_vm_iters_per_sec\tkotlin_jvm_iters_per_sec\tpython_iters_per_sec\trust_native_iters_per_sec\tck_vm_vs_kotlin_slowdown\tck_vm_vs_python_slowdown\tck_vm_vs_rust_slowdown",
+                "workload\titerations\tchecksum\tsamples\tck_vm_best_ns\tkotlin_jvm_best_ns\tpython_best_ns\trust_native_best_ns\tck_vm_iters_per_sec\tkotlin_jvm_iters_per_sec\tpython_iters_per_sec\trust_native_iters_per_sec\tck_vm_vs_kotlin_slowdown\tck_vm_vs_python_slowdown\tck_vm_vs_rust_slowdown\tck_vm_instructions\tck_vm_value_clones\tck_vm_register_reads\tck_vm_register_writes\tck_vm_function_calls\tck_vm_function_returns\tck_vm_host_call_attempts\tck_vm_native_host_calls\tck_vm_jvm_host_signals\tck_vm_pauses\tck_vm_string_allocations\tck_vm_record_allocations\tck_vm_opcode_counts",
             )
             workloads.forEach { workload ->
+                val metrics = workload.ckVmMetrics
                 appendLine(
                     listOf(
                         workload.workloadName,
@@ -50,6 +51,19 @@ internal data class ComputeVmBenchmarkReport(
                         formatPlain(workload.ckVmVsKotlinSlowdown),
                         formatPlain(workload.ckVmVsPythonSlowdown),
                         formatPlain(workload.ckVmVsRustSlowdown),
+                        metrics.executedInstructions,
+                        metrics.valueClones,
+                        metrics.registerReads,
+                        metrics.registerWrites,
+                        metrics.functionCalls,
+                        metrics.functionReturns,
+                        metrics.hostCallAttempts,
+                        metrics.nativeHostCalls,
+                        metrics.jvmHostCallSignals,
+                        metrics.pauseSignals,
+                        metrics.stringAllocations,
+                        metrics.recordAllocations,
+                        metrics.opcodeSummary(),
                     ).joinToString("\t"),
                 )
             }
@@ -77,6 +91,25 @@ internal data class ComputeVmBenchmarkReport(
                 )
             }
             appendLine()
+            appendLine("## CK VM Internal Counters")
+            appendLine()
+            appendLine(
+                "| Workload | Instructions | Value clones | Register reads | Register writes | Function calls | Function returns | Host call attempts | Native host calls | JVM host signals | Pauses | String allocations | Record allocations | Opcode counts |",
+            )
+            appendLine("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |")
+            workloads.forEach { workload ->
+                val metrics = workload.ckVmMetrics
+                appendLine(
+                    "| ${workload.workloadName} | ${formatInteger(metrics.executedInstructions)} | " +
+                        "${formatInteger(metrics.valueClones)} | ${formatInteger(metrics.registerReads)} | " +
+                        "${formatInteger(metrics.registerWrites)} | ${formatInteger(metrics.functionCalls)} | " +
+                        "${formatInteger(metrics.functionReturns)} | ${formatInteger(metrics.hostCallAttempts)} | " +
+                        "${formatInteger(metrics.nativeHostCalls)} | ${formatInteger(metrics.jvmHostCallSignals)} | " +
+                        "${formatInteger(metrics.pauseSignals)} | ${formatInteger(metrics.stringAllocations)} | " +
+                        "${formatInteger(metrics.recordAllocations)} | ${metrics.opcodeSummary()} |",
+                )
+            }
+            appendLine()
             appendLine("Best of $samples samples. Higher iter/s is better; lower slowdown is better.")
         }
 
@@ -86,6 +119,8 @@ internal data class ComputeVmBenchmarkReport(
         fun formatGrouped(value: Double): String = "%,.3f".format(java.util.Locale.US, value)
 
         fun formatInteger(value: Int): String = "%,d".format(java.util.Locale.US, value)
+
+        fun formatInteger(value: Long): String = "%,d".format(java.util.Locale.US, value)
     }
 }
 
@@ -97,6 +132,7 @@ internal data class ComputeVmBenchmarkWorkloadReport(
     val kotlinJvmBestNanos: Long,
     val pythonBestNanos: Long,
     val rustNativeBestNanos: Long,
+    val ckVmMetrics: NativeImageVmMetrics = NativeImageVmMetrics.EMPTY,
 ) {
     val ckVmIterationsPerSecond: Double
         get() = iterationsPerSecond(ckVmBestNanos)

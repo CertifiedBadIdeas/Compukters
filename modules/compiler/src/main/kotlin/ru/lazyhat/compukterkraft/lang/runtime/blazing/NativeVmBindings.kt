@@ -46,6 +46,101 @@ data class NativeDeviceDaemonHostRequest(
     val workingDirectory: String?,
 )
 
+data class NativeImageVmMetrics(
+    val executedInstructions: Long = 0,
+    val instructionClones: Long = 0,
+    val valueClones: Long = 0,
+    val registerReads: Long = 0,
+    val registerWrites: Long = 0,
+    val functionCalls: Long = 0,
+    val functionReturns: Long = 0,
+    val hostCallAttempts: Long = 0,
+    val nativeHostCalls: Long = 0,
+    val jvmHostCallSignals: Long = 0,
+    val pauseSignals: Long = 0,
+    val stringAllocations: Long = 0,
+    val recordAllocations: Long = 0,
+    val opcodeCounts: List<Long> = List(OPCODE_COUNT_SIZE) { 0L },
+) {
+    fun opcodeCount(opcode: Int): Long = opcodeCounts.getOrElse(opcode) { 0L }
+
+    fun opcodeSummary(): String =
+        opcodeCounts
+            .mapIndexedNotNull { opcode, count ->
+                if (count > 0) "${opcodeName(opcode)}=$count" else null
+            }.joinToString(",")
+
+    companion object {
+        const val OPCODE_COUNT_SIZE: Int = 37
+
+        val EMPTY = NativeImageVmMetrics()
+
+        fun from(values: LongArray): NativeImageVmMetrics =
+            NativeImageVmMetrics(
+                executedInstructions = values.getOrElse(0) { 0L },
+                instructionClones = values.getOrElse(1) { 0L },
+                valueClones = values.getOrElse(2) { 0L },
+                registerReads = values.getOrElse(3) { 0L },
+                registerWrites = values.getOrElse(4) { 0L },
+                functionCalls = values.getOrElse(5) { 0L },
+                functionReturns = values.getOrElse(6) { 0L },
+                hostCallAttempts = values.getOrElse(7) { 0L },
+                nativeHostCalls = values.getOrElse(8) { 0L },
+                jvmHostCallSignals = values.getOrElse(9) { 0L },
+                pauseSignals = values.getOrElse(10) { 0L },
+                stringAllocations = values.getOrElse(11) { 0L },
+                recordAllocations = values.getOrElse(12) { 0L },
+                opcodeCounts =
+                    List(OPCODE_COUNT_SIZE) { index ->
+                        values.getOrElse(OPCODE_OFFSET + index) { 0L }
+                    },
+            )
+
+        private const val OPCODE_OFFSET: Int = 13
+
+        private fun opcodeName(opcode: Int): String =
+            when (opcode) {
+                1 -> "LoadConst"
+                2 -> "LoadUnit"
+                3 -> "LoadNull"
+                4 -> "LoadBool"
+                5 -> "Move"
+                6 -> "I32Add"
+                7 -> "I32Sub"
+                8 -> "I32Mul"
+                9 -> "I32Div"
+                10 -> "I32Neg"
+                11 -> "I32BitAnd"
+                12 -> "I32BitOr"
+                13 -> "I32BitXor"
+                14 -> "I32BitNot"
+                15 -> "I32Shl"
+                16 -> "I32Shr"
+                17 -> "I32Eq"
+                18 -> "I32Ne"
+                19 -> "I32Lt"
+                20 -> "I32Le"
+                21 -> "I32Gt"
+                22 -> "I32Ge"
+                23 -> "BoolNot"
+                24 -> "BoolAnd"
+                25 -> "BoolOr"
+                26 -> "Jump"
+                27 -> "JumpIfFalse"
+                28 -> "JumpIfTrue"
+                29 -> "CallStatic"
+                30 -> "Return"
+                31 -> "ReturnUnit"
+                32 -> "CallHost"
+                33 -> "Yield"
+                34 -> "Sleep"
+                35 -> "ConstructRecord"
+                36 -> "GetField"
+                else -> "Opcode$opcode"
+            }
+    }
+}
+
 internal interface NativeVmBindingsFacade {
     fun createImage(
         libraryPath: String,
@@ -59,6 +154,8 @@ internal interface NativeVmBindingsFacade {
         handle: Long,
         value: ByteArray,
     )
+
+    fun imageMetrics(handle: Long): NativeImageVmMetrics = NativeImageVmMetrics.EMPTY
 
     fun freeImage(handle: Long)
 }
@@ -89,6 +186,11 @@ object NativeVmBindings : NativeVmBindingsFacade {
     ) {
         require(handle != 0L) { "Native image VM handle is zero" }
         resumeImageWithNative(handle, value)
+    }
+
+    override fun imageMetrics(handle: Long): NativeImageVmMetrics {
+        require(handle != 0L) { "Native image VM handle is zero" }
+        return NativeImageVmMetrics.from(imageMetricsNative(handle))
     }
 
     override fun freeImage(handle: Long) {
@@ -355,6 +457,9 @@ object NativeVmBindings : NativeVmBindingsFacade {
         handle: Long,
         value: ByteArray,
     )
+
+    @JvmStatic
+    private external fun imageMetricsNative(handle: Long): LongArray
 
     @JvmStatic
     private external fun freeImageNative(handle: Long)
