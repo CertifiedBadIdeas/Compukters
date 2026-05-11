@@ -54,8 +54,8 @@ fun RunConfigSettings.applyShared() {
 private val DEV_CLIENT_USERNAMES = listOf("DevA", "DevB", "DevC")
 
 private val rustVmCrateDir = rootProject.layout.projectDirectory.dir("native/ckl-vm")
-private val rustVmNativeLibrary = rustVmCrateDir.file("target/debug/libckl_vm.so")
 private val rustVmNativePlatform = currentRustVmNativePlatform()
+private val rustVmNativeLibrary = rustVmCrateDir.file("target/debug/${rustVmNativePlatform.libraryName}")
 private val rustVmReleaseNativeLibrary = rustVmCrateDir.file("target/release/${rustVmNativePlatform.libraryName}")
 private val rustVmWindowsX64Target = "x86_64-pc-windows-gnu"
 private val rustVmWindowsX64NativeLibrary = rustVmCrateDir.file("target/$rustVmWindowsX64Target/release/ckl_vm.dll")
@@ -130,13 +130,15 @@ val stageProductionRustVmNativeLibraries =
         group = "build"
         description = "Stage current-platform and Windows x64 Rust CKL VM natives for production universal jars."
         dependsOn(buildRustVmNativeLibraryRelease)
-        dependsOn(buildRustVmWindowsX64NativeLibraryRelease)
+        if (rustVmNativePlatform.id != "windows-x86_64") {
+            dependsOn(buildRustVmWindowsX64NativeLibraryRelease)
+        }
 
         from(rustVmReleaseNativeLibrary) {
             into("natives/${rustVmNativePlatform.id}")
             rename { rustVmNativePlatform.libraryName }
         }
-        from(rustVmWindowsX64NativeLibrary) {
+        from(if (rustVmNativePlatform.id == "windows-x86_64") rustVmReleaseNativeLibrary else rustVmWindowsX64NativeLibrary) {
             into("natives/windows-x86_64")
             rename { "ckl_vm.dll" }
         }
@@ -163,7 +165,6 @@ tasks.register("buildProductionUniversalJar") {
 }
 
 fun RunConfigSettings.applyRustVm() {
-    property("ckl.vm.native.library", rustVmNativeLibrary.asFile.absolutePath)
     property("ckl.vm.native.display", "true")
     property("ckl.vm.native.daemon", "true")
 }
@@ -451,26 +452,3 @@ private fun commandAvailable(command: String): Boolean =
             .waitFor() == 0
     }.getOrDefault(false)
 
-private data class RustVmNativePlatform(
-    val id: String,
-    val libraryName: String,
-)
-
-private fun currentRustVmNativePlatform(): RustVmNativePlatform {
-    val osName = System.getProperty("os.name").lowercase()
-    val osArch =
-        when (System.getProperty("os.arch").lowercase()) {
-            "amd64", "x86_64" -> "x86_64"
-            "aarch64", "arm64" -> "aarch64"
-            else -> error("Unsupported Rust VM native architecture: ${System.getProperty("os.arch")}")
-        }
-    return when {
-        osName.startsWith("linux") ->
-            RustVmNativePlatform(id = "linux-$osArch", libraryName = "libckl_vm.so")
-        osName.startsWith("windows") ->
-            RustVmNativePlatform(id = "windows-$osArch", libraryName = "ckl_vm.dll")
-        osName.startsWith("mac") || osName.startsWith("darwin") ->
-            RustVmNativePlatform(id = "macos-$osArch", libraryName = "libckl_vm.dylib")
-        else -> error("Unsupported Rust VM native OS: ${System.getProperty("os.name")}")
-    }
-}
