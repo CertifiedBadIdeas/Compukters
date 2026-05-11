@@ -113,7 +113,7 @@ class BackgroundDeviceVmTest {
         data class CreatedDaemon(
             val maxEventQueueSize: Int,
             val maxBufferedBytesPerChannel: Int,
-            val instructionBudget: Int,
+            val imageSliceBudgetNanos: Long,
             val deviceId: Int,
             val profileName: String,
         )
@@ -121,7 +121,7 @@ class BackgroundDeviceVmTest {
         val createdDaemons = mutableListOf<CreatedDaemon>()
         val freedDaemons = mutableListOf<Long>()
         val bootedImages = mutableListOf<ByteArray>()
-        val refillQuotaCalls = mutableListOf<Triple<Long, Long, Long>>()
+        val refillQuotaCalls = mutableListOf<Pair<Long, Long>>()
         val runReadyMaxTurns = mutableListOf<Long>()
         val completedRequestIds = mutableListOf<Long>()
         val completedCompileRequests = mutableListOf<Pair<Long, Int>>()
@@ -138,7 +138,7 @@ class BackgroundDeviceVmTest {
         override open fun createDeviceDaemon(
             maxEventQueueSize: Int,
             maxBufferedBytesPerChannel: Int,
-            instructionBudget: Int,
+            imageSliceBudgetNanos: Long,
             deviceId: Int,
             profileName: String,
         ): Long {
@@ -146,7 +146,7 @@ class BackgroundDeviceVmTest {
                 CreatedDaemon(
                     maxEventQueueSize = maxEventQueueSize,
                     maxBufferedBytesPerChannel = maxBufferedBytesPerChannel,
-                    instructionBudget = instructionBudget,
+                    imageSliceBudgetNanos = imageSliceBudgetNanos,
                     deviceId = deviceId,
                     profileName = profileName,
                 )
@@ -170,11 +170,10 @@ class BackgroundDeviceVmTest {
 
         override fun refillDeviceDaemonQuota(
             daemonHandle: Long,
-            instructions: Long,
             wallNanos: Long,
             serverTick: Long,
         ) {
-            refillQuotaCalls += Triple(instructions, wallNanos, serverTick)
+            refillQuotaCalls += wallNanos to serverTick
         }
 
         override fun runDeviceDaemonReady(
@@ -186,7 +185,7 @@ class BackgroundDeviceVmTest {
                 ?: NativeDeviceDaemonTickSummary(
                     serverTick = 0,
                     turns = 0,
-                    remainingInstructions = 0,
+                    remainingWallNanos = 0,
                     idle = true,
                     halted = 0,
                     hostRequests = 0,
@@ -271,7 +270,7 @@ class BackgroundDeviceVmTest {
         override fun createDeviceDaemon(
             maxEventQueueSize: Int,
             maxBufferedBytesPerChannel: Int,
-            instructionBudget: Int,
+            imageSliceBudgetNanos: Long,
             deviceId: Int,
             profileName: String,
         ): Long = error("native daemon unavailable")
@@ -337,7 +336,7 @@ class BackgroundDeviceVmTest {
                 NativeDeviceDaemonTickSummary(
                     serverTick = 42,
                     turns = 2,
-                    remainingInstructions = 12,
+                    remainingWallNanos = 12,
                     idle = false,
                     halted = 1,
                     hostRequests = 3,
@@ -349,7 +348,6 @@ class BackgroundDeviceVmTest {
                         firmwareTestProfile().resources.copy(
                             cpu =
                                 DeviceCpuResources(
-                                    instructionsPerSlice = 123,
                                     wallTimeGuardNanosPerSlice = 456,
                                 ),
                         ),
@@ -372,8 +370,8 @@ class BackgroundDeviceVmTest {
             runtime.refillQuota(serverTick = 42)
             runtime.runReadyUntilBlocked()
 
-            assertEquals(listOf(Triple(123L, 456L, 42L)), bindings.refillQuotaCalls)
-            assertEquals(listOf(123L), bindings.runReadyMaxTurns)
+            assertEquals(listOf(456L to 42L), bindings.refillQuotaCalls)
+            assertEquals(listOf(128L), bindings.runReadyMaxTurns)
             assertTrue(bindings.bootedImages.isNotEmpty())
             runtimeMetricsCollector.snapshot().vm.run {
                 assertEquals(1, nativeDaemonTicks)
@@ -395,7 +393,6 @@ class BackgroundDeviceVmTest {
                         firmwareTestProfile().resources.copy(
                             cpu =
                                 DeviceCpuResources(
-                                    instructionsPerSlice = 2_048,
                                     wallTimeGuardNanosPerSlice = 1_000_000,
                                 ),
                         ),
@@ -411,7 +408,7 @@ class BackgroundDeviceVmTest {
             runtime.refillQuota(serverTick = 12)
             runtime.runReadyUntilBlocked()
 
-            assertEquals(listOf(Triple(128L, 1_000_000L, 12L)), bindings.refillQuotaCalls)
+            assertEquals(listOf(1_000_000L to 12L), bindings.refillQuotaCalls)
             assertEquals(listOf(128L), bindings.runReadyMaxTurns)
         }
 
@@ -629,11 +626,7 @@ class BackgroundDeviceVmTest {
 
             assertEquals(
                 listOf(
-                    Triple(
-                        firmwareTestProfile().resources.cpu.instructionsPerSlice.toLong(),
-                        firmwareTestProfile().resources.cpu.wallTimeGuardNanosPerSlice,
-                        1L,
-                    ),
+                    firmwareTestProfile().resources.cpu.wallTimeGuardNanosPerSlice to 1L,
                 ),
                 daemonBindings.refillQuotaCalls,
             )

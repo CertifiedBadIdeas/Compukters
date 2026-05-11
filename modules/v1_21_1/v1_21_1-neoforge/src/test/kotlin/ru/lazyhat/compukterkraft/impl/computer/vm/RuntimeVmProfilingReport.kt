@@ -98,7 +98,7 @@ internal data class TerminalPipelineSummary(
 )
 
 internal object RuntimeVmProfileCodec {
-    private const val RUNTIME_VM_FIELD_COUNT = 30
+    private const val RUNTIME_VM_FIELD_COUNT = 29
     private const val LEGACY_RUNTIME_TICK_FIELD_COUNT = 19
     private const val LEGACY_RUNTIME_VM_FIELD_COUNT = 52
 
@@ -137,7 +137,7 @@ internal object RuntimeVmProfileCodec {
                     }
                     workload.runtime.vm.run {
                         appendLine(
-                            "runtimeVm\t$sliceRequests\t$nativeExecutionQuotaRefills\t$nativeExecutionQuotaInstructions\t$nativeExecutionQuotaWallNanos\t$nativeExecutionQuotaLastServerTick\t$haltSignals\t$pauseSignals\t$yieldSignals\t$sleepSignals\t$waitEventSignals\t$waitPollSignals\t$waitProcessSignals\t$hostCallSignals\t$nativeFastPathCalls\t$nativeWaitCalls\t$nativeWaitNanos\t$nativeWaitWakeups\t$nativeWaitTimeouts\t$nativeDisplayPumpWaitCalls\t$nativeDisplayPumpWaitNanos\t$nativeDisplayPumpWakeups\t$nativeDisplayPumpTimeouts\t$nativeDisplayFrameByteBatches\t$nativeDisplayFrameBytes\t$nativeDaemonTicks\t$nativeDaemonActiveNanos\t$nativeDaemonIdleTicks\t$nativeDaemonTurns\t$nativeDaemonHaltedProcesses\t$nativeDaemonHostRequests",
+                            "runtimeVm\t$sliceRequests\t$nativeExecutionQuotaRefills\t$nativeExecutionQuotaWallNanos\t$nativeExecutionQuotaLastServerTick\t$haltSignals\t$pauseSignals\t$yieldSignals\t$sleepSignals\t$waitEventSignals\t$waitPollSignals\t$waitProcessSignals\t$hostCallSignals\t$nativeFastPathCalls\t$nativeWaitCalls\t$nativeWaitNanos\t$nativeWaitWakeups\t$nativeWaitTimeouts\t$nativeDisplayPumpWaitCalls\t$nativeDisplayPumpWaitNanos\t$nativeDisplayPumpWakeups\t$nativeDisplayPumpTimeouts\t$nativeDisplayFrameByteBatches\t$nativeDisplayFrameBytes\t$nativeDaemonTicks\t$nativeDaemonActiveNanos\t$nativeDaemonIdleTicks\t$nativeDaemonTurns\t$nativeDaemonHaltedProcesses\t$nativeDaemonHostRequests",
                         )
                     }
                     workload.runtime.hostCalls.forEach { call ->
@@ -380,34 +380,33 @@ internal object RuntimeVmProfileCodec {
             RuntimeVmMetrics(
                 sliceRequests = v.getOrElse(0) { 0 },
                 nativeExecutionQuotaRefills = v.getOrElse(1) { 0 },
-                nativeExecutionQuotaInstructions = v.getOrElse(2) { 0 },
-                nativeExecutionQuotaWallNanos = v.getOrElse(3) { 0 },
-                nativeExecutionQuotaLastServerTick = v.getOrElse(4) { 0 },
-                haltSignals = v.getOrElse(5) { 0 },
-                pauseSignals = v.getOrElse(6) { 0 },
-                yieldSignals = v.getOrElse(7) { 0 },
-                sleepSignals = v.getOrElse(8) { 0 },
-                waitEventSignals = v.getOrElse(9) { 0 },
-                waitPollSignals = v.getOrElse(10) { 0 },
-                waitProcessSignals = v.getOrElse(11) { 0 },
-                hostCallSignals = v.getOrElse(12) { 0 },
-                nativeFastPathCalls = v.getOrElse(13) { 0 },
-                nativeWaitCalls = v.getOrElse(14) { 0 },
-                nativeWaitNanos = v.getOrElse(15) { 0 },
-                nativeWaitWakeups = v.getOrElse(16) { 0 },
-                nativeWaitTimeouts = v.getOrElse(17) { 0 },
-                nativeDisplayPumpWaitCalls = v.getOrElse(18) { 0 },
-                nativeDisplayPumpWaitNanos = v.getOrElse(19) { 0 },
-                nativeDisplayPumpWakeups = v.getOrElse(20) { 0 },
-                nativeDisplayPumpTimeouts = v.getOrElse(21) { 0 },
-                nativeDisplayFrameByteBatches = v.getOrElse(22) { 0 },
-                nativeDisplayFrameBytes = v.getOrElse(23) { 0 },
-                nativeDaemonTicks = v.getOrElse(24) { 0 },
-                nativeDaemonActiveNanos = v.getOrElse(25) { 0 },
-                nativeDaemonIdleTicks = v.getOrElse(26) { 0 },
-                nativeDaemonTurns = v.getOrElse(27) { 0 },
-                nativeDaemonHaltedProcesses = v.getOrElse(28) { 0 },
-                nativeDaemonHostRequests = v.getOrElse(29) { 0 },
+                nativeExecutionQuotaWallNanos = v.getOrElse(2) { 0 },
+                nativeExecutionQuotaLastServerTick = v.getOrElse(3) { 0 },
+                haltSignals = v.getOrElse(4) { 0 },
+                pauseSignals = v.getOrElse(5) { 0 },
+                yieldSignals = v.getOrElse(6) { 0 },
+                sleepSignals = v.getOrElse(7) { 0 },
+                waitEventSignals = v.getOrElse(8) { 0 },
+                waitPollSignals = v.getOrElse(9) { 0 },
+                waitProcessSignals = v.getOrElse(10) { 0 },
+                hostCallSignals = v.getOrElse(11) { 0 },
+                nativeFastPathCalls = v.getOrElse(12) { 0 },
+                nativeWaitCalls = v.getOrElse(13) { 0 },
+                nativeWaitNanos = v.getOrElse(14) { 0 },
+                nativeWaitWakeups = v.getOrElse(15) { 0 },
+                nativeWaitTimeouts = v.getOrElse(16) { 0 },
+                nativeDisplayPumpWaitCalls = v.getOrElse(17) { 0 },
+                nativeDisplayPumpWaitNanos = v.getOrElse(18) { 0 },
+                nativeDisplayPumpWakeups = v.getOrElse(19) { 0 },
+                nativeDisplayPumpTimeouts = v.getOrElse(20) { 0 },
+                nativeDisplayFrameByteBatches = v.getOrElse(21) { 0 },
+                nativeDisplayFrameBytes = v.getOrElse(22) { 0 },
+                nativeDaemonTicks = v.getOrElse(23) { 0 },
+                nativeDaemonActiveNanos = v.getOrElse(24) { 0 },
+                nativeDaemonIdleTicks = v.getOrElse(25) { 0 },
+                nativeDaemonTurns = v.getOrElse(26) { 0 },
+                nativeDaemonHaltedProcesses = v.getOrElse(27) { 0 },
+                nativeDaemonHostRequests = v.getOrElse(28) { 0 },
             )
         }
 
@@ -420,7 +419,6 @@ internal object RuntimeVmProfileCodec {
         return RuntimeVmMetrics(
             sliceRequests = v.getOrElse(0) { 0 },
             nativeExecutionQuotaRefills = if (hasNativeExecutionQuotaFields) v[36] else 0,
-            nativeExecutionQuotaInstructions = if (hasNativeExecutionQuotaFields) v[37] else 0,
             nativeExecutionQuotaWallNanos = if (hasNativeExecutionQuotaFields) v[38] else 0,
             nativeExecutionQuotaLastServerTick = if (hasNativeExecutionQuotaFields) v[39] else 0,
             haltSignals = v.getOrElse(9) { 0 },
@@ -639,7 +637,6 @@ internal object RuntimeVmProfilingReportFormatter {
         appendLine("| Client snapshot pixels | ${workload.client.snapshotPixels} |")
         appendLine("| Runtime all ticks | ${formatNanos(workload.runtime.tick.allNanos)} |")
         appendLine("| Native execution quota refills | ${workload.runtime.vm.nativeExecutionQuotaRefills} |")
-        appendLine("| Native execution quota instructions | ${workload.runtime.vm.nativeExecutionQuotaInstructions} |")
         appendLine("| Native execution quota wall time | ${formatNanos(workload.runtime.vm.nativeExecutionQuotaWallNanos)} |")
         appendLine("| Native execution quota last tick | ${workload.runtime.vm.nativeExecutionQuotaLastServerTick} |")
         appendLine("| Native daemon executor passes | ${workload.runtime.vm.nativeDaemonTicks} |")
@@ -725,7 +722,6 @@ internal object RuntimeVmProfilingReportFormatter {
         appendHistoricalMetricRow("Client snapshot pixels", columns) { workload -> workload.client.snapshotPixels.toString() }
         appendHistoricalMetricRow("Runtime all ticks", columns) { workload -> formatNanos(workload.runtime.tick.allNanos) }
         appendHistoricalMetricRow("Native execution quota refills", columns) { workload -> workload.runtime.vm.nativeExecutionQuotaRefills.toString() }
-        appendHistoricalMetricRow("Native execution quota instructions", columns) { workload -> workload.runtime.vm.nativeExecutionQuotaInstructions.toString() }
         appendHistoricalMetricRow("Native execution quota wall time", columns) { workload -> formatNanos(workload.runtime.vm.nativeExecutionQuotaWallNanos) }
         appendHistoricalMetricRow("Native execution quota last tick", columns) { workload -> workload.runtime.vm.nativeExecutionQuotaLastServerTick.toString() }
         appendHistoricalMetricRow("Native daemon executor passes", columns) { workload -> workload.runtime.vm.nativeDaemonTicks.toString() }

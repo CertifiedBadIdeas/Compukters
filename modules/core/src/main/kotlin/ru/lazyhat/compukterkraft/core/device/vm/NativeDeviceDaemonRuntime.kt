@@ -42,12 +42,6 @@ internal class NativeDeviceDaemonRuntime(
         NativeDaemonCompileResult(image = null, exitCode = 1)
     },
 ) {
-    private val schedulerTurnsPerRefill: Long =
-        profile.resources.cpu.instructionsPerSlice
-            .toLong()
-            .coerceAtLeast(1)
-            .coerceAtMost(MAX_SCHEDULER_TURNS_PER_REFILL)
-
     fun boot(
         image: ByteArray,
         programPath: String,
@@ -87,10 +81,14 @@ internal class NativeDeviceDaemonRuntime(
     ): Long = bindings.waitForDeviceDaemonDisplayWake(daemonHandle, observedWakeSequence, timeoutMillis)
 
     fun refillQuota(serverTick: Long) {
+        val wallNanos = profile.resources.cpu.wallTimeGuardNanosPerSlice
         bindings.refillDeviceDaemonQuota(
             daemonHandle = daemonHandle,
-            instructions = schedulerTurnsPerRefill,
-            wallNanos = profile.resources.cpu.wallTimeGuardNanosPerSlice,
+            wallNanos = wallNanos,
+            serverTick = serverTick,
+        )
+        runtimeMetricsCollector.recordNativeExecutionQuotaRefill(
+            wallNanos = wallNanos,
             serverTick = serverTick,
         )
     }
@@ -100,7 +98,7 @@ internal class NativeDeviceDaemonRuntime(
         val summary =
             bindings.runDeviceDaemonReady(
                 daemonHandle = daemonHandle,
-                maxTurns = schedulerTurnsPerRefill,
+                maxTurns = MAX_SCHEDULER_TURNS_PER_RUN,
             )
         runtimeMetricsCollector.recordNativeDaemonTick(
             activeNanos = System.nanoTime() - started,
@@ -139,16 +137,13 @@ internal data class NativeDaemonCompileResult(
     val exitCode: Int,
 )
 
-// The native kernel currently spends quota per scheduler turn, while each turn runs an image until it blocks,
-// yields, or reaches its per-image instruction budget. Keep the profile budget as the turn quota, with a safety
-// cap so yielding programs cannot flood the device with thousands of process turns per server tick.
-private const val MAX_SCHEDULER_TURNS_PER_REFILL = 128L
+private const val MAX_SCHEDULER_TURNS_PER_RUN = 128L
 
 interface NativeDaemonBindings {
     fun createDeviceDaemon(
         maxEventQueueSize: Int,
         maxBufferedBytesPerChannel: Int,
-        instructionBudget: Int,
+        imageSliceBudgetNanos: Long,
         deviceId: Int,
         profileName: String,
     ): Long
@@ -165,7 +160,6 @@ interface NativeDaemonBindings {
 
     fun refillDeviceDaemonQuota(
         daemonHandle: Long,
-        instructions: Long,
         wallNanos: Long,
         serverTick: Long,
     )
@@ -229,14 +223,14 @@ object NativeVmDaemonBindings : NativeDaemonBindings {
     override fun createDeviceDaemon(
         maxEventQueueSize: Int,
         maxBufferedBytesPerChannel: Int,
-        instructionBudget: Int,
+        imageSliceBudgetNanos: Long,
         deviceId: Int,
         profileName: String,
     ): Long =
         NativeVmBindings.createDeviceDaemon(
             maxEventQueueSize,
             maxBufferedBytesPerChannel,
-            instructionBudget,
+            imageSliceBudgetNanos,
             deviceId,
             profileName,
         )
@@ -254,11 +248,10 @@ object NativeVmDaemonBindings : NativeDaemonBindings {
 
     override fun refillDeviceDaemonQuota(
         daemonHandle: Long,
-        instructions: Long,
         wallNanos: Long,
         serverTick: Long,
     ) {
-        NativeVmBindings.refillDeviceDaemonQuota(daemonHandle, instructions, wallNanos, serverTick)
+        NativeVmBindings.refillDeviceDaemonQuota(daemonHandle, wallNanos, serverTick)
     }
 
     override fun runDeviceDaemonReady(

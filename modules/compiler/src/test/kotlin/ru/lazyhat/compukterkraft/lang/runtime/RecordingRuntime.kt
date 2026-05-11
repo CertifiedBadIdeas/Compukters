@@ -30,7 +30,6 @@ internal data class CapturedMono5x7Blit(
 
 internal class RecordingRuntime(
     private val argument: String = "",
-    private val instructionsPerSlice: Int = 64,
     private val vmRamBytes: Long = 64 * 1024,
     private val monitorConnected: Boolean = false,
     private val queuedEvents: List<VmEvent> = listOf(VmEvent("boot")),
@@ -66,7 +65,6 @@ internal class RecordingRuntime(
                 DeviceResources(
                     cpu =
                         DeviceCpuResources(
-                            instructionsPerSlice = instructionsPerSlice,
                             wallTimeGuardNanosPerSlice = 1_000_000,
                         ),
                     memory = DeviceMemoryResources(vmRamBytes = vmRamBytes),

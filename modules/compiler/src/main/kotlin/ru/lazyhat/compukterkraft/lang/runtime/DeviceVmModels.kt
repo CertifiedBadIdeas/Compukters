@@ -35,7 +35,6 @@ enum class DeviceCapability {
 }
 
 data class DeviceCpuResources(
-    val instructionsPerSlice: Int = 64,
     val wallTimeGuardNanosPerSlice: Long,
 )
 

@@ -1,5 +1,6 @@
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use crate::image::{
     decode_image, Constant, Function, HostImport, Image, Instruction, TypedRegister,
@@ -7,6 +8,8 @@ use crate::image::{
 use crate::runtime_kernel::{DeviceRuntimeKernelHandle, ProcessStatus};
 use crate::signal::{decode_value, encode_error, encode_signal, VmSignal};
 use crate::value::VmValue;
+
+const TIME_CHECK_INTERVAL: usize = 1024;
 
 const DISPLAY_PRIMARY_IMPORT_ID: i32 = 1000;
 const DISPLAY_IS_ATTACHED_IMPORT_ID: i32 = 1001;
@@ -158,8 +161,8 @@ pub struct ImageVmHandle {
     attached_kernel: Option<Arc<DeviceRuntimeKernelHandle>>,
     working_directory: String,
     process_argument: Option<String>,
-    instruction_budget: usize,
-    instructions_since_pause: usize,
+    slice_budget: Duration,
+    instructions_since_time_check: usize,
     pending_resume_register: Option<TypedRegister>,
     state: ImageVmState,
     metrics: ImageVmMetrics,
@@ -182,7 +185,7 @@ enum NativeHostImportResult {
 }
 
 impl ImageVmHandle {
-    pub fn create(image: &[u8], instruction_budget: usize) -> Result<Self, String> {
+    pub fn create(image: &[u8], slice_budget_nanos: u64) -> Result<Self, String> {
         let image = decode_image(image).map_err(|error| error.to_string())?;
         let function_index = checked_entry_function_index(&image)?;
         let entry_function = &image.functions[function_index];
@@ -206,8 +209,8 @@ impl ImageVmHandle {
             attached_kernel: None,
             working_directory: String::new(),
             process_argument: None,
-            instruction_budget: instruction_budget.max(1),
-            instructions_since_pause: 0,
+            slice_budget: Duration::from_nanos(slice_budget_nanos.max(1)),
+            instructions_since_time_check: 0,
             pending_resume_register: None,
             state: ImageVmState::Ready,
             metrics: ImageVmMetrics::default(),
@@ -708,6 +711,7 @@ impl ImageVmHandle {
             ImageVmState::Halted => return Err("native image VM is halted".to_string()),
         }
 
+        let started_at = Instant::now();
         loop {
             let instruction_start = self.instruction_pointer;
             let instruction = match self
@@ -720,7 +724,7 @@ impl ImageVmHandle {
                 None => return self.halt(VmValue::Unit),
             };
             self.instruction_pointer += 1;
-            self.instructions_since_pause += 1;
+            self.instructions_since_time_check += 1;
             self.metrics.instruction_clones = self.metrics.instruction_clones.saturating_add(1);
             self.metrics.record_opcode(instruction_opcode(&instruction));
 
@@ -976,10 +980,12 @@ impl ImageVmHandle {
                 }
             }
 
-            if self.instructions_since_pause >= self.instruction_budget {
-                self.instructions_since_pause = 0;
-                self.metrics.pause_signals = self.metrics.pause_signals.saturating_add(1);
-                return Ok(VmSignal::Pause);
+            if self.instructions_since_time_check >= TIME_CHECK_INTERVAL {
+                self.instructions_since_time_check = 0;
+                if started_at.elapsed() >= self.slice_budget {
+                    self.metrics.pause_signals = self.metrics.pause_signals.saturating_add(1);
+                    return Ok(VmSignal::Pause);
+                }
             }
         }
     }

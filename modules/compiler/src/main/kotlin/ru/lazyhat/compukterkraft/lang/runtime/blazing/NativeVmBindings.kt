@@ -24,7 +24,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.VmValue
 data class NativeDeviceDaemonTickSummary(
     val serverTick: Long,
     val turns: Long,
-    val remainingInstructions: Long,
+    val remainingWallNanos: Long,
     val idle: Boolean,
     val halted: Long,
     val hostRequests: Long,
@@ -194,7 +194,7 @@ internal interface NativeVmBindingsFacade {
     fun createImage(
         libraryPath: String,
         image: ByteArray,
-        instructionBudget: Int,
+        sliceBudgetNanos: Long,
     ): Long
 
     fun runImageUntilSignal(handle: Long): ByteArray
@@ -216,10 +216,10 @@ object NativeVmBindings : NativeVmBindingsFacade {
     override fun createImage(
         libraryPath: String,
         image: ByteArray,
-        instructionBudget: Int,
+        sliceBudgetNanos: Long,
     ): Long {
         load(libraryPath)
-        val handle = createImageNative(image, instructionBudget.coerceAtLeast(1))
+        val handle = createImageNative(image, sliceBudgetNanos.coerceAtLeast(1))
         check(handle != 0L) { "Native image VM create returned a zero handle" }
         return handle
     }
@@ -278,7 +278,7 @@ object NativeVmBindings : NativeVmBindingsFacade {
     fun createDeviceDaemon(
         maxEventQueueSize: Int,
         maxBufferedBytesPerChannel: Int,
-        instructionBudget: Int,
+        imageSliceBudgetNanos: Long,
         deviceId: Int = 0,
         profileName: String = "",
     ): Long {
@@ -287,7 +287,7 @@ object NativeVmBindings : NativeVmBindingsFacade {
             createDeviceDaemonNative(
                 maxEventQueueSize.coerceAtLeast(1),
                 maxBufferedBytesPerChannel.coerceAtLeast(1),
-                instructionBudget.coerceAtLeast(1),
+                imageSliceBudgetNanos.coerceAtLeast(1),
                 deviceId,
                 profileName,
             )
@@ -303,14 +303,12 @@ object NativeVmBindings : NativeVmBindingsFacade {
 
     fun refillDeviceDaemonQuota(
         daemonHandle: Long,
-        instructions: Long,
         wallNanos: Long,
         serverTick: Long,
     ) {
         require(daemonHandle != 0L) { "Native device daemon handle is zero" }
         refillDeviceDaemonQuotaNative(
             daemonHandle,
-            instructions,
             wallNanos,
             serverTick,
         )
@@ -472,7 +470,7 @@ object NativeVmBindings : NativeVmBindingsFacade {
         NativeDeviceDaemonTickSummary(
             serverTick = getOrElse(0) { 0L },
             turns = getOrElse(1) { 0L },
-            remainingInstructions = getOrElse(2) { 0L },
+            remainingWallNanos = getOrElse(2) { 0L },
             idle = getOrElse(3) { 0L } != 0L,
             halted = getOrElse(4) { 0L },
             hostRequests = getOrElse(5) { 0L },
@@ -522,7 +520,7 @@ object NativeVmBindings : NativeVmBindingsFacade {
     @JvmStatic
     private external fun createImageNative(
         image: ByteArray,
-        instructionBudget: Int,
+        sliceBudgetNanos: Long,
     ): Long
 
     @JvmStatic
@@ -559,7 +557,7 @@ object NativeVmBindings : NativeVmBindingsFacade {
     private external fun createDeviceDaemonNative(
         maxEventQueueSize: Int,
         maxBufferedBytesPerChannel: Int,
-        instructionBudget: Int,
+        imageSliceBudgetNanos: Long,
         deviceId: Int,
         profileName: String,
     ): Long
@@ -570,7 +568,6 @@ object NativeVmBindings : NativeVmBindingsFacade {
     @JvmStatic
     private external fun refillDeviceDaemonQuotaNative(
         daemonHandle: Long,
-        instructions: Long,
         wallNanos: Long,
         serverTick: Long,
     )

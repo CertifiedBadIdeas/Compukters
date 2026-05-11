@@ -114,7 +114,7 @@ class BackgroundDeviceVm(
             .createDeviceDaemon(
                 maxEventQueueSize = profile.resources.queues.eventQueueSlots,
                 maxBufferedBytesPerChannel = profile.resources.queues.ipcChannelBytes,
-                instructionBudget = profile.resources.cpu.instructionsPerSlice,
+                imageSliceBudgetNanos = profile.resources.cpu.wallTimeGuardNanosPerSlice,
                 deviceId = deviceId,
                 profileName = profile.displayName,
             )
@@ -384,7 +384,7 @@ class BackgroundDeviceVm(
                     while (keepRunning && isActive) {
                         val summary = nativeDaemonRuntime.runReadyUntilBlocked()
                         runtimeMetricsCollector.recordSliceRequest()
-                        keepRunning = summary.turns > 0 || summary.hostRequests > 0
+                        keepRunning = summary.remainingWallNanos > 0 && (summary.turns > 0 || summary.hostRequests > 0)
                     }
                 }
             }

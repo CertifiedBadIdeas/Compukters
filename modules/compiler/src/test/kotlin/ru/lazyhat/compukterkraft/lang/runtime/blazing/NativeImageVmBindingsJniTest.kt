@@ -40,11 +40,10 @@ class NativeImageVmBindingsJniTest {
     private fun runDaemonSlice(
         handle: Long,
         serverTick: Long,
-        instructions: Long = 128,
         wallNanos: Long = 1_000_000,
     ): NativeDeviceDaemonTickSummary {
-        NativeVmBindings.refillDeviceDaemonQuota(handle, instructions, wallNanos, serverTick)
-        return NativeVmBindings.runDeviceDaemonReady(handle, maxTurns = instructions)
+        NativeVmBindings.refillDeviceDaemonQuota(handle, wallNanos, serverTick)
+        return NativeVmBindings.runDeviceDaemonReady(handle, maxTurns = 128)
     }
 
     @Test
@@ -56,7 +55,7 @@ class NativeImageVmBindingsJniTest {
                     "createDeviceDaemonNative",
                     Int::class.javaPrimitiveType,
                     Int::class.javaPrimitiveType,
-                    Int::class.javaPrimitiveType,
+                    Long::class.javaPrimitiveType,
                     Int::class.javaPrimitiveType,
                     String::class.java,
                 ).returnType,
@@ -66,7 +65,6 @@ class NativeImageVmBindingsJniTest {
             NativeVmBindings::class.java
                 .getDeclaredMethod(
                     "refillDeviceDaemonQuotaNative",
-                    Long::class.javaPrimitiveType,
                     Long::class.javaPrimitiveType,
                     Long::class.javaPrimitiveType,
                     Long::class.javaPrimitiveType,
@@ -135,20 +133,22 @@ class NativeImageVmBindingsJniTest {
     @Test
     fun nativeDeviceDaemonCreateRefillRunReadyFreeRunsWhenLibraryIsConfigured() {
         System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
-        val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 128)
+        val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 1_000_000)
         try {
-            NativeVmBindings.refillDeviceDaemonQuota(handle, 128, 1_000_000, 5)
+            NativeVmBindings.refillDeviceDaemonQuota(handle, 1_000_000, 5)
+            val summary = NativeVmBindings.runDeviceDaemonReady(handle, maxTurns = 128)
             assertEquals(
                 NativeDeviceDaemonTickSummary(
                     serverTick = 5,
                     turns = 0,
-                    remainingInstructions = 128,
+                    remainingWallNanos = summary.remainingWallNanos,
                     idle = true,
                     halted = 0,
                     hostRequests = 0,
                 ),
-                NativeVmBindings.runDeviceDaemonReady(handle, maxTurns = 128),
+                summary,
             )
+            assertTrue(summary.remainingWallNanos > 0)
         } finally {
             NativeVmBindings.freeDeviceDaemon(handle)
         }
@@ -158,18 +158,18 @@ class NativeImageVmBindingsJniTest {
     fun nativeDeviceDaemonCanRefillQuotaAndRunReadyProcessesSeparately() {
         System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val image = assertNotNull(LanguageFrontend().compileImage("main.ck", "pub fun main() { yield(); }").image)
-        val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 64)
+        val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 1_000_000)
         try {
             NativeVmBindings.bootDeviceDaemon(handle, CkVmImageAbi.encode(image), "/rom/boot.ck", "", "")
 
-            NativeVmBindings.refillDeviceDaemonQuota(handle, instructions = 8, wallNanos = 1_000_000, serverTick = 91)
+            NativeVmBindings.refillDeviceDaemonQuota(handle, wallNanos = 1_000_000, serverTick = 91)
             val first = NativeVmBindings.runDeviceDaemonReady(handle, maxTurns = 8)
 
             assertEquals(91, first.serverTick)
             assertEquals(2, first.turns)
             assertEquals(1, first.halted)
             assertTrue(first.idle)
-            assertTrue(first.remainingInstructions >= 0)
+            assertTrue(first.remainingWallNanos >= 0)
         } finally {
             NativeVmBindings.freeDeviceDaemon(handle)
         }
@@ -179,7 +179,7 @@ class NativeImageVmBindingsJniTest {
     fun nativeDeviceDaemonBootImageRunsWhenLibraryIsConfigured() {
         System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val image = assertNotNull(LanguageFrontend().compileImage("main.ck", "pub fun main() { }").image)
-        val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 128)
+        val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 1_000_000)
         try {
             assertEquals(
                 NativeDeviceDaemonBootSummary(pid = 1, imageAttached = true),
@@ -214,14 +214,14 @@ class NativeImageVmBindingsJniTest {
                         """.trimIndent(),
                     ).image,
             )
-        val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 256)
+        val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 1_000_000)
         try {
             NativeVmBindings.attachDeviceDaemonDisplay(handle, displayId = 6, width = 18, height = 18)
             val initial = NativeVmBindings.drainDeviceDaemonDisplayFrames(handle)
             assertTrue(initial.isNotEmpty(), "daemon attach should queue a full refresh frame")
 
             NativeVmBindings.bootDeviceDaemon(handle, CkVmImageAbi.encode(image), "/rom/display.ck", "", "")
-            val tick = runDaemonSlice(handle, serverTick = 1, instructions = 256)
+            val tick = runDaemonSlice(handle, serverTick = 1)
             assertEquals(1, tick.halted)
 
             val dirty = NativeVmBindings.drainDeviceDaemonDisplayFrames(handle)
@@ -248,7 +248,7 @@ class NativeImageVmBindingsJniTest {
                         """.trimIndent(),
                     ).image,
             )
-        val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 256)
+        val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 1_000_000)
         try {
             NativeVmBindings.attachDeviceDaemonDisplay(handle, displayId = 6, width = 18, height = 18)
             NativeVmBindings.drainDeviceDaemonDisplayFrames(handle)
@@ -261,7 +261,7 @@ class NativeImageVmBindingsJniTest {
 
             Thread.sleep(25)
             NativeVmBindings.bootDeviceDaemon(handle, CkVmImageAbi.encode(image), "/rom/display.ck", "", "")
-            assertEquals(1, runDaemonSlice(handle, serverTick = 1, instructions = 256).halted)
+            assertEquals(1, runDaemonSlice(handle, serverTick = 1).halted)
 
             assertTrue(waiter.get(1, java.util.concurrent.TimeUnit.SECONDS) > observed)
         } finally {
@@ -273,7 +273,7 @@ class NativeImageVmBindingsJniTest {
     fun nativeDeviceDaemonHostRequestsRoundTripWhenLibraryIsConfigured() {
         System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val image = assertNotNull(LanguageFrontend().compileImage("main.ck", "pub fun main() { system::log(\"hi\"); }").image)
-        val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 128)
+        val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 1_000_000)
         try {
             NativeVmBindings.bootDeviceDaemon(handle, CkVmImageAbi.encode(image), "/rom/host.ck", "", "")
             val first = runDaemonSlice(handle, serverTick = 1)
@@ -302,7 +302,7 @@ class NativeImageVmBindingsJniTest {
                     .compileImage("main.ck", "pub fun main() { system::log(process::argument()); }")
                     .image,
             )
-        val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 128)
+        val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 1_000_000)
         try {
             NativeVmBindings.bootDeviceDaemon(handle, CkVmImageAbi.encode(image), "/rom/argument.ck", "stdio-v1 1 2 3", "")
 
@@ -327,7 +327,7 @@ class NativeImageVmBindingsJniTest {
                     .compileImage("main.ck", "pub fun main() { system::log(process::currentDirectory()); }")
                     .image,
             )
-        val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 128)
+        val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 1_000_000)
         try {
             NativeVmBindings.bootDeviceDaemon(handle, CkVmImageAbi.encode(image), "/rom/cwd.ck", "", "/rom")
 
@@ -361,7 +361,7 @@ class NativeImageVmBindingsJniTest {
                         """.trimIndent(),
                     ).image,
             )
-        val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 128)
+        val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 1_000_000)
         try {
             NativeVmBindings.attachDeviceDaemonFilesystem(
                 handle,
@@ -392,7 +392,7 @@ class NativeImageVmBindingsJniTest {
                     .image,
             )
         val child = assertNotNull(LanguageFrontend().compileImage("child.ck", "pub fun main() { }").image)
-        val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 128)
+        val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 1_000_000)
         try {
             NativeVmBindings.bootDeviceDaemon(handle, CkVmImageAbi.encode(parent), "/rom/parent.ck", "", "rom")
 
@@ -433,7 +433,7 @@ class NativeImageVmBindingsJniTest {
                     ).image,
             )
         val child = assertNotNull(LanguageFrontend().compileImage("child.ck", "pub fun main() { }").image)
-        val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 128)
+        val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 1_000_000)
         try {
             NativeVmBindings.bootDeviceDaemon(handle, CkVmImageAbi.encode(parent), "/rom/parent.ck", "", "rom")
 
@@ -492,7 +492,7 @@ class NativeImageVmBindingsJniTest {
                         """.trimIndent(),
                     ).image,
             )
-        val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 128)
+        val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 1_000_000)
         try {
             NativeVmBindings.bootDeviceDaemon(handle, CkVmImageAbi.encode(parent), "/rom/parent.ck", "", "rom")
             var logRequest: NativeDeviceDaemonHostRequest? = null
@@ -548,7 +548,7 @@ class NativeImageVmBindingsJniTest {
                         """.trimIndent(),
                     ).image,
             )
-        val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 128)
+        val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 1_000_000)
         try {
             NativeVmBindings.bootDeviceDaemon(handle, CkVmImageAbi.encode(image), "/rom/events.ck", "", "")
             assertTrue(
@@ -591,7 +591,7 @@ class NativeImageVmBindingsJniTest {
                         """.trimIndent(),
                     ).image,
             )
-        val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 128)
+        val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 1_000_000)
         try {
             NativeVmBindings.bootDeviceDaemon(handle, CkVmImageAbi.encode(image), "/rom/poll-events.ck", "", "")
             val waiting = runDaemonSlice(handle, serverTick = 1)
@@ -614,7 +614,7 @@ class NativeImageVmBindingsJniTest {
     fun imageRunnerHaltsForEmptyMainWhenLibraryIsConfigured() {
         val libraryPath = System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val image = assertNotNull(LanguageFrontend().compileImage("main.ck", "pub fun main() { }").image)
-        val handle = NativeVmBindings.createImage(libraryPath, CkVmImageAbi.encode(image), instructionBudget = 128)
+        val handle = NativeVmBindings.createImage(libraryPath, CkVmImageAbi.encode(image), sliceBudgetNanos = 1_000_000)
 
         try {
             val signal = NativeVmSignal.decode(NativeVmBindings.runImageUntilSignal(handle))
@@ -688,7 +688,7 @@ class NativeImageVmBindingsJniTest {
                         """.trimIndent(),
                     ).image,
             )
-        val handle = NativeVmBindings.createImage(libraryPath, CkVmImageAbi.encode(image), instructionBudget = 128)
+        val handle = NativeVmBindings.createImage(libraryPath, CkVmImageAbi.encode(image), sliceBudgetNanos = 1_000_000)
 
         try {
             val halt = assertIs<NativeVmSignal.Halt>(NativeVmSignal.decode(NativeVmBindings.runImageUntilSignal(handle)))
@@ -711,7 +711,7 @@ class NativeImageVmBindingsJniTest {
     fun imageRunnerEmitsHostCallAndResumesWhenLibraryIsConfigured() {
         val libraryPath = System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val image = assertNotNull(LanguageFrontend().compileImage("main.ck", "pub fun main() { system::log(\"hi\"); }").image)
-        val handle = NativeVmBindings.createImage(libraryPath, CkVmImageAbi.encode(image), instructionBudget = 128)
+        val handle = NativeVmBindings.createImage(libraryPath, CkVmImageAbi.encode(image), sliceBudgetNanos = 1_000_000)
 
         try {
             val signal = assertIs<NativeVmSignal.HostCall>(NativeVmSignal.decode(NativeVmBindings.runImageUntilSignal(handle)))

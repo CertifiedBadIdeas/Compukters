@@ -35,7 +35,6 @@ pub struct ProcessSchedulerTick {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DeviceExecutionQuotaSnapshot {
-    pub instructions: i64,
     pub wall_nanos: i64,
     pub server_tick: i64,
 }
@@ -44,7 +43,7 @@ pub struct DeviceExecutionQuotaSnapshot {
 pub struct DeviceSchedulerDryRun {
     pub server_tick: i64,
     pub turns: i64,
-    pub remaining_instructions: i64,
+    pub remaining_turns: i64,
     pub selected_pids: Vec<i32>,
 }
 
@@ -53,8 +52,6 @@ pub struct DeviceSchedulerStep {
     pub server_tick: i64,
     pub selected_pid: Option<i32>,
     pub selected_image_handle: Option<i64>,
-    pub remaining_instructions: i64,
-    pub quota_exhausted: bool,
     pub woken_pids: Vec<i32>,
 }
 
@@ -130,7 +127,6 @@ impl DeviceRuntimeKernel {
             display_wake_sequence: 0,
             max_event_queue_size: max_event_queue_size.max(1),
             execution_quota: DeviceExecutionQuotaSnapshot {
-                instructions: 0,
                 wall_nanos: 0,
                 server_tick: 0,
             },
@@ -147,12 +143,10 @@ impl DeviceRuntimeKernel {
 
     pub fn add_execution_quota(
         &mut self,
-        instructions: i64,
         wall_nanos: i64,
         server_tick: i64,
     ) -> DeviceExecutionQuotaSnapshot {
         self.execution_quota = DeviceExecutionQuotaSnapshot {
-            instructions: instructions.max(0),
             wall_nanos: wall_nanos.max(0),
             server_tick,
         };
@@ -165,7 +159,7 @@ impl DeviceRuntimeKernel {
 
     pub fn run_scheduler_dry_run(&self, max_turns: i64) -> DeviceSchedulerDryRun {
         let max_turns = max_turns.max(0);
-        let mut remaining_instructions = self.execution_quota.instructions.max(0);
+        let mut remaining_turns = max_turns;
         let mut processes = self.processes.clone();
         let mut runnable_queue = self.runnable_queue.clone();
         let mut runnable_pids = self.runnable_pids.clone();
@@ -191,20 +185,20 @@ impl DeviceRuntimeKernel {
             }
         }
 
-        while remaining_instructions > 0 && (selected_pids.len() as i64) < max_turns {
+        while remaining_turns > 0 {
             let Some(pid) =
                 Self::next_runnable_pid_from(&mut runnable_queue, &mut runnable_pids, &processes)
             else {
                 break;
             };
             selected_pids.push(pid);
-            remaining_instructions = remaining_instructions.saturating_sub(1);
+            remaining_turns = remaining_turns.saturating_sub(1);
         }
 
         DeviceSchedulerDryRun {
             server_tick: self.execution_quota.server_tick,
             turns: selected_pids.len() as i64,
-            remaining_instructions,
+            remaining_turns,
             selected_pids,
         }
     }
@@ -212,24 +206,14 @@ impl DeviceRuntimeKernel {
     pub fn run_scheduler_step(&mut self) -> DeviceSchedulerStep {
         let server_tick = self.execution_quota.server_tick;
         let woken_pids = self.wake_sleepers(server_tick);
-        let selected_pid = if self.execution_quota.instructions > 0 {
-            self.next_runnable_pid()
-        } else {
-            None
-        };
+        let selected_pid = self.next_runnable_pid();
         let selected_image_handle = selected_pid
             .and_then(|pid| self.processes.get(&pid))
             .and_then(|entry| entry.image_handle);
-        if selected_pid.is_some() {
-            self.execution_quota.instructions = self.execution_quota.instructions.saturating_sub(1);
-        }
-        let remaining_instructions = self.execution_quota.instructions.max(0);
         DeviceSchedulerStep {
             server_tick,
             selected_pid,
             selected_image_handle,
-            remaining_instructions,
-            quota_exhausted: remaining_instructions == 0,
             woken_pids,
         }
     }
@@ -955,21 +939,19 @@ mod tests {
     }
 
     #[test]
-    fn execution_quota_refill_replaces_previous_budget() {
+    fn execution_window_refill_replaces_previous_budget() {
         let mut kernel = DeviceRuntimeKernel::new(16, 1024);
 
         assert_eq!(
-            kernel.add_execution_quota(1_024, 2_000, 7),
+            kernel.add_execution_quota(2_000, 7),
             DeviceExecutionQuotaSnapshot {
-                instructions: 1_024,
                 wall_nanos: 2_000,
                 server_tick: 7,
             }
         );
         assert_eq!(
-            kernel.add_execution_quota(512, 750, 8),
+            kernel.add_execution_quota(750, 8),
             DeviceExecutionQuotaSnapshot {
-                instructions: 512,
                 wall_nanos: 750,
                 server_tick: 8,
             }
@@ -977,7 +959,6 @@ mod tests {
         assert_eq!(
             kernel.execution_quota_snapshot(),
             DeviceExecutionQuotaSnapshot {
-                instructions: 512,
                 wall_nanos: 750,
                 server_tick: 8,
             }
@@ -985,13 +966,12 @@ mod tests {
     }
 
     #[test]
-    fn execution_quota_refill_clamps_negative_budgets() {
+    fn execution_window_refill_clamps_negative_budgets() {
         let mut kernel = DeviceRuntimeKernel::new(16, 1024);
 
         assert_eq!(
-            kernel.add_execution_quota(-1, -2, 9),
+            kernel.add_execution_quota(-2, 9),
             DeviceExecutionQuotaSnapshot {
-                instructions: 0,
                 wall_nanos: 0,
                 server_tick: 9,
             }
@@ -999,18 +979,18 @@ mod tests {
     }
 
     #[test]
-    fn scheduler_dry_run_uses_quota_and_round_robin_without_mutating_scheduler() {
+    fn scheduler_dry_run_uses_turn_cap_and_round_robin_without_mutating_scheduler() {
         let mut kernel = DeviceRuntimeKernel::new(16, 1024);
         assert!(kernel.register_process(1, 0, "/rom/a.ck".to_string()));
         assert!(kernel.register_process(2, 0, "/rom/b.ck".to_string()));
-        assert!(kernel.add_execution_quota(3, 1_000, 42).instructions == 3);
+        assert_eq!(kernel.add_execution_quota(1_000, 42).wall_nanos, 1_000);
 
         assert_eq!(
-            kernel.run_scheduler_dry_run(8),
+            kernel.run_scheduler_dry_run(3),
             DeviceSchedulerDryRun {
                 server_tick: 42,
                 turns: 3,
-                remaining_instructions: 0,
+                remaining_turns: 0,
                 selected_pids: vec![1, 2, 1],
             }
         );
@@ -1029,14 +1009,14 @@ mod tests {
         let mut kernel = DeviceRuntimeKernel::new(16, 1024);
         assert!(kernel.register_process(1, 0, "/rom/a.ck".to_string()));
         assert!(kernel.register_process(2, 0, "/rom/b.ck".to_string()));
-        assert!(kernel.add_execution_quota(5, 1_000, 43).instructions == 5);
+        assert_eq!(kernel.add_execution_quota(1_000, 43).wall_nanos, 1_000);
 
         assert_eq!(
             kernel.run_scheduler_dry_run(2),
             DeviceSchedulerDryRun {
                 server_tick: 43,
                 turns: 2,
-                remaining_instructions: 3,
+                remaining_turns: 0,
                 selected_pids: vec![1, 2],
             }
         );
@@ -1045,14 +1025,14 @@ mod tests {
     #[test]
     fn scheduler_dry_run_stops_when_no_runnable_processes() {
         let mut kernel = DeviceRuntimeKernel::new(16, 1024);
-        assert!(kernel.add_execution_quota(5, 1_000, 44).instructions == 5);
+        assert_eq!(kernel.add_execution_quota(1_000, 44).wall_nanos, 1_000);
 
         assert_eq!(
             kernel.run_scheduler_dry_run(8),
             DeviceSchedulerDryRun {
                 server_tick: 44,
                 turns: 0,
-                remaining_instructions: 5,
+                remaining_turns: 8,
                 selected_pids: Vec::new(),
             }
         );
@@ -1063,14 +1043,14 @@ mod tests {
         let mut kernel = DeviceRuntimeKernel::new(16, 1024);
         assert!(kernel.register_process(1, 0, "/rom/a.ck".to_string()));
         assert!(kernel.mark_process_sleeping(1, 5));
-        assert!(kernel.add_execution_quota(2, 1_000, 5).instructions == 2);
+        assert_eq!(kernel.add_execution_quota(1_000, 5).wall_nanos, 1_000);
 
         assert_eq!(
-            kernel.run_scheduler_dry_run(4),
+            kernel.run_scheduler_dry_run(2),
             DeviceSchedulerDryRun {
                 server_tick: 5,
                 turns: 2,
-                remaining_instructions: 0,
+                remaining_turns: 0,
                 selected_pids: vec![1, 1],
             }
         );
@@ -1094,13 +1074,13 @@ mod tests {
     }
 
     #[test]
-    fn scheduler_step_consumes_quota_and_rotates_round_robin() {
+    fn scheduler_step_rotates_round_robin() {
         let mut kernel = DeviceRuntimeKernel::new(16, 1024);
         assert!(kernel.register_process(1, 0, "/rom/a.ck".to_string()));
         assert!(kernel.register_process(2, 0, "/rom/b.ck".to_string()));
         assert!(kernel.attach_process_image(1, 101));
         assert!(kernel.attach_process_image(2, 202));
-        assert!(kernel.add_execution_quota(2, 1_000, 42).instructions == 2);
+        assert_eq!(kernel.add_execution_quota(1_000, 42).wall_nanos, 1_000);
 
         assert_eq!(
             kernel.run_scheduler_step(),
@@ -1108,8 +1088,6 @@ mod tests {
                 server_tick: 42,
                 selected_pid: Some(1),
                 selected_image_handle: Some(101),
-                remaining_instructions: 1,
-                quota_exhausted: false,
                 woken_pids: Vec::new(),
             }
         );
@@ -1119,8 +1097,6 @@ mod tests {
                 server_tick: 42,
                 selected_pid: Some(2),
                 selected_image_handle: Some(202),
-                remaining_instructions: 0,
-                quota_exhausted: true,
                 woken_pids: Vec::new(),
             }
         );
@@ -1128,10 +1104,8 @@ mod tests {
             kernel.run_scheduler_step(),
             DeviceSchedulerStep {
                 server_tick: 42,
-                selected_pid: None,
-                selected_image_handle: None,
-                remaining_instructions: 0,
-                quota_exhausted: true,
+                selected_pid: Some(1),
+                selected_image_handle: Some(101),
                 woken_pids: Vec::new(),
             }
         );
@@ -1142,7 +1116,7 @@ mod tests {
         let mut kernel = DeviceRuntimeKernel::new(16, 1024);
         assert!(kernel.register_process(1, 0, "/rom/a.ck".to_string()));
         assert!(kernel.mark_process_sleeping(1, 5));
-        assert!(kernel.add_execution_quota(1, 1_000, 5).instructions == 1);
+        assert_eq!(kernel.add_execution_quota(1_000, 5).wall_nanos, 1_000);
 
         assert_eq!(
             kernel.run_scheduler_step(),
@@ -1150,8 +1124,6 @@ mod tests {
                 server_tick: 5,
                 selected_pid: Some(1),
                 selected_image_handle: None,
-                remaining_instructions: 0,
-                quota_exhausted: true,
                 woken_pids: vec![1],
             }
         );
@@ -1166,7 +1138,7 @@ mod tests {
         assert!(!kernel.attach_process_image(1, 0));
         assert!(!kernel.attach_process_image(1, -1));
         assert!(kernel.attach_process_image(1, 101));
-        assert!(kernel.add_execution_quota(1, 1_000, 42).instructions == 1);
+        assert_eq!(kernel.add_execution_quota(1_000, 42).wall_nanos, 1_000);
 
         assert_eq!(
             kernel.run_scheduler_step(),
@@ -1174,8 +1146,6 @@ mod tests {
                 server_tick: 42,
                 selected_pid: Some(1),
                 selected_image_handle: Some(101),
-                remaining_instructions: 0,
-                quota_exhausted: true,
                 woken_pids: Vec::new(),
             }
         );
