@@ -71,10 +71,7 @@ pub fn encode_signal(signal: &VmSignal) -> Vec<u8> {
             writer.i32(*channel);
             writer.i64(*wake_sequence);
         }
-        VmSignal::WaitProcess {
-            pid,
-            wake_sequence,
-        } => {
+        VmSignal::WaitProcess { pid, wake_sequence } => {
             writer.u8(SIGNAL_WAIT_PROCESS);
             writer.i32(*pid);
             writer.i64(*wake_sequence);

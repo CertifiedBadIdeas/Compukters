@@ -634,6 +634,11 @@ impl ImageVmHandle {
                             self.stack.push(value);
                         }
                         NativeHostImportResult::Fallback(arguments) => {
+                            if !allows_kotlin_hostcall_fallback(&module_name, &function_name) {
+                                return Err(format!(
+                                    "native host import {module_name}.{function_name} is not implemented; Kotlin fallback is disabled for native-owned hostcalls"
+                                ));
+                            }
                             self.state = ImageVmState::WaitingForResume;
                             return Ok(VmSignal::HostCall {
                                 module_name,
@@ -1597,6 +1602,20 @@ fn apply_unary_operator(operator: u8, operand: VmValue) -> Result<VmValue, Strin
     }
 }
 
+fn allows_kotlin_hostcall_fallback(module_name: &str, function_name: &str) -> bool {
+    matches!(
+        (module_name, function_name),
+        ("system", "currentTick")
+            | ("system", "label")
+            | ("system", "log")
+            | ("system", "shutdown")
+            | ("system", "reboot")
+            | ("process", "run")
+            | ("process", "spawn")
+            | ("monitor", "exists")
+    )
+}
+
 fn try_builtin_native_host_import(
     import_id: i32,
     module_name: &str,
@@ -2113,6 +2132,45 @@ mod tests {
             NativeHostImportResult::SignalNoResume { .. } => {
                 panic!("expected currentDirectory fallback without native filesystem")
             }
+        }
+    }
+
+    #[test]
+    fn native_owned_host_imports_do_not_allow_kotlin_fallback() {
+        for (module_name, function_name) in [
+            ("filesystem", "unknown"),
+            ("display", "unknown"),
+            ("events", "unknown"),
+            ("ipc", "unknown"),
+            ("runtime", "unknown"),
+            ("strings", "unknown"),
+            ("process", "currentDirectory"),
+            ("process", "changeDirectory"),
+            ("process", "wait"),
+        ] {
+            assert!(
+                !allows_kotlin_hostcall_fallback(module_name, function_name),
+                "{module_name}.{function_name} must fail fast instead of falling back to Kotlin",
+            );
+        }
+    }
+
+    #[test]
+    fn jvm_owned_host_imports_keep_explicit_kotlin_fallback() {
+        for (module_name, function_name) in [
+            ("system", "currentTick"),
+            ("system", "label"),
+            ("system", "log"),
+            ("system", "shutdown"),
+            ("system", "reboot"),
+            ("process", "run"),
+            ("process", "spawn"),
+            ("monitor", "exists"),
+        ] {
+            assert!(
+                allows_kotlin_hostcall_fallback(module_name, function_name),
+                "{module_name}.{function_name} should remain Kotlin-owned for now",
+            );
         }
     }
 

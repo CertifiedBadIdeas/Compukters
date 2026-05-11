@@ -614,6 +614,72 @@ fn attached_kernel_handles_system_identity_without_generic_host_call() {
 }
 
 #[test]
+fn native_owned_unresolved_host_import_fails_fast_instead_of_falling_back() {
+    let mut code = Vec::new();
+    call_host(&mut code, 9000, 0);
+    code.push(OP_RETURN);
+
+    let mut vm = ImageVmHandle::create(
+        &image_with_constants_host_imports_and_code(
+            vec![],
+            vec![HostImportFixture {
+                id: 9000,
+                module_name: "filesystem".to_string(),
+                function_name: "unknown".to_string(),
+                parameter_types: vec![],
+                return_type: "Unit".to_string(),
+            }],
+            0,
+            code,
+        ),
+        4096,
+    )
+    .unwrap();
+    vm.attach_device_kernel(Arc::new(DeviceRuntimeKernelHandle::new(8, 64)))
+        .unwrap();
+
+    let signal = vm.run_until_signal();
+
+    assert_eq!(signal[0], 255);
+    let message = String::from_utf8_lossy(&signal);
+    assert!(message.contains("filesystem.unknown"), "{message}");
+    assert!(message.contains("Kotlin fallback is disabled"), "{message}");
+}
+
+#[test]
+fn jvm_owned_unresolved_host_import_still_emits_host_call_signal() {
+    let mut code = Vec::new();
+    call_host(&mut code, 3001, 0);
+    code.push(OP_RETURN);
+
+    let mut vm = ImageVmHandle::create(
+        &image_with_constants_host_imports_and_code(
+            vec![],
+            vec![HostImportFixture {
+                id: 3001,
+                module_name: "system".to_string(),
+                function_name: "currentTick".to_string(),
+                parameter_types: vec![],
+                return_type: "Long".to_string(),
+            }],
+            0,
+            code,
+        ),
+        4096,
+    )
+    .unwrap();
+    vm.attach_device_kernel(Arc::new(DeviceRuntimeKernelHandle::new(8, 64)))
+        .unwrap();
+
+    let signal = vm.run_until_signal();
+
+    assert_eq!(signal[0], 4);
+    let encoded = String::from_utf8_lossy(&signal);
+    assert!(encoded.contains("system"), "{encoded}");
+    assert!(encoded.contains("currentTick"), "{encoded}");
+}
+
+#[test]
 fn process_registration_and_completion_report_success() {
     let mut kernel = ckl_vm::runtime_kernel::DeviceRuntimeKernel::new(8, 64);
 
@@ -2881,7 +2947,7 @@ fn image_with_constants_host_import_and_code(
         constants,
         vec![HostImportFixture {
             id: 1,
-            module_name: "test".to_string(),
+            module_name: "system".to_string(),
             function_name: "log".to_string(),
             parameter_types: vec!["String".to_string()],
             return_type: "Unit".to_string(),
@@ -2936,7 +3002,7 @@ fn image_with_constants_host_import_and_functions(
     let host_imports = if include_host_import {
         vec![HostImportFixture {
             id: 1,
-            module_name: "test".to_string(),
+            module_name: "system".to_string(),
             function_name: "log".to_string(),
             parameter_types: vec!["String".to_string()],
             return_type: "Unit".to_string(),
