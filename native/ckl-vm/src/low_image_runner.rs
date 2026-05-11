@@ -10,14 +10,45 @@ pub enum LowImageSignal {
     Pause,
 }
 
-pub struct LowImageVm {
-    image: Image,
+#[derive(Clone, Copy)]
+enum LowRegisterValue {
+    I32(i32),
+    I64(i64),
+    Addr(u32),
+    Bool(bool),
+}
+
+struct LowFrame {
     function_index: usize,
     instruction_pointer: usize,
+    return_register: Option<Register>,
     i32_registers: Vec<i32>,
     i64_registers: Vec<i64>,
     addr_registers: Vec<u32>,
     bool_registers: Vec<bool>,
+}
+
+impl LowFrame {
+    fn create(
+        function_index: usize,
+        function: &crate::low_image::Function,
+        return_register: Option<Register>,
+    ) -> Self {
+        Self {
+            function_index,
+            instruction_pointer: 0,
+            return_register,
+            i32_registers: vec![0; function.i32_register_count],
+            i64_registers: vec![0; function.i64_register_count],
+            addr_registers: vec![0; function.addr_register_count],
+            bool_registers: vec![false; function.bool_register_count],
+        }
+    }
+}
+
+pub struct LowImageVm {
+    image: Image,
+    frames: Vec<LowFrame>,
     memory: Vec<u8>,
     instruction_budget: usize,
     instructions_since_pause: usize,
@@ -44,19 +75,19 @@ impl LowImageVm {
                 "memory sections require {initialized} bytes but memory size is {memory_size}",
             ));
         }
-        let function = &image.functions[image.entry_function_index];
         let mut memory = vec![0_u8; memory_size];
         memory[..image.rodata.len()].copy_from_slice(&image.rodata);
         let data_start = image.rodata.len();
         memory[data_start..data_start + image.data.len()].copy_from_slice(&image.data);
+        let entry_function_index = image.entry_function_index;
+        let entry_frame = LowFrame::create(
+            entry_function_index,
+            &image.functions[entry_function_index],
+            None,
+        );
         Ok(Self {
-            i32_registers: vec![0; function.i32_register_count],
-            i64_registers: vec![0; function.i64_register_count],
-            addr_registers: vec![0; function.addr_register_count],
-            bool_registers: vec![false; function.bool_register_count],
+            frames: vec![entry_frame],
             image,
-            function_index: 0,
-            instruction_pointer: 0,
             memory,
             instruction_budget: instruction_budget.max(1),
             instructions_since_pause: 0,
@@ -69,13 +100,21 @@ impl LowImageVm {
 
     pub fn run_until_signal(&mut self) -> Result<LowImageSignal, String> {
         loop {
+            let (function_index, instruction_pointer) = {
+                let frame = self.current_frame_mut()?;
+                let instruction_pointer = frame.instruction_pointer;
+                frame.instruction_pointer += 1;
+                (frame.function_index, instruction_pointer)
+            };
             let instruction = self
-                .current_function()?
+                .image
+                .functions
+                .get(function_index)
+                .ok_or_else(|| format!("function index {function_index} is out of bounds"))?
                 .instructions
-                .get(self.instruction_pointer)
+                .get(instruction_pointer)
                 .cloned()
                 .unwrap_or(Instruction::ReturnUnit);
-            self.instruction_pointer += 1;
             self.instructions_since_pause += 1;
             match instruction {
                 Instruction::I32Const { dst, value } => self.write_i32(dst, value)?,
@@ -153,14 +192,21 @@ impl LowImageVm {
                         self.jump(target)?;
                     }
                 }
-                Instruction::Return { src } => return self.halt_register(src),
-                Instruction::ReturnUnit => return Ok(LowImageSignal::HaltUnit),
-                Instruction::CallStatic { .. } => {
-                    return Err(
-                        "low VM CallStatic is not implemented in the first runner slice"
-                            .to_string(),
-                    )
+                Instruction::Return { src } => {
+                    if let Some(signal) = self.return_value(src)? {
+                        return Ok(signal);
+                    }
                 }
+                Instruction::ReturnUnit => {
+                    if let Some(signal) = self.return_unit()? {
+                        return Ok(signal);
+                    }
+                }
+                Instruction::CallStatic {
+                    return_register,
+                    function_index,
+                    arguments,
+                } => self.call_static(return_register, function_index, arguments)?,
             }
             if self.instructions_since_pause >= self.instruction_budget {
                 self.instructions_since_pause = 0;
@@ -170,43 +216,156 @@ impl LowImageVm {
     }
 
     fn current_function(&self) -> Result<&crate::low_image::Function, String> {
+        let function_index = self.current_frame()?.function_index;
         self.image
             .functions
-            .get(self.function_index)
-            .ok_or_else(|| format!("function index {} is out of bounds", self.function_index))
+            .get(function_index)
+            .ok_or_else(|| format!("function index {function_index} is out of bounds"))
     }
 
-    fn halt_register(&self, register: Register) -> Result<LowImageSignal, String> {
+    fn current_frame(&self) -> Result<&LowFrame, String> {
+        self.frames
+            .last()
+            .ok_or_else(|| "low VM call stack is empty".to_string())
+    }
+
+    fn current_frame_mut(&mut self) -> Result<&mut LowFrame, String> {
+        self.frames
+            .last_mut()
+            .ok_or_else(|| "low VM call stack is empty".to_string())
+    }
+
+    fn return_value(&mut self, register: Register) -> Result<Option<LowImageSignal>, String> {
+        let value = self.read_register_value(register)?;
+        if self.frames.len() == 1 {
+            return Ok(Some(self.signal_from_value(value)?));
+        }
+        let return_register = self.current_frame()?.return_register;
+        self.frames.pop();
+        if let Some(return_register) = return_register {
+            self.write_register_value(return_register, value)?;
+        }
+        Ok(None)
+    }
+
+    fn return_unit(&mut self) -> Result<Option<LowImageSignal>, String> {
+        if self.frames.len() == 1 {
+            return Ok(Some(LowImageSignal::HaltUnit));
+        }
+        let return_register = self.current_frame()?.return_register;
+        self.frames.pop();
+        if let Some(return_register) = return_register {
+            return Err(format!(
+                "callee returned unit but caller expected {return_register:?}",
+            ));
+        }
+        Ok(None)
+    }
+
+    fn call_static(
+        &mut self,
+        return_register: Option<Register>,
+        function_index: usize,
+        arguments: Vec<Register>,
+    ) -> Result<(), String> {
+        let values = arguments
+            .into_iter()
+            .map(|argument| self.read_register_value(argument))
+            .collect::<Result<Vec<_>, _>>()?;
+        let function = self
+            .image
+            .functions
+            .get(function_index)
+            .ok_or_else(|| format!("function index {function_index} is out of bounds"))?;
+        if values.len() != function.parameters.len() {
+            return Err(format!(
+                "function {function_index} expects {} arguments but call provided {}",
+                function.parameters.len(),
+                values.len(),
+            ));
+        }
+        let parameters = function.parameters.clone();
+        let mut frame = LowFrame::create(function_index, function, return_register);
+        for (parameter, value) in parameters.into_iter().zip(values) {
+            Self::write_register_value_to_frame(&mut frame, parameter, value)?;
+        }
+        self.frames.push(frame);
+        Ok(())
+    }
+
+    fn signal_from_value(&self, value: LowRegisterValue) -> Result<LowImageSignal, String> {
+        match value {
+            LowRegisterValue::I32(value) => Ok(LowImageSignal::HaltI32(value)),
+            LowRegisterValue::I64(value) => Ok(LowImageSignal::HaltI64(value)),
+            LowRegisterValue::Addr(value) => Ok(LowImageSignal::HaltAddr(value)),
+            LowRegisterValue::Bool(value) => Ok(LowImageSignal::HaltBool(value)),
+        }
+    }
+
+    fn read_register_value(&self, register: Register) -> Result<LowRegisterValue, String> {
         match register {
-            Register::I32(index) => Ok(LowImageSignal::HaltI32(
-                *self
+            Register::I32(index) => Ok(LowRegisterValue::I32(self.read_i32(index)?)),
+            Register::I64(index) => Ok(LowRegisterValue::I64(self.read_i64(index)?)),
+            Register::Addr(index) => Ok(LowRegisterValue::Addr(self.read_addr(index)?)),
+            Register::Bool(index) => Ok(LowRegisterValue::Bool(self.read_bool(index)?)),
+        }
+    }
+
+    fn write_register_value(
+        &mut self,
+        register: Register,
+        value: LowRegisterValue,
+    ) -> Result<(), String> {
+        match (register, value) {
+            (Register::I32(index), LowRegisterValue::I32(value)) => self.write_i32(index, value),
+            (Register::I64(index), LowRegisterValue::I64(value)) => self.write_i64(index, value),
+            (Register::Addr(index), LowRegisterValue::Addr(value)) => self.write_addr(index, value),
+            (Register::Bool(index), LowRegisterValue::Bool(value)) => self.write_bool(index, value),
+            (register, _) => Err(format!("return value type does not match {register:?}")),
+        }
+    }
+
+    fn write_register_value_to_frame(
+        frame: &mut LowFrame,
+        register: Register,
+        value: LowRegisterValue,
+    ) -> Result<(), String> {
+        match (register, value) {
+            (Register::I32(index), LowRegisterValue::I32(value)) => {
+                *frame
                     .i32_registers
-                    .get(index as usize)
-                    .ok_or_else(|| format!("i32 register {index} is out of bounds"))?,
-            )),
-            Register::I64(index) => Ok(LowImageSignal::HaltI64(
-                *self
+                    .get_mut(index as usize)
+                    .ok_or_else(|| format!("i32 register {index} is out of bounds"))? = value;
+                Ok(())
+            }
+            (Register::I64(index), LowRegisterValue::I64(value)) => {
+                *frame
                     .i64_registers
-                    .get(index as usize)
-                    .ok_or_else(|| format!("i64 register {index} is out of bounds"))?,
-            )),
-            Register::Addr(index) => Ok(LowImageSignal::HaltAddr(
-                *self
+                    .get_mut(index as usize)
+                    .ok_or_else(|| format!("i64 register {index} is out of bounds"))? = value;
+                Ok(())
+            }
+            (Register::Addr(index), LowRegisterValue::Addr(value)) => {
+                *frame
                     .addr_registers
-                    .get(index as usize)
-                    .ok_or_else(|| format!("addr register {index} is out of bounds"))?,
-            )),
-            Register::Bool(index) => Ok(LowImageSignal::HaltBool(
-                *self
+                    .get_mut(index as usize)
+                    .ok_or_else(|| format!("addr register {index} is out of bounds"))? = value;
+                Ok(())
+            }
+            (Register::Bool(index), LowRegisterValue::Bool(value)) => {
+                *frame
                     .bool_registers
-                    .get(index as usize)
-                    .ok_or_else(|| format!("bool register {index} is out of bounds"))?,
-            )),
+                    .get_mut(index as usize)
+                    .ok_or_else(|| format!("bool register {index} is out of bounds"))? = value;
+                Ok(())
+            }
+            (register, _) => Err(format!("argument value type does not match {register:?}")),
         }
     }
 
     fn read_i32(&self, register: u16) -> Result<i32, String> {
-        self.i32_registers
+        self.current_frame()?
+            .i32_registers
             .get(register as usize)
             .copied()
             .ok_or_else(|| format!("i32 register {register} is out of bounds"))
@@ -214,14 +373,24 @@ impl LowImageVm {
 
     fn write_i32(&mut self, register: u16, value: i32) -> Result<(), String> {
         *self
+            .current_frame_mut()?
             .i32_registers
             .get_mut(register as usize)
             .ok_or_else(|| format!("i32 register {register} is out of bounds"))? = value;
         Ok(())
     }
 
+    fn read_i64(&self, register: u16) -> Result<i64, String> {
+        self.current_frame()?
+            .i64_registers
+            .get(register as usize)
+            .copied()
+            .ok_or_else(|| format!("i64 register {register} is out of bounds"))
+    }
+
     fn write_i64(&mut self, register: u16, value: i64) -> Result<(), String> {
         *self
+            .current_frame_mut()?
             .i64_registers
             .get_mut(register as usize)
             .ok_or_else(|| format!("i64 register {register} is out of bounds"))? = value;
@@ -229,7 +398,8 @@ impl LowImageVm {
     }
 
     fn read_addr(&self, register: u16) -> Result<u32, String> {
-        self.addr_registers
+        self.current_frame()?
+            .addr_registers
             .get(register as usize)
             .copied()
             .ok_or_else(|| format!("addr register {register} is out of bounds"))
@@ -237,6 +407,7 @@ impl LowImageVm {
 
     fn write_addr(&mut self, register: u16, value: u32) -> Result<(), String> {
         *self
+            .current_frame_mut()?
             .addr_registers
             .get_mut(register as usize)
             .ok_or_else(|| format!("addr register {register} is out of bounds"))? = value;
@@ -244,7 +415,8 @@ impl LowImageVm {
     }
 
     fn read_bool(&self, register: u16) -> Result<bool, String> {
-        self.bool_registers
+        self.current_frame()?
+            .bool_registers
             .get(register as usize)
             .copied()
             .ok_or_else(|| format!("bool register {register} is out of bounds"))
@@ -252,6 +424,7 @@ impl LowImageVm {
 
     fn write_bool(&mut self, register: u16, value: bool) -> Result<(), String> {
         *self
+            .current_frame_mut()?
             .bool_registers
             .get_mut(register as usize)
             .ok_or_else(|| format!("bool register {register} is out of bounds"))? = value;
@@ -265,7 +438,7 @@ impl LowImageVm {
                 "jump target {target} is outside function instruction count {instruction_count}",
             ));
         }
-        self.instruction_pointer = target;
+        self.current_frame_mut()?.instruction_pointer = target;
         Ok(())
     }
 

@@ -140,7 +140,10 @@ internal class LowVmComputeBenchmarkRunner(
     val name: String = "Low-level VM"
 
     fun supports(workload: ComputeVmBenchmarkWorkloadSpec): Boolean =
-        workload.name == "integer-mix" || workload.name == "branch-div"
+        workload.name == "integer-mix" ||
+            workload.name == "function-mix" ||
+            workload.name == "branch-div" ||
+            workload.name == "recursive-fib"
 
     fun warmUp(
         workload: ComputeVmBenchmarkWorkloadSpec,
@@ -169,7 +172,9 @@ internal class LowVmComputeBenchmarkRunner(
     ): ByteArray =
         when (workload.name) {
             "integer-mix" -> CkLowVmImageAbi.encode(integerMixImage(iterations))
+            "function-mix" -> CkLowVmImageAbi.encode(functionMixImage(iterations))
             "branch-div" -> CkLowVmImageAbi.encode(branchDivImage(iterations))
+            "recursive-fib" -> CkLowVmImageAbi.encode(recursiveFibImage(iterations))
             else -> error("Low-level VM benchmark does not support ${workload.name} yet.")
         }
 
@@ -316,6 +321,181 @@ internal class LowVmComputeBenchmarkRunner(
                 ),
         )
     }
+
+    private fun functionMixImage(iterations: Int): CkLowVmImage =
+        CkLowVmImage(
+            languageVersion = "ckl-low-1",
+            memorySize = 1024u,
+            entryFunctionIndex = 0,
+            functions =
+                listOf(
+                    CkLowVmFunction(
+                        name = "main",
+                        i32RegisterCount = 5,
+                        i64RegisterCount = 0,
+                        addrRegisterCount = 0,
+                        boolRegisterCount = 1,
+                        parameters = emptyList(),
+                        instructions = functionMixMainInstructions(iterations),
+                    ),
+                    CkLowVmFunction(
+                        name = "mixA",
+                        i32RegisterCount = 11,
+                        i64RegisterCount = 0,
+                        addrRegisterCount = 0,
+                        boolRegisterCount = 0,
+                        parameters = listOf(CkLowVmRegister.I32(0), CkLowVmRegister.I32(1)),
+                        instructions =
+                            listOf(
+                                CkLowVmInstruction.I32Const(dst = 2, value = 17),
+                                CkLowVmInstruction.I32Const(dst = 3, value = 3),
+                                CkLowVmInstruction.I32Const(dst = 4, value = 1),
+                                CkLowVmInstruction.I32Mul(dst = 5, lhs = 1, rhs = 2),
+                                CkLowVmInstruction.I32Add(dst = 6, lhs = 0, rhs = 5),
+                                CkLowVmInstruction.I32Shl(dst = 7, lhs = 0, rhs = 3),
+                                CkLowVmInstruction.I32BitXor(dst = 8, lhs = 6, rhs = 7),
+                                CkLowVmInstruction.I32Shr(dst = 9, lhs = 1, rhs = 4),
+                                CkLowVmInstruction.I32Add(dst = 10, lhs = 8, rhs = 9),
+                                CkLowVmInstruction.Return(CkLowVmRegister.I32(10)),
+                            ),
+                    ),
+                    CkLowVmFunction(
+                        name = "mixB",
+                        i32RegisterCount = 11,
+                        i64RegisterCount = 0,
+                        addrRegisterCount = 0,
+                        boolRegisterCount = 0,
+                        parameters = listOf(CkLowVmRegister.I32(0), CkLowVmRegister.I32(1)),
+                        instructions =
+                            listOf(
+                                CkLowVmInstruction.I32Const(dst = 2, value = 131),
+                                CkLowVmInstruction.I32Const(dst = 3, value = 2),
+                                CkLowVmInstruction.I32Const(dst = 4, value = 4),
+                                CkLowVmInstruction.I32Mul(dst = 5, lhs = 1, rhs = 2),
+                                CkLowVmInstruction.I32BitXor(dst = 6, lhs = 0, rhs = 5),
+                                CkLowVmInstruction.I32Shr(dst = 7, lhs = 0, rhs = 3),
+                                CkLowVmInstruction.I32Add(dst = 8, lhs = 6, rhs = 7),
+                                CkLowVmInstruction.I32Shl(dst = 9, lhs = 1, rhs = 4),
+                                CkLowVmInstruction.I32BitXor(dst = 10, lhs = 8, rhs = 9),
+                                CkLowVmInstruction.Return(CkLowVmRegister.I32(10)),
+                            ),
+                    ),
+                ),
+        )
+
+    private fun functionMixMainInstructions(iterations: Int): List<CkLowVmInstruction> {
+        val instructions = mutableListOf<CkLowVmInstruction>()
+        instructions += CkLowVmInstruction.I32Const(dst = 0, value = iterations)
+        instructions += CkLowVmInstruction.I32Const(dst = 1, value = 324_508_639)
+        instructions += CkLowVmInstruction.I32Const(dst = 2, value = 0)
+        instructions += CkLowVmInstruction.I32Const(dst = 3, value = 1)
+        val loopStart = instructions.size
+        instructions += CkLowVmInstruction.I32Lt(dst = 0, lhs = 2, rhs = 0)
+        val exitJumpIndex = instructions.size
+        instructions += CkLowVmInstruction.JumpIfFalse(cond = 0, target = -1)
+        instructions +=
+            CkLowVmInstruction.CallStatic(
+                returnRegister = CkLowVmRegister.I32(4),
+                functionIndex = 1,
+                arguments = listOf(CkLowVmRegister.I32(1), CkLowVmRegister.I32(2)),
+            )
+        instructions +=
+            CkLowVmInstruction.CallStatic(
+                returnRegister = CkLowVmRegister.I32(1),
+                functionIndex = 2,
+                arguments = listOf(CkLowVmRegister.I32(4), CkLowVmRegister.I32(2)),
+            )
+        instructions += CkLowVmInstruction.I32Add(dst = 2, lhs = 2, rhs = 3)
+        instructions += CkLowVmInstruction.Jump(target = loopStart)
+        instructions[exitJumpIndex] = CkLowVmInstruction.JumpIfFalse(cond = 0, target = instructions.size)
+        instructions += CkLowVmInstruction.Return(CkLowVmRegister.I32(1))
+        return instructions
+    }
+
+    private fun recursiveFibImage(iterations: Int): CkLowVmImage =
+        CkLowVmImage(
+            languageVersion = "ckl-low-1",
+            memorySize = 1024u,
+            entryFunctionIndex = 0,
+            functions =
+                listOf(
+                    CkLowVmFunction(
+                        name = "main",
+                        i32RegisterCount = 12,
+                        i64RegisterCount = 0,
+                        addrRegisterCount = 0,
+                        boolRegisterCount = 1,
+                        parameters = emptyList(),
+                        instructions = recursiveFibMainInstructions(iterations),
+                    ),
+                    CkLowVmFunction(
+                        name = "fib",
+                        i32RegisterCount = 7,
+                        i64RegisterCount = 0,
+                        addrRegisterCount = 0,
+                        boolRegisterCount = 1,
+                        parameters = listOf(CkLowVmRegister.I32(0)),
+                        instructions = fibFunctionInstructions(),
+                    ),
+                ),
+        )
+
+    private fun recursiveFibMainInstructions(iterations: Int): List<CkLowVmInstruction> {
+        val instructions = mutableListOf<CkLowVmInstruction>()
+        instructions += CkLowVmInstruction.I32Const(dst = 0, value = iterations)
+        instructions += CkLowVmInstruction.I32Const(dst = 1, value = 0)
+        instructions += CkLowVmInstruction.I32Const(dst = 2, value = 0)
+        instructions += CkLowVmInstruction.I32Const(dst = 3, value = 1)
+        instructions += CkLowVmInstruction.I32Const(dst = 4, value = 6)
+        instructions += CkLowVmInstruction.I32Const(dst = 5, value = 10)
+        instructions += CkLowVmInstruction.I32Const(dst = 6, value = 31)
+        val loopStart = instructions.size
+        instructions += CkLowVmInstruction.I32Lt(dst = 0, lhs = 2, rhs = 0)
+        val exitJumpIndex = instructions.size
+        instructions += CkLowVmInstruction.JumpIfFalse(cond = 0, target = -1)
+        instructions += CkLowVmInstruction.I32Div(dst = 7, lhs = 2, rhs = 4)
+        instructions += CkLowVmInstruction.I32Mul(dst = 8, lhs = 7, rhs = 4)
+        instructions += CkLowVmInstruction.I32Sub(dst = 9, lhs = 2, rhs = 8)
+        instructions += CkLowVmInstruction.I32Add(dst = 9, lhs = 9, rhs = 5)
+        instructions +=
+            CkLowVmInstruction.CallStatic(
+                returnRegister = CkLowVmRegister.I32(10),
+                functionIndex = 1,
+                arguments = listOf(CkLowVmRegister.I32(9)),
+            )
+        instructions += CkLowVmInstruction.I32Mul(dst = 11, lhs = 2, rhs = 6)
+        instructions += CkLowVmInstruction.I32BitXor(dst = 10, lhs = 10, rhs = 11)
+        instructions += CkLowVmInstruction.I32Add(dst = 1, lhs = 1, rhs = 10)
+        instructions += CkLowVmInstruction.I32Add(dst = 2, lhs = 2, rhs = 3)
+        instructions += CkLowVmInstruction.Jump(target = loopStart)
+        instructions[exitJumpIndex] = CkLowVmInstruction.JumpIfFalse(cond = 0, target = instructions.size)
+        instructions += CkLowVmInstruction.Return(CkLowVmRegister.I32(1))
+        return instructions
+    }
+
+    private fun fibFunctionInstructions(): List<CkLowVmInstruction> =
+        listOf(
+            CkLowVmInstruction.I32Const(dst = 1, value = 2),
+            CkLowVmInstruction.I32Lt(dst = 0, lhs = 0, rhs = 1),
+            CkLowVmInstruction.JumpIfFalse(cond = 0, target = 4),
+            CkLowVmInstruction.Return(CkLowVmRegister.I32(0)),
+            CkLowVmInstruction.I32Const(dst = 2, value = 1),
+            CkLowVmInstruction.I32Sub(dst = 3, lhs = 0, rhs = 2),
+            CkLowVmInstruction.CallStatic(
+                returnRegister = CkLowVmRegister.I32(4),
+                functionIndex = 1,
+                arguments = listOf(CkLowVmRegister.I32(3)),
+            ),
+            CkLowVmInstruction.I32Const(dst = 2, value = 2),
+            CkLowVmInstruction.I32Sub(dst = 3, lhs = 0, rhs = 2),
+            CkLowVmInstruction.CallStatic(
+                returnRegister = CkLowVmRegister.I32(5),
+                functionIndex = 1,
+                arguments = listOf(CkLowVmRegister.I32(3)),
+            ),
+            CkLowVmInstruction.I32Add(dst = 6, lhs = 4, rhs = 5),
+            CkLowVmInstruction.Return(CkLowVmRegister.I32(6)),
+        )
 
     private companion object {
         const val INSTRUCTION_BUDGET = Int.MAX_VALUE
