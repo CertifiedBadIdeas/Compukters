@@ -874,11 +874,11 @@ mod tests {
     fn ckim_polls_empty_channel_then_halts(channel: i32) -> Vec<u8> {
         image_with_instructions(
             vec![ConstantFixture::Int(channel)],
-            vec![HostImportFixture::new(1, "runtime", "poll")],
+            vec![HostImportFixture::new(8000, "runtime", "poll")],
             2,
             |out| {
                 load_const(out, 0, 0);
-                call_host(out, Some(1), 1, &[0]);
+                call_host(out, Some(1), 8000, &[0]);
                 return_register(out, 1);
             },
         )
@@ -887,11 +887,11 @@ mod tests {
     fn ckim_waits_for_pid_then_halts(pid: i32) -> Vec<u8> {
         image_with_instructions(
             vec![ConstantFixture::Int(pid)],
-            vec![HostImportFixture::new(1, "process", "wait")],
+            vec![HostImportFixture::new(6007, "process", "wait")],
             2,
             |out| {
                 load_const(out, 0, 0);
-                call_host(out, Some(1), 1, &[0]);
+                call_host(out, Some(1), 6007, &[0]);
                 return_register(out, 1);
             },
         )
@@ -900,11 +900,11 @@ mod tests {
     fn ckim_calls_system_log_then_halts() -> Vec<u8> {
         image_with_instructions(
             vec![ConstantFixture::String("hello".to_string())],
-            vec![HostImportFixture::new(1, "system", "log")],
+            vec![HostImportFixture::new(3004, "system", "log")],
             2,
             |out| {
                 load_const(out, 0, 0);
-                call_host(out, Some(1), 1, &[0]);
+                call_host(out, Some(1), 3004, &[0]);
                 return_unit(out);
             },
         )
@@ -916,12 +916,12 @@ mod tests {
                 ConstantFixture::String(path.to_string()),
                 ConstantFixture::String(argument.to_string()),
             ],
-            vec![HostImportFixture::new(1, "process", "spawn")],
+            vec![HostImportFixture::new(6006, "process", "spawn")],
             3,
             |out| {
                 load_const(out, 0, 0);
                 load_const(out, 1, 1);
-                call_host(out, Some(2), 1, &[0, 1]);
+                call_host(out, Some(2), 6006, &[0, 1]);
                 return_unit(out);
             },
         )
@@ -931,14 +931,14 @@ mod tests {
         image_with_instructions(
             vec![ConstantFixture::Int(channel)],
             vec![
-                HostImportFixture::new(1, "ipc", "read"),
-                HostImportFixture::new(2, "system", "log"),
+                HostImportFixture::new(5002, "ipc", "read"),
+                HostImportFixture::new(3004, "system", "log"),
             ],
             3,
             |out| {
                 load_const(out, 0, 0);
-                call_host(out, Some(1), 1, &[0]);
-                call_host(out, Some(2), 2, &[1]);
+                call_host(out, Some(1), 5002, &[0]);
+                call_host(out, Some(2), 3004, &[1]);
                 return_unit(out);
             },
         )

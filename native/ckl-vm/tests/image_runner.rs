@@ -324,6 +324,38 @@ fn attached_kernel_handles_system_device_id_without_hostcall_signal() {
 }
 
 #[test]
+fn native_hostcall_dispatch_uses_import_id_not_declared_names() {
+    let image = image(
+        vec![],
+        vec![HostImportFixture::new(
+            3000,
+            "wrong",
+            "wrong",
+            vec![],
+            "Int",
+        )],
+        vec![function(
+            "main",
+            1,
+            0,
+            vec![call_host(Some(0), 3000, &[]), return_register(0)],
+        )],
+        0,
+    );
+    let mut handle = ImageVmHandle::create(&image, 128).unwrap();
+    handle
+        .attach_device_kernel(Arc::new(
+            DeviceRuntimeKernelHandle::new_with_system_identity(8, 1024, 42, "test".to_string()),
+        ))
+        .unwrap();
+
+    assert_eq!(
+        handle.run_until_signal_decoded().unwrap(),
+        VmSignal::Halt(VmValue::Int(42)),
+    );
+}
+
+#[test]
 fn native_owned_unknown_host_import_fails_fast() {
     let image = image(
         vec![],
