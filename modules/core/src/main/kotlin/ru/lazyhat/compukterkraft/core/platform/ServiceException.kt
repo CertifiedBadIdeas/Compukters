@@ -22,7 +22,7 @@ import org.jetbrains.annotations.ApiStatus
 import java.io.Serial
 
 /**
- * A ComputerCraft-related service failed to load.
+ * A Compukter Kraft platform service failed to load.
  *
  *
  * Do **NOT** directly reference this class. It exists for internal use by the API.

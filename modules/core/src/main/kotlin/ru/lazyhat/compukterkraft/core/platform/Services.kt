@@ -33,10 +33,9 @@ object Services {
      * Load a service, asserting that only a single instance is registered.
      *
      * @param klass The class of the service to load.
-     * @param <T>   The class of the service to load.
      * @return The constructed service instance.
      * @throws IllegalStateException When the service cannot be loaded.
-     </T> */
+     */
     fun <T> load(klass: Class<T>): T {
         val services: List<ServiceLoader.Provider<T>> = ServiceLoader.load(klass, klass.classLoader).stream().toList()
         return when (services.size) {
@@ -59,10 +58,8 @@ object Services {
      * Attempt to load a service with [.load].
      *
      * @param klass The class of the service to load.
-     * @param <T>   The class of the service to load.
      * @return The result type, either containing the service or an exception.
-     * @see ComputerCraftAPIService Intended usage of this class.
-     </T> */
+     */
     fun <T> tryLoad(klass: Class<T>): LoadedService<T> =
         try {
             LoadedService(load<T>(klass), null)
@@ -77,11 +74,10 @@ object Services {
      *
      * @param klass The class of the service we failed to load.
      * @param e     The original exception caused by loading this class.
-     * @param <T>   The class of the service to load.
      * @return Never
      * @see .tryLoad
      * @see LoadedService.error
-     </T> */
+     */
     fun <T> raise(
         klass: Class<T>,
         e: Throwable?,
