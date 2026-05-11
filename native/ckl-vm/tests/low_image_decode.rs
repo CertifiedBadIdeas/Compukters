@@ -1,4 +1,4 @@
-use ckl_vm::low_image::{decode_image, ImageError, Instruction, Register};
+use ckl_vm::low_image::{decode_image, ImageError, Instruction};
 
 #[test]
 fn decodes_low_level_image_with_linear_memory_layout() {
@@ -11,17 +11,15 @@ fn decodes_low_level_image_with_linear_memory_layout() {
     assert_eq!(image.bss_size, 16);
     assert_eq!(image.entry_function_index, 0);
     assert_eq!(image.functions.len(), 1);
-    assert_eq!(image.functions[0].addr_register_count, 1);
+    assert_eq!(image.functions[0].register_count, 3);
     assert_eq!(
         image.functions[0].instructions,
         vec![
-            Instruction::AddrConst { dst: 0, value: 128 },
+            Instruction::AddrConst { dst: 2, value: 128 },
             Instruction::I32Const { dst: 0, value: 7 },
-            Instruction::Store32 { addr: 0, src: 0 },
-            Instruction::Load32 { dst: 1, addr: 0 },
-            Instruction::Return {
-                src: Register::I32(1),
-            },
+            Instruction::Store32 { addr: 2, src: 0 },
+            Instruction::Load32 { dst: 1, addr: 2 },
+            Instruction::ReturnI32 { src: 1 },
         ],
     );
 }
@@ -29,9 +27,9 @@ fn decodes_low_level_image_with_linear_memory_layout() {
 #[test]
 fn rejects_legacy_image_versions() {
     let mut bytes = representative_image_bytes();
-    bytes[4] = 3;
+    bytes[4] = 4;
 
-    assert_eq!(decode_image(&bytes), Err(ImageError::UnsupportedVersion(3)),);
+    assert_eq!(decode_image(&bytes), Err(ImageError::UnsupportedVersion(4)),);
 }
 
 #[test]
@@ -47,7 +45,7 @@ fn decodes_kotlin_generated_low_fixture() {
 fn representative_image_bytes() -> Vec<u8> {
     let mut out = Vec::new();
     out.extend_from_slice(b"CKIM");
-    out.push(4);
+    out.push(5);
     string(&mut out, "ckl-low-1");
     u32(&mut out, 4096);
     bytes(&mut out, &[1, 2, 3]);
@@ -56,48 +54,24 @@ fn representative_image_bytes() -> Vec<u8> {
     i32(&mut out, 0);
     i32(&mut out, 1);
     string(&mut out, "main");
-    u16(&mut out, 2);
-    u16(&mut out, 0);
-    u16(&mut out, 1);
-    u16(&mut out, 0);
+    u16(&mut out, 3);
     i32(&mut out, 0);
     i32(&mut out, 5);
     out.push(3);
-    u16(&mut out, 0);
+    u16(&mut out, 2);
     u32(&mut out, 128);
     out.push(1);
     u16(&mut out, 0);
     i32(&mut out, 7);
     out.push(15);
-    u16(&mut out, 0);
+    u16(&mut out, 2);
     u16(&mut out, 0);
     out.push(14);
     u16(&mut out, 1);
-    u16(&mut out, 0);
+    u16(&mut out, 2);
     out.push(20);
-    register(&mut out, Register::I32(1));
+    u16(&mut out, 1);
     out
-}
-
-fn register(out: &mut Vec<u8>, register: Register) {
-    match register {
-        Register::I32(index) => {
-            out.push(1);
-            u16(out, index);
-        }
-        Register::I64(index) => {
-            out.push(2);
-            u16(out, index);
-        }
-        Register::Addr(index) => {
-            out.push(3);
-            u16(out, index);
-        }
-        Register::Bool(index) => {
-            out.push(4);
-            u16(out, index);
-        }
-    }
 }
 
 fn string(out: &mut Vec<u8>, value: &str) {

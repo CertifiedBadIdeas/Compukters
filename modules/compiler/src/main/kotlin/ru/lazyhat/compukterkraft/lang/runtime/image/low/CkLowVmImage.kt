@@ -33,33 +33,10 @@ data class CkLowVmImage(
 
 data class CkLowVmFunction(
     val name: String,
-    val i32RegisterCount: Int,
-    val i64RegisterCount: Int,
-    val addrRegisterCount: Int,
-    val boolRegisterCount: Int,
-    val parameters: List<CkLowVmRegister>,
+    val registerCount: Int,
+    val parameters: List<Int>,
     val instructions: List<CkLowVmInstruction>,
 )
-
-sealed interface CkLowVmRegister {
-    val index: Int
-
-    data class I32(
-        override val index: Int,
-    ) : CkLowVmRegister
-
-    data class I64(
-        override val index: Int,
-    ) : CkLowVmRegister
-
-    data class Addr(
-        override val index: Int,
-    ) : CkLowVmRegister
-
-    data class Bool(
-        override val index: Int,
-    ) : CkLowVmRegister
-}
 
 sealed interface CkLowVmInstruction {
     data class I32Const(
@@ -161,13 +138,25 @@ sealed interface CkLowVmInstruction {
     ) : CkLowVmInstruction
 
     data class CallStatic(
-        val returnRegister: CkLowVmRegister?,
+        val returnRegister: Int?,
         val functionIndex: Int,
-        val arguments: List<CkLowVmRegister>,
+        val arguments: List<Int>,
     ) : CkLowVmInstruction
 
-    data class Return(
-        val src: CkLowVmRegister,
+    data class ReturnI32(
+        val src: Int,
+    ) : CkLowVmInstruction
+
+    data class ReturnI64(
+        val src: Int,
+    ) : CkLowVmInstruction
+
+    data class ReturnAddr(
+        val src: Int,
+    ) : CkLowVmInstruction
+
+    data class ReturnBool(
+        val src: Int,
     ) : CkLowVmInstruction
 
     data object ReturnUnit : CkLowVmInstruction

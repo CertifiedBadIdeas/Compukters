@@ -5,80 +5,24 @@ import kotlin.test.assertEquals
 
 class CkLowVmImageAbiTest {
     @Test
-    fun lowImageModelDescribesLinearMemoryAndPrimitiveRegisters() {
-        val image =
-            CkLowVmImage(
-                languageVersion = "ckl-low-1",
-                memorySize = 4096u,
-                rodata = byteArrayOf(1, 2, 3),
-                data = byteArrayOf(4, 5),
-                bssSize = 16u,
-                entryFunctionIndex = 0,
-                functions =
-                    listOf(
-                        CkLowVmFunction(
-                            name = "main",
-                            i32RegisterCount = 2,
-                            i64RegisterCount = 0,
-                            addrRegisterCount = 1,
-                            boolRegisterCount = 0,
-                            parameters = emptyList(),
-                            instructions =
-                                listOf(
-                                    CkLowVmInstruction.AddrConst(dst = 0, value = 128u),
-                                    CkLowVmInstruction.I32Const(dst = 0, value = 7),
-                                    CkLowVmInstruction.Store32(addr = 0, src = 0),
-                                    CkLowVmInstruction.Load32(dst = 1, addr = 0),
-                                    CkLowVmInstruction.Return(CkLowVmRegister.I32(1)),
-                                ),
-                        ),
-                    ),
-            )
+    fun lowImageModelDescribesLinearMemoryAndUnifiedPrimitiveRegisters() {
+        val image = representativeImage()
 
         assertEquals(4096u, image.memorySize)
-        assertEquals(1, image.functions.single().addrRegisterCount)
+        assertEquals(3, image.functions.single().registerCount)
         assertEquals(
-            CkLowVmRegister.I32(1),
-            (image.functions.single().instructions.last() as CkLowVmInstruction.Return).src,
+            1,
+            (image.functions.single().instructions.last() as CkLowVmInstruction.ReturnI32).src,
         )
     }
 
     @Test
-    fun lowImageAbiEncodesVersionFourAndLinearMemoryLayout() {
-        val bytes =
-            CkLowVmImageAbi.encode(
-                CkLowVmImage(
-                    languageVersion = "ckl-low-1",
-                    memorySize = 4096u,
-                    rodata = byteArrayOf(1, 2, 3),
-                    data = byteArrayOf(4, 5),
-                    bssSize = 16u,
-                    entryFunctionIndex = 0,
-                    functions =
-                        listOf(
-                            CkLowVmFunction(
-                                name = "main",
-                                i32RegisterCount = 2,
-                                i64RegisterCount = 0,
-                                addrRegisterCount = 1,
-                                boolRegisterCount = 0,
-                                parameters = emptyList(),
-                                instructions =
-                                    listOf(
-                                        CkLowVmInstruction.AddrConst(0, 128u),
-                                        CkLowVmInstruction.I32Const(0, 7),
-                                        CkLowVmInstruction.Store32(0, 0),
-                                        CkLowVmInstruction.Load32(1, 0),
-                                        CkLowVmInstruction.Return(CkLowVmRegister.I32(1)),
-                                    ),
-                            ),
-                        ),
-                ),
-            )
+    fun lowImageAbiEncodesVersionFiveAndUnifiedRegisters() {
+        val bytes = CkLowVmImageAbi.encode(representativeImage())
         val reader = LowTestReader(bytes)
 
         assertEquals("CKIM", reader.ascii(4))
-        assertEquals(4, reader.u8())
+        assertEquals(5, reader.u8())
         assertEquals("ckl-low-1", reader.string())
         assertEquals(4096u, reader.u32())
         assertEquals(listOf(1, 2, 3), reader.bytes().map { it.toInt() })
@@ -87,64 +31,59 @@ class CkLowVmImageAbiTest {
         assertEquals(0, reader.i32())
         assertEquals(1, reader.i32())
         assertEquals("main", reader.string())
-        assertEquals(2, reader.u16())
-        assertEquals(0, reader.u16())
-        assertEquals(1, reader.u16())
-        assertEquals(0, reader.u16())
+        assertEquals(3, reader.u16())
         assertEquals(emptyList(), reader.registerList())
         assertEquals(5, reader.i32())
         assertEquals(CkLowVmImageAbi.InstructionTags.ADDR_CONST, reader.u8())
-        assertEquals(0, reader.u16())
+        assertEquals(2, reader.u16())
         assertEquals(128u, reader.u32())
         assertEquals(CkLowVmImageAbi.InstructionTags.I32_CONST, reader.u8())
         assertEquals(0, reader.u16())
         assertEquals(7, reader.i32())
         assertEquals(CkLowVmImageAbi.InstructionTags.STORE32, reader.u8())
-        assertEquals(0, reader.u16())
+        assertEquals(2, reader.u16())
         assertEquals(0, reader.u16())
         assertEquals(CkLowVmImageAbi.InstructionTags.LOAD32, reader.u8())
         assertEquals(1, reader.u16())
-        assertEquals(0, reader.u16())
-        assertEquals(CkLowVmImageAbi.InstructionTags.RETURN, reader.u8())
-        assertEquals(CkLowVmRegister.I32(1), reader.register())
+        assertEquals(2, reader.u16())
+        assertEquals(CkLowVmImageAbi.InstructionTags.RETURN_I32, reader.u8())
+        assertEquals(1, reader.u16())
         assertEquals(bytes.size, reader.offset)
     }
 
     @Test
     fun writesLowGoldenFixtureWhenPathIsProvided() {
         val path = System.getProperty("ckl.low.image.golden.path")?.takeIf(String::isNotBlank) ?: return
-        val image =
-            CkLowVmImage(
-                languageVersion = "ckl-low-1",
-                memorySize = 4096u,
-                rodata = byteArrayOf(1, 2, 3),
-                data = byteArrayOf(4, 5),
-                bssSize = 16u,
-                entryFunctionIndex = 0,
-                functions =
-                    listOf(
-                        CkLowVmFunction(
-                            name = "main",
-                            i32RegisterCount = 2,
-                            i64RegisterCount = 0,
-                            addrRegisterCount = 1,
-                            boolRegisterCount = 0,
-                            parameters = emptyList(),
-                            instructions =
-                                listOf(
-                                    CkLowVmInstruction.AddrConst(0, 128u),
-                                    CkLowVmInstruction.I32Const(0, 7),
-                                    CkLowVmInstruction.Store32(0, 0),
-                                    CkLowVmInstruction.Load32(1, 0),
-                                    CkLowVmInstruction.Return(CkLowVmRegister.I32(1)),
-                                ),
-                        ),
-                    ),
-            )
 
         java.nio.file.Files.createDirectories(java.nio.file.Path.of(path).parent)
-        java.nio.file.Files.write(java.nio.file.Path.of(path), CkLowVmImageAbi.encode(image))
+        java.nio.file.Files.write(java.nio.file.Path.of(path), CkLowVmImageAbi.encode(representativeImage()))
     }
+
+    private fun representativeImage(): CkLowVmImage =
+        CkLowVmImage(
+            languageVersion = "ckl-low-1",
+            memorySize = 4096u,
+            rodata = byteArrayOf(1, 2, 3),
+            data = byteArrayOf(4, 5),
+            bssSize = 16u,
+            entryFunctionIndex = 0,
+            functions =
+                listOf(
+                    CkLowVmFunction(
+                        name = "main",
+                        registerCount = 3,
+                        parameters = emptyList(),
+                        instructions =
+                            listOf(
+                                CkLowVmInstruction.AddrConst(2, 128u),
+                                CkLowVmInstruction.I32Const(0, 7),
+                                CkLowVmInstruction.Store32(2, 0),
+                                CkLowVmInstruction.Load32(1, 2),
+                                CkLowVmInstruction.ReturnI32(1),
+                            ),
+                    ),
+                ),
+        )
 
     private class LowTestReader(
         private val bytes: ByteArray,
@@ -174,15 +113,6 @@ class CkLowVmImageAbiTest {
             return bytes.copyOfRange(offset, offset + length).also { offset += length }
         }
 
-        fun register(): CkLowVmRegister =
-            when (val tag = u8()) {
-                CkLowVmImageAbi.RegisterTags.I32 -> CkLowVmRegister.I32(u16())
-                CkLowVmImageAbi.RegisterTags.I64 -> CkLowVmRegister.I64(u16())
-                CkLowVmImageAbi.RegisterTags.ADDR -> CkLowVmRegister.Addr(u16())
-                CkLowVmImageAbi.RegisterTags.BOOL -> CkLowVmRegister.Bool(u16())
-                else -> error("Unexpected register tag $tag")
-            }
-
-        fun registerList(): List<CkLowVmRegister> = List(i32()) { register() }
+        fun registerList(): List<Int> = List(i32()) { u16() }
     }
 }

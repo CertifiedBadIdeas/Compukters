@@ -69,7 +69,7 @@ internal data class ComputeVmBenchmarkReport(
             appendLine("# CKL Compute VM Benchmark")
             appendLine()
             appendLine(
-                "CPU-only workloads. The CKL low-level CKIM v4 VM is the measured VM baseline; Kotlin/JVM, Python, and optimized native Rust are comparison baselines.",
+                "CPU-only workloads. The CKL low-level CKIM v5 VM is the measured VM baseline; Kotlin/JVM, Python, and optimized native Rust are comparison baselines.",
             )
             appendLine()
             appendLine(

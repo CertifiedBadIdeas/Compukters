@@ -1,4 +1,4 @@
-use ckl_vm::low_image::{Function, Image, Instruction, Register};
+use ckl_vm::low_image::{Function, Image, Instruction};
 use ckl_vm::low_image_runner::{low_opcode, LowImageSignal, LowImageVm};
 
 #[test]
@@ -12,14 +12,9 @@ fn runner_executes_i32_arithmetic_without_value_objects() {
                 lhs: 0,
                 rhs: 1,
             },
-            Instruction::Return {
-                src: Register::I32(2),
-            },
+            Instruction::ReturnI32 { src: 2 },
         ],
         3,
-        0,
-        0,
-        0,
     );
     let mut vm = LowImageVm::create(image, 128).unwrap();
 
@@ -32,19 +27,14 @@ fn runner_loads_and_stores_i32_in_linear_ram() {
         vec![
             Instruction::AddrConst { dst: 0, value: 128 },
             Instruction::I32Const {
-                dst: 0,
+                dst: 1,
                 value: 0x11223344,
             },
-            Instruction::Store32 { addr: 0, src: 0 },
-            Instruction::Load32 { dst: 1, addr: 0 },
-            Instruction::Return {
-                src: Register::I32(1),
-            },
+            Instruction::Store32 { addr: 0, src: 1 },
+            Instruction::Load32 { dst: 2, addr: 0 },
+            Instruction::ReturnI32 { src: 2 },
         ],
-        2,
-        0,
-        1,
-        0,
+        3,
     );
     let mut vm = LowImageVm::create(image, 128).unwrap();
 
@@ -64,14 +54,9 @@ fn runner_rejects_out_of_bounds_memory_access() {
                 value: 1022,
             },
             Instruction::Load32 { dst: 0, addr: 0 },
-            Instruction::Return {
-                src: Register::I32(0),
-            },
+            Instruction::ReturnI32 { src: 0 },
         ],
         1,
-        0,
-        1,
-        0,
     );
     let mut vm = LowImageVm::create(image, 128).unwrap();
 
@@ -95,40 +80,30 @@ fn runner_calls_static_function_with_i32_arguments_and_return_value() {
         functions: vec![
             Function {
                 name: "main".to_string(),
-                i32_register_count: 3,
-                i64_register_count: 0,
-                addr_register_count: 0,
-                bool_register_count: 0,
+                register_count: 3,
                 parameters: Vec::new(),
                 instructions: vec![
                     Instruction::I32Const { dst: 0, value: 7 },
                     Instruction::I32Const { dst: 1, value: 5 },
                     Instruction::CallStatic {
-                        return_register: Some(Register::I32(2)),
+                        return_register: Some(2),
                         function_index: 1,
-                        arguments: vec![Register::I32(0), Register::I32(1)],
+                        arguments: vec![0, 1],
                     },
-                    Instruction::Return {
-                        src: Register::I32(2),
-                    },
+                    Instruction::ReturnI32 { src: 2 },
                 ],
             },
             Function {
                 name: "add".to_string(),
-                i32_register_count: 3,
-                i64_register_count: 0,
-                addr_register_count: 0,
-                bool_register_count: 0,
-                parameters: vec![Register::I32(0), Register::I32(1)],
+                register_count: 3,
+                parameters: vec![0, 1],
                 instructions: vec![
                     Instruction::I32Add {
                         dst: 2,
                         lhs: 0,
                         rhs: 1,
                     },
-                    Instruction::Return {
-                        src: Register::I32(2),
-                    },
+                    Instruction::ReturnI32 { src: 2 },
                 ],
             },
         ],
@@ -150,41 +125,31 @@ fn runner_supports_recursive_static_calls() {
         functions: vec![
             Function {
                 name: "main".to_string(),
-                i32_register_count: 2,
-                i64_register_count: 0,
-                addr_register_count: 0,
-                bool_register_count: 0,
+                register_count: 2,
                 parameters: Vec::new(),
                 instructions: vec![
                     Instruction::I32Const { dst: 0, value: 6 },
                     Instruction::CallStatic {
-                        return_register: Some(Register::I32(1)),
+                        return_register: Some(1),
                         function_index: 1,
-                        arguments: vec![Register::I32(0)],
+                        arguments: vec![0],
                     },
-                    Instruction::Return {
-                        src: Register::I32(1),
-                    },
+                    Instruction::ReturnI32 { src: 1 },
                 ],
             },
             Function {
                 name: "fib".to_string(),
-                i32_register_count: 7,
-                i64_register_count: 0,
-                addr_register_count: 0,
-                bool_register_count: 1,
-                parameters: vec![Register::I32(0)],
+                register_count: 8,
+                parameters: vec![0],
                 instructions: vec![
                     Instruction::I32Const { dst: 1, value: 2 },
                     Instruction::I32Lt {
-                        dst: 0,
+                        dst: 7,
                         lhs: 0,
                         rhs: 1,
                     },
-                    Instruction::JumpIfFalse { cond: 0, target: 4 },
-                    Instruction::Return {
-                        src: Register::I32(0),
-                    },
+                    Instruction::JumpIfFalse { cond: 7, target: 4 },
+                    Instruction::ReturnI32 { src: 0 },
                     Instruction::I32Const { dst: 2, value: 1 },
                     Instruction::I32Sub {
                         dst: 3,
@@ -192,9 +157,9 @@ fn runner_supports_recursive_static_calls() {
                         rhs: 2,
                     },
                     Instruction::CallStatic {
-                        return_register: Some(Register::I32(4)),
+                        return_register: Some(4),
                         function_index: 1,
-                        arguments: vec![Register::I32(3)],
+                        arguments: vec![3],
                     },
                     Instruction::I32Const { dst: 2, value: 2 },
                     Instruction::I32Sub {
@@ -203,18 +168,16 @@ fn runner_supports_recursive_static_calls() {
                         rhs: 2,
                     },
                     Instruction::CallStatic {
-                        return_register: Some(Register::I32(5)),
+                        return_register: Some(5),
                         function_index: 1,
-                        arguments: vec![Register::I32(3)],
+                        arguments: vec![3],
                     },
                     Instruction::I32Add {
                         dst: 6,
                         lhs: 4,
                         rhs: 5,
                     },
-                    Instruction::Return {
-                        src: Register::I32(6),
-                    },
+                    Instruction::ReturnI32 { src: 6 },
                 ],
             },
         ],
@@ -236,10 +199,7 @@ fn runner_records_execution_metrics() {
         functions: vec![
             Function {
                 name: "main".to_string(),
-                i32_register_count: 3,
-                i64_register_count: 0,
-                addr_register_count: 1,
-                bool_register_count: 0,
+                register_count: 3,
                 parameters: Vec::new(),
                 instructions: vec![
                     Instruction::AddrConst { dst: 0, value: 128 },
@@ -248,31 +208,24 @@ fn runner_records_execution_metrics() {
                     Instruction::Store32 { addr: 0, src: 0 },
                     Instruction::Load32 { dst: 0, addr: 0 },
                     Instruction::CallStatic {
-                        return_register: Some(Register::I32(2)),
+                        return_register: Some(2),
                         function_index: 1,
-                        arguments: vec![Register::I32(0), Register::I32(1)],
+                        arguments: vec![0, 1],
                     },
-                    Instruction::Return {
-                        src: Register::I32(2),
-                    },
+                    Instruction::ReturnI32 { src: 2 },
                 ],
             },
             Function {
                 name: "add".to_string(),
-                i32_register_count: 3,
-                i64_register_count: 0,
-                addr_register_count: 0,
-                bool_register_count: 0,
-                parameters: vec![Register::I32(0), Register::I32(1)],
+                register_count: 3,
+                parameters: vec![0, 1],
                 instructions: vec![
                     Instruction::I32Add {
                         dst: 2,
                         lhs: 0,
                         rhs: 1,
                     },
-                    Instruction::Return {
-                        src: Register::I32(2),
-                    },
+                    Instruction::ReturnI32 { src: 2 },
                 ],
             },
         ],
@@ -294,15 +247,12 @@ fn runner_records_execution_metrics() {
     assert_eq!(metrics.opcode_counts[low_opcode::LOAD32], 1);
     assert_eq!(metrics.opcode_counts[low_opcode::I32_ADD], 1);
     assert_eq!(metrics.opcode_counts[low_opcode::CALL_STATIC], 1);
-    assert_eq!(metrics.opcode_counts[low_opcode::RETURN], 2);
+    assert_eq!(metrics.opcode_counts[low_opcode::RETURN_I32], 2);
 }
 
 fn image(
     instructions: Vec<Instruction>,
-    i32_count: usize,
-    i64_count: usize,
-    addr_count: usize,
-    bool_count: usize,
+    register_count: usize,
 ) -> Image {
     Image {
         language_version: "ckl-low-1".to_string(),
@@ -313,10 +263,7 @@ fn image(
         entry_function_index: 0,
         functions: vec![Function {
             name: "main".to_string(),
-            i32_register_count: i32_count,
-            i64_register_count: i64_count,
-            addr_register_count: addr_count,
-            bool_register_count: bool_count,
+            register_count,
             parameters: Vec::new(),
             instructions,
         }],

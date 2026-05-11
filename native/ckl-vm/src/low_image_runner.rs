@@ -1,6 +1,6 @@
-use crate::low_image::{Image, Instruction, Register};
+use crate::low_image::{Image, Instruction};
 
-pub const LOW_OPCODE_COUNT: usize = low_opcode::RETURN_UNIT + 1;
+pub const LOW_OPCODE_COUNT: usize = low_opcode::RETURN_BOOL + 1;
 
 pub mod low_opcode {
     pub const I32_CONST: usize = 1;
@@ -22,8 +22,11 @@ pub mod low_opcode {
     pub const JUMP: usize = 17;
     pub const JUMP_IF_FALSE: usize = 18;
     pub const CALL_STATIC: usize = 19;
-    pub const RETURN: usize = 20;
+    pub const RETURN_I32: usize = 20;
     pub const RETURN_UNIT: usize = 21;
+    pub const RETURN_I64: usize = 22;
+    pub const RETURN_ADDR: usize = 23;
+    pub const RETURN_BOOL: usize = 24;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -34,14 +37,6 @@ pub enum LowImageSignal {
     HaltAddr(u32),
     HaltBool(bool),
     Pause,
-}
-
-#[derive(Clone, Copy)]
-enum LowRegisterValue {
-    I32(i32),
-    I64(i64),
-    Addr(u32),
-    Bool(bool),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -72,11 +67,9 @@ impl Default for LowImageVmMetrics {
 struct LowFrame {
     function_index: usize,
     instruction_pointer: usize,
-    return_register: Option<Register>,
-    i32_registers: Vec<i32>,
-    i64_registers: Vec<i64>,
-    addr_registers: Vec<u32>,
-    bool_registers: Vec<bool>,
+    return_register: Option<u16>,
+    register_base: usize,
+    register_count: usize,
 }
 
 struct LowProgram {
@@ -109,10 +102,12 @@ impl LowProgram {
         let data_start = image.rodata.len();
         memory[data_start..data_start + image.data.len()].copy_from_slice(&image.data);
         let entry_function_index = image.entry_function_index;
+        let entry_register_count = image.functions[entry_function_index].register_count;
         let entry_frame = LowFrame::create(
             entry_function_index,
             &image.functions[entry_function_index],
             None,
+            0,
         );
         Ok((
             Self {
@@ -120,6 +115,7 @@ impl LowProgram {
             },
             LowState {
                 frames: vec![entry_frame],
+                registers: vec![0; entry_register_count],
                 memory,
                 instructions_since_pause: 0,
                 metrics: LowImageVmMetrics::default(),
@@ -138,22 +134,22 @@ impl LowFrame {
     fn create(
         function_index: usize,
         function: &crate::low_image::Function,
-        return_register: Option<Register>,
+        return_register: Option<u16>,
+        register_base: usize,
     ) -> Self {
         Self {
             function_index,
             instruction_pointer: 0,
             return_register,
-            i32_registers: vec![0; function.i32_register_count],
-            i64_registers: vec![0; function.i64_register_count],
-            addr_registers: vec![0; function.addr_register_count],
-            bool_registers: vec![false; function.bool_register_count],
+            register_base,
+            register_count: function.register_count,
         }
     }
 }
 
 struct LowState {
     frames: Vec<LowFrame>,
+    registers: Vec<u64>,
     memory: Vec<u8>,
     instructions_since_pause: usize,
     metrics: LowImageVmMetrics,
@@ -296,8 +292,23 @@ impl LowImageVm {
                         self.state.jump(&self.program, *target)?;
                     }
                 }
-                Instruction::Return { src } => {
-                    if let Some(signal) = self.state.return_value(*src)? {
+                Instruction::ReturnI32 { src } => {
+                    if let Some(signal) = self.state.return_i32(*src)? {
+                        return Ok(signal);
+                    }
+                }
+                Instruction::ReturnI64 { src } => {
+                    if let Some(signal) = self.state.return_i64(*src)? {
+                        return Ok(signal);
+                    }
+                }
+                Instruction::ReturnAddr { src } => {
+                    if let Some(signal) = self.state.return_addr(*src)? {
+                        return Ok(signal);
+                    }
+                }
+                Instruction::ReturnBool { src } => {
+                    if let Some(signal) = self.state.return_bool(*src)? {
                         return Ok(signal);
                     }
                 }
@@ -355,16 +366,47 @@ impl LowState {
             .ok_or_else(|| "low VM call stack is empty".to_string())
     }
 
-    fn return_value(&mut self, register: Register) -> Result<Option<LowImageSignal>, String> {
+    fn return_i32(&mut self, register: u16) -> Result<Option<LowImageSignal>, String> {
+        let value = self.read_i32(register)?;
+        self.return_raw(register, value as u32 as u64, LowImageSignal::HaltI32(value))
+    }
+
+    fn return_i64(&mut self, register: u16) -> Result<Option<LowImageSignal>, String> {
+        let value = self.read_i64(register)?;
+        self.return_raw(register, value as u64, LowImageSignal::HaltI64(value))
+    }
+
+    fn return_addr(&mut self, register: u16) -> Result<Option<LowImageSignal>, String> {
+        let value = self.read_addr(register)?;
+        self.return_raw(register, value as u64, LowImageSignal::HaltAddr(value))
+    }
+
+    fn return_bool(&mut self, register: u16) -> Result<Option<LowImageSignal>, String> {
+        let value = self.read_bool(register)?;
+        self.return_raw(register, u64::from(value), LowImageSignal::HaltBool(value))
+    }
+
+    fn return_raw(
+        &mut self,
+        register: u16,
+        value: u64,
+        root_signal: LowImageSignal,
+    ) -> Result<Option<LowImageSignal>, String> {
         self.metrics.function_returns = self.metrics.function_returns.saturating_add(1);
-        let value = self.read_register_value(register)?;
         if self.frames.len() == 1 {
-            return Ok(Some(Self::signal_from_value(value)?));
+            return Ok(Some(root_signal));
         }
-        let return_register = self.current_frame()?.return_register;
-        self.frames.pop();
-        if let Some(return_register) = return_register {
-            self.write_register_value(return_register, value)?;
+        let frame = self
+            .frames
+            .pop()
+            .ok_or_else(|| "low VM call stack is empty".to_string())?;
+        self.registers.truncate(frame.register_base);
+        if let Some(return_register) = frame.return_register {
+            self.write_raw(return_register, value)?;
+        } else {
+            return Err(format!(
+                "callee returned r{register} but caller did not provide return register",
+            ));
         }
         Ok(None)
     }
@@ -374,11 +416,14 @@ impl LowState {
         if self.frames.len() == 1 {
             return Ok(Some(LowImageSignal::HaltUnit));
         }
-        let return_register = self.current_frame()?.return_register;
-        self.frames.pop();
-        if let Some(return_register) = return_register {
+        let frame = self
+            .frames
+            .pop()
+            .ok_or_else(|| "low VM call stack is empty".to_string())?;
+        self.registers.truncate(frame.register_base);
+        if let Some(return_register) = frame.return_register {
             return Err(format!(
-                "callee returned unit but caller expected {return_register:?}",
+                "callee returned unit but caller expected r{return_register}",
             ));
         }
         Ok(None)
@@ -387,14 +432,14 @@ impl LowState {
     fn call_static(
         &mut self,
         program: &LowProgram,
-        return_register: Option<Register>,
+        return_register: Option<u16>,
         function_index: usize,
-        arguments: &[Register],
+        arguments: &[u16],
     ) -> Result<(), String> {
         let values = arguments
             .iter()
             .copied()
-            .map(|argument| self.read_register_value(argument))
+            .map(|argument| self.read_raw(argument))
             .collect::<Result<Vec<_>, _>>()?;
         let function = program.function(function_index)?;
         if values.len() != function.parameters.len() {
@@ -404,150 +449,78 @@ impl LowState {
                 values.len(),
             ));
         }
-        let mut frame = LowFrame::create(function_index, function, return_register);
+        let register_base = self.registers.len();
+        self.registers
+            .resize(register_base + function.register_count, 0);
+        let frame = LowFrame::create(function_index, function, return_register, register_base);
         for (parameter, value) in function.parameters.iter().copied().zip(values) {
-            Self::write_register_value_to_frame(&mut frame, parameter, value)?;
+            let index = frame
+                .register_base
+                .checked_add(parameter as usize)
+                .ok_or_else(|| format!("register {parameter} index overflows usize"))?;
+            if parameter as usize >= frame.register_count {
+                return Err(format!("register {parameter} is out of bounds"));
+            }
+            self.registers[index] = value;
         }
         self.metrics.function_calls = self.metrics.function_calls.saturating_add(1);
         self.frames.push(frame);
         Ok(())
     }
 
-    fn signal_from_value(value: LowRegisterValue) -> Result<LowImageSignal, String> {
-        match value {
-            LowRegisterValue::I32(value) => Ok(LowImageSignal::HaltI32(value)),
-            LowRegisterValue::I64(value) => Ok(LowImageSignal::HaltI64(value)),
-            LowRegisterValue::Addr(value) => Ok(LowImageSignal::HaltAddr(value)),
-            LowRegisterValue::Bool(value) => Ok(LowImageSignal::HaltBool(value)),
-        }
-    }
-
-    fn read_register_value(&self, register: Register) -> Result<LowRegisterValue, String> {
-        match register {
-            Register::I32(index) => Ok(LowRegisterValue::I32(self.read_i32(index)?)),
-            Register::I64(index) => Ok(LowRegisterValue::I64(self.read_i64(index)?)),
-            Register::Addr(index) => Ok(LowRegisterValue::Addr(self.read_addr(index)?)),
-            Register::Bool(index) => Ok(LowRegisterValue::Bool(self.read_bool(index)?)),
-        }
-    }
-
-    fn write_register_value(
-        &mut self,
-        register: Register,
-        value: LowRegisterValue,
-    ) -> Result<(), String> {
-        match (register, value) {
-            (Register::I32(index), LowRegisterValue::I32(value)) => self.write_i32(index, value),
-            (Register::I64(index), LowRegisterValue::I64(value)) => self.write_i64(index, value),
-            (Register::Addr(index), LowRegisterValue::Addr(value)) => self.write_addr(index, value),
-            (Register::Bool(index), LowRegisterValue::Bool(value)) => self.write_bool(index, value),
-            (register, _) => Err(format!("return value type does not match {register:?}")),
-        }
-    }
-
-    fn write_register_value_to_frame(
-        frame: &mut LowFrame,
-        register: Register,
-        value: LowRegisterValue,
-    ) -> Result<(), String> {
-        match (register, value) {
-            (Register::I32(index), LowRegisterValue::I32(value)) => {
-                *frame
-                    .i32_registers
-                    .get_mut(index as usize)
-                    .ok_or_else(|| format!("i32 register {index} is out of bounds"))? = value;
-                Ok(())
-            }
-            (Register::I64(index), LowRegisterValue::I64(value)) => {
-                *frame
-                    .i64_registers
-                    .get_mut(index as usize)
-                    .ok_or_else(|| format!("i64 register {index} is out of bounds"))? = value;
-                Ok(())
-            }
-            (Register::Addr(index), LowRegisterValue::Addr(value)) => {
-                *frame
-                    .addr_registers
-                    .get_mut(index as usize)
-                    .ok_or_else(|| format!("addr register {index} is out of bounds"))? = value;
-                Ok(())
-            }
-            (Register::Bool(index), LowRegisterValue::Bool(value)) => {
-                *frame
-                    .bool_registers
-                    .get_mut(index as usize)
-                    .ok_or_else(|| format!("bool register {index} is out of bounds"))? = value;
-                Ok(())
-            }
-            (register, _) => Err(format!("argument value type does not match {register:?}")),
-        }
-    }
-
     fn read_i32(&self, register: u16) -> Result<i32, String> {
-        self.current_frame()?
-            .i32_registers
-            .get(register as usize)
-            .copied()
-            .ok_or_else(|| format!("i32 register {register} is out of bounds"))
+        Ok(self.read_raw(register)? as u32 as i32)
     }
 
     fn write_i32(&mut self, register: u16, value: i32) -> Result<(), String> {
-        *self
-            .current_frame_mut()?
-            .i32_registers
-            .get_mut(register as usize)
-            .ok_or_else(|| format!("i32 register {register} is out of bounds"))? = value;
-        Ok(())
+        self.write_raw(register, value as u32 as u64)
     }
 
     fn read_i64(&self, register: u16) -> Result<i64, String> {
-        self.current_frame()?
-            .i64_registers
-            .get(register as usize)
-            .copied()
-            .ok_or_else(|| format!("i64 register {register} is out of bounds"))
+        Ok(self.read_raw(register)? as i64)
     }
 
     fn write_i64(&mut self, register: u16, value: i64) -> Result<(), String> {
-        *self
-            .current_frame_mut()?
-            .i64_registers
-            .get_mut(register as usize)
-            .ok_or_else(|| format!("i64 register {register} is out of bounds"))? = value;
-        Ok(())
+        self.write_raw(register, value as u64)
     }
 
     fn read_addr(&self, register: u16) -> Result<u32, String> {
-        self.current_frame()?
-            .addr_registers
-            .get(register as usize)
-            .copied()
-            .ok_or_else(|| format!("addr register {register} is out of bounds"))
+        Ok(self.read_raw(register)? as u32)
     }
 
     fn write_addr(&mut self, register: u16, value: u32) -> Result<(), String> {
-        *self
-            .current_frame_mut()?
-            .addr_registers
-            .get_mut(register as usize)
-            .ok_or_else(|| format!("addr register {register} is out of bounds"))? = value;
-        Ok(())
+        self.write_raw(register, value as u64)
     }
 
     fn read_bool(&self, register: u16) -> Result<bool, String> {
-        self.current_frame()?
-            .bool_registers
-            .get(register as usize)
-            .copied()
-            .ok_or_else(|| format!("bool register {register} is out of bounds"))
+        Ok(self.read_raw(register)? != 0)
     }
 
     fn write_bool(&mut self, register: u16, value: bool) -> Result<(), String> {
+        self.write_raw(register, u64::from(value))
+    }
+
+    fn read_raw(&self, register: u16) -> Result<u64, String> {
+        let frame = self.current_frame()?;
+        if register as usize >= frame.register_count {
+            return Err(format!("register {register} is out of bounds"));
+        }
+        self.registers
+            .get(frame.register_base + register as usize)
+            .copied()
+            .ok_or_else(|| format!("register {register} is out of bounds"))
+    }
+
+    fn write_raw(&mut self, register: u16, value: u64) -> Result<(), String> {
+        let frame = self.current_frame()?;
+        if register as usize >= frame.register_count {
+            return Err(format!("register {register} is out of bounds"));
+        }
+        let index = frame.register_base + register as usize;
         *self
-            .current_frame_mut()?
-            .bool_registers
-            .get_mut(register as usize)
-            .ok_or_else(|| format!("bool register {register} is out of bounds"))? = value;
+            .registers
+            .get_mut(index)
+            .ok_or_else(|| format!("register {register} is out of bounds"))? = value;
         Ok(())
     }
 
@@ -608,7 +581,10 @@ fn opcode_index(instruction: &Instruction) -> usize {
         Instruction::Jump { .. } => low_opcode::JUMP,
         Instruction::JumpIfFalse { .. } => low_opcode::JUMP_IF_FALSE,
         Instruction::CallStatic { .. } => low_opcode::CALL_STATIC,
-        Instruction::Return { .. } => low_opcode::RETURN,
+        Instruction::ReturnI32 { .. } => low_opcode::RETURN_I32,
         Instruction::ReturnUnit => low_opcode::RETURN_UNIT,
+        Instruction::ReturnI64 { .. } => low_opcode::RETURN_I64,
+        Instruction::ReturnAddr { .. } => low_opcode::RETURN_ADDR,
+        Instruction::ReturnBool { .. } => low_opcode::RETURN_BOOL,
     }
 }
