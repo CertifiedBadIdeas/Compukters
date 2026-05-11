@@ -139,7 +139,8 @@ internal class LowVmComputeBenchmarkRunner(
 ) {
     val name: String = "Low-level VM"
 
-    fun supports(workload: ComputeVmBenchmarkWorkloadSpec): Boolean = workload.name == "integer-mix"
+    fun supports(workload: ComputeVmBenchmarkWorkloadSpec): Boolean =
+        workload.name == "integer-mix" || workload.name == "branch-div"
 
     fun warmUp(
         workload: ComputeVmBenchmarkWorkloadSpec,
@@ -168,6 +169,7 @@ internal class LowVmComputeBenchmarkRunner(
     ): ByteArray =
         when (workload.name) {
             "integer-mix" -> CkLowVmImageAbi.encode(integerMixImage(iterations))
+            "branch-div" -> CkLowVmImageAbi.encode(branchDivImage(iterations))
             else -> error("Low-level VM benchmark does not support ${workload.name} yet.")
         }
 
@@ -229,6 +231,82 @@ internal class LowVmComputeBenchmarkRunner(
                     CkLowVmFunction(
                         name = "main",
                         i32RegisterCount = 19,
+                        i64RegisterCount = 0,
+                        addrRegisterCount = 0,
+                        boolRegisterCount = 1,
+                        parameters = emptyList(),
+                        instructions = instructions,
+                    ),
+                ),
+        )
+    }
+
+    private fun branchDivImage(iterations: Int): CkLowVmImage {
+        val instructions = mutableListOf<CkLowVmInstruction>()
+        instructions += CkLowVmInstruction.I32Const(dst = 0, value = iterations + 1)
+        instructions += CkLowVmInstruction.I32Const(dst = 1, value = 7)
+        instructions += CkLowVmInstruction.I32Const(dst = 2, value = 1)
+        instructions += CkLowVmInstruction.I32Const(dst = 3, value = 1)
+        instructions += CkLowVmInstruction.I32Const(dst = 4, value = 11)
+        instructions += CkLowVmInstruction.I32Const(dst = 5, value = 3)
+        instructions += CkLowVmInstruction.I32Const(dst = 6, value = 5)
+        instructions += CkLowVmInstruction.I32Const(dst = 7, value = 7)
+        instructions += CkLowVmInstruction.I32Const(dst = 8, value = 17)
+
+        val loopStart = instructions.size
+        instructions += CkLowVmInstruction.I32Lt(dst = 0, lhs = 2, rhs = 0)
+        val exitJumpIndex = instructions.size
+        instructions += CkLowVmInstruction.JumpIfFalse(cond = 0, target = -1)
+        instructions += CkLowVmInstruction.I32Div(dst = 9, lhs = 2, rhs = 4)
+        instructions += CkLowVmInstruction.I32Mul(dst = 11, lhs = 9, rhs = 4)
+        instructions += CkLowVmInstruction.I32Sub(dst = 10, lhs = 2, rhs = 11)
+        instructions += CkLowVmInstruction.I32Lt(dst = 0, lhs = 10, rhs = 3)
+        val modNonZeroJumpIndex = instructions.size
+        instructions += CkLowVmInstruction.JumpIfFalse(cond = 0, target = -1)
+        instructions += CkLowVmInstruction.I32Div(dst = 15, lhs = 2, rhs = 5)
+        instructions += CkLowVmInstruction.I32Add(dst = 1, lhs = 1, rhs = 15)
+        val firstBranchDoneJumpIndex = instructions.size
+        instructions += CkLowVmInstruction.Jump(target = -1)
+
+        val modNonZeroStart = instructions.size
+        instructions[modNonZeroJumpIndex] = CkLowVmInstruction.JumpIfFalse(cond = 0, target = modNonZeroStart)
+        instructions += CkLowVmInstruction.I32Lt(dst = 0, lhs = 10, rhs = 6)
+        val highModJumpIndex = instructions.size
+        instructions += CkLowVmInstruction.JumpIfFalse(cond = 0, target = -1)
+        instructions += CkLowVmInstruction.I32Mul(dst = 12, lhs = 2, rhs = 8)
+        instructions += CkLowVmInstruction.I32BitXor(dst = 17, lhs = 1, rhs = 12)
+        instructions += CkLowVmInstruction.I32Div(dst = 9, lhs = 2, rhs = 7)
+        instructions += CkLowVmInstruction.I32Mul(dst = 11, lhs = 9, rhs = 7)
+        instructions += CkLowVmInstruction.I32Sub(dst = 13, lhs = 2, rhs = 11)
+        instructions += CkLowVmInstruction.I32Add(dst = 1, lhs = 17, rhs = 13)
+        val secondBranchDoneJumpIndex = instructions.size
+        instructions += CkLowVmInstruction.Jump(target = -1)
+
+        val highModStart = instructions.size
+        instructions[highModJumpIndex] = CkLowVmInstruction.JumpIfFalse(cond = 0, target = highModStart)
+        instructions += CkLowVmInstruction.I32Add(dst = 14, lhs = 10, rhs = 3)
+        instructions += CkLowVmInstruction.I32Div(dst = 15, lhs = 2, rhs = 14)
+        instructions += CkLowVmInstruction.I32Sub(dst = 17, lhs = 1, rhs = 15)
+        instructions += CkLowVmInstruction.I32Shl(dst = 16, lhs = 1, rhs = 3)
+        instructions += CkLowVmInstruction.I32Add(dst = 1, lhs = 17, rhs = 16)
+
+        val afterIf = instructions.size
+        instructions[firstBranchDoneJumpIndex] = CkLowVmInstruction.Jump(target = afterIf)
+        instructions[secondBranchDoneJumpIndex] = CkLowVmInstruction.Jump(target = afterIf)
+        instructions += CkLowVmInstruction.I32Add(dst = 2, lhs = 2, rhs = 3)
+        instructions += CkLowVmInstruction.Jump(target = loopStart)
+        instructions[exitJumpIndex] = CkLowVmInstruction.JumpIfFalse(cond = 0, target = instructions.size)
+        instructions += CkLowVmInstruction.Return(CkLowVmRegister.I32(1))
+
+        return CkLowVmImage(
+            languageVersion = "ckl-low-1",
+            memorySize = 1024u,
+            entryFunctionIndex = 0,
+            functions =
+                listOf(
+                    CkLowVmFunction(
+                        name = "main",
+                        i32RegisterCount = 18,
                         i64RegisterCount = 0,
                         addrRegisterCount = 0,
                         boolRegisterCount = 1,
