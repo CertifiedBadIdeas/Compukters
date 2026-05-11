@@ -228,11 +228,7 @@ fn read_instruction(reader: &mut Reader<'_>) -> Result<Instruction, ImageError> 
             lhs,
             rhs,
         }),
-        13 => read_binary(reader, |dst, lhs, rhs| Instruction::I32Lt {
-            dst,
-            lhs,
-            rhs,
-        }),
+        13 => read_binary(reader, |dst, lhs, rhs| Instruction::I32Lt { dst, lhs, rhs }),
         14 => read_move(reader, |dst, addr| Instruction::Load32 { dst, addr }),
         15 => read_move(reader, |addr, src| Instruction::Store32 { addr, src }),
         16 => read_binary(reader, |dst, base, offset| Instruction::AddrAdd {
