@@ -31,10 +31,17 @@ fn rejects_legacy_image_versions() {
     let mut bytes = representative_image_bytes();
     bytes[4] = 3;
 
-    assert_eq!(
-        decode_image(&bytes),
-        Err(ImageError::UnsupportedVersion(3)),
-    );
+    assert_eq!(decode_image(&bytes), Err(ImageError::UnsupportedVersion(3)),);
+}
+
+#[test]
+fn decodes_kotlin_generated_low_fixture() {
+    let image =
+        decode_image(include_bytes!("fixtures/low-representative.ckim")).expect("fixture decodes");
+
+    assert_eq!(image.language_version, "ckl-low-1");
+    assert_eq!(image.memory_size, 4096);
+    assert_eq!(image.functions[0].instructions.len(), 5);
 }
 
 fn representative_image_bytes() -> Vec<u8> {
