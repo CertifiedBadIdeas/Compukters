@@ -19,17 +19,12 @@
 
 package ru.lazyhat.compukterkraft.core.device.vm.display
 
-import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayInfo
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayPixelFormat
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.ConcurrentLinkedQueue
 
-class DisplayRegistry(
-    private val metricsCollector: DisplayMetricsCollector = NoOpDisplayMetricsCollector,
-) {
-    private val displays = ConcurrentHashMap<Int, DisplayState>()
-    private val pendingFrames = ConcurrentLinkedQueue<DisplayFrameDelta>()
+class DisplayRegistry {
+    private val displays = ConcurrentHashMap<Int, DisplayInfo>()
 
     fun attach(
         displayId: Int,
@@ -39,12 +34,9 @@ class DisplayRegistry(
     ): DisplayInfo {
         require(width in MIN_SIZE..MAX_SIZE) { "Display width out of range: $width" }
         require(height in MIN_SIZE..MAX_SIZE) { "Display height out of range: $height" }
-        val state = DisplayState(displayId, width, height, pixelFormat)
-        displays[displayId] = state
-        val result = state.fullRefreshWithMetrics()
-        pendingFrames.add(result.frame)
-        metricsCollector.recordFrameBuild(displayId, result.metrics)
-        return info(state)
+        val info = DisplayInfo(displayId, width, height, pixelFormat)
+        displays[displayId] = info
+        return info
     }
 
     fun resize(
@@ -60,121 +52,7 @@ class DisplayRegistry(
 
     fun firstDisplayId(): Int = displays.keys.minOrNull() ?: -1
 
-    fun info(displayId: Int): DisplayInfo? = displays[displayId]?.let(::info)
-
-    fun clear(
-        displayId: Int,
-        rgb565: Int,
-    ) {
-        val started = System.nanoTime()
-        displays[displayId]?.clear(rgb565)
-        metricsCollector.recordClear(displayId, System.nanoTime() - started)
-    }
-
-    fun setPixel(
-        displayId: Int,
-        x: Int,
-        y: Int,
-        rgb565: Int,
-    ) {
-        val started = System.nanoTime()
-        displays[displayId]?.setPixel(x, y, rgb565)
-        metricsCollector.recordSetPixel(displayId, System.nanoTime() - started)
-    }
-
-    fun fillRect(
-        displayId: Int,
-        x: Int,
-        y: Int,
-        width: Int,
-        height: Int,
-        rgb565: Int,
-    ) {
-        val started = System.nanoTime()
-        displays[displayId]?.fillRect(x, y, width, height, rgb565)
-        metricsCollector.recordFillRect(displayId, width, height, System.nanoTime() - started)
-    }
-
-    fun copyRect(
-        displayId: Int,
-        srcX: Int,
-        srcY: Int,
-        width: Int,
-        height: Int,
-        dstX: Int,
-        dstY: Int,
-    ) {
-        val started = System.nanoTime()
-        displays[displayId]?.copyRect(srcX, srcY, width, height, dstX, dstY)
-        metricsCollector.recordCopyRect(displayId, width, height, System.nanoTime() - started)
-    }
-
-    fun blitMono(
-        displayId: Int,
-        x: Int,
-        y: Int,
-        width: Int,
-        height: Int,
-        mask: String,
-        foreground: Int,
-        background: Int,
-    ) {
-        val started = System.nanoTime()
-        displays[displayId]?.blitMono(x, y, width, height, mask, foreground, background)
-        metricsCollector.recordBlitMono(displayId, width, height, System.nanoTime() - started)
-    }
-
-    fun blitMono5x7(
-        displayId: Int,
-        x: Int,
-        y: Int,
-        row0: Int,
-        row1: Int,
-        row2: Int,
-        row3: Int,
-        row4: Int,
-        row5: Int,
-        row6: Int,
-        foreground: Int,
-        background: Int,
-    ) {
-        val started = System.nanoTime()
-        displays[displayId]?.blitMono5x7(x, y, row0, row1, row2, row3, row4, row5, row6, foreground, background)
-        metricsCollector.recordBlitMono(displayId, 5, 7, System.nanoTime() - started)
-    }
-
-    fun blitMono5x7Text(
-        displayId: Int,
-        x: Int,
-        y: Int,
-        text: String,
-        foreground: Int,
-        background: Int,
-    ) {
-        val started = System.nanoTime()
-        displays[displayId]?.blitMono5x7Text(x, y, text, foreground, background)
-        val width = if (text.isEmpty()) 0 else (text.length - 1) * Mono5x7Font.CELL_ADVANCE + Mono5x7Font.WIDTH
-        metricsCollector.recordBlitMono(displayId, width, Mono5x7Font.HEIGHT, System.nanoTime() - started)
-    }
-
-    fun present(displayId: Int) {
-        val started = System.nanoTime()
-        val result = displays[displayId]?.presentWithMetrics()
-        result?.let {
-            pendingFrames.add(it.frame)
-            metricsCollector.recordFrameBuild(displayId, it.metrics)
-        }
-        metricsCollector.recordPresent(displayId, emittedFrame = result != null, nanos = System.nanoTime() - started)
-    }
-
-    fun drainFrames(): List<DisplayFrameDelta> =
-        buildList {
-            while (true) {
-                add(pendingFrames.poll() ?: break)
-            }
-        }.also(metricsCollector::recordFrameDrain)
-
-    private fun info(state: DisplayState): DisplayInfo = DisplayInfo(state.displayId, state.width, state.height, state.pixelFormat)
+    fun info(displayId: Int): DisplayInfo? = displays[displayId]
 
     companion object {
         const val MIN_SIZE = 1
