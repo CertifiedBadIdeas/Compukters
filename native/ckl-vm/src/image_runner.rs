@@ -6,6 +6,59 @@ use crate::runtime_kernel::{DeviceRuntimeKernelHandle, ProcessStatus};
 use crate::signal::{decode_value, encode_error, encode_signal, VmSignal};
 use crate::value::VmValue;
 
+const DISPLAY_PRIMARY_IMPORT_ID: i32 = 1000;
+const DISPLAY_IS_ATTACHED_IMPORT_ID: i32 = 1001;
+const DISPLAY_WIDTH_IMPORT_ID: i32 = 1002;
+const DISPLAY_HEIGHT_IMPORT_ID: i32 = 1003;
+const DISPLAY_CLEAR_IMPORT_ID: i32 = 1004;
+const DISPLAY_SET_PIXEL_IMPORT_ID: i32 = 1005;
+const DISPLAY_FILL_RECT_IMPORT_ID: i32 = 1006;
+const DISPLAY_COPY_RECT_IMPORT_ID: i32 = 1007;
+const DISPLAY_BLIT_MONO_IMPORT_ID: i32 = 1008;
+const DISPLAY_BLIT_MONO_5X7_IMPORT_ID: i32 = 1009;
+const DISPLAY_BLIT_MONO_5X7_PACKED_IMPORT_ID: i32 = 1010;
+const DISPLAY_PRESENT_IMPORT_ID: i32 = 1011;
+const DISPLAY_BLIT_MONO_5X7_TEXT_IMPORT_ID: i32 = 1012;
+
+const FILESYSTEM_EXISTS_IMPORT_ID: i32 = 2000;
+const FILESYSTEM_READ_TEXT_IMPORT_ID: i32 = 2001;
+const FILESYSTEM_IS_DIRECTORY_IMPORT_ID: i32 = 2002;
+const FILESYSTEM_WRITE_TEXT_IMPORT_ID: i32 = 2003;
+const FILESYSTEM_MAKE_DIR_IMPORT_ID: i32 = 2004;
+const FILESYSTEM_REMOVE_IMPORT_ID: i32 = 2005;
+const FILESYSTEM_LIST_IMPORT_ID: i32 = 2006;
+const FILESYSTEM_LIST_PATH_IMPORT_ID: i32 = 2007;
+
+const SYSTEM_DEVICE_ID_IMPORT_ID: i32 = 3000;
+const SYSTEM_CURRENT_TICK_IMPORT_ID: i32 = 3001;
+const SYSTEM_LABEL_IMPORT_ID: i32 = 3002;
+const SYSTEM_PROFILE_NAME_IMPORT_ID: i32 = 3003;
+const SYSTEM_LOG_IMPORT_ID: i32 = 3004;
+const SYSTEM_SHUTDOWN_IMPORT_ID: i32 = 3005;
+const SYSTEM_REBOOT_IMPORT_ID: i32 = 3006;
+
+const EVENTS_TRY_PULL_IMPORT_ID: i32 = 4002;
+const EVENTS_TRY_PULL_FILTER_IMPORT_ID: i32 = 4003;
+const EVENTS_ARG_COUNT_IMPORT_ID: i32 = 4004;
+const EVENTS_ARG_INT_IMPORT_ID: i32 = 4005;
+const EVENTS_ARG_BOOL_IMPORT_ID: i32 = 4006;
+const EVENTS_ARG_STRING_IMPORT_ID: i32 = 4007;
+
+const IPC_OPEN_IMPORT_ID: i32 = 5000;
+const IPC_WRITE_IMPORT_ID: i32 = 5001;
+const IPC_READ_IMPORT_ID: i32 = 5002;
+const IPC_TRY_READ_IMPORT_ID: i32 = 5003;
+const IPC_CLOSE_IMPORT_ID: i32 = 5004;
+
+const PROCESS_CURRENT_DIRECTORY_IMPORT_ID: i32 = 6000;
+const PROCESS_ARGUMENT_IMPORT_ID: i32 = 6001;
+const PROCESS_CHANGE_DIRECTORY_IMPORT_ID: i32 = 6002;
+const PROCESS_RUN_IMPORT_ID: i32 = 6003;
+const PROCESS_RUN_WITH_ARGUMENT_IMPORT_ID: i32 = 6004;
+const PROCESS_SPAWN_IMPORT_ID: i32 = 6005;
+const PROCESS_SPAWN_WITH_ARGUMENT_IMPORT_ID: i32 = 6006;
+const PROCESS_WAIT_IMPORT_ID: i32 = 6007;
+
 const STRINGS_TRIM_IMPORT_ID: i32 = 7000;
 const STRINGS_BEFORE_SPACE_IMPORT_ID: i32 = 7001;
 const STRINGS_AFTER_SPACE_IMPORT_ID: i32 = 7002;
@@ -17,6 +70,8 @@ const STRINGS_REPEAT_IMPORT_ID: i32 = 7007;
 const STRINGS_SLICE_IMPORT_ID: i32 = 7008;
 const STRINGS_REPLACE_RANGE_IMPORT_ID: i32 = 7009;
 const STRINGS_CHAR_CODE_AT_IMPORT_ID: i32 = 7010;
+
+const RUNTIME_POLL_IMPORT_ID: i32 = 8000;
 
 struct CallFrame {
     function_index: usize,
@@ -132,14 +187,12 @@ impl ImageVmHandle {
     fn try_native_host_import(
         &mut self,
         import_id: i32,
-        module_name: &str,
-        function_name: &str,
         arguments: Vec<VmValue>,
     ) -> Result<NativeHostImportResult, String> {
-        match self.try_attached_kernel_host_import(module_name, function_name, arguments)? {
+        match self.try_attached_kernel_host_import(import_id, arguments)? {
             NativeHostImportResult::Handled(value) => Ok(NativeHostImportResult::Handled(value)),
             NativeHostImportResult::Fallback(arguments) => {
-                try_builtin_native_host_import(import_id, module_name, arguments)
+                try_builtin_native_host_import(import_id, arguments)
             }
             signal @ NativeHostImportResult::SignalNoResume { .. } => Ok(signal),
         }
@@ -147,403 +200,416 @@ impl ImageVmHandle {
 
     fn try_attached_kernel_host_import(
         &mut self,
-        module_name: &str,
-        function_name: &str,
+        import_id: i32,
         arguments: Vec<VmValue>,
     ) -> Result<NativeHostImportResult, String> {
-        if !matches!(
-            module_name,
-            "display" | "filesystem" | "system" | "events" | "ipc" | "runtime" | "process"
-        ) {
-            return Ok(NativeHostImportResult::Fallback(arguments));
-        }
         let Some(kernel_handle) = self.attached_kernel.as_ref() else {
             return Ok(NativeHostImportResult::Fallback(arguments));
         };
-        if module_name == "system" {
-            let kernel = kernel_handle.lock()?;
-            return match function_name {
-                "deviceId" => Ok(NativeHostImportResult::Handled(VmValue::Int(
+
+        match import_id {
+            SYSTEM_DEVICE_ID_IMPORT_ID => {
+                let kernel = kernel_handle.lock()?;
+                Ok(NativeHostImportResult::Handled(VmValue::Int(
                     kernel.device_id(),
-                ))),
-                "profileName" => Ok(NativeHostImportResult::Handled(VmValue::String(
+                )))
+            }
+            SYSTEM_PROFILE_NAME_IMPORT_ID => {
+                let kernel = kernel_handle.lock()?;
+                Ok(NativeHostImportResult::Handled(VmValue::String(
                     kernel.profile_name().to_string(),
-                ))),
-                _ => Ok(NativeHostImportResult::Fallback(arguments)),
-            };
-        }
-        if module_name == "filesystem" {
-            let kernel = kernel_handle.lock()?;
-            let Some(filesystem) = kernel.filesystem.as_ref() else {
-                return Ok(NativeHostImportResult::Fallback(arguments));
-            };
-            return match function_name {
-                "exists" => {
-                    let path = string_argument(&arguments, 0, "filesystem.exists path")?;
-                    Ok(NativeHostImportResult::Handled(VmValue::Bool(
-                        filesystem.exists(&self.working_directory, path)?,
-                    )))
-                }
-                "isDirectory" => {
-                    let path = string_argument(&arguments, 0, "filesystem.isDirectory path")?;
-                    Ok(NativeHostImportResult::Handled(VmValue::Bool(
-                        filesystem.is_directory(&self.working_directory, path)?,
-                    )))
-                }
-                "readText" => {
-                    let path = string_argument(&arguments, 0, "filesystem.readText path")?;
-                    Ok(NativeHostImportResult::Handled(VmValue::String(
-                        filesystem.read_text(&self.working_directory, path)?,
-                    )))
-                }
-                "writeText" => {
-                    let path = string_argument(&arguments, 0, "filesystem.writeText path")?;
-                    let text = string_argument(&arguments, 1, "filesystem.writeText text")?;
-                    filesystem.write_text(&self.working_directory, path, text)?;
-                    Ok(NativeHostImportResult::Handled(VmValue::Unit))
-                }
-                "makeDir" => {
-                    let path = string_argument(&arguments, 0, "filesystem.makeDir path")?;
-                    Ok(NativeHostImportResult::Handled(VmValue::Bool(
-                        filesystem.make_dir(&self.working_directory, path)?,
-                    )))
-                }
-                "remove" => {
-                    let path = string_argument(&arguments, 0, "filesystem.remove path")?;
-                    Ok(NativeHostImportResult::Handled(VmValue::Bool(
-                        filesystem.remove(&self.working_directory, path)?,
-                    )))
-                }
-                "list" => {
-                    let path = arguments
-                        .first()
-                        .map(|_| string_argument(&arguments, 0, "filesystem.list path"))
-                        .transpose()?
-                        .unwrap_or("");
-                    Ok(NativeHostImportResult::Handled(VmValue::String(
-                        filesystem.list(&self.working_directory, path)?,
-                    )))
-                }
-                _ => Ok(NativeHostImportResult::Fallback(arguments)),
-            };
-        }
-        if module_name == "events" {
-            let mut kernel = kernel_handle.lock()?;
-            return match function_name {
-                "tryPull" => {
-                    let filter = arguments
-                        .first()
-                        .map(|_| string_argument(&arguments, 0, "events.tryPull filter"))
-                        .transpose()?;
-                    let value = kernel
-                        .try_pull_event(filter)
-                        .map(|event| event_record(event.name, event.id, event.arg_count))
-                        .unwrap_or_else(empty_event_record);
-                    Ok(NativeHostImportResult::Handled(value))
-                }
-                "argCount" => {
-                    let event_id = event_id_argument(&arguments, 0, "events.argCount event")?;
-                    Ok(NativeHostImportResult::Handled(VmValue::Int(
-                        kernel.event_arg_count(event_id),
-                    )))
-                }
-                "argInt" => {
-                    let event_id = event_id_argument(&arguments, 0, "events.argInt event")?;
-                    let index = int_argument(&arguments, 1, "events.argInt index")?;
-                    Ok(NativeHostImportResult::Handled(VmValue::Int(
-                        kernel.event_arg_int(event_id, index),
-                    )))
-                }
-                "argBool" => {
-                    let event_id = event_id_argument(&arguments, 0, "events.argBool event")?;
-                    let index = int_argument(&arguments, 1, "events.argBool index")?;
-                    Ok(NativeHostImportResult::Handled(VmValue::Bool(
-                        kernel.event_arg_bool(event_id, index),
-                    )))
-                }
-                "argString" => {
-                    let event_id = event_id_argument(&arguments, 0, "events.argString event")?;
-                    let index = int_argument(&arguments, 1, "events.argString index")?;
-                    Ok(NativeHostImportResult::Handled(VmValue::String(
-                        kernel.event_arg_string(event_id, index),
-                    )))
-                }
-                _ => Ok(NativeHostImportResult::Fallback(arguments)),
-            };
-        }
-        if module_name == "ipc" {
-            return match function_name {
-                "open" => Ok(NativeHostImportResult::Handled(VmValue::Int(
-                    kernel_handle.with_kernel_mut(|kernel| kernel.open_ipc_channel())??,
-                ))),
-                "write" => {
-                    let channel = int_argument(&arguments, 0, "ipc.write channel")?;
-                    let text = string_argument(&arguments, 1, "ipc.write text")?;
-                    kernel_handle.with_kernel_mut(|kernel| kernel.write_ipc(channel, text))??;
-                    Ok(NativeHostImportResult::Handled(VmValue::Unit))
-                }
-                "read" => {
-                    let channel = int_argument(&arguments, 0, "ipc.read channel")?;
-                    let mut kernel = kernel_handle.lock()?;
-                    let text = kernel.try_read_ipc(channel)?;
-                    if !text.is_empty() {
-                        return Ok(NativeHostImportResult::Handled(VmValue::String(text)));
-                    }
-                    let wake_sequence = kernel.wake_sequence();
-                    Ok(NativeHostImportResult::SignalNoResume {
-                        signal: VmSignal::WaitPoll {
-                            channel,
-                            wake_sequence,
-                        },
-                        arguments,
-                    })
-                }
-                "tryRead" => {
-                    let channel = int_argument(&arguments, 0, "ipc.tryRead channel")?;
-                    let mut kernel = kernel_handle.lock()?;
-                    Ok(NativeHostImportResult::Handled(VmValue::String(
-                        kernel.try_read_ipc(channel)?,
-                    )))
-                }
-                "close" => {
-                    let channel = int_argument(&arguments, 0, "ipc.close channel")?;
-                    kernel_handle.with_kernel_mut(|kernel| kernel.close_ipc(channel))??;
-                    Ok(NativeHostImportResult::Handled(VmValue::Unit))
-                }
-                _ => Ok(NativeHostImportResult::Fallback(arguments)),
-            };
-        }
-        if module_name == "runtime" {
-            let mut kernel = kernel_handle.lock()?;
-            return match function_name {
-                "poll" => {
-                    let channel = int_argument(&arguments, 0, "runtime.poll channel")?;
-                    let text = kernel.try_read_ipc(channel)?;
-                    if !text.is_empty() {
-                        return Ok(NativeHostImportResult::Handled(poll_record(
-                            "ipc",
-                            text,
-                            empty_event_record(),
-                        )));
-                    }
-                    if let Some(event) = kernel.try_pull_event(None) {
-                        return Ok(NativeHostImportResult::Handled(poll_record(
-                            "event",
-                            String::new(),
-                            event_record(event.name, event.id, event.arg_count),
-                        )));
-                    }
-                    let wake_sequence = kernel.wake_sequence();
-                    Ok(NativeHostImportResult::SignalNoResume {
-                        signal: VmSignal::WaitPoll {
-                            channel,
-                            wake_sequence,
-                        },
-                        arguments,
-                    })
-                }
-                _ => Ok(NativeHostImportResult::Fallback(arguments)),
-            };
-        }
-        if module_name == "process" {
-            return match function_name {
-                "argument" => self
-                    .process_argument
-                    .as_ref()
-                    .map(|argument| {
-                        NativeHostImportResult::Handled(VmValue::String(argument.clone()))
-                    })
-                    .map(Ok)
-                    .unwrap_or_else(|| Ok(NativeHostImportResult::Fallback(arguments))),
-                "currentDirectory" => {
-                    let kernel = kernel_handle.lock()?;
-                    if kernel.filesystem.is_none() {
-                        return Ok(NativeHostImportResult::Fallback(arguments));
-                    }
-                    Ok(NativeHostImportResult::Handled(VmValue::String(
-                        self.working_directory.clone(),
-                    )))
-                }
-                "changeDirectory" => {
-                    let path = string_argument(&arguments, 0, "process.changeDirectory path")?;
-                    let candidate = resolve_working_directory(&self.working_directory, path);
-                    let kernel = kernel_handle.lock()?;
-                    let Some(filesystem) = kernel.filesystem.as_ref() else {
-                        return Ok(NativeHostImportResult::Fallback(arguments));
-                    };
-                    if filesystem.is_directory("", &candidate)? {
-                        self.working_directory = candidate;
-                        Ok(NativeHostImportResult::Handled(VmValue::Bool(true)))
-                    } else {
-                        Ok(NativeHostImportResult::Handled(VmValue::Bool(false)))
-                    }
-                }
-                "wait" => {
-                    let kernel = kernel_handle.lock()?;
-                    let pid = int_argument(&arguments, 0, "process.wait pid")?;
-                    match kernel.process_status(pid) {
-                        ProcessStatus::Completed(exit_code) => {
-                            Ok(NativeHostImportResult::Handled(VmValue::Int(exit_code)))
-                        }
-                        ProcessStatus::Missing => {
-                            Ok(NativeHostImportResult::Handled(VmValue::Int(1)))
-                        }
-                        ProcessStatus::Running => {
-                            let wake_sequence = kernel.wake_sequence();
-                            Ok(NativeHostImportResult::SignalNoResume {
-                                signal: VmSignal::WaitProcess { pid, wake_sequence },
-                                arguments,
-                            })
-                        }
-                    }
-                }
-                _ => Ok(NativeHostImportResult::Fallback(arguments)),
-            };
-        }
-        let mut kernel = kernel_handle.lock()?;
-        if kernel.displays.first_display_id().is_none() {
-            return Ok(NativeHostImportResult::Fallback(arguments));
-        }
-        match function_name {
-            "primary" => Ok(NativeHostImportResult::Handled(VmValue::Int(
-                kernel.displays.first_display_id().unwrap_or(0),
-            ))),
-            "isAttached" => {
-                let display_id = int_argument(&arguments, 0, "display.isAttached displayId")?;
-                Ok(NativeHostImportResult::Handled(VmValue::Bool(
-                    kernel.displays.is_attached(display_id),
                 )))
             }
-            "width" => {
-                let display_id = int_argument(&arguments, 0, "display.width displayId")?;
-                Ok(NativeHostImportResult::Handled(VmValue::Int(
-                    kernel.displays.width(display_id).unwrap_or(0),
-                )))
-            }
-            "height" => {
-                let display_id = int_argument(&arguments, 0, "display.height displayId")?;
-                Ok(NativeHostImportResult::Handled(VmValue::Int(
-                    kernel.displays.height(display_id).unwrap_or(0),
-                )))
-            }
-            "clear" => {
-                let display_id = int_argument(&arguments, 0, "display.clear displayId")?;
-                let rgb565 = int_argument(&arguments, 1, "display.clear rgb565")? as u16;
-                kernel.displays.clear(display_id, rgb565);
-                Ok(NativeHostImportResult::Handled(VmValue::Unit))
-            }
-            "setPixel" => {
-                let display_id = int_argument(&arguments, 0, "display.setPixel displayId")?;
-                let x = int_argument(&arguments, 1, "display.setPixel x")?;
-                let y = int_argument(&arguments, 2, "display.setPixel y")?;
-                let rgb565 = int_argument(&arguments, 3, "display.setPixel rgb565")? as u16;
-                kernel.displays.set_pixel(display_id, x, y, rgb565);
-                Ok(NativeHostImportResult::Handled(VmValue::Unit))
-            }
-            "fillRect" => {
-                let display_id = int_argument(&arguments, 0, "display.fillRect displayId")?;
-                let x = int_argument(&arguments, 1, "display.fillRect x")?;
-                let y = int_argument(&arguments, 2, "display.fillRect y")?;
-                let width = int_argument(&arguments, 3, "display.fillRect width")?;
-                let height = int_argument(&arguments, 4, "display.fillRect height")?;
-                let rgb565 = int_argument(&arguments, 5, "display.fillRect rgb565")? as u16;
-                kernel
-                    .displays
-                    .fill_rect(display_id, x, y, width, height, rgb565);
-                Ok(NativeHostImportResult::Handled(VmValue::Unit))
-            }
-            "copyRect" => {
-                let display_id = int_argument(&arguments, 0, "display.copyRect displayId")?;
-                let src_x = int_argument(&arguments, 1, "display.copyRect srcX")?;
-                let src_y = int_argument(&arguments, 2, "display.copyRect srcY")?;
-                let width = int_argument(&arguments, 3, "display.copyRect width")?;
-                let height = int_argument(&arguments, 4, "display.copyRect height")?;
-                let dst_x = int_argument(&arguments, 5, "display.copyRect dstX")?;
-                let dst_y = int_argument(&arguments, 6, "display.copyRect dstY")?;
-                kernel
-                    .displays
-                    .copy_rect(display_id, src_x, src_y, width, height, dst_x, dst_y);
-                Ok(NativeHostImportResult::Handled(VmValue::Unit))
-            }
-            "blitMono" => {
-                let display_id = int_argument(&arguments, 0, "display.blitMono displayId")?;
-                let x = int_argument(&arguments, 1, "display.blitMono x")?;
-                let y = int_argument(&arguments, 2, "display.blitMono y")?;
-                let width = int_argument(&arguments, 3, "display.blitMono width")?;
-                let height = int_argument(&arguments, 4, "display.blitMono height")?;
-                let mask = string_argument(&arguments, 5, "display.blitMono mask")?;
-                let foreground = int_argument(&arguments, 6, "display.blitMono foreground")? as u16;
-                let background = match int_argument(&arguments, 7, "display.blitMono background")? {
-                    value if value < 0 => None,
-                    value => Some(value as u16),
+            FILESYSTEM_EXISTS_IMPORT_ID
+            | FILESYSTEM_IS_DIRECTORY_IMPORT_ID
+            | FILESYSTEM_READ_TEXT_IMPORT_ID
+            | FILESYSTEM_WRITE_TEXT_IMPORT_ID
+            | FILESYSTEM_MAKE_DIR_IMPORT_ID
+            | FILESYSTEM_REMOVE_IMPORT_ID
+            | FILESYSTEM_LIST_IMPORT_ID
+            | FILESYSTEM_LIST_PATH_IMPORT_ID => {
+                let kernel = kernel_handle.lock()?;
+                let Some(filesystem) = kernel.filesystem.as_ref() else {
+                    return Ok(NativeHostImportResult::Fallback(arguments));
                 };
-                kernel.displays.blit_mono(
-                    display_id, x, y, width, height, mask, foreground, background,
-                );
-                Ok(NativeHostImportResult::Handled(VmValue::Unit))
-            }
-            "blitMono5x7" => {
-                let display_id = int_argument(&arguments, 0, "display.blitMono5x7 displayId")?;
-                let x = int_argument(&arguments, 1, "display.blitMono5x7 x")?;
-                let y = int_argument(&arguments, 2, "display.blitMono5x7 y")?;
-                let mut glyph = 0_u64;
-                for index in 0..7 {
-                    let row =
-                        int_argument(&arguments, 3 + index, "display.blitMono5x7 row")? as u64;
-                    glyph = (glyph << 5) | (row & 0b11111);
+                match import_id {
+                    FILESYSTEM_EXISTS_IMPORT_ID => {
+                        let path = string_argument(&arguments, 0, "filesystem.exists path")?;
+                        Ok(NativeHostImportResult::Handled(VmValue::Bool(
+                            filesystem.exists(&self.working_directory, path)?,
+                        )))
+                    }
+                    FILESYSTEM_IS_DIRECTORY_IMPORT_ID => {
+                        let path = string_argument(&arguments, 0, "filesystem.isDirectory path")?;
+                        Ok(NativeHostImportResult::Handled(VmValue::Bool(
+                            filesystem.is_directory(&self.working_directory, path)?,
+                        )))
+                    }
+                    FILESYSTEM_READ_TEXT_IMPORT_ID => {
+                        let path = string_argument(&arguments, 0, "filesystem.readText path")?;
+                        Ok(NativeHostImportResult::Handled(VmValue::String(
+                            filesystem.read_text(&self.working_directory, path)?,
+                        )))
+                    }
+                    FILESYSTEM_WRITE_TEXT_IMPORT_ID => {
+                        let path = string_argument(&arguments, 0, "filesystem.writeText path")?;
+                        let text = string_argument(&arguments, 1, "filesystem.writeText text")?;
+                        filesystem.write_text(&self.working_directory, path, text)?;
+                        Ok(NativeHostImportResult::Handled(VmValue::Unit))
+                    }
+                    FILESYSTEM_MAKE_DIR_IMPORT_ID => {
+                        let path = string_argument(&arguments, 0, "filesystem.makeDir path")?;
+                        Ok(NativeHostImportResult::Handled(VmValue::Bool(
+                            filesystem.make_dir(&self.working_directory, path)?,
+                        )))
+                    }
+                    FILESYSTEM_REMOVE_IMPORT_ID => {
+                        let path = string_argument(&arguments, 0, "filesystem.remove path")?;
+                        Ok(NativeHostImportResult::Handled(VmValue::Bool(
+                            filesystem.remove(&self.working_directory, path)?,
+                        )))
+                    }
+                    FILESYSTEM_LIST_IMPORT_ID | FILESYSTEM_LIST_PATH_IMPORT_ID => {
+                        let path = arguments
+                            .first()
+                            .map(|_| string_argument(&arguments, 0, "filesystem.list path"))
+                            .transpose()?
+                            .unwrap_or("");
+                        Ok(NativeHostImportResult::Handled(VmValue::String(
+                            filesystem.list(&self.working_directory, path)?,
+                        )))
+                    }
+                    _ => unreachable!("filesystem import id was pre-matched"),
                 }
-                let foreground =
-                    int_argument(&arguments, 10, "display.blitMono5x7 foreground")? as u16;
-                let background =
-                    match int_argument(&arguments, 11, "display.blitMono5x7 background")? {
-                        value if value < 0 => None,
-                        value => Some(value as u16),
-                    };
-                kernel
-                    .displays
-                    .blit_mono5x7_packed(display_id, x, y, glyph, foreground, background);
+            }
+            EVENTS_TRY_PULL_IMPORT_ID | EVENTS_TRY_PULL_FILTER_IMPORT_ID => {
+                let mut kernel = kernel_handle.lock()?;
+                let filter = arguments
+                    .first()
+                    .map(|_| string_argument(&arguments, 0, "events.tryPull filter"))
+                    .transpose()?;
+                let value = kernel
+                    .try_pull_event(filter)
+                    .map(|event| event_record(event.name, event.id, event.arg_count))
+                    .unwrap_or_else(empty_event_record);
+                Ok(NativeHostImportResult::Handled(value))
+            }
+            EVENTS_ARG_COUNT_IMPORT_ID => {
+                let kernel = kernel_handle.lock()?;
+                let event_id = event_id_argument(&arguments, 0, "events.argCount event")?;
+                Ok(NativeHostImportResult::Handled(VmValue::Int(
+                    kernel.event_arg_count(event_id),
+                )))
+            }
+            EVENTS_ARG_INT_IMPORT_ID => {
+                let kernel = kernel_handle.lock()?;
+                let event_id = event_id_argument(&arguments, 0, "events.argInt event")?;
+                let index = int_argument(&arguments, 1, "events.argInt index")?;
+                Ok(NativeHostImportResult::Handled(VmValue::Int(
+                    kernel.event_arg_int(event_id, index),
+                )))
+            }
+            EVENTS_ARG_BOOL_IMPORT_ID => {
+                let kernel = kernel_handle.lock()?;
+                let event_id = event_id_argument(&arguments, 0, "events.argBool event")?;
+                let index = int_argument(&arguments, 1, "events.argBool index")?;
+                Ok(NativeHostImportResult::Handled(VmValue::Bool(
+                    kernel.event_arg_bool(event_id, index),
+                )))
+            }
+            EVENTS_ARG_STRING_IMPORT_ID => {
+                let kernel = kernel_handle.lock()?;
+                let event_id = event_id_argument(&arguments, 0, "events.argString event")?;
+                let index = int_argument(&arguments, 1, "events.argString index")?;
+                Ok(NativeHostImportResult::Handled(VmValue::String(
+                    kernel.event_arg_string(event_id, index),
+                )))
+            }
+            IPC_OPEN_IMPORT_ID => Ok(NativeHostImportResult::Handled(VmValue::Int(
+                kernel_handle.with_kernel_mut(|kernel| kernel.open_ipc_channel())??,
+            ))),
+            IPC_WRITE_IMPORT_ID => {
+                let channel = int_argument(&arguments, 0, "ipc.write channel")?;
+                let text = string_argument(&arguments, 1, "ipc.write text")?;
+                kernel_handle.with_kernel_mut(|kernel| kernel.write_ipc(channel, text))??;
                 Ok(NativeHostImportResult::Handled(VmValue::Unit))
             }
-            "blitMono5x7Packed" => {
-                let display_id =
-                    int_argument(&arguments, 0, "display.blitMono5x7Packed displayId")?;
-                let x = int_argument(&arguments, 1, "display.blitMono5x7Packed x")?;
-                let y = int_argument(&arguments, 2, "display.blitMono5x7Packed y")?;
-                let glyph = long_argument(&arguments, 3, "display.blitMono5x7Packed glyph")? as u64;
-                let foreground =
-                    int_argument(&arguments, 4, "display.blitMono5x7Packed foreground")? as u16;
-                let background =
-                    match int_argument(&arguments, 5, "display.blitMono5x7Packed background")? {
-                        value if value < 0 => None,
-                        value => Some(value as u16),
-                    };
-                kernel
-                    .displays
-                    .blit_mono5x7_packed(display_id, x, y, glyph, foreground, background);
+            IPC_READ_IMPORT_ID => {
+                let channel = int_argument(&arguments, 0, "ipc.read channel")?;
+                let mut kernel = kernel_handle.lock()?;
+                let text = kernel.try_read_ipc(channel)?;
+                if !text.is_empty() {
+                    return Ok(NativeHostImportResult::Handled(VmValue::String(text)));
+                }
+                let wake_sequence = kernel.wake_sequence();
+                Ok(NativeHostImportResult::SignalNoResume {
+                    signal: VmSignal::WaitPoll {
+                        channel,
+                        wake_sequence,
+                    },
+                    arguments,
+                })
+            }
+            IPC_TRY_READ_IMPORT_ID => {
+                let channel = int_argument(&arguments, 0, "ipc.tryRead channel")?;
+                let mut kernel = kernel_handle.lock()?;
+                Ok(NativeHostImportResult::Handled(VmValue::String(
+                    kernel.try_read_ipc(channel)?,
+                )))
+            }
+            IPC_CLOSE_IMPORT_ID => {
+                let channel = int_argument(&arguments, 0, "ipc.close channel")?;
+                kernel_handle.with_kernel_mut(|kernel| kernel.close_ipc(channel))??;
                 Ok(NativeHostImportResult::Handled(VmValue::Unit))
             }
-            "present" => {
-                let display_id = int_argument(&arguments, 0, "display.present displayId")?;
-                drop(kernel);
-                kernel_handle.present_display(display_id)?;
-                Ok(NativeHostImportResult::Handled(VmValue::Unit))
+            RUNTIME_POLL_IMPORT_ID => {
+                let mut kernel = kernel_handle.lock()?;
+                let channel = int_argument(&arguments, 0, "runtime.poll channel")?;
+                let text = kernel.try_read_ipc(channel)?;
+                if !text.is_empty() {
+                    return Ok(NativeHostImportResult::Handled(poll_record(
+                        "ipc",
+                        text,
+                        empty_event_record(),
+                    )));
+                }
+                if let Some(event) = kernel.try_pull_event(None) {
+                    return Ok(NativeHostImportResult::Handled(poll_record(
+                        "event",
+                        String::new(),
+                        event_record(event.name, event.id, event.arg_count),
+                    )));
+                }
+                let wake_sequence = kernel.wake_sequence();
+                Ok(NativeHostImportResult::SignalNoResume {
+                    signal: VmSignal::WaitPoll {
+                        channel,
+                        wake_sequence,
+                    },
+                    arguments,
+                })
             }
-            "blitMono5x7Text" => {
-                let display_id = int_argument(&arguments, 0, "display.blitMono5x7Text displayId")?;
-                let x = int_argument(&arguments, 1, "display.blitMono5x7Text x")?;
-                let y = int_argument(&arguments, 2, "display.blitMono5x7Text y")?;
-                let text = string_argument(&arguments, 3, "display.blitMono5x7Text text")?;
-                let foreground =
-                    int_argument(&arguments, 4, "display.blitMono5x7Text foreground")? as u16;
-                let background =
-                    match int_argument(&arguments, 5, "display.blitMono5x7Text background")? {
-                        value if value < 0 => None,
-                        value => Some(value as u16),
-                    };
-                kernel
-                    .displays
-                    .blit_mono5x7_text(display_id, x, y, text, foreground, background);
-                Ok(NativeHostImportResult::Handled(VmValue::Unit))
+            PROCESS_ARGUMENT_IMPORT_ID => self
+                .process_argument
+                .as_ref()
+                .map(|argument| NativeHostImportResult::Handled(VmValue::String(argument.clone())))
+                .map(Ok)
+                .unwrap_or_else(|| Ok(NativeHostImportResult::Fallback(arguments))),
+            PROCESS_CURRENT_DIRECTORY_IMPORT_ID => {
+                let kernel = kernel_handle.lock()?;
+                if kernel.filesystem.is_none() {
+                    return Ok(NativeHostImportResult::Fallback(arguments));
+                }
+                Ok(NativeHostImportResult::Handled(VmValue::String(
+                    self.working_directory.clone(),
+                )))
+            }
+            PROCESS_CHANGE_DIRECTORY_IMPORT_ID => {
+                let path = string_argument(&arguments, 0, "process.changeDirectory path")?;
+                let candidate = resolve_working_directory(&self.working_directory, path);
+                let kernel = kernel_handle.lock()?;
+                let Some(filesystem) = kernel.filesystem.as_ref() else {
+                    return Ok(NativeHostImportResult::Fallback(arguments));
+                };
+                if filesystem.is_directory("", &candidate)? {
+                    self.working_directory = candidate;
+                    Ok(NativeHostImportResult::Handled(VmValue::Bool(true)))
+                } else {
+                    Ok(NativeHostImportResult::Handled(VmValue::Bool(false)))
+                }
+            }
+            PROCESS_WAIT_IMPORT_ID => {
+                let kernel = kernel_handle.lock()?;
+                let pid = int_argument(&arguments, 0, "process.wait pid")?;
+                match kernel.process_status(pid) {
+                    ProcessStatus::Completed(exit_code) => {
+                        Ok(NativeHostImportResult::Handled(VmValue::Int(exit_code)))
+                    }
+                    ProcessStatus::Missing => Ok(NativeHostImportResult::Handled(VmValue::Int(1))),
+                    ProcessStatus::Running => {
+                        let wake_sequence = kernel.wake_sequence();
+                        Ok(NativeHostImportResult::SignalNoResume {
+                            signal: VmSignal::WaitProcess { pid, wake_sequence },
+                            arguments,
+                        })
+                    }
+                }
+            }
+            DISPLAY_PRIMARY_IMPORT_ID
+            | DISPLAY_IS_ATTACHED_IMPORT_ID
+            | DISPLAY_WIDTH_IMPORT_ID
+            | DISPLAY_HEIGHT_IMPORT_ID
+            | DISPLAY_CLEAR_IMPORT_ID
+            | DISPLAY_SET_PIXEL_IMPORT_ID
+            | DISPLAY_FILL_RECT_IMPORT_ID
+            | DISPLAY_COPY_RECT_IMPORT_ID
+            | DISPLAY_BLIT_MONO_IMPORT_ID
+            | DISPLAY_BLIT_MONO_5X7_IMPORT_ID
+            | DISPLAY_BLIT_MONO_5X7_PACKED_IMPORT_ID
+            | DISPLAY_PRESENT_IMPORT_ID
+            | DISPLAY_BLIT_MONO_5X7_TEXT_IMPORT_ID => {
+                let mut kernel = kernel_handle.lock()?;
+                if kernel.displays.first_display_id().is_none() {
+                    return Ok(NativeHostImportResult::Fallback(arguments));
+                }
+                match import_id {
+                    DISPLAY_PRIMARY_IMPORT_ID => Ok(NativeHostImportResult::Handled(VmValue::Int(
+                        kernel.displays.first_display_id().unwrap_or(0),
+                    ))),
+                    DISPLAY_IS_ATTACHED_IMPORT_ID => {
+                        let display_id =
+                            int_argument(&arguments, 0, "display.isAttached displayId")?;
+                        Ok(NativeHostImportResult::Handled(VmValue::Bool(
+                            kernel.displays.is_attached(display_id),
+                        )))
+                    }
+                    DISPLAY_WIDTH_IMPORT_ID => {
+                        let display_id = int_argument(&arguments, 0, "display.width displayId")?;
+                        Ok(NativeHostImportResult::Handled(VmValue::Int(
+                            kernel.displays.width(display_id).unwrap_or(0),
+                        )))
+                    }
+                    DISPLAY_HEIGHT_IMPORT_ID => {
+                        let display_id = int_argument(&arguments, 0, "display.height displayId")?;
+                        Ok(NativeHostImportResult::Handled(VmValue::Int(
+                            kernel.displays.height(display_id).unwrap_or(0),
+                        )))
+                    }
+                    DISPLAY_CLEAR_IMPORT_ID => {
+                        let display_id = int_argument(&arguments, 0, "display.clear displayId")?;
+                        let rgb565 = int_argument(&arguments, 1, "display.clear rgb565")? as u16;
+                        kernel.displays.clear(display_id, rgb565);
+                        Ok(NativeHostImportResult::Handled(VmValue::Unit))
+                    }
+                    DISPLAY_SET_PIXEL_IMPORT_ID => {
+                        let display_id = int_argument(&arguments, 0, "display.setPixel displayId")?;
+                        let x = int_argument(&arguments, 1, "display.setPixel x")?;
+                        let y = int_argument(&arguments, 2, "display.setPixel y")?;
+                        let rgb565 = int_argument(&arguments, 3, "display.setPixel rgb565")? as u16;
+                        kernel.displays.set_pixel(display_id, x, y, rgb565);
+                        Ok(NativeHostImportResult::Handled(VmValue::Unit))
+                    }
+                    DISPLAY_FILL_RECT_IMPORT_ID => {
+                        let display_id = int_argument(&arguments, 0, "display.fillRect displayId")?;
+                        let x = int_argument(&arguments, 1, "display.fillRect x")?;
+                        let y = int_argument(&arguments, 2, "display.fillRect y")?;
+                        let width = int_argument(&arguments, 3, "display.fillRect width")?;
+                        let height = int_argument(&arguments, 4, "display.fillRect height")?;
+                        let rgb565 = int_argument(&arguments, 5, "display.fillRect rgb565")? as u16;
+                        kernel
+                            .displays
+                            .fill_rect(display_id, x, y, width, height, rgb565);
+                        Ok(NativeHostImportResult::Handled(VmValue::Unit))
+                    }
+                    DISPLAY_COPY_RECT_IMPORT_ID => {
+                        let display_id = int_argument(&arguments, 0, "display.copyRect displayId")?;
+                        let src_x = int_argument(&arguments, 1, "display.copyRect srcX")?;
+                        let src_y = int_argument(&arguments, 2, "display.copyRect srcY")?;
+                        let width = int_argument(&arguments, 3, "display.copyRect width")?;
+                        let height = int_argument(&arguments, 4, "display.copyRect height")?;
+                        let dst_x = int_argument(&arguments, 5, "display.copyRect dstX")?;
+                        let dst_y = int_argument(&arguments, 6, "display.copyRect dstY")?;
+                        kernel
+                            .displays
+                            .copy_rect(display_id, src_x, src_y, width, height, dst_x, dst_y);
+                        Ok(NativeHostImportResult::Handled(VmValue::Unit))
+                    }
+                    DISPLAY_BLIT_MONO_IMPORT_ID => {
+                        let display_id = int_argument(&arguments, 0, "display.blitMono displayId")?;
+                        let x = int_argument(&arguments, 1, "display.blitMono x")?;
+                        let y = int_argument(&arguments, 2, "display.blitMono y")?;
+                        let width = int_argument(&arguments, 3, "display.blitMono width")?;
+                        let height = int_argument(&arguments, 4, "display.blitMono height")?;
+                        let mask = string_argument(&arguments, 5, "display.blitMono mask")?;
+                        let foreground =
+                            int_argument(&arguments, 6, "display.blitMono foreground")? as u16;
+                        let background =
+                            match int_argument(&arguments, 7, "display.blitMono background")? {
+                                value if value < 0 => None,
+                                value => Some(value as u16),
+                            };
+                        kernel.displays.blit_mono(
+                            display_id, x, y, width, height, mask, foreground, background,
+                        );
+                        Ok(NativeHostImportResult::Handled(VmValue::Unit))
+                    }
+                    DISPLAY_BLIT_MONO_5X7_IMPORT_ID => {
+                        let display_id =
+                            int_argument(&arguments, 0, "display.blitMono5x7 displayId")?;
+                        let x = int_argument(&arguments, 1, "display.blitMono5x7 x")?;
+                        let y = int_argument(&arguments, 2, "display.blitMono5x7 y")?;
+                        let mut glyph = 0_u64;
+                        for index in 0..7 {
+                            let row =
+                                int_argument(&arguments, 3 + index, "display.blitMono5x7 row")?
+                                    as u64;
+                            glyph = (glyph << 5) | (row & 0b11111);
+                        }
+                        let foreground =
+                            int_argument(&arguments, 10, "display.blitMono5x7 foreground")? as u16;
+                        let background =
+                            match int_argument(&arguments, 11, "display.blitMono5x7 background")? {
+                                value if value < 0 => None,
+                                value => Some(value as u16),
+                            };
+                        kernel
+                            .displays
+                            .blit_mono5x7_packed(display_id, x, y, glyph, foreground, background);
+                        Ok(NativeHostImportResult::Handled(VmValue::Unit))
+                    }
+                    DISPLAY_BLIT_MONO_5X7_PACKED_IMPORT_ID => {
+                        let display_id =
+                            int_argument(&arguments, 0, "display.blitMono5x7Packed displayId")?;
+                        let x = int_argument(&arguments, 1, "display.blitMono5x7Packed x")?;
+                        let y = int_argument(&arguments, 2, "display.blitMono5x7Packed y")?;
+                        let glyph =
+                            long_argument(&arguments, 3, "display.blitMono5x7Packed glyph")? as u64;
+                        let foreground =
+                            int_argument(&arguments, 4, "display.blitMono5x7Packed foreground")?
+                                as u16;
+                        let background = match int_argument(
+                            &arguments,
+                            5,
+                            "display.blitMono5x7Packed background",
+                        )? {
+                            value if value < 0 => None,
+                            value => Some(value as u16),
+                        };
+                        kernel
+                            .displays
+                            .blit_mono5x7_packed(display_id, x, y, glyph, foreground, background);
+                        Ok(NativeHostImportResult::Handled(VmValue::Unit))
+                    }
+                    DISPLAY_PRESENT_IMPORT_ID => {
+                        let display_id = int_argument(&arguments, 0, "display.present displayId")?;
+                        drop(kernel);
+                        kernel_handle.present_display(display_id)?;
+                        Ok(NativeHostImportResult::Handled(VmValue::Unit))
+                    }
+                    DISPLAY_BLIT_MONO_5X7_TEXT_IMPORT_ID => {
+                        let display_id =
+                            int_argument(&arguments, 0, "display.blitMono5x7Text displayId")?;
+                        let x = int_argument(&arguments, 1, "display.blitMono5x7Text x")?;
+                        let y = int_argument(&arguments, 2, "display.blitMono5x7Text y")?;
+                        let text = string_argument(&arguments, 3, "display.blitMono5x7Text text")?;
+                        let foreground =
+                            int_argument(&arguments, 4, "display.blitMono5x7Text foreground")?
+                                as u16;
+                        let background = match int_argument(
+                            &arguments,
+                            5,
+                            "display.blitMono5x7Text background",
+                        )? {
+                            value if value < 0 => None,
+                            value => Some(value as u16),
+                        };
+                        kernel
+                            .displays
+                            .blit_mono5x7_text(display_id, x, y, text, foreground, background);
+                        Ok(NativeHostImportResult::Handled(VmValue::Unit))
+                    }
+                    _ => unreachable!("display import id was pre-matched"),
+                }
             }
             _ => Ok(NativeHostImportResult::Fallback(arguments)),
         }
@@ -764,19 +830,14 @@ impl ImageVmHandle {
                     let import = self.host_import(import_id)?;
                     let module_name = import.module_name.clone();
                     let function_name = import.function_name.clone();
-                    match self.try_native_host_import(
-                        import_id,
-                        &module_name,
-                        &function_name,
-                        arguments,
-                    )? {
+                    match self.try_native_host_import(import_id, arguments)? {
                         NativeHostImportResult::Handled(value) => {
                             if let Some(register) = return_register {
                                 self.write_register(register, value)?;
                             }
                         }
                         NativeHostImportResult::Fallback(arguments) => {
-                            if !allows_kotlin_hostcall_fallback(&module_name, &function_name) {
+                            if !allows_kotlin_hostcall_fallback(import_id) {
                                 return Err(format!(
                                     "native host import {module_name}.{function_name} is not implemented; Kotlin fallback is disabled for native-owned hostcalls"
                                 ));
@@ -1085,29 +1146,25 @@ fn checked_register_count(image: &Image, function_index: usize) -> Result<usize,
     Ok(image.functions[function_index].register_count)
 }
 
-fn allows_kotlin_hostcall_fallback(module_name: &str, function_name: &str) -> bool {
+fn allows_kotlin_hostcall_fallback(import_id: i32) -> bool {
     matches!(
-        (module_name, function_name),
-        ("system", "currentTick")
-            | ("system", "label")
-            | ("system", "log")
-            | ("system", "shutdown")
-            | ("system", "reboot")
-            | ("process", "run")
-            | ("process", "spawn")
-            | ("monitor", "exists")
+        import_id,
+        SYSTEM_CURRENT_TICK_IMPORT_ID
+            | SYSTEM_LABEL_IMPORT_ID
+            | SYSTEM_LOG_IMPORT_ID
+            | SYSTEM_SHUTDOWN_IMPORT_ID
+            | SYSTEM_REBOOT_IMPORT_ID
+            | PROCESS_RUN_IMPORT_ID
+            | PROCESS_RUN_WITH_ARGUMENT_IMPORT_ID
+            | PROCESS_SPAWN_IMPORT_ID
+            | PROCESS_SPAWN_WITH_ARGUMENT_IMPORT_ID
     )
 }
 
 fn try_builtin_native_host_import(
     import_id: i32,
-    module_name: &str,
     arguments: Vec<VmValue>,
 ) -> Result<NativeHostImportResult, String> {
-    if module_name != "strings" {
-        return Ok(NativeHostImportResult::Fallback(arguments));
-    }
-
     match import_id {
         STRINGS_TRIM_IMPORT_ID => native_string_unary(arguments, |text| {
             VmValue::String(text.trim_matches(|ch: char| ch.is_whitespace()).to_string())
@@ -1601,7 +1658,7 @@ mod tests {
             .unwrap();
 
         let result = handle
-            .try_native_host_import(6000, "process", "currentDirectory", Vec::new())
+            .try_native_host_import(PROCESS_CURRENT_DIRECTORY_IMPORT_ID, Vec::new())
             .unwrap();
 
         match result {
@@ -1619,39 +1676,46 @@ mod tests {
 
     #[test]
     fn native_owned_host_imports_do_not_allow_kotlin_fallback() {
-        for (module_name, function_name) in [
-            ("filesystem", "unknown"),
-            ("display", "unknown"),
-            ("events", "unknown"),
-            ("ipc", "unknown"),
-            ("runtime", "unknown"),
-            ("strings", "unknown"),
-            ("process", "currentDirectory"),
-            ("process", "changeDirectory"),
-            ("process", "wait"),
+        for (import_id, name) in [
+            (FILESYSTEM_EXISTS_IMPORT_ID, "filesystem.exists"),
+            (DISPLAY_PRIMARY_IMPORT_ID, "display.primary"),
+            (EVENTS_TRY_PULL_IMPORT_ID, "events.tryPull"),
+            (IPC_OPEN_IMPORT_ID, "ipc.open"),
+            (RUNTIME_POLL_IMPORT_ID, "runtime.poll"),
+            (STRINGS_TRIM_IMPORT_ID, "strings.trim"),
+            (
+                PROCESS_CURRENT_DIRECTORY_IMPORT_ID,
+                "process.currentDirectory",
+            ),
+            (
+                PROCESS_CHANGE_DIRECTORY_IMPORT_ID,
+                "process.changeDirectory",
+            ),
+            (PROCESS_WAIT_IMPORT_ID, "process.wait"),
         ] {
             assert!(
-                !allows_kotlin_hostcall_fallback(module_name, function_name),
-                "{module_name}.{function_name} must fail fast instead of falling back to Kotlin",
+                !allows_kotlin_hostcall_fallback(import_id),
+                "{name} must fail fast instead of falling back to Kotlin",
             );
         }
     }
 
     #[test]
     fn jvm_owned_host_imports_keep_explicit_kotlin_fallback() {
-        for (module_name, function_name) in [
-            ("system", "currentTick"),
-            ("system", "label"),
-            ("system", "log"),
-            ("system", "shutdown"),
-            ("system", "reboot"),
-            ("process", "run"),
-            ("process", "spawn"),
-            ("monitor", "exists"),
+        for (import_id, name) in [
+            (SYSTEM_CURRENT_TICK_IMPORT_ID, "system.currentTick"),
+            (SYSTEM_LABEL_IMPORT_ID, "system.label"),
+            (SYSTEM_LOG_IMPORT_ID, "system.log"),
+            (SYSTEM_SHUTDOWN_IMPORT_ID, "system.shutdown"),
+            (SYSTEM_REBOOT_IMPORT_ID, "system.reboot"),
+            (PROCESS_RUN_IMPORT_ID, "process.run"),
+            (PROCESS_RUN_WITH_ARGUMENT_IMPORT_ID, "process.run/2"),
+            (PROCESS_SPAWN_IMPORT_ID, "process.spawn"),
+            (PROCESS_SPAWN_WITH_ARGUMENT_IMPORT_ID, "process.spawn/2"),
         ] {
             assert!(
-                allows_kotlin_hostcall_fallback(module_name, function_name),
-                "{module_name}.{function_name} should remain Kotlin-owned for now",
+                allows_kotlin_hostcall_fallback(import_id),
+                "{name} should remain Kotlin-owned for now",
             );
         }
     }
