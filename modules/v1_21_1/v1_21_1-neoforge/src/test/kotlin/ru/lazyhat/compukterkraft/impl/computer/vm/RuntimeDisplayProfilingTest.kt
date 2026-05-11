@@ -104,7 +104,7 @@ class RuntimeDisplayProfilingTest {
     }
 
     @Test
-    fun heldEnterWorkloadProducesBacklogProfilingMetrics() {
+    fun heldEnterWorkloadStaysOnNativeDaemonQueues() {
         val run = RuntimeProfilingWorkload.runHeldEnterWorkload(repeatEnterEvents = 120, settleTicks = 220)
         val displaySnapshot = run.profiling.displayMetrics.snapshot()
         val clientSnapshot = run.profiling.clientMetrics.snapshot()
@@ -118,7 +118,8 @@ class RuntimeDisplayProfilingTest {
         println(compilerSnapshot.summary())
 
         assertTrue(run.enterEventsQueued == 120, run.summary())
-        assertTrue(run.maxQueuedEvents > 0, run.summary())
+        assertTrue(run.maxQueuedEvents == 0, run.summary())
+        assertTrue(run.maxPendingHostCalls == 0, run.summary())
         assertTrue(runtimeSnapshot.vm.nativeDaemonHostRequests > 0, runtimeSnapshot.summary())
         assertTrue(runtimeSnapshot.vm.nativeDaemonTurns > 0, runtimeSnapshot.summary())
         assertTrue(

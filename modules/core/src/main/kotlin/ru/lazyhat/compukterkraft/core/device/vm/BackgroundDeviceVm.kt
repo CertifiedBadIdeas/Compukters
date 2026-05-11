@@ -25,32 +25,21 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.selects.select
 import ru.lazyhat.compukterkraft.core.LOGGER
 import ru.lazyhat.compukterkraft.core.device.runtime.ClasspathFirmwareProgramLoader
 import ru.lazyhat.compukterkraft.core.device.runtime.FirmwareProgramLoader
 import ru.lazyhat.compukterkraft.core.device.runtime.NoOpRuntimeMetricsCollector
 import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeMetricsCollector
 import ru.lazyhat.compukterkraft.core.device.runtime.WorkspaceProgramLoader
-import ru.lazyhat.compukterkraft.core.device.vm.api.VmDisplayApi
-import ru.lazyhat.compukterkraft.core.device.vm.api.VmEventApi
-import ru.lazyhat.compukterkraft.core.device.vm.api.VmFileSystemApi
-import ru.lazyhat.compukterkraft.core.device.vm.api.VmIpcApi
-import ru.lazyhat.compukterkraft.core.device.vm.api.VmPeripheralRegistry
-import ru.lazyhat.compukterkraft.core.device.vm.api.VmPeripheralRuntimeApi
-import ru.lazyhat.compukterkraft.core.device.vm.api.VmProcessApi
-import ru.lazyhat.compukterkraft.core.device.vm.api.VmSystemApi
 import ru.lazyhat.compukterkraft.core.device.vm.display.DisplayMetricsCollector
 import ru.lazyhat.compukterkraft.core.device.vm.display.DisplayRegistry
 import ru.lazyhat.compukterkraft.core.device.vm.display.NoOpDisplayMetricsCollector
-import ru.lazyhat.compukterkraft.lang.api.BuiltinModule
 import ru.lazyhat.compukterkraft.lang.api.BuiltinRegistry
 import ru.lazyhat.compukterkraft.lang.frontend.FrontendSeverity
 import ru.lazyhat.compukterkraft.lang.frontend.CompilerMetricsCollector
@@ -59,13 +48,9 @@ import ru.lazyhat.compukterkraft.lang.frontend.LanguageFrontend
 import ru.lazyhat.compukterkraft.lang.frontend.NoOpCompilerMetricsCollector
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceCapability
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceProfile
-import ru.lazyhat.compukterkraft.lang.runtime.DeviceRuntimeMetrics
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceVmHandle
 import ru.lazyhat.compukterkraft.lang.runtime.DeviceWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.VmEvent
-import ru.lazyhat.compukterkraft.lang.runtime.VmInstructionKind
-import ru.lazyhat.compukterkraft.lang.runtime.VmPollResult
-import ru.lazyhat.compukterkraft.lang.runtime.VmSignalKind
 import ru.lazyhat.compukterkraft.lang.runtime.VmSnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.VmState
 import ru.lazyhat.compukterkraft.lang.runtime.VmStopReason
@@ -81,7 +66,6 @@ import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
 import kotlin.concurrent.write
 import kotlin.coroutines.coroutineContext
-import kotlinx.coroutines.yield as coroutineYield
 
 fun interface DeviceVmLogger {
     fun log(message: String)
@@ -89,7 +73,6 @@ fun interface DeviceVmLogger {
 
 private data class RuntimeApiRegistryProfile(
     val baseRegistry: BuiltinRegistry,
-    val optionalModules: List<BuiltinModule> = emptyList(),
 )
 
 /**
@@ -111,7 +94,7 @@ class BackgroundDeviceVm(
     override val deviceId: Int,
     override val profile: DeviceProfile,
     dispatcher: CoroutineDispatcher,
-    private val labelProvider: () -> String?,
+    labelProvider: () -> String?,
     private val logger: DeviceVmLogger,
     workspace: DeviceWorkspace,
     private val firmwareLoader: FirmwareProgramLoader = ClasspathFirmwareProgramLoader(),
@@ -120,16 +103,10 @@ class BackgroundDeviceVm(
     private val compilerMetricsCollector: CompilerMetricsCollector = NoOpCompilerMetricsCollector,
     private val nativeFilesystemRoot: Path? = null,
     private val nativeDaemonBindings: NativeDaemonBindings = NativeVmDaemonBindings,
-) : DeviceVmHandle,
-    VmContext {
+) : DeviceVmHandle {
     private val scope = CoroutineScope(SupervisorJob() + dispatcher)
-    private val executionQuota = DeviceExecutionQuota()
     private val stateManager = VmStateManager()
-    private val eventManager = EventManager(profile.resources.queues.eventQueueSlots)
-    private val eventPayloadStore = EventPayloadStore(profile.resources.queues.eventQueueSlots)
-    private val ipcRegistry = IpcChannelRegistry(profile.resources.queues.ipcChannelBytes)
     private val programLoader = WorkspaceProgramLoader(workspace)
-    private val pathResolver = VmPathResolver()
     private val effectiveNativeFilesystemRoot: Path? =
         nativeFilesystemRoot ?: (workspace as? DeviceWorkspaceHost)?.computerRoot(deviceId)
     private val nativeDeviceDaemonHandle: Long =
@@ -159,65 +136,13 @@ class BackgroundDeviceVm(
             hostBridge = ::handleNativeDaemonHostRequest,
             compileBridge = ::handleNativeDaemonCompileProgram,
         )
-    private val processManager =
-        VmProcessManager(
-            scope = scope,
-            ctx = this,
-            deviceId = deviceId,
-            programLoader = programLoader,
-            profile = profile,
-            runtimeCreator = { pid, parentPid, wd, arg -> createRuntime(pid, parentPid, wd, arg) },
-            compilerMetricsCollector = compilerMetricsCollector,
-            runtimeMetricsCollector = runtimeMetricsCollector,
-        )
     private val displayRegistry = DisplayRegistry(displayMetricsCollector)
-    private val peripheralRegistry = VmPeripheralRegistry()
     private val runtimeRegistryProfile = createRuntimeRegistryProfile()
     private val stoppedNativeDisplayFrames = mutableListOf<DisplayFrameDelta>()
     private val daemonWakeSignal = Channel<Unit>(capacity = Channel.CONFLATED)
     private var nativeDeviceKernelFreed: Boolean = false
     private var daemonExecutor: Job? = null
     private val nativeDeviceKernelLock = ReentrantReadWriteLock()
-    private var executionWindowStartedNanos: Long? = null
-
-    private inner class RuntimeMetricsApi : DeviceRuntimeMetrics {
-        override val collectsDetailedMetrics: Boolean = runtimeMetricsCollector !== NoOpRuntimeMetricsCollector
-
-        override fun recordVmSignal(kind: VmSignalKind) {
-            runtimeMetricsCollector.recordVmSignal(kind)
-        }
-
-        override fun recordVmHostCall(
-            moduleName: String,
-            functionName: String,
-            nanos: Long,
-        ) {
-            runtimeMetricsCollector.recordVmHostCall(moduleName, functionName, nanos)
-        }
-
-        override fun recordVmHostCallWait(
-            moduleName: String,
-            functionName: String,
-            nanos: Long,
-        ) {
-            runtimeMetricsCollector.recordVmHostCallWait(moduleName, functionName, nanos)
-        }
-
-        override fun recordVmInstruction(
-            kind: VmInstructionKind,
-            nanos: Long,
-        ) {
-            runtimeMetricsCollector.recordVmInstruction(kind, nanos)
-        }
-
-        override fun recordNativeWait(
-            kind: String,
-            nanos: Long,
-            woke: Boolean,
-        ) {
-            runtimeMetricsCollector.recordNativeWait(kind, nanos, woke)
-        }
-    }
 
     /**
      * Observe terminal VM states (stopped, crashed).
@@ -239,17 +164,18 @@ class BackgroundDeviceVm(
         }
     }
 
-    override fun enqueueEvent(event: VmEvent): Boolean {
-        val accepted = eventManager.enqueueEvent(event)
-        if (accepted) {
-            nativeDeviceKernelLock.read {
-                if (!nativeDeviceKernelFreed && nativeDaemonRuntime.enqueueEvent(event)) {
-                    wakeNativeDaemonExecutor()
+    override fun enqueueEvent(event: VmEvent): Boolean =
+        nativeDeviceKernelLock.read {
+            if (nativeDeviceKernelFreed) {
+                false
+            } else {
+                nativeDaemonRuntime.enqueueEvent(event).also { accepted ->
+                    if (accepted) {
+                        wakeNativeDaemonExecutor()
+                    }
                 }
             }
         }
-        return accepted
-    }
 
     override fun requestSlice(serverTick: Long) {
         stateManager.updateCurrentTick(serverTick)
@@ -263,7 +189,7 @@ class BackgroundDeviceVm(
             profile = profile,
             state = stateManager.state,
             currentTick = stateManager.currentTick,
-            queuedEvents = eventManager.queuedCount(),
+            queuedEvents = 0,
             pendingHostCalls = 0,
         )
 
@@ -361,74 +287,12 @@ class BackgroundDeviceVm(
             }
         }
 
-    // ── VmContext ───────────────────────────────────────────────────
-
-    override suspend fun receiveEvent(): VmEvent = eventManager.receiveEvent()
-
-    override fun tryReceiveEvent(): VmEvent? = eventManager.tryReceiveEvent()
-
-    override fun deferEvent(event: VmEvent) = eventManager.deferEvent(event)
-
-    override fun setState(state: VmState) = stateManager.setState(state)
-
-    override fun setSleepUntil(tick: Long?) = stateManager.setSleepUntil(tick)
-
-    override suspend fun schedulingPoint(processId: Int) = applySchedulingPoint(processId)
-
-    override fun resolvePath(path: String): String = pathResolver.resolve(path)
-
-    override fun log(message: String) = logger.log(message)
-
-    override suspend fun writeIpc(
-        channel: Int,
-        text: String,
-    ) {
-        ipcRegistry.write(channel, text)
-    }
-
-    override suspend fun pollIpcOrEvent(channel: Int): VmPollResult {
-        while (true) {
-            val text = ipcRegistry.tryRead(channel)
-            if (text.isNotEmpty()) {
-                return VmPollResult(kind = "ipc", text = text)
-            }
-            val event = eventManager.tryReceiveEvent()
-            if (event != null) {
-                return VmPollResult(kind = "event", event = event)
-            }
-
-            val readSignal = ipcRegistry.readSignal(channel)
-            stateManager.setState(VmState.WaitingEvent)
-            val selected =
-                try {
-                    select<VmPollResult?> {
-                        if (readSignal != null) {
-                            readSignal.onReceiveCatching { null }
-                        }
-                        eventManager.receiveEventClause().invoke { result ->
-                            eventManager.acceptSelectedEvent(result)?.let { selectedEvent ->
-                                VmPollResult(kind = "event", event = selectedEvent)
-                            }
-                        }
-                    }
-                } finally {
-                    if (!stateManager.isStopped) {
-                        stateManager.setState(VmState.Running)
-                    }
-                }
-            if (selected != null) {
-                return selected
-            }
-        }
-    }
-
     // ── Internal ────────────────────────────────────────────────────
 
     private suspend fun stopInternal(
         reason: VmStopReason = VmStopReason.REQUESTED,
         errorMessage: String? = null,
     ) {
-        finishExecutionWindow()
         if (stateManager.isStopped) {
             LOGGER.debug { "DeviceID: $deviceId already stopped, ignoring stop request (reason: $reason, error: $errorMessage)" }
             return
@@ -443,7 +307,6 @@ class BackgroundDeviceVm(
                 }
             }
         }
-        processManager.cancelAll()
         stateManager.stopVm(reason, errorMessage)
         daemonExecutor?.let { executor ->
             daemonExecutor = null
@@ -567,84 +430,6 @@ class BackgroundDeviceVm(
             return NativeDaemonCompileResult(image = null, exitCode = 1)
         }
         return NativeDaemonCompileResult(image = imageBytes, exitCode = 0)
-    }
-
-    private fun finishExecutionWindow() {
-        val started = executionWindowStartedNanos ?: return
-        executionWindowStartedNanos = null
-        runtimeMetricsCollector.recordVmExecutionWindow(System.nanoTime() - started)
-    }
-
-    private suspend fun awaitSlicePermit(processId: Int) {
-        finishExecutionWindow()
-        stateManager.setState(
-            when {
-                stateManager.sleepUntilTick != null -> VmState.Sleeping
-                stateManager.isBooting -> VmState.Booting
-                else -> VmState.Running
-            },
-        )
-        executionQuota.awaitPermit(processId)
-        runtimeMetricsCollector.recordSlicePermitReceived()
-        runtimeMetricsCollector.recordExecutionQuotaPermitConsumed()
-        executionWindowStartedNanos = System.nanoTime()
-        stateManager.updateSliceDeadlineNanos(profile.resources.cpu.wallTimeGuardNanosPerSlice)
-        stateManager.setState(VmState.Running)
-    }
-
-    private suspend fun applySchedulingPoint(processId: Int) {
-        coroutineContext.ensureActive()
-        if (System.nanoTime() >= stateManager.sliceDeadlineNanos) {
-            runtimeMetricsCollector.recordSchedulingPoint(waitedForSlice = true)
-            awaitSlicePermit(processId)
-        } else {
-            runtimeMetricsCollector.recordSchedulingPoint(waitedForSlice = false)
-            coroutineYield()
-        }
-    }
-
-    private fun createRuntime(
-        processId: Int,
-        parentProcessId: Int,
-        workingDirectory: String,
-        argument: String,
-    ): VmRuntime {
-        val runtimePathResolver = VmPathResolver(workingDirectory)
-
-        val systemApi =
-            VmSystemApi(
-                ctx = this,
-                deviceId = deviceId,
-                currentTickProvider = { stateManager.currentTick },
-                labelProvider = labelProvider,
-            )
-        val filesystemApi = VmFileSystemApi(pathResolver = runtimePathResolver)
-        val peripheralsApi = VmPeripheralRuntimeApi(peripheralRegistry)
-        val processApi =
-            VmProcessApi(
-                processId = processId,
-                initialArgument = argument,
-                pathResolver = runtimePathResolver,
-                filesystemApi = filesystemApi,
-                processManager = processManager,
-            )
-
-        return VmRuntime(
-            ctx = this,
-            initialProfile = profile,
-            processId = processId,
-            parentProcessId = parentProcessId,
-            runtimeRegistry = runtimeRegistryProfile.baseRegistry,
-            systemApi = systemApi,
-            displayApi = VmDisplayApi(displayRegistry),
-            filesystemApi = filesystemApi,
-            processApi = processApi,
-            ipcApi = VmIpcApi(ipcRegistry),
-            eventApi = VmEventApi(eventPayloadStore),
-            peripheralsApi = peripheralsApi,
-            metricsApi = RuntimeMetricsApi(),
-            processStateReporter = processManager,
-        )
     }
 
     private fun createRuntimeRegistryProfile(): RuntimeApiRegistryProfile {

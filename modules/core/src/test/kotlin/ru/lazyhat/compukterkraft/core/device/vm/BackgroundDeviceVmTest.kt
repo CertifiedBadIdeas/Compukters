@@ -83,6 +83,23 @@ class BackgroundDeviceVmTest {
     }
 
     @Test
+    fun backgroundDeviceVmDoesNotOwnKotlinRuntimeServices() {
+        val forbiddenRuntimeServices =
+            setOf(
+                "VmProcessManager",
+                "IpcChannelRegistry",
+                "EventManager",
+                "EventPayloadStore",
+            )
+        val ownedRuntimeServices =
+            BackgroundDeviceVm::class.java.declaredFields
+                .map { it.type.simpleName }
+                .filter { it in forbiddenRuntimeServices }
+
+        assertEquals(emptyList(), ownedRuntimeServices)
+    }
+
+    @Test
     fun nativeDeviceDaemonRuntimeDoesNotExposeRequestSliceWrapper() {
         val memberNames =
             NativeDeviceDaemonRuntime::class.java.declaredMethods
@@ -594,7 +611,7 @@ class BackgroundDeviceVmTest {
     }
 
     @Test
-    fun requestSliceDoesNotGateSharedQuotaOnSleepState() {
+    fun requestSliceAlwaysRefillsNativeQuota() {
         runtimeTestWorkspace("vm-runtime-sleep-shared-quota") { workspace ->
             val daemonBindings = RecordingNativeDaemonBindings()
             val vm =
@@ -608,7 +625,6 @@ class BackgroundDeviceVmTest {
                     nativeDaemonBindings = daemonBindings,
                 )
 
-            vm.setSleepUntil(10)
             vm.requestSlice(serverTick = 1)
 
             assertEquals(
