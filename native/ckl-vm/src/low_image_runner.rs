@@ -73,13 +73,17 @@ struct LowFrame {
 
 struct LowFunction {
     register_count: usize,
-    parameters: Vec<usize>,
     instructions: Vec<ExecutableInstruction>,
 }
 
 struct ExecutableInstruction {
     opcode: usize,
     operation: ExecutableOperation,
+}
+
+struct StaticCallBinding {
+    callee_parameter: usize,
+    caller_argument: usize,
 }
 
 enum ExecutableOperation {
@@ -166,7 +170,7 @@ enum ExecutableOperation {
     CallStatic {
         return_register: Option<usize>,
         function_index: usize,
-        arguments: Vec<usize>,
+        bindings: Vec<StaticCallBinding>,
     },
     ReturnI32 {
         src: usize,
@@ -216,7 +220,11 @@ impl LowProgram {
         let entry_function_index = image.entry_function_index;
         let entry_register_count = image.functions[entry_function_index].register_count;
         let entry_frame = LowFrame::create(entry_function_index, None, 0);
-        let functions = image.functions.iter().map(LowFunction::compile).collect();
+        let functions = image
+            .functions
+            .iter()
+            .map(|function| LowFunction::compile(&image, function))
+            .collect();
         Ok((
             Self { functions },
             LowState {
@@ -374,35 +382,29 @@ impl LowFrame {
 }
 
 impl LowFunction {
-    fn compile(function: &Function) -> Self {
+    fn compile(image: &Image, function: &Function) -> Self {
         Self {
             register_count: function.register_count,
-            parameters: function
-                .parameters
-                .iter()
-                .copied()
-                .map(usize::from)
-                .collect(),
             instructions: function
                 .instructions
                 .iter()
-                .map(ExecutableInstruction::compile)
+                .map(|instruction| ExecutableInstruction::compile(image, instruction))
                 .collect(),
         }
     }
 }
 
 impl ExecutableInstruction {
-    fn compile(instruction: &Instruction) -> Self {
+    fn compile(image: &Image, instruction: &Instruction) -> Self {
         Self {
             opcode: opcode_index(instruction),
-            operation: ExecutableOperation::compile(instruction),
+            operation: ExecutableOperation::compile(image, instruction),
         }
     }
 }
 
 impl ExecutableOperation {
-    fn compile(instruction: &Instruction) -> Self {
+    fn compile(image: &Image, instruction: &Instruction) -> Self {
         match instruction {
             Instruction::I32Const { dst, value } => Self::I32Const {
                 dst: usize::from(*dst),
@@ -489,7 +491,17 @@ impl ExecutableOperation {
             } => Self::CallStatic {
                 return_register: return_register.map(usize::from),
                 function_index: *function_index,
-                arguments: arguments.iter().copied().map(usize::from).collect(),
+                bindings: image.functions[*function_index]
+                    .parameters
+                    .iter()
+                    .copied()
+                    .map(usize::from)
+                    .zip(arguments.iter().copied().map(usize::from))
+                    .map(|(callee_parameter, caller_argument)| StaticCallBinding {
+                        callee_parameter,
+                        caller_argument,
+                    })
+                    .collect(),
             },
             Instruction::ReturnI32 { src } => Self::ReturnI32 {
                 src: usize::from(*src),
@@ -680,12 +692,12 @@ impl LowImageVm {
                 ExecutableOperation::CallStatic {
                     return_register,
                     function_index,
-                    arguments,
+                    bindings,
                 } => self.state.call_static(
                     &self.program,
                     *return_register,
                     *function_index,
-                    arguments,
+                    bindings,
                 ),
             }
             if self.state.instructions_since_pause >= self.instruction_budget {
@@ -778,7 +790,7 @@ impl LowState {
         program: &LowProgram,
         return_register: Option<usize>,
         function_index: usize,
-        arguments: &[usize],
+        bindings: &[StaticCallBinding],
     ) {
         let caller_register_base = self.current_frame().register_base;
         let function = program.function(function_index);
@@ -786,9 +798,9 @@ impl LowState {
         self.registers
             .resize(register_base + function.register_count, 0);
         let frame = LowFrame::create(function_index, return_register, register_base);
-        for (parameter, argument) in function.parameters.iter().copied().zip(arguments) {
-            let value = self.registers[caller_register_base + *argument];
-            self.registers[frame.register_base + parameter as usize] = value;
+        for binding in bindings {
+            let value = self.registers[caller_register_base + binding.caller_argument];
+            self.registers[frame.register_base + binding.callee_parameter] = value;
         }
         self.metrics.function_calls = self.metrics.function_calls.saturating_add(1);
         self.frames.push(frame);
