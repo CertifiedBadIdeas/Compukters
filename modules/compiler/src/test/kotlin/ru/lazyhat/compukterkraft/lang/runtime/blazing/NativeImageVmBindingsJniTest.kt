@@ -27,7 +27,6 @@ import ru.lazyhat.compukterkraft.lang.runtime.image.low.CkLowVmFunction
 import ru.lazyhat.compukterkraft.lang.runtime.image.low.CkLowVmImage
 import ru.lazyhat.compukterkraft.lang.runtime.image.low.CkLowVmImageAbi
 import ru.lazyhat.compukterkraft.lang.runtime.image.low.CkLowVmInstruction
-import ru.lazyhat.compukterkraft.lang.runtime.image.low.CkLowVmRegister
 import kotlin.io.path.createDirectories
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
@@ -639,17 +638,14 @@ class NativeImageVmBindingsJniTest {
                     listOf(
                         CkLowVmFunction(
                             name = "main",
-                            i32RegisterCount = 3,
-                            i64RegisterCount = 0,
-                            addrRegisterCount = 0,
-                            boolRegisterCount = 0,
+                            registerCount = 3,
                             parameters = emptyList(),
                             instructions =
                                 listOf(
                                     CkLowVmInstruction.I32Const(dst = 0, value = 40),
                                     CkLowVmInstruction.I32Const(dst = 1, value = 2),
                                     CkLowVmInstruction.I32Add(dst = 2, lhs = 0, rhs = 1),
-                                    CkLowVmInstruction.Return(CkLowVmRegister.I32(2)),
+                                    CkLowVmInstruction.ReturnI32(2),
                                 ),
                         ),
                     ),

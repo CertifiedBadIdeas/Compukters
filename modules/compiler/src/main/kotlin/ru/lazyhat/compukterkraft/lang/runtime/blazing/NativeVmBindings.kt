@@ -164,7 +164,7 @@ data class NativeLowImageVmMetrics(
             }.joinToString(",")
 
     companion object {
-        const val OPCODE_COUNT_SIZE: Int = 22
+        const val OPCODE_COUNT_SIZE: Int = 25
 
         val EMPTY = NativeLowImageVmMetrics()
 
@@ -205,8 +205,11 @@ data class NativeLowImageVmMetrics(
                 17 -> "Jump"
                 18 -> "JumpIfFalse"
                 19 -> "CallStatic"
-                20 -> "Return"
+                20 -> "ReturnI32"
                 21 -> "ReturnUnit"
+                22 -> "ReturnI64"
+                23 -> "ReturnAddr"
+                24 -> "ReturnBool"
                 else -> "Opcode$opcode"
             }
     }

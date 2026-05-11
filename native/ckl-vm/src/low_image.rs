@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-pub const VERSION: u8 = 4;
+pub const VERSION: u8 = 5;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum ImageError {
@@ -16,8 +16,8 @@ pub enum ImageError {
     NegativeLength(i32),
     #[error("negative {name} index {value}")]
     NegativeIndex { name: &'static str, value: i32 },
-    #[error("unknown register tag {0}")]
-    UnknownRegisterTag(u8),
+    #[error("unknown optional register tag {0}")]
+    UnknownOptionalRegisterTag(u8),
     #[error("unknown instruction tag {0}")]
     UnknownInstructionTag(u8),
 }
@@ -36,20 +36,9 @@ pub struct Image {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Function {
     pub name: String,
-    pub i32_register_count: usize,
-    pub i64_register_count: usize,
-    pub addr_register_count: usize,
-    pub bool_register_count: usize,
-    pub parameters: Vec<Register>,
+    pub register_count: usize,
+    pub parameters: Vec<u16>,
     pub instructions: Vec<Instruction>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Register {
-    I32(u16),
-    I64(u16),
-    Addr(u16),
-    Bool(u16),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -135,12 +124,21 @@ pub enum Instruction {
         target: usize,
     },
     CallStatic {
-        return_register: Option<Register>,
+        return_register: Option<u16>,
         function_index: usize,
-        arguments: Vec<Register>,
+        arguments: Vec<u16>,
     },
-    Return {
-        src: Register,
+    ReturnI32 {
+        src: u16,
+    },
+    ReturnI64 {
+        src: u16,
+    },
+    ReturnAddr {
+        src: u16,
+    },
+    ReturnBool {
+        src: u16,
     },
     ReturnUnit,
 }
@@ -168,10 +166,7 @@ pub fn decode_image(bytes: &[u8]) -> Result<Image, ImageError> {
 fn read_function(reader: &mut Reader<'_>) -> Result<Function, ImageError> {
     Ok(Function {
         name: reader.string()?,
-        i32_register_count: usize::from(reader.u16()?),
-        i64_register_count: usize::from(reader.u16()?),
-        addr_register_count: usize::from(reader.u16()?),
-        bool_register_count: usize::from(reader.u16()?),
+        register_count: usize::from(reader.u16()?),
         parameters: reader.register_list()?,
         instructions: reader.list(read_instruction)?,
     })
@@ -248,10 +243,11 @@ fn read_instruction(reader: &mut Reader<'_>) -> Result<Instruction, ImageError> 
             function_index: reader.index("function")?,
             arguments: reader.register_list()?,
         }),
-        20 => Ok(Instruction::Return {
-            src: reader.register()?,
-        }),
+        20 => Ok(Instruction::ReturnI32 { src: reader.u16()? }),
         21 => Ok(Instruction::ReturnUnit),
+        22 => Ok(Instruction::ReturnI64 { src: reader.u16()? }),
+        23 => Ok(Instruction::ReturnAddr { src: reader.u16()? }),
+        24 => Ok(Instruction::ReturnBool { src: reader.u16()? }),
         other => Err(ImageError::UnknownInstructionTag(other)),
     }
 }
@@ -326,31 +322,19 @@ impl<'a> Reader<'a> {
         Ok(self.take(length)?.to_vec())
     }
 
-    fn register(&mut self) -> Result<Register, ImageError> {
-        let tag = self.u8()?;
-        let index = self.u16()?;
-        match tag {
-            1 => Ok(Register::I32(index)),
-            2 => Ok(Register::I64(index)),
-            3 => Ok(Register::Addr(index)),
-            4 => Ok(Register::Bool(index)),
-            other => Err(ImageError::UnknownRegisterTag(other)),
-        }
-    }
-
-    fn optional_register(&mut self) -> Result<Option<Register>, ImageError> {
+    fn optional_register(&mut self) -> Result<Option<u16>, ImageError> {
         match self.u8()? {
             0 => Ok(None),
-            1 => Ok(Some(self.register()?)),
-            other => Err(ImageError::UnknownRegisterTag(other)),
+            1 => Ok(Some(self.u16()?)),
+            other => Err(ImageError::UnknownOptionalRegisterTag(other)),
         }
     }
 
-    fn register_list(&mut self) -> Result<Vec<Register>, ImageError> {
+    fn register_list(&mut self) -> Result<Vec<u16>, ImageError> {
         let length = self.length()?;
         let mut values = Vec::with_capacity(length);
         for _ in 0..length {
-            values.push(self.register()?);
+            values.push(self.u16()?);
         }
         Ok(values)
     }

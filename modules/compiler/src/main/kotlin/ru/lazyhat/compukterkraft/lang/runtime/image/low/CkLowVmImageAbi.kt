@@ -1,14 +1,7 @@
 package ru.lazyhat.compukterkraft.lang.runtime.image.low
 
 object CkLowVmImageAbi {
-    const val VERSION: Int = 4
-
-    object RegisterTags {
-        const val I32 = 1
-        const val I64 = 2
-        const val ADDR = 3
-        const val BOOL = 4
-    }
+    const val VERSION: Int = 5
 
     object InstructionTags {
         const val I32_CONST = 1
@@ -30,8 +23,11 @@ object CkLowVmImageAbi {
         const val JUMP = 17
         const val JUMP_IF_FALSE = 18
         const val CALL_STATIC = 19
-        const val RETURN = 20
+        const val RETURN_I32 = 20
         const val RETURN_UNIT = 21
+        const val RETURN_I64 = 22
+        const val RETURN_ADDR = 23
+        const val RETURN_BOOL = 24
     }
 
     fun encode(image: CkLowVmImage): ByteArray {
@@ -56,46 +52,19 @@ object CkLowVmImageAbi {
     }
 
     private fun Writer.function(function: CkLowVmFunction) {
-        require(function.i32RegisterCount in 0..UShort.MAX_VALUE.toInt())
-        require(function.i64RegisterCount in 0..UShort.MAX_VALUE.toInt())
-        require(function.addrRegisterCount in 0..UShort.MAX_VALUE.toInt())
-        require(function.boolRegisterCount in 0..UShort.MAX_VALUE.toInt())
+        require(function.registerCount in 0..UShort.MAX_VALUE.toInt())
         string(function.name)
-        u16(function.i32RegisterCount)
-        u16(function.i64RegisterCount)
-        u16(function.addrRegisterCount)
-        u16(function.boolRegisterCount)
-        list(function.parameters) { register(it) }
+        u16(function.registerCount)
+        list(function.parameters) { u16(it) }
         list(function.instructions) { instruction(it) }
     }
 
-    private fun Writer.register(register: CkLowVmRegister) {
-        when (register) {
-            is CkLowVmRegister.I32 -> {
-                u8(RegisterTags.I32)
-                u16(register.index)
-            }
-            is CkLowVmRegister.I64 -> {
-                u8(RegisterTags.I64)
-                u16(register.index)
-            }
-            is CkLowVmRegister.Addr -> {
-                u8(RegisterTags.ADDR)
-                u16(register.index)
-            }
-            is CkLowVmRegister.Bool -> {
-                u8(RegisterTags.BOOL)
-                u16(register.index)
-            }
-        }
-    }
-
-    private fun Writer.optionalRegister(register: CkLowVmRegister?) {
+    private fun Writer.optionalRegister(register: Int?) {
         if (register == null) {
             u8(0)
         } else {
             u8(1)
-            register(register)
+            u16(register)
         }
     }
 
@@ -142,11 +111,23 @@ object CkLowVmImageAbi {
                 u8(InstructionTags.CALL_STATIC)
                 optionalRegister(instruction.returnRegister)
                 i32(instruction.functionIndex)
-                list(instruction.arguments) { register(it) }
+                list(instruction.arguments) { u16(it) }
             }
-            is CkLowVmInstruction.Return -> {
-                u8(InstructionTags.RETURN)
-                register(instruction.src)
+            is CkLowVmInstruction.ReturnI32 -> {
+                u8(InstructionTags.RETURN_I32)
+                u16(instruction.src)
+            }
+            is CkLowVmInstruction.ReturnI64 -> {
+                u8(InstructionTags.RETURN_I64)
+                u16(instruction.src)
+            }
+            is CkLowVmInstruction.ReturnAddr -> {
+                u8(InstructionTags.RETURN_ADDR)
+                u16(instruction.src)
+            }
+            is CkLowVmInstruction.ReturnBool -> {
+                u8(InstructionTags.RETURN_BOOL)
+                u16(instruction.src)
             }
             CkLowVmInstruction.ReturnUnit -> u8(InstructionTags.RETURN_UNIT)
         }

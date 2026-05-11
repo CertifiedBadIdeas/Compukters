@@ -23,7 +23,6 @@ import ru.lazyhat.compukterkraft.lang.runtime.image.low.CkLowVmFunction
 import ru.lazyhat.compukterkraft.lang.runtime.image.low.CkLowVmImage
 import ru.lazyhat.compukterkraft.lang.runtime.image.low.CkLowVmImageAbi
 import ru.lazyhat.compukterkraft.lang.runtime.image.low.CkLowVmInstruction
-import ru.lazyhat.compukterkraft.lang.runtime.image.low.CkLowVmRegister
 import java.nio.file.Path
 import kotlin.io.path.absolutePathString
 import kotlin.system.measureNanoTime
@@ -136,9 +135,9 @@ internal class LowVmComputeBenchmarkRunner(
         instructions += CkLowVmInstruction.I32Const(dst = 10, value = 3)
 
         val loopStart = instructions.size
-        instructions += CkLowVmInstruction.I32Lt(dst = 0, lhs = 3, rhs = 0)
+        instructions += CkLowVmInstruction.I32Lt(dst = 19, lhs = 3, rhs = 0)
         val exitJumpIndex = instructions.size
-        instructions += CkLowVmInstruction.JumpIfFalse(cond = 0, target = -1)
+        instructions += CkLowVmInstruction.JumpIfFalse(cond = 19, target = -1)
         instructions += CkLowVmInstruction.I32Mul(dst = 11, lhs = 1, rhs = 5)
         instructions += CkLowVmInstruction.I32Add(dst = 1, lhs = 11, rhs = 6)
         instructions += CkLowVmInstruction.I32Shr(dst = 12, lhs = 1, rhs = 7)
@@ -152,8 +151,8 @@ internal class LowVmComputeBenchmarkRunner(
         instructions += CkLowVmInstruction.I32Add(dst = 2, lhs = 2, rhs = 18)
         instructions += CkLowVmInstruction.I32Add(dst = 3, lhs = 3, rhs = 4)
         instructions += CkLowVmInstruction.Jump(target = loopStart)
-        instructions[exitJumpIndex] = CkLowVmInstruction.JumpIfFalse(cond = 0, target = instructions.size)
-        instructions += CkLowVmInstruction.Return(CkLowVmRegister.I32(2))
+        instructions[exitJumpIndex] = CkLowVmInstruction.JumpIfFalse(cond = 19, target = instructions.size)
+        instructions += CkLowVmInstruction.ReturnI32(2)
 
         return CkLowVmImage(
             languageVersion = "ckl-low-1",
@@ -163,10 +162,7 @@ internal class LowVmComputeBenchmarkRunner(
                 listOf(
                     CkLowVmFunction(
                         name = "main",
-                        i32RegisterCount = 19,
-                        i64RegisterCount = 0,
-                        addrRegisterCount = 0,
-                        boolRegisterCount = 1,
+                        registerCount = 20,
                         parameters = emptyList(),
                         instructions = instructions,
                     ),
@@ -187,25 +183,25 @@ internal class LowVmComputeBenchmarkRunner(
         instructions += CkLowVmInstruction.I32Const(dst = 8, value = 17)
 
         val loopStart = instructions.size
-        instructions += CkLowVmInstruction.I32Lt(dst = 0, lhs = 2, rhs = 0)
+        instructions += CkLowVmInstruction.I32Lt(dst = 18, lhs = 2, rhs = 0)
         val exitJumpIndex = instructions.size
-        instructions += CkLowVmInstruction.JumpIfFalse(cond = 0, target = -1)
+        instructions += CkLowVmInstruction.JumpIfFalse(cond = 18, target = -1)
         instructions += CkLowVmInstruction.I32Div(dst = 9, lhs = 2, rhs = 4)
         instructions += CkLowVmInstruction.I32Mul(dst = 11, lhs = 9, rhs = 4)
         instructions += CkLowVmInstruction.I32Sub(dst = 10, lhs = 2, rhs = 11)
-        instructions += CkLowVmInstruction.I32Lt(dst = 0, lhs = 10, rhs = 3)
+        instructions += CkLowVmInstruction.I32Lt(dst = 18, lhs = 10, rhs = 3)
         val modNonZeroJumpIndex = instructions.size
-        instructions += CkLowVmInstruction.JumpIfFalse(cond = 0, target = -1)
+        instructions += CkLowVmInstruction.JumpIfFalse(cond = 18, target = -1)
         instructions += CkLowVmInstruction.I32Div(dst = 15, lhs = 2, rhs = 5)
         instructions += CkLowVmInstruction.I32Add(dst = 1, lhs = 1, rhs = 15)
         val firstBranchDoneJumpIndex = instructions.size
         instructions += CkLowVmInstruction.Jump(target = -1)
 
         val modNonZeroStart = instructions.size
-        instructions[modNonZeroJumpIndex] = CkLowVmInstruction.JumpIfFalse(cond = 0, target = modNonZeroStart)
-        instructions += CkLowVmInstruction.I32Lt(dst = 0, lhs = 10, rhs = 6)
+        instructions[modNonZeroJumpIndex] = CkLowVmInstruction.JumpIfFalse(cond = 18, target = modNonZeroStart)
+        instructions += CkLowVmInstruction.I32Lt(dst = 18, lhs = 10, rhs = 6)
         val highModJumpIndex = instructions.size
-        instructions += CkLowVmInstruction.JumpIfFalse(cond = 0, target = -1)
+        instructions += CkLowVmInstruction.JumpIfFalse(cond = 18, target = -1)
         instructions += CkLowVmInstruction.I32Mul(dst = 12, lhs = 2, rhs = 8)
         instructions += CkLowVmInstruction.I32BitXor(dst = 17, lhs = 1, rhs = 12)
         instructions += CkLowVmInstruction.I32Div(dst = 9, lhs = 2, rhs = 7)
@@ -216,7 +212,7 @@ internal class LowVmComputeBenchmarkRunner(
         instructions += CkLowVmInstruction.Jump(target = -1)
 
         val highModStart = instructions.size
-        instructions[highModJumpIndex] = CkLowVmInstruction.JumpIfFalse(cond = 0, target = highModStart)
+        instructions[highModJumpIndex] = CkLowVmInstruction.JumpIfFalse(cond = 18, target = highModStart)
         instructions += CkLowVmInstruction.I32Add(dst = 14, lhs = 10, rhs = 3)
         instructions += CkLowVmInstruction.I32Div(dst = 15, lhs = 2, rhs = 14)
         instructions += CkLowVmInstruction.I32Sub(dst = 17, lhs = 1, rhs = 15)
@@ -228,8 +224,8 @@ internal class LowVmComputeBenchmarkRunner(
         instructions[secondBranchDoneJumpIndex] = CkLowVmInstruction.Jump(target = afterIf)
         instructions += CkLowVmInstruction.I32Add(dst = 2, lhs = 2, rhs = 3)
         instructions += CkLowVmInstruction.Jump(target = loopStart)
-        instructions[exitJumpIndex] = CkLowVmInstruction.JumpIfFalse(cond = 0, target = instructions.size)
-        instructions += CkLowVmInstruction.Return(CkLowVmRegister.I32(1))
+        instructions[exitJumpIndex] = CkLowVmInstruction.JumpIfFalse(cond = 18, target = instructions.size)
+        instructions += CkLowVmInstruction.ReturnI32(1)
 
         return CkLowVmImage(
             languageVersion = "ckl-low-1",
@@ -239,10 +235,7 @@ internal class LowVmComputeBenchmarkRunner(
                 listOf(
                     CkLowVmFunction(
                         name = "main",
-                        i32RegisterCount = 18,
-                        i64RegisterCount = 0,
-                        addrRegisterCount = 0,
-                        boolRegisterCount = 1,
+                        registerCount = 19,
                         parameters = emptyList(),
                         instructions = instructions,
                     ),
@@ -259,20 +252,14 @@ internal class LowVmComputeBenchmarkRunner(
                 listOf(
                     CkLowVmFunction(
                         name = "main",
-                        i32RegisterCount = 5,
-                        i64RegisterCount = 0,
-                        addrRegisterCount = 0,
-                        boolRegisterCount = 1,
+                        registerCount = 6,
                         parameters = emptyList(),
                         instructions = functionMixMainInstructions(iterations),
                     ),
                     CkLowVmFunction(
                         name = "mixA",
-                        i32RegisterCount = 11,
-                        i64RegisterCount = 0,
-                        addrRegisterCount = 0,
-                        boolRegisterCount = 0,
-                        parameters = listOf(CkLowVmRegister.I32(0), CkLowVmRegister.I32(1)),
+                        registerCount = 11,
+                        parameters = listOf(0, 1),
                         instructions =
                             listOf(
                                 CkLowVmInstruction.I32Const(dst = 2, value = 17),
@@ -284,16 +271,13 @@ internal class LowVmComputeBenchmarkRunner(
                                 CkLowVmInstruction.I32BitXor(dst = 8, lhs = 6, rhs = 7),
                                 CkLowVmInstruction.I32Shr(dst = 9, lhs = 1, rhs = 4),
                                 CkLowVmInstruction.I32Add(dst = 10, lhs = 8, rhs = 9),
-                                CkLowVmInstruction.Return(CkLowVmRegister.I32(10)),
+                                CkLowVmInstruction.ReturnI32(10),
                             ),
                     ),
                     CkLowVmFunction(
                         name = "mixB",
-                        i32RegisterCount = 11,
-                        i64RegisterCount = 0,
-                        addrRegisterCount = 0,
-                        boolRegisterCount = 0,
-                        parameters = listOf(CkLowVmRegister.I32(0), CkLowVmRegister.I32(1)),
+                        registerCount = 11,
+                        parameters = listOf(0, 1),
                         instructions =
                             listOf(
                                 CkLowVmInstruction.I32Const(dst = 2, value = 131),
@@ -305,7 +289,7 @@ internal class LowVmComputeBenchmarkRunner(
                                 CkLowVmInstruction.I32Add(dst = 8, lhs = 6, rhs = 7),
                                 CkLowVmInstruction.I32Shl(dst = 9, lhs = 1, rhs = 4),
                                 CkLowVmInstruction.I32BitXor(dst = 10, lhs = 8, rhs = 9),
-                                CkLowVmInstruction.Return(CkLowVmRegister.I32(10)),
+                                CkLowVmInstruction.ReturnI32(10),
                             ),
                     ),
                 ),
@@ -318,25 +302,25 @@ internal class LowVmComputeBenchmarkRunner(
         instructions += CkLowVmInstruction.I32Const(dst = 2, value = 0)
         instructions += CkLowVmInstruction.I32Const(dst = 3, value = 1)
         val loopStart = instructions.size
-        instructions += CkLowVmInstruction.I32Lt(dst = 0, lhs = 2, rhs = 0)
+        instructions += CkLowVmInstruction.I32Lt(dst = 5, lhs = 2, rhs = 0)
         val exitJumpIndex = instructions.size
-        instructions += CkLowVmInstruction.JumpIfFalse(cond = 0, target = -1)
+        instructions += CkLowVmInstruction.JumpIfFalse(cond = 5, target = -1)
         instructions +=
             CkLowVmInstruction.CallStatic(
-                returnRegister = CkLowVmRegister.I32(4),
+                returnRegister = 4,
                 functionIndex = 1,
-                arguments = listOf(CkLowVmRegister.I32(1), CkLowVmRegister.I32(2)),
+                arguments = listOf(1, 2),
             )
         instructions +=
             CkLowVmInstruction.CallStatic(
-                returnRegister = CkLowVmRegister.I32(1),
+                returnRegister = 1,
                 functionIndex = 2,
-                arguments = listOf(CkLowVmRegister.I32(4), CkLowVmRegister.I32(2)),
+                arguments = listOf(4, 2),
             )
         instructions += CkLowVmInstruction.I32Add(dst = 2, lhs = 2, rhs = 3)
         instructions += CkLowVmInstruction.Jump(target = loopStart)
-        instructions[exitJumpIndex] = CkLowVmInstruction.JumpIfFalse(cond = 0, target = instructions.size)
-        instructions += CkLowVmInstruction.Return(CkLowVmRegister.I32(1))
+        instructions[exitJumpIndex] = CkLowVmInstruction.JumpIfFalse(cond = 5, target = instructions.size)
+        instructions += CkLowVmInstruction.ReturnI32(1)
         return instructions
     }
 
@@ -349,20 +333,14 @@ internal class LowVmComputeBenchmarkRunner(
                 listOf(
                     CkLowVmFunction(
                         name = "main",
-                        i32RegisterCount = 12,
-                        i64RegisterCount = 0,
-                        addrRegisterCount = 0,
-                        boolRegisterCount = 1,
+                        registerCount = 13,
                         parameters = emptyList(),
                         instructions = recursiveFibMainInstructions(iterations),
                     ),
                     CkLowVmFunction(
                         name = "fib",
-                        i32RegisterCount = 7,
-                        i64RegisterCount = 0,
-                        addrRegisterCount = 0,
-                        boolRegisterCount = 1,
-                        parameters = listOf(CkLowVmRegister.I32(0)),
+                        registerCount = 8,
+                        parameters = listOf(0),
                         instructions = fibFunctionInstructions(),
                     ),
                 ),
@@ -378,51 +356,51 @@ internal class LowVmComputeBenchmarkRunner(
         instructions += CkLowVmInstruction.I32Const(dst = 5, value = 10)
         instructions += CkLowVmInstruction.I32Const(dst = 6, value = 31)
         val loopStart = instructions.size
-        instructions += CkLowVmInstruction.I32Lt(dst = 0, lhs = 2, rhs = 0)
+        instructions += CkLowVmInstruction.I32Lt(dst = 12, lhs = 2, rhs = 0)
         val exitJumpIndex = instructions.size
-        instructions += CkLowVmInstruction.JumpIfFalse(cond = 0, target = -1)
+        instructions += CkLowVmInstruction.JumpIfFalse(cond = 12, target = -1)
         instructions += CkLowVmInstruction.I32Div(dst = 7, lhs = 2, rhs = 4)
         instructions += CkLowVmInstruction.I32Mul(dst = 8, lhs = 7, rhs = 4)
         instructions += CkLowVmInstruction.I32Sub(dst = 9, lhs = 2, rhs = 8)
         instructions += CkLowVmInstruction.I32Add(dst = 9, lhs = 9, rhs = 5)
         instructions +=
             CkLowVmInstruction.CallStatic(
-                returnRegister = CkLowVmRegister.I32(10),
+                returnRegister = 10,
                 functionIndex = 1,
-                arguments = listOf(CkLowVmRegister.I32(9)),
+                arguments = listOf(9),
             )
         instructions += CkLowVmInstruction.I32Mul(dst = 11, lhs = 2, rhs = 6)
         instructions += CkLowVmInstruction.I32BitXor(dst = 10, lhs = 10, rhs = 11)
         instructions += CkLowVmInstruction.I32Add(dst = 1, lhs = 1, rhs = 10)
         instructions += CkLowVmInstruction.I32Add(dst = 2, lhs = 2, rhs = 3)
         instructions += CkLowVmInstruction.Jump(target = loopStart)
-        instructions[exitJumpIndex] = CkLowVmInstruction.JumpIfFalse(cond = 0, target = instructions.size)
-        instructions += CkLowVmInstruction.Return(CkLowVmRegister.I32(1))
+        instructions[exitJumpIndex] = CkLowVmInstruction.JumpIfFalse(cond = 12, target = instructions.size)
+        instructions += CkLowVmInstruction.ReturnI32(1)
         return instructions
     }
 
     private fun fibFunctionInstructions(): List<CkLowVmInstruction> =
         listOf(
             CkLowVmInstruction.I32Const(dst = 1, value = 2),
-            CkLowVmInstruction.I32Lt(dst = 0, lhs = 0, rhs = 1),
-            CkLowVmInstruction.JumpIfFalse(cond = 0, target = 4),
-            CkLowVmInstruction.Return(CkLowVmRegister.I32(0)),
+            CkLowVmInstruction.I32Lt(dst = 7, lhs = 0, rhs = 1),
+            CkLowVmInstruction.JumpIfFalse(cond = 7, target = 4),
+            CkLowVmInstruction.ReturnI32(0),
             CkLowVmInstruction.I32Const(dst = 2, value = 1),
             CkLowVmInstruction.I32Sub(dst = 3, lhs = 0, rhs = 2),
             CkLowVmInstruction.CallStatic(
-                returnRegister = CkLowVmRegister.I32(4),
+                returnRegister = 4,
                 functionIndex = 1,
-                arguments = listOf(CkLowVmRegister.I32(3)),
+                arguments = listOf(3),
             ),
             CkLowVmInstruction.I32Const(dst = 2, value = 2),
             CkLowVmInstruction.I32Sub(dst = 3, lhs = 0, rhs = 2),
             CkLowVmInstruction.CallStatic(
-                returnRegister = CkLowVmRegister.I32(5),
+                returnRegister = 5,
                 functionIndex = 1,
-                arguments = listOf(CkLowVmRegister.I32(3)),
+                arguments = listOf(3),
             ),
             CkLowVmInstruction.I32Add(dst = 6, lhs = 4, rhs = 5),
-            CkLowVmInstruction.Return(CkLowVmRegister.I32(6)),
+            CkLowVmInstruction.ReturnI32(6),
         )
 
     private companion object {

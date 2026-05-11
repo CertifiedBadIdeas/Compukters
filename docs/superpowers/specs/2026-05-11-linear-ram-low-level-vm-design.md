@@ -91,18 +91,24 @@ The first slice can keep `.text` outside RAM as decoded instructions while still
 
 ## Register File
 
-Registers are primitive and fixed-width:
+The low-level VM uses one unified virtual register file:
 
 ```text
-i32 registers
-i64 registers
-addr registers  (u32 addresses)
-bool registers  (or i32 flags in a later packed form)
+r0..rN: u64
 ```
 
-Pointers are not VM objects. They are `u32` offsets stored in addr registers or memory.
+The register file is untyped at runtime. Type interpretation belongs to the instruction:
 
-The VM may later collapse `bool` and `addr` into integer registers for a more CPU-like ISA, but keeping them distinct at first makes ABI validation and debugging easier.
+```text
+i32.add r2, r0, r1
+i64.mul r4, r5, r6
+addr.add r7, r8, r9
+jump_if_false r10, target
+```
+
+`i32` values and `u32` guest addresses occupy the lower 32 bits. `bool` values are represented as `0` or `1`. `i64` values use the full register. This keeps call frames, hand-edited binaries, and interpreter hot paths simple: one register index namespace, one register window per frame, and no runtime tagged values for primitive scalars.
+
+Pointers are not VM objects. They are `u32` offsets stored in registers or memory and validated by memory instructions.
 
 There is no `ref` register bank in the low-level VM. Strings, records, arrays, and objects are memory layouts, not VM-owned object references.
 
@@ -114,11 +120,9 @@ The VM keeps an internal call stack for interpreter control:
 struct Frame {
     function_index: usize,
     instruction_pointer: usize,
-    i32_base: usize,
-    i64_base: usize,
-    addr_base: usize,
-    bool_base: usize,
-    return_register: Option<TypedRegister>,
+    register_base: usize,
+    register_count: usize,
+    return_register: Option<u16>,
     stack_base: GuestAddr,
 }
 ```
@@ -127,7 +131,7 @@ Guest-visible stack storage lives in linear RAM. The compiler decides which loca
 
 Function calls:
 
-1. append register windows;
+1. append one unified register window;
 2. reserve guest stack space if the callee needs it;
 3. copy or move arguments according to the function ABI;
 4. jump to callee code.
@@ -137,7 +141,7 @@ Returns:
 1. run explicit destructor/drop code already emitted by the compiler;
 2. restore stack pointer;
 3. truncate register windows;
-4. write primitive return registers.
+4. write the primitive return register.
 
 ## Ownership, RAII, And Move Semantics
 
@@ -349,7 +353,7 @@ The low-level VM targets performance through:
 - compact memory layouts;
 - no managed heap dispatch;
 - hostcalls without `VmValue` marshalling;
-- predictable register and memory instructions;
+- one unified `u64` register file and predictable memory instructions;
 - future packed instruction representation;
 - future superinstructions;
 - future AOT/JIT if needed.
@@ -360,13 +364,13 @@ Linear RAM alone does not remove interpreter dispatch overhead, but it removes t
 
 This is a replacement architecture, not a compatibility layer.
 
-1. Keep current register-bank VM only long enough to preserve benchmark and daemon behavior while building v4.
-2. Add `CKIM v4` model and decoder tests.
-3. Add a tiny v4 compiler backend for compute-only programs.
-4. Add a v4 Rust runner with primitive registers and fixed linear RAM.
-5. Port benchmark workloads to v4 and compare against current numbers.
+1. Keep current register-bank VM only long enough to preserve benchmark and daemon behavior while building v5.
+2. Add `CKIM v5` model and decoder tests.
+3. Add a tiny v5 compiler backend for compute-only programs.
+4. Add a v5 Rust runner with unified `u64` registers and fixed linear RAM.
+5. Port benchmark workloads to v5 and compare against current numbers.
 6. Add hostcall ABI for system, process, filesystem, display, strings, events, and IPC.
-7. Replace bundled ROM programs with v4 images.
+7. Replace bundled ROM programs with v5 images.
 8. Delete v3 runtime paths after parity.
 
 ## Success Criteria
