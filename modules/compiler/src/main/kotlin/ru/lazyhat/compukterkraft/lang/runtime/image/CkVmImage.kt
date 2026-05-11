@@ -218,4 +218,17 @@ sealed interface CkVmInstruction {
         val dst: Int,
         val ticks: Int,
     ) : CkVmInstruction
+
+    data class ConstructRecord(
+        val dst: Int,
+        val typeNameConstantIndex: Int,
+        val fieldNameConstantIndices: List<Int>,
+        val fieldValues: List<Int>,
+    ) : CkVmInstruction
+
+    data class GetField(
+        val dst: Int,
+        val receiver: Int,
+        val fieldNameConstantIndex: Int,
+    ) : CkVmInstruction
 }

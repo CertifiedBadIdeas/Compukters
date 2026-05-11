@@ -206,6 +206,17 @@ pub enum Instruction {
         dst: u16,
         ticks: u16,
     },
+    ConstructRecord {
+        dst: u16,
+        type_name_constant_index: usize,
+        field_name_constant_indices: Vec<usize>,
+        field_values: Vec<u16>,
+    },
+    GetField {
+        dst: u16,
+        receiver: u16,
+        field_name_constant_index: usize,
+    },
 }
 
 pub fn decode_image(bytes: &[u8]) -> Result<Image, ImageError> {
@@ -370,6 +381,26 @@ fn read_instruction(reader: &mut Reader<'_>) -> Result<Instruction, ImageError> 
         34 => Ok(Instruction::Sleep {
             dst: reader.u16()?,
             ticks: reader.u16()?,
+        }),
+        35 => {
+            let dst = reader.u16()?;
+            let type_name_constant_index = reader.index("record type name constant")?;
+            let field_count = reader.length()?;
+            let mut field_name_constant_indices = Vec::with_capacity(field_count);
+            for _ in 0..field_count {
+                field_name_constant_indices.push(reader.index("record field name constant")?);
+            }
+            Ok(Instruction::ConstructRecord {
+                dst,
+                type_name_constant_index,
+                field_name_constant_indices,
+                field_values: reader.register_list()?,
+            })
+        }
+        36 => Ok(Instruction::GetField {
+            dst: reader.u16()?,
+            receiver: reader.u16()?,
+            field_name_constant_index: reader.index("field name constant")?,
         }),
         other => Err(ImageError::UnknownInstructionTag(other)),
     }

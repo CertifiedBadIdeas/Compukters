@@ -169,6 +169,8 @@ object CkVmImageCompiler {
                     is Instruction.JumpIfTrue -> pending += PendingInstruction.JumpIfTrue(pop("jump-if-true"), instruction.target)
                     is Instruction.Binary -> lowerBinary(instruction.operator)
                     is Instruction.Unary -> lowerUnary(instruction.operator)
+                    is Instruction.ConstructRecord -> lowerConstructRecord(instruction)
+                    is Instruction.GetField -> lowerGetField(instruction)
                     is Instruction.CallFunction -> lowerCallFunction(instruction)
                     is Instruction.CallBuiltin -> lowerCallBuiltin(instruction)
                     Instruction.Return -> lowerReturn()
@@ -221,6 +223,36 @@ object CkVmImageCompiler {
                         UnaryOperator.NOT -> CkVmInstruction.BoolNot(dst, src)
                         UnaryOperator.BIT_NOT -> CkVmInstruction.I32BitNot(dst, src)
                     },
+                )
+                stack.addLast(dst)
+            }
+
+            private fun lowerConstructRecord(instruction: Instruction.ConstructRecord) {
+                val values = popArguments(instruction.fieldNames.size)
+                val dst = temp()
+                emit(
+                    CkVmInstruction.ConstructRecord(
+                        dst = dst,
+                        typeNameConstantIndex = constantIndex(CkVmConstant.StringConstant(instruction.typeName)),
+                        fieldNameConstantIndices =
+                            instruction.fieldNames.map { fieldName ->
+                                constantIndex(CkVmConstant.StringConstant(fieldName))
+                            },
+                        fieldValues = values,
+                    ),
+                )
+                stack.addLast(dst)
+            }
+
+            private fun lowerGetField(instruction: Instruction.GetField) {
+                val receiver = pop("get field receiver")
+                val dst = temp()
+                emit(
+                    CkVmInstruction.GetField(
+                        dst = dst,
+                        receiver = receiver,
+                        fieldNameConstantIndex = constantIndex(CkVmConstant.StringConstant(instruction.fieldName)),
+                    ),
                 )
                 stack.addLast(dst)
             }
