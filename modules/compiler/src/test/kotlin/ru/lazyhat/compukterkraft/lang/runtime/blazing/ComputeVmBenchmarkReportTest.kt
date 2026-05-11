@@ -36,6 +36,7 @@ class ComputeVmBenchmarkReportTest {
                             iterations = 100,
                             checksum = -1_234,
                             ckVmBestNanos = 50_000,
+                            lowVmBestNanos = 12_500,
                             kotlinJvmBestNanos = 20_000,
                             pythonBestNanos = 40_000,
                             rustNativeBestNanos = 10_000,
@@ -86,9 +87,9 @@ class ComputeVmBenchmarkReportTest {
 
         assertEquals(
             """
-            workload	iterations	checksum	samples	ck_vm_best_ns	kotlin_jvm_best_ns	python_best_ns	rust_native_best_ns	ck_vm_iters_per_sec	kotlin_jvm_iters_per_sec	python_iters_per_sec	rust_native_iters_per_sec	ck_vm_vs_kotlin_slowdown	ck_vm_vs_python_slowdown	ck_vm_vs_rust_slowdown	ck_vm_instructions	ck_vm_ns_per_instruction	ck_vm_instructions_per_iteration	ck_vm_value_clones	ck_vm_register_reads	ck_vm_register_writes	ck_vm_function_calls	ck_vm_function_returns	ck_vm_host_call_attempts	ck_vm_native_host_calls	ck_vm_jvm_host_signals	ck_vm_pauses	ck_vm_string_allocations	ck_vm_record_allocations	ck_vm_opcode_counts
-            integer-mix	100	-1234	3	50000	20000	40000	10000	2000000.000	5000000.000	2500000.000	10000000.000	2.500	1.250	5.000	1000	50.000	10.000	300	500	200	10	11	2	1	1	0	3	4	I32Const=2,I32Add=1,CallStatic=1,Return=2
-            function-mix	50	99	3	25000	10000	20000	5000	2000000.000	5000000.000	2500000.000	10000000.000	2.500	1.250	5.000	2000	12.500	40.000	700	900	400	20	21	0	0	0	1	0	0	I32Const=3,CallStatic=20,Return=21
+            workload	iterations	checksum	samples	ck_vm_best_ns	low_vm_best_ns	kotlin_jvm_best_ns	python_best_ns	rust_native_best_ns	ck_vm_iters_per_sec	low_vm_iters_per_sec	kotlin_jvm_iters_per_sec	python_iters_per_sec	rust_native_iters_per_sec	ck_vm_vs_low_vm_slowdown	ck_vm_vs_kotlin_slowdown	ck_vm_vs_python_slowdown	ck_vm_vs_rust_slowdown	low_vm_vs_kotlin_slowdown	low_vm_vs_rust_slowdown	ck_vm_instructions	ck_vm_ns_per_instruction	ck_vm_instructions_per_iteration	ck_vm_value_clones	ck_vm_register_reads	ck_vm_register_writes	ck_vm_function_calls	ck_vm_function_returns	ck_vm_host_call_attempts	ck_vm_native_host_calls	ck_vm_jvm_host_signals	ck_vm_pauses	ck_vm_string_allocations	ck_vm_record_allocations	ck_vm_opcode_counts
+            integer-mix	100	-1234	3	50000	12500	20000	40000	10000	2000000.000	8000000.000	5000000.000	2500000.000	10000000.000	4.000	2.500	1.250	5.000	0.625	1.250	1000	50.000	10.000	300	500	200	10	11	2	1	1	0	3	4	I32Const=2,I32Add=1,CallStatic=1,Return=2
+            function-mix	50	99	3	25000	n/a	10000	20000	5000	2000000.000	n/a	5000000.000	2500000.000	10000000.000	n/a	2.500	1.250	5.000	n/a	n/a	2000	12.500	40.000	700	900	400	20	21	0	0	0	1	0	0	I32Const=3,CallStatic=20,Return=21
             """.trimIndent() + "\n",
             report.toTsv(),
         )
@@ -98,11 +99,11 @@ class ComputeVmBenchmarkReportTest {
         assertContains(markdown, "# CKL Compute VM Benchmark")
         assertContains(
             markdown,
-            "| integer-mix | 100 | -1234 | 2,000,000.000 | 5,000,000.000 | 2,500,000.000 | 10,000,000.000 | 2.500x | 1.250x | 5.000x |",
+            "| integer-mix | 100 | -1234 | 2,000,000.000 | 8,000,000.000 | 5,000,000.000 | 2,500,000.000 | 10,000,000.000 | 4.000x | 2.500x | 0.625x | 5.000x | 1.250x |",
         )
         assertContains(
             markdown,
-            "| function-mix | 50 | 99 | 2,000,000.000 | 5,000,000.000 | 2,500,000.000 | 10,000,000.000 | 2.500x | 1.250x | 5.000x |",
+            "| function-mix | 50 | 99 | 2,000,000.000 | n/a | 5,000,000.000 | 2,500,000.000 | 10,000,000.000 | n/a | 2.500x | n/a | 5.000x | n/a |",
         )
         assertContains(markdown, "## CK VM Internal Counters")
         assertContains(
