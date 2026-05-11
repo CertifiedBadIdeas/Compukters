@@ -187,12 +187,17 @@ impl LowImageVm {
                 frame.instruction_pointer += 1;
                 (frame.function_index, instruction_pointer)
             };
-            let instruction = self
-                .program
-                .function(function_index)?
+            let function = self.program.function(function_index)?;
+            let instruction = function
                 .instructions
                 .get(instruction_pointer)
-                .unwrap_or(&Instruction::ReturnUnit);
+                .ok_or_else(|| {
+                    format!(
+                        "instruction pointer {instruction_pointer} is outside function {} instruction count {}",
+                        function.name,
+                        function.instructions.len(),
+                    )
+                })?;
             self.state.instructions_since_pause += 1;
             self.state.record_instruction(instruction);
             match instruction {
@@ -526,7 +531,7 @@ impl LowState {
 
     fn jump(&mut self, program: &LowProgram, target: usize) -> Result<(), String> {
         let instruction_count = self.current_function(program)?.instructions.len();
-        if target > instruction_count {
+        if target >= instruction_count {
             return Err(format!(
                 "jump target {target} is outside function instruction count {instruction_count}",
             ));

@@ -69,6 +69,32 @@ fn runner_rejects_out_of_bounds_memory_access() {
 }
 
 #[test]
+fn runner_rejects_fallthrough_past_last_instruction() {
+    let image = image(vec![Instruction::I32Const { dst: 0, value: 7 }], 1);
+    let mut vm = LowImageVm::create(image, 128).unwrap();
+
+    let error = vm.run_until_signal().unwrap_err();
+
+    assert!(
+        error.contains("instruction pointer 1 is outside function main instruction count 1"),
+        "{error}",
+    );
+}
+
+#[test]
+fn runner_rejects_jump_to_instruction_count() {
+    let image = image(vec![Instruction::Jump { target: 1 }], 1);
+    let mut vm = LowImageVm::create(image, 128).unwrap();
+
+    let error = vm.run_until_signal().unwrap_err();
+
+    assert!(
+        error.contains("jump target 1 is outside function instruction count 1"),
+        "{error}",
+    );
+}
+
+#[test]
 fn runner_calls_static_function_with_i32_arguments_and_return_value() {
     let image = Image {
         language_version: "ckl-low-1".to_string(),
