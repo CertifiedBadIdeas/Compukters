@@ -48,6 +48,7 @@ tasks.register<Test>("profileComputeVmBenchmark") {
     }
     systemProperty("ckl.vm.native.library", rustVmReleaseNativeLibrary.asFile.absolutePath)
     systemProperty("ckl.benchmark.rust.crate.dir", rustVmCrateDir.asFile.absolutePath)
+    systemProperty("ckl.benchmark.python.command", System.getProperty("ckl.benchmark.python.command") ?: "python3")
     systemProperty("ckl.benchmark.compute.tsv.path", computeVmBenchmarkTsv.get().asFile.absolutePath)
     systemProperty("ckl.benchmark.compute.markdown.path", computeVmBenchmarkMarkdown.get().asFile.absolutePath)
     systemProperty("ckl.benchmark.iterations", System.getProperty("ckl.benchmark.iterations") ?: "500000")

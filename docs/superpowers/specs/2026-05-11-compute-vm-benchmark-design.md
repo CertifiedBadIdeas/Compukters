@@ -2,7 +2,7 @@
 
 ## Goal
 
-Add an opt-in CPU-only benchmark for the CKL image VM so VM execution speed can be compared with the same workload running as Kotlin/JVM and optimized native Rust on the host machine.
+Add an opt-in CPU-only benchmark for the CKL image VM so VM execution speed can be compared with the same workload running as Kotlin/JVM, Python, and optimized native Rust on the host machine.
 
 ## Non-Goals
 
@@ -18,7 +18,7 @@ Use deterministic CPU-only workloads:
 - `function-mix`: repeated user function calls with local frames and return values.
 - `branch-div`: branches, comparisons, integer division, and derived remainder operations.
 - `recursive-fib`: recursive function calls with a bounded Fibonacci input range.
-- Each workload returns a checksum from `main()` so the CKL VM, Kotlin/JVM baseline, and Rust baseline must agree.
+- Each workload returns a checksum from `main()` so the CKL VM, Kotlin/JVM baseline, Python baseline, and Rust baseline must agree.
 
 The point is to measure several VM costs without hostcalls: arithmetic, call frames, branches/division, and recursive call stack behavior.
 
@@ -28,9 +28,17 @@ The point is to measure several VM costs without hostcalls: arithmetic, call fra
 - The source is compiled into a CK VM image.
 - The image is run through the native JNI image VM until it returns a `Halt(Int)` signal.
 - The Kotlin/JVM baseline runs the same arithmetic loop in the profiling test process.
+- The Python baseline runs a test-resource script with explicit 32-bit signed wrapping helpers.
 - The native baseline is a Rust example with the same algorithm, run through `cargo run --release --example compute_benchmark_baseline`.
 - All implementations run warmup and multiple samples; reports use the best sample.
 - `ckl.benchmark.iterations` is a base scale. Heavier workloads derive smaller iteration counts from it.
+
+## Structure
+
+- `ComputeVmBenchmarkRunner` is the orchestrator.
+- `CkVmComputeBenchmarkRunner`, `KotlinJvmComputeBenchmarkRunner`, `PythonComputeBenchmarkRunner`, and `RustNativeComputeBenchmarkRunner` own the runner-specific execution paths.
+- `ComputeVmBenchmarkWorkloads` owns CKL source snippets and Kotlin/JVM equivalents.
+- `ComputeVmBenchmarkReport` owns TSV/Markdown rendering.
 
 ## Gradle Entry Point
 
@@ -46,3 +54,4 @@ Configurable JVM properties:
 - `ckl.benchmark.iterations`, default `500000`
 - `ckl.benchmark.warmup.iterations`, default `50000`
 - `ckl.benchmark.samples`, default `5`
+- `ckl.benchmark.python.command`, default `python3`

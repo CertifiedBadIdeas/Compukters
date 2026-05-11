@@ -32,15 +32,24 @@ class ComputeVmBenchmarkProfileTest {
         val markdownPathValue = System.getProperty(MARKDOWN_PATH_PROPERTY)
         val libraryPath = System.getProperty(NATIVE_LIBRARY_PROPERTY)
         val rustCrateDir = System.getProperty(RUST_CRATE_DIR_PROPERTY)
+        val pythonCommand = System.getProperty(PYTHON_COMMAND_PROPERTY, "python3")
         assumeTrue(!tsvPathValue.isNullOrBlank(), "Compute benchmark TSV path is only provided by profiling Gradle tasks")
         assumeTrue(!markdownPathValue.isNullOrBlank(), "Compute benchmark Markdown path is only provided by profiling Gradle tasks")
         assumeTrue(!libraryPath.isNullOrBlank(), "Compute benchmark requires the native CKL VM library")
         assumeTrue(!rustCrateDir.isNullOrBlank(), "Compute benchmark requires the Rust VM crate directory")
+        val pythonScriptPath =
+            Path.of(
+                requireNotNull(javaClass.classLoader.getResource("compute_benchmark_baseline.py")) {
+                    "Compute benchmark Python runner resource is missing"
+                }.toURI(),
+            )
 
         val report =
             ComputeVmBenchmarkRunner.run(
                 libraryPath = libraryPath,
                 rustCrateDir = Path.of(rustCrateDir),
+                pythonCommand = pythonCommand,
+                pythonScriptPath = pythonScriptPath,
                 iterations = System.getProperty(ITERATIONS_PROPERTY, "500000").toInt(),
                 warmupIterations = System.getProperty(WARMUP_ITERATIONS_PROPERTY, "50000").toInt(),
                 samples = System.getProperty(SAMPLES_PROPERTY, "5").toInt(),
@@ -50,6 +59,7 @@ class ComputeVmBenchmarkProfileTest {
         report.workloads.forEach { workload ->
             assertTrue(workload.ckVmBestNanos > 0, "expected ${workload.workloadName} CK VM sample to be timed")
             assertTrue(workload.kotlinJvmBestNanos > 0, "expected ${workload.workloadName} Kotlin/JVM sample to be timed")
+            assertTrue(workload.pythonBestNanos > 0, "expected ${workload.workloadName} Python sample to be timed")
             assertTrue(workload.rustNativeBestNanos > 0, "expected ${workload.workloadName} Rust native sample to be timed")
         }
 
@@ -65,6 +75,7 @@ class ComputeVmBenchmarkProfileTest {
         const val MARKDOWN_PATH_PROPERTY = "ckl.benchmark.compute.markdown.path"
         const val NATIVE_LIBRARY_PROPERTY = "ckl.vm.native.library"
         const val RUST_CRATE_DIR_PROPERTY = "ckl.benchmark.rust.crate.dir"
+        const val PYTHON_COMMAND_PROPERTY = "ckl.benchmark.python.command"
         const val ITERATIONS_PROPERTY = "ckl.benchmark.iterations"
         const val WARMUP_ITERATIONS_PROPERTY = "ckl.benchmark.warmup.iterations"
         const val SAMPLES_PROPERTY = "ckl.benchmark.samples"
