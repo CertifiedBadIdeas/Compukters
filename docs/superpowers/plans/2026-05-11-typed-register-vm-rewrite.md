@@ -1,5 +1,7 @@
 # Typed Register VM Rewrite Implementation Plan
 
+> **Superseded:** This plan described the first dynamic-register rewrite direction. Use `docs/superpowers/plans/2026-05-11-typed-register-bank-vm.md` for the active register-bank implementation plan.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace the current CKL stack image VM with a typed, predecoded, register-based Rust VM without keeping runtime fallbacks.
