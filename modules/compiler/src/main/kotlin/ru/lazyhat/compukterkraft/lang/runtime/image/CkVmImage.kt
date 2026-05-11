@@ -35,7 +35,35 @@ data class CkVmFunction(
     val registerCount: Int,
     val parameterCount: Int,
     val instructions: List<CkVmInstruction>,
+    val i32RegisterCount: Int = registerCount,
+    val i64RegisterCount: Int = 0,
+    val boolRegisterCount: Int = 0,
+    val refRegisterCount: Int = 0,
+    val parameters: List<CkVmTypedRegister> =
+        List(parameterCount) { index ->
+            CkVmTypedRegister.Ref(index)
+        },
 )
+
+sealed interface CkVmTypedRegister {
+    val index: Int
+
+    data class I32(
+        override val index: Int,
+    ) : CkVmTypedRegister
+
+    data class I64(
+        override val index: Int,
+    ) : CkVmTypedRegister
+
+    data class Bool(
+        override val index: Int,
+    ) : CkVmTypedRegister
+
+    data class Ref(
+        override val index: Int,
+    ) : CkVmTypedRegister
+}
 
 sealed interface CkVmInstruction {
     data class LoadConst(

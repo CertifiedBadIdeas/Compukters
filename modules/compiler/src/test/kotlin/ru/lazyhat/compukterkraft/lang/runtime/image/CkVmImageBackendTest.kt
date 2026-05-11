@@ -73,7 +73,9 @@ class CkVmImageBackendTest {
             ),
             image.constants,
         )
-        assertTrue(mainFunction.registerCount > mainFunction.parameterCount)
+        assertTrue(mainFunction.i32RegisterCount > mainFunction.parameters.size)
+        assertTrue(mainFunction.boolRegisterCount >= 0)
+        assertTrue(mainFunction.refRegisterCount >= 0)
         assertTrue(mainFunction.instructions.any { instruction -> instruction is CkVmInstruction.I32Mul })
         assertTrue(mainFunction.instructions.any { instruction -> instruction is CkVmInstruction.I32Add })
         assertTrue(mainFunction.instructions.any { instruction -> instruction is CkVmInstruction.Move && instruction.dst == 0 })

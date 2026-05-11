@@ -278,7 +278,7 @@ Track local slots with:
 ```kotlin
 private val locals: List<CkVmTypedRegister> =
     function.locals.map { local ->
-        when (local.type) {
+        when (local.typeName) {
             "Int" -> CkVmTypedRegister.I32(nextI32++)
             "Long" -> CkVmTypedRegister.I64(nextI64++)
             "Bool" -> CkVmTypedRegister.Bool(nextBool++)
