@@ -279,6 +279,7 @@ object NativeVmBindings : NativeVmBindingsFacade {
         maxEventQueueSize: Int,
         maxBufferedBytesPerChannel: Int,
         imageSliceBudgetNanos: Long,
+        memoryQuotaBytes: Long = Long.MAX_VALUE,
         deviceId: Int = 0,
         profileName: String = "",
     ): Long {
@@ -288,6 +289,7 @@ object NativeVmBindings : NativeVmBindingsFacade {
                 maxEventQueueSize.coerceAtLeast(1),
                 maxBufferedBytesPerChannel.coerceAtLeast(1),
                 imageSliceBudgetNanos.coerceAtLeast(1),
+                memoryQuotaBytes.coerceAtLeast(0),
                 deviceId,
                 profileName,
             )
@@ -558,6 +560,7 @@ object NativeVmBindings : NativeVmBindingsFacade {
         maxEventQueueSize: Int,
         maxBufferedBytesPerChannel: Int,
         imageSliceBudgetNanos: Long,
+        memoryQuotaBytes: Long,
         deviceId: Int,
         profileName: String,
     ): Long

@@ -114,6 +114,7 @@ class BackgroundDeviceVmTest {
             val maxEventQueueSize: Int,
             val maxBufferedBytesPerChannel: Int,
             val imageSliceBudgetNanos: Long,
+            val memoryQuotaBytes: Long,
             val deviceId: Int,
             val profileName: String,
         )
@@ -139,6 +140,7 @@ class BackgroundDeviceVmTest {
             maxEventQueueSize: Int,
             maxBufferedBytesPerChannel: Int,
             imageSliceBudgetNanos: Long,
+            memoryQuotaBytes: Long,
             deviceId: Int,
             profileName: String,
         ): Long {
@@ -147,6 +149,7 @@ class BackgroundDeviceVmTest {
                     maxEventQueueSize = maxEventQueueSize,
                     maxBufferedBytesPerChannel = maxBufferedBytesPerChannel,
                     imageSliceBudgetNanos = imageSliceBudgetNanos,
+                    memoryQuotaBytes = memoryQuotaBytes,
                     deviceId = deviceId,
                     profileName = profileName,
                 )
@@ -271,6 +274,7 @@ class BackgroundDeviceVmTest {
             maxEventQueueSize: Int,
             maxBufferedBytesPerChannel: Int,
             imageSliceBudgetNanos: Long,
+            memoryQuotaBytes: Long,
             deviceId: Int,
             profileName: String,
         ): Long = error("native daemon unavailable")
@@ -280,10 +284,11 @@ class BackgroundDeviceVmTest {
         workspace: DeviceWorkspace,
         daemonBindings: RecordingNativeDaemonBindings,
         nativeFilesystemRoot: Path? = null,
+        profile: DeviceProfile = firmwareTestProfile(),
     ): BackgroundDeviceVm =
         BackgroundDeviceVm(
             deviceId = 1,
-            profile = firmwareTestProfile(),
+            profile = profile,
             dispatcher = Dispatchers.Default,
             labelProvider = { null },
             logger = DeviceVmLogger { },
@@ -433,6 +438,25 @@ class BackgroundDeviceVmTest {
             assertTrue(daemonBindings.bootedImages.isNotEmpty())
             assertTrue(daemonBindings.refillQuotaCalls.isNotEmpty())
             assertTrue(daemonBindings.runReadyMaxTurns.isNotEmpty())
+        }
+    }
+
+    @Test
+    fun bootPassesProfileMemoryQuotaToNativeDaemon() {
+        runtimeTestWorkspace("vm-native-daemon-memory-quota") { workspace ->
+            val daemonBindings = RecordingNativeDaemonBindings()
+            val profile =
+                firmwareTestProfile().copy(
+                    resources =
+                        firmwareTestProfile().resources.copy(
+                            memory = DeviceMemoryResources(vmRamBytes = 123_456),
+                        ),
+                )
+
+            val vm = backgroundVmWithNativeDaemonBindings(workspace.host, daemonBindings, profile = profile)
+
+            assertTrue(vm.boot())
+            assertEquals(123_456, daemonBindings.createdDaemons.single().memoryQuotaBytes)
         }
     }
 
