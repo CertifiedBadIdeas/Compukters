@@ -30,18 +30,26 @@ impl Default for LowImageVmMetrics {
 
 struct LowFrame {
     function_index: usize,
-    instruction_pointer: usize,
+    block_index: usize,
     return_register: Option<usize>,
     register_base: usize,
 }
 
 struct LowFunction {
     register_count: usize,
-    instructions: Vec<ExecutableInstruction>,
+    blocks: Vec<ExecutableBlock>,
+    instruction_to_block: Vec<BlockLocation>,
 }
 
-struct ExecutableInstruction {
-    operation: ExecutableOperation,
+struct ExecutableBlock {
+    original_start_ip: usize,
+    operations: Vec<ExecutableOperation>,
+    terminator: BlockTerminator,
+}
+
+struct BlockLocation {
+    block_index: usize,
+    operation_index: usize,
 }
 
 struct StaticCallBinding {
@@ -123,17 +131,25 @@ enum ExecutableOperation {
         base: usize,
         offset: usize,
     },
+}
+
+enum BlockTerminator {
+    Fallthrough {
+        target_block: usize,
+    },
     Jump {
-        target: usize,
+        target_block: usize,
     },
     JumpIfFalse {
         cond: usize,
-        target: usize,
+        target_block: usize,
+        fallthrough_block: usize,
     },
     CallStatic {
         return_register: Option<usize>,
         function_index: usize,
         bindings: Vec<StaticCallBinding>,
+        continuation_block: usize,
     },
     ReturnI32 {
         src: usize,
@@ -183,11 +199,14 @@ impl LowProgram {
         let entry_function_index = image.entry_function_index;
         let entry_register_count = image.functions[entry_function_index].register_count;
         let entry_frame = LowFrame::create(entry_function_index, None, 0);
-        let functions = image
+        let functions: Vec<LowFunction> = image
             .functions
             .iter()
             .map(|function| LowFunction::compile(&image, function))
             .collect();
+        debug_assert!(functions
+            .iter()
+            .all(LowFunction::instruction_mapping_is_consistent),);
         Ok((
             Self { functions },
             LowState {
@@ -337,7 +356,7 @@ impl LowFrame {
     fn create(function_index: usize, return_register: Option<usize>, register_base: usize) -> Self {
         Self {
             function_index,
-            instruction_pointer: 0,
+            block_index: 0,
             return_register,
             register_base,
         }
@@ -346,27 +365,139 @@ impl LowFrame {
 
 impl LowFunction {
     fn compile(image: &Image, function: &Function) -> Self {
+        let block_starts = block_starts(function);
+        let instruction_to_block = instruction_to_block(function.instructions.len(), &block_starts);
+        let blocks = block_starts
+            .iter()
+            .enumerate()
+            .map(|(block_index, start)| {
+                let end = block_starts
+                    .get(block_index + 1)
+                    .copied()
+                    .unwrap_or(function.instructions.len());
+                ExecutableBlock::compile(
+                    image,
+                    function,
+                    *start,
+                    end,
+                    block_index,
+                    &instruction_to_block,
+                )
+            })
+            .collect();
+
         Self {
             register_count: function.register_count,
-            instructions: function
-                .instructions
-                .iter()
-                .map(|instruction| ExecutableInstruction::compile(image, instruction))
-                .collect(),
+            blocks,
+            instruction_to_block,
         }
+    }
+
+    fn block(&self, block_index: usize) -> &ExecutableBlock {
+        // Block indices are produced from validated image control flow.
+        &self.blocks[block_index]
+    }
+
+    fn instruction_mapping_is_consistent(&self) -> bool {
+        self.instruction_to_block
+            .iter()
+            .enumerate()
+            .all(|(instruction_index, location)| {
+                self.blocks.get(location.block_index).is_some_and(|block| {
+                    instruction_index >= block.original_start_ip
+                        && location.operation_index <= block.operations.len()
+                })
+            })
     }
 }
 
-impl ExecutableInstruction {
-    fn compile(image: &Image, instruction: &Instruction) -> Self {
+impl ExecutableBlock {
+    fn compile(
+        image: &Image,
+        function: &Function,
+        start: usize,
+        end: usize,
+        block_index: usize,
+        instruction_to_block: &[BlockLocation],
+    ) -> Self {
+        let last_ip = end - 1;
+        let last_instruction = &function.instructions[last_ip];
+        let (operation_end, terminator) = match last_instruction {
+            Instruction::Jump { target } => (
+                last_ip,
+                BlockTerminator::Jump {
+                    target_block: instruction_to_block[*target].block_index,
+                },
+            ),
+            Instruction::JumpIfFalse { cond, target } => (
+                last_ip,
+                BlockTerminator::JumpIfFalse {
+                    cond: usize::from(*cond),
+                    target_block: instruction_to_block[*target].block_index,
+                    fallthrough_block: instruction_to_block[last_ip + 1].block_index,
+                },
+            ),
+            Instruction::CallStatic {
+                return_register,
+                function_index,
+                arguments,
+            } => (
+                last_ip,
+                BlockTerminator::CallStatic {
+                    return_register: return_register.map(usize::from),
+                    function_index: *function_index,
+                    bindings: static_call_bindings(image, *function_index, arguments),
+                    continuation_block: instruction_to_block[last_ip + 1].block_index,
+                },
+            ),
+            Instruction::ReturnI32 { src } => (
+                last_ip,
+                BlockTerminator::ReturnI32 {
+                    src: usize::from(*src),
+                },
+            ),
+            Instruction::ReturnI64 { src } => (
+                last_ip,
+                BlockTerminator::ReturnI64 {
+                    src: usize::from(*src),
+                },
+            ),
+            Instruction::ReturnAddr { src } => (
+                last_ip,
+                BlockTerminator::ReturnAddr {
+                    src: usize::from(*src),
+                },
+            ),
+            Instruction::ReturnBool { src } => (
+                last_ip,
+                BlockTerminator::ReturnBool {
+                    src: usize::from(*src),
+                },
+            ),
+            Instruction::ReturnUnit => (last_ip, BlockTerminator::ReturnUnit),
+            _ => (
+                end,
+                BlockTerminator::Fallthrough {
+                    target_block: instruction_to_block[end].block_index,
+                },
+            ),
+        };
+        let operations = function.instructions[start..operation_end]
+            .iter()
+            .map(ExecutableOperation::compile)
+            .collect();
+
+        debug_assert!(instruction_to_block[start].block_index == block_index);
         Self {
-            operation: ExecutableOperation::compile(image, instruction),
+            original_start_ip: start,
+            operations,
+            terminator,
         }
     }
 }
 
 impl ExecutableOperation {
-    fn compile(image: &Image, instruction: &Instruction) -> Self {
+    fn compile(instruction: &Instruction) -> Self {
         match instruction {
             Instruction::I32Const { dst, value } => Self::I32Const {
                 dst: usize::from(*dst),
@@ -441,43 +572,14 @@ impl ExecutableOperation {
                 base: usize::from(*base),
                 offset: usize::from(*offset),
             },
-            Instruction::Jump { target } => Self::Jump { target: *target },
-            Instruction::JumpIfFalse { cond, target } => Self::JumpIfFalse {
-                cond: usize::from(*cond),
-                target: *target,
-            },
-            Instruction::CallStatic {
-                return_register,
-                function_index,
-                arguments,
-            } => Self::CallStatic {
-                return_register: return_register.map(usize::from),
-                function_index: *function_index,
-                bindings: image.functions[*function_index]
-                    .parameters
-                    .iter()
-                    .copied()
-                    .map(usize::from)
-                    .zip(arguments.iter().copied().map(usize::from))
-                    .map(|(callee_parameter, caller_argument)| StaticCallBinding {
-                        callee_parameter,
-                        caller_argument,
-                    })
-                    .collect(),
-            },
-            Instruction::ReturnI32 { src } => Self::ReturnI32 {
-                src: usize::from(*src),
-            },
-            Instruction::ReturnI64 { src } => Self::ReturnI64 {
-                src: usize::from(*src),
-            },
-            Instruction::ReturnAddr { src } => Self::ReturnAddr {
-                src: usize::from(*src),
-            },
-            Instruction::ReturnBool { src } => Self::ReturnBool {
-                src: usize::from(*src),
-            },
-            Instruction::ReturnUnit => Self::ReturnUnit,
+            Instruction::Jump { .. }
+            | Instruction::JumpIfFalse { .. }
+            | Instruction::CallStatic { .. }
+            | Instruction::ReturnI32 { .. }
+            | Instruction::ReturnI64 { .. }
+            | Instruction::ReturnAddr { .. }
+            | Instruction::ReturnBool { .. }
+            | Instruction::ReturnUnit => unreachable!("control instructions are block terminators"),
         }
     }
 }
@@ -518,161 +620,25 @@ impl LowImageVm {
         self.state.metrics.run_invocations = self.state.metrics.run_invocations.saturating_add(1);
         let started_at = Instant::now();
         loop {
-            let (function_index, instruction_pointer) = {
-                let frame = self.state.current_frame_mut();
-                let instruction_pointer = frame.instruction_pointer;
-                frame.instruction_pointer += 1;
-                (frame.function_index, instruction_pointer)
+            let (function_index, block_index) = {
+                let frame = self.state.current_frame();
+                (frame.function_index, frame.block_index)
             };
-            let function = self.program.function(function_index);
-            // Instruction pointers and jump targets are image-validated before execution.
-            let instruction = &function.instructions[instruction_pointer];
-            self.state.instructions_since_time_check += 1;
-            match &instruction.operation {
-                ExecutableOperation::I32Const { dst, value } => self.state.write_i32(*dst, *value),
-                ExecutableOperation::I64Const { dst, value } => self.state.write_i64(*dst, *value),
-                ExecutableOperation::AddrConst { dst, value } => {
-                    self.state.write_addr(*dst, *value)
-                }
-                ExecutableOperation::I32Move { dst, src } => {
-                    let value = self.state.read_i32(*src);
-                    self.state.write_i32(*dst, value);
-                }
-                ExecutableOperation::AddrMove { dst, src } => {
-                    let value = self.state.read_addr(*src);
-                    self.state.write_addr(*dst, value);
-                }
-                ExecutableOperation::I32Add { dst, lhs, rhs } => {
-                    let value = self
-                        .state
-                        .read_i32(*lhs)
-                        .wrapping_add(self.state.read_i32(*rhs));
-                    self.state.write_i32(*dst, value);
-                }
-                ExecutableOperation::I32Sub { dst, lhs, rhs } => {
-                    let value = self
-                        .state
-                        .read_i32(*lhs)
-                        .wrapping_sub(self.state.read_i32(*rhs));
-                    self.state.write_i32(*dst, value);
-                }
-                ExecutableOperation::I32Mul { dst, lhs, rhs } => {
-                    let value = self
-                        .state
-                        .read_i32(*lhs)
-                        .wrapping_mul(self.state.read_i32(*rhs));
-                    self.state.write_i32(*dst, value);
-                }
-                ExecutableOperation::I32Div { dst, lhs, rhs } => {
-                    let rhs = self.state.read_i32(*rhs);
-                    if rhs == 0 {
-                        return Err("division by zero".to_string());
-                    }
-                    let value = self.state.read_i32(*lhs).wrapping_div(rhs);
-                    self.state.write_i32(*dst, value);
-                }
-                ExecutableOperation::I32BitXor { dst, lhs, rhs } => {
-                    let value = self.state.read_i32(*lhs) ^ self.state.read_i32(*rhs);
-                    self.state.write_i32(*dst, value);
-                }
-                ExecutableOperation::I32Shl { dst, lhs, rhs } => {
-                    let value = self
-                        .state
-                        .read_i32(*lhs)
-                        .wrapping_shl(self.state.read_i32(*rhs) as u32);
-                    self.state.write_i32(*dst, value);
-                }
-                ExecutableOperation::I32Shr { dst, lhs, rhs } => {
-                    let value = self
-                        .state
-                        .read_i32(*lhs)
-                        .wrapping_shr(self.state.read_i32(*rhs) as u32);
-                    self.state.write_i32(*dst, value);
-                }
-                ExecutableOperation::I32Lt { dst, lhs, rhs } => {
-                    let value = self.state.read_i32(*lhs) < self.state.read_i32(*rhs);
-                    self.state.write_bool(*dst, value);
-                }
-                ExecutableOperation::Load32 { dst, addr } => {
-                    let address = self.state.read_addr(*addr);
-                    let bytes = self.state.memory_range(address, 4)?;
-                    let mut raw = [0_u8; 4];
-                    raw.copy_from_slice(bytes);
-                    self.state.write_i32(*dst, i32::from_le_bytes(raw));
-                }
-                ExecutableOperation::Store32 { addr, src } => {
-                    let address = self.state.read_addr(*addr);
-                    let value = self.state.read_i32(*src).to_le_bytes();
-                    self.state
-                        .memory_range_mut(address, 4)?
-                        .copy_from_slice(&value);
-                }
-                ExecutableOperation::AddrAdd { dst, base, offset } => {
-                    let base = self.state.read_addr(*base);
-                    let offset = self.state.read_i32(*offset);
-                    let value = if offset >= 0 {
-                        base.wrapping_add(offset as u32)
-                    } else {
-                        base.wrapping_sub(offset.wrapping_abs() as u32)
-                    };
-                    self.state.write_addr(*dst, value);
-                }
-                ExecutableOperation::Jump { target } => self.state.jump(*target),
-                ExecutableOperation::JumpIfFalse { cond, target } => {
-                    if !self.state.read_bool(*cond) {
-                        self.state.jump(*target);
-                    }
-                }
-                ExecutableOperation::ReturnI32 { src } => {
-                    if let Some(signal) = self.state.return_i32(*src)? {
-                        self.state.record_elapsed(started_at.elapsed());
-                        return Ok(signal);
-                    }
-                }
-                ExecutableOperation::ReturnI64 { src } => {
-                    if let Some(signal) = self.state.return_i64(*src)? {
-                        self.state.record_elapsed(started_at.elapsed());
-                        return Ok(signal);
-                    }
-                }
-                ExecutableOperation::ReturnAddr { src } => {
-                    if let Some(signal) = self.state.return_addr(*src)? {
-                        self.state.record_elapsed(started_at.elapsed());
-                        return Ok(signal);
-                    }
-                }
-                ExecutableOperation::ReturnBool { src } => {
-                    if let Some(signal) = self.state.return_bool(*src)? {
-                        self.state.record_elapsed(started_at.elapsed());
-                        return Ok(signal);
-                    }
-                }
-                ExecutableOperation::ReturnUnit => {
-                    if let Some(signal) = self.state.return_unit()? {
-                        self.state.record_elapsed(started_at.elapsed());
-                        return Ok(signal);
-                    }
-                }
-                ExecutableOperation::CallStatic {
-                    return_register,
-                    function_index,
-                    bindings,
-                } => self.state.call_static(
-                    &self.program,
-                    *return_register,
-                    *function_index,
-                    bindings,
-                ),
-            }
-            if self.state.instructions_since_time_check >= TIME_CHECK_INTERVAL {
-                self.state.instructions_since_time_check = 0;
-                let elapsed = started_at.elapsed();
-                if elapsed >= self.slice_budget {
-                    self.state.record_elapsed(elapsed);
-                    self.state.metrics.pause_signals =
-                        self.state.metrics.pause_signals.saturating_add(1);
+            let block = self.program.function(function_index).block(block_index);
+            for operation in &block.operations {
+                self.state.execute_operation(operation)?;
+                if self.state.should_pause(started_at, self.slice_budget) {
                     return Ok(LowImageSignal::Pause);
                 }
+            }
+            if let Some(signal) =
+                self.state
+                    .execute_terminator(&self.program, &block.terminator, started_at)?
+            {
+                return Ok(signal);
+            }
+            if self.state.should_pause(started_at, self.slice_budget) {
+                return Ok(LowImageSignal::Pause);
             }
         }
     }
@@ -686,6 +652,162 @@ impl LowState {
             .metrics
             .elapsed_nanos
             .saturating_add(elapsed.as_nanos().min(u128::from(u64::MAX)) as u64);
+    }
+
+    fn should_pause(&mut self, started_at: Instant, slice_budget: Duration) -> bool {
+        self.instructions_since_time_check += 1;
+        if self.instructions_since_time_check < TIME_CHECK_INTERVAL {
+            return false;
+        }
+        self.instructions_since_time_check = 0;
+        let elapsed = started_at.elapsed();
+        if elapsed < slice_budget {
+            return false;
+        }
+        self.record_elapsed(elapsed);
+        self.metrics.pause_signals = self.metrics.pause_signals.saturating_add(1);
+        true
+    }
+
+    fn execute_operation(&mut self, operation: &ExecutableOperation) -> Result<(), String> {
+        match operation {
+            ExecutableOperation::I32Const { dst, value } => self.write_i32(*dst, *value),
+            ExecutableOperation::I64Const { dst, value } => self.write_i64(*dst, *value),
+            ExecutableOperation::AddrConst { dst, value } => self.write_addr(*dst, *value),
+            ExecutableOperation::I32Move { dst, src } => {
+                let value = self.read_i32(*src);
+                self.write_i32(*dst, value);
+            }
+            ExecutableOperation::AddrMove { dst, src } => {
+                let value = self.read_addr(*src);
+                self.write_addr(*dst, value);
+            }
+            ExecutableOperation::I32Add { dst, lhs, rhs } => {
+                let value = self.read_i32(*lhs).wrapping_add(self.read_i32(*rhs));
+                self.write_i32(*dst, value);
+            }
+            ExecutableOperation::I32Sub { dst, lhs, rhs } => {
+                let value = self.read_i32(*lhs).wrapping_sub(self.read_i32(*rhs));
+                self.write_i32(*dst, value);
+            }
+            ExecutableOperation::I32Mul { dst, lhs, rhs } => {
+                let value = self.read_i32(*lhs).wrapping_mul(self.read_i32(*rhs));
+                self.write_i32(*dst, value);
+            }
+            ExecutableOperation::I32Div { dst, lhs, rhs } => {
+                let rhs = self.read_i32(*rhs);
+                if rhs == 0 {
+                    return Err("division by zero".to_string());
+                }
+                let value = self.read_i32(*lhs).wrapping_div(rhs);
+                self.write_i32(*dst, value);
+            }
+            ExecutableOperation::I32BitXor { dst, lhs, rhs } => {
+                let value = self.read_i32(*lhs) ^ self.read_i32(*rhs);
+                self.write_i32(*dst, value);
+            }
+            ExecutableOperation::I32Shl { dst, lhs, rhs } => {
+                let value = self.read_i32(*lhs).wrapping_shl(self.read_i32(*rhs) as u32);
+                self.write_i32(*dst, value);
+            }
+            ExecutableOperation::I32Shr { dst, lhs, rhs } => {
+                let value = self.read_i32(*lhs).wrapping_shr(self.read_i32(*rhs) as u32);
+                self.write_i32(*dst, value);
+            }
+            ExecutableOperation::I32Lt { dst, lhs, rhs } => {
+                let value = self.read_i32(*lhs) < self.read_i32(*rhs);
+                self.write_bool(*dst, value);
+            }
+            ExecutableOperation::Load32 { dst, addr } => {
+                let address = self.read_addr(*addr);
+                let bytes = self.memory_range(address, 4)?;
+                let mut raw = [0_u8; 4];
+                raw.copy_from_slice(bytes);
+                self.write_i32(*dst, i32::from_le_bytes(raw));
+            }
+            ExecutableOperation::Store32 { addr, src } => {
+                let address = self.read_addr(*addr);
+                let value = self.read_i32(*src).to_le_bytes();
+                self.memory_range_mut(address, 4)?.copy_from_slice(&value);
+            }
+            ExecutableOperation::AddrAdd { dst, base, offset } => {
+                let base = self.read_addr(*base);
+                let offset = self.read_i32(*offset);
+                let value = if offset >= 0 {
+                    base.wrapping_add(offset as u32)
+                } else {
+                    base.wrapping_sub(offset.wrapping_abs() as u32)
+                };
+                self.write_addr(*dst, value);
+            }
+        }
+        Ok(())
+    }
+
+    fn execute_terminator(
+        &mut self,
+        program: &LowProgram,
+        terminator: &BlockTerminator,
+        started_at: Instant,
+    ) -> Result<Option<LowImageSignal>, String> {
+        match terminator {
+            BlockTerminator::Fallthrough { target_block } => self.jump_block(*target_block),
+            BlockTerminator::Jump { target_block } => self.jump_block(*target_block),
+            BlockTerminator::JumpIfFalse {
+                cond,
+                target_block,
+                fallthrough_block,
+            } => {
+                if self.read_bool(*cond) {
+                    self.jump_block(*fallthrough_block);
+                } else {
+                    self.jump_block(*target_block);
+                }
+            }
+            BlockTerminator::CallStatic {
+                return_register,
+                function_index,
+                bindings,
+                continuation_block,
+            } => self.call_static(
+                program,
+                *return_register,
+                *function_index,
+                bindings,
+                *continuation_block,
+            ),
+            BlockTerminator::ReturnI32 { src } => {
+                if let Some(signal) = self.return_i32(*src)? {
+                    self.record_elapsed(started_at.elapsed());
+                    return Ok(Some(signal));
+                }
+            }
+            BlockTerminator::ReturnI64 { src } => {
+                if let Some(signal) = self.return_i64(*src)? {
+                    self.record_elapsed(started_at.elapsed());
+                    return Ok(Some(signal));
+                }
+            }
+            BlockTerminator::ReturnAddr { src } => {
+                if let Some(signal) = self.return_addr(*src)? {
+                    self.record_elapsed(started_at.elapsed());
+                    return Ok(Some(signal));
+                }
+            }
+            BlockTerminator::ReturnBool { src } => {
+                if let Some(signal) = self.return_bool(*src)? {
+                    self.record_elapsed(started_at.elapsed());
+                    return Ok(Some(signal));
+                }
+            }
+            BlockTerminator::ReturnUnit => {
+                if let Some(signal) = self.return_unit()? {
+                    self.record_elapsed(started_at.elapsed());
+                    return Ok(Some(signal));
+                }
+            }
+        }
+        Ok(None)
     }
 
     fn current_frame(&self) -> &LowFrame {
@@ -761,7 +883,9 @@ impl LowState {
         return_register: Option<usize>,
         function_index: usize,
         bindings: &[StaticCallBinding],
+        continuation_block: usize,
     ) {
+        self.current_frame_mut().block_index = continuation_block;
         let caller_register_base = self.current_frame().register_base;
         let function = program.function(function_index);
         let register_base = self.registers.len();
@@ -820,8 +944,8 @@ impl LowState {
         self.registers[index] = value;
     }
 
-    fn jump(&mut self, target: usize) {
-        self.current_frame_mut().instruction_pointer = target;
+    fn jump_block(&mut self, target_block: usize) {
+        self.current_frame_mut().block_index = target_block;
     }
 
     fn memory_range(&self, address: u32, size: usize) -> Result<&[u8], String> {
@@ -847,6 +971,83 @@ impl LowState {
             .get_mut(start..end)
             .ok_or_else(|| format!("memory access {start}..{end} is outside {len} bytes"))
     }
+}
+
+fn block_starts(function: &Function) -> Vec<usize> {
+    let mut leaders = vec![false; function.instructions.len()];
+    leaders[0] = true;
+    for (instruction_index, instruction) in function.instructions.iter().enumerate() {
+        match instruction {
+            Instruction::Jump { target } => {
+                leaders[*target] = true;
+            }
+            Instruction::JumpIfFalse { target, .. } => {
+                leaders[*target] = true;
+                if instruction_index + 1 < leaders.len() {
+                    leaders[instruction_index + 1] = true;
+                }
+            }
+            Instruction::CallStatic { .. } => {
+                if instruction_index + 1 < leaders.len() {
+                    leaders[instruction_index + 1] = true;
+                }
+            }
+            Instruction::ReturnI32 { .. }
+            | Instruction::ReturnI64 { .. }
+            | Instruction::ReturnAddr { .. }
+            | Instruction::ReturnBool { .. }
+            | Instruction::ReturnUnit => {
+                if instruction_index + 1 < leaders.len() {
+                    leaders[instruction_index + 1] = true;
+                }
+            }
+            _ => {}
+        }
+    }
+    leaders
+        .into_iter()
+        .enumerate()
+        .filter_map(|(index, is_leader)| is_leader.then_some(index))
+        .collect()
+}
+
+fn instruction_to_block(instruction_count: usize, block_starts: &[usize]) -> Vec<BlockLocation> {
+    let mut locations = Vec::with_capacity(instruction_count);
+    locations.resize_with(instruction_count, || BlockLocation {
+        block_index: 0,
+        operation_index: 0,
+    });
+    for (block_index, start) in block_starts.iter().copied().enumerate() {
+        let end = block_starts
+            .get(block_index + 1)
+            .copied()
+            .unwrap_or(instruction_count);
+        for instruction_index in start..end {
+            locations[instruction_index] = BlockLocation {
+                block_index,
+                operation_index: instruction_index - start,
+            };
+        }
+    }
+    locations
+}
+
+fn static_call_bindings(
+    image: &Image,
+    function_index: usize,
+    arguments: &[u16],
+) -> Vec<StaticCallBinding> {
+    image.functions[function_index]
+        .parameters
+        .iter()
+        .copied()
+        .map(usize::from)
+        .zip(arguments.iter().copied().map(usize::from))
+        .map(|(callee_parameter, caller_argument)| StaticCallBinding {
+            callee_parameter,
+            caller_argument,
+        })
+        .collect()
 }
 
 fn validate_register(
@@ -890,4 +1091,55 @@ fn instruction_terminates_linear_flow(instruction: &Instruction) -> bool {
             | Instruction::ReturnBool { .. }
             | Instruction::ReturnUnit
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn lowering_splits_loop_into_basic_blocks() {
+        let image = Image {
+            language_version: "ckl-low-1".to_string(),
+            memory_size: 1024,
+            rodata: Vec::new(),
+            data: Vec::new(),
+            bss_size: 0,
+            entry_function_index: 0,
+            functions: vec![Function {
+                name: "main".to_string(),
+                register_count: 4,
+                parameters: Vec::new(),
+                instructions: vec![
+                    Instruction::I32Const { dst: 0, value: 0 },
+                    Instruction::I32Const { dst: 1, value: 3 },
+                    Instruction::I32Const { dst: 2, value: 1 },
+                    Instruction::I32Lt {
+                        dst: 3,
+                        lhs: 0,
+                        rhs: 1,
+                    },
+                    Instruction::JumpIfFalse { cond: 3, target: 7 },
+                    Instruction::I32Add {
+                        dst: 0,
+                        lhs: 0,
+                        rhs: 2,
+                    },
+                    Instruction::Jump { target: 3 },
+                    Instruction::ReturnI32 { src: 0 },
+                ],
+            }],
+        };
+
+        let (program, _) = LowProgram::create(image).unwrap();
+        let function = program.function(0);
+
+        assert_eq!(function.blocks.len(), 4);
+        assert_eq!(function.blocks[0].original_start_ip, 0);
+        assert_eq!(function.blocks[1].original_start_ip, 3);
+        assert_eq!(function.blocks[2].original_start_ip, 5);
+        assert_eq!(function.blocks[3].original_start_ip, 7);
+        assert_eq!(function.instruction_to_block[3].block_index, 1);
+        assert_eq!(function.instruction_to_block[7].block_index, 3);
+    }
 }
