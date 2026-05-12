@@ -92,7 +92,7 @@ fn kernel_launches_static_user_process_and_records_exit_code() {
                     },
                     Instruction::JumpIfFalse {
                         cond: 13,
-                        target: 32,
+                        target: 29,
                     },
                     Instruction::CallStatic {
                         return_register: Some(14),
@@ -241,4 +241,3 @@ git status --short
 ```
 
 Expected: no whitespace errors and clean status after commits.
-
