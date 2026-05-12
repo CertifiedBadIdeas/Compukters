@@ -833,17 +833,19 @@ struct LowState {
 }
 
 pub struct LowImageVm {
+    context: LowCpuContext,
+    memory: MachineMemory,
+}
+
+pub struct LowCpuContext {
     program: LowProgram,
     state: LowState,
-    memory: MachineMemory,
     slice_budget: Duration,
 }
 
 pub struct LowImageCpu<'memory> {
-    program: LowProgram,
-    state: LowState,
+    context: LowCpuContext,
     memory: &'memory mut dyn MemoryBus,
-    slice_budget: Duration,
 }
 
 impl LowImageVm {
@@ -853,11 +855,21 @@ impl LowImageVm {
         let memory =
             MachineMemory::from_sections(memory_size, &image.rodata, &image.data, image.bss_size)
                 .map_err(|error| error.to_string())?;
-        let (program, state) = LowProgram::create(image)?;
+        let context = Self::create_cpu_context(image, slice_budget_nanos)?;
         Ok(Self {
+            context,
+            memory,
+        })
+    }
+
+    pub fn create_cpu_context(
+        image: Image,
+        slice_budget_nanos: u64,
+    ) -> Result<LowCpuContext, String> {
+        let (program, state) = LowProgram::create(image)?;
+        Ok(LowCpuContext {
             program,
             state,
-            memory,
             slice_budget: Duration::from_nanos(slice_budget_nanos.max(1)),
         })
     }
@@ -883,12 +895,9 @@ impl LowImageVm {
                 memory.len(),
             ));
         }
-        let (program, state) = LowProgram::create(image)?;
         Ok(LowImageCpu {
-            program,
-            state,
+            context: Self::create_cpu_context(image, slice_budget_nanos)?,
             memory,
-            slice_budget: Duration::from_nanos(slice_budget_nanos.max(1)),
         })
     }
 
@@ -897,27 +906,35 @@ impl LowImageVm {
     }
 
     pub fn metrics_snapshot(&self) -> LowImageVmMetrics {
-        self.state.metrics.clone()
+        self.context.metrics_snapshot()
     }
 
     pub fn run_until_signal(&mut self) -> Result<LowImageSignal, String> {
+        self.context.run_until_signal(&mut self.memory)
+    }
+}
+
+impl LowCpuContext {
+    pub fn run_until_signal(
+        &mut self,
+        memory: &mut dyn MemoryBus,
+    ) -> Result<LowImageSignal, String> {
         run_cpu_until_signal(
             &self.program,
             &mut self.state,
-            &mut self.memory,
+            memory,
             self.slice_budget,
         )
+    }
+
+    pub fn metrics_snapshot(&self) -> LowImageVmMetrics {
+        self.state.metrics.clone()
     }
 }
 
 impl LowImageCpu<'_> {
     pub fn run_until_signal(&mut self) -> Result<LowImageSignal, String> {
-        run_cpu_until_signal(
-            &self.program,
-            &mut self.state,
-            self.memory,
-            self.slice_budget,
-        )
+        self.context.run_until_signal(self.memory)
     }
 }
 
