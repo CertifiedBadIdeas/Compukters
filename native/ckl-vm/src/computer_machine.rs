@@ -732,6 +732,101 @@ mod tests {
     }
 
     #[test]
+    fn scheduler_fixture_rotates_running_process_state() {
+        let mut machine = ComputerMachine::new(0x0002_0000).unwrap();
+        machine.memory_mut().store_i32(OS_CURRENT_PID, 0).unwrap();
+        machine
+            .memory_mut()
+            .store_i32(PROCESS_TABLE_BASE + PROCESS_STATE_OFFSET, PROCESS_RUNNING)
+            .unwrap();
+        machine
+            .memory_mut()
+            .store_i32(
+                PROCESS_TABLE_BASE + PROCESS_ENTRY_SIZE + PROCESS_STATE_OFFSET,
+                PROCESS_RUNNABLE,
+            )
+            .unwrap();
+        let scheduler = image(
+            vec![
+                Instruction::AddrConst {
+                    dst: 0,
+                    value: OS_CURRENT_PID,
+                },
+                Instruction::Load32 { dst: 1, addr: 0 },
+                Instruction::I32Const { dst: 2, value: 0 },
+                Instruction::I32Eq {
+                    dst: 3,
+                    lhs: 1,
+                    rhs: 2,
+                },
+                Instruction::JumpIfFalse {
+                    cond: 3,
+                    target: 18,
+                },
+                Instruction::AddrConst {
+                    dst: 4,
+                    value: PROCESS_TABLE_BASE + PROCESS_ENTRY_SIZE + PROCESS_STATE_OFFSET,
+                },
+                Instruction::Load32 { dst: 5, addr: 4 },
+                Instruction::I32Const {
+                    dst: 6,
+                    value: PROCESS_RUNNABLE,
+                },
+                Instruction::I32Eq {
+                    dst: 7,
+                    lhs: 5,
+                    rhs: 6,
+                },
+                Instruction::JumpIfFalse {
+                    cond: 7,
+                    target: 18,
+                },
+                Instruction::AddrConst {
+                    dst: 8,
+                    value: PROCESS_TABLE_BASE + PROCESS_STATE_OFFSET,
+                },
+                Instruction::I32Const {
+                    dst: 9,
+                    value: PROCESS_RUNNABLE,
+                },
+                Instruction::Store32 { addr: 8, src: 9 },
+                Instruction::I32Const {
+                    dst: 10,
+                    value: PROCESS_RUNNING,
+                },
+                Instruction::Store32 { addr: 4, src: 10 },
+                Instruction::I32Const { dst: 11, value: 1 },
+                Instruction::Store32 { addr: 0, src: 11 },
+                Instruction::ReturnUnit,
+                Instruction::ReturnUnit,
+            ],
+            12,
+        );
+
+        let cpu_id = machine.spawn_cpu(scheduler, 1024).unwrap();
+
+        assert_eq!(
+            machine.run_cpu_until_signal(cpu_id).unwrap(),
+            LowImageSignal::HaltUnit,
+        );
+        assert_eq!(machine.memory().load_i32(OS_CURRENT_PID).unwrap(), 1);
+        assert_eq!(
+            machine
+                .memory()
+                .load_i32(PROCESS_TABLE_BASE + PROCESS_STATE_OFFSET)
+                .unwrap(),
+            PROCESS_RUNNABLE,
+        );
+        assert_eq!(
+            machine
+                .memory()
+                .load_i32(PROCESS_TABLE_BASE + PROCESS_ENTRY_SIZE + PROCESS_STATE_OFFSET)
+                .unwrap(),
+            PROCESS_RUNNING,
+        );
+    }
+
+    #[test]
     fn computer_memory_map_describes_ram_region() {
         let machine = ComputerMachine::new(1024).unwrap();
         let map = machine.memory_map();
