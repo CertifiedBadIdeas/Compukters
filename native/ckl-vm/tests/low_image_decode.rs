@@ -42,6 +42,47 @@ fn decodes_kotlin_generated_low_fixture() {
     assert_eq!(image.functions[0].instructions.len(), 5);
 }
 
+#[test]
+fn decodes_i32_equality_instruction() {
+    let image = decode_image(&i32_equality_image_bytes()).expect("image decodes");
+
+    assert_eq!(
+        image.functions[0].instructions,
+        vec![
+            Instruction::I32Eq {
+                dst: 2,
+                lhs: 0,
+                rhs: 1,
+            },
+            Instruction::ReturnBool { src: 2 },
+        ],
+    );
+}
+
+fn i32_equality_image_bytes() -> Vec<u8> {
+    let mut out = Vec::new();
+    out.extend_from_slice(b"CKIM");
+    out.push(5);
+    string(&mut out, "ckl-low-1");
+    u32(&mut out, 1024);
+    bytes(&mut out, &[]);
+    bytes(&mut out, &[]);
+    u32(&mut out, 0);
+    i32(&mut out, 0);
+    i32(&mut out, 1);
+    string(&mut out, "main");
+    u16(&mut out, 3);
+    i32(&mut out, 0);
+    i32(&mut out, 2);
+    out.push(25);
+    u16(&mut out, 2);
+    u16(&mut out, 0);
+    u16(&mut out, 1);
+    out.push(24);
+    u16(&mut out, 2);
+    out
+}
+
 fn representative_image_bytes() -> Vec<u8> {
     let mut out = Vec::new();
     out.extend_from_slice(b"CKIM");
