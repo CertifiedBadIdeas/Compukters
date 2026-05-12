@@ -159,6 +159,16 @@ enum ExecutableOperation {
         lhs: usize,
         rhs: i32,
     },
+    I32Eq {
+        dst: usize,
+        lhs: usize,
+        rhs: usize,
+    },
+    I32EqImm {
+        dst: usize,
+        lhs: usize,
+        rhs: i32,
+    },
     Load32 {
         dst: usize,
         addr: usize,
@@ -328,7 +338,8 @@ impl LowProgram {
             | Instruction::I32BitXor { dst, lhs, rhs }
             | Instruction::I32Shl { dst, lhs, rhs }
             | Instruction::I32Shr { dst, lhs, rhs }
-            | Instruction::I32Lt { dst, lhs, rhs } => {
+            | Instruction::I32Lt { dst, lhs, rhs }
+            | Instruction::I32Eq { dst, lhs, rhs } => {
                 validate_register(function, instruction_index, "writes", *dst)?;
                 validate_register(function, instruction_index, "reads", *lhs)?;
                 validate_register(function, instruction_index, "reads", *rhs)?;
@@ -638,6 +649,14 @@ impl ExecutableOperation {
                 |dst, lhs, rhs| ExecutableOperation::I32Lt { dst, lhs, rhs },
                 |dst, lhs, rhs| ExecutableOperation::I32LtImm { dst, lhs, rhs },
             ),
+            Instruction::I32Eq { dst, lhs, rhs } => compile_i32_binary_imm(
+                known_i32,
+                *dst,
+                *lhs,
+                *rhs,
+                |dst, lhs, rhs| ExecutableOperation::I32Eq { dst, lhs, rhs },
+                |dst, lhs, rhs| ExecutableOperation::I32EqImm { dst, lhs, rhs },
+            ),
             Instruction::Load32 { dst, addr } => {
                 let dst = usize::from(*dst);
                 known_i32[dst] = None;
@@ -686,6 +705,7 @@ impl ExecutableOperation {
             | ExecutableOperation::I32Shl { lhs, rhs, .. }
             | ExecutableOperation::I32Shr { lhs, rhs, .. }
             | ExecutableOperation::I32Lt { lhs, rhs, .. }
+            | ExecutableOperation::I32Eq { lhs, rhs, .. }
             | ExecutableOperation::Store32 {
                 addr: lhs,
                 src: rhs,
@@ -703,7 +723,8 @@ impl ExecutableOperation {
             | ExecutableOperation::I32BitXorImm { lhs, .. }
             | ExecutableOperation::I32ShlImm { lhs, .. }
             | ExecutableOperation::I32ShrImm { lhs, .. }
-            | ExecutableOperation::I32LtImm { lhs, .. } => *lhs == register,
+            | ExecutableOperation::I32LtImm { lhs, .. }
+            | ExecutableOperation::I32EqImm { lhs, .. } => *lhs == register,
         }
     }
 }
@@ -972,6 +993,14 @@ impl LowState {
             }
             ExecutableOperation::I32LtImm { dst, lhs, rhs } => {
                 let value = self.read_i32(*lhs) < *rhs;
+                self.write_bool(*dst, value);
+            }
+            ExecutableOperation::I32Eq { dst, lhs, rhs } => {
+                let value = self.read_i32(*lhs) == self.read_i32(*rhs);
+                self.write_bool(*dst, value);
+            }
+            ExecutableOperation::I32EqImm { dst, lhs, rhs } => {
+                let value = self.read_i32(*lhs) == *rhs;
                 self.write_bool(*dst, value);
             }
             ExecutableOperation::Load32 { dst, addr } => {
@@ -1387,6 +1416,7 @@ fn instruction_read_registers(instruction: &Instruction) -> Vec<usize> {
         | Instruction::I32Shl { lhs, rhs, .. }
         | Instruction::I32Shr { lhs, rhs, .. }
         | Instruction::I32Lt { lhs, rhs, .. }
+        | Instruction::I32Eq { lhs, rhs, .. }
         | Instruction::Store32 {
             addr: lhs,
             src: rhs,
@@ -1419,6 +1449,7 @@ fn instruction_write_register(instruction: &Instruction) -> Option<(usize, Optio
         | Instruction::I32Shl { dst, .. }
         | Instruction::I32Shr { dst, .. }
         | Instruction::I32Lt { dst, .. }
+        | Instruction::I32Eq { dst, .. }
         | Instruction::Load32 { dst, .. }
         | Instruction::AddrAdd { dst, .. } => Some((usize::from(*dst), None)),
         Instruction::CallStatic {
