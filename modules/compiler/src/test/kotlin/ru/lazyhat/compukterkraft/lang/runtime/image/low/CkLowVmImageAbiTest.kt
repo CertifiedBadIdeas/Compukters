@@ -99,11 +99,71 @@ class CkLowVmImageAbiTest {
     }
 
     @Test
+    fun lowImageAbiEncodesI32ComparisonFamilyInstructions() {
+        val bytes =
+            CkLowVmImageAbi.encode(
+                CkLowVmImage(
+                    languageVersion = "ckl-low-1",
+                    memorySize = 1024u,
+                    entryFunctionIndex = 0,
+                    functions =
+                        listOf(
+                            CkLowVmFunction(
+                                name = "main",
+                                registerCount = 3,
+                                parameters = emptyList(),
+                                instructions =
+                                    listOf(
+                                        CkLowVmInstruction.I32Ne(dst = 2, lhs = 0, rhs = 1),
+                                        CkLowVmInstruction.I32Le(dst = 2, lhs = 0, rhs = 1),
+                                        CkLowVmInstruction.I32Gt(dst = 2, lhs = 0, rhs = 1),
+                                        CkLowVmInstruction.I32Ge(dst = 2, lhs = 0, rhs = 1),
+                                        CkLowVmInstruction.ReturnBool(src = 2),
+                                    ),
+                            ),
+                        ),
+                ),
+            )
+        val reader = LowTestReader(bytes)
+
+        assertEquals("CKIM", reader.ascii(4))
+        assertEquals(CkLowVmImageAbi.VERSION, reader.u8())
+        assertEquals("ckl-low-1", reader.string())
+        assertEquals(1024u, reader.u32())
+        assertEquals(emptyList(), reader.bytes().toList())
+        assertEquals(emptyList(), reader.bytes().toList())
+        assertEquals(0u, reader.u32())
+        assertEquals(0, reader.i32())
+        assertEquals(1, reader.i32())
+        assertEquals("main", reader.string())
+        assertEquals(3, reader.u16())
+        assertEquals(emptyList(), reader.registerList())
+        assertEquals(5, reader.i32())
+        assertComparisonInstruction(reader, CkLowVmImageAbi.InstructionTags.I32_NE)
+        assertComparisonInstruction(reader, CkLowVmImageAbi.InstructionTags.I32_LE)
+        assertComparisonInstruction(reader, CkLowVmImageAbi.InstructionTags.I32_GT)
+        assertComparisonInstruction(reader, CkLowVmImageAbi.InstructionTags.I32_GE)
+        assertEquals(CkLowVmImageAbi.InstructionTags.RETURN_BOOL, reader.u8())
+        assertEquals(2, reader.u16())
+        assertEquals(bytes.size, reader.offset)
+    }
+
+    @Test
     fun writesLowGoldenFixtureWhenPathIsProvided() {
         val path = System.getProperty("ckl.low.image.golden.path")?.takeIf(String::isNotBlank) ?: return
 
         java.nio.file.Files.createDirectories(java.nio.file.Path.of(path).parent)
         java.nio.file.Files.write(java.nio.file.Path.of(path), CkLowVmImageAbi.encode(representativeImage()))
+    }
+
+    private fun assertComparisonInstruction(
+        reader: LowTestReader,
+        expectedTag: Int,
+    ) {
+        assertEquals(expectedTag, reader.u8())
+        assertEquals(2, reader.u16())
+        assertEquals(0, reader.u16())
+        assertEquals(1, reader.u16())
     }
 
     private fun representativeImage(): CkLowVmImage =
