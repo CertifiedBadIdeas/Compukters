@@ -278,6 +278,8 @@ Later:
 7. Move process behavior into CKL ROM/OS code in later slices.
 8. Add `MicrocontrollerMachine` that boots one firmware image without process APIs.
 
+During the transition, `device_daemon.rs` may continue to run existing computer ROM behavior. New semantics should not be added there unless they are needed to keep current tests green while the CKL OS replacement is being built.
+
 ## First Implementation Slice
 
 The first slice should be intentionally small:

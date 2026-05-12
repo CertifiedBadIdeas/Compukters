@@ -1,3 +1,9 @@
+//! Transition adapter for the current computer runtime.
+//!
+//! New low-level execution work should target the CPU core and machine models.
+//! Process semantics are intentionally not expanded here; the long-term
+//! computer process model belongs in CKL OS code.
+
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
