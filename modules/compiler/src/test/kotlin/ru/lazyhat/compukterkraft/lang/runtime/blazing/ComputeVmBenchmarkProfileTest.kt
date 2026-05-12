@@ -31,12 +31,17 @@ class ComputeVmBenchmarkProfileTest {
         val tsvPathValue = System.getProperty(TSV_PATH_PROPERTY)
         val markdownPathValue = System.getProperty(MARKDOWN_PATH_PROPERTY)
         val libraryPath = System.getProperty(NATIVE_LIBRARY_PROPERTY)
+        val nativeLibraryProfile = System.getProperty(NATIVE_LIBRARY_PROFILE_PROPERTY)
+        val gitCommit = System.getProperty(GIT_COMMIT_PROPERTY, "unknown")
         val rustCrateDir = System.getProperty(RUST_CRATE_DIR_PROPERTY)
+        val rustTargetProfile = System.getProperty(RUST_TARGET_PROFILE_PROPERTY)
         val pythonCommand = System.getProperty(PYTHON_COMMAND_PROPERTY, "python3")
         assumeTrue(!tsvPathValue.isNullOrBlank(), "Compute benchmark TSV path is only provided by profiling Gradle tasks")
         assumeTrue(!markdownPathValue.isNullOrBlank(), "Compute benchmark Markdown path is only provided by profiling Gradle tasks")
         assumeTrue(!libraryPath.isNullOrBlank(), "Compute benchmark requires the native CKL VM library")
+        assumeTrue(!nativeLibraryProfile.isNullOrBlank(), "Compute benchmark requires the native library profile")
         assumeTrue(!rustCrateDir.isNullOrBlank(), "Compute benchmark requires the Rust VM crate directory")
+        assumeTrue(!rustTargetProfile.isNullOrBlank(), "Compute benchmark requires the Rust target/profile label")
         val pythonScriptPath =
             Path.of(
                 requireNotNull(javaClass.classLoader.getResource("compute_benchmark_baseline.py")) {
@@ -47,7 +52,10 @@ class ComputeVmBenchmarkProfileTest {
         val report =
             ComputeVmBenchmarkRunner.run(
                 libraryPath = libraryPath,
+                nativeLibraryProfile = nativeLibraryProfile,
+                gitCommit = gitCommit,
                 rustCrateDir = Path.of(rustCrateDir),
+                rustTargetProfile = rustTargetProfile,
                 pythonCommand = pythonCommand,
                 pythonScriptPath = pythonScriptPath,
                 iterations = System.getProperty(ITERATIONS_PROPERTY, "500000").toInt(),
@@ -74,7 +82,10 @@ class ComputeVmBenchmarkProfileTest {
         const val TSV_PATH_PROPERTY = "ckl.benchmark.compute.tsv.path"
         const val MARKDOWN_PATH_PROPERTY = "ckl.benchmark.compute.markdown.path"
         const val NATIVE_LIBRARY_PROPERTY = "ckl.vm.native.library"
+        const val NATIVE_LIBRARY_PROFILE_PROPERTY = "ckl.benchmark.native.library.profile"
+        const val GIT_COMMIT_PROPERTY = "ckl.benchmark.git.commit"
         const val RUST_CRATE_DIR_PROPERTY = "ckl.benchmark.rust.crate.dir"
+        const val RUST_TARGET_PROFILE_PROPERTY = "ckl.benchmark.rust.target.profile"
         const val PYTHON_COMMAND_PROPERTY = "ckl.benchmark.python.command"
         const val ITERATIONS_PROPERTY = "ckl.benchmark.iterations"
         const val WARMUP_ITERATIONS_PROPERTY = "ckl.benchmark.warmup.iterations"

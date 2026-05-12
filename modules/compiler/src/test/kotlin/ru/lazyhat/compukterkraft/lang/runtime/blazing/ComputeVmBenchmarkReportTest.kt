@@ -28,6 +28,19 @@ class ComputeVmBenchmarkReportTest {
     fun reportIncludesStableTsvAndMarkdownSummary() {
         val report =
             ComputeVmBenchmarkReport(
+                metadata =
+                    ComputeVmBenchmarkMetadata(
+                        nativeLibraryPath = "/tmp/libckl_vm.so",
+                        nativeLibraryProfile = "release",
+                        nativeLibrarySizeBytes = 777_216,
+                        gitCommit = "abcdef123456",
+                        imageAbiVersion = "CKIM v5",
+                        javaRuntime = "Test JVM 1.2.3",
+                        rustTargetProfile = "native/release",
+                        iterations = 100,
+                        warmupIterations = 10,
+                        samples = 3,
+                    ),
                 samples = 3,
                 workloads =
                     listOf(
@@ -75,6 +88,18 @@ class ComputeVmBenchmarkReportTest {
         val markdown = report.toMarkdown()
 
         assertContains(markdown, "# CKL Compute VM Benchmark")
+        assertContains(markdown, "## Benchmark Metadata")
+        assertContains(markdown, "| Native library path | /tmp/libckl_vm.so |")
+        assertContains(markdown, "| Native library profile | release |")
+        assertContains(markdown, "| Native library size bytes | 777216 |")
+        assertContains(markdown, "| Git commit | abcdef123456 |")
+        assertContains(markdown, "| Image ABI | CKIM v5 |")
+        assertContains(markdown, "| Java runtime | Test JVM 1.2.3 |")
+        assertContains(markdown, "| Rust target/profile | native/release |")
+        assertContains(markdown, "| Iterations | 100 |")
+        assertContains(markdown, "| Warmup iterations | 10 |")
+        assertContains(markdown, "| Samples | 3 |")
+        assertContains(markdown, "## Workloads")
         assertContains(
             markdown,
             "| integer-mix | 100 | -1234 | 8,000,000.000 | 5,000,000.000 | 2,500,000.000 | 10,000,000.000 | 0.625x | 0.313x | 1.250x |",
