@@ -422,6 +422,42 @@ fn runner_pauses_after_time_slice_budget() {
     assert!(metrics.elapsed_nanos > 0, "{metrics:?}");
 }
 
+#[test]
+fn runner_can_be_created_with_external_machine_memory() {
+    let writer = image(
+        vec![
+            Instruction::AddrConst { dst: 0, value: 128 },
+            Instruction::I32Const { dst: 1, value: 77 },
+            Instruction::Store32 { addr: 0, src: 1 },
+            Instruction::ReturnUnit,
+        ],
+        2,
+    );
+    let reader = image(
+        vec![
+            Instruction::AddrConst { dst: 0, value: 128 },
+            Instruction::Load32 { dst: 1, addr: 0 },
+            Instruction::ReturnI32 { src: 1 },
+        ],
+        2,
+    );
+    let mut memory = ckl_vm::low_machine::MachineMemory::zeroed(1024).unwrap();
+    {
+        let mut writer_vm = LowImageVm::create_cpu_with_memory(writer, 128, &mut memory).unwrap();
+        assert_eq!(
+            writer_vm.run_until_signal().unwrap(),
+            LowImageSignal::HaltUnit,
+        );
+    }
+    {
+        let mut reader_vm = LowImageVm::create_cpu_with_memory(reader, 128, &mut memory).unwrap();
+        assert_eq!(
+            reader_vm.run_until_signal().unwrap(),
+            LowImageSignal::HaltI32(77),
+        );
+    }
+}
+
 fn image(instructions: Vec<Instruction>, register_count: usize) -> Image {
     Image {
         language_version: "ckl-low-1".to_string(),
