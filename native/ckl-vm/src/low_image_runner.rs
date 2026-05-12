@@ -1,5 +1,5 @@
 use crate::low_image::{Function, Image, Instruction};
-use crate::low_machine::MachineMemory;
+use crate::low_machine::{MachineMemory, MemoryBus};
 use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -821,7 +821,7 @@ pub struct LowImageVm {
 pub struct LowImageCpu<'memory> {
     program: LowProgram,
     state: LowState,
-    memory: &'memory mut MachineMemory,
+    memory: &'memory mut dyn MemoryBus,
     slice_budget: Duration,
 }
 
@@ -846,12 +846,20 @@ impl LowImageVm {
         slice_budget_nanos: u64,
         memory: &'memory mut MachineMemory,
     ) -> Result<LowImageCpu<'memory>, String> {
+        Self::create_cpu_with_bus(image, slice_budget_nanos, memory)
+    }
+
+    pub fn create_cpu_with_bus<'memory>(
+        image: Image,
+        slice_budget_nanos: u64,
+        memory: &'memory mut dyn MemoryBus,
+    ) -> Result<LowImageCpu<'memory>, String> {
         let memory_size = usize::try_from(image.memory_size)
             .map_err(|_| "memory size does not fit usize".to_string())?;
-        if memory.bytes().len() < memory_size {
+        if memory.len() < memory_size {
             return Err(format!(
                 "image requires {memory_size} bytes but machine memory has {} bytes",
-                memory.bytes().len(),
+                memory.len(),
             ));
         }
         let (program, state) = LowProgram::create(image)?;
@@ -897,7 +905,7 @@ const TIME_CHECK_INTERVAL: usize = 1024;
 fn run_cpu_until_signal(
     program: &LowProgram,
     state: &mut LowState,
-    memory: &mut MachineMemory,
+    memory: &mut dyn MemoryBus,
     slice_budget: Duration,
 ) -> Result<LowImageSignal, String> {
     state.metrics.run_invocations = state.metrics.run_invocations.saturating_add(1);
@@ -948,7 +956,7 @@ impl LowState {
 
     fn execute_operation(
         &mut self,
-        memory: &mut MachineMemory,
+        memory: &mut dyn MemoryBus,
         operation: &ExecutableOperation,
     ) -> Result<(), String> {
         match operation {

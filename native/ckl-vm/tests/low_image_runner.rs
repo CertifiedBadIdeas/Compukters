@@ -1,5 +1,6 @@
 use ckl_vm::low_image::{Function, Image, Instruction};
 use ckl_vm::low_image_runner::{LowImageSignal, LowImageVm};
+use ckl_vm::low_machine::{MachineMemory, MemoryBus, MemoryFault};
 
 #[test]
 fn runner_executes_i32_arithmetic_without_value_objects() {
@@ -456,6 +457,50 @@ fn runner_can_be_created_with_external_machine_memory() {
             LowImageSignal::HaltI32(77),
         );
     }
+}
+
+#[test]
+fn runner_can_execute_against_custom_memory_bus() {
+    struct RecordingBus {
+        memory: MachineMemory,
+        stores: Vec<(u32, i32)>,
+    }
+
+    impl MemoryBus for RecordingBus {
+        fn len(&self) -> usize {
+            self.memory.len()
+        }
+
+        fn load_i32(&self, address: u32) -> Result<i32, MemoryFault> {
+            self.memory.load_i32(address)
+        }
+
+        fn store_i32(&mut self, address: u32, value: i32) -> Result<(), MemoryFault> {
+            self.stores.push((address, value));
+            self.memory.store_i32(address, value)
+        }
+    }
+
+    let image = image(
+        vec![
+            Instruction::AddrConst { dst: 0, value: 128 },
+            Instruction::I32Const { dst: 1, value: 456 },
+            Instruction::Store32 { addr: 0, src: 1 },
+            Instruction::ReturnUnit,
+        ],
+        2,
+    );
+    let mut bus = RecordingBus {
+        memory: MachineMemory::zeroed(1024).unwrap(),
+        stores: Vec::new(),
+    };
+
+    let mut cpu = LowImageVm::create_cpu_with_bus(image, 128, &mut bus).unwrap();
+
+    assert_eq!(cpu.run_until_signal().unwrap(), LowImageSignal::HaltUnit);
+    drop(cpu);
+    assert_eq!(bus.stores, vec![(128, 456)]);
+    assert_eq!(bus.memory.load_i32(128).unwrap(), 456);
 }
 
 fn image(instructions: Vec<Instruction>, register_count: usize) -> Image {

@@ -25,6 +25,14 @@ pub struct MachineMemory {
     bytes: Vec<u8>,
 }
 
+pub trait MemoryBus {
+    fn len(&self) -> usize;
+
+    fn load_i32(&self, address: u32) -> Result<i32, MemoryFault>;
+
+    fn store_i32(&mut self, address: u32, value: i32) -> Result<(), MemoryFault>;
+}
+
 impl MachineMemory {
     pub fn zeroed(size: usize) -> Result<Self, MemoryFault> {
         if size == 0 {
@@ -60,6 +68,10 @@ impl MachineMemory {
 
     pub fn bytes(&self) -> &[u8] {
         &self.bytes
+    }
+
+    pub fn len(&self) -> usize {
+        self.bytes.len()
     }
 
     pub fn load_i32(&self, address: u32) -> Result<i32, MemoryFault> {
@@ -103,6 +115,20 @@ impl MachineMemory {
                 "memory access {start}..{end} is outside {len} bytes"
             ))
         })
+    }
+}
+
+impl MemoryBus for MachineMemory {
+    fn len(&self) -> usize {
+        self.len()
+    }
+
+    fn load_i32(&self, address: u32) -> Result<i32, MemoryFault> {
+        self.load_i32(address)
+    }
+
+    fn store_i32(&mut self, address: u32, value: i32) -> Result<(), MemoryFault> {
+        self.store_i32(address, value)
     }
 }
 
