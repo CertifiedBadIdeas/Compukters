@@ -12,6 +12,10 @@ impl ComputerMachine {
     pub const CONTROL_BASE: u32 = 0x1000_0000;
     pub const CONTROL_STATUS: u32 = Self::CONTROL_BASE;
     pub const CONTROL_PANIC_CODE: u32 = Self::CONTROL_BASE + 4;
+    pub const STATUS_PANIC: i32 = -1;
+    pub const STATUS_RESET: i32 = 0;
+    pub const STATUS_BOOTING: i32 = 1;
+    pub const STATUS_READY: i32 = 2;
 
     pub fn new(memory_size: usize) -> Result<Self, MemoryFault> {
         let mut bus = MachineBus::new(memory_size)?;
@@ -37,6 +41,14 @@ impl ComputerMachine {
         slice_budget_nanos: u64,
     ) -> Result<LowImageCpu<'_>, String> {
         LowImageVm::create_cpu_with_bus(image, slice_budget_nanos, &mut self.bus)
+    }
+
+    pub fn boot_cpu(
+        &mut self,
+        kernel_image: Image,
+        slice_budget_nanos: u64,
+    ) -> Result<LowImageCpu<'_>, String> {
+        self.create_cpu(kernel_image, slice_budget_nanos)
     }
 
     pub fn control_status(&self) -> i32 {
@@ -268,6 +280,78 @@ mod tests {
         );
         drop(cpu);
         assert_eq!(machine.panic_code(), 0x55AA);
+    }
+
+    #[test]
+    fn computer_starts_in_reset_status() {
+        let machine = ComputerMachine::new(1024).unwrap();
+
+        assert_eq!(machine.control_status(), ComputerMachine::STATUS_RESET);
+        assert_eq!(machine.panic_code(), 0);
+    }
+
+    #[test]
+    fn boot_cpu_runs_kernel_that_marks_machine_ready() {
+        let mut machine = ComputerMachine::new(1024).unwrap();
+        let kernel = image(
+            vec![
+                Instruction::AddrConst {
+                    dst: 0,
+                    value: ComputerMachine::CONTROL_STATUS,
+                },
+                Instruction::I32Const {
+                    dst: 1,
+                    value: ComputerMachine::STATUS_BOOTING,
+                },
+                Instruction::Store32 { addr: 0, src: 1 },
+                Instruction::I32Const {
+                    dst: 2,
+                    value: ComputerMachine::STATUS_READY,
+                },
+                Instruction::Store32 { addr: 0, src: 2 },
+                Instruction::ReturnUnit,
+            ],
+            3,
+        );
+
+        let mut cpu = machine.boot_cpu(kernel, 128).unwrap();
+
+        assert_eq!(cpu.run_until_signal().unwrap(), LowImageSignal::HaltUnit);
+        drop(cpu);
+        assert_eq!(machine.control_status(), ComputerMachine::STATUS_READY);
+    }
+
+    #[test]
+    fn boot_cpu_runs_kernel_that_marks_machine_panicked() {
+        let mut machine = ComputerMachine::new(1024).unwrap();
+        let kernel = image(
+            vec![
+                Instruction::AddrConst {
+                    dst: 0,
+                    value: ComputerMachine::CONTROL_STATUS,
+                },
+                Instruction::AddrConst {
+                    dst: 1,
+                    value: ComputerMachine::CONTROL_PANIC_CODE,
+                },
+                Instruction::I32Const {
+                    dst: 2,
+                    value: ComputerMachine::STATUS_PANIC,
+                },
+                Instruction::I32Const { dst: 3, value: 404 },
+                Instruction::Store32 { addr: 0, src: 2 },
+                Instruction::Store32 { addr: 1, src: 3 },
+                Instruction::ReturnUnit,
+            ],
+            4,
+        );
+
+        let mut cpu = machine.boot_cpu(kernel, 128).unwrap();
+
+        assert_eq!(cpu.run_until_signal().unwrap(), LowImageSignal::HaltUnit);
+        drop(cpu);
+        assert_eq!(machine.control_status(), ComputerMachine::STATUS_PANIC);
+        assert_eq!(machine.panic_code(), 404);
     }
 
     fn image(instructions: Vec<Instruction>, register_count: usize) -> Image {
