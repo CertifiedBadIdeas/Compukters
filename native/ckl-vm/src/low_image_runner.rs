@@ -169,6 +169,46 @@ enum ExecutableOperation {
         lhs: usize,
         rhs: i32,
     },
+    I32Ne {
+        dst: usize,
+        lhs: usize,
+        rhs: usize,
+    },
+    I32NeImm {
+        dst: usize,
+        lhs: usize,
+        rhs: i32,
+    },
+    I32Le {
+        dst: usize,
+        lhs: usize,
+        rhs: usize,
+    },
+    I32LeImm {
+        dst: usize,
+        lhs: usize,
+        rhs: i32,
+    },
+    I32Gt {
+        dst: usize,
+        lhs: usize,
+        rhs: usize,
+    },
+    I32GtImm {
+        dst: usize,
+        lhs: usize,
+        rhs: i32,
+    },
+    I32Ge {
+        dst: usize,
+        lhs: usize,
+        rhs: usize,
+    },
+    I32GeImm {
+        dst: usize,
+        lhs: usize,
+        rhs: i32,
+    },
     Load32 {
         dst: usize,
         addr: usize,
@@ -339,7 +379,11 @@ impl LowProgram {
             | Instruction::I32Shl { dst, lhs, rhs }
             | Instruction::I32Shr { dst, lhs, rhs }
             | Instruction::I32Lt { dst, lhs, rhs }
-            | Instruction::I32Eq { dst, lhs, rhs } => {
+            | Instruction::I32Eq { dst, lhs, rhs }
+            | Instruction::I32Ne { dst, lhs, rhs }
+            | Instruction::I32Le { dst, lhs, rhs }
+            | Instruction::I32Gt { dst, lhs, rhs }
+            | Instruction::I32Ge { dst, lhs, rhs } => {
                 validate_register(function, instruction_index, "writes", *dst)?;
                 validate_register(function, instruction_index, "reads", *lhs)?;
                 validate_register(function, instruction_index, "reads", *rhs)?;
@@ -657,6 +701,38 @@ impl ExecutableOperation {
                 |dst, lhs, rhs| ExecutableOperation::I32Eq { dst, lhs, rhs },
                 |dst, lhs, rhs| ExecutableOperation::I32EqImm { dst, lhs, rhs },
             ),
+            Instruction::I32Ne { dst, lhs, rhs } => compile_i32_binary_imm(
+                known_i32,
+                *dst,
+                *lhs,
+                *rhs,
+                |dst, lhs, rhs| ExecutableOperation::I32Ne { dst, lhs, rhs },
+                |dst, lhs, rhs| ExecutableOperation::I32NeImm { dst, lhs, rhs },
+            ),
+            Instruction::I32Le { dst, lhs, rhs } => compile_i32_binary_imm(
+                known_i32,
+                *dst,
+                *lhs,
+                *rhs,
+                |dst, lhs, rhs| ExecutableOperation::I32Le { dst, lhs, rhs },
+                |dst, lhs, rhs| ExecutableOperation::I32LeImm { dst, lhs, rhs },
+            ),
+            Instruction::I32Gt { dst, lhs, rhs } => compile_i32_binary_imm(
+                known_i32,
+                *dst,
+                *lhs,
+                *rhs,
+                |dst, lhs, rhs| ExecutableOperation::I32Gt { dst, lhs, rhs },
+                |dst, lhs, rhs| ExecutableOperation::I32GtImm { dst, lhs, rhs },
+            ),
+            Instruction::I32Ge { dst, lhs, rhs } => compile_i32_binary_imm(
+                known_i32,
+                *dst,
+                *lhs,
+                *rhs,
+                |dst, lhs, rhs| ExecutableOperation::I32Ge { dst, lhs, rhs },
+                |dst, lhs, rhs| ExecutableOperation::I32GeImm { dst, lhs, rhs },
+            ),
             Instruction::Load32 { dst, addr } => {
                 let dst = usize::from(*dst);
                 known_i32[dst] = None;
@@ -706,6 +782,10 @@ impl ExecutableOperation {
             | ExecutableOperation::I32Shr { lhs, rhs, .. }
             | ExecutableOperation::I32Lt { lhs, rhs, .. }
             | ExecutableOperation::I32Eq { lhs, rhs, .. }
+            | ExecutableOperation::I32Ne { lhs, rhs, .. }
+            | ExecutableOperation::I32Le { lhs, rhs, .. }
+            | ExecutableOperation::I32Gt { lhs, rhs, .. }
+            | ExecutableOperation::I32Ge { lhs, rhs, .. }
             | ExecutableOperation::Store32 {
                 addr: lhs,
                 src: rhs,
@@ -724,7 +804,11 @@ impl ExecutableOperation {
             | ExecutableOperation::I32ShlImm { lhs, .. }
             | ExecutableOperation::I32ShrImm { lhs, .. }
             | ExecutableOperation::I32LtImm { lhs, .. }
-            | ExecutableOperation::I32EqImm { lhs, .. } => *lhs == register,
+            | ExecutableOperation::I32EqImm { lhs, .. }
+            | ExecutableOperation::I32NeImm { lhs, .. }
+            | ExecutableOperation::I32LeImm { lhs, .. }
+            | ExecutableOperation::I32GtImm { lhs, .. }
+            | ExecutableOperation::I32GeImm { lhs, .. } => *lhs == register,
         }
     }
 }
@@ -1001,6 +1085,38 @@ impl LowState {
             }
             ExecutableOperation::I32EqImm { dst, lhs, rhs } => {
                 let value = self.read_i32(*lhs) == *rhs;
+                self.write_bool(*dst, value);
+            }
+            ExecutableOperation::I32Ne { dst, lhs, rhs } => {
+                let value = self.read_i32(*lhs) != self.read_i32(*rhs);
+                self.write_bool(*dst, value);
+            }
+            ExecutableOperation::I32NeImm { dst, lhs, rhs } => {
+                let value = self.read_i32(*lhs) != *rhs;
+                self.write_bool(*dst, value);
+            }
+            ExecutableOperation::I32Le { dst, lhs, rhs } => {
+                let value = self.read_i32(*lhs) <= self.read_i32(*rhs);
+                self.write_bool(*dst, value);
+            }
+            ExecutableOperation::I32LeImm { dst, lhs, rhs } => {
+                let value = self.read_i32(*lhs) <= *rhs;
+                self.write_bool(*dst, value);
+            }
+            ExecutableOperation::I32Gt { dst, lhs, rhs } => {
+                let value = self.read_i32(*lhs) > self.read_i32(*rhs);
+                self.write_bool(*dst, value);
+            }
+            ExecutableOperation::I32GtImm { dst, lhs, rhs } => {
+                let value = self.read_i32(*lhs) > *rhs;
+                self.write_bool(*dst, value);
+            }
+            ExecutableOperation::I32Ge { dst, lhs, rhs } => {
+                let value = self.read_i32(*lhs) >= self.read_i32(*rhs);
+                self.write_bool(*dst, value);
+            }
+            ExecutableOperation::I32GeImm { dst, lhs, rhs } => {
+                let value = self.read_i32(*lhs) >= *rhs;
                 self.write_bool(*dst, value);
             }
             ExecutableOperation::Load32 { dst, addr } => {
@@ -1417,6 +1533,10 @@ fn instruction_read_registers(instruction: &Instruction) -> Vec<usize> {
         | Instruction::I32Shr { lhs, rhs, .. }
         | Instruction::I32Lt { lhs, rhs, .. }
         | Instruction::I32Eq { lhs, rhs, .. }
+        | Instruction::I32Ne { lhs, rhs, .. }
+        | Instruction::I32Le { lhs, rhs, .. }
+        | Instruction::I32Gt { lhs, rhs, .. }
+        | Instruction::I32Ge { lhs, rhs, .. }
         | Instruction::Store32 {
             addr: lhs,
             src: rhs,
@@ -1450,6 +1570,10 @@ fn instruction_write_register(instruction: &Instruction) -> Option<(usize, Optio
         | Instruction::I32Shr { dst, .. }
         | Instruction::I32Lt { dst, .. }
         | Instruction::I32Eq { dst, .. }
+        | Instruction::I32Ne { dst, .. }
+        | Instruction::I32Le { dst, .. }
+        | Instruction::I32Gt { dst, .. }
+        | Instruction::I32Ge { dst, .. }
         | Instruction::Load32 { dst, .. }
         | Instruction::AddrAdd { dst, .. } => Some((usize::from(*dst), None)),
         Instruction::CallStatic {

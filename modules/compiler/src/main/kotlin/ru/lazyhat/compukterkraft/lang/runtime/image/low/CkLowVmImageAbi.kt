@@ -29,6 +29,10 @@ object CkLowVmImageAbi {
         const val RETURN_ADDR = 23
         const val RETURN_BOOL = 24
         const val I32_EQ = 25
+        const val I32_NE = 26
+        const val I32_LE = 27
+        const val I32_GT = 28
+        const val I32_GE = 29
     }
 
     fun encode(image: CkLowVmImage): ByteArray {
@@ -97,6 +101,10 @@ object CkLowVmImageAbi {
             is CkLowVmInstruction.I32Shr -> typedBinary(InstructionTags.I32_SHR, instruction.dst, instruction.lhs, instruction.rhs)
             is CkLowVmInstruction.I32Lt -> typedBinary(InstructionTags.I32_LT, instruction.dst, instruction.lhs, instruction.rhs)
             is CkLowVmInstruction.I32Eq -> typedBinary(InstructionTags.I32_EQ, instruction.dst, instruction.lhs, instruction.rhs)
+            is CkLowVmInstruction.I32Ne -> typedBinary(InstructionTags.I32_NE, instruction.dst, instruction.lhs, instruction.rhs)
+            is CkLowVmInstruction.I32Le -> typedBinary(InstructionTags.I32_LE, instruction.dst, instruction.lhs, instruction.rhs)
+            is CkLowVmInstruction.I32Gt -> typedBinary(InstructionTags.I32_GT, instruction.dst, instruction.lhs, instruction.rhs)
+            is CkLowVmInstruction.I32Ge -> typedBinary(InstructionTags.I32_GE, instruction.dst, instruction.lhs, instruction.rhs)
             is CkLowVmInstruction.Load32 -> typedMove(InstructionTags.LOAD32, instruction.dst, instruction.addr)
             is CkLowVmInstruction.Store32 -> typedMove(InstructionTags.STORE32, instruction.addr, instruction.src)
             is CkLowVmInstruction.AddrAdd -> typedBinary(InstructionTags.ADDR_ADD, instruction.dst, instruction.base, instruction.offset)

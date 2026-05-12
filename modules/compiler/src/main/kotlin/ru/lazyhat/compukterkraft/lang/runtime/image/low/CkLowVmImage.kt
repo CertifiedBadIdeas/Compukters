@@ -118,6 +118,30 @@ sealed interface CkLowVmInstruction {
         val rhs: Int,
     ) : CkLowVmInstruction
 
+    data class I32Ne(
+        val dst: Int,
+        val lhs: Int,
+        val rhs: Int,
+    ) : CkLowVmInstruction
+
+    data class I32Le(
+        val dst: Int,
+        val lhs: Int,
+        val rhs: Int,
+    ) : CkLowVmInstruction
+
+    data class I32Gt(
+        val dst: Int,
+        val lhs: Int,
+        val rhs: Int,
+    ) : CkLowVmInstruction
+
+    data class I32Ge(
+        val dst: Int,
+        val lhs: Int,
+        val rhs: Int,
+    ) : CkLowVmInstruction
+
     data class Load32(
         val dst: Int,
         val addr: Int,

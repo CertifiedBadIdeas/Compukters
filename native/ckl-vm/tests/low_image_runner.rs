@@ -64,6 +64,113 @@ fn runner_executes_i32_equality_comparison() {
 }
 
 #[test]
+fn runner_executes_i32_comparison_family() {
+    let cases = [
+        (
+            Instruction::I32Ne {
+                dst: 2,
+                lhs: 0,
+                rhs: 1,
+            },
+            5,
+            7,
+            true,
+        ),
+        (
+            Instruction::I32Le {
+                dst: 2,
+                lhs: 0,
+                rhs: 1,
+            },
+            5,
+            5,
+            true,
+        ),
+        (
+            Instruction::I32Gt {
+                dst: 2,
+                lhs: 0,
+                rhs: 1,
+            },
+            8,
+            3,
+            true,
+        ),
+        (
+            Instruction::I32Ge {
+                dst: 2,
+                lhs: 0,
+                rhs: 1,
+            },
+            8,
+            8,
+            true,
+        ),
+        (
+            Instruction::I32Ne {
+                dst: 2,
+                lhs: 0,
+                rhs: 1,
+            },
+            5,
+            5,
+            false,
+        ),
+        (
+            Instruction::I32Le {
+                dst: 2,
+                lhs: 0,
+                rhs: 1,
+            },
+            9,
+            5,
+            false,
+        ),
+        (
+            Instruction::I32Gt {
+                dst: 2,
+                lhs: 0,
+                rhs: 1,
+            },
+            3,
+            8,
+            false,
+        ),
+        (
+            Instruction::I32Ge {
+                dst: 2,
+                lhs: 0,
+                rhs: 1,
+            },
+            3,
+            8,
+            false,
+        ),
+    ];
+
+    for (comparison, lhs, rhs, expected) in cases {
+        let mut vm = LowImageVm::create(
+            image(
+                vec![
+                    Instruction::I32Const { dst: 0, value: lhs },
+                    Instruction::I32Const { dst: 1, value: rhs },
+                    comparison,
+                    Instruction::ReturnBool { src: 2 },
+                ],
+                3,
+            ),
+            128,
+        )
+        .unwrap();
+
+        assert_eq!(
+            vm.run_until_signal().unwrap(),
+            LowImageSignal::HaltBool(expected),
+        );
+    }
+}
+
+#[test]
 fn runner_loads_and_stores_i32_in_linear_ram() {
     let image = image(
         vec![
