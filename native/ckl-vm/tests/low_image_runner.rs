@@ -502,6 +502,45 @@ fn runner_can_be_created_with_external_machine_memory() {
 }
 
 #[test]
+fn cpu_context_runs_against_shared_memory_without_owning_it() {
+    let writer = image(
+        vec![
+            Instruction::AddrConst { dst: 0, value: 128 },
+            Instruction::I32Const { dst: 1, value: 41 },
+            Instruction::Store32 { addr: 0, src: 1 },
+            Instruction::ReturnUnit,
+        ],
+        2,
+    );
+    let reader = image(
+        vec![
+            Instruction::AddrConst { dst: 0, value: 128 },
+            Instruction::Load32 { dst: 1, addr: 0 },
+            Instruction::I32Const { dst: 2, value: 1 },
+            Instruction::I32Add {
+                dst: 3,
+                lhs: 1,
+                rhs: 2,
+            },
+            Instruction::ReturnI32 { src: 3 },
+        ],
+        4,
+    );
+    let mut memory = MachineMemory::zeroed(1024).unwrap();
+    let mut writer_cpu = LowImageVm::create_cpu_context(writer, 128).unwrap();
+    let mut reader_cpu = LowImageVm::create_cpu_context(reader, 128).unwrap();
+
+    assert_eq!(
+        writer_cpu.run_until_signal(&mut memory).unwrap(),
+        LowImageSignal::HaltUnit,
+    );
+    assert_eq!(
+        reader_cpu.run_until_signal(&mut memory).unwrap(),
+        LowImageSignal::HaltI32(42),
+    );
+}
+
+#[test]
 fn runner_can_execute_against_custom_memory_bus() {
     struct RecordingBus {
         memory: MachineMemory,
