@@ -19,12 +19,17 @@
 
 package ru.lazyhat.compukterkraft.lang.runtime.blazing
 
+import java.nio.file.Files
 import java.nio.file.Path
+import kotlin.io.path.absolutePathString
 
 internal object ComputeVmBenchmarkRunner {
     fun run(
         libraryPath: String,
+        nativeLibraryProfile: String,
+        gitCommit: String,
         rustCrateDir: Path,
+        rustTargetProfile: String,
         pythonCommand: String,
         pythonScriptPath: Path,
         iterations: Int,
@@ -41,6 +46,19 @@ internal object ComputeVmBenchmarkRunner {
         val rustNativeRunner = RustNativeComputeBenchmarkRunner(rustCrateDir)
 
         return ComputeVmBenchmarkReport(
+            metadata =
+                ComputeVmBenchmarkMetadata(
+                    nativeLibraryPath = Path.of(libraryPath).toAbsolutePath().normalize().absolutePathString(),
+                    nativeLibraryProfile = nativeLibraryProfile,
+                    nativeLibrarySizeBytes = Files.size(Path.of(libraryPath)),
+                    gitCommit = gitCommit,
+                    imageAbiVersion = "CKIM v5",
+                    javaRuntime = javaRuntime(),
+                    rustTargetProfile = rustTargetProfile,
+                    iterations = iterations,
+                    warmupIterations = warmupIterations,
+                    samples = samples,
+                ),
             samples = samples,
             workloads =
                 ComputeVmBenchmarkWorkloads.all.map { workload ->
@@ -98,4 +116,10 @@ internal object ComputeVmBenchmarkRunner {
             lowVmMetrics = lowVm.lowVmMetrics,
         )
     }
+
+    private fun javaRuntime(): String =
+        listOfNotNull(
+            System.getProperty("java.runtime.name"),
+            System.getProperty("java.runtime.version"),
+        ).joinToString(" ")
 }

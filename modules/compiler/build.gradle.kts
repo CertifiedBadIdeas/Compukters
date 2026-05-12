@@ -32,15 +32,37 @@ dependencies {
 }
 
 val rustVmNativePlatform = currentRustVmNativePlatform()
+val rustVmDebugNativeLibrary = rootProject.layout.projectDirectory.file("native/ckl-vm/target/debug/${rustVmNativePlatform.libraryName}")
 val rustVmReleaseNativeLibrary = rootProject.layout.projectDirectory.file("native/ckl-vm/target/release/${rustVmNativePlatform.libraryName}")
 val rustVmCrateDir = rootProject.layout.projectDirectory.dir("native/ckl-vm")
 val computeVmBenchmarkReports = layout.buildDirectory.dir("reports/profiling")
-val computeVmBenchmarkTsv = computeVmBenchmarkReports.map { it.file("compute-vm-benchmark.tsv") }
 
-tasks.register<Test>("profileComputeVmBenchmark") {
+fun computeBenchmarkTimestamp(): String =
+    DateTimeFormatter
+        .ofPattern("yyyyMMdd-HHmmss")
+        .withZone(ZoneOffset.UTC)
+        .format(Instant.now())
+
+fun gitHeadCommit(): String =
+    runCatching {
+        val process =
+            ProcessBuilder("git", "rev-parse", "--short=12", "HEAD")
+                .directory(rootProject.layout.projectDirectory.asFile)
+                .redirectErrorStream(true)
+                .start()
+        val output = process.inputStream.bufferedReader().readText().trim()
+        if (process.waitFor() == 0 && output.isNotBlank()) output else "unknown"
+    }.getOrDefault("unknown")
+
+fun Test.configureComputeVmBenchmarkTask(
+    nativeProfile: String,
+    nativeBuildTask: String,
+    nativeLibraryPath: String,
+) {
     group = "verification"
-    description = "Run a CPU-only CKL VM benchmark against the same workload compiled as optimized Rust."
-    dependsOn(":v1_21_1-neoforge:buildRustVmNativeLibraryRelease")
+    description = "Run a CPU-only CKL VM benchmark with the $nativeProfile Rust CKL VM JNI library."
+    dependsOn(nativeBuildTask)
+    val tsvPath = computeVmBenchmarkReports.map { it.file("compute-vm-benchmark-$nativeProfile.tsv") }
     testClassesDirs = sourceSets.test.get().output.classesDirs
     classpath = sourceSets.test.get().runtimeClasspath
     useJUnitPlatform()
@@ -49,24 +71,51 @@ tasks.register<Test>("profileComputeVmBenchmark") {
     filter {
         includeTestsMatching("ru.lazyhat.compukterkraft.lang.runtime.blazing.ComputeVmBenchmarkProfileTest")
     }
-    systemProperty("ckl.vm.native.library", rustVmReleaseNativeLibrary.asFile.absolutePath)
+    systemProperty("ckl.vm.native.library", nativeLibraryPath)
+    systemProperty("ckl.benchmark.native.library.profile", nativeProfile)
     systemProperty("ckl.benchmark.rust.crate.dir", rustVmCrateDir.asFile.absolutePath)
+    systemProperty("ckl.benchmark.rust.target.profile", "${rustVmNativePlatform.id}/$nativeProfile")
     systemProperty("ckl.benchmark.python.command", System.getProperty("ckl.benchmark.python.command") ?: "python3")
-    systemProperty("ckl.benchmark.compute.tsv.path", computeVmBenchmarkTsv.get().asFile.absolutePath)
+    systemProperty("ckl.benchmark.compute.tsv.path", tsvPath.get().asFile.absolutePath)
     systemProperty("ckl.benchmark.iterations", System.getProperty("ckl.benchmark.iterations") ?: "500000")
     systemProperty("ckl.benchmark.warmup.iterations", System.getProperty("ckl.benchmark.warmup.iterations") ?: "50000")
     systemProperty("ckl.benchmark.samples", System.getProperty("ckl.benchmark.samples") ?: "5")
     doFirst {
-        val timestamp =
-            DateTimeFormatter
-                .ofPattern("yyyyMMdd-HHmmss")
-                .withZone(ZoneOffset.UTC)
-                .format(Instant.now())
-        val markdownPath = computeVmBenchmarkReports.get().file("compute-vm-benchmark-$timestamp.md")
+        val timestamp = computeBenchmarkTimestamp()
+        val markdownPath = computeVmBenchmarkReports.get().file("compute-vm-benchmark-$nativeProfile-$timestamp.md")
+        systemProperty("ckl.benchmark.git.commit", gitHeadCommit())
         systemProperty("ckl.benchmark.compute.markdown.path", markdownPath.asFile.absolutePath)
     }
-    outputs.file(computeVmBenchmarkTsv)
+    outputs.file(tsvPath)
     outputs.dir(computeVmBenchmarkReports)
+}
+
+tasks.register<Test>("profileComputeVmBenchmarkDebug") {
+    configureComputeVmBenchmarkTask(
+        nativeProfile = "debug",
+        nativeBuildTask = ":v1_21_1-neoforge:buildRustVmNativeLibrary",
+        nativeLibraryPath = rustVmDebugNativeLibrary.asFile.absolutePath,
+    )
+}
+
+tasks.register<Test>("profileComputeVmBenchmarkRelease") {
+    configureComputeVmBenchmarkTask(
+        nativeProfile = "release",
+        nativeBuildTask = ":v1_21_1-neoforge:buildRustVmNativeLibraryRelease",
+        nativeLibraryPath = rustVmReleaseNativeLibrary.asFile.absolutePath,
+    )
+}
+
+tasks.register("profileComputeVmBenchmarkComparison") {
+    group = "verification"
+    description = "Run CPU-only CKL VM benchmarks for both debug and release Rust CKL VM JNI libraries."
+    dependsOn("profileComputeVmBenchmarkDebug", "profileComputeVmBenchmarkRelease")
+}
+
+tasks.register("profileComputeVmBenchmark") {
+    group = "verification"
+    description = "Run a CPU-only CKL VM benchmark with the release Rust CKL VM JNI library."
+    dependsOn("profileComputeVmBenchmarkRelease")
 }
 
 tasks.test {

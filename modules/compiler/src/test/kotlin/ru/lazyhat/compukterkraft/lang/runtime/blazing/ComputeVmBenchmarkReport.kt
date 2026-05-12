@@ -24,6 +24,7 @@ import java.nio.file.Path
 import kotlin.io.path.writeText
 
 internal data class ComputeVmBenchmarkReport(
+    val metadata: ComputeVmBenchmarkMetadata,
     val samples: Int,
     val workloads: List<ComputeVmBenchmarkWorkloadReport>,
 ) {
@@ -66,6 +67,16 @@ internal data class ComputeVmBenchmarkReport(
                 "CPU-only workloads. The CKL low-level CKIM v5 VM is the measured VM baseline; Kotlin/JVM, Python, and optimized native Rust are comparison baselines.",
             )
             appendLine()
+            appendLine("## Benchmark Metadata")
+            appendLine()
+            appendLine("| Key | Value |")
+            appendLine("| --- | --- |")
+            metadata.entries.forEach { (key, value) ->
+                appendLine("| ${escapeMarkdownCell(key)} | ${escapeMarkdownCell(value)} |")
+            }
+            appendLine()
+            appendLine("## Workloads")
+            appendLine()
             appendLine(
                 "| Workload | Iterations | Checksum | Low-level VM iter/s | Kotlin/JVM iter/s | Python iter/s | Rust native iter/s | Low VM vs Kotlin | Low VM vs Python | Low VM vs Rust |",
             )
@@ -103,7 +114,37 @@ internal data class ComputeVmBenchmarkReport(
         fun formatInteger(value: Int): String = "%,d".format(java.util.Locale.US, value)
 
         fun formatInteger(value: Long): String = "%,d".format(java.util.Locale.US, value)
+
+        fun escapeMarkdownCell(value: String): String = value.replace("|", "\\|")
     }
+}
+
+internal data class ComputeVmBenchmarkMetadata(
+    val nativeLibraryPath: String,
+    val nativeLibraryProfile: String,
+    val nativeLibrarySizeBytes: Long,
+    val gitCommit: String,
+    val imageAbiVersion: String,
+    val javaRuntime: String,
+    val rustTargetProfile: String,
+    val iterations: Int,
+    val warmupIterations: Int,
+    val samples: Int,
+) {
+    val entries: List<Pair<String, String>>
+        get() =
+            listOf(
+                "Native library path" to nativeLibraryPath,
+                "Native library profile" to nativeLibraryProfile,
+                "Native library size bytes" to nativeLibrarySizeBytes.toString(),
+                "Git commit" to gitCommit,
+                "Image ABI" to imageAbiVersion,
+                "Java runtime" to javaRuntime,
+                "Rust target/profile" to rustTargetProfile,
+                "Iterations" to iterations.toString(),
+                "Warmup iterations" to warmupIterations.toString(),
+                "Samples" to samples.toString(),
+            )
 }
 
 internal data class ComputeVmBenchmarkWorkloadReport(
