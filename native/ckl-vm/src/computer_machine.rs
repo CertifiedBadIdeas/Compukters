@@ -1,11 +1,15 @@
 use crate::low_bus::{MachineBus, MmioDevice, MmioDeviceId};
 use crate::low_image::Image;
-use crate::low_image_runner::{LowImageCpu, LowImageVm};
+use crate::low_image_runner::{LowCpuContext, LowImageSignal, LowImageVm};
 use crate::low_machine::{MachineMemory, MemoryFault};
+
+pub type CpuId = usize;
 
 pub struct ComputerMachine {
     bus: MachineBus,
     control_device_id: MmioDeviceId,
+    cpus: Vec<LowCpuContext>,
+    boot_cpu: Option<CpuId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -48,6 +52,8 @@ impl ComputerMachine {
         Ok(Self {
             bus,
             control_device_id,
+            cpus: Vec::new(),
+            boot_cpu: None,
         })
     }
 
@@ -80,20 +86,52 @@ impl ComputerMachine {
         }
     }
 
-    pub fn create_cpu(
+    pub fn spawn_cpu(
         &mut self,
         image: Image,
         slice_budget_nanos: u64,
-    ) -> Result<LowImageCpu<'_>, String> {
-        LowImageVm::create_cpu_with_bus(image, slice_budget_nanos, &mut self.bus)
+    ) -> Result<CpuId, String> {
+        let required_memory = usize::try_from(image.memory_size)
+            .map_err(|_| "memory size does not fit usize".to_string())?;
+        if self.bus.memory().len() < required_memory {
+            return Err(format!(
+                "image requires {required_memory} bytes but machine memory has {} bytes",
+                self.bus.memory().len(),
+            ));
+        }
+        let cpu = LowImageVm::create_cpu_context(image, slice_budget_nanos)?;
+        let cpu_id = self.cpus.len();
+        self.cpus.push(cpu);
+        Ok(cpu_id)
     }
 
-    pub fn boot_cpu(
+    pub fn spawn_boot_cpu(
         &mut self,
         kernel_image: Image,
         slice_budget_nanos: u64,
-    ) -> Result<LowImageCpu<'_>, String> {
-        self.create_cpu(kernel_image, slice_budget_nanos)
+    ) -> Result<CpuId, String> {
+        if self.boot_cpu.is_some() {
+            return Err("boot CPU is already spawned".to_string());
+        }
+        let cpu_id = self.spawn_cpu(kernel_image, slice_budget_nanos)?;
+        self.boot_cpu = Some(cpu_id);
+        Ok(cpu_id)
+    }
+
+    pub fn boot_cpu_id(&self) -> Option<CpuId> {
+        self.boot_cpu
+    }
+
+    pub fn cpu_count(&self) -> usize {
+        self.cpus.len()
+    }
+
+    pub fn run_cpu_until_signal(&mut self, cpu_id: CpuId) -> Result<LowImageSignal, String> {
+        let cpu = self
+            .cpus
+            .get_mut(cpu_id)
+            .ok_or_else(|| format!("CPU {cpu_id} is not present"))?;
+        cpu.run_until_signal(&mut self.bus)
     }
 
     pub fn control_status(&self) -> i32 {
@@ -221,14 +259,45 @@ mod tests {
             2,
         );
 
-        {
-            let mut cpu = machine.create_cpu(writer, 128).unwrap();
-            assert_eq!(cpu.run_until_signal().unwrap(), LowImageSignal::HaltUnit);
-        }
-        {
-            let mut cpu = machine.create_cpu(reader, 128).unwrap();
-            assert_eq!(cpu.run_until_signal().unwrap(), LowImageSignal::HaltI32(91));
-        }
+        let writer_cpu_id = machine.spawn_cpu(writer, 128).unwrap();
+        assert_eq!(
+            machine.run_cpu_until_signal(writer_cpu_id).unwrap(),
+            LowImageSignal::HaltUnit,
+        );
+        let reader_cpu_id = machine.spawn_cpu(reader, 128).unwrap();
+        assert_eq!(
+            machine.run_cpu_until_signal(reader_cpu_id).unwrap(),
+            LowImageSignal::HaltI32(91),
+        );
+    }
+
+    #[test]
+    fn computer_machine_owns_boot_cpu_context() {
+        let mut machine = ComputerMachine::new(1024).unwrap();
+        let kernel = image(
+            vec![
+                Instruction::AddrConst {
+                    dst: 0,
+                    value: ComputerMachine::CONTROL_STATUS,
+                },
+                Instruction::I32Const {
+                    dst: 1,
+                    value: ComputerMachine::STATUS_READY,
+                },
+                Instruction::Store32 { addr: 0, src: 1 },
+                Instruction::ReturnUnit,
+            ],
+            2,
+        );
+
+        let cpu_id = machine.spawn_boot_cpu(kernel, 128).unwrap();
+
+        assert_eq!(machine.boot_cpu_id(), Some(cpu_id));
+        assert_eq!(
+            machine.run_cpu_until_signal(cpu_id).unwrap(),
+            LowImageSignal::HaltUnit,
+        );
+        assert_eq!(machine.control_status(), ComputerMachine::STATUS_READY);
     }
 
     #[test]
@@ -262,18 +331,20 @@ mod tests {
             2,
         );
 
-        {
-            let mut cpu = machine.create_cpu(writer, 128).unwrap();
-            assert_eq!(cpu.run_until_signal().unwrap(), LowImageSignal::HaltUnit);
-        }
+        let writer_cpu_id = machine.spawn_cpu(writer, 128).unwrap();
+        assert_eq!(
+            machine.run_cpu_until_signal(writer_cpu_id).unwrap(),
+            LowImageSignal::HaltUnit,
+        );
         assert_eq!(
             machine.bus.device::<LatchDevice>(device_id).unwrap().value,
             77
         );
-        {
-            let mut cpu = machine.create_cpu(reader, 128).unwrap();
-            assert_eq!(cpu.run_until_signal().unwrap(), LowImageSignal::HaltI32(77));
-        }
+        let reader_cpu_id = machine.spawn_cpu(reader, 128).unwrap();
+        assert_eq!(
+            machine.run_cpu_until_signal(reader_cpu_id).unwrap(),
+            LowImageSignal::HaltI32(77),
+        );
     }
 
     #[test]
@@ -292,10 +363,12 @@ mod tests {
             2,
         );
 
-        let mut cpu = machine.create_cpu(kernel, 128).unwrap();
+        let cpu_id = machine.spawn_cpu(kernel, 128).unwrap();
 
-        assert_eq!(cpu.run_until_signal().unwrap(), LowImageSignal::HaltUnit);
-        drop(cpu);
+        assert_eq!(
+            machine.run_cpu_until_signal(cpu_id).unwrap(),
+            LowImageSignal::HaltUnit,
+        );
         assert_eq!(machine.control_status(), 2);
     }
 
@@ -319,13 +392,12 @@ mod tests {
             3,
         );
 
-        let mut cpu = machine.create_cpu(kernel, 128).unwrap();
+        let cpu_id = machine.spawn_cpu(kernel, 128).unwrap();
 
         assert_eq!(
-            cpu.run_until_signal().unwrap(),
+            machine.run_cpu_until_signal(cpu_id).unwrap(),
             LowImageSignal::HaltI32(0x55AA),
         );
-        drop(cpu);
         assert_eq!(machine.panic_code(), 0x55AA);
     }
 
@@ -361,10 +433,12 @@ mod tests {
             3,
         );
 
-        let mut cpu = machine.boot_cpu(kernel, 128).unwrap();
+        let cpu_id = machine.spawn_boot_cpu(kernel, 128).unwrap();
 
-        assert_eq!(cpu.run_until_signal().unwrap(), LowImageSignal::HaltUnit);
-        drop(cpu);
+        assert_eq!(
+            machine.run_cpu_until_signal(cpu_id).unwrap(),
+            LowImageSignal::HaltUnit,
+        );
         assert_eq!(machine.control_status(), ComputerMachine::STATUS_READY);
     }
 
@@ -393,10 +467,12 @@ mod tests {
             4,
         );
 
-        let mut cpu = machine.boot_cpu(kernel, 128).unwrap();
+        let cpu_id = machine.spawn_boot_cpu(kernel, 128).unwrap();
 
-        assert_eq!(cpu.run_until_signal().unwrap(), LowImageSignal::HaltUnit);
-        drop(cpu);
+        assert_eq!(
+            machine.run_cpu_until_signal(cpu_id).unwrap(),
+            LowImageSignal::HaltUnit,
+        );
         assert_eq!(machine.control_status(), ComputerMachine::STATUS_PANIC);
         assert_eq!(machine.panic_code(), 404);
     }
