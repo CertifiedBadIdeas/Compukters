@@ -1,3 +1,4 @@
+pub mod computer_machine;
 pub mod device_daemon;
 pub mod display;
 pub mod filesystem;
