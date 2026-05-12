@@ -538,6 +538,49 @@ mod tests {
     }
 
     #[test]
+    fn boot_kernel_can_panic_through_control_mmio() {
+        let mut machine = ComputerMachine::new(0x0002_0000).unwrap();
+        let kernel = image(
+            vec![
+                Instruction::AddrConst {
+                    dst: 0,
+                    value: ComputerMachine::CONTROL_STATUS,
+                },
+                Instruction::AddrConst {
+                    dst: 1,
+                    value: ComputerMachine::CONTROL_PANIC_CODE,
+                },
+                Instruction::I32Const {
+                    dst: 2,
+                    value: ComputerMachine::STATUS_BOOTING,
+                },
+                Instruction::Store32 { addr: 0, src: 2 },
+                Instruction::I32Const {
+                    dst: 3,
+                    value: 0x0BAD,
+                },
+                Instruction::Store32 { addr: 1, src: 3 },
+                Instruction::I32Const {
+                    dst: 4,
+                    value: ComputerMachine::STATUS_PANIC,
+                },
+                Instruction::Store32 { addr: 0, src: 4 },
+                Instruction::ReturnUnit,
+            ],
+            5,
+        );
+
+        let cpu_id = machine.spawn_boot_cpu(kernel, 512).unwrap();
+
+        assert_eq!(
+            machine.run_cpu_until_signal(cpu_id).unwrap(),
+            LowImageSignal::HaltUnit,
+        );
+        assert_eq!(machine.control_status(), ComputerMachine::STATUS_PANIC);
+        assert_eq!(machine.panic_code(), 0x0BAD);
+    }
+
+    #[test]
     fn computer_memory_map_describes_ram_region() {
         let machine = ComputerMachine::new(1024).unwrap();
         let map = machine.memory_map();
