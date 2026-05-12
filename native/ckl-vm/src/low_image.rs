@@ -103,6 +103,11 @@ pub enum Instruction {
         lhs: u16,
         rhs: u16,
     },
+    I32Eq {
+        dst: u16,
+        lhs: u16,
+        rhs: u16,
+    },
     Load32 {
         dst: u16,
         addr: u16,
@@ -248,6 +253,7 @@ fn read_instruction(reader: &mut Reader<'_>) -> Result<Instruction, ImageError> 
         22 => Ok(Instruction::ReturnI64 { src: reader.u16()? }),
         23 => Ok(Instruction::ReturnAddr { src: reader.u16()? }),
         24 => Ok(Instruction::ReturnBool { src: reader.u16()? }),
+        25 => read_binary(reader, |dst, lhs, rhs| Instruction::I32Eq { dst, lhs, rhs }),
         other => Err(ImageError::UnknownInstructionTag(other)),
     }
 }
