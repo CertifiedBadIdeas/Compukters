@@ -5,6 +5,7 @@ pub mod filesystem;
 pub mod image;
 pub mod image_runner;
 pub mod jni;
+pub mod low_bus;
 pub mod low_image;
 pub mod low_image_runner;
 pub mod low_machine;
