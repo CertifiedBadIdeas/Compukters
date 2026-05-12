@@ -7,7 +7,7 @@ pub struct MemoryFault {
 }
 
 impl MemoryFault {
-    fn new(message: String) -> Self {
+    pub(crate) fn new(message: String) -> Self {
         Self { message }
     }
 }

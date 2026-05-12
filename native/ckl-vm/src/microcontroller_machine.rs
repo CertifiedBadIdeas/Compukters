@@ -7,15 +7,18 @@ const GPIO_REGISTER_COUNT: usize = 16;
 pub struct MicrocontrollerMachine {
     memory: MachineMemory,
     gpio_registers: [i32; GPIO_REGISTER_COUNT],
+    timer_ticks: i32,
 }
 
 impl MicrocontrollerMachine {
     pub const GPIO_BASE: u32 = 0x1000_0000;
+    pub const TIMER_BASE: u32 = 0x1000_0100;
 
     pub fn new(memory_size: usize) -> Result<Self, MemoryFault> {
         Ok(Self {
             memory: MachineMemory::zeroed(memory_size)?,
             gpio_registers: [0; GPIO_REGISTER_COUNT],
+            timer_ticks: 0,
         })
     }
 
@@ -35,6 +38,10 @@ impl MicrocontrollerMachine {
         self.gpio_registers.get(index).copied()
     }
 
+    pub fn set_timer_ticks(&mut self, ticks: i32) {
+        self.timer_ticks = ticks;
+    }
+
     fn gpio_index(address: u32) -> Option<usize> {
         let offset = address.checked_sub(Self::GPIO_BASE)?;
         if offset % 4 != 0 {
@@ -42,6 +49,10 @@ impl MicrocontrollerMachine {
         }
         let index = (offset / 4) as usize;
         (index < GPIO_REGISTER_COUNT).then_some(index)
+    }
+
+    fn timer_index(address: u32) -> Option<usize> {
+        (address == Self::TIMER_BASE).then_some(0)
     }
 }
 
@@ -54,6 +65,9 @@ impl MemoryBus for MicrocontrollerMachine {
         if let Some(index) = Self::gpio_index(address) {
             return Ok(self.gpio_registers[index]);
         }
+        if Self::timer_index(address).is_some() {
+            return Ok(self.timer_ticks);
+        }
         self.memory.load_i32(address)
     }
 
@@ -61,6 +75,11 @@ impl MemoryBus for MicrocontrollerMachine {
         if let Some(index) = Self::gpio_index(address) {
             self.gpio_registers[index] = value;
             return Ok(());
+        }
+        if let Some(index) = Self::timer_index(address) {
+            return Err(MemoryFault::new(format!(
+                "timer register {index} is read-only"
+            )));
         }
         self.memory.store_i32(address, value)
     }
@@ -121,6 +140,53 @@ mod tests {
         assert_eq!(cpu.run_until_signal().unwrap(), LowImageSignal::HaltI32(1));
         drop(cpu);
         assert_eq!(machine.gpio_register(0), Some(1));
+    }
+
+    #[test]
+    fn microcontroller_firmware_can_read_timer_mmio_register() {
+        let mut machine = MicrocontrollerMachine::new(256).unwrap();
+        machine.set_timer_ticks(12_345);
+        let firmware = image(
+            vec![
+                Instruction::AddrConst {
+                    dst: 0,
+                    value: MicrocontrollerMachine::TIMER_BASE,
+                },
+                Instruction::Load32 { dst: 1, addr: 0 },
+                Instruction::ReturnI32 { src: 1 },
+            ],
+            2,
+        );
+
+        let mut cpu = machine.create_firmware_cpu(firmware, 128).unwrap();
+
+        assert_eq!(
+            cpu.run_until_signal().unwrap(),
+            LowImageSignal::HaltI32(12_345),
+        );
+    }
+
+    #[test]
+    fn microcontroller_timer_mmio_register_is_read_only() {
+        let mut machine = MicrocontrollerMachine::new(256).unwrap();
+        let firmware = image(
+            vec![
+                Instruction::AddrConst {
+                    dst: 0,
+                    value: MicrocontrollerMachine::TIMER_BASE,
+                },
+                Instruction::I32Const { dst: 1, value: 99 },
+                Instruction::Store32 { addr: 0, src: 1 },
+                Instruction::ReturnUnit,
+            ],
+            2,
+        );
+
+        let mut cpu = machine.create_firmware_cpu(firmware, 128).unwrap();
+
+        let error = cpu.run_until_signal().unwrap_err();
+
+        assert_eq!(error, "timer register 0 is read-only");
     }
 
     fn image(instructions: Vec<Instruction>, register_count: usize) -> Image {
