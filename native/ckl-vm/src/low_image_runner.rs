@@ -1,4 +1,5 @@
 use crate::low_image::{Function, Image, Instruction};
+use crate::low_machine::MachineMemory;
 use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -233,10 +234,6 @@ impl LowProgram {
             ));
         }
         Self::validate(&image)?;
-        let mut memory = vec![0_u8; memory_size];
-        memory[..image.rodata.len()].copy_from_slice(&image.rodata);
-        let data_start = image.rodata.len();
-        memory[data_start..data_start + image.data.len()].copy_from_slice(&image.data);
         let entry_function_index = image.entry_function_index;
         let entry_register_count = image.functions[entry_function_index].register_count;
         let entry_frame = LowFrame::create(entry_function_index, None, 0);
@@ -253,7 +250,6 @@ impl LowProgram {
             LowState {
                 frames: vec![entry_frame],
                 registers: vec![0; entry_register_count],
-                memory,
                 instructions_since_time_check: 0,
                 metrics: LowImageVmMetrics::default(),
             },
@@ -811,7 +807,6 @@ fn register_is_read_after(
 struct LowState {
     frames: Vec<LowFrame>,
     registers: Vec<u64>,
-    memory: Vec<u8>,
     instructions_since_time_check: usize,
     metrics: LowImageVmMetrics,
 }
@@ -819,21 +814,57 @@ struct LowState {
 pub struct LowImageVm {
     program: LowProgram,
     state: LowState,
+    memory: MachineMemory,
+    slice_budget: Duration,
+}
+
+pub struct LowImageCpu<'memory> {
+    program: LowProgram,
+    state: LowState,
+    memory: &'memory mut MachineMemory,
     slice_budget: Duration,
 }
 
 impl LowImageVm {
     pub fn create(image: Image, slice_budget_nanos: u64) -> Result<Self, String> {
+        let memory_size = usize::try_from(image.memory_size)
+            .map_err(|_| "memory size does not fit usize".to_string())?;
+        let memory =
+            MachineMemory::from_sections(memory_size, &image.rodata, &image.data, image.bss_size)
+                .map_err(|error| error.to_string())?;
         let (program, state) = LowProgram::create(image)?;
         Ok(Self {
             program,
             state,
+            memory,
+            slice_budget: Duration::from_nanos(slice_budget_nanos.max(1)),
+        })
+    }
+
+    pub fn create_cpu_with_memory<'memory>(
+        image: Image,
+        slice_budget_nanos: u64,
+        memory: &'memory mut MachineMemory,
+    ) -> Result<LowImageCpu<'memory>, String> {
+        let memory_size = usize::try_from(image.memory_size)
+            .map_err(|_| "memory size does not fit usize".to_string())?;
+        if memory.bytes().len() < memory_size {
+            return Err(format!(
+                "image requires {memory_size} bytes but machine memory has {} bytes",
+                memory.bytes().len(),
+            ));
+        }
+        let (program, state) = LowProgram::create(image)?;
+        Ok(LowImageCpu {
+            program,
+            state,
+            memory,
             slice_budget: Duration::from_nanos(slice_budget_nanos.max(1)),
         })
     }
 
     pub fn memory_bytes(&self) -> &[u8] {
-        &self.state.memory
+        self.memory.bytes()
     }
 
     pub fn metrics_snapshot(&self) -> LowImageVmMetrics {
@@ -841,34 +872,56 @@ impl LowImageVm {
     }
 
     pub fn run_until_signal(&mut self) -> Result<LowImageSignal, String> {
-        self.state.metrics.run_invocations = self.state.metrics.run_invocations.saturating_add(1);
-        let started_at = Instant::now();
-        loop {
-            let (function_index, block_index) = {
-                let frame = self.state.current_frame();
-                (frame.function_index, frame.block_index)
-            };
-            let block = self.program.function(function_index).block(block_index);
-            for operation in &block.operations {
-                self.state.execute_operation(operation)?;
-                if self.state.should_pause(started_at, self.slice_budget) {
-                    return Ok(LowImageSignal::Pause);
-                }
-            }
-            if let Some(signal) =
-                self.state
-                    .execute_terminator(&self.program, &block.terminator, started_at)?
-            {
-                return Ok(signal);
-            }
-            if self.state.should_pause(started_at, self.slice_budget) {
-                return Ok(LowImageSignal::Pause);
-            }
-        }
+        run_cpu_until_signal(
+            &self.program,
+            &mut self.state,
+            &mut self.memory,
+            self.slice_budget,
+        )
+    }
+}
+
+impl LowImageCpu<'_> {
+    pub fn run_until_signal(&mut self) -> Result<LowImageSignal, String> {
+        run_cpu_until_signal(
+            &self.program,
+            &mut self.state,
+            self.memory,
+            self.slice_budget,
+        )
     }
 }
 
 const TIME_CHECK_INTERVAL: usize = 1024;
+
+fn run_cpu_until_signal(
+    program: &LowProgram,
+    state: &mut LowState,
+    memory: &mut MachineMemory,
+    slice_budget: Duration,
+) -> Result<LowImageSignal, String> {
+    state.metrics.run_invocations = state.metrics.run_invocations.saturating_add(1);
+    let started_at = Instant::now();
+    loop {
+        let (function_index, block_index) = {
+            let frame = state.current_frame();
+            (frame.function_index, frame.block_index)
+        };
+        let block = program.function(function_index).block(block_index);
+        for operation in &block.operations {
+            state.execute_operation(memory, operation)?;
+            if state.should_pause(started_at, slice_budget) {
+                return Ok(LowImageSignal::Pause);
+            }
+        }
+        if let Some(signal) = state.execute_terminator(program, &block.terminator, started_at)? {
+            return Ok(signal);
+        }
+        if state.should_pause(started_at, slice_budget) {
+            return Ok(LowImageSignal::Pause);
+        }
+    }
+}
 
 impl LowState {
     fn record_elapsed(&mut self, elapsed: Duration) {
@@ -893,7 +946,11 @@ impl LowState {
         true
     }
 
-    fn execute_operation(&mut self, operation: &ExecutableOperation) -> Result<(), String> {
+    fn execute_operation(
+        &mut self,
+        memory: &mut MachineMemory,
+        operation: &ExecutableOperation,
+    ) -> Result<(), String> {
         match operation {
             ExecutableOperation::I32Const { dst, value } => self.write_i32(*dst, *value),
             ExecutableOperation::I64Const { dst, value } => self.write_i64(*dst, *value),
@@ -976,15 +1033,16 @@ impl LowState {
             }
             ExecutableOperation::Load32 { dst, addr } => {
                 let address = self.read_addr(*addr);
-                let bytes = self.memory_range(address, 4)?;
-                let mut raw = [0_u8; 4];
-                raw.copy_from_slice(bytes);
-                self.write_i32(*dst, i32::from_le_bytes(raw));
+                let value = memory
+                    .load_i32(address)
+                    .map_err(|error| error.to_string())?;
+                self.write_i32(*dst, value);
             }
             ExecutableOperation::Store32 { addr, src } => {
                 let address = self.read_addr(*addr);
-                let value = self.read_i32(*src).to_le_bytes();
-                self.memory_range_mut(address, 4)?.copy_from_slice(&value);
+                memory
+                    .store_i32(address, self.read_i32(*src))
+                    .map_err(|error| error.to_string())?;
             }
             ExecutableOperation::AddrAdd { dst, base, offset } => {
                 let base = self.read_addr(*base);
@@ -1202,30 +1260,6 @@ impl LowState {
 
     fn jump_block(&mut self, target_block: usize) {
         self.current_frame_mut().block_index = target_block;
-    }
-
-    fn memory_range(&self, address: u32, size: usize) -> Result<&[u8], String> {
-        let start = address as usize;
-        let end = start
-            .checked_add(size)
-            .ok_or_else(|| format!("memory access starts at {address} and overflows usize"))?;
-        self.memory.get(start..end).ok_or_else(|| {
-            format!(
-                "memory access {start}..{end} is outside {} bytes",
-                self.memory.len(),
-            )
-        })
-    }
-
-    fn memory_range_mut(&mut self, address: u32, size: usize) -> Result<&mut [u8], String> {
-        let start = address as usize;
-        let end = start
-            .checked_add(size)
-            .ok_or_else(|| format!("memory access starts at {address} and overflows usize"))?;
-        let len = self.memory.len();
-        self.memory
-            .get_mut(start..end)
-            .ok_or_else(|| format!("memory access {start}..{end} is outside {len} bytes"))
     }
 }
 
