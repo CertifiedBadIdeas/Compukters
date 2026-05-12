@@ -856,10 +856,7 @@ impl LowImageVm {
             MachineMemory::from_sections(memory_size, &image.rodata, &image.data, image.bss_size)
                 .map_err(|error| error.to_string())?;
         let context = Self::create_cpu_context(image, slice_budget_nanos)?;
-        Ok(Self {
-            context,
-            memory,
-        })
+        Ok(Self { context, memory })
     }
 
     pub fn create_cpu_context(
@@ -919,12 +916,7 @@ impl LowCpuContext {
         &mut self,
         memory: &mut dyn MemoryBus,
     ) -> Result<LowImageSignal, String> {
-        run_cpu_until_signal(
-            &self.program,
-            &mut self.state,
-            memory,
-            self.slice_budget,
-        )
+        run_cpu_until_signal(&self.program, &mut self.state, memory, self.slice_budget)
     }
 
     pub fn metrics_snapshot(&self) -> LowImageVmMetrics {

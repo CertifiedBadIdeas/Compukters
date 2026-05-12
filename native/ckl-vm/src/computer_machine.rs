@@ -86,11 +86,7 @@ impl ComputerMachine {
         }
     }
 
-    pub fn spawn_cpu(
-        &mut self,
-        image: Image,
-        slice_budget_nanos: u64,
-    ) -> Result<CpuId, String> {
+    pub fn spawn_cpu(&mut self, image: Image, slice_budget_nanos: u64) -> Result<CpuId, String> {
         let required_memory = usize::try_from(image.memory_size)
             .map_err(|_| "memory size does not fit usize".to_string())?;
         if self.bus.memory().len() < required_memory {
