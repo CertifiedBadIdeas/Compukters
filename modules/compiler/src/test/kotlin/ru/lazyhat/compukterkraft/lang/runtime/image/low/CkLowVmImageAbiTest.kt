@@ -52,6 +52,53 @@ class CkLowVmImageAbiTest {
     }
 
     @Test
+    fun lowImageAbiEncodesI32EqualityInstruction() {
+        val bytes =
+            CkLowVmImageAbi.encode(
+                CkLowVmImage(
+                    languageVersion = "ckl-low-1",
+                    memorySize = 1024u,
+                    entryFunctionIndex = 0,
+                    functions =
+                        listOf(
+                            CkLowVmFunction(
+                                name = "main",
+                                registerCount = 3,
+                                parameters = emptyList(),
+                                instructions =
+                                    listOf(
+                                        CkLowVmInstruction.I32Eq(dst = 2, lhs = 0, rhs = 1),
+                                        CkLowVmInstruction.ReturnBool(src = 2),
+                                    ),
+                            ),
+                        ),
+                ),
+            )
+        val reader = LowTestReader(bytes)
+
+        assertEquals("CKIM", reader.ascii(4))
+        assertEquals(CkLowVmImageAbi.VERSION, reader.u8())
+        assertEquals("ckl-low-1", reader.string())
+        assertEquals(1024u, reader.u32())
+        assertEquals(emptyList(), reader.bytes().toList())
+        assertEquals(emptyList(), reader.bytes().toList())
+        assertEquals(0u, reader.u32())
+        assertEquals(0, reader.i32())
+        assertEquals(1, reader.i32())
+        assertEquals("main", reader.string())
+        assertEquals(3, reader.u16())
+        assertEquals(emptyList(), reader.registerList())
+        assertEquals(2, reader.i32())
+        assertEquals(CkLowVmImageAbi.InstructionTags.I32_EQ, reader.u8())
+        assertEquals(2, reader.u16())
+        assertEquals(0, reader.u16())
+        assertEquals(1, reader.u16())
+        assertEquals(CkLowVmImageAbi.InstructionTags.RETURN_BOOL, reader.u8())
+        assertEquals(2, reader.u16())
+        assertEquals(bytes.size, reader.offset)
+    }
+
+    @Test
     fun writesLowGoldenFixtureWhenPathIsProvided() {
         val path = System.getProperty("ckl.low.image.golden.path")?.takeIf(String::isNotBlank) ?: return
 

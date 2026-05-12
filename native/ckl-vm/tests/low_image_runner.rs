@@ -22,6 +22,48 @@ fn runner_executes_i32_arithmetic_without_value_objects() {
 }
 
 #[test]
+fn runner_executes_i32_equality_comparison() {
+    let equal = image(
+        vec![
+            Instruction::I32Const { dst: 0, value: 5 },
+            Instruction::I32Const { dst: 1, value: 5 },
+            Instruction::I32Eq {
+                dst: 2,
+                lhs: 0,
+                rhs: 1,
+            },
+            Instruction::ReturnBool { src: 2 },
+        ],
+        3,
+    );
+    let not_equal = image(
+        vec![
+            Instruction::I32Const { dst: 0, value: 5 },
+            Instruction::I32Const { dst: 1, value: 7 },
+            Instruction::I32Eq {
+                dst: 2,
+                lhs: 0,
+                rhs: 1,
+            },
+            Instruction::ReturnBool { src: 2 },
+        ],
+        3,
+    );
+
+    let mut equal_vm = LowImageVm::create(equal, 128).unwrap();
+    let mut not_equal_vm = LowImageVm::create(not_equal, 128).unwrap();
+
+    assert_eq!(
+        equal_vm.run_until_signal().unwrap(),
+        LowImageSignal::HaltBool(true),
+    );
+    assert_eq!(
+        not_equal_vm.run_until_signal().unwrap(),
+        LowImageSignal::HaltBool(false),
+    );
+}
+
+#[test]
 fn runner_loads_and_stores_i32_in_linear_ram() {
     let image = image(
         vec![
