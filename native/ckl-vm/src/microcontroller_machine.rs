@@ -1,3 +1,4 @@
+use crate::low_bus::{MachineBus, MmioDevice, MmioDeviceId};
 use crate::low_image::Image;
 use crate::low_image_runner::{LowImageCpu, LowImageVm};
 use crate::low_machine::{MachineMemory, MemoryBus, MemoryFault};
@@ -5,9 +6,9 @@ use crate::low_machine::{MachineMemory, MemoryBus, MemoryFault};
 const GPIO_REGISTER_COUNT: usize = 16;
 
 pub struct MicrocontrollerMachine {
-    memory: MachineMemory,
-    gpio_registers: [i32; GPIO_REGISTER_COUNT],
-    timer_ticks: i32,
+    bus: MachineBus,
+    gpio_device_id: MmioDeviceId,
+    timer_device_id: MmioDeviceId,
 }
 
 impl MicrocontrollerMachine {
@@ -15,15 +16,18 @@ impl MicrocontrollerMachine {
     pub const TIMER_BASE: u32 = 0x1000_0100;
 
     pub fn new(memory_size: usize) -> Result<Self, MemoryFault> {
+        let mut bus = MachineBus::new(memory_size)?;
+        let gpio_device_id = bus.map_mmio(Self::GPIO_BASE, Box::new(GpioDevice::new()))?;
+        let timer_device_id = bus.map_mmio(Self::TIMER_BASE, Box::new(TimerDevice::new()))?;
         Ok(Self {
-            memory: MachineMemory::zeroed(memory_size)?,
-            gpio_registers: [0; GPIO_REGISTER_COUNT],
-            timer_ticks: 0,
+            bus,
+            gpio_device_id,
+            timer_device_id,
         })
     }
 
     pub fn memory(&self) -> &MachineMemory {
-        &self.memory
+        self.bus.memory()
     }
 
     pub fn create_firmware_cpu(
@@ -31,57 +35,122 @@ impl MicrocontrollerMachine {
         image: Image,
         slice_budget_nanos: u64,
     ) -> Result<LowImageCpu<'_>, String> {
-        LowImageVm::create_cpu_with_bus(image, slice_budget_nanos, self)
+        LowImageVm::create_cpu_with_bus(image, slice_budget_nanos, &mut self.bus)
     }
 
     pub fn gpio_register(&self, index: usize) -> Option<i32> {
-        self.gpio_registers.get(index).copied()
+        self.bus
+            .device::<GpioDevice>(self.gpio_device_id)
+            .and_then(|device| device.register(index))
     }
 
     pub fn set_timer_ticks(&mut self, ticks: i32) {
-        self.timer_ticks = ticks;
+        if let Some(timer) = self.bus.device_mut::<TimerDevice>(self.timer_device_id) {
+            timer.set_ticks(ticks);
+        }
+    }
+}
+
+struct GpioDevice {
+    registers: [i32; GPIO_REGISTER_COUNT],
+}
+
+impl GpioDevice {
+    fn new() -> Self {
+        Self {
+            registers: [0; GPIO_REGISTER_COUNT],
+        }
     }
 
-    fn gpio_index(address: u32) -> Option<usize> {
-        let offset = address.checked_sub(Self::GPIO_BASE)?;
+    fn register(&self, index: usize) -> Option<i32> {
+        self.registers.get(index).copied()
+    }
+
+    fn register_index(offset: u32) -> Result<usize, MemoryFault> {
         if offset % 4 != 0 {
-            return None;
+            return Err(MemoryFault::new(format!(
+                "gpio register offset {offset} is not aligned",
+            )));
         }
         let index = (offset / 4) as usize;
-        (index < GPIO_REGISTER_COUNT).then_some(index)
+        if index >= GPIO_REGISTER_COUNT {
+            return Err(MemoryFault::new(format!(
+                "gpio register index {index} is outside {GPIO_REGISTER_COUNT} registers",
+            )));
+        }
+        Ok(index)
+    }
+}
+
+impl MmioDevice for GpioDevice {
+    fn size(&self) -> u32 {
+        (GPIO_REGISTER_COUNT as u32) * 4
     }
 
-    fn timer_index(address: u32) -> Option<usize> {
-        (address == Self::TIMER_BASE).then_some(0)
+    fn load_i32(&self, offset: u32) -> Result<i32, MemoryFault> {
+        Ok(self.registers[Self::register_index(offset)?])
+    }
+
+    fn store_i32(&mut self, offset: u32, value: i32) -> Result<(), MemoryFault> {
+        let index = Self::register_index(offset)?;
+        self.registers[index] = value;
+        Ok(())
+    }
+}
+
+struct TimerDevice {
+    ticks: i32,
+}
+
+impl TimerDevice {
+    fn new() -> Self {
+        Self { ticks: 0 }
+    }
+
+    fn set_ticks(&mut self, ticks: i32) {
+        self.ticks = ticks;
+    }
+
+    fn check_offset(offset: u32) -> Result<(), MemoryFault> {
+        if offset == 0 {
+            Ok(())
+        } else {
+            Err(MemoryFault::new(format!(
+                "timer register offset {offset} is outside timer register 0",
+            )))
+        }
+    }
+}
+
+impl MmioDevice for TimerDevice {
+    fn size(&self) -> u32 {
+        4
+    }
+
+    fn load_i32(&self, offset: u32) -> Result<i32, MemoryFault> {
+        Self::check_offset(offset)?;
+        Ok(self.ticks)
+    }
+
+    fn store_i32(&mut self, offset: u32, _value: i32) -> Result<(), MemoryFault> {
+        Self::check_offset(offset)?;
+        Err(MemoryFault::new(
+            "timer register 0 is read-only".to_string(),
+        ))
     }
 }
 
 impl MemoryBus for MicrocontrollerMachine {
     fn len(&self) -> usize {
-        self.memory.len()
+        self.bus.len()
     }
 
     fn load_i32(&self, address: u32) -> Result<i32, MemoryFault> {
-        if let Some(index) = Self::gpio_index(address) {
-            return Ok(self.gpio_registers[index]);
-        }
-        if Self::timer_index(address).is_some() {
-            return Ok(self.timer_ticks);
-        }
-        self.memory.load_i32(address)
+        self.bus.load_i32(address)
     }
 
     fn store_i32(&mut self, address: u32, value: i32) -> Result<(), MemoryFault> {
-        if let Some(index) = Self::gpio_index(address) {
-            self.gpio_registers[index] = value;
-            return Ok(());
-        }
-        if let Some(index) = Self::timer_index(address) {
-            return Err(MemoryFault::new(format!(
-                "timer register {index} is read-only"
-            )));
-        }
-        self.memory.store_i32(address, value)
+        self.bus.store_i32(address, value)
     }
 }
 
