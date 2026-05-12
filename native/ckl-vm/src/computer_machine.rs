@@ -1,16 +1,25 @@
-use crate::low_bus::MachineBus;
+use crate::low_bus::{MachineBus, MmioDevice, MmioDeviceId};
 use crate::low_image::Image;
 use crate::low_image_runner::{LowImageCpu, LowImageVm};
 use crate::low_machine::{MachineMemory, MemoryFault};
 
 pub struct ComputerMachine {
     bus: MachineBus,
+    control_device_id: MmioDeviceId,
 }
 
 impl ComputerMachine {
+    pub const CONTROL_BASE: u32 = 0x1000_0000;
+    pub const CONTROL_STATUS: u32 = Self::CONTROL_BASE;
+    pub const CONTROL_PANIC_CODE: u32 = Self::CONTROL_BASE + 4;
+
     pub fn new(memory_size: usize) -> Result<Self, MemoryFault> {
+        let mut bus = MachineBus::new(memory_size)?;
+        let control_device_id =
+            bus.map_mmio(Self::CONTROL_BASE, Box::new(ComputerControlDevice::new()))?;
         Ok(Self {
-            bus: MachineBus::new(memory_size)?,
+            bus,
+            control_device_id,
         })
     }
 
@@ -28,6 +37,69 @@ impl ComputerMachine {
         slice_budget_nanos: u64,
     ) -> Result<LowImageCpu<'_>, String> {
         LowImageVm::create_cpu_with_bus(image, slice_budget_nanos, &mut self.bus)
+    }
+
+    pub fn control_status(&self) -> i32 {
+        self.control_device().status
+    }
+
+    pub fn panic_code(&self) -> i32 {
+        self.control_device().panic_code
+    }
+
+    fn control_device(&self) -> &ComputerControlDevice {
+        self.bus
+            .device::<ComputerControlDevice>(self.control_device_id)
+            .expect("computer control device must be mapped")
+    }
+}
+
+struct ComputerControlDevice {
+    status: i32,
+    panic_code: i32,
+}
+
+impl ComputerControlDevice {
+    fn new() -> Self {
+        Self {
+            status: 0,
+            panic_code: 0,
+        }
+    }
+
+    fn register_for_offset(&mut self, offset: u32) -> Result<&mut i32, MemoryFault> {
+        match offset {
+            0 => Ok(&mut self.status),
+            4 => Ok(&mut self.panic_code),
+            _ => Err(MemoryFault::new(format!(
+                "computer control offset {offset} is not mapped",
+            ))),
+        }
+    }
+
+    fn value_for_offset(&self, offset: u32) -> Result<i32, MemoryFault> {
+        match offset {
+            0 => Ok(self.status),
+            4 => Ok(self.panic_code),
+            _ => Err(MemoryFault::new(format!(
+                "computer control offset {offset} is not mapped",
+            ))),
+        }
+    }
+}
+
+impl MmioDevice for ComputerControlDevice {
+    fn size(&self) -> u32 {
+        8
+    }
+
+    fn load_i32(&self, offset: u32) -> Result<i32, MemoryFault> {
+        self.value_for_offset(offset)
+    }
+
+    fn store_i32(&mut self, offset: u32, value: i32) -> Result<(), MemoryFault> {
+        *self.register_for_offset(offset)? = value;
+        Ok(())
     }
 }
 
@@ -105,13 +177,13 @@ mod tests {
         let mut machine = ComputerMachine::new(1024).unwrap();
         let device_id = machine
             .bus
-            .map_mmio(0x1000_0000, Box::new(LatchDevice { value: 0 }))
+            .map_mmio(0x1000_1000, Box::new(LatchDevice { value: 0 }))
             .unwrap();
         let writer = image(
             vec![
                 Instruction::AddrConst {
                     dst: 0,
-                    value: 0x1000_0000,
+                    value: 0x1000_1000,
                 },
                 Instruction::I32Const { dst: 1, value: 77 },
                 Instruction::Store32 { addr: 0, src: 1 },
@@ -123,7 +195,7 @@ mod tests {
             vec![
                 Instruction::AddrConst {
                     dst: 0,
-                    value: 0x1000_0000,
+                    value: 0x1000_1000,
                 },
                 Instruction::Load32 { dst: 1, addr: 0 },
                 Instruction::ReturnI32 { src: 1 },
@@ -143,6 +215,59 @@ mod tests {
             let mut cpu = machine.create_cpu(reader, 128).unwrap();
             assert_eq!(cpu.run_until_signal().unwrap(), LowImageSignal::HaltI32(77));
         }
+    }
+
+    #[test]
+    fn computer_kernel_can_write_machine_control_status() {
+        let mut machine = ComputerMachine::new(1024).unwrap();
+        let kernel = image(
+            vec![
+                Instruction::AddrConst {
+                    dst: 0,
+                    value: ComputerMachine::CONTROL_STATUS,
+                },
+                Instruction::I32Const { dst: 1, value: 2 },
+                Instruction::Store32 { addr: 0, src: 1 },
+                Instruction::ReturnUnit,
+            ],
+            2,
+        );
+
+        let mut cpu = machine.create_cpu(kernel, 128).unwrap();
+
+        assert_eq!(cpu.run_until_signal().unwrap(), LowImageSignal::HaltUnit);
+        drop(cpu);
+        assert_eq!(machine.control_status(), 2);
+    }
+
+    #[test]
+    fn computer_kernel_can_write_machine_panic_code() {
+        let mut machine = ComputerMachine::new(1024).unwrap();
+        let kernel = image(
+            vec![
+                Instruction::AddrConst {
+                    dst: 0,
+                    value: ComputerMachine::CONTROL_PANIC_CODE,
+                },
+                Instruction::I32Const {
+                    dst: 1,
+                    value: 0x55AA,
+                },
+                Instruction::Store32 { addr: 0, src: 1 },
+                Instruction::Load32 { dst: 2, addr: 0 },
+                Instruction::ReturnI32 { src: 2 },
+            ],
+            3,
+        );
+
+        let mut cpu = machine.create_cpu(kernel, 128).unwrap();
+
+        assert_eq!(
+            cpu.run_until_signal().unwrap(),
+            LowImageSignal::HaltI32(0x55AA),
+        );
+        drop(cpu);
+        assert_eq!(machine.panic_code(), 0x55AA);
     }
 
     fn image(instructions: Vec<Instruction>, register_count: usize) -> Image {
