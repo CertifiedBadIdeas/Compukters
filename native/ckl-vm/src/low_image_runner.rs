@@ -49,7 +49,6 @@ struct ExecutableBlock {
 
 struct BlockLocation {
     block_index: usize,
-    operation_index: usize,
 }
 
 struct StaticCallBinding {
@@ -57,6 +56,7 @@ struct StaticCallBinding {
     caller_argument: usize,
 }
 
+#[derive(Clone)]
 enum ExecutableOperation {
     I32Const {
         dst: usize,
@@ -83,15 +83,36 @@ enum ExecutableOperation {
         lhs: usize,
         rhs: usize,
     },
+    I32AddImm {
+        dst: usize,
+        lhs: usize,
+        rhs: i32,
+    },
     I32Sub {
         dst: usize,
         lhs: usize,
         rhs: usize,
     },
+    I32SubImm {
+        dst: usize,
+        lhs: usize,
+        rhs: i32,
+    },
     I32Mul {
         dst: usize,
         lhs: usize,
         rhs: usize,
+    },
+    I32MulImm {
+        dst: usize,
+        lhs: usize,
+        rhs: i32,
+    },
+    I32MulAddImm {
+        dst: usize,
+        lhs: usize,
+        mul: i32,
+        add: i32,
     },
     I32Div {
         dst: usize,
@@ -103,20 +124,40 @@ enum ExecutableOperation {
         lhs: usize,
         rhs: usize,
     },
+    I32BitXorImm {
+        dst: usize,
+        lhs: usize,
+        rhs: i32,
+    },
     I32Shl {
         dst: usize,
         lhs: usize,
         rhs: usize,
+    },
+    I32ShlImm {
+        dst: usize,
+        lhs: usize,
+        rhs: i32,
     },
     I32Shr {
         dst: usize,
         lhs: usize,
         rhs: usize,
     },
+    I32ShrImm {
+        dst: usize,
+        lhs: usize,
+        rhs: i32,
+    },
     I32Lt {
         dst: usize,
         lhs: usize,
         rhs: usize,
+    },
+    I32LtImm {
+        dst: usize,
+        lhs: usize,
+        rhs: i32,
     },
     Load32 {
         dst: usize,
@@ -367,6 +408,7 @@ impl LowFunction {
     fn compile(image: &Image, function: &Function) -> Self {
         let block_starts = block_starts(function);
         let instruction_to_block = instruction_to_block(function.instructions.len(), &block_starts);
+        let function_constants = stable_i32_constants(function);
         let blocks = block_starts
             .iter()
             .enumerate()
@@ -382,6 +424,7 @@ impl LowFunction {
                     end,
                     block_index,
                     &instruction_to_block,
+                    &function_constants,
                 )
             })
             .collect();
@@ -403,10 +446,9 @@ impl LowFunction {
             .iter()
             .enumerate()
             .all(|(instruction_index, location)| {
-                self.blocks.get(location.block_index).is_some_and(|block| {
-                    instruction_index >= block.original_start_ip
-                        && location.operation_index <= block.operations.len()
-                })
+                self.blocks
+                    .get(location.block_index)
+                    .is_some_and(|block| instruction_index >= block.original_start_ip)
             })
     }
 }
@@ -419,6 +461,7 @@ impl ExecutableBlock {
         end: usize,
         block_index: usize,
         instruction_to_block: &[BlockLocation],
+        function_constants: &[Option<i32>],
     ) -> Self {
         let last_ip = end - 1;
         let last_instruction = &function.instructions[last_ip];
@@ -482,10 +525,12 @@ impl ExecutableBlock {
                 },
             ),
         };
+        let mut known_i32 = function_constants.to_vec();
         let operations = function.instructions[start..operation_end]
             .iter()
-            .map(ExecutableOperation::compile)
+            .map(|instruction| ExecutableOperation::compile(instruction, &mut known_i32))
             .collect();
+        let operations = fuse_block_operations(operations, &terminator);
 
         debug_assert!(instruction_to_block[start].block_index == block_index);
         Self {
@@ -497,81 +542,123 @@ impl ExecutableBlock {
 }
 
 impl ExecutableOperation {
-    fn compile(instruction: &Instruction) -> Self {
+    fn compile(instruction: &Instruction, known_i32: &mut [Option<i32>]) -> Self {
         match instruction {
-            Instruction::I32Const { dst, value } => Self::I32Const {
-                dst: usize::from(*dst),
-                value: *value,
-            },
-            Instruction::I64Const { dst, value } => Self::I64Const {
-                dst: usize::from(*dst),
-                value: *value,
-            },
-            Instruction::AddrConst { dst, value } => Self::AddrConst {
-                dst: usize::from(*dst),
-                value: *value,
-            },
-            Instruction::I32Move { dst, src } => Self::I32Move {
-                dst: usize::from(*dst),
-                src: usize::from(*src),
-            },
-            Instruction::AddrMove { dst, src } => Self::AddrMove {
-                dst: usize::from(*dst),
-                src: usize::from(*src),
-            },
-            Instruction::I32Add { dst, lhs, rhs } => Self::I32Add {
-                dst: usize::from(*dst),
-                lhs: usize::from(*lhs),
-                rhs: usize::from(*rhs),
-            },
-            Instruction::I32Sub { dst, lhs, rhs } => Self::I32Sub {
-                dst: usize::from(*dst),
-                lhs: usize::from(*lhs),
-                rhs: usize::from(*rhs),
-            },
-            Instruction::I32Mul { dst, lhs, rhs } => Self::I32Mul {
-                dst: usize::from(*dst),
-                lhs: usize::from(*lhs),
-                rhs: usize::from(*rhs),
-            },
-            Instruction::I32Div { dst, lhs, rhs } => Self::I32Div {
-                dst: usize::from(*dst),
-                lhs: usize::from(*lhs),
-                rhs: usize::from(*rhs),
-            },
-            Instruction::I32BitXor { dst, lhs, rhs } => Self::I32BitXor {
-                dst: usize::from(*dst),
-                lhs: usize::from(*lhs),
-                rhs: usize::from(*rhs),
-            },
-            Instruction::I32Shl { dst, lhs, rhs } => Self::I32Shl {
-                dst: usize::from(*dst),
-                lhs: usize::from(*lhs),
-                rhs: usize::from(*rhs),
-            },
-            Instruction::I32Shr { dst, lhs, rhs } => Self::I32Shr {
-                dst: usize::from(*dst),
-                lhs: usize::from(*lhs),
-                rhs: usize::from(*rhs),
-            },
-            Instruction::I32Lt { dst, lhs, rhs } => Self::I32Lt {
-                dst: usize::from(*dst),
-                lhs: usize::from(*lhs),
-                rhs: usize::from(*rhs),
-            },
-            Instruction::Load32 { dst, addr } => Self::Load32 {
-                dst: usize::from(*dst),
-                addr: usize::from(*addr),
-            },
+            Instruction::I32Const { dst, value } => {
+                let dst = usize::from(*dst);
+                known_i32[dst] = Some(*value);
+                Self::I32Const { dst, value: *value }
+            }
+            Instruction::I64Const { dst, value } => {
+                let dst = usize::from(*dst);
+                known_i32[dst] = None;
+                Self::I64Const { dst, value: *value }
+            }
+            Instruction::AddrConst { dst, value } => {
+                let dst = usize::from(*dst);
+                known_i32[dst] = None;
+                Self::AddrConst { dst, value: *value }
+            }
+            Instruction::I32Move { dst, src } => {
+                let dst = usize::from(*dst);
+                let src = usize::from(*src);
+                known_i32[dst] = known_i32[src];
+                Self::I32Move { dst, src }
+            }
+            Instruction::AddrMove { dst, src } => {
+                let dst = usize::from(*dst);
+                known_i32[dst] = None;
+                Self::AddrMove {
+                    dst,
+                    src: usize::from(*src),
+                }
+            }
+            Instruction::I32Add { dst, lhs, rhs } => compile_i32_binary_imm(
+                known_i32,
+                *dst,
+                *lhs,
+                *rhs,
+                |dst, lhs, rhs| ExecutableOperation::I32Add { dst, lhs, rhs },
+                |dst, lhs, rhs| ExecutableOperation::I32AddImm { dst, lhs, rhs },
+            ),
+            Instruction::I32Sub { dst, lhs, rhs } => compile_i32_binary_imm(
+                known_i32,
+                *dst,
+                *lhs,
+                *rhs,
+                |dst, lhs, rhs| ExecutableOperation::I32Sub { dst, lhs, rhs },
+                |dst, lhs, rhs| ExecutableOperation::I32SubImm { dst, lhs, rhs },
+            ),
+            Instruction::I32Mul { dst, lhs, rhs } => compile_i32_binary_imm(
+                known_i32,
+                *dst,
+                *lhs,
+                *rhs,
+                |dst, lhs, rhs| ExecutableOperation::I32Mul { dst, lhs, rhs },
+                |dst, lhs, rhs| ExecutableOperation::I32MulImm { dst, lhs, rhs },
+            ),
+            Instruction::I32Div { dst, lhs, rhs } => {
+                let dst = usize::from(*dst);
+                known_i32[dst] = None;
+                Self::I32Div {
+                    dst,
+                    lhs: usize::from(*lhs),
+                    rhs: usize::from(*rhs),
+                }
+            }
+            Instruction::I32BitXor { dst, lhs, rhs } => compile_i32_binary_imm(
+                known_i32,
+                *dst,
+                *lhs,
+                *rhs,
+                |dst, lhs, rhs| ExecutableOperation::I32BitXor { dst, lhs, rhs },
+                |dst, lhs, rhs| ExecutableOperation::I32BitXorImm { dst, lhs, rhs },
+            ),
+            Instruction::I32Shl { dst, lhs, rhs } => compile_i32_binary_imm(
+                known_i32,
+                *dst,
+                *lhs,
+                *rhs,
+                |dst, lhs, rhs| ExecutableOperation::I32Shl { dst, lhs, rhs },
+                |dst, lhs, rhs| ExecutableOperation::I32ShlImm { dst, lhs, rhs },
+            ),
+            Instruction::I32Shr { dst, lhs, rhs } => compile_i32_binary_imm(
+                known_i32,
+                *dst,
+                *lhs,
+                *rhs,
+                |dst, lhs, rhs| ExecutableOperation::I32Shr { dst, lhs, rhs },
+                |dst, lhs, rhs| ExecutableOperation::I32ShrImm { dst, lhs, rhs },
+            ),
+            Instruction::I32Lt { dst, lhs, rhs } => compile_i32_binary_imm(
+                known_i32,
+                *dst,
+                *lhs,
+                *rhs,
+                |dst, lhs, rhs| ExecutableOperation::I32Lt { dst, lhs, rhs },
+                |dst, lhs, rhs| ExecutableOperation::I32LtImm { dst, lhs, rhs },
+            ),
+            Instruction::Load32 { dst, addr } => {
+                let dst = usize::from(*dst);
+                known_i32[dst] = None;
+                Self::Load32 {
+                    dst,
+                    addr: usize::from(*addr),
+                }
+            }
             Instruction::Store32 { addr, src } => Self::Store32 {
                 addr: usize::from(*addr),
                 src: usize::from(*src),
             },
-            Instruction::AddrAdd { dst, base, offset } => Self::AddrAdd {
-                dst: usize::from(*dst),
-                base: usize::from(*base),
-                offset: usize::from(*offset),
-            },
+            Instruction::AddrAdd { dst, base, offset } => {
+                let dst = usize::from(*dst);
+                known_i32[dst] = None;
+                Self::AddrAdd {
+                    dst,
+                    base: usize::from(*base),
+                    offset: usize::from(*offset),
+                }
+            }
             Instruction::Jump { .. }
             | Instruction::JumpIfFalse { .. }
             | Instruction::CallStatic { .. }
@@ -582,6 +669,143 @@ impl ExecutableOperation {
             | Instruction::ReturnUnit => unreachable!("control instructions are block terminators"),
         }
     }
+
+    fn reads_register(&self, register: usize) -> bool {
+        match self {
+            ExecutableOperation::I32Const { .. }
+            | ExecutableOperation::I64Const { .. }
+            | ExecutableOperation::AddrConst { .. } => false,
+            ExecutableOperation::I32Move { src, .. }
+            | ExecutableOperation::AddrMove { src, .. }
+            | ExecutableOperation::Load32 { addr: src, .. } => *src == register,
+            ExecutableOperation::I32Add { lhs, rhs, .. }
+            | ExecutableOperation::I32Sub { lhs, rhs, .. }
+            | ExecutableOperation::I32Mul { lhs, rhs, .. }
+            | ExecutableOperation::I32Div { lhs, rhs, .. }
+            | ExecutableOperation::I32BitXor { lhs, rhs, .. }
+            | ExecutableOperation::I32Shl { lhs, rhs, .. }
+            | ExecutableOperation::I32Shr { lhs, rhs, .. }
+            | ExecutableOperation::I32Lt { lhs, rhs, .. }
+            | ExecutableOperation::Store32 {
+                addr: lhs,
+                src: rhs,
+                ..
+            }
+            | ExecutableOperation::AddrAdd {
+                base: lhs,
+                offset: rhs,
+                ..
+            } => *lhs == register || *rhs == register,
+            ExecutableOperation::I32AddImm { lhs, .. }
+            | ExecutableOperation::I32SubImm { lhs, .. }
+            | ExecutableOperation::I32MulImm { lhs, .. }
+            | ExecutableOperation::I32MulAddImm { lhs, .. }
+            | ExecutableOperation::I32BitXorImm { lhs, .. }
+            | ExecutableOperation::I32ShlImm { lhs, .. }
+            | ExecutableOperation::I32ShrImm { lhs, .. }
+            | ExecutableOperation::I32LtImm { lhs, .. } => *lhs == register,
+        }
+    }
+}
+
+impl BlockTerminator {
+    fn reads_register(&self, register: usize) -> bool {
+        match self {
+            BlockTerminator::Fallthrough { .. } | BlockTerminator::Jump { .. } => false,
+            BlockTerminator::JumpIfFalse { cond, .. } => *cond == register,
+            BlockTerminator::CallStatic { bindings, .. } => bindings
+                .iter()
+                .any(|binding| binding.caller_argument == register),
+            BlockTerminator::ReturnI32 { src }
+            | BlockTerminator::ReturnI64 { src }
+            | BlockTerminator::ReturnAddr { src }
+            | BlockTerminator::ReturnBool { src } => *src == register,
+            BlockTerminator::ReturnUnit => false,
+        }
+    }
+}
+
+fn compile_i32_binary_imm(
+    known_i32: &mut [Option<i32>],
+    dst: u16,
+    lhs: u16,
+    rhs: u16,
+    register_operation: impl FnOnce(usize, usize, usize) -> ExecutableOperation,
+    immediate_operation: impl FnOnce(usize, usize, i32) -> ExecutableOperation,
+) -> ExecutableOperation {
+    let dst = usize::from(dst);
+    let lhs = usize::from(lhs);
+    let rhs = usize::from(rhs);
+    let rhs_value = known_i32[rhs];
+    known_i32[dst] = None;
+    match rhs_value {
+        Some(value) => immediate_operation(dst, lhs, value),
+        None => register_operation(dst, lhs, rhs),
+    }
+}
+
+fn fuse_block_operations(
+    operations: Vec<ExecutableOperation>,
+    terminator: &BlockTerminator,
+) -> Vec<ExecutableOperation> {
+    let mut fused = Vec::with_capacity(operations.len());
+    let mut index = 0;
+    while index < operations.len() {
+        if let Some(operation) = fuse_i32_mul_add_imm(&operations, terminator, index) {
+            fused.push(operation);
+            index += 2;
+        } else {
+            fused.push(operations[index].clone());
+            index += 1;
+        }
+    }
+    fused
+}
+
+fn fuse_i32_mul_add_imm(
+    operations: &[ExecutableOperation],
+    terminator: &BlockTerminator,
+    index: usize,
+) -> Option<ExecutableOperation> {
+    let (
+        ExecutableOperation::I32MulImm {
+            dst: temporary,
+            lhs,
+            rhs: mul,
+        },
+        Some(ExecutableOperation::I32AddImm {
+            dst,
+            lhs: add_lhs,
+            rhs: add,
+        }),
+    ) = (operations.get(index)?, operations.get(index + 1))
+    else {
+        return None;
+    };
+    if temporary != add_lhs || temporary == lhs || temporary == dst {
+        return None;
+    }
+    if register_is_read_after(operations, terminator, index + 2, *temporary) {
+        return None;
+    }
+    Some(ExecutableOperation::I32MulAddImm {
+        dst: *dst,
+        lhs: *lhs,
+        mul: *mul,
+        add: *add,
+    })
+}
+
+fn register_is_read_after(
+    operations: &[ExecutableOperation],
+    terminator: &BlockTerminator,
+    start: usize,
+    register: usize,
+) -> bool {
+    operations[start..]
+        .iter()
+        .any(|operation| operation.reads_register(register))
+        || terminator.reads_register(register)
 }
 
 struct LowState {
@@ -686,12 +910,28 @@ impl LowState {
                 let value = self.read_i32(*lhs).wrapping_add(self.read_i32(*rhs));
                 self.write_i32(*dst, value);
             }
+            ExecutableOperation::I32AddImm { dst, lhs, rhs } => {
+                let value = self.read_i32(*lhs).wrapping_add(*rhs);
+                self.write_i32(*dst, value);
+            }
             ExecutableOperation::I32Sub { dst, lhs, rhs } => {
                 let value = self.read_i32(*lhs).wrapping_sub(self.read_i32(*rhs));
                 self.write_i32(*dst, value);
             }
+            ExecutableOperation::I32SubImm { dst, lhs, rhs } => {
+                let value = self.read_i32(*lhs).wrapping_sub(*rhs);
+                self.write_i32(*dst, value);
+            }
             ExecutableOperation::I32Mul { dst, lhs, rhs } => {
                 let value = self.read_i32(*lhs).wrapping_mul(self.read_i32(*rhs));
+                self.write_i32(*dst, value);
+            }
+            ExecutableOperation::I32MulImm { dst, lhs, rhs } => {
+                let value = self.read_i32(*lhs).wrapping_mul(*rhs);
+                self.write_i32(*dst, value);
+            }
+            ExecutableOperation::I32MulAddImm { dst, lhs, mul, add } => {
+                let value = self.read_i32(*lhs).wrapping_mul(*mul).wrapping_add(*add);
                 self.write_i32(*dst, value);
             }
             ExecutableOperation::I32Div { dst, lhs, rhs } => {
@@ -706,16 +946,32 @@ impl LowState {
                 let value = self.read_i32(*lhs) ^ self.read_i32(*rhs);
                 self.write_i32(*dst, value);
             }
+            ExecutableOperation::I32BitXorImm { dst, lhs, rhs } => {
+                let value = self.read_i32(*lhs) ^ *rhs;
+                self.write_i32(*dst, value);
+            }
             ExecutableOperation::I32Shl { dst, lhs, rhs } => {
                 let value = self.read_i32(*lhs).wrapping_shl(self.read_i32(*rhs) as u32);
+                self.write_i32(*dst, value);
+            }
+            ExecutableOperation::I32ShlImm { dst, lhs, rhs } => {
+                let value = self.read_i32(*lhs).wrapping_shl(*rhs as u32);
                 self.write_i32(*dst, value);
             }
             ExecutableOperation::I32Shr { dst, lhs, rhs } => {
                 let value = self.read_i32(*lhs).wrapping_shr(self.read_i32(*rhs) as u32);
                 self.write_i32(*dst, value);
             }
+            ExecutableOperation::I32ShrImm { dst, lhs, rhs } => {
+                let value = self.read_i32(*lhs).wrapping_shr(*rhs as u32);
+                self.write_i32(*dst, value);
+            }
             ExecutableOperation::I32Lt { dst, lhs, rhs } => {
                 let value = self.read_i32(*lhs) < self.read_i32(*rhs);
+                self.write_bool(*dst, value);
+            }
+            ExecutableOperation::I32LtImm { dst, lhs, rhs } => {
+                let value = self.read_i32(*lhs) < *rhs;
                 self.write_bool(*dst, value);
             }
             ExecutableOperation::Load32 { dst, addr } => {
@@ -1013,20 +1269,14 @@ fn block_starts(function: &Function) -> Vec<usize> {
 
 fn instruction_to_block(instruction_count: usize, block_starts: &[usize]) -> Vec<BlockLocation> {
     let mut locations = Vec::with_capacity(instruction_count);
-    locations.resize_with(instruction_count, || BlockLocation {
-        block_index: 0,
-        operation_index: 0,
-    });
+    locations.resize_with(instruction_count, || BlockLocation { block_index: 0 });
     for (block_index, start) in block_starts.iter().copied().enumerate() {
         let end = block_starts
             .get(block_index + 1)
             .copied()
             .unwrap_or(instruction_count);
         for instruction_index in start..end {
-            locations[instruction_index] = BlockLocation {
-                block_index,
-                operation_index: instruction_index - start,
-            };
+            locations[instruction_index] = BlockLocation { block_index };
         }
     }
     locations
@@ -1048,6 +1298,146 @@ fn static_call_bindings(
             caller_argument,
         })
         .collect()
+}
+
+fn stable_i32_constants(function: &Function) -> Vec<Option<i32>> {
+    let mut candidates = vec![I32ConstantCandidate::default(); function.register_count];
+    for parameter in &function.parameters {
+        candidates[usize::from(*parameter)].invalidate();
+    }
+    for instruction in &function.instructions {
+        for register in instruction_read_registers(instruction) {
+            candidates[register].read();
+        }
+        match instruction_write_register(instruction) {
+            Some((register, Some(value))) => candidates[register].write_const(value),
+            Some((register, None)) => candidates[register].invalidate(),
+            None => {}
+        }
+    }
+    candidates
+        .into_iter()
+        .map(|candidate| {
+            if candidate.valid {
+                candidate.value
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+#[derive(Clone, Copy)]
+struct I32ConstantCandidate {
+    value: Option<i32>,
+    valid: bool,
+}
+
+impl Default for I32ConstantCandidate {
+    fn default() -> Self {
+        Self {
+            value: None,
+            valid: true,
+        }
+    }
+}
+
+impl I32ConstantCandidate {
+    fn read(&mut self) {
+        if self.value.is_none() {
+            self.valid = false;
+        }
+    }
+
+    fn write_const(&mut self, value: i32) {
+        if !self.valid {
+            return;
+        }
+        match self.value {
+            Some(existing) if existing != value => self.valid = false,
+            Some(_) => {}
+            None => self.value = Some(value),
+        }
+    }
+
+    fn invalidate(&mut self) {
+        self.valid = false;
+    }
+}
+
+fn instruction_read_registers(instruction: &Instruction) -> Vec<usize> {
+    match instruction {
+        Instruction::I32Const { .. }
+        | Instruction::I64Const { .. }
+        | Instruction::AddrConst { .. }
+        | Instruction::Jump { .. }
+        | Instruction::ReturnUnit => Vec::new(),
+        Instruction::I32Move { src, .. }
+        | Instruction::AddrMove { src, .. }
+        | Instruction::Load32 { addr: src, .. }
+        | Instruction::ReturnI32 { src }
+        | Instruction::ReturnI64 { src }
+        | Instruction::ReturnAddr { src }
+        | Instruction::ReturnBool { src } => vec![usize::from(*src)],
+        Instruction::I32Add { lhs, rhs, .. }
+        | Instruction::I32Sub { lhs, rhs, .. }
+        | Instruction::I32Mul { lhs, rhs, .. }
+        | Instruction::I32Div { lhs, rhs, .. }
+        | Instruction::I32BitXor { lhs, rhs, .. }
+        | Instruction::I32Shl { lhs, rhs, .. }
+        | Instruction::I32Shr { lhs, rhs, .. }
+        | Instruction::I32Lt { lhs, rhs, .. }
+        | Instruction::Store32 {
+            addr: lhs,
+            src: rhs,
+            ..
+        }
+        | Instruction::AddrAdd {
+            base: lhs,
+            offset: rhs,
+            ..
+        } => vec![usize::from(*lhs), usize::from(*rhs)],
+        Instruction::JumpIfFalse { cond, .. } => vec![usize::from(*cond)],
+        Instruction::CallStatic { arguments, .. } => {
+            arguments.iter().copied().map(usize::from).collect()
+        }
+    }
+}
+
+fn instruction_write_register(instruction: &Instruction) -> Option<(usize, Option<i32>)> {
+    match instruction {
+        Instruction::I32Const { dst, value } => Some((usize::from(*dst), Some(*value))),
+        Instruction::I64Const { dst, .. }
+        | Instruction::AddrConst { dst, .. }
+        | Instruction::I32Move { dst, .. }
+        | Instruction::AddrMove { dst, .. }
+        | Instruction::I32Add { dst, .. }
+        | Instruction::I32Sub { dst, .. }
+        | Instruction::I32Mul { dst, .. }
+        | Instruction::I32Div { dst, .. }
+        | Instruction::I32BitXor { dst, .. }
+        | Instruction::I32Shl { dst, .. }
+        | Instruction::I32Shr { dst, .. }
+        | Instruction::I32Lt { dst, .. }
+        | Instruction::Load32 { dst, .. }
+        | Instruction::AddrAdd { dst, .. } => Some((usize::from(*dst), None)),
+        Instruction::CallStatic {
+            return_register: Some(return_register),
+            ..
+        } => Some((usize::from(*return_register), None)),
+        Instruction::Store32 { .. }
+        | Instruction::Jump { .. }
+        | Instruction::JumpIfFalse { .. }
+        | Instruction::CallStatic {
+            return_register: None,
+            ..
+        }
+        | Instruction::ReturnI32 { .. }
+        | Instruction::ReturnI64 { .. }
+        | Instruction::ReturnAddr { .. }
+        | Instruction::ReturnBool { .. }
+        | Instruction::ReturnUnit => None,
+    }
 }
 
 fn validate_register(
@@ -1141,5 +1531,219 @@ mod tests {
         assert_eq!(function.blocks[3].original_start_ip, 7);
         assert_eq!(function.instruction_to_block[3].block_index, 1);
         assert_eq!(function.instruction_to_block[7].block_index, 3);
+    }
+
+    #[test]
+    fn lowering_fuses_i32_binary_operations_with_known_rhs_constants() {
+        let image = Image {
+            language_version: "ckl-low-1".to_string(),
+            memory_size: 1024,
+            rodata: Vec::new(),
+            data: Vec::new(),
+            bss_size: 0,
+            entry_function_index: 0,
+            functions: vec![Function {
+                name: "main".to_string(),
+                register_count: 5,
+                parameters: Vec::new(),
+                instructions: vec![
+                    Instruction::I32Const { dst: 0, value: 10 },
+                    Instruction::I32Const { dst: 1, value: 3 },
+                    Instruction::I32Add {
+                        dst: 2,
+                        lhs: 0,
+                        rhs: 1,
+                    },
+                    Instruction::I32Mul {
+                        dst: 3,
+                        lhs: 2,
+                        rhs: 1,
+                    },
+                    Instruction::I32Lt {
+                        dst: 4,
+                        lhs: 3,
+                        rhs: 1,
+                    },
+                    Instruction::ReturnBool { src: 4 },
+                ],
+            }],
+        };
+
+        let (program, _) = LowProgram::create(image).unwrap();
+        let operations = &program.function(0).blocks[0].operations;
+
+        assert!(matches!(
+            operations[2],
+            ExecutableOperation::I32AddImm {
+                dst: 2,
+                lhs: 0,
+                rhs: 3,
+            },
+        ));
+        assert!(matches!(
+            operations[3],
+            ExecutableOperation::I32MulImm {
+                dst: 3,
+                lhs: 2,
+                rhs: 3,
+            },
+        ));
+        assert!(matches!(
+            operations[4],
+            ExecutableOperation::I32LtImm {
+                dst: 4,
+                lhs: 3,
+                rhs: 3,
+            },
+        ));
+    }
+
+    #[test]
+    fn fused_i32_immediate_operations_preserve_runtime_semantics() {
+        let image = Image {
+            language_version: "ckl-low-1".to_string(),
+            memory_size: 1024,
+            rodata: Vec::new(),
+            data: Vec::new(),
+            bss_size: 0,
+            entry_function_index: 0,
+            functions: vec![Function {
+                name: "main".to_string(),
+                register_count: 8,
+                parameters: Vec::new(),
+                instructions: vec![
+                    Instruction::I32Const { dst: 0, value: 10 },
+                    Instruction::I32Const { dst: 1, value: 3 },
+                    Instruction::I32Sub {
+                        dst: 2,
+                        lhs: 0,
+                        rhs: 1,
+                    },
+                    Instruction::I32BitXor {
+                        dst: 3,
+                        lhs: 2,
+                        rhs: 1,
+                    },
+                    Instruction::I32Shl {
+                        dst: 4,
+                        lhs: 3,
+                        rhs: 1,
+                    },
+                    Instruction::I32Shr {
+                        dst: 5,
+                        lhs: 4,
+                        rhs: 1,
+                    },
+                    Instruction::I32Add {
+                        dst: 6,
+                        lhs: 5,
+                        rhs: 1,
+                    },
+                    Instruction::I32Mul {
+                        dst: 7,
+                        lhs: 6,
+                        rhs: 1,
+                    },
+                    Instruction::ReturnI32 { src: 7 },
+                ],
+            }],
+        };
+        let mut vm = LowImageVm::create(image, 128).unwrap();
+
+        assert_eq!(vm.run_until_signal().unwrap(), LowImageSignal::HaltI32(21));
+    }
+
+    #[test]
+    fn lowering_fuses_constants_loaded_before_loop_blocks() {
+        let image = Image {
+            language_version: "ckl-low-1".to_string(),
+            memory_size: 1024,
+            rodata: Vec::new(),
+            data: Vec::new(),
+            bss_size: 0,
+            entry_function_index: 0,
+            functions: vec![Function {
+                name: "main".to_string(),
+                register_count: 5,
+                parameters: Vec::new(),
+                instructions: vec![
+                    Instruction::I32Const { dst: 0, value: 0 },
+                    Instruction::I32Const { dst: 1, value: 2 },
+                    Instruction::I32Const { dst: 2, value: 1 },
+                    Instruction::I32Lt {
+                        dst: 3,
+                        lhs: 0,
+                        rhs: 1,
+                    },
+                    Instruction::JumpIfFalse { cond: 3, target: 7 },
+                    Instruction::I32Add {
+                        dst: 0,
+                        lhs: 0,
+                        rhs: 2,
+                    },
+                    Instruction::Jump { target: 3 },
+                    Instruction::ReturnI32 { src: 0 },
+                ],
+            }],
+        };
+
+        let (program, _) = LowProgram::create(image).unwrap();
+        let loop_body = &program.function(0).blocks[2];
+
+        assert!(matches!(
+            loop_body.operations[0],
+            ExecutableOperation::I32AddImm {
+                dst: 0,
+                lhs: 0,
+                rhs: 1,
+            },
+        ));
+    }
+
+    #[test]
+    fn lowering_fuses_dead_temporary_mul_add_immediate_pairs() {
+        let image = Image {
+            language_version: "ckl-low-1".to_string(),
+            memory_size: 1024,
+            rodata: Vec::new(),
+            data: Vec::new(),
+            bss_size: 0,
+            entry_function_index: 0,
+            functions: vec![Function {
+                name: "main".to_string(),
+                register_count: 5,
+                parameters: Vec::new(),
+                instructions: vec![
+                    Instruction::I32Const { dst: 0, value: 7 },
+                    Instruction::I32Const { dst: 1, value: 5 },
+                    Instruction::I32Const { dst: 2, value: 11 },
+                    Instruction::I32Mul {
+                        dst: 3,
+                        lhs: 0,
+                        rhs: 1,
+                    },
+                    Instruction::I32Add {
+                        dst: 4,
+                        lhs: 3,
+                        rhs: 2,
+                    },
+                    Instruction::ReturnI32 { src: 4 },
+                ],
+            }],
+        };
+
+        let (program, _) = LowProgram::create(image).unwrap();
+        let operations = &program.function(0).blocks[0].operations;
+
+        assert!(matches!(
+            operations[3],
+            ExecutableOperation::I32MulAddImm {
+                dst: 4,
+                lhs: 0,
+                mul: 5,
+                add: 11,
+            },
+        ));
+        assert_eq!(operations.len(), 4);
     }
 }
