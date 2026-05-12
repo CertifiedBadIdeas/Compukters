@@ -305,6 +305,27 @@ mod tests {
     }
 
     #[test]
+    fn computer_machine_rejects_second_boot_cpu() {
+        let mut machine = ComputerMachine::new(1024).unwrap();
+        let first = image(vec![Instruction::ReturnUnit], 0);
+        let second = image(vec![Instruction::ReturnUnit], 0);
+
+        assert_eq!(machine.spawn_boot_cpu(first, 128).unwrap(), 0);
+
+        let error = machine.spawn_boot_cpu(second, 128).unwrap_err();
+        assert_eq!(error, "boot CPU is already spawned");
+    }
+
+    #[test]
+    fn computer_machine_rejects_missing_cpu_id() {
+        let mut machine = ComputerMachine::new(1024).unwrap();
+
+        let error = machine.run_cpu_until_signal(7).unwrap_err();
+
+        assert_eq!(error, "CPU 7 is not present");
+    }
+
+    #[test]
     fn computer_machine_runs_cpu_contexts_against_mmio_bus_devices() {
         let mut machine = ComputerMachine::new(1024).unwrap();
         let device_id = machine
