@@ -208,6 +208,10 @@ mod tests {
     use crate::low_image_runner::LowImageSignal;
     use crate::low_machine::MemoryFault;
 
+    const OS_STATE_BASE: u32 = 0x0001_0000;
+    const OS_MAGIC: i32 = 0x434B_4F53;
+    const INITIAL_PROCESS_READY: i32 = 1;
+
     struct LatchDevice {
         value: i32,
     }
@@ -440,6 +444,62 @@ mod tests {
             LowImageSignal::HaltUnit,
         );
         assert_eq!(machine.control_status(), ComputerMachine::STATUS_READY);
+    }
+
+    #[test]
+    fn boot_kernel_initializes_os_state_and_marks_machine_ready() {
+        let mut machine = ComputerMachine::new(0x0002_0000).unwrap();
+        let kernel = image(
+            vec![
+                Instruction::AddrConst {
+                    dst: 0,
+                    value: ComputerMachine::CONTROL_STATUS,
+                },
+                Instruction::I32Const {
+                    dst: 1,
+                    value: ComputerMachine::STATUS_BOOTING,
+                },
+                Instruction::Store32 { addr: 0, src: 1 },
+                Instruction::AddrConst {
+                    dst: 2,
+                    value: OS_STATE_BASE,
+                },
+                Instruction::I32Const {
+                    dst: 3,
+                    value: OS_MAGIC,
+                },
+                Instruction::Store32 { addr: 2, src: 3 },
+                Instruction::AddrConst {
+                    dst: 4,
+                    value: OS_STATE_BASE + 4,
+                },
+                Instruction::I32Const {
+                    dst: 5,
+                    value: INITIAL_PROCESS_READY,
+                },
+                Instruction::Store32 { addr: 4, src: 5 },
+                Instruction::I32Const {
+                    dst: 6,
+                    value: ComputerMachine::STATUS_READY,
+                },
+                Instruction::Store32 { addr: 0, src: 6 },
+                Instruction::ReturnUnit,
+            ],
+            7,
+        );
+
+        let cpu_id = machine.spawn_boot_cpu(kernel, 512).unwrap();
+
+        assert_eq!(
+            machine.run_cpu_until_signal(cpu_id).unwrap(),
+            LowImageSignal::HaltUnit,
+        );
+        assert_eq!(machine.control_status(), ComputerMachine::STATUS_READY);
+        assert_eq!(machine.memory().load_i32(OS_STATE_BASE).unwrap(), OS_MAGIC);
+        assert_eq!(
+            machine.memory().load_i32(OS_STATE_BASE + 4).unwrap(),
+            INITIAL_PROCESS_READY,
+        );
     }
 
     #[test]
