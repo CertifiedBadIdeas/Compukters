@@ -8,6 +8,30 @@ pub struct ComputerMachine {
     control_device_id: MmioDeviceId,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ComputerMemoryMap {
+    regions: Vec<ComputerMemoryRegion>,
+}
+
+impl ComputerMemoryMap {
+    pub fn region(&self, name: &str) -> Option<&ComputerMemoryRegion> {
+        self.regions.iter().find(|region| region.name == name)
+    }
+
+    pub fn regions(&self) -> &[ComputerMemoryRegion] {
+        &self.regions
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ComputerMemoryRegion {
+    pub name: &'static str,
+    pub base: u32,
+    pub size: u32,
+    pub readable: bool,
+    pub writable: bool,
+}
+
 impl ComputerMachine {
     pub const CONTROL_BASE: u32 = 0x1000_0000;
     pub const CONTROL_STATUS: u32 = Self::CONTROL_BASE;
@@ -33,6 +57,27 @@ impl ComputerMachine {
 
     pub fn memory_mut(&mut self) -> &mut MachineMemory {
         self.bus.memory_mut()
+    }
+
+    pub fn memory_map(&self) -> ComputerMemoryMap {
+        ComputerMemoryMap {
+            regions: vec![
+                ComputerMemoryRegion {
+                    name: "ram",
+                    base: 0,
+                    size: self.memory().len() as u32,
+                    readable: true,
+                    writable: true,
+                },
+                ComputerMemoryRegion {
+                    name: "control",
+                    base: Self::CONTROL_BASE,
+                    size: ComputerControlDevice::SIZE,
+                    readable: true,
+                    writable: true,
+                },
+            ],
+        }
     }
 
     pub fn create_cpu(
@@ -72,6 +117,8 @@ struct ComputerControlDevice {
 }
 
 impl ComputerControlDevice {
+    const SIZE: u32 = 8;
+
     fn new() -> Self {
         Self {
             status: 0,
@@ -102,7 +149,7 @@ impl ComputerControlDevice {
 
 impl MmioDevice for ComputerControlDevice {
     fn size(&self) -> u32 {
-        8
+        Self::SIZE
     }
 
     fn load_i32(&self, offset: u32) -> Result<i32, MemoryFault> {
@@ -352,6 +399,30 @@ mod tests {
         drop(cpu);
         assert_eq!(machine.control_status(), ComputerMachine::STATUS_PANIC);
         assert_eq!(machine.panic_code(), 404);
+    }
+
+    #[test]
+    fn computer_memory_map_describes_ram_region() {
+        let machine = ComputerMachine::new(1024).unwrap();
+        let map = machine.memory_map();
+        let ram = map.region("ram").unwrap();
+
+        assert_eq!(ram.base, 0);
+        assert_eq!(ram.size, 1024);
+        assert!(ram.readable);
+        assert!(ram.writable);
+    }
+
+    #[test]
+    fn computer_memory_map_describes_control_mmio_region() {
+        let machine = ComputerMachine::new(1024).unwrap();
+        let map = machine.memory_map();
+        let control = map.region("control").unwrap();
+
+        assert_eq!(control.base, ComputerMachine::CONTROL_BASE);
+        assert_eq!(control.size, 8);
+        assert!(control.readable);
+        assert!(control.writable);
     }
 
     fn image(instructions: Vec<Instruction>, register_count: usize) -> Image {
