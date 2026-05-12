@@ -81,6 +81,9 @@ pub struct DeviceDaemon {
     next_image_handle: i64,
     next_pid: i32,
     image_slice_budget_nanos: u64,
+    memory_quota_bytes: usize,
+    memory_used_bytes: usize,
+    process_memory_bytes: BTreeMap<i32, usize>,
     host_requests: VecDeque<DeviceDaemonHostRequest>,
     pending_host_requests: BTreeMap<i64, i32>,
     pending_compiles: BTreeMap<i64, PendingCompile>,
@@ -93,6 +96,7 @@ impl DeviceDaemon {
         max_event_queue_size: usize,
         max_buffered_bytes_per_channel: usize,
         image_slice_budget_nanos: u64,
+        memory_quota_bytes: usize,
         device_id: i32,
         profile_name: String,
     ) -> Self {
@@ -108,6 +112,9 @@ impl DeviceDaemon {
             next_image_handle: 1,
             next_pid: 2,
             image_slice_budget_nanos: image_slice_budget_nanos.max(1),
+            memory_quota_bytes,
+            memory_used_bytes: 0,
+            process_memory_bytes: BTreeMap::new(),
             host_requests: VecDeque::new(),
             pending_host_requests: BTreeMap::new(),
             pending_compiles: BTreeMap::new(),
@@ -156,6 +163,13 @@ impl DeviceDaemon {
             .expect("boot image must attach to daemon kernel");
         image.set_working_directory(working_directory.to_string());
         image.set_process_argument(argument.to_string());
+        let memory_bytes = image.memory_footprint_bytes();
+        if !self.try_reserve_process_memory(pid, memory_bytes) {
+            return DeviceDaemonBootSummary {
+                pid,
+                image_attached: false,
+            };
+        }
         let image_handle = self.next_image_handle;
         self.next_image_handle = self.next_image_handle.saturating_add(1);
         let registered = self
@@ -168,6 +182,8 @@ impl DeviceDaemon {
         if registered {
             self.images.insert(pid, image);
             self.image_handles.insert(pid, image_handle);
+        } else {
+            self.release_process_memory(pid);
         }
         DeviceDaemonBootSummary {
             pid,
@@ -177,6 +193,10 @@ impl DeviceDaemon {
 
     pub fn process_image_handle(&self, pid: i32) -> Option<i64> {
         self.image_handles.get(&pid).copied()
+    }
+
+    pub fn memory_used_bytes(&self) -> usize {
+        self.memory_used_bytes
     }
 
     pub fn process_status(&self, pid: i32) -> DeviceDaemonProcessStatus {
@@ -348,12 +368,19 @@ impl DeviceDaemon {
                 None => Err(format!("daemon selected pid {pid} without image")),
             };
             match signal {
-                Ok(signal) => match self.handle_signal(pid, signal, server_tick) {
-                    Ok(DaemonSignalOutcome::Halted) => halted += 1,
-                    Ok(DaemonSignalOutcome::HostRequest) => host_requests += 1,
-                    Ok(DaemonSignalOutcome::Runnable | DaemonSignalOutcome::Waiting) => {}
-                    Err(message) => self.crash_process(pid, message),
-                },
+                Ok(signal) => {
+                    let memory_result = if matches!(signal, VmSignal::Halt(_)) {
+                        Ok(())
+                    } else {
+                        self.synchronize_process_memory(pid)
+                    };
+                    match memory_result.and_then(|_| self.handle_signal(pid, signal, server_tick)) {
+                        Ok(DaemonSignalOutcome::Halted) => halted += 1,
+                        Ok(DaemonSignalOutcome::HostRequest) => host_requests += 1,
+                        Ok(DaemonSignalOutcome::Runnable | DaemonSignalOutcome::Waiting) => {}
+                        Err(message) => self.crash_process(pid, message),
+                    }
+                }
                 Err(message) => {
                     self.crash_process(pid, message);
                 }
@@ -385,6 +412,7 @@ impl DeviceDaemon {
             .with_kernel_mut(|kernel| kernel.mark_process_crashed(pid, message));
         self.images.remove(&pid);
         self.image_handles.remove(&pid);
+        self.release_process_memory(pid);
     }
 
     fn handle_signal(
@@ -400,6 +428,7 @@ impl DeviceDaemon {
                     .with_kernel_mut(|kernel| kernel.complete_process(pid, exit_code))?;
                 self.images.remove(&pid);
                 self.image_handles.remove(&pid);
+                self.release_process_memory(pid);
                 if let Some(parent_pid) = self.pending_run_parents.remove(&pid) {
                     self.resume_process_with_value(parent_pid, VmValue::Int(exit_code))?;
                 }
@@ -546,6 +575,10 @@ impl DeviceDaemon {
         image.attach_device_kernel(self.kernel.clone())?;
         image.set_working_directory(pending.working_directory.clone());
         image.set_process_argument(pending.argument.clone());
+        let memory_bytes = image.memory_footprint_bytes();
+        if !self.try_reserve_process_memory(pending.child_pid, memory_bytes) {
+            return Ok(false);
+        }
         let image_handle = self.next_image_handle;
         self.next_image_handle = self.next_image_handle.saturating_add(1);
         let registered = self.kernel.with_kernel_mut(|kernel| {
@@ -555,8 +588,49 @@ impl DeviceDaemon {
         if registered {
             self.images.insert(pending.child_pid, image);
             self.image_handles.insert(pending.child_pid, image_handle);
+        } else {
+            self.release_process_memory(pending.child_pid);
         }
         Ok(registered)
+    }
+
+    fn try_reserve_process_memory(&mut self, pid: i32, bytes: usize) -> bool {
+        if self.memory_used_bytes.saturating_add(bytes) > self.memory_quota_bytes {
+            return false;
+        }
+        self.memory_used_bytes = self.memory_used_bytes.saturating_add(bytes);
+        self.process_memory_bytes.insert(pid, bytes);
+        true
+    }
+
+    fn release_process_memory(&mut self, pid: i32) {
+        if let Some(bytes) = self.process_memory_bytes.remove(&pid) {
+            self.memory_used_bytes = self.memory_used_bytes.saturating_sub(bytes);
+        }
+    }
+
+    fn synchronize_process_memory(&mut self, pid: i32) -> Result<(), String> {
+        let Some(image) = self.images.get(&pid) else {
+            return Ok(());
+        };
+        let new_bytes = image.memory_footprint_bytes();
+        let old_bytes = self.process_memory_bytes.get(&pid).copied().unwrap_or(0);
+        if new_bytes > old_bytes {
+            let delta = new_bytes - old_bytes;
+            if self.memory_used_bytes.saturating_add(delta) > self.memory_quota_bytes {
+                return Err(format!(
+                    "daemon memory quota exceeded for pid {pid}: requested {new_bytes} bytes, used {} bytes, quota {} bytes",
+                    self.memory_used_bytes, self.memory_quota_bytes
+                ));
+            }
+            self.memory_used_bytes = self.memory_used_bytes.saturating_add(delta);
+        } else {
+            self.memory_used_bytes = self
+                .memory_used_bytes
+                .saturating_sub(old_bytes.saturating_sub(new_bytes));
+        }
+        self.process_memory_bytes.insert(pid, new_bytes);
+        Ok(())
     }
 
     fn resume_process_with_value(&mut self, pid: i32, value: VmValue) -> Result<(), String> {
@@ -604,7 +678,11 @@ mod tests {
     }
 
     fn new_test_daemon() -> DeviceDaemon {
-        DeviceDaemon::new(16, 1024, 128, 0, String::new())
+        DeviceDaemon::new(16, 1024, 128, usize::MAX, 0, String::new())
+    }
+
+    fn new_test_daemon_with_memory_quota(memory_quota_bytes: usize) -> DeviceDaemon {
+        DeviceDaemon::new(16, 1024, 128, memory_quota_bytes, 0, String::new())
     }
 
     #[test]
@@ -621,6 +699,49 @@ mod tests {
             }
         );
         assert_eq!(daemon.process_image_handle(1), Some(1));
+    }
+
+    #[test]
+    fn daemon_rejects_boot_image_when_shared_memory_quota_is_exhausted() {
+        let image_bytes = ckim_empty_main();
+        let required_bytes = ImageVmHandle::create(&image_bytes, 128)
+            .unwrap()
+            .memory_footprint_bytes();
+        let mut daemon = new_test_daemon_with_memory_quota(required_bytes.saturating_sub(1));
+
+        let summary = daemon.boot_image(&image_bytes, "/rom/bios.ck", "", "");
+
+        assert_eq!(
+            summary,
+            DeviceDaemonBootSummary {
+                pid: 1,
+                image_attached: false,
+            }
+        );
+        assert_eq!(daemon.process_image_handle(1), None);
+        assert_eq!(daemon.memory_used_bytes(), 0);
+    }
+
+    #[test]
+    fn daemon_releases_process_memory_when_process_halts() {
+        let image_bytes = ckim_empty_main();
+        let required_bytes = ImageVmHandle::create(&image_bytes, 128)
+            .unwrap()
+            .memory_footprint_bytes();
+        let mut daemon = new_test_daemon_with_memory_quota(required_bytes);
+
+        let summary = daemon.boot_image(&image_bytes, "/rom/bios.ck", "", "");
+
+        assert!(summary.image_attached);
+        assert_eq!(daemon.memory_used_bytes(), required_bytes);
+
+        run_daemon_slice(&mut daemon, 1_000_000, 1);
+
+        assert_eq!(
+            daemon.process_status(1),
+            DeviceDaemonProcessStatus::Completed(0),
+        );
+        assert_eq!(daemon.memory_used_bytes(), 0);
     }
 
     #[test]
@@ -818,6 +939,43 @@ mod tests {
             daemon.process_status(2),
             DeviceDaemonProcessStatus::Completed(1),
         );
+    }
+
+    #[test]
+    fn daemon_process_spawn_compile_success_consumes_shared_memory_quota() {
+        let parent_bytes = ckim_spawns_child_then_halts("child.ck", "");
+        let child_bytes = ckim_empty_main();
+        let parent_required_bytes = ImageVmHandle::create(&parent_bytes, 128)
+            .unwrap()
+            .memory_footprint_bytes();
+        let child_required_bytes = ImageVmHandle::create(&child_bytes, 128)
+            .unwrap()
+            .memory_footprint_bytes();
+        let quota = parent_required_bytes
+            .saturating_add(child_required_bytes)
+            .saturating_sub(1);
+        let mut daemon = new_test_daemon_with_memory_quota(quota);
+        daemon.boot_image(&parent_bytes, "/rom/parent.ck", "", "");
+
+        run_daemon_slice(&mut daemon, 1_000_000, 1);
+        let mut requests = daemon.drain_host_requests();
+        assert_eq!(requests.len(), 1);
+        let request = requests.pop().unwrap();
+        daemon
+            .complete_compile_program(request.request_id, Some(&child_bytes), 0)
+            .unwrap();
+        let second = run_daemon_slice(&mut daemon, 1_000_000, 2);
+
+        assert_eq!(second.halted, 1);
+        assert_eq!(
+            daemon.process_status(1),
+            DeviceDaemonProcessStatus::Completed(0),
+        );
+        assert_eq!(
+            daemon.process_status(2),
+            DeviceDaemonProcessStatus::Completed(1),
+        );
+        assert_eq!(daemon.memory_used_bytes(), 0);
     }
 
     #[test]

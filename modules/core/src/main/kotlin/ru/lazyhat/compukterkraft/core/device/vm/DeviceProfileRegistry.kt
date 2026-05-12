@@ -43,6 +43,7 @@ object DeviceProfileRegistry {
                         defaultResources(
                             wallTimeGuardNanosPerSlice = 10_000,
                             eventQueueSlots = 32,
+                            vmRamBytes = Config.computerRamLimit.toLong(),
                             diskBytes = Config.computerSpaceLimit.toLong(),
                         ),
                 )
@@ -59,6 +60,7 @@ object DeviceProfileRegistry {
                         defaultResources(
                             wallTimeGuardNanosPerSlice = 100_000,
                             eventQueueSlots = 32,
+                            vmRamBytes = Config.computerRamLimit.toLong(),
                             diskBytes = Config.computerSpaceLimit.toLong(),
                         ),
                 )
@@ -75,6 +77,7 @@ object DeviceProfileRegistry {
                         defaultResources(
                             wallTimeGuardNanosPerSlice = 4_000_000,
                             eventQueueSlots = 256,
+                            vmRamBytes = Config.computerRamLimit.toLong(),
                             diskBytes = Config.computerSpaceLimit.toLong(),
                         ),
                 )
@@ -84,6 +87,7 @@ object DeviceProfileRegistry {
     private fun defaultResources(
         wallTimeGuardNanosPerSlice: Long,
         eventQueueSlots: Int,
+        vmRamBytes: Long,
         diskBytes: Long,
     ): DeviceResources =
         DeviceResources(
@@ -91,7 +95,7 @@ object DeviceProfileRegistry {
                 DeviceCpuResources(
                     wallTimeGuardNanosPerSlice = wallTimeGuardNanosPerSlice,
                 ),
-            memory = DeviceMemoryResources(),
+            memory = DeviceMemoryResources(vmRamBytes = vmRamBytes),
             storage = DeviceStorageResources(diskBytes = diskBytes),
             queues = DeviceQueueResources(eventQueueSlots = eventQueueSlots, hostCallQueueSlots = eventQueueSlots),
         )

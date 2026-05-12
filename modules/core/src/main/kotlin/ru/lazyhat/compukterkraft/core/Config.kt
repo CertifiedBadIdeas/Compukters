@@ -25,6 +25,7 @@ package ru.lazyhat.compukterkraft.core
  */
 object Config {
     var computerSpaceLimit: Int = 1000 * 1000
+    var computerRamLimit: Int = 1024 * 1024
     var uploadMaxSize: Int = 512 * 1024 // 512 KB
     var commandRequireCreative: Boolean = true
 

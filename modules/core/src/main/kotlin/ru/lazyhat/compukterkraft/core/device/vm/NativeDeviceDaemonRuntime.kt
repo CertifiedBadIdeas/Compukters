@@ -144,6 +144,7 @@ interface NativeDaemonBindings {
         maxEventQueueSize: Int,
         maxBufferedBytesPerChannel: Int,
         imageSliceBudgetNanos: Long,
+        memoryQuotaBytes: Long,
         deviceId: Int,
         profileName: String,
     ): Long
@@ -224,6 +225,7 @@ object NativeVmDaemonBindings : NativeDaemonBindings {
         maxEventQueueSize: Int,
         maxBufferedBytesPerChannel: Int,
         imageSliceBudgetNanos: Long,
+        memoryQuotaBytes: Long,
         deviceId: Int,
         profileName: String,
     ): Long =
@@ -231,6 +233,7 @@ object NativeVmDaemonBindings : NativeDaemonBindings {
             maxEventQueueSize,
             maxBufferedBytesPerChannel,
             imageSliceBudgetNanos,
+            memoryQuotaBytes,
             deviceId,
             profileName,
         )

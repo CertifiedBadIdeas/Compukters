@@ -1,3 +1,4 @@
+use std::mem::size_of;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -235,6 +236,29 @@ impl ImageVmHandle {
 
     pub fn working_directory(&self) -> &str {
         &self.working_directory
+    }
+
+    pub fn memory_footprint_bytes(&self) -> usize {
+        size_of::<Self>()
+            .saturating_add(image_memory_bytes(&self.image))
+            .saturating_add(vec_memory_bytes(&self.i32_registers))
+            .saturating_add(vec_memory_bytes(&self.i64_registers))
+            .saturating_add(vec_memory_bytes(&self.bool_registers))
+            .saturating_add(vec_memory_bytes(&self.ref_registers))
+            .saturating_add(
+                self.ref_registers
+                    .iter()
+                    .map(vm_value_extra_memory_bytes)
+                    .fold(0usize, usize::saturating_add),
+            )
+            .saturating_add(vec_memory_bytes(&self.call_stack))
+            .saturating_add(self.working_directory.capacity())
+            .saturating_add(
+                self.process_argument
+                    .as_ref()
+                    .map(|argument| argument.capacity())
+                    .unwrap_or(0),
+            )
     }
 
     pub fn run_until_signal(&mut self) -> Vec<u8> {
@@ -1384,6 +1408,114 @@ fn checked_entry_function_index(image: &Image) -> Result<usize, String> {
         ));
     }
     Ok(index)
+}
+
+fn vec_memory_bytes<T>(values: &Vec<T>) -> usize {
+    values.capacity().saturating_mul(size_of::<T>())
+}
+
+fn string_memory_bytes(value: &String) -> usize {
+    value.capacity()
+}
+
+fn image_memory_bytes(image: &Image) -> usize {
+    size_of::<Image>()
+        .saturating_add(string_memory_bytes(&image.language_version))
+        .saturating_add(vec_memory_bytes(&image.constants))
+        .saturating_add(
+            image
+                .constants
+                .iter()
+                .map(constant_extra_memory_bytes)
+                .fold(0usize, usize::saturating_add),
+        )
+        .saturating_add(vec_memory_bytes(&image.host_imports))
+        .saturating_add(
+            image
+                .host_imports
+                .iter()
+                .map(host_import_extra_memory_bytes)
+                .fold(0usize, usize::saturating_add),
+        )
+        .saturating_add(vec_memory_bytes(&image.functions))
+        .saturating_add(
+            image
+                .functions
+                .iter()
+                .map(function_extra_memory_bytes)
+                .fold(0usize, usize::saturating_add),
+        )
+}
+
+fn constant_extra_memory_bytes(constant: &Constant) -> usize {
+    match constant {
+        Constant::String(value) => string_memory_bytes(value),
+        Constant::Int(_) | Constant::Long(_) => 0,
+    }
+}
+
+fn host_import_extra_memory_bytes(host_import: &HostImport) -> usize {
+    string_memory_bytes(&host_import.module_name)
+        .saturating_add(string_memory_bytes(&host_import.function_name))
+        .saturating_add(vec_memory_bytes(&host_import.parameter_types))
+        .saturating_add(
+            host_import
+                .parameter_types
+                .iter()
+                .map(|parameter_type| string_memory_bytes(parameter_type))
+                .fold(0usize, usize::saturating_add),
+        )
+        .saturating_add(string_memory_bytes(&host_import.return_type))
+}
+
+fn function_extra_memory_bytes(function: &Function) -> usize {
+    string_memory_bytes(&function.name)
+        .saturating_add(vec_memory_bytes(&function.parameters))
+        .saturating_add(vec_memory_bytes(&function.instructions))
+        .saturating_add(
+            function
+                .instructions
+                .iter()
+                .map(instruction_extra_memory_bytes)
+                .fold(0usize, usize::saturating_add),
+        )
+}
+
+fn instruction_extra_memory_bytes(instruction: &Instruction) -> usize {
+    match instruction {
+        Instruction::CallStatic { arguments, .. } | Instruction::CallHost { arguments, .. } => {
+            vec_memory_bytes(arguments)
+        }
+        Instruction::ConstructRecord {
+            field_name_constant_indices,
+            field_values,
+            ..
+        } => vec_memory_bytes(field_name_constant_indices)
+            .saturating_add(vec_memory_bytes(field_values)),
+        _ => 0,
+    }
+}
+
+fn vm_value_extra_memory_bytes(value: &VmValue) -> usize {
+    match value {
+        VmValue::String(value) => string_memory_bytes(value),
+        VmValue::Record { type_name, fields } => string_memory_bytes(type_name)
+            .saturating_add(vec_memory_bytes(fields))
+            .saturating_add(
+                fields
+                    .iter()
+                    .map(|(name, value)| {
+                        string_memory_bytes(name).saturating_add(vm_value_extra_memory_bytes(value))
+                    })
+                    .fold(0usize, usize::saturating_add),
+            ),
+        VmValue::Unit
+        | VmValue::Null
+        | VmValue::Bool(_)
+        | VmValue::Int(_)
+        | VmValue::Long(_)
+        | VmValue::ObjectRef(_) => 0,
+    }
 }
 
 fn instruction_opcode(instruction: &Instruction) -> u8 {

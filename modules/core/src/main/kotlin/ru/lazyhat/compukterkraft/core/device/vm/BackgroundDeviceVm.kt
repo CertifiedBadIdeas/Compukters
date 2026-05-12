@@ -115,6 +115,7 @@ class BackgroundDeviceVm(
                 maxEventQueueSize = profile.resources.queues.eventQueueSlots,
                 maxBufferedBytesPerChannel = profile.resources.queues.ipcChannelBytes,
                 imageSliceBudgetNanos = profile.resources.cpu.wallTimeGuardNanosPerSlice,
+                memoryQuotaBytes = profile.resources.memory.vmRamBytes,
                 deviceId = deviceId,
                 profileName = profile.displayName,
             )

@@ -223,6 +223,7 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
     max_event_queue_size: jint,
     max_buffered_bytes_per_channel: jint,
     image_slice_budget_nanos: jlong,
+    memory_quota_bytes: jlong,
     device_id: jint,
     profile_name: JString<'_>,
 ) -> jlong {
@@ -248,6 +249,16 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
             }
         };
     let image_slice_budget_nanos = image_slice_budget_nanos.max(1) as u64;
+    let memory_quota_bytes = match usize::try_from(memory_quota_bytes.max(0)) {
+        Ok(value) => value,
+        Err(error) => {
+            let _ = env.throw_new(
+                "java/lang/IllegalArgumentException",
+                format!("Invalid native device daemon memory quota: {error}"),
+            );
+            return 0;
+        }
+    };
     let profile_name: String = match env.get_string(&profile_name) {
         Ok(value) => value.into(),
         Err(error) => {
@@ -262,6 +273,7 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
         max_event_queue_size,
         max_buffered_bytes_per_channel,
         image_slice_budget_nanos,
+        memory_quota_bytes,
         device_id,
         profile_name,
     );
