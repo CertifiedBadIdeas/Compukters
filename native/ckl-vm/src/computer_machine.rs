@@ -1283,7 +1283,7 @@ mod tests {
         let map = machine.memory_map();
         let ram = map.region("ram").unwrap();
 
-        assert_eq!(ram.base, 0);
+        assert_eq!(ram.base, computer_abi::RAM_BASE);
         assert_eq!(ram.size, 1024);
         assert!(ram.readable);
         assert!(ram.writable);
@@ -1295,8 +1295,8 @@ mod tests {
         let map = machine.memory_map();
         let control = map.region("control").unwrap();
 
-        assert_eq!(control.base, ComputerMachine::CONTROL_BASE);
-        assert_eq!(control.size, 12);
+        assert_eq!(control.base, computer_abi::CONTROL_BASE);
+        assert_eq!(control.size, computer_abi::CONTROL_SIZE);
         assert!(control.readable);
         assert!(control.writable);
     }
@@ -1307,8 +1307,8 @@ mod tests {
         let map = machine.memory_map();
         let debug = map.region("debug").unwrap();
 
-        assert_eq!(debug.base, ComputerMachine::DEBUG_BASE);
-        assert_eq!(debug.size, 4);
+        assert_eq!(debug.base, computer_abi::DEBUG_BASE);
+        assert_eq!(debug.size, computer_abi::DEBUG_SIZE);
         assert!(debug.readable);
         assert!(debug.writable);
     }
