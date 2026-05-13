@@ -104,3 +104,19 @@ ABI v0 defines:
 - status values for reset, booting, ready, halted, and panic.
 
 This is still not a CKL OS. The purpose is to make one bootable firmware program target a stable machine contract before any CKL compiler or runtime work is added on top.
+
+## 2026-05-13 Update: Rust-Like Language Seed
+
+The experiment now starts a new Rust-like bare-metal language instead of preserving CKL syntax or Kotlin compiler compatibility.
+
+Implemented seed:
+
+- new `native/ckl-compiler` Rust crate;
+- direct source-to-`low_image::Image` compilation;
+- one `main` function;
+- `i32` arithmetic returns;
+- `unsafe` MMIO access through `mmio<i32>(addr).store(value)` and `.load()`;
+- deterministic compile errors for unsupported seed inputs;
+- end-to-end firmware test on `ComputerMachine` that writes `OK`, halts, and reports exit code `0`.
+
+This keeps the branch focused on a tiny bootable vertical slice: source text, Rust compiler, low image, machine execution. It deliberately does not revive the larger CKL OS/process work yet.

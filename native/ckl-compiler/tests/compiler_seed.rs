@@ -171,10 +171,12 @@ fn compiled_seed_runs_on_computer_machine() {
     let image = compile(
         "fn main() -> i32 {
             unsafe {
+                mmio<i32>(0x10000000).store(1);
                 mmio<i32>(0x10000100).store(79);
                 mmio<i32>(0x10000100).store(75);
+                mmio<i32>(0x10000000).store(2);
             }
-            return 7;
+            return 0;
         }",
     )
     .unwrap();
@@ -183,9 +185,10 @@ fn compiled_seed_runs_on_computer_machine() {
 
     assert_eq!(
         machine.run_boot_cpu_until_signal(cpu_id).unwrap(),
-        LowImageSignal::HaltI32(7)
+        LowImageSignal::HaltI32(0)
     );
     assert_eq!(machine.control_status(), ComputerMachine::STATUS_HALTED);
-    assert_eq!(machine.exit_code(), 7);
+    assert_eq!(machine.exit_code(), 0);
+    assert_eq!(machine.panic_code(), 0);
     assert_eq!(machine.debug_output_string(), "OK");
 }

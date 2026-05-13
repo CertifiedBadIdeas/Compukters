@@ -129,7 +129,7 @@ The compiler emits a single-function low image:
 ```rust
 Image {
     language_version: "ckm-seed-0".to_string(),
-    memory_size: 1024,
+    memory_size: 64 * 1024,
     rodata: Vec::new(),
     data: Vec::new(),
     bss_size: 0,
@@ -231,3 +231,23 @@ cargo test --manifest-path native/ckl-vm/Cargo.toml
 - A Rust-like source string compiles directly to `low_image::Image`.
 - The generated image runs on `ComputerMachine` and writes `OK` through debug MMIO.
 - The compiler reports deterministic errors for unsupported seed-language input.
+
+## Implementation Status
+
+The first seed slice is implemented in `native/ckl-compiler`.
+
+Current support:
+
+- public `compile(source: &str) -> Result<Image, CompileError>` API;
+- lexer for `fn`, `return`, `unsafe`, `mmio`, `i32`, punctuation, decimal integers, and hex integers;
+- one `fn main()` or `fn main() -> i32`;
+- integer arithmetic expressions with `+`, `-`, `*`, `/` precedence;
+- `unsafe { ... }` blocks;
+- `mmio<i32>(addr).store(value)` lowered to `Store32`;
+- `mmio<i32>(addr).load()` lowered to `Load32`;
+- unit functions with implicit `ReturnUnit`;
+- i32 functions with explicit `ReturnI32`;
+- diagnostics for missing i32 return, `return;` in i32 functions, value return from unit functions, `void`, and MMIO outside `unsafe`;
+- end-to-end test that compiles firmware-shaped source and runs it on `ComputerMachine`.
+
+The implementation intentionally keeps lexer, parser, AST, and codegen in one file for the seed. Split modules only when the language grows enough to justify the structure.
