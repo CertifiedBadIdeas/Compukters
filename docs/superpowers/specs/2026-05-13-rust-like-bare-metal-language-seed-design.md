@@ -1,0 +1,217 @@
+# Rust-Like Bare-Metal Language Seed Design
+
+## Goal
+
+Create the first Rust compiler path for a new bare-metal language that targets the low VM directly.
+
+This is not a CKL compatibility project. CKL may remain as a legacy/product language elsewhere, but this experimental branch should start a new language designed for low VM computers, flat RAM, MMIO, and future ownership/RAII work.
+
+## Motivation
+
+The current CKL syntax and compiler architecture are not the desired foundation for the low-level VM direction. Porting the Kotlin CKL compiler to Rust would preserve too much of the old language shape and runtime model.
+
+The experiment should instead start with a tiny Rust-written compiler for a new Rust-like language:
+
+```text
+source text
+  -> Rust lexer
+  -> Rust parser
+  -> small AST
+  -> minimal semantic checks
+  -> ckl_vm::low_image::Image
+  -> ComputerMachine
+```
+
+The first milestone should prove the full path from source text to bare-metal machine behavior, not language completeness.
+
+## Working Language Shape
+
+The language uses Rust-like surface syntax:
+
+```rust
+fn main() -> i32 {
+    store32(0x10000000, 1);
+    store32(0x10000100, 79);
+    store32(0x10000100, 75);
+    store32(0x10000000, 2);
+    return 0;
+}
+```
+
+This is a temporary seed syntax, not final branding. The file extension can be `.ckm` for tests, but the name is intentionally not settled.
+
+## Non-Goals
+
+- Do not parse or compile CKL syntax.
+- Do not keep Kotlin compiler compatibility.
+- Do not add Kotlin fallback compilation.
+- Do not add imports, modules, packages, or IDE support.
+- Do not add strings, heap allocation, records, structs, classes, generics, or lambdas.
+- Do not add variables in the first slice unless required by tests.
+- Do not add guest OS processes, filesystem, display, shell, or daemon integration.
+- Do not add a CLI in the first slice.
+
+## Crate Layout
+
+Add a new Rust crate next to the VM crate:
+
+```text
+native/
+  ckl-vm/
+  ckl-compiler/
+```
+
+`ckl-compiler` depends on `ckl-vm` and emits `ckl_vm::low_image::Image`.
+
+This dependency direction is acceptable for the seed. Later, if the compiler grows, shared image/ISA types can move into a smaller `ckl-isa` crate so both VM and compiler depend on the same model without coupling.
+
+## Seed Grammar
+
+The first parser supports only one source file with one function:
+
+```text
+program       = function
+function      = "fn" "main" "(" ")" "->" return_type block
+return_type   = "i32" | "void"
+block         = "{" statement* "}"
+statement     = return_statement | call_statement
+return_statement = "return" expression? ";"
+call_statement   = call_expression ";"
+expression    = additive
+additive      = multiplicative (("+" | "-") multiplicative)*
+multiplicative = primary (("*" | "/") primary)*
+primary       = int_literal | "(" expression ")" | call_expression
+call_expression = identifier "(" arguments? ")"
+arguments     = expression ("," expression)*
+```
+
+Integer literals support:
+
+- decimal: `42`
+- hexadecimal: `0x2a`
+
+Comments are not required in the first slice.
+
+## Builtins
+
+The compiler recognizes two builtins:
+
+```rust
+store32(addr: i32, value: i32) -> void
+load32(addr: i32) -> i32
+```
+
+They are not hostcalls. They lower directly to low VM memory instructions:
+
+- `store32(addr, value)`:
+  - lower `addr` into an address register;
+  - lower `value` into an i32 register;
+  - emit `Instruction::Store32`.
+- `load32(addr)`:
+  - lower `addr` into an address register;
+  - emit `Instruction::Load32` into an i32 register.
+
+ABI constants are not language identifiers in the first slice. Tests use literal addresses from `computer_abi` when building the source string.
+
+## Code Generation
+
+The compiler emits a single-function low image:
+
+```rust
+Image {
+    language_version: "ckm-seed-0".to_string(),
+    memory_size: 1024,
+    rodata: Vec::new(),
+    data: Vec::new(),
+    bss_size: 0,
+    entry_function_index: 0,
+    functions: vec![Function {
+        name: "main".to_string(),
+        register_count,
+        parameters: Vec::new(),
+        instructions,
+    }],
+}
+```
+
+Register allocation is simple and monotonic:
+
+- every expression result receives a fresh register;
+- address-valued expressions use address registers by convention, but the low image model has a unified register count;
+- no reuse is attempted in the seed compiler.
+
+Return lowering:
+
+- `fn main() -> i32 { return expr; }` emits `ReturnI32`.
+- `fn main() -> void { return; }` emits `ReturnUnit`.
+- Falling off the end of a `void` function emits `ReturnUnit`.
+- Falling off the end of an `i32` function is a compile error.
+
+## Diagnostics
+
+The seed compiler should return structured errors, not panic for normal bad input.
+
+Use a compact error type such as:
+
+```rust
+pub struct CompileError {
+    pub message: String,
+}
+```
+
+The first slice does not need rich spans. Error messages should still be deterministic and useful:
+
+- unexpected token;
+- unknown function;
+- wrong argument count;
+- `return;` in `i32` function;
+- `return expr;` in `void` function;
+- missing return in `i32` function.
+
+## End-To-End Test
+
+The key success test compiles source text, boots it as firmware, and observes machine state:
+
+```rust
+fn main() -> i32 {
+    store32(0x10000000, 1);
+    store32(0x10000100, 79);
+    store32(0x10000100, 75);
+    store32(0x10000000, 2);
+    return 0;
+}
+```
+
+The test runs the emitted image through `ComputerMachine` and expects:
+
+- debug output is `OK`;
+- final status is `STATUS_HALTED`;
+- exit code is `0`;
+- panic code is `0`.
+
+## Testing Strategy
+
+Add tests inside `native/ckl-compiler`:
+
+- lexer recognizes keywords, punctuation, decimal integers, and hex integers;
+- parser parses a single `main` function;
+- compiler emits arithmetic instructions for `return 1 + 2 * 3;`;
+- compiler lowers `store32` and `load32`;
+- bad source produces compile errors rather than panics;
+- end-to-end firmware test runs on `ComputerMachine`.
+
+Run:
+
+```bash
+cargo test --manifest-path native/ckl-compiler/Cargo.toml
+cargo test --manifest-path native/ckl-vm/Cargo.toml
+```
+
+## Success Criteria
+
+- A new Rust compiler crate exists.
+- No Kotlin compiler code is touched.
+- No CKL compatibility path is added.
+- A Rust-like source string compiles directly to `low_image::Image`.
+- The generated image runs on `ComputerMachine` and writes `OK` through debug MMIO.
+- The compiler reports deterministic errors for unsupported seed-language input.
