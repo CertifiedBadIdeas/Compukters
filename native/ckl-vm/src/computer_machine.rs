@@ -685,15 +685,15 @@ mod tests {
             vec![
                 Instruction::AddrConst {
                     dst: 0,
-                    value: ComputerMachine::CONTROL_STATUS,
+                    value: computer_abi::CONTROL_STATUS,
                 },
                 Instruction::AddrConst {
                     dst: 1,
-                    value: ComputerMachine::DEBUG_WRITE,
+                    value: computer_abi::DEBUG_WRITE,
                 },
                 Instruction::I32Const {
                     dst: 2,
-                    value: ComputerMachine::STATUS_BOOTING,
+                    value: computer_abi::STATUS_BOOTING,
                 },
                 Instruction::Store32 { addr: 0, src: 2 },
                 Instruction::I32Const {
@@ -708,7 +708,7 @@ mod tests {
                 Instruction::Store32 { addr: 1, src: 4 },
                 Instruction::I32Const {
                     dst: 5,
-                    value: ComputerMachine::STATUS_READY,
+                    value: computer_abi::STATUS_READY,
                 },
                 Instruction::Store32 { addr: 0, src: 5 },
                 Instruction::ReturnUnit,
@@ -723,7 +723,7 @@ mod tests {
             LowImageSignal::HaltUnit,
         );
         assert_eq!(machine.debug_output_string(), "OK");
-        assert_eq!(machine.control_status(), ComputerMachine::STATUS_HALTED);
+        assert_eq!(machine.control_status(), computer_abi::STATUS_HALTED);
         assert_eq!(machine.exit_code(), 0);
     }
 
