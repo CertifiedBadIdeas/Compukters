@@ -13,6 +13,11 @@ pub enum TokenKind {
     Return,
     Unsafe,
     Mmio,
+    Let,
+    Mut,
+    If,
+    Else,
+    While,
     I32,
     Ident(String),
     Int(i64),
@@ -22,7 +27,13 @@ pub enum TokenKind {
     LeftBrace,
     RightBrace,
     Less,
+    LessEqual,
     Greater,
+    GreaterEqual,
+    Equal,
+    EqualEqual,
+    BangEqual,
+    Colon,
     Dot,
     Semicolon,
     Comma,
@@ -72,6 +83,11 @@ pub fn lex(source: &str) -> Result<Vec<Token>, CompileError> {
                 "return" => TokenKind::Return,
                 "unsafe" => TokenKind::Unsafe,
                 "mmio" => TokenKind::Mmio,
+                "let" => TokenKind::Let,
+                "mut" => TokenKind::Mut,
+                "if" => TokenKind::If,
+                "else" => TokenKind::Else,
+                "while" => TokenKind::While,
                 "i32" => TokenKind::I32,
                 _ => TokenKind::Ident(text.to_string()),
             };
@@ -126,8 +142,42 @@ pub fn lex(source: &str) -> Result<Vec<Token>, CompileError> {
             b')' => TokenKind::RightParen,
             b'{' => TokenKind::LeftBrace,
             b'}' => TokenKind::RightBrace,
+            b'<' if offset + 1 < bytes.len() && bytes[offset + 1] == b'=' => {
+                offset += 2;
+                tokens.push(Token {
+                    kind: TokenKind::LessEqual,
+                    offset: offset - 2,
+                });
+                continue;
+            }
             b'<' => TokenKind::Less,
+            b'>' if offset + 1 < bytes.len() && bytes[offset + 1] == b'=' => {
+                offset += 2;
+                tokens.push(Token {
+                    kind: TokenKind::GreaterEqual,
+                    offset: offset - 2,
+                });
+                continue;
+            }
             b'>' => TokenKind::Greater,
+            b'=' if offset + 1 < bytes.len() && bytes[offset + 1] == b'=' => {
+                offset += 2;
+                tokens.push(Token {
+                    kind: TokenKind::EqualEqual,
+                    offset: offset - 2,
+                });
+                continue;
+            }
+            b'=' => TokenKind::Equal,
+            b'!' if offset + 1 < bytes.len() && bytes[offset + 1] == b'=' => {
+                offset += 2;
+                tokens.push(Token {
+                    kind: TokenKind::BangEqual,
+                    offset: offset - 2,
+                });
+                continue;
+            }
+            b':' => TokenKind::Colon,
             b'.' => TokenKind::Dot,
             b';' => TokenKind::Semicolon,
             b',' => TokenKind::Comma,
@@ -438,6 +488,11 @@ impl TokenKind {
             TokenKind::Return => "return",
             TokenKind::Unsafe => "unsafe",
             TokenKind::Mmio => "mmio",
+            TokenKind::Let => "let",
+            TokenKind::Mut => "mut",
+            TokenKind::If => "if",
+            TokenKind::Else => "else",
+            TokenKind::While => "while",
             TokenKind::I32 => "i32",
             TokenKind::Ident(_) => "identifier",
             TokenKind::Int(_) => "integer",
@@ -447,7 +502,13 @@ impl TokenKind {
             TokenKind::LeftBrace => "{",
             TokenKind::RightBrace => "}",
             TokenKind::Less => "<",
+            TokenKind::LessEqual => "<=",
             TokenKind::Greater => ">",
+            TokenKind::GreaterEqual => ">=",
+            TokenKind::Equal => "=",
+            TokenKind::EqualEqual => "==",
+            TokenKind::BangEqual => "!=",
+            TokenKind::Colon => ":",
             TokenKind::Dot => ".",
             TokenKind::Semicolon => ";",
             TokenKind::Comma => ",",
