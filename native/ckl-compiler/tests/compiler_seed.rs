@@ -171,6 +171,64 @@ fn compile_lowers_assignment_to_local() {
 }
 
 #[test]
+fn compile_lowers_if_else_with_i32_equality() {
+    let image = compile(
+        "fn main() -> i32 {
+            let mut i: i32 = 0;
+            if i == 0 {
+                return 1;
+            } else {
+                return 2;
+            }
+        }",
+    )
+    .unwrap();
+    let instructions = &image.functions[0].instructions;
+
+    assert!(matches!(
+        instructions[2],
+        Instruction::I32Const { value: 0, .. }
+    ));
+    assert!(matches!(instructions[3], Instruction::I32Eq { .. }));
+    assert!(matches!(instructions[4], Instruction::JumpIfFalse { .. }));
+    assert!(instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::Jump { .. })));
+    assert!(instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::ReturnI32 { .. })));
+}
+
+#[test]
+fn compile_lowers_while_with_i32_less_than() {
+    let image = compile(
+        "fn main() -> i32 {
+            let mut i: i32 = 0;
+            while i < 3 {
+                i = i + 1;
+            }
+            return i;
+        }",
+    )
+    .unwrap();
+    let instructions = &image.functions[0].instructions;
+
+    assert!(instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::I32Lt { .. })));
+    assert!(instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::JumpIfFalse { .. })));
+    assert!(instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::Jump { target: 2 })));
+    assert!(matches!(
+        instructions.last(),
+        Some(Instruction::ReturnI32 { .. })
+    ));
+}
+
+#[test]
 fn compile_lowers_unit_main_with_implicit_return() {
     let image = compile("fn main() { }").unwrap();
     let function = &image.functions[0];
