@@ -74,3 +74,20 @@ Avoid for now:
 Resume work on `dev`.
 
 Use this branch only as a sketchpad for future architecture, not as the main delivery path.
+
+## 2026-05-13 Update: Bare-Metal Program Direction
+
+The branch is active again, but with a narrower target than a full CKL OS.
+
+The current direction is a bare-metal computer program:
+
+- one `ComputerMachine`;
+- one boot CPU;
+- one low VM program;
+- flat machine RAM;
+- minimal control/debug MMIO;
+- no guest process table in the MVP;
+- no guest scheduler in the MVP;
+- no virtual memory in the MVP.
+
+The old process-table and scheduler fixtures remain useful research references, but they are not the active implementation path. The next useful milestone is a firmware-shaped program that boots, writes deterministic debug output, updates machine status, and halts with an exit code.
