@@ -1,3 +1,4 @@
+use crate::computer_abi;
 use crate::low_bus::{MachineBus, MmioDevice, MmioDeviceId};
 use crate::low_image::Image;
 use crate::low_image_runner::{LowCpuContext, LowImageSignal, LowImageVm};
@@ -38,17 +39,19 @@ pub struct ComputerMemoryRegion {
 }
 
 impl ComputerMachine {
-    pub const CONTROL_BASE: u32 = 0x1000_0000;
-    pub const CONTROL_STATUS: u32 = Self::CONTROL_BASE;
-    pub const CONTROL_PANIC_CODE: u32 = Self::CONTROL_BASE + 4;
-    pub const CONTROL_EXIT_CODE: u32 = Self::CONTROL_BASE + 8;
-    pub const DEBUG_BASE: u32 = 0x1000_0100;
-    pub const DEBUG_WRITE: u32 = Self::DEBUG_BASE;
-    pub const STATUS_RESET: i32 = 0;
-    pub const STATUS_BOOTING: i32 = 1;
-    pub const STATUS_READY: i32 = 2;
-    pub const STATUS_HALTED: i32 = 3;
-    pub const STATUS_PANIC: i32 = 4;
+    pub const CONTROL_BASE: u32 = computer_abi::CONTROL_BASE;
+    pub const CONTROL_STATUS: u32 = computer_abi::CONTROL_STATUS;
+    pub const CONTROL_PANIC_CODE: u32 = computer_abi::CONTROL_PANIC_CODE;
+    pub const CONTROL_EXIT_CODE: u32 = computer_abi::CONTROL_EXIT_CODE;
+    pub const CONTROL_SIZE: u32 = computer_abi::CONTROL_SIZE;
+    pub const DEBUG_BASE: u32 = computer_abi::DEBUG_BASE;
+    pub const DEBUG_WRITE: u32 = computer_abi::DEBUG_WRITE;
+    pub const DEBUG_SIZE: u32 = computer_abi::DEBUG_SIZE;
+    pub const STATUS_RESET: i32 = computer_abi::STATUS_RESET;
+    pub const STATUS_BOOTING: i32 = computer_abi::STATUS_BOOTING;
+    pub const STATUS_READY: i32 = computer_abi::STATUS_READY;
+    pub const STATUS_HALTED: i32 = computer_abi::STATUS_HALTED;
+    pub const STATUS_PANIC: i32 = computer_abi::STATUS_PANIC;
 
     pub fn new(memory_size: usize) -> Result<Self, MemoryFault> {
         let mut bus = MachineBus::new(memory_size)?;
@@ -333,6 +336,7 @@ impl MmioDevice for DebugSerialDevice {
 
 #[cfg(test)]
 mod tests {
+    use crate::computer_abi;
     use crate::computer_machine::ComputerMachine;
     use crate::low_bus::MmioDevice;
     use crate::low_image::{Function, Image, Instruction};
@@ -577,6 +581,35 @@ mod tests {
 
         assert_eq!(machine.control_status(), ComputerMachine::STATUS_RESET);
         assert_eq!(machine.panic_code(), 0);
+    }
+
+    #[test]
+    fn computer_machine_constants_match_bare_metal_abi_v0() {
+        assert_eq!(ComputerMachine::CONTROL_BASE, computer_abi::CONTROL_BASE);
+        assert_eq!(
+            ComputerMachine::CONTROL_STATUS,
+            computer_abi::CONTROL_STATUS
+        );
+        assert_eq!(
+            ComputerMachine::CONTROL_PANIC_CODE,
+            computer_abi::CONTROL_PANIC_CODE,
+        );
+        assert_eq!(
+            ComputerMachine::CONTROL_EXIT_CODE,
+            computer_abi::CONTROL_EXIT_CODE,
+        );
+        assert_eq!(ComputerMachine::CONTROL_SIZE, computer_abi::CONTROL_SIZE);
+        assert_eq!(ComputerMachine::DEBUG_BASE, computer_abi::DEBUG_BASE);
+        assert_eq!(ComputerMachine::DEBUG_WRITE, computer_abi::DEBUG_WRITE);
+        assert_eq!(ComputerMachine::DEBUG_SIZE, computer_abi::DEBUG_SIZE);
+        assert_eq!(ComputerMachine::STATUS_RESET, computer_abi::STATUS_RESET);
+        assert_eq!(
+            ComputerMachine::STATUS_BOOTING,
+            computer_abi::STATUS_BOOTING
+        );
+        assert_eq!(ComputerMachine::STATUS_READY, computer_abi::STATUS_READY);
+        assert_eq!(ComputerMachine::STATUS_HALTED, computer_abi::STATUS_HALTED);
+        assert_eq!(ComputerMachine::STATUS_PANIC, computer_abi::STATUS_PANIC);
     }
 
     #[test]
