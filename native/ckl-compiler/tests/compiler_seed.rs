@@ -312,6 +312,53 @@ fn compile_rejects_empty_return_in_i32_function() {
 }
 
 #[test]
+fn compile_rejects_undeclared_local_read() {
+    let error = compile("fn main() -> i32 { return missing; }").unwrap_err();
+
+    assert!(
+        error.message.contains("use of undeclared local `missing`"),
+        "{error:?}"
+    );
+}
+
+#[test]
+fn compile_rejects_duplicate_local_declaration() {
+    let error = compile("fn main() { let mut i: i32 = 0; let mut i: i32 = 1; }").unwrap_err();
+
+    assert!(error.message.contains("duplicate local `i`"), "{error:?}");
+}
+
+#[test]
+fn compile_rejects_assignment_to_undeclared_local() {
+    let error = compile("fn main() { i = 1; }").unwrap_err();
+
+    assert!(
+        error.message.contains("assignment to undeclared local `i`"),
+        "{error:?}"
+    );
+}
+
+#[test]
+fn compile_rejects_missing_return_after_if_without_else() {
+    let error = compile("fn main() -> i32 { if 1 { return 1; } }").unwrap_err();
+
+    assert!(
+        error.message.contains("missing return in `i32` function"),
+        "{error:?}"
+    );
+}
+
+#[test]
+fn compile_rejects_unreachable_statement_after_return() {
+    let error = compile("fn main() -> i32 { return 1; let mut i: i32 = 2; }").unwrap_err();
+
+    assert!(
+        error.message.contains("unreachable statement after return"),
+        "{error:?}"
+    );
+}
+
+#[test]
 fn compiled_seed_runs_on_computer_machine() {
     let image = compile(
         "fn main() -> i32 {
