@@ -91,3 +91,16 @@ The current direction is a bare-metal computer program:
 - no virtual memory in the MVP.
 
 The old process-table and scheduler fixtures remain useful research references, but they are not the active implementation path. The next useful milestone is a firmware-shaped program that boots, writes deterministic debug output, updates machine status, and halts with an exit code.
+
+## 2026-05-13 Update: Bare-Metal ABI v0
+
+The active experiment now has a narrow ABI boundary instead of an implicit `ComputerMachine` contract.
+
+ABI v0 defines:
+
+- RAM base;
+- control MMIO base, size, and status registers;
+- debug serial MMIO base and write register;
+- status values for reset, booting, ready, halted, and panic.
+
+This is still not a CKL OS. The purpose is to make one bootable firmware program target a stable machine contract before any CKL compiler or runtime work is added on top.
