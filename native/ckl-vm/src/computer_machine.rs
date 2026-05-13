@@ -636,6 +636,55 @@ mod tests {
     }
 
     #[test]
+    fn bare_metal_firmware_marks_ready_writes_debug_and_halts() {
+        let mut machine = ComputerMachine::new(1024).unwrap();
+        let firmware = image(
+            vec![
+                Instruction::AddrConst {
+                    dst: 0,
+                    value: ComputerMachine::CONTROL_STATUS,
+                },
+                Instruction::AddrConst {
+                    dst: 1,
+                    value: ComputerMachine::DEBUG_WRITE,
+                },
+                Instruction::I32Const {
+                    dst: 2,
+                    value: ComputerMachine::STATUS_BOOTING,
+                },
+                Instruction::Store32 { addr: 0, src: 2 },
+                Instruction::I32Const {
+                    dst: 3,
+                    value: i32::from(b'O'),
+                },
+                Instruction::Store32 { addr: 1, src: 3 },
+                Instruction::I32Const {
+                    dst: 4,
+                    value: i32::from(b'K'),
+                },
+                Instruction::Store32 { addr: 1, src: 4 },
+                Instruction::I32Const {
+                    dst: 5,
+                    value: ComputerMachine::STATUS_READY,
+                },
+                Instruction::Store32 { addr: 0, src: 5 },
+                Instruction::ReturnUnit,
+            ],
+            6,
+        );
+
+        let cpu_id = machine.spawn_boot_cpu(firmware, 128).unwrap();
+
+        assert_eq!(
+            machine.run_boot_cpu_until_signal(cpu_id).unwrap(),
+            LowImageSignal::HaltUnit,
+        );
+        assert_eq!(machine.debug_output_string(), "OK");
+        assert_eq!(machine.control_status(), ComputerMachine::STATUS_HALTED);
+        assert_eq!(machine.exit_code(), 0);
+    }
+
+    #[test]
     fn bare_metal_program_fault_marks_machine_panicked() {
         let mut machine = ComputerMachine::new(1024).unwrap();
         let firmware = image(
