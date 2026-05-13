@@ -30,10 +30,13 @@ The language uses Rust-like surface syntax:
 
 ```rust
 fn main() -> i32 {
-    store32(0x10000000, 1);
-    store32(0x10000100, 79);
-    store32(0x10000100, 75);
-    store32(0x10000000, 2);
+    unsafe {
+        mmio<i32>(0x10000000).store(1);
+        mmio<i32>(0x10000100).store(79);
+        mmio<i32>(0x10000100).store(75);
+        mmio<i32>(0x10000000).store(2);
+    }
+
     return 0;
 }
 ```
@@ -70,19 +73,22 @@ This dependency direction is acceptable for the seed. Later, if the compiler gro
 The first parser supports only one source file with one function:
 
 ```text
-program       = function
-function      = "fn" "main" "(" ")" "->" return_type block
-return_type   = "i32" | "void"
-block         = "{" statement* "}"
-statement     = return_statement | call_statement
-return_statement = "return" expression? ";"
-call_statement   = call_expression ";"
-expression    = additive
-additive      = multiplicative (("+" | "-") multiplicative)*
-multiplicative = primary (("*" | "/") primary)*
-primary       = int_literal | "(" expression ")" | call_expression
-call_expression = identifier "(" arguments? ")"
-arguments     = expression ("," expression)*
+program             = function
+function            = "fn" "main" "(" ")" return_annotation? block
+return_annotation   = "->" "i32"
+block               = "{" statement* "}"
+statement           = return_statement | unsafe_block | method_call_statement
+return_statement    = "return" expression? ";"
+unsafe_block        = "unsafe" block
+method_call_statement = method_call ";"
+expression          = additive
+additive            = multiplicative (("+" | "-") multiplicative)*
+multiplicative      = postfix (("*" | "/") postfix)*
+postfix             = primary ("." identifier "(" arguments? ")")*
+primary             = int_literal | "(" expression ")" | mmio_expression
+mmio_expression     = "mmio" "<" "i32" ">" "(" expression ")"
+method_call         = expression "." identifier "(" arguments? ")"
+arguments           = expression ("," expression)*
 ```
 
 Integer literals support:
@@ -92,24 +98,27 @@ Integer literals support:
 
 Comments are not required in the first slice.
 
-## Builtins
+`fn main() -> i32` returns a 32-bit integer. `fn main()` returns unit. The seed language does not have a `void` keyword.
 
-The compiler recognizes two builtins:
+## Unsafe MMIO
+
+The compiler recognizes one unsafe MMIO constructor:
 
 ```rust
-store32(addr: i32, value: i32) -> void
-load32(addr: i32) -> i32
+mmio<i32>(addr)
 ```
 
-They are not hostcalls. They lower directly to low VM memory instructions:
+The constructor returns a typed MMIO capability. The seed compiler supports two methods on that capability:
 
-- `store32(addr, value)`:
-  - lower `addr` into an address register;
+- `.store(value)`:
+  - lower the capability address into an address register;
   - lower `value` into an i32 register;
   - emit `Instruction::Store32`.
-- `load32(addr)`:
-  - lower `addr` into an address register;
+- `.load()`:
+  - lower the capability address into an address register;
   - emit `Instruction::Load32` into an i32 register.
+
+MMIO construction and MMIO methods are valid only inside `unsafe` blocks. They are not hostcalls. They lower directly to low VM memory instructions and model Rust embedded-style volatile access.
 
 ABI constants are not language identifiers in the first slice. Tests use literal addresses from `computer_abi` when building the source string.
 
@@ -143,8 +152,8 @@ Register allocation is simple and monotonic:
 Return lowering:
 
 - `fn main() -> i32 { return expr; }` emits `ReturnI32`.
-- `fn main() -> void { return; }` emits `ReturnUnit`.
-- Falling off the end of a `void` function emits `ReturnUnit`.
+- `fn main() { return; }` emits `ReturnUnit`.
+- Falling off the end of `fn main()` emits `ReturnUnit`.
 - Falling off the end of an `i32` function is a compile error.
 
 ## Diagnostics
@@ -163,9 +172,11 @@ The first slice does not need rich spans. Error messages should still be determi
 
 - unexpected token;
 - unknown function;
+- unknown method;
 - wrong argument count;
+- MMIO access outside `unsafe`;
 - `return;` in `i32` function;
-- `return expr;` in `void` function;
+- `return expr;` in unit function;
 - missing return in `i32` function.
 
 ## End-To-End Test
@@ -174,10 +185,13 @@ The key success test compiles source text, boots it as firmware, and observes ma
 
 ```rust
 fn main() -> i32 {
-    store32(0x10000000, 1);
-    store32(0x10000100, 79);
-    store32(0x10000100, 75);
-    store32(0x10000000, 2);
+    unsafe {
+        mmio<i32>(0x10000000).store(1);
+        mmio<i32>(0x10000100).store(79);
+        mmio<i32>(0x10000100).store(75);
+        mmio<i32>(0x10000000).store(2);
+    }
+
     return 0;
 }
 ```
@@ -196,7 +210,9 @@ Add tests inside `native/ckl-compiler`:
 - lexer recognizes keywords, punctuation, decimal integers, and hex integers;
 - parser parses a single `main` function;
 - compiler emits arithmetic instructions for `return 1 + 2 * 3;`;
-- compiler lowers `store32` and `load32`;
+- compiler lowers `unsafe { mmio<i32>(addr).store(value); }`;
+- compiler lowers `unsafe { mmio<i32>(addr).load(); }` when used as an expression;
+- compiler rejects MMIO access outside `unsafe`;
 - bad source produces compile errors rather than panics;
 - end-to-end firmware test runs on `ComputerMachine`.
 
