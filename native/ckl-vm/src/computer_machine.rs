@@ -244,7 +244,7 @@ struct ComputerControlDevice {
 }
 
 impl ComputerControlDevice {
-    const SIZE: u32 = 12;
+    const SIZE: u32 = computer_abi::CONTROL_SIZE;
 
     fn new() -> Self {
         Self {
@@ -297,7 +297,7 @@ struct DebugSerialDevice {
 }
 
 impl DebugSerialDevice {
-    const SIZE: u32 = 4;
+    const SIZE: u32 = computer_abi::DEBUG_SIZE;
 
     fn new() -> Self {
         Self { bytes: Vec::new() }
@@ -336,6 +336,7 @@ impl MmioDevice for DebugSerialDevice {
 
 #[cfg(test)]
 mod tests {
+    use super::{ComputerControlDevice, DebugSerialDevice};
     use crate::computer_abi;
     use crate::computer_machine::ComputerMachine;
     use crate::low_bus::MmioDevice;
@@ -610,6 +611,15 @@ mod tests {
         assert_eq!(ComputerMachine::STATUS_READY, computer_abi::STATUS_READY);
         assert_eq!(ComputerMachine::STATUS_HALTED, computer_abi::STATUS_HALTED);
         assert_eq!(ComputerMachine::STATUS_PANIC, computer_abi::STATUS_PANIC);
+    }
+
+    #[test]
+    fn computer_mmio_device_sizes_match_bare_metal_abi_v0() {
+        let control = ComputerControlDevice::new();
+        let debug = DebugSerialDevice::new();
+
+        assert_eq!(control.size(), computer_abi::CONTROL_SIZE);
+        assert_eq!(debug.size(), computer_abi::DEBUG_SIZE);
     }
 
     #[test]
