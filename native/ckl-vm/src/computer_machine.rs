@@ -634,6 +634,31 @@ mod tests {
     }
 
     #[test]
+    fn bare_metal_program_fault_marks_machine_panicked() {
+        let mut machine = ComputerMachine::new(1024).unwrap();
+        let firmware = image(
+            vec![
+                Instruction::I32Const { dst: 0, value: 10 },
+                Instruction::I32Const { dst: 1, value: 0 },
+                Instruction::I32Div {
+                    dst: 2,
+                    lhs: 0,
+                    rhs: 1,
+                },
+                Instruction::ReturnUnit,
+            ],
+            3,
+        );
+
+        let cpu_id = machine.spawn_boot_cpu(firmware, 128).unwrap();
+        let error = machine.run_boot_cpu_until_signal(cpu_id).unwrap_err();
+
+        assert_eq!(error, "division by zero");
+        assert_eq!(machine.control_status(), ComputerMachine::STATUS_PANIC);
+        assert_ne!(machine.panic_code(), 0);
+    }
+
+    #[test]
     fn boot_cpu_runs_kernel_that_marks_machine_ready() {
         let mut machine = ComputerMachine::new(1024).unwrap();
         let kernel = image(
