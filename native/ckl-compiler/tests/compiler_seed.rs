@@ -134,6 +134,43 @@ fn compile_lowers_i32_main_return_arithmetic() {
 }
 
 #[test]
+fn compile_lowers_local_declaration_and_return() {
+    let image = compile("fn main() -> i32 { let mut i: i32 = 7; return i; }").unwrap();
+    let function = &image.functions[0];
+
+    assert_eq!(
+        function.instructions,
+        vec![
+            Instruction::I32Const { dst: 1, value: 7 },
+            Instruction::I32Move { dst: 0, src: 1 },
+            Instruction::ReturnI32 { src: 0 },
+        ]
+    );
+}
+
+#[test]
+fn compile_lowers_assignment_to_local() {
+    let image = compile("fn main() -> i32 { let mut i: i32 = 1; i = i + 2; return i; }").unwrap();
+    let function = &image.functions[0];
+
+    assert_eq!(
+        function.instructions,
+        vec![
+            Instruction::I32Const { dst: 1, value: 1 },
+            Instruction::I32Move { dst: 0, src: 1 },
+            Instruction::I32Const { dst: 2, value: 2 },
+            Instruction::I32Add {
+                dst: 3,
+                lhs: 0,
+                rhs: 2,
+            },
+            Instruction::I32Move { dst: 0, src: 3 },
+            Instruction::ReturnI32 { src: 0 },
+        ]
+    );
+}
+
+#[test]
 fn compile_lowers_unit_main_with_implicit_return() {
     let image = compile("fn main() { }").unwrap();
     let function = &image.functions[0];

@@ -1,4 +1,5 @@
 use ckl_vm::low_image::{Function, Image, Instruction};
+use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -230,6 +231,23 @@ enum ReturnType {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Statement {
+    Let {
+        name: String,
+        initializer: Expr,
+    },
+    Assign {
+        name: String,
+        value: Expr,
+    },
+    If {
+        condition: Expr,
+        then_branch: Vec<Statement>,
+        else_branch: Option<Vec<Statement>>,
+    },
+    While {
+        condition: Expr,
+        body: Vec<Statement>,
+    },
     Return(Option<Expr>),
     Unsafe(Vec<Statement>),
     Expr(Expr),
@@ -238,6 +256,7 @@ enum Statement {
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Expr {
     Int(i64),
+    Local(String),
     Mmio(Box<Expr>),
     MethodCall {
         receiver: Box<Expr>,
@@ -249,6 +268,11 @@ enum Expr {
         lhs: Box<Expr>,
         rhs: Box<Expr>,
     },
+    Compare {
+        op: CompareOp,
+        lhs: Box<Expr>,
+        rhs: Box<Expr>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -257,6 +281,16 @@ enum BinaryOp {
     Sub,
     Mul,
     Div,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CompareOp {
+    Lt,
+    Eq,
+    Ne,
+    Gt,
+    Le,
+    Ge,
 }
 
 struct Parser {
@@ -298,6 +332,35 @@ impl Parser {
     }
 
     fn parse_statement(&mut self) -> Result<Statement, CompileError> {
+        if self.consume(TokenKind::Let) {
+            self.expect(TokenKind::Mut)?;
+            let name = self.take_ident()?;
+            self.expect(TokenKind::Colon)?;
+            self.expect(TokenKind::I32)?;
+            self.expect(TokenKind::Equal)?;
+            let initializer = self.parse_expr()?;
+            self.expect(TokenKind::Semicolon)?;
+            return Ok(Statement::Let { name, initializer });
+        }
+        if self.consume(TokenKind::If) {
+            let condition = self.parse_expr()?;
+            let then_branch = self.parse_block()?;
+            let else_branch = if self.consume(TokenKind::Else) {
+                Some(self.parse_block()?)
+            } else {
+                None
+            };
+            return Ok(Statement::If {
+                condition,
+                then_branch,
+                else_branch,
+            });
+        }
+        if self.consume(TokenKind::While) {
+            let condition = self.parse_expr()?;
+            let body = self.parse_block()?;
+            return Ok(Statement::While { condition, body });
+        }
         if self.consume(TokenKind::Return) {
             if self.consume(TokenKind::Semicolon) {
                 return Ok(Statement::Return(None));
@@ -309,6 +372,15 @@ impl Parser {
         if self.consume(TokenKind::Unsafe) {
             return Ok(Statement::Unsafe(self.parse_block()?));
         }
+        if let TokenKind::Ident(name) = self.peek().clone() {
+            if self.peek_next() == &TokenKind::Equal {
+                self.offset += 1;
+                self.expect(TokenKind::Equal)?;
+                let value = self.parse_expr()?;
+                self.expect(TokenKind::Semicolon)?;
+                return Ok(Statement::Assign { name, value });
+            }
+        }
 
         let expr = self.parse_expr()?;
         self.expect(TokenKind::Semicolon)?;
@@ -316,7 +388,37 @@ impl Parser {
     }
 
     fn parse_expr(&mut self) -> Result<Expr, CompileError> {
-        self.parse_add_sub()
+        self.parse_comparison()
+    }
+
+    fn parse_comparison(&mut self) -> Result<Expr, CompileError> {
+        let lhs = self.parse_add_sub()?;
+        let op = if self.consume(TokenKind::Less) {
+            Some(CompareOp::Lt)
+        } else if self.consume(TokenKind::EqualEqual) {
+            Some(CompareOp::Eq)
+        } else if self.consume(TokenKind::BangEqual) {
+            Some(CompareOp::Ne)
+        } else if self.consume(TokenKind::Greater) {
+            Some(CompareOp::Gt)
+        } else if self.consume(TokenKind::LessEqual) {
+            Some(CompareOp::Le)
+        } else if self.consume(TokenKind::GreaterEqual) {
+            Some(CompareOp::Ge)
+        } else {
+            None
+        };
+
+        if let Some(op) = op {
+            let rhs = self.parse_add_sub()?;
+            Ok(Expr::Compare {
+                op,
+                lhs: Box::new(lhs),
+                rhs: Box::new(rhs),
+            })
+        } else {
+            Ok(lhs)
+        }
     }
 
     fn parse_add_sub(&mut self) -> Result<Expr, CompileError> {
@@ -384,6 +486,9 @@ impl Parser {
     fn parse_primary(&mut self) -> Result<Expr, CompileError> {
         if let Some(value) = self.take_int() {
             return Ok(Expr::Int(value));
+        }
+        if let Some(name) = self.take_ident_if_present() {
+            return Ok(Expr::Local(name));
         }
         if self.consume(TokenKind::Mmio) {
             self.expect(TokenKind::Less)?;
@@ -453,6 +558,19 @@ impl Parser {
         }
     }
 
+    fn take_ident_if_present(&mut self) -> Option<String> {
+        match self.tokens.get(self.offset) {
+            Some(Token {
+                kind: TokenKind::Ident(value),
+                ..
+            }) => {
+                self.offset += 1;
+                Some(value.clone())
+            }
+            _ => None,
+        }
+    }
+
     fn consume(&mut self, expected: TokenKind) -> bool {
         if self.peek() == &expected {
             self.offset += 1;
@@ -465,6 +583,13 @@ impl Parser {
     fn peek(&self) -> &TokenKind {
         self.tokens
             .get(self.offset)
+            .map(|token| &token.kind)
+            .unwrap_or(&TokenKind::Eof)
+    }
+
+    fn peek_next(&self) -> &TokenKind {
+        self.tokens
+            .get(self.offset + 1)
             .map(|token| &token.kind)
             .unwrap_or(&TokenKind::Eof)
     }
@@ -528,12 +653,25 @@ enum ExprValue {
     Unit,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ValueType {
+    I32,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct Local {
+    register: u16,
+    ty: ValueType,
+    mutable: bool,
+}
+
 struct Codegen {
     instructions: Vec<Instruction>,
     next_register: u16,
     return_type: ReturnType,
     saw_return: bool,
     unsafe_depth: usize,
+    locals: HashMap<String, Local>,
 }
 
 impl Codegen {
@@ -544,6 +682,7 @@ impl Codegen {
             return_type: program.return_type,
             saw_return: false,
             unsafe_depth: 0,
+            locals: HashMap::new(),
         };
 
         codegen.compile_statements(&program.statements)?;
@@ -588,6 +727,52 @@ impl Codegen {
 
     fn compile_statement(&mut self, statement: &Statement) -> Result<(), CompileError> {
         match statement {
+            Statement::Let { name, initializer } => {
+                if self.locals.contains_key(name) {
+                    return Err(CompileError {
+                        message: format!("duplicate local `{name}`"),
+                    });
+                }
+                let dst = self.alloc_register()?;
+                let src = self.compile_i32_expr(initializer)?;
+                self.instructions.push(Instruction::I32Move { dst, src });
+                self.locals.insert(
+                    name.clone(),
+                    Local {
+                        register: dst,
+                        ty: ValueType::I32,
+                        mutable: true,
+                    },
+                );
+                Ok(())
+            }
+            Statement::Assign { name, value } => {
+                let local = *self.locals.get(name).ok_or_else(|| CompileError {
+                    message: format!("assignment to undeclared local `{name}`"),
+                })?;
+                if !local.mutable {
+                    return Err(CompileError {
+                        message: format!("assignment to immutable local `{name}`"),
+                    });
+                }
+                if local.ty != ValueType::I32 {
+                    return Err(CompileError {
+                        message: format!("assignment to non-i32 local `{name}`"),
+                    });
+                }
+                let src = self.compile_i32_expr(value)?;
+                self.instructions.push(Instruction::I32Move {
+                    dst: local.register,
+                    src,
+                });
+                Ok(())
+            }
+            Statement::If { .. } => Err(CompileError {
+                message: "`if` lowering is not implemented yet".to_string(),
+            }),
+            Statement::While { .. } => Err(CompileError {
+                message: "`while` lowering is not implemented yet".to_string(),
+            }),
             Statement::Return(None) => match self.return_type {
                 ReturnType::Unit => {
                     self.instructions.push(Instruction::ReturnUnit);
@@ -667,6 +852,14 @@ impl Codegen {
                 self.instructions.push(Instruction::I32Const { dst, value });
                 Ok(ExprValue::I32(dst))
             }
+            Expr::Local(name) => {
+                let local = self.locals.get(name).ok_or_else(|| CompileError {
+                    message: format!("use of undeclared local `{name}`"),
+                })?;
+                match local.ty {
+                    ValueType::I32 => Ok(ExprValue::I32(local.register)),
+                }
+            }
             Expr::Mmio(address) => Ok(ExprValue::Addr(self.compile_addr_expr(address)?)),
             Expr::MethodCall {
                 receiver,
@@ -686,6 +879,9 @@ impl Codegen {
                 self.instructions.push(instruction);
                 Ok(ExprValue::I32(dst))
             }
+            Expr::Compare { .. } => Err(CompileError {
+                message: "comparison lowering is not implemented yet".to_string(),
+            }),
         }
     }
 
