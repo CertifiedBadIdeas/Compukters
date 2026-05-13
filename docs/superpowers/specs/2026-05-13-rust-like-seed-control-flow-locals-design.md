@@ -302,3 +302,16 @@ The test runs on `ComputerMachine` and expects:
 - No CKL compatibility path is added.
 - Existing seed tests keep passing.
 - New control-flow and locals tests pass.
+
+## Implementation Status
+
+Implemented in `native/ckl-compiler`:
+
+- lexer tokens for locals, branching, loops, assignment, and comparisons;
+- parser support for `let mut`, assignment, `if`, `else`, `while`, local reads, and comparison expressions;
+- register-backed mutable `i32` locals;
+- direct lowering of comparisons through existing low VM instructions;
+- direct lowering of `if` and `while` through `Jump` and `JumpIfFalse`;
+- conservative return/outcome analysis;
+- diagnostics for undeclared locals, duplicate locals, undeclared assignment, missing i32 returns, unreachable statements, and MMIO outside `unsafe`;
+- end-to-end loop firmware test on `ComputerMachine`.
