@@ -54,6 +54,56 @@ fn lexer_recognizes_seed_language_tokens() {
 }
 
 #[test]
+fn lexer_recognizes_locals_control_flow_and_comparison_tokens() {
+    let tokens =
+        lex("let mut i: i32 = 0; while i <= 3 { if i != 2 { i = i + 1; } else { i = i + 1; } }")
+            .unwrap();
+    let kinds: Vec<TokenKind> = tokens.into_iter().map(|token| token.kind).collect();
+
+    assert_eq!(
+        kinds,
+        vec![
+            TokenKind::Let,
+            TokenKind::Mut,
+            TokenKind::Ident("i".to_string()),
+            TokenKind::Colon,
+            TokenKind::I32,
+            TokenKind::Equal,
+            TokenKind::Int(0),
+            TokenKind::Semicolon,
+            TokenKind::While,
+            TokenKind::Ident("i".to_string()),
+            TokenKind::LessEqual,
+            TokenKind::Int(3),
+            TokenKind::LeftBrace,
+            TokenKind::If,
+            TokenKind::Ident("i".to_string()),
+            TokenKind::BangEqual,
+            TokenKind::Int(2),
+            TokenKind::LeftBrace,
+            TokenKind::Ident("i".to_string()),
+            TokenKind::Equal,
+            TokenKind::Ident("i".to_string()),
+            TokenKind::Plus,
+            TokenKind::Int(1),
+            TokenKind::Semicolon,
+            TokenKind::RightBrace,
+            TokenKind::Else,
+            TokenKind::LeftBrace,
+            TokenKind::Ident("i".to_string()),
+            TokenKind::Equal,
+            TokenKind::Ident("i".to_string()),
+            TokenKind::Plus,
+            TokenKind::Int(1),
+            TokenKind::Semicolon,
+            TokenKind::RightBrace,
+            TokenKind::RightBrace,
+            TokenKind::Eof,
+        ]
+    );
+}
+
+#[test]
 fn compile_lowers_i32_main_return_arithmetic() {
     let image = compile("fn main() -> i32 { return 7 + 3 * 2; }").unwrap();
     let function = &image.functions[0];
