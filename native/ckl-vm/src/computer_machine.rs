@@ -339,6 +339,8 @@ mod tests {
     use crate::low_image_runner::LowImageSignal;
     use crate::low_machine::MemoryFault;
 
+    // Legacy CKL OS research fixtures. Keep these tests as reference material, but do not
+    // treat the guest process table/scheduler path as the current bare-metal MVP direction.
     const OS_STATE_BASE: u32 = 0x0001_0000;
     const OS_MAGIC: i32 = 0x434B_4F53;
     const OS_CURRENT_PID: u32 = OS_STATE_BASE + 4;
@@ -692,7 +694,7 @@ mod tests {
     }
 
     #[test]
-    fn boot_kernel_initializes_os_state_and_marks_machine_ready() {
+    fn legacy_ckl_os_research_boot_kernel_initializes_os_state_and_marks_machine_ready() {
         let mut machine = ComputerMachine::new(0x0002_0000).unwrap();
         let kernel = image(
             vec![
@@ -748,7 +750,7 @@ mod tests {
     }
 
     #[test]
-    fn boot_kernel_initializes_guest_process_table() {
+    fn legacy_ckl_os_research_boot_kernel_initializes_guest_process_table() {
         let mut machine = ComputerMachine::new(0x0002_0000).unwrap();
         let kernel = image(
             vec![
@@ -951,7 +953,7 @@ mod tests {
     }
 
     #[test]
-    fn scheduler_fixture_rotates_running_process_state() {
+    fn legacy_ckl_os_research_scheduler_fixture_rotates_running_process_state() {
         let mut machine = ComputerMachine::new(0x0002_0000).unwrap();
         machine.memory_mut().store_i32(OS_CURRENT_PID, 0).unwrap();
         machine
@@ -1046,7 +1048,7 @@ mod tests {
     }
 
     #[test]
-    fn kernel_launches_static_user_process_and_records_exit_code() {
+    fn legacy_ckl_os_research_kernel_launches_static_user_process_and_records_exit_code() {
         let mut machine = ComputerMachine::new(0x0002_0000).unwrap();
         let kernel = Image {
             language_version: "ckl-low-1".to_string(),
