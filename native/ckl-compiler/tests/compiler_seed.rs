@@ -129,3 +129,37 @@ fn compile_lowers_unsafe_mmio_load_return() {
         ]
     );
 }
+
+#[test]
+fn compile_rejects_void_return_type() {
+    let error = compile("fn main() -> void { }").unwrap_err();
+
+    assert!(error.message.contains("expected `i32`"), "{error:?}");
+}
+
+#[test]
+fn compile_rejects_mmio_outside_unsafe() {
+    let error = compile("fn main() { mmio<i32>(0x1000).store(1); }").unwrap_err();
+
+    assert!(
+        error.message.contains("MMIO access requires `unsafe`"),
+        "{error:?}"
+    );
+}
+
+#[test]
+fn compile_rejects_missing_i32_return() {
+    let error = compile("fn main() -> i32 { }").unwrap_err();
+
+    assert!(
+        error.message.contains("missing return in `i32` function"),
+        "{error:?}"
+    );
+}
+
+#[test]
+fn compile_rejects_empty_return_in_i32_function() {
+    let error = compile("fn main() -> i32 { return; }").unwrap_err();
+
+    assert!(error.message.contains("cannot use `return;`"), "{error:?}");
+}
