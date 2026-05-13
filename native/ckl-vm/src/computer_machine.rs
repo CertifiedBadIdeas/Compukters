@@ -40,10 +40,12 @@ impl ComputerMachine {
     pub const CONTROL_BASE: u32 = 0x1000_0000;
     pub const CONTROL_STATUS: u32 = Self::CONTROL_BASE;
     pub const CONTROL_PANIC_CODE: u32 = Self::CONTROL_BASE + 4;
-    pub const STATUS_PANIC: i32 = -1;
+    pub const CONTROL_EXIT_CODE: u32 = Self::CONTROL_BASE + 8;
     pub const STATUS_RESET: i32 = 0;
     pub const STATUS_BOOTING: i32 = 1;
     pub const STATUS_READY: i32 = 2;
+    pub const STATUS_HALTED: i32 = 3;
+    pub const STATUS_PANIC: i32 = 4;
 
     pub fn new(memory_size: usize) -> Result<Self, MemoryFault> {
         let mut bus = MachineBus::new(memory_size)?;
@@ -130,6 +132,37 @@ impl ComputerMachine {
         cpu.run_until_signal(&mut self.bus)
     }
 
+    pub fn run_boot_cpu_until_signal(&mut self, cpu_id: CpuId) -> Result<LowImageSignal, String> {
+        if self.boot_cpu != Some(cpu_id) {
+            return Err(format!("CPU {cpu_id} is not the boot CPU"));
+        }
+        let signal = self.run_cpu_until_signal(cpu_id);
+        match &signal {
+            Ok(LowImageSignal::HaltUnit) => {
+                self.set_halted_exit_code(0)?;
+            }
+            Ok(LowImageSignal::HaltI32(exit_code)) => {
+                self.set_halted_exit_code(*exit_code)?;
+            }
+            Ok(LowImageSignal::HaltI64(exit_code)) => {
+                self.set_halted_exit_code(
+                    (*exit_code).clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32,
+                )?;
+            }
+            Ok(LowImageSignal::HaltAddr(exit_code)) => {
+                self.set_halted_exit_code(i32::from_ne_bytes(exit_code.to_ne_bytes()))?;
+            }
+            Ok(LowImageSignal::HaltBool(success)) => {
+                self.set_halted_exit_code(if *success { 0 } else { 1 })?;
+            }
+            Err(message) => {
+                self.set_panic_from_fault(message)?;
+            }
+            Ok(LowImageSignal::Pause) => {}
+        }
+        signal
+    }
+
     pub fn control_status(&self) -> i32 {
         self.control_device().status
     }
@@ -138,25 +171,57 @@ impl ComputerMachine {
         self.control_device().panic_code
     }
 
+    pub fn exit_code(&self) -> i32 {
+        self.control_device().exit_code
+    }
+
     fn control_device(&self) -> &ComputerControlDevice {
         self.bus
             .device::<ComputerControlDevice>(self.control_device_id)
             .expect("computer control device must be mapped")
     }
+
+    fn control_device_mut(&mut self) -> &mut ComputerControlDevice {
+        self.bus
+            .device_mut::<ComputerControlDevice>(self.control_device_id)
+            .expect("computer control device must be mapped")
+    }
+
+    fn set_halted_exit_code(&mut self, exit_code: i32) -> Result<(), String> {
+        let control = self.control_device_mut();
+        control.status = Self::STATUS_HALTED;
+        control.exit_code = exit_code;
+        Ok(())
+    }
+
+    fn set_panic_from_fault(&mut self, message: &str) -> Result<(), String> {
+        let control = self.control_device_mut();
+        control.status = Self::STATUS_PANIC;
+        control.panic_code = stable_panic_code(message);
+        Err(message.to_string())
+    }
+}
+
+fn stable_panic_code(message: &str) -> i32 {
+    message.bytes().fold(0_i32, |hash, byte| {
+        hash.wrapping_mul(31).wrapping_add(i32::from(byte))
+    })
 }
 
 struct ComputerControlDevice {
     status: i32,
     panic_code: i32,
+    exit_code: i32,
 }
 
 impl ComputerControlDevice {
-    const SIZE: u32 = 8;
+    const SIZE: u32 = 12;
 
     fn new() -> Self {
         Self {
-            status: 0,
+            status: ComputerMachine::STATUS_RESET,
             panic_code: 0,
+            exit_code: 0,
         }
     }
 
@@ -164,6 +229,7 @@ impl ComputerControlDevice {
         match offset {
             0 => Ok(&mut self.status),
             4 => Ok(&mut self.panic_code),
+            8 => Ok(&mut self.exit_code),
             _ => Err(MemoryFault::new(format!(
                 "computer control offset {offset} is not mapped",
             ))),
@@ -174,6 +240,7 @@ impl ComputerControlDevice {
         match offset {
             0 => Ok(self.status),
             4 => Ok(self.panic_code),
+            8 => Ok(self.exit_code),
             _ => Err(MemoryFault::new(format!(
                 "computer control offset {offset} is not mapped",
             ))),
@@ -439,6 +506,28 @@ mod tests {
         let machine = ComputerMachine::new(1024).unwrap();
 
         assert_eq!(machine.control_status(), ComputerMachine::STATUS_RESET);
+        assert_eq!(machine.panic_code(), 0);
+    }
+
+    #[test]
+    fn bare_metal_program_halt_sets_machine_halted_status_and_exit_code() {
+        let mut machine = ComputerMachine::new(1024).unwrap();
+        let firmware = image(
+            vec![
+                Instruction::I32Const { dst: 0, value: 7 },
+                Instruction::ReturnI32 { src: 0 },
+            ],
+            1,
+        );
+
+        let cpu_id = machine.spawn_boot_cpu(firmware, 128).unwrap();
+
+        assert_eq!(
+            machine.run_boot_cpu_until_signal(cpu_id).unwrap(),
+            LowImageSignal::HaltI32(7),
+        );
+        assert_eq!(machine.control_status(), ComputerMachine::STATUS_HALTED);
+        assert_eq!(machine.exit_code(), 7);
         assert_eq!(machine.panic_code(), 0);
     }
 
@@ -986,7 +1075,7 @@ mod tests {
         let control = map.region("control").unwrap();
 
         assert_eq!(control.base, ComputerMachine::CONTROL_BASE);
-        assert_eq!(control.size, 8);
+        assert_eq!(control.size, 12);
         assert!(control.readable);
         assert!(control.writable);
     }
