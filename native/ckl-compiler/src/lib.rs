@@ -665,11 +665,16 @@ struct Local {
     mutable: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BlockOutcome {
+    FallsThrough,
+    AlwaysReturns,
+}
+
 struct Codegen {
     instructions: Vec<Instruction>,
     next_register: u16,
     return_type: ReturnType,
-    saw_return: bool,
     unsafe_depth: usize,
     locals: HashMap<String, Local>,
 }
@@ -680,13 +685,12 @@ impl Codegen {
             instructions: Vec::new(),
             next_register: 0,
             return_type: program.return_type,
-            saw_return: false,
             unsafe_depth: 0,
             locals: HashMap::new(),
         };
 
-        codegen.compile_statements(&program.statements)?;
-        if !codegen.saw_return {
+        let outcome = codegen.compile_statements(&program.statements)?;
+        if outcome == BlockOutcome::FallsThrough {
             match codegen.return_type {
                 ReturnType::Unit => codegen.instructions.push(Instruction::ReturnUnit),
                 ReturnType::I32 => {
@@ -713,19 +717,23 @@ impl Codegen {
         })
     }
 
-    fn compile_statements(&mut self, statements: &[Statement]) -> Result<(), CompileError> {
+    fn compile_statements(
+        &mut self,
+        statements: &[Statement],
+    ) -> Result<BlockOutcome, CompileError> {
+        let mut outcome = BlockOutcome::FallsThrough;
         for statement in statements {
-            if self.saw_return {
+            if outcome == BlockOutcome::AlwaysReturns {
                 return Err(CompileError {
                     message: "unreachable statement after return".to_string(),
                 });
             }
-            self.compile_statement(statement)?;
+            outcome = self.compile_statement(statement)?;
         }
-        Ok(())
+        Ok(outcome)
     }
 
-    fn compile_statement(&mut self, statement: &Statement) -> Result<(), CompileError> {
+    fn compile_statement(&mut self, statement: &Statement) -> Result<BlockOutcome, CompileError> {
         match statement {
             Statement::Let { name, initializer } => {
                 if self.locals.contains_key(name) {
@@ -744,7 +752,7 @@ impl Codegen {
                         mutable: true,
                     },
                 );
-                Ok(())
+                Ok(BlockOutcome::FallsThrough)
             }
             Statement::Assign { name, value } => {
                 let local = *self.locals.get(name).ok_or_else(|| CompileError {
@@ -765,19 +773,51 @@ impl Codegen {
                     dst: local.register,
                     src,
                 });
-                Ok(())
+                Ok(BlockOutcome::FallsThrough)
             }
-            Statement::If { .. } => Err(CompileError {
-                message: "`if` lowering is not implemented yet".to_string(),
-            }),
-            Statement::While { .. } => Err(CompileError {
-                message: "`while` lowering is not implemented yet".to_string(),
-            }),
+            Statement::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                let cond = self.compile_i32_expr(condition)?;
+                let false_jump = self.emit_jump_if_false_placeholder(cond);
+                let then_outcome = self.compile_statements(then_branch)?;
+                if let Some(else_branch) = else_branch {
+                    let end_jump = self.emit_jump_placeholder();
+                    let else_start = self.instructions.len();
+                    self.patch_jump(false_jump, else_start)?;
+                    let else_outcome = self.compile_statements(else_branch)?;
+                    let end = self.instructions.len();
+                    self.patch_jump(end_jump, end)?;
+                    if then_outcome == BlockOutcome::AlwaysReturns
+                        && else_outcome == BlockOutcome::AlwaysReturns
+                    {
+                        Ok(BlockOutcome::AlwaysReturns)
+                    } else {
+                        Ok(BlockOutcome::FallsThrough)
+                    }
+                } else {
+                    let end = self.instructions.len();
+                    self.patch_jump(false_jump, end)?;
+                    Ok(BlockOutcome::FallsThrough)
+                }
+            }
+            Statement::While { condition, body } => {
+                let loop_start = self.instructions.len();
+                let cond = self.compile_i32_expr(condition)?;
+                let exit_jump = self.emit_jump_if_false_placeholder(cond);
+                self.compile_statements(body)?;
+                self.instructions
+                    .push(Instruction::Jump { target: loop_start });
+                let loop_end = self.instructions.len();
+                self.patch_jump(exit_jump, loop_end)?;
+                Ok(BlockOutcome::FallsThrough)
+            }
             Statement::Return(None) => match self.return_type {
                 ReturnType::Unit => {
                     self.instructions.push(Instruction::ReturnUnit);
-                    self.saw_return = true;
-                    Ok(())
+                    Ok(BlockOutcome::AlwaysReturns)
                 }
                 ReturnType::I32 => Err(CompileError {
                     message: "`i32` function cannot use `return;`".to_string(),
@@ -791,8 +831,7 @@ impl Codegen {
                 }
                 let src = self.compile_i32_expr(expr)?;
                 self.instructions.push(Instruction::ReturnI32 { src });
-                self.saw_return = true;
-                Ok(())
+                Ok(BlockOutcome::AlwaysReturns)
             }
             Statement::Unsafe(statements) => {
                 self.unsafe_depth += 1;
@@ -802,7 +841,7 @@ impl Codegen {
             }
             Statement::Expr(expr) => {
                 self.compile_expr(expr)?;
-                Ok(())
+                Ok(BlockOutcome::FallsThrough)
             }
         }
     }
@@ -848,9 +887,7 @@ impl Codegen {
                 let value = i32::try_from(*value).map_err(|_| CompileError {
                     message: format!("integer literal `{value}` does not fit `i32`"),
                 })?;
-                let dst = self.alloc_register()?;
-                self.instructions.push(Instruction::I32Const { dst, value });
-                Ok(ExprValue::I32(dst))
+                Ok(ExprValue::I32(self.emit_i32_const(value)?))
             }
             Expr::Local(name) => {
                 let local = self.locals.get(name).ok_or_else(|| CompileError {
@@ -879,9 +916,11 @@ impl Codegen {
                 self.instructions.push(instruction);
                 Ok(ExprValue::I32(dst))
             }
-            Expr::Compare { .. } => Err(CompileError {
-                message: "comparison lowering is not implemented yet".to_string(),
-            }),
+            Expr::Compare { op, lhs, rhs } => {
+                let lhs = self.compile_i32_expr(lhs)?;
+                let rhs = self.compile_i32_expr(rhs)?;
+                self.compile_compare(*op, lhs, rhs)
+            }
         }
     }
 
@@ -938,5 +977,95 @@ impl Codegen {
                 message: "too many registers in function".to_string(),
             })?;
         Ok(register)
+    }
+
+    fn emit_i32_const(&mut self, value: i32) -> Result<u16, CompileError> {
+        let dst = self.alloc_register()?;
+        self.instructions.push(Instruction::I32Const { dst, value });
+        Ok(dst)
+    }
+
+    fn emit_jump_placeholder(&mut self) -> usize {
+        let index = self.instructions.len();
+        self.instructions
+            .push(Instruction::Jump { target: usize::MAX });
+        index
+    }
+
+    fn emit_jump_if_false_placeholder(&mut self, cond: u16) -> usize {
+        let index = self.instructions.len();
+        self.instructions.push(Instruction::JumpIfFalse {
+            cond,
+            target: usize::MAX,
+        });
+        index
+    }
+
+    fn patch_jump(&mut self, index: usize, target: usize) -> Result<(), CompileError> {
+        match self.instructions.get_mut(index) {
+            Some(Instruction::Jump { target: current }) => {
+                *current = target;
+                Ok(())
+            }
+            Some(Instruction::JumpIfFalse {
+                target: current, ..
+            }) => {
+                *current = target;
+                Ok(())
+            }
+            _ => Err(CompileError {
+                message: format!("internal compiler error: instruction {index} is not a jump"),
+            }),
+        }
+    }
+
+    fn compile_compare(
+        &mut self,
+        op: CompareOp,
+        lhs: u16,
+        rhs: u16,
+    ) -> Result<ExprValue, CompileError> {
+        match op {
+            CompareOp::Lt => {
+                let dst = self.alloc_register()?;
+                self.instructions.push(Instruction::I32Lt { dst, lhs, rhs });
+                Ok(ExprValue::I32(dst))
+            }
+            CompareOp::Eq => {
+                let dst = self.alloc_register()?;
+                self.instructions.push(Instruction::I32Eq { dst, lhs, rhs });
+                Ok(ExprValue::I32(dst))
+            }
+            CompareOp::Ne => {
+                let eq = self.alloc_register()?;
+                self.instructions
+                    .push(Instruction::I32Eq { dst: eq, lhs, rhs });
+                let zero = self.emit_i32_const(0)?;
+                let dst = self.alloc_register()?;
+                self.instructions.push(Instruction::I32Eq {
+                    dst,
+                    lhs: eq,
+                    rhs: zero,
+                });
+                Ok(ExprValue::I32(dst))
+            }
+            CompareOp::Gt => self.compile_compare(CompareOp::Lt, rhs, lhs),
+            CompareOp::Le => self.compile_not_less_than(rhs, lhs),
+            CompareOp::Ge => self.compile_not_less_than(lhs, rhs),
+        }
+    }
+
+    fn compile_not_less_than(&mut self, lhs: u16, rhs: u16) -> Result<ExprValue, CompileError> {
+        let lt = self.alloc_register()?;
+        self.instructions
+            .push(Instruction::I32Lt { dst: lt, lhs, rhs });
+        let zero = self.emit_i32_const(0)?;
+        let dst = self.alloc_register()?;
+        self.instructions.push(Instruction::I32Eq {
+            dst,
+            lhs: lt,
+            rhs: zero,
+        });
+        Ok(ExprValue::I32(dst))
     }
 }
