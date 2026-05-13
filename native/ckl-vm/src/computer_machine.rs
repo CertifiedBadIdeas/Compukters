@@ -8,6 +8,7 @@ pub type CpuId = usize;
 pub struct ComputerMachine {
     bus: MachineBus,
     control_device_id: MmioDeviceId,
+    debug_device_id: MmioDeviceId,
     cpus: Vec<LowCpuContext>,
     boot_cpu: Option<CpuId>,
 }
@@ -41,6 +42,8 @@ impl ComputerMachine {
     pub const CONTROL_STATUS: u32 = Self::CONTROL_BASE;
     pub const CONTROL_PANIC_CODE: u32 = Self::CONTROL_BASE + 4;
     pub const CONTROL_EXIT_CODE: u32 = Self::CONTROL_BASE + 8;
+    pub const DEBUG_BASE: u32 = 0x1000_0100;
+    pub const DEBUG_WRITE: u32 = Self::DEBUG_BASE;
     pub const STATUS_RESET: i32 = 0;
     pub const STATUS_BOOTING: i32 = 1;
     pub const STATUS_READY: i32 = 2;
@@ -51,9 +54,11 @@ impl ComputerMachine {
         let mut bus = MachineBus::new(memory_size)?;
         let control_device_id =
             bus.map_mmio(Self::CONTROL_BASE, Box::new(ComputerControlDevice::new()))?;
+        let debug_device_id = bus.map_mmio(Self::DEBUG_BASE, Box::new(DebugSerialDevice::new()))?;
         Ok(Self {
             bus,
             control_device_id,
+            debug_device_id,
             cpus: Vec::new(),
             boot_cpu: None,
         })
@@ -81,6 +86,13 @@ impl ComputerMachine {
                     name: "control",
                     base: Self::CONTROL_BASE,
                     size: ComputerControlDevice::SIZE,
+                    readable: true,
+                    writable: true,
+                },
+                ComputerMemoryRegion {
+                    name: "debug",
+                    base: Self::DEBUG_BASE,
+                    size: DebugSerialDevice::SIZE,
                     readable: true,
                     writable: true,
                 },
@@ -175,10 +187,24 @@ impl ComputerMachine {
         self.control_device().exit_code
     }
 
+    pub fn debug_output_bytes(&self) -> &[u8] {
+        self.debug_device().bytes()
+    }
+
+    pub fn debug_output_string(&self) -> String {
+        String::from_utf8_lossy(self.debug_output_bytes()).into_owned()
+    }
+
     fn control_device(&self) -> &ComputerControlDevice {
         self.bus
             .device::<ComputerControlDevice>(self.control_device_id)
             .expect("computer control device must be mapped")
+    }
+
+    fn debug_device(&self) -> &DebugSerialDevice {
+        self.bus
+            .device::<DebugSerialDevice>(self.debug_device_id)
+            .expect("computer debug serial device must be mapped")
     }
 
     fn control_device_mut(&mut self) -> &mut ComputerControlDevice {
@@ -259,6 +285,48 @@ impl MmioDevice for ComputerControlDevice {
 
     fn store_i32(&mut self, offset: u32, value: i32) -> Result<(), MemoryFault> {
         *self.register_for_offset(offset)? = value;
+        Ok(())
+    }
+}
+
+struct DebugSerialDevice {
+    bytes: Vec<u8>,
+}
+
+impl DebugSerialDevice {
+    const SIZE: u32 = 4;
+
+    fn new() -> Self {
+        Self { bytes: Vec::new() }
+    }
+
+    fn bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+}
+
+impl MmioDevice for DebugSerialDevice {
+    fn size(&self) -> u32 {
+        Self::SIZE
+    }
+
+    fn load_i32(&self, offset: u32) -> Result<i32, MemoryFault> {
+        if offset == 0 {
+            Ok(0)
+        } else {
+            Err(MemoryFault::new(format!(
+                "computer debug serial offset {offset} is not mapped",
+            )))
+        }
+    }
+
+    fn store_i32(&mut self, offset: u32, value: i32) -> Result<(), MemoryFault> {
+        if offset != 0 {
+            return Err(MemoryFault::new(format!(
+                "computer debug serial offset {offset} is not mapped",
+            )));
+        }
+        self.bytes.push(value.to_le_bytes()[0]);
         Ok(())
     }
 }
@@ -529,6 +597,40 @@ mod tests {
         assert_eq!(machine.control_status(), ComputerMachine::STATUS_HALTED);
         assert_eq!(machine.exit_code(), 7);
         assert_eq!(machine.panic_code(), 0);
+    }
+
+    #[test]
+    fn bare_metal_program_writes_debug_serial_output() {
+        let mut machine = ComputerMachine::new(1024).unwrap();
+        let firmware = image(
+            vec![
+                Instruction::AddrConst {
+                    dst: 0,
+                    value: ComputerMachine::DEBUG_WRITE,
+                },
+                Instruction::I32Const {
+                    dst: 1,
+                    value: i32::from(b'H'),
+                },
+                Instruction::Store32 { addr: 0, src: 1 },
+                Instruction::I32Const {
+                    dst: 2,
+                    value: i32::from(b'I'),
+                },
+                Instruction::Store32 { addr: 0, src: 2 },
+                Instruction::ReturnUnit,
+            ],
+            3,
+        );
+
+        let cpu_id = machine.spawn_boot_cpu(firmware, 128).unwrap();
+
+        assert_eq!(
+            machine.run_boot_cpu_until_signal(cpu_id).unwrap(),
+            LowImageSignal::HaltUnit,
+        );
+        assert_eq!(machine.debug_output_bytes(), b"HI");
+        assert_eq!(machine.debug_output_string(), "HI");
     }
 
     #[test]
@@ -1078,6 +1180,18 @@ mod tests {
         assert_eq!(control.size, 12);
         assert!(control.readable);
         assert!(control.writable);
+    }
+
+    #[test]
+    fn computer_memory_map_describes_debug_serial_mmio_region() {
+        let machine = ComputerMachine::new(1024).unwrap();
+        let map = machine.memory_map();
+        let debug = map.region("debug").unwrap();
+
+        assert_eq!(debug.base, ComputerMachine::DEBUG_BASE);
+        assert_eq!(debug.size, 4);
+        assert!(debug.readable);
+        assert!(debug.writable);
     }
 
     fn image(instructions: Vec<Instruction>, register_count: usize) -> Image {
