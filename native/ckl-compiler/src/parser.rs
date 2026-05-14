@@ -51,9 +51,10 @@ impl Parser {
             loop {
                 let parameter_name = self.take_ident()?;
                 self.expect(TokenKind::Colon)?;
-                self.expect(TokenKind::I32)?;
+                let ty = self.parse_type()?;
                 parameters.push(Parameter {
                     name: parameter_name,
+                    ty,
                 });
                 if self.consume(TokenKind::RightParen) {
                     break;
@@ -62,8 +63,10 @@ impl Parser {
             }
         }
         let return_type = if self.consume(TokenKind::Arrow) {
-            self.expect(TokenKind::I32)?;
-            ReturnType::I32
+            match self.parse_type()? {
+                TypeName::I32 => ReturnType::I32,
+                TypeName::Bool => ReturnType::Bool,
+            }
         } else {
             ReturnType::Unit
         };
@@ -90,11 +93,15 @@ impl Parser {
             self.expect(TokenKind::Mut)?;
             let name = self.take_ident()?;
             self.expect(TokenKind::Colon)?;
-            self.expect(TokenKind::I32)?;
+            let ty = self.parse_type()?;
             self.expect(TokenKind::Equal)?;
             let initializer = self.parse_expr()?;
             self.expect(TokenKind::Semicolon)?;
-            return Ok(Statement::Let { name, initializer });
+            return Ok(Statement::Let {
+                name,
+                ty,
+                initializer,
+            });
         }
         if self.consume(TokenKind::If) {
             let condition = self.parse_expr()?;
@@ -299,6 +306,12 @@ impl Parser {
         if let Some(value) = self.take_int() {
             return Ok(Expr::Int(value));
         }
+        if self.consume(TokenKind::True) {
+            return Ok(Expr::Bool(true));
+        }
+        if self.consume(TokenKind::False) {
+            return Ok(Expr::Bool(false));
+        }
         if let TokenKind::Ident(name) = self.peek().clone() {
             if self.peek_next() == &TokenKind::LeftParen {
                 self.offset += 1;
@@ -334,6 +347,16 @@ impl Parser {
             return Ok(expr);
         }
         Err(self.error(format!("expected expression, found {:?}", self.peek())))
+    }
+
+    fn parse_type(&mut self) -> Result<TypeName, CompileError> {
+        if self.consume(TokenKind::I32) {
+            return Ok(TypeName::I32);
+        }
+        if self.consume(TokenKind::Bool) {
+            return Ok(TypeName::Bool);
+        }
+        Err(self.error(format!("expected type, found {:?}", self.peek())))
     }
 
     fn parse_argument_list(&mut self) -> Result<Vec<Expr>, CompileError> {
