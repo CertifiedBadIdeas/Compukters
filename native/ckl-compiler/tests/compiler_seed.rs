@@ -278,6 +278,65 @@ fn compile_lowers_unsafe_mmio_load_return() {
 }
 
 #[test]
+fn compile_lowers_debug_write_builtin_address() {
+    let image = compile("fn main() { unsafe { mmio<i32>(DEBUG_WRITE).store(79); } }").unwrap();
+    let function = &image.functions[0];
+
+    assert_eq!(
+        function.instructions,
+        vec![
+            Instruction::AddrConst {
+                dst: 0,
+                value: ComputerMachine::DEBUG_WRITE,
+            },
+            Instruction::I32Const { dst: 1, value: 79 },
+            Instruction::Store32 { addr: 0, src: 1 },
+            Instruction::ReturnUnit,
+        ]
+    );
+}
+
+#[test]
+fn compile_lowers_control_status_and_status_ready_builtins() {
+    let image =
+        compile("fn main() { unsafe { mmio<i32>(CONTROL_STATUS).store(STATUS_READY); } }").unwrap();
+    let function = &image.functions[0];
+
+    assert_eq!(
+        function.instructions,
+        vec![
+            Instruction::AddrConst {
+                dst: 0,
+                value: ComputerMachine::CONTROL_STATUS,
+            },
+            Instruction::I32Const {
+                dst: 1,
+                value: ComputerMachine::STATUS_READY,
+            },
+            Instruction::Store32 { addr: 0, src: 1 },
+            Instruction::ReturnUnit,
+        ]
+    );
+}
+
+#[test]
+fn compile_lowers_status_ready_builtin_i32_return() {
+    let image = compile("fn main() -> i32 { return STATUS_READY; }").unwrap();
+    let function = &image.functions[0];
+
+    assert_eq!(
+        function.instructions,
+        vec![
+            Instruction::I32Const {
+                dst: 0,
+                value: ComputerMachine::STATUS_READY,
+            },
+            Instruction::ReturnI32 { src: 0 },
+        ]
+    );
+}
+
+#[test]
 fn compile_rejects_void_return_type() {
     let error = compile("fn main() -> void { }").unwrap_err();
 
