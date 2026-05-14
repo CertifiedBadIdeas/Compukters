@@ -472,6 +472,29 @@ impl Codegen {
                 });
                 Ok(BlockOutcome::FallsThrough)
             }
+            Statement::AssignOp { name, op, value } => {
+                let local = *self.locals.get(name).ok_or_else(|| CompileError {
+                    message: format!("assignment to undeclared local `{name}`"),
+                })?;
+                if !local.mutable {
+                    return Err(CompileError {
+                        message: format!("assignment to immutable local `{name}`"),
+                    });
+                }
+                let expected = match local.ty {
+                    ValueType::I32 => TypeName::I32,
+                    ValueType::U32 => TypeName::U32,
+                    ValueType::Bool => {
+                        return Err(CompileError {
+                            message: "compound assignment requires `i32` or `u32` local"
+                                .to_string(),
+                        });
+                    }
+                };
+                let rhs = self.compile_expr_as(value, expected)?;
+                self.emit_binary_instruction(*op, local.register, local.register, rhs);
+                Ok(BlockOutcome::FallsThrough)
+            }
             Statement::If {
                 condition,
                 then_branch,
@@ -767,6 +790,7 @@ impl Codegen {
             Expr::Cast { expr, target } => self.compile_cast(expr, *target),
             Expr::Unary { op, expr } => match op {
                 UnaryOp::Not => self.compile_bool_not(expr),
+                UnaryOp::Neg => self.compile_i32_neg(expr),
             },
             Expr::Logical { op, lhs, rhs } => match op {
                 LogicalOp::And => self.compile_logical_and(lhs, rhs),
@@ -978,6 +1002,30 @@ impl Codegen {
             rhs: false_register,
         });
         Ok(ExprValue::Bool(dst))
+    }
+
+    fn compile_i32_neg(&mut self, expr: &Expr) -> Result<ExprValue, CompileError> {
+        let src = match self.compile_expr(expr)? {
+            ExprValue::I32(register) => register,
+            ExprValue::U32(_) | ExprValue::Bool(_) => {
+                return Err(CompileError {
+                    message: "unary `-` requires `i32`".to_string(),
+                });
+            }
+            value => {
+                return Err(CompileError {
+                    message: format!("unary `-` requires `i32`, found {}", value.type_name()),
+                });
+            }
+        };
+        let zero = self.emit_i32_const(0)?;
+        let dst = self.alloc_register()?;
+        self.instructions.push(Instruction::I32Sub {
+            dst,
+            lhs: zero,
+            rhs: src,
+        });
+        Ok(ExprValue::I32(dst))
     }
 
     fn compile_logical_and(&mut self, lhs: &Expr, rhs: &Expr) -> Result<ExprValue, CompileError> {

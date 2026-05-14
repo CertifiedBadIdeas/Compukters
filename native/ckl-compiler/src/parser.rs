@@ -143,6 +143,12 @@ impl Parser {
             return Ok(Statement::Unsafe(self.parse_block()?));
         }
         if let TokenKind::Ident(name) = self.peek().clone() {
+            if let Some(op) = self.compound_assignment_op(self.peek_next()) {
+                self.offset += 2;
+                let value = self.parse_expr()?;
+                self.expect(TokenKind::Semicolon)?;
+                return Ok(Statement::AssignOp { name, op, value });
+            }
             if self.peek_next() == &TokenKind::Equal {
                 self.offset += 1;
                 self.expect(TokenKind::Equal)?;
@@ -330,6 +336,13 @@ impl Parser {
             let expr = self.parse_unary()?;
             return Ok(Expr::Unary {
                 op: UnaryOp::Not,
+                expr: Box::new(expr),
+            });
+        }
+        if self.consume(TokenKind::Minus) {
+            let expr = self.parse_unary()?;
+            return Ok(Expr::Unary {
+                op: UnaryOp::Neg,
                 expr: Box::new(expr),
             });
         }
@@ -528,6 +541,21 @@ impl Parser {
             .get(self.offset + 1)
             .map(|token| &token.kind)
             .unwrap_or(&TokenKind::Eof)
+    }
+
+    fn compound_assignment_op(&self, token: &TokenKind) -> Option<BinaryOp> {
+        match token {
+            TokenKind::PlusEqual => Some(BinaryOp::Add),
+            TokenKind::MinusEqual => Some(BinaryOp::Sub),
+            TokenKind::StarEqual => Some(BinaryOp::Mul),
+            TokenKind::SlashEqual => Some(BinaryOp::Div),
+            TokenKind::AmpersandEqual => Some(BinaryOp::BitAnd),
+            TokenKind::PipeEqual => Some(BinaryOp::BitOr),
+            TokenKind::CaretEqual => Some(BinaryOp::BitXor),
+            TokenKind::ShlEqual => Some(BinaryOp::Shl),
+            TokenKind::ShrEqual => Some(BinaryOp::Shr),
+            _ => None,
+        }
     }
 
     fn error(&self, message: String) -> CompileError {
