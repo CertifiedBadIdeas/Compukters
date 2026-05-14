@@ -105,3 +105,14 @@ Each extraction should compile and be committed separately.
 - Compiler tests keep passing unchanged.
 - Low VM tests keep passing unchanged.
 - Worktree is clean after commits.
+
+## Implementation Status
+
+Implemented in `native/ckl-compiler`:
+
+- `error.rs` for compiler errors;
+- `lexer.rs` for tokenization;
+- `ast.rs` for source AST;
+- `parser.rs` for recursive-descent parsing;
+- `codegen.rs` for low image lowering;
+- `lib.rs` as a small public facade.
