@@ -15,6 +15,7 @@ pub enum TokenKind {
     Return,
     Unsafe,
     Mmio,
+    Ptr,
     Let,
     Mut,
     Const,
@@ -86,6 +87,7 @@ pub fn lex(source: &str) -> Result<Vec<Token>, CompileError> {
                 "return" => TokenKind::Return,
                 "unsafe" => TokenKind::Unsafe,
                 "mmio" => TokenKind::Mmio,
+                "ptr" => TokenKind::Ptr,
                 "let" => TokenKind::Let,
                 "mut" => TokenKind::Mut,
                 "const" => TokenKind::Const,
@@ -284,6 +286,7 @@ enum Expr {
         args: Vec<Expr>,
     },
     Mmio(Box<Expr>),
+    Ptr(Box<Expr>),
     MethodCall {
         receiver: Box<Expr>,
         method: String,
@@ -574,6 +577,15 @@ impl Parser {
             self.expect(TokenKind::RightParen)?;
             return Ok(Expr::Mmio(Box::new(address)));
         }
+        if self.consume(TokenKind::Ptr) {
+            self.expect(TokenKind::Less)?;
+            self.expect(TokenKind::I32)?;
+            self.expect(TokenKind::Greater)?;
+            self.expect(TokenKind::LeftParen)?;
+            let address = self.parse_expr()?;
+            self.expect(TokenKind::RightParen)?;
+            return Ok(Expr::Ptr(Box::new(address)));
+        }
         if self.consume(TokenKind::LeftParen) {
             let expr = self.parse_expr()?;
             self.expect(TokenKind::RightParen)?;
@@ -689,6 +701,7 @@ impl TokenKind {
             TokenKind::Return => "return",
             TokenKind::Unsafe => "unsafe",
             TokenKind::Mmio => "mmio",
+            TokenKind::Ptr => "ptr",
             TokenKind::Let => "let",
             TokenKind::Mut => "mut",
             TokenKind::Const => "const",
@@ -727,7 +740,30 @@ impl TokenKind {
 enum ExprValue {
     I32(u16),
     Addr(u16),
+    Pointer { addr: u16, kind: PointerKind },
     Unit,
+}
+
+#[derive(Clone, Copy)]
+enum PointerKind {
+    Mmio,
+    Ptr,
+}
+
+impl PointerKind {
+    fn access_name(self) -> &'static str {
+        match self {
+            PointerKind::Mmio => "MMIO",
+            PointerKind::Ptr => "pointer",
+        }
+    }
+
+    fn type_name(self) -> &'static str {
+        match self {
+            PointerKind::Mmio => "mmio<i32>",
+            PointerKind::Ptr => "ptr<i32>",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -819,11 +855,13 @@ fn evaluate_const_expr(
                 message: "const initializer arithmetic overflow".to_string(),
             })
         }
-        Expr::Compare { .. } | Expr::Call { .. } | Expr::Mmio(_) | Expr::MethodCall { .. } => {
-            Err(CompileError {
-                message: "const initializer is not compile-time evaluable".to_string(),
-            })
-        }
+        Expr::Compare { .. }
+        | Expr::Call { .. }
+        | Expr::Mmio(_)
+        | Expr::Ptr(_)
+        | Expr::MethodCall { .. } => Err(CompileError {
+            message: "const initializer is not compile-time evaluable".to_string(),
+        }),
     }
 }
 
@@ -1142,6 +1180,9 @@ impl Codegen {
             ExprValue::Addr(_) => Err(CompileError {
                 message: "expected `i32`, found address".to_string(),
             }),
+            ExprValue::Pointer { .. } => Err(CompileError {
+                message: "expected `i32`, found pointer".to_string(),
+            }),
             ExprValue::Unit => Err(CompileError {
                 message: "expected `i32`, found unit".to_string(),
             }),
@@ -1150,6 +1191,21 @@ impl Codegen {
 
     fn compile_addr_expr(&mut self, expr: &Expr) -> Result<u16, CompileError> {
         match expr {
+            Expr::Binary {
+                op: BinaryOp::Add,
+                lhs,
+                rhs,
+            } => {
+                let base = self.compile_addr_expr(lhs)?;
+                let offset = self.compile_i32_expr(rhs)?;
+                let dst = self.alloc_register()?;
+                self.instructions
+                    .push(Instruction::AddrAdd { dst, base, offset });
+                Ok(dst)
+            }
+            Expr::Binary { .. } => Err(CompileError {
+                message: "address arithmetic supports only `+`".to_string(),
+            }),
             Expr::Int(value) => {
                 let value = u32::try_from(*value).map_err(|_| CompileError {
                     message: format!("address literal `{value}` does not fit `u32`"),
@@ -1163,6 +1219,9 @@ impl Codegen {
                 ExprValue::Addr(register) => Ok(register),
                 ExprValue::I32(_) => Err(CompileError {
                     message: "MMIO address must be an address expression".to_string(),
+                }),
+                ExprValue::Pointer { .. } => Err(CompileError {
+                    message: "address expression cannot be a pointer capability".to_string(),
                 }),
                 ExprValue::Unit => Err(CompileError {
                     message: "MMIO address cannot be unit".to_string(),
@@ -1206,7 +1265,14 @@ impl Codegen {
                 }
             }
             Expr::Call { name, args } => self.compile_call(name, args),
-            Expr::Mmio(address) => Ok(ExprValue::Addr(self.compile_addr_expr(address)?)),
+            Expr::Mmio(address) => Ok(ExprValue::Pointer {
+                addr: self.compile_addr_expr(address)?,
+                kind: PointerKind::Mmio,
+            }),
+            Expr::Ptr(address) => Ok(ExprValue::Pointer {
+                addr: self.compile_addr_expr(address)?,
+                kind: PointerKind::Ptr,
+            }),
             Expr::MethodCall {
                 receiver,
                 method,
@@ -1281,13 +1347,18 @@ impl Codegen {
         args: &[Expr],
     ) -> Result<ExprValue, CompileError> {
         if self.unsafe_depth == 0 {
+            let access_name = match receiver {
+                Expr::Mmio(_) => PointerKind::Mmio.access_name(),
+                Expr::Ptr(_) => PointerKind::Ptr.access_name(),
+                _ => "raw memory",
+            };
             return Err(CompileError {
-                message: "MMIO access requires `unsafe`".to_string(),
+                message: format!("{access_name} access requires `unsafe`"),
             });
         }
-        let ExprValue::Addr(addr) = self.compile_expr(receiver)? else {
+        let ExprValue::Pointer { addr, kind } = self.compile_expr(receiver)? else {
             return Err(CompileError {
-                message: "MMIO method receiver must be an address".to_string(),
+                message: "memory method receiver must be a pointer capability".to_string(),
             });
         };
 
@@ -1295,7 +1366,7 @@ impl Codegen {
             "store" => {
                 if args.len() != 1 {
                     return Err(CompileError {
-                        message: "mmio<i32>.store expects one argument".to_string(),
+                        message: format!("{}.store expects one argument", kind.type_name()),
                     });
                 }
                 let src = self.compile_i32_expr(&args[0])?;
@@ -1305,7 +1376,7 @@ impl Codegen {
             "load" => {
                 if !args.is_empty() {
                     return Err(CompileError {
-                        message: "mmio<i32>.load expects no arguments".to_string(),
+                        message: format!("{}.load expects no arguments", kind.type_name()),
                     });
                 }
                 let dst = self.alloc_register()?;
