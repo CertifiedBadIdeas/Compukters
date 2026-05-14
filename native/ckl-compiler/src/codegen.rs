@@ -31,7 +31,7 @@ impl ExprValue {
             ExprValue::U8(_) => "u8",
             ExprValue::Bool(_) => "bool",
             ExprValue::Addr(_) => "address",
-            ExprValue::Pointer { .. } => "pointer",
+            ExprValue::Pointer { element_type, .. } => element_type.pointer_name(),
             ExprValue::Unit => "unit",
         }
     }
@@ -213,6 +213,9 @@ enum ValueType {
     U32,
     U8,
     Bool,
+    PtrI32,
+    PtrU32,
+    PtrU8,
 }
 
 impl From<TypeName> for ValueType {
@@ -222,6 +225,9 @@ impl From<TypeName> for ValueType {
             TypeName::U32 => ValueType::U32,
             TypeName::U8 => ValueType::U8,
             TypeName::Bool => ValueType::Bool,
+            TypeName::PtrI32 => ValueType::PtrI32,
+            TypeName::PtrU32 => ValueType::PtrU32,
+            TypeName::PtrU8 => ValueType::PtrU8,
         }
     }
 }
@@ -233,6 +239,70 @@ impl TypeName {
             TypeName::U32 => "u32",
             TypeName::U8 => "u8",
             TypeName::Bool => "bool",
+            TypeName::PtrI32 => "ptr<i32>",
+            TypeName::PtrU32 => "ptr<u32>",
+            TypeName::PtrU8 => "ptr<u8>",
+        }
+    }
+
+    fn pointer_name(self) -> &'static str {
+        match self {
+            TypeName::I32 => "ptr<i32>",
+            TypeName::U32 => "ptr<u32>",
+            TypeName::U8 => "ptr<u8>",
+            TypeName::Bool => "ptr<bool>",
+            TypeName::PtrI32 | TypeName::PtrU32 | TypeName::PtrU8 => self.name(),
+        }
+    }
+
+    fn pointer_type_for(element_type: TypeName) -> Option<TypeName> {
+        match element_type {
+            TypeName::I32 => Some(TypeName::PtrI32),
+            TypeName::U32 => Some(TypeName::PtrU32),
+            TypeName::U8 => Some(TypeName::PtrU8),
+            TypeName::Bool | TypeName::PtrI32 | TypeName::PtrU32 | TypeName::PtrU8 => None,
+        }
+    }
+}
+
+impl ValueType {
+    fn type_name(self) -> TypeName {
+        match self {
+            ValueType::I32 => TypeName::I32,
+            ValueType::U32 => TypeName::U32,
+            ValueType::U8 => TypeName::U8,
+            ValueType::Bool => TypeName::Bool,
+            ValueType::PtrI32 => TypeName::PtrI32,
+            ValueType::PtrU32 => TypeName::PtrU32,
+            ValueType::PtrU8 => TypeName::PtrU8,
+        }
+    }
+}
+
+impl ReturnType {
+    fn name(self) -> &'static str {
+        match self {
+            ReturnType::Unit => "unit",
+            ReturnType::I32 => "i32",
+            ReturnType::U32 => "u32",
+            ReturnType::U8 => "u8",
+            ReturnType::Bool => "bool",
+            ReturnType::PtrI32 => "ptr<i32>",
+            ReturnType::PtrU32 => "ptr<u32>",
+            ReturnType::PtrU8 => "ptr<u8>",
+        }
+    }
+
+    fn value_type(self) -> Option<TypeName> {
+        match self {
+            ReturnType::Unit => None,
+            ReturnType::I32 => Some(TypeName::I32),
+            ReturnType::U32 => Some(TypeName::U32),
+            ReturnType::U8 => Some(TypeName::U8),
+            ReturnType::Bool => Some(TypeName::Bool),
+            ReturnType::PtrI32 => Some(TypeName::PtrI32),
+            ReturnType::PtrU32 => Some(TypeName::PtrU32),
+            ReturnType::PtrU8 => Some(TypeName::PtrU8),
         }
     }
 }
@@ -404,28 +474,15 @@ impl<'rodata> Codegen<'rodata> {
 
         let outcome = codegen.compile_statements(&function.statements)?;
         if outcome == BlockOutcome::FallsThrough {
-            match codegen.return_type {
-                ReturnType::Unit => codegen.instructions.push(Instruction::ReturnUnit),
-                ReturnType::I32 => {
-                    return Err(CompileError {
-                        message: "missing return in `i32` function".to_string(),
-                    });
-                }
-                ReturnType::U32 => {
-                    return Err(CompileError {
-                        message: "missing return in `u32` function".to_string(),
-                    });
-                }
-                ReturnType::U8 => {
-                    return Err(CompileError {
-                        message: "missing return in `u8` function".to_string(),
-                    });
-                }
-                ReturnType::Bool => {
-                    return Err(CompileError {
-                        message: "missing return in `bool` function".to_string(),
-                    });
-                }
+            if codegen.return_type == ReturnType::Unit {
+                codegen.instructions.push(Instruction::ReturnUnit);
+            } else {
+                return Err(CompileError {
+                    message: format!(
+                        "missing return in `{}` function",
+                        codegen.return_type.name()
+                    ),
+                });
             }
         }
 
@@ -497,12 +554,7 @@ impl<'rodata> Codegen<'rodata> {
                         message: format!("assignment to immutable local `{name}`"),
                     });
                 }
-                let expected = match local.ty {
-                    ValueType::I32 => TypeName::I32,
-                    ValueType::U32 => TypeName::U32,
-                    ValueType::U8 => TypeName::U8,
-                    ValueType::Bool => TypeName::Bool,
-                };
+                let expected = local.ty.type_name();
                 let src = self.compile_expr_as(value, expected)?;
                 self.instructions.push(Instruction::I32Move {
                     dst: local.register,
@@ -522,13 +574,11 @@ impl<'rodata> Codegen<'rodata> {
                 let expected = match local.ty {
                     ValueType::I32 => TypeName::I32,
                     ValueType::U32 => TypeName::U32,
-                    ValueType::U8 => {
-                        return Err(CompileError {
-                            message: "compound assignment requires `i32` or `u32` local"
-                                .to_string(),
-                        });
-                    }
-                    ValueType::Bool => {
+                    ValueType::U8
+                    | ValueType::Bool
+                    | ValueType::PtrI32
+                    | ValueType::PtrU32
+                    | ValueType::PtrU8 => {
                         return Err(CompileError {
                             message: "compound assignment requires `i32` or `u32` local"
                                 .to_string(),
@@ -543,8 +593,11 @@ impl<'rodata> Codegen<'rodata> {
                     ValueType::U32 => {
                         self.emit_u32_binary_instruction(*op, local.register, local.register, rhs)
                     }
-                    ValueType::U8 => unreachable!("u8 locals are rejected above"),
-                    ValueType::Bool => unreachable!("bool locals are rejected above"),
+                    ValueType::U8
+                    | ValueType::Bool
+                    | ValueType::PtrI32
+                    | ValueType::PtrU32
+                    | ValueType::PtrU8 => unreachable!("non-arithmetic locals are rejected above"),
                 }
                 Ok(BlockOutcome::FallsThrough)
             }
@@ -645,17 +698,8 @@ impl<'rodata> Codegen<'rodata> {
                     self.instructions.push(Instruction::ReturnUnit);
                     Ok(BlockOutcome::AlwaysReturns)
                 }
-                ReturnType::I32 => Err(CompileError {
-                    message: "`i32` function cannot use `return;`".to_string(),
-                }),
-                ReturnType::U32 => Err(CompileError {
-                    message: "`u32` function cannot use `return;`".to_string(),
-                }),
-                ReturnType::U8 => Err(CompileError {
-                    message: "`u8` function cannot use `return;`".to_string(),
-                }),
-                ReturnType::Bool => Err(CompileError {
-                    message: "`bool` function cannot use `return;`".to_string(),
+                return_type => Err(CompileError {
+                    message: format!("`{}` function cannot use `return;`", return_type.name()),
                 }),
             },
             Statement::Return(Some(expr)) => match self.return_type {
@@ -680,6 +724,15 @@ impl<'rodata> Codegen<'rodata> {
                 ReturnType::Bool => {
                     let src = self.compile_bool_expr(expr)?;
                     self.instructions.push(Instruction::ReturnBool { src });
+                    Ok(BlockOutcome::AlwaysReturns)
+                }
+                ReturnType::PtrI32 | ReturnType::PtrU32 | ReturnType::PtrU8 => {
+                    let expected = self.return_type.value_type().ok_or_else(|| CompileError {
+                        message: "internal compiler error: pointer return type missing value type"
+                            .to_string(),
+                    })?;
+                    let src = self.compile_expr_as(expr, expected)?;
+                    self.instructions.push(Instruction::ReturnAddr { src });
                     Ok(BlockOutcome::AlwaysReturns)
                 }
             },
@@ -732,6 +785,9 @@ impl<'rodata> Codegen<'rodata> {
                 TypeName::Bool => Err(CompileError {
                     message: "expected `bool`, found i32".to_string(),
                 }),
+                TypeName::PtrI32 | TypeName::PtrU32 | TypeName::PtrU8 => Err(CompileError {
+                    message: format!("expected `{}`, found i32", expected.name()),
+                }),
             };
         }
         if let Expr::IntU32(value) = expr {
@@ -745,6 +801,9 @@ impl<'rodata> Codegen<'rodata> {
                 }),
                 TypeName::Bool => Err(CompileError {
                     message: "expected `bool`, found u32".to_string(),
+                }),
+                TypeName::PtrI32 | TypeName::PtrU32 | TypeName::PtrU8 => Err(CompileError {
+                    message: format!("expected `{}`, found u32", expected.name()),
                 }),
             };
         }
@@ -760,6 +819,9 @@ impl<'rodata> Codegen<'rodata> {
                 TypeName::Bool => Err(CompileError {
                     message: "expected `bool`, found u8".to_string(),
                 }),
+                TypeName::PtrI32 | TypeName::PtrU32 | TypeName::PtrU8 => Err(CompileError {
+                    message: format!("expected `{}`, found u8", expected.name()),
+                }),
             };
         }
         if matches!(expr, Expr::Binary { .. }) && expected == TypeName::U32 {
@@ -770,6 +832,9 @@ impl<'rodata> Codegen<'rodata> {
             ExprValue::U32(register) if expected == TypeName::U32 => Ok(register),
             ExprValue::U8(register) if expected == TypeName::U8 => Ok(register),
             ExprValue::Bool(register) if expected == TypeName::Bool => Ok(register),
+            ExprValue::Pointer {
+                addr, element_type, ..
+            } if TypeName::pointer_type_for(element_type) == Some(expected) => Ok(addr),
             value => Err(CompileError {
                 message: format!(
                     "expected `{}`, found {}",
@@ -863,6 +928,21 @@ impl<'rodata> Codegen<'rodata> {
                         ValueType::U32 => Ok(ExprValue::U32(local.register)),
                         ValueType::U8 => Ok(ExprValue::U8(local.register)),
                         ValueType::Bool => Ok(ExprValue::Bool(local.register)),
+                        ValueType::PtrI32 => Ok(ExprValue::Pointer {
+                            addr: local.register,
+                            kind: PointerKind::Ptr,
+                            element_type: TypeName::I32,
+                        }),
+                        ValueType::PtrU32 => Ok(ExprValue::Pointer {
+                            addr: local.register,
+                            kind: PointerKind::Ptr,
+                            element_type: TypeName::U32,
+                        }),
+                        ValueType::PtrU8 => Ok(ExprValue::Pointer {
+                            addr: local.register,
+                            kind: PointerKind::Ptr,
+                            element_type: TypeName::U8,
+                        }),
                     };
                 }
 
@@ -1017,6 +1097,9 @@ impl<'rodata> Codegen<'rodata> {
             TypeName::Bool => Err(CompileError {
                 message: "casts to `bool` are not supported".to_string(),
             }),
+            TypeName::PtrI32 | TypeName::PtrU32 | TypeName::PtrU8 => Err(CompileError {
+                message: format!("casts to `{}` are not supported", target.name()),
+            }),
         }
     }
 
@@ -1048,27 +1131,20 @@ impl<'rodata> Codegen<'rodata> {
             .zip(signature.parameter_types.iter().copied())
             .enumerate()
         {
-            match self.compile_expr(arg)? {
-                ExprValue::I32(register) if expected == TypeName::I32 => arguments.push(register),
-                ExprValue::U32(register) if expected == TypeName::U32 => arguments.push(register),
-                ExprValue::U8(register) if expected == TypeName::U8 => arguments.push(register),
-                ExprValue::Bool(register) if expected == TypeName::Bool => arguments.push(register),
-                value => {
-                    return Err(CompileError {
-                        message: format!(
-                            "function `{name}` argument {index} expected `{}`, found {}",
-                            expected.name(),
-                            value.type_name()
-                        ),
-                    });
-                }
-            }
+            let register = self
+                .compile_expr_as(arg, expected)
+                .map_err(|error| self.function_argument_error(name, index, expected, error))?;
+            arguments.push(register);
         }
         let return_register = match signature.return_type {
             ReturnType::Unit => None,
-            ReturnType::I32 | ReturnType::U32 | ReturnType::U8 | ReturnType::Bool => {
-                Some(self.alloc_register()?)
-            }
+            ReturnType::I32
+            | ReturnType::U32
+            | ReturnType::U8
+            | ReturnType::Bool
+            | ReturnType::PtrI32
+            | ReturnType::PtrU32
+            | ReturnType::PtrU8 => Some(self.alloc_register()?),
         };
         self.instructions.push(Instruction::CallStatic {
             return_register,
@@ -1081,9 +1157,44 @@ impl<'rodata> Codegen<'rodata> {
                 ReturnType::U32 => Ok(ExprValue::U32(register)),
                 ReturnType::U8 => Ok(ExprValue::U8(register)),
                 ReturnType::Bool => Ok(ExprValue::Bool(register)),
+                ReturnType::PtrI32 => Ok(ExprValue::Pointer {
+                    addr: register,
+                    kind: PointerKind::Ptr,
+                    element_type: TypeName::I32,
+                }),
+                ReturnType::PtrU32 => Ok(ExprValue::Pointer {
+                    addr: register,
+                    kind: PointerKind::Ptr,
+                    element_type: TypeName::U32,
+                }),
+                ReturnType::PtrU8 => Ok(ExprValue::Pointer {
+                    addr: register,
+                    kind: PointerKind::Ptr,
+                    element_type: TypeName::U8,
+                }),
                 ReturnType::Unit => unreachable!("unit functions do not allocate return registers"),
             },
             None => Ok(ExprValue::Unit),
+        }
+    }
+
+    fn function_argument_error(
+        &self,
+        function_name: &str,
+        index: usize,
+        expected: TypeName,
+        error: CompileError,
+    ) -> CompileError {
+        let expected_prefix = format!("expected `{}`, ", expected.name());
+        let detail = error
+            .message
+            .strip_prefix(&expected_prefix)
+            .unwrap_or(&error.message);
+        CompileError {
+            message: format!(
+                "function `{function_name}` argument {index} expected `{}`, {detail}",
+                expected.name(),
+            ),
         }
     }
 
@@ -1143,7 +1254,9 @@ impl<'rodata> Codegen<'rodata> {
                     TypeName::I32 => Ok(ExprValue::I32(dst)),
                     TypeName::U32 => Ok(ExprValue::U32(dst)),
                     TypeName::U8 => Ok(ExprValue::U8(dst)),
-                    TypeName::Bool => unreachable!("bool memory element type is rejected earlier"),
+                    TypeName::Bool | TypeName::PtrI32 | TypeName::PtrU32 | TypeName::PtrU8 => {
+                        unreachable!("non-scalar memory element types are rejected earlier")
+                    }
                 }
             }
             _ => Err(CompileError {
@@ -1165,7 +1278,9 @@ impl<'rodata> Codegen<'rodata> {
             TypeName::I32 => Ok(ExprValue::I32(dst)),
             TypeName::U32 => Ok(ExprValue::U32(dst)),
             TypeName::U8 => Ok(ExprValue::U8(dst)),
-            TypeName::Bool => unreachable!("bool memory element type is rejected earlier"),
+            TypeName::Bool | TypeName::PtrI32 | TypeName::PtrU32 | TypeName::PtrU8 => {
+                unreachable!("non-scalar memory element types are rejected earlier")
+            }
         }
     }
 
@@ -1198,7 +1313,9 @@ impl<'rodata> Codegen<'rodata> {
                 });
                 offset
             }
-            TypeName::Bool => unreachable!("bool memory element type is rejected earlier"),
+            TypeName::Bool | TypeName::PtrI32 | TypeName::PtrU32 | TypeName::PtrU8 => {
+                unreachable!("non-scalar memory element types are rejected earlier")
+            }
         };
         let addr = self.alloc_register()?;
         self.instructions.push(Instruction::AddrAdd {
@@ -1215,7 +1332,9 @@ impl<'rodata> Codegen<'rodata> {
             TypeName::I32 | TypeName::U32 => {
                 self.instructions.push(Instruction::Load32 { dst, addr })
             }
-            TypeName::Bool => unreachable!("bool memory element type is rejected earlier"),
+            TypeName::Bool | TypeName::PtrI32 | TypeName::PtrU32 | TypeName::PtrU8 => {
+                unreachable!("non-scalar memory element types are rejected earlier")
+            }
         }
     }
 
@@ -1225,7 +1344,9 @@ impl<'rodata> Codegen<'rodata> {
             TypeName::I32 | TypeName::U32 => {
                 self.instructions.push(Instruction::Store32 { addr, src })
             }
-            TypeName::Bool => unreachable!("bool memory element type is rejected earlier"),
+            TypeName::Bool | TypeName::PtrI32 | TypeName::PtrU32 | TypeName::PtrU8 => {
+                unreachable!("non-scalar memory element types are rejected earlier")
+            }
         }
     }
 
@@ -1295,9 +1416,12 @@ impl<'rodata> Codegen<'rodata> {
     fn validate_memory_element_type(&self, ty: TypeName) -> Result<(), CompileError> {
         match ty {
             TypeName::I32 | TypeName::U32 | TypeName::U8 => Ok(()),
-            TypeName::Bool => Err(CompileError {
-                message: "memory pointer element type must be `i32`, `u32`, or `u8`".to_string(),
-            }),
+            TypeName::Bool | TypeName::PtrI32 | TypeName::PtrU32 | TypeName::PtrU8 => {
+                Err(CompileError {
+                    message: "memory pointer element type must be `i32`, `u32`, or `u8`"
+                        .to_string(),
+                })
+            }
         }
     }
 

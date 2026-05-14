@@ -252,10 +252,11 @@ Current support:
 - `mmio<u8>(addr)` store/load lowered to `Store8` / `Load8`;
 - `ptr<i32>(addr)` / `ptr<u32>(addr)` store/load lowered to shared RAM `Store32` / `Load32`;
 - `ptr<u8>(addr)` store/load lowered to shared RAM `Store8` / `Load8`;
+- first-class `ptr<i32>`, `ptr<u32>`, and `ptr<u8>` types for locals, parameters, arguments, and returns;
 - pointer indexing syntax such as `ptr<u8>(RAM_BASE)[i]` and `b"OK"[i]`;
 - unit functions with implicit `ReturnUnit`;
 - i32 functions with explicit `ReturnI32`;
 - diagnostics for missing i32 return, `return;` in i32 functions, value return from unit functions, `void`, and MMIO outside `unsafe`;
 - end-to-end test that compiles firmware-shaped source and runs it on `ComputerMachine`.
 
-The implementation intentionally keeps lexer, parser, AST, and codegen in one file for the seed. Split modules only when the language grows enough to justify the structure.
+The implementation keeps lexer, parser, AST, codegen, and runner responsibilities in separate Rust modules while still keeping the seed compiler small.

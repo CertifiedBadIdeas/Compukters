@@ -1003,6 +1003,95 @@ fn compile_lowers_byte_string_literals_into_rodata() {
 }
 
 #[test]
+fn compile_lowers_ptr_u8_local_from_byte_string() {
+    let image = compile(
+        "fn main() -> i32 {
+            let mut bytes: ptr<u8> = b\"AZ\";
+            unsafe {
+                return bytes[1u32] as i32;
+            }
+        }",
+    )
+    .unwrap();
+    let instructions = &image.functions[0].instructions;
+
+    assert_eq!(image.rodata, b"AZ");
+    assert!(instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::Load8 { .. })));
+}
+
+#[test]
+fn compile_lowers_ptr_u8_function_argument() {
+    let image = compile(
+        "fn second(bytes: ptr<u8>) -> i32 {
+            unsafe {
+                return bytes[1u32] as i32;
+            }
+        }
+
+        fn main() -> i32 {
+            return second(b\"OK\");
+        }",
+    )
+    .unwrap();
+    let second = &image.functions[0];
+    let main = &image.functions[1];
+
+    assert_eq!(image.rodata, b"OK");
+    assert_eq!(second.parameters, vec![0]);
+    assert!(second
+        .instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::Load8 { .. })));
+    assert!(main.instructions.iter().any(|instruction| {
+        matches!(
+            instruction,
+            Instruction::CallStatic {
+                function_index: 0,
+                arguments,
+                ..
+            } if arguments.len() == 1
+        )
+    }));
+}
+
+#[test]
+fn compile_lowers_ptr_u8_function_return() {
+    let image = compile(
+        "fn message() -> ptr<u8> {
+            return b\"HI\";
+        }
+
+        fn main() -> i32 {
+            let mut bytes: ptr<u8> = message();
+            unsafe {
+                return bytes[0u32] as i32;
+            }
+        }",
+    )
+    .unwrap();
+    let message = &image.functions[0];
+    let main = &image.functions[1];
+
+    assert_eq!(image.rodata, b"HI");
+    assert!(matches!(
+        message.instructions.last(),
+        Some(Instruction::ReturnAddr { .. })
+    ));
+    assert!(main.instructions.iter().any(|instruction| {
+        matches!(
+            instruction,
+            Instruction::CallStatic {
+                function_index: 0,
+                return_register: Some(_),
+                ..
+            }
+        )
+    }));
+}
+
+#[test]
 fn compile_lowers_u32_less_than_to_unsigned_instruction() {
     let image = compile("fn main() -> bool { return 0xffff0000u32 < 1u32; }").unwrap();
     let instructions = &image.functions[0].instructions;
@@ -1762,6 +1851,35 @@ fn compiled_seed_byte_string_indexing_runs_on_computer_machine() {
     );
     assert_eq!(machine.exit_code(), 75);
     assert_eq!(machine.panic_code(), 0);
+}
+
+#[test]
+fn compiled_seed_write_bytes_accepts_ptr_u8_argument() {
+    let image = compile(
+        "fn write_bytes(bytes: ptr<u8>, len: u32) {
+            let mut i: u32 = 0u32;
+            while i < len {
+                unsafe {
+                    mmio<u8>(DEBUG_WRITE).store(bytes[i]);
+                }
+                i += 1u32;
+            }
+        }
+
+        fn main() -> i32 {
+            write_bytes(b\"RUX READY\", 9u32);
+            return 0;
+        }",
+    )
+    .unwrap();
+    let mut machine = ComputerMachine::new(64 * 1024).unwrap();
+    let cpu_id = machine.spawn_boot_cpu(image, 1_000_000).unwrap();
+
+    assert_eq!(
+        machine.run_boot_cpu_until_signal(cpu_id).unwrap(),
+        LowImageSignal::HaltI32(0)
+    );
+    assert_eq!(machine.debug_output_string(), "RUX READY");
 }
 
 #[test]

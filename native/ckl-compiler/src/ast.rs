@@ -31,6 +31,9 @@ pub(crate) enum ReturnType {
     U32,
     U8,
     Bool,
+    PtrI32,
+    PtrU32,
+    PtrU8,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -39,6 +42,9 @@ pub(crate) enum TypeName {
     U32,
     U8,
     Bool,
+    PtrI32,
+    PtrU32,
+    PtrU8,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
