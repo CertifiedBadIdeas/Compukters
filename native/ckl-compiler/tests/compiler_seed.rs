@@ -320,7 +320,7 @@ fn compile_lowers_i32_main_return_arithmetic() {
     let image = compile("fn main() -> i32 { return 7 + 3 * 2; }").unwrap();
     let function = &image.functions[0];
 
-    assert_eq!(image.language_version, "ckm-seed-0");
+    assert_eq!(image.language_version, "rux-0");
     assert_eq!(image.entry_function_index, 0);
     assert_eq!(function.name, "main");
     assert_eq!(function.register_count, 5);
