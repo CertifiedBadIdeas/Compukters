@@ -766,6 +766,21 @@ impl PointerKind {
     }
 }
 
+#[derive(Clone, Copy)]
+enum AddressContext {
+    Mmio,
+    Ptr,
+}
+
+impl AddressContext {
+    fn address_name(self) -> &'static str {
+        match self {
+            AddressContext::Mmio => "MMIO address",
+            AddressContext::Ptr => "pointer address",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum BuiltinConstant {
     Addr(u32),
@@ -1189,14 +1204,18 @@ impl Codegen {
         }
     }
 
-    fn compile_addr_expr(&mut self, expr: &Expr) -> Result<u16, CompileError> {
+    fn compile_addr_expr(
+        &mut self,
+        expr: &Expr,
+        context: AddressContext,
+    ) -> Result<u16, CompileError> {
         match expr {
             Expr::Binary {
                 op: BinaryOp::Add,
                 lhs,
                 rhs,
             } => {
-                let base = self.compile_addr_expr(lhs)?;
+                let base = self.compile_addr_expr(lhs, context)?;
                 let offset = self.compile_i32_expr(rhs)?;
                 let dst = self.alloc_register()?;
                 self.instructions
@@ -1218,13 +1237,13 @@ impl Codegen {
             _ => match self.compile_expr(expr)? {
                 ExprValue::Addr(register) => Ok(register),
                 ExprValue::I32(_) => Err(CompileError {
-                    message: "MMIO address must be an address expression".to_string(),
+                    message: format!("{} must be an address expression", context.address_name()),
                 }),
                 ExprValue::Pointer { .. } => Err(CompileError {
                     message: "address expression cannot be a pointer capability".to_string(),
                 }),
                 ExprValue::Unit => Err(CompileError {
-                    message: "MMIO address cannot be unit".to_string(),
+                    message: format!("{} cannot be unit", context.address_name()),
                 }),
             },
         }
@@ -1266,11 +1285,11 @@ impl Codegen {
             }
             Expr::Call { name, args } => self.compile_call(name, args),
             Expr::Mmio(address) => Ok(ExprValue::Pointer {
-                addr: self.compile_addr_expr(address)?,
+                addr: self.compile_addr_expr(address, AddressContext::Mmio)?,
                 kind: PointerKind::Mmio,
             }),
             Expr::Ptr(address) => Ok(ExprValue::Pointer {
-                addr: self.compile_addr_expr(address)?,
+                addr: self.compile_addr_expr(address, AddressContext::Ptr)?,
                 kind: PointerKind::Ptr,
             }),
             Expr::MethodCall {

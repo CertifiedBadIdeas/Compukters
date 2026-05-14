@@ -505,6 +505,29 @@ fn compile_rejects_mmio_outside_unsafe() {
 }
 
 #[test]
+fn compile_rejects_ptr_outside_unsafe() {
+    let error = compile("fn main() { ptr<i32>(RAM_BASE).store(1); }").unwrap_err();
+
+    assert!(
+        error.message.contains("pointer access requires `unsafe`"),
+        "{error:?}"
+    );
+}
+
+#[test]
+fn compile_rejects_i32_const_as_ptr_address() {
+    let error = compile("const VALUE: i32 = 4; fn main() { unsafe { ptr<i32>(VALUE).store(1); } }")
+        .unwrap_err();
+
+    assert!(
+        error
+            .message
+            .contains("pointer address must be an address expression"),
+        "{error:?}"
+    );
+}
+
+#[test]
 fn compile_rejects_missing_i32_return() {
     let error = compile("fn main() -> i32 { }").unwrap_err();
 
