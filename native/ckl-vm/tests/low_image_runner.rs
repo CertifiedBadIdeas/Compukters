@@ -65,6 +65,38 @@ fn runner_executes_i32_equality_comparison() {
 }
 
 #[test]
+fn runner_executes_i32_bitwise_and_or() {
+    let image = image(
+        vec![
+            Instruction::I32Const {
+                dst: 0,
+                value: 0xff,
+            },
+            Instruction::I32Const {
+                dst: 1,
+                value: 0xf0,
+            },
+            Instruction::I32BitAnd {
+                dst: 2,
+                lhs: 0,
+                rhs: 1,
+            },
+            Instruction::I32Const { dst: 3, value: 4 },
+            Instruction::I32BitOr {
+                dst: 4,
+                lhs: 2,
+                rhs: 3,
+            },
+            Instruction::ReturnI32 { src: 4 },
+        ],
+        5,
+    );
+    let mut vm = LowImageVm::create(image, 128).unwrap();
+
+    assert_eq!(vm.run_until_signal().unwrap(), LowImageSignal::HaltI32(0xf4));
+}
+
+#[test]
 fn runner_loads_and_stores_i32_in_linear_ram() {
     let image = image(
         vec![
