@@ -8,7 +8,7 @@ This is still a seed compiler, not a full language implementation. The goal is t
 
 ## Context
 
-The current `native/ckl-compiler` crate can compile one `main` function into `ckl_vm::low_image::Image`.
+The current `native/rux-compiler` crate can compile one `main` function into `rux_vm::low_image::Image`.
 
 Current language support:
 
@@ -249,7 +249,7 @@ Rich spans are still not required. Byte offsets from the lexer are enough for th
 
 ## Testing Strategy
 
-Add tests in `native/ckl-compiler/tests/compiler_seed.rs`.
+Add tests in `native/rux-compiler/tests/compiler_seed.rs`.
 
 Lexer tests:
 
@@ -297,7 +297,7 @@ The test runs on `ComputerMachine` and expects:
 
 - The seed language can express simple loops and branches.
 - Local variables are register-backed and require no VM memory model changes.
-- The compiler still emits `ckl_vm::low_image::Image` directly.
+- The compiler still emits `rux_vm::low_image::Image` directly.
 - No Kotlin compiler code is touched.
 - No CKL compatibility path is added.
 - Existing seed tests keep passing.
@@ -305,7 +305,7 @@ The test runs on `ComputerMachine` and expects:
 
 ## Implementation Status
 
-Implemented in `native/ckl-compiler`:
+Implemented in `native/rux-compiler`:
 
 - lexer tokens for locals, branching, loops, assignment, and comparisons;
 - parser support for `let mut`, assignment, `if`, `else`, `while`, local reads, and comparison expressions;

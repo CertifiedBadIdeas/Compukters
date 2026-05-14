@@ -53,12 +53,12 @@ fun RunConfigSettings.applyShared() {
 
 private val DEV_CLIENT_USERNAMES = listOf("DevA", "DevB", "DevC")
 
-private val rustVmCrateDir = rootProject.layout.projectDirectory.dir("native/ckl-vm")
+private val rustVmCrateDir = rootProject.layout.projectDirectory.dir("native/rux-vm")
 private val rustVmNativePlatform = currentRustVmNativePlatform()
 private val rustVmNativeLibrary = rustVmCrateDir.file("target/debug/${rustVmNativePlatform.libraryName}")
 private val rustVmReleaseNativeLibrary = rustVmCrateDir.file("target/release/${rustVmNativePlatform.libraryName}")
 private val rustVmWindowsX64Target = "x86_64-pc-windows-gnu"
-private val rustVmWindowsX64NativeLibrary = rustVmCrateDir.file("target/$rustVmWindowsX64Target/release/ckl_vm.dll")
+private val rustVmWindowsX64NativeLibrary = rustVmCrateDir.file("target/$rustVmWindowsX64Target/release/rux_vm.dll")
 private val rustVmNativeDistDir = rustVmCrateDir.dir("dist/natives")
 private val productionRustVmNativeResources = layout.buildDirectory.dir("generated/production-rust-vm-native-resources")
 private val isProductionUniversalJarRequested =
@@ -69,7 +69,7 @@ private val isProductionUniversalJarRequested =
 val buildRustVmNativeLibrary =
     tasks.register<Exec>("buildRustVmNativeLibrary") {
         group = "loom"
-        description = "Build the local Rust CKL VM JNI library used by Rust VM dev run configurations."
+        description = "Build the local Rust Rux VM JNI library used by Rust VM dev run configurations."
         workingDir = rustVmCrateDir.asFile
         commandLine("cargo", "build")
         inputs.file(rustVmCrateDir.file("Cargo.toml"))
@@ -81,7 +81,7 @@ val buildRustVmNativeLibrary =
 val buildRustVmNativeLibraryRelease =
     tasks.register<Exec>("buildRustVmNativeLibraryRelease") {
         group = "build"
-        description = "Build the release Rust CKL VM JNI library for bundling into production mod jars."
+        description = "Build the release Rust Rux VM JNI library for bundling into production mod jars."
         workingDir = rustVmCrateDir.asFile
         commandLine("cargo", "build", "--release")
         inputs.file(rustVmCrateDir.file("Cargo.toml"))
@@ -93,7 +93,7 @@ val buildRustVmNativeLibraryRelease =
 val buildRustVmWindowsX64NativeLibraryRelease =
     tasks.register<Exec>("buildRustVmWindowsX64NativeLibraryRelease") {
         group = "build"
-        description = "Cross-build the release Rust CKL VM JNI library for Windows x64 production jars."
+        description = "Cross-build the release Rust Rux VM JNI library for Windows x64 production jars."
         workingDir = rustVmCrateDir.asFile
         commandLine("cargo", "build", "--release", "--target", rustVmWindowsX64Target)
         environment("CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER", "x86_64-w64-mingw32-gcc")
@@ -112,7 +112,7 @@ val buildRustVmWindowsX64NativeLibraryRelease =
 val prepareBundledRustVmNativeLibraries =
     tasks.register<Sync>("prepareBundledRustVmNativeLibraries") {
         group = "build"
-        description = "Stage Rust CKL VM native libraries under natives/<os-arch>/ for universal mod jars."
+        description = "Stage Rust Rux VM native libraries under natives/<os-arch>/ for universal mod jars."
         dependsOn(buildRustVmNativeLibraryRelease)
 
         from(rustVmReleaseNativeLibrary) {
@@ -128,7 +128,7 @@ val prepareBundledRustVmNativeLibraries =
 val stageProductionRustVmNativeLibraries =
     tasks.register<Sync>("stageProductionRustVmNativeLibraries") {
         group = "build"
-        description = "Stage current-platform and Windows x64 Rust CKL VM natives for production universal jars."
+        description = "Stage current-platform and Windows x64 Rust Rux VM natives for production universal jars."
         dependsOn(buildRustVmNativeLibraryRelease)
         if (rustVmNativePlatform.id != "windows-x86_64") {
             dependsOn(buildRustVmWindowsX64NativeLibraryRelease)
@@ -140,7 +140,7 @@ val stageProductionRustVmNativeLibraries =
         }
         from(if (rustVmNativePlatform.id == "windows-x86_64") rustVmReleaseNativeLibrary else rustVmWindowsX64NativeLibrary) {
             into("natives/windows-x86_64")
-            rename { "ckl_vm.dll" }
+            rename { "rux_vm.dll" }
         }
         from(rustVmNativeDistDir) {
             include("**/*")
@@ -159,14 +159,14 @@ tasks.named<ProcessResources>("processResources") {
 
 tasks.register("buildProductionUniversalJar") {
     group = "build"
-    description = "Build a production mod jar with current-platform and Windows x64 Rust CKL VM natives bundled."
+    description = "Build a production mod jar with current-platform and Windows x64 Rust Rux VM natives bundled."
     dependsOn(stageProductionRustVmNativeLibraries)
     dependsOn(tasks.named("remapJar"))
 }
 
 fun RunConfigSettings.applyRustVm() {
-    property("ckl.vm.native.display", "true")
-    property("ckl.vm.native.daemon", "true")
+    property("rux.vm.native.display", "true")
+    property("rux.vm.native.daemon", "true")
 }
 
 val loom = extensions.getByType<LoomGradleExtensionAPI>()

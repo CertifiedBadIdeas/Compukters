@@ -6,14 +6,14 @@
 
 **Architecture:** Lexer and parser add keyword-backed statement forms. Codegen maintains a loop-context stack and patches `break` exits after each `while` body. Block outcome tracking distinguishes returns from other terminating loop-control statements.
 
-**Tech Stack:** Rust compiler crate `native/ckl-compiler`, low VM image instructions from `native/ckl-vm`, Cargo tests run offline.
+**Tech Stack:** Rust compiler crate `native/rux-compiler`, low VM image instructions from `native/rux-vm`, Cargo tests run offline.
 
 ---
 
 ### Task 1: Add Loop Control Tests
 
 **Files:**
-- Modify: `native/ckl-compiler/tests/compiler_seed.rs`
+- Modify: `native/rux-compiler/tests/compiler_seed.rs`
 
 - [ ] **Step 1: Add failing lexer, lowering, execution, and error tests**
 
@@ -34,7 +34,7 @@ compiled_seed_break_continue_program_runs_on_computer_machine
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml loop_control
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml loop_control
 ```
 
 Expected: failure because `TokenKind::Break`, `TokenKind::Continue`, and parser/codegen support do not exist yet.
@@ -42,9 +42,9 @@ Expected: failure because `TokenKind::Break`, `TokenKind::Continue`, and parser/
 ### Task 2: Add Lexer And Parser Support
 
 **Files:**
-- Modify: `native/ckl-compiler/src/lexer.rs`
-- Modify: `native/ckl-compiler/src/ast.rs`
-- Modify: `native/ckl-compiler/src/parser.rs`
+- Modify: `native/rux-compiler/src/lexer.rs`
+- Modify: `native/rux-compiler/src/ast.rs`
+- Modify: `native/rux-compiler/src/parser.rs`
 
 - [ ] **Step 1: Add tokens and AST variants**
 
@@ -64,7 +64,7 @@ continue;
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml loop_control
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml loop_control
 ```
 
 Expected: parsing succeeds, but codegen rejects or does not handle loop-control statements yet.
@@ -72,7 +72,7 @@ Expected: parsing succeeds, but codegen rejects or does not handle loop-control 
 ### Task 3: Lower Loop Control
 
 **Files:**
-- Modify: `native/ckl-compiler/src/codegen.rs`
+- Modify: `native/rux-compiler/src/codegen.rs`
 
 - [ ] **Step 1: Add block outcomes and loop context**
 
@@ -90,7 +90,7 @@ Use a loop-context stack:
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml break_continue
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml break_continue
 ```
 
 Expected: focused loop-control tests pass.
@@ -105,7 +105,7 @@ Expected: focused loop-control tests pass.
 Run:
 
 ```bash
-cargo fmt --manifest-path native/ckl-compiler/Cargo.toml --check
+cargo fmt --manifest-path native/rux-compiler/Cargo.toml --check
 ```
 
 Expected: exit code 0.
@@ -115,7 +115,7 @@ Expected: exit code 0.
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml
 ```
 
 Expected: all compiler tests pass.
@@ -125,7 +125,7 @@ Expected: all compiler tests pass.
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-vm/Cargo.toml
+cargo test --offline --manifest-path native/rux-vm/Cargo.toml
 ```
 
 Expected: all VM tests pass.
@@ -135,6 +135,6 @@ Expected: all VM tests pass.
 Run:
 
 ```bash
-git add docs/superpowers/specs/2026-05-14-rust-like-seed-loop-control-design.md docs/superpowers/plans/2026-05-14-rust-like-seed-loop-control.md native/ckl-compiler/src/ast.rs native/ckl-compiler/src/lexer.rs native/ckl-compiler/src/parser.rs native/ckl-compiler/src/codegen.rs native/ckl-compiler/tests/compiler_seed.rs
+git add docs/superpowers/specs/2026-05-14-rust-like-seed-loop-control-design.md docs/superpowers/plans/2026-05-14-rust-like-seed-loop-control.md native/rux-compiler/src/ast.rs native/rux-compiler/src/lexer.rs native/rux-compiler/src/parser.rs native/rux-compiler/src/codegen.rs native/rux-compiler/tests/compiler_seed.rs
 git commit -m "feat: add seed loop control"
 ```

@@ -4,11 +4,11 @@
 
 Build the next experimental computer model around one bare-metal low VM program that boots directly on a `ComputerMachine`.
 
-This is not a full CKL OS slice yet. The first target is closer to firmware: one program owns the whole guest RAM, starts at one entry function, talks to a tiny machine ABI, and can later grow into an OS kernel.
+This is not a full Rux OS slice yet. The first target is closer to firmware: one program owns the whole guest RAM, starts at one entry function, talks to a tiny machine ABI, and can later grow into an OS kernel.
 
 ## Motivation
 
-The previous shared-RAM CKL OS experiment proved useful architectural ideas:
+The previous shared-RAM Rux OS experiment proved useful architectural ideas:
 
 - `ComputerMachine` can own RAM and CPU contexts.
 - `LowCpuContext` can execute against a machine-owned memory bus.
@@ -27,7 +27,7 @@ The next slice should prove a smaller and more fundamental thing: a low VM progr
 - Do not implement user/kernel privilege separation.
 - Do not expose filesystem, terminal, shell, or display drivers in the first slice.
 - Do not merge this branch into `dev` until the bare-metal path is proven and intentionally reviewed.
-- Do not preserve the old CKL OS process-table fixtures as the main direction.
+- Do not preserve the old Rux OS process-table fixtures as the main direction.
 
 ## Architecture
 
@@ -82,7 +82,7 @@ RAM is one flat byte-addressable space owned by `ComputerMachine`.
 
 The guest program sees `u32` addresses. Every memory access remains bounds-checked by Rust. Out-of-bounds access is a VM error, not undefined behavior.
 
-The first slice does not need a guest allocator. Fixtures can write fixed addresses. Later CKL runtime support can introduce stack/heap conventions.
+The first slice does not need a guest allocator. Fixtures can write fixed addresses. Later Rux runtime support can introduce stack/heap conventions.
 
 Suggested initial layout:
 
@@ -154,13 +154,13 @@ De-emphasize for now:
 - guest process table fixtures;
 - scheduler fixtures;
 - static user process fixture;
-- CKL OS metadata and process-loader plans.
+- Rux OS metadata and process-loader plans.
 
 These older pieces are not necessarily wrong. They are just not part of the immediate path.
 
 ## Testing Strategy
 
-Use Rust tests in `native/ckl-vm` first.
+Use Rust tests in `native/rux-vm` first.
 
 Initial tests:
 
@@ -177,7 +177,7 @@ Once Rust boot semantics are stable, add Kotlin/JNI integration only if it direc
 ## Rollout
 
 1. Write a focused plan for the bare-metal MVP.
-2. Add or rename tests away from CKL OS/process language.
+2. Add or rename tests away from Rux OS/process language.
 3. Keep `ComputerMachine` as the machine wrapper for one boot program.
 4. Add a deterministic debug/serial output surface.
 5. Add a bare-metal low-image fixture that writes ready/debug/halt.
@@ -203,7 +203,7 @@ bare-metal program
   -> firmware with display/input
   -> kernel-shaped firmware
   -> optional process model
-  -> optional CKL OS
+  -> optional Rux OS
 ```
 
 The branch should stay fun and ambitious, but each slice should boot, run, and show one concrete machine behavior.

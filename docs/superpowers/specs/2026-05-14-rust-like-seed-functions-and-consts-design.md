@@ -43,8 +43,8 @@ The current seed compiler supports:
 - assignment;
 - arithmetic and comparisons;
 - `if` and `while`;
-- built-in ABI constants from `ckl_vm::computer_abi`;
-- direct lowering into `ckl_vm::low_image::Image`.
+- built-in ABI constants from `rux_vm::computer_abi`;
+- direct lowering into `rux_vm::low_image::Image`.
 
 The low VM already supports multi-function images:
 
@@ -333,7 +333,7 @@ Rich spans are still not required.
 
 ## Testing Strategy
 
-Add tests in `native/ckl-compiler/tests/compiler_seed.rs`.
+Add tests in `native/rux-compiler/tests/compiler_seed.rs`.
 
 Lexer/parser tests:
 
@@ -410,7 +410,7 @@ The test runs on `ComputerMachine` and expects:
 
 ## Implementation Status
 
-Implemented in `native/ckl-compiler`:
+Implemented in `native/rux-compiler`:
 
 - top-level source `const` declarations for `i32`;
 - multi-function source programs;

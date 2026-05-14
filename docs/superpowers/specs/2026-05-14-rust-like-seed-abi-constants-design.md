@@ -27,7 +27,7 @@ mmio<i32>(0x10000100).store(79);
 
 ## Context
 
-The low VM computer ABI already exists in `ckl_vm::computer_abi`:
+The low VM computer ABI already exists in `rux_vm::computer_abi`:
 
 ```rust
 pub const RAM_BASE: u32 = 0x0000_0000;
@@ -203,7 +203,7 @@ This remains a compile error for now. Existing named constants already cover the
 
 ## Implementation Shape
 
-Add a small built-in resolver in `native/ckl-compiler/src/lib.rs`:
+Add a small built-in resolver in `native/rux-compiler/src/lib.rs`:
 
 ```rust
 enum BuiltinConstant {
@@ -245,7 +245,7 @@ Rich spans are still not required.
 
 ## Testing Strategy
 
-Add tests in `native/ckl-compiler/tests/compiler_seed.rs`.
+Add tests in `native/rux-compiler/tests/compiler_seed.rs`.
 
 Codegen tests:
 
@@ -286,7 +286,7 @@ The test runs on `ComputerMachine` and expects:
 ## Success Criteria
 
 - Firmware tests no longer need raw ABI addresses.
-- The compiler reads ABI values from `ckl_vm::computer_abi`.
+- The compiler reads ABI values from `rux_vm::computer_abi`.
 - The low VM ISA does not change.
 - No import system is added.
 - No source-level `const` declaration is added.
@@ -294,9 +294,9 @@ The test runs on `ComputerMachine` and expects:
 
 ## Implementation Status
 
-Implemented in `native/ckl-compiler`:
+Implemented in `native/rux-compiler`:
 
-- built-in ABI constant resolver backed by `ckl_vm::computer_abi`;
+- built-in ABI constant resolver backed by `rux_vm::computer_abi`;
 - address constants lowered through `AddrConst`;
 - i32 constants lowered through `I32Const`;
 - local variables take precedence over unknown identifiers but cannot shadow built-in constants;

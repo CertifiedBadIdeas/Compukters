@@ -6,19 +6,19 @@
 
 **Architecture:** Extend the seed lexer/parser with `ptr<i32>(addr)`, represent `ptr` and `mmio` as pointer capabilities in codegen, and lower `.load()`/`.store(value)` to existing low VM `Load32`/`Store32`. Add address-context `+` lowering to existing `AddrAdd`.
 
-**Tech Stack:** Rust 2021, `native/ckl-compiler`, `ckl-vm::low_image`, `ComputerMachine`, Cargo tests.
+**Tech Stack:** Rust 2021, `native/rux-compiler`, `rux-vm::low_image`, `ComputerMachine`, Cargo tests.
 
 ---
 
 ## File Structure
 
-- Modify: `native/ckl-compiler/src/lib.rs`
+- Modify: `native/rux-compiler/src/lib.rs`
   - Add `TokenKind::Ptr`.
   - Add `Expr::Ptr(Box<Expr>)`.
   - Add pointer capability expression values.
   - Add address addition lowering in `compile_addr_expr`.
   - Share pointer method lowering for `mmio<i32>` and `ptr<i32>`.
-- Modify: `native/ckl-compiler/tests/compiler_seed.rs`
+- Modify: `native/rux-compiler/tests/compiler_seed.rs`
   - Add lexer, lowering, diagnostics, and E2E tests.
 - Modify: `docs/superpowers/specs/2026-05-14-rust-like-seed-ptr-i32-ram-primitives-design.md`
   - Add implementation status after code is complete.
@@ -26,8 +26,8 @@
 ## Task 1: Add `ptr` Token And Parser Node
 
 **Files:**
-- Modify: `native/ckl-compiler/src/lib.rs`
-- Modify: `native/ckl-compiler/tests/compiler_seed.rs`
+- Modify: `native/rux-compiler/src/lib.rs`
+- Modify: `native/rux-compiler/tests/compiler_seed.rs`
 
 - [x] **Step 1: Write failing lexer and parse/lowering tests**
 
@@ -86,7 +86,7 @@ fn compile_lowers_unsafe_ptr_i32_store_and_load() {
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml ptr --test compiler_seed
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml ptr --test compiler_seed
 ```
 
 Expected: FAIL because `ptr` is not a token or expression.
@@ -116,18 +116,18 @@ Implement:
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml ptr --test compiler_seed
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml
-cargo fmt --manifest-path native/ckl-compiler/Cargo.toml --check
-git add native/ckl-compiler/src/lib.rs native/ckl-compiler/tests/compiler_seed.rs
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml ptr --test compiler_seed
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml
+cargo fmt --manifest-path native/rux-compiler/Cargo.toml --check
+git add native/rux-compiler/src/lib.rs native/rux-compiler/tests/compiler_seed.rs
 git commit -m "Add rust language seed ptr i32 RAM primitives"
 ```
 
 ## Task 2: Add Address Arithmetic And Diagnostics
 
 **Files:**
-- Modify: `native/ckl-compiler/src/lib.rs`
-- Modify: `native/ckl-compiler/tests/compiler_seed.rs`
+- Modify: `native/rux-compiler/src/lib.rs`
+- Modify: `native/rux-compiler/tests/compiler_seed.rs`
 
 - [x] **Step 1: Write failing diagnostics tests**
 
@@ -160,7 +160,7 @@ fn compile_rejects_i32_const_as_ptr_address() {
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml compile_rejects_ptr --test compiler_seed
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml compile_rejects_ptr --test compiler_seed
 ```
 
 Expected: FAIL until diagnostics are implemented.
@@ -187,17 +187,17 @@ Update method-call lowering:
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml compile_rejects_ptr --test compiler_seed
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml
-cargo fmt --manifest-path native/ckl-compiler/Cargo.toml --check
-git add native/ckl-compiler/src/lib.rs native/ckl-compiler/tests/compiler_seed.rs
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml compile_rejects_ptr --test compiler_seed
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml
+cargo fmt --manifest-path native/rux-compiler/Cargo.toml --check
+git add native/rux-compiler/src/lib.rs native/rux-compiler/tests/compiler_seed.rs
 git commit -m "Validate rust language seed ptr i32 RAM primitives"
 ```
 
 ## Task 3: Add ComputerMachine E2E And Docs
 
 **Files:**
-- Modify: `native/ckl-compiler/tests/compiler_seed.rs`
+- Modify: `native/rux-compiler/tests/compiler_seed.rs`
 - Modify: `docs/superpowers/specs/2026-05-14-rust-like-seed-ptr-i32-ram-primitives-design.md`
 - Modify: `docs/superpowers/plans/2026-05-14-rust-like-seed-ptr-i32-ram-primitives.md`
 
@@ -235,7 +235,7 @@ fn compiled_seed_ptr_i32_ram_program_runs_on_computer_machine() {
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml compiled_seed_ptr_i32_ram_program_runs_on_computer_machine --test compiler_seed
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml compiled_seed_ptr_i32_ram_program_runs_on_computer_machine --test compiler_seed
 ```
 
 Expected: PASS.
@@ -247,7 +247,7 @@ Append to the design:
 ```markdown
 ## Implementation Status
 
-Implemented in `native/ckl-compiler`:
+Implemented in `native/rux-compiler`:
 
 - `ptr<i32>(addr)` parsing;
 - unsafe raw RAM `.store(value)` and `.load()`;
@@ -263,10 +263,10 @@ Mark completed plan checkboxes.
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml
-cargo fmt --manifest-path native/ckl-compiler/Cargo.toml --check
-cargo test --offline --manifest-path native/ckl-vm/Cargo.toml
-git add native/ckl-compiler/tests/compiler_seed.rs docs/superpowers/specs/2026-05-14-rust-like-seed-ptr-i32-ram-primitives-design.md docs/superpowers/plans/2026-05-14-rust-like-seed-ptr-i32-ram-primitives.md
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml
+cargo fmt --manifest-path native/rux-compiler/Cargo.toml --check
+cargo test --offline --manifest-path native/rux-vm/Cargo.toml
+git add native/rux-compiler/tests/compiler_seed.rs docs/superpowers/specs/2026-05-14-rust-like-seed-ptr-i32-ram-primitives-design.md docs/superpowers/plans/2026-05-14-rust-like-seed-ptr-i32-ram-primitives.md
 git commit -m "Run rust language seed ptr i32 RAM program on computer machine"
 ```
 
@@ -275,9 +275,9 @@ git commit -m "Run rust language seed ptr i32 RAM program on computer machine"
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml
-cargo fmt --manifest-path native/ckl-compiler/Cargo.toml --check
-cargo test --offline --manifest-path native/ckl-vm/Cargo.toml
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml
+cargo fmt --manifest-path native/rux-compiler/Cargo.toml --check
+cargo test --offline --manifest-path native/rux-vm/Cargo.toml
 git status --short
 ```
 

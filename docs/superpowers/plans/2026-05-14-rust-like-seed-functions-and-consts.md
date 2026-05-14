@@ -4,21 +4,21 @@
 
 **Goal:** Add top-level `const` declarations and multiple top-level functions with `i32` parameters and static calls to the Rust-like seed compiler.
 
-**Architecture:** Keep `native/ckl-compiler/src/lib.rs` as the seed compiler file. Change the parser from single-main parsing to top-level item parsing, collect const/function signatures before codegen, then lower each function into `low_image::Function` using existing `CallStatic`.
+**Architecture:** Keep `native/rux-compiler/src/lib.rs` as the seed compiler file. Change the parser from single-main parsing to top-level item parsing, collect const/function signatures before codegen, then lower each function into `low_image::Function` using existing `CallStatic`.
 
-**Tech Stack:** Rust 2021, `ckl-vm` path dependency, low image `Function`/`Instruction::CallStatic`, Cargo integration tests.
+**Tech Stack:** Rust 2021, `rux-vm` path dependency, low image `Function`/`Instruction::CallStatic`, Cargo integration tests.
 
 ---
 
 ## File Structure
 
-- Modify: `native/ckl-compiler/src/lib.rs`
+- Modify: `native/rux-compiler/src/lib.rs`
   - Add `TokenKind::Const`.
   - Replace `Program { return_type, statements }` with `Program { consts, functions }`.
   - Add AST nodes for `ConstDecl`, `FunctionDecl`, `Parameter`, and `Expr::Call`.
   - Add const evaluation for `i32` compile-time expressions.
   - Add function signature collection and static call lowering.
-- Modify: `native/ckl-compiler/tests/compiler_seed.rs`
+- Modify: `native/rux-compiler/tests/compiler_seed.rs`
   - Add lexer, const, function, call, diagnostics, and e2e tests.
 - Modify: `docs/superpowers/specs/2026-05-14-rust-like-seed-functions-and-consts-design.md`
   - Add implementation status.
@@ -26,8 +26,8 @@
 ## Task 1: Add Const Token And Top-Level Item Parser
 
 **Files:**
-- Modify: `native/ckl-compiler/src/lib.rs`
-- Modify: `native/ckl-compiler/tests/compiler_seed.rs`
+- Modify: `native/rux-compiler/src/lib.rs`
+- Modify: `native/rux-compiler/tests/compiler_seed.rs`
 
 - [x] **Step 1: Write failing lexer/parser tests**
 
@@ -73,7 +73,7 @@ fn compile_accepts_const_before_main() {
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml const
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml const
 ```
 
 Expected: FAIL because `TokenKind::Const` and top-level const parsing do not exist.
@@ -109,18 +109,18 @@ Existing single-main behavior must keep passing.
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml const
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml
-cargo fmt --manifest-path native/ckl-compiler/Cargo.toml --check
-git add native/ckl-compiler/src/lib.rs native/ckl-compiler/tests/compiler_seed.rs
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml const
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml
+cargo fmt --manifest-path native/rux-compiler/Cargo.toml --check
+git add native/rux-compiler/src/lib.rs native/rux-compiler/tests/compiler_seed.rs
 git commit -m "Add rust language seed source consts"
 ```
 
 ## Task 2: Add Multiple Function Lowering
 
 **Files:**
-- Modify: `native/ckl-compiler/src/lib.rs`
-- Modify: `native/ckl-compiler/tests/compiler_seed.rs`
+- Modify: `native/rux-compiler/src/lib.rs`
+- Modify: `native/rux-compiler/tests/compiler_seed.rs`
 
 - [x] **Step 1: Write failing function tests**
 
@@ -180,7 +180,7 @@ fn compile_lowers_i32_function_call_with_arguments() {
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml compile_lowers_
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml compile_lowers_
 ```
 
 Expected: FAIL until function signatures/calls are implemented.
@@ -223,18 +223,18 @@ Statement calls:
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml compile_lowers_
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml
-cargo fmt --manifest-path native/ckl-compiler/Cargo.toml --check
-git add native/ckl-compiler/src/lib.rs native/ckl-compiler/tests/compiler_seed.rs
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml compile_lowers_
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml
+cargo fmt --manifest-path native/rux-compiler/Cargo.toml --check
+git add native/rux-compiler/src/lib.rs native/rux-compiler/tests/compiler_seed.rs
 git commit -m "Add rust language seed functions"
 ```
 
 ## Task 3: Add Function/Const Diagnostics And Recursion Guard
 
 **Files:**
-- Modify: `native/ckl-compiler/src/lib.rs`
-- Modify: `native/ckl-compiler/tests/compiler_seed.rs`
+- Modify: `native/rux-compiler/src/lib.rs`
+- Modify: `native/rux-compiler/tests/compiler_seed.rs`
 
 - [x] **Step 1: Add diagnostics tests**
 
@@ -289,7 +289,7 @@ fn compile_rejects_direct_recursion() {
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml compile_rejects_
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml compile_rejects_
 ```
 
 Expected: FAIL for any diagnostics not implemented yet.
@@ -303,17 +303,17 @@ Add checks in signature/const collection and call lowering. Track current functi
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml compile_rejects_
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml
-cargo fmt --manifest-path native/ckl-compiler/Cargo.toml --check
-git add native/ckl-compiler/src/lib.rs native/ckl-compiler/tests/compiler_seed.rs
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml compile_rejects_
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml
+cargo fmt --manifest-path native/rux-compiler/Cargo.toml --check
+git add native/rux-compiler/src/lib.rs native/rux-compiler/tests/compiler_seed.rs
 git commit -m "Validate rust language seed functions and consts"
 ```
 
 ## Task 4: Add ComputerMachine E2E Test And Docs
 
 **Files:**
-- Modify: `native/ckl-compiler/tests/compiler_seed.rs`
+- Modify: `native/rux-compiler/tests/compiler_seed.rs`
 - Modify: `docs/superpowers/specs/2026-05-14-rust-like-seed-functions-and-consts-design.md`
 
 - [x] **Step 1: Add e2e test**
@@ -368,7 +368,7 @@ fn compiled_seed_functions_and_consts_run_on_computer_machine() {
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml compiled_seed_functions_and_consts_run_on_computer_machine
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml compiled_seed_functions_and_consts_run_on_computer_machine
 ```
 
 Expected: PASS.
@@ -380,7 +380,7 @@ Append to the design:
 ```markdown
 ## Implementation Status
 
-Implemented in `native/ckl-compiler`:
+Implemented in `native/rux-compiler`:
 
 - top-level source `const` declarations for `i32`;
 - multi-function source programs;
@@ -397,9 +397,9 @@ Implemented in `native/ckl-compiler`:
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml
-cargo fmt --manifest-path native/ckl-compiler/Cargo.toml --check
-git add native/ckl-compiler/tests/compiler_seed.rs docs/superpowers/specs/2026-05-14-rust-like-seed-functions-and-consts-design.md
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml
+cargo fmt --manifest-path native/rux-compiler/Cargo.toml --check
+git add native/rux-compiler/tests/compiler_seed.rs docs/superpowers/specs/2026-05-14-rust-like-seed-functions-and-consts-design.md
 git commit -m "Run rust language seed functions and consts on computer machine"
 ```
 
@@ -408,9 +408,9 @@ git commit -m "Run rust language seed functions and consts on computer machine"
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml
-cargo fmt --manifest-path native/ckl-compiler/Cargo.toml --check
-cargo test --offline --manifest-path native/ckl-vm/Cargo.toml
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml
+cargo fmt --manifest-path native/rux-compiler/Cargo.toml --check
+cargo test --offline --manifest-path native/rux-vm/Cargo.toml
 git status --short
 ```
 

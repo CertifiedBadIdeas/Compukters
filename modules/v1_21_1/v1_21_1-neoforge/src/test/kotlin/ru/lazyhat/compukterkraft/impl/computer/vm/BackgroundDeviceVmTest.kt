@@ -483,7 +483,7 @@ class BackgroundDeviceVmTest {
 
     @Test
     fun bundledRomTerminalUsesNativeDisplayTextRunsByDefault() {
-        System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        System.getProperty("rux.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val root = createTempDirectory("compukterkraft-rom-terminal-native-display")
 
         try {

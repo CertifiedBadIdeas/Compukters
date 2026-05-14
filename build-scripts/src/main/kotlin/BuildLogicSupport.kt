@@ -153,11 +153,11 @@ fun currentRustVmNativePlatform(
         }
     return when {
         osName.startsWith("linux", ignoreCase = true) ->
-            RustVmNativePlatform(id = "linux-$arch", libraryName = "libckl_vm.so")
+            RustVmNativePlatform(id = "linux-$arch", libraryName = "librux_vm.so")
         osName.startsWith("windows", ignoreCase = true) ->
-            RustVmNativePlatform(id = "windows-$arch", libraryName = "ckl_vm.dll")
+            RustVmNativePlatform(id = "windows-$arch", libraryName = "rux_vm.dll")
         osName.startsWith("mac", ignoreCase = true) || osName.startsWith("darwin", ignoreCase = true) ->
-            RustVmNativePlatform(id = "macos-$arch", libraryName = "libckl_vm.dylib")
+            RustVmNativePlatform(id = "macos-$arch", libraryName = "librux_vm.dylib")
         else -> error("Unsupported Rust VM native OS: $osName")
     }
 }

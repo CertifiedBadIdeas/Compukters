@@ -2,39 +2,39 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build the first Rust compiler seed for a new Rust-like bare-metal language that emits `ckl_vm::low_image::Image` and runs on `ComputerMachine`.
+**Goal:** Build the first Rust compiler seed for a new Rust-like bare-metal language that emits `rux_vm::low_image::Image` and runs on `ComputerMachine`.
 
-**Architecture:** Add a new `native/ckl-compiler` Rust crate. The crate owns lexer, parser, AST, diagnostics, and a tiny code generator that lowers one `main` function into low VM instructions. It depends on `ckl-vm` for ABI constants, low image types, and end-to-end machine tests.
+**Architecture:** Add a new `native/rux-compiler` Rust crate. The crate owns lexer, parser, AST, diagnostics, and a tiny code generator that lowers one `main` function into low VM instructions. It depends on `rux-vm` for ABI constants, low image types, and end-to-end machine tests.
 
-**Tech Stack:** Rust 2021, `ckl-vm` path dependency, Cargo unit/integration tests, low VM `Image`/`Instruction`, `ComputerMachine`.
+**Tech Stack:** Rust 2021, `rux-vm` path dependency, Cargo unit/integration tests, low VM `Image`/`Instruction`, `ComputerMachine`.
 
 ---
 
 ## File Structure
 
-- Create: `native/ckl-compiler/Cargo.toml`
-  - New Rust crate with `ckl-vm = { path = "../ckl-vm" }`.
-- Create: `native/ckl-compiler/src/lib.rs`
+- Create: `native/rux-compiler/Cargo.toml`
+  - New Rust crate with `rux-vm = { path = "../rux-vm" }`.
+- Create: `native/rux-compiler/src/lib.rs`
   - Public `compile(source: &str) -> Result<Image, CompileError>`.
   - Lexer, parser, AST, and code generator live here for the seed. Split later when the compiler grows.
-- Create: `native/ckl-compiler/tests/compiler_seed.rs`
+- Create: `native/rux-compiler/tests/compiler_seed.rs`
   - End-to-end and behavior tests.
 - Modify: `docs/superpowers/todos/2026-05-12-low-vm-shared-ram-ckl-os-research-note.md`
-  - Record that the experiment now starts a new Rust-like language rather than CKL compatibility.
+  - Record that the experiment now starts a new Rust-like language rather than Rux compatibility.
 
 ## Task 1: Scaffold Rust Compiler Crate With Public API
 
 **Files:**
-- Create: `native/ckl-compiler/Cargo.toml`
-- Create: `native/ckl-compiler/src/lib.rs`
-- Create: `native/ckl-compiler/tests/compiler_seed.rs`
+- Create: `native/rux-compiler/Cargo.toml`
+- Create: `native/rux-compiler/src/lib.rs`
+- Create: `native/rux-compiler/tests/compiler_seed.rs`
 
 - [ ] **Step 1: Write the failing public API test**
 
-Create `native/ckl-compiler/tests/compiler_seed.rs`:
+Create `native/rux-compiler/tests/compiler_seed.rs`:
 
 ```rust
-use ckl_compiler::{compile, CompileError};
+use rux_compiler::{compile, CompileError};
 
 #[test]
 fn compiler_exposes_public_compile_api() {
@@ -49,30 +49,30 @@ fn compiler_exposes_public_compile_api() {
 Run:
 
 ```bash
-cargo test --manifest-path native/ckl-compiler/Cargo.toml compiler_exposes_public_compile_api
+cargo test --manifest-path native/rux-compiler/Cargo.toml compiler_exposes_public_compile_api
 ```
 
-Expected: FAIL because `native/ckl-compiler/Cargo.toml` does not exist.
+Expected: FAIL because `native/rux-compiler/Cargo.toml` does not exist.
 
 - [ ] **Step 3: Create the crate**
 
-Create `native/ckl-compiler/Cargo.toml`:
+Create `native/rux-compiler/Cargo.toml`:
 
 ```toml
 [package]
-name = "ckl-compiler"
+name = "rux-compiler"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-ckl-vm = { path = "../ckl-vm" }
+rux-vm = { path = "../rux-vm" }
 thiserror = "1.0"
 ```
 
-Create `native/ckl-compiler/src/lib.rs`:
+Create `native/rux-compiler/src/lib.rs`:
 
 ```rust
-use ckl_vm::low_image::Image;
+use rux_vm::low_image::Image;
 use thiserror::Error;
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
@@ -99,7 +99,7 @@ pub fn compile(source: &str) -> Result<Image, CompileError> {
 Run:
 
 ```bash
-cargo test --manifest-path native/ckl-compiler/Cargo.toml compiler_exposes_public_compile_api
+cargo test --manifest-path native/rux-compiler/Cargo.toml compiler_exposes_public_compile_api
 ```
 
 Expected: PASS.
@@ -107,22 +107,22 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add native/ckl-compiler
+git add native/rux-compiler
 git commit -m "Add rust language seed compiler crate"
 ```
 
 ## Task 2: Add Lexer For Seed Syntax
 
 **Files:**
-- Modify: `native/ckl-compiler/src/lib.rs`
-- Modify: `native/ckl-compiler/tests/compiler_seed.rs`
+- Modify: `native/rux-compiler/src/lib.rs`
+- Modify: `native/rux-compiler/tests/compiler_seed.rs`
 
 - [ ] **Step 1: Write lexer tests**
 
-Append to `native/ckl-compiler/tests/compiler_seed.rs`:
+Append to `native/rux-compiler/tests/compiler_seed.rs`:
 
 ```rust
-use ckl_compiler::{lex, TokenKind};
+use rux_compiler::{lex, TokenKind};
 
 #[test]
 fn lexer_recognizes_seed_language_tokens() {
@@ -170,14 +170,14 @@ fn lexer_recognizes_seed_language_tokens() {
 Run:
 
 ```bash
-cargo test --manifest-path native/ckl-compiler/Cargo.toml lexer_recognizes_seed_language_tokens
+cargo test --manifest-path native/rux-compiler/Cargo.toml lexer_recognizes_seed_language_tokens
 ```
 
 Expected: FAIL because `lex` and `TokenKind` do not exist.
 
 - [ ] **Step 3: Implement the lexer**
 
-In `native/ckl-compiler/src/lib.rs`, add:
+In `native/rux-compiler/src/lib.rs`, add:
 
 ```rust
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -345,7 +345,7 @@ fn is_ident_continue(ch: char) -> bool {
 Run:
 
 ```bash
-cargo test --manifest-path native/ckl-compiler/Cargo.toml lexer_recognizes_seed_language_tokens
+cargo test --manifest-path native/rux-compiler/Cargo.toml lexer_recognizes_seed_language_tokens
 ```
 
 Expected: PASS.
@@ -353,19 +353,19 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add native/ckl-compiler/src/lib.rs native/ckl-compiler/tests/compiler_seed.rs
+git add native/rux-compiler/src/lib.rs native/rux-compiler/tests/compiler_seed.rs
 git commit -m "Add lexer for rust-like language seed"
 ```
 
 ## Task 3: Add Parser For Main Function, Unsafe Blocks, Returns, And MMIO Calls
 
 **Files:**
-- Modify: `native/ckl-compiler/src/lib.rs`
-- Modify: `native/ckl-compiler/tests/compiler_seed.rs`
+- Modify: `native/rux-compiler/src/lib.rs`
+- Modify: `native/rux-compiler/tests/compiler_seed.rs`
 
 - [ ] **Step 1: Write parser tests through compile errors and image shape**
 
-Append to `native/ckl-compiler/tests/compiler_seed.rs`:
+Append to `native/rux-compiler/tests/compiler_seed.rs`:
 
 ```rust
 #[test]
@@ -401,7 +401,7 @@ fn parser_rejects_void_keyword() {
 Run:
 
 ```bash
-cargo test --manifest-path native/ckl-compiler/Cargo.toml parser_
+cargo test --manifest-path native/rux-compiler/Cargo.toml parser_
 ```
 
 Expected: FAIL because `compile` still returns "compiler seed is not implemented yet" for valid functions.
@@ -427,7 +427,7 @@ Implementation may keep all types private except `compile`, `CompileError`, `lex
 Run:
 
 ```bash
-cargo test --manifest-path native/ckl-compiler/Cargo.toml parser_
+cargo test --manifest-path native/rux-compiler/Cargo.toml parser_
 ```
 
 Expected: PASS.
@@ -435,22 +435,22 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add native/ckl-compiler/src/lib.rs native/ckl-compiler/tests/compiler_seed.rs
+git add native/rux-compiler/src/lib.rs native/rux-compiler/tests/compiler_seed.rs
 git commit -m "Parse rust-like bare-metal seed programs"
 ```
 
 ## Task 4: Add Codegen Tests For Arithmetic And MMIO
 
 **Files:**
-- Modify: `native/ckl-compiler/src/lib.rs`
-- Modify: `native/ckl-compiler/tests/compiler_seed.rs`
+- Modify: `native/rux-compiler/src/lib.rs`
+- Modify: `native/rux-compiler/tests/compiler_seed.rs`
 
 - [ ] **Step 1: Write arithmetic codegen test**
 
 Append:
 
 ```rust
-use ckl_vm::low_image::Instruction;
+use rux_vm::low_image::Instruction;
 
 #[test]
 fn compiler_emits_precedence_correct_i32_arithmetic() {
@@ -487,8 +487,8 @@ fn compiler_lowers_unsafe_mmio_store_and_load() {
 Run:
 
 ```bash
-cargo test --manifest-path native/ckl-compiler/Cargo.toml compiler_emits_precedence_correct_i32_arithmetic
-cargo test --manifest-path native/ckl-compiler/Cargo.toml compiler_lowers_unsafe_mmio_store_and_load
+cargo test --manifest-path native/rux-compiler/Cargo.toml compiler_emits_precedence_correct_i32_arithmetic
+cargo test --manifest-path native/rux-compiler/Cargo.toml compiler_lowers_unsafe_mmio_store_and_load
 ```
 
 Expected: FAIL if arithmetic/MMIO expression lowering is incomplete. If both tests already pass, record that Task 3 covered this behavior and continue.
@@ -509,15 +509,15 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add native/ckl-compiler/src/lib.rs native/ckl-compiler/tests/compiler_seed.rs
+git add native/rux-compiler/src/lib.rs native/rux-compiler/tests/compiler_seed.rs
 git commit -m "Lower rust-like seed arithmetic and MMIO"
 ```
 
 ## Task 5: Add Diagnostics For Unsafe And Return Rules
 
 **Files:**
-- Modify: `native/ckl-compiler/src/lib.rs`
-- Modify: `native/ckl-compiler/tests/compiler_seed.rs`
+- Modify: `native/rux-compiler/src/lib.rs`
+- Modify: `native/rux-compiler/tests/compiler_seed.rs`
 
 - [ ] **Step 1: Write diagnostics tests**
 
@@ -551,9 +551,9 @@ fn compiler_rejects_return_value_in_unit_main() {
 Run each command:
 
 ```bash
-cargo test --manifest-path native/ckl-compiler/Cargo.toml compiler_rejects_mmio_outside_unsafe
-cargo test --manifest-path native/ckl-compiler/Cargo.toml compiler_rejects_missing_i32_return
-cargo test --manifest-path native/ckl-compiler/Cargo.toml compiler_rejects_return_value_in_unit_main
+cargo test --manifest-path native/rux-compiler/Cargo.toml compiler_rejects_mmio_outside_unsafe
+cargo test --manifest-path native/rux-compiler/Cargo.toml compiler_rejects_missing_i32_return
+cargo test --manifest-path native/rux-compiler/Cargo.toml compiler_rejects_return_value_in_unit_main
 ```
 
 Expected: FAIL if safety/return diagnostics are incomplete. If all tests already pass, record that Task 3 covered this behavior and continue.
@@ -574,23 +574,23 @@ Expected: PASS.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add native/ckl-compiler/src/lib.rs native/ckl-compiler/tests/compiler_seed.rs
+git add native/rux-compiler/src/lib.rs native/rux-compiler/tests/compiler_seed.rs
 git commit -m "Report seed compiler safety diagnostics"
 ```
 
 ## Task 6: Add End-To-End ComputerMachine Firmware Test
 
 **Files:**
-- Modify: `native/ckl-compiler/tests/compiler_seed.rs`
+- Modify: `native/rux-compiler/tests/compiler_seed.rs`
 
 - [ ] **Step 1: Write end-to-end test**
 
 Append:
 
 ```rust
-use ckl_vm::computer_abi;
-use ckl_vm::computer_machine::ComputerMachine;
-use ckl_vm::low_image_runner::LowImageSignal;
+use rux_vm::computer_abi;
+use rux_vm::computer_machine::ComputerMachine;
+use rux_vm::low_image_runner::LowImageSignal;
 
 #[test]
 fn compiled_seed_program_runs_on_computer_machine() {
@@ -623,7 +623,7 @@ fn compiled_seed_program_runs_on_computer_machine() {
 Run:
 
 ```bash
-cargo test --manifest-path native/ckl-compiler/Cargo.toml compiled_seed_program_runs_on_computer_machine
+cargo test --manifest-path native/rux-compiler/Cargo.toml compiled_seed_program_runs_on_computer_machine
 ```
 
 Expected: FAIL if the generated program does not yet run correctly on `ComputerMachine`. If it already passes, record that previous tasks covered the pipeline and continue.
@@ -633,7 +633,7 @@ Expected: FAIL if the generated program does not yet run correctly on `ComputerM
 If Step 2 failed, fix only the missing behavior required by the end-to-end test. Re-run:
 
 ```bash
-cargo test --manifest-path native/ckl-compiler/Cargo.toml compiled_seed_program_runs_on_computer_machine
+cargo test --manifest-path native/rux-compiler/Cargo.toml compiled_seed_program_runs_on_computer_machine
 ```
 
 Expected: PASS.
@@ -641,7 +641,7 @@ Expected: PASS.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add native/ckl-compiler/tests/compiler_seed.rs native/ckl-compiler/src/lib.rs
+git add native/rux-compiler/tests/compiler_seed.rs native/rux-compiler/src/lib.rs
 git commit -m "Run rust-like seed firmware on ComputerMachine"
 ```
 
@@ -657,7 +657,7 @@ Append:
 ```markdown
 ## 2026-05-13 Update: Rust-Like Language Seed
 
-The experimental compiler direction no longer targets CKL compatibility. The branch now starts a new Rust-like bare-metal language seed written in Rust.
+The experimental compiler direction no longer targets Rux compatibility. The branch now starts a new Rust-like bare-metal language seed written in Rust.
 
 The first language slice intentionally supports only one `main` function, `i32` returns, unit `fn main()`, integer arithmetic, `unsafe` blocks, and typed MMIO capability calls such as `mmio<i32>(addr).store(value)`.
 
@@ -669,7 +669,7 @@ This keeps the experiment focused on source-to-low-image-to-machine execution be
 Run:
 
 ```bash
-rg -n "Rust-Like Language Seed|no longer targets CKL compatibility|typed MMIO capability" docs/superpowers/todos/2026-05-12-low-vm-shared-ram-ckl-os-research-note.md
+rg -n "Rust-Like Language Seed|no longer targets Rux compatibility|typed MMIO capability" docs/superpowers/todos/2026-05-12-low-vm-shared-ram-ckl-os-research-note.md
 ```
 
 Expected: all phrases appear.
@@ -691,7 +691,7 @@ git commit -m "Document rust-like language seed direction"
 Run:
 
 ```bash
-cargo test --manifest-path native/ckl-compiler/Cargo.toml
+cargo test --manifest-path native/rux-compiler/Cargo.toml
 ```
 
 Expected: PASS.
@@ -701,7 +701,7 @@ Expected: PASS.
 Run:
 
 ```bash
-cargo test --manifest-path native/ckl-vm/Cargo.toml
+cargo test --manifest-path native/rux-vm/Cargo.toml
 ```
 
 Expected: PASS.
@@ -711,8 +711,8 @@ Expected: PASS.
 Run:
 
 ```bash
-cargo fmt --manifest-path native/ckl-compiler/Cargo.toml --check
-cargo fmt --manifest-path native/ckl-vm/Cargo.toml --check
+cargo fmt --manifest-path native/rux-compiler/Cargo.toml --check
+cargo fmt --manifest-path native/rux-vm/Cargo.toml --check
 ```
 
 Expected: both PASS.

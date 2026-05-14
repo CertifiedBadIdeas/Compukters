@@ -4,7 +4,7 @@
 
 Define a small, explicit ABI between a single low VM firmware program and `ComputerMachine`.
 
-The ABI must make the experimental bare-metal computer path stable enough for the next milestone: compiling CKL programs as one bootable firmware image, without starting a CKL OS, process table, scheduler, filesystem, or display stack.
+The ABI must make the experimental bare-metal computer path stable enough for the next milestone: compiling Rux programs as one bootable firmware image, without starting a Rux OS, process table, scheduler, filesystem, or display stack.
 
 ## Motivation
 
@@ -20,11 +20,11 @@ Those pieces are currently embedded directly in `ComputerMachine`. That is fine 
 
 ## Non-Goals
 
-- Do not add CKL OS processes.
+- Do not add Rux OS processes.
 - Do not add guest scheduling.
 - Do not add virtual memory.
 - Do not add filesystem, display, terminal, or shell integration.
-- Do not add a CKL compiler target in this slice.
+- Do not add a Rux compiler target in this slice.
 - Do not preserve a fallback path for older experimental ABI shapes.
 
 ## ABI v0 Shape
@@ -157,5 +157,5 @@ Existing `legacy_ckl_os_research_*` tests stay as research references and should
 - ABI constants have one source of truth.
 - Existing bare-metal tests still pass.
 - The firmware smoke test uses ABI constants, not private machine literals.
-- No CKL OS/process/scheduler work is added.
-- `cargo test --manifest-path native/ckl-vm/Cargo.toml` passes.
+- No Rux OS/process/scheduler work is added.
+- `cargo test --manifest-path native/rux-vm/Cargo.toml` passes.

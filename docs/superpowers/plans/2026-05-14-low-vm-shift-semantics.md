@@ -9,9 +9,9 @@
 ### Task 1: Add Failing Tests
 
 **Files:**
-- Modify: `native/ckl-vm/tests/low_image_runner.rs`
-- Modify: `native/ckl-vm/tests/low_image_decode.rs`
-- Modify: `native/ckl-compiler/tests/compiler_seed.rs`
+- Modify: `native/rux-vm/tests/low_image_runner.rs`
+- Modify: `native/rux-vm/tests/low_image_decode.rs`
+- Modify: `native/rux-compiler/tests/compiler_seed.rs`
 
 - [ ] Add runner tests for unbounded signed shifts and unsigned logical shifts.
 - [ ] Add decoder tests for `U32Shl` tag `29` and `U32Shr` tag `30`.
@@ -21,8 +21,8 @@
 ### Task 2: Implement Low VM Shift Instructions
 
 **Files:**
-- Modify: `native/ckl-vm/src/low_image.rs`
-- Modify: `native/ckl-vm/src/low_image_runner.rs`
+- Modify: `native/rux-vm/src/low_image.rs`
+- Modify: `native/rux-vm/src/low_image_runner.rs`
 
 - [ ] Add `Instruction::U32Shl` and `Instruction::U32Shr`.
 - [ ] Add decoder tags `29` and `30`.
@@ -32,7 +32,7 @@
 ### Task 3: Implement Compiler Lowering
 
 **Files:**
-- Modify: `native/ckl-compiler/src/codegen.rs`
+- Modify: `native/rux-compiler/src/codegen.rs`
 
 - [ ] Lower `u32 << u32` to `U32Shl`.
 - [ ] Lower `u32 >> u32` to `U32Shr`.
@@ -40,8 +40,8 @@
 
 ### Task 4: Verify And Commit
 
-- [ ] Run `cargo fmt --manifest-path native/ckl-compiler/Cargo.toml --check`.
-- [ ] Run `cargo fmt --manifest-path native/ckl-vm/Cargo.toml --check`.
-- [ ] Run `cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml`.
-- [ ] Run `cargo test --offline --manifest-path native/ckl-vm/Cargo.toml`.
+- [ ] Run `cargo fmt --manifest-path native/rux-compiler/Cargo.toml --check`.
+- [ ] Run `cargo fmt --manifest-path native/rux-vm/Cargo.toml --check`.
+- [ ] Run `cargo test --offline --manifest-path native/rux-compiler/Cargo.toml`.
+- [ ] Run `cargo test --offline --manifest-path native/rux-vm/Cargo.toml`.
 - [ ] Commit docs and implementation.

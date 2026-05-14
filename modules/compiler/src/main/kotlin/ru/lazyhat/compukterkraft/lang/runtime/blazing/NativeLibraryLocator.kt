@@ -52,8 +52,8 @@ internal sealed class NativeLibraryResolution {
 }
 
 internal object NativeLibraryLocator {
-    const val LIBRARY_PROPERTY = "ckl.vm.native.library"
-    const val EXTRACT_DIR_PROPERTY = "ckl.vm.native.extract.dir"
+    const val LIBRARY_PROPERTY = "rux.vm.native.library"
+    const val EXTRACT_DIR_PROPERTY = "rux.vm.native.extract.dir"
 
     fun resolve(): NativeLibraryResolution? =
         resolve(
@@ -67,7 +67,7 @@ internal object NativeLibraryLocator {
     fun requireLibraryPath(): String =
         resolve()?.path
             ?: error(
-                "Rust image VM runner requires -D$LIBRARY_PROPERTY=/absolute/path/to/${platform()?.libraryName ?: "libckl_vm.so"} " +
+                "Rust image VM runner requires -D$LIBRARY_PROPERTY=/absolute/path/to/${platform()?.libraryName ?: "librux_vm.so"} " +
                     "or a bundled native resource for ${System.getProperty("os.name")}/${System.getProperty("os.arch")}",
             )
 
@@ -83,11 +83,11 @@ internal object NativeLibraryLocator {
             }
         return when {
             osName.startsWith("Linux", ignoreCase = true) ->
-                NativeLibraryPlatform(id = "linux-$arch", libraryName = "libckl_vm.so")
+                NativeLibraryPlatform(id = "linux-$arch", libraryName = "librux_vm.so")
             osName.startsWith("Windows", ignoreCase = true) ->
-                NativeLibraryPlatform(id = "windows-$arch", libraryName = "ckl_vm.dll")
+                NativeLibraryPlatform(id = "windows-$arch", libraryName = "rux_vm.dll")
             osName.startsWith("Mac", ignoreCase = true) || osName.startsWith("Darwin", ignoreCase = true) ->
-                NativeLibraryPlatform(id = "macos-$arch", libraryName = "libckl_vm.dylib")
+                NativeLibraryPlatform(id = "macos-$arch", libraryName = "librux_vm.dylib")
             else -> null
         }
     }

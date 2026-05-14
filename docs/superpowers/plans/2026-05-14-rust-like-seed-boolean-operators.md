@@ -6,24 +6,24 @@
 
 **Architecture:** Extend the compiler only. Reuse existing low-image `I32Const`, `I32Eq`, `I32Move`, `Jump`, and `JumpIfFalse` instructions.
 
-**Tech Stack:** Rust, `native/ckl-compiler`, `native/ckl-vm`, offline Cargo tests.
+**Tech Stack:** Rust, `native/rux-compiler`, `native/rux-vm`, offline Cargo tests.
 
 ---
 
 ## File Structure
 
-- Modify `native/ckl-compiler/src/lexer.rs`: add `Bang`, `AndAnd`, and `OrOr` tokens.
-- Modify `native/ckl-compiler/src/ast.rs`: add unary/logical expression nodes.
-- Modify `native/ckl-compiler/src/parser.rs`: add logical precedence and unary `!`.
-- Modify `native/ckl-compiler/src/codegen.rs`: lower `!`, `&&`, and `||`.
-- Modify `native/ckl-compiler/tests/compiler_seed.rs`: add lexer, lowering, e2e, short-circuit, and type-error tests.
+- Modify `native/rux-compiler/src/lexer.rs`: add `Bang`, `AndAnd`, and `OrOr` tokens.
+- Modify `native/rux-compiler/src/ast.rs`: add unary/logical expression nodes.
+- Modify `native/rux-compiler/src/parser.rs`: add logical precedence and unary `!`.
+- Modify `native/rux-compiler/src/codegen.rs`: lower `!`, `&&`, and `||`.
+- Modify `native/rux-compiler/tests/compiler_seed.rs`: add lexer, lowering, e2e, short-circuit, and type-error tests.
 
 ## Tasks
 
 ### Task 1: RED tests
 
 - [ ] Add tests for lexer tokens and boolean operator behavior.
-- [ ] Run `cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml` and confirm missing-token or missing-AST failures.
+- [ ] Run `cargo test --offline --manifest-path native/rux-compiler/Cargo.toml` and confirm missing-token or missing-AST failures.
 
 ### Task 2: Parser and AST
 
@@ -40,9 +40,9 @@
 
 ### Task 4: Verification
 
-- [ ] Run `cargo fmt --manifest-path native/ckl-compiler/Cargo.toml --check`.
-- [ ] Run `cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml`.
-- [ ] Run `cargo test --offline --manifest-path native/ckl-vm/Cargo.toml`.
+- [ ] Run `cargo fmt --manifest-path native/rux-compiler/Cargo.toml --check`.
+- [ ] Run `cargo test --offline --manifest-path native/rux-compiler/Cargo.toml`.
+- [ ] Run `cargo test --offline --manifest-path native/rux-vm/Cargo.toml`.
 - [ ] Commit the completed slice.
 
 ## Self-Review

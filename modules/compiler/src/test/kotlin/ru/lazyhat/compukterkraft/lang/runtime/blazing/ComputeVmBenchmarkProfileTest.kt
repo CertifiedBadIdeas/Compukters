@@ -38,7 +38,7 @@ class ComputeVmBenchmarkProfileTest {
         val pythonCommand = System.getProperty(PYTHON_COMMAND_PROPERTY, "python3")
         assumeTrue(!tsvPathValue.isNullOrBlank(), "Compute benchmark TSV path is only provided by profiling Gradle tasks")
         assumeTrue(!markdownPathValue.isNullOrBlank(), "Compute benchmark Markdown path is only provided by profiling Gradle tasks")
-        assumeTrue(!libraryPath.isNullOrBlank(), "Compute benchmark requires the native CKL VM library")
+        assumeTrue(!libraryPath.isNullOrBlank(), "Compute benchmark requires the native Rux VM library")
         assumeTrue(!nativeLibraryProfile.isNullOrBlank(), "Compute benchmark requires the native library profile")
         assumeTrue(!rustCrateDir.isNullOrBlank(), "Compute benchmark requires the Rust VM crate directory")
         assumeTrue(!rustTargetProfile.isNullOrBlank(), "Compute benchmark requires the Rust target/profile label")
@@ -81,7 +81,7 @@ class ComputeVmBenchmarkProfileTest {
     private companion object {
         const val TSV_PATH_PROPERTY = "ckl.benchmark.compute.tsv.path"
         const val MARKDOWN_PATH_PROPERTY = "ckl.benchmark.compute.markdown.path"
-        const val NATIVE_LIBRARY_PROPERTY = "ckl.vm.native.library"
+        const val NATIVE_LIBRARY_PROPERTY = "rux.vm.native.library"
         const val NATIVE_LIBRARY_PROFILE_PROPERTY = "ckl.benchmark.native.library.profile"
         const val GIT_COMMIT_PROPERTY = "ckl.benchmark.git.commit"
         const val RUST_CRATE_DIR_PROPERTY = "ckl.benchmark.rust.crate.dir"

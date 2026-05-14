@@ -30,24 +30,24 @@ tasks.register("profileRuntimeVmComparison") {
 
 tasks.register("profileComputeVmBenchmark") {
     group = "verification"
-    description = "Run a CPU-only CKL VM benchmark with the release Rust CKL VM JNI library."
+    description = "Run a CPU-only Rux VM benchmark with the release Rust Rux VM JNI library."
     dependsOn(":compiler:profileComputeVmBenchmark")
 }
 
 tasks.register("profileComputeVmBenchmarkDebug") {
     group = "verification"
-    description = "Run a CPU-only CKL VM benchmark with the debug Rust CKL VM JNI library."
+    description = "Run a CPU-only Rux VM benchmark with the debug Rust Rux VM JNI library."
     dependsOn(":compiler:profileComputeVmBenchmarkDebug")
 }
 
 tasks.register("profileComputeVmBenchmarkRelease") {
     group = "verification"
-    description = "Run a CPU-only CKL VM benchmark with the release Rust CKL VM JNI library."
+    description = "Run a CPU-only Rux VM benchmark with the release Rust Rux VM JNI library."
     dependsOn(":compiler:profileComputeVmBenchmarkRelease")
 }
 
 tasks.register("profileComputeVmBenchmarkComparison") {
     group = "verification"
-    description = "Run CPU-only CKL VM benchmarks for both debug and release Rust CKL VM JNI libraries."
+    description = "Run CPU-only Rux VM benchmarks for both debug and release Rust Rux VM JNI libraries."
     dependsOn(":compiler:profileComputeVmBenchmarkComparison")
 }
