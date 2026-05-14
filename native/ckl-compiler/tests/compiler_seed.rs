@@ -7,7 +7,10 @@ use ckl_vm::low_image_runner::LowImageSignal;
 fn compiler_exposes_public_compile_api() {
     let error = compile("").unwrap_err();
 
-    assert!(error.message.contains("expected `fn`"), "{error:?}");
+    assert!(
+        error.message.contains("missing `main` function"),
+        "{error:?}"
+    );
 }
 
 #[test]
@@ -98,6 +101,26 @@ fn lexer_recognizes_locals_control_flow_and_comparison_tokens() {
             TokenKind::Semicolon,
             TokenKind::RightBrace,
             TokenKind::RightBrace,
+            TokenKind::Eof,
+        ]
+    );
+}
+
+#[test]
+fn lexer_recognizes_const_keyword() {
+    let tokens = lex("const OK: i32 = 79;").unwrap();
+    let kinds: Vec<TokenKind> = tokens.into_iter().map(|token| token.kind).collect();
+
+    assert_eq!(
+        kinds,
+        vec![
+            TokenKind::Const,
+            TokenKind::Ident("OK".to_string()),
+            TokenKind::Colon,
+            TokenKind::I32,
+            TokenKind::Equal,
+            TokenKind::Int(79),
+            TokenKind::Semicolon,
             TokenKind::Eof,
         ]
     );
@@ -331,6 +354,19 @@ fn compile_lowers_status_ready_builtin_i32_return() {
                 dst: 0,
                 value: ComputerMachine::STATUS_READY,
             },
+            Instruction::ReturnI32 { src: 0 },
+        ]
+    );
+}
+
+#[test]
+fn compile_accepts_const_before_main() {
+    let image = compile("const OK: i32 = 79; fn main() -> i32 { return OK; }").unwrap();
+
+    assert_eq!(
+        image.functions[0].instructions,
+        vec![
+            Instruction::I32Const { dst: 0, value: 79 },
             Instruction::ReturnI32 { src: 0 },
         ]
     );

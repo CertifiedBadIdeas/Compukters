@@ -17,6 +17,7 @@ pub enum TokenKind {
     Mmio,
     Let,
     Mut,
+    Const,
     If,
     Else,
     While,
@@ -87,6 +88,7 @@ pub fn lex(source: &str) -> Result<Vec<Token>, CompileError> {
                 "mmio" => TokenKind::Mmio,
                 "let" => TokenKind::Let,
                 "mut" => TokenKind::Mut,
+                "const" => TokenKind::Const,
                 "if" => TokenKind::If,
                 "else" => TokenKind::Else,
                 "while" => TokenKind::While,
@@ -220,8 +222,27 @@ pub fn compile(source: &str) -> Result<Image, CompileError> {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Program {
+    consts: Vec<ConstDecl>,
+    functions: Vec<FunctionDecl>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ConstDecl {
+    name: String,
+    value: Expr,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct FunctionDecl {
+    name: String,
+    parameters: Vec<Parameter>,
     return_type: ReturnType,
     statements: Vec<Statement>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Parameter {
+    name: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -305,10 +326,50 @@ impl Parser {
     }
 
     fn parse_program(&mut self) -> Result<Program, CompileError> {
+        let mut consts = Vec::new();
+        let mut functions = Vec::new();
+        while self.peek() != &TokenKind::Eof {
+            if self.consume(TokenKind::Const) {
+                consts.push(self.parse_const_declaration()?);
+            } else if self.peek() == &TokenKind::Fn {
+                functions.push(self.parse_function()?);
+            } else {
+                return Err(self.error(format!("expected top-level item, found {:?}", self.peek())));
+            }
+        }
+        self.expect(TokenKind::Eof)?;
+        Ok(Program { consts, functions })
+    }
+
+    fn parse_const_declaration(&mut self) -> Result<ConstDecl, CompileError> {
+        let name = self.take_ident()?;
+        self.expect(TokenKind::Colon)?;
+        self.expect(TokenKind::I32)?;
+        self.expect(TokenKind::Equal)?;
+        let value = self.parse_expr()?;
+        self.expect(TokenKind::Semicolon)?;
+        Ok(ConstDecl { name, value })
+    }
+
+    fn parse_function(&mut self) -> Result<FunctionDecl, CompileError> {
         self.expect(TokenKind::Fn)?;
-        self.expect_ident("main")?;
+        let name = self.take_ident()?;
         self.expect(TokenKind::LeftParen)?;
-        self.expect(TokenKind::RightParen)?;
+        let mut parameters = Vec::new();
+        if !self.consume(TokenKind::RightParen) {
+            loop {
+                let parameter_name = self.take_ident()?;
+                self.expect(TokenKind::Colon)?;
+                self.expect(TokenKind::I32)?;
+                parameters.push(Parameter {
+                    name: parameter_name,
+                });
+                if self.consume(TokenKind::RightParen) {
+                    break;
+                }
+                self.expect(TokenKind::Comma)?;
+            }
+        }
         let return_type = if self.consume(TokenKind::Arrow) {
             self.expect(TokenKind::I32)?;
             ReturnType::I32
@@ -316,8 +377,9 @@ impl Parser {
             ReturnType::Unit
         };
         let statements = self.parse_block()?;
-        self.expect(TokenKind::Eof)?;
-        Ok(Program {
+        Ok(FunctionDecl {
+            name,
+            parameters,
             return_type,
             statements,
         })
@@ -520,19 +582,6 @@ impl Parser {
         }
     }
 
-    fn expect_ident(&mut self, expected: &str) -> Result<(), CompileError> {
-        match self.tokens.get(self.offset) {
-            Some(Token {
-                kind: TokenKind::Ident(value),
-                ..
-            }) if value == expected => {
-                self.offset += 1;
-                Ok(())
-            }
-            _ => Err(self.error(format!("expected `{expected}`, found {:?}", self.peek()))),
-        }
-    }
-
     fn take_ident(&mut self) -> Result<String, CompileError> {
         match self.tokens.get(self.offset) {
             Some(Token {
@@ -616,6 +665,7 @@ impl TokenKind {
             TokenKind::Mmio => "mmio",
             TokenKind::Let => "let",
             TokenKind::Mut => "mut",
+            TokenKind::Const => "const",
             TokenKind::If => "if",
             TokenKind::Else => "else",
             TokenKind::While => "while",
@@ -680,6 +730,75 @@ fn resolve_builtin_constant(name: &str) -> Option<BuiltinConstant> {
     }
 }
 
+fn evaluate_consts(consts: &[ConstDecl]) -> Result<HashMap<String, i32>, CompileError> {
+    let mut values = HashMap::new();
+    for declaration in consts {
+        if resolve_builtin_constant(&declaration.name).is_some() {
+            return Err(CompileError {
+                message: format!(
+                    "const `{}` cannot shadow built-in ABI constant",
+                    declaration.name
+                ),
+            });
+        }
+        if values.contains_key(&declaration.name) {
+            return Err(CompileError {
+                message: format!("duplicate const `{}`", declaration.name),
+            });
+        }
+        let value = evaluate_const_expr(&declaration.value, &values)?;
+        values.insert(declaration.name.clone(), value);
+    }
+    Ok(values)
+}
+
+fn evaluate_const_expr(
+    expr: &Expr,
+    source_consts: &HashMap<String, i32>,
+) -> Result<i32, CompileError> {
+    match expr {
+        Expr::Int(value) => i32::try_from(*value).map_err(|_| CompileError {
+            message: format!("integer literal `{value}` does not fit `i32`"),
+        }),
+        Expr::Local(name) => {
+            if let Some(value) = source_consts.get(name).copied() {
+                return Ok(value);
+            }
+            match resolve_builtin_constant(name) {
+                Some(BuiltinConstant::I32(value)) => Ok(value),
+                Some(BuiltinConstant::Addr(_)) => Err(CompileError {
+                    message: format!("const initializer `{name}` is an address, expected `i32`"),
+                }),
+                None => Err(CompileError {
+                    message: format!("unknown const initializer identifier `{name}`"),
+                }),
+            }
+        }
+        Expr::Binary { op, lhs, rhs } => {
+            let lhs = evaluate_const_expr(lhs, source_consts)?;
+            let rhs = evaluate_const_expr(rhs, source_consts)?;
+            match op {
+                BinaryOp::Add => lhs.checked_add(rhs),
+                BinaryOp::Sub => lhs.checked_sub(rhs),
+                BinaryOp::Mul => lhs.checked_mul(rhs),
+                BinaryOp::Div => {
+                    if rhs == 0 {
+                        None
+                    } else {
+                        lhs.checked_div(rhs)
+                    }
+                }
+            }
+            .ok_or_else(|| CompileError {
+                message: "const initializer arithmetic overflow".to_string(),
+            })
+        }
+        Expr::Compare { .. } | Expr::Mmio(_) | Expr::MethodCall { .. } => Err(CompileError {
+            message: "const initializer is not compile-time evaluable".to_string(),
+        }),
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ValueType {
     I32,
@@ -704,19 +823,35 @@ struct Codegen {
     return_type: ReturnType,
     unsafe_depth: usize,
     locals: HashMap<String, Local>,
+    source_consts: HashMap<String, i32>,
 }
 
 impl Codegen {
     fn compile(program: Program) -> Result<Image, CompileError> {
+        let source_consts = evaluate_consts(&program.consts)?;
+        let main = program
+            .functions
+            .iter()
+            .find(|function| function.name == "main")
+            .ok_or_else(|| CompileError {
+                message: "missing `main` function".to_string(),
+            })?;
+        if !main.parameters.is_empty() {
+            return Err(CompileError {
+                message: "`main` cannot have parameters".to_string(),
+            });
+        }
+
         let mut codegen = Self {
             instructions: Vec::new(),
             next_register: 0,
-            return_type: program.return_type,
+            return_type: main.return_type,
             unsafe_depth: 0,
             locals: HashMap::new(),
+            source_consts,
         };
 
-        let outcome = codegen.compile_statements(&program.statements)?;
+        let outcome = codegen.compile_statements(&main.statements)?;
         if outcome == BlockOutcome::FallsThrough {
             match codegen.return_type {
                 ReturnType::Unit => codegen.instructions.push(Instruction::ReturnUnit),
@@ -926,6 +1061,10 @@ impl Codegen {
                     return match local.ty {
                         ValueType::I32 => Ok(ExprValue::I32(local.register)),
                     };
+                }
+
+                if let Some(value) = self.source_consts.get(name).copied() {
+                    return Ok(ExprValue::I32(self.emit_i32_const(value)?));
                 }
 
                 match resolve_builtin_constant(name) {
