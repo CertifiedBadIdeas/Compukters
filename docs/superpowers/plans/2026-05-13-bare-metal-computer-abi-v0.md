@@ -6,17 +6,17 @@
 
 **Architecture:** `computer_abi` becomes the source of truth for RAM/control/debug addresses, sizes, and status values. `ComputerMachine` keeps compatibility aliases but delegates values to `computer_abi`, and tests prove that the machine memory map and firmware fixtures use the ABI contract.
 
-**Tech Stack:** Rust `ckl-vm`, `ComputerMachine`, `MachineBus`, low VM `Instruction` fixtures, Cargo tests.
+**Tech Stack:** Rust `rux-vm`, `ComputerMachine`, `MachineBus`, low VM `Instruction` fixtures, Cargo tests.
 
 ---
 
 ## File Structure
 
-- Create: `native/ckl-vm/src/computer_abi.rs`
+- Create: `native/rux-vm/src/computer_abi.rs`
   - Public constants for RAM base, control MMIO, debug MMIO, and status codes.
-- Modify: `native/ckl-vm/src/lib.rs`
+- Modify: `native/rux-vm/src/lib.rs`
   - Export `computer_abi`.
-- Modify: `native/ckl-vm/src/computer_machine.rs`
+- Modify: `native/rux-vm/src/computer_machine.rs`
   - Alias `ComputerMachine` compatibility constants to `computer_abi`.
   - Use ABI-defined control/debug sizes.
   - Update tests to assert against `computer_abi`.
@@ -26,13 +26,13 @@
 ## Task 1: Add Public ABI Constants
 
 **Files:**
-- Create: `native/ckl-vm/src/computer_abi.rs`
-- Modify: `native/ckl-vm/src/lib.rs`
-- Modify: `native/ckl-vm/src/computer_machine.rs`
+- Create: `native/rux-vm/src/computer_abi.rs`
+- Modify: `native/rux-vm/src/lib.rs`
+- Modify: `native/rux-vm/src/computer_machine.rs`
 
 - [ ] **Step 1: Write the failing ABI constants test**
 
-In `native/ckl-vm/src/computer_machine.rs`, change the test imports from:
+In `native/rux-vm/src/computer_machine.rs`, change the test imports from:
 
 ```rust
 use crate::computer_machine::ComputerMachine;
@@ -74,14 +74,14 @@ fn computer_machine_constants_match_bare_metal_abi_v0() {
 Run:
 
 ```bash
-cargo test --manifest-path native/ckl-vm/Cargo.toml computer_machine_constants_match_bare_metal_abi_v0
+cargo test --manifest-path native/rux-vm/Cargo.toml computer_machine_constants_match_bare_metal_abi_v0
 ```
 
 Expected: FAIL to compile because `crate::computer_abi`, `ComputerMachine::CONTROL_SIZE`, and `ComputerMachine::DEBUG_SIZE` do not exist.
 
 - [ ] **Step 3: Create the ABI module**
 
-Create `native/ckl-vm/src/computer_abi.rs`:
+Create `native/rux-vm/src/computer_abi.rs`:
 
 ```rust
 pub const RAM_BASE: u32 = 0x0000_0000;
@@ -105,7 +105,7 @@ pub const STATUS_PANIC: i32 = 4;
 
 - [ ] **Step 4: Export the ABI module**
 
-In `native/ckl-vm/src/lib.rs`, add this line near the top:
+In `native/rux-vm/src/lib.rs`, add this line near the top:
 
 ```rust
 pub mod computer_abi;
@@ -113,7 +113,7 @@ pub mod computer_abi;
 
 - [ ] **Step 5: Alias `ComputerMachine` constants to the ABI**
 
-In `native/ckl-vm/src/computer_machine.rs`, add this import at the top:
+In `native/rux-vm/src/computer_machine.rs`, add this import at the top:
 
 ```rust
 use crate::computer_abi;
@@ -142,7 +142,7 @@ pub const STATUS_PANIC: i32 = computer_abi::STATUS_PANIC;
 Run:
 
 ```bash
-cargo test --manifest-path native/ckl-vm/Cargo.toml computer_machine_constants_match_bare_metal_abi_v0
+cargo test --manifest-path native/rux-vm/Cargo.toml computer_machine_constants_match_bare_metal_abi_v0
 ```
 
 Expected: PASS.
@@ -150,18 +150,18 @@ Expected: PASS.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add native/ckl-vm/src/computer_abi.rs native/ckl-vm/src/lib.rs native/ckl-vm/src/computer_machine.rs
+git add native/rux-vm/src/computer_abi.rs native/rux-vm/src/lib.rs native/rux-vm/src/computer_machine.rs
 git commit -m "Add bare-metal computer ABI constants"
 ```
 
 ## Task 2: Make Machine Internals Use ABI Sizes
 
 **Files:**
-- Modify: `native/ckl-vm/src/computer_machine.rs`
+- Modify: `native/rux-vm/src/computer_machine.rs`
 
 - [ ] **Step 1: Write the size-source characterization test**
 
-In `native/ckl-vm/src/computer_machine.rs`, add this test near `computer_machine_constants_match_bare_metal_abi_v0`:
+In `native/rux-vm/src/computer_machine.rs`, add this test near `computer_machine_constants_match_bare_metal_abi_v0`:
 
 ```rust
 #[test]
@@ -179,7 +179,7 @@ fn computer_mmio_device_sizes_match_bare_metal_abi_v0() {
 Run:
 
 ```bash
-cargo test --manifest-path native/ckl-vm/Cargo.toml computer_mmio_device_sizes_match_bare_metal_abi_v0
+cargo test --manifest-path native/rux-vm/Cargo.toml computer_mmio_device_sizes_match_bare_metal_abi_v0
 ```
 
 Expected: PASS. This test locks behavior before the refactor.
@@ -215,9 +215,9 @@ const SIZE: u32 = computer_abi::DEBUG_SIZE;
 Run each command:
 
 ```bash
-cargo test --manifest-path native/ckl-vm/Cargo.toml computer_mmio_device_sizes_match_bare_metal_abi_v0
-cargo test --manifest-path native/ckl-vm/Cargo.toml computer_memory_map_describes_control_mmio_region
-cargo test --manifest-path native/ckl-vm/Cargo.toml computer_memory_map_describes_debug_serial_mmio_region
+cargo test --manifest-path native/rux-vm/Cargo.toml computer_mmio_device_sizes_match_bare_metal_abi_v0
+cargo test --manifest-path native/rux-vm/Cargo.toml computer_memory_map_describes_control_mmio_region
+cargo test --manifest-path native/rux-vm/Cargo.toml computer_memory_map_describes_debug_serial_mmio_region
 ```
 
 Expected: all PASS.
@@ -225,14 +225,14 @@ Expected: all PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add native/ckl-vm/src/computer_machine.rs
+git add native/rux-vm/src/computer_machine.rs
 git commit -m "Use ABI sizes for computer MMIO devices"
 ```
 
 ## Task 3: Make Memory Map Tests Assert ABI Values
 
 **Files:**
-- Modify: `native/ckl-vm/src/computer_machine.rs`
+- Modify: `native/rux-vm/src/computer_machine.rs`
 
 - [ ] **Step 1: Update RAM memory map test to use ABI base**
 
@@ -285,9 +285,9 @@ assert_eq!(debug.size, computer_abi::DEBUG_SIZE);
 Run each command:
 
 ```bash
-cargo test --manifest-path native/ckl-vm/Cargo.toml computer_memory_map_describes_ram_region
-cargo test --manifest-path native/ckl-vm/Cargo.toml computer_memory_map_describes_control_mmio_region
-cargo test --manifest-path native/ckl-vm/Cargo.toml computer_memory_map_describes_debug_serial_mmio_region
+cargo test --manifest-path native/rux-vm/Cargo.toml computer_memory_map_describes_ram_region
+cargo test --manifest-path native/rux-vm/Cargo.toml computer_memory_map_describes_control_mmio_region
+cargo test --manifest-path native/rux-vm/Cargo.toml computer_memory_map_describes_debug_serial_mmio_region
 ```
 
 Expected: all PASS.
@@ -295,14 +295,14 @@ Expected: all PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add native/ckl-vm/src/computer_machine.rs
+git add native/rux-vm/src/computer_machine.rs
 git commit -m "Assert computer memory map against ABI"
 ```
 
 ## Task 4: Make Firmware Smoke Test Use ABI Directly
 
 **Files:**
-- Modify: `native/ckl-vm/src/computer_machine.rs`
+- Modify: `native/rux-vm/src/computer_machine.rs`
 
 - [ ] **Step 1: Replace compatibility constants in the smoke test**
 
@@ -371,7 +371,7 @@ assert_eq!(machine.control_status(), computer_abi::STATUS_HALTED);
 Run:
 
 ```bash
-cargo test --manifest-path native/ckl-vm/Cargo.toml bare_metal_firmware_marks_ready_writes_debug_and_halts
+cargo test --manifest-path native/rux-vm/Cargo.toml bare_metal_firmware_marks_ready_writes_debug_and_halts
 ```
 
 Expected: PASS.
@@ -379,7 +379,7 @@ Expected: PASS.
 - [ ] **Step 3: Commit**
 
 ```bash
-git add native/ckl-vm/src/computer_machine.rs
+git add native/rux-vm/src/computer_machine.rs
 git commit -m "Use bare-metal ABI in firmware smoke test"
 ```
 
@@ -404,7 +404,7 @@ ABI v0 defines:
 - debug serial MMIO base and write register;
 - status values for reset, booting, ready, halted, and panic.
 
-This is still not a CKL OS. The purpose is to make one bootable firmware program target a stable machine contract before any CKL compiler or runtime work is added on top.
+This is still not a Rux OS. The purpose is to make one bootable firmware program target a stable machine contract before any Rux compiler or runtime work is added on top.
 ```
 
 - [ ] **Step 2: Verify the note**
@@ -412,7 +412,7 @@ This is still not a CKL OS. The purpose is to make one bootable firmware program
 Run:
 
 ```bash
-rg -n "Bare-Metal ABI v0|stable machine contract|not a CKL OS" docs/superpowers/todos/2026-05-12-low-vm-shared-ram-ckl-os-research-note.md
+rg -n "Bare-Metal ABI v0|stable machine contract|not a Rux OS" docs/superpowers/todos/2026-05-12-low-vm-shared-ram-ckl-os-research-note.md
 ```
 
 Expected: all three phrases appear.
@@ -434,7 +434,7 @@ git commit -m "Document bare-metal ABI v0 direction"
 Run:
 
 ```bash
-cargo test --manifest-path native/ckl-vm/Cargo.toml
+cargo test --manifest-path native/rux-vm/Cargo.toml
 ```
 
 Expected: PASS.
@@ -444,7 +444,7 @@ Expected: PASS.
 Run:
 
 ```bash
-cargo fmt --manifest-path native/ckl-vm/Cargo.toml --check
+cargo fmt --manifest-path native/rux-vm/Cargo.toml --check
 ```
 
 Expected: PASS.

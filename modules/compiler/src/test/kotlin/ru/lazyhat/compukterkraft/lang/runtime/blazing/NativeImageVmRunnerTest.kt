@@ -50,7 +50,7 @@ class NativeImageVmRunnerTest {
                     ),
             )
         val runtime = RecordingRuntime(metrics = NoopDeviceRuntimeMetrics)
-        val runner = NativeImageVmRunner(libraryPath = "/unused/libckl_vm.so", bindings = bindings)
+        val runner = NativeImageVmRunner(libraryPath = "/unused/librux_vm.so", bindings = bindings)
 
         runBlocking {
             runner.run(image, runtime)

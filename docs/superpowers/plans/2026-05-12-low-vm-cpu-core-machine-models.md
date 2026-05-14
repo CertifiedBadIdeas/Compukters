@@ -4,26 +4,26 @@
 
 **Goal:** Split the low VM into a reusable CPU/ISA core with machine-owned memory, then prepare separate `ComputerMachine` and `MicrocontrollerMachine` targets.
 
-**Architecture:** Keep CKIM v5 encoding stable for the first implementation slice. Extract memory access from `LowState` into a small machine memory abstraction, then keep `LowImageVm` as a standalone CPU harness over one simple memory object. Subsequent tasks introduce named machine wrappers and move process semantics toward CKL OS code instead of expanding the Rust daemon.
+**Architecture:** Keep CKIM v5 encoding stable for the first implementation slice. Extract memory access from `LowState` into a small machine memory abstraction, then keep `LowImageVm` as a standalone CPU harness over one simple memory object. Subsequent tasks introduce named machine wrappers and move process semantics toward Rux OS code instead of expanding the Rust daemon.
 
-**Tech Stack:** Rust 2021 (`native/ckl-vm`), Kotlin/JVM compiler bindings/tests, CKIM v5 low image ABI, Gradle profiling tasks, Cargo tests.
+**Tech Stack:** Rust 2021 (`native/rux-vm`), Kotlin/JVM compiler bindings/tests, CKIM v5 low image ABI, Gradle profiling tasks, Cargo tests.
 
 ---
 
 ## File Structure
 
-- `native/ckl-vm/src/low_machine.rs`
+- `native/rux-vm/src/low_machine.rs`
   - New focused module for machine memory and memory faults.
   - Owns `MachineMemory`, `MemoryFault`, and helpers for loading initialized CKIM memory sections.
-- `native/ckl-vm/src/low_image_runner.rs`
+- `native/rux-vm/src/low_image_runner.rs`
   - Keep immutable `LowProgram`.
   - Convert `LowState` into CPU execution state only: frames, registers, metrics, time-check counters.
   - Route `Load32` and `Store32` through `MachineMemory`.
-- `native/ckl-vm/src/lib.rs`
+- `native/rux-vm/src/lib.rs`
   - Export the new `low_machine` module.
-- `native/ckl-vm/tests/low_image_runner.rs`
+- `native/rux-vm/tests/low_image_runner.rs`
   - Add public behavior tests for shared memory visibility and unchanged standalone runner behavior.
-- `native/ckl-vm/src/device_daemon.rs`
+- `native/rux-vm/src/device_daemon.rs`
   - Later transition adapter only. Do not expand process semantics here.
 - `modules/compiler/src/main/kotlin/ru/lazyhat/compukterkraft/lang/runtime/image/low/*`
   - No first-slice ABI encoding changes.
@@ -37,9 +37,9 @@
 ### Task 1: Add Machine Memory Module
 
 **Files:**
-- Create: `native/ckl-vm/src/low_machine.rs`
-- Modify: `native/ckl-vm/src/lib.rs`
-- Test: `native/ckl-vm/src/low_machine.rs`
+- Create: `native/rux-vm/src/low_machine.rs`
+- Modify: `native/rux-vm/src/lib.rs`
+- Test: `native/rux-vm/src/low_machine.rs`
 
 - [ ] **Step 1: Write memory tests first**
 
@@ -90,14 +90,14 @@ mod tests {
 Run:
 
 ```bash
-cargo test --manifest-path native/ckl-vm/Cargo.toml low_machine
+cargo test --manifest-path native/rux-vm/Cargo.toml low_machine
 ```
 
 Expected: compile failure because `low_machine` and `MachineMemory` do not exist yet.
 
 - [ ] **Step 3: Implement `MachineMemory`**
 
-Create `native/ckl-vm/src/low_machine.rs`:
+Create `native/rux-vm/src/low_machine.rs`:
 
 ```rust
 use std::error::Error;
@@ -202,7 +202,7 @@ impl MachineMemory {
 }
 ```
 
-Modify `native/ckl-vm/src/lib.rs`:
+Modify `native/rux-vm/src/lib.rs`:
 
 ```rust
 pub mod low_machine;
@@ -213,7 +213,7 @@ pub mod low_machine;
 Run:
 
 ```bash
-cargo test --manifest-path native/ckl-vm/Cargo.toml low_machine
+cargo test --manifest-path native/rux-vm/Cargo.toml low_machine
 ```
 
 Expected: all `low_machine` tests pass.
@@ -221,19 +221,19 @@ Expected: all `low_machine` tests pass.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add native/ckl-vm/src/lib.rs native/ckl-vm/src/low_machine.rs
+git add native/rux-vm/src/lib.rs native/rux-vm/src/low_machine.rs
 git commit -m "Add low VM machine memory"
 ```
 
 ### Task 2: Move LowState Off Raw Memory
 
 **Files:**
-- Modify: `native/ckl-vm/src/low_image_runner.rs`
-- Test: `native/ckl-vm/tests/low_image_runner.rs`
+- Modify: `native/rux-vm/src/low_image_runner.rs`
+- Test: `native/rux-vm/tests/low_image_runner.rs`
 
 - [ ] **Step 1: Add a public shared-memory behavior test**
 
-Append this test to `native/ckl-vm/tests/low_image_runner.rs`:
+Append this test to `native/rux-vm/tests/low_image_runner.rs`:
 
 ```rust
 #[test]
@@ -255,7 +255,7 @@ fn runner_can_be_created_with_external_machine_memory() {
         ],
         2,
     );
-    let mut memory = ckl_vm::low_machine::MachineMemory::zeroed(1024).unwrap();
+    let mut memory = rux_vm::low_machine::MachineMemory::zeroed(1024).unwrap();
     {
         let mut writer_vm = LowImageVm::create_cpu_with_memory(writer, 128, &mut memory).unwrap();
         assert_eq!(writer_vm.run_until_signal().unwrap(), LowImageSignal::HaltUnit);
@@ -272,14 +272,14 @@ fn runner_can_be_created_with_external_machine_memory() {
 Run:
 
 ```bash
-cargo test --manifest-path native/ckl-vm/Cargo.toml runner_can_be_created_with_external_machine_memory
+cargo test --manifest-path native/rux-vm/Cargo.toml runner_can_be_created_with_external_machine_memory
 ```
 
 Expected: compile failure because `LowImageVm::create_cpu_with_memory` does not exist.
 
 - [ ] **Step 3: Refactor low runner ownership**
 
-In `native/ckl-vm/src/low_image_runner.rs`:
+In `native/rux-vm/src/low_image_runner.rs`:
 
 1. Add import:
 
@@ -410,7 +410,7 @@ memory
 Run:
 
 ```bash
-cargo test --manifest-path native/ckl-vm/Cargo.toml runner_can_be_created_with_external_machine_memory
+cargo test --manifest-path native/rux-vm/Cargo.toml runner_can_be_created_with_external_machine_memory
 ```
 
 Expected: the shared-memory test passes.
@@ -420,7 +420,7 @@ Expected: the shared-memory test passes.
 Run:
 
 ```bash
-cargo test --manifest-path native/ckl-vm/Cargo.toml low_image_runner
+cargo test --manifest-path native/rux-vm/Cargo.toml low_image_runner
 ```
 
 Expected: all low image runner tests pass.
@@ -428,7 +428,7 @@ Expected: all low image runner tests pass.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add native/ckl-vm/src/low_image_runner.rs native/ckl-vm/tests/low_image_runner.rs
+git add native/rux-vm/src/low_image_runner.rs native/rux-vm/tests/low_image_runner.rs
 git commit -m "Separate low VM CPU state from machine memory"
 ```
 
@@ -437,13 +437,13 @@ git commit -m "Separate low VM CPU state from machine memory"
 ### Task 3: Add Named Computer Machine Harness
 
 **Files:**
-- Create: `native/ckl-vm/src/computer_machine.rs`
-- Modify: `native/ckl-vm/src/lib.rs`
-- Test: `native/ckl-vm/src/computer_machine.rs`
+- Create: `native/rux-vm/src/computer_machine.rs`
+- Modify: `native/rux-vm/src/lib.rs`
+- Test: `native/rux-vm/src/computer_machine.rs`
 
 - [ ] **Step 1: Write a computer-machine test**
 
-Create `native/ckl-vm/src/computer_machine.rs` with this initial test module:
+Create `native/rux-vm/src/computer_machine.rs` with this initial test module:
 
 ```rust
 #[cfg(test)]
@@ -466,7 +466,7 @@ mod tests {
 Run:
 
 ```bash
-cargo test --manifest-path native/ckl-vm/Cargo.toml computer_machine_owns_shared_physical_ram
+cargo test --manifest-path native/rux-vm/Cargo.toml computer_machine_owns_shared_physical_ram
 ```
 
 Expected: compile failure because `ComputerMachine` does not exist.
@@ -499,7 +499,7 @@ impl ComputerMachine {
 }
 ```
 
-Modify `native/ckl-vm/src/lib.rs`:
+Modify `native/rux-vm/src/lib.rs`:
 
 ```rust
 pub mod computer_machine;
@@ -510,7 +510,7 @@ pub mod computer_machine;
 Run:
 
 ```bash
-cargo test --manifest-path native/ckl-vm/Cargo.toml computer_machine_owns_shared_physical_ram
+cargo test --manifest-path native/rux-vm/Cargo.toml computer_machine_owns_shared_physical_ram
 ```
 
 Expected: test passes.
@@ -518,20 +518,20 @@ Expected: test passes.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add native/ckl-vm/src/lib.rs native/ckl-vm/src/computer_machine.rs
+git add native/rux-vm/src/lib.rs native/rux-vm/src/computer_machine.rs
 git commit -m "Add low VM computer machine harness"
 ```
 
 ### Task 4: Add Microcontroller Machine Skeleton
 
 **Files:**
-- Create: `native/ckl-vm/src/microcontroller_machine.rs`
-- Modify: `native/ckl-vm/src/lib.rs`
-- Test: `native/ckl-vm/src/microcontroller_machine.rs`
+- Create: `native/rux-vm/src/microcontroller_machine.rs`
+- Modify: `native/rux-vm/src/lib.rs`
+- Test: `native/rux-vm/src/microcontroller_machine.rs`
 
 - [ ] **Step 1: Write a microcontroller-machine test**
 
-Create `native/ckl-vm/src/microcontroller_machine.rs` with this initial test module:
+Create `native/rux-vm/src/microcontroller_machine.rs` with this initial test module:
 
 ```rust
 #[cfg(test)]
@@ -552,7 +552,7 @@ mod tests {
 Run:
 
 ```bash
-cargo test --manifest-path native/ckl-vm/Cargo.toml microcontroller_machine_has_small_ram_and_no_process_model
+cargo test --manifest-path native/rux-vm/Cargo.toml microcontroller_machine_has_small_ram_and_no_process_model
 ```
 
 Expected: compile failure because `MicrocontrollerMachine` does not exist.
@@ -581,7 +581,7 @@ impl MicrocontrollerMachine {
 }
 ```
 
-Modify `native/ckl-vm/src/lib.rs`:
+Modify `native/rux-vm/src/lib.rs`:
 
 ```rust
 pub mod microcontroller_machine;
@@ -592,7 +592,7 @@ pub mod microcontroller_machine;
 Run:
 
 ```bash
-cargo test --manifest-path native/ckl-vm/Cargo.toml microcontroller_machine_has_small_ram_and_no_process_model
+cargo test --manifest-path native/rux-vm/Cargo.toml microcontroller_machine_has_small_ram_and_no_process_model
 ```
 
 Expected: test passes.
@@ -600,7 +600,7 @@ Expected: test passes.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add native/ckl-vm/src/lib.rs native/ckl-vm/src/microcontroller_machine.rs
+git add native/rux-vm/src/lib.rs native/rux-vm/src/microcontroller_machine.rs
 git commit -m "Add low VM microcontroller machine skeleton"
 ```
 
@@ -609,19 +609,19 @@ git commit -m "Add low VM microcontroller machine skeleton"
 ### Task 5: Document Native Daemon As Transition Adapter
 
 **Files:**
-- Modify: `native/ckl-vm/src/device_daemon.rs`
+- Modify: `native/rux-vm/src/device_daemon.rs`
 - Modify: `docs/superpowers/specs/2026-05-12-low-vm-cpu-core-machine-models-design.md`
 
 - [ ] **Step 1: Add a Rust module comment**
 
-At the top of `native/ckl-vm/src/device_daemon.rs`, add:
+At the top of `native/rux-vm/src/device_daemon.rs`, add:
 
 ```rust
 //! Transition adapter for the current computer runtime.
 //!
 //! New low-level execution work should target the CPU core and machine models.
 //! Process semantics are intentionally not expanded here; the long-term
-//! computer process model belongs in CKL OS code.
+//! computer process model belongs in Rux OS code.
 ```
 
 - [ ] **Step 2: Add a short note to the design**
@@ -629,7 +629,7 @@ At the top of `native/ckl-vm/src/device_daemon.rs`, add:
 In the design document, under `Migration Plan`, add:
 
 ```markdown
-During the transition, `device_daemon.rs` may continue to run existing computer ROM behavior. New semantics should not be added there unless they are needed to keep current tests green while the CKL OS replacement is being built.
+During the transition, `device_daemon.rs` may continue to run existing computer ROM behavior. New semantics should not be added there unless they are needed to keep current tests green while the Rux OS replacement is being built.
 ```
 
 - [ ] **Step 3: Run formatting/checks**
@@ -637,7 +637,7 @@ During the transition, `device_daemon.rs` may continue to run existing computer 
 Run:
 
 ```bash
-cargo fmt --manifest-path native/ckl-vm/Cargo.toml
+cargo fmt --manifest-path native/rux-vm/Cargo.toml
 git diff --check
 ```
 
@@ -646,7 +646,7 @@ Expected: both commands exit successfully.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add native/ckl-vm/src/device_daemon.rs docs/superpowers/specs/2026-05-12-low-vm-cpu-core-machine-models-design.md
+git add native/rux-vm/src/device_daemon.rs docs/superpowers/specs/2026-05-12-low-vm-cpu-core-machine-models-design.md
 git commit -m "Mark native daemon as transition adapter"
 ```
 
@@ -662,7 +662,7 @@ git commit -m "Mark native daemon as transition adapter"
 Run:
 
 ```bash
-cargo test --manifest-path native/ckl-vm/Cargo.toml
+cargo test --manifest-path native/rux-vm/Cargo.toml
 ```
 
 Expected: all native Rust tests pass.
@@ -693,7 +693,7 @@ No commit is required for generated reports unless the user explicitly wants ben
 
 ## Explicitly Deferred Work
 
-- Full CKL OS implementation.
+- Full Rux OS implementation.
 - Removing the current native process daemon.
 - MMIO instruction extensions.
 - Trap ABI redesign.

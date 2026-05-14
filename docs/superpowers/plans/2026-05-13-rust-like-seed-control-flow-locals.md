@@ -4,21 +4,21 @@
 
 **Goal:** Extend the Rust-like seed compiler with mutable `i32` locals, assignment, comparisons, `if`, and `while`.
 
-**Architecture:** Keep the seed compiler in `native/ckl-compiler/src/lib.rs` for now. Extend the lexer and parser, add a small local symbol table inside codegen, lower control flow directly to `ckl_vm::low_image::Instruction`, and keep emitting a single-function `low_image::Image`.
+**Architecture:** Keep the seed compiler in `native/rux-compiler/src/lib.rs` for now. Extend the lexer and parser, add a small local symbol table inside codegen, lower control flow directly to `rux_vm::low_image::Instruction`, and keep emitting a single-function `low_image::Image`.
 
-**Tech Stack:** Rust 2021, `ckl-vm` path dependency, Cargo integration tests, `low_image::Instruction`, `ComputerMachine`.
+**Tech Stack:** Rust 2021, `rux-vm` path dependency, Cargo integration tests, `low_image::Instruction`, `ComputerMachine`.
 
 ---
 
 ## File Structure
 
-- Modify: `native/ckl-compiler/src/lib.rs`
+- Modify: `native/rux-compiler/src/lib.rs`
   - Add lexer tokens.
   - Extend AST with locals, assignment, `if`, `while`, variables, and comparisons.
   - Add register-backed local symbol table.
   - Add jump patching helpers.
   - Add conservative block return analysis.
-- Modify: `native/ckl-compiler/tests/compiler_seed.rs`
+- Modify: `native/rux-compiler/tests/compiler_seed.rs`
   - Add focused lexer, codegen, diagnostics, and end-to-end tests.
 - Modify: `docs/superpowers/specs/2026-05-13-rust-like-seed-control-flow-locals-design.md`
   - Update implementation status after the slice is complete.
@@ -26,12 +26,12 @@
 ## Task 1: Add Lexer Tokens For Locals And Control Flow
 
 **Files:**
-- Modify: `native/ckl-compiler/tests/compiler_seed.rs`
-- Modify: `native/ckl-compiler/src/lib.rs`
+- Modify: `native/rux-compiler/tests/compiler_seed.rs`
+- Modify: `native/rux-compiler/src/lib.rs`
 
 - [ ] **Step 1: Write the failing lexer test**
 
-Append this test to `native/ckl-compiler/tests/compiler_seed.rs`:
+Append this test to `native/rux-compiler/tests/compiler_seed.rs`:
 
 ```rust
 #[test]
@@ -89,14 +89,14 @@ fn lexer_recognizes_locals_control_flow_and_comparison_tokens() {
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml lexer_recognizes_locals_control_flow_and_comparison_tokens
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml lexer_recognizes_locals_control_flow_and_comparison_tokens
 ```
 
 Expected: FAIL because `TokenKind::Let`, `Mut`, `If`, `Else`, `While`, `Colon`, `Equal`, `BangEqual`, and `LessEqual` do not exist.
 
 - [ ] **Step 3: Add token variants**
 
-In `native/ckl-compiler/src/lib.rs`, extend `TokenKind`:
+In `native/rux-compiler/src/lib.rs`, extend `TokenKind`:
 
 ```rust
 pub enum TokenKind {
@@ -207,7 +207,7 @@ Update `TokenKind::name()` for all new variants.
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml lexer_recognizes_locals_control_flow_and_comparison_tokens
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml lexer_recognizes_locals_control_flow_and_comparison_tokens
 ```
 
 Expected: PASS.
@@ -217,21 +217,21 @@ Expected: PASS.
 Run:
 
 ```bash
-cargo fmt --manifest-path native/ckl-compiler/Cargo.toml --check
+cargo fmt --manifest-path native/rux-compiler/Cargo.toml --check
 ```
 
 Then commit:
 
 ```bash
-git add native/ckl-compiler/src/lib.rs native/ckl-compiler/tests/compiler_seed.rs
+git add native/rux-compiler/src/lib.rs native/rux-compiler/tests/compiler_seed.rs
 git commit -m "Add rust language seed control flow tokens"
 ```
 
 ## Task 2: Parse Locals, Assignment, Branches, Loops, Variables, And Comparisons
 
 **Files:**
-- Modify: `native/ckl-compiler/tests/compiler_seed.rs`
-- Modify: `native/ckl-compiler/src/lib.rs`
+- Modify: `native/rux-compiler/tests/compiler_seed.rs`
+- Modify: `native/rux-compiler/src/lib.rs`
 
 - [ ] **Step 1: Write failing parser/codegen smoke tests**
 
@@ -281,7 +281,7 @@ fn compile_lowers_assignment_to_local() {
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml compile_lowers_
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml compile_lowers_
 ```
 
 Expected: FAIL because parser does not understand `let`, variable reads, or assignment.
@@ -486,7 +486,7 @@ fn take_ident_if_present(&mut self) -> Option<String> {
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml compile_lowers_
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml compile_lowers_
 ```
 
 Expected: FAIL with codegen errors for unsupported statements or undeclared locals, not parser errors.
@@ -494,7 +494,7 @@ Expected: FAIL with codegen errors for unsupported statements or undeclared loca
 ## Task 3: Add Register-Backed Local Codegen
 
 **Files:**
-- Modify: `native/ckl-compiler/src/lib.rs`
+- Modify: `native/rux-compiler/src/lib.rs`
 
 - [ ] **Step 1: Add local type and symbol table**
 
@@ -605,7 +605,7 @@ Expr::Local(name) => {
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml compile_lowers_
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml compile_lowers_
 ```
 
 Expected: PASS.
@@ -615,7 +615,7 @@ Expected: PASS.
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml
 ```
 
 Expected: PASS.
@@ -625,21 +625,21 @@ Expected: PASS.
 Run:
 
 ```bash
-cargo fmt --manifest-path native/ckl-compiler/Cargo.toml --check
+cargo fmt --manifest-path native/rux-compiler/Cargo.toml --check
 ```
 
 Then commit:
 
 ```bash
-git add native/ckl-compiler/src/lib.rs native/ckl-compiler/tests/compiler_seed.rs
+git add native/rux-compiler/src/lib.rs native/rux-compiler/tests/compiler_seed.rs
 git commit -m "Add rust language seed register locals"
 ```
 
 ## Task 4: Lower Comparisons, If, And While
 
 **Files:**
-- Modify: `native/ckl-compiler/tests/compiler_seed.rs`
-- Modify: `native/ckl-compiler/src/lib.rs`
+- Modify: `native/rux-compiler/tests/compiler_seed.rs`
+- Modify: `native/rux-compiler/src/lib.rs`
 
 - [ ] **Step 1: Write failing control-flow tests**
 
@@ -694,7 +694,7 @@ fn compile_lowers_while_with_i32_less_than() {
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml compile_lowers_
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml compile_lowers_
 ```
 
 Expected: FAIL because `Statement::If`, `Statement::While`, and `Expr::Compare` are not lowered.
@@ -851,7 +851,7 @@ Statement::While { condition, body } => {
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml compile_lowers_
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml compile_lowers_
 ```
 
 Expected: PASS.
@@ -861,17 +861,17 @@ Expected: PASS.
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml
-cargo fmt --manifest-path native/ckl-compiler/Cargo.toml --check
-git add native/ckl-compiler/src/lib.rs native/ckl-compiler/tests/compiler_seed.rs
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml
+cargo fmt --manifest-path native/rux-compiler/Cargo.toml --check
+git add native/rux-compiler/src/lib.rs native/rux-compiler/tests/compiler_seed.rs
 git commit -m "Lower rust language seed branches and loops"
 ```
 
 ## Task 5: Add Return Outcome Analysis And Diagnostics
 
 **Files:**
-- Modify: `native/ckl-compiler/tests/compiler_seed.rs`
-- Modify: `native/ckl-compiler/src/lib.rs`
+- Modify: `native/rux-compiler/tests/compiler_seed.rs`
+- Modify: `native/rux-compiler/src/lib.rs`
 
 - [ ] **Step 1: Write failing diagnostics tests**
 
@@ -931,7 +931,7 @@ fn compile_rejects_unreachable_statement_after_return() {
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml compile_rejects_
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml compile_rejects_
 ```
 
 Expected: at least the return-analysis tests fail until block outcomes are implemented.
@@ -1015,7 +1015,7 @@ if outcome == BlockOutcome::FallsThrough {
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml compile_rejects_
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml compile_rejects_
 ```
 
 Expected: PASS.
@@ -1025,16 +1025,16 @@ Expected: PASS.
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml
-cargo fmt --manifest-path native/ckl-compiler/Cargo.toml --check
-git add native/ckl-compiler/src/lib.rs native/ckl-compiler/tests/compiler_seed.rs
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml
+cargo fmt --manifest-path native/rux-compiler/Cargo.toml --check
+git add native/rux-compiler/src/lib.rs native/rux-compiler/tests/compiler_seed.rs
 git commit -m "Validate rust language seed locals and returns"
 ```
 
 ## Task 6: Add ComputerMachine End-To-End Loop Test
 
 **Files:**
-- Modify: `native/ckl-compiler/tests/compiler_seed.rs`
+- Modify: `native/rux-compiler/tests/compiler_seed.rs`
 
 - [ ] **Step 1: Write the e2e test**
 
@@ -1074,7 +1074,7 @@ fn compiled_seed_loop_runs_on_computer_machine() {
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml compiled_seed_loop_runs_on_computer_machine
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml compiled_seed_loop_runs_on_computer_machine
 ```
 
 Expected: PASS after Tasks 1-5.
@@ -1084,9 +1084,9 @@ Expected: PASS after Tasks 1-5.
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml
-cargo fmt --manifest-path native/ckl-compiler/Cargo.toml --check
-git add native/ckl-compiler/tests/compiler_seed.rs
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml
+cargo fmt --manifest-path native/rux-compiler/Cargo.toml --check
+git add native/rux-compiler/tests/compiler_seed.rs
 git commit -m "Run rust language seed loops on computer machine"
 ```
 
@@ -1102,7 +1102,7 @@ Append:
 ```markdown
 ## Implementation Status
 
-Implemented in `native/ckl-compiler`:
+Implemented in `native/rux-compiler`:
 
 - lexer tokens for locals, branching, loops, assignment, and comparisons;
 - parser support for `let mut`, assignment, `if`, `else`, `while`, local reads, and comparison expressions;
@@ -1133,7 +1133,7 @@ git commit -m "Document rust language seed control flow implementation"
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml
 ```
 
 Expected: PASS.
@@ -1143,7 +1143,7 @@ Expected: PASS.
 Run:
 
 ```bash
-cargo fmt --manifest-path native/ckl-compiler/Cargo.toml --check
+cargo fmt --manifest-path native/rux-compiler/Cargo.toml --check
 ```
 
 Expected: PASS with no diff.
@@ -1153,7 +1153,7 @@ Expected: PASS with no diff.
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-vm/Cargo.toml
+cargo test --offline --manifest-path native/rux-vm/Cargo.toml
 ```
 
 Expected: PASS.

@@ -30,7 +30,7 @@ class ComputeVmBenchmarkReportTest {
             ComputeVmBenchmarkReport(
                 metadata =
                     ComputeVmBenchmarkMetadata(
-                        nativeLibraryPath = "/tmp/libckl_vm.so",
+                        nativeLibraryPath = "/tmp/librux_vm.so",
                         nativeLibraryProfile = "release",
                         nativeLibrarySizeBytes = 777_216,
                         gitCommit = "abcdef123456",
@@ -87,9 +87,9 @@ class ComputeVmBenchmarkReportTest {
 
         val markdown = report.toMarkdown()
 
-        assertContains(markdown, "# CKL Compute VM Benchmark")
+        assertContains(markdown, "# Rux Compute VM Benchmark")
         assertContains(markdown, "## Benchmark Metadata")
-        assertContains(markdown, "| Native library path | /tmp/libckl_vm.so |")
+        assertContains(markdown, "| Native library path | /tmp/librux_vm.so |")
         assertContains(markdown, "| Native library profile | release |")
         assertContains(markdown, "| Native library size bytes | 777216 |")
         assertContains(markdown, "| Git commit | abcdef123456 |")

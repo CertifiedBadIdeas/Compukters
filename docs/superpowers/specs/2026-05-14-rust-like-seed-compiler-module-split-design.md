@@ -6,14 +6,14 @@ Split the Rust-like seed compiler out of one large `lib.rs` into small modules w
 
 ## Motivation
 
-`native/ckl-compiler/src/lib.rs` has grown past 1500 lines while the language is still small. Keeping lexer, AST, parser, const evaluation, and codegen in one file makes every next language feature harder to review and easier to break.
+`native/rux-compiler/src/lib.rs` has grown past 1500 lines while the language is still small. Keeping lexer, AST, parser, const evaluation, and codegen in one file makes every next language feature harder to review and easier to break.
 
 This is a pure refactor. The compiler should emit exactly the same low images and diagnostics after the split.
 
 ## Target Layout
 
 ```text
-native/ckl-compiler/src/
+native/rux-compiler/src/
   lib.rs
   error.rs
   lexer.rs
@@ -78,9 +78,9 @@ AST, parser, and codegen remain crate-private.
 
 No new behavior tests are required. Existing compiler and low VM tests act as characterization tests:
 
-- `cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml`;
-- `cargo fmt --manifest-path native/ckl-compiler/Cargo.toml --check`;
-- `cargo test --offline --manifest-path native/ckl-vm/Cargo.toml`.
+- `cargo test --offline --manifest-path native/rux-compiler/Cargo.toml`;
+- `cargo fmt --manifest-path native/rux-compiler/Cargo.toml --check`;
+- `cargo test --offline --manifest-path native/rux-vm/Cargo.toml`.
 
 ## Rollout
 
@@ -108,7 +108,7 @@ Each extraction should compile and be committed separately.
 
 ## Implementation Status
 
-Implemented in `native/ckl-compiler`:
+Implemented in `native/rux-compiler`:
 
 - `error.rs` for compiler errors;
 - `lexer.rs` for tokenization;

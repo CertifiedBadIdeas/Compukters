@@ -6,16 +6,16 @@
 
 **Architecture:** Add `Instruction::U32Lt` to low image and runner. Keep registers as raw word storage. Change compiler comparison lowering so `u32` ordering uses `U32Lt` while equality reuses `I32Eq`.
 
-**Tech Stack:** Rust crates `native/ckl-vm` and `native/ckl-compiler`, Cargo tests run offline.
+**Tech Stack:** Rust crates `native/rux-vm` and `native/rux-compiler`, Cargo tests run offline.
 
 ---
 
 ### Task 1: Add Failing Tests
 
 **Files:**
-- Modify: `native/ckl-vm/tests/low_image_runner.rs`
-- Modify: `native/ckl-vm/tests/low_image_decode.rs`
-- Modify: `native/ckl-compiler/tests/compiler_seed.rs`
+- Modify: `native/rux-vm/tests/low_image_runner.rs`
+- Modify: `native/rux-vm/tests/low_image_decode.rs`
+- Modify: `native/rux-compiler/tests/compiler_seed.rs`
 
 - [ ] **Step 1: Add VM tests**
 
@@ -30,8 +30,8 @@ Add tests for `u32 <`, `>`, `<=`, `>=`, plus a rejection test for mixed `i32` / 
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-vm/Cargo.toml u32
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml u32
+cargo test --offline --manifest-path native/rux-vm/Cargo.toml u32
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml u32
 ```
 
 Expected: failures because `U32Lt` does not exist yet and compiler lowering still uses signed comparison.
@@ -39,8 +39,8 @@ Expected: failures because `U32Lt` does not exist yet and compiler lowering stil
 ### Task 2: Implement Low VM U32Lt
 
 **Files:**
-- Modify: `native/ckl-vm/src/low_image.rs`
-- Modify: `native/ckl-vm/src/low_image_runner.rs`
+- Modify: `native/rux-vm/src/low_image.rs`
+- Modify: `native/rux-vm/src/low_image_runner.rs`
 
 - [ ] **Step 1: Add image instruction**
 
@@ -53,7 +53,7 @@ Add validation, block compilation, executable operation, optional immediate lowe
 ### Task 3: Implement Compiler Lowering
 
 **Files:**
-- Modify: `native/ckl-compiler/src/codegen.rs`
+- Modify: `native/rux-compiler/src/codegen.rs`
 
 - [ ] **Step 1: Compare typed operands**
 
@@ -73,7 +73,7 @@ Use `I32Eq` for both `i32` and `u32` equality/inequality.
 Run:
 
 ```bash
-cargo fmt --manifest-path native/ckl-compiler/Cargo.toml --check
+cargo fmt --manifest-path native/rux-compiler/Cargo.toml --check
 ```
 
 Expected: exit code 0.
@@ -83,7 +83,7 @@ Expected: exit code 0.
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml
 ```
 
 Expected: all compiler tests pass.
@@ -93,7 +93,7 @@ Expected: all compiler tests pass.
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-vm/Cargo.toml
+cargo test --offline --manifest-path native/rux-vm/Cargo.toml
 ```
 
 Expected: all VM tests pass.
@@ -103,6 +103,6 @@ Expected: all VM tests pass.
 Run:
 
 ```bash
-git add docs/superpowers/specs/2026-05-14-low-vm-u32-comparisons-design.md docs/superpowers/plans/2026-05-14-low-vm-u32-comparisons.md native/ckl-vm/src/low_image.rs native/ckl-vm/src/low_image_runner.rs native/ckl-vm/tests/low_image_runner.rs native/ckl-vm/tests/low_image_decode.rs native/ckl-compiler/src/codegen.rs native/ckl-compiler/tests/compiler_seed.rs
+git add docs/superpowers/specs/2026-05-14-low-vm-u32-comparisons-design.md docs/superpowers/plans/2026-05-14-low-vm-u32-comparisons.md native/rux-vm/src/low_image.rs native/rux-vm/src/low_image_runner.rs native/rux-vm/tests/low_image_runner.rs native/rux-vm/tests/low_image_decode.rs native/rux-compiler/src/codegen.rs native/rux-compiler/tests/compiler_seed.rs
 git commit -m "feat: add low vm u32 comparisons"
 ```

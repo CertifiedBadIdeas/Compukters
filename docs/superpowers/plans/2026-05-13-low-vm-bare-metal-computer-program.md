@@ -4,15 +4,15 @@
 
 **Goal:** Turn the experimental `ComputerMachine` path into a bare-metal single-program computer MVP with ready/halt/panic status and deterministic debug/serial output.
 
-**Architecture:** Keep Rust as the machine owner and keep the guest as one booted low VM image. `ComputerMachine` owns RAM, one boot CPU, control MMIO, and a new debug serial MMIO device. Old CKL OS process-table fixtures remain as research tests but are renamed/isolated so the active direction is clearly one bare-metal program, not guest processes.
+**Architecture:** Keep Rust as the machine owner and keep the guest as one booted low VM image. `ComputerMachine` owns RAM, one boot CPU, control MMIO, and a new debug serial MMIO device. Old Rux OS process-table fixtures remain as research tests but are renamed/isolated so the active direction is clearly one bare-metal program, not guest processes.
 
-**Tech Stack:** Rust `ckl-vm`, `ComputerMachine`, `MachineBus`, `MmioDevice`, `LowCpuContext`, low VM `Instruction` fixtures, Cargo tests.
+**Tech Stack:** Rust `rux-vm`, `ComputerMachine`, `MachineBus`, `MmioDevice`, `LowCpuContext`, low VM `Instruction` fixtures, Cargo tests.
 
 ---
 
 ## File Structure
 
-- Modify `native/ckl-vm/src/computer_machine.rs`
+- Modify `native/rux-vm/src/computer_machine.rs`
   - Keep `ComputerMachine`, `ComputerControlDevice`, and tests together for this slice.
   - Add the bare-metal machine state constants and debug serial device.
   - Add public inspection APIs used by tests: debug output bytes/string and panic/fault state.
@@ -24,7 +24,7 @@
 ## Task 1: Make Machine Status Match Bare-Metal Semantics
 
 **Files:**
-- Modify: `native/ckl-vm/src/computer_machine.rs`
+- Modify: `native/rux-vm/src/computer_machine.rs`
 
 - [ ] **Step 1: Write the failing status test**
 
@@ -59,7 +59,7 @@ fn bare_metal_program_halt_sets_machine_halted_status_and_exit_code() {
 Run:
 
 ```bash
-cargo test --manifest-path native/ckl-vm/Cargo.toml bare_metal_program_halt_sets_machine_halted_status_and_exit_code
+cargo test --manifest-path native/rux-vm/Cargo.toml bare_metal_program_halt_sets_machine_halted_status_and_exit_code
 ```
 
 Expected: FAIL to compile because `run_boot_cpu_until_signal`, `STATUS_HALTED`, and `exit_code` do not exist.
@@ -243,7 +243,7 @@ assert_eq!(control.size, 12);
 Run:
 
 ```bash
-cargo test --manifest-path native/ckl-vm/Cargo.toml bare_metal_program_halt_sets_machine_halted_status_and_exit_code computer_memory_map_describes_control_mmio_region
+cargo test --manifest-path native/rux-vm/Cargo.toml bare_metal_program_halt_sets_machine_halted_status_and_exit_code computer_memory_map_describes_control_mmio_region
 ```
 
 Expected: PASS.
@@ -251,14 +251,14 @@ Expected: PASS.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add native/ckl-vm/src/computer_machine.rs
+git add native/rux-vm/src/computer_machine.rs
 git commit -m "Add bare-metal computer halt status"
 ```
 
 ## Task 2: Add Debug Serial MMIO Device
 
 **Files:**
-- Modify: `native/ckl-vm/src/computer_machine.rs`
+- Modify: `native/rux-vm/src/computer_machine.rs`
 
 - [ ] **Step 1: Write the failing debug output test**
 
@@ -299,7 +299,7 @@ fn bare_metal_program_writes_debug_serial_output() {
 Run:
 
 ```bash
-cargo test --manifest-path native/ckl-vm/Cargo.toml bare_metal_program_writes_debug_serial_output
+cargo test --manifest-path native/rux-vm/Cargo.toml bare_metal_program_writes_debug_serial_output
 ```
 
 Expected: FAIL to compile because `DEBUG_WRITE`, `debug_output_bytes`, and `debug_output_string` do not exist.
@@ -454,7 +454,7 @@ ComputerMemoryRegion {
 Run:
 
 ```bash
-cargo test --manifest-path native/ckl-vm/Cargo.toml bare_metal_program_writes_debug_serial_output computer_memory_map_describes_debug_serial_mmio_region
+cargo test --manifest-path native/rux-vm/Cargo.toml bare_metal_program_writes_debug_serial_output computer_memory_map_describes_debug_serial_mmio_region
 ```
 
 Expected: PASS.
@@ -462,14 +462,14 @@ Expected: PASS.
 - [ ] **Step 8: Commit**
 
 ```bash
-git add native/ckl-vm/src/computer_machine.rs
+git add native/rux-vm/src/computer_machine.rs
 git commit -m "Add bare-metal debug serial MMIO"
 ```
 
 ## Task 3: Add Machine Fault/Panic Visibility
 
 **Files:**
-- Modify: `native/ckl-vm/src/computer_machine.rs`
+- Modify: `native/rux-vm/src/computer_machine.rs`
 
 - [ ] **Step 1: Write the failing fault test**
 
@@ -507,7 +507,7 @@ fn bare_metal_program_fault_marks_machine_panicked() {
 Run:
 
 ```bash
-cargo test --manifest-path native/ckl-vm/Cargo.toml bare_metal_program_fault_marks_machine_panicked
+cargo test --manifest-path native/rux-vm/Cargo.toml bare_metal_program_fault_marks_machine_panicked
 ```
 
 Expected before Task 1 implementation: compile failure. Expected after Task 1 implementation but before this task: if the helper already marks panic, this may PASS. If it passes, keep the test as coverage and continue to Step 4.
@@ -529,7 +529,7 @@ Keep `set_panic_from_fault()` as defined in Task 1.
 Run:
 
 ```bash
-cargo test --manifest-path native/ckl-vm/Cargo.toml bare_metal_program_fault_marks_machine_panicked
+cargo test --manifest-path native/rux-vm/Cargo.toml bare_metal_program_fault_marks_machine_panicked
 ```
 
 Expected: PASS.
@@ -537,16 +537,16 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add native/ckl-vm/src/computer_machine.rs
+git add native/rux-vm/src/computer_machine.rs
 git commit -m "Mark bare-metal machine panicked on VM fault"
 ```
 
 If Step 2 already passed and no code changed, still commit the added test with the same message.
 
-## Task 4: Reframe Old CKL OS Fixtures As Legacy Research
+## Task 4: Reframe Old Rux OS Fixtures As Legacy Research
 
 **Files:**
-- Modify: `native/ckl-vm/src/computer_machine.rs`
+- Modify: `native/rux-vm/src/computer_machine.rs`
 
 - [ ] **Step 1: Rename process-table constants comment**
 
@@ -559,7 +559,7 @@ const OS_STATE_BASE: u32 = 0x0001_0000;
 add:
 
 ```rust
-// Legacy CKL OS research fixtures. Keep these tests as reference material, but do not
+// Legacy Rux OS research fixtures. Keep these tests as reference material, but do not
 // treat the guest process table/scheduler path as the current bare-metal MVP direction.
 ```
 
@@ -618,7 +618,7 @@ fn legacy_ckl_os_research_kernel_launches_static_user_process_and_records_exit_c
 Run:
 
 ```bash
-cargo test --manifest-path native/ckl-vm/Cargo.toml legacy_ckl_os_research
+cargo test --manifest-path native/rux-vm/Cargo.toml legacy_ckl_os_research
 ```
 
 Expected: PASS. The tests still exist, but their names now communicate that they are not the active MVP path.
@@ -626,14 +626,14 @@ Expected: PASS. The tests still exist, but their names now communicate that they
 - [ ] **Step 4: Commit**
 
 ```bash
-git add native/ckl-vm/src/computer_machine.rs
-git commit -m "Mark CKL OS fixtures as legacy research"
+git add native/rux-vm/src/computer_machine.rs
+git commit -m "Mark Rux OS fixtures as legacy research"
 ```
 
 ## Task 5: Add Final Bare-Metal Smoke Test
 
 **Files:**
-- Modify: `native/ckl-vm/src/computer_machine.rs`
+- Modify: `native/rux-vm/src/computer_machine.rs`
 
 - [ ] **Step 1: Write the final smoke test**
 
@@ -689,7 +689,7 @@ fn bare_metal_firmware_marks_ready_writes_debug_and_halts() {
 Run:
 
 ```bash
-cargo test --manifest-path native/ckl-vm/Cargo.toml bare_metal_firmware_marks_ready_writes_debug_and_halts
+cargo test --manifest-path native/rux-vm/Cargo.toml bare_metal_firmware_marks_ready_writes_debug_and_halts
 ```
 
 Expected: PASS.
@@ -699,7 +699,7 @@ Expected: PASS.
 Run:
 
 ```bash
-cargo test --manifest-path native/ckl-vm/Cargo.toml
+cargo test --manifest-path native/rux-vm/Cargo.toml
 ```
 
 Expected: PASS.
@@ -709,7 +709,7 @@ Expected: PASS.
 Run:
 
 ```bash
-cargo fmt --manifest-path native/ckl-vm/Cargo.toml --check
+cargo fmt --manifest-path native/rux-vm/Cargo.toml --check
 git diff --check
 ```
 
@@ -718,7 +718,7 @@ Expected: both commands exit successfully with no output.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add native/ckl-vm/src/computer_machine.rs
+git add native/rux-vm/src/computer_machine.rs
 git commit -m "Add bare-metal computer firmware smoke test"
 ```
 
@@ -734,7 +734,7 @@ Append this section to the end of the research note:
 ```markdown
 ## 2026-05-13 Update: Bare-Metal Program Direction
 
-The branch is active again, but with a narrower target than a full CKL OS.
+The branch is active again, but with a narrower target than a full Rux OS.
 
 The current direction is a bare-metal computer program:
 
@@ -772,7 +772,7 @@ git commit -m "Document bare-metal experiment direction"
 - [ ] **Step 1: Run all native tests**
 
 ```bash
-cargo test --manifest-path native/ckl-vm/Cargo.toml
+cargo test --manifest-path native/rux-vm/Cargo.toml
 ```
 
 Expected: PASS.
@@ -780,7 +780,7 @@ Expected: PASS.
 - [ ] **Step 2: Run formatting and whitespace checks**
 
 ```bash
-cargo fmt --manifest-path native/ckl-vm/Cargo.toml --check
+cargo fmt --manifest-path native/rux-vm/Cargo.toml --check
 git diff --check
 ```
 
@@ -798,6 +798,6 @@ Expected: no output.
 
 - Do not touch `dev` from this worktree.
 - Do not add Kotlin/JNI integration in this plan.
-- Do not delete legacy CKL OS research tests yet; renaming is enough.
+- Do not delete legacy Rux OS research tests yet; renaming is enough.
 - Do not add display, filesystem, terminal, or process APIs in this slice.
 - Keep all observable guest output deterministic and testable from Rust.

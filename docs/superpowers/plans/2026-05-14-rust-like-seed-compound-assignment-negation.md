@@ -6,14 +6,14 @@
 
 **Architecture:** Extend lexer/parser/AST with assignment operators and unary `Neg`. Codegen lowers compound assignment directly into existing `I32*` instructions using the local register as destination, and lowers unary minus as `0 - expr`.
 
-**Tech Stack:** Rust compiler crate `native/ckl-compiler`, low VM image instructions from `native/ckl-vm`, Cargo tests run offline.
+**Tech Stack:** Rust compiler crate `native/rux-compiler`, low VM image instructions from `native/rux-vm`, Cargo tests run offline.
 
 ---
 
 ### Task 1: Add Failing Tests
 
 **Files:**
-- Modify: `native/ckl-compiler/tests/compiler_seed.rs`
+- Modify: `native/rux-compiler/tests/compiler_seed.rs`
 
 - [ ] **Step 1: Add tests**
 
@@ -35,7 +35,7 @@ compiled_seed_u32_compound_assignment_runs_on_computer_machine
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml compound
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml compound
 ```
 
 Expected: failures because tokens and lowering do not exist yet.
@@ -43,9 +43,9 @@ Expected: failures because tokens and lowering do not exist yet.
 ### Task 2: Implement Lexer, Parser, And AST
 
 **Files:**
-- Modify: `native/ckl-compiler/src/lexer.rs`
-- Modify: `native/ckl-compiler/src/parser.rs`
-- Modify: `native/ckl-compiler/src/ast.rs`
+- Modify: `native/rux-compiler/src/lexer.rs`
+- Modify: `native/rux-compiler/src/parser.rs`
+- Modify: `native/rux-compiler/src/ast.rs`
 
 - [ ] **Step 1: Add compound assignment tokens**
 
@@ -67,7 +67,7 @@ Parse compound assignment before expression statements. Parse unary `-` at the s
 ### Task 3: Implement Codegen
 
 **Files:**
-- Modify: `native/ckl-compiler/src/codegen.rs`
+- Modify: `native/rux-compiler/src/codegen.rs`
 
 - [ ] **Step 1: Lower compound assignment**
 
@@ -87,7 +87,7 @@ Compile the operand as `i32`, emit zero, then emit `I32Sub`.
 Run:
 
 ```bash
-cargo fmt --manifest-path native/ckl-compiler/Cargo.toml --check
+cargo fmt --manifest-path native/rux-compiler/Cargo.toml --check
 ```
 
 Expected: exit code 0.
@@ -97,7 +97,7 @@ Expected: exit code 0.
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml
 ```
 
 Expected: all compiler tests pass.
@@ -107,7 +107,7 @@ Expected: all compiler tests pass.
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-vm/Cargo.toml
+cargo test --offline --manifest-path native/rux-vm/Cargo.toml
 ```
 
 Expected: all VM tests pass.
@@ -117,6 +117,6 @@ Expected: all VM tests pass.
 Run:
 
 ```bash
-git add docs/superpowers/specs/2026-05-14-rust-like-seed-compound-assignment-negation-design.md docs/superpowers/plans/2026-05-14-rust-like-seed-compound-assignment-negation.md native/ckl-compiler/src/ast.rs native/ckl-compiler/src/lexer.rs native/ckl-compiler/src/parser.rs native/ckl-compiler/src/codegen.rs native/ckl-compiler/tests/compiler_seed.rs
+git add docs/superpowers/specs/2026-05-14-rust-like-seed-compound-assignment-negation-design.md docs/superpowers/plans/2026-05-14-rust-like-seed-compound-assignment-negation.md native/rux-compiler/src/ast.rs native/rux-compiler/src/lexer.rs native/rux-compiler/src/parser.rs native/rux-compiler/src/codegen.rs native/rux-compiler/tests/compiler_seed.rs
 git commit -m "feat: add seed compound assignment"
 ```

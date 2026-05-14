@@ -77,7 +77,7 @@ Messages should stay deterministic and compact.
 
 ## Tests
 
-Add tests in `native/ckl-compiler/tests/compiler_seed.rs`:
+Add tests in `native/rux-compiler/tests/compiler_seed.rs`:
 
 - lexer recognizes `ptr`;
 - compiler lowers `ptr<i32>(RAM_BASE + 4).store(42)` and `.load()`;
@@ -101,7 +101,7 @@ Add tests in `native/ckl-compiler/tests/compiler_seed.rs`:
 
 ## Implementation Status
 
-Implemented in `native/ckl-compiler`:
+Implemented in `native/rux-compiler`:
 
 - `ptr<i32>(addr)` parsing;
 - unsafe raw RAM `.store(value)` and `.load()`;

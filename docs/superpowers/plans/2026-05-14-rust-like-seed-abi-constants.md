@@ -2,24 +2,24 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Expose `ckl_vm::computer_abi` constants as Rust-like seed compiler built-ins so firmware can avoid raw MMIO addresses.
+**Goal:** Expose `rux_vm::computer_abi` constants as Rust-like seed compiler built-ins so firmware can avoid raw MMIO addresses.
 
-**Architecture:** Keep the seed compiler in `native/ckl-compiler/src/lib.rs`. Add a small `BuiltinConstant` resolver backed by `ckl_vm::computer_abi`, resolve identifiers after locals and before undeclared-local errors, and lower built-ins directly to `AddrConst` or `I32Const`.
+**Architecture:** Keep the seed compiler in `native/rux-compiler/src/lib.rs`. Add a small `BuiltinConstant` resolver backed by `rux_vm::computer_abi`, resolve identifiers after locals and before undeclared-local errors, and lower built-ins directly to `AddrConst` or `I32Const`.
 
-**Tech Stack:** Rust 2021, `ckl-vm` path dependency, `computer_abi`, Cargo integration tests, `ComputerMachine`.
+**Tech Stack:** Rust 2021, `rux-vm` path dependency, `computer_abi`, Cargo integration tests, `ComputerMachine`.
 
 ---
 
 ## File Structure
 
-- Modify: `native/ckl-compiler/src/lib.rs`
-  - Import `ckl_vm::computer_abi`.
+- Modify: `native/rux-compiler/src/lib.rs`
+  - Import `rux_vm::computer_abi`.
   - Add `BuiltinConstant`.
   - Add `resolve_builtin_constant`.
   - Prevent local declarations from shadowing built-ins.
   - Resolve unknown identifiers as built-ins.
   - Reject wrong built-in type usage.
-- Modify: `native/ckl-compiler/tests/compiler_seed.rs`
+- Modify: `native/rux-compiler/tests/compiler_seed.rs`
   - Add codegen, diagnostics, and e2e tests.
 - Modify: `docs/superpowers/specs/2026-05-14-rust-like-seed-abi-constants-design.md`
   - Add implementation status after code is complete.
@@ -27,12 +27,12 @@
 ## Task 1: Add Built-In ABI Constant Codegen
 
 **Files:**
-- Modify: `native/ckl-compiler/tests/compiler_seed.rs`
-- Modify: `native/ckl-compiler/src/lib.rs`
+- Modify: `native/rux-compiler/tests/compiler_seed.rs`
+- Modify: `native/rux-compiler/src/lib.rs`
 
 - [ ] **Step 1: Write failing codegen tests**
 
-Append these tests to `native/ckl-compiler/tests/compiler_seed.rs`:
+Append these tests to `native/rux-compiler/tests/compiler_seed.rs`:
 
 ```rust
 #[test]
@@ -101,18 +101,18 @@ fn compile_lowers_status_ready_builtin_i32_return() {
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml compile_lowers_
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml compile_lowers_
 ```
 
 Expected: FAIL because identifiers such as `DEBUG_WRITE` and `STATUS_READY` are reported as undeclared locals.
 
 - [ ] **Step 3: Import ABI and add resolver**
 
-In `native/ckl-compiler/src/lib.rs`, change the top import to include `computer_abi`:
+In `native/rux-compiler/src/lib.rs`, change the top import to include `computer_abi`:
 
 ```rust
-use ckl_vm::computer_abi;
-use ckl_vm::low_image::{Function, Image, Instruction};
+use rux_vm::computer_abi;
+use rux_vm::low_image::{Function, Image, Instruction};
 ```
 
 Add near `ExprValue`:
@@ -176,7 +176,7 @@ Expr::Local(name) => {
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml compile_lowers_
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml compile_lowers_
 ```
 
 Expected: PASS.
@@ -186,17 +186,17 @@ Expected: PASS.
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml
-cargo fmt --manifest-path native/ckl-compiler/Cargo.toml --check
-git add native/ckl-compiler/src/lib.rs native/ckl-compiler/tests/compiler_seed.rs
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml
+cargo fmt --manifest-path native/rux-compiler/Cargo.toml --check
+git add native/rux-compiler/src/lib.rs native/rux-compiler/tests/compiler_seed.rs
 git commit -m "Add rust language seed ABI constants"
 ```
 
 ## Task 2: Add ABI Constant Diagnostics
 
 **Files:**
-- Modify: `native/ckl-compiler/tests/compiler_seed.rs`
-- Modify: `native/ckl-compiler/src/lib.rs`
+- Modify: `native/rux-compiler/tests/compiler_seed.rs`
+- Modify: `native/rux-compiler/src/lib.rs`
 
 - [ ] **Step 1: Write failing diagnostics tests**
 
@@ -249,7 +249,7 @@ fn compile_rejects_unknown_identifier() {
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml compile_rejects_
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml compile_rejects_
 ```
 
 Expected: `compile_rejects_builtin_shadowing` FAILS until shadowing validation is added. The other tests may already pass after Task 1.
@@ -271,7 +271,7 @@ if resolve_builtin_constant(name).is_some() {
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml compile_rejects_
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml compile_rejects_
 ```
 
 Expected: PASS.
@@ -281,16 +281,16 @@ Expected: PASS.
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml
-cargo fmt --manifest-path native/ckl-compiler/Cargo.toml --check
-git add native/ckl-compiler/src/lib.rs native/ckl-compiler/tests/compiler_seed.rs
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml
+cargo fmt --manifest-path native/rux-compiler/Cargo.toml --check
+git add native/rux-compiler/src/lib.rs native/rux-compiler/tests/compiler_seed.rs
 git commit -m "Validate rust language seed ABI constants"
 ```
 
 ## Task 3: Add ComputerMachine Built-In ABI E2E Test
 
 **Files:**
-- Modify: `native/ckl-compiler/tests/compiler_seed.rs`
+- Modify: `native/rux-compiler/tests/compiler_seed.rs`
 
 - [ ] **Step 1: Write e2e test**
 
@@ -330,7 +330,7 @@ fn compiled_seed_abi_constants_run_on_computer_machine() {
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml compiled_seed_abi_constants_run_on_computer_machine
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml compiled_seed_abi_constants_run_on_computer_machine
 ```
 
 Expected: PASS.
@@ -340,9 +340,9 @@ Expected: PASS.
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml
-cargo fmt --manifest-path native/ckl-compiler/Cargo.toml --check
-git add native/ckl-compiler/tests/compiler_seed.rs
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml
+cargo fmt --manifest-path native/rux-compiler/Cargo.toml --check
+git add native/rux-compiler/tests/compiler_seed.rs
 git commit -m "Run rust language seed ABI constants on computer machine"
 ```
 
@@ -358,9 +358,9 @@ Append:
 ```markdown
 ## Implementation Status
 
-Implemented in `native/ckl-compiler`:
+Implemented in `native/rux-compiler`:
 
-- built-in ABI constant resolver backed by `ckl_vm::computer_abi`;
+- built-in ABI constant resolver backed by `rux_vm::computer_abi`;
 - address constants lowered through `AddrConst`;
 - i32 constants lowered through `I32Const`;
 - local variables take precedence over unknown identifiers but cannot shadow built-in constants;
@@ -387,7 +387,7 @@ git commit -m "Document rust language seed ABI constants implementation"
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml
 ```
 
 Expected: PASS.
@@ -397,7 +397,7 @@ Expected: PASS.
 Run:
 
 ```bash
-cargo fmt --manifest-path native/ckl-compiler/Cargo.toml --check
+cargo fmt --manifest-path native/rux-compiler/Cargo.toml --check
 ```
 
 Expected: PASS with no diff.
@@ -407,7 +407,7 @@ Expected: PASS with no diff.
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-vm/Cargo.toml
+cargo test --offline --manifest-path native/rux-vm/Cargo.toml
 ```
 
 Expected: PASS.

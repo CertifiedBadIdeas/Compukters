@@ -19,10 +19,10 @@
 
 package ru.lazyhat.compukterkraft.lang.runtime.blazing
 
-import ru.lazyhat.compukterkraft.lang.runtime.image.low.CkLowVmFunction
-import ru.lazyhat.compukterkraft.lang.runtime.image.low.CkLowVmImage
-import ru.lazyhat.compukterkraft.lang.runtime.image.low.CkLowVmImageAbi
-import ru.lazyhat.compukterkraft.lang.runtime.image.low.CkLowVmInstruction
+import ru.lazyhat.compukterkraft.lang.runtime.image.low.RuxLowVmFunction
+import ru.lazyhat.compukterkraft.lang.runtime.image.low.RuxLowVmImage
+import ru.lazyhat.compukterkraft.lang.runtime.image.low.RuxLowVmImageAbi
+import ru.lazyhat.compukterkraft.lang.runtime.image.low.RuxLowVmInstruction
 import java.nio.file.Path
 import kotlin.io.path.absolutePathString
 import kotlin.system.measureNanoTime
@@ -94,10 +94,10 @@ internal class LowVmComputeBenchmarkRunner(
         iterations: Int,
     ): ByteArray =
         when (workload.name) {
-            "integer-mix" -> CkLowVmImageAbi.encode(integerMixImage(iterations))
-            "function-mix" -> CkLowVmImageAbi.encode(functionMixImage(iterations))
-            "branch-div" -> CkLowVmImageAbi.encode(branchDivImage(iterations))
-            "recursive-fib" -> CkLowVmImageAbi.encode(recursiveFibImage(iterations))
+            "integer-mix" -> RuxLowVmImageAbi.encode(integerMixImage(iterations))
+            "function-mix" -> RuxLowVmImageAbi.encode(functionMixImage(iterations))
+            "branch-div" -> RuxLowVmImageAbi.encode(branchDivImage(iterations))
+            "recursive-fib" -> RuxLowVmImageAbi.encode(recursiveFibImage(iterations))
             else -> error("Low-level VM benchmark does not support ${workload.name} yet.")
         }
 
@@ -120,47 +120,47 @@ internal class LowVmComputeBenchmarkRunner(
         }
     }
 
-    private fun integerMixImage(iterations: Int): CkLowVmImage {
-        val instructions = mutableListOf<CkLowVmInstruction>()
-        instructions += CkLowVmInstruction.I32Const(dst = 0, value = iterations)
-        instructions += CkLowVmInstruction.I32Const(dst = 1, value = 305_419_896)
-        instructions += CkLowVmInstruction.I32Const(dst = 2, value = -1_640_531_527)
-        instructions += CkLowVmInstruction.I32Const(dst = 3, value = 0)
-        instructions += CkLowVmInstruction.I32Const(dst = 4, value = 1)
-        instructions += CkLowVmInstruction.I32Const(dst = 5, value = 1_664_525)
-        instructions += CkLowVmInstruction.I32Const(dst = 6, value = 1_013_904_223)
-        instructions += CkLowVmInstruction.I32Const(dst = 7, value = 16)
-        instructions += CkLowVmInstruction.I32Const(dst = 8, value = 5)
-        instructions += CkLowVmInstruction.I32Const(dst = 9, value = 31)
-        instructions += CkLowVmInstruction.I32Const(dst = 10, value = 3)
+    private fun integerMixImage(iterations: Int): RuxLowVmImage {
+        val instructions = mutableListOf<RuxLowVmInstruction>()
+        instructions += RuxLowVmInstruction.I32Const(dst = 0, value = iterations)
+        instructions += RuxLowVmInstruction.I32Const(dst = 1, value = 305_419_896)
+        instructions += RuxLowVmInstruction.I32Const(dst = 2, value = -1_640_531_527)
+        instructions += RuxLowVmInstruction.I32Const(dst = 3, value = 0)
+        instructions += RuxLowVmInstruction.I32Const(dst = 4, value = 1)
+        instructions += RuxLowVmInstruction.I32Const(dst = 5, value = 1_664_525)
+        instructions += RuxLowVmInstruction.I32Const(dst = 6, value = 1_013_904_223)
+        instructions += RuxLowVmInstruction.I32Const(dst = 7, value = 16)
+        instructions += RuxLowVmInstruction.I32Const(dst = 8, value = 5)
+        instructions += RuxLowVmInstruction.I32Const(dst = 9, value = 31)
+        instructions += RuxLowVmInstruction.I32Const(dst = 10, value = 3)
 
         val loopStart = instructions.size
-        instructions += CkLowVmInstruction.I32Lt(dst = 19, lhs = 3, rhs = 0)
+        instructions += RuxLowVmInstruction.I32Lt(dst = 19, lhs = 3, rhs = 0)
         val exitJumpIndex = instructions.size
-        instructions += CkLowVmInstruction.JumpIfFalse(cond = 19, target = -1)
-        instructions += CkLowVmInstruction.I32Mul(dst = 11, lhs = 1, rhs = 5)
-        instructions += CkLowVmInstruction.I32Add(dst = 1, lhs = 11, rhs = 6)
-        instructions += CkLowVmInstruction.I32Shr(dst = 12, lhs = 1, rhs = 7)
-        instructions += CkLowVmInstruction.I32BitXor(dst = 13, lhs = 1, rhs = 12)
-        instructions += CkLowVmInstruction.I32Add(dst = 14, lhs = 2, rhs = 13)
-        instructions += CkLowVmInstruction.I32Shl(dst = 15, lhs = 2, rhs = 8)
-        instructions += CkLowVmInstruction.I32BitXor(dst = 2, lhs = 14, rhs = 15)
-        instructions += CkLowVmInstruction.I32Mul(dst = 16, lhs = 3, rhs = 9)
-        instructions += CkLowVmInstruction.I32Shr(dst = 17, lhs = 13, rhs = 10)
-        instructions += CkLowVmInstruction.I32BitXor(dst = 18, lhs = 16, rhs = 17)
-        instructions += CkLowVmInstruction.I32Add(dst = 2, lhs = 2, rhs = 18)
-        instructions += CkLowVmInstruction.I32Add(dst = 3, lhs = 3, rhs = 4)
-        instructions += CkLowVmInstruction.Jump(target = loopStart)
-        instructions[exitJumpIndex] = CkLowVmInstruction.JumpIfFalse(cond = 19, target = instructions.size)
-        instructions += CkLowVmInstruction.ReturnI32(2)
+        instructions += RuxLowVmInstruction.JumpIfFalse(cond = 19, target = -1)
+        instructions += RuxLowVmInstruction.I32Mul(dst = 11, lhs = 1, rhs = 5)
+        instructions += RuxLowVmInstruction.I32Add(dst = 1, lhs = 11, rhs = 6)
+        instructions += RuxLowVmInstruction.I32Shr(dst = 12, lhs = 1, rhs = 7)
+        instructions += RuxLowVmInstruction.I32BitXor(dst = 13, lhs = 1, rhs = 12)
+        instructions += RuxLowVmInstruction.I32Add(dst = 14, lhs = 2, rhs = 13)
+        instructions += RuxLowVmInstruction.I32Shl(dst = 15, lhs = 2, rhs = 8)
+        instructions += RuxLowVmInstruction.I32BitXor(dst = 2, lhs = 14, rhs = 15)
+        instructions += RuxLowVmInstruction.I32Mul(dst = 16, lhs = 3, rhs = 9)
+        instructions += RuxLowVmInstruction.I32Shr(dst = 17, lhs = 13, rhs = 10)
+        instructions += RuxLowVmInstruction.I32BitXor(dst = 18, lhs = 16, rhs = 17)
+        instructions += RuxLowVmInstruction.I32Add(dst = 2, lhs = 2, rhs = 18)
+        instructions += RuxLowVmInstruction.I32Add(dst = 3, lhs = 3, rhs = 4)
+        instructions += RuxLowVmInstruction.Jump(target = loopStart)
+        instructions[exitJumpIndex] = RuxLowVmInstruction.JumpIfFalse(cond = 19, target = instructions.size)
+        instructions += RuxLowVmInstruction.ReturnI32(2)
 
-        return CkLowVmImage(
-            languageVersion = "ckl-low-1",
+        return RuxLowVmImage(
+            languageVersion = "rux-low-1",
             memorySize = 1024u,
             entryFunctionIndex = 0,
             functions =
                 listOf(
-                    CkLowVmFunction(
+                    RuxLowVmFunction(
                         name = "main",
                         registerCount = 20,
                         parameters = emptyList(),
@@ -170,70 +170,70 @@ internal class LowVmComputeBenchmarkRunner(
         )
     }
 
-    private fun branchDivImage(iterations: Int): CkLowVmImage {
-        val instructions = mutableListOf<CkLowVmInstruction>()
-        instructions += CkLowVmInstruction.I32Const(dst = 0, value = iterations + 1)
-        instructions += CkLowVmInstruction.I32Const(dst = 1, value = 7)
-        instructions += CkLowVmInstruction.I32Const(dst = 2, value = 1)
-        instructions += CkLowVmInstruction.I32Const(dst = 3, value = 1)
-        instructions += CkLowVmInstruction.I32Const(dst = 4, value = 11)
-        instructions += CkLowVmInstruction.I32Const(dst = 5, value = 3)
-        instructions += CkLowVmInstruction.I32Const(dst = 6, value = 5)
-        instructions += CkLowVmInstruction.I32Const(dst = 7, value = 7)
-        instructions += CkLowVmInstruction.I32Const(dst = 8, value = 17)
+    private fun branchDivImage(iterations: Int): RuxLowVmImage {
+        val instructions = mutableListOf<RuxLowVmInstruction>()
+        instructions += RuxLowVmInstruction.I32Const(dst = 0, value = iterations + 1)
+        instructions += RuxLowVmInstruction.I32Const(dst = 1, value = 7)
+        instructions += RuxLowVmInstruction.I32Const(dst = 2, value = 1)
+        instructions += RuxLowVmInstruction.I32Const(dst = 3, value = 1)
+        instructions += RuxLowVmInstruction.I32Const(dst = 4, value = 11)
+        instructions += RuxLowVmInstruction.I32Const(dst = 5, value = 3)
+        instructions += RuxLowVmInstruction.I32Const(dst = 6, value = 5)
+        instructions += RuxLowVmInstruction.I32Const(dst = 7, value = 7)
+        instructions += RuxLowVmInstruction.I32Const(dst = 8, value = 17)
 
         val loopStart = instructions.size
-        instructions += CkLowVmInstruction.I32Lt(dst = 18, lhs = 2, rhs = 0)
+        instructions += RuxLowVmInstruction.I32Lt(dst = 18, lhs = 2, rhs = 0)
         val exitJumpIndex = instructions.size
-        instructions += CkLowVmInstruction.JumpIfFalse(cond = 18, target = -1)
-        instructions += CkLowVmInstruction.I32Div(dst = 9, lhs = 2, rhs = 4)
-        instructions += CkLowVmInstruction.I32Mul(dst = 11, lhs = 9, rhs = 4)
-        instructions += CkLowVmInstruction.I32Sub(dst = 10, lhs = 2, rhs = 11)
-        instructions += CkLowVmInstruction.I32Lt(dst = 18, lhs = 10, rhs = 3)
+        instructions += RuxLowVmInstruction.JumpIfFalse(cond = 18, target = -1)
+        instructions += RuxLowVmInstruction.I32Div(dst = 9, lhs = 2, rhs = 4)
+        instructions += RuxLowVmInstruction.I32Mul(dst = 11, lhs = 9, rhs = 4)
+        instructions += RuxLowVmInstruction.I32Sub(dst = 10, lhs = 2, rhs = 11)
+        instructions += RuxLowVmInstruction.I32Lt(dst = 18, lhs = 10, rhs = 3)
         val modNonZeroJumpIndex = instructions.size
-        instructions += CkLowVmInstruction.JumpIfFalse(cond = 18, target = -1)
-        instructions += CkLowVmInstruction.I32Div(dst = 15, lhs = 2, rhs = 5)
-        instructions += CkLowVmInstruction.I32Add(dst = 1, lhs = 1, rhs = 15)
+        instructions += RuxLowVmInstruction.JumpIfFalse(cond = 18, target = -1)
+        instructions += RuxLowVmInstruction.I32Div(dst = 15, lhs = 2, rhs = 5)
+        instructions += RuxLowVmInstruction.I32Add(dst = 1, lhs = 1, rhs = 15)
         val firstBranchDoneJumpIndex = instructions.size
-        instructions += CkLowVmInstruction.Jump(target = -1)
+        instructions += RuxLowVmInstruction.Jump(target = -1)
 
         val modNonZeroStart = instructions.size
-        instructions[modNonZeroJumpIndex] = CkLowVmInstruction.JumpIfFalse(cond = 18, target = modNonZeroStart)
-        instructions += CkLowVmInstruction.I32Lt(dst = 18, lhs = 10, rhs = 6)
+        instructions[modNonZeroJumpIndex] = RuxLowVmInstruction.JumpIfFalse(cond = 18, target = modNonZeroStart)
+        instructions += RuxLowVmInstruction.I32Lt(dst = 18, lhs = 10, rhs = 6)
         val highModJumpIndex = instructions.size
-        instructions += CkLowVmInstruction.JumpIfFalse(cond = 18, target = -1)
-        instructions += CkLowVmInstruction.I32Mul(dst = 12, lhs = 2, rhs = 8)
-        instructions += CkLowVmInstruction.I32BitXor(dst = 17, lhs = 1, rhs = 12)
-        instructions += CkLowVmInstruction.I32Div(dst = 9, lhs = 2, rhs = 7)
-        instructions += CkLowVmInstruction.I32Mul(dst = 11, lhs = 9, rhs = 7)
-        instructions += CkLowVmInstruction.I32Sub(dst = 13, lhs = 2, rhs = 11)
-        instructions += CkLowVmInstruction.I32Add(dst = 1, lhs = 17, rhs = 13)
+        instructions += RuxLowVmInstruction.JumpIfFalse(cond = 18, target = -1)
+        instructions += RuxLowVmInstruction.I32Mul(dst = 12, lhs = 2, rhs = 8)
+        instructions += RuxLowVmInstruction.I32BitXor(dst = 17, lhs = 1, rhs = 12)
+        instructions += RuxLowVmInstruction.I32Div(dst = 9, lhs = 2, rhs = 7)
+        instructions += RuxLowVmInstruction.I32Mul(dst = 11, lhs = 9, rhs = 7)
+        instructions += RuxLowVmInstruction.I32Sub(dst = 13, lhs = 2, rhs = 11)
+        instructions += RuxLowVmInstruction.I32Add(dst = 1, lhs = 17, rhs = 13)
         val secondBranchDoneJumpIndex = instructions.size
-        instructions += CkLowVmInstruction.Jump(target = -1)
+        instructions += RuxLowVmInstruction.Jump(target = -1)
 
         val highModStart = instructions.size
-        instructions[highModJumpIndex] = CkLowVmInstruction.JumpIfFalse(cond = 18, target = highModStart)
-        instructions += CkLowVmInstruction.I32Add(dst = 14, lhs = 10, rhs = 3)
-        instructions += CkLowVmInstruction.I32Div(dst = 15, lhs = 2, rhs = 14)
-        instructions += CkLowVmInstruction.I32Sub(dst = 17, lhs = 1, rhs = 15)
-        instructions += CkLowVmInstruction.I32Shl(dst = 16, lhs = 1, rhs = 3)
-        instructions += CkLowVmInstruction.I32Add(dst = 1, lhs = 17, rhs = 16)
+        instructions[highModJumpIndex] = RuxLowVmInstruction.JumpIfFalse(cond = 18, target = highModStart)
+        instructions += RuxLowVmInstruction.I32Add(dst = 14, lhs = 10, rhs = 3)
+        instructions += RuxLowVmInstruction.I32Div(dst = 15, lhs = 2, rhs = 14)
+        instructions += RuxLowVmInstruction.I32Sub(dst = 17, lhs = 1, rhs = 15)
+        instructions += RuxLowVmInstruction.I32Shl(dst = 16, lhs = 1, rhs = 3)
+        instructions += RuxLowVmInstruction.I32Add(dst = 1, lhs = 17, rhs = 16)
 
         val afterIf = instructions.size
-        instructions[firstBranchDoneJumpIndex] = CkLowVmInstruction.Jump(target = afterIf)
-        instructions[secondBranchDoneJumpIndex] = CkLowVmInstruction.Jump(target = afterIf)
-        instructions += CkLowVmInstruction.I32Add(dst = 2, lhs = 2, rhs = 3)
-        instructions += CkLowVmInstruction.Jump(target = loopStart)
-        instructions[exitJumpIndex] = CkLowVmInstruction.JumpIfFalse(cond = 18, target = instructions.size)
-        instructions += CkLowVmInstruction.ReturnI32(1)
+        instructions[firstBranchDoneJumpIndex] = RuxLowVmInstruction.Jump(target = afterIf)
+        instructions[secondBranchDoneJumpIndex] = RuxLowVmInstruction.Jump(target = afterIf)
+        instructions += RuxLowVmInstruction.I32Add(dst = 2, lhs = 2, rhs = 3)
+        instructions += RuxLowVmInstruction.Jump(target = loopStart)
+        instructions[exitJumpIndex] = RuxLowVmInstruction.JumpIfFalse(cond = 18, target = instructions.size)
+        instructions += RuxLowVmInstruction.ReturnI32(1)
 
-        return CkLowVmImage(
-            languageVersion = "ckl-low-1",
+        return RuxLowVmImage(
+            languageVersion = "rux-low-1",
             memorySize = 1024u,
             entryFunctionIndex = 0,
             functions =
                 listOf(
-                    CkLowVmFunction(
+                    RuxLowVmFunction(
                         name = "main",
                         registerCount = 19,
                         parameters = emptyList(),
@@ -243,101 +243,101 @@ internal class LowVmComputeBenchmarkRunner(
         )
     }
 
-    private fun functionMixImage(iterations: Int): CkLowVmImage =
-        CkLowVmImage(
-            languageVersion = "ckl-low-1",
+    private fun functionMixImage(iterations: Int): RuxLowVmImage =
+        RuxLowVmImage(
+            languageVersion = "rux-low-1",
             memorySize = 1024u,
             entryFunctionIndex = 0,
             functions =
                 listOf(
-                    CkLowVmFunction(
+                    RuxLowVmFunction(
                         name = "main",
                         registerCount = 6,
                         parameters = emptyList(),
                         instructions = functionMixMainInstructions(iterations),
                     ),
-                    CkLowVmFunction(
+                    RuxLowVmFunction(
                         name = "mixA",
                         registerCount = 11,
                         parameters = listOf(0, 1),
                         instructions =
                             listOf(
-                                CkLowVmInstruction.I32Const(dst = 2, value = 17),
-                                CkLowVmInstruction.I32Const(dst = 3, value = 3),
-                                CkLowVmInstruction.I32Const(dst = 4, value = 1),
-                                CkLowVmInstruction.I32Mul(dst = 5, lhs = 1, rhs = 2),
-                                CkLowVmInstruction.I32Add(dst = 6, lhs = 0, rhs = 5),
-                                CkLowVmInstruction.I32Shl(dst = 7, lhs = 0, rhs = 3),
-                                CkLowVmInstruction.I32BitXor(dst = 8, lhs = 6, rhs = 7),
-                                CkLowVmInstruction.I32Shr(dst = 9, lhs = 1, rhs = 4),
-                                CkLowVmInstruction.I32Add(dst = 10, lhs = 8, rhs = 9),
-                                CkLowVmInstruction.ReturnI32(10),
+                                RuxLowVmInstruction.I32Const(dst = 2, value = 17),
+                                RuxLowVmInstruction.I32Const(dst = 3, value = 3),
+                                RuxLowVmInstruction.I32Const(dst = 4, value = 1),
+                                RuxLowVmInstruction.I32Mul(dst = 5, lhs = 1, rhs = 2),
+                                RuxLowVmInstruction.I32Add(dst = 6, lhs = 0, rhs = 5),
+                                RuxLowVmInstruction.I32Shl(dst = 7, lhs = 0, rhs = 3),
+                                RuxLowVmInstruction.I32BitXor(dst = 8, lhs = 6, rhs = 7),
+                                RuxLowVmInstruction.I32Shr(dst = 9, lhs = 1, rhs = 4),
+                                RuxLowVmInstruction.I32Add(dst = 10, lhs = 8, rhs = 9),
+                                RuxLowVmInstruction.ReturnI32(10),
                             ),
                     ),
-                    CkLowVmFunction(
+                    RuxLowVmFunction(
                         name = "mixB",
                         registerCount = 11,
                         parameters = listOf(0, 1),
                         instructions =
                             listOf(
-                                CkLowVmInstruction.I32Const(dst = 2, value = 131),
-                                CkLowVmInstruction.I32Const(dst = 3, value = 2),
-                                CkLowVmInstruction.I32Const(dst = 4, value = 4),
-                                CkLowVmInstruction.I32Mul(dst = 5, lhs = 1, rhs = 2),
-                                CkLowVmInstruction.I32BitXor(dst = 6, lhs = 0, rhs = 5),
-                                CkLowVmInstruction.I32Shr(dst = 7, lhs = 0, rhs = 3),
-                                CkLowVmInstruction.I32Add(dst = 8, lhs = 6, rhs = 7),
-                                CkLowVmInstruction.I32Shl(dst = 9, lhs = 1, rhs = 4),
-                                CkLowVmInstruction.I32BitXor(dst = 10, lhs = 8, rhs = 9),
-                                CkLowVmInstruction.ReturnI32(10),
+                                RuxLowVmInstruction.I32Const(dst = 2, value = 131),
+                                RuxLowVmInstruction.I32Const(dst = 3, value = 2),
+                                RuxLowVmInstruction.I32Const(dst = 4, value = 4),
+                                RuxLowVmInstruction.I32Mul(dst = 5, lhs = 1, rhs = 2),
+                                RuxLowVmInstruction.I32BitXor(dst = 6, lhs = 0, rhs = 5),
+                                RuxLowVmInstruction.I32Shr(dst = 7, lhs = 0, rhs = 3),
+                                RuxLowVmInstruction.I32Add(dst = 8, lhs = 6, rhs = 7),
+                                RuxLowVmInstruction.I32Shl(dst = 9, lhs = 1, rhs = 4),
+                                RuxLowVmInstruction.I32BitXor(dst = 10, lhs = 8, rhs = 9),
+                                RuxLowVmInstruction.ReturnI32(10),
                             ),
                     ),
                 ),
         )
 
-    private fun functionMixMainInstructions(iterations: Int): List<CkLowVmInstruction> {
-        val instructions = mutableListOf<CkLowVmInstruction>()
-        instructions += CkLowVmInstruction.I32Const(dst = 0, value = iterations)
-        instructions += CkLowVmInstruction.I32Const(dst = 1, value = 324_508_639)
-        instructions += CkLowVmInstruction.I32Const(dst = 2, value = 0)
-        instructions += CkLowVmInstruction.I32Const(dst = 3, value = 1)
+    private fun functionMixMainInstructions(iterations: Int): List<RuxLowVmInstruction> {
+        val instructions = mutableListOf<RuxLowVmInstruction>()
+        instructions += RuxLowVmInstruction.I32Const(dst = 0, value = iterations)
+        instructions += RuxLowVmInstruction.I32Const(dst = 1, value = 324_508_639)
+        instructions += RuxLowVmInstruction.I32Const(dst = 2, value = 0)
+        instructions += RuxLowVmInstruction.I32Const(dst = 3, value = 1)
         val loopStart = instructions.size
-        instructions += CkLowVmInstruction.I32Lt(dst = 5, lhs = 2, rhs = 0)
+        instructions += RuxLowVmInstruction.I32Lt(dst = 5, lhs = 2, rhs = 0)
         val exitJumpIndex = instructions.size
-        instructions += CkLowVmInstruction.JumpIfFalse(cond = 5, target = -1)
+        instructions += RuxLowVmInstruction.JumpIfFalse(cond = 5, target = -1)
         instructions +=
-            CkLowVmInstruction.CallStatic(
+            RuxLowVmInstruction.CallStatic(
                 returnRegister = 4,
                 functionIndex = 1,
                 arguments = listOf(1, 2),
             )
         instructions +=
-            CkLowVmInstruction.CallStatic(
+            RuxLowVmInstruction.CallStatic(
                 returnRegister = 1,
                 functionIndex = 2,
                 arguments = listOf(4, 2),
             )
-        instructions += CkLowVmInstruction.I32Add(dst = 2, lhs = 2, rhs = 3)
-        instructions += CkLowVmInstruction.Jump(target = loopStart)
-        instructions[exitJumpIndex] = CkLowVmInstruction.JumpIfFalse(cond = 5, target = instructions.size)
-        instructions += CkLowVmInstruction.ReturnI32(1)
+        instructions += RuxLowVmInstruction.I32Add(dst = 2, lhs = 2, rhs = 3)
+        instructions += RuxLowVmInstruction.Jump(target = loopStart)
+        instructions[exitJumpIndex] = RuxLowVmInstruction.JumpIfFalse(cond = 5, target = instructions.size)
+        instructions += RuxLowVmInstruction.ReturnI32(1)
         return instructions
     }
 
-    private fun recursiveFibImage(iterations: Int): CkLowVmImage =
-        CkLowVmImage(
-            languageVersion = "ckl-low-1",
+    private fun recursiveFibImage(iterations: Int): RuxLowVmImage =
+        RuxLowVmImage(
+            languageVersion = "rux-low-1",
             memorySize = 1024u,
             entryFunctionIndex = 0,
             functions =
                 listOf(
-                    CkLowVmFunction(
+                    RuxLowVmFunction(
                         name = "main",
                         registerCount = 13,
                         parameters = emptyList(),
                         instructions = recursiveFibMainInstructions(iterations),
                     ),
-                    CkLowVmFunction(
+                    RuxLowVmFunction(
                         name = "fib",
                         registerCount = 8,
                         parameters = listOf(0),
@@ -346,61 +346,61 @@ internal class LowVmComputeBenchmarkRunner(
                 ),
         )
 
-    private fun recursiveFibMainInstructions(iterations: Int): List<CkLowVmInstruction> {
-        val instructions = mutableListOf<CkLowVmInstruction>()
-        instructions += CkLowVmInstruction.I32Const(dst = 0, value = iterations)
-        instructions += CkLowVmInstruction.I32Const(dst = 1, value = 0)
-        instructions += CkLowVmInstruction.I32Const(dst = 2, value = 0)
-        instructions += CkLowVmInstruction.I32Const(dst = 3, value = 1)
-        instructions += CkLowVmInstruction.I32Const(dst = 4, value = 6)
-        instructions += CkLowVmInstruction.I32Const(dst = 5, value = 10)
-        instructions += CkLowVmInstruction.I32Const(dst = 6, value = 31)
+    private fun recursiveFibMainInstructions(iterations: Int): List<RuxLowVmInstruction> {
+        val instructions = mutableListOf<RuxLowVmInstruction>()
+        instructions += RuxLowVmInstruction.I32Const(dst = 0, value = iterations)
+        instructions += RuxLowVmInstruction.I32Const(dst = 1, value = 0)
+        instructions += RuxLowVmInstruction.I32Const(dst = 2, value = 0)
+        instructions += RuxLowVmInstruction.I32Const(dst = 3, value = 1)
+        instructions += RuxLowVmInstruction.I32Const(dst = 4, value = 6)
+        instructions += RuxLowVmInstruction.I32Const(dst = 5, value = 10)
+        instructions += RuxLowVmInstruction.I32Const(dst = 6, value = 31)
         val loopStart = instructions.size
-        instructions += CkLowVmInstruction.I32Lt(dst = 12, lhs = 2, rhs = 0)
+        instructions += RuxLowVmInstruction.I32Lt(dst = 12, lhs = 2, rhs = 0)
         val exitJumpIndex = instructions.size
-        instructions += CkLowVmInstruction.JumpIfFalse(cond = 12, target = -1)
-        instructions += CkLowVmInstruction.I32Div(dst = 7, lhs = 2, rhs = 4)
-        instructions += CkLowVmInstruction.I32Mul(dst = 8, lhs = 7, rhs = 4)
-        instructions += CkLowVmInstruction.I32Sub(dst = 9, lhs = 2, rhs = 8)
-        instructions += CkLowVmInstruction.I32Add(dst = 9, lhs = 9, rhs = 5)
+        instructions += RuxLowVmInstruction.JumpIfFalse(cond = 12, target = -1)
+        instructions += RuxLowVmInstruction.I32Div(dst = 7, lhs = 2, rhs = 4)
+        instructions += RuxLowVmInstruction.I32Mul(dst = 8, lhs = 7, rhs = 4)
+        instructions += RuxLowVmInstruction.I32Sub(dst = 9, lhs = 2, rhs = 8)
+        instructions += RuxLowVmInstruction.I32Add(dst = 9, lhs = 9, rhs = 5)
         instructions +=
-            CkLowVmInstruction.CallStatic(
+            RuxLowVmInstruction.CallStatic(
                 returnRegister = 10,
                 functionIndex = 1,
                 arguments = listOf(9),
             )
-        instructions += CkLowVmInstruction.I32Mul(dst = 11, lhs = 2, rhs = 6)
-        instructions += CkLowVmInstruction.I32BitXor(dst = 10, lhs = 10, rhs = 11)
-        instructions += CkLowVmInstruction.I32Add(dst = 1, lhs = 1, rhs = 10)
-        instructions += CkLowVmInstruction.I32Add(dst = 2, lhs = 2, rhs = 3)
-        instructions += CkLowVmInstruction.Jump(target = loopStart)
-        instructions[exitJumpIndex] = CkLowVmInstruction.JumpIfFalse(cond = 12, target = instructions.size)
-        instructions += CkLowVmInstruction.ReturnI32(1)
+        instructions += RuxLowVmInstruction.I32Mul(dst = 11, lhs = 2, rhs = 6)
+        instructions += RuxLowVmInstruction.I32BitXor(dst = 10, lhs = 10, rhs = 11)
+        instructions += RuxLowVmInstruction.I32Add(dst = 1, lhs = 1, rhs = 10)
+        instructions += RuxLowVmInstruction.I32Add(dst = 2, lhs = 2, rhs = 3)
+        instructions += RuxLowVmInstruction.Jump(target = loopStart)
+        instructions[exitJumpIndex] = RuxLowVmInstruction.JumpIfFalse(cond = 12, target = instructions.size)
+        instructions += RuxLowVmInstruction.ReturnI32(1)
         return instructions
     }
 
-    private fun fibFunctionInstructions(): List<CkLowVmInstruction> =
+    private fun fibFunctionInstructions(): List<RuxLowVmInstruction> =
         listOf(
-            CkLowVmInstruction.I32Const(dst = 1, value = 2),
-            CkLowVmInstruction.I32Lt(dst = 7, lhs = 0, rhs = 1),
-            CkLowVmInstruction.JumpIfFalse(cond = 7, target = 4),
-            CkLowVmInstruction.ReturnI32(0),
-            CkLowVmInstruction.I32Const(dst = 2, value = 1),
-            CkLowVmInstruction.I32Sub(dst = 3, lhs = 0, rhs = 2),
-            CkLowVmInstruction.CallStatic(
+            RuxLowVmInstruction.I32Const(dst = 1, value = 2),
+            RuxLowVmInstruction.I32Lt(dst = 7, lhs = 0, rhs = 1),
+            RuxLowVmInstruction.JumpIfFalse(cond = 7, target = 4),
+            RuxLowVmInstruction.ReturnI32(0),
+            RuxLowVmInstruction.I32Const(dst = 2, value = 1),
+            RuxLowVmInstruction.I32Sub(dst = 3, lhs = 0, rhs = 2),
+            RuxLowVmInstruction.CallStatic(
                 returnRegister = 4,
                 functionIndex = 1,
                 arguments = listOf(3),
             ),
-            CkLowVmInstruction.I32Const(dst = 2, value = 2),
-            CkLowVmInstruction.I32Sub(dst = 3, lhs = 0, rhs = 2),
-            CkLowVmInstruction.CallStatic(
+            RuxLowVmInstruction.I32Const(dst = 2, value = 2),
+            RuxLowVmInstruction.I32Sub(dst = 3, lhs = 0, rhs = 2),
+            RuxLowVmInstruction.CallStatic(
                 returnRegister = 5,
                 functionIndex = 1,
                 arguments = listOf(3),
             ),
-            CkLowVmInstruction.I32Add(dst = 6, lhs = 4, rhs = 5),
-            CkLowVmInstruction.ReturnI32(6),
+            RuxLowVmInstruction.I32Add(dst = 6, lhs = 4, rhs = 5),
+            RuxLowVmInstruction.ReturnI32(6),
         )
 
     private companion object {

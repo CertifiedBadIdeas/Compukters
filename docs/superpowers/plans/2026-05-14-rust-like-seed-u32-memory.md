@@ -6,14 +6,14 @@
 
 **Architecture:** Keep the low VM unchanged. The compiler tracks `u32` as a distinct source type but lowers values to existing 32-bit low VM registers and uses existing `Load32` / `Store32` operations.
 
-**Tech Stack:** Rust compiler crate `native/ckl-compiler`, low VM image instructions from `native/ckl-vm`, Cargo tests run offline.
+**Tech Stack:** Rust compiler crate `native/rux-compiler`, low VM image instructions from `native/rux-vm`, Cargo tests run offline.
 
 ---
 
 ### Task 1: Add U32 And Memory Tests
 
 **Files:**
-- Modify: `native/ckl-compiler/tests/compiler_seed.rs`
+- Modify: `native/rux-compiler/tests/compiler_seed.rs`
 
 - [ ] **Step 1: Add failing tests**
 
@@ -36,7 +36,7 @@ compiled_seed_mmio_u32_debug_write_runs_on_computer_machine
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml u32
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml u32
 ```
 
 Expected: compilation fails because `u32`, suffixed literals, casts, and typed pointers are not implemented yet.
@@ -44,9 +44,9 @@ Expected: compilation fails because `u32`, suffixed literals, casts, and typed p
 ### Task 2: Add Lexer, Parser, And AST Support
 
 **Files:**
-- Modify: `native/ckl-compiler/src/lexer.rs`
-- Modify: `native/ckl-compiler/src/ast.rs`
-- Modify: `native/ckl-compiler/src/parser.rs`
+- Modify: `native/rux-compiler/src/lexer.rs`
+- Modify: `native/rux-compiler/src/ast.rs`
+- Modify: `native/rux-compiler/src/parser.rs`
 
 - [ ] **Step 1: Add tokens**
 
@@ -68,7 +68,7 @@ Parse `expr as i32` and `expr as u32` after postfix expressions. Parse pointer e
 ### Task 3: Add U32 Codegen
 
 **Files:**
-- Modify: `native/ckl-compiler/src/codegen.rs`
+- Modify: `native/rux-compiler/src/codegen.rs`
 
 - [ ] **Step 1: Extend value and type models**
 
@@ -92,7 +92,7 @@ Carry `TypeName` on pointer capabilities and use that type for load/store checks
 Run:
 
 ```bash
-cargo fmt --manifest-path native/ckl-compiler/Cargo.toml --check
+cargo fmt --manifest-path native/rux-compiler/Cargo.toml --check
 ```
 
 Expected: exit code 0.
@@ -102,7 +102,7 @@ Expected: exit code 0.
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml
+cargo test --offline --manifest-path native/rux-compiler/Cargo.toml
 ```
 
 Expected: all compiler tests pass.
@@ -112,7 +112,7 @@ Expected: all compiler tests pass.
 Run:
 
 ```bash
-cargo test --offline --manifest-path native/ckl-vm/Cargo.toml
+cargo test --offline --manifest-path native/rux-vm/Cargo.toml
 ```
 
 Expected: all VM tests pass.
@@ -122,6 +122,6 @@ Expected: all VM tests pass.
 Run:
 
 ```bash
-git add docs/superpowers/specs/2026-05-14-rust-like-seed-u32-memory-design.md docs/superpowers/plans/2026-05-14-rust-like-seed-u32-memory.md native/ckl-compiler/src/ast.rs native/ckl-compiler/src/lexer.rs native/ckl-compiler/src/parser.rs native/ckl-compiler/src/codegen.rs native/ckl-compiler/tests/compiler_seed.rs
+git add docs/superpowers/specs/2026-05-14-rust-like-seed-u32-memory-design.md docs/superpowers/plans/2026-05-14-rust-like-seed-u32-memory.md native/rux-compiler/src/ast.rs native/rux-compiler/src/lexer.rs native/rux-compiler/src/parser.rs native/rux-compiler/src/codegen.rs native/rux-compiler/tests/compiler_seed.rs
 git commit -m "feat: add seed u32 memory support"
 ```

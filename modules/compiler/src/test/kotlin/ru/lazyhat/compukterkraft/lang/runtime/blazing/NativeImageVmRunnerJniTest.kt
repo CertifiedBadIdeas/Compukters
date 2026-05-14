@@ -30,7 +30,7 @@ import kotlin.test.assertNotNull
 class NativeImageVmRunnerJniTest {
     @Test
     fun imageRunnerHaltsForEmptyMainWhenLibraryIsConfigured() {
-        val libraryPath = System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val libraryPath = System.getProperty("rux.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val image = assertNotNull(LanguageFrontend().compileImage("main.ck", "pub fun main() { }").image)
 
         runBlocking {
@@ -40,7 +40,7 @@ class NativeImageVmRunnerJniTest {
 
     @Test
     fun imageRunnerDispatchesSystemLogHostCallWhenLibraryIsConfigured() {
-        val libraryPath = System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val libraryPath = System.getProperty("rux.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val image = assertNotNull(LanguageFrontend().compileImage("main.ck", "pub fun main() { system::log(\"hi\"); }").image)
         val runtime = RecordingRuntime()
 
@@ -53,7 +53,7 @@ class NativeImageVmRunnerJniTest {
 
     @Test
     fun imageRunnerExecutesSchedulerBuiltinsThroughJniWhenLibraryIsConfigured() {
-        val libraryPath = System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val libraryPath = System.getProperty("rux.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val image =
             assertNotNull(
                 LanguageFrontend()
@@ -79,7 +79,7 @@ class NativeImageVmRunnerJniTest {
 
     @Test
     fun imageRunnerExecutesIfConditionAndLocalThroughJniWhenLibraryIsConfigured() {
-        val libraryPath = System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val libraryPath = System.getProperty("rux.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val image =
             assertNotNull(
                 LanguageFrontend()
@@ -106,7 +106,7 @@ class NativeImageVmRunnerJniTest {
 
     @Test
     fun imageRunnerExecutesOperatorsThroughJniWhenLibraryIsConfigured() {
-        val libraryPath = System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val libraryPath = System.getProperty("rux.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val image =
             assertNotNull(
                 LanguageFrontend()
@@ -134,7 +134,7 @@ class NativeImageVmRunnerJniTest {
 
     @Test
     fun imageRunnerExecutesBulkStringIntrinsicsThroughJniWhenLibraryIsConfigured() {
-        val libraryPath = System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val libraryPath = System.getProperty("rux.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val image =
             assertNotNull(
                 LanguageFrontend()
@@ -160,7 +160,7 @@ class NativeImageVmRunnerJniTest {
 
     @Test
     fun imageRunnerExecutesUserFunctionCallsThroughJniWhenLibraryIsConfigured() {
-        val libraryPath = System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val libraryPath = System.getProperty("rux.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val image =
             assertNotNull(
                 LanguageFrontend()
@@ -193,7 +193,7 @@ class NativeImageVmRunnerJniTest {
 
     @Test
     fun imageRunnerExecutesRecordConstructionAndFieldAccessThroughJniWhenLibraryIsConfigured() {
-        val libraryPath = System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val libraryPath = System.getProperty("rux.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val image =
             assertNotNull(
                 LanguageFrontend()
@@ -221,7 +221,7 @@ class NativeImageVmRunnerJniTest {
 
     @Test
     fun imageRunnerExecutesArrayCollectionsThroughJniWhenLibraryIsConfigured() {
-        val libraryPath = System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val libraryPath = System.getProperty("rux.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val image =
             assertNotNull(
                 LanguageFrontend()
@@ -246,7 +246,7 @@ class NativeImageVmRunnerJniTest {
 
     @Test
     fun imageRunnerExecutesListCollectionsThroughJniWhenLibraryIsConfigured() {
-        val libraryPath = System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val libraryPath = System.getProperty("rux.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val image =
             assertNotNull(
                 LanguageFrontend()
@@ -271,7 +271,7 @@ class NativeImageVmRunnerJniTest {
 
     @Test
     fun imageRunnerExecutesMapCollectionsThroughJniWhenLibraryIsConfigured() {
-        val libraryPath = System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val libraryPath = System.getProperty("rux.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val image =
             assertNotNull(
                 LanguageFrontend()

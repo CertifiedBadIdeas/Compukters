@@ -6,17 +6,17 @@
 
 **Architecture:** Extend the compiler AST/type model and reuse existing low VM bool register semantics. Do not add VM instructions in this slice.
 
-**Tech Stack:** Rust, `native/ckl-compiler`, `native/ckl-vm`, offline Cargo tests.
+**Tech Stack:** Rust, `native/rux-compiler`, `native/rux-vm`, offline Cargo tests.
 
 ---
 
 ## File Structure
 
-- Modify `native/ckl-compiler/src/lexer.rs`: add `bool`, `true`, and `false` tokens.
-- Modify `native/ckl-compiler/src/ast.rs`: add type annotations and boolean expressions.
-- Modify `native/ckl-compiler/src/parser.rs`: parse `bool` types and boolean literals.
-- Modify `native/ckl-compiler/src/codegen.rs`: add bool expression values, local types, return types, and argument checking.
-- Modify `native/ckl-compiler/tests/compiler_seed.rs`: add bool tests and update integer-condition expectations.
+- Modify `native/rux-compiler/src/lexer.rs`: add `bool`, `true`, and `false` tokens.
+- Modify `native/rux-compiler/src/ast.rs`: add type annotations and boolean expressions.
+- Modify `native/rux-compiler/src/parser.rs`: parse `bool` types and boolean literals.
+- Modify `native/rux-compiler/src/codegen.rs`: add bool expression values, local types, return types, and argument checking.
+- Modify `native/rux-compiler/tests/compiler_seed.rs`: add bool tests and update integer-condition expectations.
 
 ## Tasks
 
@@ -24,7 +24,7 @@
 
 - [ ] Add lexer tests for `bool`, `true`, and `false`.
 - [ ] Add compiler tests for bool returns, locals, conditions, function arguments, and type errors.
-- [ ] Run `cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml` and confirm failure on missing bool support.
+- [ ] Run `cargo test --offline --manifest-path native/rux-compiler/Cargo.toml` and confirm failure on missing bool support.
 
 ### Task 2: Parser and AST
 
@@ -44,9 +44,9 @@
 
 ### Task 4: Verification
 
-- [ ] Run `cargo fmt --manifest-path native/ckl-compiler/Cargo.toml --check`.
-- [ ] Run `cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml`.
-- [ ] Run `cargo test --offline --manifest-path native/ckl-vm/Cargo.toml`.
+- [ ] Run `cargo fmt --manifest-path native/rux-compiler/Cargo.toml --check`.
+- [ ] Run `cargo test --offline --manifest-path native/rux-compiler/Cargo.toml`.
+- [ ] Run `cargo test --offline --manifest-path native/rux-vm/Cargo.toml`.
 - [ ] Commit the completed slice.
 
 ## Self-Review

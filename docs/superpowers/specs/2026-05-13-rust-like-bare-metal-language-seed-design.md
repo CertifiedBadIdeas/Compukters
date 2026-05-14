@@ -4,11 +4,11 @@
 
 Create the first Rust compiler path for Rux, a new Rust-like bare-metal language that targets the low VM directly.
 
-This is not a CKL compatibility project. CKL may remain as a legacy/product language elsewhere, but this experimental branch should start a new language designed for low VM computers, flat RAM, MMIO, and future ownership/RAII work.
+This is not a Rux compatibility project. Rux may remain as a legacy/product language elsewhere, but this experimental branch should start a new language designed for low VM computers, flat RAM, MMIO, and future ownership/RAII work.
 
 ## Motivation
 
-The current CKL syntax and compiler architecture are not the desired foundation for the low-level VM direction. Porting the Kotlin CKL compiler to Rust would preserve too much of the old language shape and runtime model.
+The current Rux syntax and compiler architecture are not the desired foundation for the low-level VM direction. Porting the Kotlin Rux compiler to Rust would preserve too much of the old language shape and runtime model.
 
 The experiment should instead start with a tiny Rust-written compiler for Rux:
 
@@ -18,7 +18,7 @@ source text
   -> Rust parser
   -> small AST
   -> minimal semantic checks
-  -> ckl_vm::low_image::Image
+  -> rux_vm::low_image::Image
   -> ComputerMachine
 ```
 
@@ -45,7 +45,7 @@ The source file extension is `.rx`.
 
 ## Non-Goals
 
-- Do not parse or compile CKL syntax.
+- Do not parse or compile Rux syntax.
 - Do not keep Kotlin compiler compatibility.
 - Do not add Kotlin fallback compilation.
 - Do not add imports, modules, packages, or IDE support.
@@ -60,11 +60,11 @@ Add a new Rust crate next to the VM crate:
 
 ```text
 native/
-  ckl-vm/
-  ckl-compiler/
+  rux-vm/
+  rux-compiler/
 ```
 
-`ckl-compiler` depends on `ckl-vm` and emits `ckl_vm::low_image::Image`.
+`rux-compiler` depends on `rux-vm` and emits `rux_vm::low_image::Image`.
 
 This dependency direction is acceptable for the seed. Later, if the compiler grows, shared image/ISA types can move into a smaller `ckl-isa` crate so both VM and compiler depend on the same model without coupling.
 
@@ -205,7 +205,7 @@ The test runs the emitted image through `ComputerMachine` and expects:
 
 ## Testing Strategy
 
-Add tests inside `native/ckl-compiler`:
+Add tests inside `native/rux-compiler`:
 
 - lexer recognizes keywords, punctuation, decimal integers, and hex integers;
 - parser parses a single `main` function;
@@ -219,22 +219,22 @@ Add tests inside `native/ckl-compiler`:
 Run:
 
 ```bash
-cargo test --manifest-path native/ckl-compiler/Cargo.toml
-cargo test --manifest-path native/ckl-vm/Cargo.toml
+cargo test --manifest-path native/rux-compiler/Cargo.toml
+cargo test --manifest-path native/rux-vm/Cargo.toml
 ```
 
 ## Success Criteria
 
 - A new Rust compiler crate exists.
 - No Kotlin compiler code is touched.
-- No CKL compatibility path is added.
+- No Rux compatibility path is added.
 - A Rux source string compiles directly to `low_image::Image`.
 - The generated image runs on `ComputerMachine` and writes `OK` through debug MMIO.
 - The compiler reports deterministic errors for unsupported seed-language input.
 
 ## Implementation Status
 
-The first Rux seed slice is implemented in `native/ckl-compiler`.
+The first Rux seed slice is implemented in `native/rux-compiler`.
 
 Current support:
 
