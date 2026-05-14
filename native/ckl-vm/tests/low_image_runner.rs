@@ -93,7 +93,10 @@ fn runner_executes_i32_bitwise_and_or() {
     );
     let mut vm = LowImageVm::create(image, 128).unwrap();
 
-    assert_eq!(vm.run_until_signal().unwrap(), LowImageSignal::HaltI32(0xf4));
+    assert_eq!(
+        vm.run_until_signal().unwrap(),
+        LowImageSignal::HaltI32(0xf4)
+    );
 }
 
 #[test]

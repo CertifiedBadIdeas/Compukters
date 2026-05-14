@@ -209,8 +209,8 @@ fn compile_lowers_i32_main_return_arithmetic() {
 
 #[test]
 fn compile_lowers_i32_bitwise_operations() {
-    let image = compile("fn main() -> i32 { return (0xff & 0xf0) | (1 ^ (2 << 3 >> 1)); }")
-        .unwrap();
+    let image =
+        compile("fn main() -> i32 { return (0xff & 0xf0) | (1 ^ (2 << 3 >> 1)); }").unwrap();
     let instructions = &image.functions[0].instructions;
 
     assert!(instructions
@@ -472,7 +472,9 @@ fn compile_accepts_const_before_main() {
 
 #[test]
 fn compile_accepts_bitwise_const_initializers() {
-    let image = compile("const MASK: i32 = (0xff & 0xf0) | (1 << 2); fn main() -> i32 { return MASK; }").unwrap();
+    let image =
+        compile("const MASK: i32 = (0xff & 0xf0) | (1 << 2); fn main() -> i32 { return MASK; }")
+            .unwrap();
 
     assert_eq!(
         image.functions[0].instructions,
