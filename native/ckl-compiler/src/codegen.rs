@@ -162,6 +162,8 @@ fn evaluate_const_expr(
         }
         Expr::Compare { .. }
         | Expr::Bool(_)
+        | Expr::Unary { .. }
+        | Expr::Logical { .. }
         | Expr::Call { .. }
         | Expr::Mmio(_)
         | Expr::Ptr(_)
@@ -639,6 +641,13 @@ impl Codegen {
                 method,
                 args,
             } => self.compile_method_call(receiver, method, args),
+            Expr::Unary { op, expr } => match op {
+                UnaryOp::Not => self.compile_bool_not(expr),
+            },
+            Expr::Logical { op, lhs, rhs } => match op {
+                LogicalOp::And => self.compile_logical_and(lhs, rhs),
+                LogicalOp::Or => self.compile_logical_or(lhs, rhs),
+            },
             Expr::Binary { op, lhs, rhs } => {
                 let lhs = self.compile_i32_expr(lhs)?;
                 let rhs = self.compile_i32_expr(rhs)?;
@@ -773,6 +782,45 @@ impl Codegen {
                 message: format!("unknown MMIO method `{method}`"),
             }),
         }
+    }
+
+    fn compile_bool_not(&mut self, expr: &Expr) -> Result<ExprValue, CompileError> {
+        let src = self.compile_bool_expr(expr)?;
+        let false_register = self.emit_bool_const(false)?;
+        let dst = self.alloc_register()?;
+        self.instructions.push(Instruction::I32Eq {
+            dst,
+            lhs: src,
+            rhs: false_register,
+        });
+        Ok(ExprValue::Bool(dst))
+    }
+
+    fn compile_logical_and(&mut self, lhs: &Expr, rhs: &Expr) -> Result<ExprValue, CompileError> {
+        let dst = self.emit_bool_const(false)?;
+        let lhs = self.compile_bool_expr(lhs)?;
+        let end_jump = self.emit_jump_if_false_placeholder(lhs);
+        let rhs = self.compile_bool_expr(rhs)?;
+        self.instructions
+            .push(Instruction::I32Move { dst, src: rhs });
+        let end = self.instructions.len();
+        self.patch_jump(end_jump, end)?;
+        Ok(ExprValue::Bool(dst))
+    }
+
+    fn compile_logical_or(&mut self, lhs: &Expr, rhs: &Expr) -> Result<ExprValue, CompileError> {
+        let dst = self.emit_bool_const(true)?;
+        let lhs = self.compile_bool_expr(lhs)?;
+        let rhs_jump = self.emit_jump_if_false_placeholder(lhs);
+        let end_jump = self.emit_jump_placeholder();
+        let rhs_start = self.instructions.len();
+        self.patch_jump(rhs_jump, rhs_start)?;
+        let rhs = self.compile_bool_expr(rhs)?;
+        self.instructions
+            .push(Instruction::I32Move { dst, src: rhs });
+        let end = self.instructions.len();
+        self.patch_jump(end_jump, end)?;
+        Ok(ExprValue::Bool(dst))
     }
 
     fn alloc_register(&mut self) -> Result<u16, CompileError> {
