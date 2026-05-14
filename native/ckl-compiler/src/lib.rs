@@ -1,6 +1,6 @@
 use ckl_vm::computer_abi;
 use ckl_vm::low_image::{Function, Image, Instruction};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::{Display, Formatter};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -848,9 +848,28 @@ struct FunctionSignature {
 
 fn collect_function_signatures(
     functions: &[FunctionDecl],
+    source_consts: &HashMap<String, i32>,
 ) -> Result<HashMap<String, FunctionSignature>, CompileError> {
     let mut signatures = HashMap::new();
     for (index, function) in functions.iter().enumerate() {
+        if resolve_builtin_constant(&function.name).is_some() {
+            return Err(CompileError {
+                message: format!(
+                    "function `{}` cannot shadow built-in ABI constant",
+                    function.name
+                ),
+            });
+        }
+        if source_consts.contains_key(&function.name) {
+            return Err(CompileError {
+                message: format!("function `{}` cannot shadow const", function.name),
+            });
+        }
+        if signatures.contains_key(&function.name) {
+            return Err(CompileError {
+                message: format!("duplicate function `{}`", function.name),
+            });
+        }
         signatures.insert(
             function.name.clone(),
             FunctionSignature {
@@ -877,12 +896,13 @@ struct Codegen {
     locals: HashMap<String, Local>,
     source_consts: HashMap<String, i32>,
     function_signatures: HashMap<String, FunctionSignature>,
+    current_function: String,
 }
 
 impl Codegen {
     fn compile(program: Program) -> Result<Image, CompileError> {
         let source_consts = evaluate_consts(&program.consts)?;
-        let function_signatures = collect_function_signatures(&program.functions)?;
+        let function_signatures = collect_function_signatures(&program.functions, &source_consts)?;
         let main = function_signatures
             .get("main")
             .copied()
@@ -929,9 +949,16 @@ impl Codegen {
             locals: HashMap::new(),
             source_consts,
             function_signatures,
+            current_function: function.name.clone(),
         };
         let mut parameters = Vec::with_capacity(function.parameters.len());
+        let mut parameter_names = HashSet::new();
         for parameter in &function.parameters {
+            if !parameter_names.insert(parameter.name.clone()) {
+                return Err(CompileError {
+                    message: format!("duplicate parameter `{}`", parameter.name),
+                });
+            }
             let register = codegen.alloc_register()?;
             parameters.push(register);
             codegen.locals.insert(
@@ -1099,6 +1126,17 @@ impl Codegen {
     }
 
     fn compile_i32_expr(&mut self, expr: &Expr) -> Result<u16, CompileError> {
+        if let Expr::Call { name, .. } = expr {
+            if self
+                .function_signatures
+                .get(name)
+                .is_some_and(|signature| signature.return_type == ReturnType::Unit)
+            {
+                return Err(CompileError {
+                    message: format!("unit function `{name}` used as `i32` value"),
+                });
+            }
+        }
         match self.compile_expr(expr)? {
             ExprValue::I32(register) => Ok(register),
             ExprValue::Addr(_) => Err(CompileError {
@@ -1196,6 +1234,11 @@ impl Codegen {
     }
 
     fn compile_call(&mut self, name: &str, args: &[Expr]) -> Result<ExprValue, CompileError> {
+        if name == self.current_function {
+            return Err(CompileError {
+                message: format!("recursive function call `{name}`"),
+            });
+        }
         let signature =
             self.function_signatures
                 .get(name)
