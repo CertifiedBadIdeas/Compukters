@@ -516,3 +516,30 @@ fn compiled_seed_loop_runs_on_computer_machine() {
     assert_eq!(machine.exit_code(), 2);
     assert_eq!(machine.debug_output_bytes(), &[79, 80]);
 }
+
+#[test]
+fn compiled_seed_abi_constants_run_on_computer_machine() {
+    let image = compile(
+        "fn main() -> i32 {
+            unsafe {
+                mmio<i32>(CONTROL_STATUS).store(STATUS_BOOTING);
+                mmio<i32>(DEBUG_WRITE).store(79);
+                mmio<i32>(DEBUG_WRITE).store(75);
+                mmio<i32>(CONTROL_STATUS).store(STATUS_READY);
+            }
+            return 0;
+        }",
+    )
+    .unwrap();
+    let mut machine = ComputerMachine::new(64 * 1024).unwrap();
+    let cpu_id = machine.spawn_boot_cpu(image, 1_000_000).unwrap();
+
+    assert_eq!(
+        machine.run_boot_cpu_until_signal(cpu_id).unwrap(),
+        LowImageSignal::HaltI32(0)
+    );
+    assert_eq!(machine.control_status(), ComputerMachine::STATUS_HALTED);
+    assert_eq!(machine.exit_code(), 0);
+    assert_eq!(machine.panic_code(), 0);
+    assert_eq!(machine.debug_output_string(), "OK");
+}
