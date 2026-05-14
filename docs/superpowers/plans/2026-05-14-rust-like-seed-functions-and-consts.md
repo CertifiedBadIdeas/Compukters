@@ -29,7 +29,7 @@
 - Modify: `native/ckl-compiler/src/lib.rs`
 - Modify: `native/ckl-compiler/tests/compiler_seed.rs`
 
-- [ ] **Step 1: Write failing lexer/parser tests**
+- [x] **Step 1: Write failing lexer/parser tests**
 
 Add tests:
 
@@ -68,7 +68,7 @@ fn compile_accepts_const_before_main() {
 }
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run:
 
@@ -78,7 +78,7 @@ cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml const
 
 Expected: FAIL because `TokenKind::Const` and top-level const parsing do not exist.
 
-- [ ] **Step 3: Implement parser support**
+- [x] **Step 3: Implement parser support**
 
 Implement:
 
@@ -93,7 +93,7 @@ Implement:
 
 Keep function parameter type restricted to `i32`.
 
-- [ ] **Step 4: Add minimal const evaluation in codegen**
+- [x] **Step 4: Add minimal const evaluation in codegen**
 
 Implement source const map before function lowering:
 
@@ -104,7 +104,7 @@ Implement source const map before function lowering:
 
 Existing single-main behavior must keep passing.
 
-- [ ] **Step 5: Verify GREEN and commit**
+- [x] **Step 5: Verify GREEN and commit**
 
 Run:
 
@@ -122,7 +122,7 @@ git commit -m "Add rust language seed source consts"
 - Modify: `native/ckl-compiler/src/lib.rs`
 - Modify: `native/ckl-compiler/tests/compiler_seed.rs`
 
-- [ ] **Step 1: Write failing function tests**
+- [x] **Step 1: Write failing function tests**
 
 Add tests:
 
@@ -175,7 +175,7 @@ fn compile_lowers_i32_function_call_with_arguments() {
 }
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run:
 
@@ -185,7 +185,7 @@ cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml compile_lowe
 
 Expected: FAIL until function signatures/calls are implemented.
 
-- [ ] **Step 3: Implement function signature collection**
+- [x] **Step 3: Implement function signature collection**
 
 Implement function map:
 
@@ -196,7 +196,7 @@ Implement function map:
 - reject duplicate parameter names;
 - set `entry_function_index` to `main` index.
 
-- [ ] **Step 4: Implement `Expr::Call` parsing and lowering**
+- [x] **Step 4: Implement `Expr::Call` parsing and lowering**
 
 Parser:
 
@@ -218,7 +218,7 @@ Statement calls:
 - unit call emits `return_register: None`;
 - i32 call as statement allocates a temp return register and ignores it.
 
-- [ ] **Step 5: Verify GREEN and commit**
+- [x] **Step 5: Verify GREEN and commit**
 
 Run:
 
@@ -236,7 +236,7 @@ git commit -m "Add rust language seed functions"
 - Modify: `native/ckl-compiler/src/lib.rs`
 - Modify: `native/ckl-compiler/tests/compiler_seed.rs`
 
-- [ ] **Step 1: Add diagnostics tests**
+- [x] **Step 1: Add diagnostics tests**
 
 Add tests for:
 
@@ -284,7 +284,7 @@ fn compile_rejects_direct_recursion() {
 }
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run:
 
@@ -294,11 +294,11 @@ cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml compile_reje
 
 Expected: FAIL for any diagnostics not implemented yet.
 
-- [ ] **Step 3: Implement diagnostics**
+- [x] **Step 3: Implement diagnostics**
 
 Add checks in signature/const collection and call lowering. Track current function during body lowering and reject direct calls to the same function.
 
-- [ ] **Step 4: Verify GREEN and commit**
+- [x] **Step 4: Verify GREEN and commit**
 
 Run:
 
@@ -316,7 +316,7 @@ git commit -m "Validate rust language seed functions and consts"
 - Modify: `native/ckl-compiler/tests/compiler_seed.rs`
 - Modify: `docs/superpowers/specs/2026-05-14-rust-like-seed-functions-and-consts-design.md`
 
-- [ ] **Step 1: Add e2e test**
+- [x] **Step 1: Add e2e test**
 
 Add:
 
@@ -363,7 +363,7 @@ fn compiled_seed_functions_and_consts_run_on_computer_machine() {
 }
 ```
 
-- [ ] **Step 2: Verify e2e**
+- [x] **Step 2: Verify e2e**
 
 Run:
 
@@ -373,7 +373,7 @@ cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml compiled_see
 
 Expected: PASS.
 
-- [ ] **Step 3: Update implementation status**
+- [x] **Step 3: Update implementation status**
 
 Append to the design:
 

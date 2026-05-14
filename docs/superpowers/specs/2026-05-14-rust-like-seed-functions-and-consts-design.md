@@ -407,3 +407,16 @@ The test runs on `ComputerMachine` and expects:
 - Recursion is rejected.
 - No low VM ISA changes are required.
 - Existing seed tests keep passing.
+
+## Implementation Status
+
+Implemented in `native/ckl-compiler`:
+
+- top-level source `const` declarations for `i32`;
+- multi-function source programs;
+- `i32` parameters;
+- static unit and `i32` function calls;
+- forward function calls;
+- duplicate/shadowing/arity diagnostics;
+- direct recursion rejection;
+- end-to-end firmware test using helper functions and source constants.
