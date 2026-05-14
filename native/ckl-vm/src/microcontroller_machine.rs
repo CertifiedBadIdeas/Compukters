@@ -152,6 +152,14 @@ impl MemoryBus for MicrocontrollerMachine {
     fn store_i32(&mut self, address: u32, value: i32) -> Result<(), MemoryFault> {
         self.bus.store_i32(address, value)
     }
+
+    fn load_u8(&self, address: u32) -> Result<u8, MemoryFault> {
+        self.bus.load_u8(address)
+    }
+
+    fn store_u8(&mut self, address: u32, value: u8) -> Result<(), MemoryFault> {
+        self.bus.store_u8(address, value)
+    }
 }
 
 #[cfg(test)]

@@ -141,6 +141,14 @@ pub enum Instruction {
         addr: u16,
         src: u16,
     },
+    Load8 {
+        dst: u16,
+        addr: u16,
+    },
+    Store8 {
+        addr: u16,
+        src: u16,
+    },
     AddrAdd {
         dst: u16,
         base: u16,
@@ -300,6 +308,8 @@ fn read_instruction(reader: &mut Reader<'_>) -> Result<Instruction, ImageError> 
             lhs,
             rhs,
         }),
+        31 => read_move(reader, |dst, addr| Instruction::Load8 { dst, addr }),
+        32 => read_move(reader, |addr, src| Instruction::Store8 { addr, src }),
         other => Err(ImageError::UnknownInstructionTag(other)),
     }
 }

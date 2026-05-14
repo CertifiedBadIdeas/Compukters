@@ -733,6 +733,14 @@ fn runner_can_execute_against_custom_memory_bus() {
             self.stores.push((address, value));
             self.memory.store_i32(address, value)
         }
+
+        fn load_u8(&self, address: u32) -> Result<u8, MemoryFault> {
+            self.memory.load_u8(address)
+        }
+
+        fn store_u8(&mut self, address: u32, value: u8) -> Result<(), MemoryFault> {
+            self.memory.store_u8(address, value)
+        }
     }
 
     let image = image(
