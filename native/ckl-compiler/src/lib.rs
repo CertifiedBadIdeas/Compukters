@@ -1,3 +1,4 @@
+use ckl_vm::computer_abi;
 use ckl_vm::low_image::{Function, Image, Instruction};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
@@ -654,6 +655,32 @@ enum ExprValue {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BuiltinConstant {
+    Addr(u32),
+    I32(i32),
+}
+
+fn resolve_builtin_constant(name: &str) -> Option<BuiltinConstant> {
+    match name {
+        "RAM_BASE" => Some(BuiltinConstant::Addr(computer_abi::RAM_BASE)),
+        "CONTROL_BASE" => Some(BuiltinConstant::Addr(computer_abi::CONTROL_BASE)),
+        "CONTROL_STATUS" => Some(BuiltinConstant::Addr(computer_abi::CONTROL_STATUS)),
+        "CONTROL_PANIC_CODE" => Some(BuiltinConstant::Addr(computer_abi::CONTROL_PANIC_CODE)),
+        "CONTROL_EXIT_CODE" => Some(BuiltinConstant::Addr(computer_abi::CONTROL_EXIT_CODE)),
+        "CONTROL_SIZE" => Some(BuiltinConstant::I32(computer_abi::CONTROL_SIZE as i32)),
+        "DEBUG_BASE" => Some(BuiltinConstant::Addr(computer_abi::DEBUG_BASE)),
+        "DEBUG_WRITE" => Some(BuiltinConstant::Addr(computer_abi::DEBUG_WRITE)),
+        "DEBUG_SIZE" => Some(BuiltinConstant::I32(computer_abi::DEBUG_SIZE as i32)),
+        "STATUS_RESET" => Some(BuiltinConstant::I32(computer_abi::STATUS_RESET)),
+        "STATUS_BOOTING" => Some(BuiltinConstant::I32(computer_abi::STATUS_BOOTING)),
+        "STATUS_READY" => Some(BuiltinConstant::I32(computer_abi::STATUS_READY)),
+        "STATUS_HALTED" => Some(BuiltinConstant::I32(computer_abi::STATUS_HALTED)),
+        "STATUS_PANIC" => Some(BuiltinConstant::I32(computer_abi::STATUS_PANIC)),
+        _ => None,
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ValueType {
     I32,
 }
@@ -890,11 +917,25 @@ impl Codegen {
                 Ok(ExprValue::I32(self.emit_i32_const(value)?))
             }
             Expr::Local(name) => {
-                let local = self.locals.get(name).ok_or_else(|| CompileError {
-                    message: format!("use of undeclared local `{name}`"),
-                })?;
-                match local.ty {
-                    ValueType::I32 => Ok(ExprValue::I32(local.register)),
+                if let Some(local) = self.locals.get(name) {
+                    return match local.ty {
+                        ValueType::I32 => Ok(ExprValue::I32(local.register)),
+                    };
+                }
+
+                match resolve_builtin_constant(name) {
+                    Some(BuiltinConstant::Addr(value)) => {
+                        let dst = self.alloc_register()?;
+                        self.instructions
+                            .push(Instruction::AddrConst { dst, value });
+                        Ok(ExprValue::Addr(dst))
+                    }
+                    Some(BuiltinConstant::I32(value)) => {
+                        Ok(ExprValue::I32(self.emit_i32_const(value)?))
+                    }
+                    None => Err(CompileError {
+                        message: format!("use of undeclared local `{name}`"),
+                    }),
                 }
             }
             Expr::Mmio(address) => Ok(ExprValue::Addr(self.compile_addr_expr(address)?)),
