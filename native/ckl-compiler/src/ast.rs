@@ -21,18 +21,27 @@ pub(crate) struct FunctionDecl {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Parameter {
     pub(crate) name: String,
+    pub(crate) ty: TypeName,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ReturnType {
     Unit,
     I32,
+    Bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum TypeName {
+    I32,
+    Bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Statement {
     Let {
         name: String,
+        ty: TypeName,
         initializer: Expr,
     },
     Assign {
@@ -56,6 +65,7 @@ pub(crate) enum Statement {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Expr {
     Int(i64),
+    Bool(bool),
     Local(String),
     Call {
         name: String,

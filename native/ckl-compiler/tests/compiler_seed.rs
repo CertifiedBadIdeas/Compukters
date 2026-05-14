@@ -127,6 +127,34 @@ fn lexer_recognizes_const_keyword() {
 }
 
 #[test]
+fn lexer_recognizes_bool_keywords_and_literals() {
+    let tokens = lex("fn flag(value: bool) -> bool { return true; false }").unwrap();
+    let kinds: Vec<TokenKind> = tokens.into_iter().map(|token| token.kind).collect();
+
+    assert_eq!(
+        kinds,
+        vec![
+            TokenKind::Fn,
+            TokenKind::Ident("flag".to_string()),
+            TokenKind::LeftParen,
+            TokenKind::Ident("value".to_string()),
+            TokenKind::Colon,
+            TokenKind::Bool,
+            TokenKind::RightParen,
+            TokenKind::Arrow,
+            TokenKind::Bool,
+            TokenKind::LeftBrace,
+            TokenKind::Return,
+            TokenKind::True,
+            TokenKind::Semicolon,
+            TokenKind::False,
+            TokenKind::RightBrace,
+            TokenKind::Eof,
+        ]
+    );
+}
+
+#[test]
 fn lexer_recognizes_ptr_keyword() {
     let tokens = lex("ptr<i32>(RAM_BASE)").unwrap();
     let kinds: Vec<TokenKind> = tokens.into_iter().map(|token| token.kind).collect();
@@ -560,10 +588,77 @@ fn compile_lowers_i32_function_call_with_arguments() {
 }
 
 #[test]
+fn compile_lowers_bool_return_and_local() {
+    let image = compile("fn main() -> bool { let mut ok: bool = true; return ok; }").unwrap();
+    let function = &image.functions[0];
+
+    assert_eq!(
+        function.instructions,
+        vec![
+            Instruction::I32Const { dst: 1, value: 1 },
+            Instruction::I32Move { dst: 0, src: 1 },
+            Instruction::ReturnBool { src: 0 },
+        ]
+    );
+}
+
+#[test]
+fn compile_lowers_bool_function_call_with_argument() {
+    let image = compile(
+        "fn identity(value: bool) -> bool {
+            return value;
+        }
+
+        fn main() -> bool {
+            return identity(false);
+        }",
+    )
+    .unwrap();
+
+    assert_eq!(image.entry_function_index, 1);
+    assert_eq!(image.functions[0].parameters, vec![0]);
+    assert_eq!(
+        image.functions[1].instructions,
+        vec![
+            Instruction::I32Const { dst: 0, value: 0 },
+            Instruction::CallStatic {
+                return_register: Some(1),
+                function_index: 0,
+                arguments: vec![0],
+            },
+            Instruction::ReturnBool { src: 1 },
+        ]
+    );
+}
+
+#[test]
+fn compile_accepts_bool_conditions() {
+    let image = compile(
+        "fn main() -> i32 {
+            let mut i: i32 = 0;
+            while i < 3 {
+                if i == 1 {
+                    i = i + 2;
+                } else {
+                    i = i + 1;
+                }
+            }
+            return i;
+        }",
+    )
+    .unwrap();
+
+    assert!(image.functions[0]
+        .instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::JumpIfFalse { .. })));
+}
+
+#[test]
 fn compile_rejects_void_return_type() {
     let error = compile("fn main() -> void { }").unwrap_err();
 
-    assert!(error.message.contains("expected `i32`"), "{error:?}");
+    assert!(error.message.contains("expected type"), "{error:?}");
 }
 
 #[test]
@@ -622,6 +717,26 @@ fn compile_rejects_address_builtin_as_i32() {
 
     assert!(
         error.message.contains("expected `i32`, found address"),
+        "{error:?}"
+    );
+}
+
+#[test]
+fn compile_rejects_bool_return_from_i32_function() {
+    let error = compile("fn main() -> i32 { return true; }").unwrap_err();
+
+    assert!(
+        error.message.contains("expected `i32`, found bool"),
+        "{error:?}"
+    );
+}
+
+#[test]
+fn compile_rejects_i32_return_from_bool_function() {
+    let error = compile("fn main() -> bool { return 1; }").unwrap_err();
+
+    assert!(
+        error.message.contains("expected `bool`, found i32"),
         "{error:?}"
     );
 }
@@ -734,6 +849,18 @@ fn compile_rejects_wrong_function_argument_count() {
 }
 
 #[test]
+fn compile_rejects_wrong_function_argument_type() {
+    let error = compile("fn helper(flag: bool) { } fn main() { helper(1); }").unwrap_err();
+
+    assert!(
+        error
+            .message
+            .contains("function `helper` argument 0 expected `bool`, found i32"),
+        "{error:?}"
+    );
+}
+
+#[test]
 fn compile_rejects_unit_function_used_as_i32_value() {
     let error = compile("fn helper() { } fn main() -> i32 { return helper(); }").unwrap_err();
 
@@ -767,10 +894,40 @@ fn compile_rejects_assignment_to_undeclared_local() {
 
 #[test]
 fn compile_rejects_missing_return_after_if_without_else() {
-    let error = compile("fn main() -> i32 { if 1 { return 1; } }").unwrap_err();
+    let error = compile("fn main() -> i32 { if true { return 1; } }").unwrap_err();
 
     assert!(
         error.message.contains("missing return in `i32` function"),
+        "{error:?}"
+    );
+}
+
+#[test]
+fn compile_rejects_i32_condition() {
+    let error = compile("fn main() { if 1 { } }").unwrap_err();
+
+    assert!(
+        error.message.contains("expected `bool`, found i32"),
+        "{error:?}"
+    );
+}
+
+#[test]
+fn compile_rejects_i32_assignment_to_bool_local() {
+    let error = compile("fn main() { let mut flag: bool = true; flag = 1; }").unwrap_err();
+
+    assert!(
+        error.message.contains("expected `bool`, found i32"),
+        "{error:?}"
+    );
+}
+
+#[test]
+fn compile_rejects_bool_assignment_to_i32_local() {
+    let error = compile("fn main() { let mut value: i32 = 1; value = false; }").unwrap_err();
+
+    assert!(
+        error.message.contains("expected `i32`, found bool"),
         "{error:?}"
     );
 }
@@ -928,6 +1085,27 @@ fn compiled_seed_ptr_i32_ram_program_runs_on_computer_machine() {
     assert_eq!(machine.control_status(), ComputerMachine::STATUS_HALTED);
     assert_eq!(machine.exit_code(), 42);
     assert_eq!(machine.panic_code(), 0);
+}
+
+#[test]
+fn compiled_seed_bool_program_runs_on_computer_machine() {
+    let image = compile(
+        "fn less_than_three(value: i32) -> bool {
+            return value < 3;
+        }
+
+        fn main() -> bool {
+            return less_than_three(2);
+        }",
+    )
+    .unwrap();
+    let mut machine = ComputerMachine::new(64 * 1024).unwrap();
+    let cpu_id = machine.spawn_boot_cpu(image, 1_000_000).unwrap();
+
+    assert_eq!(
+        machine.run_boot_cpu_until_signal(cpu_id).unwrap(),
+        LowImageSignal::HaltBool(true)
+    );
 }
 
 #[test]

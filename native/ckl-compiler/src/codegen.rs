@@ -11,9 +11,22 @@ pub(crate) fn compile(program: Program) -> Result<Image, CompileError> {
 #[derive(Clone, Copy)]
 enum ExprValue {
     I32(u16),
+    Bool(u16),
     Addr(u16),
     Pointer { addr: u16, kind: PointerKind },
     Unit,
+}
+
+impl ExprValue {
+    fn type_name(self) -> &'static str {
+        match self {
+            ExprValue::I32(_) => "i32",
+            ExprValue::Bool(_) => "bool",
+            ExprValue::Addr(_) => "address",
+            ExprValue::Pointer { .. } => "pointer",
+            ExprValue::Unit => "unit",
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -148,6 +161,7 @@ fn evaluate_const_expr(
             })
         }
         Expr::Compare { .. }
+        | Expr::Bool(_)
         | Expr::Call { .. }
         | Expr::Mmio(_)
         | Expr::Ptr(_)
@@ -160,6 +174,25 @@ fn evaluate_const_expr(
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ValueType {
     I32,
+    Bool,
+}
+
+impl From<TypeName> for ValueType {
+    fn from(value: TypeName) -> Self {
+        match value {
+            TypeName::I32 => ValueType::I32,
+            TypeName::Bool => ValueType::Bool,
+        }
+    }
+}
+
+impl TypeName {
+    fn name(self) -> &'static str {
+        match self {
+            TypeName::I32 => "i32",
+            TypeName::Bool => "bool",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -169,11 +202,11 @@ struct Local {
     mutable: bool,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct FunctionSignature {
     index: usize,
     return_type: ReturnType,
-    parameter_count: usize,
+    parameter_types: Vec<TypeName>,
 }
 
 fn collect_function_signatures(
@@ -205,7 +238,11 @@ fn collect_function_signatures(
             FunctionSignature {
                 index,
                 return_type: function.return_type,
-                parameter_count: function.parameters.len(),
+                parameter_types: function
+                    .parameters
+                    .iter()
+                    .map(|parameter| parameter.ty)
+                    .collect(),
             },
         );
     }
@@ -235,7 +272,7 @@ impl Codegen {
         let function_signatures = collect_function_signatures(&program.functions, &source_consts)?;
         let main = function_signatures
             .get("main")
-            .copied()
+            .cloned()
             .ok_or_else(|| CompileError {
                 message: "missing `main` function".to_string(),
             })?;
@@ -295,7 +332,7 @@ impl Codegen {
                 parameter.name.clone(),
                 Local {
                     register,
-                    ty: ValueType::I32,
+                    ty: parameter.ty.into(),
                     mutable: false,
                 },
             );
@@ -308,6 +345,11 @@ impl Codegen {
                 ReturnType::I32 => {
                     return Err(CompileError {
                         message: "missing return in `i32` function".to_string(),
+                    });
+                }
+                ReturnType::Bool => {
+                    return Err(CompileError {
+                        message: "missing return in `bool` function".to_string(),
                     });
                 }
             }
@@ -339,7 +381,11 @@ impl Codegen {
 
     fn compile_statement(&mut self, statement: &Statement) -> Result<BlockOutcome, CompileError> {
         match statement {
-            Statement::Let { name, initializer } => {
+            Statement::Let {
+                name,
+                ty,
+                initializer,
+            } => {
                 if resolve_builtin_constant(name).is_some() {
                     return Err(CompileError {
                         message: format!("local `{name}` cannot shadow built-in ABI constant"),
@@ -351,13 +397,13 @@ impl Codegen {
                     });
                 }
                 let dst = self.alloc_register()?;
-                let src = self.compile_i32_expr(initializer)?;
+                let src = self.compile_expr_as(initializer, *ty)?;
                 self.instructions.push(Instruction::I32Move { dst, src });
                 self.locals.insert(
                     name.clone(),
                     Local {
                         register: dst,
-                        ty: ValueType::I32,
+                        ty: (*ty).into(),
                         mutable: true,
                     },
                 );
@@ -372,12 +418,11 @@ impl Codegen {
                         message: format!("assignment to immutable local `{name}`"),
                     });
                 }
-                if local.ty != ValueType::I32 {
-                    return Err(CompileError {
-                        message: format!("assignment to non-i32 local `{name}`"),
-                    });
-                }
-                let src = self.compile_i32_expr(value)?;
+                let expected = match local.ty {
+                    ValueType::I32 => TypeName::I32,
+                    ValueType::Bool => TypeName::Bool,
+                };
+                let src = self.compile_expr_as(value, expected)?;
                 self.instructions.push(Instruction::I32Move {
                     dst: local.register,
                     src,
@@ -389,7 +434,7 @@ impl Codegen {
                 then_branch,
                 else_branch,
             } => {
-                let cond = self.compile_i32_expr(condition)?;
+                let cond = self.compile_bool_expr(condition)?;
                 let false_jump = self.emit_jump_if_false_placeholder(cond);
                 let then_outcome = self.compile_statements(then_branch)?;
                 if let Some(else_branch) = else_branch {
@@ -414,7 +459,7 @@ impl Codegen {
             }
             Statement::While { condition, body } => {
                 let loop_start = self.instructions.len();
-                let cond = self.compile_i32_expr(condition)?;
+                let cond = self.compile_bool_expr(condition)?;
                 let exit_jump = self.emit_jump_if_false_placeholder(cond);
                 self.compile_statements(body)?;
                 self.instructions
@@ -431,17 +476,25 @@ impl Codegen {
                 ReturnType::I32 => Err(CompileError {
                     message: "`i32` function cannot use `return;`".to_string(),
                 }),
+                ReturnType::Bool => Err(CompileError {
+                    message: "`bool` function cannot use `return;`".to_string(),
+                }),
             },
-            Statement::Return(Some(expr)) => {
-                if self.return_type == ReturnType::Unit {
-                    return Err(CompileError {
-                        message: "unit function cannot return a value".to_string(),
-                    });
+            Statement::Return(Some(expr)) => match self.return_type {
+                ReturnType::Unit => Err(CompileError {
+                    message: "unit function cannot return a value".to_string(),
+                }),
+                ReturnType::I32 => {
+                    let src = self.compile_i32_expr(expr)?;
+                    self.instructions.push(Instruction::ReturnI32 { src });
+                    Ok(BlockOutcome::AlwaysReturns)
                 }
-                let src = self.compile_i32_expr(expr)?;
-                self.instructions.push(Instruction::ReturnI32 { src });
-                Ok(BlockOutcome::AlwaysReturns)
-            }
+                ReturnType::Bool => {
+                    let src = self.compile_bool_expr(expr)?;
+                    self.instructions.push(Instruction::ReturnBool { src });
+                    Ok(BlockOutcome::AlwaysReturns)
+                }
+            },
             Statement::Unsafe(statements) => {
                 self.unsafe_depth += 1;
                 let result = self.compile_statements(statements);
@@ -456,6 +509,14 @@ impl Codegen {
     }
 
     fn compile_i32_expr(&mut self, expr: &Expr) -> Result<u16, CompileError> {
+        self.compile_expr_as(expr, TypeName::I32)
+    }
+
+    fn compile_bool_expr(&mut self, expr: &Expr) -> Result<u16, CompileError> {
+        self.compile_expr_as(expr, TypeName::Bool)
+    }
+
+    fn compile_expr_as(&mut self, expr: &Expr, expected: TypeName) -> Result<u16, CompileError> {
         if let Expr::Call { name, .. } = expr {
             if self
                 .function_signatures
@@ -463,20 +524,19 @@ impl Codegen {
                 .is_some_and(|signature| signature.return_type == ReturnType::Unit)
             {
                 return Err(CompileError {
-                    message: format!("unit function `{name}` used as `i32` value"),
+                    message: format!("unit function `{name}` used as `{}` value", expected.name()),
                 });
             }
         }
         match self.compile_expr(expr)? {
-            ExprValue::I32(register) => Ok(register),
-            ExprValue::Addr(_) => Err(CompileError {
-                message: "expected `i32`, found address".to_string(),
-            }),
-            ExprValue::Pointer { .. } => Err(CompileError {
-                message: "expected `i32`, found pointer".to_string(),
-            }),
-            ExprValue::Unit => Err(CompileError {
-                message: "expected `i32`, found unit".to_string(),
+            ExprValue::I32(register) if expected == TypeName::I32 => Ok(register),
+            ExprValue::Bool(register) if expected == TypeName::Bool => Ok(register),
+            value => Err(CompileError {
+                message: format!(
+                    "expected `{}`, found {}",
+                    expected.name(),
+                    value.type_name()
+                ),
             }),
         }
     }
@@ -516,6 +576,9 @@ impl Codegen {
                 ExprValue::I32(_) => Err(CompileError {
                     message: format!("{} must be an address expression", context.address_name()),
                 }),
+                ExprValue::Bool(_) => Err(CompileError {
+                    message: format!("{} must be an address expression", context.address_name()),
+                }),
                 ExprValue::Pointer { .. } => Err(CompileError {
                     message: "address expression cannot be a pointer capability".to_string(),
                 }),
@@ -534,10 +597,12 @@ impl Codegen {
                 })?;
                 Ok(ExprValue::I32(self.emit_i32_const(value)?))
             }
+            Expr::Bool(value) => Ok(ExprValue::Bool(self.emit_bool_const(*value)?)),
             Expr::Local(name) => {
                 if let Some(local) = self.locals.get(name) {
                     return match local.ty {
                         ValueType::I32 => Ok(ExprValue::I32(local.register)),
+                        ValueType::Bool => Ok(ExprValue::Bool(local.register)),
                     };
                 }
 
@@ -609,26 +674,42 @@ impl Codegen {
         let signature =
             self.function_signatures
                 .get(name)
-                .copied()
+                .cloned()
                 .ok_or_else(|| CompileError {
                     message: format!("unknown function `{name}`"),
                 })?;
-        if args.len() != signature.parameter_count {
+        if args.len() != signature.parameter_types.len() {
             return Err(CompileError {
                 message: format!(
                     "function `{name}` expects {} arguments but got {}",
-                    signature.parameter_count,
+                    signature.parameter_types.len(),
                     args.len()
                 ),
             });
         }
-        let arguments = args
+        let mut arguments = Vec::with_capacity(args.len());
+        for (index, (arg, expected)) in args
             .iter()
-            .map(|arg| self.compile_i32_expr(arg))
-            .collect::<Result<Vec<_>, _>>()?;
+            .zip(signature.parameter_types.iter().copied())
+            .enumerate()
+        {
+            match self.compile_expr(arg)? {
+                ExprValue::I32(register) if expected == TypeName::I32 => arguments.push(register),
+                ExprValue::Bool(register) if expected == TypeName::Bool => arguments.push(register),
+                value => {
+                    return Err(CompileError {
+                        message: format!(
+                            "function `{name}` argument {index} expected `{}`, found {}",
+                            expected.name(),
+                            value.type_name()
+                        ),
+                    });
+                }
+            }
+        }
         let return_register = match signature.return_type {
             ReturnType::Unit => None,
-            ReturnType::I32 => Some(self.alloc_register()?),
+            ReturnType::I32 | ReturnType::Bool => Some(self.alloc_register()?),
         };
         self.instructions.push(Instruction::CallStatic {
             return_register,
@@ -636,7 +717,11 @@ impl Codegen {
             arguments,
         });
         match return_register {
-            Some(register) => Ok(ExprValue::I32(register)),
+            Some(register) => match signature.return_type {
+                ReturnType::I32 => Ok(ExprValue::I32(register)),
+                ReturnType::Bool => Ok(ExprValue::Bool(register)),
+                ReturnType::Unit => unreachable!("unit functions do not allocate return registers"),
+            },
             None => Ok(ExprValue::Unit),
         }
     }
@@ -707,6 +792,10 @@ impl Codegen {
         Ok(dst)
     }
 
+    fn emit_bool_const(&mut self, value: bool) -> Result<u16, CompileError> {
+        self.emit_i32_const(i32::from(value))
+    }
+
     fn emit_jump_placeholder(&mut self) -> usize {
         let index = self.instructions.len();
         self.instructions
@@ -751,12 +840,12 @@ impl Codegen {
             CompareOp::Lt => {
                 let dst = self.alloc_register()?;
                 self.instructions.push(Instruction::I32Lt { dst, lhs, rhs });
-                Ok(ExprValue::I32(dst))
+                Ok(ExprValue::Bool(dst))
             }
             CompareOp::Eq => {
                 let dst = self.alloc_register()?;
                 self.instructions.push(Instruction::I32Eq { dst, lhs, rhs });
-                Ok(ExprValue::I32(dst))
+                Ok(ExprValue::Bool(dst))
             }
             CompareOp::Ne => {
                 let eq = self.alloc_register()?;
@@ -769,7 +858,7 @@ impl Codegen {
                     lhs: eq,
                     rhs: zero,
                 });
-                Ok(ExprValue::I32(dst))
+                Ok(ExprValue::Bool(dst))
             }
             CompareOp::Gt => self.compile_compare(CompareOp::Lt, rhs, lhs),
             CompareOp::Le => self.compile_not_less_than(rhs, lhs),
@@ -788,6 +877,6 @@ impl Codegen {
             lhs: lt,
             rhs: zero,
         });
-        Ok(ExprValue::I32(dst))
+        Ok(ExprValue::Bool(dst))
     }
 }
