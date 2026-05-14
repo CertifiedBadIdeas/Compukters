@@ -11,9 +11,14 @@ pub(crate) fn compile(program: Program) -> Result<Image, CompileError> {
 #[derive(Clone, Copy)]
 enum ExprValue {
     I32(u16),
+    U32(u16),
     Bool(u16),
     Addr(u16),
-    Pointer { addr: u16, kind: PointerKind },
+    Pointer {
+        addr: u16,
+        kind: PointerKind,
+        element_type: TypeName,
+    },
     Unit,
 }
 
@@ -21,6 +26,7 @@ impl ExprValue {
     fn type_name(self) -> &'static str {
         match self {
             ExprValue::I32(_) => "i32",
+            ExprValue::U32(_) => "u32",
             ExprValue::Bool(_) => "bool",
             ExprValue::Addr(_) => "address",
             ExprValue::Pointer { .. } => "pointer",
@@ -43,10 +49,10 @@ impl PointerKind {
         }
     }
 
-    fn type_name(self) -> &'static str {
+    fn type_name(self, element_type: TypeName) -> String {
         match self {
-            PointerKind::Mmio => "mmio<i32>",
-            PointerKind::Ptr => "ptr<i32>",
+            PointerKind::Mmio => format!("mmio<{}>", element_type.name()),
+            PointerKind::Ptr => format!("ptr<{}>", element_type.name()),
         }
     }
 }
@@ -122,6 +128,9 @@ fn evaluate_const_expr(
         Expr::Int(value) => i32::try_from(*value).map_err(|_| CompileError {
             message: format!("integer literal `{value}` does not fit `i32`"),
         }),
+        Expr::IntU32(value) => Err(CompileError {
+            message: format!("u32 literal `{value}` cannot initialize an i32 const without a cast"),
+        }),
         Expr::Local(name) => {
             if let Some(value) = source_consts.get(name).copied() {
                 return Ok(value);
@@ -165,9 +174,10 @@ fn evaluate_const_expr(
         | Expr::Unary { .. }
         | Expr::Logical { .. }
         | Expr::Call { .. }
-        | Expr::Mmio(_)
-        | Expr::Ptr(_)
-        | Expr::MethodCall { .. } => Err(CompileError {
+        | Expr::Mmio { .. }
+        | Expr::Ptr { .. }
+        | Expr::MethodCall { .. }
+        | Expr::Cast { .. } => Err(CompileError {
             message: "const initializer is not compile-time evaluable".to_string(),
         }),
     }
@@ -176,6 +186,7 @@ fn evaluate_const_expr(
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ValueType {
     I32,
+    U32,
     Bool,
 }
 
@@ -183,6 +194,7 @@ impl From<TypeName> for ValueType {
     fn from(value: TypeName) -> Self {
         match value {
             TypeName::I32 => ValueType::I32,
+            TypeName::U32 => ValueType::U32,
             TypeName::Bool => ValueType::Bool,
         }
     }
@@ -192,6 +204,7 @@ impl TypeName {
     fn name(self) -> &'static str {
         match self {
             TypeName::I32 => "i32",
+            TypeName::U32 => "u32",
             TypeName::Bool => "bool",
         }
     }
@@ -366,6 +379,11 @@ impl Codegen {
                         message: "missing return in `i32` function".to_string(),
                     });
                 }
+                ReturnType::U32 => {
+                    return Err(CompileError {
+                        message: "missing return in `u32` function".to_string(),
+                    });
+                }
                 ReturnType::Bool => {
                     return Err(CompileError {
                         message: "missing return in `bool` function".to_string(),
@@ -444,6 +462,7 @@ impl Codegen {
                 }
                 let expected = match local.ty {
                     ValueType::I32 => TypeName::I32,
+                    ValueType::U32 => TypeName::U32,
                     ValueType::Bool => TypeName::Bool,
                 };
                 let src = self.compile_expr_as(value, expected)?;
@@ -538,6 +557,9 @@ impl Codegen {
                 ReturnType::I32 => Err(CompileError {
                     message: "`i32` function cannot use `return;`".to_string(),
                 }),
+                ReturnType::U32 => Err(CompileError {
+                    message: "`u32` function cannot use `return;`".to_string(),
+                }),
                 ReturnType::Bool => Err(CompileError {
                     message: "`bool` function cannot use `return;`".to_string(),
                 }),
@@ -548,6 +570,11 @@ impl Codegen {
                 }),
                 ReturnType::I32 => {
                     let src = self.compile_i32_expr(expr)?;
+                    self.instructions.push(Instruction::ReturnI32 { src });
+                    Ok(BlockOutcome::AlwaysReturns)
+                }
+                ReturnType::U32 => {
+                    let src = self.compile_u32_expr(expr)?;
                     self.instructions.push(Instruction::ReturnI32 { src });
                     Ok(BlockOutcome::AlwaysReturns)
                 }
@@ -574,6 +601,10 @@ impl Codegen {
         self.compile_expr_as(expr, TypeName::I32)
     }
 
+    fn compile_u32_expr(&mut self, expr: &Expr) -> Result<u16, CompileError> {
+        self.compile_expr_as(expr, TypeName::U32)
+    }
+
     fn compile_bool_expr(&mut self, expr: &Expr) -> Result<u16, CompileError> {
         self.compile_expr_as(expr, TypeName::Bool)
     }
@@ -590,8 +621,32 @@ impl Codegen {
                 });
             }
         }
+        if let Expr::Int(value) = expr {
+            return match expected {
+                TypeName::I32 => Ok(self.emit_i32_literal(*value)?),
+                TypeName::U32 => Ok(self.emit_u32_literal(*value)?),
+                TypeName::Bool => Err(CompileError {
+                    message: "expected `bool`, found i32".to_string(),
+                }),
+            };
+        }
+        if let Expr::IntU32(value) = expr {
+            return match expected {
+                TypeName::U32 => Ok(self.emit_u32_literal(*value)?),
+                TypeName::I32 => Err(CompileError {
+                    message: "expected `i32`, found u32".to_string(),
+                }),
+                TypeName::Bool => Err(CompileError {
+                    message: "expected `bool`, found u32".to_string(),
+                }),
+            };
+        }
+        if matches!(expr, Expr::Binary { .. }) && expected == TypeName::U32 {
+            return self.compile_u32_binary_expr(expr);
+        }
         match self.compile_expr(expr)? {
             ExprValue::I32(register) if expected == TypeName::I32 => Ok(register),
+            ExprValue::U32(register) if expected == TypeName::U32 => Ok(register),
             ExprValue::Bool(register) if expected == TypeName::Bool => Ok(register),
             value => Err(CompileError {
                 message: format!(
@@ -624,7 +679,7 @@ impl Codegen {
             Expr::Binary { .. } => Err(CompileError {
                 message: "address arithmetic supports only `+`".to_string(),
             }),
-            Expr::Int(value) => {
+            Expr::Int(value) | Expr::IntU32(value) => {
                 let value = u32::try_from(*value).map_err(|_| CompileError {
                     message: format!("address literal `{value}` does not fit `u32`"),
                 })?;
@@ -636,6 +691,9 @@ impl Codegen {
             _ => match self.compile_expr(expr)? {
                 ExprValue::Addr(register) => Ok(register),
                 ExprValue::I32(_) => Err(CompileError {
+                    message: format!("{} must be an address expression", context.address_name()),
+                }),
+                ExprValue::U32(_) => Err(CompileError {
                     message: format!("{} must be an address expression", context.address_name()),
                 }),
                 ExprValue::Bool(_) => Err(CompileError {
@@ -653,17 +711,14 @@ impl Codegen {
 
     fn compile_expr(&mut self, expr: &Expr) -> Result<ExprValue, CompileError> {
         match expr {
-            Expr::Int(value) => {
-                let value = i32::try_from(*value).map_err(|_| CompileError {
-                    message: format!("integer literal `{value}` does not fit `i32`"),
-                })?;
-                Ok(ExprValue::I32(self.emit_i32_const(value)?))
-            }
+            Expr::Int(value) => Ok(ExprValue::I32(self.emit_i32_literal(*value)?)),
+            Expr::IntU32(value) => Ok(ExprValue::U32(self.emit_u32_literal(*value)?)),
             Expr::Bool(value) => Ok(ExprValue::Bool(self.emit_bool_const(*value)?)),
             Expr::Local(name) => {
                 if let Some(local) = self.locals.get(name) {
                     return match local.ty {
                         ValueType::I32 => Ok(ExprValue::I32(local.register)),
+                        ValueType::U32 => Ok(ExprValue::U32(local.register)),
                         ValueType::Bool => Ok(ExprValue::Bool(local.register)),
                     };
                 }
@@ -688,19 +743,28 @@ impl Codegen {
                 }
             }
             Expr::Call { name, args } => self.compile_call(name, args),
-            Expr::Mmio(address) => Ok(ExprValue::Pointer {
-                addr: self.compile_addr_expr(address, AddressContext::Mmio)?,
-                kind: PointerKind::Mmio,
-            }),
-            Expr::Ptr(address) => Ok(ExprValue::Pointer {
-                addr: self.compile_addr_expr(address, AddressContext::Ptr)?,
-                kind: PointerKind::Ptr,
-            }),
+            Expr::Mmio { ty, address } => {
+                self.validate_memory_element_type(*ty)?;
+                Ok(ExprValue::Pointer {
+                    addr: self.compile_addr_expr(address, AddressContext::Mmio)?,
+                    kind: PointerKind::Mmio,
+                    element_type: *ty,
+                })
+            }
+            Expr::Ptr { ty, address } => {
+                self.validate_memory_element_type(*ty)?;
+                Ok(ExprValue::Pointer {
+                    addr: self.compile_addr_expr(address, AddressContext::Ptr)?,
+                    kind: PointerKind::Ptr,
+                    element_type: *ty,
+                })
+            }
             Expr::MethodCall {
                 receiver,
                 method,
                 args,
             } => self.compile_method_call(receiver, method, args),
+            Expr::Cast { expr, target } => self.compile_cast(expr, *target),
             Expr::Unary { op, expr } => match op {
                 UnaryOp::Not => self.compile_bool_not(expr),
             },
@@ -712,18 +776,7 @@ impl Codegen {
                 let lhs = self.compile_i32_expr(lhs)?;
                 let rhs = self.compile_i32_expr(rhs)?;
                 let dst = self.alloc_register()?;
-                let instruction = match op {
-                    BinaryOp::Add => Instruction::I32Add { dst, lhs, rhs },
-                    BinaryOp::Sub => Instruction::I32Sub { dst, lhs, rhs },
-                    BinaryOp::Mul => Instruction::I32Mul { dst, lhs, rhs },
-                    BinaryOp::Div => Instruction::I32Div { dst, lhs, rhs },
-                    BinaryOp::BitAnd => Instruction::I32BitAnd { dst, lhs, rhs },
-                    BinaryOp::BitOr => Instruction::I32BitOr { dst, lhs, rhs },
-                    BinaryOp::BitXor => Instruction::I32BitXor { dst, lhs, rhs },
-                    BinaryOp::Shl => Instruction::I32Shl { dst, lhs, rhs },
-                    BinaryOp::Shr => Instruction::I32Shr { dst, lhs, rhs },
-                };
-                self.instructions.push(instruction);
+                self.emit_binary_instruction(*op, dst, lhs, rhs);
                 Ok(ExprValue::I32(dst))
             }
             Expr::Compare { op, lhs, rhs } => {
@@ -731,6 +784,60 @@ impl Codegen {
                 let rhs = self.compile_i32_expr(rhs)?;
                 self.compile_compare(*op, lhs, rhs)
             }
+        }
+    }
+
+    fn compile_u32_binary_expr(&mut self, expr: &Expr) -> Result<u16, CompileError> {
+        let Expr::Binary { op, lhs, rhs } = expr else {
+            return Err(CompileError {
+                message: "internal compiler error: expected u32 binary expression".to_string(),
+            });
+        };
+        let lhs = self.compile_u32_expr(lhs)?;
+        let rhs = self.compile_u32_expr(rhs)?;
+        let dst = self.alloc_register()?;
+        self.emit_binary_instruction(*op, dst, lhs, rhs);
+        Ok(dst)
+    }
+
+    fn emit_binary_instruction(&mut self, op: BinaryOp, dst: u16, lhs: u16, rhs: u16) {
+        let instruction = match op {
+            BinaryOp::Add => Instruction::I32Add { dst, lhs, rhs },
+            BinaryOp::Sub => Instruction::I32Sub { dst, lhs, rhs },
+            BinaryOp::Mul => Instruction::I32Mul { dst, lhs, rhs },
+            BinaryOp::Div => Instruction::I32Div { dst, lhs, rhs },
+            BinaryOp::BitAnd => Instruction::I32BitAnd { dst, lhs, rhs },
+            BinaryOp::BitOr => Instruction::I32BitOr { dst, lhs, rhs },
+            BinaryOp::BitXor => Instruction::I32BitXor { dst, lhs, rhs },
+            BinaryOp::Shl => Instruction::I32Shl { dst, lhs, rhs },
+            BinaryOp::Shr => Instruction::I32Shr { dst, lhs, rhs },
+        };
+        self.instructions.push(instruction);
+    }
+
+    fn compile_cast(&mut self, expr: &Expr, target: TypeName) -> Result<ExprValue, CompileError> {
+        match target {
+            TypeName::I32 => match self.compile_expr(expr)? {
+                ExprValue::I32(register) | ExprValue::U32(register) => Ok(ExprValue::I32(register)),
+                ExprValue::Bool(_) => Err(CompileError {
+                    message: "cannot cast bool to `i32`".to_string(),
+                }),
+                value => Err(CompileError {
+                    message: format!("cannot cast {} to `i32`", value.type_name()),
+                }),
+            },
+            TypeName::U32 => match self.compile_expr(expr)? {
+                ExprValue::I32(register) | ExprValue::U32(register) => Ok(ExprValue::U32(register)),
+                ExprValue::Bool(_) => Err(CompileError {
+                    message: "cannot cast bool to `u32`".to_string(),
+                }),
+                value => Err(CompileError {
+                    message: format!("cannot cast {} to `u32`", value.type_name()),
+                }),
+            },
+            TypeName::Bool => Err(CompileError {
+                message: "casts to `bool` are not supported".to_string(),
+            }),
         }
     }
 
@@ -764,6 +871,7 @@ impl Codegen {
         {
             match self.compile_expr(arg)? {
                 ExprValue::I32(register) if expected == TypeName::I32 => arguments.push(register),
+                ExprValue::U32(register) if expected == TypeName::U32 => arguments.push(register),
                 ExprValue::Bool(register) if expected == TypeName::Bool => arguments.push(register),
                 value => {
                     return Err(CompileError {
@@ -778,7 +886,7 @@ impl Codegen {
         }
         let return_register = match signature.return_type {
             ReturnType::Unit => None,
-            ReturnType::I32 | ReturnType::Bool => Some(self.alloc_register()?),
+            ReturnType::I32 | ReturnType::U32 | ReturnType::Bool => Some(self.alloc_register()?),
         };
         self.instructions.push(Instruction::CallStatic {
             return_register,
@@ -788,6 +896,7 @@ impl Codegen {
         match return_register {
             Some(register) => match signature.return_type {
                 ReturnType::I32 => Ok(ExprValue::I32(register)),
+                ReturnType::U32 => Ok(ExprValue::U32(register)),
                 ReturnType::Bool => Ok(ExprValue::Bool(register)),
                 ReturnType::Unit => unreachable!("unit functions do not allocate return registers"),
             },
@@ -803,15 +912,20 @@ impl Codegen {
     ) -> Result<ExprValue, CompileError> {
         if self.unsafe_depth == 0 {
             let access_name = match receiver {
-                Expr::Mmio(_) => PointerKind::Mmio.access_name(),
-                Expr::Ptr(_) => PointerKind::Ptr.access_name(),
+                Expr::Mmio { .. } => PointerKind::Mmio.access_name(),
+                Expr::Ptr { .. } => PointerKind::Ptr.access_name(),
                 _ => "raw memory",
             };
             return Err(CompileError {
                 message: format!("{access_name} access requires `unsafe`"),
             });
         }
-        let ExprValue::Pointer { addr, kind } = self.compile_expr(receiver)? else {
+        let ExprValue::Pointer {
+            addr,
+            kind,
+            element_type,
+        } = self.compile_expr(receiver)?
+        else {
             return Err(CompileError {
                 message: "memory method receiver must be a pointer capability".to_string(),
             });
@@ -821,22 +935,32 @@ impl Codegen {
             "store" => {
                 if args.len() != 1 {
                     return Err(CompileError {
-                        message: format!("{}.store expects one argument", kind.type_name()),
+                        message: format!(
+                            "{}.store expects one argument",
+                            kind.type_name(element_type)
+                        ),
                     });
                 }
-                let src = self.compile_i32_expr(&args[0])?;
+                let src = self.compile_expr_as(&args[0], element_type)?;
                 self.instructions.push(Instruction::Store32 { addr, src });
                 Ok(ExprValue::Unit)
             }
             "load" => {
                 if !args.is_empty() {
                     return Err(CompileError {
-                        message: format!("{}.load expects no arguments", kind.type_name()),
+                        message: format!(
+                            "{}.load expects no arguments",
+                            kind.type_name(element_type)
+                        ),
                     });
                 }
                 let dst = self.alloc_register()?;
                 self.instructions.push(Instruction::Load32 { dst, addr });
-                Ok(ExprValue::I32(dst))
+                match element_type {
+                    TypeName::I32 => Ok(ExprValue::I32(dst)),
+                    TypeName::U32 => Ok(ExprValue::U32(dst)),
+                    TypeName::Bool => unreachable!("bool memory element type is rejected earlier"),
+                }
             }
             _ => Err(CompileError {
                 message: format!("unknown MMIO method `{method}`"),
@@ -883,6 +1007,15 @@ impl Codegen {
         Ok(ExprValue::Bool(dst))
     }
 
+    fn validate_memory_element_type(&self, ty: TypeName) -> Result<(), CompileError> {
+        match ty {
+            TypeName::I32 | TypeName::U32 => Ok(()),
+            TypeName::Bool => Err(CompileError {
+                message: "memory pointer element type must be `i32` or `u32`".to_string(),
+            }),
+        }
+    }
+
     fn alloc_register(&mut self) -> Result<u16, CompileError> {
         let register = self.next_register;
         self.next_register = self
@@ -892,6 +1025,20 @@ impl Codegen {
                 message: "too many registers in function".to_string(),
             })?;
         Ok(register)
+    }
+
+    fn emit_i32_literal(&mut self, value: i64) -> Result<u16, CompileError> {
+        let value = i32::try_from(value).map_err(|_| CompileError {
+            message: format!("integer literal `{value}` does not fit `i32`"),
+        })?;
+        self.emit_i32_const(value)
+    }
+
+    fn emit_u32_literal(&mut self, value: i64) -> Result<u16, CompileError> {
+        let value = u32::try_from(value).map_err(|_| CompileError {
+            message: format!("integer literal `{value}` does not fit `u32`"),
+        })?;
+        self.emit_i32_const(value as i32)
     }
 
     fn emit_i32_const(&mut self, value: i32) -> Result<u16, CompileError> {

@@ -65,6 +65,7 @@ impl Parser {
         let return_type = if self.consume(TokenKind::Arrow) {
             match self.parse_type()? {
                 TypeName::I32 => ReturnType::I32,
+                TypeName::U32 => ReturnType::U32,
                 TypeName::Bool => ReturnType::Bool,
             }
         } else {
@@ -157,7 +158,19 @@ impl Parser {
     }
 
     fn parse_expr(&mut self) -> Result<Expr, CompileError> {
-        self.parse_logical_or()
+        self.parse_cast()
+    }
+
+    fn parse_cast(&mut self) -> Result<Expr, CompileError> {
+        let mut expr = self.parse_logical_or()?;
+        while self.consume(TokenKind::As) {
+            let target = self.parse_type()?;
+            expr = Expr::Cast {
+                expr: Box::new(expr),
+                target,
+            };
+        }
+        Ok(expr)
     }
 
     fn parse_logical_or(&mut self) -> Result<Expr, CompileError> {
@@ -351,6 +364,9 @@ impl Parser {
         if let Some(value) = self.take_int() {
             return Ok(Expr::Int(value));
         }
+        if let Some(value) = self.take_int_u32() {
+            return Ok(Expr::IntU32(value));
+        }
         if self.consume(TokenKind::True) {
             return Ok(Expr::Bool(true));
         }
@@ -370,21 +386,27 @@ impl Parser {
         }
         if self.consume(TokenKind::Mmio) {
             self.expect(TokenKind::Less)?;
-            self.expect(TokenKind::I32)?;
+            let ty = self.parse_type()?;
             self.expect(TokenKind::Greater)?;
             self.expect(TokenKind::LeftParen)?;
             let address = self.parse_expr()?;
             self.expect(TokenKind::RightParen)?;
-            return Ok(Expr::Mmio(Box::new(address)));
+            return Ok(Expr::Mmio {
+                ty,
+                address: Box::new(address),
+            });
         }
         if self.consume(TokenKind::Ptr) {
             self.expect(TokenKind::Less)?;
-            self.expect(TokenKind::I32)?;
+            let ty = self.parse_type()?;
             self.expect(TokenKind::Greater)?;
             self.expect(TokenKind::LeftParen)?;
             let address = self.parse_expr()?;
             self.expect(TokenKind::RightParen)?;
-            return Ok(Expr::Ptr(Box::new(address)));
+            return Ok(Expr::Ptr {
+                ty,
+                address: Box::new(address),
+            });
         }
         if self.consume(TokenKind::LeftParen) {
             let expr = self.parse_expr()?;
@@ -397,6 +419,9 @@ impl Parser {
     fn parse_type(&mut self) -> Result<TypeName, CompileError> {
         if self.consume(TokenKind::I32) {
             return Ok(TypeName::I32);
+        }
+        if self.consume(TokenKind::U32) {
+            return Ok(TypeName::U32);
         }
         if self.consume(TokenKind::Bool) {
             return Ok(TypeName::Bool);
@@ -447,6 +472,19 @@ impl Parser {
         match self.tokens.get(self.offset) {
             Some(Token {
                 kind: TokenKind::Int(value),
+                ..
+            }) => {
+                self.offset += 1;
+                Some(*value)
+            }
+            _ => None,
+        }
+    }
+
+    fn take_int_u32(&mut self) -> Option<i64> {
+        match self.tokens.get(self.offset) {
+            Some(Token {
+                kind: TokenKind::IntU32(value),
                 ..
             }) => {
                 self.offset += 1;

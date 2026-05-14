@@ -179,6 +179,41 @@ fn lexer_recognizes_ptr_keyword() {
 }
 
 #[test]
+fn lexer_recognizes_u32_literals_casts_and_typed_memory_tokens() {
+    let tokens =
+        lex("let mut mask: u32 = 0xffff0000u32; ptr<u32>(RAM_BASE).load() as i32").unwrap();
+    let kinds: Vec<TokenKind> = tokens.into_iter().map(|token| token.kind).collect();
+
+    assert_eq!(
+        kinds,
+        vec![
+            TokenKind::Let,
+            TokenKind::Mut,
+            TokenKind::Ident("mask".to_string()),
+            TokenKind::Colon,
+            TokenKind::U32,
+            TokenKind::Equal,
+            TokenKind::IntU32(0xffff0000),
+            TokenKind::Semicolon,
+            TokenKind::Ptr,
+            TokenKind::Less,
+            TokenKind::U32,
+            TokenKind::Greater,
+            TokenKind::LeftParen,
+            TokenKind::Ident("RAM_BASE".to_string()),
+            TokenKind::RightParen,
+            TokenKind::Dot,
+            TokenKind::Ident("load".to_string()),
+            TokenKind::LeftParen,
+            TokenKind::RightParen,
+            TokenKind::As,
+            TokenKind::I32,
+            TokenKind::Eof,
+        ]
+    );
+}
+
+#[test]
 fn lexer_recognizes_comments_and_bitwise_tokens() {
     let tokens = lex("let mut mask: i32 = 0xff // byte mask\n & 0xf0 | 1 ^ 2 << 3 >> 1;").unwrap();
     let kinds: Vec<TokenKind> = tokens.into_iter().map(|token| token.kind).collect();
@@ -699,6 +734,69 @@ fn compile_lowers_bool_function_call_with_argument() {
 }
 
 #[test]
+fn compile_lowers_u32_literals_locals_and_casts() {
+    let image = compile(
+        "fn main() -> i32 {
+            let mut mask: u32 = 0xffff0000u32;
+            let mut value: i32 = mask as i32;
+            return value;
+        }",
+    )
+    .unwrap();
+    let instructions = &image.functions[0].instructions;
+
+    assert!(instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::I32Const { value: -65536, .. })));
+    assert!(matches!(
+        instructions.last(),
+        Some(Instruction::ReturnI32 { .. })
+    ));
+}
+
+#[test]
+fn compile_lowers_u32_function_call_with_argument() {
+    let image = compile(
+        "fn low_byte(value: u32) -> u32 {
+            return value & 0xffu32;
+        }
+
+        fn main() -> i32 {
+            return low_byte(0x12ffu32) as i32;
+        }",
+    )
+    .unwrap();
+
+    assert_eq!(image.entry_function_index, 1);
+    assert_eq!(image.functions[0].parameters, vec![0]);
+    assert!(image.functions[0]
+        .instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::I32BitAnd { .. })));
+}
+
+#[test]
+fn compile_lowers_unsafe_ptr_u32_store_and_load() {
+    let image = compile(
+        "fn main() -> i32 {
+            unsafe {
+                ptr<u32>(RAM_BASE + 4).store(0xffff0000u32);
+                return ptr<u32>(RAM_BASE + 4).load() as i32;
+            }
+        }",
+    )
+    .unwrap();
+    let instructions = &image.functions[0].instructions;
+
+    assert!(instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::Store32 { .. })));
+    assert!(instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::Load32 { .. })));
+}
+
+#[test]
 fn compile_accepts_bool_conditions() {
     let image = compile(
         "fn main() -> i32 {
@@ -1052,6 +1150,37 @@ fn compile_rejects_bool_assignment_to_i32_local() {
 }
 
 #[test]
+fn compile_rejects_i32_assignment_to_u32_local_without_cast() {
+    let error =
+        compile("fn main() { let mut signed: i32 = 1; let mut value: u32 = signed; }").unwrap_err();
+
+    assert!(
+        error.message.contains("expected `u32`, found i32"),
+        "{error:?}"
+    );
+}
+
+#[test]
+fn compile_rejects_u32_assignment_to_i32_local_without_cast() {
+    let error = compile("fn main() { let mut value: i32 = 1u32; }").unwrap_err();
+
+    assert!(
+        error.message.contains("expected `i32`, found u32"),
+        "{error:?}"
+    );
+}
+
+#[test]
+fn compile_rejects_bool_cast_to_u32() {
+    let error = compile("fn main() -> i32 { return (true as u32) as i32; }").unwrap_err();
+
+    assert!(
+        error.message.contains("cannot cast bool to `u32`"),
+        "{error:?}"
+    );
+}
+
+#[test]
 fn compile_rejects_unreachable_statement_after_return() {
     let error = compile("fn main() -> i32 { return 1; let mut i: i32 = 2; }").unwrap_err();
 
@@ -1268,6 +1397,50 @@ fn compiled_seed_ptr_i32_ram_program_runs_on_computer_machine() {
     assert_eq!(machine.control_status(), ComputerMachine::STATUS_HALTED);
     assert_eq!(machine.exit_code(), 42);
     assert_eq!(machine.panic_code(), 0);
+}
+
+#[test]
+fn compiled_seed_ptr_u32_ram_program_runs_on_computer_machine() {
+    let image = compile(
+        "fn main() -> i32 {
+            unsafe {
+                ptr<u32>(RAM_BASE + 4).store(0xffff0000u32);
+                return ptr<u32>(RAM_BASE + 4).load() as i32;
+            }
+        }",
+    )
+    .unwrap();
+    let mut machine = ComputerMachine::new(64 * 1024).unwrap();
+    let cpu_id = machine.spawn_boot_cpu(image, 1_000_000).unwrap();
+
+    assert_eq!(
+        machine.run_boot_cpu_until_signal(cpu_id).unwrap(),
+        LowImageSignal::HaltI32(-65536)
+    );
+    assert_eq!(machine.exit_code(), -65536);
+    assert_eq!(machine.panic_code(), 0);
+}
+
+#[test]
+fn compiled_seed_mmio_u32_debug_write_runs_on_computer_machine() {
+    let image = compile(
+        "fn main() -> i32 {
+            unsafe {
+                mmio<u32>(DEBUG_WRITE).store(79u32);
+                mmio<u32>(DEBUG_WRITE).store(75u32);
+            }
+            return 0;
+        }",
+    )
+    .unwrap();
+    let mut machine = ComputerMachine::new(64 * 1024).unwrap();
+    let cpu_id = machine.spawn_boot_cpu(image, 1_000_000).unwrap();
+
+    assert_eq!(
+        machine.run_boot_cpu_until_signal(cpu_id).unwrap(),
+        LowImageSignal::HaltI32(0)
+    );
+    assert_eq!(machine.debug_output_string(), "OK");
 }
 
 #[test]
