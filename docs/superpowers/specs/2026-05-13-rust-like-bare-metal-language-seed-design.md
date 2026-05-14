@@ -240,11 +240,12 @@ Current support:
 
 - public `compile(source: &str) -> Result<Image, CompileError>` API;
 - lexer for `fn`, `return`, `unsafe`, `mmio`, `i32`, punctuation, decimal integers, and hex integers;
+- `u32`, suffixed `123u32` / `0xffffu32` literals, and minimal `as i32` / `as u32` casts;
 - one `fn main()` or `fn main() -> i32`;
 - integer arithmetic expressions with `+`, `-`, `*`, `/` precedence;
 - `unsafe { ... }` blocks;
-- `mmio<i32>(addr).store(value)` lowered to `Store32`;
-- `mmio<i32>(addr).load()` lowered to `Load32`;
+- `mmio<i32>(addr)` / `mmio<u32>(addr)` store/load lowered to `Store32` / `Load32`;
+- `ptr<i32>(addr)` / `ptr<u32>(addr)` store/load lowered to shared RAM `Store32` / `Load32`;
 - unit functions with implicit `ReturnUnit`;
 - i32 functions with explicit `ReturnI32`;
 - diagnostics for missing i32 return, `return;` in i32 functions, value return from unit functions, `void`, and MMIO outside `unsafe`;

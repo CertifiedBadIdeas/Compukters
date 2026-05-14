@@ -28,12 +28,14 @@ pub(crate) struct Parameter {
 pub(crate) enum ReturnType {
     Unit,
     I32,
+    U32,
     Bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum TypeName {
     I32,
+    U32,
     Bool,
 }
 
@@ -67,18 +69,29 @@ pub(crate) enum Statement {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Expr {
     Int(i64),
+    IntU32(i64),
     Bool(bool),
     Local(String),
     Call {
         name: String,
         args: Vec<Expr>,
     },
-    Mmio(Box<Expr>),
-    Ptr(Box<Expr>),
+    Mmio {
+        ty: TypeName,
+        address: Box<Expr>,
+    },
+    Ptr {
+        ty: TypeName,
+        address: Box<Expr>,
+    },
     MethodCall {
         receiver: Box<Expr>,
         method: String,
         args: Vec<Expr>,
+    },
+    Cast {
+        expr: Box<Expr>,
+        target: TypeName,
     },
     Unary {
         op: UnaryOp,

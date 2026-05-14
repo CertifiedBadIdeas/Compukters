@@ -22,11 +22,14 @@ pub enum TokenKind {
     Break,
     Continue,
     I32,
+    U32,
     Bool,
     True,
     False,
+    As,
     Ident(String),
     Int(i64),
+    IntU32(i64),
     Arrow,
     LeftParen,
     RightParen,
@@ -102,9 +105,11 @@ pub fn lex(source: &str) -> Result<Vec<Token>, CompileError> {
                 "break" => TokenKind::Break,
                 "continue" => TokenKind::Continue,
                 "i32" => TokenKind::I32,
+                "u32" => TokenKind::U32,
                 "bool" => TokenKind::Bool,
                 "true" => TokenKind::True,
                 "false" => TokenKind::False,
+                "as" => TokenKind::As,
                 _ => TokenKind::Ident(text.to_string()),
             };
             tokens.push(Token {
@@ -146,8 +151,21 @@ pub fn lex(source: &str) -> Result<Vec<Token>, CompileError> {
                         message: format!("integer literal is too large at byte {start}"),
                     })?
             };
+            let suffix_start = offset;
+            let has_u32_suffix = source[suffix_start..].starts_with("u32")
+                && source[suffix_start + 3..]
+                    .as_bytes()
+                    .first()
+                    .is_none_or(|byte| !byte.is_ascii_alphanumeric() && *byte != b'_');
+            if has_u32_suffix {
+                offset += 3;
+            }
             tokens.push(Token {
-                kind: TokenKind::Int(value),
+                kind: if has_u32_suffix {
+                    TokenKind::IntU32(value)
+                } else {
+                    TokenKind::Int(value)
+                },
                 offset: start,
             });
             continue;
@@ -279,11 +297,14 @@ impl TokenKind {
             TokenKind::Break => "break",
             TokenKind::Continue => "continue",
             TokenKind::I32 => "i32",
+            TokenKind::U32 => "u32",
             TokenKind::Bool => "bool",
             TokenKind::True => "true",
             TokenKind::False => "false",
+            TokenKind::As => "as",
             TokenKind::Ident(_) => "identifier",
             TokenKind::Int(_) => "integer",
+            TokenKind::IntU32(_) => "u32 integer",
             TokenKind::Arrow => "->",
             TokenKind::LeftParen => "(",
             TokenKind::RightParen => ")",
