@@ -228,6 +228,14 @@ enum ExecutableOperation {
         addr: usize,
         src: usize,
     },
+    Load8 {
+        dst: usize,
+        addr: usize,
+    },
+    Store8 {
+        addr: usize,
+        src: usize,
+    },
     AddrAdd {
         dst: usize,
         base: usize,
@@ -395,11 +403,11 @@ impl LowProgram {
                 validate_register(function, instruction_index, "reads", *lhs)?;
                 validate_register(function, instruction_index, "reads", *rhs)?;
             }
-            Instruction::Load32 { dst, addr } => {
+            Instruction::Load32 { dst, addr } | Instruction::Load8 { dst, addr } => {
                 validate_register(function, instruction_index, "writes", *dst)?;
                 validate_register(function, instruction_index, "reads", *addr)?;
             }
-            Instruction::Store32 { addr, src } => {
+            Instruction::Store32 { addr, src } | Instruction::Store8 { addr, src } => {
                 validate_register(function, instruction_index, "reads", *addr)?;
                 validate_register(function, instruction_index, "reads", *src)?;
             }
@@ -756,7 +764,19 @@ impl ExecutableOperation {
                     addr: usize::from(*addr),
                 }
             }
+            Instruction::Load8 { dst, addr } => {
+                let dst = usize::from(*dst);
+                known_i32[dst] = None;
+                Self::Load8 {
+                    dst,
+                    addr: usize::from(*addr),
+                }
+            }
             Instruction::Store32 { addr, src } => Self::Store32 {
+                addr: usize::from(*addr),
+                src: usize::from(*src),
+            },
+            Instruction::Store8 { addr, src } => Self::Store8 {
                 addr: usize::from(*addr),
                 src: usize::from(*src),
             },
@@ -787,7 +807,8 @@ impl ExecutableOperation {
             | ExecutableOperation::AddrConst { .. } => false,
             ExecutableOperation::I32Move { src, .. }
             | ExecutableOperation::AddrMove { src, .. }
-            | ExecutableOperation::Load32 { addr: src, .. } => *src == register,
+            | ExecutableOperation::Load32 { addr: src, .. }
+            | ExecutableOperation::Load8 { addr: src, .. } => *src == register,
             ExecutableOperation::I32Add { lhs, rhs, .. }
             | ExecutableOperation::I32Sub { lhs, rhs, .. }
             | ExecutableOperation::I32Mul { lhs, rhs, .. }
@@ -803,6 +824,11 @@ impl ExecutableOperation {
             | ExecutableOperation::U32Lt { lhs, rhs, .. }
             | ExecutableOperation::I32Eq { lhs, rhs, .. }
             | ExecutableOperation::Store32 {
+                addr: lhs,
+                src: rhs,
+                ..
+            }
+            | ExecutableOperation::Store8 {
                 addr: lhs,
                 src: rhs,
                 ..
@@ -1235,6 +1261,17 @@ impl LowState {
                     .store_i32(address, self.read_i32(*src))
                     .map_err(|error| error.to_string())?;
             }
+            ExecutableOperation::Load8 { dst, addr } => {
+                let address = self.read_addr(*addr);
+                let value = memory.load_u8(address).map_err(|error| error.to_string())?;
+                self.write_i32(*dst, i32::from(value));
+            }
+            ExecutableOperation::Store8 { addr, src } => {
+                let address = self.read_addr(*addr);
+                memory
+                    .store_u8(address, self.read_i32(*src).to_le_bytes()[0])
+                    .map_err(|error| error.to_string())?;
+            }
             ExecutableOperation::AddrAdd { dst, base, offset } => {
                 let base = self.read_addr(*base);
                 let offset = self.read_i32(*offset);
@@ -1628,6 +1665,7 @@ fn instruction_read_registers(instruction: &Instruction) -> Vec<usize> {
         Instruction::I32Move { src, .. }
         | Instruction::AddrMove { src, .. }
         | Instruction::Load32 { addr: src, .. }
+        | Instruction::Load8 { addr: src, .. }
         | Instruction::ReturnI32 { src }
         | Instruction::ReturnI64 { src }
         | Instruction::ReturnAddr { src }
@@ -1647,6 +1685,11 @@ fn instruction_read_registers(instruction: &Instruction) -> Vec<usize> {
         | Instruction::U32Lt { lhs, rhs, .. }
         | Instruction::I32Eq { lhs, rhs, .. }
         | Instruction::Store32 {
+            addr: lhs,
+            src: rhs,
+            ..
+        }
+        | Instruction::Store8 {
             addr: lhs,
             src: rhs,
             ..
@@ -1685,12 +1728,14 @@ fn instruction_write_register(instruction: &Instruction) -> Option<(usize, Optio
         | Instruction::U32Lt { dst, .. }
         | Instruction::I32Eq { dst, .. }
         | Instruction::Load32 { dst, .. }
+        | Instruction::Load8 { dst, .. }
         | Instruction::AddrAdd { dst, .. } => Some((usize::from(*dst), None)),
         Instruction::CallStatic {
             return_register: Some(return_register),
             ..
         } => Some((usize::from(*return_register), None)),
         Instruction::Store32 { .. }
+        | Instruction::Store8 { .. }
         | Instruction::Jump { .. }
         | Instruction::JumpIfFalse { .. }
         | Instruction::CallStatic {
@@ -1796,6 +1841,40 @@ mod tests {
         assert_eq!(function.blocks[3].original_start_ip, 7);
         assert_eq!(function.instruction_to_block[3].block_index, 1);
         assert_eq!(function.instruction_to_block[7].block_index, 3);
+    }
+
+    #[test]
+    fn low_image_runner_executes_byte_memory_operations() {
+        let image = Image {
+            language_version: "ckl-low-1".to_string(),
+            memory_size: 64,
+            rodata: Vec::new(),
+            data: Vec::new(),
+            bss_size: 0,
+            entry_function_index: 0,
+            functions: vec![Function {
+                name: "main".to_string(),
+                register_count: 4,
+                parameters: Vec::new(),
+                instructions: vec![
+                    Instruction::AddrConst { dst: 0, value: 8 },
+                    Instruction::I32Const {
+                        dst: 1,
+                        value: 0x12,
+                    },
+                    Instruction::Store8 { addr: 0, src: 1 },
+                    Instruction::Load8 { dst: 2, addr: 0 },
+                    Instruction::ReturnI32 { src: 2 },
+                ],
+            }],
+        };
+
+        let mut vm = LowImageVm::create(image, 1_000_000).unwrap();
+
+        assert_eq!(
+            vm.run_until_signal().unwrap(),
+            LowImageSignal::HaltI32(0x12)
+        );
     }
 
     #[test]

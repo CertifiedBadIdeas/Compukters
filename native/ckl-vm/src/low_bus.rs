@@ -9,6 +9,14 @@ pub trait MmioDevice: Any {
     fn load_i32(&self, offset: u32) -> Result<i32, MemoryFault>;
 
     fn store_i32(&mut self, offset: u32, value: i32) -> Result<(), MemoryFault>;
+
+    fn load_u8(&self, offset: u32) -> Result<u8, MemoryFault> {
+        Ok(self.load_i32(offset)?.to_le_bytes()[0])
+    }
+
+    fn store_u8(&mut self, offset: u32, value: u8) -> Result<(), MemoryFault> {
+        self.store_i32(offset, i32::from(value))
+    }
 }
 
 struct MmioRegion {
@@ -31,6 +39,15 @@ impl MmioRegion {
         let end = self.end().ok()?;
         let access_end = address.checked_add(4)?;
         if address >= self.base && access_end <= end {
+            Some(address - self.base)
+        } else {
+            None
+        }
+    }
+
+    fn offset_for_u8(&self, address: u32) -> Option<u32> {
+        let end = self.end().ok()?;
+        if address >= self.base && address < end {
             Some(address - self.base)
         } else {
             None
@@ -105,6 +122,14 @@ impl MachineBus {
     pub fn store_i32(&mut self, address: u32, value: i32) -> Result<(), MemoryFault> {
         <Self as MemoryBus>::store_i32(self, address, value)
     }
+
+    pub fn load_u8(&self, address: u32) -> Result<u8, MemoryFault> {
+        <Self as MemoryBus>::load_u8(self, address)
+    }
+
+    pub fn store_u8(&mut self, address: u32, value: u8) -> Result<(), MemoryFault> {
+        <Self as MemoryBus>::store_u8(self, address, value)
+    }
 }
 
 impl MemoryBus for MachineBus {
@@ -128,6 +153,24 @@ impl MemoryBus for MachineBus {
             }
         }
         self.memory.store_i32(address, value)
+    }
+
+    fn load_u8(&self, address: u32) -> Result<u8, MemoryFault> {
+        for region in &self.regions {
+            if let Some(offset) = region.offset_for_u8(address) {
+                return region.device.load_u8(offset);
+            }
+        }
+        self.memory.load_u8(address)
+    }
+
+    fn store_u8(&mut self, address: u32, value: u8) -> Result<(), MemoryFault> {
+        for region in &mut self.regions {
+            if let Some(offset) = region.offset_for_u8(address) {
+                return region.device.store_u8(offset, value);
+            }
+        }
+        self.memory.store_u8(address, value)
     }
 }
 
