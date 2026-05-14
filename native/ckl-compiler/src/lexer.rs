@@ -36,6 +36,7 @@ pub enum TokenKind {
     GreaterEqual,
     Equal,
     EqualEqual,
+    Bang,
     BangEqual,
     Colon,
     Dot,
@@ -46,7 +47,9 @@ pub enum TokenKind {
     Star,
     Slash,
     Ampersand,
+    AndAnd,
     Pipe,
+    OrOr,
     Caret,
     Shl,
     Shr,
@@ -202,6 +205,7 @@ pub fn lex(source: &str) -> Result<Vec<Token>, CompileError> {
                 });
                 continue;
             }
+            b'!' => TokenKind::Bang,
             b':' => TokenKind::Colon,
             b'.' => TokenKind::Dot,
             b';' => TokenKind::Semicolon,
@@ -209,7 +213,23 @@ pub fn lex(source: &str) -> Result<Vec<Token>, CompileError> {
             b'+' => TokenKind::Plus,
             b'*' => TokenKind::Star,
             b'/' => TokenKind::Slash,
+            b'&' if offset + 1 < bytes.len() && bytes[offset + 1] == b'&' => {
+                offset += 2;
+                tokens.push(Token {
+                    kind: TokenKind::AndAnd,
+                    offset: offset - 2,
+                });
+                continue;
+            }
             b'&' => TokenKind::Ampersand,
+            b'|' if offset + 1 < bytes.len() && bytes[offset + 1] == b'|' => {
+                offset += 2;
+                tokens.push(Token {
+                    kind: TokenKind::OrOr,
+                    offset: offset - 2,
+                });
+                continue;
+            }
             b'|' => TokenKind::Pipe,
             b'^' => TokenKind::Caret,
             b'-' if offset + 1 < bytes.len() && bytes[offset + 1] == b'>' => {
@@ -269,6 +289,7 @@ impl TokenKind {
             TokenKind::GreaterEqual => ">=",
             TokenKind::Equal => "=",
             TokenKind::EqualEqual => "==",
+            TokenKind::Bang => "!",
             TokenKind::BangEqual => "!=",
             TokenKind::Colon => ":",
             TokenKind::Dot => ".",
@@ -279,7 +300,9 @@ impl TokenKind {
             TokenKind::Star => "*",
             TokenKind::Slash => "/",
             TokenKind::Ampersand => "&",
+            TokenKind::AndAnd => "&&",
             TokenKind::Pipe => "|",
+            TokenKind::OrOr => "||",
             TokenKind::Caret => "^",
             TokenKind::Shl => "<<",
             TokenKind::Shr => ">>",

@@ -128,7 +128,7 @@ fn lexer_recognizes_const_keyword() {
 
 #[test]
 fn lexer_recognizes_bool_keywords_and_literals() {
-    let tokens = lex("fn flag(value: bool) -> bool { return true; false }").unwrap();
+    let tokens = lex("fn flag(value: bool) -> bool { return !true && false || value; }").unwrap();
     let kinds: Vec<TokenKind> = tokens.into_iter().map(|token| token.kind).collect();
 
     assert_eq!(
@@ -145,9 +145,13 @@ fn lexer_recognizes_bool_keywords_and_literals() {
             TokenKind::Bool,
             TokenKind::LeftBrace,
             TokenKind::Return,
+            TokenKind::Bang,
             TokenKind::True,
-            TokenKind::Semicolon,
+            TokenKind::AndAnd,
             TokenKind::False,
+            TokenKind::OrOr,
+            TokenKind::Ident("value".to_string()),
+            TokenKind::Semicolon,
             TokenKind::RightBrace,
             TokenKind::Eof,
         ]
@@ -655,6 +659,28 @@ fn compile_accepts_bool_conditions() {
 }
 
 #[test]
+fn compile_lowers_boolean_operators_with_jumps() {
+    let image = compile(
+        "fn main() -> bool {
+            return !(false || true && false);
+        }",
+    )
+    .unwrap();
+    let instructions = &image.functions[0].instructions;
+
+    assert!(instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::JumpIfFalse { .. })));
+    assert!(instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::Jump { .. })));
+    assert!(matches!(
+        instructions.last(),
+        Some(Instruction::ReturnBool { .. })
+    ));
+}
+
+#[test]
 fn compile_rejects_void_return_type() {
     let error = compile("fn main() -> void { }").unwrap_err();
 
@@ -913,6 +939,36 @@ fn compile_rejects_i32_condition() {
 }
 
 #[test]
+fn compile_rejects_i32_boolean_not_operand() {
+    let error = compile("fn main() -> bool { return !1; }").unwrap_err();
+
+    assert!(
+        error.message.contains("expected `bool`, found i32"),
+        "{error:?}"
+    );
+}
+
+#[test]
+fn compile_rejects_i32_logical_and_operand() {
+    let error = compile("fn main() -> bool { return true && 1; }").unwrap_err();
+
+    assert!(
+        error.message.contains("expected `bool`, found i32"),
+        "{error:?}"
+    );
+}
+
+#[test]
+fn compile_rejects_i32_logical_or_operand() {
+    let error = compile("fn main() -> bool { return 1 || false; }").unwrap_err();
+
+    assert!(
+        error.message.contains("expected `bool`, found i32"),
+        "{error:?}"
+    );
+}
+
+#[test]
 fn compile_rejects_i32_assignment_to_bool_local() {
     let error = compile("fn main() { let mut flag: bool = true; flag = 1; }").unwrap_err();
 
@@ -1106,6 +1162,74 @@ fn compiled_seed_bool_program_runs_on_computer_machine() {
         machine.run_boot_cpu_until_signal(cpu_id).unwrap(),
         LowImageSignal::HaltBool(true)
     );
+}
+
+#[test]
+fn compiled_seed_boolean_operators_run_on_computer_machine() {
+    let image = compile(
+        "fn main() -> bool {
+            return !(false || true && false);
+        }",
+    )
+    .unwrap();
+    let mut machine = ComputerMachine::new(64 * 1024).unwrap();
+    let cpu_id = machine.spawn_boot_cpu(image, 1_000_000).unwrap();
+
+    assert_eq!(
+        machine.run_boot_cpu_until_signal(cpu_id).unwrap(),
+        LowImageSignal::HaltBool(true)
+    );
+    assert_eq!(machine.exit_code(), 0);
+}
+
+#[test]
+fn compiled_seed_logical_and_short_circuits_rhs() {
+    let image = compile(
+        "fn write_and_return_true() -> bool {
+            unsafe {
+                mmio<i32>(DEBUG_WRITE).store(88);
+            }
+            return true;
+        }
+
+        fn main() -> bool {
+            return false && write_and_return_true();
+        }",
+    )
+    .unwrap();
+    let mut machine = ComputerMachine::new(64 * 1024).unwrap();
+    let cpu_id = machine.spawn_boot_cpu(image, 1_000_000).unwrap();
+
+    assert_eq!(
+        machine.run_boot_cpu_until_signal(cpu_id).unwrap(),
+        LowImageSignal::HaltBool(false)
+    );
+    assert_eq!(machine.debug_output_bytes(), &[]);
+}
+
+#[test]
+fn compiled_seed_logical_or_short_circuits_rhs() {
+    let image = compile(
+        "fn write_and_return_false() -> bool {
+            unsafe {
+                mmio<i32>(DEBUG_WRITE).store(88);
+            }
+            return false;
+        }
+
+        fn main() -> bool {
+            return true || write_and_return_false();
+        }",
+    )
+    .unwrap();
+    let mut machine = ComputerMachine::new(64 * 1024).unwrap();
+    let cpu_id = machine.spawn_boot_cpu(image, 1_000_000).unwrap();
+
+    assert_eq!(
+        machine.run_boot_cpu_until_signal(cpu_id).unwrap(),
+        LowImageSignal::HaltBool(true)
+    );
+    assert_eq!(machine.debug_output_bytes(), &[]);
 }
 
 #[test]

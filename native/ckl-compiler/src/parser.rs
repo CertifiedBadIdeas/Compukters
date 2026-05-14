@@ -149,7 +149,33 @@ impl Parser {
     }
 
     fn parse_expr(&mut self) -> Result<Expr, CompileError> {
-        self.parse_comparison()
+        self.parse_logical_or()
+    }
+
+    fn parse_logical_or(&mut self) -> Result<Expr, CompileError> {
+        let mut expr = self.parse_logical_and()?;
+        while self.consume(TokenKind::OrOr) {
+            let rhs = self.parse_logical_and()?;
+            expr = Expr::Logical {
+                op: LogicalOp::Or,
+                lhs: Box::new(expr),
+                rhs: Box::new(rhs),
+            };
+        }
+        Ok(expr)
+    }
+
+    fn parse_logical_and(&mut self) -> Result<Expr, CompileError> {
+        let mut expr = self.parse_comparison()?;
+        while self.consume(TokenKind::AndAnd) {
+            let rhs = self.parse_comparison()?;
+            expr = Expr::Logical {
+                op: LogicalOp::And,
+                lhs: Box::new(expr),
+                rhs: Box::new(rhs),
+            };
+        }
+        Ok(expr)
     }
 
     fn parse_comparison(&mut self) -> Result<Expr, CompileError> {
@@ -260,7 +286,7 @@ impl Parser {
     }
 
     fn parse_mul_div(&mut self) -> Result<Expr, CompileError> {
-        let mut expr = self.parse_postfix()?;
+        let mut expr = self.parse_unary()?;
         loop {
             let op = if self.consume(TokenKind::Star) {
                 BinaryOp::Mul
@@ -269,13 +295,24 @@ impl Parser {
             } else {
                 return Ok(expr);
             };
-            let rhs = self.parse_postfix()?;
+            let rhs = self.parse_unary()?;
             expr = Expr::Binary {
                 op,
                 lhs: Box::new(expr),
                 rhs: Box::new(rhs),
             };
         }
+    }
+
+    fn parse_unary(&mut self) -> Result<Expr, CompileError> {
+        if self.consume(TokenKind::Bang) {
+            let expr = self.parse_unary()?;
+            return Ok(Expr::Unary {
+                op: UnaryOp::Not,
+                expr: Box::new(expr),
+            });
+        }
+        self.parse_postfix()
     }
 
     fn parse_postfix(&mut self) -> Result<Expr, CompileError> {

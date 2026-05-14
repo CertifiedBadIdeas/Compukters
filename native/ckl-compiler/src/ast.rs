@@ -78,6 +78,15 @@ pub(crate) enum Expr {
         method: String,
         args: Vec<Expr>,
     },
+    Unary {
+        op: UnaryOp,
+        expr: Box<Expr>,
+    },
+    Logical {
+        op: LogicalOp,
+        lhs: Box<Expr>,
+        rhs: Box<Expr>,
+    },
     Binary {
         op: BinaryOp,
         lhs: Box<Expr>,
@@ -88,6 +97,17 @@ pub(crate) enum Expr {
         lhs: Box<Expr>,
         rhs: Box<Expr>,
     },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum UnaryOp {
+    Not,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum LogicalOp {
+    And,
+    Or,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
