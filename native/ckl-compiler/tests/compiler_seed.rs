@@ -887,6 +887,16 @@ fn compile_lowers_u32_literals_locals_and_casts() {
 }
 
 #[test]
+fn compile_lowers_u32_less_than_to_unsigned_instruction() {
+    let image = compile("fn main() -> bool { return 0xffff0000u32 < 1u32; }").unwrap();
+    let instructions = &image.functions[0].instructions;
+
+    assert!(instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::U32Lt { .. })));
+}
+
+#[test]
 fn compile_lowers_u32_function_call_with_argument() {
     let image = compile(
         "fn low_byte(value: u32) -> u32 {
@@ -1325,6 +1335,25 @@ fn compile_rejects_u32_assignment_to_i32_local_without_cast() {
 }
 
 #[test]
+fn compile_rejects_mixed_signed_unsigned_comparison() {
+    let error = compile(
+        "fn main() -> bool {
+            let mut signed: i32 = 1;
+            let mut unsigned: u32 = 1u32;
+            return signed < unsigned;
+        }",
+    )
+    .unwrap_err();
+
+    assert!(
+        error
+            .message
+            .contains("comparison operands must have the same type"),
+        "{error:?}"
+    );
+}
+
+#[test]
 fn compile_rejects_bool_cast_to_u32() {
     let error = compile("fn main() -> i32 { return (true as u32) as i32; }").unwrap_err();
 
@@ -1639,6 +1668,26 @@ fn compiled_seed_u32_compound_assignment_runs_on_computer_machine() {
     assert_eq!(
         machine.run_boot_cpu_until_signal(cpu_id).unwrap(),
         LowImageSignal::HaltI32(0xff)
+    );
+}
+
+#[test]
+fn compiled_seed_u32_ordering_comparisons_run_on_computer_machine() {
+    let image = compile(
+        "fn main() -> bool {
+            return 0xffff0000u32 > 1u32
+                && 1u32 < 0xffff0000u32
+                && 0xffff0000u32 >= 0xffff0000u32
+                && 1u32 <= 1u32;
+        }",
+    )
+    .unwrap();
+    let mut machine = ComputerMachine::new(64 * 1024).unwrap();
+    let cpu_id = machine.spawn_boot_cpu(image, 1_000_000).unwrap();
+
+    assert_eq!(
+        machine.run_boot_cpu_until_signal(cpu_id).unwrap(),
+        LowImageSignal::HaltBool(true)
     );
 }
 

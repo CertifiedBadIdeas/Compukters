@@ -244,6 +244,7 @@ Current support:
 - one `fn main()` or `fn main() -> i32`;
 - integer arithmetic expressions with `+`, `-`, `*`, `/` precedence;
 - unary `-` for `i32`;
+- signed `i32` and unsigned `u32` ordering/equality comparisons;
 - compound assignment for mutable `i32` / `u32` locals: `+=`, `-=`, `*=`, `/=`, `&=`, `|=`, `^=`, `<<=`, `>>=`;
 - `unsafe { ... }` blocks;
 - `mmio<i32>(addr)` / `mmio<u32>(addr)` store/load lowered to `Store32` / `Load32`;

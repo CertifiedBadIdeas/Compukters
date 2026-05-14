@@ -65,6 +65,54 @@ fn runner_executes_i32_equality_comparison() {
 }
 
 #[test]
+fn runner_executes_u32_less_than_comparison() {
+    let high_not_less_than_low = image(
+        vec![
+            Instruction::I32Const {
+                dst: 0,
+                value: -65536,
+            },
+            Instruction::I32Const { dst: 1, value: 1 },
+            Instruction::U32Lt {
+                dst: 2,
+                lhs: 0,
+                rhs: 1,
+            },
+            Instruction::ReturnBool { src: 2 },
+        ],
+        3,
+    );
+    let low_less_than_high = image(
+        vec![
+            Instruction::I32Const { dst: 0, value: 1 },
+            Instruction::I32Const {
+                dst: 1,
+                value: -65536,
+            },
+            Instruction::U32Lt {
+                dst: 2,
+                lhs: 0,
+                rhs: 1,
+            },
+            Instruction::ReturnBool { src: 2 },
+        ],
+        3,
+    );
+
+    let mut high_vm = LowImageVm::create(high_not_less_than_low, 128).unwrap();
+    let mut low_vm = LowImageVm::create(low_less_than_high, 128).unwrap();
+
+    assert_eq!(
+        high_vm.run_until_signal().unwrap(),
+        LowImageSignal::HaltBool(false),
+    );
+    assert_eq!(
+        low_vm.run_until_signal().unwrap(),
+        LowImageSignal::HaltBool(true),
+    );
+}
+
+#[test]
 fn runner_executes_i32_bitwise_and_or() {
     let image = image(
         vec![
