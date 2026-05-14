@@ -1,0 +1,27 @@
+fn write(ch: i32) {
+    unsafe {
+        mmio<i32>(DEBUG_WRITE).store(ch);
+    }
+}
+
+fn main() -> i32 {
+    unsafe {
+        mmio<i32>(CONTROL_STATUS).store(STATUS_BOOTING);
+    }
+
+    write(82);
+    write(85);
+    write(88);
+    write(32);
+    write(82);
+    write(69);
+    write(65);
+    write(68);
+    write(89);
+
+    unsafe {
+        mmio<i32>(CONTROL_STATUS).store(STATUS_READY);
+    }
+
+    return 0;
+}
