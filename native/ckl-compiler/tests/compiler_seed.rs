@@ -541,6 +541,82 @@ fn compile_rejects_duplicate_local_declaration() {
 }
 
 #[test]
+fn compile_rejects_duplicate_function_declaration() {
+    let error = compile("fn helper() { } fn helper() { } fn main() { }").unwrap_err();
+
+    assert!(
+        error.message.contains("duplicate function `helper`"),
+        "{error:?}"
+    );
+}
+
+#[test]
+fn compile_rejects_function_name_shadowing_source_const() {
+    let error = compile("const helper: i32 = 1; fn helper() { } fn main() { }").unwrap_err();
+
+    assert!(
+        error
+            .message
+            .contains("function `helper` cannot shadow const"),
+        "{error:?}"
+    );
+}
+
+#[test]
+fn compile_rejects_duplicate_function_parameter() {
+    let error = compile("fn helper(a: i32, a: i32) { } fn main() { }").unwrap_err();
+
+    assert!(
+        error.message.contains("duplicate parameter `a`"),
+        "{error:?}"
+    );
+}
+
+#[test]
+fn compile_rejects_unknown_function_call() {
+    let error = compile("fn main() { missing(); }").unwrap_err();
+
+    assert!(
+        error.message.contains("unknown function `missing`"),
+        "{error:?}"
+    );
+}
+
+#[test]
+fn compile_rejects_wrong_function_argument_count() {
+    let error = compile("fn helper(a: i32) { } fn main() { helper(1, 2); }").unwrap_err();
+
+    assert!(
+        error
+            .message
+            .contains("function `helper` expects 1 arguments but got 2"),
+        "{error:?}"
+    );
+}
+
+#[test]
+fn compile_rejects_unit_function_used_as_i32_value() {
+    let error = compile("fn helper() { } fn main() -> i32 { return helper(); }").unwrap_err();
+
+    assert!(
+        error
+            .message
+            .contains("unit function `helper` used as `i32` value"),
+        "{error:?}"
+    );
+}
+
+#[test]
+fn compile_rejects_direct_recursion() {
+    let error = compile("fn main() { main(); }").unwrap_err();
+
+    assert!(
+        error.message.contains("recursive function call `main`"),
+        "{error:?}"
+    );
+}
+
+#[test]
 fn compile_rejects_assignment_to_undeclared_local() {
     let error = compile("fn main() { i = 1; }").unwrap_err();
 
