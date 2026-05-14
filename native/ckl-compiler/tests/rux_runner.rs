@@ -49,7 +49,7 @@ fn terminal_ui_renders_debug_output_inside_machine_frame() {
 
 #[test]
 fn example_terminal_firmware_runs() {
-    let source = include_str!("../examples/firmware/terminal.rux");
+    let source = include_str!("../examples/firmware/terminal.rx");
     let report = run_source(source).unwrap();
 
     assert_eq!(report.exit_code, 0);

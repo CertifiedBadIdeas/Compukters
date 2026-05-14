@@ -41,7 +41,7 @@ fn main() -> i32 {
 }
 ```
 
-The source file extension is `.rux`.
+The source file extension is `.rx`.
 
 ## Non-Goals
 
