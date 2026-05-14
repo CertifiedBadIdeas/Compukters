@@ -29,6 +29,7 @@ pub(crate) enum ReturnType {
     Unit,
     I32,
     U32,
+    U8,
     Bool,
 }
 
@@ -36,6 +37,7 @@ pub(crate) enum ReturnType {
 pub(crate) enum TypeName {
     I32,
     U32,
+    U8,
     Bool,
 }
 
@@ -53,6 +55,11 @@ pub(crate) enum Statement {
     AssignOp {
         name: String,
         op: BinaryOp,
+        value: Expr,
+    },
+    IndexAssign {
+        target: Expr,
+        index: Expr,
         value: Expr,
     },
     If {
@@ -75,6 +82,8 @@ pub(crate) enum Statement {
 pub(crate) enum Expr {
     Int(i64),
     IntU32(i64),
+    IntU8(i64),
+    ByteString(Vec<u8>),
     Bool(bool),
     Local(String),
     Call {
@@ -93,6 +102,10 @@ pub(crate) enum Expr {
         receiver: Box<Expr>,
         method: String,
         args: Vec<Expr>,
+    },
+    Index {
+        target: Box<Expr>,
+        index: Box<Expr>,
     },
     Cast {
         expr: Box<Expr>,

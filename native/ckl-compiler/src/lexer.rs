@@ -23,6 +23,7 @@ pub enum TokenKind {
     Continue,
     I32,
     U32,
+    U8,
     Bool,
     True,
     False,
@@ -30,11 +31,15 @@ pub enum TokenKind {
     Ident(String),
     Int(i64),
     IntU32(i64),
+    IntU8(i64),
+    ByteString(Vec<u8>),
     Arrow,
     LeftParen,
     RightParen,
     LeftBrace,
     RightBrace,
+    LeftBracket,
+    RightBracket,
     Less,
     LessEqual,
     Greater,
@@ -90,6 +95,73 @@ pub fn lex(source: &str) -> Result<Vec<Token>, CompileError> {
             continue;
         }
 
+        if byte == b'b' && offset + 1 < bytes.len() && bytes[offset + 1] == b'"' {
+            let start = offset;
+            offset += 2;
+            let mut value = Vec::new();
+            while offset < bytes.len() {
+                match bytes[offset] {
+                    b'"' => {
+                        offset += 1;
+                        tokens.push(Token {
+                            kind: TokenKind::ByteString(value),
+                            offset: start,
+                        });
+                        break;
+                    }
+                    b'\\' => {
+                        offset += 1;
+                        if offset >= bytes.len() {
+                            return Err(CompileError {
+                                message: format!("unterminated byte string escape at byte {start}"),
+                            });
+                        }
+                        let escaped = match bytes[offset] {
+                            b'n' => b'\n',
+                            b'r' => b'\r',
+                            b't' => b'\t',
+                            b'0' => 0,
+                            b'\\' => b'\\',
+                            b'"' => b'"',
+                            other => {
+                                return Err(CompileError {
+                                    message: format!(
+                                        "unsupported byte string escape `\\{}` at byte {}",
+                                        other as char, offset
+                                    ),
+                                });
+                            }
+                        };
+                        value.push(escaped);
+                        offset += 1;
+                    }
+                    byte if byte.is_ascii() => {
+                        value.push(byte);
+                        offset += 1;
+                    }
+                    _ => {
+                        return Err(CompileError {
+                            message: format!(
+                                "byte string contains non-ascii byte at byte {offset}"
+                            ),
+                        });
+                    }
+                }
+            }
+            if matches!(
+                tokens.last(),
+                Some(Token {
+                    kind: TokenKind::ByteString(_),
+                    offset: token_offset
+                }) if *token_offset == start
+            ) {
+                continue;
+            }
+            return Err(CompileError {
+                message: format!("unterminated byte string at byte {start}"),
+            });
+        }
+
         if byte.is_ascii_alphabetic() || byte == b'_' {
             let start = offset;
             offset += 1;
@@ -115,6 +187,7 @@ pub fn lex(source: &str) -> Result<Vec<Token>, CompileError> {
                 "continue" => TokenKind::Continue,
                 "i32" => TokenKind::I32,
                 "u32" => TokenKind::U32,
+                "u8" => TokenKind::U8,
                 "bool" => TokenKind::Bool,
                 "true" => TokenKind::True,
                 "false" => TokenKind::False,
@@ -161,17 +234,18 @@ pub fn lex(source: &str) -> Result<Vec<Token>, CompileError> {
                     })?
             };
             let suffix_start = offset;
-            let has_u32_suffix = source[suffix_start..].starts_with("u32")
-                && source[suffix_start + 3..]
-                    .as_bytes()
-                    .first()
-                    .is_none_or(|byte| !byte.is_ascii_alphanumeric() && *byte != b'_');
+            let has_u32_suffix = has_integer_suffix(source, suffix_start, "u32");
+            let has_u8_suffix = has_integer_suffix(source, suffix_start, "u8");
             if has_u32_suffix {
                 offset += 3;
+            } else if has_u8_suffix {
+                offset += 2;
             }
             tokens.push(Token {
                 kind: if has_u32_suffix {
                     TokenKind::IntU32(value)
+                } else if has_u8_suffix {
+                    TokenKind::IntU8(value)
                 } else {
                     TokenKind::Int(value)
                 },
@@ -185,6 +259,8 @@ pub fn lex(source: &str) -> Result<Vec<Token>, CompileError> {
             b')' => TokenKind::RightParen,
             b'{' => TokenKind::LeftBrace,
             b'}' => TokenKind::RightBrace,
+            b'[' => TokenKind::LeftBracket,
+            b']' => TokenKind::RightBracket,
             b'<' if offset + 1 < bytes.len() && bytes[offset + 1] == b'=' => {
                 offset += 2;
                 tokens.push(Token {
@@ -367,6 +443,14 @@ pub fn lex(source: &str) -> Result<Vec<Token>, CompileError> {
     Ok(tokens)
 }
 
+fn has_integer_suffix(source: &str, offset: usize, suffix: &str) -> bool {
+    source[offset..].starts_with(suffix)
+        && source[offset + suffix.len()..]
+            .as_bytes()
+            .first()
+            .is_none_or(|byte| !byte.is_ascii_alphanumeric() && *byte != b'_')
+}
+
 impl TokenKind {
     pub(crate) fn name(&self) -> &'static str {
         match self {
@@ -385,6 +469,7 @@ impl TokenKind {
             TokenKind::Continue => "continue",
             TokenKind::I32 => "i32",
             TokenKind::U32 => "u32",
+            TokenKind::U8 => "u8",
             TokenKind::Bool => "bool",
             TokenKind::True => "true",
             TokenKind::False => "false",
@@ -392,11 +477,15 @@ impl TokenKind {
             TokenKind::Ident(_) => "identifier",
             TokenKind::Int(_) => "integer",
             TokenKind::IntU32(_) => "u32 integer",
+            TokenKind::IntU8(_) => "u8 integer",
+            TokenKind::ByteString(_) => "byte string",
             TokenKind::Arrow => "->",
             TokenKind::LeftParen => "(",
             TokenKind::RightParen => ")",
             TokenKind::LeftBrace => "{",
             TokenKind::RightBrace => "}",
+            TokenKind::LeftBracket => "[",
+            TokenKind::RightBracket => "]",
             TokenKind::Less => "<",
             TokenKind::LessEqual => "<=",
             TokenKind::Greater => ">",

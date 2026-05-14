@@ -49,7 +49,7 @@ The source file extension is `.rx`.
 - Do not keep Kotlin compiler compatibility.
 - Do not add Kotlin fallback compilation.
 - Do not add imports, modules, packages, or IDE support.
-- Do not add strings, heap allocation, records, structs, classes, generics, or lambdas.
+- Do not add heap strings, records, structs, classes, generics, or lambdas.
 - Do not add variables in the first slice unless required by tests.
 - Do not add guest OS processes, filesystem, display, shell, or daemon integration.
 - Do not add a CLI in the first slice.
@@ -241,6 +241,7 @@ Current support:
 - public `compile(source: &str) -> Result<Image, CompileError>` API;
 - lexer for `fn`, `return`, `unsafe`, `mmio`, `i32`, punctuation, decimal integers, and hex integers;
 - `u32`, suffixed `123u32` / `0xffffu32` literals, and minimal `as i32` / `as u32` casts;
+- `u8`, suffixed `123u8` / `0xffu8` literals, minimal casts, and byte string literals such as `b"OK\n"`;
 - one `fn main()` or `fn main() -> i32`;
 - integer arithmetic expressions with `+`, `-`, `*`, `/` precedence;
 - unary `-` for `i32`;
@@ -248,7 +249,10 @@ Current support:
 - compound assignment for mutable `i32` / `u32` locals: `+=`, `-=`, `*=`, `/=`, `&=`, `|=`, `^=`, `<<=`, `>>=`;
 - `unsafe { ... }` blocks;
 - `mmio<i32>(addr)` / `mmio<u32>(addr)` store/load lowered to `Store32` / `Load32`;
+- `mmio<u8>(addr)` store/load lowered to `Store8` / `Load8`;
 - `ptr<i32>(addr)` / `ptr<u32>(addr)` store/load lowered to shared RAM `Store32` / `Load32`;
+- `ptr<u8>(addr)` store/load lowered to shared RAM `Store8` / `Load8`;
+- pointer indexing syntax such as `ptr<u8>(RAM_BASE)[i]` and `b"OK"[i]`;
 - unit functions with implicit `ReturnUnit`;
 - i32 functions with explicit `ReturnI32`;
 - diagnostics for missing i32 return, `return;` in i32 functions, value return from unit functions, `void`, and MMIO outside `unsafe`;

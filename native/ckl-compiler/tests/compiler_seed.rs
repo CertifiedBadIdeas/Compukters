@@ -214,6 +214,43 @@ fn lexer_recognizes_u32_literals_casts_and_typed_memory_tokens() {
 }
 
 #[test]
+fn lexer_recognizes_u8_literals_byte_strings_and_indexing_tokens() {
+    let tokens = lex(r#"let mut ch: u8 = 65u8; ptr<u8>(RAM_BASE)[1u32] = b"OK\n"[0u32];"#).unwrap();
+    let kinds: Vec<TokenKind> = tokens.into_iter().map(|token| token.kind).collect();
+
+    assert_eq!(
+        kinds,
+        vec![
+            TokenKind::Let,
+            TokenKind::Mut,
+            TokenKind::Ident("ch".to_string()),
+            TokenKind::Colon,
+            TokenKind::U8,
+            TokenKind::Equal,
+            TokenKind::IntU8(65),
+            TokenKind::Semicolon,
+            TokenKind::Ptr,
+            TokenKind::Less,
+            TokenKind::U8,
+            TokenKind::Greater,
+            TokenKind::LeftParen,
+            TokenKind::Ident("RAM_BASE".to_string()),
+            TokenKind::RightParen,
+            TokenKind::LeftBracket,
+            TokenKind::IntU32(1),
+            TokenKind::RightBracket,
+            TokenKind::Equal,
+            TokenKind::ByteString(vec![79, 75, 10]),
+            TokenKind::LeftBracket,
+            TokenKind::IntU32(0),
+            TokenKind::RightBracket,
+            TokenKind::Semicolon,
+            TokenKind::Eof,
+        ]
+    );
+}
+
+#[test]
 fn lexer_recognizes_comments_and_bitwise_tokens() {
     let tokens = lex("let mut mask: i32 = 0xff // byte mask\n & 0xf0 | 1 ^ 2 << 3 >> 1;").unwrap();
     let kinds: Vec<TokenKind> = tokens.into_iter().map(|token| token.kind).collect();
@@ -905,6 +942,64 @@ fn compile_lowers_u32_literals_locals_and_casts() {
         instructions.last(),
         Some(Instruction::ReturnI32 { .. })
     ));
+}
+
+#[test]
+fn compile_lowers_u8_literals_locals_and_casts() {
+    let image = compile(
+        "fn main() -> i32 {
+            let mut ch: u8 = 255u8;
+            return ch as i32;
+        }",
+    )
+    .unwrap();
+    let instructions = &image.functions[0].instructions;
+
+    assert!(instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::I32Const { value: 255, .. })));
+    assert!(matches!(
+        instructions.last(),
+        Some(Instruction::ReturnI32 { .. })
+    ));
+}
+
+#[test]
+fn compile_lowers_u8_pointer_indexing_to_byte_memory_ops() {
+    let image = compile(
+        "fn main() -> i32 {
+            unsafe {
+                ptr<u8>(RAM_BASE)[2u32] = 65u8;
+                return ptr<u8>(RAM_BASE)[2u32] as i32;
+            }
+        }",
+    )
+    .unwrap();
+    let instructions = &image.functions[0].instructions;
+
+    assert!(instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::Store8 { .. })));
+    assert!(instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::Load8 { .. })));
+}
+
+#[test]
+fn compile_lowers_byte_string_literals_into_rodata() {
+    let image = compile(
+        "fn main() -> i32 {
+            let mut i: u32 = 1u32;
+            return b\"OK\"[i] as i32;
+        }",
+    )
+    .unwrap();
+    let instructions = &image.functions[0].instructions;
+
+    assert_eq!(image.rodata, b"OK");
+    assert!(instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::Load8 { .. })));
 }
 
 #[test]
@@ -1622,6 +1717,50 @@ fn compiled_seed_ptr_u32_ram_program_runs_on_computer_machine() {
         LowImageSignal::HaltI32(-65536)
     );
     assert_eq!(machine.exit_code(), -65536);
+    assert_eq!(machine.panic_code(), 0);
+}
+
+#[test]
+fn compiled_seed_ptr_u8_ram_program_runs_on_computer_machine() {
+    let image = compile(
+        "fn main() -> i32 {
+            unsafe {
+                ptr<u8>(RAM_BASE + 4)[0u32] = 0x12u8;
+                ptr<u8>(RAM_BASE + 4)[1u32] = 0x34u8;
+                return (ptr<u8>(RAM_BASE + 4)[0u32] as i32)
+                    + ((ptr<u8>(RAM_BASE + 4)[1u32] as i32) << 8);
+            }
+        }",
+    )
+    .unwrap();
+    let mut machine = ComputerMachine::new(64 * 1024).unwrap();
+    let cpu_id = machine.spawn_boot_cpu(image, 1_000_000).unwrap();
+
+    assert_eq!(
+        machine.run_boot_cpu_until_signal(cpu_id).unwrap(),
+        LowImageSignal::HaltI32(0x3412)
+    );
+    assert_eq!(machine.exit_code(), 0x3412);
+    assert_eq!(machine.panic_code(), 0);
+}
+
+#[test]
+fn compiled_seed_byte_string_indexing_runs_on_computer_machine() {
+    let image = compile(
+        "fn main() -> i32 {
+            let mut i: u32 = 1u32;
+            return b\"OK\"[i] as i32;
+        }",
+    )
+    .unwrap();
+    let mut machine = ComputerMachine::new(64 * 1024).unwrap();
+    let cpu_id = machine.spawn_boot_cpu(image, 1_000_000).unwrap();
+
+    assert_eq!(
+        machine.run_boot_cpu_until_signal(cpu_id).unwrap(),
+        LowImageSignal::HaltI32(75)
+    );
+    assert_eq!(machine.exit_code(), 75);
     assert_eq!(machine.panic_code(), 0);
 }
 
