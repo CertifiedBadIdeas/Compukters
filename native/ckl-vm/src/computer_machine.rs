@@ -112,6 +112,7 @@ impl ComputerMachine {
                 self.bus.memory().len(),
             ));
         }
+        LowImageVm::load_image_sections_into_bus(&image, &mut self.bus)?;
         let cpu = LowImageVm::create_cpu_context(image, slice_budget_nanos)?;
         let cpu_id = self.cpus.len();
         self.cpus.push(cpu);

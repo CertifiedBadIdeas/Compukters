@@ -980,6 +980,43 @@ pub struct LowImageCpu<'memory> {
 }
 
 impl LowImageVm {
+    pub fn load_image_sections_into_bus(
+        image: &Image,
+        memory: &mut dyn MemoryBus,
+    ) -> Result<(), String> {
+        let initialized = image
+            .rodata
+            .len()
+            .checked_add(image.data.len())
+            .and_then(|value| value.checked_add(image.bss_size as usize))
+            .ok_or_else(|| "memory sections overflow".to_string())?;
+        if initialized > memory.len() {
+            return Err(format!(
+                "memory sections require {initialized} bytes but machine memory has {} bytes",
+                memory.len(),
+            ));
+        }
+
+        for (address, byte) in image.rodata.iter().copied().enumerate() {
+            memory
+                .store_u8(address as u32, byte)
+                .map_err(|error| error.to_string())?;
+        }
+        let data_start = image.rodata.len();
+        for (offset, byte) in image.data.iter().copied().enumerate() {
+            memory
+                .store_u8((data_start + offset) as u32, byte)
+                .map_err(|error| error.to_string())?;
+        }
+        let bss_start = data_start + image.data.len();
+        for offset in 0..image.bss_size as usize {
+            memory
+                .store_u8((bss_start + offset) as u32, 0)
+                .map_err(|error| error.to_string())?;
+        }
+        Ok(())
+    }
+
     pub fn create(image: Image, slice_budget_nanos: u64) -> Result<Self, String> {
         let memory_size = usize::try_from(image.memory_size)
             .map_err(|_| "memory size does not fit usize".to_string())?;
@@ -1023,6 +1060,7 @@ impl LowImageVm {
                 memory.len(),
             ));
         }
+        Self::load_image_sections_into_bus(&image, memory)?;
         Ok(LowImageCpu {
             context: Self::create_cpu_context(image, slice_budget_nanos)?,
             memory,

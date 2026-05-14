@@ -66,6 +66,7 @@ impl Parser {
             match self.parse_type()? {
                 TypeName::I32 => ReturnType::I32,
                 TypeName::U32 => ReturnType::U32,
+                TypeName::U8 => ReturnType::U8,
                 TypeName::Bool => ReturnType::Bool,
             }
         } else {
@@ -159,6 +160,18 @@ impl Parser {
         }
 
         let expr = self.parse_expr()?;
+        if self.consume(TokenKind::Equal) {
+            let Expr::Index { target, index } = expr else {
+                return Err(self.error("assignment target must be a local or index".to_string()));
+            };
+            let value = self.parse_expr()?;
+            self.expect(TokenKind::Semicolon)?;
+            return Ok(Statement::IndexAssign {
+                target: *target,
+                index: *index,
+                value,
+            });
+        }
         self.expect(TokenKind::Semicolon)?;
         Ok(Statement::Expr(expr))
     }
@@ -351,26 +364,38 @@ impl Parser {
 
     fn parse_postfix(&mut self) -> Result<Expr, CompileError> {
         let mut expr = self.parse_primary()?;
-        while self.consume(TokenKind::Dot) {
-            let method = self.take_ident()?;
-            self.expect(TokenKind::LeftParen)?;
-            let mut args = Vec::new();
-            if !self.consume(TokenKind::RightParen) {
-                loop {
-                    args.push(self.parse_expr()?);
-                    if self.consume(TokenKind::RightParen) {
-                        break;
+        loop {
+            if self.consume(TokenKind::Dot) {
+                let method = self.take_ident()?;
+                self.expect(TokenKind::LeftParen)?;
+                let mut args = Vec::new();
+                if !self.consume(TokenKind::RightParen) {
+                    loop {
+                        args.push(self.parse_expr()?);
+                        if self.consume(TokenKind::RightParen) {
+                            break;
+                        }
+                        self.expect(TokenKind::Comma)?;
                     }
-                    self.expect(TokenKind::Comma)?;
                 }
+                expr = Expr::MethodCall {
+                    receiver: Box::new(expr),
+                    method,
+                    args,
+                };
+                continue;
             }
-            expr = Expr::MethodCall {
-                receiver: Box::new(expr),
-                method,
-                args,
-            };
+            if self.consume(TokenKind::LeftBracket) {
+                let index = self.parse_expr()?;
+                self.expect(TokenKind::RightBracket)?;
+                expr = Expr::Index {
+                    target: Box::new(expr),
+                    index: Box::new(index),
+                };
+                continue;
+            }
+            return Ok(expr);
         }
-        Ok(expr)
     }
 
     fn parse_primary(&mut self) -> Result<Expr, CompileError> {
@@ -379,6 +404,12 @@ impl Parser {
         }
         if let Some(value) = self.take_int_u32() {
             return Ok(Expr::IntU32(value));
+        }
+        if let Some(value) = self.take_int_u8() {
+            return Ok(Expr::IntU8(value));
+        }
+        if let Some(value) = self.take_byte_string() {
+            return Ok(Expr::ByteString(value));
         }
         if self.consume(TokenKind::True) {
             return Ok(Expr::Bool(true));
@@ -435,6 +466,9 @@ impl Parser {
         }
         if self.consume(TokenKind::U32) {
             return Ok(TypeName::U32);
+        }
+        if self.consume(TokenKind::U8) {
+            return Ok(TypeName::U8);
         }
         if self.consume(TokenKind::Bool) {
             return Ok(TypeName::Bool);
@@ -502,6 +536,32 @@ impl Parser {
             }) => {
                 self.offset += 1;
                 Some(*value)
+            }
+            _ => None,
+        }
+    }
+
+    fn take_int_u8(&mut self) -> Option<i64> {
+        match self.tokens.get(self.offset) {
+            Some(Token {
+                kind: TokenKind::IntU8(value),
+                ..
+            }) => {
+                self.offset += 1;
+                Some(*value)
+            }
+            _ => None,
+        }
+    }
+
+    fn take_byte_string(&mut self) -> Option<Vec<u8>> {
+        match self.tokens.get(self.offset) {
+            Some(Token {
+                kind: TokenKind::ByteString(value),
+                ..
+            }) => {
+                self.offset += 1;
+                Some(value.clone())
             }
             _ => None,
         }
