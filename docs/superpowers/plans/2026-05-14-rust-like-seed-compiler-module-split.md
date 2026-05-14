@@ -1,6 +1,6 @@
 # Rust-Like Seed Compiler Module Split Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Split `native/ckl-compiler/src/lib.rs` into focused compiler modules without changing behavior.
 
@@ -27,7 +27,7 @@
 - Create: `native/ckl-compiler/src/lexer.rs`
 - Modify: `native/ckl-compiler/src/lib.rs`
 
-- [ ] **Step 1: Move `CompileError` into `error.rs`**
+- [x] **Step 1: Move `CompileError` into `error.rs`**
 
 Move:
 
@@ -48,7 +48,7 @@ impl Display for CompileError {
 impl std::error::Error for CompileError {}
 ```
 
-- [ ] **Step 2: Move lexer into `lexer.rs`**
+- [x] **Step 2: Move lexer into `lexer.rs`**
 
 Move:
 
@@ -59,7 +59,7 @@ Move:
 
 Add `use crate::error::CompileError;` at the top of `lexer.rs`.
 
-- [ ] **Step 3: Update `lib.rs` facade**
+- [x] **Step 3: Update `lib.rs` facade**
 
 Keep:
 
@@ -82,7 +82,7 @@ pub fn compile(source: &str) -> Result<Image, CompileError> {
 
 Temporarily leave AST/parser/codegen definitions in `lib.rs` if they have not been extracted yet.
 
-- [ ] **Step 4: Verify and commit**
+- [x] **Step 4: Verify and commit**
 
 Run:
 
@@ -101,7 +101,7 @@ git commit -m "Split rust language seed compiler lexer"
 - Modify: `native/ckl-compiler/src/lib.rs`
 - Modify: `native/ckl-compiler/src/codegen.rs` if needed after Task 3
 
-- [ ] **Step 1: Move AST into `ast.rs`**
+- [x] **Step 1: Move AST into `ast.rs`**
 
 Move:
 
@@ -117,7 +117,7 @@ Move:
 
 Mark fields and variants `pub(crate)` where required by parser/codegen.
 
-- [ ] **Step 2: Move parser into `parser.rs`**
+- [x] **Step 2: Move parser into `parser.rs`**
 
 Move:
 
@@ -140,7 +140,7 @@ use crate::error::CompileError;
 use crate::lexer::{Token, TokenKind};
 ```
 
-- [ ] **Step 3: Update `lib.rs` compile facade**
+- [x] **Step 3: Update `lib.rs` compile facade**
 
 Use:
 
@@ -152,7 +152,7 @@ pub fn compile(source: &str) -> Result<Image, CompileError> {
 }
 ```
 
-- [ ] **Step 4: Verify and commit**
+- [x] **Step 4: Verify and commit**
 
 Run:
 
@@ -169,7 +169,7 @@ git commit -m "Split rust language seed compiler parser"
 - Create: `native/ckl-compiler/src/codegen.rs`
 - Modify: `native/ckl-compiler/src/lib.rs`
 
-- [ ] **Step 1: Move codegen into `codegen.rs`**
+- [x] **Step 1: Move codegen into `codegen.rs`**
 
 Move:
 
@@ -206,11 +206,11 @@ use ckl_vm::low_image::{Function, Image, Instruction};
 use std::collections::{HashMap, HashSet};
 ```
 
-- [ ] **Step 2: Reduce `lib.rs` to facade**
+- [x] **Step 2: Reduce `lib.rs` to facade**
 
 `lib.rs` should contain only module declarations, public re-exports, and `compile`.
 
-- [ ] **Step 3: Verify and commit**
+- [x] **Step 3: Verify and commit**
 
 Run:
 
@@ -227,7 +227,7 @@ git commit -m "Split rust language seed compiler codegen"
 - Modify: `docs/superpowers/specs/2026-05-14-rust-like-seed-compiler-module-split-design.md`
 - Modify: `docs/superpowers/plans/2026-05-14-rust-like-seed-compiler-module-split.md`
 
-- [ ] **Step 1: Append implementation status**
+- [x] **Step 1: Append implementation status**
 
 Append to the design:
 
@@ -244,11 +244,11 @@ Implemented in `native/ckl-compiler`:
 - `lib.rs` as a small public facade.
 ```
 
-- [ ] **Step 2: Mark plan complete**
+- [x] **Step 2: Mark plan complete**
 
 Change all task checkboxes from `[ ]` to `[x]`.
 
-- [ ] **Step 3: Final verification and commit**
+- [x] **Step 3: Final verification and commit**
 
 Run:
 
