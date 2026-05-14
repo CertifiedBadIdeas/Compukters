@@ -1,6 +1,6 @@
 # Rust-Like Seed `ptr<i32>` RAM Primitives Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Add unsafe raw `ptr<i32>` RAM load/store support to the Rust-like seed compiler.
 
@@ -29,7 +29,7 @@
 - Modify: `native/ckl-compiler/src/lib.rs`
 - Modify: `native/ckl-compiler/tests/compiler_seed.rs`
 
-- [ ] **Step 1: Write failing lexer and parse/lowering tests**
+- [x] **Step 1: Write failing lexer and parse/lowering tests**
 
 Add tests:
 
@@ -81,7 +81,7 @@ fn compile_lowers_unsafe_ptr_i32_store_and_load() {
 }
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run:
 
@@ -91,7 +91,7 @@ cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml ptr --test c
 
 Expected: FAIL because `ptr` is not a token or expression.
 
-- [ ] **Step 3: Implement token and parser support**
+- [x] **Step 3: Implement token and parser support**
 
 Implement:
 
@@ -101,7 +101,7 @@ Implement:
 - `Expr::Ptr(Box<Expr>)`;
 - parser branch matching `ptr<i32>(expr)`.
 
-- [ ] **Step 4: Implement pointer capability lowering**
+- [x] **Step 4: Implement pointer capability lowering**
 
 Implement:
 
@@ -111,7 +111,7 @@ Implement:
 - method calls require pointer capability receivers;
 - `.store(value)` and `.load()` lower to `Store32`/`Load32`.
 
-- [ ] **Step 5: Verify GREEN and commit**
+- [x] **Step 5: Verify GREEN and commit**
 
 Run:
 
@@ -129,7 +129,7 @@ git commit -m "Add rust language seed ptr i32 RAM primitives"
 - Modify: `native/ckl-compiler/src/lib.rs`
 - Modify: `native/ckl-compiler/tests/compiler_seed.rs`
 
-- [ ] **Step 1: Write failing diagnostics tests**
+- [x] **Step 1: Write failing diagnostics tests**
 
 Add tests:
 
@@ -155,7 +155,7 @@ fn compile_rejects_i32_const_as_ptr_address() {
 }
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run:
 
@@ -165,7 +165,7 @@ cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml compile_reje
 
 Expected: FAIL until diagnostics are implemented.
 
-- [ ] **Step 3: Implement address-context `+`**
+- [x] **Step 3: Implement address-context `+`**
 
 Update `compile_addr_expr`:
 
@@ -173,7 +173,7 @@ Update `compile_addr_expr`:
 - emit `Instruction::AddrAdd`;
 - reject other binary address operations with a deterministic error.
 
-- [ ] **Step 4: Implement pointer-specific diagnostics**
+- [x] **Step 4: Implement pointer-specific diagnostics**
 
 Update method-call lowering:
 
@@ -182,7 +182,7 @@ Update method-call lowering:
 - if pointer address expression lowers to `i32`, return `pointer address must be an address expression`;
 - reject `Expr::Ptr` in const initializers.
 
-- [ ] **Step 5: Verify GREEN and commit**
+- [x] **Step 5: Verify GREEN and commit**
 
 Run:
 
@@ -201,7 +201,7 @@ git commit -m "Validate rust language seed ptr i32 RAM primitives"
 - Modify: `docs/superpowers/specs/2026-05-14-rust-like-seed-ptr-i32-ram-primitives-design.md`
 - Modify: `docs/superpowers/plans/2026-05-14-rust-like-seed-ptr-i32-ram-primitives.md`
 
-- [ ] **Step 1: Add E2E test**
+- [x] **Step 1: Add E2E test**
 
 Add:
 
@@ -230,7 +230,7 @@ fn compiled_seed_ptr_i32_ram_program_runs_on_computer_machine() {
 }
 ```
 
-- [ ] **Step 2: Verify E2E**
+- [x] **Step 2: Verify E2E**
 
 Run:
 
@@ -240,7 +240,7 @@ cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml compiled_see
 
 Expected: PASS.
 
-- [ ] **Step 3: Update implementation status**
+- [x] **Step 3: Update implementation status**
 
 Append to the design:
 
@@ -258,7 +258,7 @@ Implemented in `native/ckl-compiler`:
 
 Mark completed plan checkboxes.
 
-- [ ] **Step 4: Final verification and commit**
+- [x] **Step 4: Final verification and commit**
 
 Run:
 

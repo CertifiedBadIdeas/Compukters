@@ -98,3 +98,13 @@ Add tests in `native/ckl-compiler/tests/compiler_seed.rs`:
 - `RAM_BASE + i32` address arithmetic lowers to `AddrAdd`.
 - Existing MMIO firmware keeps working.
 - Compiler tests and low VM tests pass.
+
+## Implementation Status
+
+Implemented in `native/ckl-compiler`:
+
+- `ptr<i32>(addr)` parsing;
+- unsafe raw RAM `.store(value)` and `.load()`;
+- address-context `RAM_BASE + i32` lowering to `AddrAdd`;
+- pointer-specific diagnostics;
+- `ComputerMachine` E2E RAM read/write test.
