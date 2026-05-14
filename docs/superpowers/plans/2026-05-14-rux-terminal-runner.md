@@ -25,16 +25,16 @@
 
 **Files:**
 - Create: `native/ckl-compiler/src/bin/rux-run.rs`
-- Create: `native/ckl-compiler/examples/firmware/terminal.rux`
+- Create: `native/ckl-compiler/examples/firmware/terminal.rx`
 - Modify: `native/ckl-compiler/tests/rux_runner.rs`
 
 - [ ] Add a test that loads the demo firmware source and verifies the report output.
-- [ ] Implement `rux-run` with usage `cargo run --bin rux-run -- <path.rux>`.
+- [ ] Implement `rux-run` with usage `cargo run --bin rux-run -- <path.rx>`.
 - [ ] Add a demo firmware that writes a visible line to `DEBUG_WRITE`.
 
 ### Task 3: Verification And Commit
 
 - [ ] Run `cargo fmt --manifest-path native/ckl-compiler/Cargo.toml --check`.
 - [ ] Run `cargo test --offline --manifest-path native/ckl-compiler/Cargo.toml`.
-- [ ] Run `cargo run --offline --manifest-path native/ckl-compiler/Cargo.toml --bin rux-run -- native/ckl-compiler/examples/firmware/terminal.rux`.
+- [ ] Run `cargo run --offline --manifest-path native/ckl-compiler/Cargo.toml --bin rux-run -- native/ckl-compiler/examples/firmware/terminal.rx`.
 - [ ] Commit all changes.

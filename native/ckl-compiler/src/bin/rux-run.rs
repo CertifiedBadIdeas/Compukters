@@ -5,7 +5,7 @@ use std::process::ExitCode;
 
 fn main() -> ExitCode {
     let Some(path) = env::args().nth(1) else {
-        eprintln!("usage: rux-run <path.rux>");
+        eprintln!("usage: rux-run <path.rx>");
         return ExitCode::from(2);
     };
 
