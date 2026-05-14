@@ -48,16 +48,25 @@ pub enum TokenKind {
     Semicolon,
     Comma,
     Plus,
+    PlusEqual,
     Minus,
+    MinusEqual,
     Star,
+    StarEqual,
     Slash,
+    SlashEqual,
     Ampersand,
+    AmpersandEqual,
     AndAnd,
     Pipe,
+    PipeEqual,
     OrOr,
     Caret,
+    CaretEqual,
     Shl,
+    ShlEqual,
     Shr,
+    ShrEqual,
     Eof,
 }
 
@@ -184,6 +193,17 @@ pub fn lex(source: &str) -> Result<Vec<Token>, CompileError> {
                 });
                 continue;
             }
+            b'<' if offset + 2 < bytes.len()
+                && bytes[offset + 1] == b'<'
+                && bytes[offset + 2] == b'=' =>
+            {
+                offset += 3;
+                tokens.push(Token {
+                    kind: TokenKind::ShlEqual,
+                    offset: offset - 3,
+                });
+                continue;
+            }
             b'<' if offset + 1 < bytes.len() && bytes[offset + 1] == b'<' => {
                 offset += 2;
                 tokens.push(Token {
@@ -198,6 +218,17 @@ pub fn lex(source: &str) -> Result<Vec<Token>, CompileError> {
                 tokens.push(Token {
                     kind: TokenKind::GreaterEqual,
                     offset: offset - 2,
+                });
+                continue;
+            }
+            b'>' if offset + 2 < bytes.len()
+                && bytes[offset + 1] == b'>'
+                && bytes[offset + 2] == b'=' =>
+            {
+                offset += 3;
+                tokens.push(Token {
+                    kind: TokenKind::ShrEqual,
+                    offset: offset - 3,
                 });
                 continue;
             }
@@ -232,13 +263,45 @@ pub fn lex(source: &str) -> Result<Vec<Token>, CompileError> {
             b'.' => TokenKind::Dot,
             b';' => TokenKind::Semicolon,
             b',' => TokenKind::Comma,
+            b'+' if offset + 1 < bytes.len() && bytes[offset + 1] == b'=' => {
+                offset += 2;
+                tokens.push(Token {
+                    kind: TokenKind::PlusEqual,
+                    offset: offset - 2,
+                });
+                continue;
+            }
             b'+' => TokenKind::Plus,
+            b'*' if offset + 1 < bytes.len() && bytes[offset + 1] == b'=' => {
+                offset += 2;
+                tokens.push(Token {
+                    kind: TokenKind::StarEqual,
+                    offset: offset - 2,
+                });
+                continue;
+            }
             b'*' => TokenKind::Star,
+            b'/' if offset + 1 < bytes.len() && bytes[offset + 1] == b'=' => {
+                offset += 2;
+                tokens.push(Token {
+                    kind: TokenKind::SlashEqual,
+                    offset: offset - 2,
+                });
+                continue;
+            }
             b'/' => TokenKind::Slash,
             b'&' if offset + 1 < bytes.len() && bytes[offset + 1] == b'&' => {
                 offset += 2;
                 tokens.push(Token {
                     kind: TokenKind::AndAnd,
+                    offset: offset - 2,
+                });
+                continue;
+            }
+            b'&' if offset + 1 < bytes.len() && bytes[offset + 1] == b'=' => {
+                offset += 2;
+                tokens.push(Token {
+                    kind: TokenKind::AmpersandEqual,
                     offset: offset - 2,
                 });
                 continue;
@@ -252,12 +315,36 @@ pub fn lex(source: &str) -> Result<Vec<Token>, CompileError> {
                 });
                 continue;
             }
+            b'|' if offset + 1 < bytes.len() && bytes[offset + 1] == b'=' => {
+                offset += 2;
+                tokens.push(Token {
+                    kind: TokenKind::PipeEqual,
+                    offset: offset - 2,
+                });
+                continue;
+            }
             b'|' => TokenKind::Pipe,
+            b'^' if offset + 1 < bytes.len() && bytes[offset + 1] == b'=' => {
+                offset += 2;
+                tokens.push(Token {
+                    kind: TokenKind::CaretEqual,
+                    offset: offset - 2,
+                });
+                continue;
+            }
             b'^' => TokenKind::Caret,
             b'-' if offset + 1 < bytes.len() && bytes[offset + 1] == b'>' => {
                 offset += 2;
                 tokens.push(Token {
                     kind: TokenKind::Arrow,
+                    offset: offset - 2,
+                });
+                continue;
+            }
+            b'-' if offset + 1 < bytes.len() && bytes[offset + 1] == b'=' => {
+                offset += 2;
+                tokens.push(Token {
+                    kind: TokenKind::MinusEqual,
                     offset: offset - 2,
                 });
                 continue;
@@ -323,16 +410,25 @@ impl TokenKind {
             TokenKind::Semicolon => ";",
             TokenKind::Comma => ",",
             TokenKind::Plus => "+",
+            TokenKind::PlusEqual => "+=",
             TokenKind::Minus => "-",
+            TokenKind::MinusEqual => "-=",
             TokenKind::Star => "*",
+            TokenKind::StarEqual => "*=",
             TokenKind::Slash => "/",
+            TokenKind::SlashEqual => "/=",
             TokenKind::Ampersand => "&",
+            TokenKind::AmpersandEqual => "&=",
             TokenKind::AndAnd => "&&",
             TokenKind::Pipe => "|",
+            TokenKind::PipeEqual => "|=",
             TokenKind::OrOr => "||",
             TokenKind::Caret => "^",
+            TokenKind::CaretEqual => "^=",
             TokenKind::Shl => "<<",
+            TokenKind::ShlEqual => "<<=",
             TokenKind::Shr => ">>",
+            TokenKind::ShrEqual => ">>=",
             TokenKind::Eof => "end of file",
         }
     }

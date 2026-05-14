@@ -243,6 +243,8 @@ Current support:
 - `u32`, suffixed `123u32` / `0xffffu32` literals, and minimal `as i32` / `as u32` casts;
 - one `fn main()` or `fn main() -> i32`;
 - integer arithmetic expressions with `+`, `-`, `*`, `/` precedence;
+- unary `-` for `i32`;
+- compound assignment for mutable `i32` / `u32` locals: `+=`, `-=`, `*=`, `/=`, `&=`, `|=`, `^=`, `<<=`, `>>=`;
 - `unsafe { ... }` blocks;
 - `mmio<i32>(addr)` / `mmio<u32>(addr)` store/load lowered to `Store32` / `Load32`;
 - `ptr<i32>(addr)` / `ptr<u32>(addr)` store/load lowered to shared RAM `Store32` / `Load32`;

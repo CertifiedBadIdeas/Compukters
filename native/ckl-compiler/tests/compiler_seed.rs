@@ -245,6 +245,56 @@ fn lexer_recognizes_comments_and_bitwise_tokens() {
 }
 
 #[test]
+fn lexer_recognizes_compound_assignment_tokens() {
+    let tokens =
+        lex("a += 1; b -= 2; c *= 3; d /= 4; e &= 5; f |= 6; g ^= 7; h <<= 1; i >>= 2;").unwrap();
+    let kinds: Vec<TokenKind> = tokens.into_iter().map(|token| token.kind).collect();
+
+    assert_eq!(
+        kinds,
+        vec![
+            TokenKind::Ident("a".to_string()),
+            TokenKind::PlusEqual,
+            TokenKind::Int(1),
+            TokenKind::Semicolon,
+            TokenKind::Ident("b".to_string()),
+            TokenKind::MinusEqual,
+            TokenKind::Int(2),
+            TokenKind::Semicolon,
+            TokenKind::Ident("c".to_string()),
+            TokenKind::StarEqual,
+            TokenKind::Int(3),
+            TokenKind::Semicolon,
+            TokenKind::Ident("d".to_string()),
+            TokenKind::SlashEqual,
+            TokenKind::Int(4),
+            TokenKind::Semicolon,
+            TokenKind::Ident("e".to_string()),
+            TokenKind::AmpersandEqual,
+            TokenKind::Int(5),
+            TokenKind::Semicolon,
+            TokenKind::Ident("f".to_string()),
+            TokenKind::PipeEqual,
+            TokenKind::Int(6),
+            TokenKind::Semicolon,
+            TokenKind::Ident("g".to_string()),
+            TokenKind::CaretEqual,
+            TokenKind::Int(7),
+            TokenKind::Semicolon,
+            TokenKind::Ident("h".to_string()),
+            TokenKind::ShlEqual,
+            TokenKind::Int(1),
+            TokenKind::Semicolon,
+            TokenKind::Ident("i".to_string()),
+            TokenKind::ShrEqual,
+            TokenKind::Int(2),
+            TokenKind::Semicolon,
+            TokenKind::Eof,
+        ]
+    );
+}
+
+#[test]
 fn lexer_recognizes_break_continue_loop_control_keywords() {
     let tokens = lex("while true { continue; break; }").unwrap();
     let kinds: Vec<TokenKind> = tokens.into_iter().map(|token| token.kind).collect();
@@ -353,6 +403,88 @@ fn compile_lowers_assignment_to_local() {
             Instruction::ReturnI32 { src: 0 },
         ]
     );
+}
+
+#[test]
+fn compile_lowers_i32_compound_assignment() {
+    let image = compile(
+        "fn main() -> i32 {
+            let mut value: i32 = 5;
+            value += 3;
+            value *= 2;
+            value -= 4;
+            value /= 2;
+            return value;
+        }",
+    )
+    .unwrap();
+    let instructions = &image.functions[0].instructions;
+
+    assert!(instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::I32Add { dst: 0, lhs: 0, .. })));
+    assert!(instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::I32Mul { dst: 0, lhs: 0, .. })));
+    assert!(instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::I32Sub { dst: 0, lhs: 0, .. })));
+    assert!(instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::I32Div { dst: 0, lhs: 0, .. })));
+}
+
+#[test]
+fn compile_lowers_i32_unary_minus() {
+    let image = compile(
+        "fn main() -> i32 {
+            let mut value: i32 = -7;
+            return -value;
+        }",
+    )
+    .unwrap();
+    let instructions = &image.functions[0].instructions;
+
+    assert!(instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::I32Sub { .. })));
+    assert!(matches!(
+        instructions.last(),
+        Some(Instruction::ReturnI32 { .. })
+    ));
+}
+
+#[test]
+fn compile_lowers_u32_bitwise_compound_assignment() {
+    let image = compile(
+        "fn main() -> i32 {
+            let mut mask: u32 = 0xf0u32;
+            mask &= 0x7fu32;
+            mask |= 0x80u32;
+            mask ^= 0x0fu32;
+            mask <<= 1u32;
+            mask >>= 1u32;
+            return mask as i32;
+        }",
+    )
+    .unwrap();
+    let instructions = &image.functions[0].instructions;
+
+    assert!(instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::I32BitAnd { dst: 0, lhs: 0, .. })));
+    assert!(instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::I32BitOr { dst: 0, lhs: 0, .. })));
+    assert!(instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::I32BitXor { dst: 0, lhs: 0, .. })));
+    assert!(instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::I32Shl { dst: 0, lhs: 0, .. })));
+    assert!(instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::I32Shr { dst: 0, lhs: 0, .. })));
 }
 
 #[test]
@@ -1150,6 +1282,28 @@ fn compile_rejects_bool_assignment_to_i32_local() {
 }
 
 #[test]
+fn compile_rejects_bool_compound_assignment() {
+    let error = compile("fn main() { let mut flag: bool = true; flag += true; }").unwrap_err();
+
+    assert!(
+        error
+            .message
+            .contains("compound assignment requires `i32` or `u32` local"),
+        "{error:?}"
+    );
+}
+
+#[test]
+fn compile_rejects_u32_unary_minus() {
+    let error = compile("fn main() -> i32 { return (-1u32) as i32; }").unwrap_err();
+
+    assert!(
+        error.message.contains("unary `-` requires `i32`"),
+        "{error:?}"
+    );
+}
+
+#[test]
 fn compile_rejects_i32_assignment_to_u32_local_without_cast() {
     let error =
         compile("fn main() { let mut signed: i32 = 1; let mut value: u32 = signed; }").unwrap_err();
@@ -1441,6 +1595,51 @@ fn compiled_seed_mmio_u32_debug_write_runs_on_computer_machine() {
         LowImageSignal::HaltI32(0)
     );
     assert_eq!(machine.debug_output_string(), "OK");
+}
+
+#[test]
+fn compiled_seed_compound_assignment_and_negation_run_on_computer_machine() {
+    let image = compile(
+        "fn main() -> i32 {
+            let mut value: i32 = -5;
+            value += 13;
+            value *= 3;
+            value -= 4;
+            value /= 2;
+            return -value;
+        }",
+    )
+    .unwrap();
+    let mut machine = ComputerMachine::new(64 * 1024).unwrap();
+    let cpu_id = machine.spawn_boot_cpu(image, 1_000_000).unwrap();
+
+    assert_eq!(
+        machine.run_boot_cpu_until_signal(cpu_id).unwrap(),
+        LowImageSignal::HaltI32(-10)
+    );
+}
+
+#[test]
+fn compiled_seed_u32_compound_assignment_runs_on_computer_machine() {
+    let image = compile(
+        "fn main() -> i32 {
+            let mut mask: u32 = 0xf0u32;
+            mask &= 0x7fu32;
+            mask |= 0x80u32;
+            mask ^= 0x0fu32;
+            mask <<= 1u32;
+            mask >>= 1u32;
+            return mask as i32;
+        }",
+    )
+    .unwrap();
+    let mut machine = ComputerMachine::new(64 * 1024).unwrap();
+    let cpu_id = machine.spawn_boot_cpu(image, 1_000_000).unwrap();
+
+    assert_eq!(
+        machine.run_boot_cpu_until_signal(cpu_id).unwrap(),
+        LowImageSignal::HaltI32(0xff)
+    );
 }
 
 #[test]

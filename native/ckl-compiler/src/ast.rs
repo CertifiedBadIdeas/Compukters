@@ -50,6 +50,11 @@ pub(crate) enum Statement {
         name: String,
         value: Expr,
     },
+    AssignOp {
+        name: String,
+        op: BinaryOp,
+        value: Expr,
+    },
     If {
         condition: Expr,
         then_branch: Vec<Statement>,
@@ -117,6 +122,7 @@ pub(crate) enum Expr {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum UnaryOp {
     Not,
+    Neg,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
