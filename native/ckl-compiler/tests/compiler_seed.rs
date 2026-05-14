@@ -147,6 +147,37 @@ fn lexer_recognizes_ptr_keyword() {
 }
 
 #[test]
+fn lexer_recognizes_comments_and_bitwise_tokens() {
+    let tokens = lex("let mut mask: i32 = 0xff // byte mask\n & 0xf0 | 1 ^ 2 << 3 >> 1;").unwrap();
+    let kinds: Vec<TokenKind> = tokens.into_iter().map(|token| token.kind).collect();
+
+    assert_eq!(
+        kinds,
+        vec![
+            TokenKind::Let,
+            TokenKind::Mut,
+            TokenKind::Ident("mask".to_string()),
+            TokenKind::Colon,
+            TokenKind::I32,
+            TokenKind::Equal,
+            TokenKind::Int(0xff),
+            TokenKind::Ampersand,
+            TokenKind::Int(0xf0),
+            TokenKind::Pipe,
+            TokenKind::Int(1),
+            TokenKind::Caret,
+            TokenKind::Int(2),
+            TokenKind::Shl,
+            TokenKind::Int(3),
+            TokenKind::Shr,
+            TokenKind::Int(1),
+            TokenKind::Semicolon,
+            TokenKind::Eof,
+        ]
+    );
+}
+
+#[test]
 fn compile_lowers_i32_main_return_arithmetic() {
     let image = compile("fn main() -> i32 { return 7 + 3 * 2; }").unwrap();
     let function = &image.functions[0];
@@ -174,6 +205,29 @@ fn compile_lowers_i32_main_return_arithmetic() {
             Instruction::ReturnI32 { src: 4 },
         ]
     );
+}
+
+#[test]
+fn compile_lowers_i32_bitwise_operations() {
+    let image = compile("fn main() -> i32 { return (0xff & 0xf0) | (1 ^ (2 << 3 >> 1)); }")
+        .unwrap();
+    let instructions = &image.functions[0].instructions;
+
+    assert!(instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::I32BitAnd { .. })));
+    assert!(instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::I32BitOr { .. })));
+    assert!(instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::I32BitXor { .. })));
+    assert!(instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::I32Shl { .. })));
+    assert!(instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::I32Shr { .. })));
 }
 
 #[test]
@@ -411,6 +465,22 @@ fn compile_accepts_const_before_main() {
         image.functions[0].instructions,
         vec![
             Instruction::I32Const { dst: 0, value: 79 },
+            Instruction::ReturnI32 { src: 0 },
+        ]
+    );
+}
+
+#[test]
+fn compile_accepts_bitwise_const_initializers() {
+    let image = compile("const MASK: i32 = (0xff & 0xf0) | (1 << 2); fn main() -> i32 { return MASK; }").unwrap();
+
+    assert_eq!(
+        image.functions[0].instructions,
+        vec![
+            Instruction::I32Const {
+                dst: 0,
+                value: 0xf4,
+            },
             Instruction::ReturnI32 { src: 0 },
         ]
     );
@@ -855,5 +925,28 @@ fn compiled_seed_ptr_i32_ram_program_runs_on_computer_machine() {
     );
     assert_eq!(machine.control_status(), ComputerMachine::STATUS_HALTED);
     assert_eq!(machine.exit_code(), 42);
+    assert_eq!(machine.panic_code(), 0);
+}
+
+#[test]
+fn compiled_seed_bitwise_program_runs_on_computer_machine() {
+    let image = compile(
+        "fn main() -> i32 {
+            // Compose a compact status byte with masks and shifts.
+            let mut value: i32 = (0xff & 0xf0) | (1 << 2);
+            value = value ^ (3 >> 1);
+            return value;
+        }",
+    )
+    .unwrap();
+    let mut machine = ComputerMachine::new(64 * 1024).unwrap();
+    let cpu_id = machine.spawn_boot_cpu(image, 1_000_000).unwrap();
+
+    assert_eq!(
+        machine.run_boot_cpu_until_signal(cpu_id).unwrap(),
+        LowImageSignal::HaltI32(0xf5)
+    );
+    assert_eq!(machine.control_status(), ComputerMachine::STATUS_HALTED);
+    assert_eq!(machine.exit_code(), 0xf5);
     assert_eq!(machine.panic_code(), 0);
 }

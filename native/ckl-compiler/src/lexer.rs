@@ -42,6 +42,11 @@ pub enum TokenKind {
     Minus,
     Star,
     Slash,
+    Ampersand,
+    Pipe,
+    Caret,
+    Shl,
+    Shr,
     Eof,
 }
 
@@ -54,6 +59,14 @@ pub fn lex(source: &str) -> Result<Vec<Token>, CompileError> {
         let byte = bytes[offset];
         if byte.is_ascii_whitespace() {
             offset += 1;
+            continue;
+        }
+
+        if byte == b'/' && offset + 1 < bytes.len() && bytes[offset + 1] == b'/' {
+            offset += 2;
+            while offset < bytes.len() && !matches!(bytes[offset], b'\n' | b'\r') {
+                offset += 1;
+            }
             continue;
         }
 
@@ -140,11 +153,27 @@ pub fn lex(source: &str) -> Result<Vec<Token>, CompileError> {
                 });
                 continue;
             }
+            b'<' if offset + 1 < bytes.len() && bytes[offset + 1] == b'<' => {
+                offset += 2;
+                tokens.push(Token {
+                    kind: TokenKind::Shl,
+                    offset: offset - 2,
+                });
+                continue;
+            }
             b'<' => TokenKind::Less,
             b'>' if offset + 1 < bytes.len() && bytes[offset + 1] == b'=' => {
                 offset += 2;
                 tokens.push(Token {
                     kind: TokenKind::GreaterEqual,
+                    offset: offset - 2,
+                });
+                continue;
+            }
+            b'>' if offset + 1 < bytes.len() && bytes[offset + 1] == b'>' => {
+                offset += 2;
+                tokens.push(Token {
+                    kind: TokenKind::Shr,
                     offset: offset - 2,
                 });
                 continue;
@@ -174,6 +203,9 @@ pub fn lex(source: &str) -> Result<Vec<Token>, CompileError> {
             b'+' => TokenKind::Plus,
             b'*' => TokenKind::Star,
             b'/' => TokenKind::Slash,
+            b'&' => TokenKind::Ampersand,
+            b'|' => TokenKind::Pipe,
+            b'^' => TokenKind::Caret,
             b'-' if offset + 1 < bytes.len() && bytes[offset + 1] == b'>' => {
                 offset += 2;
                 tokens.push(Token {
@@ -237,6 +269,11 @@ impl TokenKind {
             TokenKind::Minus => "-",
             TokenKind::Star => "*",
             TokenKind::Slash => "/",
+            TokenKind::Ampersand => "&",
+            TokenKind::Pipe => "|",
+            TokenKind::Caret => "^",
+            TokenKind::Shl => "<<",
+            TokenKind::Shr => ">>",
             TokenKind::Eof => "end of file",
         }
     }
