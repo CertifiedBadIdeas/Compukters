@@ -4,16 +4,22 @@ fn write(ch: u8) {
     }
 }
 
+fn write_bytes(bytes: ptr<u8>, len: u32) {
+    let mut i: u32 = 0u32;
+    while i < len {
+        unsafe {
+            write(bytes[i]);
+        }
+        i += 1u32;
+    }
+}
+
 fn main() -> i32 {
     unsafe {
         mmio<i32>(CONTROL_STATUS).store(STATUS_BOOTING);
     }
 
-    let mut i: u32 = 0u32;
-    while i < 9u32 {
-        write(b"RUX READY"[i]);
-        i += 1u32;
-    }
+    write_bytes(b"RUX READY", 9u32);
 
     unsafe {
         mmio<i32>(CONTROL_STATUS).store(STATUS_READY);

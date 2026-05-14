@@ -68,6 +68,9 @@ impl Parser {
                 TypeName::U32 => ReturnType::U32,
                 TypeName::U8 => ReturnType::U8,
                 TypeName::Bool => ReturnType::Bool,
+                TypeName::PtrI32 => ReturnType::PtrI32,
+                TypeName::PtrU32 => ReturnType::PtrU32,
+                TypeName::PtrU8 => ReturnType::PtrU8,
             }
         } else {
             ReturnType::Unit
@@ -461,6 +464,23 @@ impl Parser {
     }
 
     fn parse_type(&mut self) -> Result<TypeName, CompileError> {
+        if self.consume(TokenKind::Ptr) {
+            self.expect(TokenKind::Less)?;
+            let element_type = self.parse_type()?;
+            self.expect(TokenKind::Greater)?;
+            return match element_type {
+                TypeName::I32 => Ok(TypeName::PtrI32),
+                TypeName::U32 => Ok(TypeName::PtrU32),
+                TypeName::U8 => Ok(TypeName::PtrU8),
+                TypeName::Bool => {
+                    Err(self
+                        .error("pointer element type must be `i32`, `u32`, or `u8`".to_string()))
+                }
+                TypeName::PtrI32 | TypeName::PtrU32 | TypeName::PtrU8 => {
+                    Err(self.error("nested pointer types are not supported yet".to_string()))
+                }
+            };
+        }
         if self.consume(TokenKind::I32) {
             return Ok(TypeName::I32);
         }
