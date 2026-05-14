@@ -291,3 +291,14 @@ The test runs on `ComputerMachine` and expects:
 - No import system is added.
 - No source-level `const` declaration is added.
 - Existing seed tests keep passing.
+
+## Implementation Status
+
+Implemented in `native/ckl-compiler`:
+
+- built-in ABI constant resolver backed by `ckl_vm::computer_abi`;
+- address constants lowered through `AddrConst`;
+- i32 constants lowered through `I32Const`;
+- local variables take precedence over unknown identifiers but cannot shadow built-in constants;
+- diagnostics for address-as-i32, i32-as-address, built-in shadowing, and unknown identifiers;
+- end-to-end firmware test that uses ABI constants instead of raw MMIO numbers.
