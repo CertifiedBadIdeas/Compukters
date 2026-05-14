@@ -279,6 +279,10 @@ enum Statement {
 enum Expr {
     Int(i64),
     Local(String),
+    Call {
+        name: String,
+        args: Vec<Expr>,
+    },
     Mmio(Box<Expr>),
     MethodCall {
         receiver: Box<Expr>,
@@ -550,6 +554,14 @@ impl Parser {
         if let Some(value) = self.take_int() {
             return Ok(Expr::Int(value));
         }
+        if let TokenKind::Ident(name) = self.peek().clone() {
+            if self.peek_next() == &TokenKind::LeftParen {
+                self.offset += 1;
+                self.expect(TokenKind::LeftParen)?;
+                let args = self.parse_argument_list()?;
+                return Ok(Expr::Call { name, args });
+            }
+        }
         if let Some(name) = self.take_ident_if_present() {
             return Ok(Expr::Local(name));
         }
@@ -568,6 +580,20 @@ impl Parser {
             return Ok(expr);
         }
         Err(self.error(format!("expected expression, found {:?}", self.peek())))
+    }
+
+    fn parse_argument_list(&mut self) -> Result<Vec<Expr>, CompileError> {
+        let mut args = Vec::new();
+        if self.consume(TokenKind::RightParen) {
+            return Ok(args);
+        }
+        loop {
+            args.push(self.parse_expr()?);
+            if self.consume(TokenKind::RightParen) {
+                return Ok(args);
+            }
+            self.expect(TokenKind::Comma)?;
+        }
     }
 
     fn expect(&mut self, expected: TokenKind) -> Result<(), CompileError> {
@@ -793,9 +819,11 @@ fn evaluate_const_expr(
                 message: "const initializer arithmetic overflow".to_string(),
             })
         }
-        Expr::Compare { .. } | Expr::Mmio(_) | Expr::MethodCall { .. } => Err(CompileError {
-            message: "const initializer is not compile-time evaluable".to_string(),
-        }),
+        Expr::Compare { .. } | Expr::Call { .. } | Expr::Mmio(_) | Expr::MethodCall { .. } => {
+            Err(CompileError {
+                message: "const initializer is not compile-time evaluable".to_string(),
+            })
+        }
     }
 }
 
@@ -811,6 +839,30 @@ struct Local {
     mutable: bool,
 }
 
+#[derive(Debug, Clone, Copy)]
+struct FunctionSignature {
+    index: usize,
+    return_type: ReturnType,
+    parameter_count: usize,
+}
+
+fn collect_function_signatures(
+    functions: &[FunctionDecl],
+) -> Result<HashMap<String, FunctionSignature>, CompileError> {
+    let mut signatures = HashMap::new();
+    for (index, function) in functions.iter().enumerate() {
+        signatures.insert(
+            function.name.clone(),
+            FunctionSignature {
+                index,
+                return_type: function.return_type,
+                parameter_count: function.parameters.len(),
+            },
+        );
+    }
+    Ok(signatures)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum BlockOutcome {
     FallsThrough,
@@ -824,34 +876,75 @@ struct Codegen {
     unsafe_depth: usize,
     locals: HashMap<String, Local>,
     source_consts: HashMap<String, i32>,
+    function_signatures: HashMap<String, FunctionSignature>,
 }
 
 impl Codegen {
     fn compile(program: Program) -> Result<Image, CompileError> {
         let source_consts = evaluate_consts(&program.consts)?;
-        let main = program
-            .functions
-            .iter()
-            .find(|function| function.name == "main")
+        let function_signatures = collect_function_signatures(&program.functions)?;
+        let main = function_signatures
+            .get("main")
+            .copied()
             .ok_or_else(|| CompileError {
                 message: "missing `main` function".to_string(),
             })?;
-        if !main.parameters.is_empty() {
+        let main_function = &program.functions[main.index];
+        if !main_function.parameters.is_empty() {
             return Err(CompileError {
                 message: "`main` cannot have parameters".to_string(),
             });
         }
 
+        let mut functions = Vec::with_capacity(program.functions.len());
+        for function in &program.functions {
+            functions.push(Self::compile_function(
+                function,
+                source_consts.clone(),
+                function_signatures.clone(),
+            )?);
+        }
+
+        Ok(Image {
+            language_version: "ckm-seed-0".to_string(),
+            memory_size: 64 * 1024,
+            rodata: Vec::new(),
+            data: Vec::new(),
+            bss_size: 0,
+            entry_function_index: main.index,
+            functions,
+        })
+    }
+
+    fn compile_function(
+        function: &FunctionDecl,
+        source_consts: HashMap<String, i32>,
+        function_signatures: HashMap<String, FunctionSignature>,
+    ) -> Result<Function, CompileError> {
         let mut codegen = Self {
             instructions: Vec::new(),
             next_register: 0,
-            return_type: main.return_type,
+            return_type: function.return_type,
             unsafe_depth: 0,
             locals: HashMap::new(),
             source_consts,
+            function_signatures,
         };
+        let mut parameters = Vec::with_capacity(function.parameters.len());
+        for parameter in &function.parameters {
+            let register = codegen.alloc_register()?;
+            parameters.push(register);
+            codegen.locals.insert(
+                parameter.name.clone(),
+                Local {
+                    register,
+                    ty: ValueType::I32,
+                    mutable: false,
+                },
+            );
+        }
 
-        let outcome = codegen.compile_statements(&main.statements)?;
+        let outcome = codegen.compile_statements(&function.statements)?;
         if outcome == BlockOutcome::FallsThrough {
             match codegen.return_type {
                 ReturnType::Unit => codegen.instructions.push(Instruction::ReturnUnit),
@@ -863,19 +956,11 @@ impl Codegen {
             }
         }
 
-        Ok(Image {
-            language_version: "ckm-seed-0".to_string(),
-            memory_size: 64 * 1024,
-            rodata: Vec::new(),
-            data: Vec::new(),
-            bss_size: 0,
-            entry_function_index: 0,
-            functions: vec![Function {
-                name: "main".to_string(),
-                register_count: usize::from(codegen.next_register),
-                parameters: Vec::new(),
-                instructions: codegen.instructions,
-            }],
+        Ok(Function {
+            name: function.name.clone(),
+            register_count: usize::from(codegen.next_register),
+            parameters,
+            instructions: codegen.instructions,
         })
     }
 
@@ -1082,6 +1167,7 @@ impl Codegen {
                     }),
                 }
             }
+            Expr::Call { name, args } => self.compile_call(name, args),
             Expr::Mmio(address) => Ok(ExprValue::Addr(self.compile_addr_expr(address)?)),
             Expr::MethodCall {
                 receiver,
@@ -1106,6 +1192,42 @@ impl Codegen {
                 let rhs = self.compile_i32_expr(rhs)?;
                 self.compile_compare(*op, lhs, rhs)
             }
+        }
+    }
+
+    fn compile_call(&mut self, name: &str, args: &[Expr]) -> Result<ExprValue, CompileError> {
+        let signature =
+            self.function_signatures
+                .get(name)
+                .copied()
+                .ok_or_else(|| CompileError {
+                    message: format!("unknown function `{name}`"),
+                })?;
+        if args.len() != signature.parameter_count {
+            return Err(CompileError {
+                message: format!(
+                    "function `{name}` expects {} arguments but got {}",
+                    signature.parameter_count,
+                    args.len()
+                ),
+            });
+        }
+        let arguments = args
+            .iter()
+            .map(|arg| self.compile_i32_expr(arg))
+            .collect::<Result<Vec<_>, _>>()?;
+        let return_register = match signature.return_type {
+            ReturnType::Unit => None,
+            ReturnType::I32 => Some(self.alloc_register()?),
+        };
+        self.instructions.push(Instruction::CallStatic {
+            return_register,
+            function_index: signature.index,
+            arguments,
+        });
+        match return_register {
+            Some(register) => Ok(ExprValue::I32(register)),
+            None => Ok(ExprValue::Unit),
         }
     }
 

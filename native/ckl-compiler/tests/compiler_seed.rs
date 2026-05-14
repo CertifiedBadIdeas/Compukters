@@ -373,6 +373,77 @@ fn compile_accepts_const_before_main() {
 }
 
 #[test]
+fn compile_lowers_unit_helper_function() {
+    let image = compile(
+        "fn write_ok() {
+            unsafe {
+                mmio<i32>(DEBUG_WRITE).store(79);
+            }
+        }
+
+        fn main() {
+            write_ok();
+        }",
+    )
+    .unwrap();
+
+    assert_eq!(image.entry_function_index, 1);
+    assert_eq!(image.functions[0].name, "write_ok");
+    assert_eq!(
+        image.functions[1].instructions,
+        vec![
+            Instruction::CallStatic {
+                return_register: None,
+                function_index: 0,
+                arguments: Vec::new(),
+            },
+            Instruction::ReturnUnit,
+        ]
+    );
+}
+
+#[test]
+fn compile_lowers_i32_function_call_with_arguments() {
+    let image = compile(
+        "fn add(a: i32, b: i32) -> i32 {
+            return a + b;
+        }
+
+        fn main() -> i32 {
+            return add(7, 5);
+        }",
+    )
+    .unwrap();
+
+    assert_eq!(image.entry_function_index, 1);
+    assert_eq!(image.functions[0].parameters, vec![0, 1]);
+    assert_eq!(
+        image.functions[0].instructions,
+        vec![
+            Instruction::I32Add {
+                dst: 2,
+                lhs: 0,
+                rhs: 1,
+            },
+            Instruction::ReturnI32 { src: 2 },
+        ]
+    );
+    assert_eq!(
+        image.functions[1].instructions,
+        vec![
+            Instruction::I32Const { dst: 0, value: 7 },
+            Instruction::I32Const { dst: 1, value: 5 },
+            Instruction::CallStatic {
+                return_register: Some(2),
+                function_index: 0,
+                arguments: vec![0, 1],
+            },
+            Instruction::ReturnI32 { src: 2 },
+        ]
+    );
+}
+
+#[test]
 fn compile_rejects_void_return_type() {
     let error = compile("fn main() -> void { }").unwrap_err();
 
