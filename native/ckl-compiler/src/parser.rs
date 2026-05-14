@@ -146,7 +146,7 @@ impl Parser {
     }
 
     fn parse_comparison(&mut self) -> Result<Expr, CompileError> {
-        let lhs = self.parse_add_sub()?;
+        let lhs = self.parse_bit_or()?;
         let op = if self.consume(TokenKind::Less) {
             Some(CompareOp::Lt)
         } else if self.consume(TokenKind::EqualEqual) {
@@ -164,7 +164,7 @@ impl Parser {
         };
 
         if let Some(op) = op {
-            let rhs = self.parse_add_sub()?;
+            let rhs = self.parse_bit_or()?;
             Ok(Expr::Compare {
                 op,
                 lhs: Box::new(lhs),
@@ -172,6 +172,64 @@ impl Parser {
             })
         } else {
             Ok(lhs)
+        }
+    }
+
+    fn parse_bit_or(&mut self) -> Result<Expr, CompileError> {
+        let mut expr = self.parse_bit_xor()?;
+        while self.consume(TokenKind::Pipe) {
+            let rhs = self.parse_bit_xor()?;
+            expr = Expr::Binary {
+                op: BinaryOp::BitOr,
+                lhs: Box::new(expr),
+                rhs: Box::new(rhs),
+            };
+        }
+        Ok(expr)
+    }
+
+    fn parse_bit_xor(&mut self) -> Result<Expr, CompileError> {
+        let mut expr = self.parse_bit_and()?;
+        while self.consume(TokenKind::Caret) {
+            let rhs = self.parse_bit_and()?;
+            expr = Expr::Binary {
+                op: BinaryOp::BitXor,
+                lhs: Box::new(expr),
+                rhs: Box::new(rhs),
+            };
+        }
+        Ok(expr)
+    }
+
+    fn parse_bit_and(&mut self) -> Result<Expr, CompileError> {
+        let mut expr = self.parse_shift()?;
+        while self.consume(TokenKind::Ampersand) {
+            let rhs = self.parse_shift()?;
+            expr = Expr::Binary {
+                op: BinaryOp::BitAnd,
+                lhs: Box::new(expr),
+                rhs: Box::new(rhs),
+            };
+        }
+        Ok(expr)
+    }
+
+    fn parse_shift(&mut self) -> Result<Expr, CompileError> {
+        let mut expr = self.parse_add_sub()?;
+        loop {
+            let op = if self.consume(TokenKind::Shl) {
+                BinaryOp::Shl
+            } else if self.consume(TokenKind::Shr) {
+                BinaryOp::Shr
+            } else {
+                return Ok(expr);
+            };
+            let rhs = self.parse_add_sub()?;
+            expr = Expr::Binary {
+                op,
+                lhs: Box::new(expr),
+                rhs: Box::new(rhs),
+            };
         }
     }
 

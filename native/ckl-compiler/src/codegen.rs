@@ -137,6 +137,11 @@ fn evaluate_const_expr(
                         lhs.checked_div(rhs)
                     }
                 }
+                BinaryOp::BitAnd => Some(lhs & rhs),
+                BinaryOp::BitOr => Some(lhs | rhs),
+                BinaryOp::BitXor => Some(lhs ^ rhs),
+                BinaryOp::Shl => Some(lhs.wrapping_shl(rhs as u32)),
+                BinaryOp::Shr => Some(lhs.wrapping_shr(rhs as u32)),
             }
             .ok_or_else(|| CompileError {
                 message: "const initializer arithmetic overflow".to_string(),
@@ -578,6 +583,11 @@ impl Codegen {
                     BinaryOp::Sub => Instruction::I32Sub { dst, lhs, rhs },
                     BinaryOp::Mul => Instruction::I32Mul { dst, lhs, rhs },
                     BinaryOp::Div => Instruction::I32Div { dst, lhs, rhs },
+                    BinaryOp::BitAnd => Instruction::I32BitAnd { dst, lhs, rhs },
+                    BinaryOp::BitOr => Instruction::I32BitOr { dst, lhs, rhs },
+                    BinaryOp::BitXor => Instruction::I32BitXor { dst, lhs, rhs },
+                    BinaryOp::Shl => Instruction::I32Shl { dst, lhs, rhs },
+                    BinaryOp::Shr => Instruction::I32Shr { dst, lhs, rhs },
                 };
                 self.instructions.push(instruction);
                 Ok(ExprValue::I32(dst))

@@ -86,6 +86,11 @@ pub(crate) enum BinaryOp {
     Sub,
     Mul,
     Div,
+    BitAnd,
+    BitOr,
+    BitXor,
+    Shl,
+    Shr,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
