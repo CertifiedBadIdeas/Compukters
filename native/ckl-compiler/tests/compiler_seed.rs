@@ -834,3 +834,26 @@ fn compiled_seed_functions_and_consts_run_on_computer_machine() {
     assert_eq!(machine.panic_code(), 0);
     assert_eq!(machine.debug_output_string(), "OK");
 }
+
+#[test]
+fn compiled_seed_ptr_i32_ram_program_runs_on_computer_machine() {
+    let image = compile(
+        "fn main() -> i32 {
+            unsafe {
+                ptr<i32>(RAM_BASE + 4).store(42);
+                return ptr<i32>(RAM_BASE + 4).load();
+            }
+        }",
+    )
+    .unwrap();
+    let mut machine = ComputerMachine::new(64 * 1024).unwrap();
+    let cpu_id = machine.spawn_boot_cpu(image, 1_000_000).unwrap();
+
+    assert_eq!(
+        machine.run_boot_cpu_until_signal(cpu_id).unwrap(),
+        LowImageSignal::HaltI32(42)
+    );
+    assert_eq!(machine.control_status(), ComputerMachine::STATUS_HALTED);
+    assert_eq!(machine.exit_code(), 42);
+    assert_eq!(machine.panic_code(), 0);
+}
