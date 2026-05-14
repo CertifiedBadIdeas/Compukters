@@ -210,6 +210,27 @@ fn lexer_recognizes_comments_and_bitwise_tokens() {
 }
 
 #[test]
+fn lexer_recognizes_break_continue_loop_control_keywords() {
+    let tokens = lex("while true { continue; break; }").unwrap();
+    let kinds: Vec<TokenKind> = tokens.into_iter().map(|token| token.kind).collect();
+
+    assert_eq!(
+        kinds,
+        vec![
+            TokenKind::While,
+            TokenKind::True,
+            TokenKind::LeftBrace,
+            TokenKind::Continue,
+            TokenKind::Semicolon,
+            TokenKind::Break,
+            TokenKind::Semicolon,
+            TokenKind::RightBrace,
+            TokenKind::Eof,
+        ]
+    );
+}
+
+#[test]
 fn compile_lowers_i32_main_return_arithmetic() {
     let image = compile("fn main() -> i32 { return 7 + 3 * 2; }").unwrap();
     let function = &image.functions[0];
@@ -355,6 +376,48 @@ fn compile_lowers_while_with_i32_less_than() {
         instructions.last(),
         Some(Instruction::ReturnI32 { .. })
     ));
+}
+
+#[test]
+fn compile_lowers_break_continue_loop_control_in_while() {
+    let image = compile(
+        "fn main() -> i32 {
+            let mut i: i32 = 0;
+            while i < 10 {
+                i = i + 1;
+                if i == 2 {
+                    continue;
+                }
+                if i == 4 {
+                    break;
+                }
+            }
+            return i;
+        }",
+    )
+    .unwrap();
+    let instructions = &image.functions[0].instructions;
+
+    assert!(instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::JumpIfFalse { .. })));
+    assert!(instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::Jump { target: 2 })));
+    assert!(matches!(
+        instructions.last(),
+        Some(Instruction::ReturnI32 { .. })
+    ));
+    assert!(instructions.iter().all(|instruction| {
+        !matches!(
+            instruction,
+            Instruction::Jump { target: usize::MAX }
+                | Instruction::JumpIfFalse {
+                    target: usize::MAX,
+                    ..
+                }
+        )
+    }));
 }
 
 #[test]
@@ -999,6 +1062,42 @@ fn compile_rejects_unreachable_statement_after_return() {
 }
 
 #[test]
+fn compile_rejects_break_continue_loop_control_outside_loop() {
+    let break_error = compile("fn main() { break; }").unwrap_err();
+    let continue_error = compile("fn main() { continue; }").unwrap_err();
+
+    assert!(
+        break_error.message.contains("`break` outside loop"),
+        "{break_error:?}"
+    );
+    assert!(
+        continue_error.message.contains("`continue` outside loop"),
+        "{continue_error:?}"
+    );
+}
+
+#[test]
+fn compile_rejects_unreachable_statement_after_break_continue_loop_control() {
+    let break_error =
+        compile("fn main() { while true { break; let mut i: i32 = 1; } }").unwrap_err();
+    let continue_error =
+        compile("fn main() { while true { continue; let mut i: i32 = 1; } }").unwrap_err();
+
+    assert!(
+        break_error
+            .message
+            .contains("unreachable statement after loop control"),
+        "{break_error:?}"
+    );
+    assert!(
+        continue_error
+            .message
+            .contains("unreachable statement after loop control"),
+        "{continue_error:?}"
+    );
+}
+
+#[test]
 fn compiled_seed_runs_on_computer_machine() {
     let image = compile(
         "fn main() -> i32 {
@@ -1023,6 +1122,34 @@ fn compiled_seed_runs_on_computer_machine() {
     assert_eq!(machine.exit_code(), 0);
     assert_eq!(machine.panic_code(), 0);
     assert_eq!(machine.debug_output_string(), "OK");
+}
+
+#[test]
+fn compiled_seed_break_continue_loop_control_runs_on_computer_machine() {
+    let image = compile(
+        "fn main() -> i32 {
+            let mut i: i32 = 0;
+            while i < 10 {
+                i = i + 1;
+                if i == 2 {
+                    continue;
+                }
+                if i == 4 {
+                    break;
+                }
+            }
+            return i;
+        }",
+    )
+    .unwrap();
+    let mut machine = ComputerMachine::new(64 * 1024).unwrap();
+    let cpu_id = machine.spawn_boot_cpu(image, 1_000_000).unwrap();
+
+    assert_eq!(
+        machine.run_boot_cpu_until_signal(cpu_id).unwrap(),
+        LowImageSignal::HaltI32(4)
+    );
+    assert_eq!(machine.exit_code(), 4);
 }
 
 #[test]

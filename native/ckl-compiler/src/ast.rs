@@ -57,6 +57,8 @@ pub(crate) enum Statement {
         condition: Expr,
         body: Vec<Statement>,
     },
+    Break,
+    Continue,
     Return(Option<Expr>),
     Unsafe(Vec<Statement>),
     Expr(Expr),
