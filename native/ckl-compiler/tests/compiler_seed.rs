@@ -127,6 +127,26 @@ fn lexer_recognizes_const_keyword() {
 }
 
 #[test]
+fn lexer_recognizes_ptr_keyword() {
+    let tokens = lex("ptr<i32>(RAM_BASE)").unwrap();
+    let kinds: Vec<TokenKind> = tokens.into_iter().map(|token| token.kind).collect();
+
+    assert_eq!(
+        kinds,
+        vec![
+            TokenKind::Ptr,
+            TokenKind::Less,
+            TokenKind::I32,
+            TokenKind::Greater,
+            TokenKind::LeftParen,
+            TokenKind::Ident("RAM_BASE".to_string()),
+            TokenKind::RightParen,
+            TokenKind::Eof,
+        ]
+    );
+}
+
+#[test]
 fn compile_lowers_i32_main_return_arithmetic() {
     let image = compile("fn main() -> i32 { return 7 + 3 * 2; }").unwrap();
     let function = &image.functions[0];
@@ -298,6 +318,30 @@ fn compile_lowers_unsafe_mmio_load_return() {
             Instruction::ReturnI32 { src: 1 },
         ]
     );
+}
+
+#[test]
+fn compile_lowers_unsafe_ptr_i32_store_and_load() {
+    let image = compile(
+        "fn main() -> i32 {
+            unsafe {
+                ptr<i32>(RAM_BASE + 4).store(42);
+                return ptr<i32>(RAM_BASE + 4).load();
+            }
+        }",
+    )
+    .unwrap();
+    let instructions = &image.functions[0].instructions;
+
+    assert!(instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::AddrAdd { .. })));
+    assert!(instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::Store32 { .. })));
+    assert!(instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::Load32 { .. })));
 }
 
 #[test]
