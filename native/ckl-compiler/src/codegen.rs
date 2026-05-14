@@ -255,6 +255,21 @@ fn collect_function_signatures(
 enum BlockOutcome {
     FallsThrough,
     AlwaysReturns,
+    AlwaysBreaks,
+    AlwaysContinues,
+    AlwaysStops,
+}
+
+impl BlockOutcome {
+    fn terminates(self) -> bool {
+        self != BlockOutcome::FallsThrough
+    }
+}
+
+#[derive(Debug, Clone)]
+struct LoopContext {
+    continue_target: usize,
+    break_jumps: Vec<usize>,
 }
 
 struct Codegen {
@@ -262,6 +277,7 @@ struct Codegen {
     next_register: u16,
     return_type: ReturnType,
     unsafe_depth: usize,
+    loop_stack: Vec<LoopContext>,
     locals: HashMap<String, Local>,
     source_consts: HashMap<String, i32>,
     function_signatures: HashMap<String, FunctionSignature>,
@@ -315,6 +331,7 @@ impl Codegen {
             next_register: 0,
             return_type: function.return_type,
             unsafe_depth: 0,
+            loop_stack: Vec::new(),
             locals: HashMap::new(),
             source_consts,
             function_signatures,
@@ -371,9 +388,14 @@ impl Codegen {
     ) -> Result<BlockOutcome, CompileError> {
         let mut outcome = BlockOutcome::FallsThrough;
         for statement in statements {
-            if outcome == BlockOutcome::AlwaysReturns {
+            if outcome.terminates() {
+                let message = if outcome == BlockOutcome::AlwaysReturns {
+                    "unreachable statement after return"
+                } else {
+                    "unreachable statement after loop control"
+                };
                 return Err(CompileError {
-                    message: "unreachable statement after return".to_string(),
+                    message: message.to_string(),
                 });
             }
             outcome = self.compile_statement(statement)?;
@@ -450,6 +472,8 @@ impl Codegen {
                         && else_outcome == BlockOutcome::AlwaysReturns
                     {
                         Ok(BlockOutcome::AlwaysReturns)
+                    } else if then_outcome.terminates() && else_outcome.terminates() {
+                        Ok(BlockOutcome::AlwaysStops)
                     } else {
                         Ok(BlockOutcome::FallsThrough)
                     }
@@ -463,12 +487,48 @@ impl Codegen {
                 let loop_start = self.instructions.len();
                 let cond = self.compile_bool_expr(condition)?;
                 let exit_jump = self.emit_jump_if_false_placeholder(cond);
-                self.compile_statements(body)?;
-                self.instructions
-                    .push(Instruction::Jump { target: loop_start });
+                self.loop_stack.push(LoopContext {
+                    continue_target: loop_start,
+                    break_jumps: Vec::new(),
+                });
+                let body_outcome = self.compile_statements(body)?;
+                let context = self.loop_stack.pop().ok_or_else(|| CompileError {
+                    message: "internal compiler error: missing loop context".to_string(),
+                })?;
+                if body_outcome == BlockOutcome::FallsThrough {
+                    self.instructions
+                        .push(Instruction::Jump { target: loop_start });
+                }
                 let loop_end = self.instructions.len();
                 self.patch_jump(exit_jump, loop_end)?;
+                for jump in context.break_jumps {
+                    self.patch_jump(jump, loop_end)?;
+                }
                 Ok(BlockOutcome::FallsThrough)
+            }
+            Statement::Break => {
+                if self.loop_stack.is_empty() {
+                    return Err(CompileError {
+                        message: "`break` outside loop".to_string(),
+                    });
+                }
+                let jump = self.emit_jump_placeholder();
+                let context = self.loop_stack.last_mut().ok_or_else(|| CompileError {
+                    message: "`break` outside loop".to_string(),
+                })?;
+                context.break_jumps.push(jump);
+                Ok(BlockOutcome::AlwaysBreaks)
+            }
+            Statement::Continue => {
+                let target = self
+                    .loop_stack
+                    .last()
+                    .map(|context| context.continue_target)
+                    .ok_or_else(|| CompileError {
+                        message: "`continue` outside loop".to_string(),
+                    })?;
+                self.instructions.push(Instruction::Jump { target });
+                Ok(BlockOutcome::AlwaysContinues)
             }
             Statement::Return(None) => match self.return_type {
                 ReturnType::Unit => {

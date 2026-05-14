@@ -122,6 +122,14 @@ impl Parser {
             let body = self.parse_block()?;
             return Ok(Statement::While { condition, body });
         }
+        if self.consume(TokenKind::Break) {
+            self.expect(TokenKind::Semicolon)?;
+            return Ok(Statement::Break);
+        }
+        if self.consume(TokenKind::Continue) {
+            self.expect(TokenKind::Semicolon)?;
+            return Ok(Statement::Continue);
+        }
         if self.consume(TokenKind::Return) {
             if self.consume(TokenKind::Semicolon) {
                 return Ok(Statement::Return(None));
