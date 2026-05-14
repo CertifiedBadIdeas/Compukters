@@ -763,6 +763,11 @@ impl Codegen {
     fn compile_statement(&mut self, statement: &Statement) -> Result<BlockOutcome, CompileError> {
         match statement {
             Statement::Let { name, initializer } => {
+                if resolve_builtin_constant(name).is_some() {
+                    return Err(CompileError {
+                        message: format!("local `{name}` cannot shadow built-in ABI constant"),
+                    });
+                }
                 if self.locals.contains_key(name) {
                     return Err(CompileError {
                         message: format!("duplicate local `{name}`"),

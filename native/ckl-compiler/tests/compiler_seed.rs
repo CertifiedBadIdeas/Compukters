@@ -371,6 +371,52 @@ fn compile_rejects_empty_return_in_i32_function() {
 }
 
 #[test]
+fn compile_rejects_address_builtin_as_i32() {
+    let error = compile("fn main() -> i32 { return DEBUG_WRITE; }").unwrap_err();
+
+    assert!(
+        error.message.contains("expected `i32`, found address"),
+        "{error:?}"
+    );
+}
+
+#[test]
+fn compile_rejects_i32_builtin_as_mmio_address() {
+    let error = compile("fn main() { unsafe { mmio<i32>(STATUS_READY).store(1); } }").unwrap_err();
+
+    assert!(
+        error
+            .message
+            .contains("MMIO address must be an address expression"),
+        "{error:?}"
+    );
+}
+
+#[test]
+fn compile_rejects_builtin_shadowing() {
+    let error = compile("fn main() { let mut DEBUG_WRITE: i32 = 1; }").unwrap_err();
+
+    assert!(
+        error
+            .message
+            .contains("local `DEBUG_WRITE` cannot shadow built-in ABI constant"),
+        "{error:?}"
+    );
+}
+
+#[test]
+fn compile_rejects_unknown_identifier() {
+    let error = compile("fn main() -> i32 { return UNKNOWN_CONSTANT; }").unwrap_err();
+
+    assert!(
+        error
+            .message
+            .contains("use of undeclared local `UNKNOWN_CONSTANT`"),
+        "{error:?}"
+    );
+}
+
+#[test]
 fn compile_rejects_undeclared_local_read() {
     let error = compile("fn main() -> i32 { return missing; }").unwrap_err();
 
