@@ -726,3 +726,44 @@ fn compiled_seed_abi_constants_run_on_computer_machine() {
     assert_eq!(machine.panic_code(), 0);
     assert_eq!(machine.debug_output_string(), "OK");
 }
+
+#[test]
+fn compiled_seed_functions_and_consts_run_on_computer_machine() {
+    let image = compile(
+        "const OK_O: i32 = 79;
+         const OK_K: i32 = 75;
+
+         fn write_ok() {
+             unsafe {
+                 mmio<i32>(DEBUG_WRITE).store(OK_O);
+                 mmio<i32>(DEBUG_WRITE).store(OK_K);
+             }
+         }
+
+         fn main() -> i32 {
+             unsafe {
+                 mmio<i32>(CONTROL_STATUS).store(STATUS_BOOTING);
+             }
+
+             write_ok();
+
+             unsafe {
+                 mmio<i32>(CONTROL_STATUS).store(STATUS_READY);
+             }
+
+             return 0;
+         }",
+    )
+    .unwrap();
+    let mut machine = ComputerMachine::new(64 * 1024).unwrap();
+    let cpu_id = machine.spawn_boot_cpu(image, 1_000_000).unwrap();
+
+    assert_eq!(
+        machine.run_boot_cpu_until_signal(cpu_id).unwrap(),
+        LowImageSignal::HaltI32(0)
+    );
+    assert_eq!(machine.control_status(), ComputerMachine::STATUS_HALTED);
+    assert_eq!(machine.exit_code(), 0);
+    assert_eq!(machine.panic_code(), 0);
+    assert_eq!(machine.debug_output_string(), "OK");
+}
