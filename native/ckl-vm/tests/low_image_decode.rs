@@ -59,6 +59,23 @@ fn decodes_i32_equality_instruction() {
     );
 }
 
+#[test]
+fn decodes_u32_less_than_instruction() {
+    let image = decode_image(&u32_less_than_image_bytes()).expect("image decodes");
+
+    assert_eq!(
+        image.functions[0].instructions,
+        vec![
+            Instruction::U32Lt {
+                dst: 2,
+                lhs: 0,
+                rhs: 1,
+            },
+            Instruction::ReturnBool { src: 2 },
+        ],
+    );
+}
+
 fn i32_equality_image_bytes() -> Vec<u8> {
     let mut out = Vec::new();
     out.extend_from_slice(b"CKIM");
@@ -75,6 +92,30 @@ fn i32_equality_image_bytes() -> Vec<u8> {
     i32(&mut out, 0);
     i32(&mut out, 2);
     out.push(25);
+    u16(&mut out, 2);
+    u16(&mut out, 0);
+    u16(&mut out, 1);
+    out.push(24);
+    u16(&mut out, 2);
+    out
+}
+
+fn u32_less_than_image_bytes() -> Vec<u8> {
+    let mut out = Vec::new();
+    out.extend_from_slice(b"CKIM");
+    out.push(5);
+    string(&mut out, "ckl-low-1");
+    u32(&mut out, 1024);
+    bytes(&mut out, &[]);
+    bytes(&mut out, &[]);
+    u32(&mut out, 0);
+    i32(&mut out, 0);
+    i32(&mut out, 1);
+    string(&mut out, "main");
+    u16(&mut out, 3);
+    i32(&mut out, 0);
+    i32(&mut out, 2);
+    out.push(28);
     u16(&mut out, 2);
     u16(&mut out, 0);
     u16(&mut out, 1);

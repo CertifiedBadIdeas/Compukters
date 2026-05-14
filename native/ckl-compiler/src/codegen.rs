@@ -803,11 +803,7 @@ impl Codegen {
                 self.emit_binary_instruction(*op, dst, lhs, rhs);
                 Ok(ExprValue::I32(dst))
             }
-            Expr::Compare { op, lhs, rhs } => {
-                let lhs = self.compile_i32_expr(lhs)?;
-                let rhs = self.compile_i32_expr(rhs)?;
-                self.compile_compare(*op, lhs, rhs)
-            }
+            Expr::Compare { op, lhs, rhs } => self.compile_compare_expr(*op, lhs, rhs),
         }
     }
 
@@ -1133,7 +1129,36 @@ impl Codegen {
         }
     }
 
-    fn compile_compare(
+    fn compile_compare_expr(
+        &mut self,
+        op: CompareOp,
+        lhs: &Expr,
+        rhs: &Expr,
+    ) -> Result<ExprValue, CompileError> {
+        let lhs = self.compile_expr(lhs)?;
+        let rhs = self.compile_expr(rhs)?;
+        match (lhs, rhs) {
+            (ExprValue::I32(lhs), ExprValue::I32(rhs)) => self.compile_i32_compare(op, lhs, rhs),
+            (ExprValue::U32(lhs), ExprValue::U32(rhs)) => self.compile_u32_compare(op, lhs, rhs),
+            (ExprValue::Bool(lhs), ExprValue::Bool(rhs)) => match op {
+                CompareOp::Eq | CompareOp::Ne => self.compile_equality(op, lhs, rhs),
+                CompareOp::Lt | CompareOp::Le | CompareOp::Gt | CompareOp::Ge => {
+                    Err(CompileError {
+                        message: "ordering comparison requires `i32` or `u32`".to_string(),
+                    })
+                }
+            },
+            (lhs, rhs) => Err(CompileError {
+                message: format!(
+                    "comparison operands must have the same type, found {} and {}",
+                    lhs.type_name(),
+                    rhs.type_name()
+                ),
+            }),
+        }
+    }
+
+    fn compile_i32_compare(
         &mut self,
         op: CompareOp,
         lhs: u16,
@@ -1145,39 +1170,75 @@ impl Codegen {
                 self.instructions.push(Instruction::I32Lt { dst, lhs, rhs });
                 Ok(ExprValue::Bool(dst))
             }
-            CompareOp::Eq => {
-                let dst = self.alloc_register()?;
-                self.instructions.push(Instruction::I32Eq { dst, lhs, rhs });
-                Ok(ExprValue::Bool(dst))
-            }
-            CompareOp::Ne => {
-                let eq = self.alloc_register()?;
-                self.instructions
-                    .push(Instruction::I32Eq { dst: eq, lhs, rhs });
-                let zero = self.emit_i32_const(0)?;
-                let dst = self.alloc_register()?;
-                self.instructions.push(Instruction::I32Eq {
-                    dst,
-                    lhs: eq,
-                    rhs: zero,
-                });
-                Ok(ExprValue::Bool(dst))
-            }
-            CompareOp::Gt => self.compile_compare(CompareOp::Lt, rhs, lhs),
-            CompareOp::Le => self.compile_not_less_than(rhs, lhs),
-            CompareOp::Ge => self.compile_not_less_than(lhs, rhs),
+            CompareOp::Eq | CompareOp::Ne => self.compile_equality(op, lhs, rhs),
+            CompareOp::Gt => self.compile_i32_compare(CompareOp::Lt, rhs, lhs),
+            CompareOp::Le => self.compile_i32_not_less_than(rhs, lhs),
+            CompareOp::Ge => self.compile_i32_not_less_than(lhs, rhs),
         }
     }
 
-    fn compile_not_less_than(&mut self, lhs: u16, rhs: u16) -> Result<ExprValue, CompileError> {
-        let lt = self.alloc_register()?;
+    fn compile_u32_compare(
+        &mut self,
+        op: CompareOp,
+        lhs: u16,
+        rhs: u16,
+    ) -> Result<ExprValue, CompileError> {
+        match op {
+            CompareOp::Lt => {
+                let dst = self.alloc_register()?;
+                self.instructions.push(Instruction::U32Lt { dst, lhs, rhs });
+                Ok(ExprValue::Bool(dst))
+            }
+            CompareOp::Eq | CompareOp::Ne => self.compile_equality(op, lhs, rhs),
+            CompareOp::Gt => self.compile_u32_compare(CompareOp::Lt, rhs, lhs),
+            CompareOp::Le => self.compile_u32_not_less_than(rhs, lhs),
+            CompareOp::Ge => self.compile_u32_not_less_than(lhs, rhs),
+        }
+    }
+
+    fn compile_equality(
+        &mut self,
+        op: CompareOp,
+        lhs: u16,
+        rhs: u16,
+    ) -> Result<ExprValue, CompileError> {
+        let eq = self.alloc_register()?;
         self.instructions
-            .push(Instruction::I32Lt { dst: lt, lhs, rhs });
+            .push(Instruction::I32Eq { dst: eq, lhs, rhs });
+        if op == CompareOp::Eq {
+            return Ok(ExprValue::Bool(eq));
+        }
+
         let zero = self.emit_i32_const(0)?;
         let dst = self.alloc_register()?;
         self.instructions.push(Instruction::I32Eq {
             dst,
-            lhs: lt,
+            lhs: eq,
+            rhs: zero,
+        });
+        Ok(ExprValue::Bool(dst))
+    }
+
+    fn compile_i32_not_less_than(&mut self, lhs: u16, rhs: u16) -> Result<ExprValue, CompileError> {
+        let lt = self.alloc_register()?;
+        self.instructions
+            .push(Instruction::I32Lt { dst: lt, lhs, rhs });
+        self.compile_bool_is_false(lt)
+    }
+
+    fn compile_u32_not_less_than(&mut self, lhs: u16, rhs: u16) -> Result<ExprValue, CompileError> {
+        let lt = self.alloc_register()?;
+        self.instructions
+            .push(Instruction::U32Lt { dst: lt, lhs, rhs });
+        self.compile_bool_is_false(lt)
+    }
+
+    fn compile_bool_is_false(&mut self, src: u16) -> Result<ExprValue, CompileError> {
+        let zero = self.emit_i32_const(0)?;
+        let dst = self.alloc_register()?;
+        self.instructions.push(Instruction::I32Eq {
+            dst,
+            lhs: src,
             rhs: zero,
         });
         Ok(ExprValue::Bool(dst))
