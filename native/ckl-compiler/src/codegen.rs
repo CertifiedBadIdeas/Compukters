@@ -338,7 +338,7 @@ impl Codegen {
         }
 
         Ok(Image {
-            language_version: "ckm-seed-0".to_string(),
+            language_version: "rux-0".to_string(),
             memory_size: 64 * 1024,
             rodata: Vec::new(),
             data: Vec::new(),

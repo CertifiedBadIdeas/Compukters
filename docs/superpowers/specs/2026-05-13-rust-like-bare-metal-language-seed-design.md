@@ -1,8 +1,8 @@
-# Rust-Like Bare-Metal Language Seed Design
+# Rux Bare-Metal Language Seed Design
 
 ## Goal
 
-Create the first Rust compiler path for a new bare-metal language that targets the low VM directly.
+Create the first Rust compiler path for Rux, a new Rust-like bare-metal language that targets the low VM directly.
 
 This is not a CKL compatibility project. CKL may remain as a legacy/product language elsewhere, but this experimental branch should start a new language designed for low VM computers, flat RAM, MMIO, and future ownership/RAII work.
 
@@ -10,7 +10,7 @@ This is not a CKL compatibility project. CKL may remain as a legacy/product lang
 
 The current CKL syntax and compiler architecture are not the desired foundation for the low-level VM direction. Porting the Kotlin CKL compiler to Rust would preserve too much of the old language shape and runtime model.
 
-The experiment should instead start with a tiny Rust-written compiler for a new Rust-like language:
+The experiment should instead start with a tiny Rust-written compiler for Rux:
 
 ```text
 source text
@@ -26,7 +26,7 @@ The first milestone should prove the full path from source text to bare-metal ma
 
 ## Working Language Shape
 
-The language uses Rust-like surface syntax:
+Rux uses Rust-like surface syntax:
 
 ```rust
 fn main() -> i32 {
@@ -41,7 +41,7 @@ fn main() -> i32 {
 }
 ```
 
-This is a temporary seed syntax, not final branding. The file extension can be `.ckm` for tests, but the name is intentionally not settled.
+The source file extension is `.rux`.
 
 ## Non-Goals
 
@@ -128,7 +128,7 @@ The compiler emits a single-function low image:
 
 ```rust
 Image {
-    language_version: "ckm-seed-0".to_string(),
+    language_version: "rux-0".to_string(),
     memory_size: 64 * 1024,
     rodata: Vec::new(),
     data: Vec::new(),
@@ -228,13 +228,13 @@ cargo test --manifest-path native/ckl-vm/Cargo.toml
 - A new Rust compiler crate exists.
 - No Kotlin compiler code is touched.
 - No CKL compatibility path is added.
-- A Rust-like source string compiles directly to `low_image::Image`.
+- A Rux source string compiles directly to `low_image::Image`.
 - The generated image runs on `ComputerMachine` and writes `OK` through debug MMIO.
 - The compiler reports deterministic errors for unsupported seed-language input.
 
 ## Implementation Status
 
-The first seed slice is implemented in `native/ckl-compiler`.
+The first Rux seed slice is implemented in `native/ckl-compiler`.
 
 Current support:
 
