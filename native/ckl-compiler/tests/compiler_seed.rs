@@ -481,10 +481,31 @@ fn compile_lowers_u32_bitwise_compound_assignment() {
         .any(|instruction| matches!(instruction, Instruction::I32BitXor { dst: 0, lhs: 0, .. })));
     assert!(instructions
         .iter()
-        .any(|instruction| matches!(instruction, Instruction::I32Shl { dst: 0, lhs: 0, .. })));
+        .any(|instruction| matches!(instruction, Instruction::U32Shl { dst: 0, lhs: 0, .. })));
     assert!(instructions
         .iter()
-        .any(|instruction| matches!(instruction, Instruction::I32Shr { dst: 0, lhs: 0, .. })));
+        .any(|instruction| matches!(instruction, Instruction::U32Shr { dst: 0, lhs: 0, .. })));
+}
+
+#[test]
+fn compile_lowers_u32_shifts_to_unsigned_instructions() {
+    let image = compile(
+        "fn main() -> i32 {
+            let mut value: u32 = 1u32;
+            value <<= 31u32;
+            value >>= 1u32;
+            return value as i32;
+        }",
+    )
+    .unwrap();
+    let instructions = &image.functions[0].instructions;
+
+    assert!(instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::U32Shl { .. })));
+    assert!(instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::U32Shr { .. })));
 }
 
 #[test]
@@ -1668,6 +1689,62 @@ fn compiled_seed_u32_compound_assignment_runs_on_computer_machine() {
     assert_eq!(
         machine.run_boot_cpu_until_signal(cpu_id).unwrap(),
         LowImageSignal::HaltI32(0xff)
+    );
+}
+
+#[test]
+fn compiled_seed_unbounded_i32_shift_runs_on_computer_machine() {
+    let image = compile(
+        "fn main() -> i32 {
+            let mut value: i32 = 42;
+            return value << 32;
+        }",
+    )
+    .unwrap();
+    let mut machine = ComputerMachine::new(64 * 1024).unwrap();
+    let cpu_id = machine.spawn_boot_cpu(image, 1_000_000).unwrap();
+
+    assert_eq!(
+        machine.run_boot_cpu_until_signal(cpu_id).unwrap(),
+        LowImageSignal::HaltI32(0)
+    );
+}
+
+#[test]
+fn compiled_seed_u32_logical_shift_runs_on_computer_machine() {
+    let image = compile(
+        "fn main() -> i32 {
+            let mut value: u32 = 0x80000000u32;
+            let mut shifted: u32 = value >> 1u32;
+            return shifted as i32;
+        }",
+    )
+    .unwrap();
+    let mut machine = ComputerMachine::new(64 * 1024).unwrap();
+    let cpu_id = machine.spawn_boot_cpu(image, 1_000_000).unwrap();
+
+    assert_eq!(
+        machine.run_boot_cpu_until_signal(cpu_id).unwrap(),
+        LowImageSignal::HaltI32(0x40000000)
+    );
+}
+
+#[test]
+fn compiled_seed_u32_out_of_range_shift_runs_on_computer_machine() {
+    let image = compile(
+        "fn main() -> i32 {
+            let mut value: u32 = 0x80000000u32;
+            let mut shifted: u32 = value >> 32u32;
+            return shifted as i32;
+        }",
+    )
+    .unwrap();
+    let mut machine = ComputerMachine::new(64 * 1024).unwrap();
+    let cpu_id = machine.spawn_boot_cpu(image, 1_000_000).unwrap();
+
+    assert_eq!(
+        machine.run_boot_cpu_until_signal(cpu_id).unwrap(),
+        LowImageSignal::HaltI32(0)
     );
 }
 
