@@ -170,6 +170,26 @@ enum ExecutableOperation {
         lhs: usize,
         rhs: i32,
     },
+    U32Shl {
+        dst: usize,
+        lhs: usize,
+        rhs: usize,
+    },
+    U32ShlImm {
+        dst: usize,
+        lhs: usize,
+        rhs: i32,
+    },
+    U32Shr {
+        dst: usize,
+        lhs: usize,
+        rhs: usize,
+    },
+    U32ShrImm {
+        dst: usize,
+        lhs: usize,
+        rhs: i32,
+    },
     I32Lt {
         dst: usize,
         lhs: usize,
@@ -366,6 +386,8 @@ impl LowProgram {
             | Instruction::I32BitXor { dst, lhs, rhs }
             | Instruction::I32Shl { dst, lhs, rhs }
             | Instruction::I32Shr { dst, lhs, rhs }
+            | Instruction::U32Shl { dst, lhs, rhs }
+            | Instruction::U32Shr { dst, lhs, rhs }
             | Instruction::I32Lt { dst, lhs, rhs }
             | Instruction::U32Lt { dst, lhs, rhs }
             | Instruction::I32Eq { dst, lhs, rhs } => {
@@ -686,6 +708,22 @@ impl ExecutableOperation {
                 |dst, lhs, rhs| ExecutableOperation::I32Shr { dst, lhs, rhs },
                 |dst, lhs, rhs| ExecutableOperation::I32ShrImm { dst, lhs, rhs },
             ),
+            Instruction::U32Shl { dst, lhs, rhs } => compile_i32_binary_imm(
+                known_i32,
+                *dst,
+                *lhs,
+                *rhs,
+                |dst, lhs, rhs| ExecutableOperation::U32Shl { dst, lhs, rhs },
+                |dst, lhs, rhs| ExecutableOperation::U32ShlImm { dst, lhs, rhs },
+            ),
+            Instruction::U32Shr { dst, lhs, rhs } => compile_i32_binary_imm(
+                known_i32,
+                *dst,
+                *lhs,
+                *rhs,
+                |dst, lhs, rhs| ExecutableOperation::U32Shr { dst, lhs, rhs },
+                |dst, lhs, rhs| ExecutableOperation::U32ShrImm { dst, lhs, rhs },
+            ),
             Instruction::I32Lt { dst, lhs, rhs } => compile_i32_binary_imm(
                 known_i32,
                 *dst,
@@ -759,6 +797,8 @@ impl ExecutableOperation {
             | ExecutableOperation::I32BitXor { lhs, rhs, .. }
             | ExecutableOperation::I32Shl { lhs, rhs, .. }
             | ExecutableOperation::I32Shr { lhs, rhs, .. }
+            | ExecutableOperation::U32Shl { lhs, rhs, .. }
+            | ExecutableOperation::U32Shr { lhs, rhs, .. }
             | ExecutableOperation::I32Lt { lhs, rhs, .. }
             | ExecutableOperation::U32Lt { lhs, rhs, .. }
             | ExecutableOperation::I32Eq { lhs, rhs, .. }
@@ -781,6 +821,8 @@ impl ExecutableOperation {
             | ExecutableOperation::I32BitXorImm { lhs, .. }
             | ExecutableOperation::I32ShlImm { lhs, .. }
             | ExecutableOperation::I32ShrImm { lhs, .. }
+            | ExecutableOperation::U32ShlImm { lhs, .. }
+            | ExecutableOperation::U32ShrImm { lhs, .. }
             | ExecutableOperation::I32LtImm { lhs, .. }
             | ExecutableOperation::U32LtImm { lhs, .. }
             | ExecutableOperation::I32EqImm { lhs, .. } => *lhs == register,
@@ -1125,20 +1167,36 @@ impl LowState {
                 self.write_i32(*dst, value);
             }
             ExecutableOperation::I32Shl { dst, lhs, rhs } => {
-                let value = self.read_i32(*lhs).wrapping_shl(self.read_i32(*rhs) as u32);
+                let value = i32_shl_unbounded(self.read_i32(*lhs), self.read_i32(*rhs));
                 self.write_i32(*dst, value);
             }
             ExecutableOperation::I32ShlImm { dst, lhs, rhs } => {
-                let value = self.read_i32(*lhs).wrapping_shl(*rhs as u32);
+                let value = i32_shl_unbounded(self.read_i32(*lhs), *rhs);
                 self.write_i32(*dst, value);
             }
             ExecutableOperation::I32Shr { dst, lhs, rhs } => {
-                let value = self.read_i32(*lhs).wrapping_shr(self.read_i32(*rhs) as u32);
+                let value = i32_shr_unbounded(self.read_i32(*lhs), self.read_i32(*rhs));
                 self.write_i32(*dst, value);
             }
             ExecutableOperation::I32ShrImm { dst, lhs, rhs } => {
-                let value = self.read_i32(*lhs).wrapping_shr(*rhs as u32);
+                let value = i32_shr_unbounded(self.read_i32(*lhs), *rhs);
                 self.write_i32(*dst, value);
+            }
+            ExecutableOperation::U32Shl { dst, lhs, rhs } => {
+                let value = u32_shl_unbounded(self.read_i32(*lhs) as u32, self.read_i32(*rhs));
+                self.write_i32(*dst, value as i32);
+            }
+            ExecutableOperation::U32ShlImm { dst, lhs, rhs } => {
+                let value = u32_shl_unbounded(self.read_i32(*lhs) as u32, *rhs);
+                self.write_i32(*dst, value as i32);
+            }
+            ExecutableOperation::U32Shr { dst, lhs, rhs } => {
+                let value = u32_shr_unbounded(self.read_i32(*lhs) as u32, self.read_i32(*rhs));
+                self.write_i32(*dst, value as i32);
+            }
+            ExecutableOperation::U32ShrImm { dst, lhs, rhs } => {
+                let value = u32_shr_unbounded(self.read_i32(*lhs) as u32, *rhs);
+                self.write_i32(*dst, value as i32);
             }
             ExecutableOperation::I32Lt { dst, lhs, rhs } => {
                 let value = self.read_i32(*lhs) < self.read_i32(*rhs);
@@ -1396,6 +1454,34 @@ impl LowState {
     }
 }
 
+fn i32_shl_unbounded(value: i32, amount: i32) -> i32 {
+    if !(0..32).contains(&amount) {
+        return 0;
+    }
+    value.wrapping_shl(amount as u32)
+}
+
+fn i32_shr_unbounded(value: i32, amount: i32) -> i32 {
+    if !(0..32).contains(&amount) {
+        return if value < 0 { -1 } else { 0 };
+    }
+    value.wrapping_shr(amount as u32)
+}
+
+fn u32_shl_unbounded(value: u32, amount: i32) -> u32 {
+    if !(0..32).contains(&amount) {
+        return 0;
+    }
+    value.wrapping_shl(amount as u32)
+}
+
+fn u32_shr_unbounded(value: u32, amount: i32) -> u32 {
+    if !(0..32).contains(&amount) {
+        return 0;
+    }
+    value.wrapping_shr(amount as u32)
+}
+
 fn block_starts(function: &Function) -> Vec<usize> {
     let mut leaders = vec![false; function.instructions.len()];
     leaders[0] = true;
@@ -1555,6 +1641,8 @@ fn instruction_read_registers(instruction: &Instruction) -> Vec<usize> {
         | Instruction::I32BitXor { lhs, rhs, .. }
         | Instruction::I32Shl { lhs, rhs, .. }
         | Instruction::I32Shr { lhs, rhs, .. }
+        | Instruction::U32Shl { lhs, rhs, .. }
+        | Instruction::U32Shr { lhs, rhs, .. }
         | Instruction::I32Lt { lhs, rhs, .. }
         | Instruction::U32Lt { lhs, rhs, .. }
         | Instruction::I32Eq { lhs, rhs, .. }
@@ -1591,6 +1679,8 @@ fn instruction_write_register(instruction: &Instruction) -> Option<(usize, Optio
         | Instruction::I32BitXor { dst, .. }
         | Instruction::I32Shl { dst, .. }
         | Instruction::I32Shr { dst, .. }
+        | Instruction::U32Shl { dst, .. }
+        | Instruction::U32Shr { dst, .. }
         | Instruction::I32Lt { dst, .. }
         | Instruction::U32Lt { dst, .. }
         | Instruction::I32Eq { dst, .. }

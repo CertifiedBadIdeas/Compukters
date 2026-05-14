@@ -148,6 +148,96 @@ fn runner_executes_i32_bitwise_and_or() {
 }
 
 #[test]
+fn runner_executes_unbounded_i32_shifts() {
+    let left_shift_out_of_range = image(
+        vec![
+            Instruction::I32Const { dst: 0, value: 42 },
+            Instruction::I32Const { dst: 1, value: 32 },
+            Instruction::I32Shl {
+                dst: 2,
+                lhs: 0,
+                rhs: 1,
+            },
+            Instruction::ReturnI32 { src: 2 },
+        ],
+        3,
+    );
+    let arithmetic_right_shift_out_of_range = image(
+        vec![
+            Instruction::I32Const { dst: 0, value: -1 },
+            Instruction::I32Const { dst: 1, value: 32 },
+            Instruction::I32Shr {
+                dst: 2,
+                lhs: 0,
+                rhs: 1,
+            },
+            Instruction::ReturnI32 { src: 2 },
+        ],
+        3,
+    );
+
+    let mut shl_vm = LowImageVm::create(left_shift_out_of_range, 128).unwrap();
+    let mut shr_vm = LowImageVm::create(arithmetic_right_shift_out_of_range, 128).unwrap();
+
+    assert_eq!(
+        shl_vm.run_until_signal().unwrap(),
+        LowImageSignal::HaltI32(0)
+    );
+    assert_eq!(
+        shr_vm.run_until_signal().unwrap(),
+        LowImageSignal::HaltI32(-1)
+    );
+}
+
+#[test]
+fn runner_executes_u32_logical_shifts() {
+    let logical_right_shift = image(
+        vec![
+            Instruction::I32Const {
+                dst: 0,
+                value: i32::MIN,
+            },
+            Instruction::I32Const { dst: 1, value: 1 },
+            Instruction::U32Shr {
+                dst: 2,
+                lhs: 0,
+                rhs: 1,
+            },
+            Instruction::ReturnI32 { src: 2 },
+        ],
+        3,
+    );
+    let right_shift_out_of_range = image(
+        vec![
+            Instruction::I32Const {
+                dst: 0,
+                value: i32::MIN,
+            },
+            Instruction::I32Const { dst: 1, value: 32 },
+            Instruction::U32Shr {
+                dst: 2,
+                lhs: 0,
+                rhs: 1,
+            },
+            Instruction::ReturnI32 { src: 2 },
+        ],
+        3,
+    );
+
+    let mut logical_vm = LowImageVm::create(logical_right_shift, 128).unwrap();
+    let mut out_of_range_vm = LowImageVm::create(right_shift_out_of_range, 128).unwrap();
+
+    assert_eq!(
+        logical_vm.run_until_signal().unwrap(),
+        LowImageSignal::HaltI32(0x40000000),
+    );
+    assert_eq!(
+        out_of_range_vm.run_until_signal().unwrap(),
+        LowImageSignal::HaltI32(0),
+    );
+}
+
+#[test]
 fn runner_loads_and_stores_i32_in_linear_ram() {
     let image = image(
         vec![

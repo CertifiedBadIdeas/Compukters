@@ -162,8 +162,8 @@ fn evaluate_const_expr(
                 BinaryOp::BitAnd => Some(lhs & rhs),
                 BinaryOp::BitOr => Some(lhs | rhs),
                 BinaryOp::BitXor => Some(lhs ^ rhs),
-                BinaryOp::Shl => Some(lhs.wrapping_shl(rhs as u32)),
-                BinaryOp::Shr => Some(lhs.wrapping_shr(rhs as u32)),
+                BinaryOp::Shl => Some(i32_shl_unbounded(lhs, rhs)),
+                BinaryOp::Shr => Some(i32_shr_unbounded(lhs, rhs)),
             }
             .ok_or_else(|| CompileError {
                 message: "const initializer arithmetic overflow".to_string(),
@@ -181,6 +181,20 @@ fn evaluate_const_expr(
             message: "const initializer is not compile-time evaluable".to_string(),
         }),
     }
+}
+
+fn i32_shl_unbounded(value: i32, amount: i32) -> i32 {
+    if !(0..32).contains(&amount) {
+        return 0;
+    }
+    value.wrapping_shl(amount as u32)
+}
+
+fn i32_shr_unbounded(value: i32, amount: i32) -> i32 {
+    if !(0..32).contains(&amount) {
+        return if value < 0 { -1 } else { 0 };
+    }
+    value.wrapping_shr(amount as u32)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -492,7 +506,15 @@ impl Codegen {
                     }
                 };
                 let rhs = self.compile_expr_as(value, expected)?;
-                self.emit_binary_instruction(*op, local.register, local.register, rhs);
+                match local.ty {
+                    ValueType::I32 => {
+                        self.emit_i32_binary_instruction(*op, local.register, local.register, rhs)
+                    }
+                    ValueType::U32 => {
+                        self.emit_u32_binary_instruction(*op, local.register, local.register, rhs)
+                    }
+                    ValueType::Bool => unreachable!("bool locals are rejected above"),
+                }
                 Ok(BlockOutcome::FallsThrough)
             }
             Statement::If {
@@ -800,7 +822,7 @@ impl Codegen {
                 let lhs = self.compile_i32_expr(lhs)?;
                 let rhs = self.compile_i32_expr(rhs)?;
                 let dst = self.alloc_register()?;
-                self.emit_binary_instruction(*op, dst, lhs, rhs);
+                self.emit_i32_binary_instruction(*op, dst, lhs, rhs);
                 Ok(ExprValue::I32(dst))
             }
             Expr::Compare { op, lhs, rhs } => self.compile_compare_expr(*op, lhs, rhs),
@@ -816,11 +838,11 @@ impl Codegen {
         let lhs = self.compile_u32_expr(lhs)?;
         let rhs = self.compile_u32_expr(rhs)?;
         let dst = self.alloc_register()?;
-        self.emit_binary_instruction(*op, dst, lhs, rhs);
+        self.emit_u32_binary_instruction(*op, dst, lhs, rhs);
         Ok(dst)
     }
 
-    fn emit_binary_instruction(&mut self, op: BinaryOp, dst: u16, lhs: u16, rhs: u16) {
+    fn emit_i32_binary_instruction(&mut self, op: BinaryOp, dst: u16, lhs: u16, rhs: u16) {
         let instruction = match op {
             BinaryOp::Add => Instruction::I32Add { dst, lhs, rhs },
             BinaryOp::Sub => Instruction::I32Sub { dst, lhs, rhs },
@@ -831,6 +853,21 @@ impl Codegen {
             BinaryOp::BitXor => Instruction::I32BitXor { dst, lhs, rhs },
             BinaryOp::Shl => Instruction::I32Shl { dst, lhs, rhs },
             BinaryOp::Shr => Instruction::I32Shr { dst, lhs, rhs },
+        };
+        self.instructions.push(instruction);
+    }
+
+    fn emit_u32_binary_instruction(&mut self, op: BinaryOp, dst: u16, lhs: u16, rhs: u16) {
+        let instruction = match op {
+            BinaryOp::Shl => Instruction::U32Shl { dst, lhs, rhs },
+            BinaryOp::Shr => Instruction::U32Shr { dst, lhs, rhs },
+            BinaryOp::Add => Instruction::I32Add { dst, lhs, rhs },
+            BinaryOp::Sub => Instruction::I32Sub { dst, lhs, rhs },
+            BinaryOp::Mul => Instruction::I32Mul { dst, lhs, rhs },
+            BinaryOp::Div => Instruction::I32Div { dst, lhs, rhs },
+            BinaryOp::BitAnd => Instruction::I32BitAnd { dst, lhs, rhs },
+            BinaryOp::BitOr => Instruction::I32BitOr { dst, lhs, rhs },
+            BinaryOp::BitXor => Instruction::I32BitXor { dst, lhs, rhs },
         };
         self.instructions.push(instruction);
     }
