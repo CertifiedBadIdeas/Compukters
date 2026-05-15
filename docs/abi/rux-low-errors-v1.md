@@ -54,6 +54,8 @@ Runtime errors mean the image passed validation but trapped while executing.
 | --- | --- |
 | `DivideByZero` | Division or remainder used zero as the divisor. |
 | `MemoryOutOfBounds` | A load/store touches memory outside the active memory bus. |
+| `ReturnRegisterMissing` | A callee returned a scalar value, but the caller did not provide a return register. |
+| `ReturnRegisterUnexpected` | A callee returned unit, but the caller provided a return register. |
 | `CallDepthExceeded` | Static calls exceeded the host's call-depth/resource limit. |
 | `RuntimeResourceExceeded` | The host refused to continue because of a runtime resource limit. |
 

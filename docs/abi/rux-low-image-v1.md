@@ -213,11 +213,23 @@ Static calls transfer argument register values into the callee parameter registe
 
 `CallStatic` encodes arguments as a `register_id_list`, so the call ABI is positional and does not include names or source-language type metadata.
 
+Registers are frame-local. A callee cannot access caller registers except through copied argument values and the optional return register write performed by the VM when the callee returns.
+
+Call/return rules:
+
+- call arguments are copied as raw 64-bit register slots by position;
+- callee parameter register ids choose where those raw values land in the callee frame;
+- scalar returns (`ReturnI32`, `ReturnI64`, `ReturnAddr`, `ReturnBool`) require the caller to provide `return_register: Some(reg)` unless the callee is the entry/root frame;
+- `ReturnUnit` requires the caller to provide `return_register: None` unless the callee is the entry/root frame;
+- a scalar return with no caller return register is a runtime error;
+- a unit return with a caller return register is a runtime error;
+- `CallStatic` must have a following continuation instruction and cannot be the final instruction of a function.
+
 ## Instruction Tags
 
 Instruction tags are stable within `RUXI` version `1`. Tags must not be reused with different operands.
 
-The same table is available in machine-readable form at `docs/abi/rux-low-image-v1-opcodes.json`.
+The same table is available in machine-readable form at `docs/abi/rux-low-image-v1-opcodes.json`. The JSON table also includes per-instruction metadata for frontend authors: register reads, writes, width, signedness, high-bit result policy, and possible trap conditions.
 
 | Tag | Instruction | Operands |
 | --- | --- | --- |
@@ -311,6 +323,8 @@ Runtime errors include:
 
 - division or remainder by zero;
 - memory load/store outside machine RAM or mapped devices;
+- scalar return without a caller return register;
+- unit return when the caller provided a return register;
 - falling through past the final instruction if validation did not reject the image first;
 - stack/frame overflow caused by calls exceeding the runtime call-depth limit.
 

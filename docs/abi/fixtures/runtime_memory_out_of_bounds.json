@@ -1,0 +1,8 @@
+{
+  "name": "runtime_memory_out_of_bounds",
+  "kind": "runtime_error",
+  "format": "RUXI",
+  "image_format_version": 1,
+  "phase": "runtime",
+  "expected_error": {"contains":"memory access 1022..1026 is outside 1024 bytes"}
+}

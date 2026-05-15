@@ -8,8 +8,12 @@ Status: pre-freeze candidate.
 - Added machine-readable opcode table for low image v1.
 - Added reference encoder in the Rust VM crate.
 - Added ABI fixtures for golden execution and negative decode/validation cases.
+- Added runtime-error ABI fixtures for divide by zero, memory faults, and call/return mismatches.
+- Added `rux_abi_conformance` reference runner for golden, negative, and runtime-error fixtures.
 - Added `U64Shl` so `u64` has symmetric left and right shift instructions.
-- Documented entry ABI, arithmetic semantics, runtime error categories, machine profile boundaries, and stability policy.
+- Expanded opcode JSON with machine-readable reads, writes, width, signedness, high-bit result policy, and trap conditions.
+- Added advisory C++ frontend lowering notes.
+- Documented entry ABI, call/return ABI, arithmetic semantics, runtime error categories, machine profile boundaries, and stability policy.
 
 ## Freeze Policy
 
