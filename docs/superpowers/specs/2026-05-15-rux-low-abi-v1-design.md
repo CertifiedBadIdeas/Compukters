@@ -64,6 +64,12 @@ Low VM registers are untyped machine-word slots. Instruction names define how bi
 - `Load8`/`Store8` operate on a single byte.
 - `Load32`/`Store32` operate on a little-endian 32-bit word.
 
+Division and remainder are defined separately for signed and unsigned values:
+
+- `I32Div` and `I32Rem` interpret operands as signed `i32`;
+- `U32Div` and `U32Rem` interpret operands as unsigned `u32`;
+- division or remainder by zero is a VM execution error.
+
 ## Control Flow
 
 Jump targets are instruction indices within the current function. Functions must end with `Jump` or `Return*`; implicit fallthrough past the final instruction is invalid.

@@ -85,6 +85,24 @@ sealed interface RuxLowVmInstruction {
         val rhs: Int,
     ) : RuxLowVmInstruction
 
+    data class I32Rem(
+        val dst: Int,
+        val lhs: Int,
+        val rhs: Int,
+    ) : RuxLowVmInstruction
+
+    data class U32Div(
+        val dst: Int,
+        val lhs: Int,
+        val rhs: Int,
+    ) : RuxLowVmInstruction
+
+    data class U32Rem(
+        val dst: Int,
+        val lhs: Int,
+        val rhs: Int,
+    ) : RuxLowVmInstruction
+
     data class I32BitXor(
         val dst: Int,
         val lhs: Int,

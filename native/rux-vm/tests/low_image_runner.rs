@@ -113,6 +113,59 @@ fn runner_executes_u32_less_than_comparison() {
 }
 
 #[test]
+fn runner_executes_i32_remainder() {
+    let image = image(
+        vec![
+            Instruction::I32Const { dst: 0, value: -13 },
+            Instruction::I32Const { dst: 1, value: 5 },
+            Instruction::I32Rem {
+                dst: 2,
+                lhs: 0,
+                rhs: 1,
+            },
+            Instruction::ReturnI32 { src: 2 },
+        ],
+        3,
+    );
+    let mut vm = LowImageVm::create(image, 128).unwrap();
+
+    assert_eq!(vm.run_until_signal().unwrap(), LowImageSignal::HaltI32(-3));
+}
+
+#[test]
+fn runner_executes_u32_division_and_remainder() {
+    let image = image(
+        vec![
+            Instruction::I32Const { dst: 0, value: -2 },
+            Instruction::I32Const { dst: 1, value: 3 },
+            Instruction::U32Div {
+                dst: 2,
+                lhs: 0,
+                rhs: 1,
+            },
+            Instruction::U32Rem {
+                dst: 3,
+                lhs: 0,
+                rhs: 1,
+            },
+            Instruction::I32Add {
+                dst: 4,
+                lhs: 2,
+                rhs: 3,
+            },
+            Instruction::ReturnI32 { src: 4 },
+        ],
+        5,
+    );
+    let mut vm = LowImageVm::create(image, 128).unwrap();
+
+    assert_eq!(
+        vm.run_until_signal().unwrap(),
+        LowImageSignal::HaltI32(1_431_655_766)
+    );
+}
+
+#[test]
 fn runner_executes_i32_bitwise_and_or() {
     let image = image(
         vec![

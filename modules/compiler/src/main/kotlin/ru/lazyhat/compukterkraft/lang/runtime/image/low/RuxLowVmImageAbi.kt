@@ -29,6 +29,16 @@ object RuxLowVmImageAbi {
         const val RETURN_ADDR = 23
         const val RETURN_BOOL = 24
         const val I32_EQ = 25
+        const val I32_BIT_AND = 26
+        const val I32_BIT_OR = 27
+        const val U32_LT = 28
+        const val U32_SHL = 29
+        const val U32_SHR = 30
+        const val LOAD8 = 31
+        const val STORE8 = 32
+        const val I32_REM = 33
+        const val U32_DIV = 34
+        const val U32_REM = 35
     }
 
     fun encode(image: RuxLowVmImage): ByteArray {
@@ -91,6 +101,9 @@ object RuxLowVmImageAbi {
             is RuxLowVmInstruction.I32Sub -> typedBinary(InstructionTags.I32_SUB, instruction.dst, instruction.lhs, instruction.rhs)
             is RuxLowVmInstruction.I32Mul -> typedBinary(InstructionTags.I32_MUL, instruction.dst, instruction.lhs, instruction.rhs)
             is RuxLowVmInstruction.I32Div -> typedBinary(InstructionTags.I32_DIV, instruction.dst, instruction.lhs, instruction.rhs)
+            is RuxLowVmInstruction.I32Rem -> typedBinary(InstructionTags.I32_REM, instruction.dst, instruction.lhs, instruction.rhs)
+            is RuxLowVmInstruction.U32Div -> typedBinary(InstructionTags.U32_DIV, instruction.dst, instruction.lhs, instruction.rhs)
+            is RuxLowVmInstruction.U32Rem -> typedBinary(InstructionTags.U32_REM, instruction.dst, instruction.lhs, instruction.rhs)
             is RuxLowVmInstruction.I32BitXor -> typedBinary(InstructionTags.I32_BIT_XOR, instruction.dst, instruction.lhs, instruction.rhs)
             is RuxLowVmInstruction.I32Shl -> typedBinary(InstructionTags.I32_SHL, instruction.dst, instruction.lhs, instruction.rhs)
             is RuxLowVmInstruction.I32Shr -> typedBinary(InstructionTags.I32_SHR, instruction.dst, instruction.lhs, instruction.rhs)

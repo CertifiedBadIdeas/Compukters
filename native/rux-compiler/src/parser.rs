@@ -387,6 +387,8 @@ impl Parser {
                 BinaryOp::Mul
             } else if self.consume(TokenKind::Slash) {
                 BinaryOp::Div
+            } else if self.consume(TokenKind::Percent) {
+                BinaryOp::Rem
             } else {
                 return Ok(expr);
             };
@@ -724,6 +726,7 @@ impl Parser {
             TokenKind::MinusEqual => Some(BinaryOp::Sub),
             TokenKind::StarEqual => Some(BinaryOp::Mul),
             TokenKind::SlashEqual => Some(BinaryOp::Div),
+            TokenKind::PercentEqual => Some(BinaryOp::Rem),
             TokenKind::AmpersandEqual => Some(BinaryOp::BitAnd),
             TokenKind::PipeEqual => Some(BinaryOp::BitOr),
             TokenKind::CaretEqual => Some(BinaryOp::BitXor),

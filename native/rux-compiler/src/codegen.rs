@@ -181,6 +181,13 @@ fn evaluate_const_expr(
                         lhs.checked_div(rhs)
                     }
                 }
+                BinaryOp::Rem => {
+                    if rhs == 0 {
+                        None
+                    } else {
+                        lhs.checked_rem(rhs)
+                    }
+                }
                 BinaryOp::BitAnd => Some(lhs & rhs),
                 BinaryOp::BitOr => Some(lhs | rhs),
                 BinaryOp::BitXor => Some(lhs ^ rhs),
@@ -1307,6 +1314,7 @@ impl<'rodata> Codegen<'rodata> {
             BinaryOp::Sub => Instruction::I32Sub { dst, lhs, rhs },
             BinaryOp::Mul => Instruction::I32Mul { dst, lhs, rhs },
             BinaryOp::Div => Instruction::I32Div { dst, lhs, rhs },
+            BinaryOp::Rem => Instruction::I32Rem { dst, lhs, rhs },
             BinaryOp::BitAnd => Instruction::I32BitAnd { dst, lhs, rhs },
             BinaryOp::BitOr => Instruction::I32BitOr { dst, lhs, rhs },
             BinaryOp::BitXor => Instruction::I32BitXor { dst, lhs, rhs },
@@ -1320,10 +1328,11 @@ impl<'rodata> Codegen<'rodata> {
         let instruction = match op {
             BinaryOp::Shl => Instruction::U32Shl { dst, lhs, rhs },
             BinaryOp::Shr => Instruction::U32Shr { dst, lhs, rhs },
+            BinaryOp::Div => Instruction::U32Div { dst, lhs, rhs },
+            BinaryOp::Rem => Instruction::U32Rem { dst, lhs, rhs },
             BinaryOp::Add => Instruction::I32Add { dst, lhs, rhs },
             BinaryOp::Sub => Instruction::I32Sub { dst, lhs, rhs },
             BinaryOp::Mul => Instruction::I32Mul { dst, lhs, rhs },
-            BinaryOp::Div => Instruction::I32Div { dst, lhs, rhs },
             BinaryOp::BitAnd => Instruction::I32BitAnd { dst, lhs, rhs },
             BinaryOp::BitOr => Instruction::I32BitOr { dst, lhs, rhs },
             BinaryOp::BitXor => Instruction::I32BitXor { dst, lhs, rhs },

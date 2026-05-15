@@ -63,6 +63,8 @@ pub enum TokenKind {
     StarEqual,
     Slash,
     SlashEqual,
+    Percent,
+    PercentEqual,
     Ampersand,
     AmpersandEqual,
     AndAnd,
@@ -379,6 +381,15 @@ pub fn lex(source: &str) -> Result<Vec<Token>, CompileError> {
                 continue;
             }
             b'/' => TokenKind::Slash,
+            b'%' if offset + 1 < bytes.len() && bytes[offset + 1] == b'=' => {
+                offset += 2;
+                tokens.push(Token {
+                    kind: TokenKind::PercentEqual,
+                    offset: offset - 2,
+                });
+                continue;
+            }
+            b'%' => TokenKind::Percent,
             b'&' if offset + 1 < bytes.len() && bytes[offset + 1] == b'&' => {
                 offset += 2;
                 tokens.push(Token {
@@ -522,6 +533,8 @@ impl TokenKind {
             TokenKind::StarEqual => "*=",
             TokenKind::Slash => "/",
             TokenKind::SlashEqual => "/=",
+            TokenKind::Percent => "%",
+            TokenKind::PercentEqual => "%=",
             TokenKind::Ampersand => "&",
             TokenKind::AmpersandEqual => "&=",
             TokenKind::AndAnd => "&&",
