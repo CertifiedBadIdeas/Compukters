@@ -130,6 +130,14 @@ impl MachineBus {
     pub fn store_u8(&mut self, address: u32, value: u8) -> Result<(), MemoryFault> {
         <Self as MemoryBus>::store_u8(self, address, value)
     }
+
+    pub fn load_u16(&self, address: u32) -> Result<u16, MemoryFault> {
+        <Self as MemoryBus>::load_u16(self, address)
+    }
+
+    pub fn store_u16(&mut self, address: u32, value: u16) -> Result<(), MemoryFault> {
+        <Self as MemoryBus>::store_u16(self, address, value)
+    }
 }
 
 impl MemoryBus for MachineBus {

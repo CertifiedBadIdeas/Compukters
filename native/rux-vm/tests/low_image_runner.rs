@@ -315,6 +315,30 @@ fn runner_loads_and_stores_i32_in_linear_ram() {
 }
 
 #[test]
+fn runner_loads_and_stores_u16_in_linear_ram() {
+    let image = image(
+        vec![
+            Instruction::AddrConst { dst: 0, value: 129 },
+            Instruction::I32Const {
+                dst: 1,
+                value: 0x0000_aabb,
+            },
+            Instruction::Store16 { addr: 0, src: 1 },
+            Instruction::Load16 { dst: 2, addr: 0 },
+            Instruction::ReturnI32 { src: 2 },
+        ],
+        3,
+    );
+    let mut vm = LowImageVm::create(image, 128).unwrap();
+
+    assert_eq!(
+        vm.run_until_signal().unwrap(),
+        LowImageSignal::HaltI32(0x0000_aabb),
+    );
+    assert_eq!(vm.memory_bytes()[128..132], [0, 0xbb, 0xaa, 0]);
+}
+
+#[test]
 fn runner_rejects_out_of_bounds_memory_access() {
     let image = image(
         vec![

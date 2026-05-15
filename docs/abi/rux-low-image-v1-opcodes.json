@@ -51,6 +51,8 @@
     { "tag": 32, "name": "Store8", "operands": [["addr", "u16"], ["src", "u16"]] },
     { "tag": 33, "name": "I32Rem", "operands": [["dst", "u16"], ["lhs", "u16"], ["rhs", "u16"]] },
     { "tag": 34, "name": "U32Div", "operands": [["dst", "u16"], ["lhs", "u16"], ["rhs", "u16"]] },
-    { "tag": 35, "name": "U32Rem", "operands": [["dst", "u16"], ["lhs", "u16"], ["rhs", "u16"]] }
+    { "tag": 35, "name": "U32Rem", "operands": [["dst", "u16"], ["lhs", "u16"], ["rhs", "u16"]] },
+    { "tag": 36, "name": "Load16", "operands": [["dst", "u16"], ["addr", "u16"]] },
+    { "tag": 37, "name": "Store16", "operands": [["addr", "u16"], ["src", "u16"]] }
   ]
 }

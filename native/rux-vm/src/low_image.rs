@@ -172,6 +172,14 @@ pub enum Instruction {
         addr: u16,
         src: u16,
     },
+    Load16 {
+        dst: u16,
+        addr: u16,
+    },
+    Store16 {
+        addr: u16,
+        src: u16,
+    },
     AddrAdd {
         dst: u16,
         base: u16,
@@ -368,6 +376,8 @@ impl Writer {
             Instruction::I32Rem { dst, lhs, rhs } => self.binary(33, *dst, *lhs, *rhs),
             Instruction::U32Div { dst, lhs, rhs } => self.binary(34, *dst, *lhs, *rhs),
             Instruction::U32Rem { dst, lhs, rhs } => self.binary(35, *dst, *lhs, *rhs),
+            Instruction::Load16 { dst, addr } => self.move_instruction(36, *dst, *addr),
+            Instruction::Store16 { addr, src } => self.move_instruction(37, *addr, *src),
         }
         Ok(())
     }
@@ -542,6 +552,8 @@ fn read_instruction(reader: &mut Reader<'_>) -> Result<Instruction, ImageError> 
             lhs,
             rhs,
         }),
+        36 => read_move(reader, |dst, addr| Instruction::Load16 { dst, addr }),
+        37 => read_move(reader, |addr, src| Instruction::Store16 { addr, src }),
         other => Err(ImageError::UnknownInstructionTag(other)),
     }
 }
