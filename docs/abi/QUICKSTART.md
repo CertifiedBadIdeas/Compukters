@@ -177,3 +177,15 @@ Live serial mode reads stdin and writes firmware debug serial output directly to
 ```bash
 printf 'Rux!' | cargo run --manifest-path native/rux-compiler/Cargo.toml --bin rux-run -- native/rux-compiler/examples/firmware/echo_live.rx --serial-live
 ```
+
+## JVM Runtime Endpoint
+
+Mod-side code should interact with serial through `RuxComputerRuntime` rather than directly sharing native buffers with terminal UI code:
+
+- create a native computer with `NativeVmBindings.createRuxComputer(...)`;
+- wrap the returned handle in `RuxComputerRuntime`;
+- call `pushInput(bytes)` for keyboard/paste input;
+- call `tick()` from the computer scheduler;
+- render `outputSnapshot()` for every connected terminal view.
+
+`outputSnapshot()` is intentionally non-destructive so several terminal items can observe the same computer console.

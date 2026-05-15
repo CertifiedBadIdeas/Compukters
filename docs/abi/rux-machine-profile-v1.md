@@ -60,6 +60,17 @@ All multi-byte MMIO registers are little-endian. Byte stores to `DEBUG_WRITE` wr
 
 The control region size is 12 bytes. The debug serial region size is 4 bytes. The serial input region size is 8 bytes.
 
+## Host Serial Endpoint
+
+In the Minecraft mod, the computer block should own exactly one native Rux computer handle and expose serial I/O through a JVM-side runtime endpoint:
+
+- terminal key/paste input is encoded as bytes and appended to `SERIAL_INPUT_READ`;
+- VM output written through `DEBUG_WRITE` is drained from native memory and appended to one shared terminal-output buffer;
+- connected terminal items read the shared output snapshot instead of each owning a separate serial stream;
+- the native handle is freed by the runtime owner, not by individual terminal sessions.
+
+This keeps the VM model close to a physical computer: one machine, one serial device, many viewers/controllers attached to the same console state.
+
 ## Halt Signals
 
 The baseline runner reports these terminal states:
