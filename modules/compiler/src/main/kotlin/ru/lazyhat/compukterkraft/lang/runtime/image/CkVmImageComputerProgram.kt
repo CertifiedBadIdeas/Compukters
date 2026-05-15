@@ -29,7 +29,7 @@ class CkVmImageComputerProgram(
     private val runnerFactory: () -> NativeImageRuntimeRunner = {
         NativeImageVmRunner.fromDefaultLibrary()
             ?: error(
-                "Rust image VM runner requires -Dckl.vm.native.library=/absolute/path/to/<platform library> " +
+                "Rust image VM runner requires -Drux.vm.native.library=/absolute/path/to/<platform library> " +
                     "or a bundled native VM library resource",
             )
     },

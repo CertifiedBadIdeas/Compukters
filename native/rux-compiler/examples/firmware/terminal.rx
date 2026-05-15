@@ -1,0 +1,15 @@
+use std::io::write_bytes;
+
+fn main() -> i32 {
+    unsafe {
+        mmio<i32>(CONTROL_STATUS).store(STATUS_BOOTING);
+    }
+
+    write_bytes(b"RUX READY", 9u32);
+
+    unsafe {
+        mmio<i32>(CONTROL_STATUS).store(STATUS_READY);
+    }
+
+    return 0;
+}

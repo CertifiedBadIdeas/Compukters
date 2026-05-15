@@ -1,0 +1,35 @@
+fn copy_byte(dst: ptr<u8>, src: ptr<u8>, index: u32) {
+    unsafe {
+        dst[index] = src[index];
+    }
+}
+
+pub fn copy(dst: ptr<u8>, src: ptr<u8>, len: u32) {
+    let mut i: u32 = 0u32;
+    while i < len {
+        unsafe {
+            dst[i] = src[i];
+        }
+        i += 1u32;
+    }
+}
+
+pub fn set(dst: ptr<u8>, value: u8, len: u32) {
+    let mut i: u32 = 0u32;
+    while i < len {
+        unsafe {
+            dst[i] = value;
+        }
+        i += 1u32;
+    }
+}
+
+pub fn zero(dst: ptr<u8>, len: u32) {
+    let mut i: u32 = 0u32;
+    while i < len {
+        unsafe {
+            dst[i] = 0u8;
+        }
+        i += 1u32;
+    }
+}

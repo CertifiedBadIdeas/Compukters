@@ -1,0 +1,9 @@
+pub fn write_bytes(bytes: ptr<u8>, len: u32) {
+    let mut i: u32 = 0u32;
+    while i < len {
+        unsafe {
+            mmio<u8>(DEBUG_WRITE).store(bytes[i]);
+        }
+        i += 1u32;
+    }
+}

@@ -23,10 +23,10 @@ import ru.lazyhat.compukterkraft.lang.frontend.LanguageFrontend
 import ru.lazyhat.compukterkraft.lang.runtime.VmValue
 import ru.lazyhat.compukterkraft.lang.runtime.image.CkVmImageAbi
 import ru.lazyhat.compukterkraft.lang.runtime.image.compileImage
-import ru.lazyhat.compukterkraft.lang.runtime.image.low.CkLowVmFunction
-import ru.lazyhat.compukterkraft.lang.runtime.image.low.CkLowVmImage
-import ru.lazyhat.compukterkraft.lang.runtime.image.low.CkLowVmImageAbi
-import ru.lazyhat.compukterkraft.lang.runtime.image.low.CkLowVmInstruction
+import ru.lazyhat.compukterkraft.lang.runtime.image.low.RuxLowVmFunction
+import ru.lazyhat.compukterkraft.lang.runtime.image.low.RuxLowVmImage
+import ru.lazyhat.compukterkraft.lang.runtime.image.low.RuxLowVmImageAbi
+import ru.lazyhat.compukterkraft.lang.runtime.image.low.RuxLowVmInstruction
 import kotlin.io.path.createDirectories
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
@@ -133,7 +133,7 @@ class NativeImageVmBindingsJniTest {
 
     @Test
     fun nativeDeviceDaemonCreateRefillRunReadyFreeRunsWhenLibraryIsConfigured() {
-        System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        System.getProperty("rux.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 1_000_000)
         try {
             NativeVmBindings.refillDeviceDaemonQuota(handle, 1_000_000, 5)
@@ -157,7 +157,7 @@ class NativeImageVmBindingsJniTest {
 
     @Test
     fun nativeDeviceDaemonCanRefillQuotaAndRunReadyProcessesSeparately() {
-        System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        System.getProperty("rux.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val image = assertNotNull(LanguageFrontend().compileImage("main.ck", "pub fun main() { yield(); }").image)
         val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 1_000_000)
         try {
@@ -178,7 +178,7 @@ class NativeImageVmBindingsJniTest {
 
     @Test
     fun nativeDeviceDaemonBootImageRunsWhenLibraryIsConfigured() {
-        System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        System.getProperty("rux.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val image = assertNotNull(LanguageFrontend().compileImage("main.ck", "pub fun main() { }").image)
         val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 1_000_000)
         try {
@@ -200,7 +200,7 @@ class NativeImageVmBindingsJniTest {
 
     @Test
     fun nativeDeviceDaemonDisplayFramesDrainWhenLibraryIsConfigured() {
-        System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        System.getProperty("rux.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val image =
             assertNotNull(
                 LanguageFrontend()
@@ -234,7 +234,7 @@ class NativeImageVmBindingsJniTest {
 
     @Test
     fun nativeDeviceDaemonDisplayWaitReturnsAfterPresentWhenLibraryIsConfigured() {
-        System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        System.getProperty("rux.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val image =
             assertNotNull(
                 LanguageFrontend()
@@ -272,7 +272,7 @@ class NativeImageVmBindingsJniTest {
 
     @Test
     fun nativeDeviceDaemonHostRequestsRoundTripWhenLibraryIsConfigured() {
-        System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        System.getProperty("rux.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val image = assertNotNull(LanguageFrontend().compileImage("main.ck", "pub fun main() { system::log(\"hi\"); }").image)
         val handle = NativeVmBindings.createDeviceDaemon(64, 4096, 1_000_000)
         try {
@@ -296,7 +296,7 @@ class NativeImageVmBindingsJniTest {
 
     @Test
     fun nativeDeviceDaemonProcessArgumentStaysInDaemonWhenLibraryIsConfigured() {
-        System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        System.getProperty("rux.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val image =
             assertNotNull(
                 LanguageFrontend()
@@ -321,7 +321,7 @@ class NativeImageVmBindingsJniTest {
 
     @Test
     fun nativeDeviceDaemonCurrentDirectoryStaysInDaemonWhenLibraryIsConfigured() {
-        System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        System.getProperty("rux.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val image =
             assertNotNull(
                 LanguageFrontend()
@@ -346,7 +346,7 @@ class NativeImageVmBindingsJniTest {
 
     @Test
     fun nativeDeviceDaemonChangeDirectoryStaysInDaemonWhenLibraryIsConfigured() {
-        System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        System.getProperty("rux.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val root = createTempDirectory("ck-daemon-fs")
         root.resolve("rom").resolve("bin").createDirectories()
         val image =
@@ -385,7 +385,7 @@ class NativeImageVmBindingsJniTest {
 
     @Test
     fun nativeDeviceDaemonProcessSpawnRequestsCompilationWhenLibraryIsConfigured() {
-        System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        System.getProperty("rux.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val parent =
             assertNotNull(
                 LanguageFrontend()
@@ -424,7 +424,7 @@ class NativeImageVmBindingsJniTest {
 
     @Test
     fun nativeDeviceDaemonProcessRunResumesParentWithExitCodeWhenLibraryIsConfigured() {
-        System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        System.getProperty("rux.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val parent =
             assertNotNull(
                 LanguageFrontend()
@@ -466,7 +466,7 @@ class NativeImageVmBindingsJniTest {
 
     @Test
     fun nativeDeviceDaemonIpcReadWaitsForChildWriteWhenLibraryIsConfigured() {
-        System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        System.getProperty("rux.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val parent =
             assertNotNull(
                 LanguageFrontend()
@@ -535,7 +535,7 @@ class NativeImageVmBindingsJniTest {
 
     @Test
     fun nativeDeviceDaemonEventsWakeImagesWhenLibraryIsConfigured() {
-        System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        System.getProperty("rux.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val image =
             assertNotNull(
                 LanguageFrontend()
@@ -577,7 +577,7 @@ class NativeImageVmBindingsJniTest {
 
     @Test
     fun nativeDeviceDaemonPollWakesOnEventsWhenLibraryIsConfigured() {
-        System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        System.getProperty("rux.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val image =
             assertNotNull(
                 LanguageFrontend()
@@ -613,7 +613,7 @@ class NativeImageVmBindingsJniTest {
 
     @Test
     fun imageRunnerHaltsForEmptyMainWhenLibraryIsConfigured() {
-        val libraryPath = System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val libraryPath = System.getProperty("rux.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val image = assertNotNull(LanguageFrontend().compileImage("main.ck", "pub fun main() { }").image)
         val handle = NativeVmBindings.createImage(libraryPath, CkVmImageAbi.encode(image), sliceBudgetNanos = 1_000_000)
 
@@ -629,24 +629,23 @@ class NativeImageVmBindingsJniTest {
 
     @Test
     fun lowImageRunnerHaltsWithI32WhenLibraryIsConfigured() {
-        val libraryPath = System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val libraryPath = System.getProperty("rux.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val image =
-            CkLowVmImage(
-                languageVersion = "ckl-low-1",
+            RuxLowVmImage(
                 memorySize = 1024u,
                 entryFunctionIndex = 0,
                 functions =
                     listOf(
-                        CkLowVmFunction(
+                        RuxLowVmFunction(
                             name = "main",
                             registerCount = 3,
                             parameters = emptyList(),
                             instructions =
                                 listOf(
-                                    CkLowVmInstruction.I32Const(dst = 0, value = 40),
-                                    CkLowVmInstruction.I32Const(dst = 1, value = 2),
-                                    CkLowVmInstruction.I32Add(dst = 2, lhs = 0, rhs = 1),
-                                    CkLowVmInstruction.ReturnI32(2),
+                                    RuxLowVmInstruction.I32Const(dst = 0, value = 40),
+                                    RuxLowVmInstruction.I32Const(dst = 1, value = 2),
+                                    RuxLowVmInstruction.I32Add(dst = 2, lhs = 0, rhs = 1),
+                                    RuxLowVmInstruction.ReturnI32(2),
                                 ),
                         ),
                     ),
@@ -654,7 +653,7 @@ class NativeImageVmBindingsJniTest {
         val handle =
             NativeVmBindings.createLowImage(
                 libraryPath = libraryPath,
-                image = CkLowVmImageAbi.encode(image),
+                image = RuxLowVmImageAbi.encode(image),
                 sliceBudgetNanos = 1_000_000,
             )
 
@@ -672,7 +671,7 @@ class NativeImageVmBindingsJniTest {
 
     @Test
     fun imageRunnerExposesExecutionMetricsWhenLibraryIsConfigured() {
-        val libraryPath = System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val libraryPath = System.getProperty("rux.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val image =
             assertNotNull(
                 LanguageFrontend()
@@ -710,7 +709,7 @@ class NativeImageVmBindingsJniTest {
 
     @Test
     fun imageRunnerEmitsHostCallAndResumesWhenLibraryIsConfigured() {
-        val libraryPath = System.getProperty("ckl.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val libraryPath = System.getProperty("rux.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val image = assertNotNull(LanguageFrontend().compileImage("main.ck", "pub fun main() { system::log(\"hi\"); }").image)
         val handle = NativeVmBindings.createImage(libraryPath, CkVmImageAbi.encode(image), sliceBudgetNanos = 1_000_000)
 

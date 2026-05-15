@@ -32,9 +32,9 @@ dependencies {
 }
 
 val rustVmNativePlatform = currentRustVmNativePlatform()
-val rustVmDebugNativeLibrary = rootProject.layout.projectDirectory.file("native/ckl-vm/target/debug/${rustVmNativePlatform.libraryName}")
-val rustVmReleaseNativeLibrary = rootProject.layout.projectDirectory.file("native/ckl-vm/target/release/${rustVmNativePlatform.libraryName}")
-val rustVmCrateDir = rootProject.layout.projectDirectory.dir("native/ckl-vm")
+val rustVmDebugNativeLibrary = rootProject.layout.projectDirectory.file("native/rux-vm/target/debug/${rustVmNativePlatform.libraryName}")
+val rustVmReleaseNativeLibrary = rootProject.layout.projectDirectory.file("native/rux-vm/target/release/${rustVmNativePlatform.libraryName}")
+val rustVmCrateDir = rootProject.layout.projectDirectory.dir("native/rux-vm")
 val computeVmBenchmarkReports = layout.buildDirectory.dir("reports/profiling")
 
 fun computeBenchmarkTimestamp(): String =
@@ -60,7 +60,7 @@ fun Test.configureComputeVmBenchmarkTask(
     nativeLibraryPath: String,
 ) {
     group = "verification"
-    description = "Run a CPU-only CKL VM benchmark with the $nativeProfile Rust CKL VM JNI library."
+    description = "Run a CPU-only Rux VM benchmark with the $nativeProfile Rust Rux VM JNI library."
     dependsOn(nativeBuildTask)
     val tsvPath = computeVmBenchmarkReports.map { it.file("compute-vm-benchmark-$nativeProfile.tsv") }
     testClassesDirs = sourceSets.test.get().output.classesDirs
@@ -71,7 +71,7 @@ fun Test.configureComputeVmBenchmarkTask(
     filter {
         includeTestsMatching("ru.lazyhat.compukterkraft.lang.runtime.blazing.ComputeVmBenchmarkProfileTest")
     }
-    systemProperty("ckl.vm.native.library", nativeLibraryPath)
+    systemProperty("rux.vm.native.library", nativeLibraryPath)
     systemProperty("ckl.benchmark.native.library.profile", nativeProfile)
     systemProperty("ckl.benchmark.rust.crate.dir", rustVmCrateDir.asFile.absolutePath)
     systemProperty("ckl.benchmark.rust.target.profile", "${rustVmNativePlatform.id}/$nativeProfile")
@@ -108,13 +108,13 @@ tasks.register<Test>("profileComputeVmBenchmarkRelease") {
 
 tasks.register("profileComputeVmBenchmarkComparison") {
     group = "verification"
-    description = "Run CPU-only CKL VM benchmarks for both debug and release Rust CKL VM JNI libraries."
+    description = "Run CPU-only Rux VM benchmarks for both debug and release Rust Rux VM JNI libraries."
     dependsOn("profileComputeVmBenchmarkDebug", "profileComputeVmBenchmarkRelease")
 }
 
 tasks.register("profileComputeVmBenchmark") {
     group = "verification"
-    description = "Run a CPU-only CKL VM benchmark with the release Rust CKL VM JNI library."
+    description = "Run a CPU-only Rux VM benchmark with the release Rust Rux VM JNI library."
     dependsOn("profileComputeVmBenchmarkRelease")
 }
 

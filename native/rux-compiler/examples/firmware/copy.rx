@@ -1,0 +1,15 @@
+use std::io::write_bytes;
+use std::mem::{copy, set};
+
+fn main() -> i32 {
+    unsafe {
+        let mut dst: ptr<u8> = ptr<u8>(RAM_BASE + 32);
+        set(dst, 0u8, 3u32);
+        copy(dst, b"RUX", 3u32);
+        write_bytes(dst, 3u32);
+
+        return (dst[0u32] as i32)
+            + ((dst[1u32] as i32) << 8)
+            + ((dst[2u32] as i32) << 16);
+    }
+}
