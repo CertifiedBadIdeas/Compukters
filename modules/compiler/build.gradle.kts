@@ -33,7 +33,10 @@ dependencies {
 
 val rustVmNativePlatform = currentRustVmNativePlatform()
 val rustVmDebugNativeLibrary = rootProject.layout.projectDirectory.file("native/rux-vm/target/debug/${rustVmNativePlatform.libraryName}")
-val rustVmReleaseNativeLibrary = rootProject.layout.projectDirectory.file("native/rux-vm/target/release/${rustVmNativePlatform.libraryName}")
+val rustVmReleaseNativeLibrary =
+    rootProject.layout.projectDirectory.file(
+        "native/rux-vm/target/release/${rustVmNativePlatform.libraryName}",
+    )
 val rustVmCrateDir = rootProject.layout.projectDirectory.dir("native/rux-vm")
 val computeVmBenchmarkReports = layout.buildDirectory.dir("reports/profiling")
 
@@ -50,7 +53,11 @@ fun gitHeadCommit(): String =
                 .directory(rootProject.layout.projectDirectory.asFile)
                 .redirectErrorStream(true)
                 .start()
-        val output = process.inputStream.bufferedReader().readText().trim()
+        val output =
+            process.inputStream
+                .bufferedReader()
+                .readText()
+                .trim()
         if (process.waitFor() == 0 && output.isNotBlank()) output else "unknown"
     }.getOrDefault("unknown")
 
@@ -63,7 +70,10 @@ fun Test.configureComputeVmBenchmarkTask(
     description = "Run a CPU-only Rux VM benchmark with the $nativeProfile Rust Rux VM JNI library."
     dependsOn(nativeBuildTask)
     val tsvPath = computeVmBenchmarkReports.map { it.file("compute-vm-benchmark-$nativeProfile.tsv") }
-    testClassesDirs = sourceSets.test.get().output.classesDirs
+    testClassesDirs =
+        sourceSets.test
+            .get()
+            .output.classesDirs
     classpath = sourceSets.test.get().runtimeClasspath
     useJUnitPlatform()
     testLogging.showStandardStreams = true
@@ -79,7 +89,7 @@ fun Test.configureComputeVmBenchmarkTask(
     systemProperty("ckl.benchmark.compute.tsv.path", tsvPath.get().asFile.absolutePath)
     systemProperty("ckl.benchmark.iterations", System.getProperty("ckl.benchmark.iterations") ?: "500000")
     systemProperty("ckl.benchmark.warmup.iterations", System.getProperty("ckl.benchmark.warmup.iterations") ?: "50000")
-    systemProperty("ckl.benchmark.samples", System.getProperty("ckl.benchmark.samples") ?: "5")
+    systemProperty("ckl.benchmark.samples", System.getProperty("ckl.benchmark.samples") ?: "10")
     doFirst {
         val timestamp = computeBenchmarkTimestamp()
         val markdownPath = computeVmBenchmarkReports.get().file("compute-vm-benchmark-$nativeProfile-$timestamp.md")
