@@ -22,6 +22,9 @@ package ru.lazyhat.compukterkraft.core.device.runtime
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 import ru.lazyhat.compukterkraft.core.device.DeviceProperties
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.DeviceStateSink
+import ru.lazyhat.compukterkraft.core.device.runtime.ports.DisplayNetworkBridge
+import ru.lazyhat.compukterkraft.core.device.runtime.ports.NoopDisplayNetworkBridge
+import ru.lazyhat.compukterkraft.core.gui.TerminalFontConstants
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.RuxComputerEndpoint
 import java.nio.ByteBuffer
 import java.util.UUID
@@ -39,12 +42,16 @@ class RuxRuntimeDevice(
     properties: DeviceProperties,
     private val endpointFactory: () -> RuxComputerEndpoint,
     private val stateSink: DeviceStateSink,
+    private val displayNetwork: DisplayNetworkBridge = NoopDisplayNetworkBridge,
 ) : RuntimeDevice,
     RuntimeDeviceSerialEndpoint {
     override val family: DeviceFamily = properties.family
 
     private var endpoint: RuxComputerEndpoint? = null
+    private val displaySessions = DisplaySessionTracker()
+    private val renderers = mutableMapOf<Int, SerialTextDisplayRenderer>()
     private var labelBacking: String? = properties.label
+    private var renderedSerialBytes = 0
 
     override var label: String?
         get() = labelBacking
@@ -64,6 +71,8 @@ class RuxRuntimeDevice(
     override fun shutdown() {
         val current = endpoint ?: return
         endpoint = null
+        renderedSerialBytes = 0
+        renderers.clear()
         current.close()
         stateSink.onPowerStateChanged(false)
     }
@@ -74,7 +83,9 @@ class RuxRuntimeDevice(
     }
 
     override fun serverTick() {
-        endpoint?.tick()
+        val current = endpoint ?: return
+        current.tick()
+        flushSerialOutput(current)
     }
 
     override fun close() =
@@ -110,19 +121,27 @@ class RuxRuntimeDevice(
         displayId: Int,
         width: Int,
         height: Int,
-    ) = Unit
+    ) {
+        displaySessions.attach(playerUuid, containerId, displayId, width, height)
+    }
 
     override fun resizeDisplaySession(
         playerUuid: UUID,
         displayId: Int,
         width: Int,
         height: Int,
-    ) = Unit
+    ) {
+        displaySessions.resize(playerUuid, displayId, width, height)
+        renderers.remove(displayId)
+    }
 
     override fun detachDisplaySession(
         playerUuid: UUID,
         displayId: Int,
-    ) = Unit
+    ) {
+        val detachedDisplayId = displaySessions.detach(playerUuid, displayId) ?: return
+        renderers.remove(detachedDisplayId)
+    }
 
     private fun argumentBytes(value: Any?): ByteArray? =
         when (value) {
@@ -134,6 +153,41 @@ class RuxRuntimeDevice(
             is String -> value.encodeToByteArray()
             else -> null
         }
+
+    private fun flushSerialOutput(current: RuxComputerEndpoint) {
+        if (displaySessions.isEmpty()) return
+        val output = current.outputSnapshot()
+        if (output.size <= renderedSerialBytes) return
+        val newBytes = output.copyOfRange(renderedSerialBytes, output.size)
+        renderedSerialBytes = output.size
+        for (endpoint in displaySessions.activeEndpoints()) {
+            val renderer =
+                renderers.getOrPut(endpoint.displayId) {
+                    SerialTextDisplayRenderer(
+                        columns = (endpoint.width / TerminalFontConstants.FONT_WIDTH).coerceAtLeast(1),
+                        rows = (endpoint.height / TerminalFontConstants.FONT_HEIGHT).coerceAtLeast(1),
+                    )
+                }
+            renderer.append(newBytes)
+            val frame = renderer.renderFrame(endpoint.displayId, endpoint.width, endpoint.height)
+            sendFrame(endpoint.displayId, frame)
+        }
+    }
+
+    private fun sendFrame(
+        displayId: Int,
+        frame: ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta,
+    ) {
+        val toDetach = mutableListOf<Pair<UUID, Int>>()
+        for (session in displaySessions.sessionsSnapshot().filter { it.displayId == displayId }) {
+            if (!displayNetwork.isDisplaySessionStillBound(session.playerUuid, session.containerId, deviceId, session.displayId)) {
+                toDetach += session.playerUuid to session.displayId
+                continue
+            }
+            displayNetwork.sendDisplayFrame(session.playerUuid, session.containerId, frame)
+        }
+        toDetach.forEach { (playerUuid, detachedDisplayId) -> detachDisplaySession(playerUuid, detachedDisplayId) }
+    }
 
     companion object {
         const val STATUS_RESET: Int = 0

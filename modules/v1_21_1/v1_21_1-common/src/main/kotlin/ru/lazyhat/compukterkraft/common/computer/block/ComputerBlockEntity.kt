@@ -20,6 +20,7 @@
 package ru.lazyhat.compukterkraft.common.computer.block
 
 import net.minecraft.core.BlockPos
+import net.minecraft.server.level.ServerLevel
 import net.minecraft.world.entity.player.Inventory
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.inventory.AbstractContainerMenu
@@ -27,6 +28,7 @@ import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.entity.BlockEntityType
 import net.minecraft.world.level.block.state.BlockState
 import ru.lazyhat.compukterkraft.common.binding.ModObjects
+import ru.lazyhat.compukterkraft.common.computer.context.BlockEntityRuntimeDeviceHost
 import ru.lazyhat.compukterkraft.common.computer.menu.ComputerMenuWithoutInventory
 import ru.lazyhat.compukterkraft.core.LOGGER
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
@@ -41,13 +43,16 @@ open class ComputerBlockEntity(
     state: BlockState,
     family: DeviceFamily,
 ) : AbstractComputerBlockEntity(type, pos, state, family) {
-    override fun createComputer(id: Int): RuntimeDevice =
-        RuxRuntimeDevice(
+    override fun createComputer(id: Int): RuntimeDevice {
+        val host = BlockEntityRuntimeDeviceHost(level as ServerLevel, this)
+        return RuxRuntimeDevice(
             deviceId = id,
             properties = DeviceProperties(family, label),
             endpointFactory = RuxComputerRuntimeFactory::createFromResource,
-            stateSink = { isOn -> updateBlockState(isOn) },
+            stateSink = host.stateSink,
+            displayNetwork = host.displayNetwork,
         )
+    }
 
     override fun updateBlockState(newState: ComputerState) {
         blockState

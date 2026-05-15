@@ -21,9 +21,12 @@ package ru.lazyhat.compukterkraft.core.device.runtime
 
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 import ru.lazyhat.compukterkraft.core.device.DeviceProperties
+import ru.lazyhat.compukterkraft.core.device.runtime.ports.DisplayNetworkBridge
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeRuxComputerControl
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.RuxComputerEndpoint
+import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 import java.nio.ByteBuffer
+import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -78,12 +81,42 @@ class RuxRuntimeDeviceTest {
         assertEquals(0, paste.position())
     }
 
+    @Test
+    fun sendsSerialOutputFrameToAttachedDisplaySessions() {
+        val endpoint = RecordingRuxEndpoint()
+        val displayNetwork = RecordingDisplayNetworkBridge()
+        val device =
+            RuxRuntimeDevice(
+                deviceId = 9,
+                properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
+                endpointFactory = { endpoint },
+                stateSink = {},
+                displayNetwork = displayNetwork,
+            )
+        val playerUuid = UUID.randomUUID()
+
+        device.attachDisplaySession(playerUuid, containerId = 17, displayId = 1, width = 36, height = 27)
+        device.turnOn()
+        endpoint.injectOutput("Rux!")
+        device.serverTick()
+
+        assertEquals(1, displayNetwork.sentFrames.size)
+        val sent = displayNetwork.sentFrames.single()
+        assertEquals(playerUuid, sent.playerUuid)
+        assertEquals(17, sent.containerId)
+        assertEquals(1, sent.frame.displayId)
+        assertEquals(36, sent.frame.width)
+        assertEquals(27, sent.frame.height)
+        assertTrue(sent.frame.fullRefresh)
+    }
+
     private class RecordingRuxEndpoint : RuxComputerEndpoint {
         val inputs = mutableListOf<ByteArray>()
         var tickCalls = 0
             private set
         var closeCalls = 0
             private set
+        private val injectedOutput = StringBuilder()
 
         override fun pushInput(bytes: ByteArray) {
             inputs += bytes.copyOf()
@@ -95,12 +128,42 @@ class RuxRuntimeDeviceTest {
         }
 
         override fun outputSnapshot(): ByteArray =
-            inputs.fold(ByteArray(0)) { acc, bytes -> acc + bytes }
+            (inputs.fold(ByteArray(0)) { acc, bytes -> acc + bytes }.decodeToString() + injectedOutput)
+                .encodeToByteArray()
 
         override fun clearOutput() = Unit
 
         override fun close() {
             closeCalls += 1
+        }
+
+        fun injectOutput(text: String) {
+            injectedOutput.append(text)
+        }
+    }
+
+    private data class SentFrame(
+        val playerUuid: UUID,
+        val containerId: Int,
+        val frame: DisplayFrameDelta,
+    )
+
+    private class RecordingDisplayNetworkBridge : DisplayNetworkBridge {
+        val sentFrames = mutableListOf<SentFrame>()
+
+        override fun isDisplaySessionStillBound(
+            playerUuid: UUID,
+            containerId: Int,
+            deviceId: Int,
+            displayId: Int,
+        ): Boolean = true
+
+        override fun sendDisplayFrame(
+            playerUuid: UUID,
+            containerId: Int,
+            frame: DisplayFrameDelta,
+        ) {
+            sentFrames += SentFrame(playerUuid, containerId, frame)
         }
     }
 }
