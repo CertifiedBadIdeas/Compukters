@@ -177,6 +177,19 @@ For wrapping addition, subtraction, multiplication, bitwise operations, equality
 
 For division, remainder, less-than, and right shift, signedness changes the result, so the ABI defines separate `I*` and `U*` opcodes.
 
+Unsigned addition, subtraction, and multiplication must use these canonical opcodes:
+
+| Source operation | RUXI v1 opcode |
+| --- | --- |
+| `u32 add` | `I32Add` |
+| `u32 sub` | `I32Sub` |
+| `u32 mul` | `I32Mul` |
+| `u64 add` | `I64Add` |
+| `u64 sub` | `I64Sub` |
+| `u64 mul` | `I64Mul` |
+
+The machine-readable opcode table exposes these mappings through `canonical_unsigned_aliases`. Those aliases are frontend documentation only; they are not serialized instruction tags.
+
 ### Instruction Semantics Summary
 
 | Instruction group | Reads | Writes | Result bits | Runtime errors |

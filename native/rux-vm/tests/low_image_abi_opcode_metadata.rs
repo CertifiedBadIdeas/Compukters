@@ -26,6 +26,13 @@ fn opcode_metadata_describes_every_instruction() {
             and any(.opcodes[]; .name == "I32Const" and .result_high_bits == "zero_extend_32")
             and any(.opcodes[]; .name == "U64Const" and .width == "u64")
             and any(.opcodes[]; .name == "Jump" and (.writes | index("control_flow")))
+            and any(.opcodes[]; .name == "I32Add" and (.canonical_unsigned_aliases | index("U32Add")))
+            and any(.opcodes[]; .name == "I32Sub" and (.canonical_unsigned_aliases | index("U32Sub")))
+            and any(.opcodes[]; .name == "I32Mul" and (.canonical_unsigned_aliases | index("U32Mul")))
+            and any(.opcodes[]; .name == "I64Add" and (.canonical_unsigned_aliases | index("U64Add")))
+            and any(.opcodes[]; .name == "I64Sub" and (.canonical_unsigned_aliases | index("U64Sub")))
+            and any(.opcodes[]; .name == "I64Mul" and (.canonical_unsigned_aliases | index("U64Mul")))
+            and ([.opcodes[] | select(has("canonical_unsigned_aliases")) | .name] | sort == ["I32Add", "I32Mul", "I32Sub", "I64Add", "I64Mul", "I64Sub"])
             "#,
         )
         .arg(opcode_metadata_path())

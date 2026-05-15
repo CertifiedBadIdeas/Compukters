@@ -321,6 +321,32 @@ pub enum Instruction {
     ReturnUnit,
 }
 
+impl Instruction {
+    pub const fn u32_add(dst: u16, lhs: u16, rhs: u16) -> Self {
+        Self::I32Add { dst, lhs, rhs }
+    }
+
+    pub const fn u32_sub(dst: u16, lhs: u16, rhs: u16) -> Self {
+        Self::I32Sub { dst, lhs, rhs }
+    }
+
+    pub const fn u32_mul(dst: u16, lhs: u16, rhs: u16) -> Self {
+        Self::I32Mul { dst, lhs, rhs }
+    }
+
+    pub const fn u64_add(dst: u16, lhs: u16, rhs: u16) -> Self {
+        Self::I64Add { dst, lhs, rhs }
+    }
+
+    pub const fn u64_sub(dst: u16, lhs: u16, rhs: u16) -> Self {
+        Self::I64Sub { dst, lhs, rhs }
+    }
+
+    pub const fn u64_mul(dst: u16, lhs: u16, rhs: u16) -> Self {
+        Self::I64Mul { dst, lhs, rhs }
+    }
+}
+
 pub fn decode_image(bytes: &[u8]) -> Result<Image, ImageError> {
     let mut reader = Reader { bytes, offset: 0 };
     if reader.take(4)? != IMAGE_MAGIC {
@@ -899,5 +925,62 @@ impl<'a> Reader<'a> {
             return Err(ImageError::NegativeLength(value));
         }
         Ok(value as usize)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Instruction;
+
+    #[test]
+    fn unsigned_add_sub_mul_helpers_use_canonical_signed_opcodes() {
+        assert_eq!(
+            Instruction::u32_add(1, 2, 3),
+            Instruction::I32Add {
+                dst: 1,
+                lhs: 2,
+                rhs: 3,
+            }
+        );
+        assert_eq!(
+            Instruction::u32_sub(1, 2, 3),
+            Instruction::I32Sub {
+                dst: 1,
+                lhs: 2,
+                rhs: 3,
+            }
+        );
+        assert_eq!(
+            Instruction::u32_mul(1, 2, 3),
+            Instruction::I32Mul {
+                dst: 1,
+                lhs: 2,
+                rhs: 3,
+            }
+        );
+        assert_eq!(
+            Instruction::u64_add(1, 2, 3),
+            Instruction::I64Add {
+                dst: 1,
+                lhs: 2,
+                rhs: 3,
+            }
+        );
+        assert_eq!(
+            Instruction::u64_sub(1, 2, 3),
+            Instruction::I64Sub {
+                dst: 1,
+                lhs: 2,
+                rhs: 3,
+            }
+        );
+        assert_eq!(
+            Instruction::u64_mul(1, 2, 3),
+            Instruction::I64Mul {
+                dst: 1,
+                lhs: 2,
+                rhs: 3,
+            }
+        );
     }
 }

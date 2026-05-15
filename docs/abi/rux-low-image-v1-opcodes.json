@@ -156,6 +156,9 @@
       "width": "i32",
       "signedness": "signed",
       "result_high_bits": "zero_extend_32",
+      "canonical_unsigned_aliases": [
+        "U32Add"
+      ],
       "trap_conditions": []
     },
     {
@@ -185,6 +188,9 @@
       "width": "i32",
       "signedness": "signed",
       "result_high_bits": "zero_extend_32",
+      "canonical_unsigned_aliases": [
+        "U32Sub"
+      ],
       "trap_conditions": []
     },
     {
@@ -214,6 +220,9 @@
       "width": "i32",
       "signedness": "signed",
       "result_high_bits": "zero_extend_32",
+      "canonical_unsigned_aliases": [
+        "U32Mul"
+      ],
       "trap_conditions": []
     },
     {
@@ -1093,6 +1102,9 @@
       "width": "i64",
       "signedness": "signed",
       "result_high_bits": "full_64",
+      "canonical_unsigned_aliases": [
+        "U64Add"
+      ],
       "trap_conditions": []
     },
     {
@@ -1122,6 +1134,9 @@
       "width": "i64",
       "signedness": "signed",
       "result_high_bits": "full_64",
+      "canonical_unsigned_aliases": [
+        "U64Sub"
+      ],
       "trap_conditions": []
     },
     {
@@ -1151,6 +1166,9 @@
       "width": "i64",
       "signedness": "signed",
       "result_high_bits": "full_64",
+      "canonical_unsigned_aliases": [
+        "U64Mul"
+      ],
       "trap_conditions": []
     },
     {
