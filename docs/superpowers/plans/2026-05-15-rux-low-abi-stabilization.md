@@ -125,7 +125,7 @@ Update in-memory images to omit `language_version`. Update any checked-in low im
 ### Task 3: Verify, document, and commit
 
 **Files:**
-- Create: `docs/superpowers/specs/2026-05-15-rux-low-abi-v1-design.md`
+- Create: `docs/abi/rux-low-image-v1.md`
 
 - [x] **Step 1: Write ABI spec**
 
@@ -166,8 +166,8 @@ git commit -m "feat: stabilize rux low image abi"
 **Files:**
 - Modify: `native/rux-vm/src/low_image.rs`
 - Modify: `native/rux-vm/tests/low_image_decode.rs`
-- Modify: `docs/superpowers/specs/2026-05-15-rux-low-abi-v1-design.md`
-- Create: `docs/superpowers/specs/2026-05-15-rux-low-abi-v1-opcodes.json`
+- Modify: `docs/abi/rux-low-image-v1.md`
+- Create: `docs/abi/rux-low-image-v1-opcodes.json`
 
 - [x] **Step 1: Add RED tests for reference encoding**
 
