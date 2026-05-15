@@ -311,7 +311,8 @@ fn lexer_recognizes_comments_and_bitwise_tokens() {
 #[test]
 fn lexer_recognizes_compound_assignment_tokens() {
     let tokens =
-        lex("a += 1; b -= 2; c *= 3; d /= 4; e &= 5; f |= 6; g ^= 7; h <<= 1; i >>= 2;").unwrap();
+        lex("a += 1; b -= 2; c *= 3; d /= 4; e %= 5; f &= 6; g |= 7; h ^= 8; i <<= 1; j >>= 2;")
+            .unwrap();
     let kinds: Vec<TokenKind> = tokens.into_iter().map(|token| token.kind).collect();
 
     assert_eq!(
@@ -334,22 +335,26 @@ fn lexer_recognizes_compound_assignment_tokens() {
             TokenKind::Int(4),
             TokenKind::Semicolon,
             TokenKind::Ident("e".to_string()),
-            TokenKind::AmpersandEqual,
+            TokenKind::PercentEqual,
             TokenKind::Int(5),
             TokenKind::Semicolon,
             TokenKind::Ident("f".to_string()),
-            TokenKind::PipeEqual,
+            TokenKind::AmpersandEqual,
             TokenKind::Int(6),
             TokenKind::Semicolon,
             TokenKind::Ident("g".to_string()),
-            TokenKind::CaretEqual,
+            TokenKind::PipeEqual,
             TokenKind::Int(7),
             TokenKind::Semicolon,
             TokenKind::Ident("h".to_string()),
+            TokenKind::CaretEqual,
+            TokenKind::Int(8),
+            TokenKind::Semicolon,
+            TokenKind::Ident("i".to_string()),
             TokenKind::ShlEqual,
             TokenKind::Int(1),
             TokenKind::Semicolon,
-            TokenKind::Ident("i".to_string()),
+            TokenKind::Ident("j".to_string()),
             TokenKind::ShrEqual,
             TokenKind::Int(2),
             TokenKind::Semicolon,
@@ -569,6 +574,32 @@ fn compile_lowers_u32_shifts_to_unsigned_instructions() {
     assert!(instructions
         .iter()
         .any(|instruction| matches!(instruction, Instruction::U32Shr { .. })));
+}
+
+#[test]
+fn compile_lowers_remainder_and_unsigned_division_instructions() {
+    let signed = compile("fn main() -> i32 { return -13 % 5; }").unwrap();
+    let unsigned = compile(
+        "fn main() -> i32 {
+            let mut value: u32 = 0xfffffffeu32;
+            let mut result: u32 = (value / 3u32) + (value % 3u32);
+            return result as i32;
+        }",
+    )
+    .unwrap();
+
+    assert!(signed.functions[0]
+        .instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::I32Rem { .. })));
+    assert!(unsigned.functions[0]
+        .instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::U32Div { .. })));
+    assert!(unsigned.functions[0]
+        .instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::U32Rem { .. })));
 }
 
 #[test]
@@ -2224,6 +2255,26 @@ fn compiled_seed_u32_compound_assignment_runs_on_computer_machine() {
     assert_eq!(
         machine.run_boot_cpu_until_signal(cpu_id).unwrap(),
         LowImageSignal::HaltI32(0xff)
+    );
+}
+
+#[test]
+fn compiled_seed_remainder_and_unsigned_division_run_on_computer_machine() {
+    let image = compile(
+        "fn main() -> i32 {
+            let mut signed: i32 = -13 % 5;
+            let mut value: u32 = 0xfffffffeu32;
+            let mut unsigned: u32 = (value / 3u32) + (value % 3u32);
+            return signed + (unsigned as i32);
+        }",
+    )
+    .unwrap();
+    let mut machine = ComputerMachine::new(64 * 1024).unwrap();
+    let cpu_id = machine.spawn_boot_cpu(image, 1_000_000).unwrap();
+
+    assert_eq!(
+        machine.run_boot_cpu_until_signal(cpu_id).unwrap(),
+        LowImageSignal::HaltI32(1_431_655_763)
     );
 }
 

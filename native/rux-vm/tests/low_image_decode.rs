@@ -96,6 +96,64 @@ fn decodes_u32_shift_instructions() {
     );
 }
 
+#[test]
+fn decodes_division_remainder_instructions() {
+    let image = decode_image(&division_remainder_image_bytes()).expect("image decodes");
+
+    assert_eq!(
+        image.functions[0].instructions,
+        vec![
+            Instruction::I32Rem {
+                dst: 2,
+                lhs: 0,
+                rhs: 1,
+            },
+            Instruction::U32Div {
+                dst: 3,
+                lhs: 0,
+                rhs: 1,
+            },
+            Instruction::U32Rem {
+                dst: 4,
+                lhs: 0,
+                rhs: 1,
+            },
+            Instruction::ReturnI32 { src: 4 },
+        ],
+    );
+}
+
+fn division_remainder_image_bytes() -> Vec<u8> {
+    let mut out = Vec::new();
+    out.extend_from_slice(b"RUXI");
+    out.push(1);
+    u32(&mut out, 1024);
+    bytes(&mut out, &[]);
+    bytes(&mut out, &[]);
+    u32(&mut out, 0);
+    i32(&mut out, 0);
+    i32(&mut out, 1);
+    string(&mut out, "main");
+    u16(&mut out, 5);
+    i32(&mut out, 0);
+    i32(&mut out, 4);
+    out.push(33);
+    u16(&mut out, 2);
+    u16(&mut out, 0);
+    u16(&mut out, 1);
+    out.push(34);
+    u16(&mut out, 3);
+    u16(&mut out, 0);
+    u16(&mut out, 1);
+    out.push(35);
+    u16(&mut out, 4);
+    u16(&mut out, 0);
+    u16(&mut out, 1);
+    out.push(20);
+    u16(&mut out, 4);
+    out
+}
+
 fn i32_equality_image_bytes() -> Vec<u8> {
     let mut out = Vec::new();
     out.extend_from_slice(b"RUXI");

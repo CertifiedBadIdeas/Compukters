@@ -96,6 +96,61 @@ class RuxLowVmImageAbiTest {
     }
 
     @Test
+    fun lowImageAbiEncodesRemainderAndUnsignedDivisionInstructions() {
+        val bytes =
+            RuxLowVmImageAbi.encode(
+                RuxLowVmImage(
+                    memorySize = 1024u,
+                    entryFunctionIndex = 0,
+                    functions =
+                        listOf(
+                            RuxLowVmFunction(
+                                name = "main",
+                                registerCount = 5,
+                                parameters = emptyList(),
+                                instructions =
+                                    listOf(
+                                        RuxLowVmInstruction.I32Rem(dst = 2, lhs = 0, rhs = 1),
+                                        RuxLowVmInstruction.U32Div(dst = 3, lhs = 0, rhs = 1),
+                                        RuxLowVmInstruction.U32Rem(dst = 4, lhs = 0, rhs = 1),
+                                        RuxLowVmInstruction.ReturnI32(src = 4),
+                                    ),
+                            ),
+                        ),
+                ),
+            )
+        val reader = LowTestReader(bytes)
+
+        assertEquals("RUXI", reader.ascii(4))
+        assertEquals(RuxLowVmImageAbi.VERSION, reader.u8())
+        assertEquals(1024u, reader.u32())
+        assertEquals(emptyList(), reader.bytes().toList())
+        assertEquals(emptyList(), reader.bytes().toList())
+        assertEquals(0u, reader.u32())
+        assertEquals(0, reader.i32())
+        assertEquals(1, reader.i32())
+        assertEquals("main", reader.string())
+        assertEquals(5, reader.u16())
+        assertEquals(emptyList(), reader.registerList())
+        assertEquals(4, reader.i32())
+        assertEquals(RuxLowVmImageAbi.InstructionTags.I32_REM, reader.u8())
+        assertEquals(2, reader.u16())
+        assertEquals(0, reader.u16())
+        assertEquals(1, reader.u16())
+        assertEquals(RuxLowVmImageAbi.InstructionTags.U32_DIV, reader.u8())
+        assertEquals(3, reader.u16())
+        assertEquals(0, reader.u16())
+        assertEquals(1, reader.u16())
+        assertEquals(RuxLowVmImageAbi.InstructionTags.U32_REM, reader.u8())
+        assertEquals(4, reader.u16())
+        assertEquals(0, reader.u16())
+        assertEquals(1, reader.u16())
+        assertEquals(RuxLowVmImageAbi.InstructionTags.RETURN_I32, reader.u8())
+        assertEquals(4, reader.u16())
+        assertEquals(bytes.size, reader.offset)
+    }
+
+    @Test
     fun writesLowGoldenFixtureWhenPathIsProvided() {
         val path = System.getProperty("ckl.low.image.golden.path")?.takeIf(String::isNotBlank) ?: return
 

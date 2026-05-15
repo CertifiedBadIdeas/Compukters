@@ -179,6 +179,7 @@ pub(crate) enum BinaryOp {
     Sub,
     Mul,
     Div,
+    Rem,
     BitAnd,
     BitOr,
     BitXor,
