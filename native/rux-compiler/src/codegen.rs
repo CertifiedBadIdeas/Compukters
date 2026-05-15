@@ -633,12 +633,10 @@ impl<'rodata> Codegen<'rodata> {
                 }
                 let dst = self.alloc_register()?;
                 let stack_addr = if matches!(ty, TypeName::ArrayU8(_)) {
-                    if initializer.is_some() {
-                        return Err(CompileError {
-                            message: "array initializers are not supported yet".to_string(),
-                        });
-                    }
                     let addr = self.alloc_stack_slot(*ty)?;
+                    if let Some(initializer) = initializer {
+                        self.initialize_stack_array(*ty, addr, initializer)?;
+                    }
                     self.instructions
                         .push(Instruction::I32Move { dst, src: addr });
                     None
@@ -1013,6 +1011,49 @@ impl<'rodata> Codegen<'rodata> {
                 ),
             }),
         }
+    }
+
+    fn initialize_stack_array(
+        &mut self,
+        ty: TypeName,
+        base_addr: u16,
+        initializer: &Expr,
+    ) -> Result<(), CompileError> {
+        let TypeName::ArrayU8(len) = ty else {
+            return Err(CompileError {
+                message: format!("type `{}` is not an array", ty.name()),
+            });
+        };
+        let Expr::ByteString(bytes) = initializer else {
+            return Err(CompileError {
+                message: "array initializer must be a byte string".to_string(),
+            });
+        };
+        if bytes.len() != len as usize {
+            return Err(CompileError {
+                message: format!(
+                    "byte string length {} does not match array length {len}",
+                    bytes.len()
+                ),
+            });
+        }
+        for (index, byte) in bytes.iter().copied().enumerate() {
+            let addr = if index == 0 {
+                base_addr
+            } else {
+                let offset = self.emit_u32_literal(index as i64)?;
+                let addr = self.alloc_register()?;
+                self.instructions.push(Instruction::AddrAdd {
+                    dst: addr,
+                    base: base_addr,
+                    offset,
+                });
+                addr
+            };
+            let src = self.emit_u8_literal(i64::from(byte))?;
+            self.instructions.push(Instruction::Store8 { addr, src });
+        }
+        Ok(())
     }
 
     fn compile_addr_expr(
@@ -1561,6 +1602,7 @@ impl<'rodata> Codegen<'rodata> {
         target: &Expr,
         index: &Expr,
     ) -> Result<(u16, PointerKind, TypeName), CompileError> {
+        self.validate_literal_stack_array_index(target, index)?;
         let ExprValue::Pointer {
             addr: base,
             kind,
@@ -1603,6 +1645,38 @@ impl<'rodata> Codegen<'rodata> {
             offset,
         });
         Ok((addr, kind, element_type))
+    }
+
+    fn validate_literal_stack_array_index(
+        &self,
+        target: &Expr,
+        index: &Expr,
+    ) -> Result<(), CompileError> {
+        let Expr::Local(name) = target else {
+            return Ok(());
+        };
+        let Some(Local {
+            ty: ValueType::ArrayU8(len),
+            ..
+        }) = self.locals.get(name).copied()
+        else {
+            return Ok(());
+        };
+        let literal = match index {
+            Expr::Int(value) | Expr::IntU32(value) | Expr::IntU8(value) => *value,
+            _ => return Ok(()),
+        };
+        let Ok(index) = u32::try_from(literal) else {
+            return Err(CompileError {
+                message: format!("array index {literal} is out of bounds for `[u8; {len}]`"),
+            });
+        };
+        if index >= len {
+            return Err(CompileError {
+                message: format!("array index {index} is out of bounds for `[u8; {len}]`"),
+            });
+        }
+        Ok(())
     }
 
     fn emit_load(&mut self, element_type: TypeName, dst: u16, addr: u16) {
