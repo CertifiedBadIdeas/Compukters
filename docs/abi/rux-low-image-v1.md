@@ -74,6 +74,18 @@ functions:            function_list
 
 `rodata`, `data`, and `bss` initialize the beginning of the machine memory in that order. The initialized section length must fit within `memory_size`.
 
+## Entry Function ABI
+
+`entry_function_index` identifies the first function executed by the VM. For image ABI v1, the entry function must be callable without external arguments. A frontend should encode entry functions with an empty `parameters` list.
+
+The entry function may terminate with any `Return*` instruction:
+
+- `ReturnUnit` reports successful unit completion;
+- `ReturnI32`, `ReturnI64`, `ReturnAddr`, and `ReturnBool` report a scalar program result;
+- non-entry functions use the same return instructions for static call results.
+
+If an entry function declares parameters, the VM must reject the image as invalid. Frontends targeting v1 must not rely on unspecified entry argument injection.
+
 ## Function Layout
 
 Each function is encoded as:
@@ -88,6 +100,20 @@ instructions:    instruction_list
 Register ids are `u16`. A function can address at most `65535` registers. Every register operand must be lower than the function `register_count`.
 
 The runtime may widen register ids and register counts to `usize` in predecoded/internal structures. That widening is not part of the serialized ABI.
+
+## ABI Limits
+
+These limits are part of image ABI v1 unless explicitly marked implementation-defined:
+
+- magic is exactly four bytes: `RUXI`;
+- `image_format_version` is exactly `1`;
+- serialized `length` and `index` values are signed 32-bit fields and must be non-negative;
+- function register ids are serialized as `u16`;
+- a function may address registers `0..register_count`;
+- `register_count = 0` is valid only when no instruction or parameter references a register;
+- memory addresses are 32-bit unsigned byte addresses;
+- `memory_size` is serialized as `u32`, so an image cannot request more than `4 GiB - 1` bytes;
+- max function count, max instruction count, max fixture file size, and call depth are implementation-defined runtime resource limits.
 
 ## Register Model
 
@@ -142,6 +168,42 @@ Division and remainder are defined separately for signed and unsigned values:
 - `I64Div` and `I64Rem` interpret operands as signed `i64`;
 - `U64Div` and `U64Rem` interpret operands as unsigned `u64`;
 - division or remainder by zero is a VM execution error.
+
+### Canonical Signed And Unsigned Opcode Policy
+
+The ABI only defines separate signed/unsigned opcodes when the bit-level result can differ.
+
+For wrapping addition, subtraction, multiplication, bitwise operations, equality, and left shift, signed and unsigned arithmetic produce the same stored bit pattern for the same width. The signed-named opcode is canonical for those shared operations unless an unsigned opcode is already present for symmetry or frontend ergonomics.
+
+For division, remainder, less-than, and right shift, signedness changes the result, so the ABI defines separate `I*` and `U*` opcodes.
+
+### Instruction Semantics Summary
+
+| Instruction group | Reads | Writes | Result bits | Runtime errors |
+| --- | --- | --- | --- | --- |
+| `I32Const` | immediate `i32` | `dst` | low 32 bits from immediate, high bits cleared | none |
+| `I64Const` / `U64Const` | immediate `i64` / `u64` | `dst` | all 64 bits from immediate | none |
+| `AddrConst` | immediate `u32` | `dst` | low 32 bits from address, high bits cleared | none |
+| `*Move` | `src` | `dst` | raw source register bits | none |
+| `I32Add/Sub/Mul` | `lhs`, `rhs` | `dst` | wrapping `i32`, high bits cleared | none |
+| `I64Add/Sub/Mul` | `lhs`, `rhs` | `dst` | wrapping `i64` | none |
+| `I32/U32/I64/U64Div/Rem` | `lhs`, `rhs` | `dst` | quotient/remainder for named signedness and width | divide by zero |
+| `*BitAnd/Or/Xor` | `lhs`, `rhs` | `dst` | raw bitwise result for named width | none |
+| `I32/U32/I64/U64Shl` | `lhs`, `rhs` | `dst` | unbounded left shift for named width | none |
+| `I32/I64Shr` | `lhs`, `rhs` | `dst` | unbounded arithmetic right shift | none |
+| `U32/U64Shr` | `lhs`, `rhs` | `dst` | unbounded logical right shift | none |
+| `I32/U32/I64/U64Lt` | `lhs`, `rhs` | `dst` | `0` or `1` bool in low 32 bits | none |
+| `I32/I64Eq` | `lhs`, `rhs` | `dst` | `0` or `1` bool in low 32 bits | none |
+| `I32ToI64` | `src` | `dst` | sign-extended low 32 bits | none |
+| `U32ToU64` | `src` | `dst` | zero-extended low 32 bits | none |
+| `I64ToI32` | `src` | `dst` | low 32 bits, high bits cleared | none |
+| `Load8/16/32/64` | `addr` | `dst` | loaded little-endian value | memory fault |
+| `Store8/16/32/64` | `addr`, `src` | memory | low 8/16/32/64 source bits | memory fault |
+| `AddrAdd` | `base`, `offset` | `dst` | wrapping 32-bit address add | none |
+| `Jump` | immediate target | control flow | none | none |
+| `JumpIfFalse` | `cond`, immediate target | control flow | false when low 32 bits are `0` | none |
+| `CallStatic` | argument registers | new frame, optional caller return register later | raw argument bits copied by position | call-depth/resource limit |
+| `Return*` | optional source register | caller return register or program halt | raw scalar bits interpreted by return kind | none |
 
 ## Control Flow
 
@@ -225,6 +287,7 @@ The same table is available in machine-readable form at `docs/abi/rux-low-image-
 The VM validates images before execution:
 
 - entry function index is in bounds;
+- entry function has no parameters;
 - functions are non-empty;
 - parameter and instruction register ids are in bounds;
 - jump targets are in bounds;
@@ -233,6 +296,12 @@ The VM validates images before execution:
 - memory initialization sections fit in `memory_size`.
 
 Invalid images fail at load/create time instead of producing partial execution.
+
+Decoders validate serialized structure first. Runners validate executable image invariants before running. Tooling may expose those as separate phases:
+
+- decode errors: malformed bytes or unsupported ABI version;
+- validation errors: structurally decodable image that violates VM invariants;
+- runtime errors: valid image traps during execution.
 
 ## Execution Errors
 
@@ -247,6 +316,8 @@ Runtime errors include:
 
 These are VM errors, not undefined behavior. The VM must report an error signal/state instead of corrupting host memory.
 
+Stable error categories are listed in `docs/abi/rux-low-errors-v1.md`.
+
 ## Reference Encoder
 
 The Rust VM crate exposes a reference encoder:
@@ -256,6 +327,8 @@ encode_image(image: &Image) -> Result<Vec<u8>, ImageEncodeError>
 ```
 
 External compiler frontends should treat the reference encoder, decode tests, and golden fixtures as executable ABI examples. The encoder is intentionally strict: oversized lengths and indices are errors instead of lossy casts.
+
+The fixture set lives in `docs/abi/fixtures`. Each `.ruxi` image has a `.json` manifest with the expected result or error category. The Rust reference fixture generator is `native/rux-vm/examples/write_abi_fixtures.rs`.
 
 ## Stability Policy
 

@@ -8,3 +8,11 @@ Current specifications:
 
 - `rux-low-image-v1.md`: Rux low image ABI v1, currently a pre-freeze candidate.
 - `rux-low-image-v1-opcodes.json`: machine-readable opcode table for Rux low image ABI v1.
+- `rux-machine-profile-v1.md`: baseline machine profile for running Rux low images on a computer-class VM.
+- `rux-low-errors-v1.md`: stable decode, validation, and runtime error categories for tooling.
+
+Conformance material:
+
+- `fixtures/*.ruxi`: golden and negative Rux low image fixtures.
+- `fixtures/*.json`: machine-readable fixture manifests.
+- `CHANGELOG.md`: ABI history and freeze notes.
