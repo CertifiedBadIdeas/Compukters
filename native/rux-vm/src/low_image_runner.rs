@@ -420,6 +420,13 @@ impl LowProgram {
                 image.entry_function_index,
             ));
         }
+        let entry_function = &image.functions[image.entry_function_index];
+        if !entry_function.parameters.is_empty() {
+            return Err(format!(
+                "entry function {} must not declare parameters",
+                entry_function.name,
+            ));
+        }
         let memory_size = usize::try_from(image.memory_size)
             .map_err(|_| "memory size does not fit usize".to_string())?;
         let initialized = image

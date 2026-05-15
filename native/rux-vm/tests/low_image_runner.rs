@@ -681,10 +681,42 @@ fn runner_rejects_invalid_parameter_register_at_create_time() {
         data: Vec::new(),
         bss_size: 0,
         entry_function_index: 0,
+        functions: vec![
+            Function {
+                name: "main".to_string(),
+                register_count: 0,
+                parameters: Vec::new(),
+                instructions: vec![Instruction::ReturnUnit],
+            },
+            Function {
+                name: "callee".to_string(),
+                register_count: 1,
+                parameters: vec![1],
+                instructions: vec![Instruction::ReturnUnit],
+            },
+        ],
+    };
+
+    let error = create_error(image);
+
+    assert!(
+        error.contains("function callee parameter 0 register 1 outside register count 1"),
+        "{error}",
+    );
+}
+
+#[test]
+fn runner_rejects_entry_function_parameters_at_create_time() {
+    let image = Image {
+        memory_size: 1024,
+        rodata: Vec::new(),
+        data: Vec::new(),
+        bss_size: 0,
+        entry_function_index: 0,
         functions: vec![Function {
             name: "main".to_string(),
             register_count: 1,
-            parameters: vec![1],
+            parameters: vec![0],
             instructions: vec![Instruction::ReturnUnit],
         }],
     };
@@ -692,7 +724,7 @@ fn runner_rejects_invalid_parameter_register_at_create_time() {
     let error = create_error(image);
 
     assert!(
-        error.contains("function main parameter 0 register 1 outside register count 1"),
+        error.contains("entry function main must not declare parameters"),
         "{error}",
     );
 }

@@ -1,0 +1,8 @@
+{
+  "name": "bad_version",
+  "kind": "negative",
+  "format": "RUXI",
+  "target_image_format_version": 1,
+  "phase": "decode",
+  "expected_error": {"type":"UnsupportedVersion","value":2}
+}

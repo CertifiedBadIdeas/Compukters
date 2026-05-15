@@ -1,0 +1,8 @@
+{
+  "name": "unknown_opcode",
+  "kind": "negative",
+  "format": "RUXI",
+  "target_image_format_version": 1,
+  "phase": "decode",
+  "expected_error": {"type":"UnknownInstructionTag","value":255}
+}
