@@ -1,4 +1,6 @@
-use rux_compiler::{render_terminal_ui, run_source};
+use rux_compiler::{
+    render_terminal_ui, run_source, run_source_until_serial_output, run_source_with_serial_input,
+};
 use rux_vm::computer_machine::ComputerMachine;
 use rux_vm::low_image_runner::LowImageSignal;
 
@@ -65,4 +67,23 @@ fn example_copy_firmware_runs() {
     assert_eq!(report.exit_code, 0x5855_52);
     assert_eq!(report.panic_code, 0);
     assert_eq!(report.debug_output, "RUX");
+}
+
+#[test]
+fn run_source_with_serial_input_echoes_bytes_through_firmware() {
+    let source = include_str!("../examples/firmware/echo.rx");
+    let report = run_source_with_serial_input(source, b"Rux!").unwrap();
+
+    assert_eq!(report.exit_code, 0);
+    assert_eq!(report.panic_code, 0);
+    assert_eq!(report.debug_output, "Rux!");
+}
+
+#[test]
+fn run_source_until_serial_output_supports_live_polling_firmware() {
+    let source = include_str!("../examples/firmware/echo_live.rx");
+    let report = run_source_until_serial_output(source, b"Rux!", 4, 32).unwrap();
+
+    assert_eq!(report.panic_code, 0);
+    assert_eq!(report.debug_output, "Rux!");
 }

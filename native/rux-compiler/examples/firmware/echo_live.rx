@@ -1,0 +1,9 @@
+use std::io::{read_byte, read_ready, write_byte};
+
+fn main() {
+    while true {
+        if read_ready() {
+            write_byte(read_byte());
+        }
+    }
+}

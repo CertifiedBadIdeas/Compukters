@@ -7,3 +7,21 @@ pub fn write_bytes(bytes: ptr<u8>, len: u32) {
         i += 1u32;
     }
 }
+
+pub fn write_byte(byte: u8) {
+    unsafe {
+        mmio<u8>(DEBUG_WRITE).store(byte);
+    }
+}
+
+pub fn read_ready() -> bool {
+    unsafe {
+        return mmio<i32>(SERIAL_INPUT_READY).load() != 0;
+    }
+}
+
+pub fn read_byte() -> u8 {
+    unsafe {
+        return mmio<u8>(SERIAL_INPUT_READ).load();
+    }
+}

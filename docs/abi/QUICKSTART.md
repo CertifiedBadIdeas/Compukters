@@ -16,6 +16,7 @@ Required:
 Recommended:
 
 - `cpp-frontend-notes.md`: lowering guidance for C++-style frontends.
+- `rux-machine-profile-v1.md`: baseline computer MMIO map for firmware that needs control/debug/serial devices.
 - `PRE-FREEZE-GAPS.md`: intentionally omitted v1 opcodes and why.
 
 ## Minimal Image Shape
@@ -155,3 +156,24 @@ Then review the fixture diff before committing.
 - keep v1 decode/run support and fixtures available.
 
 Breaking changes require a new numeric image format version.
+
+## Local Firmware Smoke Tests
+
+The Rust seed compiler includes two convenience CLIs:
+
+```bash
+cargo run --manifest-path native/rux-compiler/Cargo.toml --bin rux-emit -- input.rx output.ruxi
+cargo run --manifest-path native/rux-compiler/Cargo.toml --bin rux-run -- input.rx
+```
+
+Scripted serial input can be injected with:
+
+```bash
+cargo run --manifest-path native/rux-compiler/Cargo.toml --bin rux-run -- native/rux-compiler/examples/firmware/echo.rx --serial "Rux!"
+```
+
+Live serial mode reads stdin and writes firmware debug serial output directly to stdout:
+
+```bash
+printf 'Rux!' | cargo run --manifest-path native/rux-compiler/Cargo.toml --bin rux-run -- native/rux-compiler/examples/firmware/echo_live.rx --serial-live
+```
