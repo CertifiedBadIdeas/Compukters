@@ -266,9 +266,8 @@ mod tests {
         assert_eq!(error, "timer register 0 is read-only");
     }
 
-    fn image(instructions: Vec<Instruction>, register_count: usize) -> Image {
+    fn image(instructions: Vec<Instruction>, register_count: u16) -> Image {
         Image {
-            language_version: "rux-low-1".to_string(),
             memory_size: 256,
             rodata: Vec::new(),
             data: Vec::new(),

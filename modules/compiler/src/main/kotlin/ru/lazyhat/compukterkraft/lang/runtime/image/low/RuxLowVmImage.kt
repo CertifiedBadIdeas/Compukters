@@ -1,7 +1,6 @@
 package ru.lazyhat.compukterkraft.lang.runtime.image.low
 
 data class RuxLowVmImage(
-    val languageVersion: String,
     val memorySize: UInt,
     val rodata: ByteArray = byteArrayOf(),
     val data: ByteArray = byteArrayOf(),
@@ -11,7 +10,6 @@ data class RuxLowVmImage(
 ) {
     override fun equals(other: Any?): Boolean =
         other is RuxLowVmImage &&
-            languageVersion == other.languageVersion &&
             memorySize == other.memorySize &&
             rodata.contentEquals(other.rodata) &&
             data.contentEquals(other.data) &&
@@ -20,8 +18,7 @@ data class RuxLowVmImage(
             functions == other.functions
 
     override fun hashCode(): Int {
-        var result = languageVersion.hashCode()
-        result = 31 * result + memorySize.hashCode()
+        var result = memorySize.hashCode()
         result = 31 * result + rodata.contentHashCode()
         result = 31 * result + data.contentHashCode()
         result = 31 * result + bssSize.hashCode()

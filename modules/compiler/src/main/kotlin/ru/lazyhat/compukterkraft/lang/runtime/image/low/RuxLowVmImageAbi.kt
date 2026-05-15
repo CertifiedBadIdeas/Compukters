@@ -1,7 +1,7 @@
 package ru.lazyhat.compukterkraft.lang.runtime.image.low
 
 object RuxLowVmImageAbi {
-    const val VERSION: Int = 5
+    const val VERSION: Int = 1
 
     object InstructionTags {
         const val I32_CONST = 1
@@ -40,9 +40,8 @@ object RuxLowVmImageAbi {
             "entryFunctionIndex ${image.entryFunctionIndex} is outside function table"
         }
         val writer = Writer()
-        writer.ascii("CKIM")
+        writer.ascii("RUXI")
         writer.u8(VERSION)
-        writer.string(image.languageVersion)
         writer.u32(image.memorySize)
         writer.bytes(image.rodata)
         writer.bytes(image.data)

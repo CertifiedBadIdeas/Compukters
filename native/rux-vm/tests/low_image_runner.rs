@@ -351,7 +351,6 @@ fn runner_rejects_invalid_call_target_at_create_time() {
 #[test]
 fn runner_rejects_static_call_argument_count_at_create_time() {
     let image = Image {
-        language_version: "rux-low-1".to_string(),
         memory_size: 1024,
         rodata: Vec::new(),
         data: Vec::new(),
@@ -391,7 +390,6 @@ fn runner_rejects_static_call_argument_count_at_create_time() {
 #[test]
 fn runner_rejects_invalid_parameter_register_at_create_time() {
     let image = Image {
-        language_version: "rux-low-1".to_string(),
         memory_size: 1024,
         rodata: Vec::new(),
         data: Vec::new(),
@@ -416,7 +414,6 @@ fn runner_rejects_invalid_parameter_register_at_create_time() {
 #[test]
 fn runner_rejects_invalid_return_register_at_create_time() {
     let image = Image {
-        language_version: "rux-low-1".to_string(),
         memory_size: 1024,
         rodata: Vec::new(),
         data: Vec::new(),
@@ -456,7 +453,6 @@ fn runner_rejects_invalid_return_register_at_create_time() {
 #[test]
 fn runner_calls_static_function_with_i32_arguments_and_return_value() {
     let image = Image {
-        language_version: "rux-low-1".to_string(),
         memory_size: 1024,
         rodata: Vec::new(),
         data: Vec::new(),
@@ -501,7 +497,6 @@ fn runner_calls_static_function_with_i32_arguments_and_return_value() {
 #[test]
 fn runner_supports_recursive_static_calls() {
     let image = Image {
-        language_version: "rux-low-1".to_string(),
         memory_size: 1024,
         rodata: Vec::new(),
         data: Vec::new(),
@@ -575,7 +570,6 @@ fn runner_supports_recursive_static_calls() {
 #[test]
 fn runner_records_execution_metrics() {
     let image = Image {
-        language_version: "rux-low-1".to_string(),
         memory_size: 1024,
         rodata: Vec::new(),
         data: Vec::new(),
@@ -765,9 +759,8 @@ fn runner_can_execute_against_custom_memory_bus() {
     assert_eq!(bus.memory.load_i32(128).unwrap(), 456);
 }
 
-fn image(instructions: Vec<Instruction>, register_count: usize) -> Image {
+fn image(instructions: Vec<Instruction>, register_count: u16) -> Image {
     Image {
-        language_version: "rux-low-1".to_string(),
         memory_size: 1024,
         rodata: Vec::new(),
         data: Vec::new(),

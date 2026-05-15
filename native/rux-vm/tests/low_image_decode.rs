@@ -4,14 +4,13 @@ use rux_vm::low_image::{decode_image, ImageError, Instruction};
 fn decodes_low_level_image_with_linear_memory_layout() {
     let image = decode_image(&representative_image_bytes()).expect("low image decodes");
 
-    assert_eq!(image.language_version, "rux-low-1");
     assert_eq!(image.memory_size, 4096);
     assert_eq!(image.rodata, vec![1, 2, 3]);
     assert_eq!(image.data, vec![4, 5]);
     assert_eq!(image.bss_size, 16);
     assert_eq!(image.entry_function_index, 0);
     assert_eq!(image.functions.len(), 1);
-    assert_eq!(image.functions[0].register_count, 3);
+    assert_eq!(image.functions[0].register_count, 3u16);
     assert_eq!(
         image.functions[0].instructions,
         vec![
@@ -35,9 +34,8 @@ fn rejects_legacy_image_versions() {
 #[test]
 fn decodes_kotlin_generated_low_fixture() {
     let image =
-        decode_image(include_bytes!("fixtures/low-representative.ckim")).expect("fixture decodes");
+        decode_image(include_bytes!("fixtures/low-representative.ruxi")).expect("fixture decodes");
 
-    assert_eq!(image.language_version, "rux-low-1");
     assert_eq!(image.memory_size, 4096);
     assert_eq!(image.functions[0].instructions.len(), 5);
 }
@@ -100,9 +98,8 @@ fn decodes_u32_shift_instructions() {
 
 fn i32_equality_image_bytes() -> Vec<u8> {
     let mut out = Vec::new();
-    out.extend_from_slice(b"CKIM");
-    out.push(5);
-    string(&mut out, "rux-low-1");
+    out.extend_from_slice(b"RUXI");
+    out.push(1);
     u32(&mut out, 1024);
     bytes(&mut out, &[]);
     bytes(&mut out, &[]);
@@ -124,9 +121,8 @@ fn i32_equality_image_bytes() -> Vec<u8> {
 
 fn u32_less_than_image_bytes() -> Vec<u8> {
     let mut out = Vec::new();
-    out.extend_from_slice(b"CKIM");
-    out.push(5);
-    string(&mut out, "rux-low-1");
+    out.extend_from_slice(b"RUXI");
+    out.push(1);
     u32(&mut out, 1024);
     bytes(&mut out, &[]);
     bytes(&mut out, &[]);
@@ -148,9 +144,8 @@ fn u32_less_than_image_bytes() -> Vec<u8> {
 
 fn u32_shift_image_bytes() -> Vec<u8> {
     let mut out = Vec::new();
-    out.extend_from_slice(b"CKIM");
-    out.push(5);
-    string(&mut out, "rux-low-1");
+    out.extend_from_slice(b"RUXI");
+    out.push(1);
     u32(&mut out, 1024);
     bytes(&mut out, &[]);
     bytes(&mut out, &[]);
@@ -176,9 +171,8 @@ fn u32_shift_image_bytes() -> Vec<u8> {
 
 fn representative_image_bytes() -> Vec<u8> {
     let mut out = Vec::new();
-    out.extend_from_slice(b"CKIM");
-    out.push(5);
-    string(&mut out, "rux-low-1");
+    out.extend_from_slice(b"RUXI");
+    out.push(1);
     u32(&mut out, 4096);
     bytes(&mut out, &[1, 2, 3]);
     bytes(&mut out, &[4, 5]);

@@ -631,7 +631,6 @@ class NativeImageVmBindingsJniTest {
         val libraryPath = System.getProperty("rux.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val image =
             RuxLowVmImage(
-                languageVersion = "rux-low-1",
                 memorySize = 1024u,
                 entryFunctionIndex = 0,
                 functions =

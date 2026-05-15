@@ -303,7 +303,8 @@ impl LowProgram {
         }
         Self::validate(&image)?;
         let entry_function_index = image.entry_function_index;
-        let entry_register_count = image.functions[entry_function_index].register_count;
+        let entry_register_count =
+            usize::from(image.functions[entry_function_index].register_count);
         let entry_frame = LowFrame::create(entry_function_index, None, 0);
         let functions: Vec<LowFunction> = image
             .functions
@@ -345,7 +346,7 @@ impl LowProgram {
             return Err(format!("function {} has no instructions", function.name));
         }
         for (parameter_index, register) in function.parameters.iter().copied().enumerate() {
-            if register as usize >= function.register_count {
+            if register >= function.register_count {
                 return Err(format!(
                     "function {} parameter {parameter_index} register {register} outside register count {}",
                     function.name,
@@ -500,7 +501,7 @@ impl LowFunction {
             .collect();
 
         Self {
-            register_count: function.register_count,
+            register_count: usize::from(function.register_count),
             blocks,
             instruction_to_block,
         }
@@ -1629,7 +1630,8 @@ fn static_call_bindings(
 }
 
 fn stable_i32_constants(function: &Function) -> Vec<Option<i32>> {
-    let mut candidates = vec![I32ConstantCandidate::default(); function.register_count];
+    let mut candidates =
+        vec![I32ConstantCandidate::default(); usize::from(function.register_count)];
     for parameter in &function.parameters {
         candidates[usize::from(*parameter)].invalidate();
     }
@@ -1794,7 +1796,7 @@ fn validate_register(
     role: &str,
     register: u16,
 ) -> Result<(), String> {
-    if register as usize >= function.register_count {
+    if register >= function.register_count {
         return Err(format!(
             "function {} instruction {instruction_index} {role} register {register} outside register count {}",
             function.name,
@@ -1838,7 +1840,6 @@ mod tests {
     #[test]
     fn lowering_splits_loop_into_basic_blocks() {
         let image = Image {
-            language_version: "rux-low-1".to_string(),
             memory_size: 1024,
             rodata: Vec::new(),
             data: Vec::new(),
@@ -1884,7 +1885,6 @@ mod tests {
     #[test]
     fn low_image_runner_executes_byte_memory_operations() {
         let image = Image {
-            language_version: "rux-low-1".to_string(),
             memory_size: 64,
             rodata: Vec::new(),
             data: Vec::new(),
@@ -1918,7 +1918,6 @@ mod tests {
     #[test]
     fn lowering_fuses_i32_binary_operations_with_known_rhs_constants() {
         let image = Image {
-            language_version: "rux-low-1".to_string(),
             memory_size: 1024,
             rodata: Vec::new(),
             data: Vec::new(),
@@ -1983,7 +1982,6 @@ mod tests {
     #[test]
     fn fused_i32_immediate_operations_preserve_runtime_semantics() {
         let image = Image {
-            language_version: "rux-low-1".to_string(),
             memory_size: 1024,
             rodata: Vec::new(),
             data: Vec::new(),
@@ -2038,7 +2036,6 @@ mod tests {
     #[test]
     fn lowering_fuses_constants_loaded_before_loop_blocks() {
         let image = Image {
-            language_version: "rux-low-1".to_string(),
             memory_size: 1024,
             rodata: Vec::new(),
             data: Vec::new(),
@@ -2085,7 +2082,6 @@ mod tests {
     #[test]
     fn lowering_fuses_dead_temporary_mul_add_immediate_pairs() {
         let image = Image {
-            language_version: "rux-low-1".to_string(),
             memory_size: 1024,
             rodata: Vec::new(),
             data: Vec::new(),

@@ -519,7 +519,6 @@ impl<'rodata> Codegen<'rodata> {
         }
 
         Ok(Image {
-            language_version: "rux-0".to_string(),
             memory_size: DEFAULT_MEMORY_SIZE,
             rodata,
             data: Vec::new(),
@@ -587,7 +586,7 @@ impl<'rodata> Codegen<'rodata> {
         *next_stack_offset = codegen.next_stack_offset;
         Ok(Function {
             name: function.name.clone(),
-            register_count: usize::from(codegen.next_register),
+            register_count: codegen.next_register,
             parameters,
             instructions: codegen.instructions,
         })

@@ -142,7 +142,7 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
         Err(error) => {
             let _ = env.throw_new(
                 "java/lang/IllegalArgumentException",
-                format!("Cannot read CKIM v5 low image: {error}"),
+                format!("Cannot read RUXI v1 low image: {error}"),
             );
             return 0;
         }
@@ -152,7 +152,7 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
         Err(error) => {
             let _ = env.throw_new(
                 "java/lang/IllegalArgumentException",
-                format!("Cannot decode CKIM v5 low image: {error}"),
+                format!("Cannot decode RUXI v1 low image: {error}"),
             );
             return 0;
         }
