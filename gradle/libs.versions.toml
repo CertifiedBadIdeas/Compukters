@@ -25,11 +25,11 @@ v12111 = { id = "1.21.11-convention" }
 [versions]
 
 # common
-kotlin = "2.3.20"
-coroutines = "1.10.2"
+kotlin = "2.3.21"
+coroutines = "1.11.0"
 kotlin-logging = "8.0.01"
-slf4j = "2.0.17"
-kotlinx-collections-immutable = "0.3.8"
+slf4j = "2.0.18"
+kotlinx-collections-immutable = "0.4.0"
 
 # 1.21.1
 minecraft-v1211 = "1.21.1"
