@@ -22,7 +22,7 @@ impl Parser {
         let mut functions = Vec::new();
         while self.peek() != &TokenKind::Eof {
             if self.consume(TokenKind::Use) {
-                uses.push(self.parse_use_declaration()?);
+                uses.extend(self.parse_use_declaration()?);
             } else if self.consume(TokenKind::Const) {
                 consts.push(self.parse_const_declaration()?);
             } else if self.peek() == &TokenKind::Fn || self.peek() == &TokenKind::Pub {
@@ -39,13 +39,27 @@ impl Parser {
         })
     }
 
-    fn parse_use_declaration(&mut self) -> Result<UseDecl, CompileError> {
+    fn parse_use_declaration(&mut self) -> Result<Vec<UseDecl>, CompileError> {
         let mut path = vec![self.take_ident()?];
         while self.consume(TokenKind::DoubleColon) {
+            if self.consume(TokenKind::LeftBrace) {
+                let mut declarations = Vec::new();
+                loop {
+                    let mut item_path = path.clone();
+                    item_path.push(self.take_ident()?);
+                    declarations.push(UseDecl { path: item_path });
+                    if self.consume(TokenKind::RightBrace) {
+                        break;
+                    }
+                    self.expect(TokenKind::Comma)?;
+                }
+                self.expect(TokenKind::Semicolon)?;
+                return Ok(declarations);
+            }
             path.push(self.take_ident()?);
         }
         self.expect(TokenKind::Semicolon)?;
-        Ok(UseDecl { path })
+        Ok(vec![UseDecl { path }])
     }
 
     fn parse_const_declaration(&mut self) -> Result<ConstDecl, CompileError> {
