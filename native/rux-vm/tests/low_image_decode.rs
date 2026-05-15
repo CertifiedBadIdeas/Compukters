@@ -405,6 +405,11 @@ fn all_instruction_variants_image() -> Image {
                         lhs: 1,
                         rhs: 3,
                     },
+                    Instruction::U64Shl {
+                        dst: 1,
+                        lhs: 1,
+                        rhs: 3,
+                    },
                     Instruction::I64Eq {
                         dst: 6,
                         lhs: 1,

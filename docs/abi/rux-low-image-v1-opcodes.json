@@ -75,6 +75,7 @@
     { "tag": 56, "name": "U64Lt", "operands": [["dst", "u16"], ["lhs", "u16"], ["rhs", "u16"]] },
     { "tag": 57, "name": "I32ToI64", "operands": [["dst", "u16"], ["src", "u16"]] },
     { "tag": 58, "name": "U32ToU64", "operands": [["dst", "u16"], ["src", "u16"]] },
-    { "tag": 59, "name": "I64ToI32", "operands": [["dst", "u16"], ["src", "u16"]] }
+    { "tag": 59, "name": "I64ToI32", "operands": [["dst", "u16"], ["src", "u16"]] },
+    { "tag": 60, "name": "U64Shl", "operands": [["dst", "u16"], ["lhs", "u16"], ["rhs", "u16"]] }
   ]
 }

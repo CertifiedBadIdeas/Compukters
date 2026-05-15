@@ -120,7 +120,7 @@ Signed and unsigned integer values are stored in the same 64-bit machine-word re
 - `I64BitAnd`, `I64BitOr`, and `I64BitXor` operate on the raw 64-bit pattern.
 - `I64Lt` interprets both operands as signed `i64`.
 - `I64Eq` compares the raw 64-bit pattern.
-- `U64Lt`, `U64Div`, `U64Rem`, and `U64Shr` interpret operands as unsigned `u64`.
+- `U64Lt`, `U64Div`, `U64Rem`, `U64Shl`, and `U64Shr` interpret operands as unsigned `u64`.
 - `I32ToI64` sign-extends the low 32 bits into 64 bits.
 - `U32ToU64` zero-extends the low 32 bits into 64 bits.
 - `I64ToI32` truncates to the low 32 bits and zeroes the destination register's high 32 bits.
@@ -218,6 +218,7 @@ The same table is available in machine-readable form at `docs/abi/rux-low-image-
 | 57 | `I32ToI64` | `dst: u16, src: u16` |
 | 58 | `U32ToU64` | `dst: u16, src: u16` |
 | 59 | `I64ToI32` | `dst: u16, src: u16` |
+| 60 | `U64Shl` | `dst: u16, lhs: u16, rhs: u16` |
 
 ## Validation
 

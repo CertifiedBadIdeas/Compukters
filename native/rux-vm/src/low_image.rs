@@ -257,6 +257,11 @@ pub enum Instruction {
         lhs: u16,
         rhs: u16,
     },
+    U64Shl {
+        dst: u16,
+        lhs: u16,
+        rhs: u16,
+    },
     I64Eq {
         dst: u16,
         lhs: u16,
@@ -512,6 +517,7 @@ impl Writer {
             Instruction::I32ToI64 { dst, src } => self.move_instruction(57, *dst, *src),
             Instruction::U32ToU64 { dst, src } => self.move_instruction(58, *dst, *src),
             Instruction::I64ToI32 { dst, src } => self.move_instruction(59, *dst, *src),
+            Instruction::U64Shl { dst, lhs, rhs } => self.binary(60, *dst, *lhs, *rhs),
         }
         Ok(())
     }
@@ -765,6 +771,11 @@ fn read_instruction(reader: &mut Reader<'_>) -> Result<Instruction, ImageError> 
         57 => read_move(reader, |dst, src| Instruction::I32ToI64 { dst, src }),
         58 => read_move(reader, |dst, src| Instruction::U32ToU64 { dst, src }),
         59 => read_move(reader, |dst, src| Instruction::I64ToI32 { dst, src }),
+        60 => read_binary(reader, |dst, lhs, rhs| Instruction::U64Shl {
+            dst,
+            lhs,
+            rhs,
+        }),
         other => Err(ImageError::UnknownInstructionTag(other)),
     }
 }
