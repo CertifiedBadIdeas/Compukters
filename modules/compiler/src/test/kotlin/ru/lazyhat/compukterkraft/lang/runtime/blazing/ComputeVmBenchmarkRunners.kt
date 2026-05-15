@@ -155,7 +155,6 @@ internal class LowVmComputeBenchmarkRunner(
         instructions += RuxLowVmInstruction.ReturnI32(2)
 
         return RuxLowVmImage(
-            languageVersion = "rux-low-1",
             memorySize = 1024u,
             entryFunctionIndex = 0,
             functions =
@@ -228,7 +227,6 @@ internal class LowVmComputeBenchmarkRunner(
         instructions += RuxLowVmInstruction.ReturnI32(1)
 
         return RuxLowVmImage(
-            languageVersion = "rux-low-1",
             memorySize = 1024u,
             entryFunctionIndex = 0,
             functions =
@@ -245,7 +243,6 @@ internal class LowVmComputeBenchmarkRunner(
 
     private fun functionMixImage(iterations: Int): RuxLowVmImage =
         RuxLowVmImage(
-            languageVersion = "rux-low-1",
             memorySize = 1024u,
             entryFunctionIndex = 0,
             functions =
@@ -326,7 +323,6 @@ internal class LowVmComputeBenchmarkRunner(
 
     private fun recursiveFibImage(iterations: Int): RuxLowVmImage =
         RuxLowVmImage(
-            languageVersion = "rux-low-1",
             memorySize = 1024u,
             entryFunctionIndex = 0,
             functions =

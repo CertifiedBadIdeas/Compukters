@@ -17,13 +17,12 @@ class RuxLowVmImageAbiTest {
     }
 
     @Test
-    fun lowImageAbiEncodesVersionFiveAndUnifiedRegisters() {
+    fun lowImageAbiEncodesRuxImageVersionOneAndUnifiedRegisters() {
         val bytes = RuxLowVmImageAbi.encode(representativeImage())
         val reader = LowTestReader(bytes)
 
-        assertEquals("CKIM", reader.ascii(4))
-        assertEquals(5, reader.u8())
-        assertEquals("rux-low-1", reader.string())
+        assertEquals("RUXI", reader.ascii(4))
+        assertEquals(1, reader.u8())
         assertEquals(4096u, reader.u32())
         assertEquals(listOf(1, 2, 3), reader.bytes().map { it.toInt() })
         assertEquals(listOf(4, 5), reader.bytes().map { it.toInt() })
@@ -56,7 +55,6 @@ class RuxLowVmImageAbiTest {
         val bytes =
             RuxLowVmImageAbi.encode(
                 RuxLowVmImage(
-                    languageVersion = "rux-low-1",
                     memorySize = 1024u,
                     entryFunctionIndex = 0,
                     functions =
@@ -76,9 +74,8 @@ class RuxLowVmImageAbiTest {
             )
         val reader = LowTestReader(bytes)
 
-        assertEquals("CKIM", reader.ascii(4))
+        assertEquals("RUXI", reader.ascii(4))
         assertEquals(RuxLowVmImageAbi.VERSION, reader.u8())
-        assertEquals("rux-low-1", reader.string())
         assertEquals(1024u, reader.u32())
         assertEquals(emptyList(), reader.bytes().toList())
         assertEquals(emptyList(), reader.bytes().toList())
@@ -108,7 +105,6 @@ class RuxLowVmImageAbiTest {
 
     private fun representativeImage(): RuxLowVmImage =
         RuxLowVmImage(
-            languageVersion = "rux-low-1",
             memorySize = 4096u,
             rodata = byteArrayOf(1, 2, 3),
             data = byteArrayOf(4, 5),

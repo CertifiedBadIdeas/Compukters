@@ -64,7 +64,7 @@ internal data class ComputeVmBenchmarkReport(
             appendLine("# Rux Compute VM Benchmark")
             appendLine()
             appendLine(
-                "CPU-only workloads. The Rux low-level CKIM v5 VM is the measured VM baseline; Kotlin/JVM, Python, and optimized native Rust are comparison baselines.",
+                "CPU-only workloads. The Rux low-level RUXI v1 VM is the measured VM baseline; Kotlin/JVM, Python, and optimized native Rust are comparison baselines.",
             )
             appendLine()
             appendLine("## Benchmark Metadata")

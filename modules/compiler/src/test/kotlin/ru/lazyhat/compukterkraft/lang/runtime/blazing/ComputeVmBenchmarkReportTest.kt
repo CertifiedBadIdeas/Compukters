@@ -34,7 +34,7 @@ class ComputeVmBenchmarkReportTest {
                         nativeLibraryProfile = "release",
                         nativeLibrarySizeBytes = 777_216,
                         gitCommit = "abcdef123456",
-                        imageAbiVersion = "CKIM v5",
+                        imageAbiVersion = "RUXI v1",
                         javaRuntime = "Test JVM 1.2.3",
                         rustTargetProfile = "native/release",
                         iterations = 100,
@@ -93,7 +93,7 @@ class ComputeVmBenchmarkReportTest {
         assertContains(markdown, "| Native library profile | release |")
         assertContains(markdown, "| Native library size bytes | 777216 |")
         assertContains(markdown, "| Git commit | abcdef123456 |")
-        assertContains(markdown, "| Image ABI | CKIM v5 |")
+        assertContains(markdown, "| Image ABI | RUXI v1 |")
         assertContains(markdown, "| Java runtime | Test JVM 1.2.3 |")
         assertContains(markdown, "| Rust target/profile | native/release |")
         assertContains(markdown, "| Iterations | 100 |")

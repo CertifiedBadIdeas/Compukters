@@ -1,6 +1,7 @@
 use thiserror::Error;
 
-pub const VERSION: u8 = 5;
+pub const IMAGE_MAGIC: &[u8; 4] = b"RUXI";
+pub const IMAGE_FORMAT_VERSION: u8 = 1;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum ImageError {
@@ -24,7 +25,6 @@ pub enum ImageError {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Image {
-    pub language_version: String,
     pub memory_size: u32,
     pub rodata: Vec<u8>,
     pub data: Vec<u8>,
@@ -36,7 +36,7 @@ pub struct Image {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Function {
     pub name: String,
-    pub register_count: usize,
+    pub register_count: u16,
     pub parameters: Vec<u16>,
     pub instructions: Vec<Instruction>,
 }
@@ -183,15 +183,14 @@ pub enum Instruction {
 
 pub fn decode_image(bytes: &[u8]) -> Result<Image, ImageError> {
     let mut reader = Reader { bytes, offset: 0 };
-    if reader.take(4)? != b"CKIM" {
+    if reader.take(4)? != IMAGE_MAGIC {
         return Err(ImageError::InvalidMagic);
     }
     let version = reader.u8()?;
-    if version != VERSION {
+    if version != IMAGE_FORMAT_VERSION {
         return Err(ImageError::UnsupportedVersion(version));
     }
     Ok(Image {
-        language_version: reader.string()?,
         memory_size: reader.u32()?,
         rodata: reader.bytes()?,
         data: reader.bytes()?,
@@ -204,7 +203,7 @@ pub fn decode_image(bytes: &[u8]) -> Result<Image, ImageError> {
 fn read_function(reader: &mut Reader<'_>) -> Result<Function, ImageError> {
     Ok(Function {
         name: reader.string()?,
-        register_count: usize::from(reader.u16()?),
+        register_count: reader.u16()?,
         parameters: reader.register_list()?,
         instructions: reader.list(read_instruction)?,
     })

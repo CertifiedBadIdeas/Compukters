@@ -384,10 +384,9 @@ fn compile_lowers_i32_main_return_arithmetic() {
     let image = compile("fn main() -> i32 { return 7 + 3 * 2; }").unwrap();
     let function = &image.functions[0];
 
-    assert_eq!(image.language_version, "rux-0");
     assert_eq!(image.entry_function_index, 0);
     assert_eq!(function.name, "main");
-    assert_eq!(function.register_count, 5);
+    assert_eq!(function.register_count, 5u16);
     assert_eq!(
         function.instructions,
         vec![
@@ -677,7 +676,7 @@ fn compile_lowers_unit_main_with_implicit_return() {
     let image = compile("fn main() { }").unwrap();
     let function = &image.functions[0];
 
-    assert_eq!(function.register_count, 0);
+    assert_eq!(function.register_count, 0u16);
     assert_eq!(function.instructions, vec![Instruction::ReturnUnit]);
 }
 
@@ -686,7 +685,7 @@ fn compile_lowers_unsafe_mmio_store() {
     let image = compile("fn main() { unsafe { mmio<i32>(0x1000).store(42); } }").unwrap();
     let function = &image.functions[0];
 
-    assert_eq!(function.register_count, 2);
+    assert_eq!(function.register_count, 2u16);
     assert_eq!(
         function.instructions,
         vec![
@@ -707,7 +706,7 @@ fn compile_lowers_unsafe_mmio_load_return() {
         compile("fn main() -> i32 { unsafe { return mmio<i32>(0x1000).load(); } }").unwrap();
     let function = &image.functions[0];
 
-    assert_eq!(function.register_count, 2);
+    assert_eq!(function.register_count, 2u16);
     assert_eq!(
         function.instructions,
         vec![

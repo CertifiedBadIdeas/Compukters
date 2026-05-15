@@ -1144,7 +1144,6 @@ mod tests {
     fn legacy_ckl_os_research_kernel_launches_static_user_process_and_records_exit_code() {
         let mut machine = ComputerMachine::new(0x0002_0000).unwrap();
         let kernel = Image {
-            language_version: "rux-low-1".to_string(),
             memory_size: 0x0002_0000,
             rodata: Vec::new(),
             data: Vec::new(),
@@ -1314,9 +1313,8 @@ mod tests {
         assert!(debug.writable);
     }
 
-    fn image(instructions: Vec<Instruction>, register_count: usize) -> Image {
+    fn image(instructions: Vec<Instruction>, register_count: u16) -> Image {
         Image {
-            language_version: "rux-low-1".to_string(),
             memory_size: 1024,
             rodata: Vec::new(),
             data: Vec::new(),
