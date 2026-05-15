@@ -1450,6 +1450,23 @@ impl<'rodata> Codegen<'rodata> {
         method: &str,
         args: &[Expr],
     ) -> Result<ExprValue, CompileError> {
+        if method == "len" {
+            if !args.is_empty() {
+                return Err(CompileError {
+                    message: "array.len expects no arguments".to_string(),
+                });
+            }
+            if let Expr::Local(name) = receiver {
+                if let Some(Local {
+                    ty: ValueType::ArrayU8(len),
+                    ..
+                }) = self.locals.get(name).copied()
+                {
+                    return Ok(ExprValue::U32(self.emit_u32_literal(i64::from(len))?));
+                }
+            }
+        }
+
         let ExprValue::Pointer {
             addr,
             kind,

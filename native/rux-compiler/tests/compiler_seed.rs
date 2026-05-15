@@ -2453,6 +2453,33 @@ fn compiled_seed_stack_u8_buffer_can_be_passed_as_ptr_u8() {
 }
 
 #[test]
+fn compiled_seed_stack_u8_buffer_len_is_compile_time_u32() {
+    let image = compile(
+        "fn last_byte(bytes: ptr<u8>, len: u32) -> i32 {
+            unsafe {
+                return bytes[len - 1u32] as i32;
+            }
+        }
+
+        fn main() -> i32 {
+            let mut buf: [u8; 3];
+            buf[0u32] = 1u8;
+            buf[1u32] = 2u8;
+            buf[2u32] = 99u8;
+            return last_byte(buf, buf.len()) + (buf.len() as i32);
+        }",
+    )
+    .unwrap();
+    let mut machine = ComputerMachine::new(64 * 1024).unwrap();
+    let cpu_id = machine.spawn_boot_cpu(image, 1_000_000).unwrap();
+
+    assert_eq!(
+        machine.run_boot_cpu_until_signal(cpu_id).unwrap(),
+        LowImageSignal::HaltI32(102)
+    );
+}
+
+#[test]
 fn compile_lowers_mut_reference_local_to_stack_load_store() {
     let image = compile(
         "fn main() -> i32 {
