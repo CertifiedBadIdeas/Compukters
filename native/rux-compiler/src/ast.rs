@@ -58,7 +58,10 @@ pub(crate) enum TypeName {
     PtrI32,
     PtrU32,
     PtrU8,
+    RefMutI32,
     RefMutU32,
+    RefMutU8,
+    ArrayU8(u32),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -66,7 +69,7 @@ pub(crate) enum Statement {
     Let {
         name: String,
         ty: TypeName,
-        initializer: Expr,
+        initializer: Option<Expr>,
     },
     Assign {
         name: String,

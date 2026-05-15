@@ -106,10 +106,13 @@ impl Parser {
                 TypeName::PtrI32 => ReturnType::PtrI32,
                 TypeName::PtrU32 => ReturnType::PtrU32,
                 TypeName::PtrU8 => ReturnType::PtrU8,
-                TypeName::RefMutU32 => {
+                TypeName::RefMutI32 | TypeName::RefMutU32 | TypeName::RefMutU8 => {
                     return Err(
                         self.error("reference return types are not supported yet".to_string())
                     )
+                }
+                TypeName::ArrayU8(_) => {
+                    return Err(self.error("array return types are not supported yet".to_string()))
                 }
             }
         } else {
@@ -140,8 +143,11 @@ impl Parser {
             let name = self.take_ident()?;
             self.expect(TokenKind::Colon)?;
             let ty = self.parse_type()?;
-            self.expect(TokenKind::Equal)?;
-            let initializer = self.parse_expr()?;
+            let initializer = if self.consume(TokenKind::Equal) {
+                Some(self.parse_expr()?)
+            } else {
+                None
+            };
             self.expect(TokenKind::Semicolon)?;
             return Ok(Statement::Let {
                 name,
@@ -519,12 +525,32 @@ impl Parser {
     }
 
     fn parse_type(&mut self) -> Result<TypeName, CompileError> {
+        if self.consume(TokenKind::LeftBracket) {
+            let element_type = self.parse_type()?;
+            self.expect(TokenKind::Semicolon)?;
+            let len = self.take_int().ok_or_else(|| {
+                self.error(format!("expected array length, found {:?}", self.peek()))
+            })?;
+            self.expect(TokenKind::RightBracket)?;
+            let len = u32::try_from(len)
+                .ok()
+                .filter(|value| *value > 0)
+                .ok_or_else(|| self.error("array length must be a positive u32".to_string()))?;
+            return match element_type {
+                TypeName::U8 => Ok(TypeName::ArrayU8(len)),
+                _ => Err(self.error("only `[u8; N]` arrays are supported yet".to_string())),
+            };
+        }
         if self.consume(TokenKind::Ampersand) {
             self.expect(TokenKind::Mut)?;
             let element_type = self.parse_type()?;
             return match element_type {
+                TypeName::I32 => Ok(TypeName::RefMutI32),
                 TypeName::U32 => Ok(TypeName::RefMutU32),
-                _ => Err(self.error("only `&mut u32` references are supported yet".to_string())),
+                TypeName::U8 => Ok(TypeName::RefMutU8),
+                _ => Err(self.error(
+                    "only `&mut i32`, `&mut u32`, and `&mut u8` are supported yet".to_string(),
+                )),
             };
         }
         if self.consume(TokenKind::Ptr) {
@@ -542,8 +568,11 @@ impl Parser {
                 TypeName::PtrI32 | TypeName::PtrU32 | TypeName::PtrU8 => {
                     Err(self.error("nested pointer types are not supported yet".to_string()))
                 }
-                TypeName::RefMutU32 => {
+                TypeName::RefMutI32 | TypeName::RefMutU32 | TypeName::RefMutU8 => {
                     Err(self.error("pointers to references are not supported yet".to_string()))
+                }
+                TypeName::ArrayU8(_) => {
+                    Err(self.error("pointers to arrays are not supported yet".to_string()))
                 }
             };
         }

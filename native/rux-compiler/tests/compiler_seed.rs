@@ -2374,6 +2374,85 @@ fn compiled_seed_mut_reference_locals_do_not_overlap_between_functions() {
 }
 
 #[test]
+fn compiled_seed_mut_references_support_i32_and_u8_locals() {
+    let image = compile(
+        "fn write_i32(slot: &mut i32, value: i32) {
+            *slot = value;
+        }
+
+        fn write_u8(slot: &mut u8, value: u8) {
+            *slot = value;
+        }
+
+        fn main() -> i32 {
+            let mut signed: i32 = 1;
+            let mut byte: u8 = 2u8;
+            write_i32(&mut signed, -9);
+            write_u8(&mut byte, 0x7fu8);
+            return signed + (byte as i32);
+        }",
+    )
+    .unwrap();
+    let mut machine = ComputerMachine::new(64 * 1024).unwrap();
+    let cpu_id = machine.spawn_boot_cpu(image, 1_000_000).unwrap();
+
+    assert_eq!(
+        machine.run_boot_cpu_until_signal(cpu_id).unwrap(),
+        LowImageSignal::HaltI32(118)
+    );
+}
+
+#[test]
+fn compiled_seed_stack_u8_buffer_supports_safe_indexing() {
+    let image = compile(
+        "fn main() -> i32 {
+            let mut buf: [u8; 4];
+            buf[0u32] = 82u8;
+            buf[1u32] = 85u8;
+            buf[2u32] = 88u8;
+            buf[3u32] = 0u8;
+            return (buf[0u32] as i32)
+                + ((buf[1u32] as i32) << 8)
+                + ((buf[2u32] as i32) << 16);
+        }",
+    )
+    .unwrap();
+    let mut machine = ComputerMachine::new(64 * 1024).unwrap();
+    let cpu_id = machine.spawn_boot_cpu(image, 1_000_000).unwrap();
+
+    assert_eq!(
+        machine.run_boot_cpu_until_signal(cpu_id).unwrap(),
+        LowImageSignal::HaltI32(0x585552)
+    );
+}
+
+#[test]
+fn compiled_seed_stack_u8_buffer_can_be_passed_as_ptr_u8() {
+    let image = compile(
+        "fn second_byte(bytes: ptr<u8>) -> i32 {
+            unsafe {
+                return bytes[1u32] as i32;
+            }
+        }
+
+        fn main() -> i32 {
+            let mut buf: [u8; 2];
+            buf[0u32] = 1u8;
+            buf[1u32] = 42u8;
+            return second_byte(buf);
+        }",
+    )
+    .unwrap();
+    let mut machine = ComputerMachine::new(64 * 1024).unwrap();
+    let cpu_id = machine.spawn_boot_cpu(image, 1_000_000).unwrap();
+
+    assert_eq!(
+        machine.run_boot_cpu_until_signal(cpu_id).unwrap(),
+        LowImageSignal::HaltI32(42)
+    );
+}
+
+#[test]
 fn compile_lowers_mut_reference_local_to_stack_load_store() {
     let image = compile(
         "fn main() -> i32 {
