@@ -1,5 +1,13 @@
 # Rux Low Image ABI v1 Specification
 
+## Status
+
+Status: pre-freeze candidate.
+
+This ABI may still change in place until the first external image producer starts targeting it, or until the project explicitly marks it frozen. During this pre-freeze window, changes may still keep `image_format_version = 1`.
+
+After freeze, `RUXI` version `1` becomes immutable. Breaking changes require a new numeric image format version, and existing v1 decode/run support and fixtures must remain available for compatibility.
+
 ## Goal
 
 Define the first stable low-level Rux VM image ABI for compiler frontends that want to target the VM directly.
@@ -89,6 +97,25 @@ Low VM registers are untyped machine-word slots. Instruction names define how bi
 - `Addr*` instructions use 32-bit addresses.
 - `Load8`/`Store8` operate on a single byte.
 - `Load32`/`Store32` operate on a little-endian 32-bit word.
+
+## Arithmetic Semantics
+
+Arithmetic is defined by the VM. It is never host-language undefined behavior.
+
+Signed and unsigned integer values are stored in the same machine-word register slots. Instruction names define how the 32 low bits are interpreted:
+
+- `I32Add`, `I32Sub`, and `I32Mul` use signed `i32` wrapping arithmetic.
+- `I32BitAnd`, `I32BitOr`, and `I32BitXor` operate on the raw 32-bit pattern.
+- `I32Lt` interprets both operands as signed `i32`.
+- `I32Eq` compares the raw 32-bit pattern.
+- `U32Lt`, `U32Div`, `U32Rem`, `U32Shl`, and `U32Shr` interpret operands as unsigned `u32`.
+- `AddrAdd` uses 32-bit address wrapping arithmetic.
+
+Shift operations use unbounded shift counts, not masked CPU-style shift counts:
+
+- left shift with a count outside `0..32` produces `0`;
+- unsigned right shift with a count outside `0..32` produces `0`;
+- signed right shift with a count outside `0..32` produces `-1` for negative values and `0` otherwise.
 
 Division and remainder are defined separately for signed and unsigned values:
 
@@ -187,4 +214,8 @@ External compiler frontends should treat the reference encoder, decode tests, an
 
 ## Stability Policy
 
-`RUXI` version `1` is the target for Rux and external compiler frontends. Any serialized layout change, instruction tag reuse, operand type change, or top-level field change requires a new numeric image format version.
+`RUXI` version `1` is the target for Rux and external compiler frontends.
+
+While the ABI status is `pre-freeze candidate`, this document may still change in place. After freeze, any serialized layout change, instruction tag reuse, operand type change, top-level field change, or semantic change to an existing instruction requires a new numeric image format version.
+
+After freeze, new instructions also require a new numeric image format version. This keeps v1 decoders simple: an unknown instruction tag remains an invalid v1 image, not a partially supported extension.
