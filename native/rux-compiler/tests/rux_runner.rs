@@ -56,3 +56,13 @@ fn example_terminal_firmware_runs() {
     assert_eq!(report.panic_code, 0);
     assert_eq!(report.debug_output, "RUX READY");
 }
+
+#[test]
+fn example_copy_firmware_runs() {
+    let source = include_str!("../examples/firmware/copy.rx");
+    let report = run_source(source).unwrap();
+
+    assert_eq!(report.exit_code, 0x5855_52);
+    assert_eq!(report.panic_code, 0);
+    assert_eq!(report.debug_output, "RUX");
+}
