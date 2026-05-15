@@ -13,6 +13,7 @@ Status: pre-freeze candidate.
 - Added `U64Shl` so `u64` has symmetric left and right shift instructions.
 - Expanded opcode JSON with machine-readable reads, writes, width, signedness, high-bit result policy, and trap conditions.
 - Added advisory C++ frontend lowering notes.
+- Added pre-freeze gap review and freeze checklist documents.
 - Documented entry ABI, call/return ABI, arithmetic semantics, runtime error categories, machine profile boundaries, and stability policy.
 
 ## Freeze Policy

@@ -11,6 +11,8 @@ Current specifications:
 - `rux-machine-profile-v1.md`: baseline machine profile for running Rux low images on a computer-class VM.
 - `rux-low-errors-v1.md`: stable decode, validation, and runtime error categories for tooling.
 - `cpp-frontend-notes.md`: advisory lowering notes for external C++ frontends.
+- `PRE-FREEZE-GAPS.md`: reviewed v1 instruction-set gaps and decisions.
+- `FREEZE-CHECKLIST.md`: gates and commands required before freezing v1.
 
 Conformance material:
 
