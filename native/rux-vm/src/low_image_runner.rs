@@ -336,6 +336,11 @@ enum ExecutableOperation {
         lhs: usize,
         rhs: usize,
     },
+    U64Shl {
+        dst: usize,
+        lhs: usize,
+        rhs: usize,
+    },
     I64Eq {
         dst: usize,
         lhs: usize,
@@ -547,6 +552,7 @@ impl LowProgram {
             | Instruction::I64BitXor { dst, lhs, rhs }
             | Instruction::I64Shl { dst, lhs, rhs }
             | Instruction::I64Shr { dst, lhs, rhs }
+            | Instruction::U64Shl { dst, lhs, rhs }
             | Instruction::U64Shr { dst, lhs, rhs }
             | Instruction::I64Eq { dst, lhs, rhs }
             | Instruction::I64Lt { dst, lhs, rhs }
@@ -1059,6 +1065,11 @@ impl ExecutableOperation {
                     ExecutableOperation::U64Shr { dst, lhs, rhs }
                 })
             }
+            Instruction::U64Shl { dst, lhs, rhs } => {
+                compile_i64_binary(known_i32, *dst, *lhs, *rhs, |dst, lhs, rhs| {
+                    ExecutableOperation::U64Shl { dst, lhs, rhs }
+                })
+            }
             Instruction::I64Eq { dst, lhs, rhs } => {
                 compile_i64_binary(known_i32, *dst, *lhs, *rhs, |dst, lhs, rhs| {
                     ExecutableOperation::I64Eq { dst, lhs, rhs }
@@ -1162,6 +1173,7 @@ impl ExecutableOperation {
             | ExecutableOperation::I64BitXor { lhs, rhs, .. }
             | ExecutableOperation::I64Shl { lhs, rhs, .. }
             | ExecutableOperation::I64Shr { lhs, rhs, .. }
+            | ExecutableOperation::U64Shl { lhs, rhs, .. }
             | ExecutableOperation::U64Shr { lhs, rhs, .. }
             | ExecutableOperation::I64Eq { lhs, rhs, .. }
             | ExecutableOperation::I64Lt { lhs, rhs, .. }
@@ -1720,6 +1732,10 @@ impl LowState {
                 let value = u64_shr_unbounded(self.read_raw(*lhs), self.read_i64(*rhs));
                 self.write_raw(*dst, value);
             }
+            ExecutableOperation::U64Shl { dst, lhs, rhs } => {
+                let value = u64_shl_unbounded(self.read_raw(*lhs), self.read_i64(*rhs));
+                self.write_raw(*dst, value);
+            }
             ExecutableOperation::I32Lt { dst, lhs, rhs } => {
                 let value = self.read_i32(*lhs) < self.read_i32(*rhs);
                 self.write_bool(*dst, value);
@@ -2072,6 +2088,13 @@ fn i64_shl_unbounded(value: i64, amount: i64) -> i64 {
     value.wrapping_shl(amount as u32)
 }
 
+fn u64_shl_unbounded(value: u64, amount: i64) -> u64 {
+    if !(0..64).contains(&amount) {
+        return 0;
+    }
+    value.wrapping_shl(amount as u32)
+}
+
 fn i64_shr_unbounded(value: i64, amount: i64) -> i64 {
     if !(0..64).contains(&amount) {
         return if value < 0 { -1 } else { 0 };
@@ -2273,6 +2296,7 @@ fn instruction_read_registers(instruction: &Instruction) -> Vec<usize> {
         | Instruction::I64BitXor { lhs, rhs, .. }
         | Instruction::I64Shl { lhs, rhs, .. }
         | Instruction::I64Shr { lhs, rhs, .. }
+        | Instruction::U64Shl { lhs, rhs, .. }
         | Instruction::U64Shr { lhs, rhs, .. }
         | Instruction::I64Eq { lhs, rhs, .. }
         | Instruction::I64Lt { lhs, rhs, .. }
@@ -2346,6 +2370,7 @@ fn instruction_write_register(instruction: &Instruction) -> Option<(usize, Optio
         | Instruction::I64BitXor { dst, .. }
         | Instruction::I64Shl { dst, .. }
         | Instruction::I64Shr { dst, .. }
+        | Instruction::U64Shl { dst, .. }
         | Instruction::U64Shr { dst, .. }
         | Instruction::I64Eq { dst, .. }
         | Instruction::I64Lt { dst, .. }

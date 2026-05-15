@@ -516,19 +516,35 @@ fn runner_executes_i64_and_u64_shifts_and_casts() {
                 lhs: 1,
                 rhs: 3,
             },
+            Instruction::I64Const { dst: 8, value: 1 },
+            Instruction::U64Shl {
+                dst: 9,
+                lhs: 8,
+                rhs: 3,
+            },
+            Instruction::U64Shr {
+                dst: 10,
+                lhs: 9,
+                rhs: 3,
+            },
             Instruction::I64Add {
                 dst: 6,
                 lhs: 2,
                 rhs: 5,
             },
+            Instruction::I64Add {
+                dst: 6,
+                lhs: 6,
+                rhs: 10,
+            },
             Instruction::I64ToI32 { dst: 7, src: 6 },
             Instruction::ReturnI32 { src: 7 },
         ],
-        8,
+        11,
     );
     let mut vm = LowImageVm::create(image, 128).unwrap();
 
-    assert_eq!(vm.run_until_signal().unwrap(), LowImageSignal::HaltI32(0));
+    assert_eq!(vm.run_until_signal().unwrap(), LowImageSignal::HaltI32(1));
 }
 
 #[test]
