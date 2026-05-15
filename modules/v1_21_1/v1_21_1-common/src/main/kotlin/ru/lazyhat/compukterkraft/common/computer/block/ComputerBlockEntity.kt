@@ -20,7 +20,6 @@
 package ru.lazyhat.compukterkraft.common.computer.block
 
 import net.minecraft.core.BlockPos
-import net.minecraft.server.level.ServerLevel
 import net.minecraft.world.entity.player.Inventory
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.inventory.AbstractContainerMenu
@@ -28,14 +27,13 @@ import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.entity.BlockEntityType
 import net.minecraft.world.level.block.state.BlockState
 import ru.lazyhat.compukterkraft.common.binding.ModObjects
-import ru.lazyhat.compukterkraft.common.computer.context.BlockEntityRuntimeDeviceHost
-import ru.lazyhat.compukterkraft.common.computer.context.ServerContext
 import ru.lazyhat.compukterkraft.common.computer.menu.ComputerMenuWithoutInventory
 import ru.lazyhat.compukterkraft.core.LOGGER
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 import ru.lazyhat.compukterkraft.core.device.DeviceProperties
+import ru.lazyhat.compukterkraft.core.device.runtime.RuxRuntimeDevice
 import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDevice
-import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDeviceImpl
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.RuxComputerRuntimeFactory
 
 open class ComputerBlockEntity(
     type: BlockEntityType<out ComputerBlockEntity>,
@@ -43,18 +41,13 @@ open class ComputerBlockEntity(
     state: BlockState,
     family: DeviceFamily,
 ) : AbstractComputerBlockEntity(type, pos, state, family) {
-    override fun createComputer(id: Int): RuntimeDevice {
-        val serverLevel = level as ServerLevel
-        val host = BlockEntityRuntimeDeviceHost(serverLevel, this)
-        return RuntimeDeviceImpl(
+    override fun createComputer(id: Int): RuntimeDevice =
+        RuxRuntimeDevice(
             deviceId = id,
             properties = DeviceProperties(family, label),
-            manager = ServerContext.deviceManager,
-            gameTime = host.gameTime,
-            displayNetwork = host.displayNetwork,
-            stateSink = host.stateSink,
+            endpointFactory = RuxComputerRuntimeFactory::createFromResource,
+            stateSink = { isOn -> updateBlockState(isOn) },
         )
-    }
 
     override fun updateBlockState(newState: ComputerState) {
         blockState
