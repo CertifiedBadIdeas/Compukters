@@ -106,6 +106,11 @@ impl Parser {
                 TypeName::PtrI32 => ReturnType::PtrI32,
                 TypeName::PtrU32 => ReturnType::PtrU32,
                 TypeName::PtrU8 => ReturnType::PtrU8,
+                TypeName::RefMutU32 => {
+                    return Err(
+                        self.error("reference return types are not supported yet".to_string())
+                    )
+                }
             }
         } else {
             ReturnType::Unit
@@ -200,16 +205,21 @@ impl Parser {
 
         let expr = self.parse_expr()?;
         if self.consume(TokenKind::Equal) {
-            let Expr::Index { target, index } = expr else {
-                return Err(self.error("assignment target must be a local or index".to_string()));
-            };
             let value = self.parse_expr()?;
             self.expect(TokenKind::Semicolon)?;
-            return Ok(Statement::IndexAssign {
-                target: *target,
-                index: *index,
-                value,
-            });
+            return match expr {
+                Expr::Index { target, index } => Ok(Statement::IndexAssign {
+                    target: *target,
+                    index: *index,
+                    value,
+                }),
+                Expr::Deref(target) => Ok(Statement::DerefAssign {
+                    target: *target,
+                    value,
+                }),
+                _ => Err(self
+                    .error("assignment target must be a local, index, or dereference".to_string())),
+            };
         }
         self.expect(TokenKind::Semicolon)?;
         Ok(Statement::Expr(expr))
@@ -398,6 +408,15 @@ impl Parser {
                 expr: Box::new(expr),
             });
         }
+        if self.consume(TokenKind::Ampersand) {
+            self.expect(TokenKind::Mut)?;
+            let expr = self.parse_unary()?;
+            return Ok(Expr::AddressOfMut(Box::new(expr)));
+        }
+        if self.consume(TokenKind::Star) {
+            let expr = self.parse_unary()?;
+            return Ok(Expr::Deref(Box::new(expr)));
+        }
         self.parse_postfix()
     }
 
@@ -500,6 +519,14 @@ impl Parser {
     }
 
     fn parse_type(&mut self) -> Result<TypeName, CompileError> {
+        if self.consume(TokenKind::Ampersand) {
+            self.expect(TokenKind::Mut)?;
+            let element_type = self.parse_type()?;
+            return match element_type {
+                TypeName::U32 => Ok(TypeName::RefMutU32),
+                _ => Err(self.error("only `&mut u32` references are supported yet".to_string())),
+            };
+        }
         if self.consume(TokenKind::Ptr) {
             self.expect(TokenKind::Less)?;
             let element_type = self.parse_type()?;
@@ -514,6 +541,9 @@ impl Parser {
                 }
                 TypeName::PtrI32 | TypeName::PtrU32 | TypeName::PtrU8 => {
                     Err(self.error("nested pointer types are not supported yet".to_string()))
+                }
+                TypeName::RefMutU32 => {
+                    Err(self.error("pointers to references are not supported yet".to_string()))
                 }
             };
         }

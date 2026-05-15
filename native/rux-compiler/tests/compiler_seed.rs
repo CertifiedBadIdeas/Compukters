@@ -2305,6 +2305,104 @@ fn compiled_seed_u32_ordering_comparisons_run_on_computer_machine() {
 }
 
 #[test]
+fn compiled_seed_mut_reference_to_local_updates_ram_backed_local() {
+    let image = compile(
+        "fn main() -> i32 {
+            let mut value: u32 = 12u32;
+            let mut value_ref: &mut u32 = &mut value;
+            *value_ref = 34u32;
+            return value as i32;
+        }",
+    )
+    .unwrap();
+    let mut machine = ComputerMachine::new(64 * 1024).unwrap();
+    let cpu_id = machine.spawn_boot_cpu(image, 1_000_000).unwrap();
+
+    assert_eq!(
+        machine.run_boot_cpu_until_signal(cpu_id).unwrap(),
+        LowImageSignal::HaltI32(34)
+    );
+}
+
+#[test]
+fn compiled_seed_mut_reference_argument_updates_caller_local() {
+    let image = compile(
+        "fn write_value(slot: &mut u32, value: u32) {
+            *slot = value;
+        }
+
+        fn main() -> i32 {
+            let mut value: u32 = 1u32;
+            write_value(&mut value, 77u32);
+            return value as i32;
+        }",
+    )
+    .unwrap();
+    let mut machine = ComputerMachine::new(64 * 1024).unwrap();
+    let cpu_id = machine.spawn_boot_cpu(image, 1_000_000).unwrap();
+
+    assert_eq!(
+        machine.run_boot_cpu_until_signal(cpu_id).unwrap(),
+        LowImageSignal::HaltI32(77)
+    );
+}
+
+#[test]
+fn compiled_seed_mut_reference_locals_do_not_overlap_between_functions() {
+    let image = compile(
+        "fn touch_own_local() {
+            let mut other: u32 = 10u32;
+            let mut other_ref: &mut u32 = &mut other;
+            *other_ref = 20u32;
+        }
+
+        fn main() -> i32 {
+            let mut value: u32 = 1u32;
+            let mut value_ref: &mut u32 = &mut value;
+            touch_own_local();
+            return *value_ref as i32;
+        }",
+    )
+    .unwrap();
+    let mut machine = ComputerMachine::new(64 * 1024).unwrap();
+    let cpu_id = machine.spawn_boot_cpu(image, 1_000_000).unwrap();
+
+    assert_eq!(
+        machine.run_boot_cpu_until_signal(cpu_id).unwrap(),
+        LowImageSignal::HaltI32(1)
+    );
+}
+
+#[test]
+fn compile_lowers_mut_reference_local_to_stack_load_store() {
+    let image = compile(
+        "fn main() -> i32 {
+            let mut value: u32 = 12u32;
+            let mut value_ref: &mut u32 = &mut value;
+            *value_ref = 34u32;
+            return value as i32;
+        }",
+    )
+    .unwrap();
+    let main = &image.functions[0];
+
+    assert!(
+        main.instructions
+            .iter()
+            .any(|instruction| matches!(instruction, Instruction::Store32 { .. })),
+        "{:?}",
+        main.instructions
+    );
+    assert!(
+        main.instructions
+            .iter()
+            .any(|instruction| matches!(instruction, Instruction::Load32 { .. })),
+        "{:?}",
+        main.instructions
+    );
+}
+
+#[test]
 fn compiled_seed_bool_program_runs_on_computer_machine() {
     let image = compile(
         "fn less_than_three(value: i32) -> bool {

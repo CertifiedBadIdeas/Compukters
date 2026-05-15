@@ -8,6 +8,9 @@ pub(crate) fn compile(program: Program) -> Result<Image, CompileError> {
     Codegen::compile(program)
 }
 
+const DEFAULT_MEMORY_SIZE: u32 = 64 * 1024;
+const STACK_SLOT_U32_SIZE: u32 = 4;
+
 #[derive(Clone, Copy)]
 enum ExprValue {
     I32(u16),
@@ -15,6 +18,7 @@ enum ExprValue {
     U8(u16),
     Bool(u16),
     Addr(u16),
+    RefMutU32(u16),
     Pointer {
         addr: u16,
         kind: PointerKind,
@@ -31,6 +35,7 @@ impl ExprValue {
             ExprValue::U8(_) => "u8",
             ExprValue::Bool(_) => "bool",
             ExprValue::Addr(_) => "address",
+            ExprValue::RefMutU32(_) => "&mut u32",
             ExprValue::Pointer { element_type, .. } => element_type.pointer_name(),
             ExprValue::Unit => "unit",
         }
@@ -186,6 +191,8 @@ fn evaluate_const_expr(
         | Expr::Ptr { .. }
         | Expr::ByteString(_)
         | Expr::Index { .. }
+        | Expr::AddressOfMut(_)
+        | Expr::Deref(_)
         | Expr::MethodCall { .. }
         | Expr::Cast { .. } => Err(CompileError {
             message: "const initializer is not compile-time evaluable".to_string(),
@@ -216,6 +223,7 @@ enum ValueType {
     PtrI32,
     PtrU32,
     PtrU8,
+    RefMutU32,
 }
 
 impl From<TypeName> for ValueType {
@@ -228,6 +236,7 @@ impl From<TypeName> for ValueType {
             TypeName::PtrI32 => ValueType::PtrI32,
             TypeName::PtrU32 => ValueType::PtrU32,
             TypeName::PtrU8 => ValueType::PtrU8,
+            TypeName::RefMutU32 => ValueType::RefMutU32,
         }
     }
 }
@@ -242,6 +251,7 @@ impl TypeName {
             TypeName::PtrI32 => "ptr<i32>",
             TypeName::PtrU32 => "ptr<u32>",
             TypeName::PtrU8 => "ptr<u8>",
+            TypeName::RefMutU32 => "&mut u32",
         }
     }
 
@@ -251,7 +261,9 @@ impl TypeName {
             TypeName::U32 => "ptr<u32>",
             TypeName::U8 => "ptr<u8>",
             TypeName::Bool => "ptr<bool>",
-            TypeName::PtrI32 | TypeName::PtrU32 | TypeName::PtrU8 => self.name(),
+            TypeName::PtrI32 | TypeName::PtrU32 | TypeName::PtrU8 | TypeName::RefMutU32 => {
+                self.name()
+            }
         }
     }
 
@@ -260,7 +272,11 @@ impl TypeName {
             TypeName::I32 => Some(TypeName::PtrI32),
             TypeName::U32 => Some(TypeName::PtrU32),
             TypeName::U8 => Some(TypeName::PtrU8),
-            TypeName::Bool | TypeName::PtrI32 | TypeName::PtrU32 | TypeName::PtrU8 => None,
+            TypeName::Bool
+            | TypeName::PtrI32
+            | TypeName::PtrU32
+            | TypeName::PtrU8
+            | TypeName::RefMutU32 => None,
         }
     }
 }
@@ -275,6 +291,7 @@ impl ValueType {
             ValueType::PtrI32 => TypeName::PtrI32,
             ValueType::PtrU32 => TypeName::PtrU32,
             ValueType::PtrU8 => TypeName::PtrU8,
+            ValueType::RefMutU32 => TypeName::RefMutU32,
         }
     }
 }
@@ -312,6 +329,7 @@ struct Local {
     register: u16,
     ty: ValueType,
     mutable: bool,
+    stack_addr: Option<u16>,
 }
 
 #[derive(Debug, Clone)]
@@ -390,6 +408,7 @@ struct Codegen<'rodata> {
     unsafe_depth: usize,
     loop_stack: Vec<LoopContext>,
     locals: HashMap<String, Local>,
+    next_stack_offset: u32,
     source_consts: HashMap<String, i32>,
     function_signatures: HashMap<String, FunctionSignature>,
     current_function: String,
@@ -414,10 +433,12 @@ impl<'rodata> Codegen<'rodata> {
 
         let mut rodata = Vec::new();
         let mut functions = Vec::with_capacity(program.functions.len());
+        let mut next_stack_offset = 0;
         for function in &program.functions {
             functions.push(Self::compile_function(
                 function,
                 &mut rodata,
+                &mut next_stack_offset,
                 source_consts.clone(),
                 function_signatures.clone(),
             )?);
@@ -425,7 +446,7 @@ impl<'rodata> Codegen<'rodata> {
 
         Ok(Image {
             language_version: "rux-0".to_string(),
-            memory_size: 64 * 1024,
+            memory_size: DEFAULT_MEMORY_SIZE,
             rodata,
             data: Vec::new(),
             bss_size: 0,
@@ -437,6 +458,7 @@ impl<'rodata> Codegen<'rodata> {
     fn compile_function<'a>(
         function: &FunctionDecl,
         rodata: &'a mut Vec<u8>,
+        next_stack_offset: &mut u32,
         source_consts: HashMap<String, i32>,
         function_signatures: HashMap<String, FunctionSignature>,
     ) -> Result<Function, CompileError> {
@@ -448,6 +470,7 @@ impl<'rodata> Codegen<'rodata> {
             unsafe_depth: 0,
             loop_stack: Vec::new(),
             locals: HashMap::new(),
+            next_stack_offset: *next_stack_offset,
             source_consts,
             function_signatures,
             current_function: function.name.clone(),
@@ -468,6 +491,7 @@ impl<'rodata> Codegen<'rodata> {
                     register,
                     ty: parameter.ty.into(),
                     mutable: false,
+                    stack_addr: None,
                 },
             );
         }
@@ -486,6 +510,7 @@ impl<'rodata> Codegen<'rodata> {
             }
         }
 
+        *next_stack_offset = codegen.next_stack_offset;
         Ok(Function {
             name: function.name.clone(),
             register_count: usize::from(codegen.next_register),
@@ -541,6 +566,7 @@ impl<'rodata> Codegen<'rodata> {
                         register: dst,
                         ty: (*ty).into(),
                         mutable: true,
+                        stack_addr: None,
                     },
                 );
                 Ok(BlockOutcome::FallsThrough)
@@ -556,10 +582,14 @@ impl<'rodata> Codegen<'rodata> {
                 }
                 let expected = local.ty.type_name();
                 let src = self.compile_expr_as(value, expected)?;
-                self.instructions.push(Instruction::I32Move {
-                    dst: local.register,
-                    src,
-                });
+                if let Some(addr) = local.stack_addr {
+                    self.emit_store(expected, addr, src);
+                } else {
+                    self.instructions.push(Instruction::I32Move {
+                        dst: local.register,
+                        src,
+                    });
+                }
                 Ok(BlockOutcome::FallsThrough)
             }
             Statement::AssignOp { name, op, value } => {
@@ -578,7 +608,8 @@ impl<'rodata> Codegen<'rodata> {
                     | ValueType::Bool
                     | ValueType::PtrI32
                     | ValueType::PtrU32
-                    | ValueType::PtrU8 => {
+                    | ValueType::PtrU8
+                    | ValueType::RefMutU32 => {
                         return Err(CompileError {
                             message: "compound assignment requires `i32` or `u32` local"
                                 .to_string(),
@@ -586,18 +617,32 @@ impl<'rodata> Codegen<'rodata> {
                     }
                 };
                 let rhs = self.compile_expr_as(value, expected)?;
+                let lhs = if let Some(addr) = local.stack_addr {
+                    let lhs = self.alloc_register()?;
+                    self.emit_load(expected, lhs, addr);
+                    lhs
+                } else {
+                    local.register
+                };
+                let dst = if local.stack_addr.is_some() {
+                    self.alloc_register()?
+                } else {
+                    local.register
+                };
                 match local.ty {
-                    ValueType::I32 => {
-                        self.emit_i32_binary_instruction(*op, local.register, local.register, rhs)
-                    }
-                    ValueType::U32 => {
-                        self.emit_u32_binary_instruction(*op, local.register, local.register, rhs)
-                    }
+                    ValueType::I32 => self.emit_i32_binary_instruction(*op, dst, lhs, rhs),
+                    ValueType::U32 => self.emit_u32_binary_instruction(*op, dst, lhs, rhs),
                     ValueType::U8
                     | ValueType::Bool
                     | ValueType::PtrI32
                     | ValueType::PtrU32
-                    | ValueType::PtrU8 => unreachable!("non-arithmetic locals are rejected above"),
+                    | ValueType::PtrU8
+                    | ValueType::RefMutU32 => {
+                        unreachable!("non-arithmetic locals are rejected above")
+                    }
+                }
+                if let Some(addr) = local.stack_addr {
+                    self.emit_store(expected, addr, dst);
                 }
                 Ok(BlockOutcome::FallsThrough)
             }
@@ -614,6 +659,12 @@ impl<'rodata> Codegen<'rodata> {
                 }
                 let src = self.compile_expr_as(value, element_type)?;
                 self.emit_store(element_type, addr, src);
+                Ok(BlockOutcome::FallsThrough)
+            }
+            Statement::DerefAssign { target, value } => {
+                let addr = self.compile_ref_mut_u32_expr(target)?;
+                let src = self.compile_u32_expr(value)?;
+                self.instructions.push(Instruction::Store32 { addr, src });
                 Ok(BlockOutcome::FallsThrough)
             }
             Statement::If {
@@ -785,9 +836,11 @@ impl<'rodata> Codegen<'rodata> {
                 TypeName::Bool => Err(CompileError {
                     message: "expected `bool`, found i32".to_string(),
                 }),
-                TypeName::PtrI32 | TypeName::PtrU32 | TypeName::PtrU8 => Err(CompileError {
-                    message: format!("expected `{}`, found i32", expected.name()),
-                }),
+                TypeName::PtrI32 | TypeName::PtrU32 | TypeName::PtrU8 | TypeName::RefMutU32 => {
+                    Err(CompileError {
+                        message: format!("expected `{}`, found i32", expected.name()),
+                    })
+                }
             };
         }
         if let Expr::IntU32(value) = expr {
@@ -802,9 +855,11 @@ impl<'rodata> Codegen<'rodata> {
                 TypeName::Bool => Err(CompileError {
                     message: "expected `bool`, found u32".to_string(),
                 }),
-                TypeName::PtrI32 | TypeName::PtrU32 | TypeName::PtrU8 => Err(CompileError {
-                    message: format!("expected `{}`, found u32", expected.name()),
-                }),
+                TypeName::PtrI32 | TypeName::PtrU32 | TypeName::PtrU8 | TypeName::RefMutU32 => {
+                    Err(CompileError {
+                        message: format!("expected `{}`, found u32", expected.name()),
+                    })
+                }
             };
         }
         if let Expr::IntU8(value) = expr {
@@ -819,9 +874,11 @@ impl<'rodata> Codegen<'rodata> {
                 TypeName::Bool => Err(CompileError {
                     message: "expected `bool`, found u8".to_string(),
                 }),
-                TypeName::PtrI32 | TypeName::PtrU32 | TypeName::PtrU8 => Err(CompileError {
-                    message: format!("expected `{}`, found u8", expected.name()),
-                }),
+                TypeName::PtrI32 | TypeName::PtrU32 | TypeName::PtrU8 | TypeName::RefMutU32 => {
+                    Err(CompileError {
+                        message: format!("expected `{}`, found u8", expected.name()),
+                    })
+                }
             };
         }
         if matches!(expr, Expr::Binary { .. }) && expected == TypeName::U32 {
@@ -835,6 +892,7 @@ impl<'rodata> Codegen<'rodata> {
             ExprValue::Pointer {
                 addr, element_type, ..
             } if TypeName::pointer_type_for(element_type) == Some(expected) => Ok(addr),
+            ExprValue::RefMutU32(addr) if expected == TypeName::RefMutU32 => Ok(addr),
             value => Err(CompileError {
                 message: format!(
                     "expected `{}`, found {}",
@@ -892,6 +950,9 @@ impl<'rodata> Codegen<'rodata> {
                 ExprValue::Pointer { .. } => Err(CompileError {
                     message: "address expression cannot be a pointer capability".to_string(),
                 }),
+                ExprValue::RefMutU32(_) => Err(CompileError {
+                    message: "address expression cannot be a reference".to_string(),
+                }),
                 ExprValue::Unit => Err(CompileError {
                     message: format!("{} cannot be unit", context.address_name()),
                 }),
@@ -922,7 +983,23 @@ impl<'rodata> Codegen<'rodata> {
             }
             Expr::Bool(value) => Ok(ExprValue::Bool(self.emit_bool_const(*value)?)),
             Expr::Local(name) => {
-                if let Some(local) = self.locals.get(name) {
+                if let Some(local) = self.locals.get(name).copied() {
+                    if let Some(addr) = local.stack_addr {
+                        let dst = self.alloc_register()?;
+                        match local.ty {
+                            ValueType::U32 => {
+                                self.instructions.push(Instruction::Load32 { dst, addr });
+                                return Ok(ExprValue::U32(dst));
+                            }
+                            _ => {
+                                return Err(CompileError {
+                                    message: format!(
+                                        "internal compiler error: stack-backed local `{name}` has unsupported type"
+                                    ),
+                                });
+                            }
+                        }
+                    }
                     return match local.ty {
                         ValueType::I32 => Ok(ExprValue::I32(local.register)),
                         ValueType::U32 => Ok(ExprValue::U32(local.register)),
@@ -943,6 +1020,7 @@ impl<'rodata> Codegen<'rodata> {
                             kind: PointerKind::Ptr,
                             element_type: TypeName::U8,
                         }),
+                        ValueType::RefMutU32 => Ok(ExprValue::RefMutU32(local.register)),
                     };
                 }
 
@@ -988,6 +1066,8 @@ impl<'rodata> Codegen<'rodata> {
                 args,
             } => self.compile_method_call(receiver, method, args),
             Expr::Index { target, index } => self.compile_index(target, index),
+            Expr::AddressOfMut(target) => self.compile_address_of_mut(target),
+            Expr::Deref(target) => self.compile_deref(target),
             Expr::Cast { expr, target } => self.compile_cast(expr, *target),
             Expr::Unary { op, expr } => match op {
                 UnaryOp::Not => self.compile_bool_not(expr),
@@ -1005,6 +1085,32 @@ impl<'rodata> Codegen<'rodata> {
                 Ok(ExprValue::I32(dst))
             }
             Expr::Compare { op, lhs, rhs } => self.compile_compare_expr(*op, lhs, rhs),
+        }
+    }
+
+    fn compile_address_of_mut(&mut self, target: &Expr) -> Result<ExprValue, CompileError> {
+        let Expr::Local(name) = target else {
+            return Err(CompileError {
+                message: "`&mut` can only borrow local variables for now".to_string(),
+            });
+        };
+        let addr = self.ensure_u32_stack_slot(name)?;
+        Ok(ExprValue::RefMutU32(addr))
+    }
+
+    fn compile_deref(&mut self, target: &Expr) -> Result<ExprValue, CompileError> {
+        let addr = self.compile_ref_mut_u32_expr(target)?;
+        let dst = self.alloc_register()?;
+        self.instructions.push(Instruction::Load32 { dst, addr });
+        Ok(ExprValue::U32(dst))
+    }
+
+    fn compile_ref_mut_u32_expr(&mut self, expr: &Expr) -> Result<u16, CompileError> {
+        match self.compile_expr(expr)? {
+            ExprValue::RefMutU32(addr) => Ok(addr),
+            value => Err(CompileError {
+                message: format!("expected `&mut u32`, found {}", value.type_name()),
+            }),
         }
     }
 
@@ -1097,9 +1203,11 @@ impl<'rodata> Codegen<'rodata> {
             TypeName::Bool => Err(CompileError {
                 message: "casts to `bool` are not supported".to_string(),
             }),
-            TypeName::PtrI32 | TypeName::PtrU32 | TypeName::PtrU8 => Err(CompileError {
-                message: format!("casts to `{}` are not supported", target.name()),
-            }),
+            TypeName::PtrI32 | TypeName::PtrU32 | TypeName::PtrU8 | TypeName::RefMutU32 => {
+                Err(CompileError {
+                    message: format!("casts to `{}` are not supported", target.name()),
+                })
+            }
         }
     }
 
@@ -1254,7 +1362,11 @@ impl<'rodata> Codegen<'rodata> {
                     TypeName::I32 => Ok(ExprValue::I32(dst)),
                     TypeName::U32 => Ok(ExprValue::U32(dst)),
                     TypeName::U8 => Ok(ExprValue::U8(dst)),
-                    TypeName::Bool | TypeName::PtrI32 | TypeName::PtrU32 | TypeName::PtrU8 => {
+                    TypeName::Bool
+                    | TypeName::PtrI32
+                    | TypeName::PtrU32
+                    | TypeName::PtrU8
+                    | TypeName::RefMutU32 => {
                         unreachable!("non-scalar memory element types are rejected earlier")
                     }
                 }
@@ -1278,7 +1390,11 @@ impl<'rodata> Codegen<'rodata> {
             TypeName::I32 => Ok(ExprValue::I32(dst)),
             TypeName::U32 => Ok(ExprValue::U32(dst)),
             TypeName::U8 => Ok(ExprValue::U8(dst)),
-            TypeName::Bool | TypeName::PtrI32 | TypeName::PtrU32 | TypeName::PtrU8 => {
+            TypeName::Bool
+            | TypeName::PtrI32
+            | TypeName::PtrU32
+            | TypeName::PtrU8
+            | TypeName::RefMutU32 => {
                 unreachable!("non-scalar memory element types are rejected earlier")
             }
         }
@@ -1313,7 +1429,11 @@ impl<'rodata> Codegen<'rodata> {
                 });
                 offset
             }
-            TypeName::Bool | TypeName::PtrI32 | TypeName::PtrU32 | TypeName::PtrU8 => {
+            TypeName::Bool
+            | TypeName::PtrI32
+            | TypeName::PtrU32
+            | TypeName::PtrU8
+            | TypeName::RefMutU32 => {
                 unreachable!("non-scalar memory element types are rejected earlier")
             }
         };
@@ -1332,7 +1452,11 @@ impl<'rodata> Codegen<'rodata> {
             TypeName::I32 | TypeName::U32 => {
                 self.instructions.push(Instruction::Load32 { dst, addr })
             }
-            TypeName::Bool | TypeName::PtrI32 | TypeName::PtrU32 | TypeName::PtrU8 => {
+            TypeName::Bool
+            | TypeName::PtrI32
+            | TypeName::PtrU32
+            | TypeName::PtrU8
+            | TypeName::RefMutU32 => {
                 unreachable!("non-scalar memory element types are rejected earlier")
             }
         }
@@ -1344,7 +1468,11 @@ impl<'rodata> Codegen<'rodata> {
             TypeName::I32 | TypeName::U32 => {
                 self.instructions.push(Instruction::Store32 { addr, src })
             }
-            TypeName::Bool | TypeName::PtrI32 | TypeName::PtrU32 | TypeName::PtrU8 => {
+            TypeName::Bool
+            | TypeName::PtrI32
+            | TypeName::PtrU32
+            | TypeName::PtrU8
+            | TypeName::RefMutU32 => {
                 unreachable!("non-scalar memory element types are rejected earlier")
             }
         }
@@ -1416,13 +1544,65 @@ impl<'rodata> Codegen<'rodata> {
     fn validate_memory_element_type(&self, ty: TypeName) -> Result<(), CompileError> {
         match ty {
             TypeName::I32 | TypeName::U32 | TypeName::U8 => Ok(()),
-            TypeName::Bool | TypeName::PtrI32 | TypeName::PtrU32 | TypeName::PtrU8 => {
-                Err(CompileError {
-                    message: "memory pointer element type must be `i32`, `u32`, or `u8`"
-                        .to_string(),
-                })
-            }
+            TypeName::Bool
+            | TypeName::PtrI32
+            | TypeName::PtrU32
+            | TypeName::PtrU8
+            | TypeName::RefMutU32 => Err(CompileError {
+                message: "memory pointer element type must be `i32`, `u32`, or `u8`".to_string(),
+            }),
         }
+    }
+
+    fn ensure_u32_stack_slot(&mut self, name: &str) -> Result<u16, CompileError> {
+        let local = *self.locals.get(name).ok_or_else(|| CompileError {
+            message: format!("borrow of undeclared local `{name}`"),
+        })?;
+        if !local.mutable {
+            return Err(CompileError {
+                message: format!("cannot borrow immutable local `{name}` as mutable"),
+            });
+        }
+        if local.ty != ValueType::U32 {
+            return Err(CompileError {
+                message: format!(
+                    "`&mut` supports only `u32` locals for now, found {}",
+                    local.ty.type_name().name()
+                ),
+            });
+        }
+        if let Some(addr) = local.stack_addr {
+            return Ok(addr);
+        }
+
+        let addr = self.alloc_stack_slot_u32()?;
+        self.instructions.push(Instruction::Store32 {
+            addr,
+            src: local.register,
+        });
+        let local = self.locals.get_mut(name).ok_or_else(|| CompileError {
+            message: format!("borrow of undeclared local `{name}`"),
+        })?;
+        local.stack_addr = Some(addr);
+        Ok(addr)
+    }
+
+    fn alloc_stack_slot_u32(&mut self) -> Result<u16, CompileError> {
+        self.next_stack_offset = self
+            .next_stack_offset
+            .checked_add(STACK_SLOT_U32_SIZE)
+            .ok_or_else(|| CompileError {
+                message: "stack frame is too large".to_string(),
+            })?;
+        let value = DEFAULT_MEMORY_SIZE
+            .checked_sub(self.next_stack_offset)
+            .ok_or_else(|| CompileError {
+                message: "stack frame exceeds image memory".to_string(),
+            })?;
+        let dst = self.alloc_register()?;
+        self.instructions
+            .push(Instruction::AddrConst { dst, value });
+        Ok(dst)
     }
 
     fn alloc_register(&mut self) -> Result<u16, CompileError> {
