@@ -34,6 +34,7 @@ class ComputerBlockEntityRuxRuntimeTest {
     @Test
     fun computerBlockCreatesRuxRuntimeDeviceByDefault() {
         assertTrue(source.contains("RuxRuntimeDevice("))
+        assertTrue(source.contains("displayNetwork = host.displayNetwork"))
         assertFalse(source.contains("RuntimeDeviceImpl("))
     }
 }
