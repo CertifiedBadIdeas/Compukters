@@ -38,7 +38,7 @@ class NativeLibraryLocatorTest {
         assertEquals(
             NativeLibraryPlatform(
                 id = "linux-x86_64",
-                libraryName = "libckl_vm.so",
+                libraryName = "librux_vm.so",
             ),
             platform,
         )
@@ -47,11 +47,11 @@ class NativeLibraryLocatorTest {
     @Test
     fun normalizesWindowsAndMacPlatforms() {
         assertEquals(
-            NativeLibraryPlatform(id = "windows-x86_64", libraryName = "ckl_vm.dll"),
+            NativeLibraryPlatform(id = "windows-x86_64", libraryName = "rux_vm.dll"),
             NativeLibraryLocator.platform(osName = "Windows 11", osArch = "x86_64"),
         )
         assertEquals(
-            NativeLibraryPlatform(id = "macos-aarch64", libraryName = "libckl_vm.dylib"),
+            NativeLibraryPlatform(id = "macos-aarch64", libraryName = "librux_vm.dylib"),
             NativeLibraryLocator.platform(osName = "Mac OS X", osArch = "aarch64"),
         )
     }
@@ -62,15 +62,15 @@ class NativeLibraryLocatorTest {
 
         val resolution =
             NativeLibraryLocator.resolve(
-                configuredPath = "/dev/libckl_vm.so",
-                platform = NativeLibraryPlatform(id = "linux-x86_64", libraryName = "libckl_vm.so"),
+                configuredPath = "/dev/librux_vm.so",
+                platform = NativeLibraryPlatform(id = "linux-x86_64", libraryName = "librux_vm.so"),
                 cacheRoot = createTempDirectory("ck-native-test"),
             ) {
                 resourceRead = true
                 byteArrayOf(1, 2, 3)
             }
 
-        assertEquals(NativeLibraryResolution.Configured(path = "/dev/libckl_vm.so"), resolution)
+        assertEquals(NativeLibraryResolution.Configured(path = "/dev/librux_vm.so"), resolution)
         assertFalse(resourceRead)
     }
 
@@ -78,7 +78,7 @@ class NativeLibraryLocatorTest {
     fun extractsBundledResourceToHashAddressedCachePath() {
         val cacheRoot = createTempDirectory("ck-native-test")
         val bytes = byteArrayOf(1, 1, 2, 3, 5, 8)
-        val platform = NativeLibraryPlatform(id = "linux-x86_64", libraryName = "libckl_vm.so")
+        val platform = NativeLibraryPlatform(id = "linux-x86_64", libraryName = "librux_vm.so")
 
         val resolution =
             assertIs<NativeLibraryResolution.Bundled>(
@@ -87,15 +87,15 @@ class NativeLibraryLocatorTest {
                     platform = platform,
                     cacheRoot = cacheRoot,
                 ) { path ->
-                    assertEquals("natives/linux-x86_64/libckl_vm.so", path)
+                    assertEquals("natives/linux-x86_64/librux_vm.so", path)
                     bytes
                 },
             )
 
-        assertEquals("natives/linux-x86_64/libckl_vm.so", resolution.resourcePath)
+        assertEquals("natives/linux-x86_64/librux_vm.so", resolution.resourcePath)
         assertEquals(platform, resolution.platform)
         assertTrue(resolution.path.startsWith(cacheRoot.toAbsolutePath().toString()))
-        assertTrue(resolution.path.endsWith("/linux-x86_64/${resolution.sha256}/libckl_vm.so"))
+        assertTrue(resolution.path.endsWith("/linux-x86_64/${resolution.sha256}/librux_vm.so"))
         assertEquals(bytes.toList(), resolution.path.let { Files.readAllBytes(java.nio.file.Path.of(it)).toList() })
     }
 
@@ -103,7 +103,7 @@ class NativeLibraryLocatorTest {
     fun reusesExistingBundledExtraction() {
         val cacheRoot = createTempDirectory("ck-native-test")
         val bytes = byteArrayOf(13, 21, 34)
-        val platform = NativeLibraryPlatform(id = "linux-x86_64", libraryName = "libckl_vm.so")
+        val platform = NativeLibraryPlatform(id = "linux-x86_64", libraryName = "librux_vm.so")
 
         val first =
             assertNotNull(
@@ -131,7 +131,7 @@ class NativeLibraryLocatorTest {
         val resolution =
             NativeLibraryLocator.resolve(
                 configuredPath = null,
-                platform = NativeLibraryPlatform(id = "linux-x86_64", libraryName = "libckl_vm.so"),
+                platform = NativeLibraryPlatform(id = "linux-x86_64", libraryName = "librux_vm.so"),
                 cacheRoot = createTempDirectory("ck-native-test"),
             ) {
                 null

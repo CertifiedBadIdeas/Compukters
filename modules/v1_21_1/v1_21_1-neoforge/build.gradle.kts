@@ -82,7 +82,7 @@ dependencies {
 }
 
 val rustVmNativePlatform = currentRustVmNativePlatform()
-val rustVmNativeLibrary = rootProject.layout.projectDirectory.file("native/ckl-vm/target/debug/${rustVmNativePlatform.libraryName}")
+val rustVmNativeLibrary = rootProject.layout.projectDirectory.file("native/rux-vm/target/debug/${rustVmNativePlatform.libraryName}")
 val runtimeVmProfilingReports = layout.buildDirectory.dir("reports/profiling")
 val runtimeVmImageProfile = runtimeVmProfilingReports.map { it.file("runtime-vm-image.tsv") }
 val runtimeVmProfileRuns = runtimeVmProfilingReports.map { it.dir("runs") }
@@ -105,12 +105,12 @@ fun Test.configureRuntimeVmProfilingTestTask() {
 
 tasks.register<Test>("profileRuntimeVmImage") {
     configureRuntimeVmProfilingTestTask()
-    description = "Run runtime profiling workloads with the Rust CKL image VM runner and write raw profiling data."
+    description = "Run runtime profiling workloads with the Rust Rux image VM runner and write raw profiling data."
     dependsOn("buildRustVmNativeLibrary")
     filter {
         includeTestsMatching("ru.lazyhat.compukterkraft.impl.computer.vm.RuntimeVmProfilingReportTest")
     }
-    systemProperty("ckl.vm.native.library", rustVmNativeLibrary.asFile.absolutePath)
+    systemProperty("rux.vm.native.library", rustVmNativeLibrary.asFile.absolutePath)
     systemProperty("ckl.profiling.runtime.name", "Rust image")
     systemProperty("ckl.profiling.profile.path", runtimeVmImageProfile.get().asFile.absolutePath)
     systemProperty("ckl.profiling.runs.dir", runtimeVmProfileRuns.get().asFile.absolutePath)

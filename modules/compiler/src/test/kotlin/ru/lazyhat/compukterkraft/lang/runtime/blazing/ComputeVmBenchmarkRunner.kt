@@ -52,7 +52,7 @@ internal object ComputeVmBenchmarkRunner {
                     nativeLibraryProfile = nativeLibraryProfile,
                     nativeLibrarySizeBytes = Files.size(Path.of(libraryPath)),
                     gitCommit = gitCommit,
-                    imageAbiVersion = "CKIM v5",
+                    imageAbiVersion = "RUXI v1",
                     javaRuntime = javaRuntime(),
                     rustTargetProfile = rustTargetProfile,
                     iterations = iterations,
