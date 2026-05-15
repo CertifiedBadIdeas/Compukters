@@ -58,6 +58,7 @@ pub(crate) enum TypeName {
     PtrI32,
     PtrU32,
     PtrU8,
+    RefMutU32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -79,6 +80,10 @@ pub(crate) enum Statement {
     IndexAssign {
         target: Expr,
         index: Expr,
+        value: Expr,
+    },
+    DerefAssign {
+        target: Expr,
         value: Expr,
     },
     If {
@@ -126,6 +131,8 @@ pub(crate) enum Expr {
         target: Box<Expr>,
         index: Box<Expr>,
     },
+    AddressOfMut(Box<Expr>),
+    Deref(Box<Expr>),
     Cast {
         expr: Box<Expr>,
         target: TypeName,
