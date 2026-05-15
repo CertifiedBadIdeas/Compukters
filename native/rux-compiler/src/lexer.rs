@@ -8,6 +8,8 @@ pub struct Token {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TokenKind {
+    Use,
+    Pub,
     Fn,
     Return,
     Unsafe,
@@ -49,6 +51,7 @@ pub enum TokenKind {
     Bang,
     BangEqual,
     Colon,
+    DoubleColon,
     Dot,
     Semicolon,
     Comma,
@@ -173,6 +176,8 @@ pub fn lex(source: &str) -> Result<Vec<Token>, CompileError> {
             let text = &source[start..offset];
             let kind = match text {
                 "fn" => TokenKind::Fn,
+                "use" => TokenKind::Use,
+                "pub" => TokenKind::Pub,
                 "return" => TokenKind::Return,
                 "unsafe" => TokenKind::Unsafe,
                 "mmio" => TokenKind::Mmio,
@@ -335,6 +340,14 @@ pub fn lex(source: &str) -> Result<Vec<Token>, CompileError> {
                 continue;
             }
             b'!' => TokenKind::Bang,
+            b':' if offset + 1 < bytes.len() && bytes[offset + 1] == b':' => {
+                offset += 2;
+                tokens.push(Token {
+                    kind: TokenKind::DoubleColon,
+                    offset: offset - 2,
+                });
+                continue;
+            }
             b':' => TokenKind::Colon,
             b'.' => TokenKind::Dot,
             b';' => TokenKind::Semicolon,
@@ -454,6 +467,8 @@ fn has_integer_suffix(source: &str, offset: usize, suffix: &str) -> bool {
 impl TokenKind {
     pub(crate) fn name(&self) -> &'static str {
         match self {
+            TokenKind::Use => "use",
+            TokenKind::Pub => "pub",
             TokenKind::Fn => "fn",
             TokenKind::Return => "return",
             TokenKind::Unsafe => "unsafe",
@@ -495,6 +510,7 @@ impl TokenKind {
             TokenKind::Bang => "!",
             TokenKind::BangEqual => "!=",
             TokenKind::Colon => ":",
+            TokenKind::DoubleColon => "::",
             TokenKind::Dot => ".",
             TokenKind::Semicolon => ";",
             TokenKind::Comma => ",",

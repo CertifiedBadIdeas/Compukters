@@ -1,18 +1,4 @@
-fn write(ch: u8) {
-    unsafe {
-        mmio<u8>(DEBUG_WRITE).store(ch);
-    }
-}
-
-fn write_bytes(bytes: ptr<u8>, len: u32) {
-    let mut i: u32 = 0u32;
-    while i < len {
-        unsafe {
-            write(bytes[i]);
-        }
-        i += 1u32;
-    }
-}
+use std::io::write_bytes;
 
 fn main() -> i32 {
     unsafe {

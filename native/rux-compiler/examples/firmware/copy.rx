@@ -1,22 +1,5 @@
-fn copy(dst: ptr<u8>, src: ptr<u8>, len: u32) {
-    let mut i: u32 = 0u32;
-    while i < len {
-        unsafe {
-            dst[i] = src[i];
-        }
-        i += 1u32;
-    }
-}
-
-fn write_bytes(bytes: ptr<u8>, len: u32) {
-    let mut i: u32 = 0u32;
-    while i < len {
-        unsafe {
-            mmio<u8>(DEBUG_WRITE).store(bytes[i]);
-        }
-        i += 1u32;
-    }
-}
+use std::io::write_bytes;
+use std::mem::copy;
 
 fn main() -> i32 {
     unsafe {

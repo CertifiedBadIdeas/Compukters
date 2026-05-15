@@ -1,7 +1,13 @@
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Program {
+    pub(crate) uses: Vec<UseDecl>,
     pub(crate) consts: Vec<ConstDecl>,
     pub(crate) functions: Vec<FunctionDecl>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct UseDecl {
+    pub(crate) path: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -12,10 +18,17 @@ pub(crate) struct ConstDecl {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct FunctionDecl {
+    pub(crate) visibility: Visibility,
     pub(crate) name: String,
     pub(crate) parameters: Vec<Parameter>,
     pub(crate) return_type: ReturnType,
     pub(crate) statements: Vec<Statement>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Visibility {
+    Private,
+    Public,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
