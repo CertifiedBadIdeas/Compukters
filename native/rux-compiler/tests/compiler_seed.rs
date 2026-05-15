@@ -1157,6 +1157,53 @@ fn compile_imports_std_mem_copy_for_buffer_copy_loop() {
 }
 
 #[test]
+fn compile_imports_grouped_std_mem_functions() {
+    let image = compile(
+        "use std::mem::{copy, set};
+
+        fn main() -> i32 {
+            unsafe {
+                let mut dst: ptr<u8> = ptr<u8>(RAM_BASE + 16);
+                set(dst, 0u8, 3u32);
+                copy(dst, b\"ABC\", 3u32);
+                return dst[2u32] as i32;
+            }
+        }",
+    )
+    .unwrap();
+
+    assert!(image
+        .functions
+        .iter()
+        .any(|function| function.name == "copy"));
+    assert!(image
+        .functions
+        .iter()
+        .any(|function| function.name == "set"));
+}
+
+#[test]
+fn compile_imports_std_mem_zero() {
+    let image = compile(
+        "use std::mem::zero;
+
+        fn main() -> i32 {
+            unsafe {
+                let mut dst: ptr<u8> = ptr<u8>(RAM_BASE + 16);
+                zero(dst, 3u32);
+                return dst[2u32] as i32;
+            }
+        }",
+    )
+    .unwrap();
+
+    assert!(image
+        .functions
+        .iter()
+        .any(|function| function.name == "zero"));
+}
+
+#[test]
 fn compile_lowers_ptr_u8_function_return() {
     let image = compile(
         "fn message() -> ptr<u8> {
@@ -2078,6 +2125,39 @@ fn compiled_seed_std_copy_and_write_bytes_run_on_computer_machine() {
     );
     assert_eq!(machine.debug_output_string(), "RUX");
     assert_eq!(machine.exit_code(), 0x5855_52);
+    assert_eq!(machine.panic_code(), 0);
+}
+
+#[test]
+fn compiled_seed_std_set_zero_and_grouped_copy_run_on_computer_machine() {
+    let image = compile(
+        "use std::io::write_bytes;
+        use std::mem::{copy, set, zero};
+
+        fn main() -> i32 {
+            unsafe {
+                let mut dst: ptr<u8> = ptr<u8>(RAM_BASE + 96);
+                set(dst, 0xffu8, 4u32);
+                zero(dst, 2u32);
+                copy(dst, b\"OK\", 2u32);
+                write_bytes(dst, 4u32);
+                return (dst[0u32] as i32)
+                    + ((dst[1u32] as i32) << 8)
+                    + ((dst[2u32] as i32) << 16)
+                    + ((dst[3u32] as i32) << 24);
+            }
+        }",
+    )
+    .unwrap();
+    let mut machine = ComputerMachine::new(64 * 1024).unwrap();
+    let cpu_id = machine.spawn_boot_cpu(image, 1_000_000).unwrap();
+
+    assert_eq!(
+        machine.run_boot_cpu_until_signal(cpu_id).unwrap(),
+        LowImageSignal::HaltI32(-46_257)
+    );
+    assert_eq!(machine.debug_output_bytes(), &[b'O', b'K', 0xff, 0xff]);
+    assert_eq!(machine.exit_code(), -46_257);
     assert_eq!(machine.panic_code(), 0);
 }
 
