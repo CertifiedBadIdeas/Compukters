@@ -2,11 +2,9 @@
 
 ## Status
 
-Status: pre-freeze candidate.
+Status: frozen on 2026-05-15.
 
-This ABI may still change in place until the first external image producer starts targeting it, or until the project explicitly marks it frozen. During this pre-freeze window, changes may still keep `image_format_version = 1`.
-
-After freeze, `RUXI` version `1` becomes immutable. Breaking changes require a new numeric image format version, and existing v1 decode/run support and fixtures must remain available for compatibility.
+`RUXI` version `1` is immutable. Breaking changes require a new numeric image format version, and existing v1 decode/run support and fixtures must remain available for compatibility.
 
 ## Goal
 
@@ -361,6 +359,6 @@ The fixture set lives in `docs/abi/fixtures`. Each `.ruxi` image has a `.json` m
 
 `RUXI` version `1` is the target for Rux and external compiler frontends.
 
-While the ABI status is `pre-freeze candidate`, this document may still change in place. After freeze, any serialized layout change, instruction tag reuse, operand type change, top-level field change, or semantic change to an existing instruction requires a new numeric image format version.
+Any serialized layout change, instruction tag reuse, operand type change, top-level field change, or semantic change to an existing instruction requires a new numeric image format version.
 
-After freeze, new instructions also require a new numeric image format version. This keeps v1 decoders simple: an unknown instruction tag remains an invalid v1 image, not a partially supported extension.
+New instructions also require a new numeric image format version. This keeps v1 decoders simple: an unknown instruction tag remains an invalid v1 image, not a partially supported extension.

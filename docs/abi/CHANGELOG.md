@@ -2,7 +2,11 @@
 
 ## Unreleased
 
-Status: pre-freeze candidate.
+No ABI changes.
+
+## 2026-05-15 - RUXI v1 Frozen
+
+Status: frozen.
 
 - Added `RUXI` low image ABI v1 as the external compiler target.
 - Added machine-readable opcode table for low image v1.
@@ -19,9 +23,7 @@ Status: pre-freeze candidate.
 
 ## Freeze Policy
 
-Before freeze, `image_format_version = 1` may still change in place.
-
-After freeze:
+For frozen ABI versions:
 
 - v1 image layout, instruction tags, operand encodings, and instruction semantics are immutable;
 - breaking changes require a new numeric image format version;
