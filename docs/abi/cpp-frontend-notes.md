@@ -13,9 +13,9 @@ The VM defines arithmetic behavior explicitly. Do not inherit C++ undefined beha
 Recommended lowering:
 
 - C++ signed `int32_t` add/sub/mul -> `I32Add` / `I32Sub` / `I32Mul`;
-- C++ unsigned `uint32_t` add/sub/mul -> same `I32*` opcodes when only the stored bit pattern matters;
+- C++ unsigned `uint32_t` add/sub/mul -> canonical `I32Add` / `I32Sub` / `I32Mul`;
 - C++ signed `int64_t` add/sub/mul -> `I64Add` / `I64Sub` / `I64Mul`;
-- C++ unsigned `uint64_t` add/sub/mul -> same `I64*` opcodes when only the stored bit pattern matters;
+- C++ unsigned `uint64_t` add/sub/mul -> canonical `I64Add` / `I64Sub` / `I64Mul`;
 - signed division/remainder -> `I32Div` / `I32Rem` / `I64Div` / `I64Rem`;
 - unsigned division/remainder -> `U32Div` / `U32Rem` / `U64Div` / `U64Rem`;
 - signed less-than -> `I32Lt` / `I64Lt`;
@@ -25,6 +25,8 @@ Recommended lowering:
 - unsigned right shift -> `U32Shr` / `U64Shr`.
 
 Shift counts are unbounded in the VM. Counts outside the value width produce the ABI-defined result instead of using C++ or CPU masking behavior.
+
+The names `U32Add`, `U32Sub`, `U32Mul`, `U64Add`, `U64Sub`, and `U64Mul` are canonical unsigned aliases documented in the opcode metadata. They are not serialized opcodes. A frontend may use those names internally, but it must emit the signed-named canonical opcodes listed above.
 
 ## Overflow
 

@@ -28,11 +28,16 @@ The v1 instruction set uses canonical opcodes for operations whose signed and un
 Examples:
 
 - unsigned 32-bit addition lowers to `I32Add`;
+- unsigned 32-bit subtraction lowers to `I32Sub`;
+- unsigned 32-bit multiplication lowers to `I32Mul`;
+- unsigned 64-bit addition lowers to `I64Add`;
+- unsigned 64-bit subtraction lowers to `I64Sub`;
 - unsigned 64-bit multiplication lowers to `I64Mul`;
 - equality uses raw bit comparison, so `I32Eq` and `I64Eq` cover signed and unsigned equality;
 - unsigned division, remainder, less-than, and right shift keep separate `U*` opcodes because signedness changes the result.
 
 This keeps the v1 opcode table compact without making external frontends depend on host-language undefined behavior.
+The machine-readable opcode table records these frontend-facing names as `canonical_unsigned_aliases`; they are aliases for documentation and builder APIs, not extra serialized opcodes.
 
 ## Program Termination
 
@@ -54,7 +59,7 @@ Recommended examples:
 
 - `a != b`: lower as `I32Eq` plus boolean inversion in control flow or arithmetic;
 - `a <= b`: lower as swapped greater-than logic using existing less-than and equality;
-- unsigned `a + b`: lower as `I32Add` or `I64Add` for the appropriate width;
+- unsigned `a + b`, `a - b`, `a * b`: lower as `I32Add/Sub/Mul` or `I64Add/Sub/Mul` for the appropriate width;
 - narrow integer arithmetic: perform 32-bit arithmetic and store with `Store8` or `Store16`.
 
 ## Revisit Triggers
