@@ -334,6 +334,95 @@ fn all_instruction_variants_image() -> Image {
                         lhs: 5,
                         rhs: 3,
                     },
+                    Instruction::U64Const {
+                        dst: 1,
+                        value: 0xffff_ffff_ffff_ffff,
+                    },
+                    Instruction::Load64 { dst: 1, addr: 2 },
+                    Instruction::Store64 { addr: 2, src: 1 },
+                    Instruction::I64Add {
+                        dst: 1,
+                        lhs: 1,
+                        rhs: 3,
+                    },
+                    Instruction::I64Sub {
+                        dst: 1,
+                        lhs: 1,
+                        rhs: 3,
+                    },
+                    Instruction::I64Mul {
+                        dst: 1,
+                        lhs: 1,
+                        rhs: 3,
+                    },
+                    Instruction::I64Div {
+                        dst: 1,
+                        lhs: 1,
+                        rhs: 3,
+                    },
+                    Instruction::I64Rem {
+                        dst: 1,
+                        lhs: 1,
+                        rhs: 3,
+                    },
+                    Instruction::U64Div {
+                        dst: 1,
+                        lhs: 1,
+                        rhs: 3,
+                    },
+                    Instruction::U64Rem {
+                        dst: 1,
+                        lhs: 1,
+                        rhs: 3,
+                    },
+                    Instruction::I64BitAnd {
+                        dst: 1,
+                        lhs: 1,
+                        rhs: 3,
+                    },
+                    Instruction::I64BitOr {
+                        dst: 1,
+                        lhs: 1,
+                        rhs: 3,
+                    },
+                    Instruction::I64BitXor {
+                        dst: 1,
+                        lhs: 1,
+                        rhs: 3,
+                    },
+                    Instruction::I64Shl {
+                        dst: 1,
+                        lhs: 1,
+                        rhs: 3,
+                    },
+                    Instruction::I64Shr {
+                        dst: 1,
+                        lhs: 1,
+                        rhs: 3,
+                    },
+                    Instruction::U64Shr {
+                        dst: 1,
+                        lhs: 1,
+                        rhs: 3,
+                    },
+                    Instruction::I64Eq {
+                        dst: 6,
+                        lhs: 1,
+                        rhs: 3,
+                    },
+                    Instruction::I64Lt {
+                        dst: 6,
+                        lhs: 1,
+                        rhs: 3,
+                    },
+                    Instruction::U64Lt {
+                        dst: 6,
+                        lhs: 1,
+                        rhs: 3,
+                    },
+                    Instruction::I32ToI64 { dst: 1, src: 5 },
+                    Instruction::U32ToU64 { dst: 1, src: 5 },
+                    Instruction::I64ToI32 { dst: 5, src: 1 },
                 ],
             },
             Function {
