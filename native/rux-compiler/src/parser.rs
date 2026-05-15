@@ -17,19 +17,35 @@ impl Parser {
     }
 
     fn parse_program(&mut self) -> Result<Program, CompileError> {
+        let mut uses = Vec::new();
         let mut consts = Vec::new();
         let mut functions = Vec::new();
         while self.peek() != &TokenKind::Eof {
-            if self.consume(TokenKind::Const) {
+            if self.consume(TokenKind::Use) {
+                uses.push(self.parse_use_declaration()?);
+            } else if self.consume(TokenKind::Const) {
                 consts.push(self.parse_const_declaration()?);
-            } else if self.peek() == &TokenKind::Fn {
+            } else if self.peek() == &TokenKind::Fn || self.peek() == &TokenKind::Pub {
                 functions.push(self.parse_function()?);
             } else {
                 return Err(self.error(format!("expected top-level item, found {:?}", self.peek())));
             }
         }
         self.expect(TokenKind::Eof)?;
-        Ok(Program { consts, functions })
+        Ok(Program {
+            uses,
+            consts,
+            functions,
+        })
+    }
+
+    fn parse_use_declaration(&mut self) -> Result<UseDecl, CompileError> {
+        let mut path = vec![self.take_ident()?];
+        while self.consume(TokenKind::DoubleColon) {
+            path.push(self.take_ident()?);
+        }
+        self.expect(TokenKind::Semicolon)?;
+        Ok(UseDecl { path })
     }
 
     fn parse_const_declaration(&mut self) -> Result<ConstDecl, CompileError> {
@@ -43,6 +59,11 @@ impl Parser {
     }
 
     fn parse_function(&mut self) -> Result<FunctionDecl, CompileError> {
+        let visibility = if self.consume(TokenKind::Pub) {
+            Visibility::Public
+        } else {
+            Visibility::Private
+        };
         self.expect(TokenKind::Fn)?;
         let name = self.take_ident()?;
         self.expect(TokenKind::LeftParen)?;
@@ -77,6 +98,7 @@ impl Parser {
         };
         let statements = self.parse_block()?;
         Ok(FunctionDecl {
+            visibility,
             name,
             parameters,
             return_type,

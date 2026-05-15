@@ -57,6 +57,33 @@ fn lexer_recognizes_seed_language_tokens() {
 }
 
 #[test]
+fn lexer_recognizes_use_paths_and_public_functions() {
+    let tokens = lex("use std::mem::copy; pub fn helper() {}").unwrap();
+    let kinds: Vec<TokenKind> = tokens.into_iter().map(|token| token.kind).collect();
+
+    assert_eq!(
+        kinds,
+        vec![
+            TokenKind::Use,
+            TokenKind::Ident("std".to_string()),
+            TokenKind::DoubleColon,
+            TokenKind::Ident("mem".to_string()),
+            TokenKind::DoubleColon,
+            TokenKind::Ident("copy".to_string()),
+            TokenKind::Semicolon,
+            TokenKind::Pub,
+            TokenKind::Fn,
+            TokenKind::Ident("helper".to_string()),
+            TokenKind::LeftParen,
+            TokenKind::RightParen,
+            TokenKind::LeftBrace,
+            TokenKind::RightBrace,
+            TokenKind::Eof,
+        ]
+    );
+}
+
+#[test]
 fn lexer_recognizes_locals_control_flow_and_comparison_tokens() {
     let tokens =
         lex("let mut i: i32 = 0; while i <= 3 { if i != 2 { i = i + 1; } else { i = i + 1; } }")
@@ -1100,6 +1127,36 @@ fn compile_lowers_ptr_u8_buffer_copy_loop() {
 }
 
 #[test]
+fn compile_imports_std_mem_copy_for_buffer_copy_loop() {
+    let image = compile(
+        "use std::mem::copy;
+
+        fn main() -> i32 {
+            unsafe {
+                let mut dst: ptr<u8> = ptr<u8>(RAM_BASE + 16);
+                copy(dst, b\"ABC\", 3u32);
+                return dst[2u32] as i32;
+            }
+        }",
+    )
+    .unwrap();
+    let copy = image
+        .functions
+        .iter()
+        .find(|function| function.name == "copy")
+        .unwrap();
+
+    assert!(copy
+        .instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::Load8 { .. })));
+    assert!(copy
+        .instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::Store8 { .. })));
+}
+
+#[test]
 fn compile_lowers_ptr_u8_function_return() {
     let image = compile(
         "fn message() -> ptr<u8> {
@@ -1409,6 +1466,40 @@ fn compile_rejects_unknown_function_call() {
 
     assert!(
         error.message.contains("unknown function `missing`"),
+        "{error:?}"
+    );
+}
+
+#[test]
+fn compile_rejects_std_function_without_use() {
+    let error = compile("fn main() { copy(ptr<u8>(RAM_BASE), b\"A\", 1u32); }").unwrap_err();
+
+    assert!(
+        error.message.contains("unknown function `copy`"),
+        "{error:?}"
+    );
+}
+
+#[test]
+fn compile_rejects_unknown_std_import() {
+    let error = compile("use std::mem::missing; fn main() {}").unwrap_err();
+
+    assert!(
+        error
+            .message
+            .contains("unknown std import `std::mem::missing`"),
+        "{error:?}"
+    );
+}
+
+#[test]
+fn compile_rejects_private_std_import() {
+    let error = compile("use std::mem::copy_byte; fn main() {}").unwrap_err();
+
+    assert!(
+        error
+            .message
+            .contains("std import `std::mem::copy_byte` is private"),
         "{error:?}"
     );
 }
@@ -1956,6 +2047,36 @@ fn compiled_seed_copy_bytes_between_buffers_runs_on_computer_machine() {
         machine.run_boot_cpu_until_signal(cpu_id).unwrap(),
         LowImageSignal::HaltI32(0x5855_52)
     );
+    assert_eq!(machine.exit_code(), 0x5855_52);
+    assert_eq!(machine.panic_code(), 0);
+}
+
+#[test]
+fn compiled_seed_std_copy_and_write_bytes_run_on_computer_machine() {
+    let image = compile(
+        "use std::mem::copy;
+        use std::io::write_bytes;
+
+        fn main() -> i32 {
+            unsafe {
+                let mut dst: ptr<u8> = ptr<u8>(RAM_BASE + 64);
+                copy(dst, b\"RUX\", 3u32);
+                write_bytes(dst, 3u32);
+                return (dst[0u32] as i32)
+                    + ((dst[1u32] as i32) << 8)
+                    + ((dst[2u32] as i32) << 16);
+            }
+        }",
+    )
+    .unwrap();
+    let mut machine = ComputerMachine::new(64 * 1024).unwrap();
+    let cpu_id = machine.spawn_boot_cpu(image, 1_000_000).unwrap();
+
+    assert_eq!(
+        machine.run_boot_cpu_until_signal(cpu_id).unwrap(),
+        LowImageSignal::HaltI32(0x5855_52)
+    );
+    assert_eq!(machine.debug_output_string(), "RUX");
     assert_eq!(machine.exit_code(), 0x5855_52);
     assert_eq!(machine.panic_code(), 0);
 }
