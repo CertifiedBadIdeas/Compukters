@@ -1,0 +1,8 @@
+{
+  "name": "runtime_unit_return_with_register",
+  "kind": "runtime_error",
+  "format": "RUXI",
+  "image_format_version": 1,
+  "phase": "runtime",
+  "expected_error": {"contains":"callee returned unit but caller expected r0"}
+}

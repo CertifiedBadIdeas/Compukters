@@ -87,6 +87,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "validation",
         r#"{"contains":"memory sections require 5 bytes but memory size is 4"}"#,
     )?;
+    write_runtime_error(
+        &fixture_dir,
+        "runtime_divide_by_zero",
+        runtime_divide_by_zero(),
+        r#"{"contains":"division by zero"}"#,
+    )?;
+    write_runtime_error(
+        &fixture_dir,
+        "runtime_memory_out_of_bounds",
+        runtime_memory_out_of_bounds(),
+        r#"{"contains":"memory access 1022..1026 is outside 1024 bytes"}"#,
+    )?;
+    write_runtime_error(
+        &fixture_dir,
+        "runtime_scalar_return_without_register",
+        runtime_scalar_return_without_register(),
+        r#"{"contains":"callee returned r0 but caller did not provide return register"}"#,
+    )?;
+    write_runtime_error(
+        &fixture_dir,
+        "runtime_unit_return_with_register",
+        runtime_unit_return_with_register(),
+        r#"{"contains":"callee returned unit but caller expected r0"}"#,
+    )?;
 
     Ok(())
 }
@@ -122,6 +146,25 @@ fn write_negative(
         fixture_dir.join(format!("{name}.json")),
         format!(
             "{{\n  \"name\": \"{name}\",\n  \"kind\": \"negative\",\n  \"format\": \"RUXI\",\n  \"target_image_format_version\": 1,\n  \"phase\": \"{phase}\",\n  \"expected_error\": {expected_error}\n}}\n",
+        ),
+    )?;
+    Ok(())
+}
+
+fn write_runtime_error(
+    fixture_dir: &Path,
+    name: &str,
+    image: Image,
+    expected_error: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    fs::write(
+        fixture_dir.join(format!("{name}.ruxi")),
+        encode_image(&image)?,
+    )?;
+    fs::write(
+        fixture_dir.join(format!("{name}.json")),
+        format!(
+            "{{\n  \"name\": \"{name}\",\n  \"kind\": \"runtime_error\",\n  \"format\": \"RUXI\",\n  \"image_format_version\": 1,\n  \"phase\": \"runtime\",\n  \"expected_error\": {expected_error}\n}}\n",
         ),
     )?;
     Ok(())
@@ -318,6 +361,109 @@ fn memory_sections_overflow() -> Image {
         0,
         vec![Instruction::ReturnUnit],
     )
+}
+
+fn runtime_divide_by_zero() -> Image {
+    main_image(
+        64,
+        Vec::new(),
+        Vec::new(),
+        0,
+        3,
+        vec![
+            Instruction::I32Const { dst: 0, value: 10 },
+            Instruction::I32Const { dst: 1, value: 0 },
+            Instruction::I32Div {
+                dst: 2,
+                lhs: 0,
+                rhs: 1,
+            },
+            Instruction::ReturnI32 { src: 2 },
+        ],
+    )
+}
+
+fn runtime_memory_out_of_bounds() -> Image {
+    main_image(
+        1024,
+        Vec::new(),
+        Vec::new(),
+        0,
+        2,
+        vec![
+            Instruction::AddrConst {
+                dst: 0,
+                value: 1022,
+            },
+            Instruction::Load32 { dst: 1, addr: 0 },
+            Instruction::ReturnI32 { src: 1 },
+        ],
+    )
+}
+
+fn runtime_scalar_return_without_register() -> Image {
+    Image {
+        memory_size: 64,
+        rodata: Vec::new(),
+        data: Vec::new(),
+        bss_size: 0,
+        entry_function_index: 0,
+        functions: vec![
+            Function {
+                name: "main".to_string(),
+                register_count: 0,
+                parameters: Vec::new(),
+                instructions: vec![
+                    Instruction::CallStatic {
+                        return_register: None,
+                        function_index: 1,
+                        arguments: Vec::new(),
+                    },
+                    Instruction::ReturnUnit,
+                ],
+            },
+            Function {
+                name: "callee".to_string(),
+                register_count: 1,
+                parameters: Vec::new(),
+                instructions: vec![
+                    Instruction::I32Const { dst: 0, value: 7 },
+                    Instruction::ReturnI32 { src: 0 },
+                ],
+            },
+        ],
+    }
+}
+
+fn runtime_unit_return_with_register() -> Image {
+    Image {
+        memory_size: 64,
+        rodata: Vec::new(),
+        data: Vec::new(),
+        bss_size: 0,
+        entry_function_index: 0,
+        functions: vec![
+            Function {
+                name: "main".to_string(),
+                register_count: 1,
+                parameters: Vec::new(),
+                instructions: vec![
+                    Instruction::CallStatic {
+                        return_register: Some(0),
+                        function_index: 1,
+                        arguments: Vec::new(),
+                    },
+                    Instruction::ReturnI32 { src: 0 },
+                ],
+            },
+            Function {
+                name: "callee".to_string(),
+                register_count: 0,
+                parameters: Vec::new(),
+                instructions: vec![Instruction::ReturnUnit],
+            },
+        ],
+    }
 }
 
 fn main_image(

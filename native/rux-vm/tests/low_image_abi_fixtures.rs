@@ -79,6 +79,40 @@ fn abi_negative_fixtures_are_rejected() {
     }
 }
 
+#[test]
+fn abi_runtime_error_fixtures_decode_validate_and_trap() {
+    let cases = [
+        ("runtime_divide_by_zero", "division by zero"),
+        (
+            "runtime_memory_out_of_bounds",
+            "memory access 1022..1026 is outside 1024 bytes",
+        ),
+        (
+            "runtime_scalar_return_without_register",
+            "callee returned r0 but caller did not provide return register",
+        ),
+        (
+            "runtime_unit_return_with_register",
+            "callee returned unit but caller expected r0",
+        ),
+    ];
+
+    for (fixture, expected_error) in cases {
+        let bytes = read_fixture(fixture);
+        let image = decode_image(&bytes).expect("runtime error fixture decodes");
+        let mut vm = LowImageVm::create(image, 1024).expect("runtime error fixture validates");
+        let error = vm
+            .run_until_signal()
+            .expect_err("runtime error fixture traps while running");
+
+        assert!(
+            error.contains(expected_error),
+            "fixture {fixture}: expected error containing {expected_error:?}, got {error:?}",
+        );
+        assert_manifest_exists(fixture);
+    }
+}
+
 fn read_fixture(name: &str) -> Vec<u8> {
     fs::read(fixture_path(name, "ruxi")).unwrap_or_else(|error| {
         panic!(

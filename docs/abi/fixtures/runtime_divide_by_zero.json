@@ -1,0 +1,8 @@
+{
+  "name": "runtime_divide_by_zero",
+  "kind": "runtime_error",
+  "format": "RUXI",
+  "image_format_version": 1,
+  "phase": "runtime",
+  "expected_error": {"contains":"division by zero"}
+}
