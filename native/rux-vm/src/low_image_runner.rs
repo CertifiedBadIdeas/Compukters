@@ -251,6 +251,14 @@ enum ExecutableOperation {
         addr: usize,
         src: usize,
     },
+    Load16 {
+        dst: usize,
+        addr: usize,
+    },
+    Store16 {
+        addr: usize,
+        src: usize,
+    },
     AddrAdd {
         dst: usize,
         base: usize,
@@ -422,11 +430,15 @@ impl LowProgram {
                 validate_register(function, instruction_index, "reads", *lhs)?;
                 validate_register(function, instruction_index, "reads", *rhs)?;
             }
-            Instruction::Load32 { dst, addr } | Instruction::Load8 { dst, addr } => {
+            Instruction::Load32 { dst, addr }
+            | Instruction::Load8 { dst, addr }
+            | Instruction::Load16 { dst, addr } => {
                 validate_register(function, instruction_index, "writes", *dst)?;
                 validate_register(function, instruction_index, "reads", *addr)?;
             }
-            Instruction::Store32 { addr, src } | Instruction::Store8 { addr, src } => {
+            Instruction::Store32 { addr, src }
+            | Instruction::Store8 { addr, src }
+            | Instruction::Store16 { addr, src } => {
                 validate_register(function, instruction_index, "reads", *addr)?;
                 validate_register(function, instruction_index, "reads", *src)?;
             }
@@ -818,11 +830,23 @@ impl ExecutableOperation {
                     addr: usize::from(*addr),
                 }
             }
+            Instruction::Load16 { dst, addr } => {
+                let dst = usize::from(*dst);
+                known_i32[dst] = None;
+                Self::Load16 {
+                    dst,
+                    addr: usize::from(*addr),
+                }
+            }
             Instruction::Store32 { addr, src } => Self::Store32 {
                 addr: usize::from(*addr),
                 src: usize::from(*src),
             },
             Instruction::Store8 { addr, src } => Self::Store8 {
+                addr: usize::from(*addr),
+                src: usize::from(*src),
+            },
+            Instruction::Store16 { addr, src } => Self::Store16 {
                 addr: usize::from(*addr),
                 src: usize::from(*src),
             },
@@ -854,7 +878,8 @@ impl ExecutableOperation {
             ExecutableOperation::I32Move { src, .. }
             | ExecutableOperation::AddrMove { src, .. }
             | ExecutableOperation::Load32 { addr: src, .. }
-            | ExecutableOperation::Load8 { addr: src, .. } => *src == register,
+            | ExecutableOperation::Load8 { addr: src, .. }
+            | ExecutableOperation::Load16 { addr: src, .. } => *src == register,
             ExecutableOperation::I32Add { lhs, rhs, .. }
             | ExecutableOperation::I32Sub { lhs, rhs, .. }
             | ExecutableOperation::I32Mul { lhs, rhs, .. }
@@ -878,6 +903,11 @@ impl ExecutableOperation {
                 ..
             }
             | ExecutableOperation::Store8 {
+                addr: lhs,
+                src: rhs,
+                ..
+            }
+            | ExecutableOperation::Store16 {
                 addr: lhs,
                 src: rhs,
                 ..
@@ -1383,6 +1413,19 @@ impl LowState {
                     .store_u8(address, self.read_i32(*src).to_le_bytes()[0])
                     .map_err(|error| error.to_string())?;
             }
+            ExecutableOperation::Load16 { dst, addr } => {
+                let address = self.read_addr(*addr);
+                let value = memory
+                    .load_u16(address)
+                    .map_err(|error| error.to_string())?;
+                self.write_i32(*dst, i32::from(value));
+            }
+            ExecutableOperation::Store16 { addr, src } => {
+                let address = self.read_addr(*addr);
+                memory
+                    .store_u16(address, self.read_i32(*src) as u16)
+                    .map_err(|error| error.to_string())?;
+            }
             ExecutableOperation::AddrAdd { dst, base, offset } => {
                 let base = self.read_addr(*base);
                 let offset = self.read_i32(*offset);
@@ -1778,6 +1821,7 @@ fn instruction_read_registers(instruction: &Instruction) -> Vec<usize> {
         | Instruction::AddrMove { src, .. }
         | Instruction::Load32 { addr: src, .. }
         | Instruction::Load8 { addr: src, .. }
+        | Instruction::Load16 { addr: src, .. }
         | Instruction::ReturnI32 { src }
         | Instruction::ReturnI64 { src }
         | Instruction::ReturnAddr { src }
@@ -1805,6 +1849,11 @@ fn instruction_read_registers(instruction: &Instruction) -> Vec<usize> {
             ..
         }
         | Instruction::Store8 {
+            addr: lhs,
+            src: rhs,
+            ..
+        }
+        | Instruction::Store16 {
             addr: lhs,
             src: rhs,
             ..
@@ -1847,6 +1896,7 @@ fn instruction_write_register(instruction: &Instruction) -> Option<(usize, Optio
         | Instruction::I32Eq { dst, .. }
         | Instruction::Load32 { dst, .. }
         | Instruction::Load8 { dst, .. }
+        | Instruction::Load16 { dst, .. }
         | Instruction::AddrAdd { dst, .. } => Some((usize::from(*dst), None)),
         Instruction::CallStatic {
             return_register: Some(return_register),
@@ -1854,6 +1904,7 @@ fn instruction_write_register(instruction: &Instruction) -> Option<(usize, Optio
         } => Some((usize::from(*return_register), None)),
         Instruction::Store32 { .. }
         | Instruction::Store8 { .. }
+        | Instruction::Store16 { .. }
         | Instruction::Jump { .. }
         | Instruction::JumpIfFalse { .. }
         | Instruction::CallStatic {

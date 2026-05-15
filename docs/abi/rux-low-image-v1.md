@@ -96,7 +96,10 @@ Low VM registers are untyped machine-word slots. Instruction names define how bi
 - `U32*` instructions use unsigned 32-bit integer semantics.
 - `Addr*` instructions use 32-bit addresses.
 - `Load8`/`Store8` operate on a single byte.
+- `Load16`/`Store16` operate on a little-endian 16-bit word.
 - `Load32`/`Store32` operate on a little-endian 32-bit word.
+
+Memory is byte-addressed. `Load16`/`Store16` and `Load32`/`Store32` do not require aligned addresses. Loads zero-extend `u8`/`u16` values into the destination register. Stores use the low 8/16/32 bits of the source register.
 
 ## Arithmetic Semantics
 
@@ -174,6 +177,8 @@ The same table is available in machine-readable form at `docs/abi/rux-low-image-
 | 33 | `I32Rem` | `dst: u16, lhs: u16, rhs: u16` |
 | 34 | `U32Div` | `dst: u16, lhs: u16, rhs: u16` |
 | 35 | `U32Rem` | `dst: u16, lhs: u16, rhs: u16` |
+| 36 | `Load16` | `dst: u16, addr: u16` |
+| 37 | `Store16` | `addr: u16, src: u16` |
 
 ## Validation
 

@@ -317,6 +317,8 @@ fn all_instruction_variants_image() -> Image {
                     },
                     Instruction::Load8 { dst: 5, addr: 2 },
                     Instruction::Store8 { addr: 2, src: 5 },
+                    Instruction::Load16 { dst: 5, addr: 2 },
+                    Instruction::Store16 { addr: 2, src: 5 },
                     Instruction::I32Rem {
                         dst: 5,
                         lhs: 5,
