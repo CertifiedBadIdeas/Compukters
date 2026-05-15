@@ -1057,6 +1057,49 @@ fn compile_lowers_ptr_u8_function_argument() {
 }
 
 #[test]
+fn compile_lowers_ptr_u8_buffer_copy_loop() {
+    let image = compile(
+        "fn copy(dst: ptr<u8>, src: ptr<u8>, len: u32) {
+            let mut i: u32 = 0u32;
+            while i < len {
+                unsafe {
+                    dst[i] = src[i];
+                }
+                i += 1u32;
+            }
+        }
+
+        fn main() -> i32 {
+            unsafe {
+                let mut dst: ptr<u8> = ptr<u8>(RAM_BASE + 16);
+                copy(dst, b\"ABC\", 3u32);
+                return dst[0u32] as i32;
+            }
+        }",
+    )
+    .unwrap();
+    let copy = image
+        .functions
+        .iter()
+        .find(|function| function.name == "copy")
+        .unwrap();
+
+    assert_eq!(copy.parameters, vec![0, 1, 2]);
+    assert!(copy
+        .instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::Load8 { .. })));
+    assert!(copy
+        .instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::Store8 { .. })));
+    assert!(copy
+        .instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::JumpIfFalse { .. })));
+}
+
+#[test]
 fn compile_lowers_ptr_u8_function_return() {
     let image = compile(
         "fn message() -> ptr<u8> {
@@ -1880,6 +1923,41 @@ fn compiled_seed_write_bytes_accepts_ptr_u8_argument() {
         LowImageSignal::HaltI32(0)
     );
     assert_eq!(machine.debug_output_string(), "RUX READY");
+}
+
+#[test]
+fn compiled_seed_copy_bytes_between_buffers_runs_on_computer_machine() {
+    let image = compile(
+        "fn copy(dst: ptr<u8>, src: ptr<u8>, len: u32) {
+            let mut i: u32 = 0u32;
+            while i < len {
+                unsafe {
+                    dst[i] = src[i];
+                }
+                i += 1u32;
+            }
+        }
+
+        fn main() -> i32 {
+            unsafe {
+                let mut dst: ptr<u8> = ptr<u8>(RAM_BASE + 32);
+                copy(dst, b\"RUX\", 3u32);
+                return (dst[0u32] as i32)
+                    + ((dst[1u32] as i32) << 8)
+                    + ((dst[2u32] as i32) << 16);
+            }
+        }",
+    )
+    .unwrap();
+    let mut machine = ComputerMachine::new(64 * 1024).unwrap();
+    let cpu_id = machine.spawn_boot_cpu(image, 1_000_000).unwrap();
+
+    assert_eq!(
+        machine.run_boot_cpu_until_signal(cpu_id).unwrap(),
+        LowImageSignal::HaltI32(0x5855_52)
+    );
+    assert_eq!(machine.exit_code(), 0x5855_52);
+    assert_eq!(machine.panic_code(), 0);
 }
 
 #[test]
