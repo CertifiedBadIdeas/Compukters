@@ -303,6 +303,43 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
 }
 
 #[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_drainRuxComputerDebugOutputNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    handle: jlong,
+) -> jbyteArray {
+    let handle = match rux_computer_handle_mut(&mut env, handle) {
+        Some(handle) => handle,
+        None => return null_mut(),
+    };
+    byte_array_or_throw(&mut env, &handle.drain_debug_output_bytes())
+}
+
+#[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_pushRuxComputerSerialInputNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    handle: jlong,
+    bytes: JByteArray<'_>,
+) {
+    let handle = match rux_computer_handle_mut(&mut env, handle) {
+        Some(handle) => handle,
+        None => return,
+    };
+    let bytes = match env.convert_byte_array(&bytes) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            let _ = env.throw_new(
+                "java/lang/IllegalArgumentException",
+                format!("Cannot read Rux computer serial input: {error}"),
+            );
+            return;
+        }
+    };
+    handle.push_serial_input(&bytes);
+}
+
+#[no_mangle]
 pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_freeRuxComputerNative(
     _env: JNIEnv<'_>,
     _class: JClass<'_>,
