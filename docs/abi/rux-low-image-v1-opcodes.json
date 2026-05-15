@@ -1,8 +1,9 @@
 {
   "magic": "RUXI",
   "version": 1,
-  "status": "pre_freeze_candidate",
-  "freeze_policy": "may_change_in_place_until_first_external_image_producer_or_explicit_freeze; after_freeze_breaking_changes_require_new_version",
+  "status": "frozen",
+  "frozen_on": "2026-05-15",
+  "freeze_policy": "breaking_changes_require_new_numeric_image_format_version; existing_v1_decode_run_support_and_fixtures_remain_available",
   "endianness": "little",
   "register": "u16",
   "index": "i32_non_negative",

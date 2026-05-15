@@ -2,7 +2,7 @@
 
 ## Status
 
-Status: pre-freeze candidate.
+Status: frozen on 2026-05-15.
 
 This document names stable error categories for tools that decode, validate, generate, or execute `RUXI` low images. Exact human-readable messages may vary; categories are the compatibility surface.
 
@@ -61,4 +61,4 @@ Runtime errors mean the image passed validation but trapped while executing.
 
 ## Compatibility Rule
 
-External tools should branch on categories, not message strings. Message text is diagnostic and may change before freeze.
+External tools should branch on categories, not message strings. Message text is diagnostic and may change without changing the ABI.

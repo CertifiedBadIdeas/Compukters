@@ -2,7 +2,7 @@
 
 ## Status
 
-Status: advisory notes for the pre-freeze `RUXI` v1 ABI.
+Status: advisory notes for the frozen `RUXI` v1 ABI.
 
 This document is not a separate ABI. It explains how a C++ frontend can target `docs/abi/rux-low-image-v1.md`.
 

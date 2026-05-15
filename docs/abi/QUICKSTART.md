@@ -146,9 +146,7 @@ Then review the fixture diff before committing.
 
 ## Compatibility Policy
 
-Before freeze, `image_format_version = 1` may still change in place.
-
-After freeze, `RUXI` version `1` is immutable:
+`RUXI` version `1` is frozen and immutable:
 
 - do not reuse instruction tags;
 - do not change operand encodings;

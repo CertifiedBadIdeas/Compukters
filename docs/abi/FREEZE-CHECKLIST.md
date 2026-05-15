@@ -2,9 +2,9 @@
 
 ## Status
 
-Status: not frozen; all required gates are satisfied for a later dedicated freeze commit.
+Status: frozen on 2026-05-15.
 
-Use this checklist before changing `docs/abi/rux-low-image-v1.md` from `pre-freeze candidate` to frozen.
+This checklist records the gates used to freeze `docs/abi/rux-low-image-v1.md`.
 
 ## Required Gates
 
@@ -22,6 +22,17 @@ Use this checklist before changing `docs/abi/rux-low-image-v1.md` from `pre-free
 ## Last Gate Verification
 
 Verified on 2026-05-15 before freeze:
+
+- `cargo test` from `native/rux-vm`;
+- `cargo test` from `native/rux-compiler`;
+- `cargo run --example rux_abi_conformance` from `native/rux-vm`;
+- `cargo run --example write_abi_fixtures` from `native/rux-vm`, followed by an empty fixture diff;
+- `jq . docs/abi/rux-low-image-v1-opcodes.json docs/abi/fixtures/*.json`;
+- `git diff --check`.
+
+## Freeze Commit Verification
+
+Verified again on 2026-05-15 while freezing:
 
 - `cargo test` from `native/rux-vm`;
 - `cargo test` from `native/rux-compiler`;
@@ -66,12 +77,7 @@ from the repository root.
 
 ## Freeze Procedure
 
-1. Run the verification commands above.
-2. Confirm every required gate is checked.
-3. Change `docs/abi/rux-low-image-v1.md` status from `pre-freeze candidate` to frozen.
-4. Change `docs/abi/README.md` to describe v1 as frozen.
-5. Update `docs/abi/CHANGELOG.md` with the freeze date.
-6. Commit the freeze as a dedicated commit.
+Completed on 2026-05-15.
 
 ## Post-Freeze Rules
 
