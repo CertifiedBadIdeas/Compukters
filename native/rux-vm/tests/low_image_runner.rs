@@ -339,6 +339,199 @@ fn runner_loads_and_stores_u16_in_linear_ram() {
 }
 
 #[test]
+fn runner_loads_and_stores_u64_in_linear_ram() {
+    let image = image(
+        vec![
+            Instruction::AddrConst { dst: 0, value: 129 },
+            Instruction::U64Const {
+                dst: 1,
+                value: 0x1122_3344_5566_7788,
+            },
+            Instruction::Store64 { addr: 0, src: 1 },
+            Instruction::Load64 { dst: 2, addr: 0 },
+            Instruction::ReturnI64 { src: 2 },
+        ],
+        3,
+    );
+    let mut vm = LowImageVm::create(image, 128).unwrap();
+
+    assert_eq!(
+        vm.run_until_signal().unwrap(),
+        LowImageSignal::HaltI64(0x1122_3344_5566_7788),
+    );
+    assert_eq!(
+        vm.memory_bytes()[128..138],
+        [0, 0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11, 0],
+    );
+}
+
+#[test]
+fn runner_executes_i64_arithmetic_and_bitwise_operations() {
+    let image = image(
+        vec![
+            Instruction::U64Const {
+                dst: 0,
+                value: 0xffff_ffff_ffff_ffff,
+            },
+            Instruction::I64Const { dst: 1, value: 4 },
+            Instruction::I64Shl {
+                dst: 2,
+                lhs: 1,
+                rhs: 1,
+            },
+            Instruction::I64BitAnd {
+                dst: 3,
+                lhs: 0,
+                rhs: 2,
+            },
+            Instruction::I64BitOr {
+                dst: 4,
+                lhs: 3,
+                rhs: 1,
+            },
+            Instruction::I64BitXor {
+                dst: 5,
+                lhs: 4,
+                rhs: 1,
+            },
+            Instruction::I64Add {
+                dst: 6,
+                lhs: 5,
+                rhs: 1,
+            },
+            Instruction::I64Sub {
+                dst: 7,
+                lhs: 6,
+                rhs: 1,
+            },
+            Instruction::I64Mul {
+                dst: 8,
+                lhs: 7,
+                rhs: 1,
+            },
+            Instruction::ReturnI64 { src: 8 },
+        ],
+        9,
+    );
+    let mut vm = LowImageVm::create(image, 128).unwrap();
+
+    assert_eq!(vm.run_until_signal().unwrap(), LowImageSignal::HaltI64(256));
+}
+
+#[test]
+fn runner_executes_i64_and_u64_division_remainder_and_comparison() {
+    let image = image(
+        vec![
+            Instruction::I64Const { dst: 0, value: -9 },
+            Instruction::I64Const { dst: 1, value: 2 },
+            Instruction::I64Div {
+                dst: 2,
+                lhs: 0,
+                rhs: 1,
+            },
+            Instruction::I64Rem {
+                dst: 3,
+                lhs: 0,
+                rhs: 1,
+            },
+            Instruction::U64Const {
+                dst: 4,
+                value: u64::MAX,
+            },
+            Instruction::U64Div {
+                dst: 5,
+                lhs: 4,
+                rhs: 1,
+            },
+            Instruction::U64Rem {
+                dst: 6,
+                lhs: 4,
+                rhs: 1,
+            },
+            Instruction::I64Lt {
+                dst: 7,
+                lhs: 4,
+                rhs: 1,
+            },
+            Instruction::U64Lt {
+                dst: 8,
+                lhs: 4,
+                rhs: 1,
+            },
+            Instruction::I64Eq {
+                dst: 9,
+                lhs: 3,
+                rhs: 4,
+            },
+            Instruction::I32Const { dst: 10, value: 1 },
+            Instruction::I32BitAnd {
+                dst: 11,
+                lhs: 7,
+                rhs: 10,
+            },
+            Instruction::I32BitAnd {
+                dst: 12,
+                lhs: 8,
+                rhs: 10,
+            },
+            Instruction::I32Add {
+                dst: 13,
+                lhs: 11,
+                rhs: 12,
+            },
+            Instruction::I32BitAnd {
+                dst: 14,
+                lhs: 9,
+                rhs: 10,
+            },
+            Instruction::I32Add {
+                dst: 15,
+                lhs: 13,
+                rhs: 14,
+            },
+            Instruction::ReturnI32 { src: 15 },
+        ],
+        16,
+    );
+    let mut vm = LowImageVm::create(image, 128).unwrap();
+
+    assert_eq!(vm.run_until_signal().unwrap(), LowImageSignal::HaltI32(2));
+}
+
+#[test]
+fn runner_executes_i64_and_u64_shifts_and_casts() {
+    let image = image(
+        vec![
+            Instruction::I32Const { dst: 0, value: -1 },
+            Instruction::I32ToI64 { dst: 1, src: 0 },
+            Instruction::U32ToU64 { dst: 2, src: 0 },
+            Instruction::I64Const { dst: 3, value: 63 },
+            Instruction::I64Shr {
+                dst: 4,
+                lhs: 1,
+                rhs: 3,
+            },
+            Instruction::U64Shr {
+                dst: 5,
+                lhs: 1,
+                rhs: 3,
+            },
+            Instruction::I64Add {
+                dst: 6,
+                lhs: 2,
+                rhs: 5,
+            },
+            Instruction::I64ToI32 { dst: 7, src: 6 },
+            Instruction::ReturnI32 { src: 7 },
+        ],
+        8,
+    );
+    let mut vm = LowImageVm::create(image, 128).unwrap();
+
+    assert_eq!(vm.run_until_signal().unwrap(), LowImageSignal::HaltI32(0));
+}
+
+#[test]
 fn runner_rejects_out_of_bounds_memory_access() {
     let image = image(
         vec![

@@ -58,6 +58,31 @@ pub trait MemoryBus {
         self.store_u8(address, lo)?;
         self.store_u8(next, hi)
     }
+
+    fn load_u64(&self, address: u32) -> Result<u64, MemoryFault> {
+        let mut bytes = [0_u8; 8];
+        for (offset, byte) in bytes.iter_mut().enumerate() {
+            let address = address.checked_add(offset as u32).ok_or_else(|| {
+                MemoryFault::new(format!(
+                    "memory access starts at {address} and overflows u32",
+                ))
+            })?;
+            *byte = self.load_u8(address)?;
+        }
+        Ok(u64::from_le_bytes(bytes))
+    }
+
+    fn store_u64(&mut self, address: u32, value: u64) -> Result<(), MemoryFault> {
+        for (offset, byte) in value.to_le_bytes().into_iter().enumerate() {
+            let address = address.checked_add(offset as u32).ok_or_else(|| {
+                MemoryFault::new(format!(
+                    "memory access starts at {address} and overflows u32",
+                ))
+            })?;
+            self.store_u8(address, byte)?;
+        }
+        Ok(())
+    }
 }
 
 impl MachineMemory {
@@ -134,6 +159,19 @@ impl MachineMemory {
         Ok(())
     }
 
+    pub fn load_u64(&self, address: u32) -> Result<u64, MemoryFault> {
+        let bytes = self.range(address, 8)?;
+        let mut raw = [0_u8; 8];
+        raw.copy_from_slice(bytes);
+        Ok(u64::from_le_bytes(raw))
+    }
+
+    pub fn store_u64(&mut self, address: u32, value: u64) -> Result<(), MemoryFault> {
+        self.range_mut(address, 8)?
+            .copy_from_slice(&value.to_le_bytes());
+        Ok(())
+    }
+
     fn range(&self, address: u32, size: usize) -> Result<&[u8], MemoryFault> {
         let start = address as usize;
         let end = start.checked_add(size).ok_or_else(|| {
@@ -192,6 +230,14 @@ impl MemoryBus for MachineMemory {
 
     fn store_u16(&mut self, address: u32, value: u16) -> Result<(), MemoryFault> {
         self.store_u16(address, value)
+    }
+
+    fn load_u64(&self, address: u32) -> Result<u64, MemoryFault> {
+        self.load_u64(address)
+    }
+
+    fn store_u64(&mut self, address: u32, value: u64) -> Result<(), MemoryFault> {
+        self.store_u64(address, value)
     }
 }
 
@@ -252,6 +298,19 @@ mod tests {
 
         assert_eq!(memory.load_u16(1).unwrap(), 0xaabb);
         assert_eq!(&memory.bytes()[..4], &[0x44, 0xbb, 0xaa, 0x11]);
+    }
+
+    #[test]
+    fn machine_memory_loads_and_stores_u64_little_endian_without_alignment() {
+        let mut memory = MachineMemory::zeroed(10).unwrap();
+
+        memory.store_u64(1, 0x1122_3344_5566_7788).unwrap();
+
+        assert_eq!(memory.load_u64(1).unwrap(), 0x1122_3344_5566_7788);
+        assert_eq!(
+            &memory.bytes()[..10],
+            &[0, 0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11, 0],
+        );
     }
 
     #[test]

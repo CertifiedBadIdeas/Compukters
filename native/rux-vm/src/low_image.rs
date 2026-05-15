@@ -59,6 +59,10 @@ pub enum Instruction {
         dst: u16,
         value: i64,
     },
+    U64Const {
+        dst: u16,
+        value: u64,
+    },
     AddrConst {
         dst: u16,
         value: u32,
@@ -180,6 +184,106 @@ pub enum Instruction {
         addr: u16,
         src: u16,
     },
+    Load64 {
+        dst: u16,
+        addr: u16,
+    },
+    Store64 {
+        addr: u16,
+        src: u16,
+    },
+    I64Add {
+        dst: u16,
+        lhs: u16,
+        rhs: u16,
+    },
+    I64Sub {
+        dst: u16,
+        lhs: u16,
+        rhs: u16,
+    },
+    I64Mul {
+        dst: u16,
+        lhs: u16,
+        rhs: u16,
+    },
+    I64Div {
+        dst: u16,
+        lhs: u16,
+        rhs: u16,
+    },
+    I64Rem {
+        dst: u16,
+        lhs: u16,
+        rhs: u16,
+    },
+    U64Div {
+        dst: u16,
+        lhs: u16,
+        rhs: u16,
+    },
+    U64Rem {
+        dst: u16,
+        lhs: u16,
+        rhs: u16,
+    },
+    I64BitAnd {
+        dst: u16,
+        lhs: u16,
+        rhs: u16,
+    },
+    I64BitOr {
+        dst: u16,
+        lhs: u16,
+        rhs: u16,
+    },
+    I64BitXor {
+        dst: u16,
+        lhs: u16,
+        rhs: u16,
+    },
+    I64Shl {
+        dst: u16,
+        lhs: u16,
+        rhs: u16,
+    },
+    I64Shr {
+        dst: u16,
+        lhs: u16,
+        rhs: u16,
+    },
+    U64Shr {
+        dst: u16,
+        lhs: u16,
+        rhs: u16,
+    },
+    I64Eq {
+        dst: u16,
+        lhs: u16,
+        rhs: u16,
+    },
+    I64Lt {
+        dst: u16,
+        lhs: u16,
+        rhs: u16,
+    },
+    U64Lt {
+        dst: u16,
+        lhs: u16,
+        rhs: u16,
+    },
+    I32ToI64 {
+        dst: u16,
+        src: u16,
+    },
+    U32ToU64 {
+        dst: u16,
+        src: u16,
+    },
+    I64ToI32 {
+        dst: u16,
+        src: u16,
+    },
     AddrAdd {
         dst: u16,
         base: u16,
@@ -282,6 +386,10 @@ impl Writer {
         self.bytes.extend_from_slice(&value.to_le_bytes());
     }
 
+    fn u64(&mut self, value: u64) {
+        self.bytes.extend_from_slice(&value.to_le_bytes());
+    }
+
     fn byte_list(&mut self, name: &'static str, value: &[u8]) -> Result<(), ImageEncodeError> {
         self.length(name, value.len())?;
         self.raw(value);
@@ -322,6 +430,11 @@ impl Writer {
                 self.u8(2);
                 self.u16(*dst);
                 self.i64(*value);
+            }
+            Instruction::U64Const { dst, value } => {
+                self.u8(38);
+                self.u16(*dst);
+                self.u64(*value);
             }
             Instruction::AddrConst { dst, value } => {
                 self.u8(3);
@@ -378,6 +491,27 @@ impl Writer {
             Instruction::U32Rem { dst, lhs, rhs } => self.binary(35, *dst, *lhs, *rhs),
             Instruction::Load16 { dst, addr } => self.move_instruction(36, *dst, *addr),
             Instruction::Store16 { addr, src } => self.move_instruction(37, *addr, *src),
+            Instruction::Load64 { dst, addr } => self.move_instruction(39, *dst, *addr),
+            Instruction::Store64 { addr, src } => self.move_instruction(40, *addr, *src),
+            Instruction::I64Add { dst, lhs, rhs } => self.binary(41, *dst, *lhs, *rhs),
+            Instruction::I64Sub { dst, lhs, rhs } => self.binary(42, *dst, *lhs, *rhs),
+            Instruction::I64Mul { dst, lhs, rhs } => self.binary(43, *dst, *lhs, *rhs),
+            Instruction::I64Div { dst, lhs, rhs } => self.binary(44, *dst, *lhs, *rhs),
+            Instruction::I64Rem { dst, lhs, rhs } => self.binary(45, *dst, *lhs, *rhs),
+            Instruction::U64Div { dst, lhs, rhs } => self.binary(46, *dst, *lhs, *rhs),
+            Instruction::U64Rem { dst, lhs, rhs } => self.binary(47, *dst, *lhs, *rhs),
+            Instruction::I64BitAnd { dst, lhs, rhs } => self.binary(48, *dst, *lhs, *rhs),
+            Instruction::I64BitOr { dst, lhs, rhs } => self.binary(49, *dst, *lhs, *rhs),
+            Instruction::I64BitXor { dst, lhs, rhs } => self.binary(50, *dst, *lhs, *rhs),
+            Instruction::I64Shl { dst, lhs, rhs } => self.binary(51, *dst, *lhs, *rhs),
+            Instruction::I64Shr { dst, lhs, rhs } => self.binary(52, *dst, *lhs, *rhs),
+            Instruction::U64Shr { dst, lhs, rhs } => self.binary(53, *dst, *lhs, *rhs),
+            Instruction::I64Eq { dst, lhs, rhs } => self.binary(54, *dst, *lhs, *rhs),
+            Instruction::I64Lt { dst, lhs, rhs } => self.binary(55, *dst, *lhs, *rhs),
+            Instruction::U64Lt { dst, lhs, rhs } => self.binary(56, *dst, *lhs, *rhs),
+            Instruction::I32ToI64 { dst, src } => self.move_instruction(57, *dst, *src),
+            Instruction::U32ToU64 { dst, src } => self.move_instruction(58, *dst, *src),
+            Instruction::I64ToI32 { dst, src } => self.move_instruction(59, *dst, *src),
         }
         Ok(())
     }
@@ -446,6 +580,10 @@ fn read_instruction(reader: &mut Reader<'_>) -> Result<Instruction, ImageError> 
         2 => Ok(Instruction::I64Const {
             dst: reader.u16()?,
             value: reader.i64()?,
+        }),
+        38 => Ok(Instruction::U64Const {
+            dst: reader.u16()?,
+            value: reader.u64()?,
         }),
         3 => Ok(Instruction::AddrConst {
             dst: reader.u16()?,
@@ -554,6 +692,79 @@ fn read_instruction(reader: &mut Reader<'_>) -> Result<Instruction, ImageError> 
         }),
         36 => read_move(reader, |dst, addr| Instruction::Load16 { dst, addr }),
         37 => read_move(reader, |addr, src| Instruction::Store16 { addr, src }),
+        39 => read_move(reader, |dst, addr| Instruction::Load64 { dst, addr }),
+        40 => read_move(reader, |addr, src| Instruction::Store64 { addr, src }),
+        41 => read_binary(reader, |dst, lhs, rhs| Instruction::I64Add {
+            dst,
+            lhs,
+            rhs,
+        }),
+        42 => read_binary(reader, |dst, lhs, rhs| Instruction::I64Sub {
+            dst,
+            lhs,
+            rhs,
+        }),
+        43 => read_binary(reader, |dst, lhs, rhs| Instruction::I64Mul {
+            dst,
+            lhs,
+            rhs,
+        }),
+        44 => read_binary(reader, |dst, lhs, rhs| Instruction::I64Div {
+            dst,
+            lhs,
+            rhs,
+        }),
+        45 => read_binary(reader, |dst, lhs, rhs| Instruction::I64Rem {
+            dst,
+            lhs,
+            rhs,
+        }),
+        46 => read_binary(reader, |dst, lhs, rhs| Instruction::U64Div {
+            dst,
+            lhs,
+            rhs,
+        }),
+        47 => read_binary(reader, |dst, lhs, rhs| Instruction::U64Rem {
+            dst,
+            lhs,
+            rhs,
+        }),
+        48 => read_binary(reader, |dst, lhs, rhs| Instruction::I64BitAnd {
+            dst,
+            lhs,
+            rhs,
+        }),
+        49 => read_binary(reader, |dst, lhs, rhs| Instruction::I64BitOr {
+            dst,
+            lhs,
+            rhs,
+        }),
+        50 => read_binary(reader, |dst, lhs, rhs| Instruction::I64BitXor {
+            dst,
+            lhs,
+            rhs,
+        }),
+        51 => read_binary(reader, |dst, lhs, rhs| Instruction::I64Shl {
+            dst,
+            lhs,
+            rhs,
+        }),
+        52 => read_binary(reader, |dst, lhs, rhs| Instruction::I64Shr {
+            dst,
+            lhs,
+            rhs,
+        }),
+        53 => read_binary(reader, |dst, lhs, rhs| Instruction::U64Shr {
+            dst,
+            lhs,
+            rhs,
+        }),
+        54 => read_binary(reader, |dst, lhs, rhs| Instruction::I64Eq { dst, lhs, rhs }),
+        55 => read_binary(reader, |dst, lhs, rhs| Instruction::I64Lt { dst, lhs, rhs }),
+        56 => read_binary(reader, |dst, lhs, rhs| Instruction::U64Lt { dst, lhs, rhs }),
+        57 => read_move(reader, |dst, src| Instruction::I32ToI64 { dst, src }),
+        58 => read_move(reader, |dst, src| Instruction::U32ToU64 { dst, src }),
+        59 => read_move(reader, |dst, src| Instruction::I64ToI32 { dst, src }),
         other => Err(ImageError::UnknownInstructionTag(other)),
     }
 }
@@ -617,6 +828,12 @@ impl<'a> Reader<'a> {
         let mut bytes = [0_u8; 8];
         bytes.copy_from_slice(self.take(8)?);
         Ok(i64::from_le_bytes(bytes))
+    }
+
+    fn u64(&mut self) -> Result<u64, ImageError> {
+        let mut bytes = [0_u8; 8];
+        bytes.copy_from_slice(self.take(8)?);
+        Ok(u64::from_le_bytes(bytes))
     }
 
     fn string(&mut self) -> Result<String, ImageError> {

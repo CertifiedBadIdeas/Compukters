@@ -67,6 +67,10 @@ enum ExecutableOperation {
         dst: usize,
         value: i64,
     },
+    U64Const {
+        dst: usize,
+        value: u64,
+    },
     AddrConst {
         dst: usize,
         value: u32,
@@ -259,6 +263,106 @@ enum ExecutableOperation {
         addr: usize,
         src: usize,
     },
+    Load64 {
+        dst: usize,
+        addr: usize,
+    },
+    Store64 {
+        addr: usize,
+        src: usize,
+    },
+    I64Add {
+        dst: usize,
+        lhs: usize,
+        rhs: usize,
+    },
+    I64Sub {
+        dst: usize,
+        lhs: usize,
+        rhs: usize,
+    },
+    I64Mul {
+        dst: usize,
+        lhs: usize,
+        rhs: usize,
+    },
+    I64Div {
+        dst: usize,
+        lhs: usize,
+        rhs: usize,
+    },
+    I64Rem {
+        dst: usize,
+        lhs: usize,
+        rhs: usize,
+    },
+    U64Div {
+        dst: usize,
+        lhs: usize,
+        rhs: usize,
+    },
+    U64Rem {
+        dst: usize,
+        lhs: usize,
+        rhs: usize,
+    },
+    I64BitAnd {
+        dst: usize,
+        lhs: usize,
+        rhs: usize,
+    },
+    I64BitOr {
+        dst: usize,
+        lhs: usize,
+        rhs: usize,
+    },
+    I64BitXor {
+        dst: usize,
+        lhs: usize,
+        rhs: usize,
+    },
+    I64Shl {
+        dst: usize,
+        lhs: usize,
+        rhs: usize,
+    },
+    I64Shr {
+        dst: usize,
+        lhs: usize,
+        rhs: usize,
+    },
+    U64Shr {
+        dst: usize,
+        lhs: usize,
+        rhs: usize,
+    },
+    I64Eq {
+        dst: usize,
+        lhs: usize,
+        rhs: usize,
+    },
+    I64Lt {
+        dst: usize,
+        lhs: usize,
+        rhs: usize,
+    },
+    U64Lt {
+        dst: usize,
+        lhs: usize,
+        rhs: usize,
+    },
+    I32ToI64 {
+        dst: usize,
+        src: usize,
+    },
+    U32ToU64 {
+        dst: usize,
+        src: usize,
+    },
+    I64ToI32 {
+        dst: usize,
+        src: usize,
+    },
     AddrAdd {
         dst: usize,
         base: usize,
@@ -402,10 +506,15 @@ impl LowProgram {
         match instruction {
             Instruction::I32Const { dst, .. }
             | Instruction::I64Const { dst, .. }
+            | Instruction::U64Const { dst, .. }
             | Instruction::AddrConst { dst, .. } => {
                 validate_register(function, instruction_index, "writes", *dst)?;
             }
-            Instruction::I32Move { dst, src } | Instruction::AddrMove { dst, src } => {
+            Instruction::I32Move { dst, src }
+            | Instruction::AddrMove { dst, src }
+            | Instruction::I32ToI64 { dst, src }
+            | Instruction::U32ToU64 { dst, src }
+            | Instruction::I64ToI32 { dst, src } => {
                 validate_register(function, instruction_index, "writes", *dst)?;
                 validate_register(function, instruction_index, "reads", *src)?;
             }
@@ -425,20 +534,38 @@ impl LowProgram {
             | Instruction::U32Shr { dst, lhs, rhs }
             | Instruction::I32Lt { dst, lhs, rhs }
             | Instruction::U32Lt { dst, lhs, rhs }
-            | Instruction::I32Eq { dst, lhs, rhs } => {
+            | Instruction::I32Eq { dst, lhs, rhs }
+            | Instruction::I64Add { dst, lhs, rhs }
+            | Instruction::I64Sub { dst, lhs, rhs }
+            | Instruction::I64Mul { dst, lhs, rhs }
+            | Instruction::I64Div { dst, lhs, rhs }
+            | Instruction::I64Rem { dst, lhs, rhs }
+            | Instruction::U64Div { dst, lhs, rhs }
+            | Instruction::U64Rem { dst, lhs, rhs }
+            | Instruction::I64BitAnd { dst, lhs, rhs }
+            | Instruction::I64BitOr { dst, lhs, rhs }
+            | Instruction::I64BitXor { dst, lhs, rhs }
+            | Instruction::I64Shl { dst, lhs, rhs }
+            | Instruction::I64Shr { dst, lhs, rhs }
+            | Instruction::U64Shr { dst, lhs, rhs }
+            | Instruction::I64Eq { dst, lhs, rhs }
+            | Instruction::I64Lt { dst, lhs, rhs }
+            | Instruction::U64Lt { dst, lhs, rhs } => {
                 validate_register(function, instruction_index, "writes", *dst)?;
                 validate_register(function, instruction_index, "reads", *lhs)?;
                 validate_register(function, instruction_index, "reads", *rhs)?;
             }
             Instruction::Load32 { dst, addr }
             | Instruction::Load8 { dst, addr }
-            | Instruction::Load16 { dst, addr } => {
+            | Instruction::Load16 { dst, addr }
+            | Instruction::Load64 { dst, addr } => {
                 validate_register(function, instruction_index, "writes", *dst)?;
                 validate_register(function, instruction_index, "reads", *addr)?;
             }
             Instruction::Store32 { addr, src }
             | Instruction::Store8 { addr, src }
-            | Instruction::Store16 { addr, src } => {
+            | Instruction::Store16 { addr, src }
+            | Instruction::Store64 { addr, src } => {
                 validate_register(function, instruction_index, "reads", *addr)?;
                 validate_register(function, instruction_index, "reads", *src)?;
             }
@@ -655,6 +782,11 @@ impl ExecutableOperation {
                 known_i32[dst] = None;
                 Self::I64Const { dst, value: *value }
             }
+            Instruction::U64Const { dst, value } => {
+                let dst = usize::from(*dst);
+                known_i32[dst] = None;
+                Self::U64Const { dst, value: *value }
+            }
             Instruction::AddrConst { dst, value } => {
                 let dst = usize::from(*dst);
                 known_i32[dst] = None;
@@ -850,6 +982,122 @@ impl ExecutableOperation {
                 addr: usize::from(*addr),
                 src: usize::from(*src),
             },
+            Instruction::Load64 { dst, addr } => {
+                let dst = usize::from(*dst);
+                known_i32[dst] = None;
+                Self::Load64 {
+                    dst,
+                    addr: usize::from(*addr),
+                }
+            }
+            Instruction::Store64 { addr, src } => Self::Store64 {
+                addr: usize::from(*addr),
+                src: usize::from(*src),
+            },
+            Instruction::I64Add { dst, lhs, rhs } => {
+                compile_i64_binary(known_i32, *dst, *lhs, *rhs, |dst, lhs, rhs| {
+                    ExecutableOperation::I64Add { dst, lhs, rhs }
+                })
+            }
+            Instruction::I64Sub { dst, lhs, rhs } => {
+                compile_i64_binary(known_i32, *dst, *lhs, *rhs, |dst, lhs, rhs| {
+                    ExecutableOperation::I64Sub { dst, lhs, rhs }
+                })
+            }
+            Instruction::I64Mul { dst, lhs, rhs } => {
+                compile_i64_binary(known_i32, *dst, *lhs, *rhs, |dst, lhs, rhs| {
+                    ExecutableOperation::I64Mul { dst, lhs, rhs }
+                })
+            }
+            Instruction::I64Div { dst, lhs, rhs } => {
+                compile_i64_binary(known_i32, *dst, *lhs, *rhs, |dst, lhs, rhs| {
+                    ExecutableOperation::I64Div { dst, lhs, rhs }
+                })
+            }
+            Instruction::I64Rem { dst, lhs, rhs } => {
+                compile_i64_binary(known_i32, *dst, *lhs, *rhs, |dst, lhs, rhs| {
+                    ExecutableOperation::I64Rem { dst, lhs, rhs }
+                })
+            }
+            Instruction::U64Div { dst, lhs, rhs } => {
+                compile_i64_binary(known_i32, *dst, *lhs, *rhs, |dst, lhs, rhs| {
+                    ExecutableOperation::U64Div { dst, lhs, rhs }
+                })
+            }
+            Instruction::U64Rem { dst, lhs, rhs } => {
+                compile_i64_binary(known_i32, *dst, *lhs, *rhs, |dst, lhs, rhs| {
+                    ExecutableOperation::U64Rem { dst, lhs, rhs }
+                })
+            }
+            Instruction::I64BitAnd { dst, lhs, rhs } => {
+                compile_i64_binary(known_i32, *dst, *lhs, *rhs, |dst, lhs, rhs| {
+                    ExecutableOperation::I64BitAnd { dst, lhs, rhs }
+                })
+            }
+            Instruction::I64BitOr { dst, lhs, rhs } => {
+                compile_i64_binary(known_i32, *dst, *lhs, *rhs, |dst, lhs, rhs| {
+                    ExecutableOperation::I64BitOr { dst, lhs, rhs }
+                })
+            }
+            Instruction::I64BitXor { dst, lhs, rhs } => {
+                compile_i64_binary(known_i32, *dst, *lhs, *rhs, |dst, lhs, rhs| {
+                    ExecutableOperation::I64BitXor { dst, lhs, rhs }
+                })
+            }
+            Instruction::I64Shl { dst, lhs, rhs } => {
+                compile_i64_binary(known_i32, *dst, *lhs, *rhs, |dst, lhs, rhs| {
+                    ExecutableOperation::I64Shl { dst, lhs, rhs }
+                })
+            }
+            Instruction::I64Shr { dst, lhs, rhs } => {
+                compile_i64_binary(known_i32, *dst, *lhs, *rhs, |dst, lhs, rhs| {
+                    ExecutableOperation::I64Shr { dst, lhs, rhs }
+                })
+            }
+            Instruction::U64Shr { dst, lhs, rhs } => {
+                compile_i64_binary(known_i32, *dst, *lhs, *rhs, |dst, lhs, rhs| {
+                    ExecutableOperation::U64Shr { dst, lhs, rhs }
+                })
+            }
+            Instruction::I64Eq { dst, lhs, rhs } => {
+                compile_i64_binary(known_i32, *dst, *lhs, *rhs, |dst, lhs, rhs| {
+                    ExecutableOperation::I64Eq { dst, lhs, rhs }
+                })
+            }
+            Instruction::I64Lt { dst, lhs, rhs } => {
+                compile_i64_binary(known_i32, *dst, *lhs, *rhs, |dst, lhs, rhs| {
+                    ExecutableOperation::I64Lt { dst, lhs, rhs }
+                })
+            }
+            Instruction::U64Lt { dst, lhs, rhs } => {
+                compile_i64_binary(known_i32, *dst, *lhs, *rhs, |dst, lhs, rhs| {
+                    ExecutableOperation::U64Lt { dst, lhs, rhs }
+                })
+            }
+            Instruction::I32ToI64 { dst, src } => {
+                let dst = usize::from(*dst);
+                known_i32[dst] = None;
+                Self::I32ToI64 {
+                    dst,
+                    src: usize::from(*src),
+                }
+            }
+            Instruction::U32ToU64 { dst, src } => {
+                let dst = usize::from(*dst);
+                known_i32[dst] = None;
+                Self::U32ToU64 {
+                    dst,
+                    src: usize::from(*src),
+                }
+            }
+            Instruction::I64ToI32 { dst, src } => {
+                let dst = usize::from(*dst);
+                known_i32[dst] = None;
+                Self::I64ToI32 {
+                    dst,
+                    src: usize::from(*src),
+                }
+            }
             Instruction::AddrAdd { dst, base, offset } => {
                 let dst = usize::from(*dst);
                 known_i32[dst] = None;
@@ -874,12 +1122,17 @@ impl ExecutableOperation {
         match self {
             ExecutableOperation::I32Const { .. }
             | ExecutableOperation::I64Const { .. }
+            | ExecutableOperation::U64Const { .. }
             | ExecutableOperation::AddrConst { .. } => false,
             ExecutableOperation::I32Move { src, .. }
             | ExecutableOperation::AddrMove { src, .. }
             | ExecutableOperation::Load32 { addr: src, .. }
             | ExecutableOperation::Load8 { addr: src, .. }
-            | ExecutableOperation::Load16 { addr: src, .. } => *src == register,
+            | ExecutableOperation::Load16 { addr: src, .. }
+            | ExecutableOperation::Load64 { addr: src, .. }
+            | ExecutableOperation::I32ToI64 { src, .. }
+            | ExecutableOperation::U32ToU64 { src, .. }
+            | ExecutableOperation::I64ToI32 { src, .. } => *src == register,
             ExecutableOperation::I32Add { lhs, rhs, .. }
             | ExecutableOperation::I32Sub { lhs, rhs, .. }
             | ExecutableOperation::I32Mul { lhs, rhs, .. }
@@ -897,6 +1150,22 @@ impl ExecutableOperation {
             | ExecutableOperation::I32Lt { lhs, rhs, .. }
             | ExecutableOperation::U32Lt { lhs, rhs, .. }
             | ExecutableOperation::I32Eq { lhs, rhs, .. }
+            | ExecutableOperation::I64Add { lhs, rhs, .. }
+            | ExecutableOperation::I64Sub { lhs, rhs, .. }
+            | ExecutableOperation::I64Mul { lhs, rhs, .. }
+            | ExecutableOperation::I64Div { lhs, rhs, .. }
+            | ExecutableOperation::I64Rem { lhs, rhs, .. }
+            | ExecutableOperation::U64Div { lhs, rhs, .. }
+            | ExecutableOperation::U64Rem { lhs, rhs, .. }
+            | ExecutableOperation::I64BitAnd { lhs, rhs, .. }
+            | ExecutableOperation::I64BitOr { lhs, rhs, .. }
+            | ExecutableOperation::I64BitXor { lhs, rhs, .. }
+            | ExecutableOperation::I64Shl { lhs, rhs, .. }
+            | ExecutableOperation::I64Shr { lhs, rhs, .. }
+            | ExecutableOperation::U64Shr { lhs, rhs, .. }
+            | ExecutableOperation::I64Eq { lhs, rhs, .. }
+            | ExecutableOperation::I64Lt { lhs, rhs, .. }
+            | ExecutableOperation::U64Lt { lhs, rhs, .. }
             | ExecutableOperation::Store32 {
                 addr: lhs,
                 src: rhs,
@@ -908,6 +1177,11 @@ impl ExecutableOperation {
                 ..
             }
             | ExecutableOperation::Store16 {
+                addr: lhs,
+                src: rhs,
+                ..
+            }
+            | ExecutableOperation::Store64 {
                 addr: lhs,
                 src: rhs,
                 ..
@@ -969,6 +1243,18 @@ fn compile_i32_binary_imm(
         Some(value) => immediate_operation(dst, lhs, value),
         None => register_operation(dst, lhs, rhs),
     }
+}
+
+fn compile_i64_binary(
+    known_i32: &mut [Option<i32>],
+    dst: u16,
+    lhs: u16,
+    rhs: u16,
+    operation: impl FnOnce(usize, usize, usize) -> ExecutableOperation,
+) -> ExecutableOperation {
+    let dst = usize::from(dst);
+    known_i32[dst] = None;
+    operation(dst, usize::from(lhs), usize::from(rhs))
 }
 
 fn fuse_block_operations(
@@ -1240,6 +1526,7 @@ impl LowState {
         match operation {
             ExecutableOperation::I32Const { dst, value } => self.write_i32(*dst, *value),
             ExecutableOperation::I64Const { dst, value } => self.write_i64(*dst, *value),
+            ExecutableOperation::U64Const { dst, value } => self.write_raw(*dst, *value),
             ExecutableOperation::AddrConst { dst, value } => self.write_addr(*dst, *value),
             ExecutableOperation::I32Move { dst, src } => {
                 let value = self.read_i32(*src);
@@ -1309,6 +1596,50 @@ impl LowState {
                 let value = (self.read_i32(*lhs) as u32).wrapping_rem(rhs);
                 self.write_i32(*dst, value as i32);
             }
+            ExecutableOperation::I64Add { dst, lhs, rhs } => {
+                let value = self.read_i64(*lhs).wrapping_add(self.read_i64(*rhs));
+                self.write_i64(*dst, value);
+            }
+            ExecutableOperation::I64Sub { dst, lhs, rhs } => {
+                let value = self.read_i64(*lhs).wrapping_sub(self.read_i64(*rhs));
+                self.write_i64(*dst, value);
+            }
+            ExecutableOperation::I64Mul { dst, lhs, rhs } => {
+                let value = self.read_i64(*lhs).wrapping_mul(self.read_i64(*rhs));
+                self.write_i64(*dst, value);
+            }
+            ExecutableOperation::I64Div { dst, lhs, rhs } => {
+                let rhs = self.read_i64(*rhs);
+                if rhs == 0 {
+                    return Err("division by zero".to_string());
+                }
+                let value = self.read_i64(*lhs).wrapping_div(rhs);
+                self.write_i64(*dst, value);
+            }
+            ExecutableOperation::I64Rem { dst, lhs, rhs } => {
+                let rhs = self.read_i64(*rhs);
+                if rhs == 0 {
+                    return Err("division by zero".to_string());
+                }
+                let value = self.read_i64(*lhs).wrapping_rem(rhs);
+                self.write_i64(*dst, value);
+            }
+            ExecutableOperation::U64Div { dst, lhs, rhs } => {
+                let rhs = self.read_raw(*rhs);
+                if rhs == 0 {
+                    return Err("division by zero".to_string());
+                }
+                let value = self.read_raw(*lhs).wrapping_div(rhs);
+                self.write_raw(*dst, value);
+            }
+            ExecutableOperation::U64Rem { dst, lhs, rhs } => {
+                let rhs = self.read_raw(*rhs);
+                if rhs == 0 {
+                    return Err("division by zero".to_string());
+                }
+                let value = self.read_raw(*lhs).wrapping_rem(rhs);
+                self.write_raw(*dst, value);
+            }
             ExecutableOperation::I32BitAnd { dst, lhs, rhs } => {
                 let value = self.read_i32(*lhs) & self.read_i32(*rhs);
                 self.write_i32(*dst, value);
@@ -1332,6 +1663,18 @@ impl LowState {
             ExecutableOperation::I32BitXorImm { dst, lhs, rhs } => {
                 let value = self.read_i32(*lhs) ^ *rhs;
                 self.write_i32(*dst, value);
+            }
+            ExecutableOperation::I64BitAnd { dst, lhs, rhs } => {
+                let value = self.read_raw(*lhs) & self.read_raw(*rhs);
+                self.write_raw(*dst, value);
+            }
+            ExecutableOperation::I64BitOr { dst, lhs, rhs } => {
+                let value = self.read_raw(*lhs) | self.read_raw(*rhs);
+                self.write_raw(*dst, value);
+            }
+            ExecutableOperation::I64BitXor { dst, lhs, rhs } => {
+                let value = self.read_raw(*lhs) ^ self.read_raw(*rhs);
+                self.write_raw(*dst, value);
             }
             ExecutableOperation::I32Shl { dst, lhs, rhs } => {
                 let value = i32_shl_unbounded(self.read_i32(*lhs), self.read_i32(*rhs));
@@ -1365,6 +1708,18 @@ impl LowState {
                 let value = u32_shr_unbounded(self.read_i32(*lhs) as u32, *rhs);
                 self.write_i32(*dst, value as i32);
             }
+            ExecutableOperation::I64Shl { dst, lhs, rhs } => {
+                let value = i64_shl_unbounded(self.read_i64(*lhs), self.read_i64(*rhs));
+                self.write_i64(*dst, value);
+            }
+            ExecutableOperation::I64Shr { dst, lhs, rhs } => {
+                let value = i64_shr_unbounded(self.read_i64(*lhs), self.read_i64(*rhs));
+                self.write_i64(*dst, value);
+            }
+            ExecutableOperation::U64Shr { dst, lhs, rhs } => {
+                let value = u64_shr_unbounded(self.read_raw(*lhs), self.read_i64(*rhs));
+                self.write_raw(*dst, value);
+            }
             ExecutableOperation::I32Lt { dst, lhs, rhs } => {
                 let value = self.read_i32(*lhs) < self.read_i32(*rhs);
                 self.write_bool(*dst, value);
@@ -1387,6 +1742,18 @@ impl LowState {
             }
             ExecutableOperation::I32EqImm { dst, lhs, rhs } => {
                 let value = self.read_i32(*lhs) == *rhs;
+                self.write_bool(*dst, value);
+            }
+            ExecutableOperation::I64Eq { dst, lhs, rhs } => {
+                let value = self.read_raw(*lhs) == self.read_raw(*rhs);
+                self.write_bool(*dst, value);
+            }
+            ExecutableOperation::I64Lt { dst, lhs, rhs } => {
+                let value = self.read_i64(*lhs) < self.read_i64(*rhs);
+                self.write_bool(*dst, value);
+            }
+            ExecutableOperation::U64Lt { dst, lhs, rhs } => {
+                let value = self.read_raw(*lhs) < self.read_raw(*rhs);
                 self.write_bool(*dst, value);
             }
             ExecutableOperation::Load32 { dst, addr } => {
@@ -1425,6 +1792,31 @@ impl LowState {
                 memory
                     .store_u16(address, self.read_i32(*src) as u16)
                     .map_err(|error| error.to_string())?;
+            }
+            ExecutableOperation::Load64 { dst, addr } => {
+                let address = self.read_addr(*addr);
+                let value = memory
+                    .load_u64(address)
+                    .map_err(|error| error.to_string())?;
+                self.write_raw(*dst, value);
+            }
+            ExecutableOperation::Store64 { addr, src } => {
+                let address = self.read_addr(*addr);
+                memory
+                    .store_u64(address, self.read_raw(*src))
+                    .map_err(|error| error.to_string())?;
+            }
+            ExecutableOperation::I32ToI64 { dst, src } => {
+                let value = i64::from(self.read_i32(*src));
+                self.write_i64(*dst, value);
+            }
+            ExecutableOperation::U32ToU64 { dst, src } => {
+                let value = u64::from(self.read_i32(*src) as u32);
+                self.write_raw(*dst, value);
+            }
+            ExecutableOperation::I64ToI32 { dst, src } => {
+                let value = self.read_i64(*src) as i32;
+                self.write_i32(*dst, value);
             }
             ExecutableOperation::AddrAdd { dst, base, offset } => {
                 let base = self.read_addr(*base);
@@ -1673,6 +2065,27 @@ fn u32_shr_unbounded(value: u32, amount: i32) -> u32 {
     value.wrapping_shr(amount as u32)
 }
 
+fn i64_shl_unbounded(value: i64, amount: i64) -> i64 {
+    if !(0..64).contains(&amount) {
+        return 0;
+    }
+    value.wrapping_shl(amount as u32)
+}
+
+fn i64_shr_unbounded(value: i64, amount: i64) -> i64 {
+    if !(0..64).contains(&amount) {
+        return if value < 0 { -1 } else { 0 };
+    }
+    value.wrapping_shr(amount as u32)
+}
+
+fn u64_shr_unbounded(value: u64, amount: i64) -> u64 {
+    if !(0..64).contains(&amount) {
+        return 0;
+    }
+    value.wrapping_shr(amount as u32)
+}
+
 fn block_starts(function: &Function) -> Vec<usize> {
     let mut leaders = vec![false; function.instructions.len()];
     leaders[0] = true;
@@ -1814,6 +2227,7 @@ fn instruction_read_registers(instruction: &Instruction) -> Vec<usize> {
     match instruction {
         Instruction::I32Const { .. }
         | Instruction::I64Const { .. }
+        | Instruction::U64Const { .. }
         | Instruction::AddrConst { .. }
         | Instruction::Jump { .. }
         | Instruction::ReturnUnit => Vec::new(),
@@ -1822,6 +2236,10 @@ fn instruction_read_registers(instruction: &Instruction) -> Vec<usize> {
         | Instruction::Load32 { addr: src, .. }
         | Instruction::Load8 { addr: src, .. }
         | Instruction::Load16 { addr: src, .. }
+        | Instruction::Load64 { addr: src, .. }
+        | Instruction::I32ToI64 { src, .. }
+        | Instruction::U32ToU64 { src, .. }
+        | Instruction::I64ToI32 { src, .. }
         | Instruction::ReturnI32 { src }
         | Instruction::ReturnI64 { src }
         | Instruction::ReturnAddr { src }
@@ -1843,6 +2261,22 @@ fn instruction_read_registers(instruction: &Instruction) -> Vec<usize> {
         | Instruction::I32Lt { lhs, rhs, .. }
         | Instruction::U32Lt { lhs, rhs, .. }
         | Instruction::I32Eq { lhs, rhs, .. }
+        | Instruction::I64Add { lhs, rhs, .. }
+        | Instruction::I64Sub { lhs, rhs, .. }
+        | Instruction::I64Mul { lhs, rhs, .. }
+        | Instruction::I64Div { lhs, rhs, .. }
+        | Instruction::I64Rem { lhs, rhs, .. }
+        | Instruction::U64Div { lhs, rhs, .. }
+        | Instruction::U64Rem { lhs, rhs, .. }
+        | Instruction::I64BitAnd { lhs, rhs, .. }
+        | Instruction::I64BitOr { lhs, rhs, .. }
+        | Instruction::I64BitXor { lhs, rhs, .. }
+        | Instruction::I64Shl { lhs, rhs, .. }
+        | Instruction::I64Shr { lhs, rhs, .. }
+        | Instruction::U64Shr { lhs, rhs, .. }
+        | Instruction::I64Eq { lhs, rhs, .. }
+        | Instruction::I64Lt { lhs, rhs, .. }
+        | Instruction::U64Lt { lhs, rhs, .. }
         | Instruction::Store32 {
             addr: lhs,
             src: rhs,
@@ -1854,6 +2288,11 @@ fn instruction_read_registers(instruction: &Instruction) -> Vec<usize> {
             ..
         }
         | Instruction::Store16 {
+            addr: lhs,
+            src: rhs,
+            ..
+        }
+        | Instruction::Store64 {
             addr: lhs,
             src: rhs,
             ..
@@ -1874,6 +2313,7 @@ fn instruction_write_register(instruction: &Instruction) -> Option<(usize, Optio
     match instruction {
         Instruction::I32Const { dst, value } => Some((usize::from(*dst), Some(*value))),
         Instruction::I64Const { dst, .. }
+        | Instruction::U64Const { dst, .. }
         | Instruction::AddrConst { dst, .. }
         | Instruction::I32Move { dst, .. }
         | Instruction::AddrMove { dst, .. }
@@ -1894,9 +2334,29 @@ fn instruction_write_register(instruction: &Instruction) -> Option<(usize, Optio
         | Instruction::I32Lt { dst, .. }
         | Instruction::U32Lt { dst, .. }
         | Instruction::I32Eq { dst, .. }
+        | Instruction::I64Add { dst, .. }
+        | Instruction::I64Sub { dst, .. }
+        | Instruction::I64Mul { dst, .. }
+        | Instruction::I64Div { dst, .. }
+        | Instruction::I64Rem { dst, .. }
+        | Instruction::U64Div { dst, .. }
+        | Instruction::U64Rem { dst, .. }
+        | Instruction::I64BitAnd { dst, .. }
+        | Instruction::I64BitOr { dst, .. }
+        | Instruction::I64BitXor { dst, .. }
+        | Instruction::I64Shl { dst, .. }
+        | Instruction::I64Shr { dst, .. }
+        | Instruction::U64Shr { dst, .. }
+        | Instruction::I64Eq { dst, .. }
+        | Instruction::I64Lt { dst, .. }
+        | Instruction::U64Lt { dst, .. }
+        | Instruction::I32ToI64 { dst, .. }
+        | Instruction::U32ToU64 { dst, .. }
+        | Instruction::I64ToI32 { dst, .. }
         | Instruction::Load32 { dst, .. }
         | Instruction::Load8 { dst, .. }
         | Instruction::Load16 { dst, .. }
+        | Instruction::Load64 { dst, .. }
         | Instruction::AddrAdd { dst, .. } => Some((usize::from(*dst), None)),
         Instruction::CallStatic {
             return_register: Some(return_register),
@@ -1905,6 +2365,7 @@ fn instruction_write_register(instruction: &Instruction) -> Option<(usize, Optio
         Instruction::Store32 { .. }
         | Instruction::Store8 { .. }
         | Instruction::Store16 { .. }
+        | Instruction::Store64 { .. }
         | Instruction::Jump { .. }
         | Instruction::JumpIfFalse { .. }
         | Instruction::CallStatic {

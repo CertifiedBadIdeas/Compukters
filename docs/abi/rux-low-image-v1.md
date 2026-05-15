@@ -41,6 +41,7 @@ u8:       1 byte
 u16:      2 bytes, little-endian
 u32:      4 bytes, little-endian
 i32:      4 bytes, little-endian two's-complement
+u64:      8 bytes, little-endian
 i64:      8 bytes, little-endian two's-complement
 index:    i32, must be non-negative
 length:   i32, must be non-negative
@@ -94,36 +95,52 @@ Low VM registers are untyped machine-word slots. Instruction names define how bi
 
 - `I32*` instructions use signed 32-bit integer semantics.
 - `U32*` instructions use unsigned 32-bit integer semantics.
+- `I64*` instructions use signed 64-bit integer semantics or raw 64-bit bit patterns where noted.
+- `U64*` instructions use unsigned 64-bit integer semantics.
 - `Addr*` instructions use 32-bit addresses.
 - `Load8`/`Store8` operate on a single byte.
 - `Load16`/`Store16` operate on a little-endian 16-bit word.
 - `Load32`/`Store32` operate on a little-endian 32-bit word.
+- `Load64`/`Store64` operate on a little-endian 64-bit word.
 
-Memory is byte-addressed. `Load16`/`Store16` and `Load32`/`Store32` do not require aligned addresses. Loads zero-extend `u8`/`u16` values into the destination register. Stores use the low 8/16/32 bits of the source register.
+Memory is byte-addressed. `Load16`/`Store16`, `Load32`/`Store32`, and `Load64`/`Store64` do not require aligned addresses. Loads zero-extend `u8`/`u16` values into the destination register. `Load32` zeroes the high 32 bits of the destination register. `Load64` writes all 64 bits. Stores use the low 8/16/32/64 bits of the source register.
 
 ## Arithmetic Semantics
 
 Arithmetic is defined by the VM. It is never host-language undefined behavior.
 
-Signed and unsigned integer values are stored in the same machine-word register slots. Instruction names define how the 32 low bits are interpreted:
+Signed and unsigned integer values are stored in the same 64-bit machine-word register slots. Instruction names define how bits are interpreted:
 
 - `I32Add`, `I32Sub`, and `I32Mul` use signed `i32` wrapping arithmetic.
 - `I32BitAnd`, `I32BitOr`, and `I32BitXor` operate on the raw 32-bit pattern.
 - `I32Lt` interprets both operands as signed `i32`.
 - `I32Eq` compares the raw 32-bit pattern.
 - `U32Lt`, `U32Div`, `U32Rem`, `U32Shl`, and `U32Shr` interpret operands as unsigned `u32`.
+- `I64Add`, `I64Sub`, and `I64Mul` use signed `i64` wrapping arithmetic.
+- `I64BitAnd`, `I64BitOr`, and `I64BitXor` operate on the raw 64-bit pattern.
+- `I64Lt` interprets both operands as signed `i64`.
+- `I64Eq` compares the raw 64-bit pattern.
+- `U64Lt`, `U64Div`, `U64Rem`, and `U64Shr` interpret operands as unsigned `u64`.
+- `I32ToI64` sign-extends the low 32 bits into 64 bits.
+- `U32ToU64` zero-extends the low 32 bits into 64 bits.
+- `I64ToI32` truncates to the low 32 bits and zeroes the destination register's high 32 bits.
 - `AddrAdd` uses 32-bit address wrapping arithmetic.
 
 Shift operations use unbounded shift counts, not masked CPU-style shift counts:
 
-- left shift with a count outside `0..32` produces `0`;
-- unsigned right shift with a count outside `0..32` produces `0`;
-- signed right shift with a count outside `0..32` produces `-1` for negative values and `0` otherwise.
+- 32-bit left shift with a count outside `0..32` produces `0`;
+- 32-bit unsigned right shift with a count outside `0..32` produces `0`;
+- 32-bit signed right shift with a count outside `0..32` produces `-1` for negative values and `0` otherwise;
+- 64-bit left shift with a count outside `0..64` produces `0`;
+- 64-bit unsigned right shift with a count outside `0..64` produces `0`;
+- 64-bit signed right shift with a count outside `0..64` produces `-1` for negative values and `0` otherwise.
 
 Division and remainder are defined separately for signed and unsigned values:
 
 - `I32Div` and `I32Rem` interpret operands as signed `i32`;
 - `U32Div` and `U32Rem` interpret operands as unsigned `u32`;
+- `I64Div` and `I64Rem` interpret operands as signed `i64`;
+- `U64Div` and `U64Rem` interpret operands as unsigned `u64`;
 - division or remainder by zero is a VM execution error.
 
 ## Control Flow
@@ -179,6 +196,28 @@ The same table is available in machine-readable form at `docs/abi/rux-low-image-
 | 35 | `U32Rem` | `dst: u16, lhs: u16, rhs: u16` |
 | 36 | `Load16` | `dst: u16, addr: u16` |
 | 37 | `Store16` | `addr: u16, src: u16` |
+| 38 | `U64Const` | `dst: u16, value: u64` |
+| 39 | `Load64` | `dst: u16, addr: u16` |
+| 40 | `Store64` | `addr: u16, src: u16` |
+| 41 | `I64Add` | `dst: u16, lhs: u16, rhs: u16` |
+| 42 | `I64Sub` | `dst: u16, lhs: u16, rhs: u16` |
+| 43 | `I64Mul` | `dst: u16, lhs: u16, rhs: u16` |
+| 44 | `I64Div` | `dst: u16, lhs: u16, rhs: u16` |
+| 45 | `I64Rem` | `dst: u16, lhs: u16, rhs: u16` |
+| 46 | `U64Div` | `dst: u16, lhs: u16, rhs: u16` |
+| 47 | `U64Rem` | `dst: u16, lhs: u16, rhs: u16` |
+| 48 | `I64BitAnd` | `dst: u16, lhs: u16, rhs: u16` |
+| 49 | `I64BitOr` | `dst: u16, lhs: u16, rhs: u16` |
+| 50 | `I64BitXor` | `dst: u16, lhs: u16, rhs: u16` |
+| 51 | `I64Shl` | `dst: u16, lhs: u16, rhs: u16` |
+| 52 | `I64Shr` | `dst: u16, lhs: u16, rhs: u16` |
+| 53 | `U64Shr` | `dst: u16, lhs: u16, rhs: u16` |
+| 54 | `I64Eq` | `dst: u16, lhs: u16, rhs: u16` |
+| 55 | `I64Lt` | `dst: u16, lhs: u16, rhs: u16` |
+| 56 | `U64Lt` | `dst: u16, lhs: u16, rhs: u16` |
+| 57 | `I32ToI64` | `dst: u16, src: u16` |
+| 58 | `U32ToU64` | `dst: u16, src: u16` |
+| 59 | `I64ToI32` | `dst: u16, src: u16` |
 
 ## Validation
 
