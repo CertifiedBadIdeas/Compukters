@@ -727,4 +727,55 @@ class NativeImageVmBindingsJniTest {
             NativeVmBindings.freeImage(handle)
         }
     }
+
+    @Test
+    fun ruxComputerBootsLowImageAndExposesControlAndDebugWhenLibraryIsConfigured() {
+        val libraryPath = System.getProperty("rux.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val image =
+            RuxLowVmImage(
+                memorySize = 64u * 1024u,
+                entryFunctionIndex = 0,
+                functions =
+                    listOf(
+                        RuxLowVmFunction(
+                            name = "main",
+                            registerCount = 4,
+                            parameters = emptyList(),
+                            instructions =
+                                listOf(
+                                    RuxLowVmInstruction.AddrConst(dst = 0, value = 0x1000_0000u),
+                                    RuxLowVmInstruction.I32Const(dst = 1, value = 2),
+                                    RuxLowVmInstruction.Store32(addr = 0, src = 1),
+                                    RuxLowVmInstruction.AddrConst(dst = 0, value = 0x1000_0100u),
+                                    RuxLowVmInstruction.I32Const(dst = 1, value = 'R'.code),
+                                    RuxLowVmInstruction.Store32(addr = 0, src = 1),
+                                    RuxLowVmInstruction.I32Const(dst = 1, value = 'U'.code),
+                                    RuxLowVmInstruction.Store32(addr = 0, src = 1),
+                                    RuxLowVmInstruction.I32Const(dst = 1, value = 'X'.code),
+                                    RuxLowVmInstruction.Store32(addr = 0, src = 1),
+                                    RuxLowVmInstruction.I32Const(dst = 2, value = 0),
+                                    RuxLowVmInstruction.ReturnI32(2),
+                                ),
+                        ),
+                    ),
+            )
+        val handle =
+            NativeVmBindings.createRuxComputer(
+                libraryPath = libraryPath,
+                image = RuxLowVmImageAbi.encode(image),
+                memorySize = 64 * 1024,
+                sliceBudgetNanos = 1_000_000,
+            )
+
+        try {
+            assertEquals(NativeLowImageVmSignal.HaltI32(0), NativeVmBindings.runRuxComputerUntilSignal(handle))
+            assertEquals("RUX", NativeVmBindings.ruxComputerDebugOutput(handle).decodeToString())
+            assertEquals(
+                NativeRuxComputerControl(status = 3, exitCode = 0, panicCode = 0),
+                NativeVmBindings.ruxComputerControl(handle),
+            )
+        } finally {
+            NativeVmBindings.freeRuxComputer(handle)
+        }
+    }
 }

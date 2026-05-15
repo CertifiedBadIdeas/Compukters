@@ -163,6 +163,21 @@ data class NativeLowImageVmMetrics(
     }
 }
 
+data class NativeRuxComputerControl(
+    val status: Int,
+    val exitCode: Int,
+    val panicCode: Int,
+) {
+    companion object {
+        fun from(values: LongArray): NativeRuxComputerControl =
+            NativeRuxComputerControl(
+                status = values.getOrElse(0) { 0L }.toInt(),
+                exitCode = values.getOrElse(1) { 0L }.toInt(),
+                panicCode = values.getOrElse(2) { 0L }.toInt(),
+            )
+    }
+}
+
 sealed interface NativeLowImageVmSignal {
     data object HaltUnit : NativeLowImageVmSignal
 
@@ -272,6 +287,44 @@ object NativeVmBindings : NativeVmBindingsFacade {
     fun freeLowImage(handle: Long) {
         if (handle != 0L) {
             freeLowImageNative(handle)
+        }
+    }
+
+    fun createRuxComputer(
+        libraryPath: String,
+        image: ByteArray,
+        memorySize: Int,
+        sliceBudgetNanos: Long,
+    ): Long {
+        load(libraryPath)
+        val handle =
+            createRuxComputerNative(
+                image,
+                memorySize.coerceAtLeast(1),
+                sliceBudgetNanos.coerceAtLeast(1),
+            )
+        check(handle != 0L) { "Native Rux computer create returned a zero handle" }
+        return handle
+    }
+
+    fun runRuxComputerUntilSignal(handle: Long): NativeLowImageVmSignal {
+        require(handle != 0L) { "Native Rux computer handle is zero" }
+        return NativeLowImageVmSignal.from(runRuxComputerUntilSignalNative(handle))
+    }
+
+    fun ruxComputerControl(handle: Long): NativeRuxComputerControl {
+        require(handle != 0L) { "Native Rux computer handle is zero" }
+        return NativeRuxComputerControl.from(ruxComputerControlNative(handle))
+    }
+
+    fun ruxComputerDebugOutput(handle: Long): ByteArray {
+        require(handle != 0L) { "Native Rux computer handle is zero" }
+        return ruxComputerDebugOutputNative(handle)
+    }
+
+    fun freeRuxComputer(handle: Long) {
+        if (handle != 0L) {
+            freeRuxComputerNative(handle)
         }
     }
 
@@ -554,6 +607,25 @@ object NativeVmBindings : NativeVmBindingsFacade {
 
     @JvmStatic
     private external fun freeLowImageNative(handle: Long)
+
+    @JvmStatic
+    private external fun createRuxComputerNative(
+        image: ByteArray,
+        memorySize: Int,
+        sliceBudgetNanos: Long,
+    ): Long
+
+    @JvmStatic
+    private external fun runRuxComputerUntilSignalNative(handle: Long): LongArray
+
+    @JvmStatic
+    private external fun ruxComputerControlNative(handle: Long): LongArray
+
+    @JvmStatic
+    private external fun ruxComputerDebugOutputNative(handle: Long): ByteArray
+
+    @JvmStatic
+    private external fun freeRuxComputerNative(handle: Long)
 
     @JvmStatic
     private external fun createDeviceDaemonNative(
