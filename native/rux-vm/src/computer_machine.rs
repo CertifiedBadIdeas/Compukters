@@ -3,6 +3,8 @@ use crate::low_bus::{MachineBus, MmioDevice, MmioDeviceId};
 use crate::low_image::Image;
 use crate::low_image_runner::{LowCpuContext, LowImageSignal, LowImageVm};
 use crate::low_machine::{MachineMemory, MemoryFault};
+use std::cell::RefCell;
+use std::collections::VecDeque;
 
 pub type CpuId = usize;
 
@@ -10,6 +12,7 @@ pub struct ComputerMachine {
     bus: MachineBus,
     control_device_id: MmioDeviceId,
     debug_device_id: MmioDeviceId,
+    serial_input_device_id: MmioDeviceId,
     cpus: Vec<LowCpuContext>,
     boot_cpu: Option<CpuId>,
 }
@@ -47,6 +50,10 @@ impl ComputerMachine {
     pub const DEBUG_BASE: u32 = computer_abi::DEBUG_BASE;
     pub const DEBUG_WRITE: u32 = computer_abi::DEBUG_WRITE;
     pub const DEBUG_SIZE: u32 = computer_abi::DEBUG_SIZE;
+    pub const SERIAL_INPUT_BASE: u32 = computer_abi::SERIAL_INPUT_BASE;
+    pub const SERIAL_INPUT_READY: u32 = computer_abi::SERIAL_INPUT_READY;
+    pub const SERIAL_INPUT_READ: u32 = computer_abi::SERIAL_INPUT_READ;
+    pub const SERIAL_INPUT_SIZE: u32 = computer_abi::SERIAL_INPUT_SIZE;
     pub const STATUS_RESET: i32 = computer_abi::STATUS_RESET;
     pub const STATUS_BOOTING: i32 = computer_abi::STATUS_BOOTING;
     pub const STATUS_READY: i32 = computer_abi::STATUS_READY;
@@ -58,10 +65,13 @@ impl ComputerMachine {
         let control_device_id =
             bus.map_mmio(Self::CONTROL_BASE, Box::new(ComputerControlDevice::new()))?;
         let debug_device_id = bus.map_mmio(Self::DEBUG_BASE, Box::new(DebugSerialDevice::new()))?;
+        let serial_input_device_id =
+            bus.map_mmio(Self::SERIAL_INPUT_BASE, Box::new(SerialInputDevice::new()))?;
         Ok(Self {
             bus,
             control_device_id,
             debug_device_id,
+            serial_input_device_id,
             cpus: Vec::new(),
             boot_cpu: None,
         })
@@ -96,6 +106,13 @@ impl ComputerMachine {
                     name: "debug",
                     base: Self::DEBUG_BASE,
                     size: DebugSerialDevice::SIZE,
+                    readable: true,
+                    writable: true,
+                },
+                ComputerMemoryRegion {
+                    name: "serial-input",
+                    base: Self::SERIAL_INPUT_BASE,
+                    size: SerialInputDevice::SIZE,
                     readable: true,
                     writable: true,
                 },
@@ -199,6 +216,18 @@ impl ComputerMachine {
         String::from_utf8_lossy(self.debug_output_bytes()).into_owned()
     }
 
+    pub fn drain_debug_output_bytes(&mut self) -> Vec<u8> {
+        self.debug_device_mut().drain()
+    }
+
+    pub fn push_serial_input(&mut self, bytes: &[u8]) {
+        self.serial_input_device_mut().push_bytes(bytes);
+    }
+
+    pub fn serial_input_len(&self) -> usize {
+        self.serial_input_device().len()
+    }
+
     fn control_device(&self) -> &ComputerControlDevice {
         self.bus
             .device::<ComputerControlDevice>(self.control_device_id)
@@ -209,6 +238,24 @@ impl ComputerMachine {
         self.bus
             .device::<DebugSerialDevice>(self.debug_device_id)
             .expect("computer debug serial device must be mapped")
+    }
+
+    fn debug_device_mut(&mut self) -> &mut DebugSerialDevice {
+        self.bus
+            .device_mut::<DebugSerialDevice>(self.debug_device_id)
+            .expect("computer debug serial device must be mapped")
+    }
+
+    fn serial_input_device(&self) -> &SerialInputDevice {
+        self.bus
+            .device::<SerialInputDevice>(self.serial_input_device_id)
+            .expect("computer serial input device must be mapped")
+    }
+
+    fn serial_input_device_mut(&mut self) -> &mut SerialInputDevice {
+        self.bus
+            .device_mut::<SerialInputDevice>(self.serial_input_device_id)
+            .expect("computer serial input device must be mapped")
     }
 
     fn control_device_mut(&mut self) -> &mut ComputerControlDevice {
@@ -307,6 +354,10 @@ impl DebugSerialDevice {
     fn bytes(&self) -> &[u8] {
         &self.bytes
     }
+
+    fn drain(&mut self) -> Vec<u8> {
+        std::mem::take(&mut self.bytes)
+    }
 }
 
 impl MmioDevice for DebugSerialDevice {
@@ -335,9 +386,77 @@ impl MmioDevice for DebugSerialDevice {
     }
 }
 
+struct SerialInputDevice {
+    bytes: RefCell<VecDeque<u8>>,
+}
+
+impl SerialInputDevice {
+    const SIZE: u32 = computer_abi::SERIAL_INPUT_SIZE;
+
+    fn new() -> Self {
+        Self {
+            bytes: RefCell::new(VecDeque::new()),
+        }
+    }
+
+    fn push_bytes(&mut self, bytes: &[u8]) {
+        self.bytes.borrow_mut().extend(bytes.iter().copied());
+    }
+
+    fn len(&self) -> usize {
+        self.bytes.borrow().len()
+    }
+}
+
+impl MmioDevice for SerialInputDevice {
+    fn size(&self) -> u32 {
+        Self::SIZE
+    }
+
+    fn load_i32(&self, offset: u32) -> Result<i32, MemoryFault> {
+        match offset {
+            0 => Ok(if self.bytes.borrow().is_empty() { 0 } else { 1 }),
+            4 => Ok(self.bytes.borrow_mut().pop_front().unwrap_or(0).into()),
+            _ => Err(MemoryFault::new(format!(
+                "computer serial input offset {offset} is not mapped",
+            ))),
+        }
+    }
+
+    fn store_i32(&mut self, offset: u32, value: i32) -> Result<(), MemoryFault> {
+        if offset == 4 {
+            self.bytes.borrow_mut().push_back(value.to_le_bytes()[0]);
+            return Ok(());
+        }
+        Err(MemoryFault::new(format!(
+            "computer serial input offset {offset} is read-only",
+        )))
+    }
+
+    fn load_u8(&self, offset: u32) -> Result<u8, MemoryFault> {
+        match offset {
+            0 => Ok(if self.bytes.borrow().is_empty() { 0 } else { 1 }),
+            4 => Ok(self.bytes.borrow_mut().pop_front().unwrap_or(0)),
+            _ => Err(MemoryFault::new(format!(
+                "computer serial input offset {offset} is not mapped",
+            ))),
+        }
+    }
+
+    fn store_u8(&mut self, offset: u32, value: u8) -> Result<(), MemoryFault> {
+        if offset == 4 {
+            self.bytes.borrow_mut().push_back(value);
+            return Ok(());
+        }
+        Err(MemoryFault::new(format!(
+            "computer serial input offset {offset} is read-only",
+        )))
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{ComputerControlDevice, DebugSerialDevice};
+    use super::{ComputerControlDevice, DebugSerialDevice, SerialInputDevice};
     use crate::computer_abi;
     use crate::computer_machine::ComputerMachine;
     use crate::low_bus::MmioDevice;
@@ -524,6 +643,67 @@ mod tests {
     }
 
     #[test]
+    fn computer_serial_input_device_reports_ready_and_consumes_bytes() {
+        let mut machine = ComputerMachine::new(1024).unwrap();
+        machine.push_serial_input(b"OK");
+
+        assert_eq!(machine.serial_input_len(), 2);
+        assert_eq!(
+            machine
+                .bus
+                .load_i32(ComputerMachine::SERIAL_INPUT_READY)
+                .unwrap(),
+            1
+        );
+        assert_eq!(
+            machine
+                .bus
+                .load_u8(ComputerMachine::SERIAL_INPUT_READ)
+                .unwrap(),
+            b'O'
+        );
+        assert_eq!(machine.serial_input_len(), 1);
+        assert_eq!(
+            machine
+                .bus
+                .load_u8(ComputerMachine::SERIAL_INPUT_READ)
+                .unwrap(),
+            b'K'
+        );
+        assert_eq!(
+            machine
+                .bus
+                .load_i32(ComputerMachine::SERIAL_INPUT_READY)
+                .unwrap(),
+            0
+        );
+        assert_eq!(
+            machine
+                .bus
+                .load_u8(ComputerMachine::SERIAL_INPUT_READ)
+                .unwrap(),
+            0
+        );
+    }
+
+    #[test]
+    fn computer_debug_serial_output_can_be_drained_incrementally() {
+        let mut machine = ComputerMachine::new(1024).unwrap();
+
+        machine
+            .bus
+            .store_u8(ComputerMachine::DEBUG_WRITE, b'O')
+            .unwrap();
+        machine
+            .bus
+            .store_u8(ComputerMachine::DEBUG_WRITE, b'K')
+            .unwrap();
+
+        assert_eq!(machine.drain_debug_output_bytes(), b"OK");
+        assert_eq!(machine.drain_debug_output_bytes(), b"");
+    }
+
+    #[test]
     fn computer_kernel_can_write_machine_control_status() {
         let mut machine = ComputerMachine::new(1024).unwrap();
         let kernel = image(
@@ -604,6 +784,22 @@ mod tests {
         assert_eq!(ComputerMachine::DEBUG_BASE, computer_abi::DEBUG_BASE);
         assert_eq!(ComputerMachine::DEBUG_WRITE, computer_abi::DEBUG_WRITE);
         assert_eq!(ComputerMachine::DEBUG_SIZE, computer_abi::DEBUG_SIZE);
+        assert_eq!(
+            ComputerMachine::SERIAL_INPUT_BASE,
+            computer_abi::SERIAL_INPUT_BASE,
+        );
+        assert_eq!(
+            ComputerMachine::SERIAL_INPUT_READY,
+            computer_abi::SERIAL_INPUT_READY,
+        );
+        assert_eq!(
+            ComputerMachine::SERIAL_INPUT_READ,
+            computer_abi::SERIAL_INPUT_READ,
+        );
+        assert_eq!(
+            ComputerMachine::SERIAL_INPUT_SIZE,
+            computer_abi::SERIAL_INPUT_SIZE,
+        );
         assert_eq!(ComputerMachine::STATUS_RESET, computer_abi::STATUS_RESET);
         assert_eq!(
             ComputerMachine::STATUS_BOOTING,
@@ -618,9 +814,11 @@ mod tests {
     fn computer_mmio_device_sizes_match_bare_metal_abi_v0() {
         let control = ComputerControlDevice::new();
         let debug = DebugSerialDevice::new();
+        let serial_input = SerialInputDevice::new();
 
         assert_eq!(control.size(), computer_abi::CONTROL_SIZE);
         assert_eq!(debug.size(), computer_abi::DEBUG_SIZE);
+        assert_eq!(serial_input.size(), computer_abi::SERIAL_INPUT_SIZE);
     }
 
     #[test]
@@ -1311,6 +1509,18 @@ mod tests {
         assert_eq!(debug.size, computer_abi::DEBUG_SIZE);
         assert!(debug.readable);
         assert!(debug.writable);
+    }
+
+    #[test]
+    fn computer_memory_map_describes_serial_input_mmio_region() {
+        let machine = ComputerMachine::new(1024).unwrap();
+        let map = machine.memory_map();
+        let serial_input = map.region("serial-input").unwrap();
+
+        assert_eq!(serial_input.base, computer_abi::SERIAL_INPUT_BASE);
+        assert_eq!(serial_input.size, computer_abi::SERIAL_INPUT_SIZE);
+        assert!(serial_input.readable);
+        assert!(serial_input.writable);
     }
 
     fn image(instructions: Vec<Instruction>, register_count: u16) -> Image {

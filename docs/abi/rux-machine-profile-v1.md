@@ -45,11 +45,20 @@ This lets the Rust daemon model a computer as one machine with shared memory whi
 
 ## MMIO
 
-No stable MMIO range is frozen in machine profile v1 yet.
+Machine profile v1 is still a pre-freeze candidate and currently defines a minimal computer MMIO map for boot firmware experiments.
 
-Until this document assigns concrete address ranges, all addresses are interpreted as RAM by the baseline memory implementation. Device-backed memory buses may exist experimentally, but external compilers should not rely on them for v1 compatibility.
+All multi-byte MMIO registers are little-endian. Byte stores to `DEBUG_WRITE` write only the low byte. Reads from `SERIAL_INPUT_READ` consume one queued byte; reading it while the queue is empty returns `0`.
 
-When MMIO is stabilized, it should be added to a new machine profile version unless the current profile is still pre-freeze.
+| Name | Address | Size | Access | Semantics |
+| --- | ---: | ---: | --- | --- |
+| `CONTROL_STATUS` | `0x1000_0000` | 4 | read/write | Machine status register. |
+| `CONTROL_PANIC_CODE` | `0x1000_0004` | 4 | read/write | Firmware or host panic code. |
+| `CONTROL_EXIT_CODE` | `0x1000_0008` | 4 | read/write | Firmware exit code. |
+| `DEBUG_WRITE` | `0x1000_0100` | 4 | write-focused | Appends the low byte to host-visible debug serial output. |
+| `SERIAL_INPUT_READY` | `0x1000_0200` | 4 | read-only | Returns `1` when a host input byte is queued, otherwise `0`. |
+| `SERIAL_INPUT_READ` | `0x1000_0204` | 4 | read/host-write | Reads consume one host input byte. Host writes may enqueue bytes. |
+
+The control region size is 12 bytes. The debug serial region size is 4 bytes. The serial input region size is 8 bytes.
 
 ## Halt Signals
 
