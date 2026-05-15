@@ -778,4 +778,62 @@ class NativeImageVmBindingsJniTest {
             NativeVmBindings.freeRuxComputer(handle)
         }
     }
+
+    @Test
+    fun ruxComputerSerialInputEchoesThroughDrainWhenLibraryIsConfigured() {
+        val libraryPath = System.getProperty("rux.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val image = ruxSerialEchoPollingImage()
+        val handle =
+            NativeVmBindings.createRuxComputer(
+                libraryPath = libraryPath,
+                image = RuxLowVmImageAbi.encode(image),
+                memorySize = 64 * 1024,
+                sliceBudgetNanos = 1_000,
+            )
+
+        try {
+            NativeVmBindings.runRuxComputerUntilSignal(handle)
+            assertEquals("", NativeVmBindings.drainRuxComputerDebugOutput(handle).decodeToString())
+
+            NativeVmBindings.pushRuxComputerSerialInput(handle, "Rux!".encodeToByteArray())
+
+            val output = StringBuilder()
+            repeat(16) {
+                NativeVmBindings.runRuxComputerUntilSignal(handle)
+                output.append(NativeVmBindings.drainRuxComputerDebugOutput(handle).decodeToString())
+                if (output.toString() == "Rux!") {
+                    return@repeat
+                }
+            }
+
+            assertEquals("Rux!", output.toString())
+        } finally {
+            NativeVmBindings.freeRuxComputer(handle)
+        }
+    }
+
+    private fun ruxSerialEchoPollingImage(): RuxLowVmImage =
+        RuxLowVmImage(
+            memorySize = 64u * 1024u,
+            entryFunctionIndex = 0,
+            functions =
+                listOf(
+                    RuxLowVmFunction(
+                        name = "main",
+                        registerCount = 5,
+                        parameters = emptyList(),
+                        instructions =
+                            listOf(
+                                RuxLowVmInstruction.AddrConst(dst = 0, value = 0x1000_0200u),
+                                RuxLowVmInstruction.AddrConst(dst = 1, value = 0x1000_0204u),
+                                RuxLowVmInstruction.AddrConst(dst = 2, value = 0x1000_0100u),
+                                RuxLowVmInstruction.Load32(dst = 3, addr = 0),
+                                RuxLowVmInstruction.JumpIfFalse(cond = 3, target = 3),
+                                RuxLowVmInstruction.Load32(dst = 4, addr = 1),
+                                RuxLowVmInstruction.Store32(addr = 2, src = 4),
+                                RuxLowVmInstruction.Jump(target = 3),
+                            ),
+                    ),
+                ),
+        )
 }

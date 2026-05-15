@@ -24,6 +24,22 @@ class RuxFirmwareResourceTest {
     }
 
     @Test
+    fun bundledRuxEchoLiveFirmwareResourceExists() {
+        val bytes =
+            assertNotNull(
+                javaClass.classLoader.getResourceAsStream("firmware/rux-echo-live.ruxi"),
+                "firmware/rux-echo-live.ruxi must be bundled",
+            ).use { it.readBytes() }
+
+        assertTrue(bytes.size > 8, "Rux echo firmware image should not be empty")
+        assertTrue(
+            bytes.copyOfRange(0, 4).contentEquals(
+                byteArrayOf('R'.code.toByte(), 'U'.code.toByte(), 'X'.code.toByte(), 'I'.code.toByte()),
+            ),
+        )
+    }
+
+    @Test
     fun bundledRuxTerminalFirmwareBootsOnNativeComputerWhenLibraryIsConfigured() {
         val libraryPath = System.getProperty("rux.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val bytes =
@@ -45,6 +61,42 @@ class RuxFirmwareResourceTest {
             val output = NativeVmBindings.ruxComputerDebugOutput(handle).decodeToString()
             assertTrue(output.contains("RUX"), output)
             assertEquals(3, NativeVmBindings.ruxComputerControl(handle).status)
+        } finally {
+            NativeVmBindings.freeRuxComputer(handle)
+        }
+    }
+
+    @Test
+    fun bundledRuxEchoLiveFirmwareEchoesSerialInputWhenLibraryIsConfigured() {
+        val libraryPath = System.getProperty("rux.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val bytes =
+            assertNotNull(
+                javaClass.classLoader.getResourceAsStream("firmware/rux-echo-live.ruxi"),
+                "firmware/rux-echo-live.ruxi must be bundled",
+            ).use { it.readBytes() }
+
+        val handle =
+            NativeVmBindings.createRuxComputer(
+                libraryPath = libraryPath,
+                image = bytes,
+                memorySize = 64 * 1024,
+                sliceBudgetNanos = 1_000,
+            )
+
+        try {
+            NativeVmBindings.runRuxComputerUntilSignal(handle)
+            NativeVmBindings.pushRuxComputerSerialInput(handle, "Rux!".encodeToByteArray())
+
+            val output = StringBuilder()
+            repeat(16) {
+                NativeVmBindings.runRuxComputerUntilSignal(handle)
+                output.append(NativeVmBindings.drainRuxComputerDebugOutput(handle).decodeToString())
+                if (output.toString() == "Rux!") {
+                    return@repeat
+                }
+            }
+
+            assertEquals("Rux!", output.toString())
         } finally {
             NativeVmBindings.freeRuxComputer(handle)
         }

@@ -41,4 +41,12 @@ impl RuxComputerHandle {
     pub fn debug_output_bytes(&self) -> &[u8] {
         self.machine.debug_output_bytes()
     }
+
+    pub fn drain_debug_output_bytes(&mut self) -> Vec<u8> {
+        self.machine.drain_debug_output_bytes()
+    }
+
+    pub fn push_serial_input(&mut self, bytes: &[u8]) {
+        self.machine.push_serial_input(bytes);
+    }
 }

@@ -322,6 +322,19 @@ object NativeVmBindings : NativeVmBindingsFacade {
         return ruxComputerDebugOutputNative(handle)
     }
 
+    fun drainRuxComputerDebugOutput(handle: Long): ByteArray {
+        require(handle != 0L) { "Native Rux computer handle is zero" }
+        return drainRuxComputerDebugOutputNative(handle)
+    }
+
+    fun pushRuxComputerSerialInput(
+        handle: Long,
+        bytes: ByteArray,
+    ) {
+        require(handle != 0L) { "Native Rux computer handle is zero" }
+        pushRuxComputerSerialInputNative(handle, bytes)
+    }
+
     fun freeRuxComputer(handle: Long) {
         if (handle != 0L) {
             freeRuxComputerNative(handle)
@@ -623,6 +636,15 @@ object NativeVmBindings : NativeVmBindingsFacade {
 
     @JvmStatic
     private external fun ruxComputerDebugOutputNative(handle: Long): ByteArray
+
+    @JvmStatic
+    private external fun drainRuxComputerDebugOutputNative(handle: Long): ByteArray
+
+    @JvmStatic
+    private external fun pushRuxComputerSerialInputNative(
+        handle: Long,
+        bytes: ByteArray,
+    )
 
     @JvmStatic
     private external fun freeRuxComputerNative(handle: Long)
