@@ -1,4 +1,6 @@
-use rux_vm::low_image::{decode_image, ImageError, Instruction};
+use rux_vm::low_image::{
+    decode_image, encode_image, Function, Image, ImageEncodeError, ImageError, Instruction,
+};
 
 #[test]
 fn decodes_low_level_image_with_linear_memory_layout() {
@@ -20,6 +22,50 @@ fn decodes_low_level_image_with_linear_memory_layout() {
             Instruction::Load32 { dst: 1, addr: 2 },
             Instruction::ReturnI32 { src: 1 },
         ],
+    );
+}
+
+#[test]
+fn encodes_low_level_image_with_linear_memory_layout() {
+    let bytes = representative_image_bytes();
+    let image = decode_image(&bytes).expect("low image decodes");
+
+    assert_eq!(encode_image(&image).expect("low image encodes"), bytes);
+}
+
+#[test]
+fn roundtrips_all_instruction_variants() {
+    let image = all_instruction_variants_image();
+    let encoded = encode_image(&image).expect("low image encodes");
+
+    assert_eq!(
+        decode_image(&encoded).expect("encoded image decodes"),
+        image
+    );
+}
+
+#[test]
+fn rejects_entry_function_index_that_does_not_fit_the_abi() {
+    let image = Image {
+        memory_size: 1024,
+        rodata: Vec::new(),
+        data: Vec::new(),
+        bss_size: 0,
+        entry_function_index: i32::MAX as usize + 1,
+        functions: vec![Function {
+            name: "main".to_string(),
+            register_count: 0,
+            parameters: Vec::new(),
+            instructions: vec![Instruction::ReturnUnit],
+        }],
+    };
+
+    assert_eq!(
+        encode_image(&image),
+        Err(ImageEncodeError::IndexTooLarge {
+            name: "entry function",
+            value: i32::MAX as usize + 1,
+        }),
     );
 }
 
@@ -152,6 +198,150 @@ fn division_remainder_image_bytes() -> Vec<u8> {
     out.push(20);
     u16(&mut out, 4);
     out
+}
+
+fn all_instruction_variants_image() -> Image {
+    Image {
+        memory_size: 1024,
+        rodata: vec![0xaa, 0xbb],
+        data: vec![0xcc],
+        bss_size: 4,
+        entry_function_index: 0,
+        functions: vec![
+            Function {
+                name: "main".to_string(),
+                register_count: 8,
+                parameters: vec![0, 1],
+                instructions: vec![
+                    Instruction::I32Const { dst: 0, value: -7 },
+                    Instruction::I64Const {
+                        dst: 1,
+                        value: 0x1122_3344_5566_7788,
+                    },
+                    Instruction::AddrConst { dst: 2, value: 128 },
+                    Instruction::I32Move { dst: 3, src: 0 },
+                    Instruction::AddrMove { dst: 4, src: 2 },
+                    Instruction::I32Add {
+                        dst: 5,
+                        lhs: 0,
+                        rhs: 3,
+                    },
+                    Instruction::I32Sub {
+                        dst: 5,
+                        lhs: 5,
+                        rhs: 3,
+                    },
+                    Instruction::I32Mul {
+                        dst: 5,
+                        lhs: 5,
+                        rhs: 3,
+                    },
+                    Instruction::I32Div {
+                        dst: 5,
+                        lhs: 5,
+                        rhs: 3,
+                    },
+                    Instruction::I32BitXor {
+                        dst: 5,
+                        lhs: 5,
+                        rhs: 3,
+                    },
+                    Instruction::I32Shl {
+                        dst: 5,
+                        lhs: 5,
+                        rhs: 3,
+                    },
+                    Instruction::I32Shr {
+                        dst: 5,
+                        lhs: 5,
+                        rhs: 3,
+                    },
+                    Instruction::I32Lt {
+                        dst: 6,
+                        lhs: 0,
+                        rhs: 3,
+                    },
+                    Instruction::Load32 { dst: 5, addr: 2 },
+                    Instruction::Store32 { addr: 2, src: 5 },
+                    Instruction::AddrAdd {
+                        dst: 4,
+                        base: 2,
+                        offset: 3,
+                    },
+                    Instruction::Jump { target: 0 },
+                    Instruction::JumpIfFalse { cond: 6, target: 0 },
+                    Instruction::CallStatic {
+                        return_register: Some(5),
+                        function_index: 1,
+                        arguments: vec![0],
+                    },
+                    Instruction::CallStatic {
+                        return_register: None,
+                        function_index: 1,
+                        arguments: vec![0],
+                    },
+                    Instruction::ReturnI32 { src: 5 },
+                    Instruction::ReturnUnit,
+                    Instruction::ReturnI64 { src: 1 },
+                    Instruction::ReturnAddr { src: 2 },
+                    Instruction::ReturnBool { src: 6 },
+                    Instruction::I32Eq {
+                        dst: 6,
+                        lhs: 0,
+                        rhs: 3,
+                    },
+                    Instruction::I32BitAnd {
+                        dst: 5,
+                        lhs: 5,
+                        rhs: 3,
+                    },
+                    Instruction::I32BitOr {
+                        dst: 5,
+                        lhs: 5,
+                        rhs: 3,
+                    },
+                    Instruction::U32Lt {
+                        dst: 6,
+                        lhs: 0,
+                        rhs: 3,
+                    },
+                    Instruction::U32Shl {
+                        dst: 5,
+                        lhs: 5,
+                        rhs: 3,
+                    },
+                    Instruction::U32Shr {
+                        dst: 5,
+                        lhs: 5,
+                        rhs: 3,
+                    },
+                    Instruction::Load8 { dst: 5, addr: 2 },
+                    Instruction::Store8 { addr: 2, src: 5 },
+                    Instruction::I32Rem {
+                        dst: 5,
+                        lhs: 5,
+                        rhs: 3,
+                    },
+                    Instruction::U32Div {
+                        dst: 5,
+                        lhs: 5,
+                        rhs: 3,
+                    },
+                    Instruction::U32Rem {
+                        dst: 5,
+                        lhs: 5,
+                        rhs: 3,
+                    },
+                ],
+            },
+            Function {
+                name: "callee".to_string(),
+                register_count: 1,
+                parameters: vec![0],
+                instructions: vec![Instruction::ReturnUnit],
+            },
+        ],
+    }
 }
 
 fn i32_equality_image_bytes() -> Vec<u8> {
