@@ -2480,6 +2480,58 @@ fn compiled_seed_stack_u8_buffer_len_is_compile_time_u32() {
 }
 
 #[test]
+fn compiled_seed_stack_u8_buffer_initializes_from_byte_string() {
+    let image = compile(
+        "fn main() -> i32 {
+            let mut msg: [u8; 3] = b\"RUX\";
+            return (msg[0u32] as i32)
+                + ((msg[1u32] as i32) << 8)
+                + ((msg[2u32] as i32) << 16);
+        }",
+    )
+    .unwrap();
+    let mut machine = ComputerMachine::new(64 * 1024).unwrap();
+    let cpu_id = machine.spawn_boot_cpu(image, 1_000_000).unwrap();
+
+    assert_eq!(
+        machine.run_boot_cpu_until_signal(cpu_id).unwrap(),
+        LowImageSignal::HaltI32(0x585552)
+    );
+}
+
+#[test]
+fn compile_rejects_stack_u8_buffer_byte_string_length_mismatch() {
+    let error = compile("fn main() { let mut msg: [u8; 4] = b\"RUX\"; }").unwrap_err();
+
+    assert!(
+        error
+            .message
+            .contains("byte string length 3 does not match array length 4"),
+        "{error:?}"
+    );
+}
+
+#[test]
+fn compile_rejects_literal_index_out_of_stack_u8_buffer_bounds() {
+    let write_error = compile("fn main() { let mut buf: [u8; 2]; buf[2u32] = 1u8; }").unwrap_err();
+    let read_error =
+        compile("fn main() -> i32 { let mut buf: [u8; 2]; return buf[2u32] as i32; }").unwrap_err();
+
+    assert!(
+        write_error
+            .message
+            .contains("array index 2 is out of bounds for `[u8; 2]`"),
+        "{write_error:?}"
+    );
+    assert!(
+        read_error
+            .message
+            .contains("array index 2 is out of bounds for `[u8; 2]`"),
+        "{read_error:?}"
+    );
+}
+
+#[test]
 fn compile_lowers_mut_reference_local_to_stack_load_store() {
     let image = compile(
         "fn main() -> i32 {
