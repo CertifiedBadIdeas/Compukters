@@ -24,6 +24,32 @@ The numeric image format version is the compatibility key. A decoder must reject
 
 There is no `language_version` string in the low image. Source languages and producers are build-tool concerns, not VM ABI concerns.
 
+## Primitive Encoding
+
+All numeric fields are little-endian.
+
+```text
+u8:       1 byte
+u16:      2 bytes, little-endian
+u32:      4 bytes, little-endian
+i32:      4 bytes, little-endian two's-complement
+i64:      8 bytes, little-endian two's-complement
+index:    i32, must be non-negative
+length:   i32, must be non-negative
+string:   length + UTF-8 bytes, no trailing zero
+bytes:    length + raw bytes
+list<T>:  length + T repeated length times
+```
+
+An encoder must fail rather than truncate when a serialized `length` or `index` does not fit into a non-negative `i32`.
+
+Optional registers use an explicit tag:
+
+```text
+None:       tag u8 = 0
+Some(reg):  tag u8 = 1, then reg u16
+```
+
 ## Top-Level Layout
 
 After the header, fields are encoded in this order:
@@ -76,6 +102,52 @@ Jump targets are instruction indices within the current function. Functions must
 
 Static calls transfer argument register values into the callee parameter registers by position. A non-unit return writes the return value into the caller return register.
 
+`CallStatic` encodes arguments as a `register_id_list`, so the call ABI is positional and does not include names or source-language type metadata.
+
+## Instruction Tags
+
+Instruction tags are stable within `RUXI` version `1`. Tags must not be reused with different operands.
+
+The same table is available in machine-readable form at `docs/superpowers/specs/2026-05-15-rux-low-abi-v1-opcodes.json`.
+
+| Tag | Instruction | Operands |
+| --- | --- | --- |
+| 1 | `I32Const` | `dst: u16, value: i32` |
+| 2 | `I64Const` | `dst: u16, value: i64` |
+| 3 | `AddrConst` | `dst: u16, value: u32` |
+| 4 | `I32Move` | `dst: u16, src: u16` |
+| 5 | `AddrMove` | `dst: u16, src: u16` |
+| 6 | `I32Add` | `dst: u16, lhs: u16, rhs: u16` |
+| 7 | `I32Sub` | `dst: u16, lhs: u16, rhs: u16` |
+| 8 | `I32Mul` | `dst: u16, lhs: u16, rhs: u16` |
+| 9 | `I32Div` | `dst: u16, lhs: u16, rhs: u16` |
+| 10 | `I32BitXor` | `dst: u16, lhs: u16, rhs: u16` |
+| 11 | `I32Shl` | `dst: u16, lhs: u16, rhs: u16` |
+| 12 | `I32Shr` | `dst: u16, lhs: u16, rhs: u16` |
+| 13 | `I32Lt` | `dst: u16, lhs: u16, rhs: u16` |
+| 14 | `Load32` | `dst: u16, addr: u16` |
+| 15 | `Store32` | `addr: u16, src: u16` |
+| 16 | `AddrAdd` | `dst: u16, base: u16, offset: u16` |
+| 17 | `Jump` | `target: index` |
+| 18 | `JumpIfFalse` | `cond: u16, target: index` |
+| 19 | `CallStatic` | `return_register: optional_register, function_index: index, arguments: register_id_list` |
+| 20 | `ReturnI32` | `src: u16` |
+| 21 | `ReturnUnit` | none |
+| 22 | `ReturnI64` | `src: u16` |
+| 23 | `ReturnAddr` | `src: u16` |
+| 24 | `ReturnBool` | `src: u16` |
+| 25 | `I32Eq` | `dst: u16, lhs: u16, rhs: u16` |
+| 26 | `I32BitAnd` | `dst: u16, lhs: u16, rhs: u16` |
+| 27 | `I32BitOr` | `dst: u16, lhs: u16, rhs: u16` |
+| 28 | `U32Lt` | `dst: u16, lhs: u16, rhs: u16` |
+| 29 | `U32Shl` | `dst: u16, lhs: u16, rhs: u16` |
+| 30 | `U32Shr` | `dst: u16, lhs: u16, rhs: u16` |
+| 31 | `Load8` | `dst: u16, addr: u16` |
+| 32 | `Store8` | `addr: u16, src: u16` |
+| 33 | `I32Rem` | `dst: u16, lhs: u16, rhs: u16` |
+| 34 | `U32Div` | `dst: u16, lhs: u16, rhs: u16` |
+| 35 | `U32Rem` | `dst: u16, lhs: u16, rhs: u16` |
+
 ## Validation
 
 The VM validates images before execution:
@@ -89,6 +161,29 @@ The VM validates images before execution:
 - memory initialization sections fit in `memory_size`.
 
 Invalid images fail at load/create time instead of producing partial execution.
+
+## Execution Errors
+
+The ABI separates image validation errors from runtime execution errors. A valid image can still trap while running if it executes an operation that cannot complete.
+
+Runtime errors include:
+
+- division or remainder by zero;
+- memory load/store outside machine RAM or mapped devices;
+- falling through past the final instruction if validation did not reject the image first;
+- stack/frame overflow caused by calls exceeding the runtime call-depth limit.
+
+These are VM errors, not undefined behavior. The VM must report an error signal/state instead of corrupting host memory.
+
+## Reference Encoder
+
+The Rust VM crate exposes a reference encoder:
+
+```rust
+encode_image(image: &Image) -> Result<Vec<u8>, ImageEncodeError>
+```
+
+External compiler frontends should treat the reference encoder, decode tests, and golden fixtures as executable ABI examples. The encoder is intentionally strict: oversized lengths and indices are errors instead of lossy casts.
 
 ## Stability Policy
 

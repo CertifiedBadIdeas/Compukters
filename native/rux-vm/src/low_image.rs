@@ -23,6 +23,14 @@ pub enum ImageError {
     UnknownInstructionTag(u8),
 }
 
+#[derive(Debug, Error, PartialEq, Eq)]
+pub enum ImageEncodeError {
+    #[error("{name} length {value} exceeds i32::MAX")]
+    LengthTooLarge { name: &'static str, value: usize },
+    #[error("{name} index {value} exceeds i32::MAX")]
+    IndexTooLarge { name: &'static str, value: usize },
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Image {
     pub memory_size: u32,
@@ -215,6 +223,19 @@ pub fn decode_image(bytes: &[u8]) -> Result<Image, ImageError> {
     })
 }
 
+pub fn encode_image(image: &Image) -> Result<Vec<u8>, ImageEncodeError> {
+    let mut writer = Writer { bytes: Vec::new() };
+    writer.raw(IMAGE_MAGIC);
+    writer.u8(IMAGE_FORMAT_VERSION);
+    writer.u32(image.memory_size);
+    writer.byte_list("rodata", &image.rodata)?;
+    writer.byte_list("data", &image.data)?;
+    writer.u32(image.bss_size);
+    writer.index("entry function", image.entry_function_index)?;
+    writer.functions(&image.functions)?;
+    Ok(writer.bytes)
+}
+
 fn read_function(reader: &mut Reader<'_>) -> Result<Function, ImageError> {
     Ok(Function {
         name: reader.string()?,
@@ -222,6 +243,188 @@ fn read_function(reader: &mut Reader<'_>) -> Result<Function, ImageError> {
         parameters: reader.register_list()?,
         instructions: reader.list(read_instruction)?,
     })
+}
+
+struct Writer {
+    bytes: Vec<u8>,
+}
+
+impl Writer {
+    fn raw(&mut self, bytes: &[u8]) {
+        self.bytes.extend_from_slice(bytes);
+    }
+
+    fn u8(&mut self, value: u8) {
+        self.bytes.push(value);
+    }
+
+    fn u16(&mut self, value: u16) {
+        self.bytes.extend_from_slice(&value.to_le_bytes());
+    }
+
+    fn i32(&mut self, value: i32) {
+        self.bytes.extend_from_slice(&value.to_le_bytes());
+    }
+
+    fn u32(&mut self, value: u32) {
+        self.bytes.extend_from_slice(&value.to_le_bytes());
+    }
+
+    fn i64(&mut self, value: i64) {
+        self.bytes.extend_from_slice(&value.to_le_bytes());
+    }
+
+    fn byte_list(&mut self, name: &'static str, value: &[u8]) -> Result<(), ImageEncodeError> {
+        self.length(name, value.len())?;
+        self.raw(value);
+        Ok(())
+    }
+
+    fn string(&mut self, name: &'static str, value: &str) -> Result<(), ImageEncodeError> {
+        self.byte_list(name, value.as_bytes())
+    }
+
+    fn functions(&mut self, functions: &[Function]) -> Result<(), ImageEncodeError> {
+        self.length("functions", functions.len())?;
+        for function in functions {
+            self.function(function)?;
+        }
+        Ok(())
+    }
+
+    fn function(&mut self, function: &Function) -> Result<(), ImageEncodeError> {
+        self.string("function name", &function.name)?;
+        self.u16(function.register_count);
+        self.register_list("parameters", &function.parameters)?;
+        self.length("instructions", function.instructions.len())?;
+        for instruction in &function.instructions {
+            self.instruction(instruction)?;
+        }
+        Ok(())
+    }
+
+    fn instruction(&mut self, instruction: &Instruction) -> Result<(), ImageEncodeError> {
+        match instruction {
+            Instruction::I32Const { dst, value } => {
+                self.u8(1);
+                self.u16(*dst);
+                self.i32(*value);
+            }
+            Instruction::I64Const { dst, value } => {
+                self.u8(2);
+                self.u16(*dst);
+                self.i64(*value);
+            }
+            Instruction::AddrConst { dst, value } => {
+                self.u8(3);
+                self.u16(*dst);
+                self.u32(*value);
+            }
+            Instruction::I32Move { dst, src } => self.move_instruction(4, *dst, *src),
+            Instruction::AddrMove { dst, src } => self.move_instruction(5, *dst, *src),
+            Instruction::I32Add { dst, lhs, rhs } => self.binary(6, *dst, *lhs, *rhs),
+            Instruction::I32Sub { dst, lhs, rhs } => self.binary(7, *dst, *lhs, *rhs),
+            Instruction::I32Mul { dst, lhs, rhs } => self.binary(8, *dst, *lhs, *rhs),
+            Instruction::I32Div { dst, lhs, rhs } => self.binary(9, *dst, *lhs, *rhs),
+            Instruction::I32BitXor { dst, lhs, rhs } => self.binary(10, *dst, *lhs, *rhs),
+            Instruction::I32Shl { dst, lhs, rhs } => self.binary(11, *dst, *lhs, *rhs),
+            Instruction::I32Shr { dst, lhs, rhs } => self.binary(12, *dst, *lhs, *rhs),
+            Instruction::I32Lt { dst, lhs, rhs } => self.binary(13, *dst, *lhs, *rhs),
+            Instruction::Load32 { dst, addr } => self.move_instruction(14, *dst, *addr),
+            Instruction::Store32 { addr, src } => self.move_instruction(15, *addr, *src),
+            Instruction::AddrAdd { dst, base, offset } => self.binary(16, *dst, *base, *offset),
+            Instruction::Jump { target } => {
+                self.u8(17);
+                self.index("jump target", *target)?;
+            }
+            Instruction::JumpIfFalse { cond, target } => {
+                self.u8(18);
+                self.u16(*cond);
+                self.index("jump target", *target)?;
+            }
+            Instruction::CallStatic {
+                return_register,
+                function_index,
+                arguments,
+            } => {
+                self.u8(19);
+                self.optional_register(*return_register);
+                self.index("function", *function_index)?;
+                self.register_list("arguments", arguments)?;
+            }
+            Instruction::ReturnI32 { src } => self.return_register(20, *src),
+            Instruction::ReturnUnit => self.u8(21),
+            Instruction::ReturnI64 { src } => self.return_register(22, *src),
+            Instruction::ReturnAddr { src } => self.return_register(23, *src),
+            Instruction::ReturnBool { src } => self.return_register(24, *src),
+            Instruction::I32Eq { dst, lhs, rhs } => self.binary(25, *dst, *lhs, *rhs),
+            Instruction::I32BitAnd { dst, lhs, rhs } => self.binary(26, *dst, *lhs, *rhs),
+            Instruction::I32BitOr { dst, lhs, rhs } => self.binary(27, *dst, *lhs, *rhs),
+            Instruction::U32Lt { dst, lhs, rhs } => self.binary(28, *dst, *lhs, *rhs),
+            Instruction::U32Shl { dst, lhs, rhs } => self.binary(29, *dst, *lhs, *rhs),
+            Instruction::U32Shr { dst, lhs, rhs } => self.binary(30, *dst, *lhs, *rhs),
+            Instruction::Load8 { dst, addr } => self.move_instruction(31, *dst, *addr),
+            Instruction::Store8 { addr, src } => self.move_instruction(32, *addr, *src),
+            Instruction::I32Rem { dst, lhs, rhs } => self.binary(33, *dst, *lhs, *rhs),
+            Instruction::U32Div { dst, lhs, rhs } => self.binary(34, *dst, *lhs, *rhs),
+            Instruction::U32Rem { dst, lhs, rhs } => self.binary(35, *dst, *lhs, *rhs),
+        }
+        Ok(())
+    }
+
+    fn move_instruction(&mut self, tag: u8, first: u16, second: u16) {
+        self.u8(tag);
+        self.u16(first);
+        self.u16(second);
+    }
+
+    fn binary(&mut self, tag: u8, dst: u16, lhs: u16, rhs: u16) {
+        self.u8(tag);
+        self.u16(dst);
+        self.u16(lhs);
+        self.u16(rhs);
+    }
+
+    fn return_register(&mut self, tag: u8, src: u16) {
+        self.u8(tag);
+        self.u16(src);
+    }
+
+    fn optional_register(&mut self, value: Option<u16>) {
+        match value {
+            None => self.u8(0),
+            Some(register) => {
+                self.u8(1);
+                self.u16(register);
+            }
+        }
+    }
+
+    fn register_list(
+        &mut self,
+        name: &'static str,
+        registers: &[u16],
+    ) -> Result<(), ImageEncodeError> {
+        self.length(name, registers.len())?;
+        for register in registers {
+            self.u16(*register);
+        }
+        Ok(())
+    }
+
+    fn length(&mut self, name: &'static str, value: usize) -> Result<(), ImageEncodeError> {
+        let value =
+            i32::try_from(value).map_err(|_| ImageEncodeError::LengthTooLarge { name, value })?;
+        self.i32(value);
+        Ok(())
+    }
+
+    fn index(&mut self, name: &'static str, value: usize) -> Result<(), ImageEncodeError> {
+        let value =
+            i32::try_from(value).map_err(|_| ImageEncodeError::IndexTooLarge { name, value })?;
+        self.i32(value);
+        Ok(())
+    }
 }
 
 fn read_instruction(reader: &mut Reader<'_>) -> Result<Instruction, ImageError> {
