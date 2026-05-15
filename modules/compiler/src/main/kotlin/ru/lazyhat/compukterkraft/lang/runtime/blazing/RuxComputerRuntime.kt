@@ -55,11 +55,62 @@ object NativeRuxComputerRuntimeBindings : RuxComputerRuntimeBindings {
         NativeVmBindings.freeRuxComputer(handle)
 }
 
+object RuxComputerRuntimeFactory {
+    const val DEFAULT_FIRMWARE_RESOURCE: String = "firmware/rux-echo-live.ruxi"
+    const val DEFAULT_MEMORY_SIZE: Int = 64 * 1024
+    const val DEFAULT_SLICE_BUDGET_NANOS: Long = 1_000_000
+
+    fun createFromResource(
+        resourcePath: String = DEFAULT_FIRMWARE_RESOURCE,
+        memorySize: Int = DEFAULT_MEMORY_SIZE,
+        sliceBudgetNanos: Long = DEFAULT_SLICE_BUDGET_NANOS,
+    ): RuxComputerRuntime =
+        create(
+            image = loadFirmwareResource(resourcePath),
+            memorySize = memorySize,
+            sliceBudgetNanos = sliceBudgetNanos,
+        )
+
+    fun create(
+        image: ByteArray,
+        memorySize: Int = DEFAULT_MEMORY_SIZE,
+        sliceBudgetNanos: Long = DEFAULT_SLICE_BUDGET_NANOS,
+    ): RuxComputerRuntime {
+        val handle =
+            NativeVmBindings.createRuxComputer(
+                libraryPath = NativeLibraryLocator.requireLibraryPath(),
+                image = image,
+                memorySize = memorySize,
+                sliceBudgetNanos = sliceBudgetNanos,
+            )
+        return RuxComputerRuntime(handle)
+    }
+
+    fun loadFirmwareResource(
+        resourcePath: String,
+        classLoader: ClassLoader = RuxComputerRuntimeFactory::class.java.classLoader,
+    ): ByteArray =
+        classLoader
+            .getResourceAsStream(resourcePath)
+            ?.use { it.readBytes() }
+            ?: error("Rux firmware resource not found: $resourcePath")
+}
+
+interface RuxComputerEndpoint : AutoCloseable {
+    fun pushInput(bytes: ByteArray)
+
+    fun tick(maxTurns: Int = 8): NativeRuxComputerControl
+
+    fun outputSnapshot(): ByteArray
+
+    fun clearOutput()
+}
+
 class RuxComputerRuntime(
     private val handle: Long,
     private val bindings: RuxComputerRuntimeBindings = NativeRuxComputerRuntimeBindings,
     private val defaultMaxTurnsPerTick: Int = 8,
-) : AutoCloseable {
+) : RuxComputerEndpoint {
     private val terminalOutput = ByteArrayOutputStream()
     private var closed = false
 
@@ -68,7 +119,7 @@ class RuxComputerRuntime(
         require(defaultMaxTurnsPerTick >= 0) { "defaultMaxTurnsPerTick must be non-negative" }
     }
 
-    fun pushInput(bytes: ByteArray) {
+    override fun pushInput(bytes: ByteArray) {
         ensureOpen()
         if (bytes.isNotEmpty()) {
             bindings.pushSerialInput(handle, bytes)
@@ -78,7 +129,10 @@ class RuxComputerRuntime(
     fun pushInput(text: String) =
         pushInput(text.encodeToByteArray())
 
-    fun tick(maxTurns: Int = defaultMaxTurnsPerTick): NativeRuxComputerControl {
+    fun tick(): NativeRuxComputerControl =
+        tick(defaultMaxTurnsPerTick)
+
+    override fun tick(maxTurns: Int): NativeRuxComputerControl {
         ensureOpen()
         require(maxTurns >= 0) { "maxTurns must be non-negative" }
         repeat(maxTurns) {
@@ -96,12 +150,12 @@ class RuxComputerRuntime(
         return bindings.control(handle)
     }
 
-    fun outputSnapshot(): ByteArray {
+    override fun outputSnapshot(): ByteArray {
         ensureOpen()
         return terminalOutput.toByteArray()
     }
 
-    fun clearOutput() {
+    override fun clearOutput() {
         ensureOpen()
         terminalOutput.reset()
     }
