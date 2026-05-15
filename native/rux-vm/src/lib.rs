@@ -12,5 +12,6 @@ pub mod low_image_runner;
 pub mod low_machine;
 pub mod microcontroller_machine;
 pub mod runtime_kernel;
+pub mod rux_computer;
 pub mod signal;
 pub mod value;
