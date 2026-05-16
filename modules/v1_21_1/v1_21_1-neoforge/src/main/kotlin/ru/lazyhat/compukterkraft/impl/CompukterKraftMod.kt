@@ -51,6 +51,7 @@ class CompukterKraftMod(
             @Suppress("UNCHECKED_CAST")
             ModRegistry.BlockEntities.COMPUTER_ADVANCED.get()
         }
+        ModObjects.notebookBlockEntityType = { ModRegistry.BlockEntities.NOTEBOOK.get() }
         ModObjects.computerMenuType = { ModRegistry.Menus.COMPUTER.get() }
         ModObjects.openComputerMenu = { player: ServerPlayer, computer, menuData: ComputerContainerData ->
             player.openMenu(
