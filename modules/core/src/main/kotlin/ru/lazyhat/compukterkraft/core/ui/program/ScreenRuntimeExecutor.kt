@@ -4,6 +4,7 @@ import ru.lazyhat.compukterkraft.core.ui.foundation.CanvasScope
 import ru.lazyhat.compukterkraft.core.ui.foundation.Color
 import ru.lazyhat.compukterkraft.core.ui.foundation.TickContext
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Position
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.TextAlignment
 
 /**
  * Runtime-side counterpart to [ScreenProgram].
@@ -147,7 +148,15 @@ class ScreenRuntimeExecutor(
                     }
 
                     is RenderOp.DrawText -> {
-                        backend.drawText(op.x + ox, op.y + oy, op.value.value, op.color.value)
+                        val text = op.value.value
+                        val textWidth = backend.measureText(text)
+                        val textX =
+                            when (op.alignment) {
+                                TextAlignment.Start -> op.x
+                                TextAlignment.Center -> op.x + (op.width - textWidth) / 2
+                                TextAlignment.End -> op.x + op.width - textWidth
+                            }
+                        backend.drawText(textX + ox, op.y + oy, text, op.color.value)
                     }
 
                     is RenderOp.DrawTerminalSurface -> {

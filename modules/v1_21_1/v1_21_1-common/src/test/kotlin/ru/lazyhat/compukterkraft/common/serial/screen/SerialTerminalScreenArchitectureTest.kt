@@ -73,6 +73,8 @@ class SerialTerminalScreenArchitectureTest {
         assertTrue(source.contains("INPUT_TEXT_WIDTH = CONTENT_WIDTH - INPUT_PADDING_HORIZONTAL * 2"))
         assertTrue(source.contains("STATUS_TEXT_WIDTH"))
         assertTrue(source.contains("TITLE_TEXT_WIDTH"))
+        assertTrue(source.contains(".width(STATUS_TEXT_WIDTH)"))
+        assertTrue(source.contains(".textAlign(TextAlignment.End)"))
         assertTrue(source.contains("truncateToWidth(serialStatusText(), STATUS_TEXT_WIDTH)"))
         assertTrue(source.contains("truncateToWidth(title.string, TITLE_TEXT_WIDTH)"))
         assertTrue(source.contains("visibleOutputLine(row)"))

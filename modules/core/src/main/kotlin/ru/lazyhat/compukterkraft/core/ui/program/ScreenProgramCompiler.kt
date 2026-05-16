@@ -10,8 +10,10 @@ import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.findDraggable
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.findFocusable
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.findHoverable
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.findSize
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.findTextAlignment
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.findTooltip
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.findZIndex
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.TextAlignment
 
 /**
  * Compiles a [UiElement] tree into a [ScreenProgram] with:
@@ -239,7 +241,15 @@ class ScreenProgramCompiler(
             }
 
             is UiElement.Text -> {
-                ops += RenderOp.DrawText(node.x, node.y, element.text, element.color)
+                ops +=
+                    RenderOp.DrawText(
+                        x = node.x,
+                        y = node.y,
+                        width = node.width,
+                        value = element.text,
+                        color = element.color,
+                        alignment = element.modifier.findTextAlignment()?.alignment ?: TextAlignment.Start,
+                    )
             }
 
             is UiElement.Canvas -> {
