@@ -83,6 +83,8 @@ object ModRegistry {
 
         private fun noRedstoneConductor(): BlockBehaviour.Properties = properties().isRedstoneConductor { _, _, _ -> false }
 
+        private fun notebookProperties(): BlockBehaviour.Properties = noRedstoneConductor().noOcclusion()
+
         private fun turtleProperties(): BlockBehaviour.Properties = BlockBehaviour.Properties.of().strength(2.5f)
 
         private fun modemProperties(): BlockBehaviour.Properties = BlockBehaviour.Properties.of().strength(1.5f)
@@ -100,7 +102,7 @@ object ModRegistry {
             REGISTRY.register(
                 Names.NOTEBOOK,
                 Supplier {
-                    NotebookBlock(noRedstoneConductor().mapColor(MapColor.METAL))
+                    NotebookBlock(notebookProperties().mapColor(MapColor.METAL))
                 },
             )
 
