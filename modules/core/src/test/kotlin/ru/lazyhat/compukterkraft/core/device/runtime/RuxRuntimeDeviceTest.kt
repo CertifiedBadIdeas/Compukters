@@ -25,6 +25,7 @@ import ru.lazyhat.compukterkraft.core.device.DeviceProperties
 import ru.lazyhat.compukterkraft.core.device.input.KeyInputEvent
 import ru.lazyhat.compukterkraft.core.device.input.PasteInputEvent
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.DisplayNetworkBridge
+import ru.lazyhat.compukterkraft.core.input.KeyCodes
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeRuxComputerControl
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.RuxComputerEndpoint
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
@@ -157,6 +158,40 @@ class RuxRuntimeDeviceTest {
 
         assertEquals(listOf("Rux"), endpoint.inputs.map { it.decodeToString() })
         assertEquals(1, displayNetwork.sentFrames.size)
+    }
+
+    @Test
+    fun dispatchesEnterKeyAsSerialNewline() {
+        val endpoint = RecordingRuxEndpoint()
+        val device =
+            RuxRuntimeDevice(
+                deviceId = 12,
+                properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
+                endpointFactory = { endpoint },
+                stateSink = {},
+            )
+
+        device.turnOn()
+        DeviceEvents.dispatch(device, KeyInputEvent.Down(KeyCodes.KEY_ENTER, repeat = false))
+
+        assertEquals(listOf("\n"), endpoint.inputs.map { it.decodeToString() })
+    }
+
+    @Test
+    fun dispatchesBackspaceKeyAsSerialBackspace() {
+        val endpoint = RecordingRuxEndpoint()
+        val device =
+            RuxRuntimeDevice(
+                deviceId = 13,
+                properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
+                endpointFactory = { endpoint },
+                stateSink = {},
+            )
+
+        device.turnOn()
+        DeviceEvents.dispatch(device, KeyInputEvent.Down(KeyCodes.KEY_BACKSPACE, repeat = false))
+
+        assertEquals(listOf(listOf(0x08)), endpoint.inputs.map { it.map(Byte::toInt) })
     }
 
     private class RecordingRuxEndpoint : RuxComputerEndpoint {

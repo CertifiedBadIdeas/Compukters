@@ -25,6 +25,7 @@ import ru.lazyhat.compukterkraft.core.device.runtime.ports.DeviceStateSink
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.DisplayNetworkBridge
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.NoopDisplayNetworkBridge
 import ru.lazyhat.compukterkraft.core.gui.TerminalFontConstants
+import ru.lazyhat.compukterkraft.core.input.KeyCodes
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.RuxComputerEndpoint
 import java.nio.ByteBuffer
 import java.util.UUID
@@ -101,6 +102,7 @@ class RuxRuntimeDevice(
             "reboot" -> reboot()
             "char" -> pushSerialInput(argumentBytes(arguments.firstOrNull()) ?: return)
             "paste" -> pushSerialInput(argumentBytes(arguments.firstOrNull()) ?: return)
+            "key" -> pushSerialInput(keySerialBytes(arguments.firstOrNull()) ?: return)
         }
     }
 
@@ -151,6 +153,13 @@ class RuxRuntimeDevice(
                 ByteArray(duplicate.remaining()).also(duplicate::get)
             }
             is String -> value.encodeToByteArray()
+            else -> null
+        }
+
+    private fun keySerialBytes(value: Any?): ByteArray? =
+        when (value as? Int) {
+            KeyCodes.KEY_ENTER, KeyCodes.KEY_KP_ENTER -> byteArrayOf('\n'.code.toByte())
+            KeyCodes.KEY_BACKSPACE -> byteArrayOf(0x08)
             else -> null
         }
 

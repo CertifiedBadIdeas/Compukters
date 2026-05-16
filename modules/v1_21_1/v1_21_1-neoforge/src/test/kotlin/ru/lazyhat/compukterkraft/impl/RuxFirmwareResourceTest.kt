@@ -6,6 +6,7 @@ import ru.lazyhat.compukterkraft.core.device.DeviceProperties
 import ru.lazyhat.compukterkraft.core.device.input.KeyInputEvent
 import ru.lazyhat.compukterkraft.core.device.runtime.RuxRuntimeDevice
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.DisplayNetworkBridge
+import ru.lazyhat.compukterkraft.core.input.KeyCodes
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.RuxComputerRuntimeFactory
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeVmBindings
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
@@ -178,6 +179,47 @@ class RuxFirmwareResourceTest {
                 displayNetwork.sentFrames.last().frame.tiles.single().payload.any { it != 0.toByte() },
                 "visible frame should contain rendered glyph pixels",
             )
+        } finally {
+            device.close()
+        }
+    }
+
+    @Test
+    fun bundledRuxEchoLiveFirmwareEchoesEnterAndBackspaceKeysThroughRuntimeDeviceWhenLibraryIsConfigured() {
+        System.getProperty("rux.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val bytes =
+            assertNotNull(
+                javaClass.classLoader.getResourceAsStream("firmware/rux-echo-live.ruxi"),
+                "firmware/rux-echo-live.ruxi must be bundled",
+            ).use { it.readBytes() }
+        val device =
+            RuxRuntimeDevice(
+                deviceId = 43,
+                properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
+                endpointFactory = {
+                    RuxComputerRuntimeFactory.create(
+                        image = bytes,
+                        memorySize = 64 * 1024,
+                        sliceBudgetNanos = 1_000,
+                    )
+                },
+                stateSink = {},
+            )
+
+        try {
+            device.turnOn()
+            DeviceEvents.dispatch(device, KeyInputEvent.Character('A'.code.toByte()))
+            DeviceEvents.dispatch(device, KeyInputEvent.Down(KeyCodes.KEY_BACKSPACE, repeat = false))
+            DeviceEvents.dispatch(device, KeyInputEvent.Down(KeyCodes.KEY_ENTER, repeat = false))
+
+            val expected = "RUX READY\nA\b\n"
+            var attempts = 0
+            while (device.serialOutputSnapshot().decodeToString() != expected && attempts < 32) {
+                device.serverTick()
+                attempts += 1
+            }
+
+            assertEquals(expected, device.serialOutputSnapshot().decodeToString())
         } finally {
             device.close()
         }
