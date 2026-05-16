@@ -53,6 +53,28 @@ fn rux_run_cli_runs_encoded_ruxi_image_with_serial_input() {
     assert!(stdout.contains("panic: 0"));
 }
 
+#[test]
+fn rux_run_cli_runs_encoded_ruxi_with_declared_memory_size() {
+    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../docs/abi/fixtures/runtime_memory_out_of_bounds.ruxi");
+    let output = run_rux_run([
+        fixture.to_string_lossy().into_owned(),
+        "--memory".to_string(),
+        "1024".to_string(),
+    ]);
+
+    assert!(
+        !output.status.success(),
+        "stdout: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    let stderr = String::from_utf8(output.stderr).expect("stderr is utf-8");
+    assert!(
+        stderr.contains("memory access 1022..1026 is outside 1024 bytes"),
+        "{stderr}",
+    );
+}
+
 fn write_ruxi(source: &str) -> PathBuf {
     let image = compile(source).expect("test source compiles");
     let bytes = encode_image(&image).expect("test image encodes");
