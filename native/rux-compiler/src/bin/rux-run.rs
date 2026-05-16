@@ -17,7 +17,7 @@ fn main() -> ExitCode {
         Ok(parsed) => parsed,
         Err(error) => {
             eprintln!("{error}");
-            eprintln!("usage: rux-run <path.rx> [--serial <text>|--serial-live]");
+            eprintln!("usage: run <path.rx> [--serial <text>|--serial-live]");
             return ExitCode::from(2);
         }
     };
