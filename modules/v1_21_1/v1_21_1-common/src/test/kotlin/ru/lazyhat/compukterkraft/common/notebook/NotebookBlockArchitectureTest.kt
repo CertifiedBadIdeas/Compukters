@@ -1,0 +1,55 @@
+/*
+ * The Compukter Kraft Developers
+ *
+ * Copyright (C) 2026 Vsevolod Petrov (lazyhat)
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+package ru.lazyhat.compukterkraft.common.notebook
+
+import java.nio.file.Path
+import kotlin.io.path.exists
+import kotlin.io.path.readText
+import kotlin.test.Test
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
+
+class NotebookBlockArchitectureTest {
+    @Test
+    fun notebookIsAPlacedRuxDeviceNotAnInventoryComputer() {
+        val blockEntityPath =
+            Path.of("src/main/kotlin/ru/lazyhat/compukterkraft/common/notebook/block/NotebookBlockEntity.kt")
+        val blockPath =
+            Path.of("src/main/kotlin/ru/lazyhat/compukterkraft/common/notebook/block/NotebookBlock.kt")
+        val itemPath =
+            Path.of("src/main/kotlin/ru/lazyhat/compukterkraft/common/notebook/item/NotebookItem.kt")
+
+        assertTrue(blockEntityPath.exists())
+        assertTrue(blockPath.exists())
+        assertTrue(itemPath.exists())
+
+        val blockEntitySource = blockEntityPath.readText()
+        val blockSource = blockPath.readText()
+        val itemSource = itemPath.readText()
+
+        assertTrue(blockEntitySource.contains("ComputerBlockEntity("))
+        assertTrue(blockEntitySource.contains("DeviceFamily.NORMAL"))
+        assertTrue(blockSource.contains("AbstractComputerBlock<NotebookBlockEntity>"))
+        assertTrue(blockSource.contains("ModObjects.notebookBlockEntityType"))
+        assertTrue(itemSource.contains("deviceFamilyId = DeviceFamily.NORMAL.name.lowercase()"))
+        assertFalse(itemSource.contains("useOn"))
+        assertFalse(itemSource.contains("openMenu"))
+    }
+}
