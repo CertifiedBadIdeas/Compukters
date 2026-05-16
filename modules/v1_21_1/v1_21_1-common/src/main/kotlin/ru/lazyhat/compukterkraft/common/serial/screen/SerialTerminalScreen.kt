@@ -85,12 +85,12 @@ class SerialTerminalScreen(
                         modifier = Modifier.weight(1f),
                         color = TITLE,
                     ) {
-                        title.string
+                        truncateToWidth(title.string, TITLE_TEXT_WIDTH)
                     }
                     text(
                         color = STATUS,
                     ) {
-                        serialStatusText()
+                        truncateToWidth(serialStatusText(), STATUS_TEXT_WIDTH)
                     }
                 }
 
@@ -124,7 +124,7 @@ class SerialTerminalScreen(
                         modifier = Modifier.fillMaxWidth().height(LINE_HEIGHT),
                         color = PROMPT,
                     ) {
-                        truncateToWidth("> ${menu.serialBuffer.inputLine}", imageWidth - 18)
+                        truncateToWidth("> ${menu.serialBuffer.inputLine}", INPUT_TEXT_WIDTH)
                     }
                 }
             }
@@ -152,7 +152,7 @@ class SerialTerminalScreen(
         return all.takeLast(VISIBLE_OUTPUT_LINES.coerceAtLeast(1))
     }
 
-    private fun visibleOutputLine(row: Int): String = truncateToWidth(visibleOutputLines().getOrNull(row) ?: "", imageWidth - 18)
+    private fun visibleOutputLine(row: Int): String = truncateToWidth(visibleOutputLines().getOrNull(row) ?: "", OUTPUT_TEXT_WIDTH)
 
     private fun serialStatusText(): String =
         "${Component.translatable("gui.compukterkraft.serial_terminal.linked").string}  RX ${menu.serialBuffer.rxBytes}  TX ${menu.serialBuffer.txBytes}"
@@ -199,7 +199,14 @@ class SerialTerminalScreen(
         private const val SCREEN_PADDING = 6
         private const val HEADER_HEIGHT = 16
         private const val INPUT_HEIGHT = 16
+        private const val PANEL_PADDING_HORIZONTAL = 4
+        private const val INPUT_PADDING_HORIZONTAL = 4
         private const val LINE_HEIGHT = 10
+        private const val CONTENT_WIDTH = WIDTH - SCREEN_PADDING * 2
+        private const val OUTPUT_TEXT_WIDTH = CONTENT_WIDTH - PANEL_PADDING_HORIZONTAL * 2
+        private const val INPUT_TEXT_WIDTH = CONTENT_WIDTH - INPUT_PADDING_HORIZONTAL * 2
+        private const val STATUS_TEXT_WIDTH = 138
+        private const val TITLE_TEXT_WIDTH = CONTENT_WIDTH - STATUS_TEXT_WIDTH - 4
         private const val VISIBLE_OUTPUT_LINES = (HEIGHT - SCREEN_PADDING * 2 - HEADER_HEIGHT - INPUT_HEIGHT) / LINE_HEIGHT
         private val BACKGROUND = Color.hex(0xFF151922u)
         private val PANEL = Color.hex(0xFF0B0F14u)
