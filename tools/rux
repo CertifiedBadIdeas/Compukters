@@ -1,0 +1,34 @@
+#!/usr/bin/env sh
+set -eu
+
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+MANIFEST="$ROOT/native/rux-compiler/Cargo.toml"
+
+usage() {
+    cat >&2 <<'EOF'
+usage:
+  tools/rux emit <input.rx> <output.ruxi>
+  tools/rux disasm <input.ruxi>
+EOF
+}
+
+if [ "$#" -lt 1 ]; then
+    usage
+    exit 2
+fi
+
+COMMAND=$1
+shift
+
+case "$COMMAND" in
+    emit)
+        exec cargo run --quiet --manifest-path "$MANIFEST" --bin rux-emit -- "$@"
+        ;;
+    disasm|disassemble)
+        exec cargo run --quiet --manifest-path "$MANIFEST" --bin rux-disasm -- "$@"
+        ;;
+    *)
+        usage
+        exit 2
+        ;;
+esac
