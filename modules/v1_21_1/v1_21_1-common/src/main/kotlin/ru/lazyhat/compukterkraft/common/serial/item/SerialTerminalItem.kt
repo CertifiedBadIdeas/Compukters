@@ -19,7 +19,6 @@
 package ru.lazyhat.compukterkraft.common.serial.item
 
 import net.minecraft.ChatFormatting
-import net.minecraft.core.BlockPos
 import net.minecraft.network.chat.Component
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.InteractionHand
@@ -33,13 +32,13 @@ import net.minecraft.world.item.context.UseOnContext
 import net.minecraft.world.level.Level
 import ru.lazyhat.compukterkraft.common.binding.ModObjects
 import ru.lazyhat.compukterkraft.common.computer.block.AbstractComputerBlock
-import ru.lazyhat.compukterkraft.common.computer.block.AbstractComputerBlockEntity
 import ru.lazyhat.compukterkraft.common.computer.block.ComputerBlockEntity
+import ru.lazyhat.compukterkraft.common.computer.context.ServerContext
 import ru.lazyhat.compukterkraft.common.computer.data.ComputerContainerData
 import ru.lazyhat.compukterkraft.common.localization.CompukterComponents
 import ru.lazyhat.compukterkraft.common.utils.computerDataTagCopy
 import ru.lazyhat.compukterkraft.common.utils.updateComputerDataTag
-import ru.lazyhat.compukterkraft.core.Config
+import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDevice
 
 class SerialTerminalItem(
     properties: Properties,
@@ -59,11 +58,13 @@ class SerialTerminalItem(
         context.itemInHand.writeSerialBinding(
             SerialBinding(
                 deviceId = device.deviceId,
-                blockPos = pos.immutable(),
-                dimensionId = level.dimension().location().toString(),
             ),
         )
-        openFor(serverPlayer, be)
+        openFor(
+            serverPlayer,
+            device,
+            be.blockState.block.asItem().defaultInstance,
+        )
         return InteractionResult.sidedSuccess(false)
     }
 
@@ -81,28 +82,14 @@ class SerialTerminalItem(
                 serverPlayer.displayClientMessage(CompukterComponents.Message.Terminal.noBinding, true)
                 return InteractionResultHolder.pass(stack)
             }
-        if (binding.dimensionId != level.dimension().location().toString()) {
-            serverPlayer.displayClientMessage(CompukterComponents.Message.Terminal.wrongDimension, true)
-            return InteractionResultHolder.pass(stack)
-        }
-        val be =
-            level.getBlockEntity(binding.blockPos) as? ComputerBlockEntity ?: run {
+        val device =
+            ServerContext.deviceManager.get(binding.deviceId) ?: run {
                 stack.clearSerialBinding()
+                serverPlayer.displayClientMessage(CompukterComponents.Message.Terminal.noBinding, true)
                 return InteractionResultHolder.pass(stack)
             }
-        val radius = Config.TERMINAL_CONNECT_RADIUS_BLOCKS.toDouble()
-        val distSqr =
-            serverPlayer.distanceToSqr(
-                binding.blockPos.x + 0.5,
-                binding.blockPos.y + 0.5,
-                binding.blockPos.z + 0.5,
-            )
-        if (distSqr > radius * radius) {
-            serverPlayer.displayClientMessage(CompukterComponents.Message.Terminal.outOfRange, true)
-            return InteractionResultHolder.pass(stack)
-        }
 
-        openFor(serverPlayer, be)
+        openFor(serverPlayer, device, ItemStack.EMPTY)
         return InteractionResultHolder.sidedSuccess(stack, false)
     }
 
@@ -125,9 +112,6 @@ class SerialTerminalItem(
                     .translatable(
                         "gui.compukterkraft.tooltip.serial_terminal_linked_computer",
                         binding.deviceId,
-                        binding.blockPos.x,
-                        binding.blockPos.y,
-                        binding.blockPos.z,
                     ).withStyle(ChatFormatting.GRAY),
             )
         }
@@ -135,61 +119,41 @@ class SerialTerminalItem(
 
     private fun openFor(
         serverPlayer: ServerPlayer,
-        be: ComputerBlockEntity,
+        device: RuntimeDevice,
+        displayStack: ItemStack,
     ) {
-        val device = be.getOrCreateRuntimeDevice()
-        val displayStack =
-            be.blockState.block
-                .asItem()
-                .defaultInstance
         ModObjects.openSerialTerminalMenu(
             serverPlayer,
-            be as AbstractComputerBlockEntity,
+            device,
             ComputerContainerData(device, displayStack),
         )
     }
 
     private data class SerialBinding(
         val deviceId: Int,
-        val blockPos: BlockPos,
-        val dimensionId: String,
     )
 
     private fun ItemStack.readSerialBinding(): SerialBinding? {
         val tag = computerDataTagCopy() ?: return null
-        if (
-            !tag.contains(SerialNbt.DEVICE_ID) ||
-            !tag.contains(SerialNbt.BLOCK_POS) ||
-            !tag.contains(SerialNbt.DIMENSION_ID)
-        ) {
-            return null
-        }
+        if (!tag.contains(SerialNbt.DEVICE_ID)) return null
         return SerialBinding(
             deviceId = tag.getInt(SerialNbt.DEVICE_ID),
-            blockPos = BlockPos.of(tag.getLong(SerialNbt.BLOCK_POS)),
-            dimensionId = tag.getString(SerialNbt.DIMENSION_ID),
         )
     }
 
     private fun ItemStack.writeSerialBinding(binding: SerialBinding) {
         updateComputerDataTag {
             putInt(SerialNbt.DEVICE_ID, binding.deviceId)
-            putLong(SerialNbt.BLOCK_POS, binding.blockPos.asLong())
-            putString(SerialNbt.DIMENSION_ID, binding.dimensionId)
         }
     }
 
     private fun ItemStack.clearSerialBinding() {
         updateComputerDataTag {
             remove(SerialNbt.DEVICE_ID)
-            remove(SerialNbt.BLOCK_POS)
-            remove(SerialNbt.DIMENSION_ID)
         }
     }
 
     private object SerialNbt {
         const val DEVICE_ID = "SerialTerminalDeviceId"
-        const val BLOCK_POS = "SerialTerminalBlockPos"
-        const val DIMENSION_ID = "SerialTerminalDimensionId"
     }
 }

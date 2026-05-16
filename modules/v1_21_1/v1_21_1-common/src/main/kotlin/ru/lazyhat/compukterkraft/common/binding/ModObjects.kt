@@ -32,6 +32,7 @@ import ru.lazyhat.compukterkraft.common.serial.menu.SerialTerminalMenu
 import ru.lazyhat.compukterkraft.common.workbench.block.WorkbenchBlockEntity
 import ru.lazyhat.compukterkraft.common.workbench.data.WorkbenchContainerData
 import ru.lazyhat.compukterkraft.common.workbench.menu.WorkbenchMenuWithoutInventory
+import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDevice
 
 object ModObjects {
     lateinit var computerBlockEntityType: () -> BlockEntityType<ComputerBlockEntity>
@@ -40,7 +41,7 @@ object ModObjects {
     lateinit var computerControlMenuType: () -> MenuType<ComputerControlMenu>
     lateinit var openComputerControlMenu: (ServerPlayer, AbstractComputerBlockEntity, ComputerContainerData) -> Unit
     lateinit var serialTerminalMenuType: () -> MenuType<SerialTerminalMenu>
-    lateinit var openSerialTerminalMenu: (ServerPlayer, AbstractComputerBlockEntity, ComputerContainerData) -> Unit
+    lateinit var openSerialTerminalMenu: (ServerPlayer, RuntimeDevice, ComputerContainerData) -> Unit
     lateinit var workbenchBlockEntityType: () -> BlockEntityType<WorkbenchBlockEntity>
     lateinit var workbenchMenuType: () -> MenuType<WorkbenchMenuWithoutInventory>
     lateinit var openWorkbenchMenu: (ServerPlayer, WorkbenchBlockEntity, WorkbenchContainerData) -> Unit

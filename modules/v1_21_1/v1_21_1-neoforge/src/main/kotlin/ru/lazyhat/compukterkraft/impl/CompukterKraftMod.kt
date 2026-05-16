@@ -89,7 +89,7 @@ class CompukterKraftMod(
                             ModRegistry.Menus.SERIAL_TERMINAL.get(),
                             id,
                             playerInventory,
-                            computer.getOrCreateRuntimeDevice(),
+                            computer,
                             player,
                         )
                     },
