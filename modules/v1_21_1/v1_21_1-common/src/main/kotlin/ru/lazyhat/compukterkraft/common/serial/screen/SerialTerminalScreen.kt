@@ -70,6 +70,7 @@ class SerialTerminalScreen(
         guiGraphics.fill(leftPos + 6, topPos + 18, leftPos + imageWidth - 6, topPos + imageHeight - 24, PANEL)
         guiGraphics.fill(leftPos + 6, topPos + imageHeight - 20, leftPos + imageWidth - 6, topPos + imageHeight - 6, INPUT)
         guiGraphics.drawString(font, title, leftPos + 8, topPos + 7, TITLE, false)
+        drawConnectionStatus(guiGraphics)
 
         val lines = visibleOutputLines()
         var y = topPos + 22
@@ -86,17 +87,18 @@ class SerialTerminalScreen(
         scanCode: Int,
         modifiers: Int,
     ): Boolean =
-        when (keyCode) {
-            KeyCodes.KEY_ENTER, KeyCodes.KEY_KP_ENTER -> {
+        when {
+            keyCode == KeyCodes.KEY_ENTER || keyCode == KeyCodes.KEY_KP_ENTER -> {
                 ClientNetworking.sendToServer(
                     SerialConsoleInputServerMessage(menu.containerId, menu.serialBuffer.submitLine()),
                 )
                 true
             }
-            KeyCodes.KEY_BACKSPACE -> {
+            keyCode == KeyCodes.KEY_BACKSPACE -> {
                 menu.serialBuffer.backspace()
                 true
             }
+            isInventoryKey(keyCode, scanCode) -> true
             else -> super.keyPressed(keyCode, scanCode, modifiers)
         }
 
@@ -119,6 +121,30 @@ class SerialTerminalScreen(
         return all.takeLast(maxLines)
     }
 
+    private fun drawConnectionStatus(guiGraphics: GuiGraphics) {
+        val statusKey =
+            if (menu.isComputerOn) {
+                "gui.compukterkraft.serial_terminal.connected_on"
+            } else {
+                "gui.compukterkraft.serial_terminal.connected_off"
+            }
+        val status = Component.translatable(statusKey)
+        val color = if (menu.isComputerOn) STATUS_ON else STATUS_OFF
+        guiGraphics.drawString(
+            font,
+            status,
+            leftPos + imageWidth - 8 - font.width(status),
+            topPos + 7,
+            color,
+            false,
+        )
+    }
+
+    private fun isInventoryKey(
+        keyCode: Int,
+        scanCode: Int,
+    ): Boolean = minecraft?.options?.keyInventory?.matches(keyCode, scanCode) == true
+
     private fun truncateToWidth(
         text: String,
         maxWidth: Int,
@@ -140,5 +166,7 @@ class SerialTerminalScreen(
         private const val TITLE = 0xFFE6ECF5.toInt()
         private const val TEXT = 0xFFB7C5D8.toInt()
         private const val PROMPT = 0xFF7CFFB2.toInt()
+        private const val STATUS_ON = 0xFF7CFFB2.toInt()
+        private const val STATUS_OFF = 0xFFFFC857.toInt()
     }
 }
