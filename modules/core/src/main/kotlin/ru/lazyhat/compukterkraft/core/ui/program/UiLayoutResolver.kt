@@ -2,15 +2,18 @@ package ru.lazyhat.compukterkraft.core.ui.program
 
 import ru.lazyhat.compukterkraft.core.platform.api.FontMetrics
 import ru.lazyhat.compukterkraft.core.ui.foundation.UiElement
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.AxisSize
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Modifier
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Padding
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Position
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.UiAlignment
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.findAlignment
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.findHeight
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.findOffset
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.findPadding
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.findSize
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.findWeight
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.findWidth
 
 /**
  * A resolved rectangle for a single UI node in some frame's coordinate space.
@@ -198,7 +201,7 @@ class UiLayoutResolver(
         val fixedWidth =
             flow
                 .filter { it.modifier.findWeight() == null }
-                .sumOf { primaryWidthForRow(it) }
+                .sumOf { primaryWidthForRow(it, contentWidth) }
         val totalWeight = flow.sumOf { (it.modifier.findWeight()?.weight ?: 0f).toDouble() }.toFloat()
 
         val remainingWidth = (contentWidth - fixedWidth).coerceAtLeast(0)
@@ -221,7 +224,7 @@ class UiLayoutResolver(
                         }
                     }
                 } else {
-                    primaryWidthForRow(child)
+                    primaryWidthForRow(child, contentWidth)
                 }
             val childHeight =
                 when (child.modifier.findAlignment()?.alignment) {
@@ -265,7 +268,7 @@ class UiLayoutResolver(
         val fixedHeight =
             flow
                 .filter { it.modifier.findWeight() == null }
-                .sumOf { primaryHeightForColumn(it) }
+                .sumOf { primaryHeightForColumn(it, contentHeight) }
         val totalWeight = flow.sumOf { (it.modifier.findWeight()?.weight ?: 0f).toDouble() }.toFloat()
 
         val remainingHeight = (contentHeight - fixedHeight).coerceAtLeast(0)
@@ -288,7 +291,7 @@ class UiLayoutResolver(
                         }
                     }
                 } else {
-                    primaryHeightForColumn(child)
+                    primaryHeightForColumn(child, contentHeight)
                 }
             val childWidth =
                 when (child.modifier.findAlignment()?.alignment) {
@@ -339,10 +342,7 @@ class UiLayoutResolver(
         element: UiElement,
         fallbackWidth: Int,
     ): Int =
-        element.modifier
-            .findSize()
-            ?.size
-            ?.width ?: when (element) {
+        explicitWidth(element, fallbackWidth) ?: when (element) {
             is UiElement.Text -> fontMetrics?.width(element.text.value) ?: fallbackWidth
             else -> fallbackWidth
         }
@@ -351,30 +351,47 @@ class UiLayoutResolver(
         element: UiElement,
         fallbackHeight: Int,
     ): Int =
-        element.modifier
-            .findSize()
-            ?.size
-            ?.height ?: when (element) {
+        explicitHeight(element, fallbackHeight) ?: when (element) {
             is UiElement.Text -> DEFAULT_TEXT_HEIGHT
             else -> fallbackHeight
         }
 
-    private fun primaryWidthForRow(element: UiElement): Int =
-        element.modifier
-            .findSize()
-            ?.size
-            ?.width ?: when (element) {
+    private fun primaryWidthForRow(
+        element: UiElement,
+        parentWidth: Int,
+    ): Int =
+        explicitWidth(element, parentWidth) ?: when (element) {
             is UiElement.Text -> fontMetrics?.width(element.text.value) ?: 0
             else -> 0
         }
 
-    private fun primaryHeightForColumn(element: UiElement): Int =
-        element.modifier
-            .findSize()
-            ?.size
-            ?.height ?: when (element) {
+    private fun primaryHeightForColumn(
+        element: UiElement,
+        parentHeight: Int,
+    ): Int =
+        explicitHeight(element, parentHeight) ?: when (element) {
             is UiElement.Text -> DEFAULT_TEXT_HEIGHT
             else -> 0
+        }
+
+    private fun explicitWidth(
+        element: UiElement,
+        fallbackWidth: Int,
+    ): Int? =
+        when (val width = element.modifier.findWidth()?.width) {
+            is AxisSize.Fixed -> width.pixels
+            AxisSize.Fill -> fallbackWidth
+            null -> element.modifier.findSize()?.size?.width
+        }
+
+    private fun explicitHeight(
+        element: UiElement,
+        fallbackHeight: Int,
+    ): Int? =
+        when (val height = element.modifier.findHeight()?.height) {
+            is AxisSize.Fixed -> height.pixels
+            AxisSize.Fill -> fallbackHeight
+            null -> element.modifier.findSize()?.size?.height
         }
 
     private companion object {
