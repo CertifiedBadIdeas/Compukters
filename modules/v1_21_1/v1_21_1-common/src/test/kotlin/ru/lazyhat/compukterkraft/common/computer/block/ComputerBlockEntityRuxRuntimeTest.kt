@@ -20,6 +20,7 @@
 package ru.lazyhat.compukterkraft.common.computer.block
 
 import java.nio.file.Path
+import kotlin.io.path.exists
 import kotlin.io.path.readText
 import kotlin.test.Test
 import kotlin.test.assertFalse
@@ -30,11 +31,26 @@ class ComputerBlockEntityRuxRuntimeTest {
         Path
             .of("src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/block/ComputerBlockEntity.kt")
             .readText()
+    private val factoryPath =
+        Path.of("src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/block/ComputerRuntimeDeviceFactory.kt")
 
     @Test
     fun computerBlockCreatesRuxRuntimeDeviceByDefault() {
-        assertTrue(source.contains("RuxRuntimeDevice("))
-        assertTrue(source.contains("displayNetwork = host.displayNetwork"))
+        assertTrue(source.contains("ComputerRuntimeDeviceFactory.createRuxComputer("))
         assertFalse(source.contains("RuntimeDeviceImpl("))
+        assertFalse(source.contains("CkVmImageComputerProgram"))
+        assertFalse(source.contains("ComputerProgramCompiler"))
+        assertFalse(source.contains("DeviceProgramSupport"))
+        assertFalse(source.contains("bootDeviceDaemon"))
+
+        assertTrue(factoryPath.exists())
+        val factorySource = factoryPath.readText()
+        assertTrue(factorySource.contains("RuxRuntimeDevice("))
+        assertTrue(factorySource.contains("displayNetwork = host.displayNetwork"))
+        assertFalse(factorySource.contains("RuntimeDeviceImpl("))
+        assertFalse(factorySource.contains("CkVmImageComputerProgram"))
+        assertFalse(factorySource.contains("ComputerProgramCompiler"))
+        assertFalse(factorySource.contains("DeviceProgramSupport"))
+        assertFalse(factorySource.contains("bootDeviceDaemon"))
     }
 }
