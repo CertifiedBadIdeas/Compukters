@@ -15,16 +15,18 @@ const DEFAULT_MEMORY_SIZE: usize = 64 * 1024;
 const DEFAULT_SLICE_BUDGET_NANOS: u64 = 1_000_000;
 
 fn main() -> ExitCode {
-    let (path, mode) = match parse_args(env::args()) {
-        Ok(parsed) => parsed,
+    let config = match parse_args(env::args()) {
+        Ok(config) => config,
         Err(error) => {
             eprintln!("{error}");
-            eprintln!("usage: rux-run <path.rx|path.ruxi> [--serial <text>|--serial-live]");
+            eprintln!(
+                "usage: rux-run <path.rx|path.ruxi> [--memory <bytes>] [--serial <text>|--serial-live]"
+            );
             return ExitCode::from(2);
         }
     };
 
-    let image = match load_image(&path) {
+    let image = match load_image(&config.path) {
         Ok(image) => image,
         Err(error) => {
             eprintln!("{error}");
@@ -32,11 +34,18 @@ fn main() -> ExitCode {
         }
     };
 
-    match mode {
-        RunMode::Default => run_framed(image),
-        RunMode::ScriptedSerial(input) => run_scripted_serial(image, &input),
-        RunMode::LiveSerial => run_live_serial(image),
+    match config.mode {
+        RunMode::Default => run_framed(image, config.memory_size),
+        RunMode::ScriptedSerial(input) => run_scripted_serial(image, &input, config.memory_size),
+        RunMode::LiveSerial => run_live_serial(image, config.memory_size),
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RunConfig {
+    path: String,
+    mode: RunMode,
+    memory_size: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -46,7 +55,7 @@ enum RunMode {
     LiveSerial,
 }
 
-fn parse_args<I, S>(args: I) -> Result<(String, RunMode), String>
+fn parse_args<I, S>(args: I) -> Result<RunConfig, String>
 where
     I: IntoIterator<Item = S>,
     S: Into<String>,
@@ -56,27 +65,51 @@ where
     let Some(path) = args.next() else {
         return Err("missing input file".to_string());
     };
-    let Some(flag) = args.next() else {
-        return Ok((path, RunMode::Default));
-    };
-    match flag.as_str() {
-        "--serial" => {
-            let Some(input) = args.next() else {
-                return Err("--serial expects input text".to_string());
-            };
-            if args.next().is_some() {
-                return Err("unexpected trailing arguments".to_string());
+    let mut mode = RunMode::Default;
+    let mut memory_size = DEFAULT_MEMORY_SIZE;
+
+    while let Some(flag) = args.next() {
+        match flag.as_str() {
+            "--serial" => {
+                let Some(input) = args.next() else {
+                    return Err("--serial expects input text".to_string());
+                };
+                if !matches!(mode, RunMode::Default) {
+                    return Err("serial mode is already set".to_string());
+                }
+                mode = RunMode::ScriptedSerial(input.into_bytes());
             }
-            Ok((path, RunMode::ScriptedSerial(input.into_bytes())))
-        }
-        "--serial-live" => {
-            if args.next().is_some() {
-                return Err("unexpected trailing arguments".to_string());
+            "--serial-live" => {
+                if !matches!(mode, RunMode::Default) {
+                    return Err("serial mode is already set".to_string());
+                }
+                mode = RunMode::LiveSerial;
             }
-            Ok((path, RunMode::LiveSerial))
+            "--memory" => {
+                let Some(value) = args.next() else {
+                    return Err("--memory expects byte count".to_string());
+                };
+                memory_size = parse_memory_size(&value)?;
+            }
+            _ => return Err(format!("unknown argument `{flag}`")),
         }
-        _ => Err(format!("unknown argument `{flag}`")),
     }
+
+    Ok(RunConfig {
+        path,
+        mode,
+        memory_size,
+    })
+}
+
+fn parse_memory_size(value: &str) -> Result<usize, String> {
+    let memory_size = value
+        .parse::<usize>()
+        .map_err(|_| format!("invalid memory size `{value}`"))?;
+    if memory_size == 0 {
+        return Err("memory size must be positive".to_string());
+    }
+    Ok(memory_size)
 }
 
 fn load_image(path: &str) -> Result<Image, String> {
@@ -101,8 +134,8 @@ fn load_image(path: &str) -> Result<Image, String> {
     }
 }
 
-fn run_framed(image: Image) -> ExitCode {
-    match run_image_with_serial_input(image, &[]) {
+fn run_framed(image: Image, memory_size: usize) -> ExitCode {
+    match run_image_with_serial_input(image, &[], memory_size) {
         Ok(report) => {
             print!("{}", render_terminal_ui(&report));
             if report.panic_code == 0 {
@@ -118,8 +151,8 @@ fn run_framed(image: Image) -> ExitCode {
     }
 }
 
-fn run_scripted_serial(image: Image, input: &[u8]) -> ExitCode {
-    match run_image_with_serial_input(image, input) {
+fn run_scripted_serial(image: Image, input: &[u8], memory_size: usize) -> ExitCode {
+    match run_image_with_serial_input(image, input, memory_size) {
         Ok(report) => {
             print!("{}", render_terminal_ui(&report));
             if report.panic_code == 0 {
@@ -135,9 +168,12 @@ fn run_scripted_serial(image: Image, input: &[u8]) -> ExitCode {
     }
 }
 
-fn run_image_with_serial_input(image: Image, input: &[u8]) -> Result<RuxRunReport, String> {
-    let mut machine =
-        ComputerMachine::new(DEFAULT_MEMORY_SIZE).map_err(|error| error.to_string())?;
+fn run_image_with_serial_input(
+    image: Image,
+    input: &[u8],
+    memory_size: usize,
+) -> Result<RuxRunReport, String> {
+    let mut machine = ComputerMachine::new(memory_size).map_err(|error| error.to_string())?;
     machine.push_serial_input(input);
     let cpu_id = machine.spawn_boot_cpu(image, DEFAULT_SLICE_BUDGET_NANOS)?;
     let signal = machine.run_boot_cpu_until_signal(cpu_id)?;
@@ -151,8 +187,8 @@ fn run_image_with_serial_input(image: Image, input: &[u8]) -> Result<RuxRunRepor
     })
 }
 
-fn run_live_serial(image: Image) -> ExitCode {
-    let mut machine = match ComputerMachine::new(DEFAULT_MEMORY_SIZE) {
+fn run_live_serial(image: Image, memory_size: usize) -> ExitCode {
+    let mut machine = match ComputerMachine::new(memory_size) {
         Ok(machine) => machine,
         Err(error) => {
             eprintln!("{error}");
@@ -254,7 +290,7 @@ fn exit_code_from_i32(code: i32) -> ExitCode {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_args, RunMode};
+    use super::{parse_args, RunConfig, RunMode, DEFAULT_MEMORY_SIZE};
 
     #[test]
     fn parse_args_accepts_default_run_mode() {
@@ -262,7 +298,11 @@ mod tests {
 
         assert_eq!(
             parse_args(args).unwrap(),
-            ("firmware.rx".to_string(), RunMode::Default)
+            RunConfig {
+                path: "firmware.rx".to_string(),
+                mode: RunMode::Default,
+                memory_size: DEFAULT_MEMORY_SIZE,
+            }
         );
     }
 
@@ -272,10 +312,11 @@ mod tests {
 
         assert_eq!(
             parse_args(args).unwrap(),
-            (
-                "firmware.rx".to_string(),
-                RunMode::ScriptedSerial("Rux!".as_bytes().to_vec())
-            )
+            RunConfig {
+                path: "firmware.rx".to_string(),
+                mode: RunMode::ScriptedSerial("Rux!".as_bytes().to_vec()),
+                memory_size: DEFAULT_MEMORY_SIZE,
+            }
         );
     }
 
@@ -285,7 +326,46 @@ mod tests {
 
         assert_eq!(
             parse_args(args).unwrap(),
-            ("firmware.rx".to_string(), RunMode::LiveSerial)
+            RunConfig {
+                path: "firmware.rx".to_string(),
+                mode: RunMode::LiveSerial,
+                memory_size: DEFAULT_MEMORY_SIZE,
+            }
+        );
+    }
+
+    #[test]
+    fn parse_args_accepts_memory_size() {
+        let args = ["rux-run", "firmware.ruxi", "--memory", "1024"];
+
+        assert_eq!(
+            parse_args(args).unwrap(),
+            RunConfig {
+                path: "firmware.ruxi".to_string(),
+                mode: RunMode::Default,
+                memory_size: 1024,
+            }
+        );
+    }
+
+    #[test]
+    fn parse_args_accepts_memory_size_with_serial_input() {
+        let args = [
+            "rux-run",
+            "firmware.ruxi",
+            "--memory",
+            "1024",
+            "--serial",
+            "Rux!",
+        ];
+
+        assert_eq!(
+            parse_args(args).unwrap(),
+            RunConfig {
+                path: "firmware.ruxi".to_string(),
+                mode: RunMode::ScriptedSerial("Rux!".as_bytes().to_vec()),
+                memory_size: 1024,
+            }
         );
     }
 }
