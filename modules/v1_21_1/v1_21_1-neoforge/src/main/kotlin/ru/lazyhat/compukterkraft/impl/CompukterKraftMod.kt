@@ -28,6 +28,7 @@ import net.neoforged.fml.common.Mod
 import net.neoforged.fml.event.lifecycle.FMLDedicatedServerSetupEvent
 import ru.lazyhat.compukterkraft.common.binding.ModObjects
 import ru.lazyhat.compukterkraft.common.computer.data.ComputerContainerData
+import ru.lazyhat.compukterkraft.common.computer.menu.ComputerControlMenu
 import ru.lazyhat.compukterkraft.common.network.ClientNetworking
 import ru.lazyhat.compukterkraft.common.network.ServerNetworking
 import ru.lazyhat.compukterkraft.common.serial.menu.SerialTerminalMenu
@@ -56,6 +57,24 @@ class CompukterKraftMod(
                 SimpleMenuProvider(
                     computer,
                     computer.name,
+                ),
+            ) { buffer ->
+                menuData.toBytes(buffer)
+            }
+        }
+        ModObjects.computerControlMenuType = { ModRegistry.Menus.COMPUTER_CONTROL.get() }
+        ModObjects.openComputerControlMenu = { player: ServerPlayer, computer, menuData: ComputerContainerData ->
+            player.openMenu(
+                SimpleMenuProvider(
+                    { id, playerInventory, _ ->
+                        ComputerControlMenu(
+                            ModRegistry.Menus.COMPUTER_CONTROL.get(),
+                            id,
+                            playerInventory,
+                            computer.getOrCreateRuntimeDevice(),
+                        )
+                    },
+                    Component.translatable("gui.compukterkraft.computer_control.title"),
                 ),
             ) { buffer ->
                 menuData.toBytes(buffer)
