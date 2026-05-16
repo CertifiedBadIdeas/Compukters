@@ -124,9 +124,9 @@ class SerialTerminalScreen(
     private fun drawConnectionStatus(guiGraphics: GuiGraphics) {
         val statusKey =
             if (menu.isComputerOn) {
-                "gui.compukterkraft.serial_terminal.connected_on"
+                "gui.compukterkraft.serial_terminal.linked_on"
             } else {
-                "gui.compukterkraft.serial_terminal.connected_off"
+                "gui.compukterkraft.serial_terminal.linked_off"
             }
         val status = Component.translatable(statusKey)
         val color = if (menu.isComputerOn) STATUS_ON else STATUS_OFF

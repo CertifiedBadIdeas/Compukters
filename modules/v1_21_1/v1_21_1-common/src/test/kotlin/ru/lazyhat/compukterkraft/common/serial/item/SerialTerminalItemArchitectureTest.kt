@@ -17,29 +17,31 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package ru.lazyhat.compukterkraft.common.serial.screen
+package ru.lazyhat.compukterkraft.common.serial.item
 
 import java.nio.file.Paths
 import kotlin.io.path.readText
 import kotlin.test.Test
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-class SerialTerminalScreenArchitectureTest {
+class SerialTerminalItemArchitectureTest {
     private val source =
         Paths
-            .get("src/main/kotlin/ru/lazyhat/compukterkraft/common/serial/screen/SerialTerminalScreen.kt")
+            .get("src/main/kotlin/ru/lazyhat/compukterkraft/common/serial/item/SerialTerminalItem.kt")
             .readText()
 
     @Test
-    fun serialTerminalKeepsInventoryKeyAsTextInputInsteadOfClosingScreen() {
-        assertTrue(source.contains("keyInventory"))
-        assertTrue(source.contains(".matches(keyCode, scanCode)"))
+    fun serialTerminalBindingBelongsToTheItemStackNotThePlayerSession() {
+        assertTrue(source.contains("readSerialBinding"))
+        assertTrue(source.contains("writeSerialBinding"))
+        assertFalse(source.contains("TransientPairing"))
     }
 
     @Test
-    fun serialTerminalShowsComputerConnectionAndPowerState() {
-        assertTrue(source.contains("gui.compukterkraft.serial_terminal.linked_on"))
-        assertTrue(source.contains("gui.compukterkraft.serial_terminal.linked_off"))
-        assertTrue(source.contains("menu.isComputerOn"))
+    fun serialTerminalTooltipShowsLinkState() {
+        assertTrue(source.contains("appendHoverText"))
+        assertTrue(source.contains("gui.compukterkraft.tooltip.serial_terminal_linked_computer"))
+        assertTrue(source.contains("gui.compukterkraft.tooltip.serial_terminal_link_prompt"))
     }
 }
