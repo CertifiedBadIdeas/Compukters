@@ -41,6 +41,12 @@ interface ClientNetworkContext {
         payload: ByteArray,
     )
 
+    fun handleSerialConsoleOutput(
+        containerId: Int,
+        bytes: ByteArray,
+        reset: Boolean,
+    )
+
     fun handleWorkbenchWorkspace(
         containerId: Int,
         remoteState: WorkbenchRemoteState,

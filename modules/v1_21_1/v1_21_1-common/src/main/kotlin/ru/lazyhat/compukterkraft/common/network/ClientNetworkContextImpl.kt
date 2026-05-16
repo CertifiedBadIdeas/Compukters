@@ -23,6 +23,7 @@ import net.minecraft.client.Minecraft
 import ru.lazyhat.compukterkraft.common.computer.menu.ComputerMenu
 import ru.lazyhat.compukterkraft.common.network.text.ClientTableFormatter
 import ru.lazyhat.compukterkraft.common.network.text.TableBuilder
+import ru.lazyhat.compukterkraft.common.serial.menu.SerialTerminalMenu
 import ru.lazyhat.compukterkraft.common.workbench.menu.AbstractWorkbenchMenu
 import ru.lazyhat.compukterkraft.core.device.vm.display.NativeDisplayFrameCodec
 import ru.lazyhat.compukterkraft.core.workbench.EditorPresence
@@ -61,6 +62,18 @@ class ClientNetworkContextImpl : ClientNetworkContext {
             ?.run(block)
     }
 
+    private inline fun withCheckedSerialTerminalMenu(
+        containerId: Int,
+        block: SerialTerminalMenu.() -> Unit,
+    ) {
+        minecraft
+            .player
+            ?.containerMenu
+            ?.takeIf { it.containerId == containerId }
+            ?.let { it as? SerialTerminalMenu }
+            ?.run(block)
+    }
+
     override fun handleChatTable(table: TableBuilder) {
         ClientTableFormatter(minecraft).display(table)
     }
@@ -79,6 +92,14 @@ class ClientNetworkContextImpl : ClientNetworkContext {
         for (frame in NativeDisplayFrameCodec.decodeFrames(payload)) {
             handleDisplayFrame(frame)
         }
+    }
+
+    override fun handleSerialConsoleOutput(
+        containerId: Int,
+        bytes: ByteArray,
+        reset: Boolean,
+    ) = withCheckedSerialTerminalMenu(containerId) {
+        applySerialOutput(bytes, reset)
     }
 
     override fun handleWorkbenchWorkspace(

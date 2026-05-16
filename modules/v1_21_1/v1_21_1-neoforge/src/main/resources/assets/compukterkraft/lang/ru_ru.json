@@ -13,6 +13,7 @@
   "gui.compukterkraft.tooltip.computer_id": "ID компьютера: %s",
   "gui.compukterkraft.tooltip.copy": "Скопировать в буфер обмена",
   "item.compukterkraft.computer_advanced": "Продвинутый компьютер",
+  "item.compukterkraft.serial_terminal": "Serial-терминал",
   "item.compukterkraft.terminal": "Терминал",
   "item.compukterkraft.workbench": "Верстак",
   "message.compukterkraft.terminal.no_binding": "Нет привязанного компьютера. Сначала ПКМ по блоку компьютера.",

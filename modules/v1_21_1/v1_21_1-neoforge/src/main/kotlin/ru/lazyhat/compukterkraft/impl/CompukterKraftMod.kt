@@ -20,6 +20,7 @@
 package ru.lazyhat.compukterkraft.impl
 
 import net.minecraft.server.level.ServerPlayer
+import net.minecraft.network.chat.Component
 import net.minecraft.world.SimpleMenuProvider
 import net.neoforged.api.distmarker.Dist
 import net.neoforged.bus.api.IEventBus
@@ -29,6 +30,7 @@ import ru.lazyhat.compukterkraft.common.binding.ModObjects
 import ru.lazyhat.compukterkraft.common.computer.data.ComputerContainerData
 import ru.lazyhat.compukterkraft.common.network.ClientNetworking
 import ru.lazyhat.compukterkraft.common.network.ServerNetworking
+import ru.lazyhat.compukterkraft.common.serial.menu.SerialTerminalMenu
 import ru.lazyhat.compukterkraft.common.workbench.data.WorkbenchContainerData
 import ru.lazyhat.compukterkraft.core.LOGGER
 import ru.lazyhat.compukterkraft.core.MOD_ID
@@ -54,6 +56,25 @@ class CompukterKraftMod(
                 SimpleMenuProvider(
                     computer,
                     computer.name,
+                ),
+            ) { buffer ->
+                menuData.toBytes(buffer)
+            }
+        }
+        ModObjects.serialTerminalMenuType = { ModRegistry.Menus.SERIAL_TERMINAL.get() }
+        ModObjects.openSerialTerminalMenu = { player: ServerPlayer, computer, menuData: ComputerContainerData ->
+            player.openMenu(
+                SimpleMenuProvider(
+                    { id, playerInventory, _ ->
+                        SerialTerminalMenu(
+                            ModRegistry.Menus.SERIAL_TERMINAL.get(),
+                            id,
+                            playerInventory,
+                            computer.getOrCreateRuntimeDevice(),
+                            player,
+                        )
+                    },
+                    Component.translatable("item.compukterkraft.serial_terminal"),
                 ),
             ) { buffer ->
                 menuData.toBytes(buffer)
