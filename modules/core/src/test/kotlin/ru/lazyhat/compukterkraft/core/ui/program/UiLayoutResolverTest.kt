@@ -114,4 +114,50 @@ class UiLayoutResolverTest {
 
         assertEquals(LayoutNode("root-0-0", 4, 4, 24, 72), layout.getValue("root-0-0"))
     }
+
+    @Test
+    fun rowGapAddsSpacingBetweenFlowChildren() {
+        val root =
+            ui {
+                row(modifier = Modifier.size(100, 20), gap = 4) {
+                    box(modifier = Modifier.size(10, 20))
+                    box(modifier = Modifier.size(20, 20))
+                }
+            }
+
+        val layout = UiLayoutResolver(rootWidth = 100, rootHeight = 20).resolve(root)
+
+        assertEquals(LayoutNode("root-0-0", 0, 0, 10, 20), layout.getValue("root-0-0"))
+        assertEquals(LayoutNode("root-0-1", 14, 0, 20, 20), layout.getValue("root-0-1"))
+    }
+
+    @Test
+    fun rowVerticalAlignmentCentersChildrenInCrossAxis() {
+        val root =
+            ui {
+                row(modifier = Modifier.size(100, 30), verticalAlignment = UiAlignment.Center) {
+                    box(modifier = Modifier.size(10, 10))
+                }
+            }
+
+        val layout = UiLayoutResolver(rootWidth = 100, rootHeight = 30).resolve(root)
+
+        assertEquals(LayoutNode("root-0-0", 0, 10, 10, 10), layout.getValue("root-0-0"))
+    }
+
+    @Test
+    fun columnGapAddsSpacingAndHorizontalAlignmentMovesChildren() {
+        val root =
+            ui {
+                column(modifier = Modifier.size(100, 60), gap = 3, horizontalAlignment = UiAlignment.End) {
+                    box(modifier = Modifier.size(20, 10))
+                    box(modifier = Modifier.size(30, 10))
+                }
+            }
+
+        val layout = UiLayoutResolver(rootWidth = 100, rootHeight = 60).resolve(root)
+
+        assertEquals(LayoutNode("root-0-0", 80, 0, 20, 10), layout.getValue("root-0-0"))
+        assertEquals(LayoutNode("root-0-1", 70, 13, 30, 10), layout.getValue("root-0-1"))
+    }
 }
