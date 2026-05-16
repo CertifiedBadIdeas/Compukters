@@ -35,7 +35,12 @@ class SerialTerminalItemArchitectureTest {
     fun serialTerminalBindingBelongsToTheItemStackNotThePlayerSession() {
         assertTrue(source.contains("readSerialBinding"))
         assertTrue(source.contains("writeSerialBinding"))
+        assertTrue(source.contains("ServerContext.deviceManager.get"))
         assertFalse(source.contains("TransientPairing"))
+        assertFalse(source.contains("BlockPos"))
+        assertFalse(source.contains("blockPos"))
+        assertFalse(source.contains("DIMENSION_ID"))
+        assertFalse(source.contains("distanceToSqr"))
     }
 
     @Test
