@@ -38,8 +38,8 @@ class SerialTerminalScreenArchitectureTest {
 
     @Test
     fun serialTerminalShowsComputerConnectionAndPowerState() {
-        assertTrue(source.contains("gui.compukterkraft.serial_terminal.connected_on"))
-        assertTrue(source.contains("gui.compukterkraft.serial_terminal.connected_off"))
+        assertTrue(source.contains("gui.compukterkraft.serial_terminal.linked_on"))
+        assertTrue(source.contains("gui.compukterkraft.serial_terminal.linked_off"))
         assertTrue(source.contains("menu.isComputerOn"))
     }
 }
