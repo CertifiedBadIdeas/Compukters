@@ -19,4 +19,5 @@ Conformance material:
 
 - `fixtures/*.ruxi`: golden and negative Rux low image fixtures.
 - `fixtures/*.json`: machine-readable fixture manifests.
+- `fixtures/README.md`: fixture execution notes, including `./rux run --memory` behavior.
 - `CHANGELOG.md`: ABI history and freeze notes.
