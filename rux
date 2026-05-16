@@ -28,6 +28,7 @@ usage() {
 usage:
   rux emit <input.rx> <output.ruxi>
   rux disasm <input.ruxi>
+  rux run <input.rx|input.ruxi> [--serial <text>|--serial-live]
 EOF
 }
 

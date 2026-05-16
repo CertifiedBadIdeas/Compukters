@@ -1,9 +1,11 @@
-use rux_compiler::{compile, render_terminal_ui, run_source, run_source_with_serial_input};
+use rux_compiler::{compile, render_terminal_ui, RuxRunReport};
 use rux_vm::computer_machine::ComputerMachine;
+use rux_vm::low_image::{decode_image, Image};
 use rux_vm::low_image_runner::LowImageSignal;
 use std::env;
 use std::fs;
 use std::io::{self, Read, Write};
+use std::path::Path;
 use std::process::ExitCode;
 use std::sync::mpsc::{self, TryRecvError};
 use std::thread;
@@ -17,13 +19,13 @@ fn main() -> ExitCode {
         Ok(parsed) => parsed,
         Err(error) => {
             eprintln!("{error}");
-            eprintln!("usage: run <path.rx> [--serial <text>|--serial-live]");
+            eprintln!("usage: rux-run <path.rx|path.ruxi> [--serial <text>|--serial-live]");
             return ExitCode::from(2);
         }
     };
 
-    let source = match read_source(&path) {
-        Ok(source) => source,
+    let image = match load_image(&path) {
+        Ok(image) => image,
         Err(error) => {
             eprintln!("{error}");
             return ExitCode::from(1);
@@ -31,9 +33,9 @@ fn main() -> ExitCode {
     };
 
     match mode {
-        RunMode::Default => run_framed(&source),
-        RunMode::ScriptedSerial(input) => run_scripted_serial(&source, &input),
-        RunMode::LiveSerial => run_live_serial(&source),
+        RunMode::Default => run_framed(image),
+        RunMode::ScriptedSerial(input) => run_scripted_serial(image, &input),
+        RunMode::LiveSerial => run_live_serial(image),
     }
 }
 
@@ -77,12 +79,30 @@ where
     }
 }
 
-fn read_source(path: &str) -> Result<String, String> {
-    fs::read_to_string(path).map_err(|error| format!("failed to read {path}: {error}"))
+fn load_image(path: &str) -> Result<Image, String> {
+    match Path::new(path)
+        .extension()
+        .and_then(|extension| extension.to_str())
+    {
+        Some("rx") => {
+            let source = fs::read_to_string(path)
+                .map_err(|error| format!("failed to read {path}: {error}"))?;
+            compile(&source).map_err(|error| format!("compile error: {}", error.message))
+        }
+        Some("ruxi") => {
+            let bytes =
+                fs::read(path).map_err(|error| format!("failed to read {path}: {error}"))?;
+            decode_image(&bytes).map_err(|error| format!("decode error: {error}"))
+        }
+        Some(extension) => Err(format!(
+            "unsupported input extension `.{extension}`; expected .rx or .ruxi"
+        )),
+        None => Err("unsupported input without extension; expected .rx or .ruxi".to_string()),
+    }
 }
 
-fn run_framed(source: &str) -> ExitCode {
-    match run_source(source) {
+fn run_framed(image: Image) -> ExitCode {
+    match run_image_with_serial_input(image, &[]) {
         Ok(report) => {
             print!("{}", render_terminal_ui(&report));
             if report.panic_code == 0 {
@@ -98,8 +118,8 @@ fn run_framed(source: &str) -> ExitCode {
     }
 }
 
-fn run_scripted_serial(source: &str, input: &[u8]) -> ExitCode {
-    match run_source_with_serial_input(source, input) {
+fn run_scripted_serial(image: Image, input: &[u8]) -> ExitCode {
+    match run_image_with_serial_input(image, input) {
         Ok(report) => {
             print!("{}", render_terminal_ui(&report));
             if report.panic_code == 0 {
@@ -115,14 +135,23 @@ fn run_scripted_serial(source: &str, input: &[u8]) -> ExitCode {
     }
 }
 
-fn run_live_serial(source: &str) -> ExitCode {
-    let image = match compile(source) {
-        Ok(image) => image,
-        Err(error) => {
-            eprintln!("compile error: {}", error.message);
-            return ExitCode::from(1);
-        }
-    };
+fn run_image_with_serial_input(image: Image, input: &[u8]) -> Result<RuxRunReport, String> {
+    let mut machine =
+        ComputerMachine::new(DEFAULT_MEMORY_SIZE).map_err(|error| error.to_string())?;
+    machine.push_serial_input(input);
+    let cpu_id = machine.spawn_boot_cpu(image, DEFAULT_SLICE_BUDGET_NANOS)?;
+    let signal = machine.run_boot_cpu_until_signal(cpu_id)?;
+
+    Ok(RuxRunReport {
+        signal,
+        debug_output: machine.debug_output_string(),
+        control_status: machine.control_status(),
+        exit_code: machine.exit_code(),
+        panic_code: machine.panic_code(),
+    })
+}
+
+fn run_live_serial(image: Image) -> ExitCode {
     let mut machine = match ComputerMachine::new(DEFAULT_MEMORY_SIZE) {
         Ok(machine) => machine,
         Err(error) => {
