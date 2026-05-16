@@ -43,12 +43,14 @@ open class ComputerBlockEntity(
         ComputerRuntimeDeviceFactory.createRuxComputer(level as ServerLevel, this, id)
 
     override fun updateBlockState(newState: ComputerState) {
-        blockState
+        val currentState = level?.getBlockState(blockPos) ?: return
+        if (!canApplyRuntimeBlockStateUpdate(currentState)) return
+        currentState
             .takeIf { it.getValue(ComputerBlock.state) != newState }
             ?.let {
                 level?.setBlock(
                     blockPos,
-                    blockState.setValue(ComputerBlock.state, newState),
+                    currentState.setValue(ComputerBlock.state, newState),
                     Block.UPDATE_CLIENTS,
                 )
             }

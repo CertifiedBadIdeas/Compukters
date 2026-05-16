@@ -49,6 +49,7 @@ abstract class AbstractComputerBlockEntity(
         private set
     private var _label: String? = null
     private var _computerID: Int? = null
+    private var runtimeBlockStateUpdatesEnabled: Boolean = true
 
     var label: String?
         get() = _label
@@ -145,6 +146,7 @@ abstract class AbstractComputerBlockEntity(
     override fun getCustomName(): Component? = _label?.takeIf { it.isEmpty() }?.let { Component.literal(it) }
 
     protected fun releaseRuntimeDevice() {
+        runtimeBlockStateUpdatesEnabled = false
         ifServerSide(level) {
             _computerID
                 .takeIf { ServerContext.isInitialized }
@@ -152,4 +154,9 @@ abstract class AbstractComputerBlockEntity(
                 ?.close()
         }
     }
+
+    protected fun canApplyRuntimeBlockStateUpdate(currentState: BlockState): Boolean =
+        runtimeBlockStateUpdatesEnabled &&
+            !isRemoved &&
+            currentState.block == blockState.block
 }
