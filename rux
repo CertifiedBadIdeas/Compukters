@@ -46,6 +46,9 @@ case "$COMMAND" in
     disasm|disassemble)
         exec cargo run --quiet --manifest-path "$MANIFEST" --bin rux-disasm -- "$@"
         ;;
+    run)
+        exec cargo run --quiet --manifest-path "$MANIFEST" --bin rux-run -- "$@"
+        ;;
     *)
         usage
         exit 2

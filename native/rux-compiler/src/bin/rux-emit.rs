@@ -7,15 +7,15 @@ use std::process::ExitCode;
 fn main() -> ExitCode {
     let mut args = env::args().skip(1);
     let Some(source_path) = args.next() else {
-        eprintln!("usage: rux-emit <input.rx> <output.ruxi>");
+        eprintln!("usage: emit <input.rx> <output.ruxi>");
         return ExitCode::from(2);
     };
     let Some(output_path) = args.next() else {
-        eprintln!("usage: rux-emit <input.rx> <output.ruxi>");
+        eprintln!("usage: emit <input.rx> <output.ruxi>");
         return ExitCode::from(2);
     };
     if args.next().is_some() {
-        eprintln!("usage: rux-emit <input.rx> <output.ruxi>");
+        eprintln!("usage: emit <input.rx> <output.ruxi>");
         return ExitCode::from(2);
     }
 
