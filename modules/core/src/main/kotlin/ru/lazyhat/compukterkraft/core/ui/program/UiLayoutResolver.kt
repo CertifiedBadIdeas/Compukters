@@ -74,11 +74,33 @@ class UiLayoutResolver(
             }
 
             is UiElement.Row -> {
-                resolveRowChildren(element.children, nodeId, x, y, width, height, element.modifier, resolved)
+                resolveRowChildren(
+                    element.children,
+                    nodeId,
+                    x,
+                    y,
+                    width,
+                    height,
+                    element.modifier,
+                    element.gap,
+                    element.verticalAlignment,
+                    resolved,
+                )
             }
 
             is UiElement.Column -> {
-                resolveColumnChildren(element.children, nodeId, x, y, width, height, element.modifier, resolved)
+                resolveColumnChildren(
+                    element.children,
+                    nodeId,
+                    x,
+                    y,
+                    width,
+                    height,
+                    element.modifier,
+                    element.gap,
+                    element.horizontalAlignment,
+                    resolved,
+                )
             }
 
             is UiElement.IfNode -> {
@@ -134,11 +156,33 @@ class UiLayoutResolver(
             }
 
             is UiElement.Row -> {
-                resolveRowChildren(element.children, nodeId, x, y, width, height, element.modifier, resolved)
+                resolveRowChildren(
+                    element.children,
+                    nodeId,
+                    x,
+                    y,
+                    width,
+                    height,
+                    element.modifier,
+                    element.gap,
+                    element.verticalAlignment,
+                    resolved,
+                )
             }
 
             is UiElement.Column -> {
-                resolveColumnChildren(element.children, nodeId, x, y, width, height, element.modifier, resolved)
+                resolveColumnChildren(
+                    element.children,
+                    nodeId,
+                    x,
+                    y,
+                    width,
+                    height,
+                    element.modifier,
+                    element.gap,
+                    element.horizontalAlignment,
+                    resolved,
+                )
             }
 
             is UiElement.IfNode -> {
@@ -188,6 +232,8 @@ class UiLayoutResolver(
         width: Int,
         height: Int,
         modifier: Modifier,
+        gap: Int,
+        verticalAlignment: UiAlignment?,
         resolved: MutableMap<String, LayoutNode>,
     ) {
         val padding = modifier.findPadding()?.padding ?: Padding.Zero
@@ -198,10 +244,11 @@ class UiLayoutResolver(
         val contentHeight = height - padding.top - padding.bottom
 
         val flow = children.filterNot { it is UiElement.Overlay }
+        val gapWidth = gap * (flow.size - 1).coerceAtLeast(0)
         val fixedWidth =
             flow
                 .filter { it.modifier.findWeight() == null }
-                .sumOf { primaryWidthForRow(it, contentWidth) }
+                .sumOf { primaryWidthForRow(it, contentWidth) } + gapWidth
         val totalWeight = flow.sumOf { (it.modifier.findWeight()?.weight ?: 0f).toDouble() }.toFloat()
 
         val remainingWidth = (contentWidth - fixedWidth).coerceAtLeast(0)
@@ -226,8 +273,9 @@ class UiLayoutResolver(
                 } else {
                     primaryWidthForRow(child, contentWidth)
                 }
+            val alignment = child.modifier.findAlignment()?.alignment ?: verticalAlignment
             val childHeight =
-                when (child.modifier.findAlignment()?.alignment) {
+                when (alignment) {
                     UiAlignment.Stretch -> contentHeight
                     else -> explicitOrIntrinsicHeight(child, contentHeight)
                 }
@@ -236,14 +284,14 @@ class UiLayoutResolver(
                 child,
                 "$nodeId-$index",
                 cursorX,
-                contentY,
+                alignY(contentY, contentHeight, childHeight, alignment),
                 childWidth,
                 childHeight,
                 resolved,
                 forcedWidth = childWidth,
                 forcedHeight = childHeight,
             )
-            cursorX += childWidth
+            cursorX += childWidth + gap
         }
     }
 
@@ -255,6 +303,8 @@ class UiLayoutResolver(
         width: Int,
         height: Int,
         modifier: Modifier,
+        gap: Int,
+        horizontalAlignment: UiAlignment?,
         resolved: MutableMap<String, LayoutNode>,
     ) {
         val padding = modifier.findPadding()?.padding ?: Padding.Zero
@@ -265,10 +315,11 @@ class UiLayoutResolver(
         val contentHeight = height - padding.top - padding.bottom
 
         val flow = children.filterNot { it is UiElement.Overlay }
+        val gapHeight = gap * (flow.size - 1).coerceAtLeast(0)
         val fixedHeight =
             flow
                 .filter { it.modifier.findWeight() == null }
-                .sumOf { primaryHeightForColumn(it, contentHeight) }
+                .sumOf { primaryHeightForColumn(it, contentHeight) } + gapHeight
         val totalWeight = flow.sumOf { (it.modifier.findWeight()?.weight ?: 0f).toDouble() }.toFloat()
 
         val remainingHeight = (contentHeight - fixedHeight).coerceAtLeast(0)
@@ -293,8 +344,9 @@ class UiLayoutResolver(
                 } else {
                     primaryHeightForColumn(child, contentHeight)
                 }
+            val alignment = child.modifier.findAlignment()?.alignment ?: horizontalAlignment
             val childWidth =
-                when (child.modifier.findAlignment()?.alignment) {
+                when (alignment) {
                     UiAlignment.Stretch -> contentWidth
                     else -> explicitOrIntrinsicWidth(child, contentWidth)
                 }
@@ -302,7 +354,7 @@ class UiLayoutResolver(
             resolveNode(
                 child,
                 "$nodeId-$index",
-                contentX,
+                alignX(contentX, contentWidth, childWidth, alignment),
                 cursorY,
                 childWidth,
                 childHeight,
@@ -310,7 +362,7 @@ class UiLayoutResolver(
                 forcedWidth = childWidth,
                 forcedHeight = childHeight,
             )
-            cursorY += childHeight
+            cursorY += childHeight + gap
         }
     }
 

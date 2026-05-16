@@ -29,6 +29,7 @@ import ru.lazyhat.compukterkraft.core.input.KeyCodes
 import ru.lazyhat.compukterkraft.core.ui.foundation.Color
 import ru.lazyhat.compukterkraft.core.ui.foundation.UiElement
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Modifier
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.UiAlignment
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.background
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.fillMaxSize
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.fillMaxWidth
@@ -75,15 +76,18 @@ class SerialTerminalScreen(
     override fun content(): UiElement =
         ui(Modifier.fillMaxSize().background(BACKGROUND).padding(SCREEN_PADDING)) {
             column(Modifier.fillMaxSize()) {
-                row(Modifier.fillMaxWidth().height(HEADER_HEIGHT)) {
+                row(
+                    modifier = Modifier.fillMaxWidth().height(HEADER_HEIGHT),
+                    gap = 4,
+                    verticalAlignment = UiAlignment.Center,
+                ) {
                     text(
-                        modifier = Modifier.weight(1f).height(HEADER_HEIGHT),
+                        modifier = Modifier.weight(1f),
                         color = TITLE,
                     ) {
                         title.string
                     }
                     text(
-                        modifier = Modifier.height(HEADER_HEIGHT),
                         color = STATUS,
                     ) {
                         serialStatusText()

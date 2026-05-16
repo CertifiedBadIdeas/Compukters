@@ -44,6 +44,13 @@ Add `text` overloads that hide `Value<T>` for common cases:
 
 Add `keySurface(...)` as a semantic focus/input element. It lowers to a focusable empty canvas but hides that implementation detail from screen code.
 
+Add flow-layout parameters:
+
+- `row(gap = px, verticalAlignment = ...)`
+- `column(gap = px, horizontalAlignment = ...)`
+
+These parameters cover the common Compose/Flex case where a parent controls spacing and cross-axis alignment for all children, while individual child `Modifier.align(...)` remains an override.
+
 ## Layout Semantics
 
 The new size modifiers are resolved before the old `size(width, height)` fallback:
@@ -52,6 +59,8 @@ The new size modifiers are resolved before the old `size(width, height)` fallbac
 - `fillMaxWidth`/`fillMaxHeight` resolve to the parent content size on that axis.
 - `size(width, height)` remains as a compatibility shorthand for both axes.
 - Existing `row`, `column`, `weight`, `align`, and `padding` semantics are preserved.
+- `gap` is included in fixed-space accounting before weighted children receive remaining space.
+- Row `verticalAlignment` and column `horizontalAlignment` apply on the cross axis. A child-level `Modifier.align(...)` takes precedence.
 
 This keeps the existing runtime compatible while allowing flow-style screen code.
 

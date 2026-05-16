@@ -3,6 +3,7 @@ package ru.lazyhat.compukterkraft.core.ui.foundation
 import ru.lazyhat.compukterkraft.core.ui.editor.EditorViewModel
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Modifier
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Position
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.UiAlignment
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.clickable
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.focusable
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
@@ -18,11 +19,15 @@ sealed interface UiElement {
     data class Row(
         override val modifier: Modifier,
         val children: List<UiElement>,
+        val gap: Int = 0,
+        val verticalAlignment: UiAlignment? = null,
     ) : UiElement
 
     data class Column(
         override val modifier: Modifier,
         val children: List<UiElement>,
+        val gap: Int = 0,
+        val horizontalAlignment: UiAlignment? = null,
     ) : UiElement
 
     data class Text(
@@ -126,16 +131,22 @@ class UiScope {
 
     fun row(
         modifier: Modifier = Modifier,
+        gap: Int = 0,
+        verticalAlignment: UiAlignment? = null,
         block: UiScope.() -> Unit,
     ) {
-        children += UiElement.Row(modifier, UiScope().apply(block).build())
+        require(gap >= 0)
+        children += UiElement.Row(modifier, UiScope().apply(block).build(), gap, verticalAlignment)
     }
 
     fun column(
         modifier: Modifier = Modifier,
+        gap: Int = 0,
+        horizontalAlignment: UiAlignment? = null,
         block: UiScope.() -> Unit,
     ) {
-        children += UiElement.Column(modifier, UiScope().apply(block).build())
+        require(gap >= 0)
+        children += UiElement.Column(modifier, UiScope().apply(block).build(), gap, horizontalAlignment)
     }
 
     fun button(
