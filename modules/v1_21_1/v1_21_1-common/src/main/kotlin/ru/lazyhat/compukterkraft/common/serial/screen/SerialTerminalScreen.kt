@@ -19,28 +19,31 @@
 package ru.lazyhat.compukterkraft.common.serial.screen
 
 import net.minecraft.client.gui.GuiGraphics
-import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
 import net.minecraft.network.chat.Component
 import net.minecraft.world.entity.player.Inventory
 import ru.lazyhat.compukterkraft.common.network.ClientNetworking
 import ru.lazyhat.compukterkraft.common.serial.menu.SerialTerminalMenu
 import ru.lazyhat.compukterkraft.common.serial.network.server.SerialConsoleInputServerMessage
+import ru.lazyhat.compukterkraft.common.ui.program.DslContainerScreen
 import ru.lazyhat.compukterkraft.core.input.KeyCodes
+import ru.lazyhat.compukterkraft.core.ui.foundation.Color
+import ru.lazyhat.compukterkraft.core.ui.foundation.UiElement
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Modifier
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.background
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.focusable
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.offset
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.size
+import ru.lazyhat.compukterkraft.core.ui.foundation.ui
+import ru.lazyhat.compukterkraft.core.ui.foundation.value
 
 class SerialTerminalScreen(
     menu: SerialTerminalMenu,
     inventory: Inventory,
     title: Component,
-) : AbstractContainerScreen<SerialTerminalMenu>(menu, inventory, title) {
+) : DslContainerScreen<SerialTerminalMenu>(menu, inventory, title) {
     init {
         imageWidth = WIDTH
         imageHeight = HEIGHT
-    }
-
-    override fun init() {
-        super.init()
-        leftPos = (width - imageWidth) / 2
-        topPos = (height - imageHeight) / 2
     }
 
     override fun render(
@@ -53,62 +56,79 @@ class SerialTerminalScreen(
         super.render(guiGraphics, mouseX, mouseY, partialTick)
     }
 
-    override fun renderLabels(
-        guiGraphics: GuiGraphics,
-        mouseX: Int,
-        mouseY: Int,
-    ) {
+    override fun init() {
+        super.init()
+        focusFirstNodeIfUnfocused()
     }
 
-    override fun renderBg(
-        guiGraphics: GuiGraphics,
-        partialTick: Float,
-        mouseX: Int,
-        mouseY: Int,
-    ) {
-        guiGraphics.fill(leftPos, topPos, leftPos + imageWidth, topPos + imageHeight, BACKGROUND)
-        guiGraphics.fill(leftPos + 6, topPos + 18, leftPos + imageWidth - 6, topPos + imageHeight - 24, PANEL)
-        guiGraphics.fill(leftPos + 6, topPos + imageHeight - 20, leftPos + imageWidth - 6, topPos + imageHeight - 6, INPUT)
-        guiGraphics.drawString(font, title, leftPos + 8, topPos + 7, TITLE, false)
-        drawConnectionStatus(guiGraphics)
+    override fun mouseClicked(
+        x: Double,
+        y: Double,
+        button: Int,
+    ): Boolean {
+        val handled = super.mouseClicked(x, y, button)
+        focusFirstNodeIfUnfocused()
+        return handled
+    }
 
-        val lines = visibleOutputLines()
-        var y = topPos + 22
-        for (line in lines) {
-            guiGraphics.drawString(font, truncateToWidth(line, imageWidth - 18), leftPos + 10, y, TEXT, false)
-            y += LINE_HEIGHT
+    override fun content(): UiElement =
+        ui(Modifier.size(imageWidth, imageHeight).background(BACKGROUND)) {
+            box(
+                Modifier
+                    .offset(6, 18)
+                    .size(imageWidth - 12, imageHeight - 42)
+                    .background(PANEL),
+            )
+            box(
+                Modifier
+                    .offset(6, imageHeight - 20)
+                    .size(imageWidth - 12, 14)
+                    .background(INPUT),
+            )
+            text(
+                modifier = Modifier.offset(8, 7),
+                color = TITLE,
+                text = value { title.string },
+            )
+            text(
+                modifier = Modifier.offset(STATUS_X, 7),
+                color = STATUS,
+                text = value { serialStatusText() },
+            )
+
+            for (row in 0 until VISIBLE_OUTPUT_LINES) {
+                text(
+                    modifier = Modifier.offset(10, 22 + row * LINE_HEIGHT),
+                    color = TEXT,
+                    text = value { visibleOutputLine(row) },
+                )
+            }
+
+            text(
+                modifier = Modifier.offset(10, imageHeight - 17),
+                color = PROMPT,
+                text = value { truncateToWidth("> ${menu.serialBuffer.inputLine}", imageWidth - 18) },
+            )
+            canvas(
+                modifier =
+                    Modifier
+                        .offset(6, 18)
+                        .size(imageWidth - 12, imageHeight - 24)
+                        .focusable(
+                            id = "serial-terminal",
+                            onKeyPressed = ::handleSerialKey,
+                            onCharTyped = ::handleSerialChar,
+                        ),
+            ) {
+                // Focus target only. Visible chrome and text are authored as DSL elements.
+            }
         }
-        val input = "> ${menu.serialBuffer.inputLine}"
-        guiGraphics.drawString(font, truncateToWidth(input, imageWidth - 18), leftPos + 10, topPos + imageHeight - 17, PROMPT, false)
-    }
 
     override fun keyPressed(
         keyCode: Int,
         scanCode: Int,
         modifiers: Int,
-    ): Boolean =
-        when {
-            keyCode == KeyCodes.KEY_ENTER || keyCode == KeyCodes.KEY_KP_ENTER -> {
-                ClientNetworking.sendToServer(
-                    SerialConsoleInputServerMessage(menu.containerId, menu.serialBuffer.submitLine()),
-                )
-                true
-            }
-            keyCode == KeyCodes.KEY_BACKSPACE -> {
-                menu.serialBuffer.backspace()
-                true
-            }
-            isInventoryKey(keyCode, scanCode) -> true
-            else -> super.keyPressed(keyCode, scanCode, modifiers)
-        }
-
-    override fun charTyped(
-        codePoint: Char,
-        modifiers: Int,
-    ): Boolean {
-        menu.serialBuffer.type(codePoint)
-        return true
-    }
+    ): Boolean = isInventoryKey(keyCode, scanCode) || super.keyPressed(keyCode, scanCode, modifiers)
 
     private fun visibleOutputLines(): List<String> {
         val all = buildList {
@@ -121,18 +141,29 @@ class SerialTerminalScreen(
         return all.takeLast(maxLines)
     }
 
-    private fun drawConnectionStatus(guiGraphics: GuiGraphics) {
-        val status =
-            Component.translatable("gui.compukterkraft.serial_terminal.linked")
-                .append("  RX ${menu.serialBuffer.rxBytes}  TX ${menu.serialBuffer.txBytes}")
-        guiGraphics.drawString(
-            font,
-            status,
-            leftPos + imageWidth - 8 - font.width(status),
-            topPos + 7,
-            STATUS,
-            false,
-        )
+    private fun visibleOutputLine(row: Int): String = truncateToWidth(visibleOutputLines().getOrNull(row) ?: "", imageWidth - 18)
+
+    private fun serialStatusText(): String =
+        "${Component.translatable("gui.compukterkraft.serial_terminal.linked").string}  RX ${menu.serialBuffer.rxBytes}  TX ${menu.serialBuffer.txBytes}"
+
+    private fun handleSerialKey(keyCode: Int): Boolean =
+        when {
+            keyCode == KeyCodes.KEY_ENTER || keyCode == KeyCodes.KEY_KP_ENTER -> {
+                ClientNetworking.sendToServer(
+                    SerialConsoleInputServerMessage(menu.containerId, menu.serialBuffer.submitLine()),
+                )
+                true
+            }
+            keyCode == KeyCodes.KEY_BACKSPACE -> {
+                menu.serialBuffer.backspace()
+                true
+            }
+            else -> false
+        }
+
+    private fun handleSerialChar(codePoint: Char): Boolean {
+        menu.serialBuffer.type(codePoint)
+        return true
     }
 
     private fun isInventoryKey(
@@ -155,12 +186,14 @@ class SerialTerminalScreen(
         private const val WIDTH = 320
         private const val HEIGHT = 210
         private const val LINE_HEIGHT = 10
-        private const val BACKGROUND = 0xFF151922.toInt()
-        private const val PANEL = 0xFF0B0F14.toInt()
-        private const val INPUT = 0xFF202735.toInt()
-        private const val TITLE = 0xFFE6ECF5.toInt()
-        private const val TEXT = 0xFFB7C5D8.toInt()
-        private const val PROMPT = 0xFF7CFFB2.toInt()
-        private const val STATUS = 0xFF7CFFB2.toInt()
+        private const val VISIBLE_OUTPUT_LINES = (HEIGHT - 48) / LINE_HEIGHT
+        private const val STATUS_X = 178
+        private val BACKGROUND = Color.hex(0xFF151922u)
+        private val PANEL = Color.hex(0xFF0B0F14u)
+        private val INPUT = Color.hex(0xFF202735u)
+        private val TITLE = Color.hex(0xFFE6ECF5u)
+        private val TEXT = Color.hex(0xFFB7C5D8u)
+        private val PROMPT = Color.hex(0xFF7CFFB2u)
+        private val STATUS = Color.hex(0xFF7CFFB2u)
     }
 }

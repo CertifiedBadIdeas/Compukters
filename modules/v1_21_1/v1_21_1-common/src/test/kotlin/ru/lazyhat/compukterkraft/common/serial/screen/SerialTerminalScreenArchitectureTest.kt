@@ -38,6 +38,15 @@ class SerialTerminalScreenArchitectureTest {
     }
 
     @Test
+    fun serialTerminalScreenIsAuthoredWithTheUiDsl() {
+        assertTrue(source.contains("DslContainerScreen<SerialTerminalMenu>"))
+        assertTrue(source.contains("override fun content(): UiElement"))
+        assertTrue(source.contains("ui("))
+        assertTrue(source.contains(".focusable("))
+        assertFalse(source.contains("AbstractContainerScreen"))
+    }
+
+    @Test
     fun serialTerminalShowsLinkStateWithoutComputerPowerSemantics() {
         assertTrue(source.contains("gui.compukterkraft.serial_terminal.linked"))
         assertFalse(source.contains("linked_on"))
