@@ -4,9 +4,13 @@ import ru.lazyhat.compukterkraft.core.platform.api.FontMetrics
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Modifier
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.UiAlignment
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.align
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.fillMaxHeight
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.fillMaxWidth
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.height
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.padding
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.size
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.weight
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.width
 import ru.lazyhat.compukterkraft.core.ui.foundation.ui
 import ru.lazyhat.compukterkraft.core.ui.foundation.value
 import kotlin.test.Test
@@ -81,5 +85,33 @@ class UiLayoutResolverTest {
         val layout = UiLayoutResolver(rootWidth = 100, rootHeight = 40, fontMetrics = fontMetrics).resolve(root)
 
         assertEquals(LayoutNode("root-0-0", 44, 15, 12, 9), layout.getValue("root-0-0"))
+    }
+
+    @Test
+    fun fillMaxWidthComposesWithFixedHeight() {
+        val root =
+            ui {
+                column(modifier = Modifier.size(160, 80).padding(4)) {
+                    box(modifier = Modifier.fillMaxWidth().height(14))
+                }
+            }
+
+        val layout = UiLayoutResolver(rootWidth = 160, rootHeight = 80).resolve(root)
+
+        assertEquals(LayoutNode("root-0-0", 4, 4, 152, 14), layout.getValue("root-0-0"))
+    }
+
+    @Test
+    fun fixedWidthComposesWithFillMaxHeight() {
+        val root =
+            ui {
+                row(modifier = Modifier.size(160, 80).padding(4)) {
+                    box(modifier = Modifier.width(24).fillMaxHeight())
+                }
+            }
+
+        val layout = UiLayoutResolver(rootWidth = 160, rootHeight = 80).resolve(root)
+
+        assertEquals(LayoutNode("root-0-0", 4, 4, 24, 72), layout.getValue("root-0-0"))
     }
 }

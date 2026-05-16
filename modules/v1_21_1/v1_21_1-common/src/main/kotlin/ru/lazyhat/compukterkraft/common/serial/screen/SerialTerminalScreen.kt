@@ -30,11 +30,12 @@ import ru.lazyhat.compukterkraft.core.ui.foundation.Color
 import ru.lazyhat.compukterkraft.core.ui.foundation.UiElement
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Modifier
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.background
-import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.focusable
-import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.offset
-import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.size
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.fillMaxSize
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.fillMaxWidth
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.height
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.padding
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.weight
 import ru.lazyhat.compukterkraft.core.ui.foundation.ui
-import ru.lazyhat.compukterkraft.core.ui.foundation.value
 
 class SerialTerminalScreen(
     menu: SerialTerminalMenu,
@@ -72,56 +73,63 @@ class SerialTerminalScreen(
     }
 
     override fun content(): UiElement =
-        ui(Modifier.size(imageWidth, imageHeight).background(BACKGROUND)) {
-            box(
-                Modifier
-                    .offset(6, 18)
-                    .size(imageWidth - 12, imageHeight - 42)
-                    .background(PANEL),
-            )
-            box(
-                Modifier
-                    .offset(6, imageHeight - 20)
-                    .size(imageWidth - 12, 14)
-                    .background(INPUT),
-            )
-            text(
-                modifier = Modifier.offset(8, 7),
-                color = TITLE,
-                text = value { title.string },
-            )
-            text(
-                modifier = Modifier.offset(STATUS_X, 7),
-                color = STATUS,
-                text = value { serialStatusText() },
-            )
+        ui(Modifier.fillMaxSize().background(BACKGROUND).padding(SCREEN_PADDING)) {
+            column(Modifier.fillMaxSize()) {
+                row(Modifier.fillMaxWidth().height(HEADER_HEIGHT)) {
+                    text(
+                        modifier = Modifier.weight(1f).height(HEADER_HEIGHT),
+                        color = TITLE,
+                    ) {
+                        title.string
+                    }
+                    text(
+                        modifier = Modifier.height(HEADER_HEIGHT),
+                        color = STATUS,
+                    ) {
+                        serialStatusText()
+                    }
+                }
 
-            for (row in 0 until VISIBLE_OUTPUT_LINES) {
-                text(
-                    modifier = Modifier.offset(10, 22 + row * LINE_HEIGHT),
-                    color = TEXT,
-                    text = value { visibleOutputLine(row) },
-                )
-            }
-
-            text(
-                modifier = Modifier.offset(10, imageHeight - 17),
-                color = PROMPT,
-                text = value { truncateToWidth("> ${menu.serialBuffer.inputLine}", imageWidth - 18) },
-            )
-            canvas(
-                modifier =
+                box(
                     Modifier
-                        .offset(6, 18)
-                        .size(imageWidth - 12, imageHeight - 24)
-                        .focusable(
-                            id = "serial-terminal",
-                            onKeyPressed = ::handleSerialKey,
-                            onCharTyped = ::handleSerialChar,
-                        ),
-            ) {
-                // Focus target only. Visible chrome and text are authored as DSL elements.
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .background(PANEL)
+                        .padding(horizontal = 4, vertical = 3),
+                ) {
+                    column(Modifier.fillMaxSize()) {
+                        for (row in 0 until VISIBLE_OUTPUT_LINES) {
+                            text(
+                                modifier = Modifier.fillMaxWidth().height(LINE_HEIGHT),
+                                color = TEXT,
+                            ) {
+                                visibleOutputLine(row)
+                            }
+                        }
+                    }
+                }
+
+                box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(INPUT_HEIGHT)
+                        .background(INPUT)
+                        .padding(horizontal = 4, vertical = 3),
+                ) {
+                    text(
+                        modifier = Modifier.fillMaxWidth().height(LINE_HEIGHT),
+                        color = PROMPT,
+                    ) {
+                        truncateToWidth("> ${menu.serialBuffer.inputLine}", imageWidth - 18)
+                    }
+                }
             }
+            keySurface(
+                modifier = Modifier.fillMaxSize(),
+                id = "serial-terminal",
+                onKeyPressed = ::handleSerialKey,
+                onCharTyped = ::handleSerialChar,
+            )
         }
 
     override fun keyPressed(
@@ -137,8 +145,7 @@ class SerialTerminalScreen(
                 add(menu.serialBuffer.pendingOutputLine)
             }
         }
-        val maxLines = ((imageHeight - 48) / LINE_HEIGHT).coerceAtLeast(1)
-        return all.takeLast(maxLines)
+        return all.takeLast(VISIBLE_OUTPUT_LINES.coerceAtLeast(1))
     }
 
     private fun visibleOutputLine(row: Int): String = truncateToWidth(visibleOutputLines().getOrNull(row) ?: "", imageWidth - 18)
@@ -185,9 +192,11 @@ class SerialTerminalScreen(
     companion object {
         private const val WIDTH = 320
         private const val HEIGHT = 210
+        private const val SCREEN_PADDING = 6
+        private const val HEADER_HEIGHT = 16
+        private const val INPUT_HEIGHT = 16
         private const val LINE_HEIGHT = 10
-        private const val VISIBLE_OUTPUT_LINES = (HEIGHT - 48) / LINE_HEIGHT
-        private const val STATUS_X = 178
+        private const val VISIBLE_OUTPUT_LINES = (HEIGHT - SCREEN_PADDING * 2 - HEADER_HEIGHT - INPUT_HEIGHT) / LINE_HEIGHT
         private val BACKGROUND = Color.hex(0xFF151922u)
         private val PANEL = Color.hex(0xFF0B0F14u)
         private val INPUT = Color.hex(0xFF202735u)

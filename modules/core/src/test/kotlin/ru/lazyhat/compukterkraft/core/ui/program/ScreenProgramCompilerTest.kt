@@ -113,6 +113,59 @@ class ScreenProgramCompilerTest {
     }
 
     @Test
+    fun textOverloadsHideValueWrappersForStaticAndDynamicText() {
+        var dynamic = "Dynamic"
+        val program =
+            ScreenProgramCompiler(fontMetrics).compile(
+                ui {
+                    text("Static")
+                    text { dynamic }
+                    text(color = { Color.Red }) { "Colored" }
+                },
+            )
+
+        val textOps = program.frames[0].ops.filterIsInstance<RenderOp.DrawText>()
+
+        assertEquals(listOf("Static", "Dynamic", "Colored"), textOps.map { it.value.value })
+        assertEquals(Color.Red, textOps[2].color.value)
+        dynamic = "Updated"
+        assertEquals("Updated", textOps[1].value.value)
+    }
+
+    @Test
+    fun keySurfaceLowersToFocusableCanvas() {
+        var pressed = false
+        var typed = false
+        val program =
+            ScreenProgramCompiler().compile(
+                ui {
+                    keySurface(
+                        modifier = Modifier.size(40, 12),
+                        id = "keyboard",
+                        onKeyPressed = {
+                            pressed = true
+                            true
+                        },
+                        onCharTyped = {
+                            typed = true
+                            true
+                        },
+                    )
+                },
+            )
+
+        assertTrue(program.frames[0].ops.any { it is RenderOp.DrawCanvas })
+        val node = program.focusNodes.single()
+        assertEquals("keyboard", node.nodeId)
+        assertEquals(40, node.width)
+        assertEquals(12, node.height)
+        assertTrue(node.handler.onKeyPressed(257, 0))
+        assertTrue(node.handler.onCharTyped('x'))
+        assertTrue(pressed)
+        assertTrue(typed)
+    }
+
+    @Test
     fun ifNodeProducesSeparateFrameGuardedByVisibilityExpression() {
         var visible = false
         val program =

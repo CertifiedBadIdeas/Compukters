@@ -42,7 +42,11 @@ class SerialTerminalScreenArchitectureTest {
         assertTrue(source.contains("DslContainerScreen<SerialTerminalMenu>"))
         assertTrue(source.contains("override fun content(): UiElement"))
         assertTrue(source.contains("ui("))
-        assertTrue(source.contains(".focusable("))
+        assertTrue(source.contains("column("))
+        assertTrue(source.contains("row("))
+        assertTrue(source.contains("keySurface("))
+        assertTrue(source.contains(".fillMaxWidth()"))
+        assertFalse(source.contains(".offset("))
         assertFalse(source.contains("AbstractContainerScreen"))
     }
 

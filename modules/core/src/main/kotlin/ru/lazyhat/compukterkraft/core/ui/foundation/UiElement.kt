@@ -4,6 +4,7 @@ import ru.lazyhat.compukterkraft.core.ui.editor.EditorViewModel
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Modifier
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Position
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.clickable
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.focusable
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 
 sealed interface UiElement {
@@ -160,6 +161,30 @@ class UiScope {
         children += UiElement.Text(modifier, value(color), text)
     }
 
+    fun text(
+        text: String,
+        modifier: Modifier = Modifier,
+        color: Color = Color.White,
+    ) {
+        children += UiElement.Text(modifier, value(color), value(text))
+    }
+
+    fun text(
+        modifier: Modifier = Modifier,
+        color: Color = Color.White,
+        text: () -> String,
+    ) {
+        children += UiElement.Text(modifier, value(color), value(text))
+    }
+
+    fun text(
+        color: () -> Color,
+        modifier: Modifier = Modifier,
+        text: () -> String,
+    ) {
+        children += UiElement.Text(modifier, value(color), value(text))
+    }
+
     /**
      * Variant that accepts a reactive [color]. The runtime re-reads the color
      * every frame, so callers can drive it from a [Value] without forcing a
@@ -188,6 +213,27 @@ class UiScope {
         onDraw: CanvasScope.() -> Unit,
     ) {
         children += UiElement.Canvas(modifier, onDraw)
+    }
+
+    fun keySurface(
+        modifier: Modifier = Modifier,
+        id: String,
+        tabOrder: Int = 0,
+        onKeyPressed: (Int) -> Boolean = { false },
+        onKeyReleased: (Int) -> Boolean = { false },
+        onCharTyped: (Char) -> Boolean = { false },
+    ) {
+        canvas(
+            modifier =
+                modifier.focusable(
+                    id = id,
+                    tabOrder = tabOrder,
+                    onKeyPressed = onKeyPressed,
+                    onKeyReleased = onKeyReleased,
+                    onCharTyped = onCharTyped,
+                ),
+        ) {
+        }
     }
 
     @Suppress("FunctionName")

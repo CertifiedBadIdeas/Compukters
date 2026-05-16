@@ -80,6 +80,44 @@ fun Modifier.size(
 fun Modifier.findSize() = find<SizeModifier>()
 
 //
+
+sealed interface AxisSize {
+    data class Fixed(
+        val pixels: Int,
+    ) : AxisSize
+
+    data object Fill : AxisSize
+}
+
+data class WidthModifier(
+    val width: AxisSize,
+) : Modifier.Element
+
+data class HeightModifier(
+    val height: AxisSize,
+) : Modifier.Element
+
+fun Modifier.width(width: Int): Modifier {
+    require(width >= 0)
+    return then(WidthModifier(AxisSize.Fixed(width)))
+}
+
+fun Modifier.height(height: Int): Modifier {
+    require(height >= 0)
+    return then(HeightModifier(AxisSize.Fixed(height)))
+}
+
+fun Modifier.fillMaxWidth(): Modifier = then(WidthModifier(AxisSize.Fill))
+
+fun Modifier.fillMaxHeight(): Modifier = then(HeightModifier(AxisSize.Fill))
+
+fun Modifier.fillMaxSize(): Modifier = fillMaxWidth().fillMaxHeight()
+
+fun Modifier.findWidth() = find<WidthModifier>()
+
+fun Modifier.findHeight() = find<HeightModifier>()
+
+//
 //
 
 data class BackgroundModifier(
