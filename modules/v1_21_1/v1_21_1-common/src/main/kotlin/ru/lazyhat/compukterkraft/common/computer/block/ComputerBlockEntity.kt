@@ -28,14 +28,10 @@ import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.entity.BlockEntityType
 import net.minecraft.world.level.block.state.BlockState
 import ru.lazyhat.compukterkraft.common.binding.ModObjects
-import ru.lazyhat.compukterkraft.common.computer.context.BlockEntityRuntimeDeviceHost
 import ru.lazyhat.compukterkraft.common.computer.menu.ComputerMenuWithoutInventory
 import ru.lazyhat.compukterkraft.core.LOGGER
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
-import ru.lazyhat.compukterkraft.core.device.DeviceProperties
-import ru.lazyhat.compukterkraft.core.device.runtime.RuxRuntimeDevice
 import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDevice
-import ru.lazyhat.compukterkraft.lang.runtime.blazing.RuxComputerRuntimeFactory
 
 open class ComputerBlockEntity(
     type: BlockEntityType<out ComputerBlockEntity>,
@@ -43,16 +39,8 @@ open class ComputerBlockEntity(
     state: BlockState,
     family: DeviceFamily,
 ) : AbstractComputerBlockEntity(type, pos, state, family) {
-    override fun createComputer(id: Int): RuntimeDevice {
-        val host = BlockEntityRuntimeDeviceHost(level as ServerLevel, this)
-        return RuxRuntimeDevice(
-            deviceId = id,
-            properties = DeviceProperties(family, label),
-            endpointFactory = RuxComputerRuntimeFactory::createFromResource,
-            stateSink = host.stateSink,
-            displayNetwork = host.displayNetwork,
-        )
-    }
+    override fun createComputer(id: Int): RuntimeDevice =
+        ComputerRuntimeDeviceFactory.createRuxComputer(level as ServerLevel, this, id)
 
     override fun updateBlockState(newState: ComputerState) {
         blockState
