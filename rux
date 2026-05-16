@@ -26,8 +26,8 @@ MANIFEST="$ROOT/native/rux-compiler/Cargo.toml"
 usage() {
     cat >&2 <<'EOF'
 usage:
-  tools/rux emit <input.rx> <output.ruxi>
-  tools/rux disasm <input.ruxi>
+  rux emit <input.rx> <output.ruxi>
+  rux disasm <input.ruxi>
 EOF
 }
 
