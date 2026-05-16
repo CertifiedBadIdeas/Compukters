@@ -94,6 +94,7 @@ class RuxFirmwareResourceTest {
 
         try {
             NativeVmBindings.runRuxComputerUntilSignal(handle)
+            assertEquals("RUX READY\n", NativeVmBindings.drainRuxComputerDebugOutput(handle).decodeToString())
             NativeVmBindings.pushRuxComputerSerialInput(handle, "Rux!".encodeToByteArray())
 
             val output = StringBuilder()
@@ -106,6 +107,32 @@ class RuxFirmwareResourceTest {
             }
 
             assertEquals("Rux!", output.toString())
+        } finally {
+            NativeVmBindings.freeRuxComputer(handle)
+        }
+    }
+
+    @Test
+    fun bundledRuxEchoLiveFirmwarePrintsBootBannerWhenLibraryIsConfigured() {
+        val libraryPath = System.getProperty("rux.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val bytes =
+            assertNotNull(
+                javaClass.classLoader.getResourceAsStream("firmware/rux-echo-live.ruxi"),
+                "firmware/rux-echo-live.ruxi must be bundled",
+            ).use { it.readBytes() }
+
+        val handle =
+            NativeVmBindings.createRuxComputer(
+                libraryPath = libraryPath,
+                image = bytes,
+                memorySize = 64 * 1024,
+                sliceBudgetNanos = 1_000,
+            )
+
+        try {
+            NativeVmBindings.runRuxComputerUntilSignal(handle)
+
+            assertEquals("RUX READY\n", NativeVmBindings.drainRuxComputerDebugOutput(handle).decodeToString())
         } finally {
             NativeVmBindings.freeRuxComputer(handle)
         }

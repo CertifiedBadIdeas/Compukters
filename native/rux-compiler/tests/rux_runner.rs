@@ -85,5 +85,5 @@ fn run_source_until_serial_output_supports_live_polling_firmware() {
     let report = run_source_until_serial_output(source, b"Rux!", 4, 32).unwrap();
 
     assert_eq!(report.panic_code, 0);
-    assert_eq!(report.debug_output, "Rux!");
+    assert_eq!(report.debug_output, "RUX READY\nRux!");
 }
