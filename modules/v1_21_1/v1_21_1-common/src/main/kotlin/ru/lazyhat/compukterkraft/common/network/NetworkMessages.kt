@@ -33,6 +33,8 @@ import ru.lazyhat.compukterkraft.common.computer.network.server.PasteEventComput
 import ru.lazyhat.compukterkraft.common.network.ClientNetworkContext
 import ru.lazyhat.compukterkraft.common.network.ServerNetworkContext
 import ru.lazyhat.compukterkraft.common.network.text.ChatTableClientMessage
+import ru.lazyhat.compukterkraft.common.serial.network.client.SerialConsoleOutputClientMessage
+import ru.lazyhat.compukterkraft.common.serial.network.server.SerialConsoleInputServerMessage
 import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchCursorClientMessage
 import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchDocumentSnapshotClientMessage
 import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchOpsClientMessage
@@ -61,6 +63,7 @@ import ru.lazyhat.compukterkraft.common.workbench.network.server.WorkbenchWorksp
  * | 6  | `workbench_input`            | [WorkbenchInputServerMessage]     | Player sends terminal key/mouse/paste input through the Workbench | Target VM event queue via Workbench runtime bridge |
  * | 7  | unused                       | —                                  | Reserved for removed attach-terminal packet           | —                                             |
  * | 8  | unused                       | —                                  | Reserved for removed resize-terminal packet           | —                                             |
+ * | 27 | `serial_console_input`       | [SerialConsoleInputServerMessage]  | Player submits a serial console input line             | Rux serial input ring                        |
  *
  * ### Server → Client (clientbound)
  *
@@ -71,6 +74,7 @@ import ru.lazyhat.compukterkraft.common.workbench.network.server.WorkbenchWorksp
  * | 14 | unused               | —                                  | Reserved for removed stdout byte stream packet       | —                                             |
  * | 15 | `workbench_workspace` | [WorkbenchWorkspaceClientMessage] | Response to a Workbench action or workspace request | [AbstractWorkbenchMenu.updateRemoteState] |
  * | 16 | unused               | —                                  | Reserved for removed Workbench terminal snapshot packet | — |
+ * | 28 | `serial_console_output` | [SerialConsoleOutputClientMessage] | Server sends serial console output bytes            | Serial console history                       |
  */
 object NetworkMessages {
     private val seenIds: IntSet = IntOpenHashSet()
@@ -191,6 +195,18 @@ object NetworkMessages {
             26,
             "native_frame_batch",
             { buf -> NativeFrameBatchClientMessage(buf) },
+        )
+    val SERIAL_CONSOLE_INPUT: MessageType<SerialConsoleInputServerMessage> =
+        registerServerbound(
+            27,
+            "serial_console_input",
+            { buf -> SerialConsoleInputServerMessage(buf) },
+        )
+    val SERIAL_CONSOLE_OUTPUT: MessageType<SerialConsoleOutputClientMessage> =
+        registerClientbound(
+            28,
+            "serial_console_output",
+            { buf -> SerialConsoleOutputClientMessage(buf) },
         )
 
     @Suppress("UNCHECKED_CAST")

@@ -46,6 +46,8 @@ import ru.lazyhat.compukterkraft.common.computer.loot.ConstantLootConditionSeria
 import ru.lazyhat.compukterkraft.common.computer.loot.HasComputerIdLootCondition
 import ru.lazyhat.compukterkraft.common.computer.loot.PlayerCreativeLootCondition
 import ru.lazyhat.compukterkraft.common.computer.menu.ComputerMenuWithoutInventory
+import ru.lazyhat.compukterkraft.common.serial.item.SerialTerminalItem
+import ru.lazyhat.compukterkraft.common.serial.menu.SerialTerminalMenu
 import ru.lazyhat.compukterkraft.common.terminal.item.TerminalItem
 import ru.lazyhat.compukterkraft.common.workbench.block.WorkbenchBlock
 import ru.lazyhat.compukterkraft.common.workbench.block.WorkbenchBlockEntity
@@ -64,6 +66,7 @@ object ModRegistry {
         const val COMPUTER = "computer"
         const val WORKBENCH = "workbench"
         const val TERMINAL = "terminal"
+        const val SERIAL_TERMINAL = "serial_terminal"
     }
 
     object Blocks {
@@ -158,6 +161,12 @@ object ModRegistry {
                 Names.TERMINAL,
                 Supplier { TerminalItem(properties().stacksTo(1)) },
             )
+
+        val SERIAL_TERMINAL: DeferredHolder<Item, SerialTerminalItem> =
+            REGISTRY.register(
+                Names.SERIAL_TERMINAL,
+                Supplier { SerialTerminalItem(properties().stacksTo(1)) },
+            )
     }
 
     object LootItemConditionTypes {
@@ -220,6 +229,21 @@ object ModRegistry {
                     }
                 },
             )
+
+        val SERIAL_TERMINAL: DeferredHolder<MenuType<*>, MenuType<SerialTerminalMenu>> =
+            REGISTRY.register(
+                Names.SERIAL_TERMINAL,
+                Supplier {
+                    IMenuTypeExtension.create { id, playerInventory, data ->
+                        SerialTerminalMenu(
+                            SERIAL_TERMINAL.get(),
+                            id,
+                            playerInventory,
+                            ComputerContainerData(data),
+                        )
+                    }
+                },
+            )
     }
 
     object CreativeTabs {
@@ -238,6 +262,7 @@ object ModRegistry {
                                 out.accept(ItemStack(Items.COMPUTER_ADVANCED.get()))
                                 out.accept(ItemStack(Items.WORKBENCH.get()))
                                 out.accept(ItemStack(Items.TERMINAL.get()))
+                                out.accept(ItemStack(Items.SERIAL_TERMINAL.get()))
                             }.build()
                     },
                 )

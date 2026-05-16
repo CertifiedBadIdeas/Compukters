@@ -13,6 +13,7 @@
   "gui.compukterkraft.tooltip.computer_id": "Computer ID: %s",
   "gui.compukterkraft.tooltip.copy": "Copy to clipboard",
   "item.compukterkraft.computer_advanced": "Advanced Computer",
+  "item.compukterkraft.serial_terminal": "Serial Terminal",
   "item.compukterkraft.terminal": "Terminal",
   "item.compukterkraft.workbench": "Workbench",
   "message.compukterkraft.terminal.no_binding": "No computer bound. RMB a computer block first.",
