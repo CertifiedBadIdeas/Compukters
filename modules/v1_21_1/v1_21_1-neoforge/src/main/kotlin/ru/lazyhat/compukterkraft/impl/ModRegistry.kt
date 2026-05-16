@@ -45,6 +45,7 @@ import ru.lazyhat.compukterkraft.common.computer.loot.BlockNamedEntityLootCondit
 import ru.lazyhat.compukterkraft.common.computer.loot.ConstantLootConditionSerializer
 import ru.lazyhat.compukterkraft.common.computer.loot.HasComputerIdLootCondition
 import ru.lazyhat.compukterkraft.common.computer.loot.PlayerCreativeLootCondition
+import ru.lazyhat.compukterkraft.common.computer.menu.ComputerControlMenu
 import ru.lazyhat.compukterkraft.common.computer.menu.ComputerMenuWithoutInventory
 import ru.lazyhat.compukterkraft.common.serial.item.SerialTerminalItem
 import ru.lazyhat.compukterkraft.common.serial.menu.SerialTerminalMenu
@@ -64,6 +65,7 @@ object ModRegistry {
     object Names {
         const val COMPUTER_ADVANCED = "computer_advanced"
         const val COMPUTER = "computer"
+        const val COMPUTER_CONTROL = "computer_control"
         const val WORKBENCH = "workbench"
         const val TERMINAL = "terminal"
         const val SERIAL_TERMINAL = "serial_terminal"
@@ -225,6 +227,21 @@ object ModRegistry {
                             id,
                             playerInventory,
                             WorkbenchContainerData(data),
+                        )
+                    }
+                },
+            )
+
+        val COMPUTER_CONTROL: DeferredHolder<MenuType<*>, MenuType<ComputerControlMenu>> =
+            REGISTRY.register(
+                Names.COMPUTER_CONTROL,
+                Supplier {
+                    IMenuTypeExtension.create { id, playerInventory, data ->
+                        ComputerControlMenu(
+                            COMPUTER_CONTROL.get(),
+                            id,
+                            playerInventory,
+                            ComputerContainerData(data),
                         )
                     }
                 },

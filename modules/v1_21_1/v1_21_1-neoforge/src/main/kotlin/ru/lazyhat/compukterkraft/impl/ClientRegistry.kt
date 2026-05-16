@@ -20,6 +20,7 @@
 package ru.lazyhat.compukterkraft.impl
 
 import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent
+import ru.lazyhat.compukterkraft.common.computer.screen.ComputerControlScreen
 import ru.lazyhat.compukterkraft.common.serial.screen.SerialTerminalScreen
 import ru.lazyhat.compukterkraft.common.terminal.screen.ComputerTerminalScreen
 import ru.lazyhat.compukterkraft.common.workbench.screen.WorkbenchEditorScreen
@@ -35,6 +36,10 @@ object ClientRegistry {
             event.register(
                 ModRegistry.Menus.WORKBENCH.get(),
                 { container, inventory, title -> WorkbenchEditorScreen(container, inventory, title) },
+            )
+            event.register(
+                ModRegistry.Menus.COMPUTER_CONTROL.get(),
+                { container, inventory, title -> ComputerControlScreen(container, inventory, title) },
             )
             event.register(
                 ModRegistry.Menus.SERIAL_TERMINAL.get(),

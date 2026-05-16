@@ -21,6 +21,7 @@ package ru.lazyhat.compukterkraft.common.computer.block
 
 import net.minecraft.core.BlockPos
 import net.minecraft.resources.ResourceLocation
+import net.minecraft.server.level.ServerPlayer
 import net.minecraft.stats.Stats
 import net.minecraft.world.InteractionHand
 import net.minecraft.world.InteractionResult
@@ -39,7 +40,9 @@ import net.minecraft.world.level.storage.loot.LootParams
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams
 import net.minecraft.world.phys.BlockHitResult
 import ru.lazyhat.compukterkraft.common.computer.context.ServerContext
+import ru.lazyhat.compukterkraft.common.computer.data.ComputerContainerData
 import ru.lazyhat.compukterkraft.common.computer.item.AbstractComputerItem
+import ru.lazyhat.compukterkraft.common.binding.ModObjects
 import ru.lazyhat.compukterkraft.common.utils.castTicker
 import ru.lazyhat.compukterkraft.common.utils.computerDataTagCopy
 import ru.lazyhat.compukterkraft.common.utils.computerID
@@ -164,9 +167,19 @@ abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
         player: Player,
         hit: BlockHitResult,
     ): InteractionResult {
-        // Epic 3 (task 3.3): `ComputerBlock` is headless — plain RMB no longer opens
-        // a terminal menu. The terminal item is the sole entry point (shift+RMB
-        // with a `TerminalItem` in hand routes through `TerminalItem.useOn`).
-        return super.useWithoutItem(state, level, pos, player, hit)
+        if (level.isClientSide) return InteractionResult.sidedSuccess(true)
+        val serverPlayer = player as? ServerPlayer ?: return InteractionResult.PASS
+        val tile = level.getBlockEntity(pos) as? AbstractComputerBlockEntity ?: return InteractionResult.PASS
+        val device = tile.getOrCreateRuntimeDevice()
+        if (player.isShiftKeyDown || device.isOn) {
+            ModObjects.openComputerControlMenu(
+                serverPlayer,
+                tile,
+                ComputerContainerData(device, getItem(tile)),
+            )
+        } else {
+            device.turnOn()
+        }
+        return InteractionResult.sidedSuccess(false)
     }
 }

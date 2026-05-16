@@ -26,6 +26,7 @@ import net.minecraft.world.level.storage.loot.predicates.LootItemConditionType
 import ru.lazyhat.compukterkraft.common.computer.block.AbstractComputerBlockEntity
 import ru.lazyhat.compukterkraft.common.computer.block.ComputerBlockEntity
 import ru.lazyhat.compukterkraft.common.computer.data.ComputerContainerData
+import ru.lazyhat.compukterkraft.common.computer.menu.ComputerControlMenu
 import ru.lazyhat.compukterkraft.common.computer.menu.ComputerMenuWithoutInventory
 import ru.lazyhat.compukterkraft.common.serial.menu.SerialTerminalMenu
 import ru.lazyhat.compukterkraft.common.workbench.block.WorkbenchBlockEntity
@@ -36,6 +37,8 @@ object ModObjects {
     lateinit var computerBlockEntityType: () -> BlockEntityType<ComputerBlockEntity>
     lateinit var computerMenuType: () -> MenuType<ComputerMenuWithoutInventory>
     lateinit var openComputerMenu: (ServerPlayer, AbstractComputerBlockEntity, ComputerContainerData) -> Unit
+    lateinit var computerControlMenuType: () -> MenuType<ComputerControlMenu>
+    lateinit var openComputerControlMenu: (ServerPlayer, AbstractComputerBlockEntity, ComputerContainerData) -> Unit
     lateinit var serialTerminalMenuType: () -> MenuType<SerialTerminalMenu>
     lateinit var openSerialTerminalMenu: (ServerPlayer, AbstractComputerBlockEntity, ComputerContainerData) -> Unit
     lateinit var workbenchBlockEntityType: () -> BlockEntityType<WorkbenchBlockEntity>
