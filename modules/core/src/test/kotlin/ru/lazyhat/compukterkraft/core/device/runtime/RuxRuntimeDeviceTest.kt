@@ -20,7 +20,10 @@
 package ru.lazyhat.compukterkraft.core.device.runtime
 
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
+import ru.lazyhat.compukterkraft.core.device.DeviceEvents
 import ru.lazyhat.compukterkraft.core.device.DeviceProperties
+import ru.lazyhat.compukterkraft.core.device.input.KeyInputEvent
+import ru.lazyhat.compukterkraft.core.device.input.PasteInputEvent
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.DisplayNetworkBridge
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeRuxComputerControl
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.RuxComputerEndpoint
@@ -108,6 +111,52 @@ class RuxRuntimeDeviceTest {
         assertEquals(36, sent.frame.width)
         assertEquals(27, sent.frame.height)
         assertTrue(sent.frame.fullRefresh)
+    }
+
+    @Test
+    fun dispatchesCharacterInputThroughSerialEchoToDisplayFrame() {
+        val endpoint = RecordingRuxEndpoint()
+        val displayNetwork = RecordingDisplayNetworkBridge()
+        val device =
+            RuxRuntimeDevice(
+                deviceId = 10,
+                properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
+                endpointFactory = { endpoint },
+                stateSink = {},
+                displayNetwork = displayNetwork,
+            )
+        val playerUuid = UUID.randomUUID()
+
+        device.attachDisplaySession(playerUuid, containerId = 18, displayId = 1, width = 36, height = 27)
+        device.turnOn()
+        DeviceEvents.dispatch(device, KeyInputEvent.Character('R'.code.toByte()))
+        device.serverTick()
+
+        assertEquals(listOf("R"), endpoint.inputs.map { it.decodeToString() })
+        assertEquals(1, displayNetwork.sentFrames.size)
+        assertTrue(displayNetwork.sentFrames.single().frame.tiles.single().payload.any { it != 0.toByte() })
+    }
+
+    @Test
+    fun dispatchesPasteInputThroughSerialEchoToDisplayFrame() {
+        val endpoint = RecordingRuxEndpoint()
+        val displayNetwork = RecordingDisplayNetworkBridge()
+        val device =
+            RuxRuntimeDevice(
+                deviceId = 11,
+                properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
+                endpointFactory = { endpoint },
+                stateSink = {},
+                displayNetwork = displayNetwork,
+            )
+
+        device.attachDisplaySession(UUID.randomUUID(), containerId = 19, displayId = 1, width = 36, height = 27)
+        device.turnOn()
+        DeviceEvents.dispatch(device, PasteInputEvent(ByteBuffer.wrap("Rux".encodeToByteArray())))
+        device.serverTick()
+
+        assertEquals(listOf("Rux"), endpoint.inputs.map { it.decodeToString() })
+        assertEquals(1, displayNetwork.sentFrames.size)
     }
 
     private class RecordingRuxEndpoint : RuxComputerEndpoint {
