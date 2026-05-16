@@ -22,6 +22,10 @@ class SerialConsoleBuffer {
     private val history = mutableListOf<String>()
     private val input = StringBuilder()
     private var pendingOutput = StringBuilder()
+    var rxBytes: Long = 0
+        private set
+    var txBytes: Long = 0
+        private set
 
     val historyLines: List<String>
         get() = history.toList()
@@ -39,7 +43,9 @@ class SerialConsoleBuffer {
         if (reset) {
             history.clear()
             pendingOutput = StringBuilder()
+            rxBytes = 0
         }
+        rxBytes += bytes.size
         val text = bytes.decodeToString()
         for (ch in text) {
             when (ch) {
@@ -68,6 +74,8 @@ class SerialConsoleBuffer {
     fun submitLine(): ByteArray {
         val submitted = input.toString() + "\n"
         input.clear()
-        return submitted.encodeToByteArray()
+        val bytes = submitted.encodeToByteArray()
+        txBytes += bytes.size
+        return bytes
     }
 }

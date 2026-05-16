@@ -52,8 +52,23 @@ class SerialConsoleBufferTest {
         buffer.type('k')
 
         assertContentEquals("ok\n".encodeToByteArray(), buffer.submitLine())
+        assertEquals(3, buffer.txBytes)
         assertEquals("", buffer.inputLine)
         assertContentEquals("\n".encodeToByteArray(), buffer.submitLine())
+        assertEquals(4, buffer.txBytes)
+    }
+
+    @Test
+    fun `rx counter tracks raw output bytes and reset starts a new stream view`() {
+        val buffer = SerialConsoleBuffer()
+
+        buffer.appendOutput(byteArrayOf(1, 2, 3))
+
+        assertEquals(3, buffer.rxBytes)
+
+        buffer.appendOutput(byteArrayOf(4, 5), reset = true)
+
+        assertEquals(2, buffer.rxBytes)
     }
 
     @Test

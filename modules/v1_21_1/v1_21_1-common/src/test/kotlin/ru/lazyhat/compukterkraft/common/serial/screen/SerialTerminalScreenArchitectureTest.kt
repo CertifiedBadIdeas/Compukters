@@ -22,6 +22,7 @@ package ru.lazyhat.compukterkraft.common.serial.screen
 import java.nio.file.Paths
 import kotlin.io.path.readText
 import kotlin.test.Test
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class SerialTerminalScreenArchitectureTest {
@@ -37,9 +38,18 @@ class SerialTerminalScreenArchitectureTest {
     }
 
     @Test
-    fun serialTerminalShowsComputerConnectionAndPowerState() {
-        assertTrue(source.contains("gui.compukterkraft.serial_terminal.linked_on"))
-        assertTrue(source.contains("gui.compukterkraft.serial_terminal.linked_off"))
-        assertTrue(source.contains("menu.isComputerOn"))
+    fun serialTerminalShowsLinkStateWithoutComputerPowerSemantics() {
+        assertTrue(source.contains("gui.compukterkraft.serial_terminal.linked"))
+        assertFalse(source.contains("linked_on"))
+        assertFalse(source.contains("linked_off"))
+        assertFalse(source.contains("menu.isComputerOn"))
+    }
+
+    @Test
+    fun serialTerminalShowsRawRxTxByteCounters() {
+        assertTrue(source.contains("rxBytes"))
+        assertTrue(source.contains("txBytes"))
+        assertTrue(source.contains("RX"))
+        assertTrue(source.contains("TX"))
     }
 }

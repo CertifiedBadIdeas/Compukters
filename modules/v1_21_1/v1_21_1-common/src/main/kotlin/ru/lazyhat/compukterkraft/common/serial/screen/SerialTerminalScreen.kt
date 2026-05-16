@@ -122,20 +122,15 @@ class SerialTerminalScreen(
     }
 
     private fun drawConnectionStatus(guiGraphics: GuiGraphics) {
-        val statusKey =
-            if (menu.isComputerOn) {
-                "gui.compukterkraft.serial_terminal.linked_on"
-            } else {
-                "gui.compukterkraft.serial_terminal.linked_off"
-            }
-        val status = Component.translatable(statusKey)
-        val color = if (menu.isComputerOn) STATUS_ON else STATUS_OFF
+        val status =
+            Component.translatable("gui.compukterkraft.serial_terminal.linked")
+                .append("  RX ${menu.serialBuffer.rxBytes}  TX ${menu.serialBuffer.txBytes}")
         guiGraphics.drawString(
             font,
             status,
             leftPos + imageWidth - 8 - font.width(status),
             topPos + 7,
-            color,
+            STATUS,
             false,
         )
     }
@@ -166,7 +161,6 @@ class SerialTerminalScreen(
         private const val TITLE = 0xFFE6ECF5.toInt()
         private const val TEXT = 0xFFB7C5D8.toInt()
         private const val PROMPT = 0xFF7CFFB2.toInt()
-        private const val STATUS_ON = 0xFF7CFFB2.toInt()
-        private const val STATUS_OFF = 0xFFFFC857.toInt()
+        private const val STATUS = 0xFF7CFFB2.toInt()
     }
 }
