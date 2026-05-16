@@ -5,6 +5,7 @@ import ru.lazyhat.compukterkraft.core.ui.foundation.CanvasScope
 import ru.lazyhat.compukterkraft.core.ui.foundation.Color
 import ru.lazyhat.compukterkraft.core.ui.foundation.HoverState
 import ru.lazyhat.compukterkraft.core.ui.foundation.Value
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.TextAlignment
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Position
 import ru.lazyhat.compukterkraft.lang.runtime.ScreenBufferSnapshot
 
@@ -96,8 +97,10 @@ sealed interface RenderOp {
     data class DrawText(
         val x: Int,
         val y: Int,
+        val width: Int,
         val value: Value<String>,
         val color: Value<Color>,
+        val alignment: TextAlignment,
     ) : RenderOp
 
     data class DrawTerminalSurface(

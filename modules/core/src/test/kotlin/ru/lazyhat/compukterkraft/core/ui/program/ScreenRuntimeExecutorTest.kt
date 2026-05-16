@@ -3,11 +3,14 @@ package ru.lazyhat.compukterkraft.core.ui.program
 import ru.lazyhat.compukterkraft.core.ui.foundation.Color
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Modifier
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Position
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.TextAlignment
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.background
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.draggable
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.focusable
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.offset
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.size
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.textAlign
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.width
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.zIndex
 import ru.lazyhat.compukterkraft.core.ui.foundation.tickValue
 import ru.lazyhat.compukterkraft.core.ui.foundation.ui
@@ -238,8 +241,42 @@ class ScreenRuntimeExecutorTest {
         assertEquals(0, backend2.fillRects.size)
     }
 
+    @Test
+    fun rightAlignedTextUsesCurrentDynamicTextWidthInsideFixedBounds() {
+        var status = "A"
+        val program =
+            ScreenProgramCompiler().compile(
+                ui {
+                    text(
+                        modifier = Modifier.width(30).textAlign(TextAlignment.End),
+                    ) {
+                        status
+                    }
+                },
+                rootWidth = 30,
+                rootHeight = 9,
+            )
+        val executor = ScreenRuntimeExecutor(program)
+
+        val first = RecordingBackend()
+        executor.render(first)
+        assertEquals(24, first.drawTexts.single().x)
+
+        status = "ABC"
+        val second = RecordingBackend()
+        executor.render(second)
+        assertEquals(12, second.drawTexts.single().x)
+    }
+
     private class RecordingBackend : RenderBackend {
+        data class DrawTextCall(
+            val x: Int,
+            val y: Int,
+            val text: String,
+        )
+
         val fillRects = mutableListOf<IntArray>()
+        val drawTexts = mutableListOf<DrawTextCall>()
 
         override fun fillRect(
             x: Int,
@@ -257,6 +294,7 @@ class ScreenRuntimeExecutorTest {
             text: String,
             color: Color,
         ) {
+            drawTexts += DrawTextCall(x, y, text)
         }
 
         override fun drawTerminalSurface(

@@ -118,6 +118,21 @@ fun Modifier.findWidth() = find<WidthModifier>()
 fun Modifier.findHeight() = find<HeightModifier>()
 
 //
+
+enum class TextAlignment {
+    Start,
+    Center,
+    End,
+}
+
+data class TextAlignmentModifier(
+    val alignment: TextAlignment,
+) : Modifier.Element
+
+fun Modifier.textAlign(alignment: TextAlignment): Modifier = then(TextAlignmentModifier(alignment))
+
+fun Modifier.findTextAlignment() = find<TextAlignmentModifier>()
+
 //
 
 data class BackgroundModifier(

@@ -29,13 +29,16 @@ import ru.lazyhat.compukterkraft.core.input.KeyCodes
 import ru.lazyhat.compukterkraft.core.ui.foundation.Color
 import ru.lazyhat.compukterkraft.core.ui.foundation.UiElement
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.Modifier
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.TextAlignment
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.UiAlignment
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.background
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.fillMaxSize
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.fillMaxWidth
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.height
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.padding
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.textAlign
 import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.weight
+import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.width
 import ru.lazyhat.compukterkraft.core.ui.foundation.ui
 
 class SerialTerminalScreen(
@@ -88,6 +91,10 @@ class SerialTerminalScreen(
                         truncateToWidth(title.string, TITLE_TEXT_WIDTH)
                     }
                     text(
+                        modifier =
+                            Modifier
+                                .width(STATUS_TEXT_WIDTH)
+                                .textAlign(TextAlignment.End),
                         color = STATUS,
                     ) {
                         truncateToWidth(serialStatusText(), STATUS_TEXT_WIDTH)
