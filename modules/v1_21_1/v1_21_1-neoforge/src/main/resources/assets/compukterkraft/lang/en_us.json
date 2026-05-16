@@ -10,6 +10,8 @@
   "gui.compukterkraft.computer_control.status_off": "State: OFF",
   "gui.compukterkraft.computer_control.status_on": "State: ON",
   "gui.compukterkraft.computer_control.title": "Computer Control",
+  "gui.compukterkraft.serial_terminal.connected_off": "CONNECTED / OFF",
+  "gui.compukterkraft.serial_terminal.connected_on": "CONNECTED / ON",
   "gui.compukterkraft.terminal.connecting": "Connecting...",
   "gui.compukterkraft.terminal.focused": "Input active  |  Ctrl+V paste",
   "gui.compukterkraft.terminal.powered_off": "Computer is off. Turn it on first.",
