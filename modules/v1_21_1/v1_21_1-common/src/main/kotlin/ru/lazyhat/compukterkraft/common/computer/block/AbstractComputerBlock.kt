@@ -43,6 +43,8 @@ import ru.lazyhat.compukterkraft.common.computer.context.ServerContext
 import ru.lazyhat.compukterkraft.common.computer.data.ComputerContainerData
 import ru.lazyhat.compukterkraft.common.computer.item.AbstractComputerItem
 import ru.lazyhat.compukterkraft.common.binding.ModObjects
+import ru.lazyhat.compukterkraft.common.serial.item.SerialTerminalItem
+import ru.lazyhat.compukterkraft.common.terminal.item.TerminalItem
 import ru.lazyhat.compukterkraft.common.utils.castTicker
 import ru.lazyhat.compukterkraft.common.utils.computerDataTagCopy
 import ru.lazyhat.compukterkraft.common.utils.computerID
@@ -158,7 +160,12 @@ abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
         player: Player,
         hand: InteractionHand,
         hit: BlockHitResult,
-    ): ItemInteractionResult = ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION
+    ): ItemInteractionResult =
+        if (stack.item is TerminalItem || stack.item is SerialTerminalItem) {
+            ItemInteractionResult.SKIP_DEFAULT_BLOCK_INTERACTION
+        } else {
+            ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION
+        }
 
     override fun useWithoutItem(
         state: BlockState,

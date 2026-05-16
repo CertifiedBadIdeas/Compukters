@@ -35,4 +35,11 @@ class ComputerBlockControlInteractionArchitectureTest {
         assertTrue(source.contains("device.turnOn()"))
         assertTrue(source.contains("ModObjects.openComputerControlMenu"))
     }
+
+    @Test
+    fun terminalItemsBypassDefaultBlockControlMenuFlow() {
+        assertTrue(source.contains("TerminalItem"))
+        assertTrue(source.contains("SerialTerminalItem"))
+        assertTrue(source.contains("ItemInteractionResult.SKIP_DEFAULT_BLOCK_INTERACTION"))
+    }
 }
