@@ -22,8 +22,10 @@ package ru.lazyhat.compukterkraft.impl
 import net.neoforged.api.distmarker.Dist
 import net.neoforged.bus.api.SubscribeEvent
 import net.neoforged.fml.common.EventBusSubscriber
+import net.neoforged.neoforge.client.event.EntityRenderersEvent
 import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent
 import ru.lazyhat.compukterkraft.core.MOD_ID
+import ru.lazyhat.compukterkraft.impl.notebook.render.NotebookBlockEntityRenderer
 
 @EventBusSubscriber(modid = MOD_ID, value = [Dist.CLIENT])
 object ForgeClientRegistry {
@@ -31,5 +33,11 @@ object ForgeClientRegistry {
     @JvmStatic
     fun onRegisterMenuScreens(event: RegisterMenuScreensEvent) {
         ClientRegistry.register(event)
+    }
+
+    @SubscribeEvent
+    @JvmStatic
+    fun onRegisterBlockEntityRenderers(event: EntityRenderersEvent.RegisterRenderers) {
+        event.registerBlockEntityRenderer(ModRegistry.BlockEntities.NOTEBOOK.get(), ::NotebookBlockEntityRenderer)
     }
 }

@@ -30,7 +30,7 @@ import ru.lazyhat.compukterkraft.common.utils.deviceFamilyId
 import ru.lazyhat.compukterkraft.common.utils.updateComputerDataTag
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 
-class NotebookItem(
+open class NotebookItem(
     block: Block,
     properties: Properties,
 ) : AbstractComputerItem(block, properties) {

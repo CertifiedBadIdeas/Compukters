@@ -71,7 +71,7 @@ abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
         blockEntityType: BlockEntityType<T>,
     ): BlockEntityTicker<T>? = serverTicker.ifServerSide(level)?.castTicker()
 
-    protected abstract fun blockEntityType(): BlockEntityType<T>
+    protected abstract fun blockEntityType(): BlockEntityType<out T>
 
     abstract fun getItem(tile: AbstractComputerBlockEntity): ItemStack
 

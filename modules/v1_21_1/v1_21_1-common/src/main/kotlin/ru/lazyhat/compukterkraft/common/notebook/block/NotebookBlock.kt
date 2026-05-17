@@ -49,7 +49,7 @@ class NotebookBlock(
         )
     }
 
-    override fun blockEntityType(): BlockEntityType<NotebookBlockEntity> = ModObjects.notebookBlockEntityType()
+    override fun blockEntityType(): BlockEntityType<out NotebookBlockEntity> = ModObjects.notebookBlockEntityType()
 
     override fun createBlockStateDefinition(builder: StateDefinition.Builder<Block, BlockState>) {
         builder.add(ComputerBlock.facing, ComputerBlock.state)

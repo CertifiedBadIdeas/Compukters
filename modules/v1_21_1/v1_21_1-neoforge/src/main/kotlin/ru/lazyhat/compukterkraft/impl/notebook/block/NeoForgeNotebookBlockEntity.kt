@@ -24,12 +24,35 @@ import net.minecraft.world.level.block.entity.BlockEntityType
 import net.minecraft.world.level.block.state.BlockState
 import ru.lazyhat.compukterkraft.common.computer.block.ComputerBlockEntity
 import ru.lazyhat.compukterkraft.common.notebook.block.NotebookBlockEntity
+import software.bernie.geckolib.animatable.GeoBlockEntity
+import software.bernie.geckolib.animatable.instance.AnimatableInstanceCache
+import software.bernie.geckolib.animation.AnimatableManager
+import software.bernie.geckolib.animation.AnimationController
+import software.bernie.geckolib.animation.RawAnimation
+import software.bernie.geckolib.util.GeckoLibUtil
 
 class NeoForgeNotebookBlockEntity(
     type: BlockEntityType<out ComputerBlockEntity>,
     pos: BlockPos,
     state: BlockState,
-) : NotebookBlockEntity(type, pos, state) {
+) : NotebookBlockEntity(type, pos, state),
+    GeoBlockEntity {
+    companion object {
+        private val OPENED: RawAnimation = RawAnimation.begin().thenLoop("opened")
+    }
+
+    private val animationCache: AnimatableInstanceCache = GeckoLibUtil.createInstanceCache(this)
+
+    override fun registerControllers(controllers: AnimatableManager.ControllerRegistrar) {
+        controllers.add(
+            AnimationController(this, "notebook_lid", 0) { state ->
+                state.setAndContinue(OPENED)
+            },
+        )
+    }
+
+    override fun getAnimatableInstanceCache(): AnimatableInstanceCache = animationCache
+
     override fun onChunkUnloaded() {
         releaseRuntimeDevice()
         super.onChunkUnloaded()

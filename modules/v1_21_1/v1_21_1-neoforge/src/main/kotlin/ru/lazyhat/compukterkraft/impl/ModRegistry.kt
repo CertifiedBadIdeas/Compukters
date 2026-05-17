@@ -48,7 +48,6 @@ import ru.lazyhat.compukterkraft.common.computer.loot.PlayerCreativeLootConditio
 import ru.lazyhat.compukterkraft.common.computer.menu.ComputerControlMenu
 import ru.lazyhat.compukterkraft.common.computer.menu.ComputerMenuWithoutInventory
 import ru.lazyhat.compukterkraft.common.notebook.block.NotebookBlock
-import ru.lazyhat.compukterkraft.common.notebook.block.NotebookBlockEntity
 import ru.lazyhat.compukterkraft.common.notebook.item.NotebookItem
 import ru.lazyhat.compukterkraft.common.serial.item.SerialTerminalItem
 import ru.lazyhat.compukterkraft.common.serial.menu.SerialTerminalMenu
@@ -63,6 +62,7 @@ import ru.lazyhat.compukterkraft.core.MOD_ID
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 import ru.lazyhat.compukterkraft.impl.computer.block.NeoForgeComputerBlockEntity
 import ru.lazyhat.compukterkraft.impl.notebook.block.NeoForgeNotebookBlockEntity
+import ru.lazyhat.compukterkraft.impl.notebook.item.NeoForgeNotebookItem
 import java.util.function.Supplier
 
 object ModRegistry {
@@ -137,7 +137,7 @@ object ModRegistry {
                 Names.COMPUTER_ADVANCED,
             ) { p, s -> NeoForgeComputerBlockEntity(COMPUTER_ADVANCED.get(), p, s, DeviceFamily.ADVANCED) }
 
-        val NOTEBOOK: DeferredHolder<BlockEntityType<*>, BlockEntityType<NotebookBlockEntity>> =
+        val NOTEBOOK: DeferredHolder<BlockEntityType<*>, BlockEntityType<NeoForgeNotebookBlockEntity>> =
             ofBlock(
                 Blocks.NOTEBOOK,
                 Names.NOTEBOOK,
@@ -177,7 +177,7 @@ object ModRegistry {
             ofBlock(
                 Blocks.NOTEBOOK,
                 Names.NOTEBOOK,
-            ) { block, properties -> NotebookItem(block, properties) }
+            ) { block, properties -> NeoForgeNotebookItem(block, properties) }
 
         val WORKBENCH: DeferredHolder<Item, WorkbenchItem> =
             ofBlock(
