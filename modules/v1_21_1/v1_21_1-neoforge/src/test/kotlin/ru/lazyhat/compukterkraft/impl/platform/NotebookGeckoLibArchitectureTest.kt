@@ -61,6 +61,12 @@ class NotebookGeckoLibArchitectureTest {
                     "ru/lazyhat/compukterkraft/impl/notebook/render/NotebookGeoModel.kt",
             )
             .readText()
+        val block = root
+            .resolve(
+                "modules/v1_21_1/v1_21_1-common/src/main/kotlin/" +
+                    "ru/lazyhat/compukterkraft/common/notebook/block/NotebookBlock.kt",
+            )
+            .readText()
         val blockEntity = root
             .resolve(
                 "modules/v1_21_1/v1_21_1-neoforge/src/main/kotlin/" +
@@ -85,6 +91,10 @@ class NotebookGeckoLibArchitectureTest {
         assertTrue(
             renderer.contains("GeoBlockRenderer<NeoForgeNotebookBlockEntity>"),
             "Notebook renderer should be a GeckoLib block renderer over the NeoForge notebook block entity.",
+        )
+        assertTrue(
+            block.contains("RenderShape.ENTITYBLOCK_ANIMATED"),
+            "Notebook block must use entity-block render shape so vanilla blockstate geometry is not rendered.",
         )
         assertTrue(
             model.contains("geo/notebook.geo.json") &&

@@ -24,6 +24,7 @@ import net.minecraft.core.Direction
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.context.BlockPlaceContext
 import net.minecraft.world.level.block.Block
+import net.minecraft.world.level.block.RenderShape
 import net.minecraft.world.level.block.entity.BlockEntityType
 import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.block.state.StateDefinition
@@ -57,6 +58,8 @@ class NotebookBlock(
 
     override fun getStateForPlacement(context: BlockPlaceContext): BlockState =
         defaultBlockState().setValue(ComputerBlock.facing, context.horizontalDirection.opposite)
+
+    override fun getRenderShape(state: BlockState): RenderShape = RenderShape.ENTITYBLOCK_ANIMATED
 
     override fun codec(): MapCodec<out NotebookBlock> = CODEC
 
