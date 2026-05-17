@@ -8,7 +8,7 @@
   "display": {
     "thirdperson_righthand": {
       "rotation": [
-        0,
+        180,
         0,
         -90
       ],
@@ -20,7 +20,7 @@
     },
     "thirdperson_lefthand": {
       "rotation": [
-        0,
+        180,
         0,
         -90
       ],
@@ -32,7 +32,7 @@
     },
     "firstperson_righthand": {
       "rotation": [
-        0,
+        180,
         0,
         -90
       ],
@@ -44,7 +44,7 @@
     },
     "firstperson_lefthand": {
       "rotation": [
-        0,
+        180,
         0,
         -90
       ],
@@ -57,11 +57,11 @@
     "gui": {
       "rotation": [
         36,
-        -27,
+        153,
         2
       ],
       "translation": [
-        -0.75,
+        0,
         -2,
         0
       ],
@@ -75,11 +75,6 @@
       "rotation": [
         -90,
         180,
-        0
-      ],
-      "translation": [
-        0,
-        -2,
         0
       ]
     },
