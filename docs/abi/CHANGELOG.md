@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-No ABI changes.
+- Added draft Rux machine profile v2. This does not change frozen `RUXI` image ABI v1; it defines a new machine profile with boot info, configurable page size, optional devices, and device table discovery.
 
 ## 2026-05-15 - RUXI v1 Frozen
 
