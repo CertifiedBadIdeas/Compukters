@@ -38,7 +38,7 @@ class NeoForgeNotebookBlockEntity(
 ) : NotebookBlockEntity(type, pos, state),
     GeoBlockEntity {
     companion object {
-        private val OPENED: RawAnimation = RawAnimation.begin().thenLoop("opened")
+        private val CLOSED: RawAnimation = RawAnimation.begin().thenLoop("closed")
     }
 
     private val animationCache: AnimatableInstanceCache = GeckoLibUtil.createInstanceCache(this)
@@ -46,7 +46,7 @@ class NeoForgeNotebookBlockEntity(
     override fun registerControllers(controllers: AnimatableManager.ControllerRegistrar) {
         controllers.add(
             AnimationController(this, "notebook_lid", 0) { state ->
-                state.setAndContinue(OPENED)
+                state.setAndContinue(CLOSED)
             },
         )
     }

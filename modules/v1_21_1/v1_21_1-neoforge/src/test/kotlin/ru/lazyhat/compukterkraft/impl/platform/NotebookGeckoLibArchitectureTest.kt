@@ -105,14 +105,16 @@ class NotebookGeckoLibArchitectureTest {
         assertTrue(
             blockEntity.contains("GeoBlockEntity") &&
                 blockEntity.contains("AnimationController") &&
-                blockEntity.contains("""thenLoop("opened")"""),
-            "NeoForge notebook block entity should expose a GeckoLib controller using the exported opened animation.",
+                blockEntity.contains("""thenLoop("closed")""") &&
+                !blockEntity.contains("""thenLoop("opened")"""),
+            "NeoForge notebook block entity should default to the closed GeckoLib animation.",
         )
         assertTrue(
             item.contains("GeoItem") &&
                 item.contains("NotebookItemRenderer") &&
-                item.contains("""thenLoop("opened")"""),
-            "NeoForge notebook item should use a GeckoLib item renderer instead of the vanilla block model.",
+                item.contains("""thenLoop("closed")""") &&
+                !item.contains("""thenLoop("opened")"""),
+            "NeoForge notebook item should default to the closed GeckoLib animation.",
         )
     }
 }

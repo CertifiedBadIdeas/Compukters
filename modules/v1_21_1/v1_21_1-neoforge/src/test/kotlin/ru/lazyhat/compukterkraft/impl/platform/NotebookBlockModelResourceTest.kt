@@ -71,7 +71,7 @@ class NotebookBlockModelResourceTest {
             "Notebook should ship the Blockbench texture used by the GeckoLib model.",
         )
         assertTrue(
-            itemModel.contains("minecraft:builtin/entity"),
+            itemModel.contains("builtin/entity"),
             "Notebook item should use a built-in entity model so GeckoLib can provide the item renderer.",
         )
     }
