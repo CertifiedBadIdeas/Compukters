@@ -35,6 +35,7 @@ class ComputerMenuWithoutInventory(
     family: DeviceFamily,
     computer: RuntimeDevice?,
     menuData: ComputerContainerData?,
+    onRemoved: (() -> Unit)? = null,
 ) : AbstractComputerMenu(
         menuType,
         containerId,
@@ -42,6 +43,7 @@ class ComputerMenuWithoutInventory(
         family,
         computer,
         menuData,
+        onRemoved,
     ) {
     /**
      * Client constructor
@@ -68,6 +70,7 @@ class ComputerMenuWithoutInventory(
         containerId: Int,
         playerInventory: Inventory,
         computer: RuntimeDevice,
+        onRemoved: (() -> Unit)? = null,
     ) : this(
         menuType,
         containerId,
@@ -75,6 +78,7 @@ class ComputerMenuWithoutInventory(
         computer.family,
         computer,
         null,
+        onRemoved,
     )
 
     init {

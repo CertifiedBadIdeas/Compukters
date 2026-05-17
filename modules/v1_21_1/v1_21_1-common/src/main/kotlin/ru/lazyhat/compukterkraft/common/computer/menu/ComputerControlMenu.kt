@@ -33,6 +33,7 @@ class ComputerControlMenu(
     family: DeviceFamily,
     computer: RuntimeDevice?,
     menuData: ComputerContainerData?,
+    onRemoved: (() -> Unit)? = null,
 ) : AbstractComputerMenu(
         menuType,
         containerId,
@@ -40,6 +41,7 @@ class ComputerControlMenu(
         family,
         computer,
         menuData,
+        onRemoved,
     ) {
     constructor(
         menuType: MenuType<out AbstractComputerMenu>,
@@ -60,6 +62,7 @@ class ComputerControlMenu(
         containerId: Int,
         playerInventory: Inventory,
         computer: RuntimeDevice,
+        onRemoved: (() -> Unit)? = null,
     ) : this(
         menuType,
         containerId,
@@ -67,6 +70,7 @@ class ComputerControlMenu(
         computer.family,
         computer,
         null,
+        onRemoved,
     )
 
     override fun quickMoveStack(

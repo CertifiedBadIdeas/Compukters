@@ -52,4 +52,36 @@ class NotebookBlockArchitectureTest {
         assertFalse(itemSource.contains("useOn"))
         assertFalse(itemSource.contains("openMenu"))
     }
+
+    @Test
+    fun notebookLidStateFollowsServerMenuLifecycle() {
+        val blockEntityPath =
+            Path.of("src/main/kotlin/ru/lazyhat/compukterkraft/common/notebook/block/NotebookBlockEntity.kt")
+        val computerMenuPath =
+            Path.of("src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/menu/AbstractComputerMenu.kt")
+        val computerModPath =
+            Path.of("../v1_21_1-neoforge/src/main/kotlin/ru/lazyhat/compukterkraft/impl/CompukterKraftMod.kt")
+
+        val blockEntitySource = blockEntityPath.readText()
+        val computerMenuSource = computerMenuPath.readText()
+        val computerModSource = computerModPath.readText()
+
+        assertTrue(
+            blockEntitySource.contains("notebookMenuOpened") &&
+                blockEntitySource.contains("notebookMenuClosed") &&
+                blockEntitySource.contains("NOTEBOOK_LID_EVENT") &&
+                blockEntitySource.contains("blockEvent"),
+            "Notebook block entity should publish chest-style lid events from menu viewer count changes.",
+        )
+        assertTrue(
+            computerMenuSource.contains("onRemoved") &&
+                computerMenuSource.contains("onRemoved?.invoke()"),
+            "Computer menus should expose a close callback so notebook viewers are released on removed().",
+        )
+        assertTrue(
+            computerModSource.contains("notebookMenuOpened") &&
+                computerModSource.contains("notebookMenuClosed"),
+            "Notebook control menus should open and close the notebook lid around the menu lifecycle.",
+        )
+    }
 }

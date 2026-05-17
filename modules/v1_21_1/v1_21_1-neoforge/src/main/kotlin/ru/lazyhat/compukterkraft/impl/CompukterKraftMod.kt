@@ -31,6 +31,7 @@ import ru.lazyhat.compukterkraft.common.computer.data.ComputerContainerData
 import ru.lazyhat.compukterkraft.common.computer.menu.ComputerControlMenu
 import ru.lazyhat.compukterkraft.common.network.ClientNetworking
 import ru.lazyhat.compukterkraft.common.network.ServerNetworking
+import ru.lazyhat.compukterkraft.common.notebook.block.NotebookBlockEntity
 import ru.lazyhat.compukterkraft.common.serial.menu.SerialTerminalMenu
 import ru.lazyhat.compukterkraft.common.workbench.data.WorkbenchContainerData
 import ru.lazyhat.compukterkraft.core.LOGGER
@@ -68,12 +69,16 @@ class CompukterKraftMod(
             player.openMenu(
                 SimpleMenuProvider(
                     { id, playerInventory, _ ->
+                        val notebook = computer as? NotebookBlockEntity
                         ComputerControlMenu(
                             ModRegistry.Menus.COMPUTER_CONTROL.get(),
                             id,
                             playerInventory,
                             computer.getOrCreateRuntimeDevice(),
-                        )
+                            onRemoved = { notebook?.notebookMenuClosed() },
+                        ).also {
+                            notebook?.notebookMenuOpened()
+                        }
                     },
                     Component.translatable("gui.compukterkraft.computer_control.title"),
                 ),
