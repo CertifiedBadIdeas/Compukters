@@ -39,7 +39,7 @@ class NeoForgeNotebookItem(
 ) : NotebookItem(block, properties),
     GeoItem {
     companion object {
-        private val OPENED: RawAnimation = RawAnimation.begin().thenLoop("opened")
+        private val CLOSED: RawAnimation = RawAnimation.begin().thenLoop("closed")
     }
 
     private val animationCache: AnimatableInstanceCache = GeckoLibUtil.createInstanceCache(this)
@@ -47,7 +47,7 @@ class NeoForgeNotebookItem(
     override fun registerControllers(controllers: AnimatableManager.ControllerRegistrar) {
         controllers.add(
             AnimationController(this, "notebook_item_lid", 0) { state ->
-                state.setAndContinue(OPENED)
+                state.setAndContinue(CLOSED)
             },
         )
     }
