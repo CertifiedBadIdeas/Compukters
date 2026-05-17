@@ -17,26 +17,27 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package ru.lazyhat.compukterkraft.impl.notebook.block
+package ru.lazyhat.compukterkraft.impl.notebook.item
 
-import net.minecraft.core.BlockPos
-import net.minecraft.world.level.block.entity.BlockEntityType
-import net.minecraft.world.level.block.state.BlockState
-import ru.lazyhat.compukterkraft.common.computer.block.ComputerBlockEntity
-import ru.lazyhat.compukterkraft.common.notebook.block.NotebookBlockEntity
-import software.bernie.geckolib.animatable.GeoBlockEntity
+import net.minecraft.client.renderer.BlockEntityWithoutLevelRenderer
+import net.minecraft.world.item.Item
+import net.minecraft.world.level.block.Block
+import ru.lazyhat.compukterkraft.common.notebook.item.NotebookItem
+import ru.lazyhat.compukterkraft.impl.notebook.render.NotebookItemRenderer
+import software.bernie.geckolib.animatable.GeoItem
+import software.bernie.geckolib.animatable.client.GeoRenderProvider
 import software.bernie.geckolib.animatable.instance.AnimatableInstanceCache
 import software.bernie.geckolib.animation.AnimatableManager
 import software.bernie.geckolib.animation.AnimationController
 import software.bernie.geckolib.animation.RawAnimation
 import software.bernie.geckolib.util.GeckoLibUtil
+import java.util.function.Consumer
 
-class NeoForgeNotebookBlockEntity(
-    type: BlockEntityType<out ComputerBlockEntity>,
-    pos: BlockPos,
-    state: BlockState,
-) : NotebookBlockEntity(type, pos, state),
-    GeoBlockEntity {
+class NeoForgeNotebookItem(
+    block: Block,
+    properties: Item.Properties,
+) : NotebookItem(block, properties),
+    GeoItem {
     companion object {
         private val OPENED: RawAnimation = RawAnimation.begin().thenLoop("opened")
     }
@@ -45,7 +46,7 @@ class NeoForgeNotebookBlockEntity(
 
     override fun registerControllers(controllers: AnimatableManager.ControllerRegistrar) {
         controllers.add(
-            AnimationController(this, "notebook_lid", 0) { state ->
+            AnimationController(this, "notebook_item_lid", 0) { state ->
                 state.setAndContinue(OPENED)
             },
         )
@@ -53,8 +54,13 @@ class NeoForgeNotebookBlockEntity(
 
     override fun getAnimatableInstanceCache(): AnimatableInstanceCache = animationCache
 
-    override fun onChunkUnloaded() {
-        releaseRuntimeDevice()
-        super.onChunkUnloaded()
+    override fun createGeoRenderer(consumer: Consumer<GeoRenderProvider>) {
+        consumer.accept(
+            object : GeoRenderProvider {
+                private val renderer: BlockEntityWithoutLevelRenderer by lazy { NotebookItemRenderer() }
+
+                override fun getGeoItemRenderer(): BlockEntityWithoutLevelRenderer = renderer
+            },
+        )
     }
 }

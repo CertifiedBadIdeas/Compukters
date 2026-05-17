@@ -50,6 +50,9 @@ repositories {
     maven("https://api.modrinth.com/maven") {
         name = "Modrinth"
     }
+    maven("https://dl.cloudsmith.io/public/geckolib3/geckolib/maven/") {
+        name = "GeckoLib"
+    }
     maven("https://maven.neoforged.net/releases/") {
         name = "NeoForged"
     }

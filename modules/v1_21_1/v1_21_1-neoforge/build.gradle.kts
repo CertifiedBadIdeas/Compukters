@@ -76,6 +76,7 @@ dependencies {
     common(project(path = projects.v1211Common.path, configuration = "namedElements")) { isTransitive = false }
     shadowBundle(project(path = projects.v1211Common.path, configuration = "transformProductionNeoForge"))
     testImplementation(project(path = projects.v1211Common.path, configuration = "namedElements"))
+    modImplementation(libs.geckolib.neoforge.v1211)
 
     add(gameTest.implementationConfigurationName, sourceSets.main.get().output)
     add(gameTest.implementationConfigurationName, project(path = projects.v1211Common.path, configuration = "namedElements"))

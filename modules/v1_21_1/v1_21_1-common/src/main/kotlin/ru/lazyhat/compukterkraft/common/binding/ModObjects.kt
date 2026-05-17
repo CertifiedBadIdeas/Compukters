@@ -37,7 +37,7 @@ import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDevice
 
 object ModObjects {
     lateinit var computerBlockEntityType: () -> BlockEntityType<ComputerBlockEntity>
-    lateinit var notebookBlockEntityType: () -> BlockEntityType<NotebookBlockEntity>
+    lateinit var notebookBlockEntityType: () -> BlockEntityType<out NotebookBlockEntity>
     lateinit var computerMenuType: () -> MenuType<ComputerMenuWithoutInventory>
     lateinit var openComputerMenu: (ServerPlayer, AbstractComputerBlockEntity, ComputerContainerData) -> Unit
     lateinit var computerControlMenuType: () -> MenuType<ComputerControlMenu>

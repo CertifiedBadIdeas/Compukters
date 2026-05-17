@@ -1,0 +1,50 @@
+{
+	"format_version": "1.8.0",
+	"animations": {
+		"close": {
+			"animation_length": 1,
+			"bones": {
+				"screen": {
+					"rotation": {
+						"0.0": {
+							"vector": [107.5, 0, 0]
+						},
+						"1.0": {
+							"vector": [0, 0, 0],
+							"easing": "easeInOutQuart"
+						}
+					}
+				}
+			}
+		},
+		"open": {
+			"animation_length": 1,
+			"bones": {
+				"screen": {
+					"rotation": {
+						"0.0": {
+							"vector": [0, 0, 0]
+						},
+						"1.0": {
+							"vector": [107.5, 0, 0],
+							"easing": "easeInOutQuart"
+						}
+					}
+				}
+			}
+		},
+		"closed": {
+			"loop": true
+		},
+		"opened": {
+			"loop": true,
+			"bones": {
+				"screen": {
+					"rotation": {
+						"vector": [107.5, 0, 0]
+					}
+				}
+			}
+		}
+	}
+}

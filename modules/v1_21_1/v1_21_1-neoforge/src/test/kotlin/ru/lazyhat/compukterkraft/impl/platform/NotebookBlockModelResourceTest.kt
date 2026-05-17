@@ -24,32 +24,55 @@ import kotlin.test.assertTrue
 
 class NotebookBlockModelResourceTest {
     @Test
-    fun notebookModelIsSplitIntoAnimationReadyBaseAndLidParts() {
-        val json =
+    fun notebookUsesGeckoLibModelAssetsInsteadOfVanillaCuboidGeometry() {
+        val blockModel =
             checkNotNull(
                 javaClass.classLoader.getResource("assets/compukterkraft/models/block/notebook.json"),
             ).readText()
+        val geo =
+            checkNotNull(
+                javaClass.classLoader.getResource("assets/compukterkraft/geo/notebook.geo.json"),
+            ) {
+                "Notebook should ship a GeckoLib geometry resource."
+            }.readText()
+        val animation =
+            checkNotNull(
+                javaClass.classLoader.getResource("assets/compukterkraft/animations/notebook.animation.json"),
+            ) {
+                "Notebook should ship a GeckoLib animation resource."
+            }.readText()
+        val itemModel =
+            checkNotNull(
+                javaClass.classLoader.getResource("assets/compukterkraft/models/item/notebook.json"),
+            ).readText()
 
-        listOf(
-            "base_shell",
-            "keyboard_deck",
-            "keyboard_panel",
-            "touchpad",
-            "hinge_left",
-            "hinge_right",
-            "lid_panel",
-            "screen_panel",
-            "screen_bezel_top",
-            "screen_bezel_bottom",
-        ).forEach { partName ->
-            assertTrue(
-                json.contains(""""name": "$partName""""),
-                "Notebook model should keep '$partName' as a named element for future lid animation work.",
-            )
-        }
         assertTrue(
-            json.contains(""""display": "compukterkraft:block/computer_advanced/computer_advanced_top""""),
-            "Notebook model should bind a dedicated display texture alias instead of painting the lid as plain casing.",
+            !blockModel.contains(""""elements""""),
+            "Notebook block model should not keep vanilla cuboid geometry once GeckoLib renders the block entity.",
+        )
+        assertTrue(
+            blockModel.contains(""""particle": "compukterkraft:block/notebook/notebook""""),
+            "Notebook still needs a particle texture for block breaking particles.",
+        )
+        assertTrue(
+            geo.contains(""""identifier": "geometry.notebook""""),
+            "Notebook geometry should use the exported GeckoLib model identifier.",
+        )
+        assertTrue(
+            geo.contains(""""name": "screen""""),
+            "Notebook geometry should keep the animated screen bone.",
+        )
+        assertTrue(
+            animation.contains(""""open""""),
+            "Notebook animation resource should define the open lid animation.",
+        )
+        assertTrue(
+            javaClass.classLoader.getResource("assets/compukterkraft/textures/block/notebook/notebook.png") != null,
+            "Notebook should ship the Blockbench texture used by the GeckoLib model.",
+        )
+        assertTrue(
+            itemModel.contains("minecraft:builtin/entity"),
+            "Notebook item should use a built-in entity model so GeckoLib can provide the item renderer.",
         )
     }
 }

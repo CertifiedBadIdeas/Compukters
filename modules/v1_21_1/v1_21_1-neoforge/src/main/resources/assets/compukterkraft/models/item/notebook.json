@@ -1,1 +1,3 @@
-{"parent": "compukterkraft:block/notebook"}
+{
+  "parent": "minecraft:builtin/entity"
+}
