@@ -84,6 +84,7 @@ abstract class AbstractComputerMenu(
     override val family: DeviceFamily,
     computer: RuntimeDevice?,
     containerData: ComputerContainerData?,
+    private val onRemoved: (() -> Unit)? = null,
 ) : AbstractContainerMenu(type, id),
     ComputerMenu {
     val uploadMaxSize: Int
@@ -135,5 +136,6 @@ abstract class AbstractComputerMenu(
     override fun removed(player: Player) {
         super.removed(player)
         (side as? MenuSide.Server)?.input?.close()
+        onRemoved?.invoke()
     }
 }

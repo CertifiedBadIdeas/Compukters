@@ -105,9 +105,11 @@ class NotebookGeckoLibArchitectureTest {
         assertTrue(
             blockEntity.contains("GeoBlockEntity") &&
                 blockEntity.contains("AnimationController") &&
-                blockEntity.contains("""thenLoop("closed")""") &&
-                !blockEntity.contains("""thenLoop("opened")"""),
-            "NeoForge notebook block entity should default to the closed GeckoLib animation.",
+                blockEntity.contains("""thenPlay("open").thenLoop("opened")""") &&
+                blockEntity.contains("""thenPlay("close").thenLoop("closed")""") &&
+                blockEntity.contains("triggerEvent") &&
+                blockEntity.contains("NOTEBOOK_LID_EVENT"),
+            "NeoForge notebook block entity should animate the lid from chest-style block events.",
         )
         assertTrue(
             item.contains("GeoItem") &&

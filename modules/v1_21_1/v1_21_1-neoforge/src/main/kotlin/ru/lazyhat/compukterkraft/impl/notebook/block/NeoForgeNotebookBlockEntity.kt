@@ -39,19 +39,36 @@ class NeoForgeNotebookBlockEntity(
     GeoBlockEntity {
     companion object {
         private val CLOSED: RawAnimation = RawAnimation.begin().thenLoop("closed")
+        private val OPEN: RawAnimation = RawAnimation.begin().thenPlay("open").thenLoop("opened")
+        private val CLOSE: RawAnimation = RawAnimation.begin().thenPlay("close").thenLoop("closed")
     }
 
     private val animationCache: AnimatableInstanceCache = GeckoLibUtil.createInstanceCache(this)
+    private var lidAnimation: RawAnimation = CLOSED
+    private var lidController: AnimationController<NeoForgeNotebookBlockEntity>? = null
 
     override fun registerControllers(controllers: AnimatableManager.ControllerRegistrar) {
         controllers.add(
             AnimationController(this, "notebook_lid", 0) { state ->
-                state.setAndContinue(CLOSED)
-            },
+                state.setAndContinue(lidAnimation)
+            }.also { lidController = it },
         )
     }
 
     override fun getAnimatableInstanceCache(): AnimatableInstanceCache = animationCache
+
+    override fun triggerEvent(
+        id: Int,
+        type: Int,
+    ): Boolean {
+        if (id != NOTEBOOK_LID_EVENT) {
+            return super.triggerEvent(id, type)
+        }
+
+        lidAnimation = if (type == NOTEBOOK_LID_OPEN) OPEN else CLOSE
+        lidController?.forceAnimationReset()
+        return true
+    }
 
     override fun onChunkUnloaded() {
         releaseRuntimeDevice()
