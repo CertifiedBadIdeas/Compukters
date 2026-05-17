@@ -38,36 +38,30 @@ class NeoForgeNotebookBlockEntity(
 ) : NotebookBlockEntity(type, pos, state),
     GeoBlockEntity {
     companion object {
+        private const val LID_CONTROLLER: String = "notebook_lid"
+        private const val OPEN_TRIGGER: String = "open_lid"
+        private const val CLOSE_TRIGGER: String = "close_lid"
+
         private val CLOSED: RawAnimation = RawAnimation.begin().thenLoop("closed")
         private val OPEN: RawAnimation = RawAnimation.begin().thenPlay("open").thenLoop("opened")
         private val CLOSE: RawAnimation = RawAnimation.begin().thenPlay("close").thenLoop("closed")
     }
 
     private val animationCache: AnimatableInstanceCache = GeckoLibUtil.createInstanceCache(this)
-    private var lidAnimation: RawAnimation = CLOSED
-    private var lidController: AnimationController<NeoForgeNotebookBlockEntity>? = null
 
     override fun registerControllers(controllers: AnimatableManager.ControllerRegistrar) {
         controllers.add(
-            AnimationController(this, "notebook_lid", 0) { state ->
-                state.setAndContinue(lidAnimation)
-            }.also { lidController = it },
+            AnimationController(this, LID_CONTROLLER, 0) { state ->
+                state.setAndContinue(CLOSED)
+            }.triggerableAnim(OPEN_TRIGGER, OPEN)
+                .triggerableAnim(CLOSE_TRIGGER, CLOSE),
         )
     }
 
     override fun getAnimatableInstanceCache(): AnimatableInstanceCache = animationCache
 
-    override fun triggerEvent(
-        id: Int,
-        type: Int,
-    ): Boolean {
-        if (id != NOTEBOOK_LID_EVENT) {
-            return super.triggerEvent(id, type)
-        }
-
-        lidAnimation = if (type == NOTEBOOK_LID_OPEN) OPEN else CLOSE
-        lidController?.forceAnimationReset()
-        return true
+    override fun setNotebookLidOpen(open: Boolean) {
+        triggerAnim(LID_CONTROLLER, if (open) OPEN_TRIGGER else CLOSE_TRIGGER)
     }
 
     override fun onChunkUnloaded() {

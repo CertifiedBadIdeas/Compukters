@@ -107,9 +107,9 @@ class NotebookGeckoLibArchitectureTest {
                 blockEntity.contains("AnimationController") &&
                 blockEntity.contains("""thenPlay("open").thenLoop("opened")""") &&
                 blockEntity.contains("""thenPlay("close").thenLoop("closed")""") &&
-                blockEntity.contains("triggerEvent") &&
-                blockEntity.contains("NOTEBOOK_LID_EVENT"),
-            "NeoForge notebook block entity should animate the lid from chest-style block events.",
+                blockEntity.contains("triggerableAnim") &&
+                blockEntity.contains("triggerAnim"),
+            "NeoForge notebook block entity should animate the lid through GeckoLib triggerable animations.",
         )
         assertTrue(
             item.contains("GeoItem") &&
