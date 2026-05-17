@@ -54,6 +54,36 @@ class NotebookBlockArchitectureTest {
     }
 
     @Test
+    fun notebookOpensLaptopTerminalScreenInsteadOfDesktopControlMenu() {
+        val blockPath =
+            Path.of("src/main/kotlin/ru/lazyhat/compukterkraft/common/notebook/block/NotebookBlock.kt")
+        val screenPath =
+            Path.of("src/main/kotlin/ru/lazyhat/compukterkraft/common/notebook/screen/NotebookScreen.kt")
+        val terminalScreenPath =
+            Path.of("src/main/kotlin/ru/lazyhat/compukterkraft/common/terminal/screen/ComputerTerminalScreen.kt")
+
+        val blockSource = blockPath.readText()
+        val screenSource = screenPath.readText()
+        val terminalScreenSource = terminalScreenPath.readText()
+
+        assertTrue(
+            blockSource.contains("override fun useWithoutItem") &&
+                blockSource.contains("ModObjects.openComputerMenu") &&
+                !blockSource.contains("openComputerControlMenu"),
+            "Notebook RMB should open the laptop terminal menu directly instead of the desktop control menu.",
+        )
+        assertTrue(
+            screenSource.contains("class NotebookScreen") &&
+                screenSource.contains("ComputerTerminalScreen<ComputerMenuWithoutInventory>"),
+            "Notebook should have its own screen class so laptop-only UI can grow independently.",
+        )
+        assertTrue(
+            terminalScreenSource.contains("open class ComputerTerminalScreen"),
+            "NotebookScreen should be able to reuse the existing terminal display/input implementation.",
+        )
+    }
+
+    @Test
     fun notebookLidStateFollowsServerMenuLifecycle() {
         val blockEntityPath =
             Path.of("src/main/kotlin/ru/lazyhat/compukterkraft/common/notebook/block/NotebookBlockEntity.kt")

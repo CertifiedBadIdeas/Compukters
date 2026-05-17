@@ -76,7 +76,7 @@ import ru.lazyhat.compukterkraft.core.ui.foundation.value
  *  - Tooltip text is routed through the new `Modifier.tooltip` hook
  *    which the runtime forwards to Minecraft's tooltip pipeline.
  */
-class ComputerTerminalScreen<T : AbstractComputerMenu>(
+open class ComputerTerminalScreen<T : AbstractComputerMenu>(
     container: T,
     player: Inventory,
     title: Component,
