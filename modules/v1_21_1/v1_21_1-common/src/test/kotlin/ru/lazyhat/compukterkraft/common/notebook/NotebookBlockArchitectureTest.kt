@@ -69,9 +69,9 @@ class NotebookBlockArchitectureTest {
         assertTrue(
             blockEntitySource.contains("notebookMenuOpened") &&
                 blockEntitySource.contains("notebookMenuClosed") &&
-                blockEntitySource.contains("NOTEBOOK_LID_EVENT") &&
-                blockEntitySource.contains("blockEvent"),
-            "Notebook block entity should publish chest-style lid events from menu viewer count changes.",
+                blockEntitySource.contains("setNotebookLidOpen(open = true)") &&
+                blockEntitySource.contains("setNotebookLidOpen(open = false)"),
+            "Notebook block entity should drive lid state from menu viewer count changes.",
         )
         assertTrue(
             computerMenuSource.contains("onRemoved") &&

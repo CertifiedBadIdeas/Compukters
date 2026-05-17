@@ -35,12 +35,6 @@ open class NotebookBlockEntity(
     pos: BlockPos,
     state: BlockState,
 ) : ComputerBlockEntity(type, pos, state, DeviceFamily.NORMAL) {
-    companion object {
-        const val NOTEBOOK_LID_EVENT: Int = 1
-        const val NOTEBOOK_LID_CLOSED: Int = 0
-        const val NOTEBOOK_LID_OPEN: Int = 1
-    }
-
     private var notebookMenuViewers: Int = 0
 
     override fun createMenu(
@@ -63,7 +57,7 @@ open class NotebookBlockEntity(
         if (level.isClientSide) return
 
         if (notebookMenuViewers == 0) {
-            publishNotebookLidState(open = true)
+            setNotebookLidOpen(open = true)
         }
         notebookMenuViewers += 1
     }
@@ -74,16 +68,9 @@ open class NotebookBlockEntity(
 
         notebookMenuViewers -= 1
         if (notebookMenuViewers == 0) {
-            publishNotebookLidState(open = false)
+            setNotebookLidOpen(open = false)
         }
     }
 
-    private fun publishNotebookLidState(open: Boolean) {
-        level?.blockEvent(
-            blockPos,
-            blockState.block,
-            NOTEBOOK_LID_EVENT,
-            if (open) NOTEBOOK_LID_OPEN else NOTEBOOK_LID_CLOSED,
-        )
-    }
+    protected open fun setNotebookLidOpen(open: Boolean) = Unit
 }
