@@ -1,0 +1,15 @@
+use std::hardware::find_mmio_base;
+
+fn main() -> i32 {
+    let mut debug_base: u32 = find_mmio_base(2u32);
+    if debug_base == 0u32 {
+        return 1;
+    }
+
+    unsafe {
+        mmio<u8>(debug_base).store(72u8);
+        mmio<u8>(debug_base).store(87u8);
+    }
+
+    return 0;
+}
