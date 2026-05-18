@@ -1,27 +1,115 @@
 pub fn write_bytes(bytes: ptr<u8>, len: u32) {
-    let mut i: u32 = 0u32;
-    while i < len {
+    let mut table: u32 = 0u32;
+    let mut count: u32 = 0u32;
+    unsafe {
+        table = ptr<u32>(RAM_BASE + 20).load();
+        count = ptr<u32>(RAM_BASE + 24).load();
+    }
+
+    let mut base: u32 = 0u32;
+    let mut entry_index: u32 = 0u32;
+    while entry_index < count {
+        let mut entry: u32 = table + entry_index * 12u32;
         unsafe {
-            mmio<u8>(DEBUG_WRITE).store(bytes[i]);
+            if ptr<u32>(entry).load() == 2u32 {
+                base = ptr<u32>(entry + 4).load();
+            }
         }
-        i += 1u32;
+        entry_index += 1u32;
+    }
+
+    if base != 0u32 {
+        let mut i: u32 = 0u32;
+        while i < len {
+            unsafe {
+                mmio<u8>(base).store(bytes[i]);
+            }
+            i += 1u32;
+        }
     }
 }
 
 pub fn write_byte(byte: u8) {
+    let mut table: u32 = 0u32;
+    let mut count: u32 = 0u32;
     unsafe {
-        mmio<u8>(DEBUG_WRITE).store(byte);
+        table = ptr<u32>(RAM_BASE + 20).load();
+        count = ptr<u32>(RAM_BASE + 24).load();
+    }
+
+    let mut base: u32 = 0u32;
+    let mut i: u32 = 0u32;
+    while i < count {
+        let mut entry: u32 = table + i * 12u32;
+        unsafe {
+            if ptr<u32>(entry).load() == 2u32 {
+                base = ptr<u32>(entry + 4).load();
+            }
+        }
+        i += 1u32;
+    }
+
+    if base != 0u32 {
+        unsafe {
+            mmio<u8>(base).store(byte);
+        }
     }
 }
 
 pub fn read_ready() -> bool {
+    let mut table: u32 = 0u32;
+    let mut count: u32 = 0u32;
     unsafe {
-        return mmio<i32>(SERIAL_INPUT_READY).load() != 0;
+        table = ptr<u32>(RAM_BASE + 20).load();
+        count = ptr<u32>(RAM_BASE + 24).load();
+    }
+
+    let mut base: u32 = 0u32;
+    let mut i: u32 = 0u32;
+    while i < count {
+        let mut entry: u32 = table + i * 12u32;
+        unsafe {
+            if ptr<u32>(entry).load() == 3u32 {
+                base = ptr<u32>(entry + 4).load();
+            }
+        }
+        i += 1u32;
+    }
+
+    if base == 0u32 {
+        return false;
+    }
+
+    unsafe {
+        return mmio<i32>(base).load() != 0;
     }
 }
 
 pub fn read_byte() -> u8 {
+    let mut table: u32 = 0u32;
+    let mut count: u32 = 0u32;
     unsafe {
-        return mmio<u8>(SERIAL_INPUT_READ).load();
+        table = ptr<u32>(RAM_BASE + 20).load();
+        count = ptr<u32>(RAM_BASE + 24).load();
+    }
+
+    let mut base: u32 = 0u32;
+    let mut i: u32 = 0u32;
+    while i < count {
+        let mut entry: u32 = table + i * 12u32;
+        unsafe {
+            if ptr<u32>(entry).load() == 3u32 {
+                base = ptr<u32>(entry + 4).load();
+            }
+        }
+        i += 1u32;
+    }
+
+    if base == 0u32 {
+        return 0u8;
+    }
+
+    unsafe {
+        return mmio<u8>(base + 4).load();
     }
 }

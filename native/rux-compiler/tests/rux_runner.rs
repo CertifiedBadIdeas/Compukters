@@ -70,6 +70,16 @@ fn example_copy_firmware_runs() {
 }
 
 #[test]
+fn example_hardware_discovery_firmware_runs() {
+    let source = include_str!("../examples/firmware/hardware_debug.rx");
+    let report = run_source(source).unwrap();
+
+    assert_eq!(report.exit_code, 0);
+    assert_eq!(report.panic_code, 0);
+    assert_eq!(report.debug_output, "HW");
+}
+
+#[test]
 fn run_source_with_serial_input_echoes_bytes_through_firmware() {
     let source = include_str!("../examples/firmware/echo.rx");
     let report = run_source_with_serial_input(source, b"Rux!").unwrap();

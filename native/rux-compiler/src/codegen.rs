@@ -1098,10 +1098,8 @@ impl<'rodata> Codegen<'rodata> {
             }
             _ => match self.compile_expr(expr)? {
                 ExprValue::Addr(register) => Ok(register),
+                ExprValue::U32(register) => Ok(register),
                 ExprValue::I32(_) => Err(CompileError {
-                    message: format!("{} must be an address expression", context.address_name()),
-                }),
-                ExprValue::U32(_) => Err(CompileError {
                     message: format!("{} must be an address expression", context.address_name()),
                 }),
                 ExprValue::U8(_) => Err(CompileError {

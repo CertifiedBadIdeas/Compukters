@@ -176,14 +176,10 @@ The core profile intentionally does not define what hardware entry `id` values m
 A concrete target machine profile defines those meanings. For example:
 
 ```text
-Rux notebook profile v1:
-  hardware id 1 = display controller
-  hardware id 2 = input controller
-  hardware id 3 = power controller
-  hardware id 4 = port controller
-
-Rux headless profile v1:
-  hardware id 1 = serial console
+Rux computer profile v1:
+  hardware id 1 = control
+  hardware id 2 = debug
+  hardware id 3 = serial-input
 ```
 
 The register layout and behavior of each MMIO range are also target-profile-defined.

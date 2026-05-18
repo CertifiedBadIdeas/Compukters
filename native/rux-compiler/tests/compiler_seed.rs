@@ -1234,6 +1234,58 @@ fn compile_imports_std_mem_zero() {
 }
 
 #[test]
+fn compile_imports_std_hardware_find_mmio_base() {
+    let image = compile(
+        "use std::hardware::find_mmio_base;
+
+        fn main() -> i32 {
+            return find_mmio_base(2u32) as i32;
+        }",
+    )
+    .unwrap();
+    let find = image
+        .functions
+        .iter()
+        .find(|function| function.name == "find_mmio_base")
+        .unwrap();
+
+    assert!(find
+        .instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::Load32 { .. })));
+    assert!(find
+        .instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::JumpIfFalse { .. })));
+}
+
+#[test]
+fn compile_imports_std_io_write_byte_discovers_debug_mmio_base() {
+    let image = compile(
+        "use std::io::write_byte;
+
+        fn main() {
+            write_byte(65u8);
+        }",
+    )
+    .unwrap();
+    let write_byte = image
+        .functions
+        .iter()
+        .find(|function| function.name == "write_byte")
+        .unwrap();
+
+    assert!(write_byte
+        .instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::Load32 { .. })));
+    assert!(write_byte
+        .instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::JumpIfFalse { .. })));
+}
+
+#[test]
 fn compile_lowers_ptr_u8_function_return() {
     let image = compile(
         "fn message() -> ptr<u8> {
@@ -2155,6 +2207,32 @@ fn compiled_seed_std_copy_and_write_bytes_run_on_computer_machine() {
     );
     assert_eq!(machine.debug_output_string(), "RUX");
     assert_eq!(machine.exit_code(), 0x5855_52);
+    assert_eq!(machine.panic_code(), 0);
+}
+
+#[test]
+fn compiled_seed_std_hardware_finds_debug_mmio_base_on_computer_machine() {
+    let image = compile(
+        "use std::hardware::find_mmio_base;
+
+        fn main() -> i32 {
+            let mut debug_base: u32 = find_mmio_base(2u32);
+            unsafe {
+                mmio<u8>(debug_base).store(65u8);
+            }
+            return debug_base as i32;
+        }",
+    )
+    .unwrap();
+    let mut machine = ComputerMachine::new(64 * 1024).unwrap();
+    let cpu_id = machine.spawn_boot_cpu(image, 1_000_000).unwrap();
+
+    assert_eq!(
+        machine.run_boot_cpu_until_signal(cpu_id).unwrap(),
+        LowImageSignal::HaltI32(ComputerMachine::DEBUG_BASE as i32)
+    );
+    assert_eq!(machine.debug_output_string(), "A");
+    assert_eq!(machine.exit_code(), ComputerMachine::DEBUG_BASE as i32);
     assert_eq!(machine.panic_code(), 0);
 }
 
