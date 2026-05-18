@@ -1129,9 +1129,14 @@ impl<'rodata> Codegen<'rodata> {
             Expr::IntU32(value) => Ok(ExprValue::U32(self.emit_u32_literal(*value)?)),
             Expr::IntU8(value) => Ok(ExprValue::U8(self.emit_u8_literal(*value)?)),
             Expr::ByteString(bytes) => {
-                let addr = u32::try_from(self.rodata.len()).map_err(|_| CompileError {
+                let offset = u32::try_from(self.rodata.len()).map_err(|_| CompileError {
                     message: "rodata address does not fit `u32`".to_string(),
                 })?;
+                let addr = computer_abi::PROFILE_V2_PROGRAM_BASE
+                    .checked_add(offset)
+                    .ok_or_else(|| CompileError {
+                        message: "rodata address does not fit `u32`".to_string(),
+                    })?;
                 self.rodata.extend_from_slice(bytes);
                 let register = self.alloc_register()?;
                 self.instructions.push(Instruction::AddrConst {

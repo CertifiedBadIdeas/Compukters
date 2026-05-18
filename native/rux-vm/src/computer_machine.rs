@@ -42,6 +42,16 @@ pub struct ComputerMemoryRegion {
 }
 
 impl ComputerMachine {
+    pub const PROFILE_V2_BOOT_INFO_MAGIC: u32 = computer_abi::PROFILE_V2_BOOT_INFO_MAGIC;
+    pub const PROFILE_V2_VERSION: u32 = computer_abi::PROFILE_V2_VERSION;
+    pub const PROFILE_V2_PAGE_SIZE: u32 = computer_abi::PROFILE_V2_PAGE_SIZE;
+    pub const PROFILE_V2_BOOT_INFO_ADDR: u32 = computer_abi::PROFILE_V2_BOOT_INFO_ADDR;
+    pub const PROFILE_V2_PROGRAM_BASE: u32 = computer_abi::PROFILE_V2_PROGRAM_BASE;
+    pub const PROFILE_V2_BOOT_INFO_SIZE: u32 = computer_abi::PROFILE_V2_BOOT_INFO_SIZE;
+    pub const PROFILE_V2_HARDWARE_ENTRY_SIZE: u32 = computer_abi::PROFILE_V2_HARDWARE_ENTRY_SIZE;
+    pub const HARDWARE_ID_CONTROL: u32 = computer_abi::COMPUTER_HARDWARE_ID_CONTROL;
+    pub const HARDWARE_ID_DEBUG: u32 = computer_abi::COMPUTER_HARDWARE_ID_DEBUG;
+    pub const HARDWARE_ID_SERIAL_INPUT: u32 = computer_abi::COMPUTER_HARDWARE_ID_SERIAL_INPUT;
     pub const CONTROL_BASE: u32 = computer_abi::CONTROL_BASE;
     pub const CONTROL_STATUS: u32 = computer_abi::CONTROL_STATUS;
     pub const CONTROL_PANIC_CODE: u32 = computer_abi::CONTROL_PANIC_CODE;
@@ -61,12 +71,14 @@ impl ComputerMachine {
     pub const STATUS_PANIC: i32 = computer_abi::STATUS_PANIC;
 
     pub fn new(memory_size: usize) -> Result<Self, MemoryFault> {
+        validate_profile_v2_memory_size(memory_size)?;
         let mut bus = MachineBus::new(memory_size)?;
         let control_device_id =
             bus.map_mmio(Self::CONTROL_BASE, Box::new(ComputerControlDevice::new()))?;
         let debug_device_id = bus.map_mmio(Self::DEBUG_BASE, Box::new(DebugSerialDevice::new()))?;
         let serial_input_device_id =
             bus.map_mmio(Self::SERIAL_INPUT_BASE, Box::new(SerialInputDevice::new()))?;
+        write_profile_v2_boot_info(&mut bus)?;
         Ok(Self {
             bus,
             control_device_id,
@@ -129,7 +141,11 @@ impl ComputerMachine {
                 self.bus.memory().len(),
             ));
         }
-        LowImageVm::load_image_sections_into_bus(&image, &mut self.bus)?;
+        load_image_sections_into_bus_at(
+            &image,
+            &mut self.bus,
+            computer_abi::PROFILE_V2_PROGRAM_BASE,
+        )?;
         let cpu = LowImageVm::create_cpu_context(image, slice_budget_nanos)?;
         let cpu_id = self.cpus.len();
         self.cpus.push(cpu);
@@ -277,6 +293,125 @@ impl ComputerMachine {
         control.panic_code = stable_panic_code(message);
         Err(message.to_string())
     }
+}
+
+fn validate_profile_v2_memory_size(memory_size: usize) -> Result<(), MemoryFault> {
+    let page_size = computer_abi::PROFILE_V2_PAGE_SIZE as usize;
+    if memory_size < page_size {
+        return Err(MemoryFault::new(format!(
+            "computer memory size {memory_size} is smaller than profile page size {page_size}",
+        )));
+    }
+    if memory_size % page_size != 0 {
+        return Err(MemoryFault::new(format!(
+            "computer memory size {memory_size} is not a multiple of profile page size {page_size}",
+        )));
+    }
+    if memory_size > u32::MAX as usize {
+        return Err(MemoryFault::new(format!(
+            "computer memory size {memory_size} exceeds profile u32 address space",
+        )));
+    }
+    Ok(())
+}
+
+fn write_profile_v2_boot_info(bus: &mut MachineBus) -> Result<(), MemoryFault> {
+    const HARDWARE_TABLE_ADDR: u32 = computer_abi::PROFILE_V2_BOOT_INFO_SIZE;
+    const HARDWARE_COUNT: u32 = 3;
+    let ram_size = bus.memory().len() as u32;
+
+    write_u32(
+        bus.memory_mut(),
+        computer_abi::PROFILE_V2_BOOT_INFO_ADDR,
+        computer_abi::PROFILE_V2_BOOT_INFO_MAGIC,
+    )?;
+    write_u32(bus.memory_mut(), 0x04, computer_abi::PROFILE_V2_VERSION)?;
+    write_u32(bus.memory_mut(), 0x08, ram_size)?;
+    write_u32(bus.memory_mut(), 0x0C, computer_abi::PROFILE_V2_PAGE_SIZE)?;
+    write_u32(
+        bus.memory_mut(),
+        0x10,
+        computer_abi::PROFILE_V2_PROGRAM_BASE,
+    )?;
+    write_u32(bus.memory_mut(), 0x14, HARDWARE_TABLE_ADDR)?;
+    write_u32(bus.memory_mut(), 0x18, HARDWARE_COUNT)?;
+
+    write_hardware_entry(
+        bus.memory_mut(),
+        HARDWARE_TABLE_ADDR,
+        computer_abi::COMPUTER_HARDWARE_ID_CONTROL,
+        computer_abi::CONTROL_BASE,
+        computer_abi::CONTROL_SIZE,
+    )?;
+    write_hardware_entry(
+        bus.memory_mut(),
+        HARDWARE_TABLE_ADDR + computer_abi::PROFILE_V2_HARDWARE_ENTRY_SIZE,
+        computer_abi::COMPUTER_HARDWARE_ID_DEBUG,
+        computer_abi::DEBUG_BASE,
+        computer_abi::DEBUG_SIZE,
+    )?;
+    write_hardware_entry(
+        bus.memory_mut(),
+        HARDWARE_TABLE_ADDR + computer_abi::PROFILE_V2_HARDWARE_ENTRY_SIZE * 2,
+        computer_abi::COMPUTER_HARDWARE_ID_SERIAL_INPUT,
+        computer_abi::SERIAL_INPUT_BASE,
+        computer_abi::SERIAL_INPUT_SIZE,
+    )?;
+    Ok(())
+}
+
+fn write_hardware_entry(
+    memory: &mut MachineMemory,
+    address: u32,
+    id: u32,
+    mmio_base: u32,
+    mmio_size: u32,
+) -> Result<(), MemoryFault> {
+    write_u32(memory, address, id)?;
+    write_u32(memory, address + 4, mmio_base)?;
+    write_u32(memory, address + 8, mmio_size)
+}
+
+fn write_u32(memory: &mut MachineMemory, address: u32, value: u32) -> Result<(), MemoryFault> {
+    memory.store_i32(address, i32::from_le_bytes(value.to_le_bytes()))
+}
+
+fn load_image_sections_into_bus_at(
+    image: &Image,
+    bus: &mut MachineBus,
+    base: u32,
+) -> Result<(), String> {
+    let initialized = image
+        .rodata
+        .len()
+        .checked_add(image.data.len())
+        .and_then(|value| value.checked_add(image.bss_size as usize))
+        .ok_or_else(|| "memory sections overflow".to_string())?;
+    let initialized_end = (base as usize)
+        .checked_add(initialized)
+        .ok_or_else(|| "memory sections overflow".to_string())?;
+    if initialized_end > bus.memory().len() {
+        return Err(format!(
+            "memory sections require {initialized} bytes at base {base:#010x} but machine memory has {} bytes",
+            bus.memory().len(),
+        ));
+    }
+
+    for (offset, byte) in image.rodata.iter().copied().enumerate() {
+        bus.store_u8(base + offset as u32, byte)
+            .map_err(|error| error.to_string())?;
+    }
+    let data_start = image.rodata.len();
+    for (offset, byte) in image.data.iter().copied().enumerate() {
+        bus.store_u8(base + (data_start + offset) as u32, byte)
+            .map_err(|error| error.to_string())?;
+    }
+    let bss_start = data_start + image.data.len();
+    for offset in 0..image.bss_size as usize {
+        bus.store_u8(base + (bss_start + offset) as u32, 0)
+            .map_err(|error| error.to_string())?;
+    }
+    Ok(())
 }
 
 fn stable_panic_code(message: &str) -> i32 {
@@ -766,7 +901,173 @@ mod tests {
     }
 
     #[test]
-    fn computer_machine_constants_match_bare_metal_abi_v0() {
+    fn computer_machine_writes_machine_profile_v2_boot_info() {
+        let machine = ComputerMachine::new(1024).unwrap();
+
+        assert_eq!(
+            read_u32(machine.memory(), 0x00),
+            u32::from_le_bytes(*b"RXBI")
+        );
+        assert_eq!(
+            read_u32(machine.memory(), 0x04),
+            ComputerMachine::PROFILE_V2_VERSION
+        );
+        assert_eq!(read_u32(machine.memory(), 0x08), 1024);
+        assert_eq!(
+            read_u32(machine.memory(), 0x0C),
+            ComputerMachine::PROFILE_V2_PAGE_SIZE
+        );
+        assert_eq!(
+            read_u32(machine.memory(), 0x10),
+            ComputerMachine::PROFILE_V2_PROGRAM_BASE
+        );
+        assert_eq!(
+            read_u32(machine.memory(), 0x14),
+            ComputerMachine::PROFILE_V2_BOOT_INFO_SIZE
+        );
+        assert_eq!(read_u32(machine.memory(), 0x18), 3);
+    }
+
+    #[test]
+    fn computer_machine_writes_static_hardware_table_for_mmio_ranges() {
+        let machine = ComputerMachine::new(1024).unwrap();
+
+        assert_hardware_entry(
+            machine.memory(),
+            28,
+            computer_abi::COMPUTER_HARDWARE_ID_CONTROL,
+            computer_abi::CONTROL_BASE,
+            computer_abi::PROFILE_V2_PAGE_SIZE,
+        );
+        assert_hardware_entry(
+            machine.memory(),
+            40,
+            computer_abi::COMPUTER_HARDWARE_ID_DEBUG,
+            computer_abi::DEBUG_BASE,
+            computer_abi::PROFILE_V2_PAGE_SIZE,
+        );
+        assert_hardware_entry(
+            machine.memory(),
+            52,
+            computer_abi::COMPUTER_HARDWARE_ID_SERIAL_INPUT,
+            computer_abi::SERIAL_INPUT_BASE,
+            computer_abi::PROFILE_V2_PAGE_SIZE,
+        );
+    }
+
+    #[test]
+    fn computer_machine_rejects_memory_smaller_than_profile_page() {
+        let error = match ComputerMachine::new(128) {
+            Ok(_) => panic!("computer machine should reject memory smaller than profile page"),
+            Err(error) => error,
+        };
+
+        assert_eq!(
+            error.to_string(),
+            "computer memory size 128 is smaller than profile page size 256",
+        );
+    }
+
+    #[test]
+    fn computer_machine_rejects_memory_that_is_not_page_aligned() {
+        let error = match ComputerMachine::new(1000) {
+            Ok(_) => panic!("computer machine should reject unaligned memory"),
+            Err(error) => error,
+        };
+
+        assert_eq!(
+            error.to_string(),
+            "computer memory size 1000 is not a multiple of profile page size 256",
+        );
+    }
+
+    #[test]
+    fn computer_machine_rejects_memory_that_exceeds_u32_address_space() {
+        if usize::BITS <= u32::BITS {
+            return;
+        }
+        let memory_size = u32::MAX as usize + 1;
+        let error = match ComputerMachine::new(memory_size) {
+            Ok(_) => panic!("computer machine should reject memory above u32 address space"),
+            Err(error) => error,
+        };
+
+        assert_eq!(
+            error.to_string(),
+            "computer memory size 4294967296 exceeds profile u32 address space",
+        );
+    }
+
+    #[test]
+    fn computer_machine_loads_image_sections_at_profile_program_base() {
+        let mut machine = ComputerMachine::new(1024).unwrap();
+        let mut firmware = image(vec![Instruction::ReturnUnit], 0);
+        firmware.rodata = vec![0xA5, 0x5A];
+
+        machine.spawn_boot_cpu(firmware, 128).unwrap();
+
+        assert_eq!(
+            read_u32(machine.memory(), 0x00),
+            ComputerMachine::PROFILE_V2_BOOT_INFO_MAGIC
+        );
+        assert_eq!(
+            machine
+                .memory()
+                .load_u8(ComputerMachine::PROFILE_V2_PROGRAM_BASE)
+                .unwrap(),
+            0xA5,
+        );
+        assert_eq!(
+            machine
+                .memory()
+                .load_u8(ComputerMachine::PROFILE_V2_PROGRAM_BASE + 1)
+                .unwrap(),
+            0x5A,
+        );
+    }
+
+    #[test]
+    fn computer_machine_constants_match_profile_v2_abi() {
+        assert_eq!(
+            ComputerMachine::PROFILE_V2_BOOT_INFO_MAGIC,
+            computer_abi::PROFILE_V2_BOOT_INFO_MAGIC,
+        );
+        assert_eq!(
+            ComputerMachine::PROFILE_V2_VERSION,
+            computer_abi::PROFILE_V2_VERSION,
+        );
+        assert_eq!(
+            ComputerMachine::PROFILE_V2_PAGE_SIZE,
+            computer_abi::PROFILE_V2_PAGE_SIZE,
+        );
+        assert_eq!(
+            ComputerMachine::PROFILE_V2_BOOT_INFO_ADDR,
+            computer_abi::PROFILE_V2_BOOT_INFO_ADDR,
+        );
+        assert_eq!(
+            ComputerMachine::PROFILE_V2_PROGRAM_BASE,
+            computer_abi::PROFILE_V2_PROGRAM_BASE,
+        );
+        assert_eq!(
+            ComputerMachine::PROFILE_V2_BOOT_INFO_SIZE,
+            computer_abi::PROFILE_V2_BOOT_INFO_SIZE,
+        );
+        assert_eq!(
+            ComputerMachine::PROFILE_V2_HARDWARE_ENTRY_SIZE,
+            computer_abi::PROFILE_V2_HARDWARE_ENTRY_SIZE,
+        );
+        assert_eq!(
+            ComputerMachine::HARDWARE_ID_CONTROL,
+            computer_abi::COMPUTER_HARDWARE_ID_CONTROL,
+        );
+        assert_eq!(
+            ComputerMachine::HARDWARE_ID_DEBUG,
+            computer_abi::COMPUTER_HARDWARE_ID_DEBUG,
+        );
+        assert_eq!(
+            ComputerMachine::HARDWARE_ID_SERIAL_INPUT,
+            computer_abi::COMPUTER_HARDWARE_ID_SERIAL_INPUT,
+        );
         assert_eq!(ComputerMachine::CONTROL_BASE, computer_abi::CONTROL_BASE);
         assert_eq!(
             ComputerMachine::CONTROL_STATUS,
@@ -811,7 +1112,7 @@ mod tests {
     }
 
     #[test]
-    fn computer_mmio_device_sizes_match_bare_metal_abi_v0() {
+    fn computer_mmio_device_sizes_match_profile_v2_abi() {
         let control = ComputerControlDevice::new();
         let debug = DebugSerialDevice::new();
         let serial_input = SerialInputDevice::new();
@@ -1537,5 +1838,21 @@ mod tests {
                 instructions,
             }],
         }
+    }
+
+    fn read_u32(memory: &crate::low_machine::MachineMemory, address: u32) -> u32 {
+        u32::from_le_bytes(memory.load_i32(address).unwrap().to_le_bytes())
+    }
+
+    fn assert_hardware_entry(
+        memory: &crate::low_machine::MachineMemory,
+        address: u32,
+        id: u32,
+        mmio_base: u32,
+        mmio_size: u32,
+    ) {
+        assert_eq!(read_u32(memory, address), id);
+        assert_eq!(read_u32(memory, address + 4), mmio_base);
+        assert_eq!(read_u32(memory, address + 8), mmio_size);
     }
 }

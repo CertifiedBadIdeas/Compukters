@@ -72,7 +72,7 @@ fn rux_computer_handle_fails_when_memory_is_too_small() {
     };
 
     assert!(
-        error.contains("image requires"),
+        error.contains("smaller than profile page size"),
         "unexpected error: {error}",
     );
 }
