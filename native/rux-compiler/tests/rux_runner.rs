@@ -60,6 +60,14 @@ fn example_terminal_firmware_runs() {
 }
 
 #[test]
+fn example_terminal_firmware_uses_computer_std_for_status() {
+    let source = include_str!("../examples/firmware/terminal.rx");
+
+    assert!(!source.contains("CONTROL_STATUS"));
+    assert!(source.contains("std::computer"));
+}
+
+#[test]
 fn example_copy_firmware_runs() {
     let source = include_str!("../examples/firmware/copy.rx");
     let report = run_source(source).unwrap();
@@ -77,6 +85,14 @@ fn example_hardware_discovery_firmware_runs() {
     assert_eq!(report.exit_code, 0);
     assert_eq!(report.panic_code, 0);
     assert_eq!(report.debug_output, "HW");
+}
+
+#[test]
+fn example_hardware_discovery_uses_computer_std() {
+    let source = include_str!("../examples/firmware/hardware_debug.rx");
+
+    assert!(source.contains("std::computer::debug_base"));
+    assert!(!source.contains("2u32"));
 }
 
 #[test]
