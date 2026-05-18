@@ -1286,6 +1286,32 @@ fn compile_imports_std_io_write_byte_discovers_debug_mmio_base() {
 }
 
 #[test]
+fn compile_imports_std_computer_debug_base() {
+    let image = compile(
+        "use std::computer::debug_base;
+
+        fn main() -> i32 {
+            return debug_base() as i32;
+        }",
+    )
+    .unwrap();
+    let debug_base = image
+        .functions
+        .iter()
+        .find(|function| function.name == "debug_base")
+        .unwrap();
+
+    assert!(debug_base
+        .instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::Load32 { .. })));
+    assert!(debug_base
+        .instructions
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::JumpIfFalse { .. })));
+}
+
+#[test]
 fn compile_lowers_ptr_u8_function_return() {
     let image = compile(
         "fn message() -> ptr<u8> {
@@ -2233,6 +2259,55 @@ fn compiled_seed_std_hardware_finds_debug_mmio_base_on_computer_machine() {
     );
     assert_eq!(machine.debug_output_string(), "A");
     assert_eq!(machine.exit_code(), ComputerMachine::DEBUG_BASE as i32);
+    assert_eq!(machine.panic_code(), 0);
+}
+
+#[test]
+fn compiled_seed_std_computer_debug_base_runs_on_computer_machine() {
+    let image = compile(
+        "use std::computer::debug_base;
+
+        fn main() -> i32 {
+            let mut base: u32 = debug_base();
+            unsafe {
+                mmio<u8>(base).store(66u8);
+            }
+            return base as i32;
+        }",
+    )
+    .unwrap();
+    let mut machine = ComputerMachine::new(64 * 1024).unwrap();
+    let cpu_id = machine.spawn_boot_cpu(image, 1_000_000).unwrap();
+
+    assert_eq!(
+        machine.run_boot_cpu_until_signal(cpu_id).unwrap(),
+        LowImageSignal::HaltI32(ComputerMachine::DEBUG_BASE as i32)
+    );
+    assert_eq!(machine.debug_output_string(), "B");
+    assert_eq!(machine.exit_code(), ComputerMachine::DEBUG_BASE as i32);
+    assert_eq!(machine.panic_code(), 0);
+}
+
+#[test]
+fn compiled_seed_std_computer_set_ready_runs_on_computer_machine() {
+    let image = compile(
+        "use std::computer::set_ready;
+
+        fn main() {
+            set_ready();
+            while true {
+            }
+        }",
+    )
+    .unwrap();
+    let mut machine = ComputerMachine::new(64 * 1024).unwrap();
+    let cpu_id = machine.spawn_boot_cpu(image, 128).unwrap();
+
+    assert_eq!(
+        machine.run_boot_cpu_until_signal(cpu_id).unwrap(),
+        LowImageSignal::Pause
+    );
+    assert_eq!(machine.control_status(), ComputerMachine::STATUS_READY);
     assert_eq!(machine.panic_code(), 0);
 }
 

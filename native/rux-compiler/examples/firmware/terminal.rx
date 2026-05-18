@@ -1,15 +1,10 @@
+use std::computer::{set_booting, set_ready};
 use std::io::write_bytes;
 
 fn main() -> i32 {
-    unsafe {
-        mmio<i32>(CONTROL_STATUS).store(STATUS_BOOTING);
-    }
-
+    set_booting();
     write_bytes(b"RUX READY", 9u32);
-
-    unsafe {
-        mmio<i32>(CONTROL_STATUS).store(STATUS_READY);
-    }
+    set_ready();
 
     return 0;
 }
