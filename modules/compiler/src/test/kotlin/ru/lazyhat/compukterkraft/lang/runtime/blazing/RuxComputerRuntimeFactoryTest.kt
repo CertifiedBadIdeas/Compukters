@@ -20,9 +20,15 @@
 package ru.lazyhat.compukterkraft.lang.runtime.blazing
 
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
 class RuxComputerRuntimeFactoryTest {
+    @Test
+    fun defaultFirmwareResourceTargetsLaptopDisplayFirmware() {
+        assertEquals("firmware/rux-laptop.ruxi", RuxComputerRuntimeFactory.DEFAULT_FIRMWARE_RESOURCE)
+    }
+
     @Test
     fun reportsMissingFirmwareResource() {
         assertFailsWith<IllegalStateException> {

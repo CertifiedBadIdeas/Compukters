@@ -53,6 +53,7 @@ val generateCklResourceIndexes =
                     if (sourceRoot.isDirectory) {
                         fileTree(sourceRoot)
                             .files
+                            .filter { it.extension == "ck" }
                             .map {
                                 sourceRoot
                                     .toPath()
@@ -83,11 +84,15 @@ val generateModMetadata =
 
         from(from) {
             exclude("rom/rom.index", "firmware/firmware.index")
-            exclude { element -> element.name.contains(".png") || element.name.endsWith(".ck") }
+            exclude { element ->
+                element.name.contains(".png") ||
+                    element.name.endsWith(".ck") ||
+                    element.name.endsWith(".ruxi")
+            }
             expand(replaceProperties)
         }
         from(from) {
-            include("**/*.ck")
+            include("**/*.ck", "**/*.ruxi")
         }
         from(generateCklResourceIndexes)
 

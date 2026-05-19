@@ -54,6 +54,16 @@ class RustVmNativePackagingConventionTest {
         )
     }
 
+    @Test
+    fun metadataGenerationDoesNotTemplateExpandRuxImages() {
+        val source = metadataConventionSource().readText()
+
+        assertTrue(
+            source.contains("endsWith(\".ruxi\")"),
+            "Rux image binaries must be copied as binary resources, not parsed as Groovy templates.",
+        )
+    }
+
     private fun loomRunsConventionSource(): Path {
         val candidates =
             listOf(
@@ -62,5 +72,15 @@ class RustVmNativePackagingConventionTest {
             )
         return candidates.firstOrNull(Files::exists)
             ?: error("Could not locate loom-runs-convention.gradle.kts from ${System.getProperty("user.dir")}")
+    }
+
+    private fun metadataConventionSource(): Path {
+        val candidates =
+            listOf(
+                Path.of(System.getProperty("user.dir"), "src/main/kotlin/metadata.gradle.kts"),
+                Path.of(System.getProperty("user.dir"), "build-scripts/src/main/kotlin/metadata.gradle.kts"),
+            )
+        return candidates.firstOrNull(Files::exists)
+            ?: error("Could not locate metadata.gradle.kts from ${System.getProperty("user.dir")}")
     }
 }
