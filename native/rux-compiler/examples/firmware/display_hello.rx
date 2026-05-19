@@ -1,0 +1,10 @@
+use std::computer::{set_booting, set_ready};
+use std::display::{clear, write_bytes};
+
+fn main() -> i32 {
+    set_booting();
+    clear();
+    write_bytes(b"RUX DISPLAY READY", 17u32);
+    set_ready();
+    return 0;
+}

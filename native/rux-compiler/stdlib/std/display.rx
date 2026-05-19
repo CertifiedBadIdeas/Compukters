@@ -1,0 +1,193 @@
+pub fn base() -> u32 {
+    let mut table: u32 = 0u32;
+    let mut count: u32 = 0u32;
+    unsafe {
+        table = ptr<u32>(RAM_BASE + 20).load();
+        count = ptr<u32>(RAM_BASE + 24).load();
+    }
+
+    let mut i: u32 = 0u32;
+    while i < count {
+        let mut entry: u32 = table + i * 12u32;
+        unsafe {
+            if ptr<u32>(entry).load() == 4u32 {
+                return ptr<u32>(entry + 4).load();
+            }
+        }
+        i += 1u32;
+    }
+
+    return 0u32;
+}
+
+pub fn columns() -> u32 {
+    let mut table: u32 = 0u32;
+    let mut count: u32 = 0u32;
+    unsafe {
+        table = ptr<u32>(RAM_BASE + 20).load();
+        count = ptr<u32>(RAM_BASE + 24).load();
+    }
+
+    let mut base: u32 = 0u32;
+    let mut i: u32 = 0u32;
+    while i < count {
+        let mut entry: u32 = table + i * 12u32;
+        unsafe {
+            if ptr<u32>(entry).load() == 4u32 {
+                base = ptr<u32>(entry + 4).load();
+            }
+        }
+        i += 1u32;
+    }
+
+    if base == 0u32 {
+        return 0u32;
+    }
+
+    unsafe {
+        return mmio<i32>(base).load() as u32;
+    }
+}
+
+pub fn rows() -> u32 {
+    let mut table: u32 = 0u32;
+    let mut count: u32 = 0u32;
+    unsafe {
+        table = ptr<u32>(RAM_BASE + 20).load();
+        count = ptr<u32>(RAM_BASE + 24).load();
+    }
+
+    let mut base: u32 = 0u32;
+    let mut i: u32 = 0u32;
+    while i < count {
+        let mut entry: u32 = table + i * 12u32;
+        unsafe {
+            if ptr<u32>(entry).load() == 4u32 {
+                base = ptr<u32>(entry + 4).load();
+            }
+        }
+        i += 1u32;
+    }
+
+    if base == 0u32 {
+        return 0u32;
+    }
+
+    unsafe {
+        return mmio<i32>(base + 4).load() as u32;
+    }
+}
+
+pub fn clear() {
+    let mut table: u32 = 0u32;
+    let mut count: u32 = 0u32;
+    unsafe {
+        table = ptr<u32>(RAM_BASE + 20).load();
+        count = ptr<u32>(RAM_BASE + 24).load();
+    }
+
+    let mut base: u32 = 0u32;
+    let mut i: u32 = 0u32;
+    while i < count {
+        let mut entry: u32 = table + i * 12u32;
+        unsafe {
+            if ptr<u32>(entry).load() == 4u32 {
+                base = ptr<u32>(entry + 4).load();
+            }
+        }
+        i += 1u32;
+    }
+
+    if base != 0u32 {
+        unsafe {
+            mmio<i32>(base + 16).store(1);
+        }
+    }
+}
+
+pub fn put_byte(byte: u8) {
+    let mut table: u32 = 0u32;
+    let mut count: u32 = 0u32;
+    unsafe {
+        table = ptr<u32>(RAM_BASE + 20).load();
+        count = ptr<u32>(RAM_BASE + 24).load();
+    }
+
+    let mut base: u32 = 0u32;
+    let mut i: u32 = 0u32;
+    while i < count {
+        let mut entry: u32 = table + i * 12u32;
+        unsafe {
+            if ptr<u32>(entry).load() == 4u32 {
+                base = ptr<u32>(entry + 4).load();
+            }
+        }
+        i += 1u32;
+    }
+
+    if base != 0u32 {
+        unsafe {
+            mmio<i32>(base + 20).store(byte as i32);
+            mmio<i32>(base + 16).store(2);
+        }
+    }
+}
+
+pub fn newline() {
+    let mut table: u32 = 0u32;
+    let mut count: u32 = 0u32;
+    unsafe {
+        table = ptr<u32>(RAM_BASE + 20).load();
+        count = ptr<u32>(RAM_BASE + 24).load();
+    }
+
+    let mut base: u32 = 0u32;
+    let mut i: u32 = 0u32;
+    while i < count {
+        let mut entry: u32 = table + i * 12u32;
+        unsafe {
+            if ptr<u32>(entry).load() == 4u32 {
+                base = ptr<u32>(entry + 4).load();
+            }
+        }
+        i += 1u32;
+    }
+
+    if base != 0u32 {
+        unsafe {
+            mmio<i32>(base + 16).store(4);
+        }
+    }
+}
+
+pub fn write_bytes(bytes: ptr<u8>, len: u32) {
+    let mut table: u32 = 0u32;
+    let mut count: u32 = 0u32;
+    unsafe {
+        table = ptr<u32>(RAM_BASE + 20).load();
+        count = ptr<u32>(RAM_BASE + 24).load();
+    }
+
+    let mut base: u32 = 0u32;
+    let mut entry_index: u32 = 0u32;
+    while entry_index < count {
+        let mut entry: u32 = table + entry_index * 12u32;
+        unsafe {
+            if ptr<u32>(entry).load() == 4u32 {
+                base = ptr<u32>(entry + 4).load();
+            }
+        }
+        entry_index += 1u32;
+    }
+
+    if base != 0u32 {
+        let mut i: u32 = 0u32;
+        while i < len {
+            unsafe {
+                mmio<i32>(base + 20).store(bytes[i] as i32);
+                mmio<i32>(base + 16).store(2);
+            }
+            i += 1u32;
+        }
+    }
+}
