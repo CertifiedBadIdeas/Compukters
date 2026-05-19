@@ -1,4 +1,4 @@
-use crate::computer_machine::{ComputerMachine, CpuId};
+use crate::computer_machine::{ComputerMachine, ComputerTextDisplaySnapshot, CpuId};
 use crate::low_image::decode_image;
 use crate::low_image_runner::LowImageSignal;
 
@@ -12,6 +12,29 @@ pub struct RuxComputerControl {
 pub struct RuxComputerHandle {
     machine: ComputerMachine,
     boot_cpu: CpuId,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuxComputerTextDisplaySnapshot {
+    pub columns: u32,
+    pub rows: u32,
+    pub cursor_x: u32,
+    pub cursor_y: u32,
+    pub sequence: u64,
+    pub cells: Vec<u8>,
+}
+
+impl From<ComputerTextDisplaySnapshot> for RuxComputerTextDisplaySnapshot {
+    fn from(snapshot: ComputerTextDisplaySnapshot) -> Self {
+        Self {
+            columns: snapshot.columns,
+            rows: snapshot.rows,
+            cursor_x: snapshot.cursor_x,
+            cursor_y: snapshot.cursor_y,
+            sequence: snapshot.sequence,
+            cells: snapshot.cells,
+        }
+    }
 }
 
 impl RuxComputerHandle {
@@ -44,6 +67,10 @@ impl RuxComputerHandle {
 
     pub fn drain_debug_output_bytes(&mut self) -> Vec<u8> {
         self.machine.drain_debug_output_bytes()
+    }
+
+    pub fn display0_snapshot(&self) -> Option<RuxComputerTextDisplaySnapshot> {
+        self.machine.display0_snapshot().map(Into::into)
     }
 
     pub fn push_serial_input(&mut self, bytes: &[u8]) {

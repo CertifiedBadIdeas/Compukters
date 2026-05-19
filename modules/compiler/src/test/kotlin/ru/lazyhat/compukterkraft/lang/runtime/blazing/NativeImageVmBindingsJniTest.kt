@@ -812,6 +812,62 @@ class NativeImageVmBindingsJniTest {
         }
     }
 
+    @Test
+    fun ruxComputerDisplaySnapshotExposesTextCellsWhenLibraryIsConfigured() {
+        val libraryPath = System.getProperty("rux.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val image =
+            RuxLowVmImage(
+                memorySize = 64u * 1024u,
+                entryFunctionIndex = 0,
+                functions =
+                    listOf(
+                        RuxLowVmFunction(
+                            name = "main",
+                            registerCount = 4,
+                            parameters = emptyList(),
+                            instructions =
+                                listOf(
+                                    RuxLowVmInstruction.AddrConst(dst = 0, value = 0x1000_0314u),
+                                    RuxLowVmInstruction.AddrConst(dst = 1, value = 0x1000_0310u),
+                                    RuxLowVmInstruction.I32Const(dst = 2, value = 'R'.code),
+                                    RuxLowVmInstruction.Store32(addr = 0, src = 2),
+                                    RuxLowVmInstruction.I32Const(dst = 3, value = 2),
+                                    RuxLowVmInstruction.Store32(addr = 1, src = 3),
+                                    RuxLowVmInstruction.I32Const(dst = 2, value = 'U'.code),
+                                    RuxLowVmInstruction.Store32(addr = 0, src = 2),
+                                    RuxLowVmInstruction.Store32(addr = 1, src = 3),
+                                    RuxLowVmInstruction.I32Const(dst = 2, value = 'X'.code),
+                                    RuxLowVmInstruction.Store32(addr = 0, src = 2),
+                                    RuxLowVmInstruction.Store32(addr = 1, src = 3),
+                                    RuxLowVmInstruction.I32Const(dst = 2, value = 0),
+                                    RuxLowVmInstruction.ReturnI32(2),
+                                ),
+                        ),
+                    ),
+            )
+        val handle =
+            NativeVmBindings.createRuxComputer(
+                libraryPath = libraryPath,
+                image = RuxLowVmImageAbi.encode(image),
+                memorySize = 64 * 1024,
+                sliceBudgetNanos = 1_000_000,
+            )
+
+        try {
+            assertEquals(NativeLowImageVmSignal.HaltI32(0), NativeVmBindings.runRuxComputerUntilSignal(handle))
+            val snapshot = NativeVmBindings.ruxComputerDisplay0Snapshot(handle)
+            requireNotNull(snapshot)
+            assertEquals(80, snapshot.columns)
+            assertEquals(25, snapshot.rows)
+            assertEquals(3, snapshot.cursorX)
+            assertEquals(0, snapshot.cursorY)
+            assertEquals(3, snapshot.sequence)
+            assertEquals("RUX", snapshot.cells.copyOfRange(0, 3).decodeToString())
+        } finally {
+            NativeVmBindings.freeRuxComputer(handle)
+        }
+    }
+
     private fun ruxSerialEchoPollingImage(): RuxLowVmImage =
         RuxLowVmImage(
             memorySize = 64u * 1024u,
