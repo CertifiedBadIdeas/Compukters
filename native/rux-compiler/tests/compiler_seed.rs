@@ -1312,6 +1312,23 @@ fn compile_imports_std_computer_debug_base() {
 }
 
 #[test]
+fn compile_imports_std_display_write_bytes() {
+    let image = compile(
+        "use std::display::write_bytes;
+
+        fn main() {
+            write_bytes(b\"OK\", 2u32);
+        }",
+    )
+    .unwrap();
+
+    assert!(image
+        .functions
+        .iter()
+        .any(|function| function.name == "write_bytes"));
+}
+
+#[test]
 fn compile_lowers_ptr_u8_function_return() {
     let image = compile(
         "fn message() -> ptr<u8> {
@@ -2309,6 +2326,28 @@ fn compiled_seed_std_computer_set_ready_runs_on_computer_machine() {
     );
     assert_eq!(machine.control_status(), ComputerMachine::STATUS_READY);
     assert_eq!(machine.panic_code(), 0);
+}
+
+#[test]
+fn compiled_seed_std_display_write_bytes_runs_on_computer_machine() {
+    let image = compile(
+        "use std::display::{clear, write_bytes};
+
+        fn main() {
+            clear();
+            write_bytes(b\"RUX\", 3u32);
+        }",
+    )
+    .unwrap();
+    let mut machine = ComputerMachine::new(64 * 1024).unwrap();
+    let cpu_id = machine.spawn_boot_cpu(image, 1_000_000).unwrap();
+
+    assert_eq!(
+        machine.run_boot_cpu_until_signal(cpu_id).unwrap(),
+        LowImageSignal::HaltUnit,
+    );
+    let snapshot = machine.display0_snapshot().unwrap();
+    assert_eq!(&snapshot.cells[0..3], b"RUX");
 }
 
 #[test]
