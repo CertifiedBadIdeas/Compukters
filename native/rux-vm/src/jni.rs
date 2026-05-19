@@ -14,7 +14,7 @@ use crate::image_runner::ImageVmHandle;
 use crate::low_image::decode_image as decode_low_image;
 use crate::low_image_runner::{LowImageSignal, LowImageVm};
 use crate::runtime_kernel::DeviceRuntimeKernelHandle;
-use crate::rux_computer::RuxComputerHandle;
+use crate::rux_computer::{RuxComputerHandle, RuxComputerTextDisplaySnapshot};
 use crate::signal::{decode_value, encode_value};
 use crate::value::VmValue;
 
@@ -313,6 +313,23 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
         None => return null_mut(),
     };
     byte_array_or_throw(&mut env, &handle.drain_debug_output_bytes())
+}
+
+#[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_ruxComputerDisplay0SnapshotNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    handle: jlong,
+) -> jbyteArray {
+    let handle = match rux_computer_handle_mut(&mut env, handle) {
+        Some(handle) => handle,
+        None => return null_mut(),
+    };
+    let payload = match handle.display0_snapshot() {
+        Some(snapshot) => encode_rux_computer_text_display_snapshot(&snapshot),
+        None => Vec::new(),
+    };
+    byte_array_or_throw(&mut env, &payload)
 }
 
 #[no_mangle]
@@ -974,9 +991,29 @@ fn push_i64(out: &mut Vec<u8>, value: i64) {
     out.extend_from_slice(&value.to_le_bytes());
 }
 
+fn push_u32(out: &mut Vec<u8>, value: u32) {
+    out.extend_from_slice(&value.to_le_bytes());
+}
+
+fn push_u64(out: &mut Vec<u8>, value: u64) {
+    out.extend_from_slice(&value.to_le_bytes());
+}
+
 fn push_string(out: &mut Vec<u8>, value: &str) {
     push_i32(out, value.len() as i32);
     out.extend_from_slice(value.as_bytes());
+}
+
+fn encode_rux_computer_text_display_snapshot(snapshot: &RuxComputerTextDisplaySnapshot) -> Vec<u8> {
+    let mut out = Vec::with_capacity(28 + snapshot.cells.len());
+    push_u32(&mut out, snapshot.columns);
+    push_u32(&mut out, snapshot.rows);
+    push_u32(&mut out, snapshot.cursor_x);
+    push_u32(&mut out, snapshot.cursor_y);
+    push_u64(&mut out, snapshot.sequence);
+    push_u32(&mut out, snapshot.cells.len() as u32);
+    out.extend_from_slice(&snapshot.cells);
+    out
 }
 
 fn event_arguments_from_payload(payload: &[u8]) -> Result<Vec<VmValue>, String> {
