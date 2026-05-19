@@ -137,6 +137,12 @@ open class ComputerTerminalScreen<T : AbstractComputerMenu>(
         return handled
     }
 
+    override fun keyPressed(
+        keyCode: Int,
+        scanCode: Int,
+        modifiers: Int,
+    ): Boolean = isInventoryKey(keyCode, scanCode) || super.keyPressed(keyCode, scanCode, modifiers)
+
     override fun init() {
         super.init()
         attachDisplayEndpoint()
@@ -355,6 +361,11 @@ open class ComputerTerminalScreen<T : AbstractComputerMenu>(
         textWidth: Int,
         gap: Int,
     ): Int = (rightBoundaryX - gap - textWidth).coerceAtLeast(statusBounds.x + STATUS_TEXT_START_PADDING)
+
+    private fun isInventoryKey(
+        keyCode: Int,
+        scanCode: Int,
+    ): Boolean = minecraft?.options?.keyInventory?.matches(keyCode, scanCode) == true
 
     private fun CanvasScope.drawButtonChrome(
         bg: Color,

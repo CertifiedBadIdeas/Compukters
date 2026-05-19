@@ -59,4 +59,10 @@ class ComputerTerminalScreenArchitectureTest {
         assertTrue(source.contains("RESOLUTION_BUTTON_GAP"))
         assertFalse(source.contains("STATUS_TEXT_RIGHT_INSET"))
     }
+
+    @Test
+    fun computerScreenKeepsInventoryKeyAsTextInputInsteadOfClosingScreen() {
+        assertTrue(source.contains("keyInventory"))
+        assertTrue(source.contains(".matches(keyCode, scanCode)"))
+    }
 }
