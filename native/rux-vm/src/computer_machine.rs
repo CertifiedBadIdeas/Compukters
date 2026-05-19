@@ -13,6 +13,7 @@ pub struct ComputerMachine {
     control_device_id: MmioDeviceId,
     debug_device_id: MmioDeviceId,
     serial_input_device_id: MmioDeviceId,
+    display0_device_id: MmioDeviceId,
     cpus: Vec<LowCpuContext>,
     boot_cpu: Option<CpuId>,
 }
@@ -41,6 +42,16 @@ pub struct ComputerMemoryRegion {
     pub writable: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ComputerTextDisplaySnapshot {
+    pub columns: u32,
+    pub rows: u32,
+    pub cursor_x: u32,
+    pub cursor_y: u32,
+    pub sequence: u64,
+    pub cells: Vec<u8>,
+}
+
 impl ComputerMachine {
     pub const PROFILE_V2_BOOT_INFO_MAGIC: u32 = computer_abi::PROFILE_V2_BOOT_INFO_MAGIC;
     pub const PROFILE_V2_VERSION: u32 = computer_abi::PROFILE_V2_VERSION;
@@ -52,6 +63,7 @@ impl ComputerMachine {
     pub const HARDWARE_ID_CONTROL: u32 = computer_abi::COMPUTER_HARDWARE_ID_CONTROL;
     pub const HARDWARE_ID_DEBUG: u32 = computer_abi::COMPUTER_HARDWARE_ID_DEBUG;
     pub const HARDWARE_ID_SERIAL_INPUT: u32 = computer_abi::COMPUTER_HARDWARE_ID_SERIAL_INPUT;
+    pub const HARDWARE_ID_DISPLAY0: u32 = computer_abi::COMPUTER_HARDWARE_ID_DISPLAY0;
     pub const CONTROL_BASE: u32 = computer_abi::CONTROL_BASE;
     pub const CONTROL_STATUS: u32 = computer_abi::CONTROL_STATUS;
     pub const CONTROL_PANIC_CODE: u32 = computer_abi::CONTROL_PANIC_CODE;
@@ -64,6 +76,21 @@ impl ComputerMachine {
     pub const SERIAL_INPUT_READY: u32 = computer_abi::SERIAL_INPUT_READY;
     pub const SERIAL_INPUT_READ: u32 = computer_abi::SERIAL_INPUT_READ;
     pub const SERIAL_INPUT_SIZE: u32 = computer_abi::SERIAL_INPUT_SIZE;
+    pub const DISPLAY0_BASE: u32 = computer_abi::DISPLAY0_BASE;
+    pub const DISPLAY0_COLUMNS: u32 = computer_abi::DISPLAY0_COLUMNS;
+    pub const DISPLAY0_ROWS: u32 = computer_abi::DISPLAY0_ROWS;
+    pub const DISPLAY0_CURSOR_X: u32 = computer_abi::DISPLAY0_CURSOR_X;
+    pub const DISPLAY0_CURSOR_Y: u32 = computer_abi::DISPLAY0_CURSOR_Y;
+    pub const DISPLAY0_COMMAND: u32 = computer_abi::DISPLAY0_COMMAND;
+    pub const DISPLAY0_DATA: u32 = computer_abi::DISPLAY0_DATA;
+    pub const DISPLAY0_SEQUENCE_LOW: u32 = computer_abi::DISPLAY0_SEQUENCE_LOW;
+    pub const DISPLAY0_SEQUENCE_HIGH: u32 = computer_abi::DISPLAY0_SEQUENCE_HIGH;
+    pub const DISPLAY0_SIZE: u32 = computer_abi::DISPLAY0_SIZE;
+    pub const DISPLAY0_COMMAND_CLEAR: i32 = computer_abi::DISPLAY0_COMMAND_CLEAR;
+    pub const DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR: i32 =
+        computer_abi::DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR;
+    pub const DISPLAY0_COMMAND_PUT_BYTE_AT_XY: i32 = computer_abi::DISPLAY0_COMMAND_PUT_BYTE_AT_XY;
+    pub const DISPLAY0_COMMAND_NEWLINE: i32 = computer_abi::DISPLAY0_COMMAND_NEWLINE;
     pub const STATUS_RESET: i32 = computer_abi::STATUS_RESET;
     pub const STATUS_BOOTING: i32 = computer_abi::STATUS_BOOTING;
     pub const STATUS_READY: i32 = computer_abi::STATUS_READY;
@@ -78,12 +105,15 @@ impl ComputerMachine {
         let debug_device_id = bus.map_mmio(Self::DEBUG_BASE, Box::new(DebugSerialDevice::new()))?;
         let serial_input_device_id =
             bus.map_mmio(Self::SERIAL_INPUT_BASE, Box::new(SerialInputDevice::new()))?;
+        let display0_device_id =
+            bus.map_mmio(Self::DISPLAY0_BASE, Box::new(TextDisplayDevice::new()))?;
         write_profile_v2_boot_info(&mut bus)?;
         Ok(Self {
             bus,
             control_device_id,
             debug_device_id,
             serial_input_device_id,
+            display0_device_id,
             cpus: Vec::new(),
             boot_cpu: None,
         })
@@ -125,6 +155,13 @@ impl ComputerMachine {
                     name: "serial-input",
                     base: Self::SERIAL_INPUT_BASE,
                     size: SerialInputDevice::SIZE,
+                    readable: true,
+                    writable: true,
+                },
+                ComputerMemoryRegion {
+                    name: "display0",
+                    base: Self::DISPLAY0_BASE,
+                    size: TextDisplayDevice::SIZE,
                     readable: true,
                     writable: true,
                 },
@@ -244,6 +281,14 @@ impl ComputerMachine {
         self.serial_input_device().len()
     }
 
+    pub fn display0_snapshot(&self) -> Option<ComputerTextDisplaySnapshot> {
+        Some(self.display0_device().snapshot())
+    }
+
+    pub fn display0_sequence(&self) -> Option<u64> {
+        Some(self.display0_device().sequence())
+    }
+
     fn control_device(&self) -> &ComputerControlDevice {
         self.bus
             .device::<ComputerControlDevice>(self.control_device_id)
@@ -272,6 +317,12 @@ impl ComputerMachine {
         self.bus
             .device_mut::<SerialInputDevice>(self.serial_input_device_id)
             .expect("computer serial input device must be mapped")
+    }
+
+    fn display0_device(&self) -> &TextDisplayDevice {
+        self.bus
+            .device::<TextDisplayDevice>(self.display0_device_id)
+            .expect("computer display0 device must be mapped")
     }
 
     fn control_device_mut(&mut self) -> &mut ComputerControlDevice {
@@ -317,7 +368,7 @@ fn validate_profile_v2_memory_size(memory_size: usize) -> Result<(), MemoryFault
 
 fn write_profile_v2_boot_info(bus: &mut MachineBus) -> Result<(), MemoryFault> {
     const HARDWARE_TABLE_ADDR: u32 = computer_abi::PROFILE_V2_BOOT_INFO_SIZE;
-    const HARDWARE_COUNT: u32 = 3;
+    const HARDWARE_COUNT: u32 = 4;
     let ram_size = bus.memory().len() as u32;
 
     write_u32(
@@ -356,6 +407,13 @@ fn write_profile_v2_boot_info(bus: &mut MachineBus) -> Result<(), MemoryFault> {
         computer_abi::COMPUTER_HARDWARE_ID_SERIAL_INPUT,
         computer_abi::SERIAL_INPUT_BASE,
         computer_abi::SERIAL_INPUT_SIZE,
+    )?;
+    write_hardware_entry(
+        bus.memory_mut(),
+        HARDWARE_TABLE_ADDR + computer_abi::PROFILE_V2_HARDWARE_ENTRY_SIZE * 3,
+        computer_abi::COMPUTER_HARDWARE_ID_DISPLAY0,
+        computer_abi::DISPLAY0_BASE,
+        computer_abi::DISPLAY0_SIZE,
     )?;
     Ok(())
 }
@@ -589,9 +647,182 @@ impl MmioDevice for SerialInputDevice {
     }
 }
 
+struct TextDisplayDevice {
+    columns: u32,
+    rows: u32,
+    cursor_x: u32,
+    cursor_y: u32,
+    data: i32,
+    sequence: u64,
+    cells: Vec<u8>,
+}
+
+impl TextDisplayDevice {
+    const SIZE: u32 = computer_abi::DISPLAY0_SIZE;
+    const COLUMNS: u32 = 80;
+    const ROWS: u32 = 25;
+
+    fn new() -> Self {
+        Self {
+            columns: Self::COLUMNS,
+            rows: Self::ROWS,
+            cursor_x: 0,
+            cursor_y: 0,
+            data: 0,
+            sequence: 0,
+            cells: vec![0; (Self::COLUMNS * Self::ROWS) as usize],
+        }
+    }
+
+    fn snapshot(&self) -> ComputerTextDisplaySnapshot {
+        ComputerTextDisplaySnapshot {
+            columns: self.columns,
+            rows: self.rows,
+            cursor_x: self.cursor_x,
+            cursor_y: self.cursor_y,
+            sequence: self.sequence,
+            cells: self.cells.clone(),
+        }
+    }
+
+    fn sequence(&self) -> u64 {
+        self.sequence
+    }
+
+    fn clamp_x(&self, value: i32) -> u32 {
+        value.max(0).min(self.columns.saturating_sub(1) as i32) as u32
+    }
+
+    fn clamp_y(&self, value: i32) -> u32 {
+        value.max(0).min(self.rows.saturating_sub(1) as i32) as u32
+    }
+
+    fn cell_index(&self, x: u32, y: u32) -> usize {
+        (y * self.columns + x) as usize
+    }
+
+    fn clear(&mut self) {
+        self.cells.fill(0);
+        self.cursor_x = 0;
+        self.cursor_y = 0;
+        self.sequence = self.sequence.wrapping_add(1);
+    }
+
+    fn put_byte_at_cursor(&mut self, byte: u8) {
+        let index = self.cell_index(self.cursor_x, self.cursor_y);
+        self.cells[index] = byte;
+        self.cursor_x += 1;
+        if self.cursor_x >= self.columns {
+            self.newline_without_sequence();
+        }
+        self.sequence = self.sequence.wrapping_add(1);
+    }
+
+    fn put_byte_at_xy(&mut self, byte: u8, x: u32, y: u32) {
+        if x >= self.columns || y >= self.rows {
+            return;
+        }
+        let index = self.cell_index(x, y);
+        self.cells[index] = byte;
+        self.sequence = self.sequence.wrapping_add(1);
+    }
+
+    fn newline(&mut self) {
+        self.newline_without_sequence();
+        self.sequence = self.sequence.wrapping_add(1);
+    }
+
+    fn newline_without_sequence(&mut self) {
+        self.cursor_x = 0;
+        if self.cursor_y + 1 >= self.rows {
+            self.scroll();
+        } else {
+            self.cursor_y += 1;
+        }
+    }
+
+    fn scroll(&mut self) {
+        let columns = self.columns as usize;
+        self.cells.copy_within(columns.., 0);
+        let last_row = self.cells.len() - columns;
+        self.cells[last_row..].fill(0);
+        self.cursor_y = self.rows - 1;
+    }
+
+    fn execute_command(&mut self, command: i32) {
+        match command {
+            computer_abi::DISPLAY0_COMMAND_CLEAR => self.clear(),
+            computer_abi::DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR => {
+                self.put_byte_at_cursor(self.data.to_le_bytes()[0]);
+            }
+            computer_abi::DISPLAY0_COMMAND_PUT_BYTE_AT_XY => {
+                let packed = u32::from_le_bytes(self.data.to_le_bytes());
+                let byte = (packed & 0xFF) as u8;
+                let x = (packed >> 8) & 0x0FFF;
+                let y = (packed >> 20) & 0x0FFF;
+                self.put_byte_at_xy(byte, x, y);
+            }
+            computer_abi::DISPLAY0_COMMAND_NEWLINE => self.newline(),
+            _ => {}
+        }
+    }
+
+    fn load_register(&self, offset: u32) -> Result<i32, MemoryFault> {
+        match offset {
+            0 => Ok(self.columns as i32),
+            4 => Ok(self.rows as i32),
+            8 => Ok(self.cursor_x as i32),
+            12 => Ok(self.cursor_y as i32),
+            24 => Ok((self.sequence as u32) as i32),
+            28 => Ok((self.sequence >> 32) as u32 as i32),
+            _ => Err(MemoryFault::new(format!(
+                "computer display0 offset {offset} is not readable",
+            ))),
+        }
+    }
+
+    fn store_register(&mut self, offset: u32, value: i32) -> Result<(), MemoryFault> {
+        match offset {
+            8 => {
+                self.cursor_x = self.clamp_x(value);
+                Ok(())
+            }
+            12 => {
+                self.cursor_y = self.clamp_y(value);
+                Ok(())
+            }
+            16 => {
+                self.execute_command(value);
+                Ok(())
+            }
+            20 => {
+                self.data = value;
+                Ok(())
+            }
+            _ => Err(MemoryFault::new(format!(
+                "computer display0 offset {offset} is not writable",
+            ))),
+        }
+    }
+}
+
+impl MmioDevice for TextDisplayDevice {
+    fn size(&self) -> u32 {
+        Self::SIZE
+    }
+
+    fn load_i32(&self, offset: u32) -> Result<i32, MemoryFault> {
+        self.load_register(offset)
+    }
+
+    fn store_i32(&mut self, offset: u32, value: i32) -> Result<(), MemoryFault> {
+        self.store_register(offset, value)
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{ComputerControlDevice, DebugSerialDevice, SerialInputDevice};
+    use super::{ComputerControlDevice, DebugSerialDevice, SerialInputDevice, TextDisplayDevice};
     use crate::computer_abi;
     use crate::computer_machine::ComputerMachine;
     use crate::low_bus::MmioDevice;
@@ -822,6 +1053,113 @@ mod tests {
     }
 
     #[test]
+    fn computer_machine_writes_display0_hardware_entry() {
+        let machine = ComputerMachine::new(1024).unwrap();
+
+        assert_eq!(read_u32(machine.memory(), 0x18), 4);
+        assert_hardware_entry(
+            machine.memory(),
+            64,
+            computer_abi::COMPUTER_HARDWARE_ID_DISPLAY0,
+            computer_abi::DISPLAY0_BASE,
+            computer_abi::DISPLAY0_SIZE,
+        );
+    }
+
+    #[test]
+    fn computer_display0_mmio_reports_dimensions() {
+        let machine = ComputerMachine::new(1024).unwrap();
+
+        assert_eq!(
+            machine
+                .bus
+                .load_i32(ComputerMachine::DISPLAY0_COLUMNS)
+                .unwrap(),
+            80,
+        );
+        assert_eq!(
+            machine
+                .bus
+                .load_i32(ComputerMachine::DISPLAY0_ROWS)
+                .unwrap(),
+            25,
+        );
+    }
+
+    #[test]
+    fn computer_display0_put_byte_updates_snapshot_and_sequence() {
+        let mut machine = ComputerMachine::new(1024).unwrap();
+
+        machine
+            .bus
+            .store_i32(ComputerMachine::DISPLAY0_DATA, i32::from(b'R'))
+            .unwrap();
+        machine
+            .bus
+            .store_i32(
+                ComputerMachine::DISPLAY0_COMMAND,
+                ComputerMachine::DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR,
+            )
+            .unwrap();
+
+        let snapshot = machine.display0_snapshot().unwrap();
+        assert_eq!(snapshot.columns, 80);
+        assert_eq!(snapshot.rows, 25);
+        assert_eq!(snapshot.cursor_x, 1);
+        assert_eq!(snapshot.cursor_y, 0);
+        assert_eq!(snapshot.sequence, 1);
+        assert_eq!(snapshot.cells[0], b'R');
+    }
+
+    #[test]
+    fn computer_display0_clear_and_newline_are_deterministic() {
+        let mut machine = ComputerMachine::new(1024).unwrap();
+
+        machine
+            .bus
+            .store_i32(ComputerMachine::DISPLAY0_DATA, i32::from(b'A'))
+            .unwrap();
+        machine
+            .bus
+            .store_i32(
+                ComputerMachine::DISPLAY0_COMMAND,
+                ComputerMachine::DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR,
+            )
+            .unwrap();
+        machine
+            .bus
+            .store_i32(
+                ComputerMachine::DISPLAY0_COMMAND,
+                ComputerMachine::DISPLAY0_COMMAND_NEWLINE,
+            )
+            .unwrap();
+        machine
+            .bus
+            .store_i32(ComputerMachine::DISPLAY0_DATA, i32::from(b'B'))
+            .unwrap();
+        machine
+            .bus
+            .store_i32(
+                ComputerMachine::DISPLAY0_COMMAND,
+                ComputerMachine::DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR,
+            )
+            .unwrap();
+        machine
+            .bus
+            .store_i32(
+                ComputerMachine::DISPLAY0_COMMAND,
+                ComputerMachine::DISPLAY0_COMMAND_CLEAR,
+            )
+            .unwrap();
+
+        let snapshot = machine.display0_snapshot().unwrap();
+        assert_eq!(snapshot.cursor_x, 0);
+        assert_eq!(snapshot.cursor_y, 0);
+        assert_eq!(snapshot.sequence, 4);
+        assert!(snapshot.cells.iter().all(|cell| *cell == 0));
+    }
+
+    #[test]
     fn computer_debug_serial_output_can_be_drained_incrementally() {
         let mut machine = ComputerMachine::new(1024).unwrap();
 
@@ -925,7 +1263,7 @@ mod tests {
             read_u32(machine.memory(), 0x14),
             ComputerMachine::PROFILE_V2_BOOT_INFO_SIZE
         );
-        assert_eq!(read_u32(machine.memory(), 0x18), 3);
+        assert_eq!(read_u32(machine.memory(), 0x18), 4);
     }
 
     #[test]
@@ -951,6 +1289,13 @@ mod tests {
             52,
             computer_abi::COMPUTER_HARDWARE_ID_SERIAL_INPUT,
             computer_abi::SERIAL_INPUT_BASE,
+            computer_abi::PROFILE_V2_PAGE_SIZE,
+        );
+        assert_hardware_entry(
+            machine.memory(),
+            64,
+            computer_abi::COMPUTER_HARDWARE_ID_DISPLAY0,
+            computer_abi::DISPLAY0_BASE,
             computer_abi::PROFILE_V2_PAGE_SIZE,
         );
     }
@@ -1068,6 +1413,10 @@ mod tests {
             ComputerMachine::HARDWARE_ID_SERIAL_INPUT,
             computer_abi::COMPUTER_HARDWARE_ID_SERIAL_INPUT,
         );
+        assert_eq!(
+            ComputerMachine::HARDWARE_ID_DISPLAY0,
+            computer_abi::COMPUTER_HARDWARE_ID_DISPLAY0,
+        );
         assert_eq!(ComputerMachine::CONTROL_BASE, computer_abi::CONTROL_BASE);
         assert_eq!(
             ComputerMachine::CONTROL_STATUS,
@@ -1101,6 +1450,50 @@ mod tests {
             ComputerMachine::SERIAL_INPUT_SIZE,
             computer_abi::SERIAL_INPUT_SIZE,
         );
+        assert_eq!(ComputerMachine::DISPLAY0_BASE, computer_abi::DISPLAY0_BASE);
+        assert_eq!(
+            ComputerMachine::DISPLAY0_COLUMNS,
+            computer_abi::DISPLAY0_COLUMNS,
+        );
+        assert_eq!(ComputerMachine::DISPLAY0_ROWS, computer_abi::DISPLAY0_ROWS);
+        assert_eq!(
+            ComputerMachine::DISPLAY0_CURSOR_X,
+            computer_abi::DISPLAY0_CURSOR_X,
+        );
+        assert_eq!(
+            ComputerMachine::DISPLAY0_CURSOR_Y,
+            computer_abi::DISPLAY0_CURSOR_Y,
+        );
+        assert_eq!(
+            ComputerMachine::DISPLAY0_COMMAND,
+            computer_abi::DISPLAY0_COMMAND,
+        );
+        assert_eq!(ComputerMachine::DISPLAY0_DATA, computer_abi::DISPLAY0_DATA);
+        assert_eq!(
+            ComputerMachine::DISPLAY0_SEQUENCE_LOW,
+            computer_abi::DISPLAY0_SEQUENCE_LOW,
+        );
+        assert_eq!(
+            ComputerMachine::DISPLAY0_SEQUENCE_HIGH,
+            computer_abi::DISPLAY0_SEQUENCE_HIGH,
+        );
+        assert_eq!(ComputerMachine::DISPLAY0_SIZE, computer_abi::DISPLAY0_SIZE);
+        assert_eq!(
+            ComputerMachine::DISPLAY0_COMMAND_CLEAR,
+            computer_abi::DISPLAY0_COMMAND_CLEAR,
+        );
+        assert_eq!(
+            ComputerMachine::DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR,
+            computer_abi::DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR,
+        );
+        assert_eq!(
+            ComputerMachine::DISPLAY0_COMMAND_PUT_BYTE_AT_XY,
+            computer_abi::DISPLAY0_COMMAND_PUT_BYTE_AT_XY,
+        );
+        assert_eq!(
+            ComputerMachine::DISPLAY0_COMMAND_NEWLINE,
+            computer_abi::DISPLAY0_COMMAND_NEWLINE,
+        );
         assert_eq!(ComputerMachine::STATUS_RESET, computer_abi::STATUS_RESET);
         assert_eq!(
             ComputerMachine::STATUS_BOOTING,
@@ -1116,10 +1509,12 @@ mod tests {
         let control = ComputerControlDevice::new();
         let debug = DebugSerialDevice::new();
         let serial_input = SerialInputDevice::new();
+        let display = TextDisplayDevice::new();
 
         assert_eq!(control.size(), computer_abi::CONTROL_SIZE);
         assert_eq!(debug.size(), computer_abi::DEBUG_SIZE);
         assert_eq!(serial_input.size(), computer_abi::SERIAL_INPUT_SIZE);
+        assert_eq!(display.size(), computer_abi::DISPLAY0_SIZE);
     }
 
     #[test]
@@ -1822,6 +2217,18 @@ mod tests {
         assert_eq!(serial_input.size, computer_abi::SERIAL_INPUT_SIZE);
         assert!(serial_input.readable);
         assert!(serial_input.writable);
+    }
+
+    #[test]
+    fn computer_memory_map_describes_display0_mmio_region() {
+        let machine = ComputerMachine::new(1024).unwrap();
+        let map = machine.memory_map();
+        let display = map.region("display0").unwrap();
+
+        assert_eq!(display.base, computer_abi::DISPLAY0_BASE);
+        assert_eq!(display.size, computer_abi::DISPLAY0_SIZE);
+        assert!(display.readable);
+        assert!(display.writable);
     }
 
     fn image(instructions: Vec<Instruction>, register_count: u16) -> Image {
