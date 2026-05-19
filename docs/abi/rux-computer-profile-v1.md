@@ -35,6 +35,7 @@ id  name          mmio_base     mmio_size
 1   control       0x1000_0000   0x0000_0100
 2   debug         0x1000_0100   0x0000_0100
 3   serial-input  0x1000_0200   0x0000_0100
+4   display0      0x1000_0300   0x0000_0100
 ```
 
 Firmware should discover these ranges through `BootInfo.hardware_table_addr` and `BootInfo.hardware_count`.
@@ -90,12 +91,58 @@ offset  size  name
 
 A byte load from `read` consumes and returns one queued byte. If the queue is empty, it returns `0`.
 
+## Display0 MMIO
+
+The display0 range provides a text-mode display surface for firmware.
+
+Initial dimensions:
+
+```text
+80 columns x 25 rows
+```
+
+All multi-byte registers are little-endian.
+
+```text
+offset  size  access  name
+0x00    4     R       columns
+0x04    4     R       rows
+0x08    4     R/W     cursor_x
+0x0C    4     R/W     cursor_y
+0x10    4     W       command
+0x14    4     W       data
+0x18    4     R       sequence_low
+0x1C    4     R       sequence_high
+```
+
+Commands:
+
+```text
+1  clear
+2  put_byte_at_cursor
+3  put_byte_at_xy
+4  newline
+```
+
+Firmware writes `data` first, then writes `command`. A command write consumes the current data register value.
+
+`put_byte_at_xy` uses packed data:
+
+```text
+bits 0..7    byte
+bits 8..19   x
+bits 20..31  y
+```
+
+The sequence registers expose a monotonic `u64` split into low/high `u32` words. It advances when visible display state changes through a display command.
+
 ## Missing Hardware
 
-Rux machine profile v2 allows hardware entries to be absent. Current `ComputerMachine` always exposes the three entries above, but firmware should still handle missing entries:
+Rux machine profile v2 allows hardware entries to be absent. Current `ComputerMachine` always exposes the four entries above, but firmware should still handle missing entries:
 
 - missing debug output should become a no-op;
 - missing serial input should behave as not ready and return `0`;
 - missing control should make firmware rely on CPU halt or host lifecycle controls.
+- missing display should make display writes no-ops and display reads return `0`.
 
 The Rux standard library follows this rule for `std::io`.
