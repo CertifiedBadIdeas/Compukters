@@ -33,6 +33,8 @@ interface RuxComputerRuntimeBindings {
 
     fun drainDebugOutput(handle: Long): ByteArray
 
+    fun display0Snapshot(handle: Long): NativeRuxComputerDisplaySnapshot?
+
     fun free(handle: Long)
 }
 
@@ -50,6 +52,9 @@ object NativeRuxComputerRuntimeBindings : RuxComputerRuntimeBindings {
 
     override fun drainDebugOutput(handle: Long): ByteArray =
         NativeVmBindings.drainRuxComputerDebugOutput(handle)
+
+    override fun display0Snapshot(handle: Long): NativeRuxComputerDisplaySnapshot? =
+        NativeVmBindings.ruxComputerDisplay0Snapshot(handle)
 
     override fun free(handle: Long) =
         NativeVmBindings.freeRuxComputer(handle)
@@ -103,6 +108,10 @@ interface RuxComputerEndpoint : AutoCloseable {
 
     fun outputSnapshot(): ByteArray
 
+    fun display0Snapshot(): NativeRuxComputerDisplaySnapshot?
+
+    fun pollDisplay0Snapshot(): NativeRuxComputerDisplaySnapshot?
+
     fun clearOutput()
 }
 
@@ -112,6 +121,7 @@ class RuxComputerRuntime(
     private val defaultMaxTurnsPerTick: Int = 8,
 ) : RuxComputerEndpoint {
     private val terminalOutput = ByteArrayOutputStream()
+    private var lastDisplay0Sequence: Long? = null
     private var closed = false
 
     init {
@@ -153,6 +163,24 @@ class RuxComputerRuntime(
     override fun outputSnapshot(): ByteArray {
         ensureOpen()
         return terminalOutput.toByteArray()
+    }
+
+    override fun display0Snapshot(): NativeRuxComputerDisplaySnapshot? {
+        ensureOpen()
+        return bindings.display0Snapshot(handle)
+    }
+
+    override fun pollDisplay0Snapshot(): NativeRuxComputerDisplaySnapshot? {
+        ensureOpen()
+        val snapshot = bindings.display0Snapshot(handle) ?: run {
+            lastDisplay0Sequence = null
+            return null
+        }
+        if (lastDisplay0Sequence == snapshot.sequence) {
+            return null
+        }
+        lastDisplay0Sequence = snapshot.sequence
+        return snapshot
     }
 
     override fun clearOutput() {
