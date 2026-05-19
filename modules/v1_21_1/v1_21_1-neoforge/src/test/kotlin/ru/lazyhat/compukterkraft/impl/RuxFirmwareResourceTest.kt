@@ -50,6 +50,22 @@ class RuxFirmwareResourceTest {
     }
 
     @Test
+    fun bundledRuxLaptopFirmwareResourceExists() {
+        val bytes =
+            assertNotNull(
+                javaClass.classLoader.getResourceAsStream("firmware/rux-laptop.ruxi"),
+                "firmware/rux-laptop.ruxi must be bundled",
+            ).use { it.readBytes() }
+
+        assertTrue(bytes.size > 8, "Rux laptop firmware image should not be empty")
+        assertTrue(
+            bytes.copyOfRange(0, 4).contentEquals(
+                byteArrayOf('R'.code.toByte(), 'U'.code.toByte(), 'X'.code.toByte(), 'I'.code.toByte()),
+            ),
+        )
+    }
+
+    @Test
     fun bundledRuxTerminalFirmwareBootsOnNativeComputerWhenLibraryIsConfigured() {
         val libraryPath = System.getProperty("rux.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val bytes =

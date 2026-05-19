@@ -1,0 +1,16 @@
+use std::computer::{set_booting, set_ready};
+use std::display::{clear, put_byte, write_bytes};
+use std::io::{read_byte, read_ready};
+
+fn main() {
+    set_booting();
+    clear();
+    write_bytes(b"RUX LAPTOP READY\n", 17u32);
+    set_ready();
+
+    while true {
+        if read_ready() {
+            put_byte(read_byte());
+        }
+    }
+}
