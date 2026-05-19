@@ -27,6 +27,7 @@ import ru.lazyhat.compukterkraft.core.device.input.PasteInputEvent
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.DisplayNetworkBridge
 import ru.lazyhat.compukterkraft.core.input.KeyCodes
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeRuxComputerControl
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeRuxComputerDisplaySnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.RuxComputerEndpoint
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 import java.nio.ByteBuffer
@@ -115,6 +116,45 @@ class RuxRuntimeDeviceTest {
     }
 
     @Test
+    fun sendsRuxDisplaySnapshotFrameToAttachedDisplaySessions() {
+        val endpoint = RecordingRuxEndpoint()
+        val displayNetwork = RecordingDisplayNetworkBridge()
+        val device =
+            RuxRuntimeDevice(
+                deviceId = 14,
+                properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
+                endpointFactory = { endpoint },
+                stateSink = {},
+                displayNetwork = displayNetwork,
+            )
+        val playerUuid = UUID.randomUUID()
+
+        endpoint.displaySnapshot =
+            NativeRuxComputerDisplaySnapshot(
+                columns = 80,
+                rows = 25,
+                cursorX = 3,
+                cursorY = 0,
+                sequence = 1,
+                cells = "RUX".encodeToByteArray() + ByteArray(80 * 25 - 3),
+            )
+        device.attachDisplaySession(playerUuid, containerId = 20, displayId = 1, width = 400, height = 200)
+        device.turnOn()
+        device.serverTick()
+        device.serverTick()
+
+        assertEquals(1, displayNetwork.sentFrames.size)
+        val sent = displayNetwork.sentFrames.single()
+        assertEquals(playerUuid, sent.playerUuid)
+        assertEquals(20, sent.containerId)
+        assertEquals(1, sent.frame.displayId)
+        assertEquals(400, sent.frame.width)
+        assertEquals(200, sent.frame.height)
+        assertTrue(sent.frame.fullRefresh)
+        assertTrue(sent.frame.tiles.single().payload.any { it != 0.toByte() })
+    }
+
+    @Test
     fun dispatchesCharacterInputThroughSerialEchoToDisplayFrame() {
         val endpoint = RecordingRuxEndpoint()
         val displayNetwork = RecordingDisplayNetworkBridge()
@@ -200,6 +240,8 @@ class RuxRuntimeDeviceTest {
             private set
         var closeCalls = 0
             private set
+        var displaySnapshot: NativeRuxComputerDisplaySnapshot? = null
+        private var lastPolledDisplaySequence: Long? = null
         private val injectedOutput = StringBuilder()
 
         override fun pushInput(bytes: ByteArray) {
@@ -214,6 +256,20 @@ class RuxRuntimeDeviceTest {
         override fun outputSnapshot(): ByteArray =
             (inputs.fold(ByteArray(0)) { acc, bytes -> acc + bytes }.decodeToString() + injectedOutput)
                 .encodeToByteArray()
+
+        override fun display0Snapshot(): NativeRuxComputerDisplaySnapshot? = displaySnapshot
+
+        override fun pollDisplay0Snapshot(): NativeRuxComputerDisplaySnapshot? {
+            val snapshot = displaySnapshot ?: run {
+                lastPolledDisplaySequence = null
+                return null
+            }
+            if (lastPolledDisplaySequence == snapshot.sequence) {
+                return null
+            }
+            lastPolledDisplaySequence = snapshot.sequence
+            return snapshot
+        }
 
         override fun clearOutput() = Unit
 

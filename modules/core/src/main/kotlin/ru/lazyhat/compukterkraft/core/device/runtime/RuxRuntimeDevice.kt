@@ -86,7 +86,9 @@ class RuxRuntimeDevice(
     override fun serverTick() {
         val current = endpoint ?: return
         current.tick()
-        flushSerialOutput(current)
+        if (!flushRuxDisplaySnapshot(current)) {
+            flushSerialOutput(current)
+        }
     }
 
     override fun close() =
@@ -181,6 +183,25 @@ class RuxRuntimeDevice(
             val frame = renderer.renderFrame(endpoint.displayId, endpoint.width, endpoint.height)
             sendFrame(endpoint.displayId, frame)
         }
+    }
+
+    private fun flushRuxDisplaySnapshot(current: RuxComputerEndpoint): Boolean {
+        if (current.display0Snapshot() == null) return false
+        if (displaySessions.isEmpty()) return true
+        val snapshot = current.pollDisplay0Snapshot() ?: return true
+        for (endpoint in displaySessions.activeEndpoints()) {
+            val renderer = SerialTextDisplayRenderer(snapshot.columns, snapshot.rows)
+            renderer.replaceCells(snapshot.cells)
+            val frame =
+                renderer.renderFrame(
+                    displayId = endpoint.displayId,
+                    pixelWidth = endpoint.width,
+                    pixelHeight = endpoint.height,
+                    sequence = snapshot.sequence,
+                )
+            sendFrame(endpoint.displayId, frame)
+        }
+        return true
     }
 
     private fun sendFrame(
