@@ -45,6 +45,17 @@ class SerialTextDisplayRenderer(
         }
     }
 
+    fun replaceCells(bytes: ByteArray) {
+        cells.fill(' ')
+        val count = minOf(bytes.size, cells.size)
+        var index = 0
+        while (index < count) {
+            val ch = (bytes[index].toInt() and 0xff).toChar()
+            cells[index] = if (isPrintable(ch)) ch else ' '
+            index += 1
+        }
+    }
+
     fun rowText(row: Int): String {
         require(row in 0 until rows) { "row out of bounds: $row" }
         return cells.concatToString(startIndex = row * columns, endIndex = row * columns + columns)
@@ -54,6 +65,7 @@ class SerialTextDisplayRenderer(
         displayId: Int,
         pixelWidth: Int,
         pixelHeight: Int,
+        sequence: Long = nextSequence++,
     ): DisplayFrameDelta {
         require(pixelWidth > 0) { "pixelWidth must be positive" }
         require(pixelHeight > 0) { "pixelHeight must be positive" }
@@ -73,7 +85,7 @@ class SerialTextDisplayRenderer(
         }
         return DisplayFrameDelta(
             displayId = displayId,
-            sequence = nextSequence++,
+            sequence = sequence,
             width = pixelWidth,
             height = pixelHeight,
             pixelFormat = DisplayPixelFormat.RGB565,

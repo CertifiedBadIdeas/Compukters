@@ -135,6 +135,12 @@ class ArchitectureBoundaryTest {
                         "ru/lazyhat/compukterkraft/impl/ForgeCommonHooks.kt",
                         "ru/lazyhat/compukterkraft/impl/ModRegistry.kt",
                         "ru/lazyhat/compukterkraft/impl/computer/block/NeoForgeComputerBlockEntity.kt",
+                        "ru/lazyhat/compukterkraft/impl/notebook/block/NeoForgeNotebookBlockEntity.kt",
+                        "ru/lazyhat/compukterkraft/impl/notebook/item/NeoForgeNotebookItem.kt",
+                        "ru/lazyhat/compukterkraft/impl/notebook/render/NotebookBlockEntityRenderer.kt",
+                        "ru/lazyhat/compukterkraft/impl/notebook/render/NotebookGeoModel.kt",
+                        "ru/lazyhat/compukterkraft/impl/notebook/render/NotebookItemGeoModel.kt",
+                        "ru/lazyhat/compukterkraft/impl/notebook/render/NotebookItemRenderer.kt",
                         "ru/lazyhat/compukterkraft/impl/platform/NetworkHandler.kt",
                     ),
             )
