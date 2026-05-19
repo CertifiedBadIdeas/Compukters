@@ -81,8 +81,8 @@ open class ComputerTerminalScreen<T : AbstractComputerMenu>(
     player: Inventory,
     title: Component,
 ) : DslContainerScreen<T>(container, player, title) {
-    private val inputHandler = ClientInputHandler(container)
-    private val terminalInput = WorkbenchTerminalInputController(inputHandler, MinecraftInputProvider)
+    protected val inputHandler = ClientInputHandler(container)
+    protected val terminalInput = WorkbenchTerminalInputController(inputHandler, MinecraftInputProvider)
     private val displayId: Int = SHARED_TERMINAL_DISPLAY_ID
     private val displayTexture = DisplayTextureCache(displayId)
 
@@ -306,7 +306,7 @@ open class ComputerTerminalScreen<T : AbstractComputerMenu>(
         }
     }
 
-    private fun CanvasScope.drawDisplayPlaceholder(
+    protected fun CanvasScope.drawDisplayPlaceholder(
         targetWidth: Int,
         targetHeight: Int,
     ) {
@@ -323,7 +323,7 @@ open class ComputerTerminalScreen<T : AbstractComputerMenu>(
         displayTexture.draw(guiGraphics, buffer, currentLayout().terminalBounds)
     }
 
-    private fun currentLayout() =
+    protected open fun currentLayout() =
         WorkbenchTerminalMetrics.layout(
             leftPos = leftPos,
             topPos = topPos,
