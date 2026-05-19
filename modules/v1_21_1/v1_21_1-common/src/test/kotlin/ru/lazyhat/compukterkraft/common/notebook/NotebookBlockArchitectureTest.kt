@@ -78,8 +78,22 @@ class NotebookBlockArchitectureTest {
             "Notebook should have its own screen class so laptop-only UI can grow independently.",
         )
         assertTrue(
+                screenSource.contains("override fun content(): UiElement") &&
+                screenSource.contains("override fun currentLayout()") &&
+                screenSource.contains("ComputerControlAction.REBOOT") &&
+                screenSource.contains("ComputerControlAction.SHUTDOWN") &&
+                !screenSource.contains("SerialTerminalScreen"),
+            "NotebookScreen should define its own laptop layout while reusing the terminal display/input backend.",
+        )
+        assertTrue(
             terminalScreenSource.contains("open class ComputerTerminalScreen"),
             "NotebookScreen should be able to reuse the existing terminal display/input implementation.",
+        )
+        assertTrue(
+            terminalScreenSource.contains("protected open fun currentLayout()") &&
+                terminalScreenSource.contains("protected val inputHandler") &&
+                terminalScreenSource.contains("protected val terminalInput"),
+            "ComputerTerminalScreen should expose narrow hooks for laptop-specific screen layouts.",
         )
     }
 
