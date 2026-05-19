@@ -156,7 +156,7 @@ class RuxFirmwareResourceTest {
     }
 
     @Test
-    fun bundledRuxEchoLiveFirmwareEchoesTerminalInputThroughRuntimeDisplayBridgeWhenLibraryIsConfigured() {
+    fun bundledRuxEchoLiveFirmwareKeepsDebugSerialOutputSeparateFromDisplay0WhenLibraryIsConfigured() {
         System.getProperty("rux.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val bytes =
             assertNotNull(
@@ -191,10 +191,8 @@ class RuxFirmwareResourceTest {
             }
 
             assertTrue(displayNetwork.sentFrames.isNotEmpty(), "Rux echo firmware should produce a visible frame")
-            assertTrue(
-                displayNetwork.sentFrames.last().frame.tiles.single().payload.any { it != 0.toByte() },
-                "visible frame should contain rendered glyph pixels",
-            )
+            assertTrue(device.serialOutputSnapshot().decodeToString().contains("RUX READY\nR"))
+            assertTrue(displayNetwork.sentFrames.last().frame.tiles.single().payload.all { it == 0.toByte() })
         } finally {
             device.close()
         }
@@ -236,6 +234,62 @@ class RuxFirmwareResourceTest {
             }
 
             assertEquals(expected, device.serialOutputSnapshot().decodeToString())
+        } finally {
+            device.close()
+        }
+    }
+
+    @Test
+    fun bundledRuxLaptopFirmwareUpdatesDisplayAfterInputThroughRuntimeDeviceWhenLibraryIsConfigured() {
+        System.getProperty("rux.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val bytes =
+            assertNotNull(
+                javaClass.classLoader.getResourceAsStream("firmware/rux-laptop.ruxi"),
+                "firmware/rux-laptop.ruxi must be bundled",
+            ).use { it.readBytes() }
+        val displayNetwork = RecordingDisplayNetworkBridge()
+        val device =
+            RuxRuntimeDevice(
+                deviceId = 44,
+                properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
+                endpointFactory = {
+                    RuxComputerRuntimeFactory.create(
+                        image = bytes,
+                        memorySize = 64 * 1024,
+                        sliceBudgetNanos = 1_000,
+                    )
+                },
+                stateSink = {},
+                displayNetwork = displayNetwork,
+            )
+
+        try {
+            device.attachDisplaySession(UUID.randomUUID(), containerId = 22, displayId = 1, width = 400, height = 200)
+            device.turnOn()
+
+            var attempts = 0
+            while (displayNetwork.sentFrames.isEmpty() && attempts < 32) {
+                device.serverTick()
+                attempts += 1
+            }
+            assertTrue(displayNetwork.sentFrames.isNotEmpty(), "Rux laptop firmware should draw its boot prompt")
+            val bootFrame = displayNetwork.sentFrames.last().frame
+
+            DeviceEvents.dispatch(device, KeyInputEvent.Character('A'.code.toByte()))
+            DeviceEvents.dispatch(device, KeyInputEvent.Down(KeyCodes.KEY_BACKSPACE, repeat = false))
+            DeviceEvents.dispatch(device, KeyInputEvent.Down(KeyCodes.KEY_ENTER, repeat = false))
+
+            while (displayNetwork.sentFrames.last().frame.sequence <= bootFrame.sequence && attempts < 64) {
+                device.serverTick()
+                attempts += 1
+            }
+
+            val inputFrame = displayNetwork.sentFrames.last().frame
+            assertTrue(inputFrame.sequence > bootFrame.sequence, "Laptop input should advance display sequence")
+            assertTrue(
+                inputFrame.tiles.single().payload.any { it != 0.toByte() },
+                "Laptop display frame should contain rendered glyph pixels",
+            )
         } finally {
             device.close()
         }
