@@ -105,6 +105,92 @@ pub fn clear() {
     }
 }
 
+pub fn cursor_x() -> u32 {
+    let mut table: u32 = 0u32;
+    let mut count: u32 = 0u32;
+    unsafe {
+        table = ptr<u32>(RAM_BASE + 20).load();
+        count = ptr<u32>(RAM_BASE + 24).load();
+    }
+
+    let mut base: u32 = 0u32;
+    let mut i: u32 = 0u32;
+    while i < count {
+        let mut entry: u32 = table + i * 12u32;
+        unsafe {
+            if ptr<u32>(entry).load() == 4u32 {
+                base = ptr<u32>(entry + 4).load();
+            }
+        }
+        i += 1u32;
+    }
+
+    if base == 0u32 {
+        return 0u32;
+    }
+
+    unsafe {
+        return mmio<i32>(base + 8).load() as u32;
+    }
+}
+
+pub fn cursor_y() -> u32 {
+    let mut table: u32 = 0u32;
+    let mut count: u32 = 0u32;
+    unsafe {
+        table = ptr<u32>(RAM_BASE + 20).load();
+        count = ptr<u32>(RAM_BASE + 24).load();
+    }
+
+    let mut base: u32 = 0u32;
+    let mut i: u32 = 0u32;
+    while i < count {
+        let mut entry: u32 = table + i * 12u32;
+        unsafe {
+            if ptr<u32>(entry).load() == 4u32 {
+                base = ptr<u32>(entry + 4).load();
+            }
+        }
+        i += 1u32;
+    }
+
+    if base == 0u32 {
+        return 0u32;
+    }
+
+    unsafe {
+        return mmio<i32>(base + 12).load() as u32;
+    }
+}
+
+pub fn set_cursor(x: u32, y: u32) {
+    let mut table: u32 = 0u32;
+    let mut count: u32 = 0u32;
+    unsafe {
+        table = ptr<u32>(RAM_BASE + 20).load();
+        count = ptr<u32>(RAM_BASE + 24).load();
+    }
+
+    let mut base: u32 = 0u32;
+    let mut i: u32 = 0u32;
+    while i < count {
+        let mut entry: u32 = table + i * 12u32;
+        unsafe {
+            if ptr<u32>(entry).load() == 4u32 {
+                base = ptr<u32>(entry + 4).load();
+            }
+        }
+        i += 1u32;
+    }
+
+    if base != 0u32 {
+        unsafe {
+            mmio<i32>(base + 8).store(x as i32);
+            mmio<i32>(base + 12).store(y as i32);
+        }
+    }
+}
+
 pub fn put_byte(byte: u8) {
     let mut table: u32 = 0u32;
     let mut count: u32 = 0u32;
