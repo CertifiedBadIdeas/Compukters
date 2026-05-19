@@ -1,7 +1,9 @@
 use rux_compiler::{
-    render_terminal_ui, run_source, run_source_until_serial_output, run_source_with_serial_input,
+    compile, render_terminal_ui, run_source, run_source_until_serial_output,
+    run_source_with_serial_input,
 };
 use rux_vm::computer_machine::ComputerMachine;
+use rux_vm::computer_machine::ComputerTextDisplaySnapshot;
 use rux_vm::low_image_runner::LowImageSignal;
 
 #[test]
@@ -121,4 +123,54 @@ fn run_source_until_serial_output_supports_live_polling_firmware() {
 
     assert_eq!(report.panic_code, 0);
     assert_eq!(report.debug_output, "RUX READY\nRux!");
+}
+
+#[test]
+fn example_laptop_firmware_draws_prompt_on_display() {
+    let snapshot = run_laptop_firmware_display(b"", 32);
+
+    assert_eq!(display_row(&snapshot, 0), "RUX LAPTOP READY");
+    assert_eq!(display_row(&snapshot, 1), "> ");
+}
+
+#[test]
+fn example_laptop_firmware_supports_enter_and_backspace_on_display() {
+    let snapshot = run_laptop_firmware_display(b"AB\x08C\n", 64);
+
+    assert_eq!(display_row(&snapshot, 1), "> AC");
+    assert_eq!(display_row(&snapshot, 2), "> ");
+}
+
+fn run_laptop_firmware_display(input: &[u8], max_turns: usize) -> ComputerTextDisplaySnapshot {
+    let source = include_str!("../examples/firmware/laptop.rx");
+    let image = compile(source).unwrap();
+    let mut machine = ComputerMachine::new(64 * 1024).unwrap();
+    machine.push_serial_input(input);
+    let cpu_id = machine.spawn_boot_cpu(image, 1_000).unwrap();
+
+    for _ in 0..max_turns {
+        let signal = machine.run_boot_cpu_until_signal(cpu_id).unwrap();
+        if !matches!(signal, LowImageSignal::Pause) {
+            break;
+        }
+    }
+
+    machine.display0_snapshot().unwrap()
+}
+
+fn display_row(snapshot: &ComputerTextDisplaySnapshot, row: u32) -> String {
+    let columns = snapshot.columns as usize;
+    let start = row as usize * columns;
+    let end = start + columns;
+    let row = &snapshot.cells[start..end];
+    let visible_end = row
+        .iter()
+        .rposition(|byte| *byte != 0)
+        .map(|index| index + 1)
+        .unwrap_or(0);
+
+    row[..visible_end]
+        .iter()
+        .map(|byte| char::from(*byte))
+        .collect()
 }

@@ -1,16 +1,46 @@
 use std::computer::{set_booting, set_ready};
-use std::display::{clear, put_byte, write_bytes};
+use std::display::{clear, cursor_x, cursor_y, newline, put_byte, set_cursor, write_bytes};
 use std::io::{read_byte, read_ready};
+
+fn prompt() {
+    write_bytes(b"> ", 2u32);
+}
+
+fn erase_last_cell() {
+    let mut x: u32 = cursor_x();
+    let mut y: u32 = cursor_y();
+    set_cursor(x - 1u32, y);
+    put_byte(32u8);
+    set_cursor(x - 1u32, y);
+}
 
 fn main() {
     set_booting();
     clear();
-    write_bytes(b"RUX LAPTOP READY\n", 17u32);
+    write_bytes(b"RUX LAPTOP READY", 16u32);
+    newline();
+    prompt();
     set_ready();
 
+    let mut line_len: u32 = 0u32;
     while true {
         if read_ready() {
-            put_byte(read_byte());
+            let mut byte: u8 = read_byte();
+            if byte == 8u8 {
+                if line_len > 0u32 {
+                    erase_last_cell();
+                    line_len -= 1u32;
+                }
+            } else {
+                if byte == 10u8 || byte == 13u8 {
+                    newline();
+                    prompt();
+                    line_len = 0u32;
+                } else {
+                    put_byte(byte);
+                    line_len += 1u32;
+                }
+            }
         }
     }
 }
