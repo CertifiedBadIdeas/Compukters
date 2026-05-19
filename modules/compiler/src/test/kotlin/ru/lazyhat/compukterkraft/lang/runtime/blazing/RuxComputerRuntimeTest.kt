@@ -53,6 +53,41 @@ class RuxComputerRuntimeTest {
     }
 
     @Test
+    fun exposesDisplaySnapshotAndPollsOnlyChangedSequences() {
+        val bindings = EchoBindings()
+        val runtime = RuxComputerRuntime(handle = 11L, bindings = bindings)
+        val first =
+            NativeRuxComputerDisplaySnapshot(
+                columns = 80,
+                rows = 25,
+                cursorX = 1,
+                cursorY = 0,
+                sequence = 1,
+                cells = byteArrayOf('A'.code.toByte()),
+            )
+        val second =
+            NativeRuxComputerDisplaySnapshot(
+                columns = 80,
+                rows = 25,
+                cursorX = 2,
+                cursorY = 0,
+                sequence = 2,
+                cells = byteArrayOf('A'.code.toByte(), 'B'.code.toByte()),
+            )
+
+        bindings.displaySnapshot = first
+
+        assertEquals(first, runtime.display0Snapshot())
+        assertEquals(first, runtime.pollDisplay0Snapshot())
+        assertEquals(null, runtime.pollDisplay0Snapshot())
+
+        bindings.displaySnapshot = second
+
+        assertEquals(second, runtime.pollDisplay0Snapshot())
+        assertEquals(null, runtime.pollDisplay0Snapshot())
+    }
+
+    @Test
     fun rejectsZeroHandle() {
         assertFailsWith<IllegalArgumentException> {
             RuxComputerRuntime(handle = 0L, bindings = EchoBindings())
@@ -62,6 +97,7 @@ class RuxComputerRuntimeTest {
     private class EchoBindings : RuxComputerRuntimeBindings {
         val serialInputs = mutableListOf<ByteArray>()
         val freedHandles = mutableListOf<Long>()
+        var displaySnapshot: NativeRuxComputerDisplaySnapshot? = null
         private val pendingOutput = ArrayDeque<ByteArray>()
 
         override fun runUntilSignal(handle: Long): NativeLowImageVmSignal = NativeLowImageVmSignal.Pause
@@ -83,6 +119,8 @@ class RuxComputerRuntimeTest {
             } else {
                 pendingOutput.removeFirst()
             }
+
+        override fun display0Snapshot(handle: Long): NativeRuxComputerDisplaySnapshot? = displaySnapshot
 
         override fun free(handle: Long) {
             freedHandles += handle
