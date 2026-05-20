@@ -211,7 +211,7 @@ impl ComputerMachine {
     }
 
     pub fn from_profile(profile: ComputerMachineProfile) -> Result<Self, MemoryFault> {
-        validate_profile_v2_memory_size(profile.memory_size, profile.page_size)?;
+        validate_profile_v2(&profile)?;
         let mut bus = MachineBus::new(profile.memory_size)?;
         let mut control_device_id = None;
         let mut debug_device_id = None;
@@ -491,6 +491,33 @@ impl ComputerMachine {
     }
 }
 
+fn validate_profile_v2(profile: &ComputerMachineProfile) -> Result<(), MemoryFault> {
+    validate_profile_v2_page_size(profile.page_size)?;
+    validate_profile_v2_memory_size(profile.memory_size, profile.page_size)?;
+    validate_profile_v2_program_base(profile)?;
+    validate_profile_v2_hardware_table_size(profile)?;
+    validate_profile_v2_hardware(profile)
+}
+
+fn validate_profile_v2_page_size(page_size: u32) -> Result<(), MemoryFault> {
+    if page_size < 256 {
+        return Err(MemoryFault::new(format!(
+            "computer profile page size {page_size} is smaller than minimum 256",
+        )));
+    }
+    if !page_size.is_power_of_two() {
+        return Err(MemoryFault::new(format!(
+            "computer profile page size {page_size} is not a power of two",
+        )));
+    }
+    if page_size > 65536 {
+        return Err(MemoryFault::new(format!(
+            "computer profile page size {page_size} exceeds maximum 65536",
+        )));
+    }
+    Ok(())
+}
+
 fn validate_profile_v2_memory_size(memory_size: usize, page_size: u32) -> Result<(), MemoryFault> {
     let page_size = page_size as usize;
     if memory_size < page_size {
@@ -508,6 +535,125 @@ fn validate_profile_v2_memory_size(memory_size: usize, page_size: u32) -> Result
             "computer memory size {memory_size} exceeds profile u32 address space",
         )));
     }
+    Ok(())
+}
+
+fn validate_profile_v2_program_base(profile: &ComputerMachineProfile) -> Result<(), MemoryFault> {
+    if profile.program_base < profile.page_size {
+        return Err(MemoryFault::new(format!(
+            "computer profile program base {:#010x} is below first page size {}",
+            profile.program_base, profile.page_size,
+        )));
+    }
+    if profile.program_base % profile.page_size != 0 {
+        return Err(MemoryFault::new(format!(
+            "computer profile program base {:#010x} is not aligned to page size {}",
+            profile.program_base, profile.page_size,
+        )));
+    }
+    if profile.program_base as usize >= profile.memory_size {
+        return Err(MemoryFault::new(format!(
+            "computer profile program base {:#010x} is outside RAM size {}",
+            profile.program_base, profile.memory_size,
+        )));
+    }
+    Ok(())
+}
+
+fn validate_profile_v2_hardware_table_size(
+    profile: &ComputerMachineProfile,
+) -> Result<(), MemoryFault> {
+    let table_size = (profile.hardware.len() as u64)
+        .checked_mul(u64::from(computer_abi::PROFILE_V2_HARDWARE_ENTRY_SIZE))
+        .and_then(|value| value.checked_add(u64::from(computer_abi::PROFILE_V2_BOOT_INFO_SIZE)))
+        .ok_or_else(|| {
+            MemoryFault::new("computer hardware table size overflows address space".to_string())
+        })?;
+    if table_size > u64::from(profile.page_size) {
+        return Err(MemoryFault::new(format!(
+            "computer hardware table with {} entries does not fit boot page size {}",
+            profile.hardware.len(),
+            profile.page_size,
+        )));
+    }
+    Ok(())
+}
+
+fn validate_profile_v2_hardware(profile: &ComputerMachineProfile) -> Result<(), MemoryFault> {
+    let ram_start = 0_u64;
+    let ram_end = profile.memory_size as u64;
+    let mut ids = Vec::new();
+    let mut ranges = Vec::new();
+
+    for hardware in &profile.hardware {
+        if hardware.id == 0 {
+            return Err(MemoryFault::new(
+                "computer hardware id must be non-zero".to_string(),
+            ));
+        }
+        if ids.contains(&hardware.id) {
+            return Err(MemoryFault::new(format!(
+                "computer hardware id {} is duplicated",
+                hardware.id,
+            )));
+        }
+        ids.push(hardware.id);
+
+        let mmio_size = hardware.mmio_size();
+        if hardware.mmio_base == 0 {
+            return Err(MemoryFault::new(format!(
+                "computer hardware id {} mmio base must be non-zero",
+                hardware.id,
+            )));
+        }
+        if mmio_size == 0 {
+            return Err(MemoryFault::new(format!(
+                "computer hardware id {} mmio size must be non-zero",
+                hardware.id,
+            )));
+        }
+        let range_start = u64::from(hardware.mmio_base);
+        let range_end = range_start + u64::from(mmio_size);
+        if range_end > u64::from(u32::MAX) + 1 {
+            return Err(MemoryFault::new(format!(
+                "computer hardware id {} mmio range {:#010x} with size {} overflows address space",
+                hardware.id, hardware.mmio_base, mmio_size,
+            )));
+        }
+        if hardware.mmio_base % profile.page_size != 0 {
+            return Err(MemoryFault::new(format!(
+                "computer hardware id {} mmio base {:#010x} is not aligned to page size {}",
+                hardware.id, hardware.mmio_base, profile.page_size,
+            )));
+        }
+        if mmio_size % profile.page_size != 0 {
+            return Err(MemoryFault::new(format!(
+                "computer hardware id {} mmio size {} is not aligned to page size {}",
+                hardware.id, mmio_size, profile.page_size,
+            )));
+        }
+        if range_start < ram_end && ram_start < range_end {
+            return Err(MemoryFault::new(format!(
+                "computer hardware id {} mmio range {:#010x}..{:#010x} overlaps RAM {:#010x}..{:#010x}",
+                hardware.id, hardware.mmio_base, range_end, ram_start, ram_end,
+            )));
+        }
+        for (existing_id, existing_start, existing_end) in &ranges {
+            if range_start < *existing_end && *existing_start < range_end {
+                return Err(MemoryFault::new(format!(
+                    "computer hardware id {} mmio range {:#010x}..{:#010x} overlaps hardware id {} range {:#010x}..{:#010x}",
+                    hardware.id,
+                    hardware.mmio_base,
+                    range_end,
+                    existing_id,
+                    existing_start,
+                    existing_end,
+                )));
+            }
+        }
+        ranges.push((hardware.id, range_start, range_end));
+    }
+
     Ok(())
 }
 
@@ -1513,6 +1659,154 @@ mod tests {
     }
 
     #[test]
+    fn computer_machine_profile_rejects_invalid_page_sizes() {
+        assert_profile_error(
+            ComputerMachineProfile {
+                page_size: 128,
+                ..ComputerMachineProfile::new(1024)
+            },
+            "computer profile page size 128 is smaller than minimum 256",
+        );
+        assert_profile_error(
+            ComputerMachineProfile {
+                page_size: 384,
+                ..ComputerMachineProfile::new(1152)
+            },
+            "computer profile page size 384 is not a power of two",
+        );
+        assert_profile_error(
+            ComputerMachineProfile {
+                page_size: 131072,
+                ..ComputerMachineProfile::new(131072)
+            },
+            "computer profile page size 131072 exceeds maximum 65536",
+        );
+    }
+
+    #[test]
+    fn computer_machine_profile_rejects_invalid_program_base() {
+        assert_profile_error(
+            ComputerMachineProfile {
+                program_base: 128,
+                ..ComputerMachineProfile::new(1024)
+            },
+            "computer profile program base 0x00000080 is below first page size 256",
+        );
+        assert_profile_error(
+            ComputerMachineProfile {
+                program_base: 384,
+                ..ComputerMachineProfile::new(1024)
+            },
+            "computer profile program base 0x00000180 is not aligned to page size 256",
+        );
+        assert_profile_error(
+            ComputerMachineProfile {
+                program_base: 1024,
+                ..ComputerMachineProfile::new(1024)
+            },
+            "computer profile program base 0x00000400 is outside RAM size 1024",
+        );
+    }
+
+    #[test]
+    fn computer_machine_profile_rejects_invalid_hardware_ids() {
+        assert_profile_error(
+            ComputerMachineProfile::new(1024).with_hardware(ComputerHardwareConfig::control(
+                0,
+                computer_abi::CONTROL_BASE,
+            )),
+            "computer hardware id must be non-zero",
+        );
+        assert_profile_error(
+            ComputerMachineProfile::new(1024)
+                .with_hardware(ComputerHardwareConfig::control(
+                    computer_abi::COMPUTER_HARDWARE_ID_CONTROL,
+                    computer_abi::CONTROL_BASE,
+                ))
+                .with_hardware(ComputerHardwareConfig::debug_serial(
+                    computer_abi::COMPUTER_HARDWARE_ID_CONTROL,
+                    computer_abi::DEBUG_BASE,
+                )),
+            "computer hardware id 1 is duplicated",
+        );
+    }
+
+    #[test]
+    fn computer_machine_profile_rejects_invalid_mmio_ranges() {
+        assert_profile_error(
+            ComputerMachineProfile::new(1024).with_hardware(ComputerHardwareConfig::control(
+                computer_abi::COMPUTER_HARDWARE_ID_CONTROL,
+                0,
+            )),
+            "computer hardware id 1 mmio base must be non-zero",
+        );
+        assert_profile_error(
+            ComputerMachineProfile::new(1024).with_hardware(ComputerHardwareConfig::control(
+                computer_abi::COMPUTER_HARDWARE_ID_CONTROL,
+                computer_abi::CONTROL_BASE + 1,
+            )),
+            "computer hardware id 1 mmio base 0x10000001 is not aligned to page size 256",
+        );
+        assert_profile_error(
+            ComputerMachineProfile {
+                page_size: 512,
+                program_base: 512,
+                ..ComputerMachineProfile::new(1024).with_hardware(ComputerHardwareConfig::control(
+                    computer_abi::COMPUTER_HARDWARE_ID_CONTROL,
+                    computer_abi::CONTROL_BASE,
+                ))
+            },
+            "computer hardware id 1 mmio size 256 is not aligned to page size 512",
+        );
+        assert_profile_error(
+            ComputerMachineProfile::new(1024).with_hardware(ComputerHardwareConfig::control(
+                computer_abi::COMPUTER_HARDWARE_ID_CONTROL,
+                512,
+            )),
+            "computer hardware id 1 mmio range 0x00000200..0x00000300 overlaps RAM 0x00000000..0x00000400",
+        );
+        assert_profile_error(
+            ComputerMachineProfile::new(1024).with_hardware(ComputerHardwareConfig::control(
+                computer_abi::COMPUTER_HARDWARE_ID_CONTROL,
+                u32::MAX - 127,
+            )),
+            "computer hardware id 1 mmio range 0xffffff80 with size 256 overflows address space",
+        );
+    }
+
+    #[test]
+    fn computer_machine_profile_rejects_overlapping_mmio_ranges() {
+        assert_profile_error(
+            ComputerMachineProfile::new(1024)
+                .with_hardware(ComputerHardwareConfig::control(
+                    computer_abi::COMPUTER_HARDWARE_ID_CONTROL,
+                    computer_abi::CONTROL_BASE,
+                ))
+                .with_hardware(ComputerHardwareConfig::debug_serial(
+                    computer_abi::COMPUTER_HARDWARE_ID_DEBUG,
+                    computer_abi::CONTROL_BASE,
+                )),
+            "computer hardware id 2 mmio range 0x10000000..0x10000100 overlaps hardware id 1 range 0x10000000..0x10000100",
+        );
+    }
+
+    #[test]
+    fn computer_machine_profile_rejects_hardware_table_that_does_not_fit_boot_page() {
+        let mut profile = ComputerMachineProfile::new(4096);
+        for id in 1..=20 {
+            profile = profile.with_hardware(ComputerHardwareConfig::control(
+                id,
+                computer_abi::CONTROL_BASE + (id - 1) * computer_abi::PROFILE_V2_PAGE_SIZE,
+            ));
+        }
+
+        assert_profile_error(
+            profile,
+            "computer hardware table with 20 entries does not fit boot page size 256",
+        );
+    }
+
+    #[test]
     fn computer_machine_rejects_memory_smaller_than_profile_page() {
         let error = match ComputerMachine::new(128) {
             Ok(_) => panic!("computer machine should reject memory smaller than profile page"),
@@ -2473,5 +2767,14 @@ mod tests {
         assert_eq!(read_u32(memory, address), id);
         assert_eq!(read_u32(memory, address + 4), mmio_base);
         assert_eq!(read_u32(memory, address + 8), mmio_size);
+    }
+
+    fn assert_profile_error(profile: ComputerMachineProfile, expected: &str) {
+        let error = match ComputerMachine::from_profile(profile) {
+            Ok(_) => panic!("computer machine should reject invalid profile"),
+            Err(error) => error,
+        };
+
+        assert_eq!(error.to_string(), expected);
     }
 }
