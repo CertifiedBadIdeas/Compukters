@@ -1,6 +1,7 @@
-use crate::ast::{FunctionDecl, Program, Visibility};
-use crate::error::CompileError;
-use crate::{lexer, parser, stdlib};
+use crate::frontend::ast::{FunctionDecl, Program, Visibility};
+use crate::frontend::error::CompileError;
+use crate::frontend::{lexer, parser};
+use crate::runtime::stdlib;
 use std::collections::HashSet;
 
 pub(crate) fn resolve(program: Program) -> Result<Program, CompileError> {

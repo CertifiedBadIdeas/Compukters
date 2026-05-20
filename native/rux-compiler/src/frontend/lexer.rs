@@ -1,4 +1,4 @@
-use crate::error::CompileError;
+use crate::frontend::error::CompileError;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Token {
