@@ -1,4 +1,4 @@
-use crate::computer_machine::{ComputerMachine, ComputerTextDisplaySnapshot, CpuId};
+use crate::computer::{ComputerMachine, ComputerTextDisplaySnapshot, CpuId};
 use crate::low_image::decode_image;
 use crate::low_image_runner::LowImageSignal;
 
