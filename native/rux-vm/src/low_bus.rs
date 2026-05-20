@@ -115,6 +115,12 @@ impl MachineBus {
             .and_then(|region| (&mut *region.device as &mut dyn Any).downcast_mut::<T>())
     }
 
+    pub fn mmio_region_bounds(&self, id: MmioDeviceId) -> Option<(u32, u32)> {
+        self.regions
+            .get(id)
+            .map(|region| (region.base, region.size))
+    }
+
     pub fn load_i32(&self, address: u32) -> Result<i32, MemoryFault> {
         <Self as MemoryBus>::load_i32(self, address)
     }

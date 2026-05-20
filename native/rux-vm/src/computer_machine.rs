@@ -10,10 +10,11 @@ pub type CpuId = usize;
 
 pub struct ComputerMachine {
     bus: MachineBus,
-    control_device_id: MmioDeviceId,
-    debug_device_id: MmioDeviceId,
-    serial_input_device_id: MmioDeviceId,
-    display0_device_id: MmioDeviceId,
+    control_device_id: Option<MmioDeviceId>,
+    debug_device_id: Option<MmioDeviceId>,
+    serial_input_device_id: Option<MmioDeviceId>,
+    display0_device_id: Option<MmioDeviceId>,
+    program_base: u32,
     cpus: Vec<LowCpuContext>,
     boot_cpu: Option<CpuId>,
 }
@@ -50,6 +51,114 @@ pub struct ComputerTextDisplaySnapshot {
     pub cursor_y: u32,
     pub sequence: u64,
     pub cells: Vec<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ComputerMachineProfile {
+    memory_size: usize,
+    page_size: u32,
+    program_base: u32,
+    hardware: Vec<ComputerHardwareConfig>,
+}
+
+impl ComputerMachineProfile {
+    pub fn new(memory_size: usize) -> Self {
+        Self {
+            memory_size,
+            page_size: computer_abi::PROFILE_V2_PAGE_SIZE,
+            program_base: computer_abi::PROFILE_V2_PROGRAM_BASE,
+            hardware: Vec::new(),
+        }
+    }
+
+    pub fn computer_v1(memory_size: usize) -> Self {
+        Self::new(memory_size)
+            .with_hardware(ComputerHardwareConfig::control(
+                computer_abi::COMPUTER_HARDWARE_ID_CONTROL,
+                computer_abi::CONTROL_BASE,
+            ))
+            .with_hardware(ComputerHardwareConfig::debug_serial(
+                computer_abi::COMPUTER_HARDWARE_ID_DEBUG,
+                computer_abi::DEBUG_BASE,
+            ))
+            .with_hardware(ComputerHardwareConfig::serial_input(
+                computer_abi::COMPUTER_HARDWARE_ID_SERIAL_INPUT,
+                computer_abi::SERIAL_INPUT_BASE,
+            ))
+            .with_hardware(ComputerHardwareConfig::text_display(
+                computer_abi::COMPUTER_HARDWARE_ID_DISPLAY0,
+                computer_abi::DISPLAY0_BASE,
+            ))
+    }
+
+    pub fn with_hardware(mut self, hardware: ComputerHardwareConfig) -> Self {
+        self.hardware.push(hardware);
+        self
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ComputerHardwareConfig {
+    id: u32,
+    mmio_base: u32,
+    device: ComputerHardwareDevice,
+}
+
+impl ComputerHardwareConfig {
+    pub fn control(id: u32, mmio_base: u32) -> Self {
+        Self {
+            id,
+            mmio_base,
+            device: ComputerHardwareDevice::Control,
+        }
+    }
+
+    pub fn debug_serial(id: u32, mmio_base: u32) -> Self {
+        Self {
+            id,
+            mmio_base,
+            device: ComputerHardwareDevice::DebugSerial,
+        }
+    }
+
+    pub fn serial_input(id: u32, mmio_base: u32) -> Self {
+        Self {
+            id,
+            mmio_base,
+            device: ComputerHardwareDevice::SerialInput,
+        }
+    }
+
+    pub fn text_display(id: u32, mmio_base: u32) -> Self {
+        Self {
+            id,
+            mmio_base,
+            device: ComputerHardwareDevice::TextDisplay,
+        }
+    }
+
+    fn mmio_size(&self) -> u32 {
+        self.device.mmio_size()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ComputerHardwareDevice {
+    Control,
+    DebugSerial,
+    SerialInput,
+    TextDisplay,
+}
+
+impl ComputerHardwareDevice {
+    fn mmio_size(self) -> u32 {
+        match self {
+            Self::Control => ComputerControlDevice::SIZE,
+            Self::DebugSerial => DebugSerialDevice::SIZE,
+            Self::SerialInput => SerialInputDevice::SIZE,
+            Self::TextDisplay => TextDisplayDevice::SIZE,
+        }
+    }
 }
 
 impl ComputerMachine {
@@ -98,22 +207,57 @@ impl ComputerMachine {
     pub const STATUS_PANIC: i32 = computer_abi::STATUS_PANIC;
 
     pub fn new(memory_size: usize) -> Result<Self, MemoryFault> {
-        validate_profile_v2_memory_size(memory_size)?;
-        let mut bus = MachineBus::new(memory_size)?;
-        let control_device_id =
-            bus.map_mmio(Self::CONTROL_BASE, Box::new(ComputerControlDevice::new()))?;
-        let debug_device_id = bus.map_mmio(Self::DEBUG_BASE, Box::new(DebugSerialDevice::new()))?;
-        let serial_input_device_id =
-            bus.map_mmio(Self::SERIAL_INPUT_BASE, Box::new(SerialInputDevice::new()))?;
-        let display0_device_id =
-            bus.map_mmio(Self::DISPLAY0_BASE, Box::new(TextDisplayDevice::new()))?;
-        write_profile_v2_boot_info(&mut bus)?;
+        Self::from_profile(ComputerMachineProfile::computer_v1(memory_size))
+    }
+
+    pub fn from_profile(profile: ComputerMachineProfile) -> Result<Self, MemoryFault> {
+        validate_profile_v2_memory_size(profile.memory_size, profile.page_size)?;
+        let mut bus = MachineBus::new(profile.memory_size)?;
+        let mut control_device_id = None;
+        let mut debug_device_id = None;
+        let mut serial_input_device_id = None;
+        let mut display0_device_id = None;
+        let hardware_entries = profile
+            .hardware
+            .iter()
+            .map(|hardware| HardwareTableEntry {
+                id: hardware.id,
+                mmio_base: hardware.mmio_base,
+                mmio_size: hardware.mmio_size(),
+            })
+            .collect::<Vec<_>>();
+
+        for hardware in &profile.hardware {
+            let device_id = match hardware.device {
+                ComputerHardwareDevice::Control => {
+                    bus.map_mmio(hardware.mmio_base, Box::new(ComputerControlDevice::new()))?
+                }
+                ComputerHardwareDevice::DebugSerial => {
+                    bus.map_mmio(hardware.mmio_base, Box::new(DebugSerialDevice::new()))?
+                }
+                ComputerHardwareDevice::SerialInput => {
+                    bus.map_mmio(hardware.mmio_base, Box::new(SerialInputDevice::new()))?
+                }
+                ComputerHardwareDevice::TextDisplay => {
+                    bus.map_mmio(hardware.mmio_base, Box::new(TextDisplayDevice::new()))?
+                }
+            };
+            match hardware.device {
+                ComputerHardwareDevice::Control => control_device_id = Some(device_id),
+                ComputerHardwareDevice::DebugSerial => debug_device_id = Some(device_id),
+                ComputerHardwareDevice::SerialInput => serial_input_device_id = Some(device_id),
+                ComputerHardwareDevice::TextDisplay => display0_device_id = Some(device_id),
+            }
+        }
+
+        write_profile_v2_boot_info(&mut bus, &profile, &hardware_entries)?;
         Ok(Self {
             bus,
             control_device_id,
             debug_device_id,
             serial_input_device_id,
             display0_device_id,
+            program_base: profile.program_base,
             cpus: Vec::new(),
             boot_cpu: None,
         })
@@ -128,45 +272,20 @@ impl ComputerMachine {
     }
 
     pub fn memory_map(&self) -> ComputerMemoryMap {
-        ComputerMemoryMap {
-            regions: vec![
-                ComputerMemoryRegion {
-                    name: "ram",
-                    base: 0,
-                    size: self.memory().len() as u32,
-                    readable: true,
-                    writable: true,
-                },
-                ComputerMemoryRegion {
-                    name: "control",
-                    base: Self::CONTROL_BASE,
-                    size: ComputerControlDevice::SIZE,
-                    readable: true,
-                    writable: true,
-                },
-                ComputerMemoryRegion {
-                    name: "debug",
-                    base: Self::DEBUG_BASE,
-                    size: DebugSerialDevice::SIZE,
-                    readable: true,
-                    writable: true,
-                },
-                ComputerMemoryRegion {
-                    name: "serial-input",
-                    base: Self::SERIAL_INPUT_BASE,
-                    size: SerialInputDevice::SIZE,
-                    readable: true,
-                    writable: true,
-                },
-                ComputerMemoryRegion {
-                    name: "display0",
-                    base: Self::DISPLAY0_BASE,
-                    size: TextDisplayDevice::SIZE,
-                    readable: true,
-                    writable: true,
-                },
-            ],
-        }
+        let mut map = ComputerMemoryMap {
+            regions: vec![ComputerMemoryRegion {
+                name: "ram",
+                base: 0,
+                size: self.memory().len() as u32,
+                readable: true,
+                writable: true,
+            }],
+        };
+        self.push_memory_map_region(&mut map, self.control_device_id, "control");
+        self.push_memory_map_region(&mut map, self.debug_device_id, "debug");
+        self.push_memory_map_region(&mut map, self.serial_input_device_id, "serial-input");
+        self.push_memory_map_region(&mut map, self.display0_device_id, "display0");
+        map
     }
 
     pub fn spawn_cpu(&mut self, image: Image, slice_budget_nanos: u64) -> Result<CpuId, String> {
@@ -178,11 +297,7 @@ impl ComputerMachine {
                 self.bus.memory().len(),
             ));
         }
-        load_image_sections_into_bus_at(
-            &image,
-            &mut self.bus,
-            computer_abi::PROFILE_V2_PROGRAM_BASE,
-        )?;
+        load_image_sections_into_bus_at(&image, &mut self.bus, self.program_base)?;
         let cpu = LowImageVm::create_cpu_context(image, slice_budget_nanos)?;
         let cpu_id = self.cpus.len();
         self.cpus.push(cpu);
@@ -250,19 +365,27 @@ impl ComputerMachine {
     }
 
     pub fn control_status(&self) -> i32 {
-        self.control_device().status
+        self.control_device()
+            .map(|device| device.status)
+            .unwrap_or(Self::STATUS_RESET)
     }
 
     pub fn panic_code(&self) -> i32 {
-        self.control_device().panic_code
+        self.control_device()
+            .map(|device| device.panic_code)
+            .unwrap_or(0)
     }
 
     pub fn exit_code(&self) -> i32 {
-        self.control_device().exit_code
+        self.control_device()
+            .map(|device| device.exit_code)
+            .unwrap_or(0)
     }
 
     pub fn debug_output_bytes(&self) -> &[u8] {
-        self.debug_device().bytes()
+        self.debug_device()
+            .map(|device| device.bytes())
+            .unwrap_or(&[])
     }
 
     pub fn debug_output_string(&self) -> String {
@@ -270,84 +393,106 @@ impl ComputerMachine {
     }
 
     pub fn drain_debug_output_bytes(&mut self) -> Vec<u8> {
-        self.debug_device_mut().drain()
+        self.debug_device_mut()
+            .map(DebugSerialDevice::drain)
+            .unwrap_or_default()
     }
 
     pub fn push_serial_input(&mut self, bytes: &[u8]) {
-        self.serial_input_device_mut().push_bytes(bytes);
+        if let Some(device) = self.serial_input_device_mut() {
+            device.push_bytes(bytes);
+        }
     }
 
     pub fn serial_input_len(&self) -> usize {
-        self.serial_input_device().len()
+        self.serial_input_device()
+            .map(SerialInputDevice::len)
+            .unwrap_or(0)
     }
 
     pub fn display0_snapshot(&self) -> Option<ComputerTextDisplaySnapshot> {
-        Some(self.display0_device().snapshot())
+        self.display0_device().map(TextDisplayDevice::snapshot)
     }
 
     pub fn display0_sequence(&self) -> Option<u64> {
-        Some(self.display0_device().sequence())
+        self.display0_device().map(TextDisplayDevice::sequence)
     }
 
-    fn control_device(&self) -> &ComputerControlDevice {
-        self.bus
-            .device::<ComputerControlDevice>(self.control_device_id)
-            .expect("computer control device must be mapped")
+    fn push_memory_map_region(
+        &self,
+        map: &mut ComputerMemoryMap,
+        device_id: Option<MmioDeviceId>,
+        name: &'static str,
+    ) {
+        let Some(device_id) = device_id else {
+            return;
+        };
+        let Some((base, size)) = self.bus.mmio_region_bounds(device_id) else {
+            return;
+        };
+        map.regions.push(ComputerMemoryRegion {
+            name,
+            base,
+            size,
+            readable: true,
+            writable: true,
+        });
     }
 
-    fn debug_device(&self) -> &DebugSerialDevice {
-        self.bus
-            .device::<DebugSerialDevice>(self.debug_device_id)
-            .expect("computer debug serial device must be mapped")
+    fn control_device(&self) -> Option<&ComputerControlDevice> {
+        self.control_device_id
+            .and_then(|id| self.bus.device::<ComputerControlDevice>(id))
     }
 
-    fn debug_device_mut(&mut self) -> &mut DebugSerialDevice {
-        self.bus
-            .device_mut::<DebugSerialDevice>(self.debug_device_id)
-            .expect("computer debug serial device must be mapped")
+    fn debug_device(&self) -> Option<&DebugSerialDevice> {
+        self.debug_device_id
+            .and_then(|id| self.bus.device::<DebugSerialDevice>(id))
     }
 
-    fn serial_input_device(&self) -> &SerialInputDevice {
-        self.bus
-            .device::<SerialInputDevice>(self.serial_input_device_id)
-            .expect("computer serial input device must be mapped")
+    fn debug_device_mut(&mut self) -> Option<&mut DebugSerialDevice> {
+        self.debug_device_id
+            .and_then(|id| self.bus.device_mut::<DebugSerialDevice>(id))
     }
 
-    fn serial_input_device_mut(&mut self) -> &mut SerialInputDevice {
-        self.bus
-            .device_mut::<SerialInputDevice>(self.serial_input_device_id)
-            .expect("computer serial input device must be mapped")
+    fn serial_input_device(&self) -> Option<&SerialInputDevice> {
+        self.serial_input_device_id
+            .and_then(|id| self.bus.device::<SerialInputDevice>(id))
     }
 
-    fn display0_device(&self) -> &TextDisplayDevice {
-        self.bus
-            .device::<TextDisplayDevice>(self.display0_device_id)
-            .expect("computer display0 device must be mapped")
+    fn serial_input_device_mut(&mut self) -> Option<&mut SerialInputDevice> {
+        self.serial_input_device_id
+            .and_then(|id| self.bus.device_mut::<SerialInputDevice>(id))
     }
 
-    fn control_device_mut(&mut self) -> &mut ComputerControlDevice {
-        self.bus
-            .device_mut::<ComputerControlDevice>(self.control_device_id)
-            .expect("computer control device must be mapped")
+    fn display0_device(&self) -> Option<&TextDisplayDevice> {
+        self.display0_device_id
+            .and_then(|id| self.bus.device::<TextDisplayDevice>(id))
+    }
+
+    fn control_device_mut(&mut self) -> Option<&mut ComputerControlDevice> {
+        self.control_device_id
+            .and_then(|id| self.bus.device_mut::<ComputerControlDevice>(id))
     }
 
     fn set_halted_exit_code(&mut self, exit_code: i32) -> Result<(), String> {
-        let control = self.control_device_mut();
-        control.status = Self::STATUS_HALTED;
-        control.exit_code = exit_code;
+        if let Some(control) = self.control_device_mut() {
+            control.status = Self::STATUS_HALTED;
+            control.exit_code = exit_code;
+        }
         Ok(())
     }
 
     fn set_panic_from_fault(&mut self, message: &str) -> Result<(), String> {
-        let control = self.control_device_mut();
-        control.status = Self::STATUS_PANIC;
-        control.panic_code = stable_panic_code(message);
+        if let Some(control) = self.control_device_mut() {
+            control.status = Self::STATUS_PANIC;
+            control.panic_code = stable_panic_code(message);
+        }
         Err(message.to_string())
     }
 }
 
-fn validate_profile_v2_memory_size(memory_size: usize) -> Result<(), MemoryFault> {
-    let page_size = computer_abi::PROFILE_V2_PAGE_SIZE as usize;
+fn validate_profile_v2_memory_size(memory_size: usize, page_size: u32) -> Result<(), MemoryFault> {
+    let page_size = page_size as usize;
     if memory_size < page_size {
         return Err(MemoryFault::new(format!(
             "computer memory size {memory_size} is smaller than profile page size {page_size}",
@@ -366,9 +511,24 @@ fn validate_profile_v2_memory_size(memory_size: usize) -> Result<(), MemoryFault
     Ok(())
 }
 
-fn write_profile_v2_boot_info(bus: &mut MachineBus) -> Result<(), MemoryFault> {
-    const HARDWARE_TABLE_ADDR: u32 = computer_abi::PROFILE_V2_BOOT_INFO_SIZE;
-    const HARDWARE_COUNT: u32 = 4;
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct HardwareTableEntry {
+    id: u32,
+    mmio_base: u32,
+    mmio_size: u32,
+}
+
+fn write_profile_v2_boot_info(
+    bus: &mut MachineBus,
+    profile: &ComputerMachineProfile,
+    hardware_entries: &[HardwareTableEntry],
+) -> Result<(), MemoryFault> {
+    let hardware_table_addr = if hardware_entries.is_empty() {
+        0
+    } else {
+        computer_abi::PROFILE_V2_BOOT_INFO_SIZE
+    };
+    let hardware_count = hardware_entries.len() as u32;
     let ram_size = bus.memory().len() as u32;
 
     write_u32(
@@ -378,43 +538,20 @@ fn write_profile_v2_boot_info(bus: &mut MachineBus) -> Result<(), MemoryFault> {
     )?;
     write_u32(bus.memory_mut(), 0x04, computer_abi::PROFILE_V2_VERSION)?;
     write_u32(bus.memory_mut(), 0x08, ram_size)?;
-    write_u32(bus.memory_mut(), 0x0C, computer_abi::PROFILE_V2_PAGE_SIZE)?;
-    write_u32(
-        bus.memory_mut(),
-        0x10,
-        computer_abi::PROFILE_V2_PROGRAM_BASE,
-    )?;
-    write_u32(bus.memory_mut(), 0x14, HARDWARE_TABLE_ADDR)?;
-    write_u32(bus.memory_mut(), 0x18, HARDWARE_COUNT)?;
+    write_u32(bus.memory_mut(), 0x0C, profile.page_size)?;
+    write_u32(bus.memory_mut(), 0x10, profile.program_base)?;
+    write_u32(bus.memory_mut(), 0x14, hardware_table_addr)?;
+    write_u32(bus.memory_mut(), 0x18, hardware_count)?;
 
-    write_hardware_entry(
-        bus.memory_mut(),
-        HARDWARE_TABLE_ADDR,
-        computer_abi::COMPUTER_HARDWARE_ID_CONTROL,
-        computer_abi::CONTROL_BASE,
-        computer_abi::CONTROL_SIZE,
-    )?;
-    write_hardware_entry(
-        bus.memory_mut(),
-        HARDWARE_TABLE_ADDR + computer_abi::PROFILE_V2_HARDWARE_ENTRY_SIZE,
-        computer_abi::COMPUTER_HARDWARE_ID_DEBUG,
-        computer_abi::DEBUG_BASE,
-        computer_abi::DEBUG_SIZE,
-    )?;
-    write_hardware_entry(
-        bus.memory_mut(),
-        HARDWARE_TABLE_ADDR + computer_abi::PROFILE_V2_HARDWARE_ENTRY_SIZE * 2,
-        computer_abi::COMPUTER_HARDWARE_ID_SERIAL_INPUT,
-        computer_abi::SERIAL_INPUT_BASE,
-        computer_abi::SERIAL_INPUT_SIZE,
-    )?;
-    write_hardware_entry(
-        bus.memory_mut(),
-        HARDWARE_TABLE_ADDR + computer_abi::PROFILE_V2_HARDWARE_ENTRY_SIZE * 3,
-        computer_abi::COMPUTER_HARDWARE_ID_DISPLAY0,
-        computer_abi::DISPLAY0_BASE,
-        computer_abi::DISPLAY0_SIZE,
-    )?;
+    for (index, entry) in hardware_entries.iter().enumerate() {
+        write_hardware_entry(
+            bus.memory_mut(),
+            hardware_table_addr + computer_abi::PROFILE_V2_HARDWARE_ENTRY_SIZE * index as u32,
+            entry.id,
+            entry.mmio_base,
+            entry.mmio_size,
+        )?;
+    }
     Ok(())
 }
 
@@ -822,7 +959,10 @@ impl MmioDevice for TextDisplayDevice {
 
 #[cfg(test)]
 mod tests {
-    use super::{ComputerControlDevice, DebugSerialDevice, SerialInputDevice, TextDisplayDevice};
+    use super::{
+        ComputerControlDevice, ComputerHardwareConfig, ComputerMachineProfile, DebugSerialDevice,
+        SerialInputDevice, TextDisplayDevice,
+    };
     use crate::computer_abi;
     use crate::computer_machine::ComputerMachine;
     use crate::low_bus::MmioDevice;
@@ -1298,6 +1438,78 @@ mod tests {
             computer_abi::DISPLAY0_BASE,
             computer_abi::PROFILE_V2_PAGE_SIZE,
         );
+    }
+
+    #[test]
+    fn computer_machine_can_be_created_from_explicit_computer_v1_profile() {
+        let profile = ComputerMachineProfile::computer_v1(1024);
+        let machine = ComputerMachine::from_profile(profile).unwrap();
+
+        assert_eq!(read_u32(machine.memory(), 0x18), 4);
+        assert_hardware_entry(
+            machine.memory(),
+            28,
+            computer_abi::COMPUTER_HARDWARE_ID_CONTROL,
+            computer_abi::CONTROL_BASE,
+            computer_abi::PROFILE_V2_PAGE_SIZE,
+        );
+        assert_hardware_entry(
+            machine.memory(),
+            40,
+            computer_abi::COMPUTER_HARDWARE_ID_DEBUG,
+            computer_abi::DEBUG_BASE,
+            computer_abi::PROFILE_V2_PAGE_SIZE,
+        );
+        assert_hardware_entry(
+            machine.memory(),
+            52,
+            computer_abi::COMPUTER_HARDWARE_ID_SERIAL_INPUT,
+            computer_abi::SERIAL_INPUT_BASE,
+            computer_abi::PROFILE_V2_PAGE_SIZE,
+        );
+        assert_hardware_entry(
+            machine.memory(),
+            64,
+            computer_abi::COMPUTER_HARDWARE_ID_DISPLAY0,
+            computer_abi::DISPLAY0_BASE,
+            computer_abi::PROFILE_V2_PAGE_SIZE,
+        );
+    }
+
+    #[test]
+    fn computer_machine_profile_controls_which_hardware_entries_are_visible() {
+        let profile = ComputerMachineProfile::new(1024)
+            .with_hardware(ComputerHardwareConfig::control(
+                computer_abi::COMPUTER_HARDWARE_ID_CONTROL,
+                computer_abi::CONTROL_BASE,
+            ))
+            .with_hardware(ComputerHardwareConfig::debug_serial(
+                computer_abi::COMPUTER_HARDWARE_ID_DEBUG,
+                computer_abi::DEBUG_BASE,
+            ));
+        let machine = ComputerMachine::from_profile(profile).unwrap();
+
+        assert_eq!(
+            read_u32(machine.memory(), 0x14),
+            ComputerMachine::PROFILE_V2_BOOT_INFO_SIZE,
+        );
+        assert_eq!(read_u32(machine.memory(), 0x18), 2);
+        assert_hardware_entry(
+            machine.memory(),
+            28,
+            computer_abi::COMPUTER_HARDWARE_ID_CONTROL,
+            computer_abi::CONTROL_BASE,
+            computer_abi::PROFILE_V2_PAGE_SIZE,
+        );
+        assert_hardware_entry(
+            machine.memory(),
+            40,
+            computer_abi::COMPUTER_HARDWARE_ID_DEBUG,
+            computer_abi::DEBUG_BASE,
+            computer_abi::PROFILE_V2_PAGE_SIZE,
+        );
+        assert!(machine.memory_map().region("display0").is_none());
+        assert!(machine.display0_snapshot().is_none());
     }
 
     #[test]
