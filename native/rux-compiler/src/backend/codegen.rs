@@ -1,5 +1,5 @@
-use crate::ast::*;
-use crate::error::CompileError;
+use crate::frontend::ast::*;
+use crate::frontend::error::CompileError;
 use rux_vm::computer_abi;
 use rux_vm::low_image::{Function, Image, Instruction};
 use std::collections::{HashMap, HashSet};

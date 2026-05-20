@@ -1,6 +1,6 @@
-use crate::ast::*;
-use crate::error::CompileError;
-use crate::lexer::{Token, TokenKind};
+use crate::frontend::ast::*;
+use crate::frontend::error::CompileError;
+use crate::frontend::lexer::{Token, TokenKind};
 
 pub(crate) fn parse(tokens: Vec<Token>) -> Result<Program, CompileError> {
     Parser::new(tokens).parse_program()
