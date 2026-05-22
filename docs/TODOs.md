@@ -57,6 +57,8 @@ git cli клиент.
 
 ## 2026-04-16 — Workbench как отдельный Authoring Station
 
+→ ROADMAP: R-001
+
 ~~Сделать workbench (компьютерный стол) где можно будет программировать
 компьютеры.~~ **Реализовано.** Workbench выделен в отдельный Authoring Station,
 описан в:
@@ -69,6 +71,8 @@ git cli клиент.
   архитектуре.
 
 ## 2026-05-22 — Workbench IDE: clipboard и выделение (отложено после переписывания UI на DSL)
+
+→ ROADMAP: R-002
 
 - **Clipboard API для CodeEditor.** Сейчас Ctrl+X/C/V в редакторе кода не работают — модель `EditorViewModel` поддерживает `selection`, но клавиатурные сочетания не подключены. Для полноценной IDE надо вынести clipboard-операции в отдельный интерфейс (доступ к системному буферу через Minecraft API) и обработать их в `CodeEditor` поверх текущей логики.
 - **Shift+Arrow и выделение текста.** `EditorViewModel.selection: SelectionRange?` уже зарезервировано, но никем не выставляется. Нужно: расширить `WorkbenchStore` действиями `extendSelection*`, отрисовать прямоугольник выделения в `CodeEditor` (внутри ScrollArea), сделать `Backspace`/`Delete`/`Tab`/printable consume selection.

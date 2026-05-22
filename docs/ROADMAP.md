@@ -39,3 +39,5 @@ status view.
 
 | ID | Idea | Theme | Status | Prio | Source (inbox) | Spec / Plan |
 |----|------|-------|--------|------|----------------|-------------|
+| R-001 | Workbench as separate Authoring Station | IDE | Done | — | [TODOs.md](TODOs.md#2026-04-16--workbench-как-отдельный-authoring-station) | [spec](superpowers/specs/2026-04-16-workbench-separate-entity-design.md) |
+| R-002 | Workbench IDE: clipboard & selection (deferred until UI DSL) | IDE | Backlog | Low | [TODOs.md](TODOs.md#2026-05-22--workbench-ide-clipboard-и-выделение-отложено-после-переписывания-ui-на-dsl) | — |
