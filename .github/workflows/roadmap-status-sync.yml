@@ -13,15 +13,16 @@ concurrency:
 
 jobs:
   sync-dropped:
-    if: github.actor == github.repository_owner
+    # Repository is org-owned; gate on a known maintainer login.
+    if: github.actor == 'lazyhat'
     runs-on: ubuntu-24.04
     env:
       GH_TOKEN: ${{ secrets.ROADMAP_PROJECT_TOKEN }}
-      OWNER: lazyhat
+      OWNER: CertifiedBadIdeas
       REPO: Compukter-Kraft
-      PROJECT_ID: PVT_kwHOBkSydc4BYgqn
-      PROJECT_NUMBER: "6"
-      STATUS_FIELD_ID: PVTSSF_lAHOBkSydc4BYgqnzhTmClk
+      PROJECT_ID: PVT_kwDODHkEV84BYh0b
+      PROJECT_NUMBER: "1"
+      STATUS_FIELD_ID: PVTSSF_lADODHkEV84BYh0bzhTnEZo
       OPTION_DROPPED: bfde95f0
       OPTION_INBOX: "75588027"
       DROPPED_LABEL: status:dropped

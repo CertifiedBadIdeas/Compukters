@@ -7,11 +7,11 @@ If you are an agent reading this file: invoke `superpowers:using-github-roadmap`
 ## Roadmap config
 
 ```yaml roadmap
-owner: lazyhat
-repo: lazyhat/Compukter-Kraft
-project_number: 6
-project_id: PVT_kwHOBkSydc4BYgqn
-status_field_id: PVTSSF_lAHOBkSydc4BYgqnzhTmClk
+owner: CertifiedBadIdeas
+repo: CertifiedBadIdeas/Compukter-Kraft
+project_number: 1
+project_id: PVT_kwDODHkEV84BYh0b
+status_field_id: PVTSSF_lADODHkEV84BYh0bzhTnEZo
 statuses:
   Inbox: "75588027"
   Backlog: "7fdcf485"
@@ -31,12 +31,12 @@ statuses:
 ## Spec & plan conventions
 
 - English only. Specs live under `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`; plans under `docs/superpowers/plans/YYYY-MM-DD-<topic>.md`.
-- First content line under the `# Title` MUST be `> Issue: [#N](https://github.com/lazyhat/Compukter-Kraft/issues/N)`.
+- First content line under the `# Title` MUST be `> Issue: [#N](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/N)`.
 - When a spec/plan is superseded, prepend a `> **Superseded by** [...](...)` banner; do not delete the file.
 
 ## Authentication
 
-`gh project *` and `gh api` GraphQL mutations against user-owned Projects v2 require a **classic** PAT with the `project` scope (fine-grained PATs do not currently support user-owned Projects v2). Plain `gh issue create` / label / state edits work with either token type via REST.
+`gh project *` and `gh api` GraphQL mutations against org-owned Projects v2 require a **classic** PAT with the `project` scope (fine-grained PATs do not currently support Projects v2). Plain `gh issue create` / label / state edits work with either token type via REST.
 
 ## Shell pitfall
 
