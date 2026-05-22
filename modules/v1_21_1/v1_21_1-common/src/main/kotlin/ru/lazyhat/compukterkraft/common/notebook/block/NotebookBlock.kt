@@ -37,7 +37,6 @@ import net.minecraft.world.phys.BlockHitResult
 import ru.lazyhat.compukterkraft.common.binding.ModObjects
 import ru.lazyhat.compukterkraft.common.computer.block.AbstractComputerBlock
 import ru.lazyhat.compukterkraft.common.computer.block.AbstractComputerBlockEntity
-import ru.lazyhat.compukterkraft.common.computer.block.ComputerBlock
 import ru.lazyhat.compukterkraft.common.computer.block.ComputerState
 import ru.lazyhat.compukterkraft.common.computer.data.ComputerContainerData
 import ru.lazyhat.compukterkraft.common.notebook.item.NotebookItem
@@ -52,19 +51,19 @@ class NotebookBlock(
     init {
         registerDefaultState(
             defaultBlockState()
-                .setValue(ComputerBlock.facing, Direction.NORTH)
-                .setValue(ComputerBlock.state, ComputerState.OFF),
+                .setValue(AbstractComputerBlock.facing, Direction.NORTH)
+                .setValue(AbstractComputerBlock.state, ComputerState.OFF),
         )
     }
 
     override fun blockEntityType(): BlockEntityType<out NotebookBlockEntity> = ModObjects.notebookBlockEntityType()
 
     override fun createBlockStateDefinition(builder: StateDefinition.Builder<Block, BlockState>) {
-        builder.add(ComputerBlock.facing, ComputerBlock.state)
+        builder.add(AbstractComputerBlock.facing, AbstractComputerBlock.state)
     }
 
     override fun getStateForPlacement(context: BlockPlaceContext): BlockState =
-        defaultBlockState().setValue(ComputerBlock.facing, context.horizontalDirection.opposite)
+        defaultBlockState().setValue(AbstractComputerBlock.facing, context.horizontalDirection.opposite)
 
     override fun getRenderShape(state: BlockState): RenderShape = RenderShape.ENTITYBLOCK_ANIMATED
 

@@ -32,8 +32,6 @@ import ru.lazyhat.compukterkraft.common.computer.menu.ComputerControlMenu
 import ru.lazyhat.compukterkraft.common.network.ClientNetworking
 import ru.lazyhat.compukterkraft.common.network.ServerNetworking
 import ru.lazyhat.compukterkraft.common.notebook.block.NotebookBlockEntity
-import ru.lazyhat.compukterkraft.common.serial.menu.SerialTerminalMenu
-import ru.lazyhat.compukterkraft.common.workbench.data.WorkbenchContainerData
 import ru.lazyhat.compukterkraft.core.LOGGER
 import ru.lazyhat.compukterkraft.core.MOD_ID
 import ru.lazyhat.compukterkraft.core.MOD_NAME
@@ -48,10 +46,6 @@ class CompukterKraftMod(
         LOGGER.debug { "$MOD_ID has started!" }
 
         ModRegistry.register(modEventBus)
-        ModObjects.computerBlockEntityType = {
-            @Suppress("UNCHECKED_CAST")
-            ModRegistry.BlockEntities.COMPUTER_ADVANCED.get()
-        }
         ModObjects.notebookBlockEntityType = { ModRegistry.BlockEntities.NOTEBOOK.get() }
         ModObjects.computerMenuType = { ModRegistry.Menus.COMPUTER.get() }
         ModObjects.openComputerMenu = { player: ServerPlayer, computer, menuData: ComputerContainerData ->
@@ -81,40 +75,6 @@ class CompukterKraftMod(
                         }
                     },
                     Component.translatable("gui.compukterkraft.computer_control.title"),
-                ),
-            ) { buffer ->
-                menuData.toBytes(buffer)
-            }
-        }
-        ModObjects.serialTerminalMenuType = { ModRegistry.Menus.SERIAL_TERMINAL.get() }
-        ModObjects.openSerialTerminalMenu = { player: ServerPlayer, computer, menuData: ComputerContainerData ->
-            player.openMenu(
-                SimpleMenuProvider(
-                    { id, playerInventory, _ ->
-                        SerialTerminalMenu(
-                            ModRegistry.Menus.SERIAL_TERMINAL.get(),
-                            id,
-                            playerInventory,
-                            computer,
-                            player,
-                        )
-                    },
-                    Component.translatable("item.compukterkraft.serial_terminal"),
-                ),
-            ) { buffer ->
-                menuData.toBytes(buffer)
-            }
-        }
-        ModObjects.workbenchBlockEntityType = {
-            @Suppress("UNCHECKED_CAST")
-            ModRegistry.BlockEntities.WORKBENCH.get()
-        }
-        ModObjects.workbenchMenuType = { ModRegistry.Menus.WORKBENCH.get() }
-        ModObjects.openWorkbenchMenu = { player: ServerPlayer, workbench, menuData: WorkbenchContainerData ->
-            player.openMenu(
-                SimpleMenuProvider(
-                    workbench,
-                    workbench.displayName,
                 ),
             ) { buffer ->
                 menuData.toBytes(buffer)

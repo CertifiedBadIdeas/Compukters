@@ -23,9 +23,7 @@ import net.minecraft.core.BlockPos
 import net.minecraft.resources.ResourceLocation
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.stats.Stats
-import net.minecraft.world.InteractionHand
 import net.minecraft.world.InteractionResult
-import net.minecraft.world.ItemInteractionResult
 import net.minecraft.world.entity.LivingEntity
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.item.ItemStack
@@ -36,6 +34,9 @@ import net.minecraft.world.level.block.entity.BlockEntity
 import net.minecraft.world.level.block.entity.BlockEntityTicker
 import net.minecraft.world.level.block.entity.BlockEntityType
 import net.minecraft.world.level.block.state.BlockState
+import net.minecraft.world.level.block.state.properties.BlockStateProperties
+import net.minecraft.world.level.block.state.properties.DirectionProperty
+import net.minecraft.world.level.block.state.properties.EnumProperty
 import net.minecraft.world.level.storage.loot.LootParams
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams
 import net.minecraft.world.phys.BlockHitResult
@@ -43,8 +44,6 @@ import ru.lazyhat.compukterkraft.common.computer.context.ServerContext
 import ru.lazyhat.compukterkraft.common.computer.data.ComputerContainerData
 import ru.lazyhat.compukterkraft.common.computer.item.AbstractComputerItem
 import ru.lazyhat.compukterkraft.common.binding.ModObjects
-import ru.lazyhat.compukterkraft.common.serial.item.SerialTerminalItem
-import ru.lazyhat.compukterkraft.common.terminal.item.TerminalItem
 import ru.lazyhat.compukterkraft.common.utils.castTicker
 import ru.lazyhat.compukterkraft.common.utils.computerDataTagCopy
 import ru.lazyhat.compukterkraft.common.utils.computerID
@@ -58,6 +57,9 @@ abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
     EntityBlock {
     companion object {
         val drop: ResourceLocation = ResourceLocation.fromNamespaceAndPath(MOD_ID, "computer")
+
+        val state: EnumProperty<ComputerState> = EnumProperty.create("state", ComputerState::class.java)
+        val facing: DirectionProperty = BlockStateProperties.HORIZONTAL_FACING
 
         val serverTicker =
             BlockEntityTicker<AbstractComputerBlockEntity> { _, _, _, computer ->
@@ -151,21 +153,6 @@ abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
                 } ?: params,
         )
     }
-
-    override fun useItemOn(
-        stack: ItemStack,
-        state: BlockState,
-        level: Level,
-        pos: BlockPos,
-        player: Player,
-        hand: InteractionHand,
-        hit: BlockHitResult,
-    ): ItemInteractionResult =
-        if (stack.item is TerminalItem || stack.item is SerialTerminalItem) {
-            ItemInteractionResult.SKIP_DEFAULT_BLOCK_INTERACTION
-        } else {
-            ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION
-        }
 
     override fun useWithoutItem(
         state: BlockState,

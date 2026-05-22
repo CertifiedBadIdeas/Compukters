@@ -23,9 +23,7 @@ import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent
 import ru.lazyhat.compukterkraft.common.computer.screen.ComputerControlScreen
 import ru.lazyhat.compukterkraft.common.notebook.item.NotebookItem
 import ru.lazyhat.compukterkraft.common.notebook.screen.NotebookScreen
-import ru.lazyhat.compukterkraft.common.serial.screen.SerialTerminalScreen
 import ru.lazyhat.compukterkraft.common.terminal.screen.ComputerTerminalScreen
-import ru.lazyhat.compukterkraft.common.workbench.screen.WorkbenchEditorScreen
 import ru.lazyhat.compukterkraft.core.LOGGER
 
 object ClientRegistry {
@@ -42,18 +40,10 @@ object ClientRegistry {
                 },
             )
             event.register(
-                ModRegistry.Menus.WORKBENCH.get(),
-                { container, inventory, title -> WorkbenchEditorScreen(container, inventory, title) },
-            )
-            event.register(
                 ModRegistry.Menus.COMPUTER_CONTROL.get(),
                 { container, inventory, title -> ComputerControlScreen(container, inventory, title) },
             )
-            event.register(
-                ModRegistry.Menus.SERIAL_TERMINAL.get(),
-                { container, inventory, title -> SerialTerminalScreen(container, inventory, title) },
-            )
-            LOGGER.debug { "ClientRegistry: terminal-only computer screen successfully registered" }
+            LOGGER.debug { "ClientRegistry: notebook computer screen successfully registered" }
         } catch (e: Exception) {
             LOGGER.error { "ClientRegistry: computer screen registration failed: ${e.message}" }
         }

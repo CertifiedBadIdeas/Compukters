@@ -24,29 +24,17 @@ import net.minecraft.world.inventory.MenuType
 import net.minecraft.world.level.block.entity.BlockEntityType
 import net.minecraft.world.level.storage.loot.predicates.LootItemConditionType
 import ru.lazyhat.compukterkraft.common.computer.block.AbstractComputerBlockEntity
-import ru.lazyhat.compukterkraft.common.computer.block.ComputerBlockEntity
 import ru.lazyhat.compukterkraft.common.computer.data.ComputerContainerData
 import ru.lazyhat.compukterkraft.common.computer.menu.ComputerControlMenu
 import ru.lazyhat.compukterkraft.common.computer.menu.ComputerMenuWithoutInventory
 import ru.lazyhat.compukterkraft.common.notebook.block.NotebookBlockEntity
-import ru.lazyhat.compukterkraft.common.serial.menu.SerialTerminalMenu
-import ru.lazyhat.compukterkraft.common.workbench.block.WorkbenchBlockEntity
-import ru.lazyhat.compukterkraft.common.workbench.data.WorkbenchContainerData
-import ru.lazyhat.compukterkraft.common.workbench.menu.WorkbenchMenuWithoutInventory
-import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDevice
 
 object ModObjects {
-    lateinit var computerBlockEntityType: () -> BlockEntityType<ComputerBlockEntity>
     lateinit var notebookBlockEntityType: () -> BlockEntityType<out NotebookBlockEntity>
     lateinit var computerMenuType: () -> MenuType<ComputerMenuWithoutInventory>
     lateinit var openComputerMenu: (ServerPlayer, AbstractComputerBlockEntity, ComputerContainerData) -> Unit
     lateinit var computerControlMenuType: () -> MenuType<ComputerControlMenu>
     lateinit var openComputerControlMenu: (ServerPlayer, AbstractComputerBlockEntity, ComputerContainerData) -> Unit
-    lateinit var serialTerminalMenuType: () -> MenuType<SerialTerminalMenu>
-    lateinit var openSerialTerminalMenu: (ServerPlayer, RuntimeDevice, ComputerContainerData) -> Unit
-    lateinit var workbenchBlockEntityType: () -> BlockEntityType<WorkbenchBlockEntity>
-    lateinit var workbenchMenuType: () -> MenuType<WorkbenchMenuWithoutInventory>
-    lateinit var openWorkbenchMenu: (ServerPlayer, WorkbenchBlockEntity, WorkbenchContainerData) -> Unit
     lateinit var blockNamedEntityLootConditionType: () -> LootItemConditionType
     lateinit var hasComputerIdLootConditionType: () -> LootItemConditionType
     lateinit var playerCreativeLootConditionType: () -> LootItemConditionType

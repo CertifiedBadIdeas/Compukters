@@ -20,22 +20,45 @@
 package ru.lazyhat.compukterkraft.common.notebook.block
 
 import net.minecraft.core.BlockPos
+import net.minecraft.server.level.ServerLevel
 import net.minecraft.world.entity.player.Inventory
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.inventory.AbstractContainerMenu
+import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.entity.BlockEntityType
 import net.minecraft.world.level.block.state.BlockState
 import ru.lazyhat.compukterkraft.common.binding.ModObjects
-import ru.lazyhat.compukterkraft.common.computer.block.ComputerBlockEntity
+import ru.lazyhat.compukterkraft.common.computer.block.AbstractComputerBlock
+import ru.lazyhat.compukterkraft.common.computer.block.AbstractComputerBlockEntity
+import ru.lazyhat.compukterkraft.common.computer.block.ComputerRuntimeDeviceFactory
+import ru.lazyhat.compukterkraft.common.computer.block.ComputerState
 import ru.lazyhat.compukterkraft.common.computer.menu.ComputerMenuWithoutInventory
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
+import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDevice
 
 open class NotebookBlockEntity(
-    type: BlockEntityType<out ComputerBlockEntity>,
+    type: BlockEntityType<out NotebookBlockEntity>,
     pos: BlockPos,
     state: BlockState,
-) : ComputerBlockEntity(type, pos, state, DeviceFamily.NORMAL) {
+) : AbstractComputerBlockEntity(type, pos, state, DeviceFamily.NORMAL) {
     private var notebookMenuViewers: Int = 0
+
+    override fun createComputer(id: Int): RuntimeDevice =
+        ComputerRuntimeDeviceFactory.createRuxComputer(level as ServerLevel, this, id)
+
+    override fun updateBlockState(newState: ComputerState) {
+        val currentState = level?.getBlockState(blockPos) ?: return
+        if (!canApplyRuntimeBlockStateUpdate(currentState)) return
+        currentState
+            .takeIf { it.getValue(AbstractComputerBlock.state) != newState }
+            ?.let {
+                level?.setBlock(
+                    blockPos,
+                    currentState.setValue(AbstractComputerBlock.state, newState),
+                    Block.UPDATE_CLIENTS,
+                )
+            }
+    }
 
     override fun createMenu(
         containerId: Int,

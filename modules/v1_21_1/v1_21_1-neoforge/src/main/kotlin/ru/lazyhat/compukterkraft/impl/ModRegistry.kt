@@ -37,10 +37,7 @@ import net.neoforged.bus.api.IEventBus
 import net.neoforged.neoforge.common.extensions.IMenuTypeExtension
 import net.neoforged.neoforge.registries.DeferredHolder
 import net.neoforged.neoforge.registries.DeferredRegister
-import ru.lazyhat.compukterkraft.common.computer.block.ComputerBlock
-import ru.lazyhat.compukterkraft.common.computer.block.ComputerBlockEntity
 import ru.lazyhat.compukterkraft.common.computer.data.ComputerContainerData
-import ru.lazyhat.compukterkraft.common.computer.item.ComputerItem
 import ru.lazyhat.compukterkraft.common.computer.loot.BlockNamedEntityLootCondition
 import ru.lazyhat.compukterkraft.common.computer.loot.ConstantLootConditionSerializer
 import ru.lazyhat.compukterkraft.common.computer.loot.HasComputerIdLootCondition
@@ -49,31 +46,17 @@ import ru.lazyhat.compukterkraft.common.computer.menu.ComputerControlMenu
 import ru.lazyhat.compukterkraft.common.computer.menu.ComputerMenuWithoutInventory
 import ru.lazyhat.compukterkraft.common.notebook.block.NotebookBlock
 import ru.lazyhat.compukterkraft.common.notebook.item.NotebookItem
-import ru.lazyhat.compukterkraft.common.serial.item.SerialTerminalItem
-import ru.lazyhat.compukterkraft.common.serial.menu.SerialTerminalMenu
-import ru.lazyhat.compukterkraft.common.terminal.item.TerminalItem
-import ru.lazyhat.compukterkraft.common.workbench.block.WorkbenchBlock
-import ru.lazyhat.compukterkraft.common.workbench.block.WorkbenchBlockEntity
-import ru.lazyhat.compukterkraft.common.workbench.data.WorkbenchContainerData
-import ru.lazyhat.compukterkraft.common.workbench.item.WorkbenchItem
-import ru.lazyhat.compukterkraft.common.workbench.menu.WorkbenchMenuWithoutInventory
 import ru.lazyhat.compukterkraft.core.LOGGER
 import ru.lazyhat.compukterkraft.core.MOD_ID
-import ru.lazyhat.compukterkraft.core.block.DeviceFamily
-import ru.lazyhat.compukterkraft.impl.computer.block.NeoForgeComputerBlockEntity
 import ru.lazyhat.compukterkraft.impl.notebook.block.NeoForgeNotebookBlockEntity
 import ru.lazyhat.compukterkraft.impl.notebook.item.NeoForgeNotebookItem
 import java.util.function.Supplier
 
 object ModRegistry {
     object Names {
-        const val COMPUTER_ADVANCED = "computer_advanced"
         const val NOTEBOOK = "notebook"
         const val COMPUTER = "computer"
         const val COMPUTER_CONTROL = "computer_control"
-        const val WORKBENCH = "workbench"
-        const val TERMINAL = "terminal"
-        const val SERIAL_TERMINAL = "serial_terminal"
     }
 
     object Blocks {
@@ -85,32 +68,11 @@ object ModRegistry {
 
         private fun notebookProperties(): BlockBehaviour.Properties = noRedstoneConductor().noOcclusion()
 
-        private fun turtleProperties(): BlockBehaviour.Properties = BlockBehaviour.Properties.of().strength(2.5f)
-
-        private fun modemProperties(): BlockBehaviour.Properties = BlockBehaviour.Properties.of().strength(1.5f)
-
-        val COMPUTER_ADVANCED: DeferredHolder<Block, ComputerBlock> =
-            REGISTRY
-                .register(
-                    Names.COMPUTER_ADVANCED,
-                    Supplier {
-                        ComputerBlock(noRedstoneConductor().mapColor(MapColor.STONE))
-                    },
-                )
-
         val NOTEBOOK: DeferredHolder<Block, NotebookBlock> =
             REGISTRY.register(
                 Names.NOTEBOOK,
                 Supplier {
                     NotebookBlock(notebookProperties().mapColor(MapColor.METAL))
-                },
-            )
-
-        val WORKBENCH: DeferredHolder<Block, WorkbenchBlock> =
-            REGISTRY.register(
-                Names.WORKBENCH,
-                Supplier {
-                    WorkbenchBlock(noRedstoneConductor().mapColor(MapColor.WOOD))
                 },
             )
     }
@@ -131,23 +93,11 @@ object ModRegistry {
                 },
             )
 
-        val COMPUTER_ADVANCED: DeferredHolder<BlockEntityType<*>, BlockEntityType<ComputerBlockEntity>> =
-            ofBlock(
-                Blocks.COMPUTER_ADVANCED,
-                Names.COMPUTER_ADVANCED,
-            ) { p, s -> NeoForgeComputerBlockEntity(COMPUTER_ADVANCED.get(), p, s, DeviceFamily.ADVANCED) }
-
         val NOTEBOOK: DeferredHolder<BlockEntityType<*>, BlockEntityType<NeoForgeNotebookBlockEntity>> =
             ofBlock(
                 Blocks.NOTEBOOK,
                 Names.NOTEBOOK,
             ) { p, s -> NeoForgeNotebookBlockEntity(NOTEBOOK.get(), p, s) }
-
-        val WORKBENCH: DeferredHolder<BlockEntityType<*>, BlockEntityType<WorkbenchBlockEntity>> =
-            ofBlock(
-                Blocks.WORKBENCH,
-                Names.WORKBENCH,
-            ) { p, s -> WorkbenchBlockEntity(p, s) }
     }
 
     object Items {
@@ -167,35 +117,11 @@ object ModRegistry {
                 },
             )
 
-        val COMPUTER_ADVANCED: DeferredHolder<Item, ComputerItem> =
-            ofBlock(
-                Blocks.COMPUTER_ADVANCED,
-                Names.COMPUTER_ADVANCED,
-            ) { block, properties -> ComputerItem(block, properties) }
-
         val NOTEBOOK: DeferredHolder<Item, NotebookItem> =
             ofBlock(
                 Blocks.NOTEBOOK,
                 Names.NOTEBOOK,
             ) { block, properties -> NeoForgeNotebookItem(block, properties) }
-
-        val WORKBENCH: DeferredHolder<Item, WorkbenchItem> =
-            ofBlock(
-                Blocks.WORKBENCH,
-                Names.WORKBENCH,
-            ) { block, properties -> WorkbenchItem(block, properties) }
-
-        val TERMINAL: DeferredHolder<Item, TerminalItem> =
-            REGISTRY.register(
-                Names.TERMINAL,
-                Supplier { TerminalItem(properties().stacksTo(1)) },
-            )
-
-        val SERIAL_TERMINAL: DeferredHolder<Item, SerialTerminalItem> =
-            REGISTRY.register(
-                Names.SERIAL_TERMINAL,
-                Supplier { SerialTerminalItem(properties().stacksTo(1)) },
-            )
     }
 
     object LootItemConditionTypes {
@@ -244,21 +170,6 @@ object ModRegistry {
                 },
             )
 
-        val WORKBENCH: DeferredHolder<MenuType<*>, MenuType<WorkbenchMenuWithoutInventory>> =
-            REGISTRY.register(
-                Names.WORKBENCH,
-                Supplier {
-                    IMenuTypeExtension.create { id, playerInventory, data ->
-                        WorkbenchMenuWithoutInventory(
-                            WORKBENCH.get(),
-                            id,
-                            playerInventory,
-                            WorkbenchContainerData(data),
-                        )
-                    }
-                },
-            )
-
         val COMPUTER_CONTROL: DeferredHolder<MenuType<*>, MenuType<ComputerControlMenu>> =
             REGISTRY.register(
                 Names.COMPUTER_CONTROL,
@@ -266,21 +177,6 @@ object ModRegistry {
                     IMenuTypeExtension.create { id, playerInventory, data ->
                         ComputerControlMenu(
                             COMPUTER_CONTROL.get(),
-                            id,
-                            playerInventory,
-                            ComputerContainerData(data),
-                        )
-                    }
-                },
-            )
-
-        val SERIAL_TERMINAL: DeferredHolder<MenuType<*>, MenuType<SerialTerminalMenu>> =
-            REGISTRY.register(
-                Names.SERIAL_TERMINAL,
-                Supplier {
-                    IMenuTypeExtension.create { id, playerInventory, data ->
-                        SerialTerminalMenu(
-                            SERIAL_TERMINAL.get(),
                             id,
                             playerInventory,
                             ComputerContainerData(data),
@@ -300,14 +196,10 @@ object ModRegistry {
                     Supplier {
                         CreativeModeTab
                             .builder()
-                            .icon { ItemStack(Items.COMPUTER_ADVANCED.get()) }
+                            .icon { ItemStack(Items.NOTEBOOK.get()) }
                             .title(Component.translatable("itemGroup.compukterkraft"))
                             .displayItems { _, out ->
-                                out.accept(ItemStack(Items.COMPUTER_ADVANCED.get()))
                                 out.accept(ItemStack(Items.NOTEBOOK.get()))
-                                out.accept(ItemStack(Items.WORKBENCH.get()))
-                                out.accept(ItemStack(Items.TERMINAL.get()))
-                                out.accept(ItemStack(Items.SERIAL_TERMINAL.get()))
                             }.build()
                     },
                 )
