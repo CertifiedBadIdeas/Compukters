@@ -1,0 +1,96 @@
+name: Roadmap status sync
+
+on:
+  issues:
+    types: [closed, reopened]
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  sync-dropped:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.ROADMAP_PROJECT_TOKEN }}
+      OWNER: lazyhat
+      REPO: Compukter-Kraft
+      PROJECT_ID: PVT_kwHOBkSydc4BYgqn
+      PROJECT_NUMBER: "6"
+      STATUS_FIELD_ID: PVTSSF_lAHOBkSydc4BYgqnzhTmClk
+      OPTION_DROPPED: bfde95f0
+      OPTION_INBOX: "75588027"
+      DROPPED_LABEL: status:dropped
+      ISSUE_NUMBER: ${{ github.event.issue.number }}
+      STATE_REASON: ${{ github.event.issue.state_reason }}
+      ACTION: ${{ github.event.action }}
+    steps:
+      - name: Guard — require PAT
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::ROADMAP_PROJECT_TOKEN secret is not configured."
+            exit 1
+          fi
+
+      - name: Skip when not the cases we care about
+        id: gate
+        run: |
+          set -euo pipefail
+          if [ "$ACTION" = "closed" ] && [ "$STATE_REASON" = "not_planned" ]; then
+            echo "mode=drop" >> "$GITHUB_OUTPUT"
+          elif [ "$ACTION" = "reopened" ]; then
+            has_label=$(gh issue view "$ISSUE_NUMBER" --repo "$OWNER/$REPO" --json labels --jq '[.labels[].name] | index("'"$DROPPED_LABEL"'") != null')
+            if [ "$has_label" = "true" ]; then
+              echo "mode=undrop" >> "$GITHUB_OUTPUT"
+            else
+              echo "mode=skip" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "mode=skip" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Ensure status:dropped label exists
+        if: steps.gate.outputs.mode != 'skip'
+        run: |
+          gh label create "$DROPPED_LABEL" --repo "$OWNER/$REPO" --color "ededed" --description "Issue dropped from roadmap (closed not planned)" 2>/dev/null || true
+
+      - name: Resolve project item id (add if missing)
+        if: steps.gate.outputs.mode != 'skip'
+        id: item
+        run: |
+          set -euo pipefail
+          ISSUE_NODE_ID=$(gh api graphql -f query='
+            query($owner:String!,$repo:String!,$number:Int!){
+              repository(owner:$owner,name:$repo){ issue(number:$number){ id projectItems(first:20){ nodes{ id project{ number id } } } } }
+            }' -F owner="$OWNER" -F repo="$REPO" -F number="$ISSUE_NUMBER" --jq '.data.repository.issue.id')
+          ITEM_ID=$(gh api graphql -f query='
+            query($owner:String!,$repo:String!,$number:Int!){
+              repository(owner:$owner,name:$repo){ issue(number:$number){ projectItems(first:20){ nodes{ id project{ number } } } } }
+            }' -F owner="$OWNER" -F repo="$REPO" -F number="$ISSUE_NUMBER" --jq '.data.repository.issue.projectItems.nodes[] | select(.project.number=='"$PROJECT_NUMBER"') | .id' | head -n1)
+          if [ -z "$ITEM_ID" ]; then
+            ITEM_ID=$(gh api graphql -f query='
+              mutation($project:ID!,$content:ID!){
+                addProjectV2ItemById(input:{projectId:$project, contentId:$content}){ item{ id } }
+              }' -F project="$PROJECT_ID" -F content="$ISSUE_NODE_ID" --jq '.data.addProjectV2ItemById.item.id')
+          fi
+          echo "id=$ITEM_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Move to Dropped + add label
+        if: steps.gate.outputs.mode == 'drop'
+        run: |
+          set -euo pipefail
+          gh api graphql -f query='
+            mutation($p:ID!,$i:ID!,$f:ID!,$o:String!){
+              updateProjectV2ItemFieldValue(input:{projectId:$p,itemId:$i,fieldId:$f,value:{singleSelectOptionId:$o}}){ projectV2Item{ id } }
+            }' -F p="$PROJECT_ID" -F i="${{ steps.item.outputs.id }}" -F f="$STATUS_FIELD_ID" -F o="$OPTION_DROPPED" >/dev/null
+          gh issue edit "$ISSUE_NUMBER" --repo "$OWNER/$REPO" --add-label "$DROPPED_LABEL"
+
+      - name: Move to Inbox + drop label
+        if: steps.gate.outputs.mode == 'undrop'
+        run: |
+          set -euo pipefail
+          gh api graphql -f query='
+            mutation($p:ID!,$i:ID!,$f:ID!,$o:String!){
+              updateProjectV2ItemFieldValue(input:{projectId:$p,itemId:$i,fieldId:$f,value:{singleSelectOptionId:$o}}){ projectV2Item{ id } }
+            }' -F p="$PROJECT_ID" -F i="${{ steps.item.outputs.id }}" -F f="$STATUS_FIELD_ID" -F o="$OPTION_INBOX" >/dev/null
+          gh issue edit "$ISSUE_NUMBER" --repo "$OWNER/$REPO" --remove-label "$DROPPED_LABEL"
