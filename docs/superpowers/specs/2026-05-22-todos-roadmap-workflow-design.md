@@ -1,5 +1,9 @@
 # TODOs Inbox + ROADMAP Workflow
 
+> **Superseded by** [2026-05-22-github-issues-roadmap-design.md](2026-05-22-github-issues-roadmap-design.md).
+> The TODOs.md + ROADMAP.md workflow has been retired in favor of GitHub
+> Issues + a Projects v2 board. This document is kept for history.
+
 Status: Draft (design approved 2026-05-22)
 Owner: lazyhat
 
