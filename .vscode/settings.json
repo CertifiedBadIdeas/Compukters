@@ -6,6 +6,7 @@
       "true": true,
       "git add": true,
       "git commit": true,
-      "printf": true
+      "printf": true,
+      "gh": true
     }
 }
