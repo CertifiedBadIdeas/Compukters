@@ -52,7 +52,7 @@ fun include(
     }
 }
 
-include("compiler", modulesDir)
+include("native-runtime", modulesDir)
 include("core", modulesDir)
 
 val v1_21_1Dir = modulesDir.resolve("v1_21_1")

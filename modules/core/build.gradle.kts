@@ -22,7 +22,7 @@ plugins {
 }
 
 dependencies {
-    implementation(projects.compiler)
+    implementation(projects.nativeRuntime)
     implementation(libs.kotlinx.coroutines.core)
     api(libs.kotlinx.collections.immutable)
     implementation(libs.kotlin.stdlib)

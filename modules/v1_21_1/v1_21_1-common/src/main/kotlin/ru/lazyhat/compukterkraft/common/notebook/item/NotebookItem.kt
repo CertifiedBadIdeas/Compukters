@@ -19,13 +19,18 @@
 
 package ru.lazyhat.compukterkraft.common.notebook.item
 
+import net.minecraft.ChatFormatting
 import net.minecraft.core.component.DataComponents
 import net.minecraft.network.chat.Component
+import net.minecraft.world.item.BlockItem
 import net.minecraft.world.item.ItemStack
+import net.minecraft.world.item.TooltipFlag
 import net.minecraft.world.level.block.Block
-import ru.lazyhat.compukterkraft.common.computer.item.AbstractComputerItem
+import ru.lazyhat.compukterkraft.common.localization.CompukterComponents
+import ru.lazyhat.compukterkraft.common.utils.computerDataTagCopy
 import ru.lazyhat.compukterkraft.common.utils.computerID
 import ru.lazyhat.compukterkraft.common.utils.computerLabel
+import ru.lazyhat.compukterkraft.common.utils.computerLabelByHoverName
 import ru.lazyhat.compukterkraft.common.utils.deviceFamilyId
 import ru.lazyhat.compukterkraft.common.utils.updateComputerDataTag
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
@@ -33,7 +38,24 @@ import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 open class NotebookItem(
     block: Block,
     properties: Properties,
-) : AbstractComputerItem(block, properties) {
+) : BlockItem(block, properties) {
+    override fun appendHoverText(
+        stack: ItemStack,
+        context: TooltipContext,
+        list: MutableList<Component>,
+        options: TooltipFlag,
+    ) {
+        if (options.isAdvanced || stack.computerLabelByHoverName == null) {
+            stack.computerDataTagCopy()?.computerID?.let {
+                list.add(
+                    CompukterComponents.Gui.Tooltip
+                        .computerId(it)
+                        .withStyle(ChatFormatting.GRAY),
+                )
+            }
+        }
+    }
+
     fun create(
         id: Int?,
         label: String?,
