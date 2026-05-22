@@ -1,5 +1,9 @@
 # TODOs Inbox + ROADMAP Workflow — Implementation Plan
 
+> **Superseded by** [2026-05-22-github-issues-roadmap.md](2026-05-22-github-issues-roadmap.md).
+> The TODOs.md + ROADMAP.md workflow has been retired in favor of GitHub
+> Issues + a Projects v2 board. This plan is kept for history.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Introduce a two-file roadmap workflow — `docs/TODOs.md` as an idea inbox and `docs/ROADMAP.md` as a curated status table — and migrate the existing inbox content into the new format.
