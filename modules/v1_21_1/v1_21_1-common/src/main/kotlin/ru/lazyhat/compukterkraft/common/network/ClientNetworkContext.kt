@@ -19,10 +19,6 @@
 package ru.lazyhat.compukterkraft.common.network
 
 import ru.lazyhat.compukterkraft.common.network.text.TableBuilder
-import ru.lazyhat.compukterkraft.core.workbench.WorkbenchRemoteState
-import ru.lazyhat.compukterkraft.core.workbench.crdt.Op
-import ru.lazyhat.compukterkraft.core.workbench.crdt.SiteId
-import ru.lazyhat.compukterkraft.core.workbench.crdt.TextRun
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 
 /**
@@ -39,42 +35,5 @@ interface ClientNetworkContext {
     fun handleNativeDisplayFrameBytes(
         containerId: Int,
         payload: ByteArray,
-    )
-
-    fun handleSerialConsoleOutput(
-        containerId: Int,
-        bytes: ByteArray,
-        reset: Boolean,
-    )
-
-    fun handleWorkbenchWorkspace(
-        containerId: Int,
-        remoteState: WorkbenchRemoteState,
-    )
-
-    fun handleWorkbenchOps(
-        containerId: Int,
-        path: String,
-        ops: List<Op>,
-        ackedClock: Int,
-    )
-
-    fun handleWorkbenchDocumentSnapshot(
-        containerId: Int,
-        path: String,
-        runs: List<TextRun>,
-        versionVector: Map<SiteId, Int>,
-    )
-
-    fun handleWorkbenchPresence(
-        containerId: Int,
-        presences: List<ru.lazyhat.compukterkraft.core.workbench.EditorPresence>,
-    )
-
-    fun handleWorkbenchCursor(
-        containerId: Int,
-        path: String,
-        siteId: SiteId,
-        cursor: ru.lazyhat.compukterkraft.core.workbench.crdt.CursorAnchor?,
     )
 }

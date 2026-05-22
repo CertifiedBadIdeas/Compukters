@@ -30,51 +30,10 @@ import ru.lazyhat.compukterkraft.common.computer.network.server.DisplayResizeSer
 import ru.lazyhat.compukterkraft.common.computer.network.server.KeyEventServerMessage
 import ru.lazyhat.compukterkraft.common.computer.network.server.MouseEventServerMessage
 import ru.lazyhat.compukterkraft.common.computer.network.server.PasteEventComputerMessage
-import ru.lazyhat.compukterkraft.common.network.ClientNetworkContext
-import ru.lazyhat.compukterkraft.common.network.ServerNetworkContext
 import ru.lazyhat.compukterkraft.common.network.text.ChatTableClientMessage
-import ru.lazyhat.compukterkraft.common.serial.network.client.SerialConsoleOutputClientMessage
-import ru.lazyhat.compukterkraft.common.serial.network.server.SerialConsoleInputServerMessage
-import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchCursorClientMessage
-import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchDocumentSnapshotClientMessage
-import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchOpsClientMessage
-import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchPresenceClientMessage
-import ru.lazyhat.compukterkraft.common.workbench.network.client.WorkbenchWorkspaceClientMessage
-import ru.lazyhat.compukterkraft.common.workbench.network.server.WorkbenchCursorServerMessage
-import ru.lazyhat.compukterkraft.common.workbench.network.server.WorkbenchInputServerMessage
-import ru.lazyhat.compukterkraft.common.workbench.network.server.WorkbenchOpsServerMessage
-import ru.lazyhat.compukterkraft.common.workbench.network.server.WorkbenchWorkspaceServerMessage
 
 /**
- * Registry of all network message types used by the mod.
- *
- * ## Packet Protocol
- *
- * ### Client → Server (serverbound)
- *
- * | ID | Channel                      | Class                              | Trigger                                           | State modified on server                     |
- * |----|------------------------------|------------------------------------|----------------------------------------------------|----------------------------------------------|
- * | 0  | `computer_action`            | [ComputerActionServerMessage]      | Player clicks Turn On / Shutdown / Reboot / Terminate button | [RuntimeDevice] lifecycle (turnOn/shutdown/reboot) |
- * | 1  | `key_event`                  | [KeyEventServerMessage]            | Player presses/releases a key while computer GUI is open | VM event queue (`key` / `key_up`)            |
- * | 2  | `mouse_event`                | [MouseEventServerMessage]          | Player clicks/drags/scrolls inside the terminal area | VM event queue (`mouse_click` / `mouse_up` / `mouse_drag` / `mouse_scroll`) |
- * | 3  | `paste_event`                | [PasteEventComputerMessage]        | Player pastes text (Ctrl+V)                        | VM event queue (`paste`)                     |
- * | 4  | unused                       | —                                  | Reserved for removed computer workspace requests | — |
- * | 5  | `workbench_workspace_request` | [WorkbenchWorkspaceServerMessage] | Workbench editor requests file, sync, or target actions | Workbench authoring session; triggers clientbound response |
- * | 6  | `workbench_input`            | [WorkbenchInputServerMessage]     | Player sends terminal key/mouse/paste input through the Workbench | Target VM event queue via Workbench runtime bridge |
- * | 7  | unused                       | —                                  | Reserved for removed attach-terminal packet           | —                                             |
- * | 8  | unused                       | —                                  | Reserved for removed resize-terminal packet           | —                                             |
- * | 27 | `serial_console_input`       | [SerialConsoleInputServerMessage]  | Player submits a serial console input line             | Rux serial input ring                        |
- *
- * ### Server → Client (clientbound)
- *
- * | ID | Channel              | Class                              | Trigger                                        | State modified on client                      |
- * |----|----------------------|------------------------------------|-------------------------------------------------|-----------------------------------------------|
- * | 10 | `chat_table`         | [ChatTableClientMessage]           | Server sends a formatted table to display in chat | Minecraft chat HUD                            |
- * | 13 | unused               | —                                  | Reserved for removed ComputerTerminalClientMessage (Epic 4)     | —                                             |
- * | 14 | unused               | —                                  | Reserved for removed stdout byte stream packet       | —                                             |
- * | 15 | `workbench_workspace` | [WorkbenchWorkspaceClientMessage] | Response to a Workbench action or workspace request | [AbstractWorkbenchMenu.updateRemoteState] |
- * | 16 | unused               | —                                  | Reserved for removed Workbench terminal snapshot packet | — |
- * | 28 | `serial_console_output` | [SerialConsoleOutputClientMessage] | Server sends serial console output bytes            | Serial console history                       |
+ * Registry of all network message types used by the mod (CKL stack removed; computer-only).
  */
 object NetworkMessages {
     private val seenIds: IntSet = IntOpenHashSet()
@@ -83,131 +42,25 @@ object NetworkMessages {
     private val clientMessages = mutableListOf<MessageType<out NetworkMessage<ClientNetworkContext>>>()
 
     val COMPUTER_ACTION: MessageType<ComputerActionServerMessage> =
-        registerServerbound(
-            0,
-            "computer_action",
-            { buf -> ComputerActionServerMessage(buf) },
-        )
+        registerServerbound(0, "computer_action") { ComputerActionServerMessage(it) }
     val KEY_EVENT: MessageType<KeyEventServerMessage> =
-        registerServerbound(
-            1,
-            "key_event",
-            { buf -> KeyEventServerMessage(buf) },
-        )
+        registerServerbound(1, "key_event") { KeyEventServerMessage(it) }
     val MOUSE_EVENT: MessageType<MouseEventServerMessage> =
-        registerServerbound(
-            2,
-            "mouse_event",
-            { buf -> MouseEventServerMessage(buf) },
-        )
+        registerServerbound(2, "mouse_event") { MouseEventServerMessage(it) }
     val PASTE_EVENT: MessageType<PasteEventComputerMessage> =
-        registerServerbound(
-            3,
-            "paste_event",
-            { buf -> PasteEventComputerMessage(buf) },
-        )
-    val WORKBENCH_WORKSPACE_REQUEST: MessageType<WorkbenchWorkspaceServerMessage> =
-        registerServerbound(
-            5,
-            "workbench_workspace_request",
-            { buf -> WorkbenchWorkspaceServerMessage(buf) },
-        )
-    val WORKBENCH_INPUT: MessageType<WorkbenchInputServerMessage> =
-        registerServerbound(
-            6,
-            "workbench_input",
-            { buf -> WorkbenchInputServerMessage(buf) },
-        )
-    val WORKBENCH_OPS_REQUEST: MessageType<WorkbenchOpsServerMessage> =
-        registerServerbound(
-            9,
-            "workbench_ops_request",
-            { buf -> WorkbenchOpsServerMessage(buf) },
-        )
-    val WORKBENCH_CURSOR_REQUEST: MessageType<WorkbenchCursorServerMessage> =
-        registerServerbound(
-            19,
-            "workbench_cursor_request",
-            { buf -> WorkbenchCursorServerMessage(buf) },
-        )
+        registerServerbound(3, "paste_event") { PasteEventComputerMessage(it) }
     val CHAT_TABLE: MessageType<ChatTableClientMessage> =
-        registerClientbound(
-            10,
-            "chat_table",
-            { buf -> ChatTableClientMessage(buf) },
-        )
-    val WORKBENCH_WORKSPACE: MessageType<WorkbenchWorkspaceClientMessage> =
-        registerClientbound(
-            15,
-            "workbench_workspace",
-            { buf -> WorkbenchWorkspaceClientMessage(buf) },
-        )
-    val WORKBENCH_OPS: MessageType<WorkbenchOpsClientMessage> =
-        registerClientbound(
-            17,
-            "workbench_ops",
-            { buf -> WorkbenchOpsClientMessage(buf) },
-        )
-    val WORKBENCH_DOCUMENT_SNAPSHOT: MessageType<WorkbenchDocumentSnapshotClientMessage> =
-        registerClientbound(
-            18,
-            "workbench_document_snapshot",
-            { buf -> WorkbenchDocumentSnapshotClientMessage(buf) },
-        )
-    val WORKBENCH_PRESENCE: MessageType<WorkbenchPresenceClientMessage> =
-        registerClientbound(
-            20,
-            "workbench_presence",
-            { buf -> WorkbenchPresenceClientMessage(buf) },
-        )
-    val WORKBENCH_CURSOR: MessageType<WorkbenchCursorClientMessage> =
-        registerClientbound(
-            21,
-            "workbench_cursor",
-            { buf -> WorkbenchCursorClientMessage(buf) },
-        )
+        registerClientbound(10, "chat_table") { ChatTableClientMessage(it) }
     val DISPLAY_ATTACH: MessageType<DisplayAttachServerMessage> =
-        registerServerbound(
-            22,
-            "display_attach",
-            { buf -> DisplayAttachServerMessage(buf) },
-        )
+        registerServerbound(22, "display_attach") { DisplayAttachServerMessage(it) }
     val DISPLAY_RESIZE: MessageType<DisplayResizeServerMessage> =
-        registerServerbound(
-            23,
-            "display_resize",
-            { buf -> DisplayResizeServerMessage(buf) },
-        )
+        registerServerbound(23, "display_resize") { DisplayResizeServerMessage(it) }
     val DISPLAY_DETACH: MessageType<DisplayDetachServerMessage> =
-        registerServerbound(
-            24,
-            "display_detach",
-            { buf -> DisplayDetachServerMessage(buf) },
-        )
+        registerServerbound(24, "display_detach") { DisplayDetachServerMessage(it) }
     val FRAME_DELTA: MessageType<FrameDeltaClientMessage> =
-        registerClientbound(
-            25,
-            "frame_delta",
-            { buf -> FrameDeltaClientMessage(buf) },
-        )
+        registerClientbound(25, "frame_delta") { FrameDeltaClientMessage(it) }
     val NATIVE_FRAME_BATCH: MessageType<NativeFrameBatchClientMessage> =
-        registerClientbound(
-            26,
-            "native_frame_batch",
-            { buf -> NativeFrameBatchClientMessage(buf) },
-        )
-    val SERIAL_CONSOLE_INPUT: MessageType<SerialConsoleInputServerMessage> =
-        registerServerbound(
-            27,
-            "serial_console_input",
-            { buf -> SerialConsoleInputServerMessage(buf) },
-        )
-    val SERIAL_CONSOLE_OUTPUT: MessageType<SerialConsoleOutputClientMessage> =
-        registerClientbound(
-            28,
-            "serial_console_output",
-            { buf -> SerialConsoleOutputClientMessage(buf) },
-        )
+        registerClientbound(26, "native_frame_batch") { NativeFrameBatchClientMessage(it) }
 
     @Suppress("UNCHECKED_CAST")
     private fun <C, T : NetworkMessage<C>> register(
@@ -247,19 +100,9 @@ object NetworkMessages {
             ?.let { it as MessageTypeImpl<out NetworkMessage<ClientNetworkContext>> }
             ?: error("Unknown clientbound message id: $id")
 
-    /**
-     * Get all serverbound message types.
-     *
-     * @return An unmodifiable sequence of all serverbound message types.
-     */
     val serverbound: List<MessageType<out NetworkMessage<ServerNetworkContext>>>
         get() = serverMessages.toList()
 
-    /**
-     * Get all clientbound message types.
-     *
-     * @return An unmodifiable sequence of all clientbound message types.
-     */
     val clientbound: List<MessageType<out NetworkMessage<ClientNetworkContext>>>
         get() = clientMessages.toList()
 }

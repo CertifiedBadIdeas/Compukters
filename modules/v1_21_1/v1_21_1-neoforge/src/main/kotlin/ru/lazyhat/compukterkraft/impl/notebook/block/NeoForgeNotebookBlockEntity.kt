@@ -22,7 +22,6 @@ package ru.lazyhat.compukterkraft.impl.notebook.block
 import net.minecraft.core.BlockPos
 import net.minecraft.world.level.block.entity.BlockEntityType
 import net.minecraft.world.level.block.state.BlockState
-import ru.lazyhat.compukterkraft.common.computer.block.ComputerBlockEntity
 import ru.lazyhat.compukterkraft.common.notebook.block.NotebookBlockEntity
 import software.bernie.geckolib.animatable.GeoBlockEntity
 import software.bernie.geckolib.animatable.instance.AnimatableInstanceCache
@@ -32,7 +31,7 @@ import software.bernie.geckolib.animation.RawAnimation
 import software.bernie.geckolib.util.GeckoLibUtil
 
 class NeoForgeNotebookBlockEntity(
-    type: BlockEntityType<out ComputerBlockEntity>,
+    type: BlockEntityType<out NotebookBlockEntity>,
     pos: BlockPos,
     state: BlockState,
 ) : NotebookBlockEntity(type, pos, state),
