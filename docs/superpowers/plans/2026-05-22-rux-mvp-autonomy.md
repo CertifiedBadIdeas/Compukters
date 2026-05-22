@@ -2,6 +2,8 @@
 
 > Issue: [#26](https://github.com/lazyhat/Compukter-Kraft/issues/26)
 
+> **Status (2026-05-22):** Tasks 1 + 2 landed in commit `49a62e42` — Notebook is now the only registered player-facing computer block, the standalone Computer block / Workbench / Terminal / SerialTerminal items are unregistered, and the CKL-tied mod-side Kotlin (workbench, terminal/item, serial/*, ComputerBlock/Entity/Item, NeoForgeComputerBlockEntity, infrastructure/workbench, workbench/serial network channels) was deleted. `:v1_21_1-neoforge:compileKotlin` is green. Tasks 3–10 (core CKIM runtime, lang frontend, JNI/Rust CKIM, module rename, docs) are pending and should land as separate reviewable commits.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Remove the CKL/CKIM stack from Compukter-Kraft, leaving Notebook as the only player-facing computer block, booted end-to-end through the Rust toolchain (`native/rux-compiler` → `rux-laptop.ruxi` → `native/rux-vm`).
