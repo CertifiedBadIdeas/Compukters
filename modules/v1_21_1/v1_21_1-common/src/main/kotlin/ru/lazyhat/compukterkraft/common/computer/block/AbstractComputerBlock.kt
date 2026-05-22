@@ -42,7 +42,7 @@ import net.minecraft.world.level.storage.loot.parameters.LootContextParams
 import net.minecraft.world.phys.BlockHitResult
 import ru.lazyhat.compukterkraft.common.computer.context.ServerContext
 import ru.lazyhat.compukterkraft.common.computer.data.ComputerContainerData
-import ru.lazyhat.compukterkraft.common.computer.item.AbstractComputerItem
+import ru.lazyhat.compukterkraft.common.notebook.item.NotebookItem
 import ru.lazyhat.compukterkraft.common.binding.ModObjects
 import ru.lazyhat.compukterkraft.common.utils.castTicker
 import ru.lazyhat.compukterkraft.common.utils.computerDataTagCopy
@@ -90,7 +90,7 @@ abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
             .getBlockEntity(pos)
             ?.ifServerSide(level)
             ?.let { it as? AbstractComputerBlockEntity }
-            ?.takeIf { stack.item is AbstractComputerItem }
+            ?.takeIf { stack.item is NotebookItem }
             ?.let { tile ->
                 stack
                     .computerDataTagCopy()
@@ -99,10 +99,9 @@ abstract class AbstractComputerBlock<T : AbstractComputerBlockEntity>(
                         tile.label = it.computerLabel
                     }
 
-                val resolvedComputerId =
-                    tile.computerID ?: ServerContext.allocateDeviceId().also { tile.computerID = it }
-
-                ServerContext.deviceManager.ensureWorkspaceInitialized(resolvedComputerId)
+                if (tile.computerID == null) {
+                    tile.computerID = ServerContext.allocateDeviceId()
+                }
             }
     }
 

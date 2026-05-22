@@ -43,7 +43,7 @@ dependencies {
 
     implementation(project(":core"))
 
-    fabricImplementation(project(":compiler"))
+    fabricImplementation(project(":native-runtime"))
     fabricImplementation(libs.findLibrary("kotlinx-coroutines-core").get())
     fabricImplementation(libs.findLibrary("kotlinx-collections-immutable").get())
     fabricImplementation(libs.findLibrary("kotlin-stdlib").get())

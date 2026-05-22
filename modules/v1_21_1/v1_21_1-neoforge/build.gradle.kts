@@ -66,7 +66,7 @@ loom {
         maybeCreate("main").apply {
             sourceSet("main", project(projects.v1211Common.path))
             sourceSet("main", project(projects.core.path))
-            sourceSet("main", project(":compiler"))
+            sourceSet("main", project(":native-runtime"))
             sourceSet(gameTest.name)
         }
     }
@@ -84,51 +84,3 @@ dependencies {
 
 val rustVmNativePlatform = currentRustVmNativePlatform()
 val rustVmNativeLibrary = rootProject.layout.projectDirectory.file("native/rux-vm/target/debug/${rustVmNativePlatform.libraryName}")
-val runtimeVmProfilingReports = layout.buildDirectory.dir("reports/profiling")
-val runtimeVmImageProfile = runtimeVmProfilingReports.map { it.file("runtime-vm-image.tsv") }
-val runtimeVmProfileRuns = runtimeVmProfilingReports.map { it.dir("runs") }
-val runtimeVmComparisonReport = runtimeVmProfilingReports.map { it.file("runtime-vm-comparison.md") }
-
-fun runtimeProfileTimestamp(): String =
-    OffsetDateTime
-        .now()
-        .format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH-mm-ssXXX"))
-        .replace(':', '-')
-
-fun Test.configureRuntimeVmProfilingTestTask() {
-    group = "verification"
-    testClassesDirs = sourceSets.test.get().output.classesDirs
-    classpath = sourceSets.test.get().runtimeClasspath
-    useJUnitPlatform()
-    testLogging.showStandardStreams = true
-    outputs.upToDateWhen { false }
-}
-
-tasks.register<Test>("profileRuntimeVmImage") {
-    configureRuntimeVmProfilingTestTask()
-    description = "Run runtime profiling workloads with the Rust Rux image VM runner and write raw profiling data."
-    dependsOn("buildRustVmNativeLibrary")
-    filter {
-        includeTestsMatching("ru.lazyhat.compukterkraft.impl.computer.vm.RuntimeVmProfilingReportTest")
-    }
-    systemProperty("rux.vm.native.library", rustVmNativeLibrary.asFile.absolutePath)
-    systemProperty("ckl.profiling.runtime.name", "Rust image")
-    systemProperty("ckl.profiling.profile.path", runtimeVmImageProfile.get().asFile.absolutePath)
-    systemProperty("ckl.profiling.runs.dir", runtimeVmProfileRuns.get().asFile.absolutePath)
-    doFirst {
-        systemProperty("ckl.profiling.run.timestamp", runtimeProfileTimestamp())
-    }
-    outputs.file(runtimeVmImageProfile)
-}
-
-tasks.register<Test>("profileRuntimeVmComparison") {
-    configureRuntimeVmProfilingTestTask()
-    description = "Run runtime profiling workloads and write a Markdown comparison report over all archived runs."
-    dependsOn("profileRuntimeVmImage")
-    filter {
-        includeTestsMatching("ru.lazyhat.compukterkraft.impl.computer.vm.RuntimeVmProfilingReportAggregationTest")
-    }
-    systemProperty("ckl.profiling.runs.dir", runtimeVmProfileRuns.get().asFile.absolutePath)
-    systemProperty("ckl.profiling.comparison.path", runtimeVmComparisonReport.get().asFile.absolutePath)
-    outputs.file(runtimeVmComparisonReport)
-}

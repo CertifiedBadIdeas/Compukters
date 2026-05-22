@@ -20,32 +20,43 @@
 package ru.lazyhat.compukterkraft.common.computer.context
 
 import net.minecraft.server.MinecraftServer
-import net.minecraft.world.level.storage.LevelResource
-import ru.lazyhat.compukterkraft.core.device.runtime.DeviceManager
-import ru.lazyhat.compukterkraft.core.device.vm.DeviceVmSupervisor
+import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDevice
 
 class ServerContext(
     val server: MinecraftServer,
 ) {
-    val vmSupervisor = DeviceVmSupervisor { server.getWorldPath(LevelResource.ROOT) }
-    val deviceManager = DeviceManager(vmSupervisor)
+    private val devices: MutableMap<Int, RuntimeDevice> = HashMap()
+
+    fun get(deviceId: Int): RuntimeDevice? = devices[deviceId]
+
+    fun add(device: RuntimeDevice) {
+        check(!devices.containsKey(device.deviceId)) {
+            "Device with ${device.deviceId} already exists!"
+        }
+        devices[device.deviceId] = device
+    }
+
+    fun remove(deviceId: Int): RuntimeDevice? = devices.remove(deviceId)
+
+    fun closeAll() {
+        devices.values.forEach { it.close() }
+        devices.clear()
+    }
 
     companion object {
         private var current: ServerContext? = null
 
-        val isInitialized: Boolean
-            get() = current != null
+        val isInitialized: Boolean get() = current != null
 
-        val vmSupervisor
-            get() = context().vmSupervisor
-
-        val deviceManager
-            get() = context().deviceManager
-
-        val server
-            get() = context().server
+        val server get() = context().server
 
         fun allocateDeviceId(): Int = ComputerIdentitySavedData.get(server).allocateComputerId()
+
+        fun get(deviceId: Int): RuntimeDevice? = context().get(deviceId)
+
+        fun add(device: RuntimeDevice) = context().add(device)
+
+        fun remove(deviceId: Int): RuntimeDevice? = context().remove(deviceId)
 
         fun create(server: MinecraftServer) {
             check(current == null) { "ServerContext is already initialized" }
@@ -53,7 +64,7 @@ class ServerContext(
         }
 
         fun close() {
-            current?.deviceManager?.close()
+            current?.closeAll()
             current = null
         }
 

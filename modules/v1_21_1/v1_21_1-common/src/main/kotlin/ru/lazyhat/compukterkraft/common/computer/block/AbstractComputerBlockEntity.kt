@@ -60,7 +60,7 @@ abstract class AbstractComputerBlockEntity(
                 ?.let {
                     _label = value
                     _computerID
-                        ?.let(ServerContext.deviceManager::get)
+                        ?.let(ServerContext::get)
                         ?.let { device -> device.label = value }
                     updateBlock()
                 }
@@ -100,16 +100,15 @@ abstract class AbstractComputerBlockEntity(
         val resolvedDeviceId =
             _computerID ?: ServerContext.allocateDeviceId().also { allocatedDeviceId ->
                 computerID = allocatedDeviceId
-                ServerContext.deviceManager.ensureWorkspaceInitialized(allocatedDeviceId)
             }
 
         return _computerID
             ?.let {
-                ServerContext.deviceManager.get(it)
+                ServerContext.get(it)
             }
             ?: run {
                 createComputer(resolvedDeviceId).also {
-                    ServerContext.deviceManager.add(it)
+                    ServerContext.add(it)
                 }
             }
     }
@@ -150,7 +149,7 @@ abstract class AbstractComputerBlockEntity(
         ifServerSide(level) {
             _computerID
                 .takeIf { ServerContext.isInitialized }
-                ?.let(ServerContext.deviceManager::remove)
+                ?.let(ServerContext::remove)
                 ?.close()
         }
     }

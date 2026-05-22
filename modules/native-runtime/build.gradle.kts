@@ -17,17 +17,22 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+import java.time.Instant
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
+
 plugins {
-    id("kotlin-convention")
+    alias(libs.plugins.kotlinConvention)
 }
 
-val libs = libsCatalog()
-
 dependencies {
-    implementation(project(":core"))
-    implementation(project(":native-runtime"))
+    implementation(libs.kotlin.stdlib)
+    implementation(libs.kotlinx.coroutines.core)
+    testImplementation(kotlin("test"))
+}
 
-    implementation(libs.findLibrary("kotlin-stdlib").get())
-    implementation(libs.findLibrary("kotlin-logging").get())
-    implementation(libs.findLibrary("kotlinx-coroutines-core").get())
+tasks.test {
+    System.getProperty("ckl.low.image.golden.path")?.takeIf { it.isNotBlank() }?.let { path ->
+        systemProperty("ckl.low.image.golden.path", path)
+    }
 }

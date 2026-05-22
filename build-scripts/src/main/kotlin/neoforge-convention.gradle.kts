@@ -49,8 +49,8 @@ dependencies {
     add("neoForge", versionLibrary("neoforge"))
     modImplementation(versionLibrary("architectury-neoforge"))
 
-    implementation(project(":compiler"))
-    shadowBundle(project(path = ":compiler")) { isTransitive = false }
+    implementation(project(":native-runtime"))
+    shadowBundle(project(path = ":native-runtime")) { isTransitive = false }
 
     implementation(project(":core"))
     shadowBundle(project(":core")) { isTransitive = false }

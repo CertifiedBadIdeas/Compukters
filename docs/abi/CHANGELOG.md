@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Retired the CKL/CKIM bytecode stack (issue #26). The mod-side JVM no longer
+  hosts a high-level language frontend, CKIM image VM, or Workbench IDE.
+  All player-facing computers (Notebook) boot the Rux low-image VM directly
+  via the device daemon JNI. The CKIM JNI exports
+  (`createImage`/`runImageUntilSignal`/`resumeImage`/`imageMetrics`/`freeImage`)
+  have been removed from `native/rux-vm`. The frozen `RUXI` low-image ABI v1
+  itself is unchanged.
 - Added draft Rux machine profile v2. This does not change frozen `RUXI` image ABI v1; it defines a new machine profile with boot info, configurable page size, and a static MMIO hardware table.
 
 ## 2026-05-15 - RUXI v1 Frozen

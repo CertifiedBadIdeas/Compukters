@@ -10,7 +10,6 @@ use jni::JNIEnv;
 
 use crate::device_daemon::{DeviceDaemon, DeviceDaemonHostRequest, DeviceDaemonHostRequestKind};
 use crate::display::PixelFormat;
-use crate::image_runner::ImageVmHandle;
 use crate::low_image::decode_image as decode_low_image;
 use crate::low_image_runner::{LowImageSignal, LowImageVm};
 use crate::runtime_kernel::DeviceRuntimeKernelHandle;
@@ -22,114 +21,6 @@ type SharedDeviceRuntimeKernel = Arc<DeviceRuntimeKernelHandle>;
 
 static NEXT_DEVICE_DAEMON_HANDLE: AtomicI64 = AtomicI64::new(1);
 static DEVICE_DAEMON_HANDLES: OnceLock<Mutex<HashMap<jlong, DeviceDaemon>>> = OnceLock::new();
-
-#[no_mangle]
-pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_createImageNative(
-    mut env: JNIEnv<'_>,
-    _class: JClass<'_>,
-    image: JByteArray<'_>,
-    slice_budget_nanos: jlong,
-) -> jlong {
-    let image = match env.convert_byte_array(&image) {
-        Ok(image) => image,
-        Err(error) => {
-            let _ = env.throw_new(
-                "java/lang/IllegalArgumentException",
-                format!("Cannot read CKIM image: {error}"),
-            );
-            return 0;
-        }
-    };
-
-    match ImageVmHandle::create(&image, slice_budget_nanos.max(1) as u64) {
-        Ok(handle) => Box::into_raw(Box::new(handle)) as jlong,
-        Err(error) => {
-            let _ = env.throw_new("java/lang/IllegalArgumentException", error);
-            0
-        }
-    }
-}
-
-#[no_mangle]
-pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_runImageUntilSignalForHandleNative(
-    mut env: JNIEnv<'_>,
-    _class: JClass<'_>,
-    handle: jlong,
-) -> jbyteArray {
-    let handle = match image_handle_mut(&mut env, handle) {
-        Some(handle) => handle,
-        None => return null_mut(),
-    };
-    let signal = handle.run_until_signal();
-    byte_array_or_throw(&mut env, &signal)
-}
-
-#[no_mangle]
-pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_resumeImageWithNative(
-    mut env: JNIEnv<'_>,
-    _class: JClass<'_>,
-    handle: jlong,
-    value: JByteArray<'_>,
-) {
-    let handle = match image_handle_mut(&mut env, handle) {
-        Some(handle) => handle,
-        None => return,
-    };
-    let value = match env.convert_byte_array(&value) {
-        Ok(value) => value,
-        Err(error) => {
-            let _ = env.throw_new(
-                "java/lang/IllegalArgumentException",
-                format!("Cannot read native image VM resume value: {error}"),
-            );
-            return;
-        }
-    };
-    if let Err(error) = handle.resume_with_value_bytes(&value) {
-        let _ = env.throw_new("java/lang/IllegalStateException", error);
-    }
-}
-
-#[no_mangle]
-pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_imageMetricsNative(
-    mut env: JNIEnv<'_>,
-    _class: JClass<'_>,
-    handle: jlong,
-) -> jlongArray {
-    let handle = match image_handle_mut(&mut env, handle) {
-        Some(handle) => handle,
-        None => return null_mut(),
-    };
-    let metrics = handle.metrics_snapshot();
-    let mut values = vec![
-        metrics.executed_instructions as jlong,
-        metrics.instruction_clones as jlong,
-        metrics.value_clones as jlong,
-        metrics.register_reads as jlong,
-        metrics.register_writes as jlong,
-        metrics.function_calls as jlong,
-        metrics.function_returns as jlong,
-        metrics.host_call_attempts as jlong,
-        metrics.native_host_calls as jlong,
-        metrics.jvm_host_call_signals as jlong,
-        metrics.pause_signals as jlong,
-        metrics.string_allocations as jlong,
-        metrics.record_allocations as jlong,
-    ];
-    values.extend(metrics.opcode_counts.iter().map(|count| *count as jlong));
-    long_array_or_throw(&mut env, &values)
-}
-
-#[no_mangle]
-pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_freeImageNative(
-    _env: JNIEnv<'_>,
-    _class: JClass<'_>,
-    handle: jlong,
-) {
-    if handle != 0 {
-        unsafe { drop(Box::from_raw(handle as *mut ImageVmHandle)) };
-    }
-}
 
 #[no_mangle]
 pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_createLowImageNative(
@@ -798,25 +689,6 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
             observed_wake_sequence
         }
     }
-}
-
-fn image_handle_mut(env: &mut JNIEnv<'_>, handle: jlong) -> Option<&'static mut ImageVmHandle> {
-    if handle == 0 {
-        let _ = env.throw_new(
-            "java/lang/IllegalStateException",
-            "Native image VM handle is zero",
-        );
-        return None;
-    }
-    let pointer = handle as *mut ImageVmHandle;
-    if pointer.is_null() {
-        let _ = env.throw_new(
-            "java/lang/IllegalStateException",
-            "Native image VM handle is null",
-        );
-        return None;
-    }
-    Some(unsafe { &mut *pointer })
 }
 
 fn low_image_handle_mut(env: &mut JNIEnv<'_>, handle: jlong) -> Option<&'static mut LowImageVm> {
