@@ -6,11 +6,15 @@ on:
 
 permissions:
   issues: write
-  contents: read
+
+concurrency:
+  group: roadmap-status-sync-${{ github.event.issue.number }}
+  cancel-in-progress: false
 
 jobs:
   sync-dropped:
-    runs-on: ubuntu-latest
+    if: github.actor == github.repository_owner
+    runs-on: ubuntu-24.04
     env:
       GH_TOKEN: ${{ secrets.ROADMAP_PROJECT_TOKEN }}
       OWNER: lazyhat
