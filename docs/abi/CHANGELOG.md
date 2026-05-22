@@ -2,10 +2,20 @@
 
 ## Unreleased
 
+- Collapsed the mod runtime to a single LowVM (issue #44). The legacy
+  Image-VM (`image.rs`/`image_runner.rs` + `CallHost` opcode), device
+  daemon (`device_daemon.rs`), runtime kernel (`runtime_kernel.rs`),
+  and host-imported filesystem (`filesystem.rs`) have been retired
+  along with their JNI surface and Kotlin wrappers
+  (`NativeDeviceDaemonRuntime`, daemon entries in `NativeVmBindings`,
+  `NativeVmSignal`/`NativeVmValue`). The `VmSignal` / `value` encoding
+  used by the host-call protocol is gone. The frozen `RUXI` low-image
+  ABI v1 itself is unchanged \u2014 the notebook already boots LowVM images
+  via `createRuxComputer` and continues to do so.
 - Retired the CKL/CKIM bytecode stack (issue #26). The mod-side JVM no longer
   hosts a high-level language frontend, CKIM image VM, or Workbench IDE.
-  All player-facing computers (Notebook) boot the Rux low-image VM directly
-  via the device daemon JNI. The CKIM JNI exports
+  All player-facing computers (Notebook) boot the Rux low-image VM directly.
+  The CKIM JNI exports
   (`createImage`/`runImageUntilSignal`/`resumeImage`/`imageMetrics`/`freeImage`)
   have been removed from `native/rux-vm`. The frozen `RUXI` low-image ABI v1
   itself is unchanged.
