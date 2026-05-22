@@ -1,16 +1,19 @@
 # Compukter Kraft — Architecture
 
-> Note: as of issue #26 the legacy CKL language / CKIM bytecode VM / in-game
-> Workbench IDE have been removed. This document reflects the current
-> Rux-only stack. Older revisions in git history describe the previous CKL
-> architecture.
+> Note: as of issue #26 the legacy CKL language / CKIM bytecode VM /
+> in-game Workbench IDE have been removed. As of issue #44 the legacy
+> Image-VM (host-call opcode, multi-process device daemon, runtime
+> kernel, host-imported filesystem) has also been retired in favour of a
+> single LowVM runtime with flat RAM and MMIO devices. Older revisions
+> in git history describe the previous architectures.
 
 ## Overview
 
 Compukter Kraft is a Minecraft mod that adds programmable computers backed
 by a Rust virtual machine (`native/rux-vm`). The mod ships a single
 player-facing computer item — **Notebook** — that boots a precompiled
-`rux-laptop.ruxi` image via JNI.
+`rux-laptop.ruxi` image via JNI. The image is a LowVM program executing
+over flat RAM with memory-mapped peripherals.
 
 ## Modules (Gradle)
 
@@ -26,8 +29,8 @@ player-facing computer item — **Notebook** — that boots a precompiled
 
 | Crate            | Purpose                                                                  |
 |------------------|--------------------------------------------------------------------------|
-| `native/rux-vm`  | Rust virtual machine, low-image runner, device daemon, JNI exports       |
-| `native/rux-compiler` | Compiler producing `rux-laptop.ruxi` images consumed by `rux-vm`   |
+| `native/rux-vm`  | Rust virtual machine: LowVM (flat RAM + MMIO), `RuxComputer` handle, JNI exports |
+| `native/rux-compiler` | Compiler producing `rux-laptop.ruxi` LowVM images consumed by `rux-vm`   |
 
 ## Module ownership rules
 
@@ -44,41 +47,44 @@ NotebookItem.use()
         └─ RuntimeDevice (native-backed)
 
 RuntimeDevice.boot()
-  └─ NativeVmBindings.bootDeviceDaemon(profile, image, mountPoints)
-        └─ Rust device daemon thread
-              ├─ DeviceDaemon (native/rux-vm/src/device_daemon.rs)
-              ├─ owns LowImageVm + image_runner state
-              └─ exposes signal/event/host-call protocol via VmValue
+  └─ NativeVmBindings.createRuxComputer(image, memorySize, sliceBudgetNanos)
+        └─ Rust RuxComputerHandle
+              ├─ LowImageVm executing rux-laptop.ruxi
+              ├─ flat RAM + MMIO bus (control, debug-serial, serial-input,
+              │   text-display) — single process, no scheduler
+              └─ exposes control / debug / display snapshot over JNI
 
 RuntimeDevice.serverTick(gameTime)
-  ├─ pollDaemon() — drain signals, host calls, display deltas
-  └─ flushDisplaySessions() — send framebuffer deltas to bound clients
+  ├─ runRuxComputerUntilSignal() — advance VM until pause / halt
+  ├─ ruxComputerDisplay0Snapshot() — pull text display state
+  └─ drainRuxComputerDebugOutput() — drain debug serial bytes
 
 RuntimeDevice.close()
-  └─ NativeVmBindings.shutdownDeviceDaemon()
+  └─ NativeVmBindings.freeRuxComputer(handle)
 ```
 
 ## Data flow
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│  Rust device daemon (background thread, JNI-attached)               │
+│  Rust LowVM (driven on demand by JNI calls, single process)         │
 │                                                                     │
-│  LowImageVm executing rux-laptop.ruxi                               │
-│    ├─ host-call signals  ──►  DeviceDaemon.signal_queue              │
-│    ├─ display ops        ──►  DisplayRegistry frame deltas          │
-│    └─ kernel syscalls    ──►  RuntimeKernel state                   │
+│  LowImageVm executing rux-laptop.ruxi over flat RAM                 │
+│    ├─ MMIO control device  ──►  status / exit / panic registers      │
+│    ├─ MMIO debug serial    ──►  RuxComputerHandle.debug_output       │
+│    ├─ MMIO serial input    ◄──  player keyboard events               │
+│    └─ MMIO text display    ──►  RuxComputerTextDisplaySnapshot       │
 └──────────────────────────────────────────┬──────────────────────────┘
-                                           │ JNI poll
+                                           │ JNI run-until-signal
                                            ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │  Server tick thread (main thread)                                   │
 │                                                                     │
 │  RuntimeDevice.serverTick()                                          │
-│    ├─ NativeVmBindings.poll(daemonHandle, gameTime)                  │
-│    ├─ dispatch host calls via NativeDeviceDaemonRuntime              │
+│    ├─ NativeVmBindings.runRuxComputerUntilSignal(handle)             │
+│    ├─ poll display snapshot / debug output                           │
 │    ├─ flushDisplaySessions → FrameDeltaClientMessage                 │
-│    └─ react to VmStopReason (halt / crash / reboot)                  │
+│    └─ react to control register (halt / crash / reboot)              │
 └──────────────────────────────────────────┬──────────────────────────┘
                                            │ network
                                            ▼
@@ -91,7 +97,8 @@ RuntimeDevice.close()
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-The display device exposes generic accelerated framebuffer primitives
-(`fillRect`, `copyRect`, `blitMono`, `present`). The client sends discrete
-input events (`key`, `key_up`, `char`, `paste`, mouse) into the VM event
-queue. The server emits framebuffer deltas through display sessions.
+The text display device exposes a character cell buffer with cursor and a
+monotonic sequence number for delta detection. The client sends discrete
+input events into the serial-input MMIO device. There is no filesystem,
+no multi-process scheduling, and no host-call opcode — host-side
+interaction happens purely through memory-mapped registers.
