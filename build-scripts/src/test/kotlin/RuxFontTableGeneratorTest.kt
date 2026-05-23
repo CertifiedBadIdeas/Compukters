@@ -39,6 +39,19 @@ class RuxFontTableGeneratorTest {
     }
 
     @Test
+    fun generatesMarkdownSpecimenFromRuxFontSource() {
+        val source = Path.of("..", "assets", "rux", "fonts", "rux-mono-5x7.font").readText()
+
+        val generated = RuxFontTableGenerator().generate(source)
+
+        assertTrue(generated.markdownSpecimen.contains("# Rux Mono 5x7 Font Specimen"))
+        assertTrue(generated.markdownSpecimen.contains("- Glyph size: 5x7"))
+        assertTrue(generated.markdownSpecimen.contains("## U+0041 A"))
+        assertTrue(generated.markdownSpecimen.contains("```text\n.###.\n#...#"))
+        assertTrue(generated.markdownSpecimen.contains("## U+2500 ─"))
+    }
+
+    @Test
     fun rejectsRowsWithInvalidWidth() {
         val source =
             Path.of("..", "assets", "rux", "fonts", "rux-mono-5x7.font")
