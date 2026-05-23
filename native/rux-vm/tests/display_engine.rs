@@ -141,6 +141,11 @@ fn generated_font_uses_explicit_fallback_for_unknown_glyphs() {
 }
 
 #[test]
+fn generated_font_hash_uses_full_height_strokes() {
+    assert_eq!(mono5x7_glyph('#'), 0b01010010101111101010111110101001010,);
+}
+
+#[test]
 fn registry_attach_queues_full_refresh_and_drain_frames() {
     let mut registry = DeviceDisplayRegistry::new();
 
