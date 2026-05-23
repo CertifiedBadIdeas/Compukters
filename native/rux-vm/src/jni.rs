@@ -348,4 +348,3 @@ fn long_array_or_throw(env: &mut JNIEnv<'_>, values: &[jlong]) -> jlongArray {
     }
     array.into_raw()
 }
-

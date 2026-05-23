@@ -20,6 +20,7 @@
 package ru.lazyhat.compukterkraft.core.device.runtime
 
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayPixelFormat
+import ru.lazyhat.compukterkraft.core.gui.GeneratedTerminalFont
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
@@ -63,5 +64,33 @@ class SerialTextDisplayRendererTest {
         renderer.append("abc\rX".encodeToByteArray())
 
         assertEquals("Xbc  ", renderer.rowText(0))
+    }
+
+    @Test
+    fun generatedFontCoversPrintableAsciiAndTerminalBoxGlyphs() {
+        for (code in 0x20..0x7e) {
+            val ch = code.toChar()
+            assertTrue(GeneratedTerminalFont.hasGlyph(ch), "missing glyph for printable ASCII `$ch`")
+        }
+
+        for (ch in listOf('─', '│', '┌', '┐', '└', '┘', '┼')) {
+            assertTrue(GeneratedTerminalFont.hasGlyph(ch), "missing box drawing glyph `$ch`")
+        }
+    }
+
+    @Test
+    fun generatedFontKeepsLowercaseDistinctFromUppercase() {
+        for ((lower, upper) in listOf('a' to 'A', 'e' to 'E', 'o' to 'O', 'x' to 'X')) {
+            assertNotEquals(
+                GeneratedTerminalFont.glyph(lower),
+                GeneratedTerminalFont.glyph(upper),
+                "glyph `$lower` should not collapse to `$upper`",
+            )
+        }
+    }
+
+    @Test
+    fun generatedFontUsesExplicitFallbackForUnknownGlyphs() {
+        assertEquals(GeneratedTerminalFont.glyph('\u2603'), GeneratedTerminalFont.glyph('\ufffd'))
     }
 }
