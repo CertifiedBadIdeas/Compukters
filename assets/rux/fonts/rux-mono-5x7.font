@@ -1,5 +1,5 @@
 # Rux Mono 5x7 bitmap font.
-# Edit this file, then run tools/rux-font/generate-font-tables.py.
+# Edit this file, then run ./gradlew generateRuxFontTables.
 # Each glyph is 5 columns by 7 rows. `#` is on, `.` is off.
 
 glyph U+0020 SPACE
@@ -31,12 +31,12 @@ glyph U+0022 "
 
 glyph U+0023 #
 .#.#.
-#####
 .#.#.
 #####
 .#.#.
-.....
-.....
+#####
+.#.#.
+.#.#.
 
 glyph U+0024 $
 ..#..
