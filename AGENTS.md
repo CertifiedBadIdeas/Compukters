@@ -10,6 +10,8 @@ metadata is in `config/`, and visual/model assets are in `models/` and top-level
 
 ## Build, Test, and Development Commands
 
+- AI agents running Gradle from the sandbox should use `./gradlew-sandbox` instead of `./gradlew`. It keeps
+  `GRADLE_USER_HOME` in `.gradle-sandbox`, disables the Gradle daemon, and avoids sharing host Gradle lock files.
 - `./gradlew build` builds all Gradle modules and runs standard checks.
 - `./gradlew test` runs JVM unit tests across Kotlin modules.
 - `./gradlew :core:test` or `./gradlew :native-runtime:test` runs focused module tests.
