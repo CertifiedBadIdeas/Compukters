@@ -18,32 +18,17 @@
  */
 package ru.lazyhat.compukterkraft.common.terminal.screen
 
-import com.mojang.blaze3d.platform.NativeImage
-import net.minecraft.client.Minecraft
-import net.minecraft.client.gui.GuiGraphics
-import net.minecraft.client.renderer.texture.DynamicTexture
 import net.minecraft.network.chat.Component
-import net.minecraft.resources.ResourceLocation
-import net.minecraft.util.FastColor
 import net.minecraft.world.entity.player.Inventory
-import ru.lazyhat.compukterkraft.common.computer.client.ClientDisplayBuffer
-import ru.lazyhat.compukterkraft.common.computer.input.ClientInputHandler
 import ru.lazyhat.compukterkraft.common.computer.menu.AbstractComputerMenu
-import ru.lazyhat.compukterkraft.common.computer.network.server.DisplayAttachServerMessage
-import ru.lazyhat.compukterkraft.common.computer.network.server.DisplayDetachServerMessage
-import ru.lazyhat.compukterkraft.common.computer.network.server.DisplayResizeServerMessage
+import ru.lazyhat.compukterkraft.common.computer.screen.ComputerDisplayScreen
 import ru.lazyhat.compukterkraft.common.localization.CompukterKeys
 import ru.lazyhat.compukterkraft.common.localization.CompukterTranslatable
-import ru.lazyhat.compukterkraft.common.network.ClientNetworking
-import ru.lazyhat.compukterkraft.common.platform.MinecraftInputProvider
 import ru.lazyhat.compukterkraft.common.ui.dsl.translatable
-import ru.lazyhat.compukterkraft.common.ui.program.DslContainerScreen
 import ru.lazyhat.compukterkraft.core.Config
 import ru.lazyhat.compukterkraft.core.device.input.ComputerControlAction
 import ru.lazyhat.compukterkraft.core.device.input.ControlInputEvent
-import ru.lazyhat.compukterkraft.core.gui.TerminalFontConstants
 import ru.lazyhat.compukterkraft.core.gui.TerminalRect
-import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalInputController
 import ru.lazyhat.compukterkraft.core.gui.WorkbenchTerminalMetrics
 import ru.lazyhat.compukterkraft.core.ui.foundation.CanvasScope
 import ru.lazyhat.compukterkraft.core.ui.foundation.Color
@@ -68,7 +53,7 @@ import ru.lazyhat.compukterkraft.core.ui.foundation.value
  *    active) and snapshot contents flow through `ValueExpression`s —
  *    no recompile is needed per frame.
  *  - The snapshot's grid dimensions still drive `imageWidth`/
- *    `imageHeight`; when they change, [DslContainerScreen] auto-
+ *    `imageHeight`; when they change, [ComputerDisplayScreen] auto-
  *    recompiles the layout (see Epic 3).
  *  - Power/reboot buttons are `canvas` draw lambdas fed by
  *    `HoverState` flags so hover chrome and icon color are resolved
@@ -80,12 +65,10 @@ open class ComputerTerminalScreen<T : AbstractComputerMenu>(
     container: T,
     player: Inventory,
     title: Component,
-) : DslContainerScreen<T>(container, player, title) {
-    protected val inputHandler = ClientInputHandler(container)
-    protected val terminalInput = WorkbenchTerminalInputController(inputHandler, MinecraftInputProvider)
-    private val displayId: Int = SHARED_TERMINAL_DISPLAY_ID
-    private val displayTexture = DisplayTextureCache(displayId)
-
+) : ComputerDisplayScreen<T>(container, player, title) {
+    override val displayId: Int = SHARED_TERMINAL_DISPLAY_ID
+    override val terminalColumns: Int = DEFAULT_COLS
+    override val terminalRows: Int = DEFAULT_ROWS
     private val powerHover = HoverState()
     private val rebootHover = HoverState()
 
@@ -94,61 +77,6 @@ open class ComputerTerminalScreen<T : AbstractComputerMenu>(
         val rows = DEFAULT_ROWS
         imageWidth = WorkbenchTerminalMetrics.imageWidth(cols)
         imageHeight = WorkbenchTerminalMetrics.imageHeight(rows, contentTopInset = COMPUTER_CONTENT_TOP)
-    }
-
-    override fun removed() {
-        displayTexture.close()
-        ClientNetworking.sendToServer(DisplayDetachServerMessage(menu, displayId))
-        super.removed()
-    }
-
-    override fun renderBg(
-        guiGraphics: GuiGraphics,
-        partialTick: Float,
-        mouseX: Int,
-        mouseY: Int,
-    ) {
-        super.renderBg(guiGraphics, partialTick, mouseX, mouseY)
-        drawDisplayTexture(guiGraphics)
-    }
-
-    override fun containerTick() {
-        super.containerTick()
-        menu.clientSide.displayBuffer?.swapIfDirty()
-        syncDisplayEndpoint()
-        // The display surface only enters the tree once the computer
-        // reaches the Active state; focus it as soon as it appears so the
-        // player never has to click to start typing.
-        focusFirstNodeIfUnfocused()
-    }
-
-    override fun mouseClicked(
-        x: Double,
-        y: Double,
-        button: Int,
-    ): Boolean {
-        val handled = super.mouseClicked(x, y, button)
-        // The portable terminal screen has exactly one sensible keyboard
-        // target — the terminal surface itself — and we don't want the
-        // player to have to click on it before typing. Re-acquire focus
-        // after every click so power/reboot button clicks (or clicks on
-        // empty chrome) don't strand the terminal without focus.
-        focusFirstNodeIfUnfocused()
-        return handled
-    }
-
-    override fun keyPressed(
-        keyCode: Int,
-        scanCode: Int,
-        modifiers: Int,
-    ): Boolean = isInventoryKey(keyCode, scanCode) || super.keyPressed(keyCode, scanCode, modifiers)
-
-    override fun init() {
-        super.init()
-        attachDisplayEndpoint()
-        // After the executor has been built for the first time, plant
-        // focus on the terminal surface so the user can type immediately.
-        focusFirstNodeIfUnfocused()
     }
 
     override fun content(): UiElement {
@@ -289,41 +217,7 @@ open class ComputerTerminalScreen<T : AbstractComputerMenu>(
         }
     }
 
-    private fun attachDisplayEndpoint() {
-        val displayWidth = currentDisplayWidth()
-        val displayHeight = currentDisplayHeight()
-        menu.clientSide.attachDisplayBuffer(ClientDisplayBuffer(displayId, displayWidth, displayHeight))
-        ClientNetworking.sendToServer(DisplayAttachServerMessage(menu, displayId, displayWidth, displayHeight))
-    }
-
-    private fun syncDisplayEndpoint() {
-        val displayWidth = currentDisplayWidth()
-        val displayHeight = currentDisplayHeight()
-        val buffer = menu.clientSide.displayBuffer
-        if (buffer == null || buffer.width != displayWidth || buffer.height != displayHeight) {
-            menu.clientSide.attachDisplayBuffer(ClientDisplayBuffer(displayId, displayWidth, displayHeight))
-            ClientNetworking.sendToServer(DisplayResizeServerMessage(menu, displayId, displayWidth, displayHeight))
-        }
-    }
-
-    protected fun CanvasScope.drawDisplayPlaceholder(
-        targetWidth: Int,
-        targetHeight: Int,
-    ) {
-        val buffer = menu.clientSide.displayBuffer
-        if (buffer == null || !buffer.hasReceivedFrames) {
-            fillRect(0, 0, targetWidth, targetHeight, DISPLAY_PLACEHOLDER)
-        }
-    }
-
-    private fun drawDisplayTexture(guiGraphics: GuiGraphics) {
-        if (!menu.isComputerOn) return
-        val buffer = menu.clientSide.displayBuffer ?: return
-        if (!buffer.hasReceivedFrames) return
-        displayTexture.draw(guiGraphics, buffer, currentLayout().terminalBounds)
-    }
-
-    protected open fun currentLayout() =
+    override fun currentLayout() =
         WorkbenchTerminalMetrics.layout(
             leftPos = leftPos,
             topPos = topPos,
@@ -333,15 +227,6 @@ open class ComputerTerminalScreen<T : AbstractComputerMenu>(
             terminalRows = DEFAULT_ROWS,
             contentTopInset = COMPUTER_CONTENT_TOP,
         )
-
-    private fun currentDisplayWidth(): Int = (DEFAULT_COLS * TerminalFontConstants.FONT_WIDTH).coerceAtLeast(64)
-
-    private fun currentDisplayHeight(): Int = (DEFAULT_ROWS * TerminalFontConstants.FONT_HEIGHT).coerceAtLeast(48)
-
-    private fun displayResolutionText(
-        width: Int,
-        height: Int,
-    ): String = "$width x $height"
 
     private fun statusButtonBounds(
         statusBounds: TerminalRect,
@@ -416,7 +301,6 @@ open class ComputerTerminalScreen<T : AbstractComputerMenu>(
         private const val STATUS_TEXT_START_PADDING = 12
 
         private val BACKGROUND = Color.hex(0xFF12151DU)
-        private val DISPLAY_PLACEHOLDER = Color.hex(0xFF05070AU)
         private val STATUS_TEXT_COLOR = Color.hex(0xFF9CA8B8U)
         private val BUTTON_BG = Color.hex(0xFF1B202AU)
         private val BUTTON_BG_HOVER = Color.hex(0xFF222938U)
@@ -424,95 +308,5 @@ open class ComputerTerminalScreen<T : AbstractComputerMenu>(
         private val BUTTON_ICON = Color.hex(0xFFE6ECF5U)
         private val POWER_ACCENT = Color.hex(0xFF4FA56CU)
         private val REBOOT_ACCENT = Color.hex(0xFFC9894FU)
-    }
-
-    private class DisplayTextureCache(
-        private val displayId: Int,
-    ) : AutoCloseable {
-        private var image: NativeImage? = null
-        private var texture: DynamicTexture? = null
-        private var location: ResourceLocation? = null
-        private var width: Int = 0
-        private var height: Int = 0
-        private var uploadedVersion: Long = Long.MIN_VALUE
-
-        fun draw(
-            guiGraphics: GuiGraphics,
-            buffer: ClientDisplayBuffer,
-            bounds: TerminalRect,
-        ) {
-            ensureTexture(buffer.width, buffer.height)
-            uploadIfNeeded(buffer)
-            val textureLocation = location ?: return
-            guiGraphics.blit(
-                textureLocation,
-                bounds.x,
-                bounds.y,
-                bounds.width,
-                bounds.height,
-                0f,
-                0f,
-                buffer.width,
-                buffer.height,
-                buffer.width,
-                buffer.height,
-            )
-        }
-
-        private fun ensureTexture(
-            width: Int,
-            height: Int,
-        ) {
-            if (image != null && this.width == width && this.height == height) return
-            close()
-            this.width = width
-            this.height = height
-            val newImage = NativeImage(width, height, false)
-            val newTexture = DynamicTexture(newImage)
-            image = newImage
-            texture = newTexture
-            location = Minecraft.getInstance().textureManager.register("compukterkraft_display_$displayId", newTexture)
-            uploadedVersion = Long.MIN_VALUE
-        }
-
-        private fun uploadIfNeeded(buffer: ClientDisplayBuffer) {
-            val currentImage = image ?: return
-            val currentTexture = texture ?: return
-            if (buffer.frontVersion == uploadedVersion) return
-            val snapshot = buffer.copyFrontSnapshotSince(uploadedVersion)
-            if (snapshot.version == uploadedVersion) return
-            for (region in snapshot.regions) {
-                var row = region.y
-                while (row < region.y + region.height) {
-                    var columnOffset = 0
-                    while (columnOffset < region.width) {
-                        currentImage.setPixelRGBA(
-                            region.x + columnOffset,
-                            row,
-                            FastColor.ABGR32.fromArgb32(
-                                snapshot.pixels[row * buffer.width + region.x + columnOffset],
-                            ),
-                        )
-                        columnOffset = columnOffset + 1
-                    }
-                    row = row + 1
-                }
-            }
-            currentTexture.bind()
-            for (region in snapshot.regions) {
-                currentImage.upload(0, region.x, region.y, region.x, region.y, region.width, region.height, false, false)
-            }
-            uploadedVersion = snapshot.version
-        }
-
-        override fun close() {
-            location?.let { Minecraft.getInstance().textureManager.release(it) }
-            image = null
-            texture = null
-            location = null
-            width = 0
-            height = 0
-            uploadedVersion = Long.MIN_VALUE
-        }
     }
 }

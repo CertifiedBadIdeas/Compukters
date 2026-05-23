@@ -22,7 +22,7 @@ package ru.lazyhat.compukterkraft.common.notebook.screen
 import net.minecraft.network.chat.Component
 import net.minecraft.world.entity.player.Inventory
 import ru.lazyhat.compukterkraft.common.computer.menu.ComputerMenuWithoutInventory
-import ru.lazyhat.compukterkraft.common.terminal.screen.ComputerTerminalScreen
+import ru.lazyhat.compukterkraft.common.computer.screen.ComputerDisplayScreen
 import ru.lazyhat.compukterkraft.core.Config
 import ru.lazyhat.compukterkraft.core.device.input.ComputerControlAction
 import ru.lazyhat.compukterkraft.core.device.input.ControlInputEvent
@@ -43,7 +43,11 @@ class NotebookScreen(
     menu: ComputerMenuWithoutInventory,
     inventory: Inventory,
     title: Component,
-) : ComputerTerminalScreen<ComputerMenuWithoutInventory>(menu, inventory, title) {
+) : ComputerDisplayScreen<ComputerMenuWithoutInventory>(menu, inventory, title) {
+    override val displayId: Int = NOTEBOOK_DISPLAY_ID
+    override val terminalColumns: Int = TERMINAL_COLUMNS
+    override val terminalRows: Int = TERMINAL_ROWS
+
     init {
         imageWidth = WorkbenchTerminalMetrics.imageWidth(TERMINAL_COLUMNS)
         imageHeight = WorkbenchTerminalMetrics.imageHeight(TERMINAL_ROWS, contentTopInset = NOTEBOOK_CONTENT_TOP)
@@ -154,6 +158,7 @@ class NotebookScreen(
     }
 
     companion object {
+        private const val NOTEBOOK_DISPLAY_ID = 1
         private val TERMINAL_COLUMNS = Config.DEFAULT_COMPUTER_TERM_WIDTH
         private val TERMINAL_ROWS = Config.DEFAULT_COMPUTER_TERM_HEIGHT
         private const val NOTEBOOK_CONTENT_TOP = 32
