@@ -1,0 +1,55 @@
+/*
+ * The Compukter Kraft Developers
+ *
+ * Copyright (C) 2026 Vsevolod Petrov (lazyhat)
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+import org.junit.jupiter.api.Assertions.assertThrows
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Test
+import java.nio.file.Path
+import kotlin.io.path.readText
+
+class RuxFontTableGeneratorTest {
+    @Test
+    fun generatesRustAndKotlinTablesFromRuxFontSource() {
+        val source = Path.of("..", "assets", "rux", "fonts", "rux-mono-5x7.font").readText()
+
+        val generated = RuxFontTableGenerator().generate(source)
+
+        assertTrue(generated.rustSource.contains("pub fn mono5x7_glyph(ch: char) -> u64"))
+        assertTrue(generated.rustSource.contains("'\\u{41}' =>"))
+        assertTrue(generated.rustSource.contains("'\\u{2500}' =>"))
+        assertTrue(generated.kotlinSource.contains("object GeneratedTerminalFont"))
+        assertTrue(generated.kotlinSource.contains("0x0041.toChar() ->"))
+        assertTrue(generated.kotlinSource.contains("0x2500.toChar() ->"))
+    }
+
+    @Test
+    fun rejectsRowsWithInvalidWidth() {
+        val source =
+            Path.of("..", "assets", "rux", "fonts", "rux-mono-5x7.font")
+                .readText()
+                .replaceFirst(".....", "....")
+
+        val error =
+            assertThrows(IllegalArgumentException::class.java) {
+                RuxFontTableGenerator().generate(source)
+            }
+
+        assertTrue((error.message ?: "").contains("must be 5 cells"))
+    }
+}

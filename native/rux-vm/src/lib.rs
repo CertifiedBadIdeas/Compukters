@@ -8,6 +8,7 @@ pub mod computer_machine {
     pub use crate::computer::profile::{ComputerHardwareConfig, ComputerMachineProfile};
 }
 pub mod display;
+pub mod generated;
 pub mod jni;
 pub mod low_bus;
 pub mod low_disasm;

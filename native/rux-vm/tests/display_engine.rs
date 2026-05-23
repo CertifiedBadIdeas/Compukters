@@ -1,4 +1,5 @@
 use rux_vm::display::{DeviceDisplayRegistry, DisplayEngine, PixelFormat};
+use rux_vm::generated::font_mono5x7::{has_mono5x7_glyph, mono5x7_glyph};
 
 fn payload_contains_rgb565(payload: &[u8], rgb565: u16) -> bool {
     let hi = (rgb565 >> 8) as u8;
@@ -106,6 +107,37 @@ fn text_run_supports_digits_lowercase_and_punctuation() {
     assert_ne!(single_text_payload("x"), single_text_payload("X"));
     assert_ne!(single_text_payload("1"), single_text_payload("@"));
     assert_ne!(single_text_payload("-"), single_text_payload("@"));
+}
+
+#[test]
+fn generated_font_covers_printable_ascii_and_terminal_box_glyphs() {
+    for byte in 0x20u8..=0x7e {
+        let ch = byte as char;
+        assert!(
+            has_mono5x7_glyph(ch),
+            "missing glyph for printable ASCII `{ch}`",
+        );
+    }
+
+    for ch in ['─', '│', '┌', '┐', '└', '┘', '┼'] {
+        assert!(has_mono5x7_glyph(ch), "missing box drawing glyph `{ch}`");
+    }
+}
+
+#[test]
+fn generated_font_keeps_lowercase_distinct_from_uppercase() {
+    for (lower, upper) in [('a', 'A'), ('e', 'E'), ('o', 'O'), ('x', 'X')] {
+        assert_ne!(
+            mono5x7_glyph(lower),
+            mono5x7_glyph(upper),
+            "glyph `{lower}` should not collapse to `{upper}`",
+        );
+    }
+}
+
+#[test]
+fn generated_font_uses_explicit_fallback_for_unknown_glyphs() {
+    assert_eq!(mono5x7_glyph('\u{2603}'), mono5x7_glyph('\u{fffd}'));
 }
 
 #[test]
