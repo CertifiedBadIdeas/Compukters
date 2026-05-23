@@ -28,6 +28,7 @@ private val requiredCodepoints =
 data class GeneratedRuxFontTables(
     val rustSource: String,
     val kotlinSource: String,
+    val markdownSpecimen: String,
 )
 
 class RuxFontTableGenerator {
@@ -38,6 +39,7 @@ class RuxFontTableGenerator {
         return GeneratedRuxFontTables(
             rustSource = renderRust(packed),
             kotlinSource = renderKotlin(packed),
+            markdownSpecimen = renderMarkdownSpecimen(glyphs.toSortedMap()),
         )
     }
 
@@ -153,11 +155,41 @@ class RuxFontTableGenerator {
         """.trimMargin()
     }
 
+    private fun renderMarkdownSpecimen(glyphs: Map<Int, List<String>>): String {
+        val glyphSections =
+            glyphs.entries.joinToString(separator = "\n\n") { (codepoint, rows) ->
+                """
+                    |## U+${codepoint.hex()} ${codepoint.displayName()}
+                    |
+                    |```text
+                    |${rows.joinToString(separator = "\n")}
+                    |```
+                """.trimMargin()
+            }
+        return """
+            |# Rux Mono 5x7 Font Specimen
+            |
+            |- Glyph size: ${GLYPH_WIDTH}x${GLYPH_HEIGHT}
+            |- Glyph count: ${glyphs.size}
+            |- Source: assets/rux/fonts/rux-mono-5x7.font
+            |
+            |$glyphSections
+            |
+        """.trimMargin()
+    }
+
     private fun rustChar(codepoint: Int): String = "'\\u{${codepoint.toString(radix = 16)}}'"
 
     private fun Int.hex(): String = toString(radix = 16).uppercase().padStart(4, '0')
 
     private fun Int.hexLiteral(): String = "0x${hex()}"
+
+    private fun Int.displayName(): String =
+        when (this) {
+            0x20 -> "SPACE"
+            FALLBACK_CODEPOINT -> "FALLBACK"
+            else -> String(Character.toChars(this))
+        }
 
     private fun Long.bits35(): String = toString(radix = 2).padStart(GLYPH_WIDTH * GLYPH_HEIGHT, '0')
 }

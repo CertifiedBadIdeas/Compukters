@@ -33,3 +33,10 @@ tasks.register<GenerateRuxFontTablesTask>("generateRuxFontTables") {
         ),
     )
 }
+
+tasks.register<GenerateRuxFontSpecimenTask>("generateRuxFontSpecimen") {
+    description = "Generates a Markdown specimen report for the Rux bitmap font source."
+    group = "rux"
+    fontFile.set(layout.projectDirectory.file("assets/rux/fonts/rux-mono-5x7.font"))
+    output.set(layout.buildDirectory.file("reports/rux-font/rux-mono-5x7-specimen.md"))
+}
