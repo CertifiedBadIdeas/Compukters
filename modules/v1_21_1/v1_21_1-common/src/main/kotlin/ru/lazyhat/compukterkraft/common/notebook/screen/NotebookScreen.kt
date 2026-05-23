@@ -39,6 +39,14 @@ import ru.lazyhat.compukterkraft.core.ui.foundation.modifier.size
 import ru.lazyhat.compukterkraft.core.ui.foundation.ui
 import ru.lazyhat.compukterkraft.core.ui.foundation.value
 
+private enum class NotebookRuntimeState(
+    val label: String,
+) {
+    OFF("OFFLINE"),
+    CONNECTING("BOOTING"),
+    RUNNING("RUNNING"),
+}
+
 class NotebookScreen(
     menu: ComputerMenuWithoutInventory,
     inventory: Inventory,
@@ -61,6 +69,8 @@ class NotebookScreen(
         val surfaceRelY = layout.terminalSurfaceBounds.y - topPos
         val statusRelX = layout.statusBounds.x - leftPos
         val statusRelY = layout.statusBounds.y - topPos
+        val moduleBayX = statusRelX + 104
+        val moduleBayY = statusRelY + 3
 
         return ui(Modifier.size(imageWidth, imageHeight).background(BACKGROUND)) {
             text(
@@ -70,14 +80,16 @@ class NotebookScreen(
                 title.string
             }
             text(
-                modifier = Modifier.offset(imageWidth - 128, 8),
-                color = STATUS,
+                modifier = Modifier.offset(12, 20),
+                color = DIM,
             ) {
-                when {
-                    !menu.isComputerOn -> "OFF"
-                    menu.clientSide.displayBuffer?.hasReceivedFrames == true -> "RUNNING"
-                    else -> "CONNECTING"
-                }
+                "RUX LAPTOP"
+            }
+            text(
+                modifier = Modifier.offset(imageWidth - 156, 8),
+                color = { runtimeStateColor(runtimeState()) },
+            ) {
+                "STATE: ${runtimeState().label}"
             }
 
             If(value { menu.isComputerOn }) {
@@ -100,9 +112,9 @@ class NotebookScreen(
             If(value { !menu.isComputerOn }) {
                 text(
                     modifier = Modifier.offset(surfaceRelX + 12, surfaceRelY + 12),
-                    color = STATUS,
+                    color = DIM,
                 ) {
-                    "POWERED OFF"
+                    "POWERED OFF - PRESS POWER"
                 }
             }
 
@@ -112,17 +124,20 @@ class NotebookScreen(
             ) {
                 "${TERMINAL_COLUMNS * TerminalFontConstants.FONT_WIDTH} x ${TERMINAL_ROWS * TerminalFontConstants.FONT_HEIGHT}"
             }
+            moduleBay(moduleBayX, moduleBayY)
 
             laptopButton(
                 x = imageWidth - 154,
                 y = statusRelY + 3,
                 label = { if (menu.isComputerOn) "SHUTDOWN" else "POWER" },
+                enabled = { true },
                 action = { if (menu.isComputerOn) ComputerControlAction.SHUTDOWN else ComputerControlAction.TURN_ON },
             )
             laptopButton(
                 x = imageWidth - 74,
                 y = statusRelY + 3,
                 label = { "REBOOT" },
+                enabled = { menu.isComputerOn },
                 action = { ComputerControlAction.REBOOT },
             )
         }
@@ -143,19 +158,68 @@ class NotebookScreen(
         x: Int,
         y: Int,
         label: () -> String,
+        enabled: () -> Boolean,
         action: () -> ComputerControlAction,
     ) {
         button(
-            modifier = Modifier.offset(x, y).size(68, 14).background(BUTTON),
-            onClick = { inputHandler.accept(ControlInputEvent(action())) },
+            modifier = Modifier.offset(x, y).size(68, 14),
+            onClick = {
+                if (enabled()) {
+                    inputHandler.accept(ControlInputEvent(action()))
+                }
+            },
         ) {
+            canvas(Modifier.size(68, 14)) {
+                drawButtonChrome(if (enabled()) BUTTON else BUTTON_DISABLED)
+            }
             text(
                 modifier = Modifier.offset(5, 3),
-                color = BUTTON_TEXT,
+                color = { if (enabled()) BUTTON_TEXT else BUTTON_TEXT_DISABLED },
                 text = label,
             )
         }
     }
+
+    private fun ru.lazyhat.compukterkraft.core.ui.foundation.UiScope.moduleBay(
+        x: Int,
+        y: Int,
+    ) {
+        canvas(Modifier.offset(x, y).size(126, 14)) {
+            fillRect(0, 0, 126, 14, MODULE_BAY)
+            fillRect(0, 0, 126, 1, MODULE_BAY_BORDER)
+            fillRect(0, 13, 126, 1, MODULE_BAY_BORDER)
+            fillRect(0, 0, 1, 14, MODULE_BAY_BORDER)
+            fillRect(125, 0, 1, 14, MODULE_BAY_BORDER)
+        }
+        text(
+            modifier = Modifier.offset(x + 6, y + 3),
+            color = DIM,
+        ) {
+            "MODULE BAY: EMPTY"
+        }
+    }
+
+    private fun ru.lazyhat.compukterkraft.core.ui.foundation.CanvasScope.drawButtonChrome(color: Color) {
+        fillRect(0, 0, 68, 14, color)
+        fillRect(0, 0, 68, 1, BUTTON_BORDER)
+        fillRect(0, 13, 68, 1, BUTTON_BORDER)
+        fillRect(0, 0, 1, 14, BUTTON_BORDER)
+        fillRect(67, 0, 1, 14, BUTTON_BORDER)
+    }
+
+    private fun runtimeState(): NotebookRuntimeState =
+        when {
+            !menu.isComputerOn -> NotebookRuntimeState.OFF
+            menu.clientSide.displayBuffer?.hasReceivedFrames == true -> NotebookRuntimeState.RUNNING
+            else -> NotebookRuntimeState.CONNECTING
+        }
+
+    private fun runtimeStateColor(state: NotebookRuntimeState): Color =
+        when (state) {
+            NotebookRuntimeState.OFF -> DIM
+            NotebookRuntimeState.CONNECTING -> BOOTING
+            NotebookRuntimeState.RUNNING -> STATUS
+        }
 
     companion object {
         private const val NOTEBOOK_DISPLAY_ID = 1
@@ -165,8 +229,14 @@ class NotebookScreen(
         private val BACKGROUND = Color.hex(0xFF101318U)
         private val TITLE = Color.hex(0xFFE6ECF5U)
         private val STATUS = Color.hex(0xFF7CFFB2U)
+        private val BOOTING = Color.hex(0xFFFFD37CU)
         private val DIM = Color.hex(0xFF798394U)
         private val BUTTON = Color.hex(0xFF202735U)
+        private val BUTTON_DISABLED = Color.hex(0xFF171B23U)
+        private val BUTTON_BORDER = Color.hex(0xFF2C3444U)
         private val BUTTON_TEXT = Color.hex(0xFFE6ECF5U)
+        private val BUTTON_TEXT_DISABLED = Color.hex(0xFF606A78U)
+        private val MODULE_BAY = Color.hex(0xFF151A22U)
+        private val MODULE_BAY_BORDER = Color.hex(0xFF2C3444U)
     }
 }
