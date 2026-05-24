@@ -46,3 +46,5 @@ Minecraft/UI changes.
 
 Respect user changes in the worktree. Prefer focused edits, run the narrowest useful verification, and update docs or
 ABI fixtures when behavior changes.
+For GitHub operations in this repository, do not use the GitHub MCP server or GitHub app connector tools. Use the
+`gh` CLI instead, including `gh api` for REST or GraphQL operations that are not covered by first-class `gh` commands.
