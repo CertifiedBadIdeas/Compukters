@@ -4,6 +4,7 @@ use crate::computer::devices::{
 };
 use crate::computer_abi;
 use crate::low_machine::MemoryFault;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ComputerMachineProfile {
@@ -77,6 +78,34 @@ impl ComputerMachineProfile {
             ))
     }
 
+    pub fn computer_v1_with_storage0_path(
+        memory_size: usize,
+        storage0_path: impl AsRef<Path>,
+    ) -> Self {
+        Self::new(memory_size)
+            .with_hardware(ComputerHardwareConfig::control(
+                computer_abi::COMPUTER_HARDWARE_ID_CONTROL,
+                computer_abi::CONTROL_BASE,
+            ))
+            .with_hardware(ComputerHardwareConfig::debug_serial(
+                computer_abi::COMPUTER_HARDWARE_ID_DEBUG,
+                computer_abi::DEBUG_BASE,
+            ))
+            .with_hardware(ComputerHardwareConfig::serial_input(
+                computer_abi::COMPUTER_HARDWARE_ID_SERIAL_INPUT,
+                computer_abi::SERIAL_INPUT_BASE,
+            ))
+            .with_hardware(ComputerHardwareConfig::text_display(
+                computer_abi::COMPUTER_HARDWARE_ID_DISPLAY0,
+                computer_abi::DISPLAY0_BASE,
+            ))
+            .with_hardware(ComputerHardwareConfig::storage_port_with_rux_volume_file(
+                computer_abi::COMPUTER_HARDWARE_ID_STORAGE0,
+                computer_abi::STORAGE0_BASE,
+                storage0_path,
+            ))
+    }
+
     pub fn with_hardware(mut self, hardware: ComputerHardwareConfig) -> Self {
         self.hardware.push(hardware);
         self
@@ -146,6 +175,20 @@ impl ComputerHardwareConfig {
         }
     }
 
+    pub fn storage_port_with_rux_volume_file(
+        id: u32,
+        mmio_base: u32,
+        path: impl AsRef<Path>,
+    ) -> Self {
+        Self {
+            id,
+            mmio_base,
+            device: ComputerHardwareDevice::StoragePort(StoragePortConfig::with_rux_volume_file(
+                path,
+            )),
+        }
+    }
+
     pub(crate) fn mmio_size(&self) -> u32 {
         self.device.mmio_size()
     }
@@ -172,15 +215,23 @@ impl StoragePortConfig {
 
     fn with_media(bytes: Vec<u8>, read_only: bool) -> Self {
         Self {
-            media: Some(StorageMediaConfig { bytes, read_only }),
+            media: Some(StorageMediaConfig::InMemory { bytes, read_only }),
+        }
+    }
+
+    fn with_rux_volume_file(path: impl AsRef<Path>) -> Self {
+        Self {
+            media: Some(StorageMediaConfig::RuxVolumeFile {
+                path: path.as_ref().to_path_buf(),
+            }),
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct StorageMediaConfig {
-    pub(crate) bytes: Vec<u8>,
-    pub(crate) read_only: bool,
+pub(crate) enum StorageMediaConfig {
+    InMemory { bytes: Vec<u8>, read_only: bool },
+    RuxVolumeFile { path: PathBuf },
 }
 
 impl ComputerHardwareDevice {

@@ -3,6 +3,9 @@ use crate::low_bus::MmioDevice;
 use crate::low_machine::{MachineMemory, MemoryFault};
 use std::cell::RefCell;
 use std::collections::VecDeque;
+use std::fs::{File, OpenOptions};
+use std::io::{Read, Seek, SeekFrom, Write};
+use std::path::Path;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ComputerTextDisplaySnapshot {
@@ -382,6 +385,132 @@ pub(crate) trait StorageMedia {
     fn snapshot_bytes(&self) -> Option<Vec<u8>>;
 }
 
+#[derive(Debug)]
+pub(crate) struct RuxVolumeFileStorageMedia {
+    file: File,
+    len: u64,
+}
+
+impl RuxVolumeFileStorageMedia {
+    const MAGIC: &'static [u8; 6] = b"RUXVOL";
+    const VERSION: u16 = 1;
+    const HEADER_SIZE: u64 = 16;
+
+    pub(crate) fn open(path: impl AsRef<Path>) -> Result<Self, MemoryFault> {
+        let mut file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(path.as_ref())
+            .map_err(|error| {
+                MemoryFault::new(format!(
+                    "failed to open RUXVOL file {}: {error}",
+                    path.as_ref().display()
+                ))
+            })?;
+        let file_len = file
+            .metadata()
+            .map_err(|error| MemoryFault::new(format!("failed to stat RUXVOL file: {error}")))?
+            .len();
+        if file_len < Self::HEADER_SIZE {
+            return Err(MemoryFault::new(format!(
+                "truncated RUXVOL header: file has {file_len} bytes",
+            )));
+        }
+
+        let mut header = [0; Self::HEADER_SIZE as usize];
+        file.seek(SeekFrom::Start(0))
+            .map_err(|error| MemoryFault::new(format!("failed to seek RUXVOL header: {error}")))?;
+        file.read_exact(&mut header)
+            .map_err(|error| MemoryFault::new(format!("failed to read RUXVOL header: {error}")))?;
+
+        if &header[0..6] != Self::MAGIC {
+            return Err(MemoryFault::new("invalid RUXVOL magic".to_string()));
+        }
+        let version = u16::from_le_bytes([header[6], header[7]]);
+        if version != Self::VERSION {
+            return Err(MemoryFault::new(format!(
+                "unsupported RUXVOL version {version}",
+            )));
+        }
+        let len = u64::from_le_bytes([
+            header[8], header[9], header[10], header[11], header[12], header[13], header[14],
+            header[15],
+        ]);
+        if len == 0 {
+            return Err(MemoryFault::new(
+                "RUXVOL logical size must be positive".to_string(),
+            ));
+        }
+        let expected_len = Self::HEADER_SIZE
+            .checked_add(len)
+            .ok_or_else(|| MemoryFault::new("RUXVOL file length overflows u64".to_string()))?;
+        if file_len != expected_len {
+            return Err(MemoryFault::new(format!(
+                "RUXVOL file length {file_len} does not match logical size {len}",
+            )));
+        }
+
+        Ok(Self { file, len })
+    }
+
+    fn payload_offset(&self, offset: u64, len: usize) -> Result<u64, MemoryFault> {
+        let len = u64::try_from(len)
+            .map_err(|_| MemoryFault::new("RUXVOL access length does not fit u64".to_string()))?;
+        let end = offset
+            .checked_add(len)
+            .ok_or_else(|| MemoryFault::new("RUXVOL access range overflows u64".to_string()))?;
+        if end > self.len {
+            return Err(MemoryFault::new(format!(
+                "RUXVOL payload access {offset}..{end} exceeds logical size {}",
+                self.len,
+            )));
+        }
+        Self::HEADER_SIZE
+            .checked_add(offset)
+            .ok_or_else(|| MemoryFault::new("RUXVOL file offset overflows u64".to_string()))
+    }
+}
+
+impl StorageMedia for RuxVolumeFileStorageMedia {
+    fn len(&self) -> u64 {
+        self.len
+    }
+
+    fn is_read_only(&self) -> bool {
+        false
+    }
+
+    fn read_at(&mut self, offset: u64, dst: &mut [u8]) -> Result<(), MemoryFault> {
+        let file_offset = self.payload_offset(offset, dst.len())?;
+        self.file
+            .seek(SeekFrom::Start(file_offset))
+            .map_err(|error| MemoryFault::new(format!("failed to seek RUXVOL read: {error}")))?;
+        self.file
+            .read_exact(dst)
+            .map_err(|error| MemoryFault::new(format!("failed to read RUXVOL payload: {error}")))
+    }
+
+    fn write_at(&mut self, offset: u64, src: &[u8]) -> Result<(), MemoryFault> {
+        let file_offset = self.payload_offset(offset, src.len())?;
+        self.file
+            .seek(SeekFrom::Start(file_offset))
+            .map_err(|error| MemoryFault::new(format!("failed to seek RUXVOL write: {error}")))?;
+        self.file
+            .write_all(src)
+            .map_err(|error| MemoryFault::new(format!("failed to write RUXVOL payload: {error}")))
+    }
+
+    fn flush(&mut self) -> Result<(), MemoryFault> {
+        self.file
+            .sync_data()
+            .map_err(|error| MemoryFault::new(format!("failed to flush RUXVOL payload: {error}")))
+    }
+
+    fn snapshot_bytes(&self) -> Option<Vec<u8>> {
+        None
+    }
+}
+
 pub(crate) struct InMemoryStorageMedia {
     bytes: Vec<u8>,
     read_only: bool,
@@ -704,7 +833,9 @@ impl MmioDevice for StoragePortDevice {
 mod tests {
     use super::*;
     use std::cell::Cell;
+    use std::fs;
     use std::rc::Rc;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     struct CountingFlushMedia {
         bytes: Vec<u8>,
@@ -765,5 +896,55 @@ mod tests {
                 .unwrap(),
             computer_abi::STORAGE_STATUS_DONE,
         );
+    }
+
+    #[test]
+    fn rux_volume_file_media_reads_writes_and_flushes_payload() {
+        let path = temp_volume_path("read_write_flush");
+        write_rux_volume(&path, &[0; 512]);
+        let mut media = RuxVolumeFileStorageMedia::open(&path).unwrap();
+
+        media.write_at(511, &[0xA5]).unwrap();
+        media.flush().unwrap();
+
+        let bytes = fs::read(&path).unwrap();
+        assert_eq!(bytes[16 + 511], 0xA5);
+
+        let mut read = [0; 1];
+        media.read_at(511, &mut read).unwrap();
+        assert_eq!(read, [0xA5]);
+
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn rux_volume_file_media_rejects_invalid_magic() {
+        let path = temp_volume_path("invalid_magic");
+        fs::write(&path, b"BADVOL\x01\x00\x00\x02\x00\x00\x00\x00\x00\x00").unwrap();
+
+        let error = RuxVolumeFileStorageMedia::open(&path).unwrap_err();
+
+        assert!(error.to_string().contains("invalid RUXVOL magic"));
+        fs::remove_file(path).unwrap();
+    }
+
+    fn write_rux_volume(path: &std::path::Path, payload: &[u8]) {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RUXVOL");
+        bytes.extend_from_slice(&1u16.to_le_bytes());
+        bytes.extend_from_slice(&(payload.len() as u64).to_le_bytes());
+        bytes.extend_from_slice(payload);
+        fs::write(path, bytes).unwrap();
+    }
+
+    fn temp_volume_path(name: &str) -> std::path::PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir().join(format!(
+            "rux-vm-{name}-{}-{nanos}.ruxvol",
+            std::process::id()
+        ))
     }
 }

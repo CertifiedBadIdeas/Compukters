@@ -1,9 +1,10 @@
 use crate::computer::devices::{
     ComputerControlDevice, ComputerTextDisplaySnapshot, DebugSerialDevice, SerialInputDevice,
-    StoragePortDevice, TextDisplayDevice,
+    RuxVolumeFileStorageMedia, StoragePortDevice, TextDisplayDevice,
 };
 use crate::computer::profile::{
     validate_profile_v2, ComputerHardwareDevice, ComputerMachineProfile, HardwareTableEntry,
+    StorageMediaConfig,
 };
 use crate::computer_abi;
 use crate::low_bus::{MachineBus, MmioDeviceId};
@@ -150,8 +151,13 @@ impl ComputerMachine {
                 }
                 ComputerHardwareDevice::StoragePort(config) => {
                     let device = match &config.media {
-                        Some(media) => {
-                            StoragePortDevice::with_media(media.bytes.clone(), media.read_only)?
+                        Some(StorageMediaConfig::InMemory { bytes, read_only }) => {
+                            StoragePortDevice::with_media(bytes.clone(), *read_only)?
+                        }
+                        Some(StorageMediaConfig::RuxVolumeFile { path }) => {
+                            StoragePortDevice::with_media_backend(Box::new(
+                                RuxVolumeFileStorageMedia::open(path)?,
+                            ))?
                         }
                         None => StoragePortDevice::new_absent(),
                     };
@@ -533,6 +539,8 @@ mod tests {
     use crate::low_image::{Function, Image, Instruction};
     use crate::low_image_runner::LowImageSignal;
     use crate::low_machine::MemoryFault;
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     // Legacy CKL OS research fixtures. Keep these tests as reference material, but do not
     // treat the guest process table/scheduler path as the current bare-metal MVP direction.
@@ -1197,6 +1205,44 @@ mod tests {
         let media = machine.storage0_media_bytes().unwrap();
         assert_eq!(media[0], 0x5A);
         assert_eq!(media[511], 0xC3);
+    }
+
+    #[test]
+    fn storage0_file_media_write_blocks_flushes_payload_file() {
+        let path = temp_volume_path("machine-storage0-file");
+        write_rux_volume(&path, &[0; 512]);
+        let profile = ComputerMachineProfile::new(2048).with_hardware(
+            ComputerHardwareConfig::storage_port_with_rux_volume_file(
+                computer_abi::COMPUTER_HARDWARE_ID_STORAGE0,
+                computer_abi::STORAGE0_BASE,
+                &path,
+            ),
+        );
+        let mut machine = ComputerMachine::from_profile(profile).unwrap();
+        machine.memory_mut().store_u8(512, 0x7E).unwrap();
+
+        machine
+            .bus_store_i32(computer_abi::STORAGE0_BLOCK_COUNT, 1)
+            .unwrap();
+        machine
+            .bus_store_i32(computer_abi::STORAGE0_BUFFER_ADDR, 512)
+            .unwrap();
+        machine
+            .bus_store_i32(
+                computer_abi::STORAGE0_COMMAND,
+                computer_abi::STORAGE_COMMAND_WRITE_BLOCKS,
+            )
+            .unwrap();
+        machine
+            .bus_store_i32(
+                computer_abi::STORAGE0_COMMAND,
+                computer_abi::STORAGE_COMMAND_FLUSH,
+            )
+            .unwrap();
+
+        let bytes = fs::read(&path).unwrap();
+        assert_eq!(bytes[16], 0x7E);
+        fs::remove_file(path).unwrap();
     }
 
     #[test]
@@ -2447,6 +2493,26 @@ mod tests {
             ),
         );
         ComputerMachine::from_profile(profile).unwrap()
+    }
+
+    fn write_rux_volume(path: &std::path::Path, payload: &[u8]) {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RUXVOL");
+        bytes.extend_from_slice(&1u16.to_le_bytes());
+        bytes.extend_from_slice(&(payload.len() as u64).to_le_bytes());
+        bytes.extend_from_slice(payload);
+        fs::write(path, bytes).unwrap();
+    }
+
+    fn temp_volume_path(name: &str) -> std::path::PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir().join(format!(
+            "rux-machine-{name}-{}-{nanos}.ruxvol",
+            std::process::id()
+        ))
     }
 
     fn assert_storage_error(machine: &ComputerMachine, error: i32) {

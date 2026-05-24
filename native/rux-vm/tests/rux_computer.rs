@@ -2,6 +2,8 @@ use rux_vm::computer_machine::ComputerMachine;
 use rux_vm::low_image::{encode_image, Function, Image, Instruction};
 use rux_vm::low_image_runner::LowImageSignal;
 use rux_vm::rux_computer::{RuxComputerControl, RuxComputerHandle};
+use std::fs;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 fn terminal_firmware_image() -> Vec<u8> {
     let image = Image {
@@ -161,4 +163,38 @@ fn rux_computer_handle_accepts_storage0_media_and_exposes_snapshot() {
         handle.storage0_media_snapshot().expect("storage0 media exists"),
         media,
     );
+}
+
+#[test]
+fn rux_computer_handle_accepts_storage0_volume_path() {
+    let image = terminal_firmware_image();
+    let path = temp_volume_path("handle-storage0-path");
+    write_rux_volume(&path, &[0; 1024]);
+
+    let handle =
+        RuxComputerHandle::create_with_storage0_path(&image, 64 * 1024, 1_000_000, &path)
+            .expect("computer handle creates with storage0 volume path");
+
+    assert!(handle.storage0_media_snapshot().is_none());
+    fs::remove_file(path).unwrap();
+}
+
+fn write_rux_volume(path: &std::path::Path, payload: &[u8]) {
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(b"RUXVOL");
+    bytes.extend_from_slice(&1u16.to_le_bytes());
+    bytes.extend_from_slice(&(payload.len() as u64).to_le_bytes());
+    bytes.extend_from_slice(payload);
+    fs::write(path, bytes).unwrap();
+}
+
+fn temp_volume_path(name: &str) -> std::path::PathBuf {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    std::env::temp_dir().join(format!(
+        "rux-computer-{name}-{}-{nanos}.ruxvol",
+        std::process::id()
+    ))
 }

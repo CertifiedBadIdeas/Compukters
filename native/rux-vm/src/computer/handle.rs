@@ -3,6 +3,7 @@ use crate::computer::{
 };
 use crate::low_image::decode_image;
 use crate::low_image_runner::LowImageSignal;
+use std::path::Path;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RuxComputerControl {
@@ -65,6 +66,19 @@ impl RuxComputerHandle {
                 storage0_media,
                 false,
             ),
+            slice_budget_nanos,
+        )
+    }
+
+    pub fn create_with_storage0_path(
+        image_bytes: &[u8],
+        memory_size: usize,
+        slice_budget_nanos: u64,
+        storage0_path: impl AsRef<Path>,
+    ) -> Result<Self, String> {
+        Self::create_with_profile(
+            image_bytes,
+            ComputerMachineProfile::computer_v1_with_storage0_path(memory_size, storage0_path),
             slice_budget_nanos,
         )
     }
