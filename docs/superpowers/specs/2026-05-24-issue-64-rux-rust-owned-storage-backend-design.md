@@ -4,7 +4,7 @@
 
 ## Status
 
-Accepted for implementation.
+Implemented.
 
 ## Context
 
@@ -122,4 +122,3 @@ This work should be split into small commits:
 2. Rust storage media abstraction and file backend;
 3. JNI/Kotlin wiring;
 4. follow-up fixes only if verification exposes them.
-
