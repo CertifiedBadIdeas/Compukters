@@ -34,22 +34,23 @@ fn main() {
     set_booting();
 
     clear();
-    display_line(0u32, b"RUX BIOS", 8u32);
-    display_line(1u32, b"BootInfo OK", 11u32);
+    display_line(0u32, b"RUX BIOS v1", 11u32);
+    display_line(1u32, b"Compukter Kraft", 15u32);
+    display_line(3u32, b"BootInfo OK", 11u32);
 
     debug_line(b"RUX BIOS", 8u32);
     debug_line(b"BOOTINFO OK", 11u32);
 
     let mut media: i32 = storage_media_status();
     if media == 1 || media == 2 {
-        display_line(2u32, b"Storage: present", 16u32);
+        display_line(4u32, b"Storage: present", 16u32);
         debug_line(b"HW STORAGE0 PRESENT", 19u32);
     } else {
-        display_line(2u32, b"Storage: absent", 15u32);
+        display_line(4u32, b"Storage: absent", 15u32);
         debug_line(b"HW STORAGE0 ABSENT", 18u32);
     }
 
-    display_line(3u32, b"No bootable device", 18u32);
+    display_line(5u32, b"No bootable device", 18u32);
     debug_line(b"NO BOOTABLE DEVICE", 18u32);
 
     set_ready();
