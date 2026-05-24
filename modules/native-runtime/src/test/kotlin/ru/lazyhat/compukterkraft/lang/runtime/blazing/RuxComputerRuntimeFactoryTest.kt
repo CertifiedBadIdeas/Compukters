@@ -26,8 +26,8 @@ import kotlin.test.assertFailsWith
 
 class RuxComputerRuntimeFactoryTest {
     @Test
-    fun defaultFirmwareResourceTargetsLaptopDisplayFirmware() {
-        assertEquals("firmware/rux-laptop.ruxi", RuxComputerRuntimeFactory.DEFAULT_FIRMWARE_RESOURCE)
+    fun defaultFirmwareResourceTargetsBiosFirmware() {
+        assertEquals("firmware/rux-bios.ruxi", RuxComputerRuntimeFactory.DEFAULT_FIRMWARE_RESOURCE)
     }
 
     @Test
