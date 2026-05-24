@@ -125,6 +125,46 @@ fn run_source_until_serial_output_supports_live_polling_firmware() {
 }
 
 #[test]
+fn example_bios_firmware_reports_no_bootable_device() {
+    let source = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/firmware/bios.rx"),
+    )
+    .expect("bios firmware source should exist");
+    let report = run_source_until_serial_output(&source, b"", 58, 256).unwrap();
+
+    assert_eq!(report.panic_code, 0);
+    assert_eq!(report.control_status, ComputerMachine::STATUS_READY);
+    assert!(report.debug_output.contains("RUX BIOS"), "{}", report.debug_output);
+    assert!(
+        report.debug_output.contains("NO BOOTABLE DEVICE"),
+        "{}",
+        report.debug_output,
+    );
+}
+
+#[test]
+fn example_bios_firmware_draws_no_bootable_device_screen() {
+    let source = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/firmware/bios.rx"),
+    )
+    .expect("bios firmware source should exist");
+    let image = compile(&source).unwrap();
+    let mut machine = ComputerMachine::new(64 * 1024).unwrap();
+    let cpu_id = machine.spawn_boot_cpu(image, 1_000).unwrap();
+
+    for _ in 0..128 {
+        let signal = machine.run_boot_cpu_until_signal(cpu_id).unwrap();
+        if !matches!(signal, LowImageSignal::Pause) {
+            break;
+        }
+    }
+
+    let snapshot = machine.display0_snapshot().unwrap();
+    assert_eq!(display_row(&snapshot, 0), "RUX BIOS");
+    assert_eq!(display_row(&snapshot, 3), "No bootable device");
+}
+
+#[test]
 fn example_laptop_firmware_draws_prompt_on_display() {
     let snapshot = run_laptop_firmware_display(b"", 32);
 
