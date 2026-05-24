@@ -1,6 +1,6 @@
 use crate::computer_abi;
 use crate::low_bus::MmioDevice;
-use crate::low_machine::MemoryFault;
+use crate::low_machine::{MachineMemory, MemoryFault};
 use std::cell::RefCell;
 use std::collections::VecDeque;
 
@@ -352,6 +352,260 @@ impl MmioDevice for TextDisplayDevice {
     }
 
     fn store_i32(&mut self, offset: u32, value: i32) -> Result<(), MemoryFault> {
+        self.store_register(offset, value)
+    }
+}
+
+pub(crate) struct StoragePortDevice {
+    status: i32,
+    error: i32,
+    lba_low: u32,
+    lba_high: u32,
+    block_count: u32,
+    buffer_addr: u32,
+    bytes_done: u32,
+    sequence: u64,
+    media: Option<StorageMedia>,
+}
+
+struct StorageMedia {
+    bytes: Vec<u8>,
+    read_only: bool,
+}
+
+impl StoragePortDevice {
+    pub(crate) const SIZE: u32 = computer_abi::STORAGE0_SIZE;
+    const BLOCK_SIZE: u32 = 512;
+
+    pub(crate) fn new_absent() -> Self {
+        Self {
+            status: computer_abi::STORAGE_STATUS_READY,
+            error: computer_abi::STORAGE_ERROR_NONE,
+            lba_low: 0,
+            lba_high: 0,
+            block_count: 0,
+            buffer_addr: 0,
+            bytes_done: 0,
+            sequence: 0,
+            media: None,
+        }
+    }
+
+    pub(crate) fn with_media(bytes: Vec<u8>, read_only: bool) -> Result<Self, MemoryFault> {
+        if bytes.len() % Self::BLOCK_SIZE as usize != 0 {
+            return Err(MemoryFault::new(format!(
+                "storage0 media size {} is not a multiple of block size {}",
+                bytes.len(),
+                Self::BLOCK_SIZE,
+            )));
+        }
+        let mut device = Self::new_absent();
+        device.media = Some(StorageMedia { bytes, read_only });
+        Ok(device)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn media_bytes(&self) -> Option<&[u8]> {
+        self.media.as_ref().map(|media| media.bytes.as_slice())
+    }
+
+    fn execute_command(&mut self, command: i32, memory: Option<&mut MachineMemory>) {
+        self.sequence = self.sequence.wrapping_add(1);
+        self.bytes_done = 0;
+        match command {
+            computer_abi::STORAGE_COMMAND_NOP => {
+                self.status = computer_abi::STORAGE_STATUS_DONE;
+                self.error = computer_abi::STORAGE_ERROR_NONE;
+            }
+            computer_abi::STORAGE_COMMAND_FLUSH => {
+                self.status = computer_abi::STORAGE_STATUS_DONE;
+                self.error = computer_abi::STORAGE_ERROR_NONE;
+            }
+            computer_abi::STORAGE_COMMAND_READ_BLOCKS
+            | computer_abi::STORAGE_COMMAND_WRITE_BLOCKS => self.execute_transfer(command, memory),
+            _ => {
+                self.status = computer_abi::STORAGE_STATUS_ERROR;
+                self.error = computer_abi::STORAGE_ERROR_INVALID_COMMAND;
+            }
+        }
+    }
+
+    fn execute_transfer(&mut self, command: i32, memory: Option<&mut MachineMemory>) {
+        let Some(media) = self.media.as_mut() else {
+            self.fail(computer_abi::STORAGE_ERROR_MEDIA_ABSENT);
+            return;
+        };
+        if command == computer_abi::STORAGE_COMMAND_WRITE_BLOCKS && media.read_only {
+            self.fail(computer_abi::STORAGE_ERROR_WRITE_PROTECTED);
+            return;
+        }
+        let byte_count = match self.block_count.checked_mul(Self::BLOCK_SIZE) {
+            Some(value) => value,
+            None => {
+                self.fail(computer_abi::STORAGE_ERROR_BYTE_COUNT_OVERFLOW);
+                return;
+            }
+        };
+        let lba = (u64::from(self.lba_high) << 32) | u64::from(self.lba_low);
+        let end_lba = match lba.checked_add(u64::from(self.block_count)) {
+            Some(value) => value,
+            None => {
+                self.fail(computer_abi::STORAGE_ERROR_LBA_OUT_OF_BOUNDS);
+                return;
+            }
+        };
+        let capacity_blocks = media.bytes.len() as u64 / u64::from(Self::BLOCK_SIZE);
+        if end_lba > capacity_blocks {
+            self.fail(computer_abi::STORAGE_ERROR_LBA_OUT_OF_BOUNDS);
+            return;
+        }
+        let Some(buffer_end) = self.buffer_addr.checked_add(byte_count) else {
+            self.fail(computer_abi::STORAGE_ERROR_BUFFER_OUT_OF_BOUNDS);
+            return;
+        };
+        let Some(memory) = memory else {
+            self.fail(computer_abi::STORAGE_ERROR_BUFFER_OUT_OF_BOUNDS);
+            return;
+        };
+        if buffer_end as usize > memory.len() {
+            self.fail(computer_abi::STORAGE_ERROR_BUFFER_OUT_OF_BOUNDS);
+            return;
+        }
+        let media_start = match lba.checked_mul(u64::from(Self::BLOCK_SIZE)) {
+            Some(value) => value as usize,
+            None => {
+                self.fail(computer_abi::STORAGE_ERROR_LBA_OUT_OF_BOUNDS);
+                return;
+            }
+        };
+        let byte_count_usize = byte_count as usize;
+        match command {
+            computer_abi::STORAGE_COMMAND_READ_BLOCKS => {
+                for offset in 0..byte_count_usize {
+                    let byte = media.bytes[media_start + offset];
+                    if memory
+                        .store_u8(self.buffer_addr + offset as u32, byte)
+                        .is_err()
+                    {
+                        self.fail(computer_abi::STORAGE_ERROR_BUFFER_OUT_OF_BOUNDS);
+                        return;
+                    }
+                }
+            }
+            computer_abi::STORAGE_COMMAND_WRITE_BLOCKS => {
+                for offset in 0..byte_count_usize {
+                    let byte = match memory.load_u8(self.buffer_addr + offset as u32) {
+                        Ok(byte) => byte,
+                        Err(_) => {
+                            self.fail(computer_abi::STORAGE_ERROR_BUFFER_OUT_OF_BOUNDS);
+                            return;
+                        }
+                    };
+                    media.bytes[media_start + offset] = byte;
+                }
+            }
+            _ => unreachable!("transfer command is validated by caller"),
+        }
+        self.status = computer_abi::STORAGE_STATUS_DONE;
+        self.error = computer_abi::STORAGE_ERROR_NONE;
+        self.bytes_done = byte_count;
+    }
+
+    fn fail(&mut self, error: i32) {
+        self.status = computer_abi::STORAGE_STATUS_ERROR;
+        self.error = error;
+        self.bytes_done = 0;
+    }
+
+    fn load_register(&self, offset: u32) -> Result<i32, MemoryFault> {
+        match offset {
+            0 => Ok(computer_abi::STORAGE_VERSION),
+            4 => Ok(self.status),
+            8 => Ok(self.error),
+            16 => Ok(Self::BLOCK_SIZE as i32),
+            20 => Ok((self.capacity_blocks() as u32) as i32),
+            24 => Ok((self.capacity_blocks() >> 32) as u32 as i32),
+            28 => Ok(self.lba_low as i32),
+            32 => Ok(self.lba_high as i32),
+            36 => Ok(self.block_count as i32),
+            40 => Ok(self.buffer_addr as i32),
+            44 => Ok(self.bytes_done as i32),
+            48 => Ok((self.sequence as u32) as i32),
+            52 => Ok((self.sequence >> 32) as u32 as i32),
+            56 => Ok(self.media_status()),
+            _ => Err(MemoryFault::new(format!(
+                "computer storage0 offset {offset} is not readable",
+            ))),
+        }
+    }
+
+    fn capacity_blocks(&self) -> u64 {
+        self.media
+            .as_ref()
+            .map(|media| media.bytes.len() as u64 / u64::from(Self::BLOCK_SIZE))
+            .unwrap_or(0)
+    }
+
+    fn media_status(&self) -> i32 {
+        match &self.media {
+            None => computer_abi::STORAGE_MEDIA_ABSENT,
+            Some(media) if media.read_only => computer_abi::STORAGE_MEDIA_READ_ONLY,
+            Some(_) => computer_abi::STORAGE_MEDIA_PRESENT,
+        }
+    }
+
+    fn store_register(&mut self, offset: u32, value: i32) -> Result<(), MemoryFault> {
+        match offset {
+            12 => {
+                self.execute_command(value, None);
+                Ok(())
+            }
+            28 => {
+                self.lba_low = u32::from_le_bytes(value.to_le_bytes());
+                Ok(())
+            }
+            32 => {
+                self.lba_high = u32::from_le_bytes(value.to_le_bytes());
+                Ok(())
+            }
+            36 => {
+                self.block_count = u32::from_le_bytes(value.to_le_bytes());
+                Ok(())
+            }
+            40 => {
+                self.buffer_addr = u32::from_le_bytes(value.to_le_bytes());
+                Ok(())
+            }
+            _ => Err(MemoryFault::new(format!(
+                "computer storage0 offset {offset} is not writable",
+            ))),
+        }
+    }
+}
+
+impl MmioDevice for StoragePortDevice {
+    fn size(&self) -> u32 {
+        Self::SIZE
+    }
+
+    fn load_i32(&self, offset: u32) -> Result<i32, MemoryFault> {
+        self.load_register(offset)
+    }
+
+    fn store_i32(&mut self, offset: u32, value: i32) -> Result<(), MemoryFault> {
+        self.store_register(offset, value)
+    }
+
+    fn store_i32_with_memory(
+        &mut self,
+        offset: u32,
+        value: i32,
+        memory: &mut MachineMemory,
+    ) -> Result<(), MemoryFault> {
+        if offset == 12 {
+            self.execute_command(value, Some(memory));
+            return Ok(());
+        }
         self.store_register(offset, value)
     }
 }

@@ -32,6 +32,7 @@ impl Default for LowImageVmMetrics {
 struct LowFrame {
     function_index: usize,
     block_index: usize,
+    operation_index: usize,
     return_register: Option<usize>,
     register_base: usize,
 }
@@ -639,6 +640,7 @@ impl LowFrame {
         Self {
             function_index,
             block_index: 0,
+            operation_index: 0,
             return_register,
             register_base,
         }
@@ -1499,12 +1501,16 @@ fn run_cpu_until_signal(
             (frame.function_index, frame.block_index)
         };
         let block = program.function(function_index).block(block_index);
-        for operation in &block.operations {
+        while state.current_frame().operation_index < block.operations.len() {
+            let operation_index = state.current_frame().operation_index;
+            let operation = &block.operations[operation_index];
             state.execute_operation(memory, operation)?;
+            state.current_frame_mut().operation_index += 1;
             if state.should_pause(started_at, slice_budget) {
                 return Ok(LowImageSignal::Pause);
             }
         }
+        state.current_frame_mut().operation_index = 0;
         if let Some(signal) = state.execute_terminator(program, &block.terminator, started_at)? {
             return Ok(signal);
         }
@@ -1996,7 +2002,9 @@ impl LowState {
         bindings: &[StaticCallBinding],
         continuation_block: usize,
     ) {
-        self.current_frame_mut().block_index = continuation_block;
+        let caller = self.current_frame_mut();
+        caller.block_index = continuation_block;
+        caller.operation_index = 0;
         let caller_register_base = self.current_frame().register_base;
         let function = program.function(function_index);
         let register_base = self.registers.len();
@@ -2056,7 +2064,9 @@ impl LowState {
     }
 
     fn jump_block(&mut self, target_block: usize) {
-        self.current_frame_mut().block_index = target_block;
+        let frame = self.current_frame_mut();
+        frame.block_index = target_block;
+        frame.operation_index = 0;
     }
 }
 
@@ -2458,6 +2468,74 @@ fn instruction_terminates_linear_flow(instruction: &Instruction) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::low_machine::MemoryFault;
+
+    struct CountingBus {
+        bytes: Vec<u8>,
+        store_count: usize,
+    }
+
+    impl CountingBus {
+        fn new(size: usize) -> Self {
+            Self {
+                bytes: vec![0; size],
+                store_count: 0,
+            }
+        }
+
+        fn range(&self, address: u32, size: usize) -> Result<&[u8], MemoryFault> {
+            let start = address as usize;
+            let end = start
+                .checked_add(size)
+                .ok_or_else(|| MemoryFault::new("test memory range overflows".to_string()))?;
+            self.bytes.get(start..end).ok_or_else(|| {
+                MemoryFault::new(format!(
+                    "test memory access {start}..{end} is outside {} bytes",
+                    self.bytes.len(),
+                ))
+            })
+        }
+
+        fn range_mut(&mut self, address: u32, size: usize) -> Result<&mut [u8], MemoryFault> {
+            let start = address as usize;
+            let end = start
+                .checked_add(size)
+                .ok_or_else(|| MemoryFault::new("test memory range overflows".to_string()))?;
+            let len = self.bytes.len();
+            self.bytes.get_mut(start..end).ok_or_else(|| {
+                MemoryFault::new(format!(
+                    "test memory access {start}..{end} is outside {len} bytes",
+                ))
+            })
+        }
+    }
+
+    impl MemoryBus for CountingBus {
+        fn len(&self) -> usize {
+            self.bytes.len()
+        }
+
+        fn load_i32(&self, address: u32) -> Result<i32, MemoryFault> {
+            let bytes = self.range(address, 4)?;
+            Ok(i32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
+        }
+
+        fn store_i32(&mut self, address: u32, value: i32) -> Result<(), MemoryFault> {
+            self.store_count += 1;
+            self.range_mut(address, 4)?
+                .copy_from_slice(&value.to_le_bytes());
+            Ok(())
+        }
+
+        fn load_u8(&self, address: u32) -> Result<u8, MemoryFault> {
+            Ok(self.range(address, 1)?[0])
+        }
+
+        fn store_u8(&mut self, address: u32, value: u8) -> Result<(), MemoryFault> {
+            self.range_mut(address, 1)?[0] = value;
+            Ok(())
+        }
+    }
 
     #[test]
     fn lowering_splits_loop_into_basic_blocks() {
@@ -2535,6 +2613,50 @@ mod tests {
             vm.run_until_signal().unwrap(),
             LowImageSignal::HaltI32(0x12)
         );
+    }
+
+    #[test]
+    fn low_image_runner_resumes_after_pause_without_replaying_block_operations() {
+        let mut instructions = vec![
+            Instruction::AddrConst { dst: 0, value: 0 },
+            Instruction::I32Const { dst: 1, value: 65 },
+            Instruction::Store32 { addr: 0, src: 1 },
+        ];
+        for _ in 0..TIME_CHECK_INTERVAL {
+            instructions.push(Instruction::I32Const { dst: 2, value: 1 });
+        }
+        instructions.push(Instruction::ReturnI32 { src: 1 });
+
+        let image = Image {
+            memory_size: 64,
+            rodata: Vec::new(),
+            data: Vec::new(),
+            bss_size: 0,
+            entry_function_index: 0,
+            functions: vec![Function {
+                name: "main".to_string(),
+                register_count: 3,
+                parameters: Vec::new(),
+                instructions,
+            }],
+        };
+        let mut bus = CountingBus::new(64);
+        let mut cpu = LowImageVm::create_cpu_with_bus(image, 1, &mut bus).unwrap();
+
+        let mut halted = false;
+        for _ in 0..8 {
+            match cpu.run_until_signal().unwrap() {
+                LowImageSignal::Pause => {}
+                LowImageSignal::HaltI32(65) => {
+                    halted = true;
+                    break;
+                }
+                signal => panic!("unexpected signal: {signal:?}"),
+            }
+        }
+
+        assert!(halted, "CPU did not reach halt after pause/resume");
+        assert_eq!(bus.store_count, 1);
     }
 
     #[test]

@@ -2,8 +2,7 @@ use rux_compiler::{
     compile, render_terminal_ui, run_source, run_source_until_serial_output,
     run_source_with_serial_input,
 };
-use rux_vm::computer_machine::ComputerMachine;
-use rux_vm::computer_machine::ComputerTextDisplaySnapshot;
+use rux_vm::computer_machine::{ComputerMachine, ComputerTextDisplaySnapshot};
 use rux_vm::low_image_runner::LowImageSignal;
 
 #[test]
