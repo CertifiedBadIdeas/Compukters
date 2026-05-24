@@ -26,38 +26,37 @@
 
 ## Task 1: Rust Storage Media Abstraction
 
-- [ ] Add a failing Rust test proving `StoragePortDevice` can read/write/flush through a non-`Vec` media backend.
-- [ ] Run `cargo test -p rux-vm <test-name>` and confirm it fails because the abstraction is missing.
-- [ ] Add `StorageMedia` and `InMemoryStorageMedia`.
-- [ ] Update `StoragePortDevice` to use the abstraction.
-- [ ] Run `cargo test` in `native/rux-vm`.
-- [ ] Commit: `refactor(vm): abstract rux storage media backend`.
+- [x] Add a failing Rust test proving `StoragePortDevice` can read/write/flush through a non-`Vec` media backend.
+- [x] Run `cargo test -p rux-vm <test-name>` and confirm it fails because the abstraction is missing.
+- [x] Add `StorageMedia` and `InMemoryStorageMedia`.
+- [x] Update `StoragePortDevice` to use the abstraction.
+- [x] Run `cargo test` in `native/rux-vm`.
+- [x] Commit: `refactor(vm): abstract rux storage media backend`.
 
 ## Task 2: Rust RUXVOL File Backend
 
-- [ ] Add failing Rust tests for opening a `.ruxvol`, block read/write persistence, flush, invalid magic, unsupported version, and truncated payload.
-- [ ] Run the focused tests and confirm expected failures.
-- [ ] Implement `RuxVolumeFileStorageMedia`.
-- [ ] Add handle/profile creation from a storage0 file path.
-- [ ] Run `cargo test` in `native/rux-vm`.
-- [ ] Commit: `feat(vm): add rux volume file storage backend`.
+- [x] Add failing Rust tests for opening a `.ruxvol`, block read/write persistence, flush, invalid magic, unsupported version, and truncated payload.
+- [x] Run the focused tests and confirm expected failures.
+- [x] Implement `RuxVolumeFileStorageMedia`.
+- [x] Add handle/profile creation from a storage0 file path.
+- [x] Run `cargo test` in `native/rux-vm`.
+- [x] Commit: `feat(vm): add rux volume file storage backend`.
 
 ## Task 3: Kotlin/JNI Path Wiring
 
-- [ ] Add failing Kotlin/JNI-facing tests or compile checks for `storage0Path` creation arguments.
-- [ ] Run `./gradlew-sandbox :native-runtime:test` and confirm expected failure.
-- [ ] Update `NativeVmBindings`, `RuxComputerRuntimeFactory`, and JNI signatures.
-- [ ] Update `ComputerRuntimeDeviceFactory` to pass `RuxVolumeBlob.path` or an equivalent concrete file path instead of payload bytes.
-- [ ] Keep snapshot-based creation available for tests/non-Minecraft runtime paths if still needed.
-- [ ] Run `./gradlew-sandbox :native-runtime:test` and `./gradlew-sandbox :v1_21_1-common:test`.
-- [ ] Commit: `feat(runtime): pass rux storage volume path to native vm`.
+- [x] Add failing Kotlin/JNI-facing tests or compile checks for `storage0Path` creation arguments.
+- [x] Run `./gradlew-sandbox :native-runtime:test` and confirm expected failure.
+- [x] Update `NativeVmBindings`, `RuxComputerRuntimeFactory`, and JNI signatures.
+- [x] Update `ComputerRuntimeDeviceFactory` to pass `RuxVolumeBlob.path` or an equivalent concrete file path instead of payload bytes.
+- [x] Keep snapshot-based creation available for tests/non-Minecraft runtime paths if still needed.
+- [x] Run `./gradlew-sandbox :native-runtime:test` and `./gradlew-sandbox :v1_21_1-common:test`.
+- [x] Commit: `feat(runtime): pass rux storage volume path to native vm`.
 
 ## Task 4: Integrated Verification And Roadmap Update
 
-- [ ] Run `cargo test` in `native/rux-vm`.
-- [ ] Run `./gradlew-sandbox :native-runtime:test`.
-- [ ] Run `./gradlew-sandbox :v1_21_1-common:test`.
-- [ ] If native signature is exercised by NeoForge tests, run the focused JNI smoke with `-Drux.vm.native.library=...`.
-- [ ] Update issue #64 with implemented behavior, verification commands, and any remaining limitations.
-- [ ] Close #64 only if all acceptance criteria are verified; otherwise leave it open with exact remaining work.
-
+- [x] Run `cargo test` in `native/rux-vm`.
+- [x] Run `./gradlew-sandbox :native-runtime:test`.
+- [x] Run `./gradlew-sandbox :v1_21_1-common:test`.
+- [x] If native signature is exercised by NeoForge tests, run the focused JNI smoke with `-Drux.vm.native.library=...`.
+- [x] Update issue #64 with implemented behavior, verification commands, and any remaining limitations.
+- [x] Close #64 only if all acceptance criteria are verified; otherwise leave it open with exact remaining work.
