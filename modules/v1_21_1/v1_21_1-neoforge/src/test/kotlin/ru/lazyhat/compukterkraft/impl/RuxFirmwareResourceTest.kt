@@ -66,6 +66,52 @@ class RuxFirmwareResourceTest {
     }
 
     @Test
+    fun bundledRuxBiosFirmwareResourceExists() {
+        val bytes =
+            assertNotNull(
+                javaClass.classLoader.getResourceAsStream("firmware/rux-bios.ruxi"),
+                "firmware/rux-bios.ruxi must be bundled",
+            ).use { it.readBytes() }
+
+        assertTrue(bytes.size > 8, "Rux BIOS firmware image should not be empty")
+        assertTrue(
+            bytes.copyOfRange(0, 4).contentEquals(
+                byteArrayOf('R'.code.toByte(), 'U'.code.toByte(), 'X'.code.toByte(), 'I'.code.toByte()),
+            ),
+        )
+    }
+
+    @Test
+    fun bundledRuxBiosFirmwareReportsNoBootableDeviceWhenLibraryIsConfigured() {
+        val libraryPath = System.getProperty("rux.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
+        val bytes =
+            assertNotNull(
+                javaClass.classLoader.getResourceAsStream("firmware/rux-bios.ruxi"),
+                "firmware/rux-bios.ruxi must be bundled",
+            ).use { it.readBytes() }
+
+        val handle =
+            NativeVmBindings.createRuxComputer(
+                libraryPath = libraryPath,
+                image = bytes,
+                memorySize = 64 * 1024,
+                sliceBudgetNanos = 1_000,
+            )
+
+        try {
+            repeat(64) {
+                NativeVmBindings.runRuxComputerUntilSignal(handle)
+            }
+            val output = NativeVmBindings.ruxComputerDebugOutput(handle).decodeToString()
+            assertTrue(output.contains("RUX BIOS"), output)
+            assertTrue(output.contains("NO BOOTABLE DEVICE"), output)
+            assertEquals(2, NativeVmBindings.ruxComputerControl(handle).status)
+        } finally {
+            NativeVmBindings.freeRuxComputer(handle)
+        }
+    }
+
+    @Test
     fun bundledRuxTerminalFirmwareBootsOnNativeComputerWhenLibraryIsConfigured() {
         val libraryPath = System.getProperty("rux.vm.native.library")?.takeIf { it.isNotBlank() } ?: return
         val bytes =
