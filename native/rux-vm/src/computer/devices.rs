@@ -365,12 +365,80 @@ pub(crate) struct StoragePortDevice {
     buffer_addr: u32,
     bytes_done: u32,
     sequence: u64,
-    media: Option<StorageMedia>,
+    media: Option<Box<dyn StorageMedia>>,
 }
 
-struct StorageMedia {
+pub(crate) trait StorageMedia {
+    fn len(&self) -> u64;
+
+    fn is_read_only(&self) -> bool;
+
+    fn read_at(&mut self, offset: u64, dst: &mut [u8]) -> Result<(), MemoryFault>;
+
+    fn write_at(&mut self, offset: u64, src: &[u8]) -> Result<(), MemoryFault>;
+
+    fn flush(&mut self) -> Result<(), MemoryFault>;
+
+    fn snapshot_bytes(&self) -> Option<Vec<u8>>;
+}
+
+pub(crate) struct InMemoryStorageMedia {
     bytes: Vec<u8>,
     read_only: bool,
+}
+
+impl InMemoryStorageMedia {
+    pub(crate) fn new(bytes: Vec<u8>, read_only: bool) -> Self {
+        Self { bytes, read_only }
+    }
+}
+
+impl StorageMedia for InMemoryStorageMedia {
+    fn len(&self) -> u64 {
+        self.bytes.len() as u64
+    }
+
+    fn is_read_only(&self) -> bool {
+        self.read_only
+    }
+
+    fn read_at(&mut self, offset: u64, dst: &mut [u8]) -> Result<(), MemoryFault> {
+        let offset = usize::try_from(offset)
+            .map_err(|_| MemoryFault::new("storage0 read offset does not fit usize".to_string()))?;
+        let end = offset
+            .checked_add(dst.len())
+            .ok_or_else(|| MemoryFault::new("storage0 read range overflow".to_string()))?;
+        let Some(bytes) = self.bytes.get(offset..end) else {
+            return Err(MemoryFault::new(
+                "storage0 read range is out of bounds".to_string(),
+            ));
+        };
+        dst.copy_from_slice(bytes);
+        Ok(())
+    }
+
+    fn write_at(&mut self, offset: u64, src: &[u8]) -> Result<(), MemoryFault> {
+        let offset = usize::try_from(offset)
+            .map_err(|_| MemoryFault::new("storage0 write offset does not fit usize".to_string()))?;
+        let end = offset
+            .checked_add(src.len())
+            .ok_or_else(|| MemoryFault::new("storage0 write range overflow".to_string()))?;
+        let Some(bytes) = self.bytes.get_mut(offset..end) else {
+            return Err(MemoryFault::new(
+                "storage0 write range is out of bounds".to_string(),
+            ));
+        };
+        bytes.copy_from_slice(src);
+        Ok(())
+    }
+
+    fn flush(&mut self) -> Result<(), MemoryFault> {
+        Ok(())
+    }
+
+    fn snapshot_bytes(&self) -> Option<Vec<u8>> {
+        Some(self.bytes.clone())
+    }
 }
 
 impl StoragePortDevice {
@@ -392,20 +460,27 @@ impl StoragePortDevice {
     }
 
     pub(crate) fn with_media(bytes: Vec<u8>, read_only: bool) -> Result<Self, MemoryFault> {
-        if bytes.len() % Self::BLOCK_SIZE as usize != 0 {
+        Self::with_media_backend(Box::new(InMemoryStorageMedia::new(bytes, read_only)))
+    }
+
+    pub(crate) fn with_media_backend(
+        media: Box<dyn StorageMedia>,
+    ) -> Result<Self, MemoryFault> {
+        let len = media.len();
+        if len % u64::from(Self::BLOCK_SIZE) != 0 {
             return Err(MemoryFault::new(format!(
                 "storage0 media size {} is not a multiple of block size {}",
-                bytes.len(),
+                len,
                 Self::BLOCK_SIZE,
             )));
         }
         let mut device = Self::new_absent();
-        device.media = Some(StorageMedia { bytes, read_only });
+        device.media = Some(media);
         Ok(device)
     }
 
-    pub(crate) fn media_bytes(&self) -> Option<&[u8]> {
-        self.media.as_ref().map(|media| media.bytes.as_slice())
+    pub(crate) fn media_bytes(&self) -> Option<Vec<u8>> {
+        self.media.as_ref().and_then(|media| media.snapshot_bytes())
     }
 
     fn execute_command(&mut self, command: i32, memory: Option<&mut MachineMemory>) {
@@ -417,8 +492,16 @@ impl StoragePortDevice {
                 self.error = computer_abi::STORAGE_ERROR_NONE;
             }
             computer_abi::STORAGE_COMMAND_FLUSH => {
-                self.status = computer_abi::STORAGE_STATUS_DONE;
-                self.error = computer_abi::STORAGE_ERROR_NONE;
+                match self.media.as_mut() {
+                    Some(media) => match media.flush() {
+                        Ok(()) => {
+                            self.status = computer_abi::STORAGE_STATUS_DONE;
+                            self.error = computer_abi::STORAGE_ERROR_NONE;
+                        }
+                        Err(_) => self.fail(computer_abi::STORAGE_ERROR_IO_ERROR),
+                    },
+                    None => self.fail(computer_abi::STORAGE_ERROR_MEDIA_ABSENT),
+                }
             }
             computer_abi::STORAGE_COMMAND_READ_BLOCKS
             | computer_abi::STORAGE_COMMAND_WRITE_BLOCKS => self.execute_transfer(command, memory),
@@ -434,7 +517,7 @@ impl StoragePortDevice {
             self.fail(computer_abi::STORAGE_ERROR_MEDIA_ABSENT);
             return;
         };
-        if command == computer_abi::STORAGE_COMMAND_WRITE_BLOCKS && media.read_only {
+        if command == computer_abi::STORAGE_COMMAND_WRITE_BLOCKS && media.is_read_only() {
             self.fail(computer_abi::STORAGE_ERROR_WRITE_PROTECTED);
             return;
         }
@@ -453,7 +536,7 @@ impl StoragePortDevice {
                 return;
             }
         };
-        let capacity_blocks = media.bytes.len() as u64 / u64::from(Self::BLOCK_SIZE);
+        let capacity_blocks = media.len() / u64::from(Self::BLOCK_SIZE);
         if end_lba > capacity_blocks {
             self.fail(computer_abi::STORAGE_ERROR_LBA_OUT_OF_BOUNDS);
             return;
@@ -480,8 +563,12 @@ impl StoragePortDevice {
         let byte_count_usize = byte_count as usize;
         match command {
             computer_abi::STORAGE_COMMAND_READ_BLOCKS => {
-                for offset in 0..byte_count_usize {
-                    let byte = media.bytes[media_start + offset];
+                let mut bytes = vec![0; byte_count_usize];
+                if media.read_at(media_start as u64, &mut bytes).is_err() {
+                    self.fail(computer_abi::STORAGE_ERROR_IO_ERROR);
+                    return;
+                }
+                for (offset, byte) in bytes.into_iter().enumerate() {
                     if memory
                         .store_u8(self.buffer_addr + offset as u32, byte)
                         .is_err()
@@ -492,15 +579,19 @@ impl StoragePortDevice {
                 }
             }
             computer_abi::STORAGE_COMMAND_WRITE_BLOCKS => {
+                let mut bytes = vec![0; byte_count_usize];
                 for offset in 0..byte_count_usize {
-                    let byte = match memory.load_u8(self.buffer_addr + offset as u32) {
+                    bytes[offset] = match memory.load_u8(self.buffer_addr + offset as u32) {
                         Ok(byte) => byte,
                         Err(_) => {
                             self.fail(computer_abi::STORAGE_ERROR_BUFFER_OUT_OF_BOUNDS);
                             return;
                         }
                     };
-                    media.bytes[media_start + offset] = byte;
+                }
+                if media.write_at(media_start as u64, &bytes).is_err() {
+                    self.fail(computer_abi::STORAGE_ERROR_IO_ERROR);
+                    return;
                 }
             }
             _ => unreachable!("transfer command is validated by caller"),
@@ -541,14 +632,14 @@ impl StoragePortDevice {
     fn capacity_blocks(&self) -> u64 {
         self.media
             .as_ref()
-            .map(|media| media.bytes.len() as u64 / u64::from(Self::BLOCK_SIZE))
+            .map(|media| media.len() / u64::from(Self::BLOCK_SIZE))
             .unwrap_or(0)
     }
 
     fn media_status(&self) -> i32 {
         match &self.media {
             None => computer_abi::STORAGE_MEDIA_ABSENT,
-            Some(media) if media.read_only => computer_abi::STORAGE_MEDIA_READ_ONLY,
+            Some(media) if media.is_read_only() => computer_abi::STORAGE_MEDIA_READ_ONLY,
             Some(_) => computer_abi::STORAGE_MEDIA_PRESENT,
         }
     }
@@ -606,5 +697,73 @@ impl MmioDevice for StoragePortDevice {
             return Ok(());
         }
         self.store_register(offset, value)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::cell::Cell;
+    use std::rc::Rc;
+
+    struct CountingFlushMedia {
+        bytes: Vec<u8>,
+        flush_count: Rc<Cell<u32>>,
+    }
+
+    impl StorageMedia for CountingFlushMedia {
+        fn len(&self) -> u64 {
+            self.bytes.len() as u64
+        }
+
+        fn is_read_only(&self) -> bool {
+            false
+        }
+
+        fn read_at(&mut self, offset: u64, dst: &mut [u8]) -> Result<(), MemoryFault> {
+            let offset = offset as usize;
+            dst.copy_from_slice(&self.bytes[offset..offset + dst.len()]);
+            Ok(())
+        }
+
+        fn write_at(&mut self, offset: u64, src: &[u8]) -> Result<(), MemoryFault> {
+            let offset = offset as usize;
+            self.bytes[offset..offset + src.len()].copy_from_slice(src);
+            Ok(())
+        }
+
+        fn flush(&mut self) -> Result<(), MemoryFault> {
+            self.flush_count.set(self.flush_count.get() + 1);
+            Ok(())
+        }
+
+        fn snapshot_bytes(&self) -> Option<Vec<u8>> {
+            Some(self.bytes.clone())
+        }
+    }
+
+    #[test]
+    fn storage_port_flush_delegates_to_media_backend() {
+        let flush_count = Rc::new(Cell::new(0));
+        let media = CountingFlushMedia {
+            bytes: vec![0; 512],
+            flush_count: flush_count.clone(),
+        };
+        let mut device = StoragePortDevice::with_media_backend(Box::new(media)).unwrap();
+
+        device
+            .store_i32(
+                12,
+                computer_abi::STORAGE_COMMAND_FLUSH,
+            )
+            .unwrap();
+
+        assert_eq!(flush_count.get(), 1);
+        assert_eq!(
+            device
+                .load_i32(4)
+                .unwrap(),
+            computer_abi::STORAGE_STATUS_DONE,
+        );
     }
 }

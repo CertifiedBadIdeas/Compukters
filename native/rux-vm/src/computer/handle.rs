@@ -110,6 +110,6 @@ impl RuxComputerHandle {
     }
 
     pub fn storage0_media_snapshot(&self) -> Option<Vec<u8>> {
-        self.machine.storage0_media_bytes().map(<[u8]>::to_vec)
+        self.machine.storage0_media_bytes()
     }
 }
