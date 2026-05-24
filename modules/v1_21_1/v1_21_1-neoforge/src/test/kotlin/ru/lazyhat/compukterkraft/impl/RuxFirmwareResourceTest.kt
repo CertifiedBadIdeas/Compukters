@@ -9,6 +9,7 @@ import ru.lazyhat.compukterkraft.core.device.runtime.ports.DisplayNetworkBridge
 import ru.lazyhat.compukterkraft.core.input.KeyCodes
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.RuxComputerRuntimeFactory
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeVmBindings
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeRuxComputerDisplaySnapshot
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 import java.util.UUID
 import kotlin.test.Test
@@ -103,6 +104,10 @@ class RuxFirmwareResourceTest {
                 NativeVmBindings.runRuxComputerUntilSignal(handle)
             }
             val output = NativeVmBindings.ruxComputerDebugOutput(handle).decodeToString()
+            val display = assertNotNull(NativeVmBindings.ruxComputerDisplay0Snapshot(handle))
+            assertEquals("RUX BIOS v1", display.rowText(0))
+            assertEquals("Compukter Kraft", display.rowText(1))
+            assertEquals("No bootable device", display.rowText(5))
             assertTrue(output.contains("RUX BIOS"), output)
             assertTrue(output.contains("NO BOOTABLE DEVICE"), output)
             assertEquals(2, NativeVmBindings.ruxComputerControl(handle).status)
@@ -365,4 +370,11 @@ class RuxFirmwareResourceTest {
         val containerId: Int,
         val frame: DisplayFrameDelta,
     )
+
+    private fun NativeRuxComputerDisplaySnapshot.rowText(row: Int): String {
+        val start = row * columns
+        val bytes = cells.copyOfRange(start, start + columns)
+        val visibleEnd = bytes.indexOfLast { it != 0.toByte() } + 1
+        return bytes.copyOfRange(0, visibleEnd).decodeToString()
+    }
 }

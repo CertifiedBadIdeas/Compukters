@@ -160,8 +160,10 @@ fn example_bios_firmware_draws_no_bootable_device_screen() {
     }
 
     let snapshot = machine.display0_snapshot().unwrap();
-    assert_eq!(display_row(&snapshot, 0), "RUX BIOS");
-    assert_eq!(display_row(&snapshot, 3), "No bootable device");
+    assert_eq!(display_row(&snapshot, 0), "RUX BIOS v1");
+    assert_eq!(display_row(&snapshot, 1), "Compukter Kraft");
+    assert_eq!(display_row(&snapshot, 3), "BootInfo OK");
+    assert_eq!(display_row(&snapshot, 5), "No bootable device");
 }
 
 #[test]
