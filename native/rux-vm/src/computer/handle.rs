@@ -1,5 +1,5 @@
 use crate::computer::{
-    ComputerMachine, ComputerMachineProfile, ComputerTextDisplaySnapshot, CpuId,
+    BootHandoffError, ComputerMachine, ComputerMachineProfile, ComputerTextDisplaySnapshot, CpuId,
 };
 use crate::low_image::decode_image;
 use crate::low_image_runner::LowImageSignal;
@@ -125,5 +125,19 @@ impl RuxComputerHandle {
 
     pub fn storage0_media_snapshot(&self) -> Option<Vec<u8>> {
         self.machine.storage0_media_bytes()
+    }
+
+    pub fn write_guest_ram_bytes(&mut self, address: u32, bytes: &[u8]) -> Result<(), String> {
+        self.machine.write_guest_ram_bytes(address, bytes)
+    }
+
+    pub fn boot_handoff_ruxi_from_guest_ram(
+        &mut self,
+        image_addr: u32,
+        image_len: u32,
+        slice_budget_nanos: u64,
+    ) -> Result<CpuId, BootHandoffError> {
+        self.machine
+            .boot_handoff_ruxi_from_ram(image_addr, image_len, slice_budget_nanos)
     }
 }

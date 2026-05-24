@@ -3,7 +3,7 @@ pub mod computer_abi;
 pub mod computer_machine {
     pub use crate::computer::devices::ComputerTextDisplaySnapshot;
     pub use crate::computer::machine::{
-        ComputerMachine, ComputerMemoryMap, ComputerMemoryRegion, CpuId,
+        BootHandoffError, ComputerMachine, ComputerMemoryMap, ComputerMemoryRegion, CpuId,
     };
     pub use crate::computer::profile::{ComputerHardwareConfig, ComputerMachineProfile};
 }
@@ -20,4 +20,5 @@ pub mod rux_computer {
     pub use crate::computer::handle::{
         RuxComputerControl, RuxComputerHandle, RuxComputerTextDisplaySnapshot,
     };
+    pub use crate::computer::machine::BootHandoffError;
 }
