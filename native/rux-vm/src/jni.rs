@@ -1,6 +1,6 @@
 use std::ptr::null_mut;
 
-use jni::objects::{JByteArray, JClass};
+use jni::objects::{JByteArray, JClass, JString};
 use jni::sys::{jbyteArray, jint, jlong, jlongArray};
 use jni::JNIEnv;
 
@@ -102,6 +102,7 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
     memory_size: jint,
     slice_budget_nanos: jlong,
     storage0_media: JByteArray<'_>,
+    storage0_path: JString<'_>,
 ) -> jlong {
     let image = match env.convert_byte_array(&image) {
         Ok(image) => image,
@@ -127,18 +128,47 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
             }
         }
     };
-    let result = match storage0_media {
-        Some(media) => RuxComputerHandle::create_with_storage0_media(
+    let storage0_path = if storage0_path.is_null() {
+        None
+    } else {
+        match env.get_string(&storage0_path) {
+            Ok(path) => Some(path.to_string_lossy().into_owned()),
+            Err(error) => {
+                let _ = env.throw_new(
+                    "java/lang/IllegalArgumentException",
+                    format!("Cannot read Rux computer storage0 path: {error}"),
+                );
+                return 0;
+            }
+        }
+    };
+    if storage0_media.is_some() && storage0_path.is_some() {
+        let _ = env.throw_new(
+            "java/lang/IllegalArgumentException",
+            "storage0 media and storage0 path are mutually exclusive",
+        );
+        return 0;
+    }
+    let result = if let Some(path) = storage0_path {
+        RuxComputerHandle::create_with_storage0_path(
+            &image,
+            memory_size.max(1) as usize,
+            slice_budget_nanos.max(1) as u64,
+            path,
+        )
+    } else if let Some(media) = storage0_media {
+        RuxComputerHandle::create_with_storage0_media(
             &image,
             memory_size.max(1) as usize,
             slice_budget_nanos.max(1) as u64,
             media,
-        ),
-        None => RuxComputerHandle::create(
+        )
+    } else {
+        RuxComputerHandle::create(
             &image,
             memory_size.max(1) as usize,
             slice_budget_nanos.max(1) as u64,
-        ),
+        )
     };
     match result {
         Ok(handle) => Box::into_raw(Box::new(handle)) as jlong,
