@@ -1,6 +1,6 @@
 use crate::computer::devices::{
-    ComputerControlDevice, ComputerTextDisplaySnapshot, DebugSerialDevice, SerialInputDevice,
-    RuxVolumeFileStorageMedia, StoragePortDevice, TextDisplayDevice,
+    ComputerControlDevice, ComputerTextDisplaySnapshot, DebugSerialDevice,
+    RuxVolumeFileStorageMedia, SerialInputDevice, StoragePortDevice, TextDisplayDevice,
 };
 use crate::computer::profile::{
     validate_profile_v2, ComputerHardwareDevice, ComputerMachineProfile, HardwareTableEntry,
@@ -8,9 +8,10 @@ use crate::computer::profile::{
 };
 use crate::computer_abi;
 use crate::low_bus::{MachineBus, MmioDeviceId};
-use crate::low_image::Image;
+use crate::low_image::{decode_image, Image};
 use crate::low_image_runner::{LowCpuContext, LowImageSignal, LowImageVm};
 use crate::low_machine::{MachineMemory, MemoryFault};
+use std::fmt::{Display, Formatter};
 
 pub type CpuId = usize;
 
@@ -25,6 +26,59 @@ pub struct ComputerMachine {
     cpus: Vec<LowCpuContext>,
     boot_cpu: Option<CpuId>,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BootHandoffError {
+    MissingBootCpu,
+    EmptyImage,
+    RamRangeOverflow {
+        image_addr: u32,
+        image_len: u32,
+    },
+    RamRangeOutOfBounds {
+        image_addr: u32,
+        image_len: u32,
+        ram_len: usize,
+    },
+    InvalidImage(String),
+    ImageTooLarge(String),
+    MachineState(String),
+}
+
+impl Display for BootHandoffError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::MissingBootCpu => formatter.write_str("boot CPU is not spawned"),
+            Self::EmptyImage => formatter.write_str("boot handoff image is empty"),
+            Self::RamRangeOverflow {
+                image_addr,
+                image_len,
+            } => write!(
+                formatter,
+                "boot handoff RAM range {image_addr:#010x} with length {image_len} overflows address space",
+            ),
+            Self::RamRangeOutOfBounds {
+                image_addr,
+                image_len,
+                ram_len,
+            } => write!(
+                formatter,
+                "boot handoff RAM range {image_addr:#010x} with length {image_len} is outside {ram_len} bytes",
+            ),
+            Self::InvalidImage(message) => {
+                write!(formatter, "invalid boot handoff image: {message}")
+            }
+            Self::ImageTooLarge(message) => {
+                write!(formatter, "boot handoff image is too large: {message}")
+            }
+            Self::MachineState(message) => {
+                write!(formatter, "boot handoff machine state error: {message}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for BootHandoffError {}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ComputerMemoryMap {
@@ -227,6 +281,23 @@ impl ComputerMachine {
             .and_then(StoragePortDevice::media_bytes)
     }
 
+    pub fn write_guest_ram_bytes(&mut self, address: u32, bytes: &[u8]) -> Result<(), String> {
+        checked_ram_range(
+            address,
+            u32::try_from(bytes.len())
+                .map_err(|_| "guest RAM write length does not fit u32".to_string())?,
+            self.bus.memory().len(),
+        )
+        .map_err(|error| error.to_string())?;
+        for (offset, byte) in bytes.iter().copied().enumerate() {
+            self.bus
+                .memory_mut()
+                .store_u8(address + offset as u32, byte)
+                .map_err(|error| error.to_string())?;
+        }
+        Ok(())
+    }
+
     pub fn spawn_cpu(&mut self, image: Image, slice_budget_nanos: u64) -> Result<CpuId, String> {
         let required_memory = usize::try_from(image.memory_size)
             .map_err(|_| "memory size does not fit usize".to_string())?;
@@ -254,6 +325,33 @@ impl ComputerMachine {
         let cpu_id = self.spawn_cpu(kernel_image, slice_budget_nanos)?;
         self.boot_cpu = Some(cpu_id);
         Ok(cpu_id)
+    }
+
+    pub fn boot_handoff_ruxi_from_ram(
+        &mut self,
+        image_addr: u32,
+        image_len: u32,
+        slice_budget_nanos: u64,
+    ) -> Result<CpuId, BootHandoffError> {
+        let boot_cpu = self.boot_cpu.ok_or(BootHandoffError::MissingBootCpu)?;
+        let image_bytes = self.boot_handoff_image_bytes(image_addr, image_len)?;
+        let image = decode_image(&image_bytes)
+            .map_err(|error| BootHandoffError::InvalidImage(error.to_string()))?;
+        let required_memory = usize::try_from(image.memory_size).map_err(|_| {
+            BootHandoffError::ImageTooLarge("memory size does not fit usize".to_string())
+        })?;
+        if self.bus.memory().len() < required_memory {
+            return Err(BootHandoffError::ImageTooLarge(format!(
+                "image requires {required_memory} bytes but machine memory has {} bytes",
+                self.bus.memory().len(),
+            )));
+        }
+        let next_cpu = LowImageVm::create_cpu_context(image.clone(), slice_budget_nanos.max(1))
+            .map_err(BootHandoffError::InvalidImage)?;
+        load_image_sections_into_bus_at(&image, &mut self.bus, self.program_base)
+            .map_err(BootHandoffError::MachineState)?;
+        self.cpus[boot_cpu] = next_cpu;
+        Ok(boot_cpu)
     }
 
     pub fn boot_cpu_id(&self) -> Option<CpuId> {
@@ -383,6 +481,18 @@ impl ComputerMachine {
             .and_then(|id| self.bus.device::<ComputerControlDevice>(id))
     }
 
+    fn boot_handoff_image_bytes(
+        &self,
+        image_addr: u32,
+        image_len: u32,
+    ) -> Result<Vec<u8>, BootHandoffError> {
+        if image_len == 0 {
+            return Err(BootHandoffError::EmptyImage);
+        }
+        let end = checked_ram_range(image_addr, image_len, self.bus.memory().len())?;
+        Ok(self.bus.memory().bytes()[image_addr as usize..end].to_vec())
+    }
+
     fn debug_device(&self) -> Option<&DebugSerialDevice> {
         self.debug_device_id
             .and_then(|id| self.bus.device::<DebugSerialDevice>(id))
@@ -428,6 +538,30 @@ impl ComputerMachine {
         }
         Err(message.to_string())
     }
+}
+
+fn checked_ram_range(
+    image_addr: u32,
+    image_len: u32,
+    ram_len: usize,
+) -> Result<usize, BootHandoffError> {
+    let image_end =
+        image_addr
+            .checked_add(image_len)
+            .ok_or(BootHandoffError::RamRangeOverflow {
+                image_addr,
+                image_len,
+            })?;
+    let start = image_addr as usize;
+    let end = image_end as usize;
+    if start > ram_len || end > ram_len {
+        return Err(BootHandoffError::RamRangeOutOfBounds {
+            image_addr,
+            image_len,
+            ram_len,
+        });
+    }
+    Ok(end)
 }
 
 fn write_profile_v2_boot_info(

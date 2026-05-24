@@ -1,7 +1,7 @@
 use rux_vm::computer_machine::ComputerMachine;
 use rux_vm::low_image::{encode_image, Function, Image, Instruction};
 use rux_vm::low_image_runner::LowImageSignal;
-use rux_vm::rux_computer::{RuxComputerControl, RuxComputerHandle};
+use rux_vm::rux_computer::{BootHandoffError, RuxComputerControl, RuxComputerHandle};
 use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -94,6 +94,29 @@ fn display_firmware_image() -> Vec<u8> {
     encode_image(&image).expect("test image encodes")
 }
 
+fn halt_i32_image(exit_code: i32) -> Vec<u8> {
+    let image = Image {
+        memory_size: 64 * 1024,
+        rodata: Vec::new(),
+        data: Vec::new(),
+        bss_size: 0,
+        entry_function_index: 0,
+        functions: vec![Function {
+            name: "main".to_string(),
+            register_count: 1,
+            parameters: Vec::new(),
+            instructions: vec![
+                Instruction::I32Const {
+                    dst: 0,
+                    value: exit_code,
+                },
+                Instruction::ReturnI32 { src: 0 },
+            ],
+        }],
+    };
+    encode_image(&image).expect("test image encodes")
+}
+
 #[test]
 fn rux_computer_handle_boots_firmware_and_exposes_machine_state() {
     let image = terminal_firmware_image();
@@ -160,7 +183,9 @@ fn rux_computer_handle_accepts_storage0_media_and_exposes_snapshot() {
             .expect("computer handle creates with storage0 media");
 
     assert_eq!(
-        handle.storage0_media_snapshot().expect("storage0 media exists"),
+        handle
+            .storage0_media_snapshot()
+            .expect("storage0 media exists"),
         media,
     );
 }
@@ -171,12 +196,96 @@ fn rux_computer_handle_accepts_storage0_volume_path() {
     let path = temp_volume_path("handle-storage0-path");
     write_rux_volume(&path, &[0; 1024]);
 
-    let handle =
-        RuxComputerHandle::create_with_storage0_path(&image, 64 * 1024, 1_000_000, &path)
-            .expect("computer handle creates with storage0 volume path");
+    let handle = RuxComputerHandle::create_with_storage0_path(&image, 64 * 1024, 1_000_000, &path)
+        .expect("computer handle creates with storage0 volume path");
 
     assert!(handle.storage0_media_snapshot().is_none());
     fs::remove_file(path).unwrap();
+}
+
+#[test]
+fn rux_computer_handle_boot_handoff_replaces_bios_cpu_from_guest_ram() {
+    let bios = halt_i32_image(1);
+    let next = halt_i32_image(77);
+    let image_addr = 4096;
+    let mut handle =
+        RuxComputerHandle::create(&bios, 64 * 1024, 1_000_000).expect("computer handle creates");
+    handle.write_guest_ram_bytes(image_addr, &next).unwrap();
+
+    let cpu_id = handle
+        .boot_handoff_ruxi_from_guest_ram(image_addr, next.len() as u32, 1_000_000)
+        .expect("boot handoff accepts in-RAM RUXI image");
+
+    assert_eq!(cpu_id, 0);
+    assert_eq!(
+        handle.run_until_signal().unwrap(),
+        LowImageSignal::HaltI32(77),
+    );
+}
+
+#[test]
+fn rux_computer_handle_boot_handoff_rejects_empty_image_and_keeps_bios_cpu() {
+    let bios = halt_i32_image(1);
+    let mut handle =
+        RuxComputerHandle::create(&bios, 64 * 1024, 1_000_000).expect("computer handle creates");
+
+    let error = handle
+        .boot_handoff_ruxi_from_guest_ram(4096, 0, 1_000_000)
+        .expect_err("empty boot handoff image is rejected");
+
+    assert_eq!(error, BootHandoffError::EmptyImage);
+    assert_eq!(
+        handle.run_until_signal().unwrap(),
+        LowImageSignal::HaltI32(1),
+    );
+}
+
+#[test]
+fn rux_computer_handle_boot_handoff_rejects_ram_range_out_of_bounds_and_keeps_bios_cpu() {
+    let bios = halt_i32_image(1);
+    let mut handle =
+        RuxComputerHandle::create(&bios, 64 * 1024, 1_000_000).expect("computer handle creates");
+
+    let error = handle
+        .boot_handoff_ruxi_from_guest_ram(64 * 1024 - 1, 2, 1_000_000)
+        .expect_err("out-of-bounds boot handoff RAM range is rejected");
+
+    assert_eq!(
+        error,
+        BootHandoffError::RamRangeOutOfBounds {
+            image_addr: 64 * 1024 - 1,
+            image_len: 2,
+            ram_len: 64 * 1024,
+        },
+    );
+    assert_eq!(
+        handle.run_until_signal().unwrap(),
+        LowImageSignal::HaltI32(1),
+    );
+}
+
+#[test]
+fn rux_computer_handle_boot_handoff_rejects_invalid_ruxi_and_keeps_bios_cpu() {
+    let bios = halt_i32_image(1);
+    let image_addr = 4096;
+    let mut handle =
+        RuxComputerHandle::create(&bios, 64 * 1024, 1_000_000).expect("computer handle creates");
+    handle
+        .write_guest_ram_bytes(image_addr, b"NOPE")
+        .expect("test writes invalid image bytes into RAM");
+
+    let error = handle
+        .boot_handoff_ruxi_from_guest_ram(image_addr, 4, 1_000_000)
+        .expect_err("invalid boot handoff RUXI image is rejected");
+
+    assert!(
+        matches!(&error, BootHandoffError::InvalidImage(message) if message.contains("magic")),
+        "unexpected error: {error}",
+    );
+    assert_eq!(
+        handle.run_until_signal().unwrap(),
+        LowImageSignal::HaltI32(1),
+    );
 }
 
 fn write_rux_volume(path: &std::path::Path, payload: &[u8]) {
