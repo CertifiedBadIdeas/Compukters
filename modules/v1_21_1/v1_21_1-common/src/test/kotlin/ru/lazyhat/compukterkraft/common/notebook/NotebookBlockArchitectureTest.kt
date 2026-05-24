@@ -59,12 +59,12 @@ class NotebookBlockArchitectureTest {
             Path.of("src/main/kotlin/ru/lazyhat/compukterkraft/common/notebook/block/NotebookBlock.kt")
         val screenPath =
             Path.of("src/main/kotlin/ru/lazyhat/compukterkraft/common/notebook/screen/NotebookScreen.kt")
-        val terminalScreenPath =
-            Path.of("src/main/kotlin/ru/lazyhat/compukterkraft/common/terminal/screen/ComputerTerminalScreen.kt")
+        val displayScreenPath =
+            Path.of("src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/screen/ComputerDisplayScreen.kt")
 
         val blockSource = blockPath.readText()
         val screenSource = screenPath.readText()
-        val terminalScreenSource = terminalScreenPath.readText()
+        val displayScreenSource = displayScreenPath.readText()
 
         assertTrue(
             blockSource.contains("override fun useWithoutItem") &&
@@ -74,7 +74,7 @@ class NotebookBlockArchitectureTest {
         )
         assertTrue(
             screenSource.contains("class NotebookScreen") &&
-                screenSource.contains("ComputerTerminalScreen<ComputerMenuWithoutInventory>"),
+                screenSource.contains("ComputerDisplayScreen<ComputerMenuWithoutInventory>"),
             "Notebook should have its own screen class so laptop-only UI can grow independently.",
         )
         assertTrue(
@@ -86,14 +86,14 @@ class NotebookBlockArchitectureTest {
             "NotebookScreen should define its own laptop layout while reusing the terminal display/input backend.",
         )
         assertTrue(
-            terminalScreenSource.contains("open class ComputerTerminalScreen"),
-            "NotebookScreen should be able to reuse the existing terminal display/input implementation.",
+            displayScreenSource.contains("abstract class ComputerDisplayScreen"),
+            "NotebookScreen should be able to reuse the existing display/input implementation.",
         )
         assertTrue(
-            terminalScreenSource.contains("protected open fun currentLayout()") &&
-                terminalScreenSource.contains("protected val inputHandler") &&
-                terminalScreenSource.contains("protected val terminalInput"),
-            "ComputerTerminalScreen should expose narrow hooks for laptop-specific screen layouts.",
+            displayScreenSource.contains("protected abstract fun currentLayout()") &&
+                displayScreenSource.contains("protected val inputHandler") &&
+                displayScreenSource.contains("protected val terminalInput"),
+            "ComputerDisplayScreen should expose narrow hooks for laptop-specific screen layouts.",
         )
     }
 

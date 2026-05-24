@@ -47,6 +47,36 @@ impl ComputerMachineProfile {
             ))
     }
 
+    pub fn computer_v1_with_storage0_media(
+        memory_size: usize,
+        storage0_media: Vec<u8>,
+        storage0_read_only: bool,
+    ) -> Self {
+        Self::new(memory_size)
+            .with_hardware(ComputerHardwareConfig::control(
+                computer_abi::COMPUTER_HARDWARE_ID_CONTROL,
+                computer_abi::CONTROL_BASE,
+            ))
+            .with_hardware(ComputerHardwareConfig::debug_serial(
+                computer_abi::COMPUTER_HARDWARE_ID_DEBUG,
+                computer_abi::DEBUG_BASE,
+            ))
+            .with_hardware(ComputerHardwareConfig::serial_input(
+                computer_abi::COMPUTER_HARDWARE_ID_SERIAL_INPUT,
+                computer_abi::SERIAL_INPUT_BASE,
+            ))
+            .with_hardware(ComputerHardwareConfig::text_display(
+                computer_abi::COMPUTER_HARDWARE_ID_DISPLAY0,
+                computer_abi::DISPLAY0_BASE,
+            ))
+            .with_hardware(ComputerHardwareConfig::storage_port_with_media(
+                computer_abi::COMPUTER_HARDWARE_ID_STORAGE0,
+                computer_abi::STORAGE0_BASE,
+                storage0_media,
+                storage0_read_only,
+            ))
+    }
+
     pub fn with_hardware(mut self, hardware: ComputerHardwareConfig) -> Self {
         self.hardware.push(hardware);
         self

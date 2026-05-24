@@ -26,43 +26,51 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ComputerTerminalScreenArchitectureTest {
-    private val source =
+    private val terminalSource =
         Paths
             .get("src/main/kotlin/ru/lazyhat/compukterkraft/common/terminal/screen/ComputerTerminalScreen.kt")
+            .readText()
+    private val displaySource =
+        Paths
+            .get("src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/screen/ComputerDisplayScreen.kt")
             .readText()
 
     @Test
     fun computerScreenUsesDisplayBufferNotTerminalBuffer() {
-        assertFalse(source.contains("ClientTerminalBuffer"))
-        assertFalse(source.contains("AttachTerminalServerMessage"))
-        assertFalse(source.contains("ResizeTerminalServerMessage"))
-        assertFalse(source.contains("terminalSurface("))
-        assertTrue(source.contains("ClientDisplayBuffer"))
-        assertTrue(source.contains("DisplayAttachServerMessage"))
-        assertTrue(source.contains("DisplayResizeServerMessage"))
+        assertFalse(terminalSource.contains("ClientTerminalBuffer"))
+        assertFalse(displaySource.contains("ClientTerminalBuffer"))
+        assertFalse(terminalSource.contains("AttachTerminalServerMessage"))
+        assertFalse(displaySource.contains("AttachTerminalServerMessage"))
+        assertFalse(terminalSource.contains("ResizeTerminalServerMessage"))
+        assertFalse(displaySource.contains("ResizeTerminalServerMessage"))
+        assertFalse(terminalSource.contains("terminalSurface("))
+        assertFalse(displaySource.contains("terminalSurface("))
+        assertTrue(displaySource.contains("ClientDisplayBuffer"))
+        assertTrue(displaySource.contains("DisplayAttachServerMessage"))
+        assertTrue(displaySource.contains("DisplayResizeServerMessage"))
     }
 
     @Test
     fun computerScreenRendersDisplayAsTextureNotPerPixelGuiRects() {
-        assertTrue(source.contains("NativeImage"))
-        assertTrue(source.contains("DynamicTexture"))
-        assertTrue(source.contains("drawDisplayTexture"))
-        assertFalse(source.contains("frontArgb()"))
-        assertFalse(source.contains("while (x < buffer.width)"))
-        assertFalse(source.contains("fillRect(px, py, pw, ph, color)"))
+        assertTrue(displaySource.contains("NativeImage"))
+        assertTrue(displaySource.contains("DynamicTexture"))
+        assertTrue(displaySource.contains("drawDisplayTexture"))
+        assertFalse(displaySource.contains("frontArgb()"))
+        assertFalse(displaySource.contains("while (x < buffer.width)"))
+        assertFalse(displaySource.contains("fillRect(px, py, pw, ph, color)"))
     }
 
     @Test
     fun computerScreenKeepsResolutionLabelBeforeControlButtons() {
-        assertTrue(source.contains("resolutionRelX"))
-        assertTrue(source.contains("rightBoundaryX = powerBtn.x"))
-        assertTrue(source.contains("RESOLUTION_BUTTON_GAP"))
-        assertFalse(source.contains("STATUS_TEXT_RIGHT_INSET"))
+        assertTrue(terminalSource.contains("resolutionRelX"))
+        assertTrue(terminalSource.contains("rightBoundaryX = powerBtn.x"))
+        assertTrue(terminalSource.contains("RESOLUTION_BUTTON_GAP"))
+        assertFalse(terminalSource.contains("STATUS_TEXT_RIGHT_INSET"))
     }
 
     @Test
     fun computerScreenKeepsInventoryKeyAsTextInputInsteadOfClosingScreen() {
-        assertTrue(source.contains("keyInventory"))
-        assertTrue(source.contains(".matches(keyCode, scanCode)"))
+        assertTrue(displaySource.contains("keyInventory"))
+        assertTrue(displaySource.contains(".matches(keyCode, scanCode)"))
     }
 }

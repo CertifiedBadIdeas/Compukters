@@ -215,8 +215,7 @@ impl ComputerMachine {
         self.bus.store_i32(address, value)
     }
 
-    #[cfg(test)]
-    pub(crate) fn storage0_media_bytes(&self) -> Option<&[u8]> {
+    pub fn storage0_media_bytes(&self) -> Option<&[u8]> {
         self.storage0_device_id
             .and_then(|id| self.bus.device::<StoragePortDevice>(id))
             .and_then(StoragePortDevice::media_bytes)

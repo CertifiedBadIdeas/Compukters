@@ -404,7 +404,6 @@ impl StoragePortDevice {
         Ok(device)
     }
 
-    #[cfg(test)]
     pub(crate) fn media_bytes(&self) -> Option<&[u8]> {
         self.media.as_ref().map(|media| media.bytes.as_slice())
     }
