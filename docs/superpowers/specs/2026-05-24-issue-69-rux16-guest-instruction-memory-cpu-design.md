@@ -86,6 +86,39 @@ The source of truth is guest memory. An implementation may later cache decoded
 instructions for speed, but the cache must behave as an optimization over
 memory bytes, not as the architectural program representation.
 
+The implementation should separate three layers:
+
+```text
+semantic instruction set
+  add, load32, store32, jump, halt
+
+encoding
+  Rux16 words today, possible Rux32 words later
+
+execution
+  apply DecodedInstruction to registers, pc, and MachineBus
+```
+
+The CPU core should execute a decoded semantic instruction, not hard-code a
+specific instruction width into every operation. A decoder boundary keeps the
+16-bit versus 32-bit decision reversible:
+
+```rust
+trait InstructionDecoder {
+    fn decode(&mut self, bus: &mut dyn MemoryBus, pc: u32) -> DecodeResult;
+}
+
+struct DecodeResult {
+    instruction: DecodedInstruction,
+    next_pc: u32,
+}
+```
+
+`Rux16Decoder` is the first decoder. A future `Rux32Decoder` should be able to
+target the same `DecodedInstruction` execution path. This makes a later
+16-bit-to-32-bit migration mostly an encoder/decoder/compiler-backend change,
+not a CPU rewrite.
+
 ## Instruction Encoding
 
 The base instruction word is 16 bits:
@@ -125,6 +158,10 @@ The exact subop layout is intentionally deferred to the implementation plan. The
 constraint for that plan is fixed here: common BIOS code must fit in compact
 16-bit instructions, while wide constants and absolute addresses use extension
 words.
+
+The first implementation should treat the binary encoding as experimental. It
+must not promise stable executable compatibility until storage boot has proven
+which forms BIOS and the early OS actually need.
 
 Example wide constant sequence:
 
@@ -247,6 +284,8 @@ The first implementation should be deliberately small:
 
 - add a new `rux16` module in `native/rux-vm`;
 - define `Rux16CpuState`;
+- define `DecodedInstruction`, `DecodeResult`, and an `InstructionDecoder`
+  boundary;
 - implement fetch of `u16` little-endian instruction words from `MachineBus`;
 - implement `halt`, small constants, `add`, `load32`, `store32`, and register
   jump;
@@ -263,6 +302,8 @@ Native Rust tests should cover:
 - fetch/decode of little-endian 16-bit words from guest memory;
 - `pc` advancing by 2 for normal instructions;
 - extension-word consumption for at least one wide constant instruction;
+- execution through `DecodedInstruction` so instruction semantics are not tied
+  directly to the 16-bit decoder;
 - arithmetic and register moves;
 - load/store through regular RAM;
 - load/store through a small test MMIO device on `MachineBus`;
@@ -273,6 +314,8 @@ Native Rust tests should cover:
 ## Open Follow-Ups
 
 - Define the exact subop layout for each instruction family.
+- Decide whether a `Rux32Decoder` experiment is useful before the first stable
+  executable format.
 - Decide whether `r0` should become a zero register.
 - Decide whether BIOS bytes live in ROM, protected RAM, or regular RAM in the
   first Rux16 machine profile.
