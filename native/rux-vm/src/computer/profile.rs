@@ -1,5 +1,6 @@
 use crate::computer::devices::{
-    ComputerControlDevice, DebugSerialDevice, SerialInputDevice, TextDisplayDevice,
+    ComputerControlDevice, DebugSerialDevice, SerialInputDevice, StoragePortDevice,
+    TextDisplayDevice,
 };
 use crate::computer_abi;
 use crate::low_machine::MemoryFault;
@@ -39,6 +40,10 @@ impl ComputerMachineProfile {
             .with_hardware(ComputerHardwareConfig::text_display(
                 computer_abi::COMPUTER_HARDWARE_ID_DISPLAY0,
                 computer_abi::DISPLAY0_BASE,
+            ))
+            .with_hardware(ComputerHardwareConfig::storage_port(
+                computer_abi::COMPUTER_HARDWARE_ID_STORAGE0,
+                computer_abi::STORAGE0_BASE,
             ))
     }
 
@@ -88,26 +93,74 @@ impl ComputerHardwareConfig {
         }
     }
 
+    pub fn storage_port(id: u32, mmio_base: u32) -> Self {
+        Self {
+            id,
+            mmio_base,
+            device: ComputerHardwareDevice::StoragePort(StoragePortConfig::absent()),
+        }
+    }
+
+    pub fn storage_port_with_media(
+        id: u32,
+        mmio_base: u32,
+        media: Vec<u8>,
+        read_only: bool,
+    ) -> Self {
+        Self {
+            id,
+            mmio_base,
+            device: ComputerHardwareDevice::StoragePort(StoragePortConfig::with_media(
+                media, read_only,
+            )),
+        }
+    }
+
     pub(crate) fn mmio_size(&self) -> u32 {
         self.device.mmio_size()
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ComputerHardwareDevice {
     Control,
     DebugSerial,
     SerialInput,
     TextDisplay,
+    StoragePort(StoragePortConfig),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct StoragePortConfig {
+    pub(crate) media: Option<StorageMediaConfig>,
+}
+
+impl StoragePortConfig {
+    fn absent() -> Self {
+        Self { media: None }
+    }
+
+    fn with_media(bytes: Vec<u8>, read_only: bool) -> Self {
+        Self {
+            media: Some(StorageMediaConfig { bytes, read_only }),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct StorageMediaConfig {
+    pub(crate) bytes: Vec<u8>,
+    pub(crate) read_only: bool,
 }
 
 impl ComputerHardwareDevice {
-    fn mmio_size(self) -> u32 {
+    fn mmio_size(&self) -> u32 {
         match self {
             Self::Control => ComputerControlDevice::SIZE,
             Self::DebugSerial => DebugSerialDevice::SIZE,
             Self::SerialInput => SerialInputDevice::SIZE,
             Self::TextDisplay => TextDisplayDevice::SIZE,
+            Self::StoragePort(_) => StoragePortDevice::SIZE,
         }
     }
 }

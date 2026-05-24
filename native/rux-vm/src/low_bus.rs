@@ -10,6 +10,15 @@ pub trait MmioDevice: Any {
 
     fn store_i32(&mut self, offset: u32, value: i32) -> Result<(), MemoryFault>;
 
+    fn store_i32_with_memory(
+        &mut self,
+        offset: u32,
+        value: i32,
+        _memory: &mut MachineMemory,
+    ) -> Result<(), MemoryFault> {
+        self.store_i32(offset, value)
+    }
+
     fn load_u8(&self, offset: u32) -> Result<u8, MemoryFault> {
         Ok(self.load_i32(offset)?.to_le_bytes()[0])
     }
@@ -171,7 +180,9 @@ impl MemoryBus for MachineBus {
     fn store_i32(&mut self, address: u32, value: i32) -> Result<(), MemoryFault> {
         for region in &mut self.regions {
             if let Some(offset) = region.offset_for_i32(address) {
-                return region.device.store_i32(offset, value);
+                return region
+                    .device
+                    .store_i32_with_memory(offset, value, &mut self.memory);
             }
         }
         self.memory.store_i32(address, value)

@@ -1,6 +1,6 @@
 use crate::computer::devices::{
     ComputerControlDevice, ComputerTextDisplaySnapshot, DebugSerialDevice, SerialInputDevice,
-    TextDisplayDevice,
+    StoragePortDevice, TextDisplayDevice,
 };
 use crate::computer::profile::{
     validate_profile_v2, ComputerHardwareDevice, ComputerMachineProfile, HardwareTableEntry,
@@ -19,6 +19,7 @@ pub struct ComputerMachine {
     debug_device_id: Option<MmioDeviceId>,
     serial_input_device_id: Option<MmioDeviceId>,
     display0_device_id: Option<MmioDeviceId>,
+    storage0_device_id: Option<MmioDeviceId>,
     program_base: u32,
     cpus: Vec<LowCpuContext>,
     boot_cpu: Option<CpuId>,
@@ -60,6 +61,7 @@ impl ComputerMachine {
     pub const HARDWARE_ID_DEBUG: u32 = computer_abi::COMPUTER_HARDWARE_ID_DEBUG;
     pub const HARDWARE_ID_SERIAL_INPUT: u32 = computer_abi::COMPUTER_HARDWARE_ID_SERIAL_INPUT;
     pub const HARDWARE_ID_DISPLAY0: u32 = computer_abi::COMPUTER_HARDWARE_ID_DISPLAY0;
+    pub const HARDWARE_ID_STORAGE0: u32 = computer_abi::COMPUTER_HARDWARE_ID_STORAGE0;
     pub const CONTROL_BASE: u32 = computer_abi::CONTROL_BASE;
     pub const CONTROL_STATUS: u32 = computer_abi::CONTROL_STATUS;
     pub const CONTROL_PANIC_CODE: u32 = computer_abi::CONTROL_PANIC_CODE;
@@ -87,6 +89,23 @@ impl ComputerMachine {
         computer_abi::DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR;
     pub const DISPLAY0_COMMAND_PUT_BYTE_AT_XY: i32 = computer_abi::DISPLAY0_COMMAND_PUT_BYTE_AT_XY;
     pub const DISPLAY0_COMMAND_NEWLINE: i32 = computer_abi::DISPLAY0_COMMAND_NEWLINE;
+    pub const STORAGE0_BASE: u32 = computer_abi::STORAGE0_BASE;
+    pub const STORAGE0_VERSION: u32 = computer_abi::STORAGE0_VERSION;
+    pub const STORAGE0_STATUS: u32 = computer_abi::STORAGE0_STATUS;
+    pub const STORAGE0_ERROR: u32 = computer_abi::STORAGE0_ERROR;
+    pub const STORAGE0_COMMAND: u32 = computer_abi::STORAGE0_COMMAND;
+    pub const STORAGE0_BLOCK_SIZE: u32 = computer_abi::STORAGE0_BLOCK_SIZE;
+    pub const STORAGE0_CAPACITY_BLOCKS_LOW: u32 = computer_abi::STORAGE0_CAPACITY_BLOCKS_LOW;
+    pub const STORAGE0_CAPACITY_BLOCKS_HIGH: u32 = computer_abi::STORAGE0_CAPACITY_BLOCKS_HIGH;
+    pub const STORAGE0_LBA_LOW: u32 = computer_abi::STORAGE0_LBA_LOW;
+    pub const STORAGE0_LBA_HIGH: u32 = computer_abi::STORAGE0_LBA_HIGH;
+    pub const STORAGE0_BLOCK_COUNT: u32 = computer_abi::STORAGE0_BLOCK_COUNT;
+    pub const STORAGE0_BUFFER_ADDR: u32 = computer_abi::STORAGE0_BUFFER_ADDR;
+    pub const STORAGE0_BYTES_DONE: u32 = computer_abi::STORAGE0_BYTES_DONE;
+    pub const STORAGE0_SEQUENCE_LOW: u32 = computer_abi::STORAGE0_SEQUENCE_LOW;
+    pub const STORAGE0_SEQUENCE_HIGH: u32 = computer_abi::STORAGE0_SEQUENCE_HIGH;
+    pub const STORAGE0_MEDIA_STATUS: u32 = computer_abi::STORAGE0_MEDIA_STATUS;
+    pub const STORAGE0_SIZE: u32 = computer_abi::STORAGE0_SIZE;
     pub const STATUS_RESET: i32 = computer_abi::STATUS_RESET;
     pub const STATUS_BOOTING: i32 = computer_abi::STATUS_BOOTING;
     pub const STATUS_READY: i32 = computer_abi::STATUS_READY;
@@ -104,6 +123,7 @@ impl ComputerMachine {
         let mut debug_device_id = None;
         let mut serial_input_device_id = None;
         let mut display0_device_id = None;
+        let mut storage0_device_id = None;
         let hardware_entries = profile
             .hardware
             .iter()
@@ -115,7 +135,7 @@ impl ComputerMachine {
             .collect::<Vec<_>>();
 
         for hardware in &profile.hardware {
-            let device_id = match hardware.device {
+            let device_id = match &hardware.device {
                 ComputerHardwareDevice::Control => {
                     bus.map_mmio(hardware.mmio_base, Box::new(ComputerControlDevice::new()))?
                 }
@@ -128,12 +148,22 @@ impl ComputerMachine {
                 ComputerHardwareDevice::TextDisplay => {
                     bus.map_mmio(hardware.mmio_base, Box::new(TextDisplayDevice::new()))?
                 }
+                ComputerHardwareDevice::StoragePort(config) => {
+                    let device = match &config.media {
+                        Some(media) => {
+                            StoragePortDevice::with_media(media.bytes.clone(), media.read_only)?
+                        }
+                        None => StoragePortDevice::new_absent(),
+                    };
+                    bus.map_mmio(hardware.mmio_base, Box::new(device))?
+                }
             };
-            match hardware.device {
+            match &hardware.device {
                 ComputerHardwareDevice::Control => control_device_id = Some(device_id),
                 ComputerHardwareDevice::DebugSerial => debug_device_id = Some(device_id),
                 ComputerHardwareDevice::SerialInput => serial_input_device_id = Some(device_id),
                 ComputerHardwareDevice::TextDisplay => display0_device_id = Some(device_id),
+                ComputerHardwareDevice::StoragePort(_) => storage0_device_id = Some(device_id),
             }
         }
 
@@ -144,6 +174,7 @@ impl ComputerMachine {
             debug_device_id,
             serial_input_device_id,
             display0_device_id,
+            storage0_device_id,
             program_base: profile.program_base,
             cpus: Vec::new(),
             boot_cpu: None,
@@ -172,7 +203,23 @@ impl ComputerMachine {
         self.push_memory_map_region(&mut map, self.debug_device_id, "debug");
         self.push_memory_map_region(&mut map, self.serial_input_device_id, "serial-input");
         self.push_memory_map_region(&mut map, self.display0_device_id, "display0");
+        self.push_memory_map_region(&mut map, self.storage0_device_id, "storage0");
         map
+    }
+
+    pub fn bus_load_i32(&self, address: u32) -> Result<i32, MemoryFault> {
+        self.bus.load_i32(address)
+    }
+
+    pub fn bus_store_i32(&mut self, address: u32, value: i32) -> Result<(), MemoryFault> {
+        self.bus.store_i32(address, value)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn storage0_media_bytes(&self) -> Option<&[u8]> {
+        self.storage0_device_id
+            .and_then(|id| self.bus.device::<StoragePortDevice>(id))
+            .and_then(StoragePortDevice::media_bytes)
     }
 
     pub fn spawn_cpu(&mut self, image: Image, slice_budget_nanos: u64) -> Result<CpuId, String> {
@@ -714,7 +761,7 @@ mod tests {
     fn computer_machine_writes_display0_hardware_entry() {
         let machine = ComputerMachine::new(1024).unwrap();
 
-        assert_eq!(read_u32(machine.memory(), 0x18), 4);
+        assert_eq!(read_u32(machine.memory(), 0x18), 5);
         assert_hardware_entry(
             machine.memory(),
             64,
@@ -921,7 +968,7 @@ mod tests {
             read_u32(machine.memory(), 0x14),
             ComputerMachine::PROFILE_V2_BOOT_INFO_SIZE
         );
-        assert_eq!(read_u32(machine.memory(), 0x18), 4);
+        assert_eq!(read_u32(machine.memory(), 0x18), 5);
     }
 
     #[test]
@@ -956,6 +1003,13 @@ mod tests {
             computer_abi::DISPLAY0_BASE,
             computer_abi::PROFILE_V2_PAGE_SIZE,
         );
+        assert_hardware_entry(
+            machine.memory(),
+            76,
+            computer_abi::COMPUTER_HARDWARE_ID_STORAGE0,
+            computer_abi::STORAGE0_BASE,
+            computer_abi::PROFILE_V2_PAGE_SIZE,
+        );
     }
 
     #[test]
@@ -963,7 +1017,7 @@ mod tests {
         let profile = ComputerMachineProfile::computer_v1(1024);
         let machine = ComputerMachine::from_profile(profile).unwrap();
 
-        assert_eq!(read_u32(machine.memory(), 0x18), 4);
+        assert_eq!(read_u32(machine.memory(), 0x18), 5);
         assert_hardware_entry(
             machine.memory(),
             28,
@@ -992,6 +1046,249 @@ mod tests {
             computer_abi::DISPLAY0_BASE,
             computer_abi::PROFILE_V2_PAGE_SIZE,
         );
+        assert_hardware_entry(
+            machine.memory(),
+            76,
+            computer_abi::COMPUTER_HARDWARE_ID_STORAGE0,
+            computer_abi::STORAGE0_BASE,
+            computer_abi::PROFILE_V2_PAGE_SIZE,
+        );
+    }
+
+    #[test]
+    fn computer_profile_can_expose_storage0_without_attached_media() {
+        let profile =
+            ComputerMachineProfile::new(1024).with_hardware(ComputerHardwareConfig::storage_port(
+                computer_abi::COMPUTER_HARDWARE_ID_STORAGE0,
+                computer_abi::STORAGE0_BASE,
+            ));
+
+        let machine = ComputerMachine::from_profile(profile).unwrap();
+
+        assert_eq!(read_u32(machine.memory(), 0x18), 1);
+        assert_hardware_entry(
+            machine.memory(),
+            28,
+            computer_abi::COMPUTER_HARDWARE_ID_STORAGE0,
+            computer_abi::STORAGE0_BASE,
+            computer_abi::STORAGE0_SIZE,
+        );
+        assert!(machine.memory_map().region("storage0").is_some());
+    }
+
+    #[test]
+    fn storage0_absent_media_reports_zero_capacity_and_media_absent_errors() {
+        let mut machine = ComputerMachine::new(1024).unwrap();
+
+        assert_eq!(
+            machine
+                .bus_load_i32(computer_abi::STORAGE0_VERSION)
+                .unwrap(),
+            computer_abi::STORAGE_VERSION,
+        );
+        assert_eq!(
+            machine
+                .bus_load_i32(computer_abi::STORAGE0_MEDIA_STATUS)
+                .unwrap(),
+            computer_abi::STORAGE_MEDIA_ABSENT,
+        );
+        assert_eq!(
+            machine
+                .bus_load_i32(computer_abi::STORAGE0_CAPACITY_BLOCKS_LOW)
+                .unwrap(),
+            0,
+        );
+
+        machine
+            .bus_store_i32(
+                computer_abi::STORAGE0_COMMAND,
+                computer_abi::STORAGE_COMMAND_READ_BLOCKS,
+            )
+            .unwrap();
+
+        assert_eq!(
+            machine.bus_load_i32(computer_abi::STORAGE0_STATUS).unwrap(),
+            computer_abi::STORAGE_STATUS_ERROR,
+        );
+        assert_eq!(
+            machine.bus_load_i32(computer_abi::STORAGE0_ERROR).unwrap(),
+            computer_abi::STORAGE_ERROR_MEDIA_ABSENT,
+        );
+    }
+
+    #[test]
+    fn storage0_read_blocks_copies_media_into_guest_ram() {
+        let media = vec![0xA5; 512];
+        let profile = ComputerMachineProfile::new(2048).with_hardware(
+            ComputerHardwareConfig::storage_port_with_media(
+                computer_abi::COMPUTER_HARDWARE_ID_STORAGE0,
+                computer_abi::STORAGE0_BASE,
+                media,
+                false,
+            ),
+        );
+        let mut machine = ComputerMachine::from_profile(profile).unwrap();
+
+        machine
+            .bus_store_i32(computer_abi::STORAGE0_LBA_LOW, 0)
+            .unwrap();
+        machine
+            .bus_store_i32(computer_abi::STORAGE0_LBA_HIGH, 0)
+            .unwrap();
+        machine
+            .bus_store_i32(computer_abi::STORAGE0_BLOCK_COUNT, 1)
+            .unwrap();
+        machine
+            .bus_store_i32(computer_abi::STORAGE0_BUFFER_ADDR, 512)
+            .unwrap();
+        machine
+            .bus_store_i32(
+                computer_abi::STORAGE0_COMMAND,
+                computer_abi::STORAGE_COMMAND_READ_BLOCKS,
+            )
+            .unwrap();
+
+        assert_eq!(
+            machine.bus_load_i32(computer_abi::STORAGE0_STATUS).unwrap(),
+            computer_abi::STORAGE_STATUS_DONE,
+        );
+        assert_eq!(
+            machine
+                .bus_load_i32(computer_abi::STORAGE0_BYTES_DONE)
+                .unwrap(),
+            512,
+        );
+        assert_eq!(machine.memory().bytes()[512], 0xA5);
+        assert_eq!(machine.memory().bytes()[1023], 0xA5);
+    }
+
+    #[test]
+    fn storage0_write_blocks_copies_guest_ram_into_media() {
+        let profile = ComputerMachineProfile::new(2048).with_hardware(
+            ComputerHardwareConfig::storage_port_with_media(
+                computer_abi::COMPUTER_HARDWARE_ID_STORAGE0,
+                computer_abi::STORAGE0_BASE,
+                vec![0; 512],
+                false,
+            ),
+        );
+        let mut machine = ComputerMachine::from_profile(profile).unwrap();
+        machine.memory_mut().store_u8(512, 0x5A).unwrap();
+        machine.memory_mut().store_u8(1023, 0xC3).unwrap();
+
+        machine
+            .bus_store_i32(computer_abi::STORAGE0_LBA_LOW, 0)
+            .unwrap();
+        machine
+            .bus_store_i32(computer_abi::STORAGE0_LBA_HIGH, 0)
+            .unwrap();
+        machine
+            .bus_store_i32(computer_abi::STORAGE0_BLOCK_COUNT, 1)
+            .unwrap();
+        machine
+            .bus_store_i32(computer_abi::STORAGE0_BUFFER_ADDR, 512)
+            .unwrap();
+        machine
+            .bus_store_i32(
+                computer_abi::STORAGE0_COMMAND,
+                computer_abi::STORAGE_COMMAND_WRITE_BLOCKS,
+            )
+            .unwrap();
+
+        let media = machine.storage0_media_bytes().unwrap();
+        assert_eq!(media[0], 0x5A);
+        assert_eq!(media[511], 0xC3);
+    }
+
+    #[test]
+    fn storage0_read_blocks_rejects_out_of_bounds_lba() {
+        let mut machine = storage0_machine_with_media(vec![0; 512], false);
+
+        machine
+            .bus_store_i32(computer_abi::STORAGE0_LBA_LOW, 1)
+            .unwrap();
+        machine
+            .bus_store_i32(computer_abi::STORAGE0_BLOCK_COUNT, 1)
+            .unwrap();
+        machine
+            .bus_store_i32(computer_abi::STORAGE0_BUFFER_ADDR, 512)
+            .unwrap();
+        machine
+            .bus_store_i32(
+                computer_abi::STORAGE0_COMMAND,
+                computer_abi::STORAGE_COMMAND_READ_BLOCKS,
+            )
+            .unwrap();
+
+        assert_storage_error(&machine, computer_abi::STORAGE_ERROR_LBA_OUT_OF_BOUNDS);
+    }
+
+    #[test]
+    fn storage0_read_blocks_rejects_out_of_bounds_guest_buffer() {
+        let mut machine = storage0_machine_with_media(vec![0; 512], false);
+
+        machine
+            .bus_store_i32(computer_abi::STORAGE0_BLOCK_COUNT, 1)
+            .unwrap();
+        machine
+            .bus_store_i32(computer_abi::STORAGE0_BUFFER_ADDR, 1800)
+            .unwrap();
+        machine
+            .bus_store_i32(
+                computer_abi::STORAGE0_COMMAND,
+                computer_abi::STORAGE_COMMAND_READ_BLOCKS,
+            )
+            .unwrap();
+
+        assert_storage_error(&machine, computer_abi::STORAGE_ERROR_BUFFER_OUT_OF_BOUNDS);
+    }
+
+    #[test]
+    fn storage0_write_blocks_rejects_read_only_media() {
+        let mut machine = storage0_machine_with_media(vec![0; 512], true);
+
+        machine
+            .bus_store_i32(computer_abi::STORAGE0_BLOCK_COUNT, 1)
+            .unwrap();
+        machine
+            .bus_store_i32(computer_abi::STORAGE0_BUFFER_ADDR, 512)
+            .unwrap();
+        machine
+            .bus_store_i32(
+                computer_abi::STORAGE0_COMMAND,
+                computer_abi::STORAGE_COMMAND_WRITE_BLOCKS,
+            )
+            .unwrap();
+
+        assert_storage_error(&machine, computer_abi::STORAGE_ERROR_WRITE_PROTECTED);
+    }
+
+    #[test]
+    fn storage0_invalid_command_sets_invalid_command_error() {
+        let mut machine = storage0_machine_with_media(vec![0; 512], false);
+
+        machine
+            .bus_store_i32(computer_abi::STORAGE0_COMMAND, 99)
+            .unwrap();
+
+        assert_storage_error(&machine, computer_abi::STORAGE_ERROR_INVALID_COMMAND);
+    }
+
+    #[test]
+    fn storage0_read_blocks_rejects_byte_count_overflow() {
+        let mut machine = storage0_machine_with_media(vec![0; 512], false);
+
+        machine
+            .bus_store_i32(computer_abi::STORAGE0_BLOCK_COUNT, -1)
+            .unwrap();
+        machine
+            .bus_store_i32(
+                computer_abi::STORAGE0_COMMAND,
+                computer_abi::STORAGE_COMMAND_READ_BLOCKS,
+            )
+            .unwrap();
+
+        assert_storage_error(&machine, computer_abi::STORAGE_ERROR_BYTE_COUNT_OVERFLOW);
     }
 
     #[test]
@@ -2139,6 +2436,35 @@ mod tests {
         assert_eq!(read_u32(memory, address), id);
         assert_eq!(read_u32(memory, address + 4), mmio_base);
         assert_eq!(read_u32(memory, address + 8), mmio_size);
+    }
+
+    fn storage0_machine_with_media(media: Vec<u8>, read_only: bool) -> ComputerMachine {
+        let profile = ComputerMachineProfile::new(2048).with_hardware(
+            ComputerHardwareConfig::storage_port_with_media(
+                computer_abi::COMPUTER_HARDWARE_ID_STORAGE0,
+                computer_abi::STORAGE0_BASE,
+                media,
+                read_only,
+            ),
+        );
+        ComputerMachine::from_profile(profile).unwrap()
+    }
+
+    fn assert_storage_error(machine: &ComputerMachine, error: i32) {
+        assert_eq!(
+            machine.bus_load_i32(computer_abi::STORAGE0_STATUS).unwrap(),
+            computer_abi::STORAGE_STATUS_ERROR,
+        );
+        assert_eq!(
+            machine.bus_load_i32(computer_abi::STORAGE0_ERROR).unwrap(),
+            error,
+        );
+        assert_eq!(
+            machine
+                .bus_load_i32(computer_abi::STORAGE0_BYTES_DONE)
+                .unwrap(),
+            0,
+        );
     }
 
     fn assert_profile_error(profile: ComputerMachineProfile, expected: &str) {

@@ -36,6 +36,7 @@ id  name          mmio_base     mmio_size
 2   debug         0x1000_0100   0x0000_0100
 3   serial-input  0x1000_0200   0x0000_0100
 4   display0      0x1000_0300   0x0000_0100
+5   storage0      0x1000_0400   0x0000_0100
 ```
 
 Firmware should discover these ranges through `BootInfo.hardware_table_addr` and `BootInfo.hardware_count`.
@@ -136,6 +137,88 @@ bits 20..31  y
 
 The sequence registers expose a monotonic `u64` split into low/high `u32` words. It advances when visible display state changes through a display command.
 
+## Storage0 MMIO
+
+The storage0 range exposes a block storage port. The port is stable hardware,
+but media is optional: firmware must expect the port to exist with no disk
+attached.
+
+All multi-byte registers are little-endian.
+
+```text
+offset  size  access  name
+0x00    4     R       version
+0x04    4     R       status
+0x08    4     R       error
+0x0C    4     W       command
+0x10    4     R       block_size
+0x14    4     R       capacity_blocks_low
+0x18    4     R       capacity_blocks_high
+0x1C    4     R/W     lba_low
+0x20    4     R/W     lba_high
+0x24    4     R/W     block_count
+0x28    4     R/W     buffer_addr
+0x2C    4     R       bytes_done
+0x30    4     R       sequence_low
+0x34    4     R       sequence_high
+0x38    4     R       media_status
+```
+
+Version:
+
+```text
+1  storage MMIO v1
+```
+
+Status values:
+
+```text
+0  ready
+1  busy
+2  done
+3  error
+```
+
+Error values:
+
+```text
+0  none
+1  invalid_command
+2  media_absent
+3  buffer_out_of_bounds
+4  lba_out_of_bounds
+5  byte_count_overflow
+6  write_protected
+7  io_error
+```
+
+Commands:
+
+```text
+0  nop
+1  read_blocks
+2  write_blocks
+3  flush
+```
+
+Media status values:
+
+```text
+0  absent
+1  present
+2  read_only
+3  error
+```
+
+When media is absent, `capacity_blocks_*` return zero, `media_status` returns
+`absent`, and block I/O commands complete with `status = error` and
+`error = media_absent`.
+
+`read_blocks` and `write_blocks` use guest RAM as the transfer buffer. Firmware
+writes `lba_low/high`, `block_count`, and `buffer_addr`, then writes `command`.
+The host copies `block_count * block_size` bytes between the attached media and
+guest RAM.
+
 ## Missing Hardware
 
 Rux machine profile v2 allows hardware entries to be absent. Current `ComputerMachine` always exposes the four entries above, but firmware should still handle missing entries:
@@ -144,5 +227,6 @@ Rux machine profile v2 allows hardware entries to be absent. Current `ComputerMa
 - missing serial input should behave as not ready and return `0`;
 - missing control should make firmware rely on CPU halt or host lifecycle controls.
 - missing display should make display writes no-ops and display reads return `0`.
+- missing storage should make filesystem/boot discovery treat the port as unavailable.
 
 The Rux standard library follows this rule for `std::io`.
