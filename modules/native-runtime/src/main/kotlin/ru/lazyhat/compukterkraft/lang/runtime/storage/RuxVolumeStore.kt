@@ -62,6 +62,8 @@ class RuxVolumeException(
 ) : RuntimeException(message, cause)
 
 interface RuxVolumeBlob : AutoCloseable {
+    val path: Path
+
     val size: Long
 
     fun read(
@@ -235,7 +237,7 @@ class FileRuxVolumeStore(
 }
 
 private class FileRuxVolumeBlob(
-    private val path: Path,
+    override val path: Path,
     private val file: RandomAccessFile,
     initialSize: Long,
     private val maxVolumeSize: Long,

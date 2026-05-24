@@ -20,6 +20,7 @@
 package ru.lazyhat.compukterkraft.lang.runtime.blazing
 
 import java.io.ByteArrayOutputStream
+import java.nio.file.Path
 
 interface RuxComputerRuntimeBindings {
     fun runUntilSignal(handle: Long): NativeLowImageVmSignal
@@ -75,6 +76,7 @@ object RuxComputerRuntimeFactory {
         memorySize: Int = DEFAULT_MEMORY_SIZE,
         sliceBudgetNanos: Long = DEFAULT_SLICE_BUDGET_NANOS,
         storage0Media: ByteArray? = null,
+        storage0Path: Path? = null,
         storage0Sink: ((ByteArray) -> Unit)? = null,
     ): RuxComputerRuntime =
         create(
@@ -82,6 +84,7 @@ object RuxComputerRuntimeFactory {
             memorySize = memorySize,
             sliceBudgetNanos = sliceBudgetNanos,
             storage0Media = storage0Media,
+            storage0Path = storage0Path,
             storage0Sink = storage0Sink,
         )
 
@@ -90,8 +93,12 @@ object RuxComputerRuntimeFactory {
         memorySize: Int = DEFAULT_MEMORY_SIZE,
         sliceBudgetNanos: Long = DEFAULT_SLICE_BUDGET_NANOS,
         storage0Media: ByteArray? = null,
+        storage0Path: Path? = null,
         storage0Sink: ((ByteArray) -> Unit)? = null,
     ): RuxComputerRuntime {
+        require(storage0Media == null || storage0Path == null) {
+            "storage0Media and storage0Path are mutually exclusive"
+        }
         val handle =
             NativeVmBindings.createRuxComputer(
                 libraryPath = NativeLibraryLocator.requireLibraryPath(),
@@ -99,6 +106,7 @@ object RuxComputerRuntimeFactory {
                 memorySize = memorySize,
                 sliceBudgetNanos = sliceBudgetNanos,
                 storage0Media = storage0Media,
+                storage0Path = storage0Path,
             )
         return RuxComputerRuntime(handle, storage0Sink = storage0Sink)
     }

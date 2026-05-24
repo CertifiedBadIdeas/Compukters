@@ -51,24 +51,11 @@ object ComputerRuntimeDeviceFactory {
 
     private fun createRuxComputerEndpoint(storage0: RuxVolumeBlob) =
         try {
-            RuxComputerRuntimeFactory.createFromResource(
-                storage0Media = storage0.readAll(),
-                storage0Sink = { snapshot ->
-                    storage0.resize(snapshot.size.toLong())
-                    storage0.write(0, snapshot)
-                    storage0.flush()
-                    storage0.close()
-                },
-            )
+            val storage0Path = storage0.path
+            storage0.close()
+            RuxComputerRuntimeFactory.createFromResource(storage0Path = storage0Path)
         } catch (error: Throwable) {
             storage0.close()
             throw error
         }
-
-    private fun RuxVolumeBlob.readAll(): ByteArray {
-        require(size <= Int.MAX_VALUE) {
-            "Rux storage0 volume is too large to attach to the current native runtime: $size bytes"
-        }
-        return read(0, size.toInt())
-    }
 }

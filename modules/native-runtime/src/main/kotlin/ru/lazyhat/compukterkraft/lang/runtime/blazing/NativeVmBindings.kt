@@ -19,6 +19,8 @@
 
 package ru.lazyhat.compukterkraft.lang.runtime.blazing
 
+import java.nio.file.Path
+
 import ru.lazyhat.compukterkraft.lang.runtime.VmValue
 
 data class NativeLowImageVmMetrics(
@@ -175,7 +177,11 @@ object NativeVmBindings {
         memorySize: Int,
         sliceBudgetNanos: Long,
         storage0Media: ByteArray? = null,
+        storage0Path: Path? = null,
     ): Long {
+        require(storage0Media == null || storage0Path == null) {
+            "storage0Media and storage0Path are mutually exclusive"
+        }
         load(libraryPath)
         val handle =
             createRuxComputerNative(
@@ -183,6 +189,7 @@ object NativeVmBindings {
                 memorySize.coerceAtLeast(1),
                 sliceBudgetNanos.coerceAtLeast(1),
                 storage0Media,
+                storage0Path?.toAbsolutePath()?.normalize()?.toString(),
             )
         check(handle != 0L) { "Native Rux computer create returned a zero handle" }
         return handle
@@ -265,6 +272,7 @@ object NativeVmBindings {
         memorySize: Int,
         sliceBudgetNanos: Long,
         storage0Media: ByteArray?,
+        storage0Path: String?,
     ): Long
 
     @JvmStatic
