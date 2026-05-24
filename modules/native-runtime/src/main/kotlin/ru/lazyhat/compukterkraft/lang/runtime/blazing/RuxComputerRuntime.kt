@@ -67,7 +67,7 @@ object NativeRuxComputerRuntimeBindings : RuxComputerRuntimeBindings {
 }
 
 object RuxComputerRuntimeFactory {
-    const val DEFAULT_FIRMWARE_RESOURCE: String = "firmware/rux-laptop.ruxi"
+    const val DEFAULT_FIRMWARE_RESOURCE: String = "firmware/rux-bios.ruxi"
     const val DEFAULT_MEMORY_SIZE: Int = 64 * 1024
     const val DEFAULT_SLICE_BUDGET_NANOS: Long = 1_000_000
 
