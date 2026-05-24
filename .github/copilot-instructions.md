@@ -4,6 +4,12 @@ All non-trivial work in this repo (anything that produces a commit on `dev` or `
 
 If you are an agent reading this file: invoke `superpowers:using-github-roadmap` before invoking `brainstorming`, `writing-plans`, `executing-plans`, or `finishing-a-development-branch`.
 
+## GitHub tooling
+
+Do not use the GitHub MCP server or GitHub app connector tools for this repository. Use the `gh` CLI for all GitHub
+issue, pull request, repository, and Projects v2 operations. When a first-class `gh` command is insufficient, use
+`gh api` for REST or GraphQL calls.
+
 ## Roadmap config
 
 ```yaml roadmap
