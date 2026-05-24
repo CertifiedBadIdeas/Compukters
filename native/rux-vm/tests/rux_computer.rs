@@ -148,3 +148,17 @@ fn rux_computer_handle_exposes_display0_snapshot() {
     assert_eq!(snapshot.sequence, 3);
     assert_eq!(&snapshot.cells[..3], b"RUX");
 }
+
+#[test]
+fn rux_computer_handle_accepts_storage0_media_and_exposes_snapshot() {
+    let image = terminal_firmware_image();
+    let media = vec![7; 1024];
+    let handle =
+        RuxComputerHandle::create_with_storage0_media(&image, 64 * 1024, 1_000_000, media.clone())
+            .expect("computer handle creates with storage0 media");
+
+    assert_eq!(
+        handle.storage0_media_snapshot().expect("storage0 media exists"),
+        media,
+    );
+}

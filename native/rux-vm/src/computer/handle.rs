@@ -1,4 +1,6 @@
-use crate::computer::{ComputerMachine, ComputerTextDisplaySnapshot, CpuId};
+use crate::computer::{
+    ComputerMachine, ComputerMachineProfile, ComputerTextDisplaySnapshot, CpuId,
+};
 use crate::low_image::decode_image;
 use crate::low_image_runner::LowImageSignal;
 
@@ -43,8 +45,38 @@ impl RuxComputerHandle {
         memory_size: usize,
         slice_budget_nanos: u64,
     ) -> Result<Self, String> {
+        Self::create_with_profile(
+            image_bytes,
+            ComputerMachineProfile::computer_v1(memory_size),
+            slice_budget_nanos,
+        )
+    }
+
+    pub fn create_with_storage0_media(
+        image_bytes: &[u8],
+        memory_size: usize,
+        slice_budget_nanos: u64,
+        storage0_media: Vec<u8>,
+    ) -> Result<Self, String> {
+        Self::create_with_profile(
+            image_bytes,
+            ComputerMachineProfile::computer_v1_with_storage0_media(
+                memory_size,
+                storage0_media,
+                false,
+            ),
+            slice_budget_nanos,
+        )
+    }
+
+    fn create_with_profile(
+        image_bytes: &[u8],
+        profile: ComputerMachineProfile,
+        slice_budget_nanos: u64,
+    ) -> Result<Self, String> {
         let image = decode_image(image_bytes).map_err(|error| error.to_string())?;
-        let mut machine = ComputerMachine::new(memory_size).map_err(|error| error.to_string())?;
+        let mut machine =
+            ComputerMachine::from_profile(profile).map_err(|error| error.to_string())?;
         let boot_cpu = machine.spawn_boot_cpu(image, slice_budget_nanos.max(1))?;
         Ok(Self { machine, boot_cpu })
     }
@@ -75,5 +107,9 @@ impl RuxComputerHandle {
 
     pub fn push_serial_input(&mut self, bytes: &[u8]) {
         self.machine.push_serial_input(bytes);
+    }
+
+    pub fn storage0_media_snapshot(&self) -> Option<Vec<u8>> {
+        self.machine.storage0_media_bytes().map(<[u8]>::to_vec)
     }
 }

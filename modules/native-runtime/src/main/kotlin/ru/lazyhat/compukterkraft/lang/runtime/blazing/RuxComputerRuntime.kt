@@ -35,6 +35,8 @@ interface RuxComputerRuntimeBindings {
 
     fun display0Snapshot(handle: Long): NativeRuxComputerDisplaySnapshot?
 
+    fun storage0MediaSnapshot(handle: Long): ByteArray?
+
     fun free(handle: Long)
 }
 
@@ -56,6 +58,9 @@ object NativeRuxComputerRuntimeBindings : RuxComputerRuntimeBindings {
     override fun display0Snapshot(handle: Long): NativeRuxComputerDisplaySnapshot? =
         NativeVmBindings.ruxComputerDisplay0Snapshot(handle)
 
+    override fun storage0MediaSnapshot(handle: Long): ByteArray? =
+        NativeVmBindings.ruxComputerStorage0MediaSnapshot(handle)
+
     override fun free(handle: Long) =
         NativeVmBindings.freeRuxComputer(handle)
 }
@@ -69,17 +74,23 @@ object RuxComputerRuntimeFactory {
         resourcePath: String = DEFAULT_FIRMWARE_RESOURCE,
         memorySize: Int = DEFAULT_MEMORY_SIZE,
         sliceBudgetNanos: Long = DEFAULT_SLICE_BUDGET_NANOS,
+        storage0Media: ByteArray? = null,
+        storage0Sink: ((ByteArray) -> Unit)? = null,
     ): RuxComputerRuntime =
         create(
             image = loadFirmwareResource(resourcePath),
             memorySize = memorySize,
             sliceBudgetNanos = sliceBudgetNanos,
+            storage0Media = storage0Media,
+            storage0Sink = storage0Sink,
         )
 
     fun create(
         image: ByteArray,
         memorySize: Int = DEFAULT_MEMORY_SIZE,
         sliceBudgetNanos: Long = DEFAULT_SLICE_BUDGET_NANOS,
+        storage0Media: ByteArray? = null,
+        storage0Sink: ((ByteArray) -> Unit)? = null,
     ): RuxComputerRuntime {
         val handle =
             NativeVmBindings.createRuxComputer(
@@ -87,8 +98,9 @@ object RuxComputerRuntimeFactory {
                 image = image,
                 memorySize = memorySize,
                 sliceBudgetNanos = sliceBudgetNanos,
+                storage0Media = storage0Media,
             )
-        return RuxComputerRuntime(handle)
+        return RuxComputerRuntime(handle, storage0Sink = storage0Sink)
     }
 
     fun loadFirmwareResource(
@@ -119,6 +131,7 @@ class RuxComputerRuntime(
     private val handle: Long,
     private val bindings: RuxComputerRuntimeBindings = NativeRuxComputerRuntimeBindings,
     private val defaultMaxTurnsPerTick: Int = 8,
+    private val storage0Sink: ((ByteArray) -> Unit)? = null,
 ) : RuxComputerEndpoint {
     private val terminalOutput = ByteArrayOutputStream()
     private var lastDisplay0Sequence: Long? = null
@@ -190,8 +203,16 @@ class RuxComputerRuntime(
 
     override fun close() {
         if (!closed) {
-            closed = true
-            bindings.free(handle)
+            try {
+                storage0Sink?.let { sink ->
+                    bindings.storage0MediaSnapshot(handle)?.let { snapshot ->
+                        sink(snapshot)
+                    }
+                }
+            } finally {
+                closed = true
+                bindings.free(handle)
+            }
         }
     }
 

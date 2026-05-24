@@ -20,6 +20,7 @@
 package ru.lazyhat.compukterkraft.lang.runtime.blazing
 
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
@@ -50,6 +51,25 @@ class RuxComputerRuntimeTest {
         assertFailsWith<IllegalStateException> {
             runtime.pushInput(byteArrayOf(1))
         }
+    }
+
+    @Test
+    fun closesAfterPersistingStorage0Snapshot() {
+        val bindings = EchoBindings()
+        bindings.storage0Media = byteArrayOf(10, 20, 30)
+        val persisted = mutableListOf<ByteArray>()
+        val runtime =
+            RuxComputerRuntime(
+                handle = 13L,
+                bindings = bindings,
+                storage0Sink = { persisted += it.copyOf() },
+            )
+
+        runtime.close()
+
+        assertEquals(1, persisted.size)
+        assertContentEquals(byteArrayOf(10, 20, 30), persisted.single())
+        assertEquals(listOf(13L), bindings.freedHandles)
     }
 
     @Test
@@ -98,6 +118,7 @@ class RuxComputerRuntimeTest {
         val serialInputs = mutableListOf<ByteArray>()
         val freedHandles = mutableListOf<Long>()
         var displaySnapshot: NativeRuxComputerDisplaySnapshot? = null
+        var storage0Media: ByteArray? = null
         private val pendingOutput = ArrayDeque<ByteArray>()
 
         override fun runUntilSignal(handle: Long): NativeLowImageVmSignal = NativeLowImageVmSignal.Pause
@@ -121,6 +142,8 @@ class RuxComputerRuntimeTest {
             }
 
         override fun display0Snapshot(handle: Long): NativeRuxComputerDisplaySnapshot? = displaySnapshot
+
+        override fun storage0MediaSnapshot(handle: Long): ByteArray? = storage0Media?.copyOf()
 
         override fun free(handle: Long) {
             freedHandles += handle

@@ -174,6 +174,7 @@ object NativeVmBindings {
         image: ByteArray,
         memorySize: Int,
         sliceBudgetNanos: Long,
+        storage0Media: ByteArray? = null,
     ): Long {
         load(libraryPath)
         val handle =
@@ -181,6 +182,7 @@ object NativeVmBindings {
                 image,
                 memorySize.coerceAtLeast(1),
                 sliceBudgetNanos.coerceAtLeast(1),
+                storage0Media,
             )
         check(handle != 0L) { "Native Rux computer create returned a zero handle" }
         return handle
@@ -209,6 +211,11 @@ object NativeVmBindings {
     fun ruxComputerDisplay0Snapshot(handle: Long): NativeRuxComputerDisplaySnapshot? {
         require(handle != 0L) { "Native Rux computer handle is zero" }
         return NativeRuxComputerDisplaySnapshot.from(ruxComputerDisplay0SnapshotNative(handle))
+    }
+
+    fun ruxComputerStorage0MediaSnapshot(handle: Long): ByteArray? {
+        require(handle != 0L) { "Native Rux computer handle is zero" }
+        return ruxComputerStorage0MediaSnapshotNative(handle).takeIf { it.isNotEmpty() }
     }
 
     fun pushRuxComputerSerialInput(
@@ -257,6 +264,7 @@ object NativeVmBindings {
         image: ByteArray,
         memorySize: Int,
         sliceBudgetNanos: Long,
+        storage0Media: ByteArray?,
     ): Long
 
     @JvmStatic
@@ -273,6 +281,9 @@ object NativeVmBindings {
 
     @JvmStatic
     private external fun ruxComputerDisplay0SnapshotNative(handle: Long): ByteArray
+
+    @JvmStatic
+    private external fun ruxComputerStorage0MediaSnapshotNative(handle: Long): ByteArray
 
     @JvmStatic
     private external fun pushRuxComputerSerialInputNative(
@@ -338,4 +349,3 @@ private class NativeRuxComputerDisplaySnapshotReader(
         return b0 or (b1 shl 8) or (b2 shl 16) or (b3 shl 24)
     }
 }
-
