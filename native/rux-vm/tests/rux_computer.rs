@@ -319,6 +319,31 @@ fn rux_computer_handle_rux16_bios_flash_is_read_only() {
 }
 
 #[test]
+fn rux_computer_handle_rux16_bios_flash_reads_storage0_block_into_ram() {
+    let bios = rux16_words(&rux16_storage_read_bios_words());
+    let mut media = vec![0; 512];
+    media[0..3].copy_from_slice(b"RUX");
+    let mut handle = RuxComputerHandle::create_rux16_bios_flash_with_storage0_media(
+        &bios,
+        64 * 1024,
+        256,
+        media,
+    )
+    .expect("Rux16 BIOS flash computer creates with storage0 media");
+
+    assert_eq!(handle.run_rux16_until_signal().unwrap(), Rux16Signal::Halt);
+    assert_eq!(handle.debug_output_bytes(), b"RUX");
+    assert_eq!(
+        handle.control(),
+        RuxComputerControl {
+            status: ComputerMachine::STATUS_HALTED,
+            exit_code: 0,
+            panic_code: 2,
+        },
+    );
+}
+
+#[test]
 fn rux_computer_handle_boot_handoff_rejects_empty_image_and_keeps_bios_cpu() {
     let bios = halt_i32_image(1);
     let mut handle =
@@ -426,6 +451,14 @@ fn rux16_store32(addr: u8, src: u8) -> u16 {
     0x5002 | (u16::from(addr) << 8) | (u16::from(src) << 4)
 }
 
+fn rux16_load8(dst: u8, addr: u8) -> u16 {
+    0x4000 | (u16::from(dst) << 8) | (u16::from(addr) << 4)
+}
+
+fn rux16_load32(dst: u8, addr: u8) -> u16 {
+    0x4002 | (u16::from(dst) << 8) | (u16::from(addr) << 4)
+}
+
 fn rux16_mmio_firmware_words() -> Vec<u16> {
     let mut words = Vec::new();
     words.extend(rux16_const32(0, ComputerMachine::DEBUG_WRITE));
@@ -440,6 +473,47 @@ fn rux16_mmio_firmware_words() -> Vec<u16> {
     words.push(rux16_store32(0, 1));
     words.push(rux16_halt());
     words
+}
+
+fn rux16_storage_read_bios_words() -> Vec<u16> {
+    let mut words = Vec::new();
+    words.extend(rux16_const32(0, ComputerMachine::STORAGE0_LBA_LOW));
+    words.push(rux16_const4(1, 0));
+    words.push(rux16_store32(0, 1));
+    words.extend(rux16_const32(0, ComputerMachine::STORAGE0_LBA_HIGH));
+    words.push(rux16_store32(0, 1));
+    words.extend(rux16_const32(0, ComputerMachine::STORAGE0_BLOCK_COUNT));
+    words.push(rux16_const4(1, 1));
+    words.push(rux16_store32(0, 1));
+    words.extend(rux16_const32(0, ComputerMachine::STORAGE0_BUFFER_ADDR));
+    words.extend(rux16_const32(1, 512));
+    words.push(rux16_store32(0, 1));
+    words.extend(rux16_const32(0, ComputerMachine::STORAGE0_COMMAND));
+    words.push(rux16_const4(1, 1));
+    words.push(rux16_store32(0, 1));
+
+    words.extend(rux16_const32(0, 512));
+    words.extend(rux16_const32(3, ComputerMachine::DEBUG_WRITE));
+    words.push(rux16_const4(4, 1));
+    words.push(rux16_load8(2, 0));
+    words.push(rux16_store32(3, 2));
+    words.push(rux16_add(0, 0, 4));
+    words.push(rux16_load8(2, 0));
+    words.push(rux16_store32(3, 2));
+    words.push(rux16_add(0, 0, 4));
+    words.push(rux16_load8(2, 0));
+    words.push(rux16_store32(3, 2));
+
+    words.extend(rux16_const32(0, ComputerMachine::STORAGE0_STATUS));
+    words.push(rux16_load32(2, 0));
+    words.extend(rux16_const32(0, ComputerMachine::CONTROL_PANIC_CODE));
+    words.push(rux16_store32(0, 2));
+    words.push(rux16_halt());
+    words
+}
+
+fn rux16_add(dst: u8, lhs: u8, rhs: u8) -> u16 {
+    0x2000 | (u16::from(dst) << 8) | (u16::from(lhs) << 4) | u16::from(rhs)
 }
 
 fn rux16_halt() -> u16 {
