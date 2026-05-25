@@ -1,8 +1,6 @@
 use crate::computer::{
     BootHandoffError, ComputerMachine, ComputerMachineProfile, ComputerTextDisplaySnapshot, CpuId,
 };
-use crate::low_image::decode_image;
-use crate::low_image_runner::LowImageSignal;
 use crate::rux16::Rux16Signal;
 use std::fs;
 use std::path::Path;
@@ -43,48 +41,6 @@ impl From<ComputerTextDisplaySnapshot> for RuxComputerTextDisplaySnapshot {
 }
 
 impl RuxComputerHandle {
-    pub fn create(
-        image_bytes: &[u8],
-        memory_size: usize,
-        slice_budget_nanos: u64,
-    ) -> Result<Self, String> {
-        Self::create_with_profile(
-            image_bytes,
-            ComputerMachineProfile::computer_v1(memory_size),
-            slice_budget_nanos,
-        )
-    }
-
-    pub fn create_with_storage0_media(
-        image_bytes: &[u8],
-        memory_size: usize,
-        slice_budget_nanos: u64,
-        storage0_media: Vec<u8>,
-    ) -> Result<Self, String> {
-        Self::create_with_profile(
-            image_bytes,
-            ComputerMachineProfile::computer_v1_with_storage0_media(
-                memory_size,
-                storage0_media,
-                false,
-            ),
-            slice_budget_nanos,
-        )
-    }
-
-    pub fn create_with_storage0_path(
-        image_bytes: &[u8],
-        memory_size: usize,
-        slice_budget_nanos: u64,
-        storage0_path: impl AsRef<Path>,
-    ) -> Result<Self, String> {
-        Self::create_with_profile(
-            image_bytes,
-            ComputerMachineProfile::computer_v1_with_storage0_path(memory_size, storage0_path),
-            slice_budget_nanos,
-        )
-    }
-
     pub fn create_rux16_bios_flash(
         bios_flash: &[u8],
         memory_size: usize,
@@ -145,22 +101,6 @@ impl RuxComputerHandle {
         )
     }
 
-    fn create_with_profile(
-        image_bytes: &[u8],
-        profile: ComputerMachineProfile,
-        slice_budget_nanos: u64,
-    ) -> Result<Self, String> {
-        let image = decode_image(image_bytes).map_err(|error| error.to_string())?;
-        let mut machine =
-            ComputerMachine::from_profile(profile).map_err(|error| error.to_string())?;
-        let boot_cpu = machine.spawn_boot_cpu(image, slice_budget_nanos.max(1))?;
-        Ok(Self { machine, boot_cpu })
-    }
-
-    pub fn run_until_signal(&mut self) -> Result<LowImageSignal, String> {
-        self.machine.run_boot_cpu_until_signal(self.boot_cpu)
-    }
-
     pub fn run_rux16_until_signal(&mut self) -> Result<Rux16Signal, String> {
         self.machine.run_boot_rux16_until_signal(self.boot_cpu)
     }
@@ -195,16 +135,6 @@ impl RuxComputerHandle {
 
     pub fn write_guest_ram_bytes(&mut self, address: u32, bytes: &[u8]) -> Result<(), String> {
         self.machine.write_guest_ram_bytes(address, bytes)
-    }
-
-    pub fn boot_handoff_ruxi_from_guest_ram(
-        &mut self,
-        image_addr: u32,
-        image_len: u32,
-        slice_budget_nanos: u64,
-    ) -> Result<CpuId, BootHandoffError> {
-        self.machine
-            .boot_handoff_ruxi_from_ram(image_addr, image_len, slice_budget_nanos)
     }
 
     pub fn boot_handoff_rux16_from_guest_ram(

@@ -23,7 +23,7 @@ import java.io.ByteArrayOutputStream
 import java.nio.file.Path
 
 interface RuxComputerRuntimeBindings {
-    fun runUntilSignal(handle: Long): NativeLowImageVmSignal
+    fun runUntilSignal(handle: Long): NativeRuxComputerSignal
 
     fun control(handle: Long): NativeRuxComputerControl
 
@@ -41,33 +41,8 @@ interface RuxComputerRuntimeBindings {
     fun free(handle: Long)
 }
 
-object NativeRuxComputerRuntimeBindings : RuxComputerRuntimeBindings {
-    override fun runUntilSignal(handle: Long): NativeLowImageVmSignal =
-        NativeVmBindings.runRuxComputerUntilSignal(handle)
-
-    override fun control(handle: Long): NativeRuxComputerControl =
-        NativeVmBindings.ruxComputerControl(handle)
-
-    override fun pushSerialInput(
-        handle: Long,
-        bytes: ByteArray,
-    ) = NativeVmBindings.pushRuxComputerSerialInput(handle, bytes)
-
-    override fun drainDebugOutput(handle: Long): ByteArray =
-        NativeVmBindings.drainRuxComputerDebugOutput(handle)
-
-    override fun display0Snapshot(handle: Long): NativeRuxComputerDisplaySnapshot? =
-        NativeVmBindings.ruxComputerDisplay0Snapshot(handle)
-
-    override fun storage0MediaSnapshot(handle: Long): ByteArray? =
-        NativeVmBindings.ruxComputerStorage0MediaSnapshot(handle)
-
-    override fun free(handle: Long) =
-        NativeVmBindings.freeRuxComputer(handle)
-}
-
 object NativeRux16ComputerRuntimeBindings : RuxComputerRuntimeBindings {
-    override fun runUntilSignal(handle: Long): NativeLowImageVmSignal =
+    override fun runUntilSignal(handle: Long): NativeRuxComputerSignal =
         NativeVmBindings.runRux16ComputerUntilSignal(handle)
 
     override fun control(handle: Long): NativeRuxComputerControl =
@@ -92,49 +67,8 @@ object NativeRux16ComputerRuntimeBindings : RuxComputerRuntimeBindings {
 }
 
 object RuxComputerRuntimeFactory {
-    const val DEFAULT_FIRMWARE_RESOURCE: String = "firmware/rux-bios.ruxi"
     const val DEFAULT_MEMORY_SIZE: Int = 64 * 1024
     const val DEFAULT_SLICE_BUDGET_NANOS: Long = 1_000_000
-
-    fun createFromResource(
-        resourcePath: String = DEFAULT_FIRMWARE_RESOURCE,
-        memorySize: Int = DEFAULT_MEMORY_SIZE,
-        sliceBudgetNanos: Long = DEFAULT_SLICE_BUDGET_NANOS,
-        storage0Media: ByteArray? = null,
-        storage0Path: Path? = null,
-        storage0Sink: ((ByteArray) -> Unit)? = null,
-    ): RuxComputerRuntime =
-        create(
-            image = loadFirmwareResource(resourcePath),
-            memorySize = memorySize,
-            sliceBudgetNanos = sliceBudgetNanos,
-            storage0Media = storage0Media,
-            storage0Path = storage0Path,
-            storage0Sink = storage0Sink,
-        )
-
-    fun create(
-        image: ByteArray,
-        memorySize: Int = DEFAULT_MEMORY_SIZE,
-        sliceBudgetNanos: Long = DEFAULT_SLICE_BUDGET_NANOS,
-        storage0Media: ByteArray? = null,
-        storage0Path: Path? = null,
-        storage0Sink: ((ByteArray) -> Unit)? = null,
-    ): RuxComputerRuntime {
-        require(storage0Media == null || storage0Path == null) {
-            "storage0Media and storage0Path are mutually exclusive"
-        }
-        val handle =
-            NativeVmBindings.createRuxComputer(
-                libraryPath = NativeLibraryLocator.requireLibraryPath(),
-                image = image,
-                memorySize = memorySize,
-                sliceBudgetNanos = sliceBudgetNanos,
-                storage0Media = storage0Media,
-                storage0Path = storage0Path,
-            )
-        return RuxComputerRuntime(handle, storage0Sink = storage0Sink)
-    }
 
     fun createFromBiosFlash(
         biosFlashPath: Path,
@@ -152,15 +86,6 @@ object RuxComputerRuntimeFactory {
             )
         return RuxComputerRuntime(handle, bindings = NativeRux16ComputerRuntimeBindings)
     }
-
-    fun loadFirmwareResource(
-        resourcePath: String,
-        classLoader: ClassLoader = RuxComputerRuntimeFactory::class.java.classLoader,
-    ): ByteArray =
-        classLoader
-            .getResourceAsStream(resourcePath)
-            ?.use { it.readBytes() }
-            ?: error("Rux firmware resource not found: $resourcePath")
 }
 
 interface RuxComputerEndpoint : AutoCloseable {
@@ -179,7 +104,7 @@ interface RuxComputerEndpoint : AutoCloseable {
 
 class RuxComputerRuntime(
     private val handle: Long,
-    private val bindings: RuxComputerRuntimeBindings = NativeRuxComputerRuntimeBindings,
+    private val bindings: RuxComputerRuntimeBindings = NativeRux16ComputerRuntimeBindings,
     private val defaultMaxTurnsPerTick: Int = 8,
     private val storage0Sink: ((ByteArray) -> Unit)? = null,
 ) : RuxComputerEndpoint {
@@ -211,7 +136,7 @@ class RuxComputerRuntime(
         repeat(maxTurns) {
             val signal = bindings.runUntilSignal(handle)
             appendNativeOutput()
-            if (signal != NativeLowImageVmSignal.Pause) {
+            if (signal != NativeRuxComputerSignal.Pause) {
                 return bindings.control(handle)
             }
         }
