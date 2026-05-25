@@ -1,10 +1,20 @@
 use crate::low_machine::{MemoryBus, MemoryFault};
 use std::fmt::{Display, Formatter};
 
+pub const RUX16_CSR_TRAP_VECTOR: u32 = 1;
+pub const RUX16_CSR_TRAP_CAUSE: u32 = 2;
+pub const RUX16_CSR_TRAP_PC: u32 = 3;
+pub const RUX16_CSR_TRAP_VALUE: u32 = 4;
+
+pub const RUX16_TRAP_CAUSE_ILLEGAL_INSTRUCTION: u32 = 1;
+pub const RUX16_TRAP_CAUSE_INSTRUCTION_FETCH_FAULT: u32 = 2;
+pub const RUX16_TRAP_CAUSE_LOAD_FAULT: u32 = 3;
+pub const RUX16_TRAP_CAUSE_STORE_FAULT: u32 = 4;
+pub const RUX16_TRAP_CAUSE_EXPLICIT_TRAP: u32 = 5;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Rux16Signal {
     Halt,
-    Trap,
     StepLimitExceeded,
 }
 
@@ -15,12 +25,27 @@ pub struct Rux16Metrics {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Rux16Trap {
+    cause: u32,
+    pc: u32,
+    value: u32,
     message: String,
 }
 
 impl Rux16Trap {
     fn new(message: impl Into<String>) -> Self {
         Self {
+            cause: 0,
+            pc: 0,
+            value: 0,
+            message: message.into(),
+        }
+    }
+
+    fn exception(cause: u32, pc: u32, value: u32, message: impl Into<String>) -> Self {
+        Self {
+            cause,
+            pc,
+            value,
             message: message.into(),
         }
     }
@@ -33,12 +58,6 @@ impl Display for Rux16Trap {
 }
 
 impl std::error::Error for Rux16Trap {}
-
-impl From<MemoryFault> for Rux16Trap {
-    fn from(value: MemoryFault) -> Self {
-        Self::new(value.to_string())
-    }
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DecodeResult {
@@ -62,6 +81,8 @@ pub enum DecodedInstruction {
     BranchIfZero { src: usize, target_pc: u32 },
     BranchIfNonZero { src: usize, target_pc: u32 },
     Jump { target: usize },
+    ReadCsr { dst: usize, csr: u32 },
+    WriteCsr { csr: u32, src: usize },
 }
 
 pub trait InstructionDecoder {
@@ -79,12 +100,10 @@ impl Rux16Decoder {
 
 impl InstructionDecoder for Rux16Decoder {
     fn decode(&mut self, bus: &mut dyn MemoryBus, pc: u32) -> Result<DecodeResult, Rux16Trap> {
-        let word = bus.load_u16(pc)?;
-        let next_pc = pc.checked_add(2).ok_or_else(|| {
-            Rux16Trap::new(format!(
-                "pc {pc:#010x} overflows while advancing instruction"
-            ))
-        })?;
+        let word = bus
+            .load_u16(pc)
+            .map_err(|error| instruction_fetch_fault(pc, error))?;
+        let next_pc = checked_pc_add(pc, 2)?;
         let op = (word >> 12) & 0x0f;
         let a = usize::from((word >> 8) & 0x0f);
         let b = usize::from((word >> 4) & 0x0f);
@@ -93,6 +112,14 @@ impl InstructionDecoder for Rux16Decoder {
             0x0 => match word & 0x0fff {
                 0x000 => DecodedInstruction::Nop,
                 0x001 => DecodedInstruction::Halt,
+                _ if c == 0x2 => DecodedInstruction::ReadCsr {
+                    dst: a,
+                    csr: b as u32,
+                },
+                _ if c == 0x3 => DecodedInstruction::WriteCsr {
+                    csr: a as u32,
+                    src: b,
+                },
                 _ => return Err(illegal_instruction(pc, word)),
             },
             0x1 => {
@@ -110,7 +137,10 @@ impl InstructionDecoder for Rux16Decoder {
                 rhs: c,
             },
             0x3 => {
-                let extension = bus.load_u16(checked_pc_add(pc, 2)?)?;
+                let extension_addr = checked_pc_add(pc, 2)?;
+                let extension = bus
+                    .load_u16(extension_addr)
+                    .map_err(|error| instruction_fetch_fault(extension_addr, error))?;
                 let instruction = match c {
                     0x0 if b == 0 => DecodedInstruction::Eq {
                         dst: a,
@@ -157,8 +187,16 @@ impl InstructionDecoder for Rux16Decoder {
                 if b != 0 || c != 1 {
                     return Err(illegal_instruction(pc, word));
                 }
-                let low = u32::from(bus.load_u16(checked_pc_add(pc, 2)?)?);
-                let high = u32::from(bus.load_u16(checked_pc_add(pc, 4)?)?);
+                let low_addr = checked_pc_add(pc, 2)?;
+                let high_addr = checked_pc_add(pc, 4)?;
+                let low = u32::from(
+                    bus.load_u16(low_addr)
+                        .map_err(|error| instruction_fetch_fault(low_addr, error))?,
+                );
+                let high = u32::from(
+                    bus.load_u16(high_addr)
+                        .map_err(|error| instruction_fetch_fault(high_addr, error))?,
+                );
                 return Ok(DecodeResult {
                     instruction: DecodedInstruction::Const32 {
                         dst: a,
@@ -187,6 +225,10 @@ enum Rux16State {
 pub struct Rux16Cpu {
     pc: u32,
     registers: [u32; 16],
+    trap_vector: u32,
+    trap_cause: u32,
+    trap_pc: u32,
+    trap_value: u32,
     state: Rux16State,
     metrics: Rux16Metrics,
 }
@@ -196,6 +238,10 @@ impl Rux16Cpu {
         Self {
             pc: entry_pc,
             registers: [0; 16],
+            trap_vector: 0,
+            trap_cause: 0,
+            trap_pc: 0,
+            trap_value: 0,
             state: Rux16State::Running,
             metrics: Rux16Metrics { steps: 0 },
         }
@@ -220,6 +266,16 @@ impl Rux16Cpu {
         }
     }
 
+    pub fn csr(&self, csr: u32) -> Option<u32> {
+        match csr {
+            RUX16_CSR_TRAP_VECTOR => Some(self.trap_vector),
+            RUX16_CSR_TRAP_CAUSE => Some(self.trap_cause),
+            RUX16_CSR_TRAP_PC => Some(self.trap_pc),
+            RUX16_CSR_TRAP_VALUE => Some(self.trap_value),
+            _ => None,
+        }
+    }
+
     pub fn step(&mut self, bus: &mut dyn MemoryBus) -> Result<Option<Rux16Signal>, Rux16Trap> {
         self.step_with_decoder(bus, &mut Rux16Decoder::new())
     }
@@ -232,14 +288,18 @@ impl Rux16Cpu {
         match &self.state {
             Rux16State::Running => {}
             Rux16State::Halted => return Ok(Some(Rux16Signal::Halt)),
-            Rux16State::Trapped(_) => return Ok(Some(Rux16Signal::Trap)),
+            Rux16State::Trapped(message) => {
+                return Err(Rux16Trap::new(format!(
+                    "cpu is trapped and cannot continue: {message}"
+                )))
+            }
         }
 
+        let fault_pc = self.pc;
         let decode = match decoder.decode(bus, self.pc) {
             Ok(decode) => decode,
             Err(error) => {
-                self.state = Rux16State::Trapped(error.to_string());
-                return Ok(Some(Rux16Signal::Trap));
+                return self.raise_exception(error.cause, fault_pc, error.value, error.to_string());
             }
         };
         self.metrics.steps += 1;
@@ -272,19 +332,59 @@ impl Rux16Cpu {
                 Ok(None)
             }
             DecodedInstruction::Load8 { dst, addr } => {
-                self.registers[dst] = u32::from(bus.load_u8(self.registers[addr])?);
+                let address = self.registers[addr];
+                let value = match bus.load_u8(address) {
+                    Ok(value) => value,
+                    Err(error) => {
+                        return self.raise_exception(
+                            RUX16_TRAP_CAUSE_LOAD_FAULT,
+                            fault_pc,
+                            address,
+                            error.to_string(),
+                        )
+                    }
+                };
+                self.registers[dst] = u32::from(value);
                 Ok(None)
             }
             DecodedInstruction::Load32 { dst, addr } => {
-                self.registers[dst] = bus.load_i32(self.registers[addr])? as u32;
+                let address = self.registers[addr];
+                let value = match bus.load_i32(address) {
+                    Ok(value) => value,
+                    Err(error) => {
+                        return self.raise_exception(
+                            RUX16_TRAP_CAUSE_LOAD_FAULT,
+                            fault_pc,
+                            address,
+                            error.to_string(),
+                        )
+                    }
+                };
+                self.registers[dst] = value as u32;
                 Ok(None)
             }
             DecodedInstruction::Store8 { addr, src } => {
-                bus.store_u8(self.registers[addr], self.registers[src] as u8)?;
+                let address = self.registers[addr];
+                if let Err(error) = bus.store_u8(address, self.registers[src] as u8) {
+                    return self.raise_exception(
+                        RUX16_TRAP_CAUSE_STORE_FAULT,
+                        fault_pc,
+                        address,
+                        error.to_string(),
+                    );
+                }
                 Ok(None)
             }
             DecodedInstruction::Store32 { addr, src } => {
-                bus.store_i32(self.registers[addr], self.registers[src] as i32)?;
+                let address = self.registers[addr];
+                if let Err(error) = bus.store_i32(address, self.registers[src] as i32) {
+                    return self.raise_exception(
+                        RUX16_TRAP_CAUSE_STORE_FAULT,
+                        fault_pc,
+                        address,
+                        error.to_string(),
+                    );
+                }
                 Ok(None)
             }
             DecodedInstruction::BranchIfZero { src, target_pc } => {
@@ -303,7 +403,69 @@ impl Rux16Cpu {
                 self.pc = self.registers[target];
                 Ok(None)
             }
+            DecodedInstruction::ReadCsr { dst, csr } => {
+                let value = match self.csr(csr) {
+                    Some(value) => value,
+                    None => {
+                        return self.raise_exception(
+                            RUX16_TRAP_CAUSE_EXPLICIT_TRAP,
+                            fault_pc,
+                            csr,
+                            format!("unknown csr {csr}"),
+                        )
+                    }
+                };
+                self.registers[dst] = value;
+                Ok(None)
+            }
+            DecodedInstruction::WriteCsr { csr, src } => {
+                match csr {
+                    RUX16_CSR_TRAP_VECTOR => self.trap_vector = self.registers[src],
+                    RUX16_CSR_TRAP_CAUSE | RUX16_CSR_TRAP_PC | RUX16_CSR_TRAP_VALUE => {
+                        return self.raise_exception(
+                            RUX16_TRAP_CAUSE_EXPLICIT_TRAP,
+                            fault_pc,
+                            csr,
+                            format!("csr {csr} is read-only"),
+                        )
+                    }
+                    _ => {
+                        return self.raise_exception(
+                            RUX16_TRAP_CAUSE_EXPLICIT_TRAP,
+                            fault_pc,
+                            csr,
+                            format!("unknown csr {csr}"),
+                        )
+                    }
+                }
+                Ok(None)
+            }
         }
+    }
+
+    fn raise_exception(
+        &mut self,
+        cause: u32,
+        fault_pc: u32,
+        value: u32,
+        message: impl Into<String>,
+    ) -> Result<Option<Rux16Signal>, Rux16Trap> {
+        let message = message.into();
+        if self.trap_vector == 0 {
+            let trap = Rux16Trap::exception(
+                cause,
+                fault_pc,
+                value,
+                format!("unhandled exception cause {cause} at pc {fault_pc:#010x}: {message}"),
+            );
+            self.state = Rux16State::Trapped(trap.to_string());
+            return Err(trap);
+        }
+        self.trap_cause = cause;
+        self.trap_pc = fault_pc;
+        self.trap_value = value;
+        self.pc = self.trap_vector;
+        Ok(None)
     }
 
     pub fn run_until_signal(
@@ -330,12 +492,32 @@ impl Rux16Cpu {
 }
 
 fn illegal_instruction(pc: u32, word: u16) -> Rux16Trap {
-    Rux16Trap::new(format!("illegal instruction {word:#06x} at pc {pc:#010x}"))
+    Rux16Trap::exception(
+        RUX16_TRAP_CAUSE_ILLEGAL_INSTRUCTION,
+        pc,
+        u32::from(word),
+        format!("illegal instruction {word:#06x} at pc {pc:#010x}"),
+    )
+}
+
+fn instruction_fetch_fault(pc: u32, error: MemoryFault) -> Rux16Trap {
+    Rux16Trap::exception(
+        RUX16_TRAP_CAUSE_INSTRUCTION_FETCH_FAULT,
+        pc,
+        pc,
+        format!("instruction fetch fault at pc {pc:#010x}: {error}"),
+    )
 }
 
 fn checked_pc_add(pc: u32, offset: u32) -> Result<u32, Rux16Trap> {
-    pc.checked_add(offset)
-        .ok_or_else(|| Rux16Trap::new(format!("pc {pc:#010x} overflows by {offset} bytes")))
+    pc.checked_add(offset).ok_or_else(|| {
+        Rux16Trap::exception(
+            RUX16_TRAP_CAUSE_INSTRUCTION_FETCH_FAULT,
+            pc,
+            pc,
+            format!("pc {pc:#010x} overflows by {offset} bytes"),
+        )
+    })
 }
 
 fn relative_branch_target(next_pc: u32, offset_nibble: usize) -> Result<u32, Rux16Trap> {
@@ -343,9 +525,14 @@ fn relative_branch_target(next_pc: u32, offset_nibble: usize) -> Result<u32, Rux
     let offset_bytes = offset_words * 2;
     let target = i64::from(next_pc) + i64::from(offset_bytes);
     if !(0..=i64::from(u32::MAX)).contains(&target) {
-        return Err(Rux16Trap::new(format!(
-            "branch from next pc {next_pc:#010x} with offset {offset_words} words leaves address space",
-        )));
+        return Err(Rux16Trap::exception(
+            RUX16_TRAP_CAUSE_EXPLICIT_TRAP,
+            next_pc,
+            next_pc,
+            format!(
+                "branch from next pc {next_pc:#010x} with offset {offset_words} words leaves address space",
+            ),
+        ));
     }
     Ok(target as u32)
 }
