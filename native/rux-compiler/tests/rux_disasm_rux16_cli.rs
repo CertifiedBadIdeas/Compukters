@@ -1,0 +1,119 @@
+use std::fs;
+use std::path::PathBuf;
+use std::process::Command;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+static TEMP_FILE_COUNTER: AtomicUsize = AtomicUsize::new(0);
+
+#[test]
+fn rux_disasm_requires_explicit_target() {
+    let artifact_path = temp_file("program.bin");
+    fs::write(&artifact_path, halt().to_le_bytes()).expect("artifact writes");
+
+    let output = Command::new(rux_binary())
+        .args(["disasm", artifact_path.to_str().unwrap()])
+        .output()
+        .expect("rux disasm runs");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("--target"), "stderr: {stderr}");
+}
+
+#[test]
+fn rux_disasm_prints_program_artifact_from_zero_base() {
+    let artifact_path = temp_file("program.bin");
+    fs::write(
+        &artifact_path,
+        words_to_bytes(&[const4(1, 7), const4(2, 3), add(3, 1, 2), halt()]),
+    )
+    .expect("artifact writes");
+
+    let output = Command::new(rux_binary())
+        .args([
+            "disasm",
+            "--target",
+            "program",
+            artifact_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("rux disasm runs");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("00000000: 1107  const4 r1, 7"),
+        "stdout: {stdout}"
+    );
+    assert!(
+        stdout.contains("00000004: 2312  add r3, r1, r2"),
+        "stdout: {stdout}"
+    );
+    assert!(stdout.contains("00000006: 0001  halt"), "stdout: {stdout}");
+}
+
+#[test]
+fn rux_disasm_prints_bios_artifact_from_bios_flash_base() {
+    let artifact_path = temp_file("bios.flash");
+    fs::write(&artifact_path, words_to_bytes(&[const4(1, 7), halt()])).expect("artifact writes");
+
+    let output = Command::new(rux_binary())
+        .args([
+            "disasm",
+            "--target",
+            "bios",
+            artifact_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("rux disasm runs");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("fff00000: 1107  const4 r1, 7"),
+        "stdout: {stdout}"
+    );
+    assert!(stdout.contains("fff00002: 0001  halt"), "stdout: {stdout}");
+}
+
+fn temp_file(name: &str) -> PathBuf {
+    let counter = TEMP_FILE_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let path = std::env::temp_dir().join(format!(
+        "rux-disasm-rux16-{}-{counter}-{name}",
+        std::process::id()
+    ));
+    let _ = fs::remove_file(&path);
+    path
+}
+
+fn rux_binary() -> String {
+    std::env::var("CARGO_BIN_EXE_rux").expect("Cargo exposes rux binary path")
+}
+
+fn words_to_bytes(words: &[u16]) -> Vec<u8> {
+    let mut bytes = Vec::with_capacity(words.len() * 2);
+    for word in words {
+        bytes.extend_from_slice(&word.to_le_bytes());
+    }
+    bytes
+}
+
+fn const4(register: u8, value: u8) -> u16 {
+    0x1000 | (u16::from(register) << 8) | u16::from(value & 0x0f)
+}
+
+fn add(dst: u8, lhs: u8, rhs: u8) -> u16 {
+    0x2000 | (u16::from(dst) << 8) | (u16::from(lhs) << 4) | u16::from(rhs)
+}
+
+fn halt() -> u16 {
+    0x0001
+}
