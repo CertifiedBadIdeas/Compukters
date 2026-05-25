@@ -11,6 +11,7 @@ use crate::low_bus::{MachineBus, MmioDeviceId};
 use crate::low_image::{decode_image, Image};
 use crate::low_image_runner::{LowCpuContext, LowImageSignal, LowImageVm};
 use crate::low_machine::{MachineMemory, MemoryFault};
+use crate::rux16::{Rux16Cpu, Rux16Signal};
 use std::fmt::{Display, Formatter};
 
 pub type CpuId = usize;
@@ -23,8 +24,13 @@ pub struct ComputerMachine {
     display0_device_id: Option<MmioDeviceId>,
     storage0_device_id: Option<MmioDeviceId>,
     program_base: u32,
-    cpus: Vec<LowCpuContext>,
+    cpus: Vec<ComputerCpuContext>,
     boot_cpu: Option<CpuId>,
+}
+
+enum ComputerCpuContext {
+    LowImage(LowCpuContext),
+    Rux16 { cpu: Rux16Cpu, max_steps: u64 },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -310,7 +316,7 @@ impl ComputerMachine {
         load_image_sections_into_bus_at(&image, &mut self.bus, self.program_base)?;
         let cpu = LowImageVm::create_cpu_context(image, slice_budget_nanos)?;
         let cpu_id = self.cpus.len();
-        self.cpus.push(cpu);
+        self.cpus.push(ComputerCpuContext::LowImage(cpu));
         Ok(cpu_id)
     }
 
@@ -350,7 +356,25 @@ impl ComputerMachine {
             .map_err(BootHandoffError::InvalidImage)?;
         load_image_sections_into_bus_at(&image, &mut self.bus, self.program_base)
             .map_err(BootHandoffError::MachineState)?;
-        self.cpus[boot_cpu] = next_cpu;
+        self.cpus[boot_cpu] = ComputerCpuContext::LowImage(next_cpu);
+        Ok(boot_cpu)
+    }
+
+    pub fn boot_handoff_rux16_from_ram(
+        &mut self,
+        entry_pc: u32,
+        byte_len: u32,
+        max_steps: u64,
+    ) -> Result<CpuId, BootHandoffError> {
+        let boot_cpu = self.boot_cpu.ok_or(BootHandoffError::MissingBootCpu)?;
+        if byte_len == 0 {
+            return Err(BootHandoffError::EmptyImage);
+        }
+        checked_ram_range(entry_pc, byte_len, self.bus.memory().len())?;
+        self.cpus[boot_cpu] = ComputerCpuContext::Rux16 {
+            cpu: Rux16Cpu::new(entry_pc),
+            max_steps: max_steps.max(1),
+        };
         Ok(boot_cpu)
     }
 
@@ -367,7 +391,10 @@ impl ComputerMachine {
             .cpus
             .get_mut(cpu_id)
             .ok_or_else(|| format!("CPU {cpu_id} is not present"))?;
-        cpu.run_until_signal(&mut self.bus)
+        match cpu {
+            ComputerCpuContext::LowImage(cpu) => cpu.run_until_signal(&mut self.bus),
+            ComputerCpuContext::Rux16 { .. } => Err(format!("CPU {cpu_id} is not a LowImage CPU")),
+        }
     }
 
     pub fn run_boot_cpu_until_signal(&mut self, cpu_id: CpuId) -> Result<LowImageSignal, String> {
@@ -397,6 +424,34 @@ impl ComputerMachine {
                 self.set_panic_from_fault(message)?;
             }
             Ok(LowImageSignal::Pause) => {}
+        }
+        signal
+    }
+
+    pub fn run_boot_rux16_until_signal(&mut self, cpu_id: CpuId) -> Result<Rux16Signal, String> {
+        if self.boot_cpu != Some(cpu_id) {
+            return Err(format!("CPU {cpu_id} is not the boot CPU"));
+        }
+        let signal = {
+            let cpu = self
+                .cpus
+                .get_mut(cpu_id)
+                .ok_or_else(|| format!("CPU {cpu_id} is not present"))?;
+            match cpu {
+                ComputerCpuContext::Rux16 { cpu, max_steps } => cpu
+                    .run_until_signal(&mut self.bus, *max_steps)
+                    .map_err(|error| error.to_string()),
+                ComputerCpuContext::LowImage(_) => Err(format!("CPU {cpu_id} is not a Rux16 CPU")),
+            }
+        };
+        match &signal {
+            Ok(Rux16Signal::Halt) => {
+                self.set_halted_exit_code(0)?;
+            }
+            Ok(Rux16Signal::StepLimitExceeded) => {}
+            Err(message) => {
+                self.set_panic_from_fault(message)?;
+            }
         }
         signal
     }

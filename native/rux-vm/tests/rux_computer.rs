@@ -1,6 +1,7 @@
 use rux_vm::computer_machine::ComputerMachine;
 use rux_vm::low_image::{encode_image, Function, Image, Instruction};
 use rux_vm::low_image_runner::LowImageSignal;
+use rux_vm::rux16::Rux16Signal;
 use rux_vm::rux_computer::{BootHandoffError, RuxComputerControl, RuxComputerHandle};
 use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -224,6 +225,23 @@ fn rux_computer_handle_boot_handoff_replaces_bios_cpu_from_guest_ram() {
 }
 
 #[test]
+fn rux_computer_handle_boot_handoff_starts_rux16_from_guest_ram_without_host_decode() {
+    let bios = halt_i32_image(1);
+    let entry_pc = 4096;
+    let program = rux16_words(&[rux16_const4(1, 7), rux16_halt()]);
+    let mut handle =
+        RuxComputerHandle::create(&bios, 64 * 1024, 1_000_000).expect("computer handle creates");
+    handle.write_guest_ram_bytes(entry_pc, &program).unwrap();
+
+    let cpu_id = handle
+        .boot_handoff_rux16_from_guest_ram(entry_pc, program.len() as u32, 128)
+        .expect("boot handoff accepts in-RAM Rux16 program");
+
+    assert_eq!(cpu_id, 0);
+    assert_eq!(handle.run_rux16_until_signal().unwrap(), Rux16Signal::Halt);
+}
+
+#[test]
 fn rux_computer_handle_boot_handoff_rejects_empty_image_and_keeps_bios_cpu() {
     let bios = halt_i32_image(1);
     let mut handle =
@@ -306,4 +324,19 @@ fn temp_volume_path(name: &str) -> std::path::PathBuf {
         "rux-computer-{name}-{}-{nanos}.ruxvol",
         std::process::id()
     ))
+}
+
+fn rux16_words(words: &[u16]) -> Vec<u8> {
+    words
+        .iter()
+        .flat_map(|word| word.to_le_bytes())
+        .collect::<Vec<_>>()
+}
+
+fn rux16_const4(dst: u8, value: u8) -> u16 {
+    0x1000 | (u16::from(dst) << 8) | u16::from(value & 0x0f)
+}
+
+fn rux16_halt() -> u16 {
+    0x0001
 }
