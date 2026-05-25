@@ -7,9 +7,10 @@ import ru.lazyhat.compukterkraft.core.device.input.KeyInputEvent
 import ru.lazyhat.compukterkraft.core.device.runtime.RuxRuntimeDevice
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.DisplayNetworkBridge
 import ru.lazyhat.compukterkraft.core.input.KeyCodes
-import ru.lazyhat.compukterkraft.lang.runtime.blazing.RuxComputerRuntimeFactory
-import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeVmBindings
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeRuxComputerDisplaySnapshot
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.NativeVmBindings
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.RuxBiosFlashWorkspace
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.RuxComputerRuntimeFactory
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 import java.util.UUID
 import kotlin.test.Test
@@ -80,6 +81,17 @@ class RuxFirmwareResourceTest {
                 byteArrayOf('R'.code.toByte(), 'U'.code.toByte(), 'X'.code.toByte(), 'I'.code.toByte()),
             ),
         )
+    }
+
+    @Test
+    fun bundledRux16BiosFlashResourceExists() {
+        val bytes =
+            RuxBiosFlashWorkspace.loadBiosFlashResource(
+                classLoader = javaClass.classLoader,
+            )
+
+        assertTrue(bytes.size > 8, "Rux16 BIOS flash resource should not be empty")
+        assertEquals(0, bytes.size % 2, "Rux16 BIOS flash resource should contain whole words")
     }
 
     @Test

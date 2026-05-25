@@ -66,6 +66,31 @@ object NativeRuxComputerRuntimeBindings : RuxComputerRuntimeBindings {
         NativeVmBindings.freeRuxComputer(handle)
 }
 
+object NativeRux16ComputerRuntimeBindings : RuxComputerRuntimeBindings {
+    override fun runUntilSignal(handle: Long): NativeLowImageVmSignal =
+        NativeVmBindings.runRux16ComputerUntilSignal(handle)
+
+    override fun control(handle: Long): NativeRuxComputerControl =
+        NativeVmBindings.ruxComputerControl(handle)
+
+    override fun pushSerialInput(
+        handle: Long,
+        bytes: ByteArray,
+    ) = NativeVmBindings.pushRuxComputerSerialInput(handle, bytes)
+
+    override fun drainDebugOutput(handle: Long): ByteArray =
+        NativeVmBindings.drainRuxComputerDebugOutput(handle)
+
+    override fun display0Snapshot(handle: Long): NativeRuxComputerDisplaySnapshot? =
+        NativeVmBindings.ruxComputerDisplay0Snapshot(handle)
+
+    override fun storage0MediaSnapshot(handle: Long): ByteArray? =
+        NativeVmBindings.ruxComputerStorage0MediaSnapshot(handle)
+
+    override fun free(handle: Long) =
+        NativeVmBindings.freeRuxComputer(handle)
+}
+
 object RuxComputerRuntimeFactory {
     const val DEFAULT_FIRMWARE_RESOURCE: String = "firmware/rux-bios.ruxi"
     const val DEFAULT_MEMORY_SIZE: Int = 64 * 1024
@@ -109,6 +134,23 @@ object RuxComputerRuntimeFactory {
                 storage0Path = storage0Path,
             )
         return RuxComputerRuntime(handle, storage0Sink = storage0Sink)
+    }
+
+    fun createFromBiosFlash(
+        biosFlashPath: Path,
+        storage0Path: Path,
+        memorySize: Int = DEFAULT_MEMORY_SIZE,
+        maxSteps: Long = DEFAULT_SLICE_BUDGET_NANOS,
+    ): RuxComputerRuntime {
+        val handle =
+            NativeVmBindings.createRuxComputerFromBiosFlash(
+                libraryPath = NativeLibraryLocator.requireLibraryPath(),
+                biosFlashPath = biosFlashPath,
+                memorySize = memorySize,
+                maxSteps = maxSteps,
+                storage0Path = storage0Path,
+            )
+        return RuxComputerRuntime(handle, bindings = NativeRux16ComputerRuntimeBindings)
     }
 
     fun loadFirmwareResource(

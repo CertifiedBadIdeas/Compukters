@@ -6,6 +6,7 @@ use jni::JNIEnv;
 
 use crate::low_image::decode_image as decode_low_image;
 use crate::low_image_runner::{LowImageSignal, LowImageVm};
+use crate::rux16::Rux16Signal;
 use crate::rux_computer::{RuxComputerHandle, RuxComputerTextDisplaySnapshot};
 
 #[no_mangle]
@@ -180,6 +181,49 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
 }
 
 #[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_createRuxComputerFromBiosFlashNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    bios_flash_path: JString<'_>,
+    memory_size: jint,
+    max_steps: jlong,
+    storage0_path: JString<'_>,
+) -> jlong {
+    let bios_flash_path = match env.get_string(&bios_flash_path) {
+        Ok(path) => path.to_string_lossy().into_owned(),
+        Err(error) => {
+            let _ = env.throw_new(
+                "java/lang/IllegalArgumentException",
+                format!("Cannot read Rux16 BIOS flash path: {error}"),
+            );
+            return 0;
+        }
+    };
+    let storage0_path = match env.get_string(&storage0_path) {
+        Ok(path) => path.to_string_lossy().into_owned(),
+        Err(error) => {
+            let _ = env.throw_new(
+                "java/lang/IllegalArgumentException",
+                format!("Cannot read Rux computer storage0 path: {error}"),
+            );
+            return 0;
+        }
+    };
+    match RuxComputerHandle::create_rux16_bios_flash_path_with_storage0_path(
+        bios_flash_path,
+        memory_size.max(1) as usize,
+        max_steps.max(1) as u64,
+        storage0_path,
+    ) {
+        Ok(handle) => Box::into_raw(Box::new(handle)) as jlong,
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalArgumentException", error);
+            0
+        }
+    }
+}
+
+#[no_mangle]
 pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_runRuxComputerUntilSignalNative(
     mut env: JNIEnv<'_>,
     _class: JClass<'_>,
@@ -197,6 +241,26 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
         }
     };
     long_array_or_throw(&mut env, &low_image_signal_values(signal))
+}
+
+#[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_runRux16ComputerUntilSignalNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    handle: jlong,
+) -> jlongArray {
+    let handle = match rux_computer_handle_mut(&mut env, handle) {
+        Some(handle) => handle,
+        None => return null_mut(),
+    };
+    let signal = match handle.run_rux16_until_signal() {
+        Ok(signal) => signal,
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalStateException", error);
+            return null_mut();
+        }
+    };
+    long_array_or_throw(&mut env, &rux16_signal_values(signal))
 }
 
 #[no_mangle]
@@ -360,6 +424,13 @@ fn low_image_signal_values(signal: LowImageSignal) -> [jlong; 2] {
         LowImageSignal::HaltAddr(value) => [4, value as jlong],
         LowImageSignal::HaltBool(value) => [5, i64::from(value) as jlong],
         LowImageSignal::Pause => [6, 0],
+    }
+}
+
+fn rux16_signal_values(signal: Rux16Signal) -> [jlong; 2] {
+    match signal {
+        Rux16Signal::Halt => [1, 0],
+        Rux16Signal::StepLimitExceeded => [6, 0],
     }
 }
 

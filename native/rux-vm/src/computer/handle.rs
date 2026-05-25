@@ -4,6 +4,7 @@ use crate::computer::{
 use crate::low_image::decode_image;
 use crate::low_image_runner::LowImageSignal;
 use crate::rux16::Rux16Signal;
+use std::fs;
 use std::path::Path;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -121,6 +122,27 @@ impl RuxComputerHandle {
         let (machine, boot_cpu) =
             ComputerMachine::from_rux16_bios_flash_with_profile(bios_flash, profile, max_steps)?;
         Ok(Self { machine, boot_cpu })
+    }
+
+    pub fn create_rux16_bios_flash_path_with_storage0_path(
+        bios_flash_path: impl AsRef<Path>,
+        memory_size: usize,
+        max_steps: u64,
+        storage0_path: impl AsRef<Path>,
+    ) -> Result<Self, String> {
+        let bios_flash_path = bios_flash_path.as_ref();
+        let bios_flash = fs::read(bios_flash_path).map_err(|error| {
+            format!(
+                "Cannot read Rux16 BIOS flash at {}: {error}",
+                bios_flash_path.display(),
+            )
+        })?;
+        Self::create_rux16_bios_flash_with_storage0_path(
+            &bios_flash,
+            memory_size,
+            max_steps,
+            storage0_path,
+        )
     }
 
     fn create_with_profile(
