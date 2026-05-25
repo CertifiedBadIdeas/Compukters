@@ -195,9 +195,33 @@ object NativeVmBindings {
         return handle
     }
 
+    fun createRuxComputerFromBiosFlash(
+        libraryPath: String,
+        biosFlashPath: Path,
+        memorySize: Int,
+        maxSteps: Long,
+        storage0Path: Path,
+    ): Long {
+        load(libraryPath)
+        val handle =
+            createRuxComputerFromBiosFlashNative(
+                biosFlashPath.toAbsolutePath().normalize().toString(),
+                memorySize.coerceAtLeast(1),
+                maxSteps.coerceAtLeast(1),
+                storage0Path.toAbsolutePath().normalize().toString(),
+            )
+        check(handle != 0L) { "Native Rux16 BIOS flash computer create returned a zero handle" }
+        return handle
+    }
+
     fun runRuxComputerUntilSignal(handle: Long): NativeLowImageVmSignal {
         require(handle != 0L) { "Native Rux computer handle is zero" }
         return NativeLowImageVmSignal.from(runRuxComputerUntilSignalNative(handle))
+    }
+
+    fun runRux16ComputerUntilSignal(handle: Long): NativeLowImageVmSignal {
+        require(handle != 0L) { "Native Rux computer handle is zero" }
+        return NativeLowImageVmSignal.from(runRux16ComputerUntilSignalNative(handle))
     }
 
     fun ruxComputerControl(handle: Long): NativeRuxComputerControl {
@@ -276,7 +300,18 @@ object NativeVmBindings {
     ): Long
 
     @JvmStatic
+    private external fun createRuxComputerFromBiosFlashNative(
+        biosFlashPath: String,
+        memorySize: Int,
+        maxSteps: Long,
+        storage0Path: String,
+    ): Long
+
+    @JvmStatic
     private external fun runRuxComputerUntilSignalNative(handle: Long): LongArray
+
+    @JvmStatic
+    private external fun runRux16ComputerUntilSignalNative(handle: Long): LongArray
 
     @JvmStatic
     private external fun ruxComputerControlNative(handle: Long): LongArray

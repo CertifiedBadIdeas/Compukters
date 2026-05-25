@@ -25,9 +25,11 @@ import ru.lazyhat.compukterkraft.common.computer.context.BlockEntityRuntimeDevic
 import ru.lazyhat.compukterkraft.core.device.DeviceProperties
 import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDevice
 import ru.lazyhat.compukterkraft.core.device.runtime.RuxRuntimeDevice
+import ru.lazyhat.compukterkraft.lang.runtime.blazing.RuxBiosFlashWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.RuxComputerRuntimeFactory
 import ru.lazyhat.compukterkraft.lang.runtime.storage.FileRuxVolumeStore
 import ru.lazyhat.compukterkraft.lang.runtime.storage.RuxVolumeBlob
+import java.nio.file.Path
 
 object ComputerRuntimeDeviceFactory {
     fun createRuxComputer(
@@ -36,24 +38,33 @@ object ComputerRuntimeDeviceFactory {
         deviceId: Int,
     ): RuntimeDevice {
         val host = BlockEntityRuntimeDeviceHost(level, tile)
-        val volumeStore = FileRuxVolumeStore(level.server.getWorldPath(LevelResource.ROOT))
+        val worldRoot = level.server.getWorldPath(LevelResource.ROOT)
+        val volumeStore = FileRuxVolumeStore(worldRoot)
+        val workspace = worldRoot.resolve("compukterkraft").resolve("computers").resolve(deviceId.toString())
         return RuxRuntimeDevice(
             deviceId = deviceId,
             properties = DeviceProperties(tile.family, tile.label),
             endpointFactory = {
                 val storage0 = volumeStore.openOrCreateComputerVolume(deviceId, "storage0")
-                createRuxComputerEndpoint(storage0)
+                val biosFlashPath = RuxBiosFlashWorkspace.prepareBiosFlash(workspace)
+                createRuxComputerEndpoint(biosFlashPath, storage0)
             },
             stateSink = host.stateSink,
             displayNetwork = host.displayNetwork,
         )
     }
 
-    private fun createRuxComputerEndpoint(storage0: RuxVolumeBlob) =
+    private fun createRuxComputerEndpoint(
+        biosFlashPath: Path,
+        storage0: RuxVolumeBlob,
+    ) =
         try {
             val storage0Path = storage0.path
             storage0.close()
-            RuxComputerRuntimeFactory.createFromResource(storage0Path = storage0Path)
+            RuxComputerRuntimeFactory.createFromBiosFlash(
+                biosFlashPath = biosFlashPath,
+                storage0Path = storage0Path,
+            )
         } catch (error: Throwable) {
             storage0.close()
             throw error

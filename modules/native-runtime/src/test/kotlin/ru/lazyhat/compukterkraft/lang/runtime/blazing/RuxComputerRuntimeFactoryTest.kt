@@ -47,4 +47,17 @@ class RuxComputerRuntimeFactoryTest {
 
         assertEquals(true, hasStorage0Path)
     }
+
+    @Test
+    fun createFromBiosFlashAcceptsOnlyPathInputsForFirmwareAndStorage() {
+        val createMethods = RuxComputerRuntimeFactory::class.java.methods.filter { it.name == "createFromBiosFlash" }
+        val hasBiosFlashAndStorage0Paths =
+            createMethods.any { method ->
+                val pathParameterCount = method.parameterTypes.count { parameterType -> parameterType == Path::class.java }
+                val byteArrayParameterCount = method.parameterTypes.count { parameterType -> parameterType == ByteArray::class.java }
+                pathParameterCount >= 2 && byteArrayParameterCount == 0
+            }
+
+        assertEquals(true, hasBiosFlashAndStorage0Paths)
+    }
 }
