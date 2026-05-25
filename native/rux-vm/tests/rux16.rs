@@ -87,6 +87,57 @@ fn rux16_register_jump_sets_pc_to_guest_address() {
 }
 
 #[test]
+fn rux16_const32_consumes_extension_words_and_loads_u32_value() {
+    let mut bus = MachineBus::new(64).unwrap();
+    let mut program = Vec::new();
+    program.extend(const32(1, 0x1000_0040));
+    program.push(halt());
+    write_words(&mut bus, 0, &program);
+    let mut cpu = Rux16Cpu::new(0);
+
+    assert_eq!(
+        cpu.run_until_signal(&mut bus, 16).unwrap(),
+        Rux16Signal::Halt,
+    );
+    assert_eq!(cpu.register(1), 0x1000_0040);
+    assert_eq!(cpu.pc(), 8);
+}
+
+#[test]
+fn rux16_branch_if_zero_skips_guest_instruction() {
+    let mut bus = MachineBus::new(64).unwrap();
+    write_words(
+        &mut bus,
+        0,
+        &[branch_if_zero(1, 1), const4(2, 9), const4(2, 4), halt()],
+    );
+    let mut cpu = Rux16Cpu::new(0);
+
+    assert_eq!(
+        cpu.run_until_signal(&mut bus, 16).unwrap(),
+        Rux16Signal::Halt,
+    );
+    assert_eq!(cpu.register(2), 4);
+}
+
+#[test]
+fn rux16_branch_if_nonzero_can_loop_with_negative_relative_offset() {
+    let mut bus = MachineBus::new(64).unwrap();
+    let mut program = vec![const4(1, 3), const4(2, 1), const4(3, 0)];
+    program.extend(const32(4, u32::MAX));
+    program.extend([add(3, 3, 2), add(1, 1, 4), branch_if_nonzero(1, -3), halt()]);
+    write_words(&mut bus, 0, &program);
+    let mut cpu = Rux16Cpu::new(0);
+
+    assert_eq!(
+        cpu.run_until_signal(&mut bus, 32).unwrap(),
+        Rux16Signal::Halt,
+    );
+    assert_eq!(cpu.register(1), 0);
+    assert_eq!(cpu.register(3), 3);
+}
+
+#[test]
 fn rux16_illegal_instruction_reports_trap() {
     let mut bus = MachineBus::new(64).unwrap();
     write_words(&mut bus, 0, &[0xf000]);
@@ -113,6 +164,14 @@ fn const4(register: u8, value: u8) -> u16 {
     0x1000 | (u16::from(register) << 8) | u16::from(value & 0x0f)
 }
 
+fn const32(register: u8, value: u32) -> [u16; 3] {
+    [
+        0xe001 | (u16::from(register) << 8),
+        (value & 0xffff) as u16,
+        (value >> 16) as u16,
+    ]
+}
+
 fn add(dst: u8, lhs: u8, rhs: u8) -> u16 {
     0x2000 | (u16::from(dst) << 8) | (u16::from(lhs) << 4) | u16::from(rhs)
 }
@@ -127,6 +186,19 @@ fn store32(addr: u8, src: u8) -> u16 {
 
 fn jmp(register: u8) -> u16 {
     0x7000 | (u16::from(register) << 8)
+}
+
+fn branch_if_zero(register: u8, offset_words: i8) -> u16 {
+    0x6000 | (u16::from(register) << 8) | encode_signed_nibble(offset_words)
+}
+
+fn branch_if_nonzero(register: u8, offset_words: i8) -> u16 {
+    0x6000 | (u16::from(register) << 8) | 0x0010 | encode_signed_nibble(offset_words)
+}
+
+fn encode_signed_nibble(value: i8) -> u16 {
+    assert!((-8..=7).contains(&value));
+    u16::from((value as i16 & 0x000f) as u8)
 }
 
 fn halt() -> u16 {

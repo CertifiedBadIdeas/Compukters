@@ -51,9 +51,12 @@ pub enum DecodedInstruction {
     Nop,
     Halt,
     Const4 { dst: usize, value: u32 },
+    Const32 { dst: usize, value: u32 },
     Add { dst: usize, lhs: usize, rhs: usize },
     Load32 { dst: usize, addr: usize },
     Store32 { addr: usize, src: usize },
+    BranchIfZero { src: usize, target_pc: u32 },
+    BranchIfNonZero { src: usize, target_pc: u32 },
     Jump { target: usize },
 }
 
@@ -110,11 +113,33 @@ impl InstructionDecoder for Rux16Decoder {
                 0x2 => DecodedInstruction::Store32 { addr: a, src: b },
                 _ => return Err(illegal_instruction(pc, word)),
             },
+            0x6 => {
+                let target_pc = relative_branch_target(next_pc, c)?;
+                match b {
+                    0x0 => DecodedInstruction::BranchIfZero { src: a, target_pc },
+                    0x1 => DecodedInstruction::BranchIfNonZero { src: a, target_pc },
+                    _ => return Err(illegal_instruction(pc, word)),
+                }
+            }
             0x7 => {
                 if b != 0 || c != 0 {
                     return Err(illegal_instruction(pc, word));
                 }
                 DecodedInstruction::Jump { target: a }
+            }
+            0xe => {
+                if b != 0 || c != 1 {
+                    return Err(illegal_instruction(pc, word));
+                }
+                let low = u32::from(bus.load_u16(checked_pc_add(pc, 2)?)?);
+                let high = u32::from(bus.load_u16(checked_pc_add(pc, 4)?)?);
+                return Ok(DecodeResult {
+                    instruction: DecodedInstruction::Const32 {
+                        dst: a,
+                        value: (high << 16) | low,
+                    },
+                    next_pc: checked_pc_add(pc, 6)?,
+                });
             }
             _ => return Err(illegal_instruction(pc, word)),
         };
@@ -204,6 +229,10 @@ impl Rux16Cpu {
                 self.registers[dst] = value;
                 Ok(None)
             }
+            DecodedInstruction::Const32 { dst, value } => {
+                self.registers[dst] = value;
+                Ok(None)
+            }
             DecodedInstruction::Add { dst, lhs, rhs } => {
                 self.registers[dst] = self.registers[lhs].wrapping_add(self.registers[rhs]);
                 Ok(None)
@@ -214,6 +243,18 @@ impl Rux16Cpu {
             }
             DecodedInstruction::Store32 { addr, src } => {
                 bus.store_i32(self.registers[addr], self.registers[src] as i32)?;
+                Ok(None)
+            }
+            DecodedInstruction::BranchIfZero { src, target_pc } => {
+                if self.registers[src] == 0 {
+                    self.pc = target_pc;
+                }
+                Ok(None)
+            }
+            DecodedInstruction::BranchIfNonZero { src, target_pc } => {
+                if self.registers[src] != 0 {
+                    self.pc = target_pc;
+                }
                 Ok(None)
             }
             DecodedInstruction::Jump { target } => {
@@ -248,4 +289,30 @@ impl Rux16Cpu {
 
 fn illegal_instruction(pc: u32, word: u16) -> Rux16Trap {
     Rux16Trap::new(format!("illegal instruction {word:#06x} at pc {pc:#010x}"))
+}
+
+fn checked_pc_add(pc: u32, offset: u32) -> Result<u32, Rux16Trap> {
+    pc.checked_add(offset)
+        .ok_or_else(|| Rux16Trap::new(format!("pc {pc:#010x} overflows by {offset} bytes")))
+}
+
+fn relative_branch_target(next_pc: u32, offset_nibble: usize) -> Result<u32, Rux16Trap> {
+    let offset_words = sign_extend_nibble(offset_nibble);
+    let offset_bytes = offset_words * 2;
+    let target = i64::from(next_pc) + i64::from(offset_bytes);
+    if !(0..=i64::from(u32::MAX)).contains(&target) {
+        return Err(Rux16Trap::new(format!(
+            "branch from next pc {next_pc:#010x} with offset {offset_words} words leaves address space",
+        )));
+    }
+    Ok(target as u32)
+}
+
+fn sign_extend_nibble(value: usize) -> i32 {
+    let raw = (value & 0x0f) as i32;
+    if raw & 0x08 == 0 {
+        raw
+    } else {
+        raw - 16
+    }
 }
