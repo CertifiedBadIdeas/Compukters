@@ -16,6 +16,7 @@ pub mod low_image;
 pub mod low_image_runner;
 pub mod low_machine;
 pub mod microcontroller_machine;
+pub mod rux16;
 pub mod rux_computer {
     pub use crate::computer::handle::{
         RuxComputerControl, RuxComputerHandle, RuxComputerTextDisplaySnapshot,
