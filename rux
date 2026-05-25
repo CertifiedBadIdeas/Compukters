@@ -26,9 +26,10 @@ MANIFEST="$ROOT/native/rux-compiler/Cargo.toml"
 usage() {
     cat >&2 <<'EOF'
 usage:
-  rux emit <input.rx> <output.ruxi>
-  rux disasm <input.ruxi>
-  rux run <input.rx|input.ruxi> [--memory <bytes>] [--serial <text>|--serial-live]
+  rux compile --target <bios|boot|program> <input.rx> -o <output>
+  rux disasm --target <bios|boot|program> <input>
+  rux volume create <volume.ruxvol> --size <bytes>
+  rux volume put-boot <volume.ruxvol> <boot.bin>
 EOF
 }
 
@@ -37,21 +38,4 @@ if [ "$#" -lt 1 ]; then
     exit 2
 fi
 
-COMMAND=$1
-shift
-
-case "$COMMAND" in
-    emit)
-        exec cargo run --quiet --manifest-path "$MANIFEST" --bin rux-emit -- "$@"
-        ;;
-    disasm|disassemble)
-        exec cargo run --quiet --manifest-path "$MANIFEST" --bin rux-disasm -- "$@"
-        ;;
-    run)
-        exec cargo run --quiet --manifest-path "$MANIFEST" --bin rux-run -- "$@"
-        ;;
-    *)
-        usage
-        exit 2
-        ;;
-esac
+exec cargo run --quiet --manifest-path "$MANIFEST" --bin rux -- "$@"

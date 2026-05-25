@@ -1,6 +1,7 @@
 mod backend;
 mod frontend;
 mod runtime;
+pub mod volume;
 
 use rux_vm::low_image::Image;
 
