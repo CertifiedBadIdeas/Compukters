@@ -3,6 +3,7 @@ use crate::computer::{
 };
 use crate::low_image::decode_image;
 use crate::low_image_runner::LowImageSignal;
+use crate::rux16::Rux16Signal;
 use std::path::Path;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -99,6 +100,10 @@ impl RuxComputerHandle {
         self.machine.run_boot_cpu_until_signal(self.boot_cpu)
     }
 
+    pub fn run_rux16_until_signal(&mut self) -> Result<Rux16Signal, String> {
+        self.machine.run_boot_rux16_until_signal(self.boot_cpu)
+    }
+
     pub fn control(&self) -> RuxComputerControl {
         RuxComputerControl {
             status: self.machine.control_status(),
@@ -139,5 +144,15 @@ impl RuxComputerHandle {
     ) -> Result<CpuId, BootHandoffError> {
         self.machine
             .boot_handoff_ruxi_from_ram(image_addr, image_len, slice_budget_nanos)
+    }
+
+    pub fn boot_handoff_rux16_from_guest_ram(
+        &mut self,
+        entry_pc: u32,
+        byte_len: u32,
+        max_steps: u64,
+    ) -> Result<CpuId, BootHandoffError> {
+        self.machine
+            .boot_handoff_rux16_from_ram(entry_pc, byte_len, max_steps)
     }
 }
