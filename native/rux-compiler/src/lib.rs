@@ -2,6 +2,7 @@ pub mod artifact;
 mod backend;
 mod frontend;
 mod runtime;
+pub mod rux16_disasm;
 pub mod volume;
 
 use rux_vm::low_image::Image;
