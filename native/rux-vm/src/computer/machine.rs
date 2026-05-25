@@ -255,6 +255,18 @@ impl ComputerMachine {
         memory_size: usize,
         max_steps: u64,
     ) -> Result<(Self, CpuId), String> {
+        Self::from_rux16_bios_flash_with_profile(
+            bios_flash,
+            ComputerMachineProfile::computer_v1(memory_size),
+            max_steps,
+        )
+    }
+
+    pub(crate) fn from_rux16_bios_flash_with_profile(
+        bios_flash: &[u8],
+        profile: ComputerMachineProfile,
+        max_steps: u64,
+    ) -> Result<(Self, CpuId), String> {
         if bios_flash.is_empty() {
             return Err("Rux16 BIOS flash is empty".to_string());
         }
@@ -264,7 +276,7 @@ impl ComputerMachine {
             .checked_add(bios_flash_len)
             .ok_or_else(|| "Rux16 BIOS flash range overflows address space".to_string())?;
 
-        let mut machine = Self::new(memory_size).map_err(|error| error.to_string())?;
+        let mut machine = Self::from_profile(profile).map_err(|error| error.to_string())?;
         machine.map_rux16_bios_flash(bios_flash.to_vec())?;
         let boot_cpu = machine.spawn_rux16_boot_cpu(Self::RUX16_BIOS_FLASH_BASE, max_steps)?;
         Ok((machine, boot_cpu))

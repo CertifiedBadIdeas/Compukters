@@ -94,6 +94,22 @@ impl RuxComputerHandle {
         Ok(Self { machine, boot_cpu })
     }
 
+    pub fn create_rux16_bios_flash_with_storage0_media(
+        bios_flash: &[u8],
+        memory_size: usize,
+        max_steps: u64,
+        storage0_media: Vec<u8>,
+    ) -> Result<Self, String> {
+        let profile = ComputerMachineProfile::computer_v1_with_storage0_media(
+            memory_size,
+            storage0_media,
+            false,
+        );
+        let (machine, boot_cpu) =
+            ComputerMachine::from_rux16_bios_flash_with_profile(bios_flash, profile, max_steps)?;
+        Ok(Self { machine, boot_cpu })
+    }
+
     fn create_with_profile(
         image_bytes: &[u8],
         profile: ComputerMachineProfile,
