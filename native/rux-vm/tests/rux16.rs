@@ -1,6 +1,9 @@
 use rux_vm::low_bus::{MachineBus, MmioDevice};
 use rux_vm::low_machine::MemoryFault;
-use rux_vm::rux16::{Rux16Cpu, Rux16Signal};
+use rux_vm::rux16::{
+    Rux16Cpu, Rux16Signal, RUX16_CSR_TRAP_CAUSE, RUX16_CSR_TRAP_PC, RUX16_CSR_TRAP_VALUE,
+    RUX16_CSR_TRAP_VECTOR, RUX16_TRAP_CAUSE_ILLEGAL_INSTRUCTION,
+};
 
 #[test]
 fn rux16_fetches_decodes_and_executes_words_from_guest_memory() {
@@ -200,19 +203,44 @@ fn rux16_test_bits_builds_condition_register_from_mask() {
 }
 
 #[test]
-fn rux16_illegal_instruction_reports_trap() {
+fn rux16_illegal_instruction_enters_configured_exception_vector() {
     let mut bus = MachineBus::new(64).unwrap();
-    write_words(&mut bus, 0, &[0xf000]);
+    write_words(
+        &mut bus,
+        0,
+        &[
+            const4(1, 8),
+            write_csr(RUX16_CSR_TRAP_VECTOR, 1),
+            0xf123,
+            halt(),
+            read_csr(2, RUX16_CSR_TRAP_CAUSE),
+            read_csr(3, RUX16_CSR_TRAP_PC),
+            read_csr(4, RUX16_CSR_TRAP_VALUE),
+            halt(),
+        ],
+    );
     let mut cpu = Rux16Cpu::new(0);
 
     assert_eq!(
         cpu.run_until_signal(&mut bus, 16).unwrap(),
-        Rux16Signal::Trap,
+        Rux16Signal::Halt,
     );
+    assert_eq!(cpu.register(2), RUX16_TRAP_CAUSE_ILLEGAL_INSTRUCTION);
+    assert_eq!(cpu.register(3), 4);
+    assert_eq!(cpu.register(4), 0xf123);
+}
+
+#[test]
+fn rux16_unhandled_exception_is_a_hard_error() {
+    let mut bus = MachineBus::new(64).unwrap();
+    write_words(&mut bus, 0, &[0xf123]);
+    let mut cpu = Rux16Cpu::new(0);
+
+    let error = cpu.run_until_signal(&mut bus, 16).unwrap_err();
+
     assert!(
-        cpu.trap().unwrap().contains("illegal instruction"),
-        "unexpected trap: {:?}",
-        cpu.trap(),
+        error.to_string().contains("unhandled exception"),
+        "unexpected error: {error}",
     );
 }
 
@@ -275,6 +303,14 @@ fn branch_if_zero(register: u8, offset_words: i8) -> u16 {
 
 fn branch_if_nonzero(register: u8, offset_words: i8) -> u16 {
     0x6000 | (u16::from(register) << 8) | 0x0010 | encode_signed_nibble(offset_words)
+}
+
+fn read_csr(dst: u8, csr: u32) -> u16 {
+    0x0002 | (u16::from(dst) << 8) | ((csr as u16) << 4)
+}
+
+fn write_csr(csr: u32, src: u8) -> u16 {
+    0x0003 | ((csr as u16) << 8) | (u16::from(src) << 4)
 }
 
 fn encode_signed_nibble(value: i8) -> u16 {
