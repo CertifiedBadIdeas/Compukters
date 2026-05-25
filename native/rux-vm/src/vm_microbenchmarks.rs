@@ -1,0 +1,273 @@
+/*
+ * The Compukter Kraft Developers
+ *
+ * Copyright (C) 2026 Vsevolod Petrov (lazyhat)
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+use crate::low_bus::MachineBus;
+use crate::low_image::{Function, Image, Instruction};
+use crate::low_image_runner::{LowImageSignal, LowImageVm};
+use crate::rux16::{Rux16Cpu, Rux16Signal};
+
+const MEMORY_SIZE: usize = 1024;
+const DATA_ADDR: u32 = 512;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VmBenchmarkWorkload {
+    ComputeLoop,
+    MemoryLoop,
+}
+
+impl VmBenchmarkWorkload {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::ComputeLoop => "compute-loop",
+            Self::MemoryLoop => "memory-loop",
+        }
+    }
+
+    pub fn all() -> &'static [Self] {
+        &[Self::ComputeLoop, Self::MemoryLoop]
+    }
+}
+
+impl std::str::FromStr for VmBenchmarkWorkload {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "compute-loop" => Ok(Self::ComputeLoop),
+            "memory-loop" => Ok(Self::MemoryLoop),
+            _ => Err(format!("unknown VM benchmark workload: {value}")),
+        }
+    }
+}
+
+pub fn run_low_image_workload(
+    workload: VmBenchmarkWorkload,
+    iterations: u32,
+) -> Result<u32, String> {
+    let mut vm = LowImageVm::create(low_image_workload(workload, iterations), u64::MAX)?;
+    match vm.run_until_signal()? {
+        LowImageSignal::HaltI32(value) => Ok(value as u32),
+        signal => Err(format!("unexpected LowImage signal: {signal:?}")),
+    }
+}
+
+pub fn run_rux16_workload(workload: VmBenchmarkWorkload, iterations: u32) -> Result<u32, String> {
+    let mut bus = MachineBus::new(MEMORY_SIZE).map_err(|error| error.to_string())?;
+    let (words, result_register) = rux16_workload(workload, iterations);
+    write_words(&mut bus, 0, &words)?;
+    let mut cpu = Rux16Cpu::new(0);
+    match cpu
+        .run_until_signal(&mut bus, rux16_max_steps(workload, iterations))
+        .map_err(|error| error.to_string())?
+    {
+        Rux16Signal::Halt => Ok(cpu.register(result_register)),
+        signal => Err(format!("unexpected Rux16 signal: {signal:?}")),
+    }
+}
+
+fn low_image_workload(workload: VmBenchmarkWorkload, iterations: u32) -> Image {
+    let instructions = match workload {
+        VmBenchmarkWorkload::ComputeLoop => vec![
+            Instruction::I32Const {
+                dst: 0,
+                value: iterations as i32,
+            },
+            Instruction::I32Const { dst: 1, value: 0 },
+            Instruction::I32Const { dst: 2, value: 1 },
+            Instruction::I32Eq {
+                dst: 3,
+                lhs: 1,
+                rhs: 0,
+            },
+            Instruction::JumpIfFalse { cond: 3, target: 6 },
+            Instruction::ReturnI32 { src: 1 },
+            Instruction::I32Add {
+                dst: 1,
+                lhs: 1,
+                rhs: 2,
+            },
+            Instruction::Jump { target: 3 },
+        ],
+        VmBenchmarkWorkload::MemoryLoop => vec![
+            Instruction::I32Const {
+                dst: 0,
+                value: iterations as i32,
+            },
+            Instruction::I32Const { dst: 1, value: 0 },
+            Instruction::I32Const { dst: 2, value: 1 },
+            Instruction::AddrConst {
+                dst: 4,
+                value: DATA_ADDR,
+            },
+            Instruction::I32Eq {
+                dst: 3,
+                lhs: 1,
+                rhs: 0,
+            },
+            Instruction::JumpIfFalse { cond: 3, target: 8 },
+            Instruction::Load32 { dst: 5, addr: 4 },
+            Instruction::ReturnI32 { src: 5 },
+            Instruction::Load32 { dst: 5, addr: 4 },
+            Instruction::I32Add {
+                dst: 5,
+                lhs: 5,
+                rhs: 2,
+            },
+            Instruction::Store32 { addr: 4, src: 5 },
+            Instruction::I32Add {
+                dst: 1,
+                lhs: 1,
+                rhs: 2,
+            },
+            Instruction::Jump { target: 4 },
+        ],
+    };
+    Image {
+        memory_size: MEMORY_SIZE as u32,
+        rodata: Vec::new(),
+        data: Vec::new(),
+        bss_size: 0,
+        entry_function_index: 0,
+        functions: vec![Function {
+            name: workload.name().to_string(),
+            register_count: 8,
+            parameters: Vec::new(),
+            instructions,
+        }],
+    }
+}
+
+fn rux16_workload(workload: VmBenchmarkWorkload, iterations: u32) -> (Vec<u16>, usize) {
+    match workload {
+        VmBenchmarkWorkload::ComputeLoop => (
+            vec![
+                const32(0),
+                low16(iterations),
+                high16(iterations),
+                const4(1, 0),
+                const4(2, 1),
+                eq(3),
+                eq_operands(1, 0),
+                branch_if_zero(3, 1),
+                halt(),
+                add(1, 1, 2),
+                branch_if_nonzero(2, -6),
+            ],
+            1,
+        ),
+        VmBenchmarkWorkload::MemoryLoop => (
+            vec![
+                const32(0),
+                low16(iterations),
+                high16(iterations),
+                const4(1, 0),
+                const4(2, 1),
+                const32(4),
+                low16(DATA_ADDR),
+                high16(DATA_ADDR),
+                const32(6),
+                low16(22),
+                high16(22),
+                eq(3),
+                eq_operands(1, 0),
+                branch_if_zero(3, 2),
+                load32(5, 4),
+                halt(),
+                load32(5, 4),
+                add(5, 5, 2),
+                store32(4, 5),
+                add(1, 1, 2),
+                jump(6),
+            ],
+            5,
+        ),
+    }
+}
+
+fn rux16_max_steps(workload: VmBenchmarkWorkload, iterations: u32) -> u64 {
+    match workload {
+        VmBenchmarkWorkload::ComputeLoop => u64::from(iterations) * 4 + 16,
+        VmBenchmarkWorkload::MemoryLoop => u64::from(iterations) * 7 + 16,
+    }
+}
+
+fn write_words(bus: &mut MachineBus, address: u32, words: &[u16]) -> Result<(), String> {
+    for (index, word) in words.iter().copied().enumerate() {
+        bus.store_u16(address + (index as u32 * 2), word)
+            .map_err(|error| error.to_string())?;
+    }
+    Ok(())
+}
+
+fn const4(dst: u8, value: u8) -> u16 {
+    0x1000 | (u16::from(dst) << 8) | u16::from(value & 0x0f)
+}
+
+fn const32(dst: u8) -> u16 {
+    0xe001 | (u16::from(dst) << 8)
+}
+
+fn add(dst: u8, lhs: u8, rhs: u8) -> u16 {
+    0x2000 | (u16::from(dst) << 8) | (u16::from(lhs) << 4) | u16::from(rhs)
+}
+
+fn eq(dst: u8) -> u16 {
+    0x3000 | (u16::from(dst) << 8)
+}
+
+fn eq_operands(lhs: u8, rhs: u8) -> u16 {
+    (u16::from(lhs) << 4) | u16::from(rhs)
+}
+
+fn load32(dst: u8, addr: u8) -> u16 {
+    0x4002 | (u16::from(dst) << 8) | (u16::from(addr) << 4)
+}
+
+fn store32(addr: u8, src: u8) -> u16 {
+    0x5002 | (u16::from(addr) << 8) | (u16::from(src) << 4)
+}
+
+fn branch_if_zero(register: u8, offset_words: i8) -> u16 {
+    0x6000 | (u16::from(register) << 8) | encode_signed_nibble(offset_words)
+}
+
+fn branch_if_nonzero(register: u8, offset_words: i8) -> u16 {
+    0x6000 | (u16::from(register) << 8) | 0x0010 | encode_signed_nibble(offset_words)
+}
+
+fn jump(target: u8) -> u16 {
+    0x7000 | (u16::from(target) << 8)
+}
+
+fn halt() -> u16 {
+    0x0001
+}
+
+fn low16(value: u32) -> u16 {
+    value as u16
+}
+
+fn high16(value: u32) -> u16 {
+    (value >> 16) as u16
+}
+
+fn encode_signed_nibble(value: i8) -> u16 {
+    assert!((-8..=7).contains(&value));
+    u16::from((value as i16 & 0x000f) as u8)
+}
