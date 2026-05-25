@@ -84,6 +84,16 @@ impl RuxComputerHandle {
         )
     }
 
+    pub fn create_rux16_bios_flash(
+        bios_flash: &[u8],
+        memory_size: usize,
+        max_steps: u64,
+    ) -> Result<Self, String> {
+        let (machine, boot_cpu) =
+            ComputerMachine::from_rux16_bios_flash(bios_flash, memory_size, max_steps)?;
+        Ok(Self { machine, boot_cpu })
+    }
+
     fn create_with_profile(
         image_bytes: &[u8],
         profile: ComputerMachineProfile,

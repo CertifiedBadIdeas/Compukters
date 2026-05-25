@@ -17,6 +17,57 @@ pub struct ComputerTextDisplaySnapshot {
     pub cells: Vec<u8>,
 }
 
+pub(crate) struct BiosFlashDevice {
+    bytes: Vec<u8>,
+}
+
+impl BiosFlashDevice {
+    pub(crate) fn new(bytes: Vec<u8>) -> Result<Self, MemoryFault> {
+        if bytes.len() > u32::MAX as usize {
+            return Err(MemoryFault::new(
+                "BIOS flash size does not fit u32".to_string(),
+            ));
+        }
+        Ok(Self { bytes })
+    }
+
+    fn byte_at(&self, offset: u32) -> Result<u8, MemoryFault> {
+        self.bytes
+            .get(offset as usize)
+            .copied()
+            .ok_or_else(|| MemoryFault::new(format!("BIOS flash offset {offset} is not mapped")))
+    }
+}
+
+impl MmioDevice for BiosFlashDevice {
+    fn size(&self) -> u32 {
+        self.bytes.len() as u32
+    }
+
+    fn load_i32(&self, offset: u32) -> Result<i32, MemoryFault> {
+        let mut bytes = [0_u8; 4];
+        for (index, byte) in bytes.iter_mut().enumerate() {
+            let offset = offset.checked_add(index as u32).ok_or_else(|| {
+                MemoryFault::new("BIOS flash i32 load offset overflows u32".to_string())
+            })?;
+            *byte = self.byte_at(offset)?;
+        }
+        Ok(i32::from_le_bytes(bytes))
+    }
+
+    fn store_i32(&mut self, _offset: u32, _value: i32) -> Result<(), MemoryFault> {
+        Err(MemoryFault::new("BIOS flash is read-only".to_string()))
+    }
+
+    fn load_u8(&self, offset: u32) -> Result<u8, MemoryFault> {
+        self.byte_at(offset)
+    }
+
+    fn store_u8(&mut self, _offset: u32, _value: u8) -> Result<(), MemoryFault> {
+        Err(MemoryFault::new("BIOS flash is read-only".to_string()))
+    }
+}
+
 pub(crate) struct ComputerControlDevice {
     pub(crate) status: i32,
     pub(crate) panic_code: i32,
@@ -547,8 +598,9 @@ impl StorageMedia for InMemoryStorageMedia {
     }
 
     fn write_at(&mut self, offset: u64, src: &[u8]) -> Result<(), MemoryFault> {
-        let offset = usize::try_from(offset)
-            .map_err(|_| MemoryFault::new("storage0 write offset does not fit usize".to_string()))?;
+        let offset = usize::try_from(offset).map_err(|_| {
+            MemoryFault::new("storage0 write offset does not fit usize".to_string())
+        })?;
         let end = offset
             .checked_add(src.len())
             .ok_or_else(|| MemoryFault::new("storage0 write range overflow".to_string()))?;
@@ -592,9 +644,7 @@ impl StoragePortDevice {
         Self::with_media_backend(Box::new(InMemoryStorageMedia::new(bytes, read_only)))
     }
 
-    pub(crate) fn with_media_backend(
-        media: Box<dyn StorageMedia>,
-    ) -> Result<Self, MemoryFault> {
+    pub(crate) fn with_media_backend(media: Box<dyn StorageMedia>) -> Result<Self, MemoryFault> {
         let len = media.len();
         if len % u64::from(Self::BLOCK_SIZE) != 0 {
             return Err(MemoryFault::new(format!(
@@ -620,18 +670,16 @@ impl StoragePortDevice {
                 self.status = computer_abi::STORAGE_STATUS_DONE;
                 self.error = computer_abi::STORAGE_ERROR_NONE;
             }
-            computer_abi::STORAGE_COMMAND_FLUSH => {
-                match self.media.as_mut() {
-                    Some(media) => match media.flush() {
-                        Ok(()) => {
-                            self.status = computer_abi::STORAGE_STATUS_DONE;
-                            self.error = computer_abi::STORAGE_ERROR_NONE;
-                        }
-                        Err(_) => self.fail(computer_abi::STORAGE_ERROR_IO_ERROR),
-                    },
-                    None => self.fail(computer_abi::STORAGE_ERROR_MEDIA_ABSENT),
-                }
-            }
+            computer_abi::STORAGE_COMMAND_FLUSH => match self.media.as_mut() {
+                Some(media) => match media.flush() {
+                    Ok(()) => {
+                        self.status = computer_abi::STORAGE_STATUS_DONE;
+                        self.error = computer_abi::STORAGE_ERROR_NONE;
+                    }
+                    Err(_) => self.fail(computer_abi::STORAGE_ERROR_IO_ERROR),
+                },
+                None => self.fail(computer_abi::STORAGE_ERROR_MEDIA_ABSENT),
+            },
             computer_abi::STORAGE_COMMAND_READ_BLOCKS
             | computer_abi::STORAGE_COMMAND_WRITE_BLOCKS => self.execute_transfer(command, memory),
             _ => {
@@ -883,17 +931,12 @@ mod tests {
         let mut device = StoragePortDevice::with_media_backend(Box::new(media)).unwrap();
 
         device
-            .store_i32(
-                12,
-                computer_abi::STORAGE_COMMAND_FLUSH,
-            )
+            .store_i32(12, computer_abi::STORAGE_COMMAND_FLUSH)
             .unwrap();
 
         assert_eq!(flush_count.get(), 1);
         assert_eq!(
-            device
-                .load_i32(4)
-                .unwrap(),
+            device.load_i32(4).unwrap(),
             computer_abi::STORAGE_STATUS_DONE,
         );
     }
