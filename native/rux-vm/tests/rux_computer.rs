@@ -370,6 +370,31 @@ fn rux_computer_handle_rux16_bios_loads_stage2_from_storage_and_jumps_to_ram() {
 }
 
 #[test]
+fn rux_computer_handle_rux16_bios_loads_stage2_from_storage_volume_path() {
+    let entry_pc = 2048;
+    let bios = rux16_words(&rux16_stage2_boot_bios_words());
+    let stage2 = rux16_words(&rux16_stage2_program_words());
+    let media = rux16_boot_media(entry_pc, entry_pc, 1, 1, &stage2);
+    let path = temp_volume_path("rux16-stage2-volume-path");
+    write_rux_volume(&path, &media);
+    let mut handle =
+        RuxComputerHandle::create_rux16_bios_flash_with_storage0_path(&bios, 64 * 1024, 512, &path)
+            .expect("Rux16 BIOS flash computer creates with boot volume path");
+
+    assert_eq!(handle.run_rux16_until_signal().unwrap(), Rux16Signal::Halt);
+    assert_eq!(handle.debug_output_bytes(), b"S2");
+    assert_eq!(
+        handle.control(),
+        RuxComputerControl {
+            status: ComputerMachine::STATUS_HALTED,
+            exit_code: 0,
+            panic_code: 0x52,
+        },
+    );
+    fs::remove_file(path).unwrap();
+}
+
+#[test]
 fn rux_computer_handle_rux16_bios_rejects_corrupt_boot_header_magic() {
     let entry_pc = 2048;
     let bios = rux16_words(&rux16_stage2_boot_bios_words());
