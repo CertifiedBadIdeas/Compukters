@@ -267,6 +267,58 @@ fn rux_computer_handle_rux16_firmware_writes_debug_and_control_mmio() {
 }
 
 #[test]
+fn rux_computer_handle_boots_rux16_directly_from_bios_flash() {
+    let bios = rux16_words(&rux16_mmio_firmware_words());
+    let mut handle = RuxComputerHandle::create_rux16_bios_flash(&bios, 64 * 1024, 128)
+        .expect("Rux16 BIOS flash computer creates");
+
+    assert_eq!(handle.run_rux16_until_signal().unwrap(), Rux16Signal::Halt);
+    assert_eq!(handle.debug_output_bytes(), b"RUX");
+    assert_eq!(
+        handle.control(),
+        RuxComputerControl {
+            status: ComputerMachine::STATUS_HALTED,
+            exit_code: 0,
+            panic_code: 0x16,
+        },
+    );
+}
+
+#[test]
+fn rux_computer_handle_rejects_empty_rux16_bios_flash() {
+    let error = match RuxComputerHandle::create_rux16_bios_flash(&[], 64 * 1024, 128) {
+        Ok(_) => panic!("empty Rux16 BIOS flash unexpectedly created a computer"),
+        Err(error) => error,
+    };
+
+    assert!(
+        error.contains("Rux16 BIOS flash is empty"),
+        "unexpected error: {error}",
+    );
+}
+
+#[test]
+fn rux_computer_handle_rux16_bios_flash_is_read_only() {
+    let mut words = Vec::new();
+    words.extend(rux16_const32(0, ComputerMachine::RUX16_BIOS_FLASH_BASE));
+    words.extend(rux16_const32(1, 0x1234));
+    words.push(rux16_store32(0, 1));
+    words.push(rux16_halt());
+    let bios = rux16_words(&words);
+    let mut handle = RuxComputerHandle::create_rux16_bios_flash(&bios, 64 * 1024, 128)
+        .expect("Rux16 BIOS flash computer creates");
+
+    let error = handle
+        .run_rux16_until_signal()
+        .expect_err("flash write traps");
+
+    assert!(
+        error.contains("BIOS flash is read-only"),
+        "unexpected error: {error}",
+    );
+}
+
+#[test]
 fn rux_computer_handle_boot_handoff_rejects_empty_image_and_keeps_bios_cpu() {
     let bios = halt_i32_image(1);
     let mut handle =

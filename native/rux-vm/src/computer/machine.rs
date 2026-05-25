@@ -1,5 +1,5 @@
 use crate::computer::devices::{
-    ComputerControlDevice, ComputerTextDisplaySnapshot, DebugSerialDevice,
+    BiosFlashDevice, ComputerControlDevice, ComputerTextDisplaySnapshot, DebugSerialDevice,
     RuxVolumeFileStorageMedia, SerialInputDevice, StoragePortDevice, TextDisplayDevice,
 };
 use crate::computer::profile::{
@@ -23,6 +23,7 @@ pub struct ComputerMachine {
     serial_input_device_id: Option<MmioDeviceId>,
     display0_device_id: Option<MmioDeviceId>,
     storage0_device_id: Option<MmioDeviceId>,
+    bios_flash_device_id: Option<MmioDeviceId>,
     program_base: u32,
     cpus: Vec<ComputerCpuContext>,
     boot_cpu: Option<CpuId>,
@@ -167,6 +168,7 @@ impl ComputerMachine {
     pub const STORAGE0_SEQUENCE_HIGH: u32 = computer_abi::STORAGE0_SEQUENCE_HIGH;
     pub const STORAGE0_MEDIA_STATUS: u32 = computer_abi::STORAGE0_MEDIA_STATUS;
     pub const STORAGE0_SIZE: u32 = computer_abi::STORAGE0_SIZE;
+    pub const RUX16_BIOS_FLASH_BASE: u32 = 0xFFF0_0000;
     pub const STATUS_RESET: i32 = computer_abi::STATUS_RESET;
     pub const STATUS_BOOTING: i32 = computer_abi::STATUS_BOOTING;
     pub const STATUS_READY: i32 = computer_abi::STATUS_READY;
@@ -241,10 +243,31 @@ impl ComputerMachine {
             serial_input_device_id,
             display0_device_id,
             storage0_device_id,
+            bios_flash_device_id: None,
             program_base: profile.program_base,
             cpus: Vec::new(),
             boot_cpu: None,
         })
+    }
+
+    pub fn from_rux16_bios_flash(
+        bios_flash: &[u8],
+        memory_size: usize,
+        max_steps: u64,
+    ) -> Result<(Self, CpuId), String> {
+        if bios_flash.is_empty() {
+            return Err("Rux16 BIOS flash is empty".to_string());
+        }
+        let bios_flash_len = u32::try_from(bios_flash.len())
+            .map_err(|_| "Rux16 BIOS flash size does not fit u32".to_string())?;
+        Self::RUX16_BIOS_FLASH_BASE
+            .checked_add(bios_flash_len)
+            .ok_or_else(|| "Rux16 BIOS flash range overflows address space".to_string())?;
+
+        let mut machine = Self::new(memory_size).map_err(|error| error.to_string())?;
+        machine.map_rux16_bios_flash(bios_flash.to_vec())?;
+        let boot_cpu = machine.spawn_rux16_boot_cpu(Self::RUX16_BIOS_FLASH_BASE, max_steps)?;
+        Ok((machine, boot_cpu))
     }
 
     pub fn memory(&self) -> &MachineMemory {
@@ -270,6 +293,13 @@ impl ComputerMachine {
         self.push_memory_map_region(&mut map, self.serial_input_device_id, "serial-input");
         self.push_memory_map_region(&mut map, self.display0_device_id, "display0");
         self.push_memory_map_region(&mut map, self.storage0_device_id, "storage0");
+        self.push_memory_map_region_with_flags(
+            &mut map,
+            self.bios_flash_device_id,
+            "bios-flash",
+            true,
+            false,
+        );
         map
     }
 
@@ -329,6 +359,19 @@ impl ComputerMachine {
             return Err("boot CPU is already spawned".to_string());
         }
         let cpu_id = self.spawn_cpu(kernel_image, slice_budget_nanos)?;
+        self.boot_cpu = Some(cpu_id);
+        Ok(cpu_id)
+    }
+
+    fn spawn_rux16_boot_cpu(&mut self, entry_pc: u32, max_steps: u64) -> Result<CpuId, String> {
+        if self.boot_cpu.is_some() {
+            return Err("boot CPU is already spawned".to_string());
+        }
+        let cpu_id = self.cpus.len();
+        self.cpus.push(ComputerCpuContext::Rux16 {
+            cpu: Rux16Cpu::new(entry_pc),
+            max_steps: max_steps.max(1),
+        });
         self.boot_cpu = Some(cpu_id);
         Ok(cpu_id)
     }
@@ -516,6 +559,17 @@ impl ComputerMachine {
         device_id: Option<MmioDeviceId>,
         name: &'static str,
     ) {
+        self.push_memory_map_region_with_flags(map, device_id, name, true, true);
+    }
+
+    fn push_memory_map_region_with_flags(
+        &self,
+        map: &mut ComputerMemoryMap,
+        device_id: Option<MmioDeviceId>,
+        name: &'static str,
+        readable: bool,
+        writable: bool,
+    ) {
         let Some(device_id) = device_id else {
             return;
         };
@@ -526,9 +580,22 @@ impl ComputerMachine {
             name,
             base,
             size,
-            readable: true,
-            writable: true,
+            readable,
+            writable,
         });
+    }
+
+    fn map_rux16_bios_flash(&mut self, bytes: Vec<u8>) -> Result<(), String> {
+        if self.bios_flash_device_id.is_some() {
+            return Err("Rux16 BIOS flash is already mapped".to_string());
+        }
+        let device = BiosFlashDevice::new(bytes).map_err(|error| error.to_string())?;
+        let device_id = self
+            .bus
+            .map_mmio(Self::RUX16_BIOS_FLASH_BASE, Box::new(device))
+            .map_err(|error| error.to_string())?;
+        self.bios_flash_device_id = Some(device_id);
+        Ok(())
     }
 
     fn control_device(&self) -> Option<&ComputerControlDevice> {
