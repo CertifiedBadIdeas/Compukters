@@ -211,7 +211,8 @@ Minimum control-flow requirements:
 - short relative branch for compact loops and conditionals;
 - register jump for bootloader handoff to a loaded entry address;
 - call/ret for firmware subroutines;
-- halt/trap state for deterministic tests and firmware error reporting.
+- halt state for deterministic tests and firmware success reporting;
+- strict exception-vector behavior for CPU faults and explicit traps.
 
 The BIOS handoff model becomes a normal guest operation:
 
@@ -222,6 +223,46 @@ jmp entry_register
 ```
 
 No host-side CPU replacement is required for the final architecture.
+
+## Exception Model
+
+Rux16 should model CPU exceptions as guest-visible control transfer, not as a
+host fallback. A CPU fault should either enter a configured guest exception
+handler or fail as an unhandled exception. There is no compatibility fallback
+where the host silently handles the fault and continues execution.
+
+The CPU owns a small set of control/status registers:
+
+```text
+trap_vector  guest address of the exception handler
+trap_cause   stable cause code for the last exception
+trap_pc      pc of the faulting instruction
+trap_value   cause-specific value such as opcode or faulting address
+```
+
+Minimum cause codes:
+
+```text
+1  illegal_instruction
+2  instruction_fetch_fault
+3  load_fault
+4  store_fault
+5  explicit_trap
+```
+
+When an exception occurs and `trap_vector` is configured, the CPU records the
+cause registers and sets `pc = trap_vector`. Execution then continues in guest
+code. The handler can inspect the cause registers, decide whether to recover,
+write firmware-visible panic status through control MMIO, or halt.
+
+When an exception occurs and no trap vector is configured, the CPU reports a
+hard unhandled-exception error. This is a machine setup or firmware bug, not a
+fallback execution mode.
+
+Firmware panic codes remain a guest policy. BIOS and OS code should convert
+known validation failures into writes to `CONTROL_PANIC_CODE` and
+`CONTROL_STATUS = STATUS_PANIC`; the CPU should only provide exception cause
+state and control transfer.
 
 ## Memory And MMIO
 
