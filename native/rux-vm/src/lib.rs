@@ -23,3 +23,4 @@ pub mod rux_computer {
     };
     pub use crate::computer::machine::BootHandoffError;
 }
+pub mod vm_microbenchmarks;
