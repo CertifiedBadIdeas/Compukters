@@ -8,7 +8,7 @@ use crate::computer::profile::{
 };
 use crate::computer_abi;
 use crate::low_bus::{MachineBus, MmioDeviceId};
-use crate::low_image::{decode_image, Image};
+use crate::low_image::Image;
 use crate::low_image_runner::{LowCpuContext, LowImageSignal, LowImageVm};
 use crate::low_machine::{MachineMemory, MemoryFault};
 use crate::rux16::{Rux16Cpu, Rux16Signal};
@@ -47,9 +47,6 @@ pub enum BootHandoffError {
         image_len: u32,
         ram_len: usize,
     },
-    InvalidImage(String),
-    ImageTooLarge(String),
-    MachineState(String),
 }
 
 impl Display for BootHandoffError {
@@ -72,15 +69,6 @@ impl Display for BootHandoffError {
                 formatter,
                 "boot handoff RAM range {image_addr:#010x} with length {image_len} is outside {ram_len} bytes",
             ),
-            Self::InvalidImage(message) => {
-                write!(formatter, "invalid boot handoff image: {message}")
-            }
-            Self::ImageTooLarge(message) => {
-                write!(formatter, "boot handoff image is too large: {message}")
-            }
-            Self::MachineState(message) => {
-                write!(formatter, "boot handoff machine state error: {message}")
-            }
         }
     }
 }
@@ -388,33 +376,6 @@ impl ComputerMachine {
         Ok(cpu_id)
     }
 
-    pub fn boot_handoff_ruxi_from_ram(
-        &mut self,
-        image_addr: u32,
-        image_len: u32,
-        slice_budget_nanos: u64,
-    ) -> Result<CpuId, BootHandoffError> {
-        let boot_cpu = self.boot_cpu.ok_or(BootHandoffError::MissingBootCpu)?;
-        let image_bytes = self.boot_handoff_image_bytes(image_addr, image_len)?;
-        let image = decode_image(&image_bytes)
-            .map_err(|error| BootHandoffError::InvalidImage(error.to_string()))?;
-        let required_memory = usize::try_from(image.memory_size).map_err(|_| {
-            BootHandoffError::ImageTooLarge("memory size does not fit usize".to_string())
-        })?;
-        if self.bus.memory().len() < required_memory {
-            return Err(BootHandoffError::ImageTooLarge(format!(
-                "image requires {required_memory} bytes but machine memory has {} bytes",
-                self.bus.memory().len(),
-            )));
-        }
-        let next_cpu = LowImageVm::create_cpu_context(image.clone(), slice_budget_nanos.max(1))
-            .map_err(BootHandoffError::InvalidImage)?;
-        load_image_sections_into_bus_at(&image, &mut self.bus, self.program_base)
-            .map_err(BootHandoffError::MachineState)?;
-        self.cpus[boot_cpu] = ComputerCpuContext::LowImage(next_cpu);
-        Ok(boot_cpu)
-    }
-
     pub fn boot_handoff_rux16_from_ram(
         &mut self,
         entry_pc: u32,
@@ -613,18 +574,6 @@ impl ComputerMachine {
     fn control_device(&self) -> Option<&ComputerControlDevice> {
         self.control_device_id
             .and_then(|id| self.bus.device::<ComputerControlDevice>(id))
-    }
-
-    fn boot_handoff_image_bytes(
-        &self,
-        image_addr: u32,
-        image_len: u32,
-    ) -> Result<Vec<u8>, BootHandoffError> {
-        if image_len == 0 {
-            return Err(BootHandoffError::EmptyImage);
-        }
-        let end = checked_ram_range(image_addr, image_len, self.bus.memory().len())?;
-        Ok(self.bus.memory().bytes()[image_addr as usize..end].to_vec())
     }
 
     fn debug_device(&self) -> Option<&DebugSerialDevice> {

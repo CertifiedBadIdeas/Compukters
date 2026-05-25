@@ -121,7 +121,7 @@ class RuxComputerRuntimeTest {
         var storage0Media: ByteArray? = null
         private val pendingOutput = ArrayDeque<ByteArray>()
 
-        override fun runUntilSignal(handle: Long): NativeLowImageVmSignal = NativeLowImageVmSignal.Pause
+        override fun runUntilSignal(handle: Long): NativeRuxComputerSignal = NativeRuxComputerSignal.Pause
 
         override fun control(handle: Long): NativeRuxComputerControl =
             NativeRuxComputerControl(status = 1, exitCode = 0, panicCode = 0)

@@ -21,25 +21,6 @@ package ru.lazyhat.compukterkraft.lang.runtime.blazing
 
 import java.nio.file.Path
 
-import ru.lazyhat.compukterkraft.lang.runtime.VmValue
-
-data class NativeLowImageVmMetrics(
-    val runInvocations: Long = 0,
-    val elapsedNanos: Long = 0,
-    val pauseSignals: Long = 0,
-) {
-    companion object {
-        val EMPTY = NativeLowImageVmMetrics()
-
-        fun from(values: LongArray): NativeLowImageVmMetrics =
-            NativeLowImageVmMetrics(
-                runInvocations = values.getOrElse(0) { 0L },
-                elapsedNanos = values.getOrElse(1) { 0L },
-                pauseSignals = values.getOrElse(2) { 0L },
-            )
-    }
-}
-
 data class NativeRuxComputerControl(
     val status: Int,
     val exitCode: Int,
@@ -113,29 +94,17 @@ class NativeRuxComputerDisplaySnapshot(
             "cursorY=$cursorY, sequence=$sequence, cells=${cells.size} bytes)"
 }
 
-sealed interface NativeLowImageVmSignal {
-    data object HaltUnit : NativeLowImageVmSignal
+sealed interface NativeRuxComputerSignal {
+    data object Halt : NativeRuxComputerSignal
 
-    data class HaltI32(val value: Int) : NativeLowImageVmSignal
-
-    data class HaltI64(val value: Long) : NativeLowImageVmSignal
-
-    data class HaltAddr(val value: UInt) : NativeLowImageVmSignal
-
-    data class HaltBool(val value: Boolean) : NativeLowImageVmSignal
-
-    data object Pause : NativeLowImageVmSignal
+    data object Pause : NativeRuxComputerSignal
 
     companion object {
-        fun from(values: LongArray): NativeLowImageVmSignal =
+        fun from(values: LongArray): NativeRuxComputerSignal =
             when (val tag = values.getOrElse(0) { 0L }) {
-                1L -> HaltUnit
-                2L -> HaltI32(values.getOrElse(1) { 0L }.toInt())
-                3L -> HaltI64(values.getOrElse(1) { 0L })
-                4L -> HaltAddr(values.getOrElse(1) { 0L }.toUInt())
-                5L -> HaltBool(values.getOrElse(1) { 0L } != 0L)
+                1L -> Halt
                 6L -> Pause
-                else -> error("Unknown native low image VM signal tag: $tag")
+                else -> error("Unknown native Rux computer signal tag: $tag")
             }
     }
 }
@@ -143,57 +112,6 @@ sealed interface NativeLowImageVmSignal {
 object NativeVmBindings {
     private val lock = Any()
     private var loadedPath: String? = null
-
-    fun createLowImage(
-        libraryPath: String,
-        image: ByteArray,
-        sliceBudgetNanos: Int,
-    ): Long {
-        load(libraryPath)
-        val handle = createLowImageNative(image, sliceBudgetNanos.coerceAtLeast(1))
-        check(handle != 0L) { "Native low image VM create returned a zero handle" }
-        return handle
-    }
-
-    fun runLowImageUntilSignal(handle: Long): NativeLowImageVmSignal {
-        require(handle != 0L) { "Native low image VM handle is zero" }
-        return NativeLowImageVmSignal.from(runLowImageUntilSignalNative(handle))
-    }
-
-    fun lowImageMetrics(handle: Long): NativeLowImageVmMetrics {
-        require(handle != 0L) { "Native low image VM handle is zero" }
-        return NativeLowImageVmMetrics.from(lowImageMetricsNative(handle))
-    }
-
-    fun freeLowImage(handle: Long) {
-        if (handle != 0L) {
-            freeLowImageNative(handle)
-        }
-    }
-
-    fun createRuxComputer(
-        libraryPath: String,
-        image: ByteArray,
-        memorySize: Int,
-        sliceBudgetNanos: Long,
-        storage0Media: ByteArray? = null,
-        storage0Path: Path? = null,
-    ): Long {
-        require(storage0Media == null || storage0Path == null) {
-            "storage0Media and storage0Path are mutually exclusive"
-        }
-        load(libraryPath)
-        val handle =
-            createRuxComputerNative(
-                image,
-                memorySize.coerceAtLeast(1),
-                sliceBudgetNanos.coerceAtLeast(1),
-                storage0Media,
-                storage0Path?.toAbsolutePath()?.normalize()?.toString(),
-            )
-        check(handle != 0L) { "Native Rux computer create returned a zero handle" }
-        return handle
-    }
 
     fun createRuxComputerFromBiosFlash(
         libraryPath: String,
@@ -214,14 +132,9 @@ object NativeVmBindings {
         return handle
     }
 
-    fun runRuxComputerUntilSignal(handle: Long): NativeLowImageVmSignal {
+    fun runRux16ComputerUntilSignal(handle: Long): NativeRuxComputerSignal {
         require(handle != 0L) { "Native Rux computer handle is zero" }
-        return NativeLowImageVmSignal.from(runRuxComputerUntilSignalNative(handle))
-    }
-
-    fun runRux16ComputerUntilSignal(handle: Long): NativeLowImageVmSignal {
-        require(handle != 0L) { "Native Rux computer handle is zero" }
-        return NativeLowImageVmSignal.from(runRux16ComputerUntilSignalNative(handle))
+        return NativeRuxComputerSignal.from(runRux16ComputerUntilSignalNative(handle))
     }
 
     fun ruxComputerControl(handle: Long): NativeRuxComputerControl {
@@ -276,39 +189,12 @@ object NativeVmBindings {
         }
     }
     @JvmStatic
-    private external fun createLowImageNative(
-        image: ByteArray,
-        sliceBudgetNanos: Int,
-    ): Long
-
-    @JvmStatic
-    private external fun runLowImageUntilSignalNative(handle: Long): LongArray
-
-    @JvmStatic
-    private external fun lowImageMetricsNative(handle: Long): LongArray
-
-    @JvmStatic
-    private external fun freeLowImageNative(handle: Long)
-
-    @JvmStatic
-    private external fun createRuxComputerNative(
-        image: ByteArray,
-        memorySize: Int,
-        sliceBudgetNanos: Long,
-        storage0Media: ByteArray?,
-        storage0Path: String?,
-    ): Long
-
-    @JvmStatic
     private external fun createRuxComputerFromBiosFlashNative(
         biosFlashPath: String,
         memorySize: Int,
         maxSteps: Long,
         storage0Path: String,
     ): Long
-
-    @JvmStatic
-    private external fun runRuxComputerUntilSignalNative(handle: Long): LongArray
 
     @JvmStatic
     private external fun runRux16ComputerUntilSignalNative(handle: Long): LongArray

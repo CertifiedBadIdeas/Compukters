@@ -22,30 +22,17 @@ package ru.lazyhat.compukterkraft.lang.runtime.blazing
 import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 
 class RuxComputerRuntimeFactoryTest {
     @Test
-    fun defaultFirmwareResourceTargetsBiosFirmware() {
-        assertEquals("firmware/rux-bios.ruxi", RuxComputerRuntimeFactory.DEFAULT_FIRMWARE_RESOURCE)
-    }
+    fun runtimeFactoryDoesNotExposeResourceOrImageStartup() {
+        val methodNames = RuxComputerRuntimeFactory::class.java.methods.map { it.name }.toSet()
 
-    @Test
-    fun reportsMissingFirmwareResource() {
-        assertFailsWith<IllegalStateException> {
-            RuxComputerRuntimeFactory.loadFirmwareResource("firmware/missing-rux-image.ruxi")
-        }
-    }
-
-    @Test
-    fun createFactoryAcceptsStorage0PathParameter() {
+        assertFalse("createFromResource" in methodNames)
+        assertFalse("loadFirmwareResource" in methodNames)
         val createMethods = RuxComputerRuntimeFactory::class.java.methods.filter { it.name == "create" }
-        val hasStorage0Path =
-            createMethods.any { method ->
-                method.parameterTypes.any { parameterType -> parameterType == Path::class.java }
-            }
-
-        assertEquals(true, hasStorage0Path)
+        assertEquals(emptyList(), createMethods)
     }
 
     @Test
