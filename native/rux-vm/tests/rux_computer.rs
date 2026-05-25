@@ -242,6 +242,31 @@ fn rux_computer_handle_boot_handoff_starts_rux16_from_guest_ram_without_host_dec
 }
 
 #[test]
+fn rux_computer_handle_rux16_firmware_writes_debug_and_control_mmio() {
+    let bios = halt_i32_image(1);
+    let entry_pc = 4096;
+    let program = rux16_words(&rux16_mmio_firmware_words());
+    let mut handle =
+        RuxComputerHandle::create(&bios, 64 * 1024, 1_000_000).expect("computer handle creates");
+    handle.write_guest_ram_bytes(entry_pc, &program).unwrap();
+
+    handle
+        .boot_handoff_rux16_from_guest_ram(entry_pc, program.len() as u32, 128)
+        .expect("boot handoff accepts in-RAM Rux16 firmware");
+
+    assert_eq!(handle.run_rux16_until_signal().unwrap(), Rux16Signal::Halt);
+    assert_eq!(handle.debug_output_bytes(), b"RUX");
+    assert_eq!(
+        handle.control(),
+        RuxComputerControl {
+            status: ComputerMachine::STATUS_HALTED,
+            exit_code: 0,
+            panic_code: 0x16,
+        },
+    );
+}
+
+#[test]
 fn rux_computer_handle_boot_handoff_rejects_empty_image_and_keeps_bios_cpu() {
     let bios = halt_i32_image(1);
     let mut handle =
@@ -335,6 +360,34 @@ fn rux16_words(words: &[u16]) -> Vec<u8> {
 
 fn rux16_const4(dst: u8, value: u8) -> u16 {
     0x1000 | (u16::from(dst) << 8) | u16::from(value & 0x0f)
+}
+
+fn rux16_const32(dst: u8, value: u32) -> [u16; 3] {
+    [
+        0xe001 | (u16::from(dst) << 8),
+        value as u16,
+        (value >> 16) as u16,
+    ]
+}
+
+fn rux16_store32(addr: u8, src: u8) -> u16 {
+    0x5002 | (u16::from(addr) << 8) | (u16::from(src) << 4)
+}
+
+fn rux16_mmio_firmware_words() -> Vec<u16> {
+    let mut words = Vec::new();
+    words.extend(rux16_const32(0, ComputerMachine::DEBUG_WRITE));
+    words.extend(rux16_const32(1, u32::from(b'R')));
+    words.push(rux16_store32(0, 1));
+    words.extend(rux16_const32(1, u32::from(b'U')));
+    words.push(rux16_store32(0, 1));
+    words.extend(rux16_const32(1, u32::from(b'X')));
+    words.push(rux16_store32(0, 1));
+    words.extend(rux16_const32(0, ComputerMachine::CONTROL_PANIC_CODE));
+    words.extend(rux16_const32(1, 0x16));
+    words.push(rux16_store32(0, 1));
+    words.push(rux16_halt());
+    words
 }
 
 fn rux16_halt() -> u16 {
