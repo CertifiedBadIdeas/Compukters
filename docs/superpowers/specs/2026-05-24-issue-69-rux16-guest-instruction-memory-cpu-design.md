@@ -4,7 +4,8 @@
 
 ## Status
 
-Accepted design direction; implementation plan not written yet.
+Accepted design direction; initial CPU, exception-vector, and explicit Rux16
+boot-handoff implementation slices are planned or implemented incrementally.
 
 ## Context
 
