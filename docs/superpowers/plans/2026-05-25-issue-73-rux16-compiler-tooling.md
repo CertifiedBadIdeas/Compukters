@@ -188,10 +188,10 @@ git commit -m "feat(tooling): disassemble Rux16 binary artifacts"
 Create a minimal source file and assert:
 
 ```bash
-rux compile --target bios input.rx -o bios.flash
+rux compile input.rx -o app.bin
 ```
 
-writes binary bytes and does not write a `RUXI` header.
+writes binary bytes for the default `program` target and does not write a `RUXI` header. Add a second assertion that `rux compile --target program input.rx -o explicit.bin` produces the same bytes.
 
 - [ ] **Step 2: Run RED**
 
@@ -205,7 +205,7 @@ Expected: fail because `rux compile --target bios` is not implemented.
 
 - [ ] **Step 3: Implement the first minimal Rux16 backend path**
 
-Add a Rux16 artifact type and backend entrypoint. Keep the scope intentionally small; unsupported language features should return explicit compile errors instead of lowering through LowImage.
+Add a Rux16 artifact type and backend entrypoint. Keep the scope intentionally small; unsupported language features should return explicit compile errors instead of lowering through LowImage. `program` must be the default compile target; `bios` and `boot` remain explicit targets.
 
 - [ ] **Step 4: Run GREEN and commit**
 

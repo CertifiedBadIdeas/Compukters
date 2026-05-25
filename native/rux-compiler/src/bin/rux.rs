@@ -1,4 +1,5 @@
-use rux_compiler::volume;
+use rux_compiler::artifact::Rux16ArtifactTarget;
+use rux_compiler::{compile_rux16_artifact, volume};
 use std::env;
 use std::fs;
 use std::process::ExitCode;
@@ -18,9 +19,65 @@ fn run(args: Vec<String>) -> Result<(), String> {
         return usage_error();
     };
     match command.as_str() {
+        "compile" => run_compile(&args[1..]),
         "volume" => run_volume(&args[1..]),
         _ => usage_error(),
     }
+}
+
+fn run_compile(args: &[String]) -> Result<(), String> {
+    let config = parse_compile_args(args)?;
+    let source = fs::read_to_string(&config.source_path)
+        .map_err(|error| format!("failed to read {}: {error}", config.source_path))?;
+    let artifact = compile_rux16_artifact(&source, config.target)
+        .map_err(|error| format!("compile error: {}", error.message))?;
+    fs::write(&config.output_path, artifact.bytes)
+        .map_err(|error| format!("failed to write {}: {error}", config.output_path))
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CompileConfig {
+    target: Rux16ArtifactTarget,
+    source_path: String,
+    output_path: String,
+}
+
+fn parse_compile_args(args: &[String]) -> Result<CompileConfig, String> {
+    let mut target = Rux16ArtifactTarget::Program;
+    let mut source_path = None;
+    let mut output_path = None;
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--target" => {
+                let Some(value) = args.get(index + 1) else {
+                    return compile_usage_error();
+                };
+                target = Rux16ArtifactTarget::parse(value)?;
+                index += 2;
+            }
+            "-o" => {
+                let Some(value) = args.get(index + 1) else {
+                    return compile_usage_error();
+                };
+                output_path = Some(value.clone());
+                index += 2;
+            }
+            value if value.starts_with('-') => return compile_usage_error(),
+            value => {
+                if source_path.is_some() {
+                    return compile_usage_error();
+                }
+                source_path = Some(value.to_string());
+                index += 1;
+            }
+        }
+    }
+    Ok(CompileConfig {
+        target,
+        source_path: source_path.ok_or_else(compile_usage_message)?,
+        output_path: output_path.ok_or_else(compile_usage_message)?,
+    })
 }
 
 fn run_volume(args: &[String]) -> Result<(), String> {
@@ -64,7 +121,15 @@ fn parse_size(value: &str) -> Result<usize, String> {
 }
 
 fn usage_error() -> Result<(), String> {
-    Err("usage: rux volume <create|put-boot> ...".to_string())
+    Err("usage: rux compile [--target <bios|boot|program>] <input.rx> -o <output>\n       rux volume <create|put-boot> ...".to_string())
+}
+
+fn compile_usage_error() -> Result<CompileConfig, String> {
+    Err(compile_usage_message())
+}
+
+fn compile_usage_message() -> String {
+    "usage: rux compile [--target <bios|boot|program>] <input.rx> -o <output>".to_string()
 }
 
 fn volume_usage_error() -> Result<(), String> {

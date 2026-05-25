@@ -1,3 +1,4 @@
+pub mod artifact;
 mod backend;
 mod frontend;
 mod runtime;
@@ -16,4 +17,14 @@ pub fn compile(source: &str) -> Result<Image, CompileError> {
     let program = frontend::parse(tokens)?;
     let program = frontend::resolve(program)?;
     backend::compile(program)
+}
+
+pub fn compile_rux16_artifact(
+    source: &str,
+    target: artifact::Rux16ArtifactTarget,
+) -> Result<artifact::Rux16Artifact, CompileError> {
+    let tokens = lex(source)?;
+    let program = frontend::parse(tokens)?;
+    let program = frontend::resolve(program)?;
+    artifact::compile(program, target)
 }
