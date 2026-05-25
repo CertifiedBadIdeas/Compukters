@@ -21,9 +21,9 @@ The old `.flash.words` resource is a human-readable seed format, not the real fi
 The public CLI should converge on:
 
 ```bash
+rux compile path/to/app.rx -o app.bin
 rux compile --target bios path/to/bios.rx -o bios.flash
 rux compile --target boot path/to/boot.rx -o boot.bin
-rux compile --target program path/to/app.rx -o app.bin
 
 rux disasm --target bios bios.flash
 rux disasm --target boot boot.bin
@@ -38,6 +38,8 @@ rux volume inspect storage0.ruxvol
 ```
 
 `rux-emit`, `rux-run`, and `rux-disasm` should stop being the public interface. A future `rux run` may exist as an explicit Rux16 development harness, but it must not run RUXI as a fallback path.
+
+`rux compile` defaults to the `program` target. BIOS and boot artifacts are less common and must be requested explicitly with `--target bios` or `--target boot`.
 
 ## Artifact Contracts
 
