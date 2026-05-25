@@ -46,6 +46,34 @@ fn rux16_loads_and_stores_regular_ram_through_machine_bus() {
 }
 
 #[test]
+fn rux16_load8_and_store8_access_single_bytes_without_touching_neighbors() {
+    let mut bus = MachineBus::new(64).unwrap();
+    bus.store_u8(12, 0xaa).unwrap();
+    bus.store_u8(13, 0xbb).unwrap();
+    write_words(
+        &mut bus,
+        0,
+        &[
+            const4(1, 12),
+            load8(2, 1),
+            const4(3, 13),
+            store8(3, 2),
+            halt(),
+        ],
+    );
+    let mut cpu = Rux16Cpu::new(0);
+
+    assert_eq!(
+        cpu.run_until_signal(&mut bus, 16).unwrap(),
+        Rux16Signal::Halt,
+    );
+    assert_eq!(cpu.register(2), 0xaa);
+    assert_eq!(bus.load_u8(12).unwrap(), 0xaa);
+    assert_eq!(bus.load_u8(13).unwrap(), 0xaa);
+    assert_eq!(bus.load_u8(14).unwrap(), 0);
+}
+
+#[test]
 fn rux16_loads_and_stores_mmio_through_machine_bus() {
     let mut bus = MachineBus::new(64).unwrap();
     let device_id = bus
@@ -138,6 +166,40 @@ fn rux16_branch_if_nonzero_can_loop_with_negative_relative_offset() {
 }
 
 #[test]
+fn rux16_eq_builds_condition_register_for_branching() {
+    let mut bus = MachineBus::new(64).unwrap();
+    let mut program = vec![const4(1, 7), const4(2, 7)];
+    program.extend(eq(3, 1, 2));
+    program.extend([branch_if_zero(3, 1), const4(4, 5), halt()]);
+    write_words(&mut bus, 0, &program);
+    let mut cpu = Rux16Cpu::new(0);
+
+    assert_eq!(
+        cpu.run_until_signal(&mut bus, 16).unwrap(),
+        Rux16Signal::Halt,
+    );
+    assert_eq!(cpu.register(3), 1);
+    assert_eq!(cpu.register(4), 5);
+}
+
+#[test]
+fn rux16_test_bits_builds_condition_register_from_mask() {
+    let mut bus = MachineBus::new(64).unwrap();
+    let mut program = vec![const4(1, 0b1010)];
+    program.extend(test_bits(2, 1, 0b1000));
+    program.extend([branch_if_zero(2, 1), const4(3, 6), halt()]);
+    write_words(&mut bus, 0, &program);
+    let mut cpu = Rux16Cpu::new(0);
+
+    assert_eq!(
+        cpu.run_until_signal(&mut bus, 16).unwrap(),
+        Rux16Signal::Halt,
+    );
+    assert_eq!(cpu.register(2), 1);
+    assert_eq!(cpu.register(3), 6);
+}
+
+#[test]
 fn rux16_illegal_instruction_reports_trap() {
     let mut bus = MachineBus::new(64).unwrap();
     write_words(&mut bus, 0, &[0xf000]);
@@ -176,8 +238,27 @@ fn add(dst: u8, lhs: u8, rhs: u8) -> u16 {
     0x2000 | (u16::from(dst) << 8) | (u16::from(lhs) << 4) | u16::from(rhs)
 }
 
+fn eq(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    [
+        0x3000 | (u16::from(dst) << 8),
+        (u16::from(lhs) << 4) | u16::from(rhs),
+    ]
+}
+
+fn test_bits(dst: u8, src: u8, mask: u16) -> [u16; 2] {
+    [0x3001 | (u16::from(dst) << 8) | (u16::from(src) << 4), mask]
+}
+
+fn load8(dst: u8, addr: u8) -> u16 {
+    0x4000 | (u16::from(dst) << 8) | (u16::from(addr) << 4)
+}
+
 fn load32(dst: u8, addr: u8) -> u16 {
     0x4002 | (u16::from(dst) << 8) | (u16::from(addr) << 4)
+}
+
+fn store8(addr: u8, src: u8) -> u16 {
+    0x5000 | (u16::from(addr) << 8) | (u16::from(src) << 4)
 }
 
 fn store32(addr: u8, src: u8) -> u16 {

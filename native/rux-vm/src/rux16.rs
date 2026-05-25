@@ -53,7 +53,11 @@ pub enum DecodedInstruction {
     Const4 { dst: usize, value: u32 },
     Const32 { dst: usize, value: u32 },
     Add { dst: usize, lhs: usize, rhs: usize },
+    Eq { dst: usize, lhs: usize, rhs: usize },
+    TestBits { dst: usize, src: usize, mask: u32 },
+    Load8 { dst: usize, addr: usize },
     Load32 { dst: usize, addr: usize },
+    Store8 { addr: usize, src: usize },
     Store32 { addr: usize, src: usize },
     BranchIfZero { src: usize, target_pc: u32 },
     BranchIfNonZero { src: usize, target_pc: u32 },
@@ -105,11 +109,33 @@ impl InstructionDecoder for Rux16Decoder {
                 lhs: b,
                 rhs: c,
             },
+            0x3 => {
+                let extension = bus.load_u16(checked_pc_add(pc, 2)?)?;
+                let instruction = match c {
+                    0x0 if b == 0 => DecodedInstruction::Eq {
+                        dst: a,
+                        lhs: usize::from((extension >> 4) & 0x0f),
+                        rhs: usize::from(extension & 0x0f),
+                    },
+                    0x1 => DecodedInstruction::TestBits {
+                        dst: a,
+                        src: b,
+                        mask: u32::from(extension),
+                    },
+                    _ => return Err(illegal_instruction(pc, word)),
+                };
+                return Ok(DecodeResult {
+                    instruction,
+                    next_pc: checked_pc_add(pc, 4)?,
+                });
+            }
             0x4 => match c {
+                0x0 => DecodedInstruction::Load8 { dst: a, addr: b },
                 0x2 => DecodedInstruction::Load32 { dst: a, addr: b },
                 _ => return Err(illegal_instruction(pc, word)),
             },
             0x5 => match c {
+                0x0 => DecodedInstruction::Store8 { addr: a, src: b },
                 0x2 => DecodedInstruction::Store32 { addr: a, src: b },
                 _ => return Err(illegal_instruction(pc, word)),
             },
@@ -237,8 +263,24 @@ impl Rux16Cpu {
                 self.registers[dst] = self.registers[lhs].wrapping_add(self.registers[rhs]);
                 Ok(None)
             }
+            DecodedInstruction::Eq { dst, lhs, rhs } => {
+                self.registers[dst] = u32::from(self.registers[lhs] == self.registers[rhs]);
+                Ok(None)
+            }
+            DecodedInstruction::TestBits { dst, src, mask } => {
+                self.registers[dst] = u32::from((self.registers[src] & mask) != 0);
+                Ok(None)
+            }
+            DecodedInstruction::Load8 { dst, addr } => {
+                self.registers[dst] = u32::from(bus.load_u8(self.registers[addr])?);
+                Ok(None)
+            }
             DecodedInstruction::Load32 { dst, addr } => {
                 self.registers[dst] = bus.load_i32(self.registers[addr])? as u32;
+                Ok(None)
+            }
+            DecodedInstruction::Store8 { addr, src } => {
+                bus.store_u8(self.registers[addr], self.registers[src] as u8)?;
                 Ok(None)
             }
             DecodedInstruction::Store32 { addr, src } => {

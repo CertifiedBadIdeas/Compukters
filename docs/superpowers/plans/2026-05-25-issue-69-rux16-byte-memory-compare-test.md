@@ -33,13 +33,13 @@ Add these encodings:
 ```text
 0x4ab0       load8  ra, [rb]
 0x5ab0       store8 [ra], rb
-0x3a00 rhs   eq     ra, rb, rc   where rc is encoded by rhs low nibble
-0x3a10 mask  test_bits ra, rb, mask16
+0x3a00 rhs   eq        ra, rb, rc   where rb/rc are encoded by rhs nibbles
+0x3ab1 mask  test_bits ra, rb, mask16
 ```
 
 `eq` consumes one extension word and uses its low nibble as the rhs register. This keeps the compare family extensible without stealing the `c` field for every compare form. It writes `1` when the two registers are equal and `0` otherwise.
 
-`test_bits` consumes one extension word as a zero-extended 16-bit mask. It writes `1` when `(rb & mask) != 0` and `0` otherwise.
+`test_bits` consumes one extension word as a zero-extended 16-bit mask. It writes `1` when `(rb & mask) != 0` and `0` otherwise. It uses `c == 1` so `b` remains available as the source register field.
 
 ## Task 1: Plan Artifact
 
