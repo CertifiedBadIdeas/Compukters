@@ -51,6 +51,7 @@ class RuxRuntimeDevice(
     private var endpoint: RuxComputerEndpoint? = null
     private val displaySessions = DisplaySessionTracker()
     private val renderers = mutableMapOf<Int, SerialTextDisplayRenderer>()
+    private val displaySnapshotRefreshDisplayIds = mutableSetOf<Int>()
     private var labelBacking: String? = properties.label
     private var renderedSerialBytes = 0
 
@@ -74,6 +75,7 @@ class RuxRuntimeDevice(
         endpoint = null
         renderedSerialBytes = 0
         renderers.clear()
+        displaySnapshotRefreshDisplayIds.clear()
         current.close()
         stateSink.onPowerStateChanged(false)
     }
@@ -127,6 +129,7 @@ class RuxRuntimeDevice(
         height: Int,
     ) {
         displaySessions.attach(playerUuid, containerId, displayId, width, height)
+        displaySnapshotRefreshDisplayIds += displayId
     }
 
     override fun resizeDisplaySession(
@@ -137,6 +140,7 @@ class RuxRuntimeDevice(
     ) {
         displaySessions.resize(playerUuid, displayId, width, height)
         renderers.remove(displayId)
+        displaySnapshotRefreshDisplayIds += displayId
     }
 
     override fun detachDisplaySession(
@@ -145,6 +149,7 @@ class RuxRuntimeDevice(
     ) {
         val detachedDisplayId = displaySessions.detach(playerUuid, displayId) ?: return
         renderers.remove(detachedDisplayId)
+        displaySnapshotRefreshDisplayIds.remove(detachedDisplayId)
     }
 
     private fun argumentBytes(value: Any?): ByteArray? =
@@ -188,7 +193,13 @@ class RuxRuntimeDevice(
     private fun flushRuxDisplaySnapshot(current: RuxComputerEndpoint): Boolean {
         if (current.display0Snapshot() == null) return false
         if (displaySessions.isEmpty()) return true
-        val snapshot = current.pollDisplay0Snapshot() ?: return true
+        val refreshDisplayIds = displaySnapshotRefreshDisplayIds.toSet()
+        val snapshot =
+            if (refreshDisplayIds.isNotEmpty()) {
+                current.display0Snapshot().also { current.pollDisplay0Snapshot() }
+            } else {
+                current.pollDisplay0Snapshot()
+            } ?: return true
         for (endpoint in displaySessions.activeEndpoints()) {
             val renderer = SerialTextDisplayRenderer(snapshot.columns, snapshot.rows)
             renderer.replaceCells(snapshot.cells)
@@ -201,6 +212,7 @@ class RuxRuntimeDevice(
                 )
             sendFrame(endpoint.displayId, frame)
         }
+        displaySnapshotRefreshDisplayIds.removeAll(refreshDisplayIds)
         return true
     }
 
