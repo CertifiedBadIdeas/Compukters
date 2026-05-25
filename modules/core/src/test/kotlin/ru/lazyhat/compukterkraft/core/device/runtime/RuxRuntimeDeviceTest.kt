@@ -155,6 +155,42 @@ class RuxRuntimeDeviceTest {
     }
 
     @Test
+    fun sendsCurrentRuxDisplaySnapshotWhenDisplaySessionReopensWithoutNewVmFrame() {
+        val endpoint = RecordingRuxEndpoint()
+        val displayNetwork = RecordingDisplayNetworkBridge()
+        val device =
+            RuxRuntimeDevice(
+                deviceId = 15,
+                properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
+                endpointFactory = { endpoint },
+                stateSink = {},
+                displayNetwork = displayNetwork,
+            )
+        val playerUuid = UUID.randomUUID()
+        endpoint.displaySnapshot =
+            NativeRuxComputerDisplaySnapshot(
+                columns = 80,
+                rows = 25,
+                cursorX = 0,
+                cursorY = 0,
+                sequence = 1,
+                cells = "No Bootable Device".encodeToByteArray() + ByteArray(80 * 25 - "No Bootable Device".length),
+            )
+
+        device.attachDisplaySession(playerUuid, containerId = 20, displayId = 1, width = 400, height = 200)
+        device.turnOn()
+        device.serverTick()
+        device.detachDisplaySession(playerUuid, displayId = 1)
+        device.attachDisplaySession(playerUuid, containerId = 21, displayId = 1, width = 400, height = 200)
+        device.serverTick()
+
+        assertEquals(2, displayNetwork.sentFrames.size)
+        assertEquals(listOf(20, 21), displayNetwork.sentFrames.map { it.containerId })
+        assertTrue(displayNetwork.sentFrames.all { it.frame.fullRefresh })
+        assertTrue(displayNetwork.sentFrames.last().frame.tiles.single().payload.any { it != 0.toByte() })
+    }
+
+    @Test
     fun dispatchesCharacterInputThroughSerialEchoToDisplayFrame() {
         val endpoint = RecordingRuxEndpoint()
         val displayNetwork = RecordingDisplayNetworkBridge()
