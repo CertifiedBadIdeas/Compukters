@@ -370,6 +370,33 @@ fn rux_computer_handle_rux16_bios_loads_stage2_from_storage_and_jumps_to_ram() {
 }
 
 #[test]
+fn rux_computer_handle_rux16_bios_rejects_corrupt_boot_header_magic() {
+    let entry_pc = 2048;
+    let bios = rux16_words(&rux16_stage2_boot_bios_words());
+    let stage2 = rux16_words(&rux16_stage2_program_words());
+    let mut media = rux16_boot_media(entry_pc, entry_pc, 1, 1, &stage2);
+    media[0..4].copy_from_slice(b"NOPE");
+    let mut handle = RuxComputerHandle::create_rux16_bios_flash_with_storage0_media(
+        &bios,
+        64 * 1024,
+        512,
+        media,
+    )
+    .expect("Rux16 BIOS flash computer creates with corrupt boot media");
+
+    assert_eq!(handle.run_rux16_until_signal().unwrap(), Rux16Signal::Halt);
+    assert_eq!(handle.debug_output_bytes(), b"");
+    assert_eq!(
+        handle.control(),
+        RuxComputerControl {
+            status: ComputerMachine::STATUS_HALTED,
+            exit_code: 0,
+            panic_code: 0xB,
+        },
+    );
+}
+
+#[test]
 fn rux_computer_handle_boot_handoff_rejects_empty_image_and_keeps_bios_cpu() {
     let bios = halt_i32_image(1);
     let mut handle =
