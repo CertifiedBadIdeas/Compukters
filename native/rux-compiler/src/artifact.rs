@@ -59,7 +59,15 @@ struct Rux16ArtifactBackend {
     words: Vec<u16>,
     consts: HashMap<String, i32>,
     functions: HashMap<String, FunctionDecl>,
+    locals: HashMap<String, Rux16Local>,
     call_stack: Vec<String>,
+    next_register: u8,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Rux16Local {
+    ty: TypeName,
+    register: u8,
 }
 
 impl Rux16ArtifactBackend {
@@ -68,7 +76,9 @@ impl Rux16ArtifactBackend {
             words: Vec::new(),
             consts,
             functions,
+            locals: HashMap::new(),
             call_stack: Vec::new(),
+            next_register: 3,
         }
     }
 
@@ -82,9 +92,11 @@ impl Rux16ArtifactBackend {
             .cloned()
             .ok_or_else(|| CompileError {
                 message: format!("Rux16 backend does not support this program yet: unknown helper function `{name}`"),
-            })?;
+        })?;
         self.call_stack.push(name.to_string());
+        let caller_locals = std::mem::take(&mut self.locals);
         let result = self.compile_statements(&function.statements, false);
+        self.locals = caller_locals;
         self.call_stack.pop();
         result
     }
@@ -108,8 +120,12 @@ impl Rux16ArtifactBackend {
         match statement {
             Statement::Unsafe(statements) => self.compile_statements(statements, true),
             Statement::Expr(expr) => self.compile_expr_statement(expr, unsafe_context),
-            Statement::Let { .. }
-            | Statement::Assign { .. }
+            Statement::Let {
+                name,
+                ty,
+                initializer,
+            } => self.compile_let_statement(name, *ty, initializer.as_ref(), unsafe_context),
+            Statement::Assign { .. }
             | Statement::AssignOp { .. }
             | Statement::IndexAssign { .. }
             | Statement::DerefAssign { .. }
@@ -121,6 +137,42 @@ impl Rux16ArtifactBackend {
                 unsupported("only unsafe MMIO store statements can be lowered")
             }
         }
+    }
+
+    fn compile_let_statement(
+        &mut self,
+        name: &str,
+        ty: TypeName,
+        initializer: Option<&Expr>,
+        unsafe_context: bool,
+    ) -> Result<(), CompileError> {
+        if self.locals.contains_key(name) {
+            return unsupported(format!("duplicate Rux16 local `{name}`"));
+        }
+        let initializer = initializer.ok_or_else(|| CompileError {
+            message: format!(
+                "Rux16 backend does not support this program yet: local `{name}` requires an initializer"
+            ),
+        })?;
+        let register = self.alloc_register()?;
+        match ty {
+            TypeName::I32 => self.compile_i32_expr_into(register, initializer, unsafe_context)?,
+            TypeName::U8 => self.compile_u8_expr_into(register, initializer, unsafe_context)?,
+            TypeName::U32
+            | TypeName::Bool
+            | TypeName::PtrI32
+            | TypeName::PtrU32
+            | TypeName::PtrU8
+            | TypeName::RefMutI32
+            | TypeName::RefMutU32
+            | TypeName::RefMutU8
+            | TypeName::ArrayU8(_) => {
+                return unsupported("only i32 and u8 locals can be lowered to Rux16 yet");
+            }
+        }
+        self.locals
+            .insert(name.to_string(), Rux16Local { ty, register });
+        Ok(())
     }
 
     fn compile_expr_statement(
@@ -160,16 +212,12 @@ impl Rux16ArtifactBackend {
             .extend_from_slice(&rux16_asm::const32(1, address));
         match ty {
             TypeName::I32 => {
-                let value = self.eval_i32_value(&args[0])?;
-                self.words
-                    .extend_from_slice(&rux16_asm::const32(2, value as u32));
-                self.words.push(rux16_asm::store32(1, 2));
+                let src = self.compile_i32_expr_to_scratch(&args[0], unsafe_context)?;
+                self.words.push(rux16_asm::store32(1, src));
             }
             TypeName::U8 => {
-                let value = self.eval_u8_value(&args[0])?;
-                self.words
-                    .extend_from_slice(&rux16_asm::const32(2, u32::from(value)));
-                self.words.push(rux16_asm::store8(1, 2));
+                let src = self.compile_u8_expr_to_scratch(&args[0], unsafe_context)?;
+                self.words.push(rux16_asm::store8(1, src));
             }
             TypeName::U32
             | TypeName::Bool
@@ -184,6 +232,153 @@ impl Rux16ArtifactBackend {
             }
         }
         Ok(())
+    }
+
+    fn compile_i32_expr_to_scratch(
+        &mut self,
+        expr: &Expr,
+        unsafe_context: bool,
+    ) -> Result<u8, CompileError> {
+        if let Expr::Local(name) = expr {
+            if let Some(local) = self.local(name, TypeName::I32)? {
+                return Ok(local.register);
+            }
+        }
+        self.compile_i32_expr_into(2, expr, unsafe_context)?;
+        Ok(2)
+    }
+
+    fn compile_u8_expr_to_scratch(
+        &mut self,
+        expr: &Expr,
+        unsafe_context: bool,
+    ) -> Result<u8, CompileError> {
+        if let Expr::Local(name) = expr {
+            if let Some(local) = self.local(name, TypeName::U8)? {
+                return Ok(local.register);
+            }
+        }
+        self.compile_u8_expr_into(2, expr, unsafe_context)?;
+        Ok(2)
+    }
+
+    fn compile_i32_expr_into(
+        &mut self,
+        dst: u8,
+        expr: &Expr,
+        unsafe_context: bool,
+    ) -> Result<(), CompileError> {
+        match expr {
+            Expr::Local(name) => {
+                if self.local(name, TypeName::I32)?.is_some() {
+                    return unsupported("Rux16 local-to-local moves are not supported yet");
+                }
+                let value = self.eval_i32_value(expr)?;
+                self.words
+                    .extend_from_slice(&rux16_asm::const32(dst, value as u32));
+                Ok(())
+            }
+            Expr::MethodCall {
+                receiver,
+                method,
+                args,
+            } if method == "load" => {
+                if !args.is_empty() {
+                    return unsupported("memory `.load()` requires no arguments");
+                }
+                let Expr::Mmio { ty, address } = receiver.as_ref() else {
+                    return unsupported("only `mmio<T>(...).load()` can be lowered");
+                };
+                if !unsafe_context {
+                    return unsupported("MMIO load requires `unsafe`");
+                }
+                if *ty != TypeName::I32 {
+                    return unsupported("i32 local initializer requires `mmio<i32>(...).load()`");
+                }
+                let address = self.eval_mmio_address(address)?;
+                self.words
+                    .extend_from_slice(&rux16_asm::const32(1, address));
+                self.words.push(rux16_asm::load32(dst, 1));
+                Ok(())
+            }
+            _ => {
+                let value = self.eval_i32_value(expr)?;
+                self.words
+                    .extend_from_slice(&rux16_asm::const32(dst, value as u32));
+                Ok(())
+            }
+        }
+    }
+
+    fn compile_u8_expr_into(
+        &mut self,
+        dst: u8,
+        expr: &Expr,
+        unsafe_context: bool,
+    ) -> Result<(), CompileError> {
+        match expr {
+            Expr::Local(name) => {
+                if self.local(name, TypeName::U8)?.is_some() {
+                    return unsupported("Rux16 local-to-local moves are not supported yet");
+                }
+                let value = self.eval_u8_value(expr)?;
+                self.words
+                    .extend_from_slice(&rux16_asm::const32(dst, u32::from(value)));
+                Ok(())
+            }
+            Expr::MethodCall {
+                receiver,
+                method,
+                args,
+            } if method == "load" => {
+                if !args.is_empty() {
+                    return unsupported("memory `.load()` requires no arguments");
+                }
+                let Expr::Mmio { ty, address } = receiver.as_ref() else {
+                    return unsupported("only `mmio<T>(...).load()` can be lowered");
+                };
+                if !unsafe_context {
+                    return unsupported("MMIO load requires `unsafe`");
+                }
+                if *ty != TypeName::U8 {
+                    return unsupported("u8 local initializer requires `mmio<u8>(...).load()`");
+                }
+                let address = self.eval_mmio_address(address)?;
+                self.words
+                    .extend_from_slice(&rux16_asm::const32(1, address));
+                self.words.push(rux16_asm::load8(dst, 1));
+                Ok(())
+            }
+            _ => {
+                let value = self.eval_u8_value(expr)?;
+                self.words
+                    .extend_from_slice(&rux16_asm::const32(dst, u32::from(value)));
+                Ok(())
+            }
+        }
+    }
+
+    fn local(&self, name: &str, expected: TypeName) -> Result<Option<Rux16Local>, CompileError> {
+        let Some(local) = self.locals.get(name).copied() else {
+            return Ok(None);
+        };
+        if local.ty != expected {
+            return unsupported(format!(
+                "local `{name}` has type {}, expected {}",
+                type_name(local.ty),
+                type_name(expected)
+            ));
+        }
+        Ok(Some(local))
+    }
+
+    fn alloc_register(&mut self) -> Result<u8, CompileError> {
+        let register = self.next_register;
+        if register > 15 {
+            return unsupported("Rux16 backend ran out of registers");
+        }
+        self.next_register += 1;
+        Ok(register)
     }
 
     fn eval_mmio_address(&self, expr: &Expr) -> Result<u32, CompileError> {
@@ -359,6 +554,26 @@ fn resolve_builtin_constant(name: &str) -> Option<BuiltinConstant> {
         "CONTROL_EXIT_CODE" => Some(BuiltinConstant::Addr(computer_abi::CONTROL_EXIT_CODE)),
         "DEBUG_BASE" => Some(BuiltinConstant::Addr(computer_abi::DEBUG_BASE)),
         "DEBUG_WRITE" => Some(BuiltinConstant::Addr(computer_abi::DEBUG_WRITE)),
+        "SERIAL_INPUT_BASE" => Some(BuiltinConstant::Addr(computer_abi::SERIAL_INPUT_BASE)),
+        "SERIAL_INPUT_READY" => Some(BuiltinConstant::Addr(computer_abi::SERIAL_INPUT_READY)),
+        "SERIAL_INPUT_READ" => Some(BuiltinConstant::Addr(computer_abi::SERIAL_INPUT_READ)),
+        "STORAGE0_BASE" => Some(BuiltinConstant::Addr(computer_abi::STORAGE0_BASE)),
+        "STORAGE0_STATUS" => Some(BuiltinConstant::Addr(computer_abi::STORAGE0_STATUS)),
+        "STORAGE0_ERROR" => Some(BuiltinConstant::Addr(computer_abi::STORAGE0_ERROR)),
+        "STORAGE0_COMMAND" => Some(BuiltinConstant::Addr(computer_abi::STORAGE0_COMMAND)),
+        "STORAGE0_BLOCK_SIZE" => Some(BuiltinConstant::Addr(computer_abi::STORAGE0_BLOCK_SIZE)),
+        "STORAGE0_LBA_LOW" => Some(BuiltinConstant::Addr(computer_abi::STORAGE0_LBA_LOW)),
+        "STORAGE0_LBA_HIGH" => Some(BuiltinConstant::Addr(computer_abi::STORAGE0_LBA_HIGH)),
+        "STORAGE0_BLOCK_COUNT" => Some(BuiltinConstant::Addr(computer_abi::STORAGE0_BLOCK_COUNT)),
+        "STORAGE0_BUFFER_ADDR" => Some(BuiltinConstant::Addr(computer_abi::STORAGE0_BUFFER_ADDR)),
+        "STORAGE0_BYTES_DONE" => Some(BuiltinConstant::Addr(computer_abi::STORAGE0_BYTES_DONE)),
+        "STORAGE_STATUS_READY" => Some(BuiltinConstant::I32(computer_abi::STORAGE_STATUS_READY)),
+        "STORAGE_STATUS_BUSY" => Some(BuiltinConstant::I32(computer_abi::STORAGE_STATUS_BUSY)),
+        "STORAGE_STATUS_DONE" => Some(BuiltinConstant::I32(computer_abi::STORAGE_STATUS_DONE)),
+        "STORAGE_STATUS_ERROR" => Some(BuiltinConstant::I32(computer_abi::STORAGE_STATUS_ERROR)),
+        "STORAGE_COMMAND_READ_BLOCKS" => Some(BuiltinConstant::I32(
+            computer_abi::STORAGE_COMMAND_READ_BLOCKS,
+        )),
         "STATUS_RESET" => Some(BuiltinConstant::I32(computer_abi::STATUS_RESET)),
         "STATUS_BOOTING" => Some(BuiltinConstant::I32(computer_abi::STATUS_BOOTING)),
         "STATUS_READY" => Some(BuiltinConstant::I32(computer_abi::STATUS_READY)),
@@ -444,4 +659,20 @@ fn unsupported<T>(message: impl Into<String>) -> Result<T, CompileError> {
             message.into()
         ),
     })
+}
+
+fn type_name(ty: TypeName) -> &'static str {
+    match ty {
+        TypeName::I32 => "i32",
+        TypeName::U32 => "u32",
+        TypeName::U8 => "u8",
+        TypeName::Bool => "bool",
+        TypeName::PtrI32 => "ptr<i32>",
+        TypeName::PtrU32 => "ptr<u32>",
+        TypeName::PtrU8 => "ptr<u8>",
+        TypeName::RefMutI32 => "&mut i32",
+        TypeName::RefMutU32 => "&mut u32",
+        TypeName::RefMutU8 => "&mut u8",
+        TypeName::ArrayU8(_) => "[u8]",
+    }
 }

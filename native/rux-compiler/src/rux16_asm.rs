@@ -19,6 +19,18 @@ pub(crate) fn const32(register: u8, value: u32) -> [u16; 3] {
     ]
 }
 
+pub(crate) fn load32(dst: u8, addr: u8) -> u16 {
+    assert_register(dst);
+    assert_register(addr);
+    0x4002 | (u16::from(dst) << 8) | (u16::from(addr) << 4)
+}
+
+pub(crate) fn load8(dst: u8, addr: u8) -> u16 {
+    assert_register(dst);
+    assert_register(addr);
+    0x4000 | (u16::from(dst) << 8) | (u16::from(addr) << 4)
+}
+
 pub(crate) fn store32(addr: u8, src: u8) -> u16 {
     assert_register(addr);
     assert_register(src);
