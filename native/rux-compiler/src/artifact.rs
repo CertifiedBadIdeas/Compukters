@@ -802,6 +802,29 @@ fn resolve_builtin_constant(name: &str) -> Option<BuiltinConstant> {
         "CONTROL_EXIT_CODE" => Some(BuiltinConstant::Addr(computer_abi::CONTROL_EXIT_CODE)),
         "DEBUG_BASE" => Some(BuiltinConstant::Addr(computer_abi::DEBUG_BASE)),
         "DEBUG_WRITE" => Some(BuiltinConstant::Addr(computer_abi::DEBUG_WRITE)),
+        "DISPLAY0_BASE" => Some(BuiltinConstant::Addr(computer_abi::DISPLAY0_BASE)),
+        "DISPLAY0_COLUMNS" => Some(BuiltinConstant::Addr(computer_abi::DISPLAY0_COLUMNS)),
+        "DISPLAY0_ROWS" => Some(BuiltinConstant::Addr(computer_abi::DISPLAY0_ROWS)),
+        "DISPLAY0_CURSOR_X" => Some(BuiltinConstant::Addr(computer_abi::DISPLAY0_CURSOR_X)),
+        "DISPLAY0_CURSOR_Y" => Some(BuiltinConstant::Addr(computer_abi::DISPLAY0_CURSOR_Y)),
+        "DISPLAY0_COMMAND" => Some(BuiltinConstant::Addr(computer_abi::DISPLAY0_COMMAND)),
+        "DISPLAY0_DATA" => Some(BuiltinConstant::Addr(computer_abi::DISPLAY0_DATA)),
+        "DISPLAY0_SEQUENCE_LOW" => Some(BuiltinConstant::Addr(computer_abi::DISPLAY0_SEQUENCE_LOW)),
+        "DISPLAY0_SEQUENCE_HIGH" => {
+            Some(BuiltinConstant::Addr(computer_abi::DISPLAY0_SEQUENCE_HIGH))
+        }
+        "DISPLAY0_COMMAND_CLEAR" => {
+            Some(BuiltinConstant::I32(computer_abi::DISPLAY0_COMMAND_CLEAR))
+        }
+        "DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR" => Some(BuiltinConstant::I32(
+            computer_abi::DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR,
+        )),
+        "DISPLAY0_COMMAND_PUT_BYTE_AT_XY" => Some(BuiltinConstant::I32(
+            computer_abi::DISPLAY0_COMMAND_PUT_BYTE_AT_XY,
+        )),
+        "DISPLAY0_COMMAND_NEWLINE" => {
+            Some(BuiltinConstant::I32(computer_abi::DISPLAY0_COMMAND_NEWLINE))
+        }
         "SERIAL_INPUT_BASE" => Some(BuiltinConstant::Addr(computer_abi::SERIAL_INPUT_BASE)),
         "SERIAL_INPUT_READY" => Some(BuiltinConstant::Addr(computer_abi::SERIAL_INPUT_READY)),
         "SERIAL_INPUT_READ" => Some(BuiltinConstant::Addr(computer_abi::SERIAL_INPUT_READ)),
