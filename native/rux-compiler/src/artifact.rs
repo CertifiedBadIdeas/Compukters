@@ -410,20 +410,38 @@ impl Rux16ArtifactBackend {
                 if !args.is_empty() {
                     return unsupported("memory `.load()` requires no arguments");
                 }
-                let Expr::Mmio { ty, address } = receiver.as_ref() else {
-                    return unsupported("only `mmio<T>(...).load()` can be lowered");
-                };
                 if !unsafe_context {
-                    return unsupported("MMIO load requires `unsafe`");
+                    return unsupported("memory load requires `unsafe`");
                 }
-                if *ty != TypeName::I32 {
-                    return unsupported("i32 local initializer requires `mmio<i32>(...).load()`");
+                match receiver.as_ref() {
+                    Expr::Mmio { ty, address } => {
+                        if *ty != TypeName::I32 {
+                            return unsupported(
+                                "i32 local initializer requires `mmio<i32>(...).load()`",
+                            );
+                        }
+                        let address = self.eval_mmio_address(address)?;
+                        self.words
+                            .extend_from_slice(&rux16_asm::const32(1, address));
+                        self.words.push(rux16_asm::load32(dst, 1));
+                        Ok(())
+                    }
+                    Expr::Ptr { ty, address } => {
+                        if *ty != TypeName::I32 {
+                            return unsupported(
+                                "i32 local initializer requires `ptr<i32>(...).load()`",
+                            );
+                        }
+                        let address = self.eval_ram_address(address)?;
+                        self.words
+                            .extend_from_slice(&rux16_asm::const32(1, address));
+                        self.words.push(rux16_asm::load32(dst, 1));
+                        Ok(())
+                    }
+                    _ => unsupported(
+                        "only `mmio<T>(...).load()` and `ptr<T>(...).load()` can be lowered",
+                    ),
                 }
-                let address = self.eval_mmio_address(address)?;
-                self.words
-                    .extend_from_slice(&rux16_asm::const32(1, address));
-                self.words.push(rux16_asm::load32(dst, 1));
-                Ok(())
             }
             _ => {
                 let value = self.eval_i32_value(expr)?;
@@ -458,20 +476,38 @@ impl Rux16ArtifactBackend {
                 if !args.is_empty() {
                     return unsupported("memory `.load()` requires no arguments");
                 }
-                let Expr::Mmio { ty, address } = receiver.as_ref() else {
-                    return unsupported("only `mmio<T>(...).load()` can be lowered");
-                };
                 if !unsafe_context {
-                    return unsupported("MMIO load requires `unsafe`");
+                    return unsupported("memory load requires `unsafe`");
                 }
-                if *ty != TypeName::U8 {
-                    return unsupported("u8 local initializer requires `mmio<u8>(...).load()`");
+                match receiver.as_ref() {
+                    Expr::Mmio { ty, address } => {
+                        if *ty != TypeName::U8 {
+                            return unsupported(
+                                "u8 local initializer requires `mmio<u8>(...).load()`",
+                            );
+                        }
+                        let address = self.eval_mmio_address(address)?;
+                        self.words
+                            .extend_from_slice(&rux16_asm::const32(1, address));
+                        self.words.push(rux16_asm::load8(dst, 1));
+                        Ok(())
+                    }
+                    Expr::Ptr { ty, address } => {
+                        if *ty != TypeName::U8 {
+                            return unsupported(
+                                "u8 local initializer requires `ptr<u8>(...).load()`",
+                            );
+                        }
+                        let address = self.eval_ram_address(address)?;
+                        self.words
+                            .extend_from_slice(&rux16_asm::const32(1, address));
+                        self.words.push(rux16_asm::load8(dst, 1));
+                        Ok(())
+                    }
+                    _ => unsupported(
+                        "only `mmio<T>(...).load()` and `ptr<T>(...).load()` can be lowered",
+                    ),
                 }
-                let address = self.eval_mmio_address(address)?;
-                self.words
-                    .extend_from_slice(&rux16_asm::const32(1, address));
-                self.words.push(rux16_asm::load8(dst, 1));
-                Ok(())
             }
             _ => {
                 let value = self.eval_u8_value(expr)?;
@@ -580,6 +616,44 @@ impl Rux16ArtifactBackend {
             | Expr::Logical { .. }
             | Expr::Compare { .. } => {
                 unsupported("only literal or ABI MMIO addresses can be lowered")
+            }
+        }
+    }
+
+    fn eval_ram_address(&self, expr: &Expr) -> Result<u32, CompileError> {
+        match expr {
+            Expr::Int(value) => u32::try_from(*value).map_err(|_| CompileError {
+                message: format!("RAM address literal `{value}` does not fit `u32`"),
+            }),
+            Expr::IntU32(value) => u32::try_from(*value).map_err(|_| CompileError {
+                message: format!("RAM address literal `{value}u32` does not fit `u32`"),
+            }),
+            Expr::IntU8(value) => u32::try_from(*value).map_err(|_| CompileError {
+                message: format!("RAM address literal `{value}u8` does not fit `u32`"),
+            }),
+            Expr::Local(name) => {
+                if let Some(value) = self.consts.get(name).copied() {
+                    return u32::try_from(value).map_err(|_| CompileError {
+                        message: format!("const `{name}` value `{value}` does not fit `u32`"),
+                    });
+                }
+                unsupported(format!("unknown Rux16 RAM address `{name}`"))
+            }
+            Expr::Binary { .. }
+            | Expr::ByteString(_)
+            | Expr::Bool(_)
+            | Expr::Call { .. }
+            | Expr::Mmio { .. }
+            | Expr::Ptr { .. }
+            | Expr::MethodCall { .. }
+            | Expr::Index { .. }
+            | Expr::AddressOfMut(_)
+            | Expr::Deref(_)
+            | Expr::Cast { .. }
+            | Expr::Unary { .. }
+            | Expr::Logical { .. }
+            | Expr::Compare { .. } => {
+                unsupported("only literal or const RAM addresses can be lowered")
             }
         }
     }
