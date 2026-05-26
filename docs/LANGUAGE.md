@@ -2,8 +2,9 @@
 
 The Compukter Kraft Language (CKL) and its in-game IDE/Workbench were removed
 as part of the Rux MVP cutover (issue #26). The mod no longer ships a
-player-facing high-level language: all computers boot a precompiled
-`rux-laptop.ruxi` image produced by the Rust toolchain in
-`native/rux-compiler/` and executed by `native/rux-vm/`.
+player-facing high-level language. Current runtime work uses Rux16 binary
+artifacts: `rux compile` produces raw guest code, `rux disasm --target ...`
+prints readable instruction output, and `rux volume` prepares storage0
+`ruxvol` boot media.
 
 If you need the previous CKL design notes, see the git history of this file.

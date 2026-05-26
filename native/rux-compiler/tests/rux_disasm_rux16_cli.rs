@@ -87,7 +87,7 @@ fn rux_disasm_prints_bios_artifact_from_bios_flash_base() {
 fn temp_file(name: &str) -> PathBuf {
     let counter = TEMP_FILE_COUNTER.fetch_add(1, Ordering::Relaxed);
     let path = std::env::temp_dir().join(format!(
-        "rux-disasm-rux16-{}-{counter}-{name}",
+        "rux16-disasm-{}-{counter}-{name}",
         std::process::id()
     ));
     let _ = fs::remove_file(&path);
