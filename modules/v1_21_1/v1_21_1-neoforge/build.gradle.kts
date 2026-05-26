@@ -84,3 +84,44 @@ dependencies {
 
 val rustVmNativePlatform = currentRustVmNativePlatform()
 val rustVmNativeLibrary = rootProject.layout.projectDirectory.file("native/rux-vm/target/debug/${rustVmNativePlatform.libraryName}")
+val generatedRuxFirmwareResources = layout.buildDirectory.dir("generated/rux-firmware-resources")
+val ruxCompilerManifest = rootProject.layout.projectDirectory.file("native/rux-compiler/Cargo.toml")
+val rux16BiosSource = rootProject.layout.projectDirectory.file("native/rux-compiler/examples/firmware/rux16_bios.rx")
+val rux16BiosFlashResource = generatedRuxFirmwareResources.map { it.file("firmware/rux16-bios.flash") }
+
+val compileRux16BiosFlash =
+    tasks.register<Exec>("compileRux16BiosFlash") {
+        description = "Compiles the bundled Rux16 BIOS source into a raw BIOS flash resource."
+        group = "rux"
+        inputs.file(ruxCompilerManifest)
+        inputs.file(rux16BiosSource)
+        outputs.file(rux16BiosFlashResource)
+
+        doFirst {
+            rux16BiosFlashResource.get().asFile.parentFile.mkdirs()
+        }
+
+        commandLine(
+            "cargo",
+            "run",
+            "--manifest-path",
+            ruxCompilerManifest.asFile.absolutePath,
+            "--bin",
+            "rux",
+            "--",
+            "compile",
+            "--target",
+            "bios",
+            rux16BiosSource.asFile.absolutePath,
+            "-o",
+            rux16BiosFlashResource.get().asFile.absolutePath,
+        )
+    }
+
+sourceSets.main {
+    resources.srcDir(generatedRuxFirmwareResources)
+}
+
+tasks.named("processResources") {
+    dependsOn(compileRux16BiosFlash)
+}

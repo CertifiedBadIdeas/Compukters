@@ -25,7 +25,7 @@ import kotlin.io.path.exists
 import kotlin.io.path.writeBytes
 
 object RuxBiosFlashWorkspace {
-    const val DEFAULT_BIOS_FLASH_RESOURCE: String = "firmware/rux16-bios.flash.words"
+    const val DEFAULT_BIOS_FLASH_RESOURCE: String = "firmware/rux16-bios.flash"
     const val BIOS_FLASH_FILENAME: String = "bios.flash"
 
     fun prepareBiosFlash(
@@ -47,44 +47,9 @@ object RuxBiosFlashWorkspace {
     fun loadBiosFlashResource(
         resourcePath: String = DEFAULT_BIOS_FLASH_RESOURCE,
         classLoader: ClassLoader = RuxBiosFlashWorkspace::class.java.classLoader,
-    ): ByteArray {
-        val source =
-            classLoader
-                .getResourceAsStream(resourcePath)
-                ?.use { it.readBytes().decodeToString() }
-                ?: error("Rux16 BIOS flash resource not found: $resourcePath")
-        return decodeWords(source, resourcePath)
-    }
-
-    private fun decodeWords(
-        source: String,
-        resourcePath: String,
-    ): ByteArray {
-        val words =
-            source
-                .lineSequence()
-                .flatMap { line ->
-                    line
-                        .substringBefore("#")
-                        .trim()
-                        .splitToSequence(Regex("\\s+"))
-                }.filter { token -> token.isNotBlank() }
-                .map { token ->
-                    val normalized = token.removePrefix("0x").removePrefix("0X")
-                    require(normalized.length in 1..4 && normalized.all(::isHexDigit)) {
-                        "Invalid Rux16 BIOS flash word '$token' in $resourcePath"
-                    }
-                    normalized.toInt(16)
-                }.toList()
-
-        val bytes = ByteArray(words.size * 2)
-        for ((index, word) in words.withIndex()) {
-            bytes[index * 2] = (word and 0xff).toByte()
-            bytes[index * 2 + 1] = ((word ushr 8) and 0xff).toByte()
-        }
-        return bytes
-    }
-
-    private fun isHexDigit(char: Char): Boolean =
-        char in '0'..'9' || char in 'a'..'f' || char in 'A'..'F'
+    ): ByteArray =
+        classLoader
+            .getResourceAsStream(resourcePath)
+            ?.use { it.readBytes() }
+            ?: error("Rux16 BIOS flash resource not found: $resourcePath")
 }
