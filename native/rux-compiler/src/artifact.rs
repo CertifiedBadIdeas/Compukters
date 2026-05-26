@@ -1,5 +1,5 @@
 use crate::frontend::ast::{
-    ConstDecl, Expr, FunctionDecl, Program, ReturnType, Statement, TypeName,
+    CompareOp, ConstDecl, Expr, FunctionDecl, Program, ReturnType, Statement, TypeName,
 };
 use crate::frontend::CompileError;
 use crate::rux16_asm;
@@ -45,7 +45,7 @@ pub(crate) fn compile(
 ) -> Result<Rux16Artifact, CompileError> {
     let consts = evaluate_consts(&program.consts)?;
     let functions = collect_supported_functions(&program)?;
-    let mut backend = Rux16ArtifactBackend::new(consts, functions);
+    let mut backend = Rux16ArtifactBackend::new(consts, functions, target.base_address());
     backend.inline_function("main")?;
     backend.words.push(rux16_asm::halt());
 
@@ -62,6 +62,7 @@ struct Rux16ArtifactBackend {
     locals: HashMap<String, Rux16Local>,
     call_stack: Vec<String>,
     next_register: u8,
+    base_address: u32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -71,7 +72,11 @@ struct Rux16Local {
 }
 
 impl Rux16ArtifactBackend {
-    fn new(consts: HashMap<String, i32>, functions: HashMap<String, FunctionDecl>) -> Self {
+    fn new(
+        consts: HashMap<String, i32>,
+        functions: HashMap<String, FunctionDecl>,
+        base_address: u32,
+    ) -> Self {
         Self {
             words: Vec::new(),
             consts,
@@ -79,6 +84,7 @@ impl Rux16ArtifactBackend {
             locals: HashMap::new(),
             call_stack: Vec::new(),
             next_register: 3,
+            base_address,
         }
     }
 
@@ -125,12 +131,23 @@ impl Rux16ArtifactBackend {
                 ty,
                 initializer,
             } => self.compile_let_statement(name, *ty, initializer.as_ref(), unsafe_context),
+            Statement::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => self.compile_if_statement(
+                condition,
+                then_branch,
+                else_branch.as_deref(),
+                unsafe_context,
+            ),
+            Statement::While { condition, body } => {
+                self.compile_while_statement(condition, body, unsafe_context)
+            }
             Statement::Assign { .. }
             | Statement::AssignOp { .. }
             | Statement::IndexAssign { .. }
             | Statement::DerefAssign { .. }
-            | Statement::If { .. }
-            | Statement::While { .. }
             | Statement::Break
             | Statement::Continue
             | Statement::Return(_) => {
@@ -172,6 +189,44 @@ impl Rux16ArtifactBackend {
         }
         self.locals
             .insert(name.to_string(), Rux16Local { ty, register });
+        Ok(())
+    }
+
+    fn compile_if_statement(
+        &mut self,
+        condition: &Expr,
+        then_branch: &[Statement],
+        else_branch: Option<&[Statement]>,
+        unsafe_context: bool,
+    ) -> Result<(), CompileError> {
+        self.compile_condition_into(2, condition, unsafe_context)?;
+        self.words.push(rux16_asm::branch_if_nonzero(2, 4));
+        let false_jump = self.emit_absolute_jump_placeholder();
+        self.compile_statements(then_branch, unsafe_context)?;
+        if let Some(else_branch) = else_branch {
+            let end_jump = self.emit_absolute_jump_placeholder();
+            self.patch_absolute_jump(false_jump, self.current_address())?;
+            self.compile_statements(else_branch, unsafe_context)?;
+            self.patch_absolute_jump(end_jump, self.current_address())?;
+        } else {
+            self.patch_absolute_jump(false_jump, self.current_address())?;
+        }
+        Ok(())
+    }
+
+    fn compile_while_statement(
+        &mut self,
+        condition: &Expr,
+        body: &[Statement],
+        unsafe_context: bool,
+    ) -> Result<(), CompileError> {
+        let loop_start = self.current_address();
+        self.compile_condition_into(2, condition, unsafe_context)?;
+        self.words.push(rux16_asm::branch_if_nonzero(2, 4));
+        let exit_jump = self.emit_absolute_jump_placeholder();
+        self.compile_statements(body, unsafe_context)?;
+        self.emit_absolute_jump(loop_start);
+        self.patch_absolute_jump(exit_jump, self.current_address())?;
         Ok(())
     }
 
@@ -234,6 +289,30 @@ impl Rux16ArtifactBackend {
         Ok(())
     }
 
+    fn compile_condition_into(
+        &mut self,
+        dst: u8,
+        expr: &Expr,
+        unsafe_context: bool,
+    ) -> Result<(), CompileError> {
+        let Expr::Compare { op, lhs, rhs } = expr else {
+            return unsupported("only equality comparisons can be lowered as Rux16 conditions");
+        };
+        let lhs = self.compile_i32_expr_to_scratch(lhs, unsafe_context)?;
+        let rhs = self.compile_i32_expr_to_register_or_use(14, rhs, unsafe_context)?;
+        self.words.extend_from_slice(&rux16_asm::eq(dst, lhs, rhs));
+        match op {
+            CompareOp::Eq => Ok(()),
+            CompareOp::Ne => {
+                self.words.extend_from_slice(&rux16_asm::eq(dst, dst, 0));
+                Ok(())
+            }
+            CompareOp::Lt | CompareOp::Gt | CompareOp::Le | CompareOp::Ge => {
+                unsupported("only `==` and `!=` comparisons can be lowered as Rux16 conditions")
+            }
+        }
+    }
+
     fn compile_i32_expr_to_scratch(
         &mut self,
         expr: &Expr,
@@ -246,6 +325,21 @@ impl Rux16ArtifactBackend {
         }
         self.compile_i32_expr_into(2, expr, unsafe_context)?;
         Ok(2)
+    }
+
+    fn compile_i32_expr_to_register_or_use(
+        &mut self,
+        dst: u8,
+        expr: &Expr,
+        unsafe_context: bool,
+    ) -> Result<u8, CompileError> {
+        if let Expr::Local(name) = expr {
+            if let Some(local) = self.local(name, TypeName::I32)? {
+                return Ok(local.register);
+            }
+        }
+        self.compile_i32_expr_into(dst, expr, unsafe_context)?;
+        Ok(dst)
     }
 
     fn compile_u8_expr_to_scratch(
@@ -374,11 +468,50 @@ impl Rux16ArtifactBackend {
 
     fn alloc_register(&mut self) -> Result<u8, CompileError> {
         let register = self.next_register;
-        if register > 15 {
+        if register > 13 {
             return unsupported("Rux16 backend ran out of registers");
         }
         self.next_register += 1;
         Ok(register)
+    }
+
+    fn current_address(&self) -> u32 {
+        self.base_address + self.words.len() as u32 * 2
+    }
+
+    fn emit_absolute_jump_placeholder(&mut self) -> usize {
+        let const_index = self.words.len();
+        self.words.extend_from_slice(&rux16_asm::const32(15, 0));
+        self.words.push(rux16_asm::jmp(15));
+        const_index
+    }
+
+    fn emit_absolute_jump(&mut self, address: u32) {
+        self.words
+            .extend_from_slice(&rux16_asm::const32(15, address));
+        self.words.push(rux16_asm::jmp(15));
+    }
+
+    fn patch_absolute_jump(
+        &mut self,
+        const_index: usize,
+        address: u32,
+    ) -> Result<(), CompileError> {
+        let low_index = const_index.checked_add(1).ok_or_else(|| CompileError {
+            message: "Rux16 absolute jump patch index overflow".to_string(),
+        })?;
+        let high_index = const_index.checked_add(2).ok_or_else(|| CompileError {
+            message: "Rux16 absolute jump patch index overflow".to_string(),
+        })?;
+        let low = self.words.get_mut(low_index).ok_or_else(|| CompileError {
+            message: "Rux16 absolute jump patch index is out of bounds".to_string(),
+        })?;
+        *low = (address & 0xffff) as u16;
+        let high = self.words.get_mut(high_index).ok_or_else(|| CompileError {
+            message: "Rux16 absolute jump patch index is out of bounds".to_string(),
+        })?;
+        *high = (address >> 16) as u16;
+        Ok(())
     }
 
     fn eval_mmio_address(&self, expr: &Expr) -> Result<u32, CompileError> {
