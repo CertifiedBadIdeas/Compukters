@@ -155,17 +155,34 @@ impl Rux16ArtifactBackend {
         if !unsafe_context {
             return unsupported("MMIO store requires `unsafe`");
         }
-        if *ty != TypeName::I32 {
-            return unsupported("only `mmio<i32>(...).store(...)` can be lowered");
-        }
-
         let address = self.eval_mmio_address(address)?;
-        let value = self.eval_i32_value(&args[0])?;
         self.words
             .extend_from_slice(&rux16_asm::const32(1, address));
-        self.words
-            .extend_from_slice(&rux16_asm::const32(2, value as u32));
-        self.words.push(rux16_asm::store32(1, 2));
+        match ty {
+            TypeName::I32 => {
+                let value = self.eval_i32_value(&args[0])?;
+                self.words
+                    .extend_from_slice(&rux16_asm::const32(2, value as u32));
+                self.words.push(rux16_asm::store32(1, 2));
+            }
+            TypeName::U8 => {
+                let value = self.eval_u8_value(&args[0])?;
+                self.words
+                    .extend_from_slice(&rux16_asm::const32(2, u32::from(value)));
+                self.words.push(rux16_asm::store8(1, 2));
+            }
+            TypeName::U32
+            | TypeName::Bool
+            | TypeName::PtrI32
+            | TypeName::PtrU32
+            | TypeName::PtrU8
+            | TypeName::RefMutI32
+            | TypeName::RefMutU32
+            | TypeName::RefMutU8
+            | TypeName::ArrayU8(_) => {
+                return unsupported("only `mmio<i32>` and `mmio<u8>` stores can be lowered");
+            }
+        }
         Ok(())
     }
 
@@ -246,6 +263,54 @@ impl Rux16ArtifactBackend {
             | Expr::Unary { .. }
             | Expr::Logical { .. }
             | Expr::Compare { .. } => unsupported("only i32 literal store values can be lowered"),
+        }
+    }
+
+    fn eval_u8_value(&self, expr: &Expr) -> Result<u8, CompileError> {
+        match expr {
+            Expr::Int(value) => u8::try_from(*value).map_err(|_| CompileError {
+                message: format!("integer literal `{value}` does not fit `u8`"),
+            }),
+            Expr::IntU8(value) => u8::try_from(*value).map_err(|_| CompileError {
+                message: format!("u8 literal `{value}` does not fit `u8`"),
+            }),
+            Expr::Local(name) => {
+                if let Some(value) = self.consts.get(name).copied() {
+                    return u8::try_from(value).map_err(|_| CompileError {
+                        message: format!("const `{name}` value `{value}` does not fit `u8`"),
+                    });
+                }
+                match resolve_builtin_constant(name) {
+                    Some(BuiltinConstant::I32(value)) => {
+                        u8::try_from(value).map_err(|_| CompileError {
+                            message: format!(
+                                "ABI constant `{name}` value `{value}` does not fit `u8`"
+                            ),
+                        })
+                    }
+                    Some(BuiltinConstant::Addr(_)) => {
+                        unsupported(format!("`{name}` is an address, expected u8 value"))
+                    }
+                    None => unsupported(format!("unknown Rux16 u8 value `{name}`")),
+                }
+            }
+            Expr::IntU32(value) => Err(CompileError {
+                message: format!("u32 literal `{value}` cannot be stored as u8 without a cast"),
+            }),
+            Expr::Binary { .. }
+            | Expr::ByteString(_)
+            | Expr::Bool(_)
+            | Expr::Call { .. }
+            | Expr::Mmio { .. }
+            | Expr::Ptr { .. }
+            | Expr::MethodCall { .. }
+            | Expr::Index { .. }
+            | Expr::AddressOfMut(_)
+            | Expr::Deref(_)
+            | Expr::Cast { .. }
+            | Expr::Unary { .. }
+            | Expr::Logical { .. }
+            | Expr::Compare { .. } => unsupported("only u8 literal store values can be lowered"),
         }
     }
 }
