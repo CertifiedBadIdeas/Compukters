@@ -3,17 +3,19 @@
 > Note: as of issue #26 the legacy CKL language / CKIM bytecode VM /
 > in-game Workbench IDE have been removed. As of issue #44 the legacy
 > Image-VM (host-call opcode, multi-process device daemon, runtime
-> kernel, host-imported filesystem) has also been retired in favour of a
-> single LowVM runtime with flat RAM and MMIO devices. Older revisions
-> in git history describe the previous architectures.
+> kernel, host-imported filesystem) has also been retired. The active
+> computer boot path is now Rux16 guest execution from BIOS flash and
+> storage-backed boot media. Older revisions in git history describe the
+> previous architectures.
 
 ## Overview
 
 Compukter Kraft is a Minecraft mod that adds programmable computers backed
 by a Rust virtual machine (`native/rux-vm`). The mod ships a single
-player-facing computer item — **Notebook** — that boots a precompiled
-`rux-laptop.ruxi` image via JNI. The image is a LowVM program executing
-over flat RAM with memory-mapped peripherals.
+player-facing computer item — **Notebook** — that starts a native
+`RuxComputer` from a per-computer `bios.flash` file. The BIOS executes on
+the Rux16 guest CPU, can inspect storage0 boot media, and exposes devices
+through memory-mapped peripherals.
 
 ## Modules (Gradle)
 
@@ -29,8 +31,8 @@ over flat RAM with memory-mapped peripherals.
 
 | Crate            | Purpose                                                                  |
 |------------------|--------------------------------------------------------------------------|
-| `native/rux-vm`  | Rust virtual machine: LowVM (flat RAM + MMIO), `RuxComputer` handle, JNI exports |
-| `native/rux-compiler` | Compiler producing `rux-laptop.ruxi` LowVM images consumed by `rux-vm`   |
+| `native/rux-vm`  | Rust virtual machine: Rux16 CPU, memory-mapped devices, `RuxComputer` handle, JNI exports |
+| `native/rux-compiler` | Rux language frontend plus `rux compile`, `rux disasm`, and `rux volume` tooling for Rux16 artifacts |
 
 ## Module ownership rules
 
@@ -47,15 +49,16 @@ NotebookItem.use()
         └─ RuntimeDevice (native-backed)
 
 RuntimeDevice.boot()
-  └─ NativeVmBindings.createRuxComputer(image, memorySize, sliceBudgetNanos)
+  └─ NativeVmBindings.createRux16Computer(biosFlashPath, storage0Path, ...)
         └─ Rust RuxComputerHandle
-              ├─ LowImageVm executing rux-laptop.ruxi
+              ├─ Rux16 CPU fetching instructions from mapped BIOS flash
+              ├─ storage0 ruxvol boot media
               ├─ flat RAM + MMIO bus (control, debug-serial, serial-input,
-              │   text-display) — single process, no scheduler
+              │   text-display, storage0, bios-flash)
               └─ exposes control / debug / display snapshot over JNI
 
 RuntimeDevice.serverTick(gameTime)
-  ├─ runRuxComputerUntilSignal() — advance VM until pause / halt
+  ├─ runRux16ComputerUntilSignal() — advance guest CPU until pause / halt
   ├─ ruxComputerDisplay0Snapshot() — pull text display state
   └─ drainRuxComputerDebugOutput() — drain debug serial bytes
 
@@ -67,12 +70,14 @@ RuntimeDevice.close()
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│  Rust LowVM (driven on demand by JNI calls, single process)         │
+│  Rust Rux16 computer (driven on demand by JNI calls)                │
 │                                                                     │
-│  LowImageVm executing rux-laptop.ruxi over flat RAM                 │
+│  Rux16 BIOS executing from mapped bios.flash                        │
 │    ├─ MMIO control device  ──►  status / exit / panic registers      │
 │    ├─ MMIO debug serial    ──►  RuxComputerHandle.debug_output       │
 │    ├─ MMIO serial input    ◄──  player keyboard events               │
+│    ├─ MMIO storage0        ◄──► ruxvol boot media                    │
+│    ├─ MMIO bios flash      ──►  read-only firmware mapping           │
 │    └─ MMIO text display    ──►  RuxComputerTextDisplaySnapshot       │
 └──────────────────────────────────────────┬──────────────────────────┘
                                            │ JNI run-until-signal
@@ -81,7 +86,7 @@ RuntimeDevice.close()
 │  Server tick thread (main thread)                                   │
 │                                                                     │
 │  RuntimeDevice.serverTick()                                          │
-│    ├─ NativeVmBindings.runRuxComputerUntilSignal(handle)             │
+│    ├─ NativeVmBindings.runRux16ComputerUntilSignal(handle)           │
 │    ├─ poll display snapshot / debug output                           │
 │    ├─ flushDisplaySessions → FrameDeltaClientMessage                 │
 │    └─ react to control register (halt / crash / reboot)              │
@@ -99,6 +104,6 @@ RuntimeDevice.close()
 
 The text display device exposes a character cell buffer with cursor and a
 monotonic sequence number for delta detection. The client sends discrete
-input events into the serial-input MMIO device. There is no filesystem,
-no multi-process scheduling, and no host-call opcode — host-side
-interaction happens purely through memory-mapped registers.
+input events into the serial-input MMIO device. There is no multi-process
+scheduling and no host-call opcode — host-side interaction happens purely
+through memory-mapped registers.
