@@ -2,6 +2,7 @@ pub mod artifact;
 mod backend;
 mod frontend;
 mod runtime;
+mod rux16_asm;
 pub mod rux16_disasm;
 pub mod volume;
 
