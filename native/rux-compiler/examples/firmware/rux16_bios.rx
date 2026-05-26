@@ -1,0 +1,53 @@
+fn write_banner() {
+    unsafe {
+        mmio<u8>(DEBUG_WRITE).store(82u8);
+        mmio<u8>(DEBUG_WRITE).store(85u8);
+        mmio<u8>(DEBUG_WRITE).store(88u8);
+        mmio<u8>(DEBUG_WRITE).store(49u8);
+        mmio<u8>(DEBUG_WRITE).store(54u8);
+        mmio<u8>(DEBUG_WRITE).store(32u8);
+        mmio<u8>(DEBUG_WRITE).store(66u8);
+        mmio<u8>(DEBUG_WRITE).store(73u8);
+        mmio<u8>(DEBUG_WRITE).store(79u8);
+        mmio<u8>(DEBUG_WRITE).store(83u8);
+        mmio<u8>(DEBUG_WRITE).store(10u8);
+    }
+}
+
+fn write_no_bootable_device() {
+    unsafe {
+        mmio<u8>(DEBUG_WRITE).store(78u8);
+        mmio<u8>(DEBUG_WRITE).store(79u8);
+        mmio<u8>(DEBUG_WRITE).store(32u8);
+        mmio<u8>(DEBUG_WRITE).store(66u8);
+        mmio<u8>(DEBUG_WRITE).store(79u8);
+        mmio<u8>(DEBUG_WRITE).store(79u8);
+        mmio<u8>(DEBUG_WRITE).store(84u8);
+        mmio<u8>(DEBUG_WRITE).store(65u8);
+        mmio<u8>(DEBUG_WRITE).store(66u8);
+        mmio<u8>(DEBUG_WRITE).store(76u8);
+        mmio<u8>(DEBUG_WRITE).store(69u8);
+        mmio<u8>(DEBUG_WRITE).store(32u8);
+        mmio<u8>(DEBUG_WRITE).store(68u8);
+        mmio<u8>(DEBUG_WRITE).store(69u8);
+        mmio<u8>(DEBUG_WRITE).store(86u8);
+        mmio<u8>(DEBUG_WRITE).store(73u8);
+        mmio<u8>(DEBUG_WRITE).store(67u8);
+        mmio<u8>(DEBUG_WRITE).store(69u8);
+        mmio<u8>(DEBUG_WRITE).store(10u8);
+    }
+}
+
+fn main() {
+    unsafe {
+        mmio<i32>(CONTROL_STATUS).store(STATUS_BOOTING);
+    }
+
+    write_banner();
+    write_no_bootable_device();
+
+    unsafe {
+        mmio<i32>(CONTROL_PANIC_CODE).store(STATUS_READY);
+        mmio<i32>(CONTROL_STATUS).store(STATUS_READY);
+    }
+}
