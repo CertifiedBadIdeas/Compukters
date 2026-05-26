@@ -57,6 +57,34 @@ fn rux_disasm_prints_program_artifact_from_zero_base() {
 }
 
 #[test]
+fn rux_disasm_prints_boot_artifact_from_boot_load_base() {
+    let artifact_path = temp_file("boot.bin");
+    fs::write(&artifact_path, words_to_bytes(&[const4(1, 7), halt()])).expect("artifact writes");
+
+    let output = Command::new(rux_binary())
+        .args([
+            "disasm",
+            "--target",
+            "boot",
+            artifact_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("rux disasm runs");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("00000800: 1107  const4 r1, 7"),
+        "stdout: {stdout}"
+    );
+    assert!(stdout.contains("00000802: 0001  halt"), "stdout: {stdout}");
+}
+
+#[test]
 fn rux_disasm_prints_bios_artifact_from_bios_flash_base() {
     let artifact_path = temp_file("bios.flash");
     fs::write(&artifact_path, words_to_bytes(&[const4(1, 7), halt()])).expect("artifact writes");
