@@ -67,6 +67,56 @@ fn rux16_artifact_rejects_out_of_range_u8_store_value() {
 }
 
 #[test]
+fn rux16_artifact_loads_i32_mmio_into_local_from_bios_flash() {
+    let artifact = compile_rux16_artifact(
+        "fn main() {
+            unsafe {
+                mmio<i32>(CONTROL_STATUS).store(STATUS_READY);
+                let mut status: i32 = mmio<i32>(CONTROL_STATUS).load();
+                mmio<i32>(CONTROL_PANIC_CODE).store(status);
+            }
+         }",
+        Rux16ArtifactTarget::Bios,
+    )
+    .expect("i32 MMIO load into local compiles to Rux16");
+    let (mut machine, cpu_id) =
+        ComputerMachine::from_rux16_bios_flash(&artifact.bytes, 64 * 1024, 128)
+            .expect("machine boots Rux16 BIOS flash");
+
+    assert_eq!(
+        machine.run_boot_rux16_until_signal(cpu_id).unwrap(),
+        Rux16Signal::Halt,
+    );
+    assert_eq!(machine.panic_code(), ComputerMachine::STATUS_READY);
+    assert_eq!(machine.control_status(), ComputerMachine::STATUS_HALTED);
+}
+
+#[test]
+fn rux16_artifact_loads_u8_mmio_into_local_from_bios_flash() {
+    let artifact = compile_rux16_artifact(
+        "fn main() {
+            unsafe {
+                let mut byte: u8 = mmio<u8>(SERIAL_INPUT_READ).load();
+                mmio<u8>(DEBUG_WRITE).store(byte);
+            }
+         }",
+        Rux16ArtifactTarget::Bios,
+    )
+    .expect("u8 MMIO load into local compiles to Rux16");
+    let (mut machine, cpu_id) =
+        ComputerMachine::from_rux16_bios_flash(&artifact.bytes, 64 * 1024, 128)
+            .expect("machine boots Rux16 BIOS flash");
+    machine.push_serial_input(b"Z");
+
+    assert_eq!(
+        machine.run_boot_rux16_until_signal(cpu_id).unwrap(),
+        Rux16Signal::Halt,
+    );
+    assert_eq!(machine.debug_output_bytes(), b"Z");
+    assert_eq!(machine.control_status(), ComputerMachine::STATUS_HALTED);
+}
+
+#[test]
 fn rux16_artifact_const_mmio_sequence_runs_from_bios_flash() {
     let artifact = compile_rux16_artifact(
         "const O: i32 = 79;
