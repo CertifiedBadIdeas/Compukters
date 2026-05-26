@@ -34,6 +34,25 @@ fn rux16_bios_firmware_source_runs_from_bios_flash() {
 }
 
 #[test]
+fn rux16_bios_firmware_source_draws_no_bootable_device_screen() {
+    let artifact = compile_bundled_rux16_bios();
+    let (mut machine, cpu_id) =
+        ComputerMachine::from_rux16_bios_flash(&artifact.bytes, 64 * 1024, 1024)
+            .expect("machine boots Rux16 BIOS flash");
+
+    assert_eq!(
+        machine.run_boot_rux16_until_signal(cpu_id).unwrap(),
+        Rux16Signal::Halt,
+    );
+
+    let snapshot = machine
+        .display0_snapshot()
+        .expect("computer profile maps display0");
+    assert_eq!(rux16_display_row(&snapshot, 0), "RUX16 BIOS");
+    assert_eq!(rux16_display_row(&snapshot, 2), "No bootable device");
+}
+
+#[test]
 fn rux16_bios_firmware_source_rejects_incomplete_storage0_boot_record() {
     let artifact = compile_bundled_rux16_bios();
     let mut media = vec![0; 512];
@@ -147,6 +166,20 @@ fn assert_bios_rejects_boot_media(bios_flash: &[u8], media: Vec<u8>) {
     );
     assert_eq!(handle.control().status, ComputerMachine::STATUS_HALTED);
     assert_eq!(handle.control().panic_code, ComputerMachine::STATUS_READY);
+}
+
+fn rux16_display_row(
+    snapshot: &rux_vm::computer_machine::ComputerTextDisplaySnapshot,
+    row: u32,
+) -> String {
+    let start = (row * snapshot.columns) as usize;
+    let end = start + snapshot.columns as usize;
+    let row = &snapshot.cells[start..end];
+    let visible_end = row
+        .iter()
+        .rposition(|byte| *byte != b' ' && *byte != 0)
+        .map_or(0, |index| index + 1);
+    String::from_utf8_lossy(&row[..visible_end]).to_string()
 }
 
 fn rux16_boot_media(
