@@ -144,8 +144,10 @@ impl Rux16ArtifactBackend {
             Statement::While { condition, body } => {
                 self.compile_while_statement(condition, body, unsafe_context)
             }
-            Statement::Assign { .. }
-            | Statement::AssignOp { .. }
+            Statement::Assign { name, value } => {
+                self.compile_assign_statement(name, value, unsafe_context)
+            }
+            Statement::AssignOp { .. }
             | Statement::IndexAssign { .. }
             | Statement::DerefAssign { .. }
             | Statement::Break
@@ -190,6 +192,34 @@ impl Rux16ArtifactBackend {
         self.locals
             .insert(name.to_string(), Rux16Local { ty, register });
         Ok(())
+    }
+
+    fn compile_assign_statement(
+        &mut self,
+        name: &str,
+        value: &Expr,
+        unsafe_context: bool,
+    ) -> Result<(), CompileError> {
+        let local = self.locals.get(name).copied().ok_or_else(|| CompileError {
+            message: format!(
+                "Rux16 backend does not support this program yet: unknown local `{name}`"
+            ),
+        })?;
+        match local.ty {
+            TypeName::I32 => self.compile_i32_expr_into(local.register, value, unsafe_context),
+            TypeName::U8 => self.compile_u8_expr_into(local.register, value, unsafe_context),
+            TypeName::U32
+            | TypeName::Bool
+            | TypeName::PtrI32
+            | TypeName::PtrU32
+            | TypeName::PtrU8
+            | TypeName::RefMutI32
+            | TypeName::RefMutU32
+            | TypeName::RefMutU8
+            | TypeName::ArrayU8(_) => {
+                unsupported("only i32 and u8 locals can be assigned in Rux16 yet")
+            }
+        }
     }
 
     fn compile_if_statement(
