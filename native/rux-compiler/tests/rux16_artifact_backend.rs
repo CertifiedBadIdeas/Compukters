@@ -55,6 +55,34 @@ fn rux16_bios_firmware_source_detects_storage0_boot_record() {
     assert_eq!(handle.control().panic_code, ComputerMachine::STATUS_READY);
 }
 
+#[test]
+fn rux16_bios_firmware_source_loads_storage0_boot_payload() {
+    let artifact = compile_bundled_rux16_bios();
+    let payload = b"PAYLOAD";
+    let media = rux16_boot_media(2048, 2048, 1, 1, payload);
+    let mut handle = RuxComputerHandle::create_rux16_bios_flash_with_storage0_media(
+        &artifact.bytes,
+        64 * 1024,
+        1024,
+        media,
+    )
+    .expect("machine boots Rux16 BIOS flash with storage0 boot media");
+
+    assert_eq!(handle.run_rux16_until_signal().unwrap(), Rux16Signal::Halt);
+    assert_eq!(
+        handle.debug_output_bytes(),
+        b"RUX16 BIOS\nBOOT RECORD FOUND\nBOOT PAYLOAD LOADED\n"
+    );
+    assert_eq!(handle.control().status, ComputerMachine::STATUS_HALTED);
+    assert_eq!(handle.control().panic_code, ComputerMachine::STATUS_READY);
+    assert_eq!(
+        handle
+            .read_guest_ram_bytes(2048, payload.len() as u32)
+            .unwrap(),
+        payload
+    );
+}
+
 fn compile_bundled_rux16_bios() -> rux_compiler::artifact::Rux16Artifact {
     let source = std::fs::read_to_string(
         Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/firmware/rux16_bios.rx"),
@@ -62,6 +90,23 @@ fn compile_bundled_rux16_bios() -> rux_compiler::artifact::Rux16Artifact {
     .expect("Rux16 BIOS firmware source should exist");
     compile_rux16_artifact(&source, Rux16ArtifactTarget::Bios)
         .expect("Rux16 BIOS source compiles to BIOS flash")
+}
+
+fn rux16_boot_media(
+    entry_pc: u32,
+    load_addr: u32,
+    block_count: u32,
+    start_lba: u32,
+    payload: &[u8],
+) -> Vec<u8> {
+    let mut media = vec![0; 1024];
+    media[0..4].copy_from_slice(b"RUXB");
+    media[4..8].copy_from_slice(&entry_pc.to_le_bytes());
+    media[8..12].copy_from_slice(&load_addr.to_le_bytes());
+    media[12..16].copy_from_slice(&block_count.to_le_bytes());
+    media[16..20].copy_from_slice(&start_lba.to_le_bytes());
+    media[512..512 + payload.len()].copy_from_slice(payload);
+    media
 }
 
 #[test]

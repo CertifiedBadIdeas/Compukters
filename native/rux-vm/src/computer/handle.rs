@@ -137,6 +137,10 @@ impl RuxComputerHandle {
         self.machine.write_guest_ram_bytes(address, bytes)
     }
 
+    pub fn read_guest_ram_bytes(&self, address: u32, byte_len: u32) -> Result<Vec<u8>, String> {
+        self.machine.read_guest_ram_bytes(address, byte_len)
+    }
+
     pub fn boot_handoff_rux16_from_guest_ram(
         &mut self,
         entry_pc: u32,
