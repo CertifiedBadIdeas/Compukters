@@ -38,13 +38,58 @@ fn write_no_bootable_device() {
     }
 }
 
+fn write_boot_record_found() {
+    unsafe {
+        mmio<u8>(DEBUG_WRITE).store(66u8);
+        mmio<u8>(DEBUG_WRITE).store(79u8);
+        mmio<u8>(DEBUG_WRITE).store(79u8);
+        mmio<u8>(DEBUG_WRITE).store(84u8);
+        mmio<u8>(DEBUG_WRITE).store(32u8);
+        mmio<u8>(DEBUG_WRITE).store(82u8);
+        mmio<u8>(DEBUG_WRITE).store(69u8);
+        mmio<u8>(DEBUG_WRITE).store(67u8);
+        mmio<u8>(DEBUG_WRITE).store(79u8);
+        mmio<u8>(DEBUG_WRITE).store(82u8);
+        mmio<u8>(DEBUG_WRITE).store(68u8);
+        mmio<u8>(DEBUG_WRITE).store(32u8);
+        mmio<u8>(DEBUG_WRITE).store(70u8);
+        mmio<u8>(DEBUG_WRITE).store(79u8);
+        mmio<u8>(DEBUG_WRITE).store(85u8);
+        mmio<u8>(DEBUG_WRITE).store(78u8);
+        mmio<u8>(DEBUG_WRITE).store(68u8);
+        mmio<u8>(DEBUG_WRITE).store(10u8);
+    }
+}
+
+fn discover_boot_record() {
+    unsafe {
+        mmio<i32>(STORAGE0_LBA_LOW).store(0);
+        mmio<i32>(STORAGE0_LBA_HIGH).store(0);
+        mmio<i32>(STORAGE0_BLOCK_COUNT).store(1);
+        mmio<i32>(STORAGE0_BUFFER_ADDR).store(512);
+        mmio<i32>(STORAGE0_COMMAND).store(STORAGE_COMMAND_READ_BLOCKS);
+
+        let mut status: i32 = mmio<i32>(STORAGE0_STATUS).load();
+        if status == STORAGE_STATUS_DONE {
+            let mut magic: i32 = ptr<i32>(512u32).load();
+            if magic == 1113085266 {
+                write_boot_record_found();
+            } else {
+                write_no_bootable_device();
+            }
+        } else {
+            write_no_bootable_device();
+        }
+    }
+}
+
 fn main() {
     unsafe {
         mmio<i32>(CONTROL_STATUS).store(STATUS_BOOTING);
     }
 
     write_banner();
-    write_no_bootable_device();
+    discover_boot_record();
 
     unsafe {
         mmio<i32>(CONTROL_PANIC_CODE).store(STATUS_READY);

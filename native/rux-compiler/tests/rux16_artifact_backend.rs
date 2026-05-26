@@ -2,6 +2,7 @@ use rux_compiler::artifact::Rux16ArtifactTarget;
 use rux_compiler::compile_rux16_artifact;
 use rux_vm::computer_machine::ComputerMachine;
 use rux_vm::rux16::Rux16Signal;
+use rux_vm::rux_computer::RuxComputerHandle;
 use std::path::Path;
 
 #[test]
@@ -15,14 +16,9 @@ fn rux16_artifact_empty_main_halts() {
 
 #[test]
 fn rux16_bios_firmware_source_runs_from_bios_flash() {
-    let source = std::fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/firmware/rux16_bios.rx"),
-    )
-    .expect("Rux16 BIOS firmware source should exist");
-    let artifact = compile_rux16_artifact(&source, Rux16ArtifactTarget::Bios)
-        .expect("Rux16 BIOS source compiles to BIOS flash");
+    let artifact = compile_bundled_rux16_bios();
     let (mut machine, cpu_id) =
-        ComputerMachine::from_rux16_bios_flash(&artifact.bytes, 64 * 1024, 128)
+        ComputerMachine::from_rux16_bios_flash(&artifact.bytes, 64 * 1024, 1024)
             .expect("machine boots Rux16 BIOS flash");
 
     assert_eq!(
@@ -35,6 +31,37 @@ fn rux16_bios_firmware_source_runs_from_bios_flash() {
     );
     assert_eq!(machine.control_status(), ComputerMachine::STATUS_HALTED);
     assert_eq!(machine.panic_code(), ComputerMachine::STATUS_READY);
+}
+
+#[test]
+fn rux16_bios_firmware_source_detects_storage0_boot_record() {
+    let artifact = compile_bundled_rux16_bios();
+    let mut media = vec![0; 512];
+    media[0..4].copy_from_slice(b"RUXB");
+    let mut handle = RuxComputerHandle::create_rux16_bios_flash_with_storage0_media(
+        &artifact.bytes,
+        64 * 1024,
+        1024,
+        media,
+    )
+    .expect("machine boots Rux16 BIOS flash with storage0 media");
+
+    assert_eq!(handle.run_rux16_until_signal().unwrap(), Rux16Signal::Halt);
+    assert_eq!(
+        handle.debug_output_bytes(),
+        b"RUX16 BIOS\nBOOT RECORD FOUND\n"
+    );
+    assert_eq!(handle.control().status, ComputerMachine::STATUS_HALTED);
+    assert_eq!(handle.control().panic_code, ComputerMachine::STATUS_READY);
+}
+
+fn compile_bundled_rux16_bios() -> rux_compiler::artifact::Rux16Artifact {
+    let source = std::fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/firmware/rux16_bios.rx"),
+    )
+    .expect("Rux16 BIOS firmware source should exist");
+    compile_rux16_artifact(&source, Rux16ArtifactTarget::Bios)
+        .expect("Rux16 BIOS source compiles to BIOS flash")
 }
 
 #[test]
