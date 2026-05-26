@@ -25,6 +25,12 @@ pub(crate) fn store32(addr: u8, src: u8) -> u16 {
     0x5002 | (u16::from(addr) << 8) | (u16::from(src) << 4)
 }
 
+pub(crate) fn store8(addr: u8, src: u8) -> u16 {
+    assert_register(addr);
+    assert_register(src);
+    0x5000 | (u16::from(addr) << 8) | (u16::from(src) << 4)
+}
+
 fn assert_register(register: u8) {
     assert!(
         register <= 0x0f,
