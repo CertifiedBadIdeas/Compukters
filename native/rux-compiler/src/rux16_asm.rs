@@ -19,6 +19,16 @@ pub(crate) fn const32(register: u8, value: u32) -> [u16; 3] {
     ]
 }
 
+pub(crate) fn eq(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    assert_register(dst);
+    assert_register(lhs);
+    assert_register(rhs);
+    [
+        0x3000 | (u16::from(dst) << 8),
+        (u16::from(lhs) << 4) | u16::from(rhs),
+    ]
+}
+
 pub(crate) fn load32(dst: u8, addr: u8) -> u16 {
     assert_register(dst);
     assert_register(addr);
@@ -43,9 +53,27 @@ pub(crate) fn store8(addr: u8, src: u8) -> u16 {
     0x5000 | (u16::from(addr) << 8) | (u16::from(src) << 4)
 }
 
+pub(crate) fn branch_if_nonzero(register: u8, offset_words: i8) -> u16 {
+    assert_register(register);
+    0x6000 | (u16::from(register) << 8) | 0x0010 | encode_signed_nibble(offset_words)
+}
+
+pub(crate) fn jmp(register: u8) -> u16 {
+    assert_register(register);
+    0x7000 | (u16::from(register) << 8)
+}
+
 fn assert_register(register: u8) {
     assert!(
         register <= 0x0f,
         "Rux16 register index {register} is outside 0..=15"
     );
+}
+
+fn encode_signed_nibble(value: i8) -> u16 {
+    assert!(
+        (-8..=7).contains(&value),
+        "Rux16 branch offset {value} is outside -8..=7 words"
+    );
+    u16::from((value as i16 & 0x000f) as u8)
 }
