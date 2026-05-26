@@ -266,6 +266,17 @@ impl Rux16ArtifactBackend {
         unsafe_context: bool,
     ) -> Result<(), CompileError> {
         if let Expr::Call { name, args } = expr {
+            if name == "rux16_jump" {
+                if args.len() != 1 {
+                    return unsupported("Rux16 jump requires exactly one target argument");
+                }
+                if !unsafe_context {
+                    return unsupported("Rux16 jump requires `unsafe`");
+                }
+                let target = self.compile_i32_expr_to_scratch(&args[0], unsafe_context)?;
+                self.words.push(rux16_asm::jmp(target));
+                return Ok(());
+            }
             if !args.is_empty() {
                 return unsupported("Rux16 helper calls do not support arguments yet");
             }

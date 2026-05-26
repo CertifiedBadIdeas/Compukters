@@ -58,8 +58,8 @@ fn rux16_bios_firmware_source_detects_storage0_boot_record() {
 #[test]
 fn rux16_bios_firmware_source_loads_storage0_boot_payload() {
     let artifact = compile_bundled_rux16_bios();
-    let payload = b"PAYLOAD";
-    let media = rux16_boot_media(2048, 2048, 1, 1, payload);
+    let payload = compile_stage2_program();
+    let media = rux16_boot_media(2048, 2048, 1, 1, &payload.bytes);
     let mut handle = RuxComputerHandle::create_rux16_bios_flash_with_storage0_media(
         &artifact.bytes,
         64 * 1024,
@@ -71,16 +71,38 @@ fn rux16_bios_firmware_source_loads_storage0_boot_payload() {
     assert_eq!(handle.run_rux16_until_signal().unwrap(), Rux16Signal::Halt);
     assert_eq!(
         handle.debug_output_bytes(),
-        b"RUX16 BIOS\nBOOT RECORD FOUND\nBOOT PAYLOAD LOADED\n"
+        b"RUX16 BIOS\nBOOT RECORD FOUND\nBOOT PAYLOAD LOADED\nS2"
     );
     assert_eq!(handle.control().status, ComputerMachine::STATUS_HALTED);
-    assert_eq!(handle.control().panic_code, ComputerMachine::STATUS_READY);
+    assert_eq!(handle.control().panic_code, 82);
     assert_eq!(
         handle
-            .read_guest_ram_bytes(2048, payload.len() as u32)
+            .read_guest_ram_bytes(2048, payload.bytes.len() as u32)
             .unwrap(),
-        payload
+        payload.bytes
     );
+}
+
+#[test]
+fn rux16_bios_firmware_source_jumps_to_loaded_storage0_boot_payload() {
+    let artifact = compile_bundled_rux16_bios();
+    let payload = compile_stage2_program();
+    let media = rux16_boot_media(2048, 2048, 1, 1, &payload.bytes);
+    let mut handle = RuxComputerHandle::create_rux16_bios_flash_with_storage0_media(
+        &artifact.bytes,
+        64 * 1024,
+        1024,
+        media,
+    )
+    .expect("machine boots Rux16 BIOS flash with executable storage0 boot media");
+
+    assert_eq!(handle.run_rux16_until_signal().unwrap(), Rux16Signal::Halt);
+    assert_eq!(
+        handle.debug_output_bytes(),
+        b"RUX16 BIOS\nBOOT RECORD FOUND\nBOOT PAYLOAD LOADED\nS2"
+    );
+    assert_eq!(handle.control().status, ComputerMachine::STATUS_HALTED);
+    assert_eq!(handle.control().panic_code, 82);
 }
 
 fn compile_bundled_rux16_bios() -> rux_compiler::artifact::Rux16Artifact {
@@ -90,6 +112,20 @@ fn compile_bundled_rux16_bios() -> rux_compiler::artifact::Rux16Artifact {
     .expect("Rux16 BIOS firmware source should exist");
     compile_rux16_artifact(&source, Rux16ArtifactTarget::Bios)
         .expect("Rux16 BIOS source compiles to BIOS flash")
+}
+
+fn compile_stage2_program() -> rux_compiler::artifact::Rux16Artifact {
+    compile_rux16_artifact(
+        "fn main() {
+            unsafe {
+                mmio<u8>(DEBUG_WRITE).store(83u8);
+                mmio<u8>(DEBUG_WRITE).store(50u8);
+                mmio<i32>(CONTROL_PANIC_CODE).store(82);
+            }
+        }",
+        Rux16ArtifactTarget::Program,
+    )
+    .expect("stage2 program compiles to Rux16")
 }
 
 fn rux16_boot_media(

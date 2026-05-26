@@ -103,6 +103,7 @@ fn load_boot_payload() {
             let mut status: i32 = mmio<i32>(STORAGE0_STATUS).load();
             if status == STORAGE_STATUS_DONE {
                 write_boot_payload_loaded();
+                rux16_jump(entry_pc);
             } else {
                 write_no_bootable_device();
             }
