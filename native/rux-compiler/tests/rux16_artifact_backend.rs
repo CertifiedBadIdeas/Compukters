@@ -34,25 +34,28 @@ fn rux16_bios_firmware_source_runs_from_bios_flash() {
 }
 
 #[test]
-fn rux16_bios_firmware_source_detects_storage0_boot_record() {
+fn rux16_bios_firmware_source_rejects_incomplete_storage0_boot_record() {
     let artifact = compile_bundled_rux16_bios();
     let mut media = vec![0; 512];
     media[0..4].copy_from_slice(b"RUXB");
-    let mut handle = RuxComputerHandle::create_rux16_bios_flash_with_storage0_media(
-        &artifact.bytes,
-        64 * 1024,
-        1024,
-        media,
-    )
-    .expect("machine boots Rux16 BIOS flash with storage0 media");
 
-    assert_eq!(handle.run_rux16_until_signal().unwrap(), Rux16Signal::Halt);
-    assert_eq!(
-        handle.debug_output_bytes(),
-        b"RUX16 BIOS\nBOOT RECORD FOUND\n"
-    );
-    assert_eq!(handle.control().status, ComputerMachine::STATUS_HALTED);
-    assert_eq!(handle.control().panic_code, ComputerMachine::STATUS_READY);
+    assert_bios_rejects_boot_media(&artifact.bytes, media);
+}
+
+#[test]
+fn rux16_bios_firmware_source_rejects_invalid_storage0_boot_header_fields() {
+    let artifact = compile_bundled_rux16_bios();
+    let payload = compile_stage2_program();
+    let invalid_headers = [
+        rux16_boot_media(0, 2048, 1, 1, &payload.bytes),
+        rux16_boot_media(2048, 0, 1, 1, &payload.bytes),
+        rux16_boot_media(2048, 2048, 0, 1, &payload.bytes),
+        rux16_boot_media(2048, 2048, 1, 0, &payload.bytes),
+    ];
+
+    for media in invalid_headers {
+        assert_bios_rejects_boot_media(&artifact.bytes, media);
+    }
 }
 
 #[test]
@@ -126,6 +129,24 @@ fn compile_stage2_program() -> rux_compiler::artifact::Rux16Artifact {
         Rux16ArtifactTarget::Program,
     )
     .expect("stage2 program compiles to Rux16")
+}
+
+fn assert_bios_rejects_boot_media(bios_flash: &[u8], media: Vec<u8>) {
+    let mut handle = RuxComputerHandle::create_rux16_bios_flash_with_storage0_media(
+        bios_flash,
+        64 * 1024,
+        1024,
+        media,
+    )
+    .expect("machine boots Rux16 BIOS flash with storage0 boot media");
+
+    assert_eq!(handle.run_rux16_until_signal().unwrap(), Rux16Signal::Halt);
+    assert_eq!(
+        handle.debug_output_bytes(),
+        b"RUX16 BIOS\nBOOT RECORD FOUND\nNO BOOTABLE DEVICE\n"
+    );
+    assert_eq!(handle.control().status, ComputerMachine::STATUS_HALTED);
+    assert_eq!(handle.control().panic_code, ComputerMachine::STATUS_READY);
 }
 
 fn rux16_boot_media(

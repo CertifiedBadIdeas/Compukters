@@ -93,19 +93,33 @@ fn load_boot_payload() {
         let mut block_count: i32 = ptr<i32>(524u32).load();
         let mut start_lba: i32 = ptr<i32>(528u32).load();
 
-        if block_count != 0 {
-            mmio<i32>(STORAGE0_LBA_LOW).store(start_lba);
-            mmio<i32>(STORAGE0_LBA_HIGH).store(0);
-            mmio<i32>(STORAGE0_BLOCK_COUNT).store(block_count);
-            mmio<i32>(STORAGE0_BUFFER_ADDR).store(load_addr);
-            mmio<i32>(STORAGE0_COMMAND).store(STORAGE_COMMAND_READ_BLOCKS);
-
-            let mut status: i32 = mmio<i32>(STORAGE0_STATUS).load();
-            if status == STORAGE_STATUS_DONE {
-                write_boot_payload_loaded();
-                rux16_jump(entry_pc);
-            } else {
+        if entry_pc == 0 {
+            write_no_bootable_device();
+        } else {
+            if load_addr == 0 {
                 write_no_bootable_device();
+            } else {
+                if block_count == 0 {
+                    write_no_bootable_device();
+                } else {
+                    if start_lba == 0 {
+                        write_no_bootable_device();
+                    } else {
+                        mmio<i32>(STORAGE0_LBA_LOW).store(start_lba);
+                        mmio<i32>(STORAGE0_LBA_HIGH).store(0);
+                        mmio<i32>(STORAGE0_BLOCK_COUNT).store(block_count);
+                        mmio<i32>(STORAGE0_BUFFER_ADDR).store(load_addr);
+                        mmio<i32>(STORAGE0_COMMAND).store(STORAGE_COMMAND_READ_BLOCKS);
+
+                        let mut status: i32 = mmio<i32>(STORAGE0_STATUS).load();
+                        if status == STORAGE_STATUS_DONE {
+                            write_boot_payload_loaded();
+                            rux16_jump(entry_pc);
+                        } else {
+                            write_no_bootable_device();
+                        }
+                    }
+                }
             }
         }
     }
