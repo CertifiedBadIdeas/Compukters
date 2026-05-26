@@ -334,6 +334,21 @@ impl ComputerMachine {
         Ok(())
     }
 
+    pub fn read_guest_ram_bytes(&self, address: u32, byte_len: u32) -> Result<Vec<u8>, String> {
+        checked_ram_range(address, byte_len, self.bus.memory().len())
+            .map_err(|error| error.to_string())?;
+        let mut bytes = Vec::with_capacity(byte_len as usize);
+        for offset in 0..byte_len {
+            bytes.push(
+                self.bus
+                    .memory()
+                    .load_u8(address + offset)
+                    .map_err(|error| error.to_string())?,
+            );
+        }
+        Ok(bytes)
+    }
+
     pub fn spawn_cpu(&mut self, image: Image, slice_budget_nanos: u64) -> Result<CpuId, String> {
         let required_memory = usize::try_from(image.memory_size)
             .map_err(|_| "memory size does not fit usize".to_string())?;
