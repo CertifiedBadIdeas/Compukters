@@ -33,14 +33,14 @@ import kotlin.test.assertTrue
 
 class RuxBiosFlashWorkspaceTest {
     @Test
-    fun preparesBiosFlashFromResourceWords() {
+    fun preparesBiosFlashFromRawResourceBytes() {
         val workspace = createTempDirectory("rux-bios-workspace-")
-        val loader = resourceClassLoader("firmware/test-bios.words", "1001 e001\n")
+        val loader = resourceClassLoader("firmware/test-bios.flash", byteArrayOf(0x01, 0x10, 0x01, 0xe0.toByte()))
 
         val path =
             RuxBiosFlashWorkspace.prepareBiosFlash(
                 workspace = workspace,
-                resourcePath = "firmware/test-bios.words",
+                resourcePath = "firmware/test-bios.flash",
                 classLoader = loader,
             )
 
@@ -54,12 +54,12 @@ class RuxBiosFlashWorkspaceTest {
         val workspace = createTempDirectory("rux-bios-workspace-")
         val existing = workspace.resolve("bios.flash")
         existing.writeBytes(byteArrayOf(7, 8, 9))
-        val loader = resourceClassLoader("firmware/test-bios.words", "1001 e001\n")
+        val loader = resourceClassLoader("firmware/test-bios.flash", byteArrayOf(1, 2, 3))
 
         val path =
             RuxBiosFlashWorkspace.prepareBiosFlash(
                 workspace = workspace,
-                resourcePath = "firmware/test-bios.words",
+                resourcePath = "firmware/test-bios.flash",
                 classLoader = loader,
             )
 
@@ -74,18 +74,23 @@ class RuxBiosFlashWorkspaceTest {
         assertFailsWith<IllegalStateException> {
             RuxBiosFlashWorkspace.prepareBiosFlash(
                 workspace = workspace,
-                resourcePath = "firmware/missing-bios.words",
-                classLoader = resourceClassLoader("firmware/other.words", "1001\n"),
+                resourcePath = "firmware/missing-bios.flash",
+                classLoader = resourceClassLoader("firmware/other.flash", byteArrayOf(1, 2)),
             )
         }
     }
 
+    @Test
+    fun defaultBiosFlashResourceIsRawFlash() {
+        assertEquals("firmware/rux16-bios.flash", RuxBiosFlashWorkspace.DEFAULT_BIOS_FLASH_RESOURCE)
+    }
+
     private fun resourceClassLoader(
         path: String,
-        content: String,
+        content: ByteArray,
     ): ClassLoader =
         object : ClassLoader(null) {
             override fun getResourceAsStream(name: String): InputStream? =
-                if (name == path) ByteArrayInputStream(content.encodeToByteArray()) else null
+                if (name == path) ByteArrayInputStream(content) else null
         }
 }

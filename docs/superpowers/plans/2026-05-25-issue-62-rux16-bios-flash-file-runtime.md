@@ -22,7 +22,7 @@
 - Modify `native/rux-vm/src/computer/handle.rs`: add BIOS flash path loader.
 - Modify `native/rux-vm/src/jni.rs`: add JNI creation/run entrypoints for Rux16 BIOS flash.
 - Modify `modules/v1_21_1/v1_21_1-common/src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/block/ComputerRuntimeDeviceFactory.kt`: prepare workspace and call `createFromBiosFlash`.
-- Add `modules/v1_21_1/v1_21_1-neoforge/src/main/resources/firmware/rux16-bios.flash.words`: bundled default BIOS flash words.
+- Add generated `firmware/rux16-bios.flash`: bundled default raw BIOS flash compiled from source.
 - Add or update tests in native-runtime, native Rust, and v1_21_1 modules.
 
 ## Task 1: Documentation
