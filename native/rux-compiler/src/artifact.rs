@@ -44,9 +44,9 @@ pub(crate) fn compile(
     target: Rux16ArtifactTarget,
 ) -> Result<Rux16Artifact, CompileError> {
     let consts = evaluate_consts(&program.consts)?;
-    let main = supported_main(&program)?;
-    let mut backend = Rux16ArtifactBackend::new(consts);
-    backend.compile_statements(&main.statements, false)?;
+    let functions = collect_supported_functions(&program)?;
+    let mut backend = Rux16ArtifactBackend::new(consts, functions);
+    backend.inline_function("main")?;
     backend.words.push(rux16_asm::halt());
 
     Ok(Rux16Artifact {
@@ -58,14 +58,35 @@ pub(crate) fn compile(
 struct Rux16ArtifactBackend {
     words: Vec<u16>,
     consts: HashMap<String, i32>,
+    functions: HashMap<String, FunctionDecl>,
+    call_stack: Vec<String>,
 }
 
 impl Rux16ArtifactBackend {
-    fn new(consts: HashMap<String, i32>) -> Self {
+    fn new(consts: HashMap<String, i32>, functions: HashMap<String, FunctionDecl>) -> Self {
         Self {
             words: Vec::new(),
             consts,
+            functions,
+            call_stack: Vec::new(),
         }
+    }
+
+    fn inline_function(&mut self, name: &str) -> Result<(), CompileError> {
+        if self.call_stack.iter().any(|active| active == name) {
+            return unsupported(format!("recursive Rux16 helper call `{name}`"));
+        }
+        let function = self
+            .functions
+            .get(name)
+            .cloned()
+            .ok_or_else(|| CompileError {
+                message: format!("Rux16 backend does not support this program yet: unknown helper function `{name}`"),
+            })?;
+        self.call_stack.push(name.to_string());
+        let result = self.compile_statements(&function.statements, false);
+        self.call_stack.pop();
+        result
     }
 
     fn compile_statements(
@@ -107,6 +128,13 @@ impl Rux16ArtifactBackend {
         expr: &Expr,
         unsafe_context: bool,
     ) -> Result<(), CompileError> {
+        if let Expr::Call { name, args } = expr {
+            if !args.is_empty() {
+                return unsupported("Rux16 helper calls do not support arguments yet");
+            }
+            return self.inline_function(name);
+        }
+
         let Expr::MethodCall {
             receiver,
             method,
@@ -222,20 +250,34 @@ impl Rux16ArtifactBackend {
     }
 }
 
-fn supported_main(program: &Program) -> Result<&FunctionDecl, CompileError> {
+fn collect_supported_functions(
+    program: &Program,
+) -> Result<HashMap<String, FunctionDecl>, CompileError> {
     if !program.uses.is_empty() {
         return unsupported("uses are not supported by the Rux16 backend yet");
     }
-    if program.functions.len() != 1 {
-        return unsupported("only a single `main` function is supported by the Rux16 backend yet");
+    let mut functions = HashMap::new();
+    for function in &program.functions {
+        if !function.parameters.is_empty() || function.return_type != ReturnType::Unit {
+            return unsupported(
+                "only no-argument functions with unit return are supported by the Rux16 backend yet",
+            );
+        }
+        if functions
+            .insert(function.name.clone(), function.clone())
+            .is_some()
+        {
+            return Err(CompileError {
+                message: format!("duplicate function `{}`", function.name),
+            });
+        }
     }
-    let main = &program.functions[0];
-    if main.name != "main" || !main.parameters.is_empty() || main.return_type != ReturnType::Unit {
+    if !functions.contains_key("main") {
         return unsupported(
-            "only `fn main()` with unit return is supported by the Rux16 backend yet",
+            "a no-argument `fn main()` with unit return is required by the Rux16 backend",
         );
     }
-    Ok(main)
+    Ok(functions)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

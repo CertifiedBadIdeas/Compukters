@@ -63,3 +63,55 @@ fn rux16_artifact_const_mmio_sequence_runs_from_bios_flash() {
     assert_eq!(machine.exit_code(), 0);
     assert_eq!(machine.panic_code(), ComputerMachine::STATUS_READY);
 }
+
+#[test]
+fn rux16_artifact_inlines_unit_helper_function_from_bios_flash() {
+    let artifact = compile_rux16_artifact(
+        "const O: i32 = 79;
+         const K: i32 = 75;
+
+         fn write_ok() {
+            unsafe {
+                mmio<i32>(DEBUG_WRITE).store(O);
+                mmio<i32>(DEBUG_WRITE).store(K);
+            }
+         }
+
+         fn main() {
+            write_ok();
+         }",
+        Rux16ArtifactTarget::Bios,
+    )
+    .expect("unit helper call compiles to inlined Rux16");
+    let (mut machine, cpu_id) =
+        ComputerMachine::from_rux16_bios_flash(&artifact.bytes, 64 * 1024, 128)
+            .expect("machine boots Rux16 BIOS flash");
+
+    assert_eq!(
+        machine.run_boot_rux16_until_signal(cpu_id).unwrap(),
+        Rux16Signal::Halt,
+    );
+    assert_eq!(machine.debug_output_bytes(), b"OK");
+    assert_eq!(machine.control_status(), ComputerMachine::STATUS_HALTED);
+}
+
+#[test]
+fn rux16_artifact_rejects_recursive_helper_inline() {
+    let error = compile_rux16_artifact(
+        "fn again() {
+            again();
+         }
+
+         fn main() {
+            again();
+         }",
+        Rux16ArtifactTarget::Program,
+    )
+    .unwrap_err();
+
+    assert!(
+        error.message.contains("recursive Rux16 helper call `again`"),
+        "{}",
+        error.message
+    );
+}
