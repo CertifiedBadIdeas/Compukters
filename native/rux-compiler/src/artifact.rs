@@ -53,11 +53,11 @@ pub(crate) fn compile(
 
     let code = rux16_asm::encode_words(&backend.words);
     let bytes = match target {
-        Rux16ArtifactTarget::Program => {
+        Rux16ArtifactTarget::Boot | Rux16ArtifactTarget::Program => {
             ruxe::encode_rux16_executable(&code, target.base_address(), target.base_address())
                 .map_err(|message| CompileError { message })?
         }
-        Rux16ArtifactTarget::Bios | Rux16ArtifactTarget::Boot => code,
+        Rux16ArtifactTarget::Bios => code,
     };
 
     Ok(Rux16Artifact { target, bytes })

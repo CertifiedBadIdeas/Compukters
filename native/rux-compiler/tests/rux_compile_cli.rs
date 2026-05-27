@@ -85,9 +85,9 @@ fn rux_compile_writes_explicit_bios_artifact() {
 }
 
 #[test]
-fn rux_compile_writes_explicit_boot_artifact_as_raw_rux16_bytes() {
+fn rux_compile_writes_explicit_boot_artifact_as_ruxe_executable() {
     let source_path = temp_file("boot.rx");
-    let output_path = temp_file("boot.bin");
+    let output_path = temp_file("boot.ruxe");
     fs::write(&source_path, "fn main() { }").expect("source writes");
 
     let output = Command::new(rux_binary())
@@ -107,10 +107,11 @@ fn rux_compile_writes_explicit_boot_artifact_as_raw_rux16_bytes() {
         "stderr: {}",
         String::from_utf8_lossy(&output.stderr)
     );
-    assert_eq!(
-        fs::read(output_path).expect("output reads"),
-        vec![0x01, 0x00]
-    );
+    let bytes = fs::read(output_path).expect("output reads");
+    assert_eq!(&bytes[0..4], b"RUXE");
+    assert_eq!(u32_at(&bytes, 12), 2048);
+    assert_eq!(u32_at(&bytes, 36), 2048);
+    assert_eq!(&bytes[52..], &[0x01, 0x00]);
 }
 
 #[test]

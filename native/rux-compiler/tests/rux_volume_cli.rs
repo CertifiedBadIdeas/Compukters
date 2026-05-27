@@ -1,5 +1,6 @@
 use rux_compiler::artifact::Rux16ArtifactTarget;
 use rux_compiler::compile_rux16_artifact;
+use rux_compiler::ruxe;
 use rux_vm::rux16::Rux16Signal;
 use rux_vm::rux_computer::{RuxComputerHandle, RuxComputerTextDisplaySnapshot};
 use std::fs;
@@ -31,8 +32,13 @@ fn rux_volume_create_writes_empty_ruxvol_header() {
 #[test]
 fn rux_volume_put_boot_records_boot_artifact() {
     let volume_path = temp_file("boot-storage0.ruxvol");
-    let boot_path = temp_file("boot.bin");
-    fs::write(&boot_path, [0x01, 0x02, 0x03, 0x04]).expect("boot writes");
+    let boot_path = temp_file("boot.ruxe");
+    fs::write(
+        &boot_path,
+        ruxe::encode_rux16_executable(&[0x01, 0x02, 0x03, 0x04], 0x900, 0x900)
+            .expect("RUXE encodes"),
+    )
+    .expect("boot writes");
 
     assert!(Command::new(rux_binary())
         .args([
@@ -63,12 +69,47 @@ fn rux_volume_put_boot_records_boot_artifact() {
     let bytes = fs::read(&volume_path).expect("volume reads");
     let payload = &bytes[16..];
     assert_eq!(&payload[0..4], b"RUXB");
-    assert_eq!(u32::from_le_bytes(payload[4..8].try_into().unwrap()), 2048);
-    assert_eq!(u32::from_le_bytes(payload[8..12].try_into().unwrap()), 2048);
+    assert_eq!(u32::from_le_bytes(payload[4..8].try_into().unwrap()), 0x900);
+    assert_eq!(
+        u32::from_le_bytes(payload[8..12].try_into().unwrap()),
+        0x900
+    );
     assert_eq!(u32::from_le_bytes(payload[12..16].try_into().unwrap()), 1);
     assert_eq!(u32::from_le_bytes(payload[16..20].try_into().unwrap()), 1);
     assert_eq!(&payload[512..516], &[0x01, 0x02, 0x03, 0x04]);
     assert!(payload[516..1024].iter().all(|byte| *byte == 0));
+}
+
+#[test]
+fn rux_volume_put_boot_rejects_raw_boot_bytes_without_ruxe_fallback() {
+    let volume_path = temp_file("raw-boot-storage0.ruxvol");
+    let boot_path = temp_file("raw-boot.bin");
+    fs::write(&boot_path, [0x01, 0x00]).expect("boot writes");
+
+    assert!(Command::new(rux_binary())
+        .args([
+            "volume",
+            "create",
+            volume_path.to_str().unwrap(),
+            "--size",
+            "4096",
+        ])
+        .status()
+        .expect("create runs")
+        .success());
+    let output = Command::new(rux_binary())
+        .args([
+            "volume",
+            "put-boot",
+            volume_path.to_str().unwrap(),
+            boot_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("put-boot runs");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("invalid RUXE magic"), "stderr: {stderr}");
 }
 
 #[test]

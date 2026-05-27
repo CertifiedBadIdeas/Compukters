@@ -12,7 +12,10 @@ fn rux16_artifact_empty_main_halts() {
         .expect("empty main compiles to Rux16");
 
     assert_eq!(artifact.target, Rux16ArtifactTarget::Boot);
-    assert_eq!(artifact.bytes, vec![0x01, 0x00]);
+    let executable = ruxe::decode_rux16_executable(&artifact.bytes).expect("RUXE decodes");
+    assert_eq!(executable.entry_pc, 2048);
+    assert_eq!(executable.load_addr, 2048);
+    assert_eq!(executable.payload, vec![0x01, 0x00]);
 }
 
 #[test]
@@ -94,7 +97,8 @@ fn rux16_bios_firmware_source_rejects_invalid_storage0_boot_header_fields() {
 fn rux16_bios_firmware_source_loads_storage0_boot_payload() {
     let artifact = compile_bundled_rux16_bios();
     let payload = compile_stage2_program();
-    let media = rux16_boot_media(2048, 2048, 1, 1, &payload.bytes);
+    let payload = ruxe::decode_rux16_executable(&payload.bytes).expect("stage2 RUXE decodes");
+    let media = rux16_boot_media(payload.entry_pc, payload.load_addr, 1, 1, &payload.payload);
     let mut handle = RuxComputerHandle::create_rux16_bios_flash_with_storage0_media(
         &artifact.bytes,
         64 * 1024,
@@ -112,9 +116,9 @@ fn rux16_bios_firmware_source_loads_storage0_boot_payload() {
     assert_eq!(handle.control().panic_code, 82);
     assert_eq!(
         handle
-            .read_guest_ram_bytes(2048, payload.bytes.len() as u32)
+            .read_guest_ram_bytes(2048, payload.payload.len() as u32)
             .unwrap(),
-        payload.bytes
+        payload.payload
     );
 }
 
@@ -122,7 +126,8 @@ fn rux16_bios_firmware_source_loads_storage0_boot_payload() {
 fn rux16_bios_firmware_source_jumps_to_loaded_storage0_boot_payload() {
     let artifact = compile_bundled_rux16_bios();
     let payload = compile_stage2_program();
-    let media = rux16_boot_media(2048, 2048, 1, 1, &payload.bytes);
+    let payload = ruxe::decode_rux16_executable(&payload.bytes).expect("stage2 RUXE decodes");
+    let media = rux16_boot_media(payload.entry_pc, payload.load_addr, 1, 1, &payload.payload);
     let mut handle = RuxComputerHandle::create_rux16_bios_flash_with_storage0_media(
         &artifact.bytes,
         64 * 1024,

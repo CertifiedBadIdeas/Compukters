@@ -18,12 +18,12 @@ system or process model yet.
 
 ```text
 program  RUXE v1 executable container
-boot     raw Rux16 bytes loaded by the current storage0 boot record
+boot     RUXE v1 executable container prepared for storage0 boot media
 bios     raw Rux16 bytes mapped as BIOS flash
 ```
 
-Loaders must not treat raw Rux16 bytes as a valid `RUXE` executable. Invalid
-magic is a hard decode error.
+Loaders and volume tools must not treat raw Rux16 bytes as a valid `RUXE`
+executable. Invalid magic is a hard decode error.
 
 ## Endianness
 

@@ -1,10 +1,10 @@
+use crate::ruxe;
+
 pub const RUXVOL_MAGIC: &[u8; 6] = b"RUXVOL";
 pub const RUXVOL_VERSION: u16 = 1;
 pub const RUXVOL_HEADER_SIZE: usize = 16;
 pub const RUXVOL_BOOT_RECORD_OFFSET: usize = 0;
 pub const RUXVOL_BOOT_PAYLOAD_OFFSET: usize = 512;
-pub const RUX16_BOOT_ENTRY_PC: u32 = 2048;
-pub const RUX16_BOOT_LOAD_ADDR: u32 = 2048;
 
 pub fn create_empty_volume(size: usize) -> Result<Vec<u8>, String> {
     if size < RUXVOL_BOOT_PAYLOAD_OFFSET {
@@ -23,12 +23,10 @@ pub fn create_empty_volume(size: usize) -> Result<Vec<u8>, String> {
 
 pub fn put_boot(volume: &mut [u8], boot: &[u8]) -> Result<(), String> {
     let payload_range = validate_volume_header(volume)?;
-    if boot.is_empty() {
-        return Err("boot artifact is empty".to_string());
-    }
-    let block_count = boot.len().div_ceil(512);
+    let boot = ruxe::decode_rux16_executable(boot)?;
+    let block_count = boot.payload.len().div_ceil(512);
     let boot_end = RUXVOL_BOOT_PAYLOAD_OFFSET
-        .checked_add(boot.len())
+        .checked_add(boot.payload.len())
         .ok_or_else(|| "boot artifact range overflows".to_string())?;
     let payload_len = payload_range.len();
     if boot_end > payload_len {
@@ -41,11 +39,11 @@ pub fn put_boot(volume: &mut [u8], boot: &[u8]) -> Result<(), String> {
 
     let payload = &mut volume[payload_range];
     payload[RUXVOL_BOOT_RECORD_OFFSET..RUXVOL_BOOT_RECORD_OFFSET + 4].copy_from_slice(b"RUXB");
-    write_u32(payload, 4, RUX16_BOOT_ENTRY_PC);
-    write_u32(payload, 8, RUX16_BOOT_LOAD_ADDR);
+    write_u32(payload, 4, boot.entry_pc);
+    write_u32(payload, 8, boot.load_addr);
     write_u32(payload, 12, block_count);
     write_u32(payload, 16, 1);
-    payload[RUXVOL_BOOT_PAYLOAD_OFFSET..boot_end].copy_from_slice(boot);
+    payload[RUXVOL_BOOT_PAYLOAD_OFFSET..boot_end].copy_from_slice(&boot.payload);
     Ok(())
 }
 
