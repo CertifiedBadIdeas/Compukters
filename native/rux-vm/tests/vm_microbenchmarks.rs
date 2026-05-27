@@ -17,25 +17,27 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use rux_vm::vm_microbenchmarks::{run_low_image_workload, run_rux16_workload, VmBenchmarkWorkload};
+use rux_vm::vm_microbenchmarks::{run_rux16_workload, VmBenchmarkWorkload};
+use std::fs;
+use std::path::Path;
 
 #[test]
-fn compute_loop_matches_between_low_image_and_rux16() {
+fn compute_loop_runs_on_rux16() {
     let iterations = 7;
 
     assert_eq!(
-        run_low_image_workload(VmBenchmarkWorkload::ComputeLoop, iterations).unwrap(),
         run_rux16_workload(VmBenchmarkWorkload::ComputeLoop, iterations).unwrap(),
+        iterations,
     );
 }
 
 #[test]
-fn memory_loop_matches_between_low_image_and_rux16() {
+fn memory_loop_runs_on_rux16() {
     let iterations = 7;
 
     assert_eq!(
-        run_low_image_workload(VmBenchmarkWorkload::MemoryLoop, iterations).unwrap(),
         run_rux16_workload(VmBenchmarkWorkload::MemoryLoop, iterations).unwrap(),
+        iterations,
     );
 }
 
@@ -47,4 +49,14 @@ fn memory_loop_budget_covers_larger_benchmark_runs() {
         run_rux16_workload(VmBenchmarkWorkload::MemoryLoop, iterations).unwrap(),
         iterations,
     );
+}
+
+#[test]
+fn vm_microbenchmarks_source_does_not_expose_low_image_path() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let source = fs::read_to_string(manifest_dir.join("src/vm_microbenchmarks.rs")).unwrap();
+
+    assert!(!source.contains("low_image"));
+    assert!(!source.contains("LowImage"));
+    assert!(!source.contains("run_low_image_workload"));
 }

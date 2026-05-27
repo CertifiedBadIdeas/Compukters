@@ -17,7 +17,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use rux_vm::vm_microbenchmarks::{run_low_image_workload, run_rux16_workload, VmBenchmarkWorkload};
+use rux_vm::vm_microbenchmarks::{run_rux16_workload, VmBenchmarkWorkload};
 use std::env;
 use std::hint::black_box;
 use std::time::Instant;
@@ -29,13 +29,6 @@ fn main() {
 
     println!("workload\tvm\titerations\tchecksum\tbest_nanos\tnanos_per_iteration");
     for workload in VmBenchmarkWorkload::all() {
-        print_sample(
-            *workload,
-            "low-image",
-            iterations,
-            samples,
-            run_low_image_workload,
-        );
         print_sample(*workload, "rux16", iterations, samples, run_rux16_workload);
     }
 }
