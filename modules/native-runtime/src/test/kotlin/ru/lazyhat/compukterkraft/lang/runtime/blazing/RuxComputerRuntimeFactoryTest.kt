@@ -47,4 +47,25 @@ class RuxComputerRuntimeFactoryTest {
 
         assertEquals(true, hasBiosFlashAndStorage0Paths)
     }
+
+    @Test
+    fun nativeRuntimeMainDoesNotExposeLowImageAbiPackage() {
+        val lowImagePackage =
+            Path.of(
+                "modules",
+                "native-runtime",
+                "src",
+                "main",
+                "kotlin",
+                "ru",
+                "lazyhat",
+                "compukterkraft",
+                "lang",
+                "runtime",
+                "image",
+                "low",
+            )
+
+        assertFalse(lowImagePackage.toFile().exists())
+    }
 }
