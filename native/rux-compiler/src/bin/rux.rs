@@ -151,6 +151,18 @@ fn run_volume(args: &[String]) -> Result<(), String> {
             fs::write(&args[1], volume_bytes)
                 .map_err(|error| format!("failed to write {}: {error}", args[1]))
         }
+        "put-kernel" => {
+            if args.len() != 3 {
+                return volume_usage_error();
+            }
+            let mut volume_bytes = fs::read(&args[1])
+                .map_err(|error| format!("failed to read {}: {error}", args[1]))?;
+            let kernel_bytes = fs::read(&args[2])
+                .map_err(|error| format!("failed to read {}: {error}", args[2]))?;
+            volume::put_kernel(&mut volume_bytes, &kernel_bytes)?;
+            fs::write(&args[1], volume_bytes)
+                .map_err(|error| format!("failed to write {}: {error}", args[1]))
+        }
         _ => volume_usage_error(),
     }
 }
@@ -188,6 +200,7 @@ fn disasm_usage_message() -> String {
 fn volume_usage_error() -> Result<(), String> {
     Err(
         "usage: rux volume create <volume.ruxvol> --size <bytes>\n       rux volume put-boot <volume.ruxvol> <boot.bin>"
-            .to_string(),
+            .to_string()
+            + "\n       rux volume put-kernel <volume.ruxvol> <kernel.ruxe>",
     )
 }

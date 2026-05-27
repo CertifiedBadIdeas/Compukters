@@ -121,6 +121,17 @@ A loader should:
 No loader should guess an entry address from file position, reinterpret a
 different ABI kind, or fall back to raw instruction bytes.
 
+## Storage Volume Tooling
+
+`RUXE` is the artifact format produced by the compiler. The current `RUXVOL`
+storage tooling decodes fixed-image `RUXE` artifacts and writes compact
+guest-visible records:
+
+- `put-boot` accepts ABI kind `bootloader` and writes a `RUXB` record.
+- `put-kernel` accepts ABI kind `kernel` and writes a `RUXK` record.
+
+The fixed storage layout is defined in `rux-storage-volume-v1.md`.
+
 ## Validation Errors
 
 A decoder must reject:

@@ -11,6 +11,10 @@
 - `rux volume put-boot` now accepts a `RUXE` boot artifact and writes the
   current storage0 boot record from its entry/load metadata and payload. Kernel
   artifacts are rejected for boot media.
+- Added `rux volume put-kernel`, which writes a fixed `RUXK` kernel record and
+  kernel payload for the bootloader-to-kernel chain.
+- Added `rux-storage-volume-v1.md` for the current `RUXVOL`, `RUXB`, and `RUXK`
+  storage0 media layout.
 - Retired the previous host-decoded executable ABI package from active
   documentation.
 - Removed the obsolete decoder, runner, disassembler, conformance examples,
@@ -25,3 +29,4 @@
 - `rux-machine-profile-v2.md`
 - `rux-computer-profile-v1.md`
 - `ruxe-v1.md`
+- `rux-storage-volume-v1.md`
