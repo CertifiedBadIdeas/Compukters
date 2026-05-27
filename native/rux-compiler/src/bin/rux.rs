@@ -166,7 +166,7 @@ fn parse_size(value: &str) -> Result<usize, String> {
 }
 
 fn usage_error() -> Result<(), String> {
-    Err("usage: rux compile [--target <bios|boot|program>] <input.rx> -o <output>\n       rux disasm --target <bios|boot|program> <input>\n       rux volume <create|put-boot> ...".to_string())
+    Err("usage: rux compile [--target <bios|boot|kernel|program>] <input.rx> -o <output>\n       rux disasm --target <bios|boot|kernel|program> <input>\n       rux volume <create|put-boot> ...".to_string())
 }
 
 fn compile_usage_error() -> Result<CompileConfig, String> {
@@ -174,7 +174,7 @@ fn compile_usage_error() -> Result<CompileConfig, String> {
 }
 
 fn compile_usage_message() -> String {
-    "usage: rux compile [--target <bios|boot|program>] <input.rx> -o <output>".to_string()
+    "usage: rux compile [--target <bios|boot|kernel|program>] <input.rx> -o <output>".to_string()
 }
 
 fn disasm_usage_error() -> Result<DisasmConfig, String> {
@@ -182,7 +182,7 @@ fn disasm_usage_error() -> Result<DisasmConfig, String> {
 }
 
 fn disasm_usage_message() -> String {
-    "usage: rux disasm --target <bios|boot|program> <input>".to_string()
+    "usage: rux disasm --target <bios|boot|kernel|program> <input>".to_string()
 }
 
 fn volume_usage_error() -> Result<(), String> {

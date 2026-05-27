@@ -198,7 +198,7 @@ A concrete target machine profile defines those meanings. For example, the
 current Rux computer profile defines hardware entry `1` as its control device
 and entry `5` as its storage0 block device.
 
-Programs are expected to be compiled or linked for a target machine profile,
+Guest images are expected to be compiled or linked for a target machine profile,
 not for profile v2 alone.
 
 ## Power And Reboot

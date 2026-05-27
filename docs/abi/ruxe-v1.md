@@ -1,24 +1,25 @@
-# RUXE v1 Guest Executable
+# RUXE v1 Fixed Image Executable
 
 ## Status
 
 Status: experimental.
 
-`RUXE` is the guest-loadable executable container for Rux16 programs. It is the
-format future firmware and OS loaders should read from storage before copying
-program bytes into guest RAM and jumping to an entry address.
+`RUXE` is the guest-loadable executable container for fixed-address Rux16 boot
+images. It is the format firmware and boot loaders should read from storage
+before copying image bytes into guest RAM and jumping to an entry address.
 
 This first version intentionally supports one load section. It is enough to
-separate "program file" from "raw instruction bytes" without introducing a file
-system or process model yet.
+separate "executable image file" from "raw instruction bytes" without
+introducing a user-space process model yet.
 
 ## Relationship To Existing Targets
 
 `rux compile` target meanings:
 
 ```text
-program  RUXE v1 executable container
-boot     RUXE v1 executable container prepared for storage0 boot media
+boot     RUXE v1 fixed image, ABI kind bootloader, prepared for storage0 boot media
+kernel   RUXE v1 fixed image, ABI kind kernel, loaded by a bootloader
+program  reserved for future user-space executable ABI; not emitted by v1 tooling yet
 bios     raw Rux16 bytes mapped as BIOS flash
 ```
 
@@ -43,7 +44,7 @@ offset  size  name
 0x0C    4     entry_pc
 0x10    4     section_table_offset
 0x14    4     section_count
-0x18    4     reserved0
+0x18    4     abi_kind
 0x1C    4     reserved1
 ```
 
@@ -57,12 +58,25 @@ isa                   1  (Rux16)
 flags                 0
 section_table_offset  32
 section_count         1
-reserved0             0
+abi_kind              1  (bootloader) or 2  (kernel)
 reserved1             0
 ```
 
 `entry_pc` is the guest physical address where execution starts after all load
-sections have been copied.
+sections have been copied. In v1 this is part of a trusted fixed-image ABI:
+the image describes where it was linked to run, and the loader must reject it
+if that range is not allowed by the current boot policy.
+
+ABI kind values:
+
+```text
+1  bootloader
+2  kernel
+```
+
+User-space programs are deliberately not represented by a v1 ABI kind. They
+need a future executable ABI where the kernel, not the file, decides physical
+placement.
 
 ## Section Record
 
@@ -104,8 +118,8 @@ A loader should:
 5. Copy `file_size` bytes from `file_offset` to guest RAM at `load_addr`.
 6. Start or jump to `entry_pc`.
 
-No loader should guess an entry address from file position or fall back to raw
-instruction bytes.
+No loader should guess an entry address from file position, reinterpret a
+different ABI kind, or fall back to raw instruction bytes.
 
 ## Validation Errors
 
@@ -118,6 +132,7 @@ A decoder must reject:
 - non-zero flags;
 - unsupported section table offset;
 - section count other than `1`;
+- unsupported ABI kind;
 - non-zero reserved header fields;
 - unsupported section kind;
 - payload offset other than `52`;

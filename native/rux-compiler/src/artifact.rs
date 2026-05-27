@@ -11,6 +11,7 @@ use std::collections::HashMap;
 pub enum Rux16ArtifactTarget {
     Bios,
     Boot,
+    Kernel,
     Program,
 }
 
@@ -19,9 +20,10 @@ impl Rux16ArtifactTarget {
         match value {
             "bios" => Ok(Self::Bios),
             "boot" => Ok(Self::Boot),
+            "kernel" => Ok(Self::Kernel),
             "program" => Ok(Self::Program),
             _ => Err(format!(
-                "unknown compile target `{value}`; expected bios, boot, or program"
+                "unknown compile target `{value}`; expected bios, boot, kernel, or program"
             )),
         }
     }
@@ -30,7 +32,16 @@ impl Rux16ArtifactTarget {
         match self {
             Self::Bios => rux_vm::computer_machine::ComputerMachine::RUX16_BIOS_FLASH_BASE,
             Self::Boot => 2048,
+            Self::Kernel => 0x4000,
             Self::Program => 0,
+        }
+    }
+
+    pub fn fixed_image_abi_kind(self) -> Option<ruxe::RuxeAbiKind> {
+        match self {
+            Self::Boot => Some(ruxe::RuxeAbiKind::Bootloader),
+            Self::Kernel => Some(ruxe::RuxeAbiKind::Kernel),
+            Self::Bios | Self::Program => None,
         }
     }
 }
@@ -45,6 +56,11 @@ pub(crate) fn compile(
     program: Program,
     target: Rux16ArtifactTarget,
 ) -> Result<Rux16Artifact, CompileError> {
+    if target == Rux16ArtifactTarget::Program {
+        return Err(CompileError {
+            message: "Rux16 user-space program ABI is not defined yet".to_string(),
+        });
+    }
     let consts = evaluate_consts(&program.consts)?;
     let functions = collect_supported_functions(&program)?;
     let mut backend = Rux16ArtifactBackend::new(consts, functions, target.base_address());
@@ -53,11 +69,15 @@ pub(crate) fn compile(
 
     let code = rux16_asm::encode_words(&backend.words);
     let bytes = match target {
-        Rux16ArtifactTarget::Boot | Rux16ArtifactTarget::Program => {
-            ruxe::encode_rux16_executable(&code, target.base_address(), target.base_address())
-                .map_err(|message| CompileError { message })?
-        }
+        Rux16ArtifactTarget::Boot | Rux16ArtifactTarget::Kernel => ruxe::encode_rux16_executable(
+            &code,
+            target.fixed_image_abi_kind().unwrap(),
+            target.base_address(),
+            target.base_address(),
+        )
+        .map_err(|message| CompileError { message })?,
         Rux16ArtifactTarget::Bios => code,
+        Rux16ArtifactTarget::Program => unreachable!("program target is rejected before lowering"),
     };
 
     Ok(Rux16Artifact { target, bytes })

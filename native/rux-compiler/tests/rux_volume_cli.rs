@@ -35,8 +35,13 @@ fn rux_volume_put_boot_records_boot_artifact() {
     let boot_path = temp_file("boot.ruxe");
     fs::write(
         &boot_path,
-        ruxe::encode_rux16_executable(&[0x01, 0x02, 0x03, 0x04], 0x900, 0x900)
-            .expect("RUXE encodes"),
+        ruxe::encode_rux16_executable(
+            &[0x01, 0x02, 0x03, 0x04],
+            ruxe::RuxeAbiKind::Bootloader,
+            0x900,
+            0x900,
+        )
+        .expect("RUXE encodes"),
     )
     .expect("boot writes");
 
@@ -78,6 +83,46 @@ fn rux_volume_put_boot_records_boot_artifact() {
     assert_eq!(u32::from_le_bytes(payload[16..20].try_into().unwrap()), 1);
     assert_eq!(&payload[512..516], &[0x01, 0x02, 0x03, 0x04]);
     assert!(payload[516..1024].iter().all(|byte| *byte == 0));
+}
+
+#[test]
+fn rux_volume_put_boot_rejects_kernel_artifact_without_profile_fallback() {
+    let volume_path = temp_file("kernel-storage0.ruxvol");
+    let boot_path = temp_file("kernel.ruxe");
+    fs::write(
+        &boot_path,
+        ruxe::encode_rux16_executable(&[0x01, 0x00], ruxe::RuxeAbiKind::Kernel, 0x4000, 0x4000)
+            .expect("RUXE encodes"),
+    )
+    .expect("kernel writes");
+
+    assert!(Command::new(rux_binary())
+        .args([
+            "volume",
+            "create",
+            volume_path.to_str().unwrap(),
+            "--size",
+            "4096",
+        ])
+        .status()
+        .expect("create runs")
+        .success());
+    let output = Command::new(rux_binary())
+        .args([
+            "volume",
+            "put-boot",
+            volume_path.to_str().unwrap(),
+            boot_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("put-boot runs");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("boot media requires RUXE bootloader ABI kind"),
+        "stderr: {stderr}"
+    );
 }
 
 #[test]

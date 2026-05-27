@@ -2,12 +2,15 @@
 
 ## Unreleased
 
-- Added experimental `RUXE` v1 as the guest-loadable executable container for
-  Rux16 program artifacts.
-- `rux compile` now emits `RUXE` for `program` and `boot` targets. Explicit
-  `bios` continues to emit raw Rux16 instruction bytes for BIOS flash.
+- Added experimental `RUXE` v1 as the guest-loadable fixed-image container for
+  Rux16 bootloader and kernel artifacts.
+- `RUXE` now carries an ABI kind: `bootloader` or `kernel`.
+- `rux compile` now emits `RUXE` for `boot` and `kernel` targets. Explicit
+  `bios` continues to emit raw Rux16 instruction bytes for BIOS flash, while
+  `program` is reserved for the future user-space executable ABI and is rejected.
 - `rux volume put-boot` now accepts a `RUXE` boot artifact and writes the
-  current storage0 boot record from its entry/load metadata and payload.
+  current storage0 boot record from its entry/load metadata and payload. Kernel
+  artifacts are rejected for boot media.
 - Retired the previous host-decoded executable ABI package from active
   documentation.
 - Removed the obsolete decoder, runner, disassembler, conformance examples,

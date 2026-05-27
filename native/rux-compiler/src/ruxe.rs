@@ -9,8 +9,32 @@ pub const RUXE_SECTION_COUNT_SINGLE_LOAD: u32 = 1;
 pub const RUXE_PAYLOAD_OFFSET_SINGLE_LOAD: u32 =
     RUXE_SECTION_TABLE_OFFSET + RUXE_SECTION_RECORD_SIZE;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuxeAbiKind {
+    Bootloader,
+    Kernel,
+}
+
+impl RuxeAbiKind {
+    pub fn code(self) -> u32 {
+        match self {
+            Self::Bootloader => 1,
+            Self::Kernel => 2,
+        }
+    }
+
+    fn decode(code: u32) -> Result<Self, String> {
+        match code {
+            1 => Ok(Self::Bootloader),
+            2 => Ok(Self::Kernel),
+            _ => Err(format!("unsupported RUXE ABI kind {code}")),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RuxeExecutable {
+    pub abi_kind: RuxeAbiKind,
     pub entry_pc: u32,
     pub load_addr: u32,
     pub payload: Vec<u8>,
@@ -18,6 +42,7 @@ pub struct RuxeExecutable {
 
 pub fn encode_rux16_executable(
     payload: &[u8],
+    abi_kind: RuxeAbiKind,
     entry_pc: u32,
     load_addr: u32,
 ) -> Result<Vec<u8>, String> {
@@ -47,7 +72,7 @@ pub fn encode_rux16_executable(
     write_u32(&mut bytes, entry_pc);
     write_u32(&mut bytes, RUXE_SECTION_TABLE_OFFSET);
     write_u32(&mut bytes, RUXE_SECTION_COUNT_SINGLE_LOAD);
-    write_u32(&mut bytes, 0);
+    write_u32(&mut bytes, abi_kind.code());
     write_u32(&mut bytes, 0);
 
     write_u32(&mut bytes, RUXE_SECTION_KIND_LOAD);
@@ -97,7 +122,8 @@ pub fn decode_rux16_executable(bytes: &[u8]) -> Result<RuxeExecutable, String> {
     if section_count != RUXE_SECTION_COUNT_SINGLE_LOAD {
         return Err(format!("unsupported RUXE section count {section_count}"));
     }
-    if read_u32(bytes, 24)? != 0 || read_u32(bytes, 28)? != 0 {
+    let abi_kind = RuxeAbiKind::decode(read_u32(bytes, 24)?)?;
+    if read_u32(bytes, 28)? != 0 {
         return Err("RUXE reserved header fields must be zero".to_string());
     }
 
@@ -134,6 +160,7 @@ pub fn decode_rux16_executable(bytes: &[u8]) -> Result<RuxeExecutable, String> {
         .to_vec();
 
     Ok(RuxeExecutable {
+        abi_kind,
         entry_pc,
         load_addr,
         payload,
