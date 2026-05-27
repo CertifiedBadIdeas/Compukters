@@ -36,7 +36,7 @@ statuses:
 
 ## Spec & plan conventions
 
-- English only. Specs live under `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`; plans under `docs/superpowers/plans/YYYY-MM-DD-<topic>.md`.
+- English only. Specs live under `docs/superpowers/specs/YYYY-MM-DD/YYYY-MM-DD-<topic>-design.md`; plans under `docs/superpowers/plans/YYYY-MM-DD/YYYY-MM-DD-<topic>.md`.
 - First content line under the `# Title` MUST be `> Issue: [#N](https://github.com/CertifiedBadIdeas/Compukter-Kraft/issues/N)`.
 - When a spec/plan is superseded, prepend a `> **Superseded by** [...](...)` banner; do not delete the file.
 
