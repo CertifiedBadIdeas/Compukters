@@ -63,8 +63,17 @@ fn rux_disasm_prints_program_artifact_from_zero_base() {
 
 #[test]
 fn rux_disasm_prints_boot_artifact_from_boot_load_base() {
-    let artifact_path = temp_file("boot.bin");
-    fs::write(&artifact_path, words_to_bytes(&[const4(1, 7), halt()])).expect("artifact writes");
+    let artifact_path = temp_file("boot.ruxe");
+    fs::write(
+        &artifact_path,
+        rux_compiler::ruxe::encode_rux16_executable(
+            &words_to_bytes(&[const4(1, 7), halt()]),
+            2048,
+            2048,
+        )
+        .expect("RUXE encodes"),
+    )
+    .expect("artifact writes");
 
     let output = Command::new(rux_binary())
         .args([
@@ -87,6 +96,26 @@ fn rux_disasm_prints_boot_artifact_from_boot_load_base() {
         "stdout: {stdout}"
     );
     assert!(stdout.contains("00000802: 0001  halt"), "stdout: {stdout}");
+}
+
+#[test]
+fn rux_disasm_rejects_raw_boot_bytes_without_ruxe_fallback() {
+    let artifact_path = temp_file("raw-boot.bin");
+    fs::write(&artifact_path, words_to_bytes(&[halt()])).expect("artifact writes");
+
+    let output = Command::new(rux_binary())
+        .args([
+            "disasm",
+            "--target",
+            "boot",
+            artifact_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("rux disasm runs");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("invalid RUXE magic"), "stderr: {stderr}");
 }
 
 #[test]

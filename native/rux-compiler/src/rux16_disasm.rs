@@ -3,13 +3,11 @@ use crate::ruxe;
 
 pub fn disassemble_artifact(bytes: &[u8], target: Rux16ArtifactTarget) -> Result<String, String> {
     let (bytes, base_address) = match target {
-        Rux16ArtifactTarget::Program => {
+        Rux16ArtifactTarget::Boot | Rux16ArtifactTarget::Program => {
             let executable = ruxe::decode_rux16_executable(bytes)?;
             (executable.payload, executable.load_addr)
         }
-        Rux16ArtifactTarget::Bios | Rux16ArtifactTarget::Boot => {
-            (bytes.to_vec(), target.base_address())
-        }
+        Rux16ArtifactTarget::Bios => (bytes.to_vec(), target.base_address()),
     };
     if bytes.len() % 2 != 0 {
         return Err("Rux16 artifact byte length must be even".to_string());
