@@ -18,8 +18,6 @@
  */
 
 use crate::low_bus::MachineBus;
-use crate::low_image::{Function, Image, Instruction};
-use crate::low_image_runner::{LowImageSignal, LowImageVm};
 use crate::rux16::{Rux16Cpu, Rux16Signal};
 
 const MEMORY_SIZE: usize = 1024;
@@ -56,17 +54,6 @@ impl std::str::FromStr for VmBenchmarkWorkload {
     }
 }
 
-pub fn run_low_image_workload(
-    workload: VmBenchmarkWorkload,
-    iterations: u32,
-) -> Result<u32, String> {
-    let mut vm = LowImageVm::create(low_image_workload(workload, iterations), u64::MAX)?;
-    match vm.run_until_signal()? {
-        LowImageSignal::HaltI32(value) => Ok(value as u32),
-        signal => Err(format!("unexpected LowImage signal: {signal:?}")),
-    }
-}
-
 pub fn run_rux16_workload(workload: VmBenchmarkWorkload, iterations: u32) -> Result<u32, String> {
     let mut bus = MachineBus::new(MEMORY_SIZE).map_err(|error| error.to_string())?;
     let (words, result_register) = rux16_workload(workload, iterations);
@@ -78,78 +65,6 @@ pub fn run_rux16_workload(workload: VmBenchmarkWorkload, iterations: u32) -> Res
     {
         Rux16Signal::Halt => Ok(cpu.register(result_register)),
         signal => Err(format!("unexpected Rux16 signal: {signal:?}")),
-    }
-}
-
-fn low_image_workload(workload: VmBenchmarkWorkload, iterations: u32) -> Image {
-    let instructions = match workload {
-        VmBenchmarkWorkload::ComputeLoop => vec![
-            Instruction::I32Const {
-                dst: 0,
-                value: iterations as i32,
-            },
-            Instruction::I32Const { dst: 1, value: 0 },
-            Instruction::I32Const { dst: 2, value: 1 },
-            Instruction::I32Eq {
-                dst: 3,
-                lhs: 1,
-                rhs: 0,
-            },
-            Instruction::JumpIfFalse { cond: 3, target: 6 },
-            Instruction::ReturnI32 { src: 1 },
-            Instruction::I32Add {
-                dst: 1,
-                lhs: 1,
-                rhs: 2,
-            },
-            Instruction::Jump { target: 3 },
-        ],
-        VmBenchmarkWorkload::MemoryLoop => vec![
-            Instruction::I32Const {
-                dst: 0,
-                value: iterations as i32,
-            },
-            Instruction::I32Const { dst: 1, value: 0 },
-            Instruction::I32Const { dst: 2, value: 1 },
-            Instruction::AddrConst {
-                dst: 4,
-                value: DATA_ADDR,
-            },
-            Instruction::I32Eq {
-                dst: 3,
-                lhs: 1,
-                rhs: 0,
-            },
-            Instruction::JumpIfFalse { cond: 3, target: 8 },
-            Instruction::Load32 { dst: 5, addr: 4 },
-            Instruction::ReturnI32 { src: 5 },
-            Instruction::Load32 { dst: 5, addr: 4 },
-            Instruction::I32Add {
-                dst: 5,
-                lhs: 5,
-                rhs: 2,
-            },
-            Instruction::Store32 { addr: 4, src: 5 },
-            Instruction::I32Add {
-                dst: 1,
-                lhs: 1,
-                rhs: 2,
-            },
-            Instruction::Jump { target: 4 },
-        ],
-    };
-    Image {
-        memory_size: MEMORY_SIZE as u32,
-        rodata: Vec::new(),
-        data: Vec::new(),
-        bss_size: 0,
-        entry_function_index: 0,
-        functions: vec![Function {
-            name: workload.name().to_string(),
-            register_count: 8,
-            parameters: Vec::new(),
-            instructions,
-        }],
     }
 }
 
