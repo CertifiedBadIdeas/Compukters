@@ -29,3 +29,12 @@ fn computer_machine_source_does_not_expose_low_image_cpu_path() {
     assert!(!machine_source.contains("run_boot_cpu_until_signal"));
     assert!(!machine_source.contains("run_cpu_until_signal"));
 }
+
+#[test]
+fn runtime_source_does_not_expose_low_image_microcontroller_machine() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let lib_source = fs::read_to_string(manifest_dir.join("src/lib.rs")).unwrap();
+
+    assert!(!manifest_dir.join("src/microcontroller_machine.rs").exists());
+    assert!(!lib_source.contains("microcontroller_machine"));
+}
