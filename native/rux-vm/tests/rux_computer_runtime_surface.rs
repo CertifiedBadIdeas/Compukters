@@ -56,3 +56,48 @@ fn runtime_source_does_not_expose_low_image_modules() {
         assert!(!lib_source.contains(forbidden));
     }
 }
+
+#[test]
+fn active_abi_docs_do_not_present_low_image_as_supported() {
+    let repo_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(Path::parent)
+        .expect("repo root is above native/rux-vm");
+    let abi_dir = repo_dir.join("docs/abi");
+    let mut docs = String::new();
+    collect_text_files(&abi_dir, &mut docs);
+
+    assert!(!abi_dir.join("fixtures").exists());
+    for removed_doc in [
+        "QUICKSTART.md",
+        "FREEZE-CHECKLIST.md",
+        "PRE-FREEZE-GAPS.md",
+        "cpp-frontend-notes.md",
+        "rux-low-errors-v1.md",
+        "rux-low-image-v1.md",
+        "rux-low-image-v1-opcodes.json",
+        "rux-machine-profile-v1.md",
+    ] {
+        assert!(!abi_dir.join(removed_doc).exists());
+    }
+
+    for forbidden in ["RUXI", "LowImage", "low image", "low-image", ".ruxi"] {
+        assert!(!docs.contains(forbidden));
+    }
+}
+
+fn collect_text_files(dir: &Path, output: &mut String) {
+    for entry in fs::read_dir(dir).expect("directory reads") {
+        let entry = entry.expect("directory entry reads");
+        let path = entry.path();
+        if path.is_dir() {
+            collect_text_files(&path, output);
+        } else if path
+            .extension()
+            .is_some_and(|extension| extension == "md" || extension == "json")
+        {
+            output.push_str(&fs::read_to_string(path).expect("text file reads"));
+            output.push('\n');
+        }
+    }
+}

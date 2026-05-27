@@ -1,7 +1,0 @@
-{
-  "name": "minimal_return_i32",
-  "kind": "golden",
-  "format": "RUXI",
-  "image_format_version": 1,
-  "expected_signal": {"type":"HaltI32","value":42}
-}

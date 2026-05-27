@@ -2,16 +2,33 @@
 
 ## Status
 
-Status: draft.
+Status: active draft.
 
-This document defines the concrete computer-class hardware IDs currently used by `ComputerMachine`.
-It is a target machine profile layered on top of `RUXI` low image ABI v1 and Rux machine profile v2.
+This document defines the concrete computer-class hardware IDs currently used by
+`ComputerMachine`.
 
-Use this target description for firmware that wants to run on the current mod computer VM:
+Use this target description for firmware that wants to run on the current mod
+computer VM:
 
 ```text
-RUXI image ABI v1 + Rux machine profile v2 + Rux computer profile v1
+Rux16 guest code + Rux machine profile v2 + Rux computer profile v1
 ```
+
+## Boot Model
+
+The current computer target starts a Rux16 CPU at:
+
+```text
+BIOS_FLASH_BASE = 0xFFF0_0000
+```
+
+The BIOS flash region is read-only and mapped outside RAM. Firmware fetches
+instructions directly from that region. The host writes profile v2 boot info and
+the hardware table into RAM before the CPU starts.
+
+Storage boot is firmware policy. The current BIOS can inspect storage0, read a
+boot record, copy a Rux16 payload into RAM, and jump to the payload entry
+address. There is no host-side executable decode step in this path.
 
 ## Base Machine Profile
 
@@ -22,9 +39,10 @@ Rux computer profile v1 uses:
 - profile v2 `BootInfo` at `0x0000_0000`;
 - profile v2 `HardwareTable` entries;
 - `page_size = 256`;
-- `program_base = 0x0000_0100`.
+- `program_base = 0x0000_0100`;
+- Rux16 BIOS flash mapped at `0xFFF0_0000`.
 
-The first RAM page is reserved for boot data. The host loads image memory sections at `program_base`.
+The first RAM page is reserved for boot data.
 
 ## Hardware IDs
 
@@ -39,12 +57,14 @@ id  name          mmio_base     mmio_size
 5   storage0      0x1000_0400   0x0000_0100
 ```
 
-Firmware should discover these ranges through `BootInfo.hardware_table_addr` and `BootInfo.hardware_count`.
-The numeric addresses above are the current profile assignment, not an image ABI feature.
+Firmware should discover these ranges through `BootInfo.hardware_table_addr` and
+`BootInfo.hardware_count`. The numeric addresses above are the current profile
+assignment, not a CPU feature.
 
 ## Control MMIO
 
-The control range is host-visible machine state. All registers are little-endian `i32`.
+The control range is host-visible machine state. All registers are little-endian
+`i32`.
 
 ```text
 offset  size  name
@@ -63,7 +83,9 @@ Status values:
 4  panic
 ```
 
-The CPU `halt` signal still terminates execution from the host perspective. Writing control registers is a firmware convention for exposing state to the host and UI.
+The CPU `halt` signal still terminates execution from the host perspective.
+Writing control registers is a firmware convention for exposing state to the
+host and UI.
 
 ## Debug MMIO
 
@@ -76,7 +98,8 @@ offset  size  name
 
 A byte store to `debug + 0x00` appends the byte to host-visible debug output.
 
-Multi-byte stores are accepted by the current VM through the same MMIO range, but portable firmware should use byte stores.
+Multi-byte stores are accepted by the current VM through the same MMIO range,
+but portable firmware should use byte stores.
 
 ## Serial Input MMIO
 
@@ -90,7 +113,8 @@ offset  size  name
 
 `ready` returns `1` when at least one byte is queued and `0` otherwise.
 
-A byte load from `read` consumes and returns one queued byte. If the queue is empty, it returns `0`.
+A byte load from `read` consumes and returns one queued byte. If the queue is
+empty, it returns `0`.
 
 ## Display0 MMIO
 
@@ -125,7 +149,8 @@ Commands:
 4  newline
 ```
 
-Firmware writes `data` first, then writes `command`. A command write consumes the current data register value.
+Firmware writes `data` first, then writes `command`. A command write consumes
+the current data register value.
 
 `put_byte_at_xy` uses packed data:
 
@@ -135,7 +160,8 @@ bits 8..19   x
 bits 20..31  y
 ```
 
-The sequence registers expose a monotonic `u64` split into low/high `u32` words. It advances when visible display state changes through a display command.
+The sequence registers expose a monotonic `u64` split into low/high `u32`
+words. It advances when visible display state changes through a display command.
 
 ## Storage0 MMIO
 
@@ -218,15 +244,3 @@ When media is absent, `capacity_blocks_*` return zero, `media_status` returns
 writes `lba_low/high`, `block_count`, and `buffer_addr`, then writes `command`.
 The host copies `block_count * block_size` bytes between the attached media and
 guest RAM.
-
-## Missing Hardware
-
-Rux machine profile v2 allows hardware entries to be absent. Current `ComputerMachine` always exposes the four entries above, but firmware should still handle missing entries:
-
-- missing debug output should become a no-op;
-- missing serial input should behave as not ready and return `0`;
-- missing control should make firmware rely on CPU halt or host lifecycle controls.
-- missing display should make display writes no-ops and display reads return `0`.
-- missing storage should make filesystem/boot discovery treat the port as unavailable.
-
-The Rux standard library follows this rule for `std::io`.

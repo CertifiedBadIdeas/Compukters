@@ -1,8 +1,0 @@
-{
-  "name": "runtime_scalar_return_without_register",
-  "kind": "runtime_error",
-  "format": "RUXI",
-  "image_format_version": 1,
-  "phase": "runtime",
-  "expected_error": {"contains":"callee returned r0 but caller did not provide return register"}
-}

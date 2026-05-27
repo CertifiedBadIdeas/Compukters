@@ -2,28 +2,32 @@
 
 ## Status
 
-Status: draft.
+Status: active draft.
 
-This document defines the next computer-class Rux machine environment. It is a machine profile, not an image ABI. `RUXI` low image ABI v1 remains byte-compatible with this profile as long as the image decoder, instruction encoding, and instruction semantics are unchanged.
-
-Programs must still be compiled or linked for the target machine profile. A `RUXI` v1 image that assumes machine profile v1 addresses is not automatically semantically compatible with machine profile v2.
+This document defines the core computer-class Rux machine environment. It is a
+machine profile, not a CPU instruction encoding. The current runtime starts a
+Rux16 CPU at mapped BIOS flash, while RAM contains host-written boot metadata
+and guest-writable memory.
 
 ## Goals
 
-- Keep the CPU and image ABI independent from Minecraft-specific hardware semantics.
-- Make all guest-visible MMIO hardware optional.
-- Remove mandatory guest-visible control MMIO.
-- Add a boot info contract that tells software how RAM and guest-visible MMIO ranges are laid out.
+- Keep CPU instruction encoding independent from Minecraft-specific hardware
+  semantics.
+- Make guest-visible MMIO hardware explicit and discoverable.
+- Provide boot info that tells firmware how RAM and guest-visible MMIO ranges
+  are laid out.
 - Support configurable page size for boot layout and MMIO allocation.
-- Allow future laptop, desktop, headless, monitor, modem, and storage configurations without changing the image ABI.
+- Allow future laptop, desktop, headless, monitor, modem, and storage
+  configurations without changing the core profile.
 
 ## Non-Goals
 
 - Do not define a full USB, PCI, ACPI, or firmware protocol.
-- Do not define generic device classes, physical connector kinds, flags, descriptors, or a common MMIO device header.
-- Do not require a display, serial port, storage interface, modem, timer, or power-management interface.
+- Do not define generic device classes, physical connector kinds, flags,
+  descriptors, or a common MMIO device header.
+- Do not require a display, serial port, storage interface, modem, timer, or
+  power-management interface.
 - Do not add virtual memory or MMU semantics.
-- Do not change `RUXI` low image ABI v1.
 - Do not support hotplug in this profile.
 
 ## Required Machine Components
@@ -32,10 +36,11 @@ The minimum machine has:
 
 - CPU;
 - byte-addressed linear RAM;
-- a boot image loaded into RAM;
 - boot info written by the host before execution starts.
 
-No guest-visible MMIO range is required. Lifecycle controls such as start, force stop, and reset are host/runtime actions unless a target machine profile defines a guest-visible power-management range.
+Firmware may execute from a target-defined ROM or flash region instead of RAM.
+Lifecycle controls such as start, force stop, and reset are host/runtime actions
+unless a target machine profile defines a guest-visible power-management range.
 
 ## Address Spaces
 
@@ -47,7 +52,9 @@ RAM occupies:
 0x0000_0000 .. ram_size - 1
 ```
 
-MMIO ranges are assigned by the host before boot and occupy implementation-assigned ranges outside RAM. Computer-class profiles should allocate MMIO from:
+MMIO ranges are assigned by the host before boot and occupy
+implementation-assigned ranges outside RAM. Computer-class profiles should
+allocate MMIO from:
 
 ```text
 0x1000_0000 .. 0xFFFF_FFFF
@@ -64,16 +71,18 @@ else:
     memory fault
 ```
 
-Multi-byte RAM and MMIO accesses are little-endian and do not require alignment unless a target-specific MMIO handler says otherwise.
+Multi-byte RAM and MMIO accesses are little-endian and do not require alignment
+unless a target-specific MMIO handler says otherwise.
 
 ## Configurable Page Size
 
 Each machine has a `page_size` value in boot info.
 
-`page_size` is not an MMU page. It is the machine allocation and alignment granularity used for:
+`page_size` is not an MMU page. It is the machine allocation and alignment
+granularity used for:
 
 - the reserved boot page;
-- program load base;
+- program load base for RAM-loaded guest programs;
 - MMIO range alignment;
 - framebuffer and command-buffer alignment recommendations;
 - future memory-protection work.
@@ -93,7 +102,7 @@ The first RAM page is reserved for host-provided boot data:
 0x0000_0000                    page_size
 | boot page                    |
                                ram_size
-                               | guest program RAM |
+                               | guest RAM |
 ```
 
 For profile v2:
@@ -103,9 +112,12 @@ BOOT_INFO_ADDR = 0x0000_0000
 program_base = page_size
 ```
 
-The host loads image memory sections starting at `program_base` unless a future profile explicitly defines a different loader contract.
+`program_base` is the conventional RAM address for boot-loaded guest programs.
+It does not imply that the first-stage firmware is loaded by the host into RAM;
+the current computer target starts first-stage firmware from BIOS flash.
 
-The guest must not write the boot page unless it intentionally gives up access to boot data.
+The guest must not write the boot page unless it intentionally gives up access
+to boot data.
 
 ## BootInfo Layout
 
@@ -126,7 +138,9 @@ offset  size  name
 
 `version` is `2` for this profile.
 
-`hardware_table_addr` is a RAM address when `hardware_count > 0`. For small hardware tables the host should place the table inside the boot page after `BootInfo`.
+`hardware_table_addr` is a RAM address when `hardware_count > 0`. For small
+hardware tables the host should place the table inside the boot page after
+`BootInfo`.
 
 If `hardware_count = 0`, `hardware_table_addr` must be `0`.
 
@@ -134,11 +148,13 @@ BootInfo size is 28 bytes.
 
 ## Hardware Table
 
-The hardware table is an array of fixed-size entries. All fields are little-endian `u32`.
+The hardware table is an array of fixed-size entries. All fields are
+little-endian `u32`.
 
-The table describes guest-visible MMIO ranges. It does not describe device classes, physical connector kinds, capabilities, flags, or hotplug state.
+The table describes guest-visible MMIO ranges. It does not describe device
+classes, physical connector kinds, capabilities, flags, or hotplug state.
 
-The semantic meaning of each entry is defined by the target machine profile. For example, a notebook target profile may define hardware entry `1` as its display controller and entry `2` as its input controller, but those meanings are outside this core profile.
+The semantic meaning of each entry is defined by the target machine profile.
 
 ```text
 offset  size  name
@@ -149,11 +165,15 @@ offset  size  name
 
 Entry size is 12 bytes.
 
-`id` is stable for the current boot and must be unique within the hardware table.
+`id` is stable for the current boot and must be unique within the hardware
+table.
 
-`mmio_base` and `mmio_size` describe the MMIO range. Both must be non-zero and aligned to `page_size`.
+`mmio_base` and `mmio_size` describe the MMIO range. Both must be non-zero and
+aligned to `page_size`.
 
-Hardware table entries are static for the whole boot. This profile has no hotplug; physical attachment changes become guest-visible only after a reboot that rebuilds BootInfo and the hardware table.
+Hardware table entries are static for the whole boot. This profile has no
+hotplug; physical attachment changes become guest-visible only after a reboot
+that rebuilds BootInfo and the hardware table.
 
 ## Hardware Entry Rules
 
@@ -171,20 +191,15 @@ Valid profile v2 entries follow these rules:
 
 ## Target Machine Profiles
 
-The core profile intentionally does not define what hardware entry `id` values mean.
+The core profile intentionally does not define what hardware entry `id` values
+mean.
 
-A concrete target machine profile defines those meanings. For example:
+A concrete target machine profile defines those meanings. For example, the
+current Rux computer profile defines hardware entry `1` as its control device
+and entry `5` as its storage0 block device.
 
-```text
-Rux computer profile v1:
-  hardware id 1 = control
-  hardware id 2 = debug
-  hardware id 3 = serial-input
-```
-
-The register layout and behavior of each MMIO range are also target-profile-defined.
-
-Programs are expected to be compiled or linked for a target machine profile, not for profile v2 alone.
+Programs are expected to be compiled or linked for a target machine profile,
+not for profile v2 alone.
 
 ## Power And Reboot
 
@@ -195,32 +210,10 @@ Host-level machine controls are outside the guest-visible hardware table:
 - reset;
 - destroy.
 
-Guest-requested graceful shutdown or reboot requires a target-defined MMIO range that provides power-management semantics. If no such range is defined by the target profile, guest software cannot request shutdown through the machine profile.
+Guest-requested graceful shutdown or reboot requires a target-defined MMIO range
+that provides power-management semantics. If no such range is defined by the
+target profile, guest software cannot request shutdown through the machine
+profile.
 
-The CPU `halt` signal is not poweroff. It only reports a terminal execution state to the host.
-
-## Compatibility With RUXI Image ABI v1
-
-This profile does not change `RUXI` low image ABI v1:
-
-- image magic and version are unchanged;
-- section encoding is unchanged;
-- instruction tags and operand encodings are unchanged;
-- instruction semantics are unchanged;
-- decode and validation rules are unchanged.
-
-This profile does change machine semantics compared with profile v1:
-
-- the first RAM page is reserved for boot data;
-- image memory sections are loaded at `program_base`;
-- guest-visible MMIO range discovery comes from boot info and the hardware table;
-- guest-visible control MMIO is no longer required;
-- hardware semantics are target-profile-defined.
-
-Toolchains should describe their target as:
-
-```text
-RUXI image ABI v1 + Rux machine profile v2
-```
-
-instead of only `RUXI v1`.
+The CPU `halt` signal is not poweroff. It only reports a terminal execution
+state to the host.
