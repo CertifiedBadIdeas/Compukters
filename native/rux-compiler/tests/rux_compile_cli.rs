@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::process::Command;
 
 #[test]
-fn rux_compile_defaults_to_program_target() {
+fn rux_compile_defaults_to_user_space_program_target_and_rejects_it_until_program_abi_exists() {
     let source_path = temp_file("default-program.rx");
     let default_output_path = temp_file("default-program.bin");
     let explicit_output_path = temp_file("explicit-program.bin");
@@ -18,10 +18,11 @@ fn rux_compile_defaults_to_program_target() {
         ])
         .output()
         .expect("rux compile runs");
+    assert!(!default_output.status.success());
+    let default_stderr = String::from_utf8_lossy(&default_output.stderr);
     assert!(
-        default_output.status.success(),
-        "stderr: {}",
-        String::from_utf8_lossy(&default_output.stderr)
+        default_stderr.contains("user-space program ABI is not defined yet"),
+        "stderr: {default_stderr}"
     );
 
     let explicit_output = Command::new(rux_binary())
@@ -35,24 +36,14 @@ fn rux_compile_defaults_to_program_target() {
         ])
         .output()
         .expect("rux compile runs");
+    assert!(!explicit_output.status.success());
+    let explicit_stderr = String::from_utf8_lossy(&explicit_output.stderr);
     assert!(
-        explicit_output.status.success(),
-        "stderr: {}",
-        String::from_utf8_lossy(&explicit_output.stderr)
+        explicit_stderr.contains("user-space program ABI is not defined yet"),
+        "stderr: {explicit_stderr}"
     );
-
-    let default_bytes = fs::read(default_output_path).expect("default output reads");
-    let explicit_bytes = fs::read(explicit_output_path).expect("explicit output reads");
-    assert_eq!(default_bytes, explicit_bytes);
-    assert_eq!(&default_bytes[0..4], b"RUXE");
-    assert_eq!(u16_at(&default_bytes, 4), 1);
-    assert_eq!(u16_at(&default_bytes, 6), 32);
-    assert_eq!(u16_at(&default_bytes, 8), 1);
-    assert_eq!(u32_at(&default_bytes, 12), 0);
-    assert_eq!(u32_at(&default_bytes, 16), 32);
-    assert_eq!(u32_at(&default_bytes, 20), 1);
-    assert_eq!(&default_bytes[52..], &[0x01, 0x00]);
-    assert_ne!(&default_bytes[..], b"RUXI");
+    assert!(!default_output_path.exists());
+    assert!(!explicit_output_path.exists());
 }
 
 #[test]
@@ -109,8 +100,40 @@ fn rux_compile_writes_explicit_boot_artifact_as_ruxe_executable() {
     );
     let bytes = fs::read(output_path).expect("output reads");
     assert_eq!(&bytes[0..4], b"RUXE");
+    assert_eq!(u32_at(&bytes, 24), 1);
     assert_eq!(u32_at(&bytes, 12), 2048);
     assert_eq!(u32_at(&bytes, 36), 2048);
+    assert_eq!(&bytes[52..], &[0x01, 0x00]);
+}
+
+#[test]
+fn rux_compile_writes_explicit_kernel_artifact_as_ruxe_executable() {
+    let source_path = temp_file("kernel.rx");
+    let output_path = temp_file("kernel.ruxe");
+    fs::write(&source_path, "fn main() { }").expect("source writes");
+
+    let output = Command::new(rux_binary())
+        .args([
+            "compile",
+            "--target",
+            "kernel",
+            source_path.to_str().unwrap(),
+            "-o",
+            output_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("rux compile runs");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let bytes = fs::read(output_path).expect("output reads");
+    assert_eq!(&bytes[0..4], b"RUXE");
+    assert_eq!(u32_at(&bytes, 24), 2);
+    assert_eq!(u32_at(&bytes, 12), 0x4000);
+    assert_eq!(u32_at(&bytes, 36), 0x4000);
     assert_eq!(&bytes[52..], &[0x01, 0x00]);
 }
 
@@ -123,6 +146,8 @@ fn rux_compile_rejects_unsupported_rux16_program_without_lowimage_fallback() {
     let output = Command::new(rux_binary())
         .args([
             "compile",
+            "--target",
+            "boot",
             source_path.to_str().unwrap(),
             "-o",
             output_path.to_str().unwrap(),
@@ -147,10 +172,6 @@ fn temp_file(name: &str) -> PathBuf {
 
 fn rux_binary() -> String {
     std::env::var("CARGO_BIN_EXE_rux").expect("Cargo exposes rux binary path")
-}
-
-fn u16_at(bytes: &[u8], offset: usize) -> u16 {
-    u16::from_le_bytes(bytes[offset..offset + 2].try_into().unwrap())
 }
 
 fn u32_at(bytes: &[u8], offset: usize) -> u32 {

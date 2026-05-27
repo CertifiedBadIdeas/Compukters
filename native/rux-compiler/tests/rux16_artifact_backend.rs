@@ -13,21 +13,37 @@ fn rux16_artifact_empty_main_halts() {
 
     assert_eq!(artifact.target, Rux16ArtifactTarget::Boot);
     let executable = ruxe::decode_rux16_executable(&artifact.bytes).expect("RUXE decodes");
+    assert_eq!(executable.abi_kind, ruxe::RuxeAbiKind::Bootloader);
     assert_eq!(executable.entry_pc, 2048);
     assert_eq!(executable.load_addr, 2048);
     assert_eq!(executable.payload, vec![0x01, 0x00]);
 }
 
 #[test]
-fn rux16_program_artifact_is_ruxe_executable_container() {
-    let artifact = compile_rux16_artifact("fn main() { }", Rux16ArtifactTarget::Program)
-        .expect("empty main compiles to RUXE");
+fn rux16_kernel_artifact_is_ruxe_fixed_image() {
+    let artifact = compile_rux16_artifact("fn main() { }", Rux16ArtifactTarget::Kernel)
+        .expect("empty main compiles to kernel RUXE");
 
-    assert_eq!(artifact.target, Rux16ArtifactTarget::Program);
+    assert_eq!(artifact.target, Rux16ArtifactTarget::Kernel);
     let executable = ruxe::decode_rux16_executable(&artifact.bytes).expect("RUXE decodes");
-    assert_eq!(executable.entry_pc, 0);
-    assert_eq!(executable.load_addr, 0);
+    assert_eq!(executable.abi_kind, ruxe::RuxeAbiKind::Kernel);
+    assert_eq!(executable.entry_pc, 0x4000);
+    assert_eq!(executable.load_addr, 0x4000);
     assert_eq!(executable.payload, vec![0x01, 0x00]);
+}
+
+#[test]
+fn rux16_program_artifact_is_rejected_until_user_space_abi_exists() {
+    let artifact =
+        compile_rux16_artifact("fn main() { }", Rux16ArtifactTarget::Program).unwrap_err();
+
+    assert!(
+        artifact
+            .message
+            .contains("user-space program ABI is not defined yet"),
+        "{}",
+        artifact.message
+    );
 }
 
 #[test]
@@ -260,7 +276,7 @@ fn rux16_artifact_mmio_u8_store_runs_from_bios_flash() {
 fn rux16_artifact_rejects_out_of_range_u8_store_value() {
     let error = compile_rux16_artifact(
         "fn main() { unsafe { mmio<u8>(DEBUG_WRITE).store(256); } }",
-        Rux16ArtifactTarget::Program,
+        Rux16ArtifactTarget::Boot,
     )
     .unwrap_err();
 
@@ -550,10 +566,10 @@ fn rux16_artifact_rejects_recursive_helper_inline() {
             again();
          }
 
-         fn main() {
+        fn main() {
             again();
          }",
-        Rux16ArtifactTarget::Program,
+        Rux16ArtifactTarget::Boot,
     )
     .unwrap_err();
 

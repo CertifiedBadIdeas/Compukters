@@ -24,6 +24,9 @@ pub fn create_empty_volume(size: usize) -> Result<Vec<u8>, String> {
 pub fn put_boot(volume: &mut [u8], boot: &[u8]) -> Result<(), String> {
     let payload_range = validate_volume_header(volume)?;
     let boot = ruxe::decode_rux16_executable(boot)?;
+    if boot.abi_kind != ruxe::RuxeAbiKind::Bootloader {
+        return Err("boot media requires RUXE bootloader ABI kind".to_string());
+    }
     let block_count = boot.payload.len().div_ceil(512);
     let boot_end = RUXVOL_BOOT_PAYLOAD_OFFSET
         .checked_add(boot.payload.len())

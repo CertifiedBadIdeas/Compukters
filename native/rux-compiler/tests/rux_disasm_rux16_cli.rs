@@ -21,14 +21,15 @@ fn rux_disasm_requires_explicit_target() {
 }
 
 #[test]
-fn rux_disasm_prints_program_artifact_from_zero_base() {
-    let artifact_path = temp_file("program.bin");
+fn rux_disasm_rejects_program_target_until_user_space_abi_exists() {
+    let artifact_path = temp_file("program.ruxe");
     fs::write(
         &artifact_path,
         rux_compiler::ruxe::encode_rux16_executable(
             &words_to_bytes(&[const4(1, 7), const4(2, 3), add(3, 1, 2), halt()]),
-            0,
-            0,
+            rux_compiler::ruxe::RuxeAbiKind::Bootloader,
+            2048,
+            2048,
         )
         .expect("RUXE encodes"),
     )
@@ -44,21 +45,12 @@ fn rux_disasm_prints_program_artifact_from_zero_base() {
         .output()
         .expect("rux disasm runs");
 
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        output.status.success(),
-        "stderr: {}",
-        String::from_utf8_lossy(&output.stderr)
+        stderr.contains("user-space program ABI is not defined yet"),
+        "stderr: {stderr}"
     );
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(
-        stdout.contains("00000000: 1107  const4 r1, 7"),
-        "stdout: {stdout}"
-    );
-    assert!(
-        stdout.contains("00000004: 2312  add r3, r1, r2"),
-        "stdout: {stdout}"
-    );
-    assert!(stdout.contains("00000006: 0001  halt"), "stdout: {stdout}");
 }
 
 #[test]
@@ -68,6 +60,7 @@ fn rux_disasm_prints_boot_artifact_from_boot_load_base() {
         &artifact_path,
         rux_compiler::ruxe::encode_rux16_executable(
             &words_to_bytes(&[const4(1, 7), halt()]),
+            rux_compiler::ruxe::RuxeAbiKind::Bootloader,
             2048,
             2048,
         )
@@ -96,6 +89,44 @@ fn rux_disasm_prints_boot_artifact_from_boot_load_base() {
         "stdout: {stdout}"
     );
     assert!(stdout.contains("00000802: 0001  halt"), "stdout: {stdout}");
+}
+
+#[test]
+fn rux_disasm_prints_kernel_artifact_from_kernel_load_base() {
+    let artifact_path = temp_file("kernel.ruxe");
+    fs::write(
+        &artifact_path,
+        rux_compiler::ruxe::encode_rux16_executable(
+            &words_to_bytes(&[const4(1, 7), halt()]),
+            rux_compiler::ruxe::RuxeAbiKind::Kernel,
+            0x4000,
+            0x4000,
+        )
+        .expect("RUXE encodes"),
+    )
+    .expect("artifact writes");
+
+    let output = Command::new(rux_binary())
+        .args([
+            "disasm",
+            "--target",
+            "kernel",
+            artifact_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("rux disasm runs");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("00004000: 1107  const4 r1, 7"),
+        "stdout: {stdout}"
+    );
+    assert!(stdout.contains("00004002: 0001  halt"), "stdout: {stdout}");
 }
 
 #[test]
