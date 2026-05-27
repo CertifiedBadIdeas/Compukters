@@ -1,15 +1,24 @@
 use crate::artifact::Rux16ArtifactTarget;
+use crate::ruxe;
 
 pub fn disassemble_artifact(bytes: &[u8], target: Rux16ArtifactTarget) -> Result<String, String> {
+    let (bytes, base_address) = match target {
+        Rux16ArtifactTarget::Program => {
+            let executable = ruxe::decode_rux16_executable(bytes)?;
+            (executable.payload, executable.load_addr)
+        }
+        Rux16ArtifactTarget::Bios | Rux16ArtifactTarget::Boot => {
+            (bytes.to_vec(), target.base_address())
+        }
+    };
     if bytes.len() % 2 != 0 {
         return Err("Rux16 artifact byte length must be even".to_string());
     }
-    let words = decode_words(bytes);
+    let words = decode_words(&bytes);
     let mut output = String::new();
     let mut index = 0;
     while index < words.len() {
-        let pc = target
-            .base_address()
+        let pc = base_address
             .checked_add((index as u32) * 2)
             .ok_or_else(|| "Rux16 artifact address overflows u32".to_string())?;
         let (text, width) = disassemble_instruction(&words, index);

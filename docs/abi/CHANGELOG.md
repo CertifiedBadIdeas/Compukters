@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Added experimental `RUXE` v1 as the guest-loadable executable container for
+  Rux16 program artifacts.
+- `rux compile` now emits `RUXE` for the default `program` target. Explicit
+  `bios` and `boot` targets continue to emit raw Rux16 instruction bytes for
+  BIOS flash and current storage0 boot records.
 - Retired the previous host-decoded executable ABI package from active
   documentation.
 - Removed the obsolete decoder, runner, disassembler, conformance examples,
@@ -15,3 +20,4 @@
 
 - `rux-machine-profile-v2.md`
 - `rux-computer-profile-v1.md`
+- `ruxe-v1.md`

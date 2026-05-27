@@ -3,6 +3,7 @@ use crate::frontend::ast::{
 };
 use crate::frontend::CompileError;
 use crate::rux16_asm;
+use crate::ruxe;
 use rux_vm::computer_abi;
 use std::collections::HashMap;
 
@@ -50,10 +51,16 @@ pub(crate) fn compile(
     backend.inline_function("main")?;
     backend.words.push(rux16_asm::halt());
 
-    Ok(Rux16Artifact {
-        target,
-        bytes: rux16_asm::encode_words(&backend.words),
-    })
+    let code = rux16_asm::encode_words(&backend.words);
+    let bytes = match target {
+        Rux16ArtifactTarget::Program => {
+            ruxe::encode_rux16_executable(&code, target.base_address(), target.base_address())
+                .map_err(|message| CompileError { message })?
+        }
+        Rux16ArtifactTarget::Bios | Rux16ArtifactTarget::Boot => code,
+    };
+
+    Ok(Rux16Artifact { target, bytes })
 }
 
 struct Rux16ArtifactBackend {
