@@ -11,9 +11,6 @@ pub mod display;
 pub mod generated;
 pub mod jni;
 pub mod low_bus;
-pub mod low_disasm;
-pub mod low_image;
-pub mod low_image_runner;
 pub mod low_machine;
 pub mod rux16;
 pub mod rux_computer {

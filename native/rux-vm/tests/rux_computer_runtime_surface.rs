@@ -38,3 +38,21 @@ fn runtime_source_does_not_expose_low_image_microcontroller_machine() {
     assert!(!manifest_dir.join("src/microcontroller_machine.rs").exists());
     assert!(!lib_source.contains("microcontroller_machine"));
 }
+
+#[test]
+fn runtime_source_does_not_expose_low_image_modules() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let lib_source = fs::read_to_string(manifest_dir.join("src/lib.rs")).unwrap();
+
+    for removed_path in [
+        "src/low_image.rs",
+        "src/low_image_runner.rs",
+        "src/low_disasm.rs",
+    ] {
+        assert!(!manifest_dir.join(removed_path).exists());
+    }
+
+    for forbidden in ["low_image", "low_image_runner", "low_disasm", "LowImage"] {
+        assert!(!lib_source.contains(forbidden));
+    }
+}
