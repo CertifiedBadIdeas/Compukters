@@ -1,8 +1,0 @@
-{
-  "name": "bad_jump_target",
-  "kind": "negative",
-  "format": "RUXI",
-  "target_image_format_version": 1,
-  "phase": "validation",
-  "expected_error": {"contains":"jump target 1 is outside instruction count 1"}
-}

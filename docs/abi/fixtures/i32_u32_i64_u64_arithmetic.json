@@ -1,7 +1,0 @@
-{
-  "name": "i32_u32_i64_u64_arithmetic",
-  "kind": "golden",
-  "format": "RUXI",
-  "image_format_version": 1,
-  "expected_signal": {"type":"HaltI32","value":1}
-}

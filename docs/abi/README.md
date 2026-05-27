@@ -1,25 +1,18 @@
 # ABI Specifications
 
-This directory contains stable runtime and binary interface contracts.
+This directory contains the active guest-visible hardware contracts for the
+Rux computer runtime.
 
-Design notes and implementation plans may explain how an ABI was chosen, but the files here are the canonical references for external tools and compiler frontends.
+Design notes and implementation plans may explain how older interfaces were
+chosen, but the files here are the current references for firmware and tooling.
 
 Current specifications:
 
-- `QUICKSTART.md`: practical first steps for external image producers.
-- `rux-low-image-v1.md`: frozen Rux low image ABI v1.
-- `rux-low-image-v1-opcodes.json`: machine-readable opcode table for Rux low image ABI v1.
-- `rux-machine-profile-v1.md`: baseline machine profile for running Rux low images on a computer-class VM.
-- `rux-machine-profile-v2.md`: draft machine profile with boot info, configurable page size, and a static MMIO hardware table.
-- `rux-computer-profile-v1.md`: concrete hardware IDs and MMIO layout for the current `ComputerMachine`.
-- `rux-low-errors-v1.md`: stable decode, validation, and runtime error categories for tooling.
-- `cpp-frontend-notes.md`: advisory lowering notes for external C++ frontends.
-- `PRE-FREEZE-GAPS.md`: reviewed v1 instruction-set gaps and decisions.
-- `FREEZE-CHECKLIST.md`: gates and commands required before freezing v1.
+- `rux-machine-profile-v2.md`: machine boot info, RAM layout, MMIO allocation,
+  and hardware table contract.
+- `rux-computer-profile-v1.md`: concrete hardware IDs and MMIO register layout
+  for the current `ComputerMachine`.
+- `CHANGELOG.md`: active ABI history.
 
-Conformance material:
-
-- `fixtures/*.ruxi`: golden and negative Rux low image fixtures.
-- `fixtures/*.json`: machine-readable fixture manifests.
-- `fixtures/README.md`: fixture execution notes, including `./rux run --memory` behavior.
-- `CHANGELOG.md`: ABI history and freeze notes.
+The supported execution model is Rux16 guest instruction-memory execution from
+BIOS flash with optional storage0 boot media.
