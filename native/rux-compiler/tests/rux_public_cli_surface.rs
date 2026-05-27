@@ -30,7 +30,10 @@ fn rux_compile_bios_is_the_public_firmware_path() {
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("rux compile"), "stderr: {stderr}");
-    assert!(stderr.contains("--target <bios|boot|program>"), "stderr: {stderr}");
+    assert!(
+        stderr.contains("--target <bios|boot|program>"),
+        "stderr: {stderr}"
+    );
 }
 
 fn rux_binary() -> String {
