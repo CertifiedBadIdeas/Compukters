@@ -15,3 +15,17 @@ fn rux_computer_handle_source_does_not_expose_low_image_startup_or_handoff() {
     assert!(!jni_source.contains("createRuxComputerNative"));
     assert!(!jni_source.contains("runRuxComputerUntilSignalNative"));
 }
+
+#[test]
+fn computer_machine_source_does_not_expose_low_image_cpu_path() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let machine_source = fs::read_to_string(manifest_dir.join("src/computer/machine.rs")).unwrap();
+
+    assert!(!machine_source.contains("LowImage"));
+    assert!(!machine_source.contains("LowCpuContext"));
+    assert!(!machine_source.contains("LowImageVm"));
+    assert!(!machine_source.contains("spawn_boot_cpu"));
+    assert!(!machine_source.contains("spawn_cpu("));
+    assert!(!machine_source.contains("run_boot_cpu_until_signal"));
+    assert!(!machine_source.contains("run_cpu_until_signal"));
+}
