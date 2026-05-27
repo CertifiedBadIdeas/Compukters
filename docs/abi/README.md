@@ -8,8 +8,10 @@ chosen, but the files here are the current references for firmware and tooling.
 
 Current specifications:
 
-- `ruxe-v1.md`: experimental guest-loadable executable container for Rux16
-  programs.
+- `ruxe-v1.md`: experimental guest-loadable fixed-image executable container
+  for Rux16 bootloader and kernel images.
+- `rux-storage-volume-v1.md`: current storage0 volume and fixed boot/kernel
+  media record layout.
 - `rux-machine-profile-v2.md`: machine boot info, RAM layout, MMIO allocation,
   and hardware table contract.
 - `rux-computer-profile-v1.md`: concrete hardware IDs and MMIO register layout

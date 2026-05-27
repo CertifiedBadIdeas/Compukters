@@ -5,6 +5,10 @@ pub const RUXVOL_VERSION: u16 = 1;
 pub const RUXVOL_HEADER_SIZE: usize = 16;
 pub const RUXVOL_BOOT_RECORD_OFFSET: usize = 0;
 pub const RUXVOL_BOOT_PAYLOAD_OFFSET: usize = 512;
+pub const RUXVOL_KERNEL_RECORD_OFFSET: usize = 8192;
+pub const RUXVOL_KERNEL_PAYLOAD_OFFSET: usize = 8704;
+pub const RUXVOL_KERNEL_RECORD_LBA: u32 = 16;
+pub const RUXVOL_KERNEL_PAYLOAD_LBA: u32 = 17;
 
 pub fn create_empty_volume(size: usize) -> Result<Vec<u8>, String> {
     if size < RUXVOL_BOOT_PAYLOAD_OFFSET {
@@ -37,6 +41,11 @@ pub fn put_boot(volume: &mut [u8], boot: &[u8]) -> Result<(), String> {
             "boot artifact needs {boot_end} payload bytes but ruxvol payload has {payload_len} bytes",
         ));
     }
+    if boot_end > RUXVOL_KERNEL_RECORD_OFFSET {
+        return Err(format!(
+            "boot artifact overlaps reserved kernel record area at byte {RUXVOL_KERNEL_RECORD_OFFSET}",
+        ));
+    }
     let block_count = u32::try_from(block_count)
         .map_err(|_| "boot artifact block count does not fit u32".to_string())?;
 
@@ -47,6 +56,39 @@ pub fn put_boot(volume: &mut [u8], boot: &[u8]) -> Result<(), String> {
     write_u32(payload, 12, block_count);
     write_u32(payload, 16, 1);
     payload[RUXVOL_BOOT_PAYLOAD_OFFSET..boot_end].copy_from_slice(&boot.payload);
+    Ok(())
+}
+
+pub fn put_kernel(volume: &mut [u8], kernel: &[u8]) -> Result<(), String> {
+    let payload_range = validate_volume_header(volume)?;
+    let kernel = ruxe::decode_rux16_executable(kernel)?;
+    if kernel.abi_kind != ruxe::RuxeAbiKind::Kernel {
+        return Err("kernel media requires RUXE kernel ABI kind".to_string());
+    }
+    let block_count = kernel.payload.len().div_ceil(512);
+    let kernel_end = RUXVOL_KERNEL_PAYLOAD_OFFSET
+        .checked_add(kernel.payload.len())
+        .ok_or_else(|| "kernel artifact range overflows".to_string())?;
+    let payload_len = payload_range.len();
+    if kernel_end > payload_len {
+        return Err(format!(
+            "kernel artifact needs {kernel_end} payload bytes but ruxvol payload has {payload_len} bytes",
+        ));
+    }
+    let block_count = u32::try_from(block_count)
+        .map_err(|_| "kernel artifact block count does not fit u32".to_string())?;
+
+    let payload = &mut volume[payload_range];
+    payload[RUXVOL_KERNEL_RECORD_OFFSET..RUXVOL_KERNEL_RECORD_OFFSET + 4].copy_from_slice(b"RUXK");
+    write_u32(payload, RUXVOL_KERNEL_RECORD_OFFSET + 4, kernel.entry_pc);
+    write_u32(payload, RUXVOL_KERNEL_RECORD_OFFSET + 8, kernel.load_addr);
+    write_u32(payload, RUXVOL_KERNEL_RECORD_OFFSET + 12, block_count);
+    write_u32(
+        payload,
+        RUXVOL_KERNEL_RECORD_OFFSET + 16,
+        RUXVOL_KERNEL_PAYLOAD_LBA,
+    );
+    payload[RUXVOL_KERNEL_PAYLOAD_OFFSET..kernel_end].copy_from_slice(&kernel.payload);
     Ok(())
 }
 
