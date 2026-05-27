@@ -1,5 +1,6 @@
 use rux_compiler::artifact::Rux16ArtifactTarget;
 use rux_compiler::compile_rux16_artifact;
+use rux_compiler::ruxe;
 use rux_vm::computer_machine::ComputerMachine;
 use rux_vm::rux16::Rux16Signal;
 use rux_vm::rux_computer::RuxComputerHandle;
@@ -7,11 +8,23 @@ use std::path::Path;
 
 #[test]
 fn rux16_artifact_empty_main_halts() {
-    let artifact = compile_rux16_artifact("fn main() { }", Rux16ArtifactTarget::Program)
+    let artifact = compile_rux16_artifact("fn main() { }", Rux16ArtifactTarget::Boot)
         .expect("empty main compiles to Rux16");
 
-    assert_eq!(artifact.target, Rux16ArtifactTarget::Program);
+    assert_eq!(artifact.target, Rux16ArtifactTarget::Boot);
     assert_eq!(artifact.bytes, vec![0x01, 0x00]);
+}
+
+#[test]
+fn rux16_program_artifact_is_ruxe_executable_container() {
+    let artifact = compile_rux16_artifact("fn main() { }", Rux16ArtifactTarget::Program)
+        .expect("empty main compiles to RUXE");
+
+    assert_eq!(artifact.target, Rux16ArtifactTarget::Program);
+    let executable = ruxe::decode_rux16_executable(&artifact.bytes).expect("RUXE decodes");
+    assert_eq!(executable.entry_pc, 0);
+    assert_eq!(executable.load_addr, 0);
+    assert_eq!(executable.payload, vec![0x01, 0x00]);
 }
 
 #[test]
@@ -145,7 +158,7 @@ fn compile_stage2_program() -> rux_compiler::artifact::Rux16Artifact {
                 mmio<i32>(CONTROL_PANIC_CODE).store(82);
             }
         }",
-        Rux16ArtifactTarget::Program,
+        Rux16ArtifactTarget::Boot,
     )
     .expect("stage2 program compiles to Rux16")
 }

@@ -25,7 +25,12 @@ fn rux_disasm_prints_program_artifact_from_zero_base() {
     let artifact_path = temp_file("program.bin");
     fs::write(
         &artifact_path,
-        words_to_bytes(&[const4(1, 7), const4(2, 3), add(3, 1, 2), halt()]),
+        rux_compiler::ruxe::encode_rux16_executable(
+            &words_to_bytes(&[const4(1, 7), const4(2, 3), add(3, 1, 2), halt()]),
+            0,
+            0,
+        )
+        .expect("RUXE encodes"),
     )
     .expect("artifact writes");
 
