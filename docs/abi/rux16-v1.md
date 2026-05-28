@@ -21,6 +21,7 @@ The compiler-owned helper call ABI currently assigns:
 ```text
 r0      return value
 r1..r3  first three helper arguments
+r12     helper frame pointer
 ```
 
 There is no zero register in v1.
@@ -56,6 +57,35 @@ pop u32:
 Compiler backends must not use `r15` as a scratch register. If stack setup has
 not happened for a target, code that needs stack storage must fail explicitly
 instead of silently using a different register or fallback execution path.
+
+## Helper Frame Pointer
+
+`r12` is reserved as the compiler-owned helper frame pointer:
+
+```text
+r12  fp
+```
+
+Real helper bodies save the caller frame pointer, then set `fp` to the current
+stack pointer:
+
+```text
+push fp
+fp = sp
+```
+
+Before returning, helpers restore the stack to the frame base, pop the caller
+frame pointer, and then execute `ret`:
+
+```text
+sp = fp
+pop fp
+ret
+```
+
+The current frame slice only reserves a stable base for helper bodies. It does
+not add stack-backed locals, stack-passed arguments, recursion, or a user-space
+ABI.
 
 ## Target Stack Ownership
 
@@ -104,6 +134,7 @@ When the Rux16 compiler emits a real helper call and the caller has live local
 registers, it saves those local registers to the `r15` stack before `call` and
 restores them after `ret`.
 
+Compiler backends must not use `r12` or `r15` as scratch or local registers.
 This is a compiler-owned preservation rule for the current register-backed
 local lowering. It is not yet a full caller-saved/callee-saved register
 classification, and it does not define stack-passed parameters or return slots.
