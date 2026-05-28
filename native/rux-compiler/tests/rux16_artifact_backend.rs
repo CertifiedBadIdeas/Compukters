@@ -739,6 +739,10 @@ fn rux16_artifact_calls_unit_helper_function_from_bios_flash() {
         disassembly.contains("ret"),
         "unit helper body must return with Rux16 ret:\n{disassembly}"
     );
+    assert!(
+        disassembly.contains("r12"),
+        "real helper bodies must reserve r12 as the helper frame pointer:\n{disassembly}"
+    );
     let (mut machine, cpu_id) =
         ComputerMachine::from_rux16_bios_flash(&artifact.bytes, 64 * 1024, 1024)
             .expect("machine boots Rux16 BIOS flash");
@@ -1061,6 +1065,38 @@ fn rux16_artifact_backend_reserves_r15_for_stack_pointer() {
     assert!(
         !disassembly.contains("r15"),
         "r15 is the stack pointer and must not be used as a compiler scratch register:\n{disassembly}"
+    );
+}
+
+#[test]
+fn rux16_artifact_backend_reserves_r12_for_frame_pointer() {
+    let error = compile_rux16_artifact(
+        &with_computer_abi(
+            "fn main() {
+            let mut a: u8 = 1u8;
+            let mut b: u8 = 2u8;
+            let mut c: u8 = 3u8;
+            let mut d: u8 = 4u8;
+            let mut e: u8 = 5u8;
+            let mut f: u8 = 6u8;
+            let mut g: u8 = 7u8;
+            let mut h: u8 = 8u8;
+            let mut i: u8 = 9u8;
+            let mut j: u8 = 10u8;
+            unsafe {
+                mmio<u8>(debug::WRITE).store(a);
+                mmio<u8>(debug::WRITE).store(j);
+            }
+         }",
+        ),
+        Rux16ArtifactTarget::Bios,
+    )
+    .unwrap_err();
+
+    assert!(
+        error.message.contains("Rux16 backend ran out of registers"),
+        "{}",
+        error.message
     );
 }
 

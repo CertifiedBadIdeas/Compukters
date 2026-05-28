@@ -330,6 +330,22 @@ impl Rux16ArtifactBackend {
         ));
     }
 
+    fn emit_function_prologue(&mut self) {
+        self.emit_push_register(rux16_asm::FRAME_POINTER_REGISTER);
+        self.emit_register_copy(
+            rux16_asm::FRAME_POINTER_REGISTER,
+            rux16_asm::STACK_POINTER_REGISTER,
+        );
+    }
+
+    fn emit_function_epilogue(&mut self) {
+        self.emit_register_copy(
+            rux16_asm::STACK_POINTER_REGISTER,
+            rux16_asm::FRAME_POINTER_REGISTER,
+        );
+        self.emit_pop_register(rux16_asm::FRAME_POINTER_REGISTER);
+    }
+
     fn emit_pending_function_bodies(&mut self) -> Result<(), CompileError> {
         let mut index = 0;
         while index < self.pending_functions.len() {
@@ -361,8 +377,10 @@ impl Rux16ArtifactBackend {
             self.locals = self.call_abi_parameter_locals(&function)?;
             self.next_register = first_callee_local_register(function.parameters.len());
             self.active_function_return_type = Some(function.return_type);
+            self.emit_function_prologue();
             let result = self.compile_function_body(&function);
             if matches!(result, Ok(false)) {
+                self.emit_function_epilogue();
                 self.words.push(rux16_asm::ret());
             }
             self.locals = caller_locals;
@@ -540,6 +558,7 @@ impl Rux16ArtifactBackend {
         };
         match (return_type, value) {
             (ReturnType::Unit, None) => {
+                self.emit_function_epilogue();
                 self.words.push(rux16_asm::ret());
                 Ok(())
             }
@@ -559,6 +578,7 @@ impl Rux16ArtifactBackend {
                     expr,
                     unsafe_context,
                 )?;
+                self.emit_function_epilogue();
                 self.words.push(rux16_asm::ret());
                 Ok(())
             }
@@ -1419,7 +1439,7 @@ impl Rux16ArtifactBackend {
 
     fn alloc_register(&mut self) -> Result<u8, CompileError> {
         let register = self.next_register;
-        if register >= rux16_asm::SECONDARY_SCRATCH_REGISTER {
+        if register >= rux16_asm::FRAME_POINTER_REGISTER {
             return unsupported("Rux16 backend ran out of registers");
         }
         self.next_register += 1;
