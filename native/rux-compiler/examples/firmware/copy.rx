@@ -1,3 +1,4 @@
+use rux::abi::computer::RAM_BASE;
 use std::io::write_bytes;
 use std::mem::{copy, set};
 
