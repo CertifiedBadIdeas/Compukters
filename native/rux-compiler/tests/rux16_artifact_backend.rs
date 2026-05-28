@@ -796,6 +796,48 @@ fn rux16_artifact_preserves_live_locals_around_unit_helper_call_from_bios_flash(
 }
 
 #[test]
+fn rux16_artifact_preserves_live_locals_around_argument_helper_call_from_bios_flash() {
+    let artifact = compile_rux16_artifact(
+        &with_computer_abi(
+            "fn write_three(first: u8, second: u8, third: u8) {
+            unsafe {
+                mmio<u8>(debug::WRITE).store(first);
+                mmio<u8>(debug::WRITE).store(second);
+                mmio<u8>(debug::WRITE).store(third);
+            }
+         }
+
+         fn main() {
+            let mut after: u8 = 33u8;
+            write_three(after, 66u8, 67u8);
+            unsafe {
+                mmio<u8>(debug::WRITE).store(after);
+            }
+         }",
+        ),
+        Rux16ArtifactTarget::Bios,
+    )
+    .expect("live locals survive Rux16 call ABI argument lowering");
+    let disassembly =
+        rux16_disasm::disassemble_artifact(&artifact.bytes, Rux16ArtifactTarget::Bios)
+            .expect("BIOS artifact disassembles");
+    assert!(
+        disassembly.contains("call r"),
+        "argument helper with live caller locals must lower to a real Rux16 call:\n{disassembly}"
+    );
+    let (mut machine, cpu_id) =
+        ComputerMachine::from_rux16_bios_flash(&artifact.bytes, 64 * 1024, 1024)
+            .expect("machine boots Rux16 BIOS flash");
+
+    assert_eq!(
+        machine.run_boot_rux16_until_signal(cpu_id).unwrap(),
+        Rux16Signal::Halt,
+    );
+    assert_eq!(machine.debug_output_bytes(), b"!BC!", "{disassembly}");
+    assert_eq!(machine.control_status(), ComputerMachine::STATUS_HALTED);
+}
+
+#[test]
 fn rux16_artifact_calls_helper_parameters_and_returns_from_bios_flash() {
     let artifact = compile_rux16_artifact(
         &with_computer_abi(
