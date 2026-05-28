@@ -208,6 +208,54 @@ fn load_boot_payload() {
     }
 }
 
+fn find_boot_partition_start_lba() -> i32 {
+    unsafe {
+        let mut magic: i32 = ptr<i32>(512u32).load();
+        if magic == 0x50585552 {
+            let mut tail: u8 = ptr<u8>(516u32).load();
+            if tail == 84u8 {
+                let mut version: u8 = ptr<u8>(517u32).load();
+                if version == 1u8 {
+                    let mut index: u32 = 0u32;
+                    let mut entry_addr: u32 = 528u32;
+                    while index < 15u32 {
+                        let mut partition_type: i32 = ptr<i32>(entry_addr).load();
+                        if partition_type == 0x544f4f42 {
+                            let mut start_lba_addr: u32 = entry_addr + 8u32;
+                            return ptr<i32>(start_lba_addr).load();
+                        }
+                        entry_addr = entry_addr + 32u32;
+                        index = index + 1u32;
+                    }
+                }
+            }
+        }
+        return 0;
+    }
+}
+
+fn load_partitioned_boot_record() {
+    unsafe {
+        let mut boot_start_lba: i32 = find_boot_partition_start_lba();
+        if boot_start_lba != 0 {
+            let mut status: i32 = read_storage0_blocks(boot_start_lba, 1, 512);
+            if status == storage0::STATUS_DONE {
+                let mut magic: i32 = ptr<i32>(512u32).load();
+                if magic == 1113085266 {
+                    write_boot_record_found();
+                    load_boot_payload();
+                } else {
+                    write_no_bootable_device();
+                }
+            } else {
+                write_no_bootable_device();
+            }
+        } else {
+            write_no_bootable_device();
+        }
+    }
+}
+
 fn discover_boot_record() {
     unsafe {
         let mut status: i32 = read_storage0_blocks(0, 1, 512);
@@ -217,7 +265,7 @@ fn discover_boot_record() {
                 write_boot_record_found();
                 load_boot_payload();
             } else {
-                write_no_bootable_device();
+                load_partitioned_boot_record();
             }
         } else {
             write_no_bootable_device();

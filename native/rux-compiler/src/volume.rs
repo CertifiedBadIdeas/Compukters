@@ -51,30 +51,37 @@ pub fn put_boot(volume: &mut [u8], boot: &[u8]) -> Result<(), String> {
         return Err("boot media requires RUXE bootloader ABI kind".to_string());
     }
     let block_count = boot.payload.len().div_ceil(512);
-    let boot_end = RUXVOL_BOOT_PAYLOAD_OFFSET
+    let payload_len = payload_range.len();
+    let payload = &mut volume[payload_range];
+    let boot_layout = boot_layout(payload)?;
+    let boot_end = boot_layout
+        .payload_offset
         .checked_add(boot.payload.len())
         .ok_or_else(|| "boot artifact range overflows".to_string())?;
-    let payload_len = payload_range.len();
     if boot_end > payload_len {
         return Err(format!(
             "boot artifact needs {boot_end} payload bytes but ruxvol payload has {payload_len} bytes",
         ));
     }
-    if boot_end > RUXVOL_KERNEL_RECORD_OFFSET {
+    if boot_end > boot_layout.end_offset {
         return Err(format!(
-            "boot artifact overlaps reserved kernel record area at byte {RUXVOL_KERNEL_RECORD_OFFSET}",
+            "boot artifact exceeds boot area ending at byte {}",
+            boot_layout.end_offset,
         ));
     }
     let block_count = u32::try_from(block_count)
         .map_err(|_| "boot artifact block count does not fit u32".to_string())?;
 
-    let payload = &mut volume[payload_range];
-    payload[RUXVOL_BOOT_RECORD_OFFSET..RUXVOL_BOOT_RECORD_OFFSET + 4].copy_from_slice(b"RUXB");
-    write_u32(payload, 4, boot.entry_pc);
-    write_u32(payload, 8, boot.load_addr);
-    write_u32(payload, 12, block_count);
-    write_u32(payload, 16, 1);
-    payload[RUXVOL_BOOT_PAYLOAD_OFFSET..boot_end].copy_from_slice(&boot.payload);
+    payload[boot_layout.record_offset..boot_layout.record_offset + 4].copy_from_slice(b"RUXB");
+    write_u32(payload, boot_layout.record_offset + 4, boot.entry_pc);
+    write_u32(payload, boot_layout.record_offset + 8, boot.load_addr);
+    write_u32(payload, boot_layout.record_offset + 12, block_count);
+    write_u32(
+        payload,
+        boot_layout.record_offset + 16,
+        boot_layout.payload_lba,
+    );
+    payload[boot_layout.payload_offset..boot_end].copy_from_slice(&boot.payload);
     Ok(())
 }
 
@@ -203,6 +210,54 @@ fn partition_payload_range(
         ));
     }
     Ok(start..end)
+}
+
+struct BootLayout {
+    record_offset: usize,
+    payload_offset: usize,
+    end_offset: usize,
+    payload_lba: u32,
+}
+
+fn boot_layout(payload: &[u8]) -> Result<BootLayout, String> {
+    if payload.get(..5) == Some(partition::RUXPT_MAGIC) {
+        let table_bytes = payload
+            .get(..partition::RUXPT_BLOCK_SIZE)
+            .ok_or_else(|| "ruxvol payload is too small for RUXPT".to_string())?;
+        let table = partition::decode_partition_table(table_bytes)?;
+        let total_blocks = u32::try_from(payload.len() / partition::RUXPT_BLOCK_SIZE)
+            .map_err(|_| "ruxvol block count does not fit u32".to_string())?;
+        partition::validate_partition_table(&table, total_blocks)?;
+        let entry = table
+            .entries
+            .iter()
+            .find(|entry| entry.partition_type == partition::PartitionType::Boot)
+            .ok_or_else(|| "RUXPT BOOT partition not found".to_string())?;
+        let record_offset = partition_byte_offset(entry.start_lba)?;
+        let payload_lba = entry
+            .start_lba
+            .checked_add(1)
+            .ok_or_else(|| "BOOT payload LBA overflows".to_string())?;
+        let payload_offset = partition_byte_offset(payload_lba)?;
+        let end_lba = entry
+            .start_lba
+            .checked_add(entry.block_count)
+            .ok_or_else(|| "BOOT partition range overflows".to_string())?;
+        let end_offset = partition_byte_offset(end_lba)?;
+        return Ok(BootLayout {
+            record_offset,
+            payload_offset,
+            end_offset,
+            payload_lba,
+        });
+    }
+
+    Ok(BootLayout {
+        record_offset: RUXVOL_BOOT_RECORD_OFFSET,
+        payload_offset: RUXVOL_BOOT_PAYLOAD_OFFSET,
+        end_offset: RUXVOL_KERNEL_RECORD_OFFSET,
+        payload_lba: 1,
+    })
 }
 
 fn partition_byte_offset(blocks: u32) -> Result<usize, String> {

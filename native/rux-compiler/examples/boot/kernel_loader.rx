@@ -263,11 +263,49 @@ fn load_kernel_ruxe_from_root_ruxfs(root_start_lba: i32, kernel_ruxe_inode: i32)
     }
 }
 
+fn execute_loaded_kernel_ruxe() {
+    unsafe {
+        let mut entry_pc: i32 = ptr<i32>(0x300cu32).load();
+        let mut section_kind: i32 = ptr<i32>(0x3020u32).load();
+        let mut load_addr_i32: i32 = ptr<i32>(0x3024u32).load();
+        let mut load_addr: u32 = ptr<u32>(0x3024u32).load();
+        let mut payload_offset_i32: i32 = ptr<i32>(0x3028u32).load();
+        let mut payload_offset: u32 = ptr<u32>(0x3028u32).load();
+        let mut payload_size_i32: i32 = ptr<i32>(0x302cu32).load();
+        let mut payload_size: u32 = ptr<u32>(0x302cu32).load();
+        let mut memory_size_i32: i32 = ptr<i32>(0x3030u32).load();
+
+        if entry_pc != 0 {
+            if section_kind == 1 {
+                if load_addr_i32 != 0 {
+                    if payload_offset_i32 != 0 {
+                        if payload_size_i32 != 0 {
+                            if memory_size_i32 == payload_size_i32 {
+                                let mut copied: u32 = 0u32;
+                                let mut source_addr: u32 = 0x3000u32 + payload_offset;
+                                let mut dest_addr: u32 = load_addr;
+                                while copied < payload_size {
+                                    let mut byte: u8 = ptr<u8>(source_addr).load();
+                                    ptr<u8>(dest_addr).store(byte);
+                                    source_addr = source_addr + 1u32;
+                                    dest_addr = dest_addr + 1u32;
+                                    copied = copied + 1u32;
+                                }
+                                rux16_jump(entry_pc);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        write_kernel_load_failed();
+    }
+}
+
 fn load_kernel() {
     unsafe {
         let mut root_start_lba: i32 = find_root_partition_start_lba();
-        let mut root_ruxfs_present: i32 = probe_root_ruxfs_superblock(root_start_lba);
-        let mut root_inode_present: i32 = probe_root_ruxfs_inode(root_start_lba);
         let mut boot_directory_inode: i32 = find_boot_directory_inode(root_start_lba);
         let mut kernel_ruxe_inode: i32 = find_kernel_ruxe_inode(
             root_start_lba,
@@ -277,44 +315,8 @@ fn load_kernel() {
             root_start_lba,
             kernel_ruxe_inode
         );
-        let mut status: i32 = read_storage0_blocks(16, 1, 0x3000);
-        if status == storage0::STATUS_DONE {
-            let mut magic: i32 = ptr<i32>(0x3000u32).load();
-            if magic == 0x4b585552 {
-                let mut entry_pc: i32 = ptr<i32>(0x3004u32).load();
-                let mut load_addr: i32 = ptr<i32>(0x3008u32).load();
-                let mut block_count: i32 = ptr<i32>(0x300cu32).load();
-                let mut start_lba: i32 = ptr<i32>(0x3010u32).load();
-
-                if entry_pc == 0 {
-                    write_kernel_load_failed();
-                } else {
-                    if load_addr == 0 {
-                        write_kernel_load_failed();
-                    } else {
-                        if block_count == 0 {
-                            write_kernel_load_failed();
-                        } else {
-                            if start_lba == 0 {
-                                write_kernel_load_failed();
-                            } else {
-                                let mut payload_status: i32 = read_storage0_blocks(
-                                    start_lba,
-                                    block_count,
-                                    load_addr
-                                );
-                                if payload_status == storage0::STATUS_DONE {
-                                    rux16_jump(entry_pc);
-                                } else {
-                                    write_kernel_load_failed();
-                                }
-                            }
-                        }
-                    }
-                }
-            } else {
-                write_kernel_load_failed();
-            }
+        if kernel_ruxe_metadata_present == 1 {
+            execute_loaded_kernel_ruxe();
         } else {
             write_kernel_load_failed();
         }
