@@ -63,7 +63,7 @@ pub(crate) fn compile(
     let consts = evaluate_consts(&program.consts)?;
     let functions = collect_supported_functions(&program)?;
     let mut backend = Rux16ArtifactBackend::new(consts, functions, target.base_address());
-    backend.inline_function("main")?;
+    backend.inline_unit_function("main", &[], false)?;
     backend.words.push(rux16_asm::halt());
 
     let code = rux16_asm::encode_words(&backend.words);
@@ -115,7 +115,12 @@ impl Rux16ArtifactBackend {
         }
     }
 
-    fn inline_function(&mut self, name: &str) -> Result<(), CompileError> {
+    fn inline_unit_function(
+        &mut self,
+        name: &str,
+        args: &[Expr],
+        unsafe_context: bool,
+    ) -> Result<(), CompileError> {
         if self.call_stack.iter().any(|active| active == name) {
             return unsupported(format!("recursive Rux16 helper call `{name}`"));
         }
@@ -126,12 +131,137 @@ impl Rux16ArtifactBackend {
             .ok_or_else(|| CompileError {
                 message: format!("Rux16 backend does not support this program yet: unknown helper function `{name}`"),
         })?;
+        if function.return_type != ReturnType::Unit {
+            return unsupported(format!("helper function `{name}` does not return unit"));
+        }
+        let callee_locals = self.compile_call_arguments(&function, args, unsafe_context)?;
         self.call_stack.push(name.to_string());
         let caller_locals = std::mem::take(&mut self.locals);
+        self.locals = callee_locals;
         let result = self.compile_statements(&function.statements, false);
         self.locals = caller_locals;
         self.call_stack.pop();
         result
+    }
+
+    fn inline_returning_function_into(
+        &mut self,
+        dst: u8,
+        expected_ty: TypeName,
+        name: &str,
+        args: &[Expr],
+        unsafe_context: bool,
+    ) -> Result<(), CompileError> {
+        if self.call_stack.iter().any(|active| active == name) {
+            return unsupported(format!("recursive Rux16 helper call `{name}`"));
+        }
+        let function = self
+            .functions
+            .get(name)
+            .cloned()
+            .ok_or_else(|| CompileError {
+                message: format!("Rux16 backend does not support this program yet: unknown helper function `{name}`"),
+            })?;
+        let return_ty = return_type_to_type_name(function.return_type).ok_or_else(|| {
+            CompileError {
+                message: format!(
+                    "Rux16 backend does not support this program yet: helper function `{name}` does not return a value"
+                ),
+            }
+        })?;
+        if return_ty != expected_ty {
+            return unsupported(format!(
+                "helper function `{name}` returns {}, expected {}",
+                type_name(return_ty),
+                type_name(expected_ty)
+            ));
+        }
+        let callee_locals = self.compile_call_arguments(&function, args, unsafe_context)?;
+        self.call_stack.push(name.to_string());
+        let caller_locals = std::mem::take(&mut self.locals);
+        self.locals = callee_locals;
+        let result = self.compile_single_return_into(dst, expected_ty, &function, false);
+        self.locals = caller_locals;
+        self.call_stack.pop();
+        result
+    }
+
+    fn compile_call_arguments(
+        &mut self,
+        function: &FunctionDecl,
+        args: &[Expr],
+        unsafe_context: bool,
+    ) -> Result<HashMap<String, Rux16Local>, CompileError> {
+        if args.len() != function.parameters.len() {
+            return unsupported(format!(
+                "helper function `{}` expects {} arguments, got {}",
+                function.name,
+                function.parameters.len(),
+                args.len()
+            ));
+        }
+        let mut locals = HashMap::new();
+        for (parameter, arg) in function.parameters.iter().zip(args) {
+            if locals.contains_key(&parameter.name) {
+                return unsupported(format!("duplicate Rux16 parameter `{}`", parameter.name));
+            }
+            let register = self.alloc_register()?;
+            match parameter.ty {
+                TypeName::I32 => self.compile_i32_expr_into(register, arg, unsafe_context)?,
+                TypeName::U32 => self.compile_u32_expr_into(register, arg, unsafe_context)?,
+                TypeName::U8 => self.compile_u8_expr_into(register, arg, unsafe_context)?,
+                TypeName::Bool
+                | TypeName::PtrI32
+                | TypeName::PtrU32
+                | TypeName::PtrU8
+                | TypeName::RefMutI32
+                | TypeName::RefMutU32
+                | TypeName::RefMutU8
+                | TypeName::ArrayU8(_) => {
+                    return unsupported(
+                        "only i32, u32, and u8 parameters can be lowered to Rux16 yet",
+                    );
+                }
+            }
+            locals.insert(
+                parameter.name.clone(),
+                Rux16Local {
+                    ty: parameter.ty,
+                    register,
+                },
+            );
+        }
+        Ok(locals)
+    }
+
+    fn compile_single_return_into(
+        &mut self,
+        dst: u8,
+        expected_ty: TypeName,
+        function: &FunctionDecl,
+        unsafe_context: bool,
+    ) -> Result<(), CompileError> {
+        let [Statement::Return(Some(expr))] = function.statements.as_slice() else {
+            return unsupported(format!(
+                "returning helper function `{}` requires a single return statement in Rux16 yet",
+                function.name
+            ));
+        };
+        match expected_ty {
+            TypeName::I32 => self.compile_i32_expr_into(dst, expr, unsafe_context),
+            TypeName::U32 => self.compile_u32_expr_into(dst, expr, unsafe_context),
+            TypeName::U8 => self.compile_u8_expr_into(dst, expr, unsafe_context),
+            TypeName::Bool
+            | TypeName::PtrI32
+            | TypeName::PtrU32
+            | TypeName::PtrU8
+            | TypeName::RefMutI32
+            | TypeName::RefMutU32
+            | TypeName::RefMutU8
+            | TypeName::ArrayU8(_) => {
+                unsupported("only i32, u32, and u8 returns can be lowered to Rux16 yet")
+            }
+        }
     }
 
     fn compile_statements(
@@ -348,10 +478,7 @@ impl Rux16ArtifactBackend {
                 self.words.push(rux16_asm::jmp(target));
                 return Ok(());
             }
-            if !args.is_empty() {
-                return unsupported("Rux16 helper calls do not support arguments yet");
-            }
-            return self.inline_function(name);
+            return self.inline_unit_function(name, args, unsafe_context);
         }
 
         let Expr::MethodCall {
@@ -445,7 +572,7 @@ impl Rux16ArtifactBackend {
                 return Ok(local.register);
             }
         }
-        if matches!(expr, Expr::Binary { .. }) {
+        if matches!(expr, Expr::Binary { .. } | Expr::Call { .. }) {
             self.compile_u32_expr_into(dst, expr, unsafe_context)?;
             return Ok(dst);
         }
@@ -466,7 +593,7 @@ impl Rux16ArtifactBackend {
                 return Ok(local.register);
             }
         }
-        if matches!(expr, Expr::Binary { .. }) {
+        if matches!(expr, Expr::Binary { .. } | Expr::Call { .. }) {
             self.compile_u32_expr_into(dst, expr, unsafe_context)?;
             return Ok(dst);
         }
@@ -559,6 +686,9 @@ impl Rux16ArtifactBackend {
                 let rhs = self.compile_i32_expr_to_register_or_use(14, rhs, unsafe_context)?;
                 self.words.push(rux16_asm::add(dst, lhs, rhs));
                 Ok(())
+            }
+            Expr::Call { name, args } => {
+                self.inline_returning_function_into(dst, TypeName::I32, name, args, unsafe_context)
             }
             Expr::Path(_) => {
                 let value = self.eval_i32_value(expr)?;
@@ -660,6 +790,9 @@ impl Rux16ArtifactBackend {
                     unsupported("only u32 addition and multiplication by a constant can be lowered")
                 }
             },
+            Expr::Call { name, args } => {
+                self.inline_returning_function_into(dst, TypeName::U32, name, args, unsafe_context)
+            }
             Expr::Path(_) => {
                 let value = self.eval_u32_value(expr)?;
                 self.words
@@ -757,6 +890,9 @@ impl Rux16ArtifactBackend {
                 self.words
                     .extend_from_slice(&rux16_asm::const32(dst, u32::from(value)));
                 Ok(())
+            }
+            Expr::Call { name, args } => {
+                self.inline_returning_function_into(dst, TypeName::U8, name, args, unsafe_context)
             }
             Expr::Path(_) => {
                 let value = self.eval_u8_value(expr)?;
@@ -1142,9 +1278,19 @@ fn collect_supported_functions(
     }
     let mut functions = HashMap::new();
     for function in &program.functions {
-        if !function.parameters.is_empty() || function.return_type != ReturnType::Unit {
+        for parameter in &function.parameters {
+            if !matches!(parameter.ty, TypeName::I32 | TypeName::U32 | TypeName::U8) {
+                return unsupported(
+                    "only i32, u32, and u8 function parameters are supported by the Rux16 backend yet",
+                );
+            }
+        }
+        if !matches!(
+            function.return_type,
+            ReturnType::Unit | ReturnType::I32 | ReturnType::U32 | ReturnType::U8
+        ) {
             return unsupported(
-                "only no-argument functions with unit return are supported by the Rux16 backend yet",
+                "only unit, i32, u32, and u8 function returns are supported by the Rux16 backend yet",
             );
         }
         if functions
@@ -1157,6 +1303,12 @@ fn collect_supported_functions(
         }
     }
     if !functions.contains_key("main") {
+        return unsupported(
+            "a no-argument `fn main()` with unit return is required by the Rux16 backend",
+        );
+    }
+    let main = functions.get("main").expect("main exists");
+    if !main.parameters.is_empty() || main.return_type != ReturnType::Unit {
         return unsupported(
             "a no-argument `fn main()` with unit return is required by the Rux16 backend",
         );
@@ -1326,6 +1478,19 @@ fn const_from_const_value(
 
 fn path_name(path: &[String]) -> String {
     path.join("::")
+}
+
+fn return_type_to_type_name(return_type: ReturnType) -> Option<TypeName> {
+    match return_type {
+        ReturnType::Unit => None,
+        ReturnType::I32 => Some(TypeName::I32),
+        ReturnType::U32 => Some(TypeName::U32),
+        ReturnType::U8 => Some(TypeName::U8),
+        ReturnType::Bool => Some(TypeName::Bool),
+        ReturnType::PtrI32 => Some(TypeName::PtrI32),
+        ReturnType::PtrU32 => Some(TypeName::PtrU32),
+        ReturnType::PtrU8 => Some(TypeName::PtrU8),
+    }
 }
 
 fn unsupported<T>(message: impl Into<String>) -> Result<T, CompileError> {

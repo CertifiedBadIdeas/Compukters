@@ -740,6 +740,55 @@ fn rux16_artifact_inlines_unit_helper_function_from_bios_flash() {
 }
 
 #[test]
+fn rux16_artifact_inlines_helper_parameters_and_returns_from_bios_flash() {
+    let artifact = compile_rux16_artifact(
+        &with_computer_abi(
+            "fn panic_addr() -> u32 {
+            return control::PANIC_CODE;
+         }
+
+         fn ready_code() -> i32 {
+            return status::READY;
+         }
+
+         fn byte_o() -> u8 {
+            return 79u8;
+         }
+
+         fn write_panic(addr: u32, code: i32) {
+            unsafe {
+                mmio<i32>(addr).store(code);
+            }
+         }
+
+         fn write_byte(byte: u8) {
+            unsafe {
+                mmio<u8>(debug::WRITE).store(byte);
+            }
+         }
+
+         fn main() {
+            write_panic(panic_addr(), ready_code());
+            write_byte(byte_o());
+         }",
+        ),
+        Rux16ArtifactTarget::Bios,
+    )
+    .expect("helper parameters and returns compile to inlined Rux16");
+    let (mut machine, cpu_id) =
+        ComputerMachine::from_rux16_bios_flash(&artifact.bytes, 64 * 1024, 128)
+            .expect("machine boots Rux16 BIOS flash");
+
+    assert_eq!(
+        machine.run_boot_rux16_until_signal(cpu_id).unwrap(),
+        Rux16Signal::Halt,
+    );
+    assert_eq!(machine.panic_code(), ComputerMachine::STATUS_READY);
+    assert_eq!(machine.debug_output_bytes(), b"O");
+    assert_eq!(machine.control_status(), ComputerMachine::STATUS_HALTED);
+}
+
+#[test]
 fn rux16_artifact_rejects_recursive_helper_inline() {
     let error = compile_rux16_artifact(
         "fn again() {
