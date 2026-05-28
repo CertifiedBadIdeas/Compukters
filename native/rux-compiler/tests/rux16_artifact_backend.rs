@@ -838,6 +838,46 @@ fn rux16_artifact_preserves_live_locals_around_argument_helper_call_from_bios_fl
 }
 
 #[test]
+fn rux16_artifact_lowers_early_returning_helper_control_flow_from_bios_flash() {
+    let artifact = compile_rux16_artifact(
+        &with_computer_abi(
+            "fn choose_byte(flag: i32) -> u8 {
+            if flag == 1 {
+                return 79u8;
+            }
+            return 33u8;
+         }
+
+         fn main() {
+            unsafe {
+                mmio<u8>(debug::WRITE).store(choose_byte(1));
+                mmio<u8>(debug::WRITE).store(choose_byte(0));
+            }
+         }",
+        ),
+        Rux16ArtifactTarget::Bios,
+    )
+    .expect("early returning helper control flow compiles to Rux16");
+    let disassembly =
+        rux16_disasm::disassemble_artifact(&artifact.bytes, Rux16ArtifactTarget::Bios)
+            .expect("BIOS artifact disassembles");
+    assert!(
+        disassembly.contains("ret"),
+        "early returning helper must lower returns to Rux16 ret:\n{disassembly}"
+    );
+    let (mut machine, cpu_id) =
+        ComputerMachine::from_rux16_bios_flash(&artifact.bytes, 64 * 1024, 1024)
+            .expect("machine boots Rux16 BIOS flash");
+
+    assert_eq!(
+        machine.run_boot_rux16_until_signal(cpu_id).unwrap(),
+        Rux16Signal::Halt,
+    );
+    assert_eq!(machine.debug_output_bytes(), b"O!", "{disassembly}");
+    assert_eq!(machine.control_status(), ComputerMachine::STATUS_HALTED);
+}
+
+#[test]
 fn rux16_artifact_calls_helper_parameters_and_returns_from_bios_flash() {
     let artifact = compile_rux16_artifact(
         &with_computer_abi(
