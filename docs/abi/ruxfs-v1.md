@@ -97,6 +97,9 @@ The root inode id is stored in the superblock. The current formatter writes
 root inode `1` as a directory with size `0` and one extent pointing at the root
 directory data block.
 
+Directory inode `size_bytes` is the number of directory-entry bytes currently
+used by the directory. It must be a multiple of 64.
+
 ## Extents
 
 Each inline extent is 8 bytes:
@@ -111,6 +114,31 @@ RuxFS v1 currently supports up to 4 inline extents per inode. Extents must be
 non-empty, inside `total_blocks`, and outside the superblock, bitmap, and inode
 table ranges.
 
+## Directories
+
+Directory data is a sequence of fixed-size 64-byte entries:
+
+```text
+offset  size  name
+0x00    1     state
+0x01    1     name_len
+0x02    2     reserved
+0x04    4     inode_id
+0x08    56    name_utf8
+```
+
+Accepted directory entry states:
+
+```text
+0  free
+1  live
+2  deleted
+```
+
+Names are UTF-8, must be 1..56 bytes, and are not NUL-terminated. Live
+entries in one directory must not contain duplicate names. A live entry must
+point to an active file or directory inode.
+
 ## Current Implementation Scope
 
 The current compiler crate provides:
@@ -118,7 +146,10 @@ The current compiler crate provides:
 - empty filesystem formatting;
 - superblock and inode decoding;
 - structural validation for magic, version, block size, metadata ranges, root
-  inode state, and root extents.
+  inode state, inode extents, directory entries, and duplicate directory names;
+- absolute-path directory creation;
+- absolute-path file creation and full-file reads;
+- directory listing.
 
-Directory entries, named files, file writing, and bootloader integration are
+Delete, overwrite, CLI volume integration, and bootloader integration are
 next-step work under the same RuxFS v1 contract.

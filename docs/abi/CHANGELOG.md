@@ -18,6 +18,9 @@
 - Added experimental `RuxFS` v1 as the extent-based filesystem contract for
   the partitioned `ROOT` partition, with empty formatting and structural
   validation in compiler tooling.
+- `RuxFS` tooling now supports fixed-size directory entries, absolute-path
+  directory creation, file creation, file reads, and directory listing over an
+  in-memory filesystem image.
 - Added `rux-storage-volume-v1.md` for the current `RUXVOL`, `RUXB`, and `RUXK`
   storage0 media layout.
 - Retired the previous host-decoded executable ABI package from active
