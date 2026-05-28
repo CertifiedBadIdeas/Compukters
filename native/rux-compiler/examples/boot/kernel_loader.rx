@@ -55,9 +55,29 @@ fn probe_ruxpt_header() -> i32 {
     }
 }
 
+fn find_root_partition_start_lba() -> i32 {
+    unsafe {
+        if probe_ruxpt_header() == 1 {
+            let mut entry_count: u8 = ptr<u8>(0x3006u32).load();
+            let mut index: u32 = 0u32;
+            let mut entry_addr: u32 = 0x3010u32;
+            while index < 15u32 {
+                let mut partition_type: i32 = ptr<i32>(entry_addr).load();
+                if partition_type == 0x544f4f52 {
+                    let mut start_lba_addr: u32 = entry_addr + 8u32;
+                    return ptr<i32>(start_lba_addr).load();
+                }
+                entry_addr = entry_addr + 32u32;
+                index = index + 1u32;
+            }
+        }
+        return 0;
+    }
+}
+
 fn load_kernel() {
     unsafe {
-        let mut ruxpt_present: i32 = probe_ruxpt_header();
+        let mut root_start_lba: i32 = find_root_partition_start_lba();
         let mut status: i32 = read_storage0_blocks(16, 1, 0x3000);
         if status == storage0::STATUS_DONE {
             let mut magic: i32 = ptr<i32>(0x3000u32).load();
