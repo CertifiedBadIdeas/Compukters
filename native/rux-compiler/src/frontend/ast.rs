@@ -115,6 +115,7 @@ pub(crate) enum Expr {
     ByteString(Vec<u8>),
     Bool(bool),
     Local(String),
+    Path(Vec<String>),
     Call {
         name: String,
         args: Vec<Expr>,

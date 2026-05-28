@@ -1,0 +1,1 @@
+pub const RAM_BASE: u32 = 0x00000000u32;

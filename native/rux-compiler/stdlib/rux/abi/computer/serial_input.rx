@@ -1,0 +1,4 @@
+pub const BASE: u32 = 0x10000200u32;
+pub const READY: u32 = 0x10000200u32;
+pub const READ: u32 = 0x10000204u32;
+pub const SIZE: u32 = 256u32;

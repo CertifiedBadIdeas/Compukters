@@ -22,6 +22,10 @@ pub(crate) fn resolve(program: Program) -> Result<Program, CompileError> {
                 check_import_conflict(&program, &mut imported_names, &function.name)?;
                 imported_functions.push(function);
             }
+            ImportedItem::Namespace { alias, consts } => {
+                check_import_conflict(&program, &mut imported_names, &alias)?;
+                imported_consts.extend(consts);
+            }
         }
     }
 
@@ -39,6 +43,10 @@ pub(crate) fn resolve(program: Program) -> Result<Program, CompileError> {
 enum ImportedItem {
     Const(ConstDecl),
     Function(FunctionDecl),
+    Namespace {
+        alias: String,
+        consts: Vec<ConstDecl>,
+    },
 }
 
 fn check_import_conflict(
@@ -107,6 +115,22 @@ fn resolve_import(path: &[String]) -> Result<ImportedItem, CompileError> {
             });
         }
         return Ok(ImportedItem::Function(function));
+    }
+
+    if let Some(source) = stdlib::source_for_path(path) {
+        let namespace_program = parser::parse(lexer::lex(source)?)?;
+        let mut consts = Vec::new();
+        for mut constant in namespace_program.consts {
+            if constant.visibility != Visibility::Public {
+                continue;
+            }
+            constant.name = format!("{item_name}::{}", constant.name);
+            consts.push(constant);
+        }
+        return Ok(ImportedItem::Namespace {
+            alias: item_name.clone(),
+            consts,
+        });
     }
 
     Err(CompileError {

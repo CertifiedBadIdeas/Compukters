@@ -440,6 +440,12 @@ impl Rux16ArtifactBackend {
                     .extend_from_slice(&rux16_asm::const32(dst, value as u32));
                 Ok(())
             }
+            Expr::Path(_) => {
+                let value = self.eval_i32_value(expr)?;
+                self.words
+                    .extend_from_slice(&rux16_asm::const32(dst, value as u32));
+                Ok(())
+            }
             Expr::MethodCall {
                 receiver,
                 method,
@@ -501,6 +507,12 @@ impl Rux16ArtifactBackend {
                 if self.local(name, TypeName::U8)?.is_some() {
                     return unsupported("Rux16 local-to-local moves are not supported yet");
                 }
+                let value = self.eval_u8_value(expr)?;
+                self.words
+                    .extend_from_slice(&rux16_asm::const32(dst, u32::from(value)));
+                Ok(())
+            }
+            Expr::Path(_) => {
                 let value = self.eval_u8_value(expr)?;
                 self.words
                     .extend_from_slice(&rux16_asm::const32(dst, u32::from(value)));
@@ -627,6 +639,16 @@ impl Rux16ArtifactBackend {
                 }
                 None => unsupported(format!("unknown Rux16 MMIO address `{name}`")),
             },
+            Expr::Path(path) => {
+                let name = path_name(path);
+                match self.consts.get(&name).copied() {
+                    Some(ConstValue::U32(value)) => Ok(value),
+                    Some(ConstValue::I32(_)) | Some(ConstValue::U8(_)) => {
+                        unsupported(format!("`{name}` is not an address, expected MMIO address"))
+                    }
+                    None => unsupported(format!("unknown Rux16 MMIO address `{name}`")),
+                }
+            }
             Expr::Int(value) => u32::try_from(*value).map_err(|_| CompileError {
                 message: format!("MMIO address literal `{value}` does not fit `u32`"),
             }),
@@ -672,6 +694,13 @@ impl Rux16ArtifactBackend {
                 }
                 unsupported(format!("unknown Rux16 RAM address `{name}`"))
             }
+            Expr::Path(path) => {
+                let name = path_name(path);
+                if let Some(value) = self.consts.get(&name).copied() {
+                    return value.as_u32(&name);
+                }
+                unsupported(format!("unknown Rux16 RAM address `{name}`"))
+            }
             Expr::Binary { .. }
             | Expr::ByteString(_)
             | Expr::Bool(_)
@@ -702,6 +731,13 @@ impl Rux16ArtifactBackend {
             Expr::Local(name) => {
                 if let Some(value) = self.consts.get(name).copied() {
                     return value.as_i32(name);
+                }
+                unsupported(format!("unknown Rux16 i32 value `{name}`"))
+            }
+            Expr::Path(path) => {
+                let name = path_name(path);
+                if let Some(value) = self.consts.get(&name).copied() {
+                    return value.as_i32(&name);
                 }
                 unsupported(format!("unknown Rux16 i32 value `{name}`"))
             }
@@ -736,6 +772,13 @@ impl Rux16ArtifactBackend {
             Expr::Local(name) => {
                 if let Some(value) = self.consts.get(name).copied() {
                     return value.as_u8(name);
+                }
+                unsupported(format!("unknown Rux16 u8 value `{name}`"))
+            }
+            Expr::Path(path) => {
+                let name = path_name(path);
+                if let Some(value) = self.consts.get(&name).copied() {
+                    return value.as_u8(&name);
                 }
                 unsupported(format!("unknown Rux16 u8 value `{name}`"))
             }
@@ -859,6 +902,15 @@ fn evaluate_const_expr(
                 message: format!("unknown const initializer identifier `{name}`"),
             })
         }
+        Expr::Path(path) => {
+            let name = path_name(path);
+            if let Some(value) = source_consts.get(&name).copied() {
+                return const_from_const_value(value, ty, &name);
+            }
+            Err(CompileError {
+                message: format!("unknown const initializer identifier `{name}`"),
+            })
+        }
         Expr::IntU32(value) => const_from_u32_literal(*value, ty),
         Expr::Binary { .. }
         | Expr::ByteString(_)
@@ -939,6 +991,10 @@ fn const_from_const_value(
         TypeName::U8 => value.as_u8(name).map(ConstValue::U8),
         _ => unreachable!("const parser rejects non-numeric const types"),
     }
+}
+
+fn path_name(path: &[String]) -> String {
+    path.join("::")
 }
 
 fn unsupported<T>(message: impl Into<String>) -> Result<T, CompileError> {
