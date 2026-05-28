@@ -5,6 +5,8 @@
 - Added `rux16-v1.md` and reserved `r15` as the Rux16 stack pointer. The stack
   lives in guest RAM, grows downward, and uses 4-byte slots in the first ABI
   slice.
+- Added Rux16 `call rN` and `ret` instructions backed by the `r15` stack
+  pointer convention.
 - Added experimental `RUXE` v1 as the guest-loadable fixed-image container for
   Rux16 bootloader and kernel artifacts.
 - `RUXE` now carries an ABI kind: `bootloader` or `kernel`.
