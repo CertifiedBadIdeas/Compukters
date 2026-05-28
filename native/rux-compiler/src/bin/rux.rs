@@ -1,5 +1,5 @@
 use rux_compiler::artifact::Rux16ArtifactTarget;
-use rux_compiler::{compile_rux16_artifact, rux16_disasm, ruxfs, volume};
+use rux_compiler::{advice, compile_rux16_artifact, rux16_disasm, ruxfs, volume};
 use std::env;
 use std::fs;
 use std::process::ExitCode;
@@ -20,11 +20,31 @@ fn run(args: Vec<String>) -> Result<(), String> {
     };
     match command.as_str() {
         "compile" => run_compile(&args[1..]),
+        "check" => run_check(&args[1..]),
         "disasm" | "disassemble" => run_disasm(&args[1..]),
         "fs" => run_fs(&args[1..]),
         "volume" => run_volume(&args[1..]),
         _ => usage_error(),
     }
+}
+
+fn run_check(args: &[String]) -> Result<(), String> {
+    if args.len() != 1 {
+        return check_usage_error();
+    }
+    let source_path = &args[0];
+    let source = fs::read_to_string(source_path)
+        .map_err(|error| format!("failed to read {source_path}: {error}"))?;
+    let diagnostics =
+        advice::check_source(&source).map_err(|error| format!("check error: {}", error.message))?;
+    for diagnostic in diagnostics {
+        println!(
+            "{source_path}:{}:{}: suggestion: {}",
+            diagnostic.line, diagnostic.column, diagnostic.message
+        );
+        println!("  help: {}", diagnostic.help);
+    }
+    Ok(())
 }
 
 fn run_compile(args: &[String]) -> Result<(), String> {
@@ -309,7 +329,11 @@ fn parse_size(value: &str) -> Result<usize, String> {
 }
 
 fn usage_error() -> Result<(), String> {
-    Err("usage: rux compile [--target <bios|boot|kernel|program>] <input.rx> -o <output>\n       rux disasm --target <bios|boot|kernel|program> <input>\n       rux volume <create|init|put-boot|put-kernel> ...\n       rux fs <filesystem> ...".to_string())
+    Err("usage: rux check <input.rx>\n       rux compile [--target <bios|boot|kernel|program>] <input.rx> -o <output>\n       rux disasm --target <bios|boot|kernel|program> <input>\n       rux volume <create|init|put-boot|put-kernel> ...\n       rux fs <filesystem> ...".to_string())
+}
+
+fn check_usage_error() -> Result<(), String> {
+    Err("usage: rux check <input.rx>".to_string())
 }
 
 fn compile_usage_error() -> Result<CompileConfig, String> {

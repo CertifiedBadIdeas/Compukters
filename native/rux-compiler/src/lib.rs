@@ -1,3 +1,4 @@
+pub mod advice;
 pub mod artifact;
 mod frontend;
 pub mod partition;
