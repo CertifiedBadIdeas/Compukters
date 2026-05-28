@@ -437,11 +437,11 @@ impl Rux16ArtifactBackend {
             let caller_next_register = self.next_register;
             let caller_next_frame_slot_offset = self.next_frame_slot_offset;
             let caller_return_type = self.active_function_return_type;
-            self.locals = self.call_abi_parameter_locals(&function)?;
             self.next_register = first_callee_local_register(function.parameters.len());
             self.next_frame_slot_offset = 0;
             self.active_function_return_type = Some(function.return_type);
             self.emit_function_prologue();
+            self.locals = self.emit_call_abi_parameter_locals(&function)?;
             let result = self.compile_function_body(&function);
             if matches!(result, Ok(false)) {
                 self.emit_function_epilogue();
@@ -551,12 +551,12 @@ impl Rux16ArtifactBackend {
         Ok(())
     }
 
-    fn call_abi_parameter_locals(
-        &self,
+    fn emit_call_abi_parameter_locals(
+        &mut self,
         function: &FunctionDecl,
     ) -> Result<HashMap<String, Rux16Local>, CompileError> {
         let mut locals = HashMap::new();
-        for (parameter, register) in function
+        for (parameter, source_register) in function
             .parameters
             .iter()
             .zip(rux16_asm::ARGUMENT_REGISTERS)
@@ -564,11 +564,23 @@ impl Rux16ArtifactBackend {
             if locals.contains_key(&parameter.name) {
                 return unsupported(format!("duplicate Rux16 parameter `{}`", parameter.name));
             }
+            let storage = self.alloc_local_storage()?;
+            match storage {
+                Rux16LocalStorage::Register(register) => {
+                    self.emit_register_copy(register, source_register);
+                }
+                Rux16LocalStorage::FrameSlot { offset } => {
+                    self.emit_store_frame_slot(offset, source_register);
+                }
+                Rux16LocalStorage::FrameArray { .. } => {
+                    unreachable!("parameters cannot be stored as frame arrays")
+                }
+            }
             locals.insert(
                 parameter.name.clone(),
                 Rux16Local {
                     ty: parameter.ty,
-                    storage: Rux16LocalStorage::Register(register),
+                    storage,
                 },
             );
         }

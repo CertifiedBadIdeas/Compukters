@@ -163,9 +163,9 @@ fn write_boot_payload_loaded() {
 fn read_storage0_blocks(lba: i32, block_count: i32, buffer_addr: i32) -> i32 {
     unsafe {
         mmio<i32>(storage0::LBA_LOW).store(lba);
+        mmio<i32>(storage0::LBA_HIGH).store(0);
         mmio<i32>(storage0::BLOCK_COUNT).store(block_count);
         mmio<i32>(storage0::BUFFER_ADDR).store(buffer_addr);
-        mmio<i32>(storage0::LBA_HIGH).store(0);
         mmio<i32>(storage0::COMMAND).store(storage0::COMMAND_READ_BLOCKS);
         return mmio<i32>(storage0::STATUS).load();
     }
