@@ -28,6 +28,7 @@ import ru.lazyhat.compukterkraft.core.device.runtime.RuxRuntimeDevice
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.RuxBiosFlashWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.blazing.RuxComputerRuntimeFactory
 import ru.lazyhat.compukterkraft.lang.runtime.storage.FileRuxVolumeStore
+import ru.lazyhat.compukterkraft.lang.runtime.storage.RuxSystemVolumeWorkspace
 import ru.lazyhat.compukterkraft.lang.runtime.storage.RuxVolumeBlob
 import java.nio.file.Path
 
@@ -45,6 +46,7 @@ object ComputerRuntimeDeviceFactory {
             deviceId = deviceId,
             properties = DeviceProperties(tile.family, tile.label),
             endpointFactory = {
+                RuxSystemVolumeWorkspace.prepareStorage0Volume(workspace)
                 val storage0 = volumeStore.openOrCreateComputerVolume(deviceId, "storage0")
                 val biosFlashPath = RuxBiosFlashWorkspace.prepareBiosFlash(workspace)
                 createRuxComputerEndpoint(biosFlashPath, storage0)

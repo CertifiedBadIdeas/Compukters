@@ -85,9 +85,15 @@ dependencies {
 val rustVmNativePlatform = currentRustVmNativePlatform()
 val rustVmNativeLibrary = rootProject.layout.projectDirectory.file("native/rux-vm/target/debug/${rustVmNativePlatform.libraryName}")
 val generatedRuxFirmwareResources = layout.buildDirectory.dir("generated/rux-firmware-resources")
+val generatedRuxFirmwareArtifacts = layout.buildDirectory.dir("generated/rux-firmware-artifacts")
 val ruxCompilerManifest = rootProject.layout.projectDirectory.file("native/rux-compiler/Cargo.toml")
 val rux16BiosSource = rootProject.layout.projectDirectory.file("native/rux-compiler/examples/firmware/rux16_bios.rx")
+val rux16BootSource = rootProject.layout.projectDirectory.file("native/rux-compiler/examples/boot/kernel_loader.rx")
+val rux16KernelSource = rootProject.layout.projectDirectory.file("native/rux-compiler/examples/kernel/display_ok.rx")
 val rux16BiosFlashResource = generatedRuxFirmwareResources.map { it.file("firmware/rux16-bios.flash") }
+val rux16BootArtifact = generatedRuxFirmwareArtifacts.map { it.file("kernel-loader.boot.ruxe") }
+val rux16KernelArtifact = generatedRuxFirmwareArtifacts.map { it.file("display-ok.kernel.ruxe") }
+val rux16SystemStorage0Resource = generatedRuxFirmwareResources.map { it.file("firmware/rux16-system-storage0.ruxvol") }
 
 val compileRux16BiosFlash =
     tasks.register<Exec>("compileRux16BiosFlash") {
@@ -118,10 +124,142 @@ val compileRux16BiosFlash =
         )
     }
 
+val compileRux16SystemBoot =
+    tasks.register<Exec>("compileRux16SystemBoot") {
+        description = "Compiles the bundled Rux16 bootloader artifact."
+        group = "rux"
+        inputs.file(ruxCompilerManifest)
+        inputs.file(rux16BootSource)
+        outputs.file(rux16BootArtifact)
+
+        doFirst {
+            rux16BootArtifact.get().asFile.parentFile.mkdirs()
+        }
+
+        commandLine(
+            "cargo",
+            "run",
+            "--manifest-path",
+            ruxCompilerManifest.asFile.absolutePath,
+            "--bin",
+            "rux",
+            "--",
+            "compile",
+            "--target",
+            "boot",
+            rux16BootSource.asFile.absolutePath,
+            "-o",
+            rux16BootArtifact.get().asFile.absolutePath,
+        )
+    }
+
+val compileRux16SystemKernel =
+    tasks.register<Exec>("compileRux16SystemKernel") {
+        description = "Compiles the bundled Rux16 kernel artifact."
+        group = "rux"
+        inputs.file(ruxCompilerManifest)
+        inputs.file(rux16KernelSource)
+        outputs.file(rux16KernelArtifact)
+
+        doFirst {
+            rux16KernelArtifact.get().asFile.parentFile.mkdirs()
+        }
+
+        commandLine(
+            "cargo",
+            "run",
+            "--manifest-path",
+            ruxCompilerManifest.asFile.absolutePath,
+            "--bin",
+            "rux",
+            "--",
+            "compile",
+            "--target",
+            "kernel",
+            rux16KernelSource.asFile.absolutePath,
+            "-o",
+            rux16KernelArtifact.get().asFile.absolutePath,
+        )
+    }
+
+val createRux16SystemStorage0 =
+    tasks.register<Exec>("createRux16SystemStorage0") {
+        description = "Creates the bundled Rux16 system storage0 volume resource."
+        group = "rux"
+        inputs.file(ruxCompilerManifest)
+
+        doFirst {
+            rux16SystemStorage0Resource.get().asFile.parentFile.mkdirs()
+        }
+
+        commandLine(
+            "cargo",
+            "run",
+            "--manifest-path",
+            ruxCompilerManifest.asFile.absolutePath,
+            "--bin",
+            "rux",
+            "--",
+            "volume",
+            "create",
+            rux16SystemStorage0Resource.get().asFile.absolutePath,
+            "--size",
+            "1048576",
+        )
+    }
+
+val putRux16SystemStorage0Boot =
+    tasks.register<Exec>("putRux16SystemStorage0Boot") {
+        description = "Writes the bundled Rux16 bootloader into the system storage0 volume resource."
+        group = "rux"
+        dependsOn(createRux16SystemStorage0, compileRux16SystemBoot)
+        inputs.file(ruxCompilerManifest)
+        inputs.file(rux16BootArtifact)
+
+        commandLine(
+            "cargo",
+            "run",
+            "--manifest-path",
+            ruxCompilerManifest.asFile.absolutePath,
+            "--bin",
+            "rux",
+            "--",
+            "volume",
+            "put-boot",
+            rux16SystemStorage0Resource.get().asFile.absolutePath,
+            rux16BootArtifact.get().asFile.absolutePath,
+        )
+    }
+
+val compileRux16SystemStorage0 =
+    tasks.register<Exec>("compileRux16SystemStorage0") {
+        description = "Writes the bundled Rux16 kernel into the system storage0 volume resource."
+        group = "rux"
+        dependsOn(putRux16SystemStorage0Boot, compileRux16SystemKernel)
+        inputs.file(ruxCompilerManifest)
+        inputs.file(rux16BootArtifact)
+        inputs.file(rux16KernelArtifact)
+
+        commandLine(
+            "cargo",
+            "run",
+            "--manifest-path",
+            ruxCompilerManifest.asFile.absolutePath,
+            "--bin",
+            "rux",
+            "--",
+            "volume",
+            "put-kernel",
+            rux16SystemStorage0Resource.get().asFile.absolutePath,
+            rux16KernelArtifact.get().asFile.absolutePath,
+        )
+    }
+
 sourceSets.main {
     resources.srcDir(generatedRuxFirmwareResources)
 }
 
 tasks.named("processResources") {
     dependsOn(compileRux16BiosFlash)
+    dependsOn(compileRux16SystemStorage0)
 }
