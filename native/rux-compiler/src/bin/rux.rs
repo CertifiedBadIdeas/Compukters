@@ -204,6 +204,15 @@ fn run_volume(args: &[String]) -> Result<(), String> {
             print!("{}", volume::inspect(&volume_bytes)?);
             Ok(())
         }
+        "inspect-boot" => {
+            if args.len() != 2 {
+                return volume_usage_error();
+            }
+            let volume_bytes = fs::read(&args[1])
+                .map_err(|error| format!("failed to read {}: {error}", args[1]))?;
+            print!("{}", volume::inspect_boot_chain(&volume_bytes)?);
+            Ok(())
+        }
         _ => volume_usage_error(),
     }
 }
@@ -326,7 +335,8 @@ fn volume_usage_error() -> Result<(), String> {
             + "\n       rux volume put-kernel <volume.ruxvol> <kernel.ruxe>"
             + "\n       rux volume extract-partition <volume.ruxvol> <partition> <output>"
             + "\n       rux volume replace-partition <volume.ruxvol> <partition> <input>"
-            + "\n       rux volume inspect <volume.ruxvol>",
+            + "\n       rux volume inspect <volume.ruxvol>"
+            + "\n       rux volume inspect-boot <volume.ruxvol>",
     )
 }
 
