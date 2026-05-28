@@ -46,7 +46,7 @@ impl Rux16ArtifactTarget {
 
     fn initial_stack_top(self) -> u32 {
         match self {
-            Self::Bios => 512,
+            Self::Bios => Self::Boot.base_address(),
             Self::Boot => Self::Boot.base_address(),
             Self::Kernel => Self::Kernel.base_address(),
             Self::Program => 0,
