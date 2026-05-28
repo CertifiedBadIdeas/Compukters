@@ -169,13 +169,34 @@ fn rux16_bios_firmware_source_jumps_to_loaded_storage0_boot_payload() {
     assert_eq!(handle.control().panic_code, 82);
 }
 
+#[test]
+fn rux16_bios_firmware_source_uses_guest_storage0_read_helper() {
+    let source = bundled_rux16_bios_source();
+
+    assert!(
+        source.contains("fn read_storage0_blocks("),
+        "bundled BIOS should expose one guest helper for storage0 block reads"
+    );
+    assert_eq!(
+        source
+            .matches("mmio<i32>(storage0::COMMAND).store(storage0::COMMAND_READ_BLOCKS)")
+            .count(),
+        1,
+        "storage0 read command setup should live in the helper only"
+    );
+}
+
 fn compile_bundled_rux16_bios() -> rux_compiler::artifact::Rux16Artifact {
-    let source = std::fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/firmware/rux16_bios.rx"),
-    )
-    .expect("Rux16 BIOS firmware source should exist");
+    let source = bundled_rux16_bios_source();
     compile_rux16_artifact(&source, Rux16ArtifactTarget::Bios)
         .expect("Rux16 BIOS source compiles to BIOS flash")
+}
+
+fn bundled_rux16_bios_source() -> String {
+    std::fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/firmware/rux16_bios.rx"),
+    )
+    .expect("Rux16 BIOS firmware source should exist")
 }
 
 fn compile_stage2_program() -> rux_compiler::artifact::Rux16Artifact {
