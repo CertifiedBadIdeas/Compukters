@@ -80,6 +80,22 @@ layout, including partition type, start LBA, block count, byte size, and name.
 must match the partition size exactly. Tooling must reject wrong-sized input
 rather than truncating or padding it.
 
+Example ROOT filesystem image workflow:
+
+```text
+rux volume init storage0.ruxvol --size 65536
+rux volume inspect storage0.ruxvol
+rux fs ruxfs format root.ruxfs --blocks 95
+rux fs ruxfs mkdir root.ruxfs /boot
+rux fs ruxfs put root.ruxfs /boot/kernel.ruxe kernel.ruxe
+rux volume replace-partition storage0.ruxvol ROOT root.ruxfs
+rux volume extract-partition storage0.ruxvol ROOT check-root.ruxfs
+rux fs ruxfs get check-root.ruxfs /boot/kernel.ruxe check-kernel.ruxe
+```
+
+This workflow keeps `rux volume` responsible for partition bytes and `rux fs`
+responsible for filesystem contents.
+
 ## RUXPT Partition Table
 
 `RUXPT` is guest-visible and starts at LBA 0 in the partitioned layout. It
