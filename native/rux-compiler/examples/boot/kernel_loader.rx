@@ -116,11 +116,46 @@ fn probe_root_ruxfs_inode(root_start_lba: i32) -> i32 {
     }
 }
 
+fn find_boot_directory_inode(root_start_lba: i32) -> i32 {
+    unsafe {
+        if probe_root_ruxfs_inode(root_start_lba) == 1 {
+            let mut root_dir_start_block: i32 = ptr<i32>(0x3060u32).load();
+            if root_dir_start_block != 0 {
+                let mut root_dir_lba: i32 = root_start_lba + root_dir_start_block;
+                let mut status: i32 = read_storage0_blocks(root_dir_lba, 1, 0x3000);
+                if status == storage0::STATUS_DONE {
+                    let mut index: u32 = 0u32;
+                    let mut entry_addr: u32 = 0x3000u32;
+                    while index < 8u32 {
+                        let mut entry_state: u8 = ptr<u8>(entry_addr).load();
+                        let mut name_len_addr: u32 = entry_addr + 1u32;
+                        let mut name_len: u8 = ptr<u8>(name_len_addr).load();
+                        if entry_state == 1u8 {
+                            if name_len == 4u8 {
+                                let mut name_addr: u32 = entry_addr + 8u32;
+                                let mut name_magic: i32 = ptr<i32>(name_addr).load();
+                                if name_magic == 0x746f6f62 {
+                                    let mut inode_id_addr: u32 = entry_addr + 4u32;
+                                    return ptr<i32>(inode_id_addr).load();
+                                }
+                            }
+                        }
+                        entry_addr = entry_addr + 64u32;
+                        index = index + 1u32;
+                    }
+                }
+            }
+        }
+        return 0;
+    }
+}
+
 fn load_kernel() {
     unsafe {
         let mut root_start_lba: i32 = find_root_partition_start_lba();
         let mut root_ruxfs_present: i32 = probe_root_ruxfs_superblock(root_start_lba);
         let mut root_inode_present: i32 = probe_root_ruxfs_inode(root_start_lba);
+        let mut boot_directory_inode: i32 = find_boot_directory_inode(root_start_lba);
         let mut status: i32 = read_storage0_blocks(16, 1, 0x3000);
         if status == storage0::STATUS_DONE {
             let mut magic: i32 = ptr<i32>(0x3000u32).load();
