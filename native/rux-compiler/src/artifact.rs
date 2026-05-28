@@ -195,6 +195,10 @@ impl Rux16ArtifactBackend {
         {
             self.pending_functions.push(name.to_string());
         }
+        let saved_registers = self.live_local_registers();
+        for register in &saved_registers {
+            self.emit_push_register(*register);
+        }
         let const_index = self.words.len();
         self.words
             .extend_from_slice(&rux16_asm::const32(rux16_asm::SCRATCH_REGISTER, 0));
@@ -202,7 +206,21 @@ impl Rux16ArtifactBackend {
             .push(rux16_asm::call(rux16_asm::SCRATCH_REGISTER));
         self.pending_call_patches
             .push((const_index, name.to_string()));
+        for register in saved_registers.into_iter().rev() {
+            self.emit_pop_register(register);
+        }
         Ok(())
+    }
+
+    fn live_local_registers(&self) -> Vec<u8> {
+        let mut registers = self
+            .locals
+            .values()
+            .map(|local| local.register)
+            .collect::<Vec<_>>();
+        registers.sort_unstable();
+        registers.dedup();
+        registers
     }
 
     fn ensure_stack_initialized(&mut self) {
@@ -214,6 +232,36 @@ impl Rux16ArtifactBackend {
             self.initial_stack_top,
         ));
         self.stack_initialized = true;
+    }
+
+    fn emit_push_register(&mut self, register: u8) {
+        self.words.extend_from_slice(&rux16_asm::const32(
+            rux16_asm::SCRATCH_REGISTER,
+            u32::MAX - 3,
+        ));
+        self.words.push(rux16_asm::add(
+            rux16_asm::STACK_POINTER_REGISTER,
+            rux16_asm::STACK_POINTER_REGISTER,
+            rux16_asm::SCRATCH_REGISTER,
+        ));
+        self.words.push(rux16_asm::store32(
+            rux16_asm::STACK_POINTER_REGISTER,
+            register,
+        ));
+    }
+
+    fn emit_pop_register(&mut self, register: u8) {
+        self.words.push(rux16_asm::load32(
+            register,
+            rux16_asm::STACK_POINTER_REGISTER,
+        ));
+        self.words
+            .extend_from_slice(&rux16_asm::const32(rux16_asm::SCRATCH_REGISTER, 4));
+        self.words.push(rux16_asm::add(
+            rux16_asm::STACK_POINTER_REGISTER,
+            rux16_asm::STACK_POINTER_REGISTER,
+            rux16_asm::SCRATCH_REGISTER,
+        ));
     }
 
     fn emit_pending_function_bodies(&mut self) -> Result<(), CompileError> {
@@ -601,7 +649,7 @@ impl Rux16ArtifactBackend {
                 self.words.push(rux16_asm::jmp(target));
                 return Ok(());
             }
-            if args.is_empty() && self.locals.is_empty() {
+            if args.is_empty() {
                 return self.emit_real_unit_function_call(name);
             }
             return self.inline_unit_function(name, args, unsafe_context);

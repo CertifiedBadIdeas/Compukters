@@ -7,6 +7,8 @@
   slice.
 - Added Rux16 `call rN` and `ret` instructions backed by the `r15` stack
   pointer convention.
+- The Rux16 compiler now saves and restores live local registers around
+  compiler-generated helper calls that use `call`/`ret`.
 - Added experimental `RUXE` v1 as the guest-loadable fixed-image container for
   Rux16 bootloader and kernel artifacts.
 - `RUXE` now carries an ABI kind: `bootloader` or `kernel`.
