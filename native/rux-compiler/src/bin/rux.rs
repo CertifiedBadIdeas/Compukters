@@ -173,6 +173,28 @@ fn run_volume(args: &[String]) -> Result<(), String> {
             fs::write(&args[1], volume_bytes)
                 .map_err(|error| format!("failed to write {}: {error}", args[1]))
         }
+        "extract-partition" => {
+            if args.len() != 4 {
+                return volume_usage_error();
+            }
+            let volume_bytes = fs::read(&args[1])
+                .map_err(|error| format!("failed to read {}: {error}", args[1]))?;
+            let partition_bytes = volume::extract_partition(&volume_bytes, &args[2])?;
+            fs::write(&args[3], partition_bytes)
+                .map_err(|error| format!("failed to write {}: {error}", args[3]))
+        }
+        "replace-partition" => {
+            if args.len() != 4 {
+                return volume_usage_error();
+            }
+            let mut volume_bytes = fs::read(&args[1])
+                .map_err(|error| format!("failed to read {}: {error}", args[1]))?;
+            let partition_bytes = fs::read(&args[3])
+                .map_err(|error| format!("failed to read {}: {error}", args[3]))?;
+            volume::replace_partition(&mut volume_bytes, &args[2], &partition_bytes)?;
+            fs::write(&args[1], volume_bytes)
+                .map_err(|error| format!("failed to write {}: {error}", args[1]))
+        }
         _ => volume_usage_error(),
     }
 }
@@ -292,7 +314,9 @@ fn volume_usage_error() -> Result<(), String> {
     Err(
         "usage: rux volume create <volume.ruxvol> --size <bytes>\n       rux volume init <volume.ruxvol> --size <bytes>\n       rux volume put-boot <volume.ruxvol> <boot.bin>"
             .to_string()
-            + "\n       rux volume put-kernel <volume.ruxvol> <kernel.ruxe>",
+            + "\n       rux volume put-kernel <volume.ruxvol> <kernel.ruxe>"
+            + "\n       rux volume extract-partition <volume.ruxvol> <partition> <output>"
+            + "\n       rux volume replace-partition <volume.ruxvol> <partition> <input>",
     )
 }
 

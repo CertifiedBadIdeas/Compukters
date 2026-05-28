@@ -15,6 +15,13 @@ pub enum PartitionType {
 }
 
 impl PartitionType {
+    pub fn tag(self) -> &'static str {
+        match self {
+            PartitionType::Boot => "BOOT",
+            PartitionType::Root => "ROOT",
+        }
+    }
+
     fn bytes(self) -> &'static [u8; 4] {
         match self {
             PartitionType::Boot => b"BOOT",
