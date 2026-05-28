@@ -115,6 +115,9 @@ program_base = page_size
 `program_base` is the conventional RAM address for boot-loaded guest programs.
 It does not imply that the first-stage firmware is loaded by the host into RAM;
 the current computer target starts first-stage firmware from BIOS flash.
+Rux16 BIOS artifacts initialize `sp` to `program_base`, so firmware scratch
+stack grows downward and leaves the boot-loaded program range available for the
+next stage.
 
 The guest must not write the boot page unless it intentionally gives up access
 to boot data.

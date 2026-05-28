@@ -1250,6 +1250,56 @@ fn rux16_artifact_lowers_address_of_stack_array_element_to_guest_address() {
 }
 
 #[test]
+fn rux16_artifact_reads_storage0_block_into_stack_buffer() {
+    let zero_initializer = "\\0".repeat(512);
+    let source = format!(
+        "use rux::abi::computer::storage0;
+
+         fn read_storage0_block() {{
+            let mut block: [u8; 512] = b\"{zero_initializer}\";
+            let mut addr: u32 = &mut block[0u32];
+            unsafe {{
+                mmio<i32>(storage0::LBA_LOW).store(0);
+                mmio<i32>(storage0::LBA_HIGH).store(0);
+                mmio<i32>(storage0::BLOCK_COUNT).store(1);
+                mmio<u32>(storage0::BUFFER_ADDR).store(addr);
+                mmio<i32>(storage0::COMMAND).store(storage0::COMMAND_READ_BLOCKS);
+                if mmio<i32>(storage0::STATUS).load() == storage0::STATUS_DONE {{
+                    mmio<u8>(debug::WRITE).store(block[0u32]);
+                    mmio<u8>(debug::WRITE).store(block[1u32]);
+                }}
+            }}
+         }}
+
+         fn main() {{
+            read_storage0_block();
+         }}"
+    );
+    let artifact = compile_rux16_artifact(&with_computer_abi(&source), Rux16ArtifactTarget::Bios)
+        .expect("helper can read one storage0 block into a stack-backed byte buffer");
+    let mut media = vec![0; 512];
+    media[0] = b'O';
+    media[1] = b'K';
+    let mut handle = RuxComputerHandle::create_rux16_bios_flash_with_storage0_media(
+        &artifact.bytes,
+        64 * 1024,
+        100_000,
+        media,
+    )
+    .expect("machine boots Rux16 BIOS flash with storage0 media");
+
+    let signal = handle.run_rux16_until_signal().unwrap();
+    assert_eq!(
+        signal,
+        Rux16Signal::Halt,
+        "debug output before signal: {:?}",
+        String::from_utf8_lossy(handle.debug_output_bytes())
+    );
+    assert_eq!(handle.debug_output_bytes(), b"OK");
+    assert_eq!(handle.control().status, ComputerMachine::STATUS_HALTED);
+}
+
+#[test]
 fn rux16_artifact_rejects_recursive_helper_inline() {
     let error = compile_rux16_artifact(
         "fn again() {
