@@ -249,6 +249,65 @@ fn rux_volume_put_boot_records_boot_artifact() {
 }
 
 #[test]
+fn rux_volume_put_boot_records_boot_artifact_in_boot_partition() {
+    let volume_path = temp_file("partitioned-boot-storage0.ruxvol");
+    let boot_path = temp_file("partitioned-boot.ruxe");
+    fs::write(
+        &boot_path,
+        ruxe::encode_rux16_executable(
+            &[0x01, 0x02, 0x03, 0x04],
+            ruxe::RuxeAbiKind::Bootloader,
+            0x900,
+            0x900,
+        )
+        .expect("RUXE encodes"),
+    )
+    .expect("boot writes");
+
+    assert!(Command::new(rux_binary())
+        .args([
+            "volume",
+            "init",
+            volume_path.to_str().unwrap(),
+            "--size",
+            "65536",
+        ])
+        .status()
+        .expect("init runs")
+        .success());
+    let output = Command::new(rux_binary())
+        .args([
+            "volume",
+            "put-boot",
+            volume_path.to_str().unwrap(),
+            boot_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("put-boot runs");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let bytes = fs::read(&volume_path).expect("volume reads");
+    let payload = &bytes[16..];
+    assert_eq!(&payload[0..5], b"RUXPT");
+    assert_eq!(&payload[512..516], b"RUXB");
+    assert_eq!(
+        u32::from_le_bytes(payload[516..520].try_into().unwrap()),
+        0x900
+    );
+    assert_eq!(
+        u32::from_le_bytes(payload[520..524].try_into().unwrap()),
+        0x900
+    );
+    assert_eq!(u32::from_le_bytes(payload[524..528].try_into().unwrap()), 1);
+    assert_eq!(u32::from_le_bytes(payload[528..532].try_into().unwrap()), 2);
+    assert_eq!(&payload[1024..1028], &[0x01, 0x02, 0x03, 0x04]);
+}
+
+#[test]
 fn rux_volume_put_kernel_records_kernel_artifact() {
     let volume_path = temp_file("kernel-record-storage0.ruxvol");
     let kernel_path = temp_file("kernel-record.ruxe");
@@ -722,11 +781,57 @@ fn rux16_kernel_loader_source_loads_kernel_ruxe_from_root_ruxfs() {
 }
 
 #[test]
+fn rux16_kernel_loader_source_executes_kernel_ruxe_from_root_ruxfs() {
+    let source = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/boot/kernel_loader.rx"),
+    )
+    .expect("kernel loader source should exist");
+
+    assert!(
+        source.contains("fn execute_loaded_kernel_ruxe("),
+        "kernel loader should expose a guest-side RUXE execution helper"
+    );
+    assert!(
+        source.contains("ptr<i32>(0x300cu32).load()"),
+        "RUXE execution should read the entry_pc field"
+    );
+    assert!(
+        source.contains("ptr<u32>(0x3024u32).load()"),
+        "RUXE execution should read the load_addr field from the first section"
+    );
+    assert!(
+        source.contains("ptr<u32>(0x3028u32).load()"),
+        "RUXE execution should read the payload file offset"
+    );
+    assert!(
+        source.contains("ptr<u32>(0x302cu32).load()"),
+        "RUXE execution should read the payload file size"
+    );
+    assert!(
+        source.contains("ptr<u8>(source_addr).load()"),
+        "RUXE execution should copy payload bytes from the loaded RUXE file"
+    );
+    assert!(
+        source.contains("ptr<u8>(dest_addr).store(byte)"),
+        "RUXE execution should copy payload bytes to the load address"
+    );
+    assert!(
+        source.contains("rux16_jump(entry_pc)"),
+        "RUXE execution should jump to the RUXE entry point"
+    );
+    assert!(
+        !source.contains("0x4b585552"),
+        "kernel loader should not keep the fixed RUXK record execution path"
+    );
+}
+
+#[test]
 fn rux_volume_put_boot_and_kernel_creates_storage0_that_bundled_bios_executes() {
     let volume_path = temp_file("boot-kernel-storage0.ruxvol");
+    let root_path = temp_file("boot-kernel-root.ruxfs");
     let boot_path = temp_file("kernel-loader.boot");
     let kernel_source_path = temp_file("kernel.rx");
-    let kernel_path = temp_file("kernel.ruxe");
+    let kernel_path = temp_file("boot-kernel-kernel.ruxe");
     let boot_source_path =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/boot/kernel_loader.rx");
     fs::write(
@@ -797,13 +902,13 @@ fn rux_volume_put_boot_and_kernel_creates_storage0_that_bundled_bios_executes() 
     assert!(Command::new(rux_binary())
         .args([
             "volume",
-            "create",
+            "init",
             volume_path.to_str().unwrap(),
             "--size",
-            "16384",
+            "65536",
         ])
         .status()
-        .expect("create runs")
+        .expect("init runs")
         .success());
     assert!(Command::new(rux_binary())
         .args([
@@ -817,20 +922,50 @@ fn rux_volume_put_boot_and_kernel_creates_storage0_that_bundled_bios_executes() 
         .success());
     assert!(Command::new(rux_binary())
         .args([
-            "volume",
-            "put-kernel",
-            volume_path.to_str().unwrap(),
+            "fs",
+            "ruxfs",
+            "format",
+            root_path.to_str().unwrap(),
+            "--blocks",
+            "95",
+        ])
+        .status()
+        .expect("ruxfs format runs")
+        .success());
+    assert!(Command::new(rux_binary())
+        .args(["fs", "ruxfs", "mkdir", root_path.to_str().unwrap(), "/boot"])
+        .status()
+        .expect("ruxfs mkdir runs")
+        .success());
+    assert!(Command::new(rux_binary())
+        .args([
+            "fs",
+            "ruxfs",
+            "put",
+            root_path.to_str().unwrap(),
+            "/boot/kernel.ruxe",
             kernel_path.to_str().unwrap(),
         ])
         .status()
-        .expect("put-kernel runs")
+        .expect("ruxfs put runs")
+        .success());
+    assert!(Command::new(rux_binary())
+        .args([
+            "volume",
+            "replace-partition",
+            volume_path.to_str().unwrap(),
+            "ROOT",
+            root_path.to_str().unwrap(),
+        ])
+        .status()
+        .expect("replace ROOT runs")
         .success());
 
     let bios = compile_bundled_rux16_bios();
     let mut handle = RuxComputerHandle::create_rux16_bios_flash_with_storage0_path(
         &bios,
         64 * 1024,
-        4096,
+        50_000,
         &volume_path,
     )
     .expect("Rux16 BIOS flash computer creates with CLI boot/kernel volume path");
