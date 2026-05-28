@@ -18,6 +18,8 @@
 - Added byte-level `rux volume extract-partition` and `replace-partition`
   commands for moving partition images in and out of `RUXPT` volumes without
   filesystem-specific logic.
+- Added `rux volume inspect`, which prints the `RUXVOL` header summary and
+  decoded `RUXPT` partition layout.
 - Added experimental `RuxFS` v1 as the extent-based filesystem contract for
   the partitioned `ROOT` partition, with empty formatting and structural
   validation in compiler tooling.

@@ -67,9 +67,13 @@ uses `rux fs ruxfs ...`; future filesystems should use their own `rux fs
 `rux volume` may copy partition bytes without interpreting their filesystem:
 
 ```text
+rux volume inspect <volume.ruxvol>
 rux volume extract-partition <volume.ruxvol> <partition> <output>
 rux volume replace-partition <volume.ruxvol> <partition> <input>
 ```
+
+`inspect` prints the RUXVOL header summary and the decoded `RUXPT` partition
+layout, including partition type, start LBA, block count, byte size, and name.
 
 `<partition>` matches either the partition type tag, for example `BOOT` or
 `ROOT`, or the partition name, for example `boot` or `root`. Replacement input
