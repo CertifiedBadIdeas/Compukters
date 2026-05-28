@@ -506,6 +506,13 @@ impl Parser {
             }
         }
         if let Some(name) = self.take_ident_if_present() {
+            if self.consume(TokenKind::DoubleColon) {
+                let mut path = vec![name, self.take_ident()?];
+                while self.consume(TokenKind::DoubleColon) {
+                    path.push(self.take_ident()?);
+                }
+                return Ok(Expr::Path(path));
+            }
             return Ok(Expr::Local(name));
         }
         if self.consume(TokenKind::Mmio) {

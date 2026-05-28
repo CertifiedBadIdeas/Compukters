@@ -1,44 +1,40 @@
-use rux::abi::computer::{
-    CONTROL_PANIC_CODE, DEBUG_WRITE, STORAGE0_BLOCK_COUNT, STORAGE0_BUFFER_ADDR, STORAGE0_COMMAND,
-    STORAGE0_LBA_HIGH, STORAGE0_LBA_LOW, STORAGE0_STATUS, STORAGE_COMMAND_READ_BLOCKS,
-    STORAGE_STATUS_DONE
-};
+use rux::abi::computer::{control, debug, storage0};
 
 fn write_kernel_load_failed() {
     unsafe {
-        mmio<u8>(DEBUG_WRITE).store(75u8);
-        mmio<u8>(DEBUG_WRITE).store(69u8);
-        mmio<u8>(DEBUG_WRITE).store(82u8);
-        mmio<u8>(DEBUG_WRITE).store(78u8);
-        mmio<u8>(DEBUG_WRITE).store(69u8);
-        mmio<u8>(DEBUG_WRITE).store(76u8);
-        mmio<u8>(DEBUG_WRITE).store(32u8);
-        mmio<u8>(DEBUG_WRITE).store(76u8);
-        mmio<u8>(DEBUG_WRITE).store(79u8);
-        mmio<u8>(DEBUG_WRITE).store(65u8);
-        mmio<u8>(DEBUG_WRITE).store(68u8);
-        mmio<u8>(DEBUG_WRITE).store(32u8);
-        mmio<u8>(DEBUG_WRITE).store(70u8);
-        mmio<u8>(DEBUG_WRITE).store(65u8);
-        mmio<u8>(DEBUG_WRITE).store(73u8);
-        mmio<u8>(DEBUG_WRITE).store(76u8);
-        mmio<u8>(DEBUG_WRITE).store(69u8);
-        mmio<u8>(DEBUG_WRITE).store(68u8);
-        mmio<u8>(DEBUG_WRITE).store(10u8);
-        mmio<i32>(CONTROL_PANIC_CODE).store(69);
+        mmio<u8>(debug::WRITE).store(75u8);
+        mmio<u8>(debug::WRITE).store(69u8);
+        mmio<u8>(debug::WRITE).store(82u8);
+        mmio<u8>(debug::WRITE).store(78u8);
+        mmio<u8>(debug::WRITE).store(69u8);
+        mmio<u8>(debug::WRITE).store(76u8);
+        mmio<u8>(debug::WRITE).store(32u8);
+        mmio<u8>(debug::WRITE).store(76u8);
+        mmio<u8>(debug::WRITE).store(79u8);
+        mmio<u8>(debug::WRITE).store(65u8);
+        mmio<u8>(debug::WRITE).store(68u8);
+        mmio<u8>(debug::WRITE).store(32u8);
+        mmio<u8>(debug::WRITE).store(70u8);
+        mmio<u8>(debug::WRITE).store(65u8);
+        mmio<u8>(debug::WRITE).store(73u8);
+        mmio<u8>(debug::WRITE).store(76u8);
+        mmio<u8>(debug::WRITE).store(69u8);
+        mmio<u8>(debug::WRITE).store(68u8);
+        mmio<u8>(debug::WRITE).store(10u8);
+        mmio<i32>(control::PANIC_CODE).store(69);
     }
 }
 
 fn load_kernel() {
     unsafe {
-        mmio<i32>(STORAGE0_LBA_LOW).store(16);
-        mmio<i32>(STORAGE0_LBA_HIGH).store(0);
-        mmio<i32>(STORAGE0_BLOCK_COUNT).store(1);
-        mmio<i32>(STORAGE0_BUFFER_ADDR).store(0x3000);
-        mmio<i32>(STORAGE0_COMMAND).store(STORAGE_COMMAND_READ_BLOCKS);
+        mmio<i32>(storage0::LBA_LOW).store(16);
+        mmio<i32>(storage0::LBA_HIGH).store(0);
+        mmio<i32>(storage0::BLOCK_COUNT).store(1);
+        mmio<i32>(storage0::BUFFER_ADDR).store(0x3000);
+        mmio<i32>(storage0::COMMAND).store(storage0::COMMAND_READ_BLOCKS);
 
-        let mut status: i32 = mmio<i32>(STORAGE0_STATUS).load();
-        if status == STORAGE_STATUS_DONE {
+        let mut status: i32 = mmio<i32>(storage0::STATUS).load();
+        if status == storage0::STATUS_DONE {
             let mut magic: i32 = ptr<i32>(0x3000u32).load();
             if magic == 0x4b585552 {
                 let mut entry_pc: i32 = ptr<i32>(0x3004u32).load();
@@ -58,14 +54,14 @@ fn load_kernel() {
                             if start_lba == 0 {
                                 write_kernel_load_failed();
                             } else {
-                                mmio<i32>(STORAGE0_LBA_LOW).store(start_lba);
-                                mmio<i32>(STORAGE0_LBA_HIGH).store(0);
-                                mmio<i32>(STORAGE0_BLOCK_COUNT).store(block_count);
-                                mmio<i32>(STORAGE0_BUFFER_ADDR).store(load_addr);
-                                mmio<i32>(STORAGE0_COMMAND).store(STORAGE_COMMAND_READ_BLOCKS);
+                                mmio<i32>(storage0::LBA_LOW).store(start_lba);
+                                mmio<i32>(storage0::LBA_HIGH).store(0);
+                                mmio<i32>(storage0::BLOCK_COUNT).store(block_count);
+                                mmio<i32>(storage0::BUFFER_ADDR).store(load_addr);
+                                mmio<i32>(storage0::COMMAND).store(storage0::COMMAND_READ_BLOCKS);
 
-                                let mut payload_status: i32 = mmio<i32>(STORAGE0_STATUS).load();
-                                if payload_status == STORAGE_STATUS_DONE {
+                                let mut payload_status: i32 = mmio<i32>(storage0::STATUS).load();
+                                if payload_status == storage0::STATUS_DONE {
                                     rux16_jump(entry_pc);
                                 } else {
                                     write_kernel_load_failed();

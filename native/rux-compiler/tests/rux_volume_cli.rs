@@ -434,36 +434,32 @@ fn rux_volume_put_boot_and_kernel_creates_storage0_that_bundled_bios_executes() 
         Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/boot/kernel_loader.rx");
     fs::write(
         &kernel_source_path,
-        "use rux::abi::computer::{
-            CONTROL_PANIC_CODE, DISPLAY0_COMMAND, DISPLAY0_COMMAND_CLEAR,
-            DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR, DISPLAY0_CURSOR_X, DISPLAY0_CURSOR_Y,
-            DISPLAY0_DATA
-        };
+        "use rux::abi::computer::{control, display0};
 
         fn main() {
             unsafe {
-                mmio<i32>(DISPLAY0_COMMAND).store(DISPLAY0_COMMAND_CLEAR);
-                mmio<i32>(DISPLAY0_CURSOR_X).store(0);
-                mmio<i32>(DISPLAY0_CURSOR_Y).store(0);
-                mmio<i32>(DISPLAY0_DATA).store(75);
-                mmio<i32>(DISPLAY0_COMMAND).store(DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR);
-                mmio<i32>(DISPLAY0_DATA).store(69);
-                mmio<i32>(DISPLAY0_COMMAND).store(DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR);
-                mmio<i32>(DISPLAY0_DATA).store(82);
-                mmio<i32>(DISPLAY0_COMMAND).store(DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR);
-                mmio<i32>(DISPLAY0_DATA).store(78);
-                mmio<i32>(DISPLAY0_COMMAND).store(DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR);
-                mmio<i32>(DISPLAY0_DATA).store(69);
-                mmio<i32>(DISPLAY0_COMMAND).store(DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR);
-                mmio<i32>(DISPLAY0_DATA).store(76);
-                mmio<i32>(DISPLAY0_COMMAND).store(DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR);
-                mmio<i32>(DISPLAY0_DATA).store(32);
-                mmio<i32>(DISPLAY0_COMMAND).store(DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR);
-                mmio<i32>(DISPLAY0_DATA).store(79);
-                mmio<i32>(DISPLAY0_COMMAND).store(DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR);
-                mmio<i32>(DISPLAY0_DATA).store(75);
-                mmio<i32>(DISPLAY0_COMMAND).store(DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR);
-                mmio<i32>(CONTROL_PANIC_CODE).store(75);
+                mmio<i32>(display0::COMMAND).store(display0::COMMAND_CLEAR);
+                mmio<i32>(display0::CURSOR_X).store(0);
+                mmio<i32>(display0::CURSOR_Y).store(0);
+                mmio<i32>(display0::DATA).store(75);
+                mmio<i32>(display0::COMMAND).store(display0::COMMAND_PUT_BYTE_AT_CURSOR);
+                mmio<i32>(display0::DATA).store(69);
+                mmio<i32>(display0::COMMAND).store(display0::COMMAND_PUT_BYTE_AT_CURSOR);
+                mmio<i32>(display0::DATA).store(82);
+                mmio<i32>(display0::COMMAND).store(display0::COMMAND_PUT_BYTE_AT_CURSOR);
+                mmio<i32>(display0::DATA).store(78);
+                mmio<i32>(display0::COMMAND).store(display0::COMMAND_PUT_BYTE_AT_CURSOR);
+                mmio<i32>(display0::DATA).store(69);
+                mmio<i32>(display0::COMMAND).store(display0::COMMAND_PUT_BYTE_AT_CURSOR);
+                mmio<i32>(display0::DATA).store(76);
+                mmio<i32>(display0::COMMAND).store(display0::COMMAND_PUT_BYTE_AT_CURSOR);
+                mmio<i32>(display0::DATA).store(32);
+                mmio<i32>(display0::COMMAND).store(display0::COMMAND_PUT_BYTE_AT_CURSOR);
+                mmio<i32>(display0::DATA).store(79);
+                mmio<i32>(display0::COMMAND).store(display0::COMMAND_PUT_BYTE_AT_CURSOR);
+                mmio<i32>(display0::DATA).store(75);
+                mmio<i32>(display0::COMMAND).store(display0::COMMAND_PUT_BYTE_AT_CURSOR);
+                mmio<i32>(control::PANIC_CODE).store(75);
             }
         }",
     )

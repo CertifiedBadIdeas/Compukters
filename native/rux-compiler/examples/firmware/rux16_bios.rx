@@ -1,168 +1,162 @@
-use rux::abi::computer::{
-    CONTROL_PANIC_CODE, CONTROL_STATUS, DEBUG_WRITE, DISPLAY0_COMMAND, DISPLAY0_COMMAND_CLEAR,
-    DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR, DISPLAY0_CURSOR_X, DISPLAY0_CURSOR_Y, DISPLAY0_DATA,
-    STATUS_BOOTING, STATUS_READY, STORAGE0_BLOCK_COUNT, STORAGE0_BUFFER_ADDR, STORAGE0_COMMAND,
-    STORAGE0_LBA_HIGH, STORAGE0_LBA_LOW, STORAGE0_STATUS, STORAGE_COMMAND_READ_BLOCKS,
-    STORAGE_STATUS_DONE
-};
+use rux::abi::computer::{control, debug, display0, status, storage0};
 
 fn write_banner() {
     unsafe {
-        mmio<u8>(DEBUG_WRITE).store(82u8);
-        mmio<u8>(DEBUG_WRITE).store(85u8);
-        mmio<u8>(DEBUG_WRITE).store(88u8);
-        mmio<u8>(DEBUG_WRITE).store(49u8);
-        mmio<u8>(DEBUG_WRITE).store(54u8);
-        mmio<u8>(DEBUG_WRITE).store(32u8);
-        mmio<u8>(DEBUG_WRITE).store(66u8);
-        mmio<u8>(DEBUG_WRITE).store(73u8);
-        mmio<u8>(DEBUG_WRITE).store(79u8);
-        mmio<u8>(DEBUG_WRITE).store(83u8);
-        mmio<u8>(DEBUG_WRITE).store(10u8);
+        mmio<u8>(debug::WRITE).store(82u8);
+        mmio<u8>(debug::WRITE).store(85u8);
+        mmio<u8>(debug::WRITE).store(88u8);
+        mmio<u8>(debug::WRITE).store(49u8);
+        mmio<u8>(debug::WRITE).store(54u8);
+        mmio<u8>(debug::WRITE).store(32u8);
+        mmio<u8>(debug::WRITE).store(66u8);
+        mmio<u8>(debug::WRITE).store(73u8);
+        mmio<u8>(debug::WRITE).store(79u8);
+        mmio<u8>(debug::WRITE).store(83u8);
+        mmio<u8>(debug::WRITE).store(10u8);
     }
 }
 
 fn draw_banner() {
     unsafe {
-        mmio<i32>(DISPLAY0_COMMAND).store(DISPLAY0_COMMAND_CLEAR);
-        mmio<i32>(DISPLAY0_CURSOR_X).store(0);
-        mmio<i32>(DISPLAY0_CURSOR_Y).store(0);
-        mmio<i32>(DISPLAY0_DATA).store(82);
-        mmio<i32>(DISPLAY0_COMMAND).store(DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR);
-        mmio<i32>(DISPLAY0_DATA).store(85);
-        mmio<i32>(DISPLAY0_COMMAND).store(DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR);
-        mmio<i32>(DISPLAY0_DATA).store(88);
-        mmio<i32>(DISPLAY0_COMMAND).store(DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR);
-        mmio<i32>(DISPLAY0_DATA).store(49);
-        mmio<i32>(DISPLAY0_COMMAND).store(DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR);
-        mmio<i32>(DISPLAY0_DATA).store(54);
-        mmio<i32>(DISPLAY0_COMMAND).store(DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR);
-        mmio<i32>(DISPLAY0_DATA).store(32);
-        mmio<i32>(DISPLAY0_COMMAND).store(DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR);
-        mmio<i32>(DISPLAY0_DATA).store(66);
-        mmio<i32>(DISPLAY0_COMMAND).store(DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR);
-        mmio<i32>(DISPLAY0_DATA).store(73);
-        mmio<i32>(DISPLAY0_COMMAND).store(DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR);
-        mmio<i32>(DISPLAY0_DATA).store(79);
-        mmio<i32>(DISPLAY0_COMMAND).store(DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR);
-        mmio<i32>(DISPLAY0_DATA).store(83);
-        mmio<i32>(DISPLAY0_COMMAND).store(DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR);
+        mmio<i32>(display0::COMMAND).store(display0::COMMAND_CLEAR);
+        mmio<i32>(display0::CURSOR_X).store(0);
+        mmio<i32>(display0::CURSOR_Y).store(0);
+        mmio<i32>(display0::DATA).store(82);
+        mmio<i32>(display0::COMMAND).store(display0::COMMAND_PUT_BYTE_AT_CURSOR);
+        mmio<i32>(display0::DATA).store(85);
+        mmio<i32>(display0::COMMAND).store(display0::COMMAND_PUT_BYTE_AT_CURSOR);
+        mmio<i32>(display0::DATA).store(88);
+        mmio<i32>(display0::COMMAND).store(display0::COMMAND_PUT_BYTE_AT_CURSOR);
+        mmio<i32>(display0::DATA).store(49);
+        mmio<i32>(display0::COMMAND).store(display0::COMMAND_PUT_BYTE_AT_CURSOR);
+        mmio<i32>(display0::DATA).store(54);
+        mmio<i32>(display0::COMMAND).store(display0::COMMAND_PUT_BYTE_AT_CURSOR);
+        mmio<i32>(display0::DATA).store(32);
+        mmio<i32>(display0::COMMAND).store(display0::COMMAND_PUT_BYTE_AT_CURSOR);
+        mmio<i32>(display0::DATA).store(66);
+        mmio<i32>(display0::COMMAND).store(display0::COMMAND_PUT_BYTE_AT_CURSOR);
+        mmio<i32>(display0::DATA).store(73);
+        mmio<i32>(display0::COMMAND).store(display0::COMMAND_PUT_BYTE_AT_CURSOR);
+        mmio<i32>(display0::DATA).store(79);
+        mmio<i32>(display0::COMMAND).store(display0::COMMAND_PUT_BYTE_AT_CURSOR);
+        mmio<i32>(display0::DATA).store(83);
+        mmio<i32>(display0::COMMAND).store(display0::COMMAND_PUT_BYTE_AT_CURSOR);
     }
 }
 
 fn write_no_bootable_device() {
     unsafe {
-        mmio<u8>(DEBUG_WRITE).store(78u8);
-        mmio<u8>(DEBUG_WRITE).store(79u8);
-        mmio<u8>(DEBUG_WRITE).store(32u8);
-        mmio<u8>(DEBUG_WRITE).store(66u8);
-        mmio<u8>(DEBUG_WRITE).store(79u8);
-        mmio<u8>(DEBUG_WRITE).store(79u8);
-        mmio<u8>(DEBUG_WRITE).store(84u8);
-        mmio<u8>(DEBUG_WRITE).store(65u8);
-        mmio<u8>(DEBUG_WRITE).store(66u8);
-        mmio<u8>(DEBUG_WRITE).store(76u8);
-        mmio<u8>(DEBUG_WRITE).store(69u8);
-        mmio<u8>(DEBUG_WRITE).store(32u8);
-        mmio<u8>(DEBUG_WRITE).store(68u8);
-        mmio<u8>(DEBUG_WRITE).store(69u8);
-        mmio<u8>(DEBUG_WRITE).store(86u8);
-        mmio<u8>(DEBUG_WRITE).store(73u8);
-        mmio<u8>(DEBUG_WRITE).store(67u8);
-        mmio<u8>(DEBUG_WRITE).store(69u8);
-        mmio<u8>(DEBUG_WRITE).store(10u8);
+        mmio<u8>(debug::WRITE).store(78u8);
+        mmio<u8>(debug::WRITE).store(79u8);
+        mmio<u8>(debug::WRITE).store(32u8);
+        mmio<u8>(debug::WRITE).store(66u8);
+        mmio<u8>(debug::WRITE).store(79u8);
+        mmio<u8>(debug::WRITE).store(79u8);
+        mmio<u8>(debug::WRITE).store(84u8);
+        mmio<u8>(debug::WRITE).store(65u8);
+        mmio<u8>(debug::WRITE).store(66u8);
+        mmio<u8>(debug::WRITE).store(76u8);
+        mmio<u8>(debug::WRITE).store(69u8);
+        mmio<u8>(debug::WRITE).store(32u8);
+        mmio<u8>(debug::WRITE).store(68u8);
+        mmio<u8>(debug::WRITE).store(69u8);
+        mmio<u8>(debug::WRITE).store(86u8);
+        mmio<u8>(debug::WRITE).store(73u8);
+        mmio<u8>(debug::WRITE).store(67u8);
+        mmio<u8>(debug::WRITE).store(69u8);
+        mmio<u8>(debug::WRITE).store(10u8);
     }
     draw_no_bootable_device();
 }
 
 fn draw_no_bootable_device() {
     unsafe {
-        mmio<i32>(DISPLAY0_CURSOR_X).store(0);
-        mmio<i32>(DISPLAY0_CURSOR_Y).store(2);
-        mmio<i32>(DISPLAY0_DATA).store(78);
-        mmio<i32>(DISPLAY0_COMMAND).store(DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR);
-        mmio<i32>(DISPLAY0_DATA).store(111);
-        mmio<i32>(DISPLAY0_COMMAND).store(DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR);
-        mmio<i32>(DISPLAY0_DATA).store(32);
-        mmio<i32>(DISPLAY0_COMMAND).store(DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR);
-        mmio<i32>(DISPLAY0_DATA).store(98);
-        mmio<i32>(DISPLAY0_COMMAND).store(DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR);
-        mmio<i32>(DISPLAY0_DATA).store(111);
-        mmio<i32>(DISPLAY0_COMMAND).store(DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR);
-        mmio<i32>(DISPLAY0_DATA).store(111);
-        mmio<i32>(DISPLAY0_COMMAND).store(DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR);
-        mmio<i32>(DISPLAY0_DATA).store(116);
-        mmio<i32>(DISPLAY0_COMMAND).store(DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR);
-        mmio<i32>(DISPLAY0_DATA).store(97);
-        mmio<i32>(DISPLAY0_COMMAND).store(DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR);
-        mmio<i32>(DISPLAY0_DATA).store(98);
-        mmio<i32>(DISPLAY0_COMMAND).store(DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR);
-        mmio<i32>(DISPLAY0_DATA).store(108);
-        mmio<i32>(DISPLAY0_COMMAND).store(DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR);
-        mmio<i32>(DISPLAY0_DATA).store(101);
-        mmio<i32>(DISPLAY0_COMMAND).store(DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR);
-        mmio<i32>(DISPLAY0_DATA).store(32);
-        mmio<i32>(DISPLAY0_COMMAND).store(DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR);
-        mmio<i32>(DISPLAY0_DATA).store(100);
-        mmio<i32>(DISPLAY0_COMMAND).store(DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR);
-        mmio<i32>(DISPLAY0_DATA).store(101);
-        mmio<i32>(DISPLAY0_COMMAND).store(DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR);
-        mmio<i32>(DISPLAY0_DATA).store(118);
-        mmio<i32>(DISPLAY0_COMMAND).store(DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR);
-        mmio<i32>(DISPLAY0_DATA).store(105);
-        mmio<i32>(DISPLAY0_COMMAND).store(DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR);
-        mmio<i32>(DISPLAY0_DATA).store(99);
-        mmio<i32>(DISPLAY0_COMMAND).store(DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR);
-        mmio<i32>(DISPLAY0_DATA).store(101);
-        mmio<i32>(DISPLAY0_COMMAND).store(DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR);
+        mmio<i32>(display0::CURSOR_X).store(0);
+        mmio<i32>(display0::CURSOR_Y).store(2);
+        mmio<i32>(display0::DATA).store(78);
+        mmio<i32>(display0::COMMAND).store(display0::COMMAND_PUT_BYTE_AT_CURSOR);
+        mmio<i32>(display0::DATA).store(111);
+        mmio<i32>(display0::COMMAND).store(display0::COMMAND_PUT_BYTE_AT_CURSOR);
+        mmio<i32>(display0::DATA).store(32);
+        mmio<i32>(display0::COMMAND).store(display0::COMMAND_PUT_BYTE_AT_CURSOR);
+        mmio<i32>(display0::DATA).store(98);
+        mmio<i32>(display0::COMMAND).store(display0::COMMAND_PUT_BYTE_AT_CURSOR);
+        mmio<i32>(display0::DATA).store(111);
+        mmio<i32>(display0::COMMAND).store(display0::COMMAND_PUT_BYTE_AT_CURSOR);
+        mmio<i32>(display0::DATA).store(111);
+        mmio<i32>(display0::COMMAND).store(display0::COMMAND_PUT_BYTE_AT_CURSOR);
+        mmio<i32>(display0::DATA).store(116);
+        mmio<i32>(display0::COMMAND).store(display0::COMMAND_PUT_BYTE_AT_CURSOR);
+        mmio<i32>(display0::DATA).store(97);
+        mmio<i32>(display0::COMMAND).store(display0::COMMAND_PUT_BYTE_AT_CURSOR);
+        mmio<i32>(display0::DATA).store(98);
+        mmio<i32>(display0::COMMAND).store(display0::COMMAND_PUT_BYTE_AT_CURSOR);
+        mmio<i32>(display0::DATA).store(108);
+        mmio<i32>(display0::COMMAND).store(display0::COMMAND_PUT_BYTE_AT_CURSOR);
+        mmio<i32>(display0::DATA).store(101);
+        mmio<i32>(display0::COMMAND).store(display0::COMMAND_PUT_BYTE_AT_CURSOR);
+        mmio<i32>(display0::DATA).store(32);
+        mmio<i32>(display0::COMMAND).store(display0::COMMAND_PUT_BYTE_AT_CURSOR);
+        mmio<i32>(display0::DATA).store(100);
+        mmio<i32>(display0::COMMAND).store(display0::COMMAND_PUT_BYTE_AT_CURSOR);
+        mmio<i32>(display0::DATA).store(101);
+        mmio<i32>(display0::COMMAND).store(display0::COMMAND_PUT_BYTE_AT_CURSOR);
+        mmio<i32>(display0::DATA).store(118);
+        mmio<i32>(display0::COMMAND).store(display0::COMMAND_PUT_BYTE_AT_CURSOR);
+        mmio<i32>(display0::DATA).store(105);
+        mmio<i32>(display0::COMMAND).store(display0::COMMAND_PUT_BYTE_AT_CURSOR);
+        mmio<i32>(display0::DATA).store(99);
+        mmio<i32>(display0::COMMAND).store(display0::COMMAND_PUT_BYTE_AT_CURSOR);
+        mmio<i32>(display0::DATA).store(101);
+        mmio<i32>(display0::COMMAND).store(display0::COMMAND_PUT_BYTE_AT_CURSOR);
     }
 }
 
 fn write_boot_record_found() {
     unsafe {
-        mmio<u8>(DEBUG_WRITE).store(66u8);
-        mmio<u8>(DEBUG_WRITE).store(79u8);
-        mmio<u8>(DEBUG_WRITE).store(79u8);
-        mmio<u8>(DEBUG_WRITE).store(84u8);
-        mmio<u8>(DEBUG_WRITE).store(32u8);
-        mmio<u8>(DEBUG_WRITE).store(82u8);
-        mmio<u8>(DEBUG_WRITE).store(69u8);
-        mmio<u8>(DEBUG_WRITE).store(67u8);
-        mmio<u8>(DEBUG_WRITE).store(79u8);
-        mmio<u8>(DEBUG_WRITE).store(82u8);
-        mmio<u8>(DEBUG_WRITE).store(68u8);
-        mmio<u8>(DEBUG_WRITE).store(32u8);
-        mmio<u8>(DEBUG_WRITE).store(70u8);
-        mmio<u8>(DEBUG_WRITE).store(79u8);
-        mmio<u8>(DEBUG_WRITE).store(85u8);
-        mmio<u8>(DEBUG_WRITE).store(78u8);
-        mmio<u8>(DEBUG_WRITE).store(68u8);
-        mmio<u8>(DEBUG_WRITE).store(10u8);
+        mmio<u8>(debug::WRITE).store(66u8);
+        mmio<u8>(debug::WRITE).store(79u8);
+        mmio<u8>(debug::WRITE).store(79u8);
+        mmio<u8>(debug::WRITE).store(84u8);
+        mmio<u8>(debug::WRITE).store(32u8);
+        mmio<u8>(debug::WRITE).store(82u8);
+        mmio<u8>(debug::WRITE).store(69u8);
+        mmio<u8>(debug::WRITE).store(67u8);
+        mmio<u8>(debug::WRITE).store(79u8);
+        mmio<u8>(debug::WRITE).store(82u8);
+        mmio<u8>(debug::WRITE).store(68u8);
+        mmio<u8>(debug::WRITE).store(32u8);
+        mmio<u8>(debug::WRITE).store(70u8);
+        mmio<u8>(debug::WRITE).store(79u8);
+        mmio<u8>(debug::WRITE).store(85u8);
+        mmio<u8>(debug::WRITE).store(78u8);
+        mmio<u8>(debug::WRITE).store(68u8);
+        mmio<u8>(debug::WRITE).store(10u8);
     }
 }
 
 fn write_boot_payload_loaded() {
     unsafe {
-        mmio<u8>(DEBUG_WRITE).store(66u8);
-        mmio<u8>(DEBUG_WRITE).store(79u8);
-        mmio<u8>(DEBUG_WRITE).store(79u8);
-        mmio<u8>(DEBUG_WRITE).store(84u8);
-        mmio<u8>(DEBUG_WRITE).store(32u8);
-        mmio<u8>(DEBUG_WRITE).store(80u8);
-        mmio<u8>(DEBUG_WRITE).store(65u8);
-        mmio<u8>(DEBUG_WRITE).store(89u8);
-        mmio<u8>(DEBUG_WRITE).store(76u8);
-        mmio<u8>(DEBUG_WRITE).store(79u8);
-        mmio<u8>(DEBUG_WRITE).store(65u8);
-        mmio<u8>(DEBUG_WRITE).store(68u8);
-        mmio<u8>(DEBUG_WRITE).store(32u8);
-        mmio<u8>(DEBUG_WRITE).store(76u8);
-        mmio<u8>(DEBUG_WRITE).store(79u8);
-        mmio<u8>(DEBUG_WRITE).store(65u8);
-        mmio<u8>(DEBUG_WRITE).store(68u8);
-        mmio<u8>(DEBUG_WRITE).store(69u8);
-        mmio<u8>(DEBUG_WRITE).store(68u8);
-        mmio<u8>(DEBUG_WRITE).store(10u8);
+        mmio<u8>(debug::WRITE).store(66u8);
+        mmio<u8>(debug::WRITE).store(79u8);
+        mmio<u8>(debug::WRITE).store(79u8);
+        mmio<u8>(debug::WRITE).store(84u8);
+        mmio<u8>(debug::WRITE).store(32u8);
+        mmio<u8>(debug::WRITE).store(80u8);
+        mmio<u8>(debug::WRITE).store(65u8);
+        mmio<u8>(debug::WRITE).store(89u8);
+        mmio<u8>(debug::WRITE).store(76u8);
+        mmio<u8>(debug::WRITE).store(79u8);
+        mmio<u8>(debug::WRITE).store(65u8);
+        mmio<u8>(debug::WRITE).store(68u8);
+        mmio<u8>(debug::WRITE).store(32u8);
+        mmio<u8>(debug::WRITE).store(76u8);
+        mmio<u8>(debug::WRITE).store(79u8);
+        mmio<u8>(debug::WRITE).store(65u8);
+        mmio<u8>(debug::WRITE).store(68u8);
+        mmio<u8>(debug::WRITE).store(69u8);
+        mmio<u8>(debug::WRITE).store(68u8);
+        mmio<u8>(debug::WRITE).store(10u8);
     }
 }
 
@@ -185,14 +179,14 @@ fn load_boot_payload() {
                     if start_lba == 0 {
                         write_no_bootable_device();
                     } else {
-                        mmio<i32>(STORAGE0_LBA_LOW).store(start_lba);
-                        mmio<i32>(STORAGE0_LBA_HIGH).store(0);
-                        mmio<i32>(STORAGE0_BLOCK_COUNT).store(block_count);
-                        mmio<i32>(STORAGE0_BUFFER_ADDR).store(load_addr);
-                        mmio<i32>(STORAGE0_COMMAND).store(STORAGE_COMMAND_READ_BLOCKS);
+                        mmio<i32>(storage0::LBA_LOW).store(start_lba);
+                        mmio<i32>(storage0::LBA_HIGH).store(0);
+                        mmio<i32>(storage0::BLOCK_COUNT).store(block_count);
+                        mmio<i32>(storage0::BUFFER_ADDR).store(load_addr);
+                        mmio<i32>(storage0::COMMAND).store(storage0::COMMAND_READ_BLOCKS);
 
-                        let mut status: i32 = mmio<i32>(STORAGE0_STATUS).load();
-                        if status == STORAGE_STATUS_DONE {
+                        let mut status: i32 = mmio<i32>(storage0::STATUS).load();
+                        if status == storage0::STATUS_DONE {
                             write_boot_payload_loaded();
                             rux16_jump(entry_pc);
                         } else {
@@ -207,14 +201,14 @@ fn load_boot_payload() {
 
 fn discover_boot_record() {
     unsafe {
-        mmio<i32>(STORAGE0_LBA_LOW).store(0);
-        mmio<i32>(STORAGE0_LBA_HIGH).store(0);
-        mmio<i32>(STORAGE0_BLOCK_COUNT).store(1);
-        mmio<i32>(STORAGE0_BUFFER_ADDR).store(512);
-        mmio<i32>(STORAGE0_COMMAND).store(STORAGE_COMMAND_READ_BLOCKS);
+        mmio<i32>(storage0::LBA_LOW).store(0);
+        mmio<i32>(storage0::LBA_HIGH).store(0);
+        mmio<i32>(storage0::BLOCK_COUNT).store(1);
+        mmio<i32>(storage0::BUFFER_ADDR).store(512);
+        mmio<i32>(storage0::COMMAND).store(storage0::COMMAND_READ_BLOCKS);
 
-        let mut status: i32 = mmio<i32>(STORAGE0_STATUS).load();
-        if status == STORAGE_STATUS_DONE {
+        let mut status: i32 = mmio<i32>(storage0::STATUS).load();
+        if status == storage0::STATUS_DONE {
             let mut magic: i32 = ptr<i32>(512u32).load();
             if magic == 1113085266 {
                 write_boot_record_found();
@@ -230,7 +224,7 @@ fn discover_boot_record() {
 
 fn main() {
     unsafe {
-        mmio<i32>(CONTROL_STATUS).store(STATUS_BOOTING);
+        mmio<i32>(control::STATUS).store(status::BOOTING);
     }
 
     write_banner();
@@ -238,7 +232,7 @@ fn main() {
     discover_boot_record();
 
     unsafe {
-        mmio<i32>(CONTROL_PANIC_CODE).store(STATUS_READY);
-        mmio<i32>(CONTROL_STATUS).store(STATUS_READY);
+        mmio<i32>(control::PANIC_CODE).store(status::READY);
+        mmio<i32>(control::STATUS).store(status::READY);
     }
 }

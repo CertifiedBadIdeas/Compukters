@@ -1,0 +1,15 @@
+pub const BASE: u32 = 0x10000300u32;
+pub const COLUMNS: u32 = 0x10000300u32;
+pub const ROWS: u32 = 0x10000304u32;
+pub const CURSOR_X: u32 = 0x10000308u32;
+pub const CURSOR_Y: u32 = 0x1000030cu32;
+pub const COMMAND: u32 = 0x10000310u32;
+pub const DATA: u32 = 0x10000314u32;
+pub const SEQUENCE_LOW: u32 = 0x10000318u32;
+pub const SEQUENCE_HIGH: u32 = 0x1000031cu32;
+pub const SIZE: u32 = 256u32;
+
+pub const COMMAND_CLEAR: i32 = 1;
+pub const COMMAND_PUT_BYTE_AT_CURSOR: i32 = 2;
+pub const COMMAND_PUT_BYTE_AT_XY: i32 = 3;
+pub const COMMAND_NEWLINE: i32 = 4;

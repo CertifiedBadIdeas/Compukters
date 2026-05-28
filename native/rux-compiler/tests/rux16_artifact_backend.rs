@@ -7,7 +7,7 @@ use rux_vm::rux_computer::RuxComputerHandle;
 use std::path::Path;
 
 const TEST_COMPUTER_ABI_IMPORT: &str =
-    "use rux::abi::computer::{CONTROL_PANIC_CODE, CONTROL_STATUS, DEBUG_WRITE, SERIAL_INPUT_READ, STATUS_BOOTING, STATUS_READY, STATUS_RESET};";
+    "use rux::abi::computer::{control, debug, serial_input, status};";
 
 fn with_computer_abi(source: &str) -> String {
     format!("{TEST_COMPUTER_ABI_IMPORT}\n{source}")
@@ -182,9 +182,9 @@ fn compile_stage2_program() -> rux_compiler::artifact::Rux16Artifact {
         &with_computer_abi(
             "fn main() {
             unsafe {
-                mmio<u8>(DEBUG_WRITE).store(83u8);
-                mmio<u8>(DEBUG_WRITE).store(50u8);
-                mmio<i32>(CONTROL_PANIC_CODE).store(82);
+                mmio<u8>(debug::WRITE).store(83u8);
+                mmio<u8>(debug::WRITE).store(50u8);
+                mmio<i32>(control::PANIC_CODE).store(82);
             }
         }",
         ),
@@ -267,11 +267,35 @@ fn rux16_artifact_imports_abi_constants_from_rux_source() {
 }
 
 #[test]
+fn rux16_artifact_imports_abi_namespace_constants_from_rux_source() {
+    let artifact = compile_rux16_artifact(
+        "use rux::abi::computer::{control, status};
+
+         fn main() {
+            unsafe {
+                mmio<i32>(control::PANIC_CODE).store(status::READY);
+            }
+         }",
+        Rux16ArtifactTarget::Bios,
+    )
+    .expect("qualified ABI namespace constants compile to Rux16");
+    let (mut machine, cpu_id) =
+        ComputerMachine::from_rux16_bios_flash(&artifact.bytes, 64 * 1024, 128)
+            .expect("machine boots Rux16 BIOS flash");
+
+    assert_eq!(
+        machine.run_boot_rux16_until_signal(cpu_id).unwrap(),
+        Rux16Signal::Halt,
+    );
+    assert_eq!(machine.panic_code(), ComputerMachine::STATUS_READY);
+}
+
+#[test]
 fn rux16_artifact_rejects_bare_abi_constants_without_import() {
     let error = compile_rux16_artifact(
         "fn main() {
             unsafe {
-                mmio<i32>(CONTROL_PANIC_CODE).store(STATUS_READY);
+                mmio<i32>(control::PANIC_CODE).store(status::READY);
             }
          }",
         Rux16ArtifactTarget::Bios,
@@ -281,7 +305,7 @@ fn rux16_artifact_rejects_bare_abi_constants_without_import() {
     assert!(
         error
             .message
-            .contains("unknown Rux16 MMIO address `CONTROL_PANIC_CODE`"),
+            .contains("unknown Rux16 MMIO address `control::PANIC_CODE`"),
         "{}",
         error.message
     );
@@ -290,7 +314,7 @@ fn rux16_artifact_rejects_bare_abi_constants_without_import() {
 #[test]
 fn rux16_artifact_mmio_i32_store_runs_from_bios_flash() {
     let artifact = compile_rux16_artifact(
-        &with_computer_abi("fn main() { unsafe { mmio<i32>(DEBUG_WRITE).store(65); } }"),
+        &with_computer_abi("fn main() { unsafe { mmio<i32>(debug::WRITE).store(65); } }"),
         Rux16ArtifactTarget::Bios,
     )
     .expect("debug MMIO store compiles to Rux16");
@@ -310,7 +334,7 @@ fn rux16_artifact_mmio_i32_store_runs_from_bios_flash() {
 #[test]
 fn rux16_artifact_mmio_u8_store_runs_from_bios_flash() {
     let artifact = compile_rux16_artifact(
-        &with_computer_abi("fn main() { unsafe { mmio<u8>(DEBUG_WRITE).store(65u8); } }"),
+        &with_computer_abi("fn main() { unsafe { mmio<u8>(debug::WRITE).store(65u8); } }"),
         Rux16ArtifactTarget::Bios,
     )
     .expect("debug MMIO u8 store compiles to Rux16");
@@ -329,7 +353,7 @@ fn rux16_artifact_mmio_u8_store_runs_from_bios_flash() {
 #[test]
 fn rux16_artifact_rejects_out_of_range_u8_store_value() {
     let error = compile_rux16_artifact(
-        &with_computer_abi("fn main() { unsafe { mmio<u8>(DEBUG_WRITE).store(256); } }"),
+        &with_computer_abi("fn main() { unsafe { mmio<u8>(debug::WRITE).store(256); } }"),
         Rux16ArtifactTarget::Boot,
     )
     .unwrap_err();
@@ -347,9 +371,9 @@ fn rux16_artifact_loads_i32_mmio_into_local_from_bios_flash() {
         &with_computer_abi(
             "fn main() {
             unsafe {
-                mmio<i32>(CONTROL_STATUS).store(STATUS_READY);
-                let mut status: i32 = mmio<i32>(CONTROL_STATUS).load();
-                mmio<i32>(CONTROL_PANIC_CODE).store(status);
+                mmio<i32>(control::STATUS).store(status::READY);
+                let mut status: i32 = mmio<i32>(control::STATUS).load();
+                mmio<i32>(control::PANIC_CODE).store(status);
             }
          }",
         ),
@@ -374,8 +398,8 @@ fn rux16_artifact_loads_u8_mmio_into_local_from_bios_flash() {
         &with_computer_abi(
             "fn main() {
             unsafe {
-                let mut byte: u8 = mmio<u8>(SERIAL_INPUT_READ).load();
-                mmio<u8>(DEBUG_WRITE).store(byte);
+                let mut byte: u8 = mmio<u8>(serial_input::READ).load();
+                mmio<u8>(debug::WRITE).store(byte);
             }
          }",
         ),
@@ -401,9 +425,9 @@ fn rux16_artifact_assigns_i32_local_from_bios_flash() {
         &with_computer_abi(
             "fn main() {
             unsafe {
-                let mut status: i32 = STATUS_RESET;
-                status = STATUS_READY;
-                mmio<i32>(CONTROL_PANIC_CODE).store(status);
+                let mut status: i32 = status::RESET;
+                status = status::READY;
+                mmio<i32>(control::PANIC_CODE).store(status);
             }
          }",
         ),
@@ -428,13 +452,13 @@ fn rux16_artifact_updates_i32_local_inside_while_from_bios_flash() {
         &with_computer_abi(
             "fn main() {
             unsafe {
-                let mut status: i32 = mmio<i32>(CONTROL_STATUS).load();
-                while status == STATUS_RESET {
-                    mmio<i32>(CONTROL_STATUS).store(STATUS_READY);
-                    status = mmio<i32>(CONTROL_STATUS).load();
-                    mmio<u8>(DEBUG_WRITE).store(76u8);
+                let mut status: i32 = mmio<i32>(control::STATUS).load();
+                while status == status::RESET {
+                    mmio<i32>(control::STATUS).store(status::READY);
+                    status = mmio<i32>(control::STATUS).load();
+                    mmio<u8>(debug::WRITE).store(76u8);
                 }
-                mmio<u8>(DEBUG_WRITE).store(68u8);
+                mmio<u8>(debug::WRITE).store(68u8);
             }
          }",
         ),
@@ -461,7 +485,7 @@ fn rux16_artifact_assigns_u8_local_from_bios_flash() {
             unsafe {
                 let mut byte: u8 = 65u8;
                 byte = 66u8;
-                mmio<u8>(DEBUG_WRITE).store(byte);
+                mmio<u8>(debug::WRITE).store(byte);
             }
          }",
         ),
@@ -486,9 +510,9 @@ fn rux16_artifact_lowers_if_eq_condition_from_bios_flash() {
         &with_computer_abi(
             "fn main() {
             unsafe {
-                mmio<i32>(CONTROL_STATUS).store(STATUS_READY);
-                if mmio<i32>(CONTROL_STATUS).load() == STATUS_READY {
-                    mmio<u8>(DEBUG_WRITE).store(89u8);
+                mmio<i32>(control::STATUS).store(status::READY);
+                if mmio<i32>(control::STATUS).load() == status::READY {
+                    mmio<u8>(debug::WRITE).store(89u8);
                 }
             }
          }",
@@ -514,10 +538,10 @@ fn rux16_artifact_lowers_if_else_false_condition_from_bios_flash() {
         &with_computer_abi(
             "fn main() {
             unsafe {
-                if mmio<i32>(CONTROL_STATUS).load() == STATUS_READY {
-                    mmio<u8>(DEBUG_WRITE).store(84u8);
+                if mmio<i32>(control::STATUS).load() == status::READY {
+                    mmio<u8>(debug::WRITE).store(84u8);
                 } else {
-                    mmio<u8>(DEBUG_WRITE).store(70u8);
+                    mmio<u8>(debug::WRITE).store(70u8);
                 }
             }
          }",
@@ -543,11 +567,11 @@ fn rux16_artifact_lowers_while_eq_condition_from_bios_flash() {
         &with_computer_abi(
             "fn main() {
             unsafe {
-                while mmio<i32>(CONTROL_STATUS).load() == STATUS_RESET {
-                    mmio<i32>(CONTROL_STATUS).store(STATUS_READY);
-                    mmio<u8>(DEBUG_WRITE).store(76u8);
+                while mmio<i32>(control::STATUS).load() == status::RESET {
+                    mmio<i32>(control::STATUS).store(status::READY);
+                    mmio<u8>(debug::WRITE).store(76u8);
                 }
-                mmio<u8>(DEBUG_WRITE).store(68u8);
+                mmio<u8>(debug::WRITE).store(68u8);
             }
          }",
         ),
@@ -575,11 +599,11 @@ fn rux16_artifact_const_mmio_sequence_runs_from_bios_flash() {
 
          fn main() {
             unsafe {
-                mmio<i32>(CONTROL_STATUS).store(STATUS_BOOTING);
-                mmio<i32>(DEBUG_WRITE).store(O);
-                mmio<i32>(DEBUG_WRITE).store(K);
-                mmio<i32>(CONTROL_PANIC_CODE).store(STATUS_READY);
-                mmio<i32>(CONTROL_STATUS).store(STATUS_READY);
+                mmio<i32>(control::STATUS).store(status::BOOTING);
+                mmio<i32>(debug::WRITE).store(O);
+                mmio<i32>(debug::WRITE).store(K);
+                mmio<i32>(control::PANIC_CODE).store(status::READY);
+                mmio<i32>(control::STATUS).store(status::READY);
             }
          }",
         ),
@@ -609,8 +633,8 @@ fn rux16_artifact_inlines_unit_helper_function_from_bios_flash() {
 
          fn write_ok() {
             unsafe {
-                mmio<i32>(DEBUG_WRITE).store(O);
-                mmio<i32>(DEBUG_WRITE).store(K);
+                mmio<i32>(debug::WRITE).store(O);
+                mmio<i32>(debug::WRITE).store(K);
             }
          }
 
