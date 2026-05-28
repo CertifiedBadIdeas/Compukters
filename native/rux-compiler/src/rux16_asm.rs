@@ -84,6 +84,15 @@ pub(crate) fn jmp(register: u8) -> u16 {
     0x7000 | (u16::from(register) << 8)
 }
 
+pub(crate) fn call(register: u8) -> u16 {
+    assert_register(register);
+    0x8000 | (u16::from(register) << 8)
+}
+
+pub(crate) fn ret() -> u16 {
+    0x9000
+}
+
 fn assert_register(register: u8) {
     assert!(
         register <= STACK_POINTER_REGISTER,

@@ -708,7 +708,7 @@ fn rux16_artifact_const_mmio_sequence_runs_from_bios_flash() {
 }
 
 #[test]
-fn rux16_artifact_inlines_unit_helper_function_from_bios_flash() {
+fn rux16_artifact_calls_unit_helper_function_from_bios_flash() {
     let artifact = compile_rux16_artifact(
         &with_computer_abi(
             "const O: i32 = 79;
@@ -727,9 +727,20 @@ fn rux16_artifact_inlines_unit_helper_function_from_bios_flash() {
         ),
         Rux16ArtifactTarget::Bios,
     )
-    .expect("unit helper call compiles to inlined Rux16");
+    .expect("unit helper call compiles to Rux16 call/ret");
+    let disassembly =
+        rux16_disasm::disassemble_artifact(&artifact.bytes, Rux16ArtifactTarget::Bios)
+            .expect("BIOS artifact disassembles");
+    assert!(
+        disassembly.contains("call r"),
+        "unit helper call must lower to a real Rux16 call:\n{disassembly}"
+    );
+    assert!(
+        disassembly.contains("ret"),
+        "unit helper body must return with Rux16 ret:\n{disassembly}"
+    );
     let (mut machine, cpu_id) =
-        ComputerMachine::from_rux16_bios_flash(&artifact.bytes, 64 * 1024, 128)
+        ComputerMachine::from_rux16_bios_flash(&artifact.bytes, 64 * 1024, 1024)
             .expect("machine boots Rux16 BIOS flash");
 
     assert_eq!(
