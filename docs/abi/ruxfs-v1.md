@@ -151,6 +151,16 @@ The current compiler crate provides:
 - absolute-path file creation and full-file reads;
 - directory listing.
 
+The host-side read path used to model future bootloader behavior is:
+
+```text
+RUXVOL -> RUXPT ROOT partition -> RUXFS superblock -> /boot/kernel.ruxe
+```
+
+This reader composes byte-level volume partition extraction with RuxFS absolute
+path lookup. It is not a fallback path and does not make `rux volume`
+filesystem-aware.
+
 The public CLI namespace is filesystem-specific:
 
 ```text
@@ -165,5 +175,5 @@ rux fs ruxfs ls <image.ruxfs> <path>
 commands; future filesystems should get their own `rux fs <filesystem>`
 subcommands.
 
-Delete, overwrite, partition extraction/injection, and bootloader integration
-are next-step work under the same RuxFS v1 contract.
+Delete, overwrite, and bootloader integration are next-step work under the same
+RuxFS v1 contract.
