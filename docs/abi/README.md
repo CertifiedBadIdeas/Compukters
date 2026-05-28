@@ -12,6 +12,8 @@ Current specifications:
   for Rux16 bootloader and kernel images.
 - `rux-storage-volume-v1.md`: current storage0 volume, legacy fixed boot/kernel
   media records, and partitioned `RUXPT` layout.
+- `ruxfs-v1.md`: extent-based filesystem targeted for the `ROOT` partition in
+  the partitioned storage0 layout.
 - `rux-machine-profile-v2.md`: machine boot info, RAM layout, MMIO allocation,
   and hardware table contract.
 - `rux-computer-profile-v1.md`: concrete hardware IDs and MMIO register layout

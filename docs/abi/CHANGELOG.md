@@ -15,6 +15,9 @@
   kernel payload for the bootloader-to-kernel chain.
 - Added `rux volume init`, which creates a partitioned `RUXPT` volume with
   `BOOT` and `ROOT` partitions for the next filesystem-backed boot chain.
+- Added experimental `RuxFS` v1 as the extent-based filesystem contract for
+  the partitioned `ROOT` partition, with empty formatting and structural
+  validation in compiler tooling.
 - Added `rux-storage-volume-v1.md` for the current `RUXVOL`, `RUXB`, and `RUXK`
   storage0 media layout.
 - Retired the previous host-decoded executable ABI package from active
@@ -32,3 +35,4 @@
 - `rux-computer-profile-v1.md`
 - `ruxe-v1.md`
 - `rux-storage-volume-v1.md`
+- `ruxfs-v1.md`
