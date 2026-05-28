@@ -128,6 +128,12 @@ enum Rux16LocalStorage {
     FrameArray { offset: u32, len: u32 },
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Rux16AddressSpace {
+    Mmio,
+    Ram,
+}
+
 impl Rux16ArtifactBackend {
     fn new(
         consts: HashMap<String, ConstValue>,
@@ -847,6 +853,38 @@ impl Rux16ArtifactBackend {
         Ok(())
     }
 
+    fn compile_address_of_mut_into(
+        &mut self,
+        dst: u8,
+        target: &Expr,
+        unsafe_context: bool,
+    ) -> Result<(), CompileError> {
+        let Expr::Index { target, index } = target else {
+            return unsupported(
+                "only `&mut local_byte_array[index]` can be lowered to a Rux16 guest address yet",
+            );
+        };
+        let Expr::Local(name) = target.as_ref() else {
+            return unsupported(
+                "only `&mut local_byte_array[index]` can be lowered to a Rux16 guest address yet",
+            );
+        };
+        let local = self.locals.get(name).copied().ok_or_else(|| CompileError {
+            message: format!(
+                "Rux16 backend does not support this program yet: unknown local `{name}`"
+            ),
+        })?;
+        let Rux16LocalStorage::FrameArray { offset, len } = local.storage else {
+            return unsupported(
+                "only stack-backed byte array elements can produce Rux16 guest addresses yet",
+            );
+        };
+        if local.ty != TypeName::ArrayU8(len) {
+            return unsupported("only `[u8; N]` address-of can be lowered to Rux16 yet");
+        }
+        self.compile_frame_array_address_into(dst, offset, len, index, unsafe_context)
+    }
+
     fn compile_index_assign_statement(
         &mut self,
         target: &Expr,
@@ -1086,46 +1124,106 @@ impl Rux16ArtifactBackend {
         if args.len() != 1 {
             return unsupported("memory `.store(...)` requires exactly one argument");
         }
-        let Expr::Mmio { ty, address } = receiver.as_ref() else {
-            return unsupported("only `mmio<T>(...).store(...)` can be lowered");
-        };
         if !unsafe_context {
-            return unsupported("MMIO store requires `unsafe`");
+            return unsupported("memory store requires `unsafe`");
         }
+        match receiver.as_ref() {
+            Expr::Mmio { ty, address } => self.compile_memory_store(
+                *ty,
+                address,
+                &args[0],
+                unsafe_context,
+                Rux16AddressSpace::Mmio,
+            )?,
+            Expr::Ptr { ty, address } => self.compile_memory_store(
+                *ty,
+                address,
+                &args[0],
+                unsafe_context,
+                Rux16AddressSpace::Ram,
+            )?,
+            _ => {
+                return unsupported(
+                    "only `mmio<T>(...).store(...)` and `ptr<T>(...).store(...)` can be lowered",
+                );
+            }
+        }
+        Ok(())
+    }
+
+    fn compile_memory_store(
+        &mut self,
+        ty: TypeName,
+        address: &Expr,
+        value: &Expr,
+        unsafe_context: bool,
+        address_space: Rux16AddressSpace,
+    ) -> Result<(), CompileError> {
         match ty {
             TypeName::I32 => {
-                let src = self.compile_i32_expr_to_scratch(&args[0], unsafe_context)?;
+                let src = self.compile_i32_expr_to_scratch(value, unsafe_context)?;
                 let address_register = scratch_register_excluding(src);
-                let address = self.compile_mmio_address_to_register_or_use(
+                let address = self.compile_memory_store_address(
                     address_register,
                     address,
                     unsafe_context,
+                    address_space,
                 )?;
                 self.words.push(rux16_asm::store32(address, src));
+                Ok(())
             }
-            TypeName::U8 => {
-                let src = self.compile_u8_expr_to_scratch(&args[0], unsafe_context)?;
+            TypeName::U32 => {
+                let src = self.compile_u32_expr_to_register_or_use(2, value, unsafe_context)?;
                 let address_register = scratch_register_excluding(src);
-                let address = self.compile_mmio_address_to_register_or_use(
+                let address = self.compile_memory_store_address(
                     address_register,
                     address,
                     unsafe_context,
+                    address_space,
+                )?;
+                self.words.push(rux16_asm::store32(address, src));
+                Ok(())
+            }
+            TypeName::U8 => {
+                let src = self.compile_u8_expr_to_scratch(value, unsafe_context)?;
+                let address_register = scratch_register_excluding(src);
+                let address = self.compile_memory_store_address(
+                    address_register,
+                    address,
+                    unsafe_context,
+                    address_space,
                 )?;
                 self.words.push(rux16_asm::store8(address, src));
+                Ok(())
             }
-            TypeName::U32
-            | TypeName::Bool
+            TypeName::Bool
             | TypeName::PtrI32
             | TypeName::PtrU32
             | TypeName::PtrU8
             | TypeName::RefMutI32
             | TypeName::RefMutU32
             | TypeName::RefMutU8
-            | TypeName::ArrayU8(_) => {
-                return unsupported("only `mmio<i32>` and `mmio<u8>` stores can be lowered");
+            | TypeName::ArrayU8(_) => unsupported(
+                "only `mmio<i32>`, `mmio<u32>`, `mmio<u8>`, `ptr<i32>`, `ptr<u32>`, and `ptr<u8>` stores can be lowered",
+            ),
+        }
+    }
+
+    fn compile_memory_store_address(
+        &mut self,
+        dst: u8,
+        address: &Expr,
+        unsafe_context: bool,
+        address_space: Rux16AddressSpace,
+    ) -> Result<u8, CompileError> {
+        match address_space {
+            Rux16AddressSpace::Mmio => {
+                self.compile_mmio_address_to_register_or_use(dst, address, unsafe_context)
+            }
+            Rux16AddressSpace::Ram => {
+                self.compile_ram_address_to_register_or_use(dst, address, unsafe_context)
             }
         }
-        Ok(())
     }
 
     fn compile_condition_into(
@@ -1525,6 +1623,9 @@ impl Rux16ArtifactBackend {
                 self.words
                     .extend_from_slice(&rux16_asm::const32(dst, value));
                 Ok(())
+            }
+            Expr::AddressOfMut(target) => {
+                self.compile_address_of_mut_into(dst, target, unsafe_context)
             }
             Expr::MethodCall {
                 receiver,
