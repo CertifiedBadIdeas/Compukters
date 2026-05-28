@@ -695,6 +695,77 @@ fn rux16_artifact_lowers_while_eq_condition_from_bios_flash() {
 }
 
 #[test]
+fn rux16_artifact_lowers_logical_conditions_with_short_circuit_from_bios_flash() {
+    let artifact = compile_rux16_artifact(
+        &with_computer_abi(
+            "fn mark_x() -> i32 {
+            unsafe {
+                mmio<u8>(debug::WRITE).store(88u8);
+            }
+            return 1;
+         }
+
+         fn mark_y() -> i32 {
+            unsafe {
+                mmio<u8>(debug::WRITE).store(89u8);
+            }
+            return 1;
+         }
+
+         fn main() {
+            unsafe {
+                if status::RESET == status::READY && mark_x() == 1 {
+                    mmio<u8>(debug::WRITE).store(70u8);
+                } else {
+                    mmio<u8>(debug::WRITE).store(65u8);
+                }
+
+                if status::READY == status::READY || mark_y() == 1 {
+                    mmio<u8>(debug::WRITE).store(66u8);
+                }
+
+                if !(status::RESET == status::READY) {
+                    mmio<u8>(debug::WRITE).store(67u8);
+                }
+            }
+         }",
+        ),
+        Rux16ArtifactTarget::Bios,
+    )
+    .expect("logical conditions compile to Rux16");
+    let (mut machine, cpu_id) =
+        ComputerMachine::from_rux16_bios_flash(&artifact.bytes, 64 * 1024, 256)
+            .expect("machine boots Rux16 BIOS flash");
+
+    assert_eq!(
+        machine.run_boot_rux16_until_signal(cpu_id).unwrap(),
+        Rux16Signal::Halt,
+    );
+    assert_eq!(machine.debug_output_bytes(), b"ABC");
+    assert_eq!(machine.control_status(), ComputerMachine::STATUS_HALTED);
+}
+
+#[test]
+fn rux16_artifact_rejects_numeric_logical_operands_without_truthiness() {
+    let error = compile_rux16_artifact(
+        "fn main() {
+            if 1 && true {
+            }
+         }",
+        Rux16ArtifactTarget::Boot,
+    )
+    .unwrap_err();
+
+    assert!(
+        error
+            .message
+            .contains("logical operator operands must be boolean conditions"),
+        "{}",
+        error.message
+    );
+}
+
+#[test]
 fn rux16_artifact_const_mmio_sequence_runs_from_bios_flash() {
     let artifact = compile_rux16_artifact(
         &with_computer_abi(

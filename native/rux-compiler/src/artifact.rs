@@ -1,5 +1,6 @@
 use crate::frontend::ast::{
-    BinaryOp, CompareOp, ConstDecl, Expr, FunctionDecl, Program, ReturnType, Statement, TypeName,
+    BinaryOp, CompareOp, ConstDecl, Expr, FunctionDecl, LogicalOp, Program, ReturnType, Statement,
+    TypeName, UnaryOp,
 };
 use crate::frontend::CompileError;
 use crate::rux16_asm;
@@ -1244,6 +1245,30 @@ impl Rux16ArtifactBackend {
         expr: &Expr,
         unsafe_context: bool,
     ) -> Result<(), CompileError> {
+        if let Expr::Bool(value) = expr {
+            self.words
+                .extend_from_slice(&rux16_asm::const32(dst, u32::from(*value)));
+            return Ok(());
+        }
+        if let Expr::Unary {
+            op: UnaryOp::Not,
+            expr,
+        } = expr
+        {
+            if !Self::is_boolean_condition_expr(expr) {
+                return unsupported("logical operator operands must be boolean conditions");
+            }
+            self.compile_condition_into(dst, expr, unsafe_context)?;
+            self.words
+                .extend_from_slice(&rux16_asm::const32(rux16_asm::SCRATCH_REGISTER, 0));
+            self.words
+                .extend_from_slice(&rux16_asm::eq(dst, dst, rux16_asm::SCRATCH_REGISTER));
+            return Ok(());
+        }
+        if let Expr::Logical { op, lhs, rhs } = expr {
+            return self.compile_logical_condition_into(dst, *op, lhs, rhs, unsafe_context);
+        }
+
         let Expr::Compare { op, lhs, rhs } = expr else {
             return unsupported("only equality comparisons can be lowered as Rux16 conditions");
         };
@@ -1270,6 +1295,56 @@ impl Rux16ArtifactBackend {
                 "only `==`, `!=`, and unsigned `<` comparisons can be lowered as Rux16 conditions",
             ),
         }
+    }
+
+    fn compile_logical_condition_into(
+        &mut self,
+        dst: u8,
+        op: LogicalOp,
+        lhs: &Expr,
+        rhs: &Expr,
+        unsafe_context: bool,
+    ) -> Result<(), CompileError> {
+        if !Self::is_boolean_condition_expr(lhs) || !Self::is_boolean_condition_expr(rhs) {
+            return unsupported("logical operator operands must be boolean conditions");
+        }
+        match op {
+            LogicalOp::And => {
+                self.compile_condition_into(dst, lhs, unsafe_context)?;
+                self.words.push(rux16_asm::branch_if_nonzero(dst, 4));
+                let false_jump = self.emit_absolute_jump_placeholder();
+                self.compile_condition_into(dst, rhs, unsafe_context)?;
+                let end_jump = self.emit_absolute_jump_placeholder();
+                self.patch_absolute_jump(false_jump, self.current_address())?;
+                self.words.extend_from_slice(&rux16_asm::const32(dst, 0));
+                self.patch_absolute_jump(end_jump, self.current_address())?;
+                Ok(())
+            }
+            LogicalOp::Or => {
+                self.compile_condition_into(dst, lhs, unsafe_context)?;
+                self.words.push(rux16_asm::branch_if_nonzero(dst, 4));
+                let rhs_jump = self.emit_absolute_jump_placeholder();
+                self.words.extend_from_slice(&rux16_asm::const32(dst, 1));
+                let end_jump = self.emit_absolute_jump_placeholder();
+                self.patch_absolute_jump(rhs_jump, self.current_address())?;
+                self.compile_condition_into(dst, rhs, unsafe_context)?;
+                self.patch_absolute_jump(end_jump, self.current_address())?;
+                Ok(())
+            }
+        }
+    }
+
+    fn is_boolean_condition_expr(expr: &Expr) -> bool {
+        matches!(
+            expr,
+            Expr::Bool(_)
+                | Expr::Unary {
+                    op: UnaryOp::Not,
+                    ..
+                }
+                | Expr::Logical { .. }
+                | Expr::Compare { .. }
+        )
     }
 
     fn compile_equality_condition_into(
