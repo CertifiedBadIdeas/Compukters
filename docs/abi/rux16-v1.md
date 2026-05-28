@@ -83,9 +83,22 @@ pop fp
 ret
 ```
 
-The current frame slice only reserves a stable base for helper bodies. It does
-not add stack-backed locals, stack-passed arguments, recursion, or a user-space
-ABI.
+Compiler-managed helper locals may live in 4-byte stack slots below `fp`:
+
+```text
+[fp + 0]   saved caller fp
+[fp - 4]   local slot 0
+[fp - 8]   local slot 1
+...
+```
+
+Stack-backed helper locals are addressed by adding a negative 32-bit offset to
+`fp`, then using ordinary Rux16 load/store instructions. The helper epilogue
+sets `sp = fp`, so all local slots are discarded before the saved caller frame
+pointer is popped.
+
+The current frame slice does not add stack-passed arguments, recursion, return
+slots, or a user-space ABI.
 
 ## Target Stack Ownership
 

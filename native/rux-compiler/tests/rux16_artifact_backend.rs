@@ -1101,6 +1101,61 @@ fn rux16_artifact_backend_reserves_r12_for_frame_pointer() {
 }
 
 #[test]
+fn rux16_artifact_uses_stack_backed_helper_local_from_frame_pointer() {
+    let artifact = compile_rux16_artifact(
+        &with_computer_abi(
+            "fn write_stacked() {
+            let mut a: u8 = 1u8;
+            let mut b: u8 = 2u8;
+            let mut c: u8 = 3u8;
+            let mut d: u8 = 4u8;
+            let mut e: u8 = 5u8;
+            let mut f: u8 = 6u8;
+            let mut g: u8 = 7u8;
+            let mut h: u8 = 8u8;
+            let mut i: u8 = 9u8;
+            let mut j: u8 = 74u8;
+            unsafe {
+                mmio<u8>(debug::WRITE).store(j);
+            }
+         }
+
+         fn main() {
+            write_stacked();
+            write_stacked();
+         }",
+        ),
+        Rux16ArtifactTarget::Bios,
+    )
+    .expect("helper locals can spill to a frame-pointer stack slot");
+    let disassembly =
+        rux16_disasm::disassemble_artifact(&artifact.bytes, Rux16ArtifactTarget::Bios)
+            .expect("BIOS artifact disassembles");
+    assert!(
+        disassembly.contains(", r12,"),
+        "stack-backed helper local addresses must be derived from r12 frame pointer:\n{disassembly}"
+    );
+    assert!(
+        disassembly.contains("store32 [r"),
+        "stack-backed helper local initializer must be stored to its frame slot:\n{disassembly}"
+    );
+    assert!(
+        disassembly.contains("load32 r"),
+        "stack-backed helper local use must load from its frame slot:\n{disassembly}"
+    );
+    let (mut machine, cpu_id) =
+        ComputerMachine::from_rux16_bios_flash(&artifact.bytes, 64 * 1024, 1024)
+            .expect("machine boots Rux16 BIOS flash");
+
+    assert_eq!(
+        machine.run_boot_rux16_until_signal(cpu_id).unwrap(),
+        Rux16Signal::Halt,
+    );
+    assert_eq!(machine.debug_output_bytes(), b"JJ", "{disassembly}");
+    assert_eq!(machine.control_status(), ComputerMachine::STATUS_HALTED);
+}
+
+#[test]
 fn rux16_artifact_rejects_recursive_helper_inline() {
     let error = compile_rux16_artifact(
         "fn again() {
