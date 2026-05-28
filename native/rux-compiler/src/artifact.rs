@@ -1,5 +1,5 @@
 use crate::frontend::ast::{
-    CompareOp, ConstDecl, Expr, FunctionDecl, Program, ReturnType, Statement, TypeName,
+    BinaryOp, CompareOp, ConstDecl, Expr, FunctionDecl, Program, ReturnType, Statement, TypeName,
 };
 use crate::frontend::CompileError;
 use crate::rux16_asm;
@@ -174,8 +174,10 @@ impl Rux16ArtifactBackend {
             Statement::Assign { name, value } => {
                 self.compile_assign_statement(name, value, unsafe_context)
             }
-            Statement::AssignOp { .. }
-            | Statement::IndexAssign { .. }
+            Statement::AssignOp { name, op, value } => {
+                self.compile_assign_op_statement(name, *op, value, unsafe_context)
+            }
+            Statement::IndexAssign { .. }
             | Statement::DerefAssign { .. }
             | Statement::Break
             | Statement::Continue
@@ -213,7 +215,7 @@ impl Rux16ArtifactBackend {
             | TypeName::RefMutU32
             | TypeName::RefMutU8
             | TypeName::ArrayU8(_) => {
-                return unsupported("only i32 and u8 locals can be lowered to Rux16 yet");
+                return unsupported("only i32, u32, and u8 locals can be lowered to Rux16 yet");
             }
         }
         self.locals
@@ -244,7 +246,49 @@ impl Rux16ArtifactBackend {
             | TypeName::RefMutU32
             | TypeName::RefMutU8
             | TypeName::ArrayU8(_) => {
-                unsupported("only i32 and u8 locals can be assigned in Rux16 yet")
+                unsupported("only i32, u32, and u8 locals can be assigned in Rux16 yet")
+            }
+        }
+    }
+
+    fn compile_assign_op_statement(
+        &mut self,
+        name: &str,
+        op: BinaryOp,
+        value: &Expr,
+        unsafe_context: bool,
+    ) -> Result<(), CompileError> {
+        if op != BinaryOp::Add {
+            return unsupported("only `+=` compound assignment can be lowered in Rux16 yet");
+        }
+        let local = self.locals.get(name).copied().ok_or_else(|| CompileError {
+            message: format!(
+                "Rux16 backend does not support this program yet: unknown local `{name}`"
+            ),
+        })?;
+        match local.ty {
+            TypeName::I32 => {
+                let rhs = self.compile_i32_expr_to_register_or_use(14, value, unsafe_context)?;
+                self.words
+                    .push(rux16_asm::add(local.register, local.register, rhs));
+                Ok(())
+            }
+            TypeName::U32 => {
+                let rhs = self.compile_u32_expr_to_register_or_use(14, value, unsafe_context)?;
+                self.words
+                    .push(rux16_asm::add(local.register, local.register, rhs));
+                Ok(())
+            }
+            TypeName::U8
+            | TypeName::Bool
+            | TypeName::PtrI32
+            | TypeName::PtrU32
+            | TypeName::PtrU8
+            | TypeName::RefMutI32
+            | TypeName::RefMutU32
+            | TypeName::RefMutU8
+            | TypeName::ArrayU8(_) => {
+                unsupported("only i32 and u32 `+=` can be lowered in Rux16 yet")
             }
         }
     }
@@ -330,7 +374,7 @@ impl Rux16ArtifactBackend {
         if !unsafe_context {
             return unsupported("MMIO store requires `unsafe`");
         }
-        let address = self.compile_mmio_address_to_register_or_use(1, address)?;
+        let address = self.compile_mmio_address_to_register_or_use(1, address, unsafe_context)?;
         match ty {
             TypeName::I32 => {
                 let src = self.compile_i32_expr_to_scratch(&args[0], unsafe_context)?;
@@ -364,18 +408,29 @@ impl Rux16ArtifactBackend {
         let Expr::Compare { op, lhs, rhs } = expr else {
             return unsupported("only equality comparisons can be lowered as Rux16 conditions");
         };
-        let lhs = self.compile_i32_expr_to_scratch(lhs, unsafe_context)?;
-        let rhs = self.compile_i32_expr_to_register_or_use(14, rhs, unsafe_context)?;
-        self.words.extend_from_slice(&rux16_asm::eq(dst, lhs, rhs));
         match op {
-            CompareOp::Eq => Ok(()),
+            CompareOp::Eq => {
+                let lhs = self.compile_i32_expr_to_scratch(lhs, unsafe_context)?;
+                let rhs = self.compile_i32_expr_to_register_or_use(14, rhs, unsafe_context)?;
+                self.words.extend_from_slice(&rux16_asm::eq(dst, lhs, rhs));
+                Ok(())
+            }
             CompareOp::Ne => {
+                let lhs = self.compile_i32_expr_to_scratch(lhs, unsafe_context)?;
+                let rhs = self.compile_i32_expr_to_register_or_use(14, rhs, unsafe_context)?;
+                self.words.extend_from_slice(&rux16_asm::eq(dst, lhs, rhs));
                 self.words.extend_from_slice(&rux16_asm::eq(dst, dst, 0));
                 Ok(())
             }
-            CompareOp::Lt | CompareOp::Gt | CompareOp::Le | CompareOp::Ge => {
-                unsupported("only `==` and `!=` comparisons can be lowered as Rux16 conditions")
+            CompareOp::Lt => {
+                let lhs = self.compile_u32_expr_to_register_or_use(2, lhs, unsafe_context)?;
+                let rhs = self.compile_u32_expr_to_register_or_use(14, rhs, unsafe_context)?;
+                self.words.extend_from_slice(&rux16_asm::ltu(dst, lhs, rhs));
+                Ok(())
             }
+            CompareOp::Gt | CompareOp::Le | CompareOp::Ge => unsupported(
+                "only `==`, `!=`, and unsigned `<` comparisons can be lowered as Rux16 conditions",
+            ),
         }
     }
 
@@ -383,11 +438,16 @@ impl Rux16ArtifactBackend {
         &mut self,
         dst: u8,
         expr: &Expr,
+        unsafe_context: bool,
     ) -> Result<u8, CompileError> {
         if let Expr::Local(name) = expr {
             if let Some(local) = self.local(name, TypeName::U32)? {
                 return Ok(local.register);
             }
+        }
+        if matches!(expr, Expr::Binary { .. }) {
+            self.compile_u32_expr_into(dst, expr, unsafe_context)?;
+            return Ok(dst);
         }
         let address = self.eval_mmio_address(expr)?;
         self.words
@@ -399,11 +459,16 @@ impl Rux16ArtifactBackend {
         &mut self,
         dst: u8,
         expr: &Expr,
+        unsafe_context: bool,
     ) -> Result<u8, CompileError> {
         if let Expr::Local(name) = expr {
             if let Some(local) = self.local(name, TypeName::U32)? {
                 return Ok(local.register);
             }
+        }
+        if matches!(expr, Expr::Binary { .. }) {
+            self.compile_u32_expr_into(dst, expr, unsafe_context)?;
+            return Ok(dst);
         }
         let address = self.eval_ram_address(expr)?;
         self.words
@@ -485,6 +550,16 @@ impl Rux16ArtifactBackend {
                     .extend_from_slice(&rux16_asm::const32(dst, value as u32));
                 Ok(())
             }
+            Expr::Binary {
+                op: BinaryOp::Add,
+                lhs,
+                rhs,
+            } => {
+                let lhs = self.compile_i32_expr_to_register_or_use(dst, lhs, unsafe_context)?;
+                let rhs = self.compile_i32_expr_to_register_or_use(14, rhs, unsafe_context)?;
+                self.words.push(rux16_asm::add(dst, lhs, rhs));
+                Ok(())
+            }
             Expr::Path(_) => {
                 let value = self.eval_i32_value(expr)?;
                 self.words
@@ -509,7 +584,11 @@ impl Rux16ArtifactBackend {
                                 "i32 local initializer requires `mmio<i32>(...).load()`",
                             );
                         }
-                        let address = self.compile_mmio_address_to_register_or_use(1, address)?;
+                        let address = self.compile_mmio_address_to_register_or_use(
+                            1,
+                            address,
+                            unsafe_context,
+                        )?;
                         self.words.push(rux16_asm::load32(dst, address));
                         Ok(())
                     }
@@ -519,7 +598,11 @@ impl Rux16ArtifactBackend {
                                 "i32 local initializer requires `ptr<i32>(...).load()`",
                             );
                         }
-                        let address = self.compile_ram_address_to_register_or_use(1, address)?;
+                        let address = self.compile_ram_address_to_register_or_use(
+                            1,
+                            address,
+                            unsafe_context,
+                        )?;
                         self.words.push(rux16_asm::load32(dst, address));
                         Ok(())
                     }
@@ -545,14 +628,38 @@ impl Rux16ArtifactBackend {
     ) -> Result<(), CompileError> {
         match expr {
             Expr::Local(name) => {
-                if self.local(name, TypeName::U32)?.is_some() {
-                    return unsupported("Rux16 local-to-local moves are not supported yet");
+                if let Some(local) = self.local(name, TypeName::U32)? {
+                    self.emit_register_copy(dst, local.register);
+                    return Ok(());
                 }
                 let value = self.eval_u32_value(expr)?;
                 self.words
                     .extend_from_slice(&rux16_asm::const32(dst, value));
                 Ok(())
             }
+            Expr::Binary { op, lhs, rhs } => match op {
+                BinaryOp::Add => {
+                    let lhs = self.compile_u32_expr_to_register_or_use(dst, lhs, unsafe_context)?;
+                    let rhs = self.compile_u32_expr_to_register_or_use(14, rhs, unsafe_context)?;
+                    self.words.push(rux16_asm::add(dst, lhs, rhs));
+                    Ok(())
+                }
+                BinaryOp::Mul => {
+                    let multiplier = self.eval_u32_const_value(rhs)?;
+                    self.compile_u32_expr_into(dst, lhs, unsafe_context)?;
+                    self.emit_mul_by_small_const(dst, multiplier)
+                }
+                BinaryOp::Sub
+                | BinaryOp::Div
+                | BinaryOp::Rem
+                | BinaryOp::BitAnd
+                | BinaryOp::BitOr
+                | BinaryOp::BitXor
+                | BinaryOp::Shl
+                | BinaryOp::Shr => {
+                    unsupported("only u32 addition and multiplication by a constant can be lowered")
+                }
+            },
             Expr::Path(_) => {
                 let value = self.eval_u32_value(expr)?;
                 self.words
@@ -577,7 +684,11 @@ impl Rux16ArtifactBackend {
                                 "u32 local initializer requires `mmio<u32>(...).load()`",
                             );
                         }
-                        let address = self.compile_mmio_address_to_register_or_use(1, address)?;
+                        let address = self.compile_mmio_address_to_register_or_use(
+                            1,
+                            address,
+                            unsafe_context,
+                        )?;
                         self.words.push(rux16_asm::load32(dst, address));
                         Ok(())
                     }
@@ -604,6 +715,31 @@ impl Rux16ArtifactBackend {
                 Ok(())
             }
         }
+    }
+
+    fn emit_register_copy(&mut self, dst: u8, src: u8) {
+        self.words.extend_from_slice(&rux16_asm::const32(15, 0));
+        self.words.push(rux16_asm::add(dst, src, 15));
+    }
+
+    fn emit_mul_by_small_const(&mut self, dst: u8, multiplier: u32) -> Result<(), CompileError> {
+        if multiplier == 0 {
+            self.words.extend_from_slice(&rux16_asm::const32(dst, 0));
+            return Ok(());
+        }
+        if multiplier == 1 {
+            return Ok(());
+        }
+        if multiplier > 16 {
+            return unsupported(format!(
+                "u32 multiplication by constant `{multiplier}` is too large for Rux16 lowering"
+            ));
+        }
+        self.emit_register_copy(15, dst);
+        for _ in 1..multiplier {
+            self.words.push(rux16_asm::add(dst, dst, 15));
+        }
+        Ok(())
     }
 
     fn compile_u8_expr_into(
@@ -646,7 +782,11 @@ impl Rux16ArtifactBackend {
                                 "u8 local initializer requires `mmio<u8>(...).load()`",
                             );
                         }
-                        let address = self.compile_mmio_address_to_register_or_use(1, address)?;
+                        let address = self.compile_mmio_address_to_register_or_use(
+                            1,
+                            address,
+                            unsafe_context,
+                        )?;
                         self.words.push(rux16_asm::load8(dst, address));
                         Ok(())
                     }
@@ -656,7 +796,11 @@ impl Rux16ArtifactBackend {
                                 "u8 local initializer requires `ptr<u8>(...).load()`",
                             );
                         }
-                        let address = self.compile_ram_address_to_register_or_use(1, address)?;
+                        let address = self.compile_ram_address_to_register_or_use(
+                            1,
+                            address,
+                            unsafe_context,
+                        )?;
                         self.words.push(rux16_asm::load8(dst, address));
                         Ok(())
                     }
@@ -905,6 +1049,46 @@ impl Rux16ArtifactBackend {
             | Expr::Unary { .. }
             | Expr::Logical { .. }
             | Expr::Compare { .. } => unsupported("only u32 literal values can be lowered"),
+        }
+    }
+
+    fn eval_u32_const_value(&self, expr: &Expr) -> Result<u32, CompileError> {
+        match expr {
+            Expr::Int(value) | Expr::IntU32(value) => {
+                u32::try_from(*value).map_err(|_| CompileError {
+                    message: format!("u32 constant `{value}` does not fit `u32`"),
+                })
+            }
+            Expr::IntU8(value) => u32::try_from(*value).map_err(|_| CompileError {
+                message: format!("u8 constant `{value}` does not fit `u32`"),
+            }),
+            Expr::Local(name) => {
+                if let Some(value) = self.consts.get(name).copied() {
+                    return value.as_u32(name);
+                }
+                unsupported(format!("`{name}` is not a compile-time u32 constant"))
+            }
+            Expr::Path(path) => {
+                let name = path_name(path);
+                if let Some(value) = self.consts.get(&name).copied() {
+                    return value.as_u32(&name);
+                }
+                unsupported(format!("`{name}` is not a compile-time u32 constant"))
+            }
+            Expr::Binary { .. }
+            | Expr::ByteString(_)
+            | Expr::Bool(_)
+            | Expr::Call { .. }
+            | Expr::Mmio { .. }
+            | Expr::Ptr { .. }
+            | Expr::MethodCall { .. }
+            | Expr::Index { .. }
+            | Expr::AddressOfMut(_)
+            | Expr::Deref(_)
+            | Expr::Cast { .. }
+            | Expr::Unary { .. }
+            | Expr::Logical { .. }
+            | Expr::Compare { .. } => unsupported("expected a compile-time u32 constant"),
         }
     }
 

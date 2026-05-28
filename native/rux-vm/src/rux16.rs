@@ -73,6 +73,7 @@ pub enum DecodedInstruction {
     Const32 { dst: usize, value: u32 },
     Add { dst: usize, lhs: usize, rhs: usize },
     Eq { dst: usize, lhs: usize, rhs: usize },
+    Ltu { dst: usize, lhs: usize, rhs: usize },
     TestBits { dst: usize, src: usize, mask: u32 },
     Load8 { dst: usize, addr: usize },
     Load32 { dst: usize, addr: usize },
@@ -151,6 +152,11 @@ impl InstructionDecoder for Rux16Decoder {
                         dst: a,
                         src: b,
                         mask: u32::from(extension),
+                    },
+                    0x2 if b == 0 => DecodedInstruction::Ltu {
+                        dst: a,
+                        lhs: usize::from((extension >> 4) & 0x0f),
+                        rhs: usize::from(extension & 0x0f),
                     },
                     _ => return Err(illegal_instruction(pc, word)),
                 };
@@ -325,6 +331,10 @@ impl Rux16Cpu {
             }
             DecodedInstruction::Eq { dst, lhs, rhs } => {
                 self.registers[dst] = u32::from(self.registers[lhs] == self.registers[rhs]);
+                Ok(None)
+            }
+            DecodedInstruction::Ltu { dst, lhs, rhs } => {
+                self.registers[dst] = u32::from(self.registers[lhs] < self.registers[rhs]);
                 Ok(None)
             }
             DecodedInstruction::TestBits { dst, src, mask } => {

@@ -177,6 +177,40 @@ fn rux_disasm_prints_bios_artifact_from_bios_flash_base() {
     assert!(stdout.contains("fff00002: 0001  halt"), "stdout: {stdout}");
 }
 
+#[test]
+fn rux_disasm_prints_ltu_extended_instruction() {
+    let artifact_path = temp_file("bios-ltu.flash");
+    fs::write(
+        &artifact_path,
+        words_to_bytes(&[
+            const4(1, 2),
+            const4(2, 5),
+            ltu(3, 1, 2)[0],
+            ltu(3, 1, 2)[1],
+            halt(),
+        ]),
+    )
+    .expect("artifact writes");
+
+    let output = Command::new(rux_binary())
+        .args([
+            "disasm",
+            "--target",
+            "bios",
+            artifact_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("rux disasm runs");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("ltu r3, r1, r2"), "stdout: {stdout}");
+}
+
 fn temp_file(name: &str) -> PathBuf {
     let counter = TEMP_FILE_COUNTER.fetch_add(1, Ordering::Relaxed);
     let path = std::env::temp_dir().join(format!(
@@ -205,6 +239,13 @@ fn const4(register: u8, value: u8) -> u16 {
 
 fn add(dst: u8, lhs: u8, rhs: u8) -> u16 {
     0x2000 | (u16::from(dst) << 8) | (u16::from(lhs) << 4) | u16::from(rhs)
+}
+
+fn ltu(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    [
+        0x3002 | (u16::from(dst) << 8),
+        (u16::from(lhs) << 4) | u16::from(rhs),
+    ]
 }
 
 fn halt() -> u16 {

@@ -99,6 +99,11 @@ fn disassemble_extended(
             (format!("eq r{a}, r{lhs}, r{rhs}"), 2)
         }
         0x1 => (format!("test_bits r{a}, r{b}, 0x{extension:04x}"), 2),
+        0x2 if b == 0 => {
+            let lhs = ((extension >> 4) & 0x0f) as u8;
+            let rhs = (extension & 0x0f) as u8;
+            (format!("ltu r{a}, r{lhs}, r{rhs}"), 2)
+        }
         _ => (format!(".word 0x{word:04x}"), 1),
     }
 }
