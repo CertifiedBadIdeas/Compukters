@@ -611,6 +611,47 @@ fn rux16_kernel_loader_source_finds_boot_directory_entry() {
 }
 
 #[test]
+fn rux16_kernel_loader_source_finds_kernel_ruxe_entry() {
+    let source = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/boot/kernel_loader.rx"),
+    )
+    .expect("kernel loader source should exist");
+
+    assert!(
+        source.contains("fn find_kernel_ruxe_inode("),
+        "kernel loader should expose a guest-side kernel.ruxe lookup"
+    );
+    assert!(
+        source.contains("boot_directory_inode"),
+        "kernel.ruxe lookup should take the boot directory inode id"
+    );
+    assert!(
+        source.contains("read_storage0_blocks(inode_table_lba, 1, 0x3000)"),
+        "kernel.ruxe lookup should read the inode table block"
+    );
+    assert!(
+        source.contains("read_storage0_blocks(boot_dir_lba, 1, 0x3000)"),
+        "kernel.ruxe lookup should read the boot directory block"
+    );
+    assert!(
+        source.contains("0x6e72656b"),
+        "kernel.ruxe lookup should match the little-endian `kern` prefix"
+    );
+    assert!(
+        source.contains("0x722e6c65"),
+        "kernel.ruxe lookup should match the little-endian `el.r` middle"
+    );
+    assert!(
+        source.contains("0x00657875"),
+        "kernel.ruxe lookup should match the little-endian `uxe` suffix"
+    );
+    assert!(
+        source.contains("ptr<i32>(inode_id_addr).load()"),
+        "kernel.ruxe lookup should return the matched file inode id"
+    );
+}
+
+#[test]
 fn rux_volume_put_boot_and_kernel_creates_storage0_that_bundled_bios_executes() {
     let volume_path = temp_file("boot-kernel-storage0.ruxvol");
     let boot_path = temp_file("kernel-loader.boot");
