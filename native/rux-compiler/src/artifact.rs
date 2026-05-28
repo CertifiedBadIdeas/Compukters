@@ -198,7 +198,6 @@ impl Rux16ArtifactBackend {
         {
             self.pending_functions.push(name.to_string());
         }
-        self.reject_live_argument_register_overlap(args.len())?;
         let saved_registers = self.live_local_registers();
         for register in &saved_registers {
             self.emit_push_register(*register);
@@ -275,20 +274,6 @@ impl Rux16ArtifactBackend {
                 type_name(expected)
             )),
         }
-    }
-
-    fn reject_live_argument_register_overlap(&self, arg_count: usize) -> Result<(), CompileError> {
-        let used_argument_registers = &rux16_asm::ARGUMENT_REGISTERS[..arg_count];
-        let overlap = self
-            .live_local_registers()
-            .into_iter()
-            .find(|register| used_argument_registers.contains(register));
-        if let Some(register) = overlap {
-            return unsupported(format!(
-                "Rux16 call ABI argument register r{register} overlaps a live local in this call shape"
-            ));
-        }
-        Ok(())
     }
 
     fn live_local_registers(&self) -> Vec<u8> {
@@ -954,8 +939,9 @@ impl Rux16ArtifactBackend {
     ) -> Result<(), CompileError> {
         match expr {
             Expr::Local(name) => {
-                if self.local(name, TypeName::I32)?.is_some() {
-                    return unsupported("Rux16 local-to-local moves are not supported yet");
+                if let Some(local) = self.local(name, TypeName::I32)? {
+                    self.emit_register_copy(dst, local.register);
+                    return Ok(());
                 }
                 let value = self.eval_i32_value(expr)?;
                 self.words
@@ -1181,8 +1167,9 @@ impl Rux16ArtifactBackend {
     ) -> Result<(), CompileError> {
         match expr {
             Expr::Local(name) => {
-                if self.local(name, TypeName::U8)?.is_some() {
-                    return unsupported("Rux16 local-to-local moves are not supported yet");
+                if let Some(local) = self.local(name, TypeName::U8)? {
+                    self.emit_register_copy(dst, local.register);
+                    return Ok(());
                 }
                 let value = self.eval_u8_value(expr)?;
                 self.words
