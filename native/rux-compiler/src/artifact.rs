@@ -43,6 +43,15 @@ impl Rux16ArtifactTarget {
             Self::Bios | Self::Program => None,
         }
     }
+
+    fn initial_stack_top(self) -> u32 {
+        match self {
+            Self::Bios => 512,
+            Self::Boot => Self::Boot.base_address(),
+            Self::Kernel => Self::Kernel.base_address(),
+            Self::Program => 0,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -62,9 +71,16 @@ pub(crate) fn compile(
     }
     let consts = evaluate_consts(&program.consts)?;
     let functions = collect_supported_functions(&program)?;
-    let mut backend = Rux16ArtifactBackend::new(consts, functions, target.base_address());
+    let mut backend = Rux16ArtifactBackend::new(
+        consts,
+        functions,
+        target.base_address(),
+        target.initial_stack_top(),
+    );
     backend.inline_unit_function("main", &[], false)?;
     backend.words.push(rux16_asm::halt());
+    backend.emit_pending_function_bodies()?;
+    backend.patch_pending_calls()?;
 
     let code = rux16_asm::encode_words(&backend.words);
     let bytes = match target {
@@ -90,6 +106,11 @@ struct Rux16ArtifactBackend {
     call_stack: Vec<String>,
     next_register: u8,
     base_address: u32,
+    initial_stack_top: u32,
+    stack_initialized: bool,
+    pending_functions: Vec<String>,
+    function_addresses: HashMap<String, u32>,
+    pending_call_patches: Vec<(usize, String)>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -103,6 +124,7 @@ impl Rux16ArtifactBackend {
         consts: HashMap<String, ConstValue>,
         functions: HashMap<String, FunctionDecl>,
         base_address: u32,
+        initial_stack_top: u32,
     ) -> Self {
         Self {
             words: Vec::new(),
@@ -112,6 +134,11 @@ impl Rux16ArtifactBackend {
             call_stack: Vec::new(),
             next_register: 3,
             base_address,
+            initial_stack_top,
+            stack_initialized: false,
+            pending_functions: Vec::new(),
+            function_addresses: HashMap::new(),
+            pending_call_patches: Vec::new(),
         }
     }
 
@@ -142,6 +169,102 @@ impl Rux16ArtifactBackend {
         self.locals = caller_locals;
         self.call_stack.pop();
         result
+    }
+
+    fn emit_real_unit_function_call(&mut self, name: &str) -> Result<(), CompileError> {
+        if self.call_stack.iter().any(|active| active == name) {
+            return unsupported(format!("recursive Rux16 helper call `{name}`"));
+        }
+        let function = self
+            .functions
+            .get(name)
+            .cloned()
+            .ok_or_else(|| CompileError {
+                message: format!(
+                    "Rux16 backend does not support this program yet: unknown helper function `{name}`"
+                ),
+            })?;
+        if function.return_type != ReturnType::Unit || !function.parameters.is_empty() {
+            return unsupported(
+                "only no-argument unit helper functions can lower to real Rux16 calls yet",
+            );
+        }
+        self.ensure_stack_initialized();
+        if !self.function_addresses.contains_key(name)
+            && !self.pending_functions.iter().any(|pending| pending == name)
+        {
+            self.pending_functions.push(name.to_string());
+        }
+        let const_index = self.words.len();
+        self.words
+            .extend_from_slice(&rux16_asm::const32(rux16_asm::SCRATCH_REGISTER, 0));
+        self.words
+            .push(rux16_asm::call(rux16_asm::SCRATCH_REGISTER));
+        self.pending_call_patches
+            .push((const_index, name.to_string()));
+        Ok(())
+    }
+
+    fn ensure_stack_initialized(&mut self) {
+        if self.stack_initialized {
+            return;
+        }
+        self.words.extend_from_slice(&rux16_asm::const32(
+            rux16_asm::STACK_POINTER_REGISTER,
+            self.initial_stack_top,
+        ));
+        self.stack_initialized = true;
+    }
+
+    fn emit_pending_function_bodies(&mut self) -> Result<(), CompileError> {
+        let mut index = 0;
+        while index < self.pending_functions.len() {
+            let name = self.pending_functions[index].clone();
+            index += 1;
+            if self.function_addresses.contains_key(&name) {
+                continue;
+            }
+            let function = self
+                .functions
+                .get(&name)
+                .cloned()
+                .ok_or_else(|| CompileError {
+                    message: format!(
+                        "Rux16 backend does not support this program yet: unknown helper function `{name}`"
+                    ),
+                })?;
+            if function.return_type != ReturnType::Unit || !function.parameters.is_empty() {
+                return unsupported(
+                    "only no-argument unit helper functions can lower to real Rux16 calls yet",
+                );
+            }
+            self.function_addresses
+                .insert(name.clone(), self.current_address());
+            self.call_stack.push(name);
+            let caller_locals = std::mem::take(&mut self.locals);
+            let caller_next_register = self.next_register;
+            self.next_register = 3;
+            let result = self.compile_statements(&function.statements, false);
+            self.words.push(rux16_asm::ret());
+            self.locals = caller_locals;
+            self.next_register = caller_next_register;
+            self.call_stack.pop();
+            result?;
+        }
+        Ok(())
+    }
+
+    fn patch_pending_calls(&mut self) -> Result<(), CompileError> {
+        for (const_index, name) in self.pending_call_patches.clone() {
+            let address = *self
+                .function_addresses
+                .get(&name)
+                .ok_or_else(|| CompileError {
+                    message: format!("Rux16 helper function `{name}` was called but not emitted"),
+                })?;
+            self.patch_absolute_const32(const_index, address)?;
+        }
+        Ok(())
     }
 
     fn inline_returning_function_into(
@@ -477,6 +600,9 @@ impl Rux16ArtifactBackend {
                 let target = self.compile_i32_expr_to_scratch(&args[0], unsafe_context)?;
                 self.words.push(rux16_asm::jmp(target));
                 return Ok(());
+            }
+            if args.is_empty() && self.locals.is_empty() {
+                return self.emit_real_unit_function_call(name);
             }
             return self.inline_unit_function(name, args, unsafe_context);
         }
@@ -1001,6 +1127,14 @@ impl Rux16ArtifactBackend {
     }
 
     fn patch_absolute_jump(
+        &mut self,
+        const_index: usize,
+        address: u32,
+    ) -> Result<(), CompileError> {
+        self.patch_absolute_const32(const_index, address)
+    }
+
+    fn patch_absolute_const32(
         &mut self,
         const_index: usize,
         address: u32,
