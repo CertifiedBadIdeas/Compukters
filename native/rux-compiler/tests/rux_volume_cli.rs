@@ -574,6 +574,43 @@ fn rux16_kernel_loader_source_probes_root_ruxfs_inode() {
 }
 
 #[test]
+fn rux16_kernel_loader_source_finds_boot_directory_entry() {
+    let source = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/boot/kernel_loader.rx"),
+    )
+    .expect("kernel loader source should exist");
+
+    assert!(
+        source.contains("fn find_boot_directory_inode("),
+        "kernel loader should expose a guest-side boot directory lookup"
+    );
+    assert!(
+        source.contains("ptr<i32>(0x3060u32).load()"),
+        "boot lookup should read the root directory first extent start block"
+    );
+    assert!(
+        source.contains("read_storage0_blocks(root_dir_lba, 1, 0x3000)"),
+        "boot lookup should read the root directory block"
+    );
+    assert!(
+        source.contains("let mut entry_addr: u32 = 0x3000u32"),
+        "boot lookup should scan directory entries from the loaded block"
+    );
+    assert!(
+        source.contains("entry_addr = entry_addr + 64u32"),
+        "boot lookup should advance by the 64-byte RuxFS directory entry size"
+    );
+    assert!(
+        source.contains("0x746f6f62"),
+        "boot lookup should match the little-endian `boot` directory name"
+    );
+    assert!(
+        source.contains("ptr<i32>(inode_id_addr).load()"),
+        "boot lookup should return the matched directory inode id"
+    );
+}
+
+#[test]
 fn rux_volume_put_boot_and_kernel_creates_storage0_that_bundled_bios_executes() {
     let volume_path = temp_file("boot-kernel-storage0.ruxvol");
     let boot_path = temp_file("kernel-loader.boot");
