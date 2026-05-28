@@ -505,6 +505,40 @@ fn rux16_artifact_assigns_u8_local_from_bios_flash() {
 }
 
 #[test]
+fn rux16_artifact_uses_u32_local_as_mmio_address_from_bios_flash() {
+    let artifact = compile_rux16_artifact(
+        &with_computer_abi(
+            "fn write_ready() {
+            unsafe {
+                let mut panic_code: u32 = control::STATUS;
+                panic_code = control::PANIC_CODE;
+                let mut status_addr: u32 = control::STATUS;
+                mmio<i32>(status_addr).store(status::READY);
+                let mut status: i32 = mmio<i32>(status_addr).load();
+                mmio<i32>(panic_code).store(status);
+            }
+         }
+
+         fn main() {
+            write_ready();
+         }",
+        ),
+        Rux16ArtifactTarget::Bios,
+    )
+    .expect("u32 MMIO address local compiles to Rux16");
+    let (mut machine, cpu_id) =
+        ComputerMachine::from_rux16_bios_flash(&artifact.bytes, 64 * 1024, 128)
+            .expect("machine boots Rux16 BIOS flash");
+
+    assert_eq!(
+        machine.run_boot_rux16_until_signal(cpu_id).unwrap(),
+        Rux16Signal::Halt,
+    );
+    assert_eq!(machine.panic_code(), ComputerMachine::STATUS_READY);
+    assert_eq!(machine.control_status(), ComputerMachine::STATUS_HALTED);
+}
+
+#[test]
 fn rux16_artifact_lowers_if_eq_condition_from_bios_flash() {
     let artifact = compile_rux16_artifact(
         &with_computer_abi(
