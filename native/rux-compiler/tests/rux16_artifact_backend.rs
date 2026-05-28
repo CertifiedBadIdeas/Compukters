@@ -1,5 +1,6 @@
 use rux_compiler::artifact::Rux16ArtifactTarget;
 use rux_compiler::compile_rux16_artifact;
+use rux_compiler::rux16_disasm;
 use rux_compiler::ruxe;
 use rux_vm::computer_machine::ComputerMachine;
 use rux_vm::rux16::Rux16Signal;
@@ -786,6 +787,33 @@ fn rux16_artifact_inlines_helper_parameters_and_returns_from_bios_flash() {
     assert_eq!(machine.panic_code(), ComputerMachine::STATUS_READY);
     assert_eq!(machine.debug_output_bytes(), b"O");
     assert_eq!(machine.control_status(), ComputerMachine::STATUS_HALTED);
+}
+
+#[test]
+fn rux16_artifact_backend_reserves_r15_for_stack_pointer() {
+    let artifact = compile_rux16_artifact(
+        &with_computer_abi(
+            "fn main() {
+            unsafe {
+                if mmio<i32>(control::STATUS).load() == status::RESET {
+                    mmio<i32>(control::STATUS).store(status::READY);
+                } else {
+                    mmio<i32>(control::PANIC_CODE).store(status::BOOTING);
+                }
+            }
+         }",
+        ),
+        Rux16ArtifactTarget::Bios,
+    )
+    .expect("conditional firmware compiles to Rux16");
+    let disassembly =
+        rux16_disasm::disassemble_artifact(&artifact.bytes, Rux16ArtifactTarget::Bios)
+            .expect("BIOS artifact disassembles");
+
+    assert!(
+        !disassembly.contains("r15"),
+        "r15 is the stack pointer and must not be used as a compiler scratch register:\n{disassembly}"
+    );
 }
 
 #[test]

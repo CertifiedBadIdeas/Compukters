@@ -2,7 +2,7 @@ use rux_vm::low_bus::{MachineBus, MmioDevice};
 use rux_vm::low_machine::MemoryFault;
 use rux_vm::rux16::{
     Rux16Cpu, Rux16Signal, RUX16_CSR_TRAP_CAUSE, RUX16_CSR_TRAP_PC, RUX16_CSR_TRAP_VALUE,
-    RUX16_CSR_TRAP_VECTOR, RUX16_TRAP_CAUSE_ILLEGAL_INSTRUCTION,
+    RUX16_CSR_TRAP_VECTOR, RUX16_STACK_POINTER_REGISTER, RUX16_TRAP_CAUSE_ILLEGAL_INSTRUCTION,
 };
 
 #[test]
@@ -46,6 +46,43 @@ fn rux16_loads_and_stores_regular_ram_through_machine_bus() {
     );
     assert_eq!(cpu.register(2), 0x0102_0304);
     assert_eq!(bus.load_i32(14).unwrap(), 0x0102_0304);
+}
+
+#[test]
+fn rux16_uses_r15_as_stack_pointer_into_guest_ram() {
+    let mut bus = MachineBus::new(128).unwrap();
+    let stack_top = 96;
+    let mut program = Vec::new();
+    program.extend(const32(RUX16_STACK_POINTER_REGISTER, stack_top));
+    program.extend(const32(1, u32::MAX - 3));
+    program.extend(const32(2, 0x1122_3344));
+    program.push(const4(4, 4));
+    program.push(add(
+        RUX16_STACK_POINTER_REGISTER,
+        RUX16_STACK_POINTER_REGISTER,
+        1,
+    ));
+    program.push(store32(RUX16_STACK_POINTER_REGISTER, 2));
+    program.push(load32(3, RUX16_STACK_POINTER_REGISTER));
+    program.push(add(
+        RUX16_STACK_POINTER_REGISTER,
+        RUX16_STACK_POINTER_REGISTER,
+        4,
+    ));
+    program.push(halt());
+    write_words(&mut bus, 0, &program);
+    let mut cpu = Rux16Cpu::new(0);
+
+    assert_eq!(
+        cpu.run_until_signal(&mut bus, 32).unwrap(),
+        Rux16Signal::Halt,
+    );
+    assert_eq!(cpu.register(3), 0x1122_3344);
+    assert_eq!(
+        cpu.register(RUX16_STACK_POINTER_REGISTER as usize),
+        stack_top
+    );
+    assert_eq!(bus.load_i32(stack_top - 4).unwrap() as u32, 0x1122_3344);
 }
 
 #[test]

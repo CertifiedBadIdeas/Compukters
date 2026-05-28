@@ -851,8 +851,12 @@ impl Rux16ArtifactBackend {
     }
 
     fn emit_register_copy(&mut self, dst: u8, src: u8) {
-        self.words.extend_from_slice(&rux16_asm::const32(15, 0));
-        self.words.push(rux16_asm::add(dst, src, 15));
+        if dst == src {
+            return;
+        }
+        let zero = scratch_register_excluding(src);
+        self.words.extend_from_slice(&rux16_asm::const32(zero, 0));
+        self.words.push(rux16_asm::add(dst, src, zero));
     }
 
     fn emit_mul_by_small_const(&mut self, dst: u8, multiplier: u32) -> Result<(), CompileError> {
@@ -868,9 +872,10 @@ impl Rux16ArtifactBackend {
                 "u32 multiplication by constant `{multiplier}` is too large for Rux16 lowering"
             ));
         }
-        self.emit_register_copy(15, dst);
+        let scratch = scratch_register_excluding(dst);
+        self.emit_register_copy(scratch, dst);
         for _ in 1..multiplier {
-            self.words.push(rux16_asm::add(dst, dst, 15));
+            self.words.push(rux16_asm::add(dst, dst, scratch));
         }
         Ok(())
     }
@@ -970,7 +975,7 @@ impl Rux16ArtifactBackend {
 
     fn alloc_register(&mut self) -> Result<u8, CompileError> {
         let register = self.next_register;
-        if register > 13 {
+        if register >= rux16_asm::SECONDARY_SCRATCH_REGISTER {
             return unsupported("Rux16 backend ran out of registers");
         }
         self.next_register += 1;
@@ -983,15 +988,16 @@ impl Rux16ArtifactBackend {
 
     fn emit_absolute_jump_placeholder(&mut self) -> usize {
         let const_index = self.words.len();
-        self.words.extend_from_slice(&rux16_asm::const32(15, 0));
-        self.words.push(rux16_asm::jmp(15));
+        self.words
+            .extend_from_slice(&rux16_asm::const32(rux16_asm::SCRATCH_REGISTER, 0));
+        self.words.push(rux16_asm::jmp(rux16_asm::SCRATCH_REGISTER));
         const_index
     }
 
     fn emit_absolute_jump(&mut self, address: u32) {
         self.words
-            .extend_from_slice(&rux16_asm::const32(15, address));
-        self.words.push(rux16_asm::jmp(15));
+            .extend_from_slice(&rux16_asm::const32(rux16_asm::SCRATCH_REGISTER, address));
+        self.words.push(rux16_asm::jmp(rux16_asm::SCRATCH_REGISTER));
     }
 
     fn patch_absolute_jump(
@@ -1478,6 +1484,14 @@ fn const_from_const_value(
 
 fn path_name(path: &[String]) -> String {
     path.join("::")
+}
+
+fn scratch_register_excluding(register: u8) -> u8 {
+    if register == rux16_asm::SCRATCH_REGISTER {
+        rux16_asm::SECONDARY_SCRATCH_REGISTER
+    } else {
+        rux16_asm::SCRATCH_REGISTER
+    }
 }
 
 fn return_type_to_type_name(return_type: ReturnType) -> Option<TypeName> {

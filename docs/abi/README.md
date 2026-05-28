@@ -10,6 +10,8 @@ Current specifications:
 
 - `ruxe-v1.md`: experimental guest-loadable fixed-image executable container
   for Rux16 bootloader and kernel images.
+- `rux16-v1.md`: experimental Rux16 CPU ABI, including the register file and
+  stack pointer convention.
 - `rux-storage-volume-v1.md`: current storage0 volume, legacy fixed boot/kernel
   media records, and partitioned `RUXPT` layout.
 - `ruxfs-v1.md`: extent-based filesystem targeted for the `ROOT` partition in

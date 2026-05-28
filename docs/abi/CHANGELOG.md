@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added `rux16-v1.md` and reserved `r15` as the Rux16 stack pointer. The stack
+  lives in guest RAM, grows downward, and uses 4-byte slots in the first ABI
+  slice.
 - Added experimental `RUXE` v1 as the guest-loadable fixed-image container for
   Rux16 bootloader and kernel artifacts.
 - `RUXE` now carries an ABI kind: `bootloader` or `kernel`.
@@ -47,6 +50,7 @@
 
 - `rux-machine-profile-v2.md`
 - `rux-computer-profile-v1.md`
+- `rux16-v1.md`
 - `ruxe-v1.md`
 - `rux-storage-volume-v1.md`
 - `ruxfs-v1.md`
