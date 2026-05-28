@@ -211,6 +211,34 @@ fn rux_disasm_prints_ltu_extended_instruction() {
     assert!(stdout.contains("ltu r3, r1, r2"), "stdout: {stdout}");
 }
 
+#[test]
+fn rux_disasm_prints_call_and_ret_instructions() {
+    let artifact_path = temp_file("bios-call-ret.flash");
+    fs::write(&artifact_path, words_to_bytes(&[call(1), ret(), halt()])).expect("artifact writes");
+
+    let output = Command::new(rux_binary())
+        .args([
+            "disasm",
+            "--target",
+            "bios",
+            artifact_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("rux disasm runs");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("fff00000: 8100  call r1"),
+        "stdout: {stdout}"
+    );
+    assert!(stdout.contains("fff00002: 9000  ret"), "stdout: {stdout}");
+}
+
 fn temp_file(name: &str) -> PathBuf {
     let counter = TEMP_FILE_COUNTER.fetch_add(1, Ordering::Relaxed);
     let path = std::env::temp_dir().join(format!(
@@ -246,6 +274,14 @@ fn ltu(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
         0x3002 | (u16::from(dst) << 8),
         (u16::from(lhs) << 4) | u16::from(rhs),
     ]
+}
+
+fn call(register: u8) -> u16 {
+    0x8000 | (u16::from(register) << 8)
+}
+
+fn ret() -> u16 {
+    0x9000
 }
 
 fn halt() -> u16 {

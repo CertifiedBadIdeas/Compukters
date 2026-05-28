@@ -155,6 +155,36 @@ fn rux16_register_jump_sets_pc_to_guest_address() {
 }
 
 #[test]
+fn rux16_call_pushes_return_pc_and_ret_restores_control_flow() {
+    let mut bus = MachineBus::new(128).unwrap();
+    let stack_top = 96;
+    let function_pc = 18;
+    let mut program = Vec::new();
+    program.extend(const32(RUX16_STACK_POINTER_REGISTER, stack_top));
+    program.extend(const32(1, function_pc));
+    program.push(call(1));
+    program.push(const4(3, 9));
+    program.push(halt());
+    program.push(const4(2, 7));
+    program.push(ret());
+    write_words(&mut bus, 0, &program);
+    let mut cpu = Rux16Cpu::new(0);
+
+    assert_eq!(
+        cpu.run_until_signal(&mut bus, 32).unwrap(),
+        Rux16Signal::Halt,
+    );
+    assert_eq!(cpu.register(2), 7);
+    assert_eq!(cpu.register(3), 9);
+    assert_eq!(
+        cpu.register(RUX16_STACK_POINTER_REGISTER as usize),
+        stack_top
+    );
+    assert_eq!(bus.load_i32(stack_top - 4).unwrap(), 14);
+    assert_eq!(cpu.pc(), 18);
+}
+
+#[test]
 fn rux16_const32_consumes_extension_words_and_loads_u32_value() {
     let mut bus = MachineBus::new(64).unwrap();
     let mut program = Vec::new();
@@ -359,6 +389,14 @@ fn store32(addr: u8, src: u8) -> u16 {
 
 fn jmp(register: u8) -> u16 {
     0x7000 | (u16::from(register) << 8)
+}
+
+fn call(register: u8) -> u16 {
+    0x8000 | (u16::from(register) << 8)
+}
+
+fn ret() -> u16 {
+    0x9000
 }
 
 fn branch_if_zero(register: u8, offset_words: i8) -> u16 {

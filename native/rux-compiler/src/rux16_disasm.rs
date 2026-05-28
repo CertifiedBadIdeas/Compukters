@@ -76,6 +76,14 @@ fn disassemble_instruction(words: &[u16], index: usize) -> (String, usize) {
             _ => (format!(".word 0x{word:04x}"), 1),
         },
         0x7 => (format!("jump r{a}"), 1),
+        0x8 => match (b, c) {
+            (0x0, 0x0) => (format!("call r{a}"), 1),
+            _ => (format!(".word 0x{word:04x}"), 1),
+        },
+        0x9 => match (a, b, c) {
+            (0x0, 0x0, 0x0) => ("ret".to_string(), 1),
+            _ => (format!(".word 0x{word:04x}"), 1),
+        },
         0xe => disassemble_const32(words, index, a, word),
         _ => (format!(".word 0x{word:04x}"), 1),
     }

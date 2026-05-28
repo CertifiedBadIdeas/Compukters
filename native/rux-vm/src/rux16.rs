@@ -86,6 +86,8 @@ pub enum DecodedInstruction {
     BranchIfZero { src: usize, target_pc: u32 },
     BranchIfNonZero { src: usize, target_pc: u32 },
     Jump { target: usize },
+    Call { target: usize },
+    Ret,
     ReadCsr { dst: usize, csr: u32 },
     WriteCsr { csr: u32, src: usize },
 }
@@ -192,6 +194,18 @@ impl InstructionDecoder for Rux16Decoder {
                     return Err(illegal_instruction(pc, word));
                 }
                 DecodedInstruction::Jump { target: a }
+            }
+            0x8 => {
+                if b != 0 || c != 0 {
+                    return Err(illegal_instruction(pc, word));
+                }
+                DecodedInstruction::Call { target: a }
+            }
+            0x9 => {
+                if a != 0 || b != 0 || c != 0 {
+                    return Err(illegal_instruction(pc, word));
+                }
+                DecodedInstruction::Ret
             }
             0xe => {
                 if b != 0 || c != 1 {
@@ -415,6 +429,39 @@ impl Rux16Cpu {
             }
             DecodedInstruction::Jump { target } => {
                 self.pc = self.registers[target];
+                Ok(None)
+            }
+            DecodedInstruction::Call { target } => {
+                let return_pc = self.pc;
+                let stack_pointer = usize::from(RUX16_STACK_POINTER_REGISTER);
+                let new_stack_pointer = self.registers[stack_pointer].wrapping_sub(4);
+                if let Err(error) = bus.store_i32(new_stack_pointer, return_pc as i32) {
+                    return self.raise_exception(
+                        RUX16_TRAP_CAUSE_STORE_FAULT,
+                        fault_pc,
+                        new_stack_pointer,
+                        error.to_string(),
+                    );
+                }
+                self.registers[stack_pointer] = new_stack_pointer;
+                self.pc = self.registers[target];
+                Ok(None)
+            }
+            DecodedInstruction::Ret => {
+                let stack_pointer = usize::from(RUX16_STACK_POINTER_REGISTER);
+                let return_pc = match bus.load_i32(self.registers[stack_pointer]) {
+                    Ok(value) => value as u32,
+                    Err(error) => {
+                        return self.raise_exception(
+                            RUX16_TRAP_CAUSE_LOAD_FAULT,
+                            fault_pc,
+                            self.registers[stack_pointer],
+                            error.to_string(),
+                        )
+                    }
+                };
+                self.registers[stack_pointer] = self.registers[stack_pointer].wrapping_add(4);
+                self.pc = return_pc;
                 Ok(None)
             }
             DecodedInstruction::ReadCsr { dst, csr } => {

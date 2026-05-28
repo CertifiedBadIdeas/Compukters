@@ -65,3 +65,26 @@ program     kernel allocates and initializes user stack before entry
 The current implementation only reserves the convention and proves the memory
 behavior. Full call/return lowering, kernel/user privilege separation, and
 process stack allocation are later ABI slices.
+
+## Call And Return
+
+`call rN` transfers control to the address in `rN` and pushes the return PC to
+the stack:
+
+```text
+sp = sp - 4
+store32 [sp], return_pc
+pc = rN
+```
+
+`ret` pops the return PC from the stack and transfers control back:
+
+```text
+return_pc = load32 [sp]
+sp = sp + 4
+pc = return_pc
+```
+
+The return address is the next instruction after `call`. Stack load/store
+faults are normal Rux16 CPU faults. The first ABI slice does not add stack
+bounds metadata or a fallback return path.
