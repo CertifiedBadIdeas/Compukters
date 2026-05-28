@@ -151,5 +151,19 @@ The current compiler crate provides:
 - absolute-path file creation and full-file reads;
 - directory listing.
 
-Delete, overwrite, CLI volume integration, and bootloader integration are
-next-step work under the same RuxFS v1 contract.
+The public CLI namespace is filesystem-specific:
+
+```text
+rux fs ruxfs format <image.ruxfs> --blocks <blocks>
+rux fs ruxfs mkdir <image.ruxfs> <path>
+rux fs ruxfs put <image.ruxfs> <path> <host-input>
+rux fs ruxfs get <image.ruxfs> <path> <host-output>
+rux fs ruxfs ls <image.ruxfs> <path>
+```
+
+`rux volume` remains storage-container tooling. It must not grow RuxFS-specific
+commands; future filesystems should get their own `rux fs <filesystem>`
+subcommands.
+
+Delete, overwrite, partition extraction/injection, and bootloader integration
+are next-step work under the same RuxFS v1 contract.

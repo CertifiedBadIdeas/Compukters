@@ -60,6 +60,10 @@ The partitioned layout does not contain `RUXB` or `RUXK` fixed records.
 Current firmware does not boot it yet; future BIOS and bootloader work should
 consume `RUXPT` directly rather than probing both layouts.
 
+Filesystem-specific operations are not part of `rux volume`. Tooling for RuxFS
+uses `rux fs ruxfs ...`; future filesystems should use their own `rux fs
+<filesystem>` namespace.
+
 ## RUXPT Partition Table
 
 `RUXPT` is guest-visible and starts at LBA 0 in the partitioned layout. It

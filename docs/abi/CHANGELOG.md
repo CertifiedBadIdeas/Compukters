@@ -21,6 +21,8 @@
 - `RuxFS` tooling now supports fixed-size directory entries, absolute-path
   directory creation, file creation, file reads, and directory listing over an
   in-memory filesystem image.
+- Added `rux fs ruxfs`, keeping filesystem-specific commands separate from
+  `rux volume` so additional filesystems can be introduced explicitly.
 - Added `rux-storage-volume-v1.md` for the current `RUXVOL`, `RUXB`, and `RUXK`
   storage0 media layout.
 - Retired the previous host-decoded executable ABI package from active
