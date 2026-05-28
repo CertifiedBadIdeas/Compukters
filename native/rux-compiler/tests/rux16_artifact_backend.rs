@@ -1156,6 +1156,56 @@ fn rux16_artifact_uses_stack_backed_helper_local_from_frame_pointer() {
 }
 
 #[test]
+fn rux16_artifact_uses_stack_array_helper_byte_buffer_from_frame_pointer() {
+    let artifact = compile_rux16_artifact(
+        &with_computer_abi(
+            "fn write_buffered() {
+            let mut buffer: [u8; 4] = b\"\\0\\0\\0\\0\";
+            let mut index: u32 = 2u32;
+            buffer[0u32] = 79u8;
+            buffer[index] = 75u8;
+            unsafe {
+                mmio<u8>(debug::WRITE).store(buffer[0u32]);
+                mmio<u8>(debug::WRITE).store(buffer[index]);
+            }
+         }
+
+         fn main() {
+            write_buffered();
+            write_buffered();
+         }",
+        ),
+        Rux16ArtifactTarget::Bios,
+    )
+    .expect("helper byte arrays can live in frame-pointer stack storage");
+    let disassembly =
+        rux16_disasm::disassemble_artifact(&artifact.bytes, Rux16ArtifactTarget::Bios)
+            .expect("BIOS artifact disassembles");
+    assert!(
+        disassembly.contains(", r12,"),
+        "stack-backed helper array addresses must be derived from r12 frame pointer:\n{disassembly}"
+    );
+    assert!(
+        disassembly.contains("store8 [r"),
+        "stack-backed helper array writes must use byte stores:\n{disassembly}"
+    );
+    assert!(
+        disassembly.contains("load8 r"),
+        "stack-backed helper array reads must use byte loads:\n{disassembly}"
+    );
+    let (mut machine, cpu_id) =
+        ComputerMachine::from_rux16_bios_flash(&artifact.bytes, 64 * 1024, 1024)
+            .expect("machine boots Rux16 BIOS flash");
+
+    assert_eq!(
+        machine.run_boot_rux16_until_signal(cpu_id).unwrap(),
+        Rux16Signal::Halt,
+    );
+    assert_eq!(machine.debug_output_bytes(), b"OKOK", "{disassembly}");
+    assert_eq!(machine.control_status(), ComputerMachine::STATUS_HALTED);
+}
+
+#[test]
 fn rux16_artifact_rejects_recursive_helper_inline() {
     let error = compile_rux16_artifact(
         "fn again() {

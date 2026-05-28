@@ -97,6 +97,20 @@ Stack-backed helper locals are addressed by adding a negative 32-bit offset to
 sets `sp = fp`, so all local slots are discarded before the saved caller frame
 pointer is popped.
 
+Helper-local byte arrays are also frame-backed. `[u8; N]` arrays reserve `N`
+bytes rounded up to the next 4-byte stack slot boundary, and elements are
+addressed as:
+
+```text
+array_base = fp - array_offset
+element    = array_base + index
+```
+
+The current compiler slice supports direct byte load/store for local
+`[u8; N]` arrays inside helper bodies. Arrays are not passed as helper
+arguments, returned from helpers, heap allocated, or exposed through the
+user-space ABI yet.
+
 The current frame slice does not add stack-passed arguments, recursion, return
 slots, or a user-space ABI.
 
