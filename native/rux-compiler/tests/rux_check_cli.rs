@@ -73,6 +73,29 @@ fn main() {
     );
 }
 
+#[test]
+fn rux_check_reports_no_nested_if_suggestions_for_kernel_loader_listing() {
+    let source_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("examples")
+        .join("boot")
+        .join("kernel_loader.rx");
+
+    let output = Command::new(rux_binary())
+        .args(["check", source_path.to_str().unwrap()])
+        .output()
+        .expect("rux check runs");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8(output.stdout).expect("stdout is UTF-8"),
+        ""
+    );
+}
+
 fn temp_file(name: &str) -> PathBuf {
     let path = std::env::temp_dir().join(format!("rux-check-cli-{}-{name}", std::process::id()));
     let _ = fs::remove_file(&path);
