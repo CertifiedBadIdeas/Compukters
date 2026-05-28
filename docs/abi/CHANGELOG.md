@@ -20,6 +20,8 @@
   filesystem-specific logic.
 - Added `rux volume inspect`, which prints the `RUXVOL` header summary and
   decoded `RUXPT` partition layout.
+- Added CLI workflow coverage for building a partitioned `storage0.ruxvol`
+  with a RuxFS `ROOT` partition containing `/boot/kernel.ruxe`.
 - Added experimental `RuxFS` v1 as the extent-based filesystem contract for
   the partitioned `ROOT` partition, with empty formatting and structural
   validation in compiler tooling.
