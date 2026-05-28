@@ -88,3 +88,13 @@ pc = return_pc
 The return address is the next instruction after `call`. Stack load/store
 faults are normal Rux16 CPU faults. The first ABI slice does not add stack
 bounds metadata or a fallback return path.
+
+## Compiler-Generated Register Saves
+
+When the Rux16 compiler emits a real helper call and the caller has live local
+registers, it saves those local registers to the `r15` stack before `call` and
+restores them after `ret`.
+
+This is a compiler-owned preservation rule for the current register-backed
+local lowering. It is not yet a full caller-saved/callee-saved register
+classification, and it does not define stack-passed parameters or return slots.
