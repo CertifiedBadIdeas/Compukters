@@ -158,6 +158,157 @@ fn rux_volume_inspect_prints_ruxpt_partition_layout() {
 }
 
 #[test]
+fn rux_volume_inspect_boot_prints_boot_chain_metadata() {
+    let volume_path = temp_file("inspect-boot-storage0.ruxvol");
+    let root_path = temp_file("inspect-boot-root.ruxfs");
+    let boot_path = temp_file("inspect-boot-loader.ruxe");
+    let kernel_path = temp_file("inspect-boot-kernel.ruxe");
+    let boot_bytes =
+        ruxe::encode_rux16_executable(&[0x10, 0x20], ruxe::RuxeAbiKind::Bootloader, 0x2000, 0x2000)
+            .expect("boot RUXE encodes");
+    let kernel_bytes =
+        ruxe::encode_rux16_executable(&[0x30, 0x40], ruxe::RuxeAbiKind::Kernel, 0x3000, 0x3000)
+            .expect("kernel RUXE encodes");
+    fs::write(&boot_path, &boot_bytes).expect("boot writes");
+    fs::write(&kernel_path, &kernel_bytes).expect("kernel writes");
+
+    assert!(Command::new(rux_binary())
+        .args([
+            "volume",
+            "init",
+            volume_path.to_str().unwrap(),
+            "--size",
+            "65536",
+        ])
+        .status()
+        .expect("init runs")
+        .success());
+    assert!(Command::new(rux_binary())
+        .args([
+            "volume",
+            "put-boot",
+            volume_path.to_str().unwrap(),
+            boot_path.to_str().unwrap(),
+        ])
+        .status()
+        .expect("put-boot runs")
+        .success());
+    assert!(Command::new(rux_binary())
+        .args([
+            "fs",
+            "ruxfs",
+            "format",
+            root_path.to_str().unwrap(),
+            "--blocks",
+            "95",
+        ])
+        .status()
+        .expect("ruxfs format runs")
+        .success());
+    assert!(Command::new(rux_binary())
+        .args([
+            "volume",
+            "replace-partition",
+            volume_path.to_str().unwrap(),
+            "ROOT",
+            root_path.to_str().unwrap(),
+        ])
+        .status()
+        .expect("replace ROOT runs")
+        .success());
+    assert!(Command::new(rux_binary())
+        .args([
+            "volume",
+            "put-kernel",
+            volume_path.to_str().unwrap(),
+            kernel_path.to_str().unwrap(),
+        ])
+        .status()
+        .expect("put-kernel runs")
+        .success());
+
+    let output = Command::new(rux_binary())
+        .args(["volume", "inspect-boot", volume_path.to_str().unwrap()])
+        .output()
+        .expect("inspect-boot runs");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8(output.stdout).expect("inspect-boot stdout is UTF-8"),
+        "RUXVOL boot-chain\nBOOT record entry_pc=0x00002000 load_addr=0x00002000 blocks=1 payload_lba=2\nROOT partition start_lba=33 blocks=95 bytes=48640 name=root\nROOT RuxFS /boot/kernel.ruxe file_bytes=54\nKERNEL RUXE abi=kernel entry_pc=0x00003000 load_addr=0x00003000 payload_bytes=2\n"
+    );
+}
+
+#[test]
+fn rux_volume_inspect_boot_rejects_missing_root_kernel() {
+    let volume_path = temp_file("inspect-boot-missing-kernel-storage0.ruxvol");
+    let root_path = temp_file("inspect-boot-missing-kernel-root.ruxfs");
+    let boot_path = temp_file("inspect-boot-missing-kernel-loader.ruxe");
+    let boot_bytes =
+        ruxe::encode_rux16_executable(&[0x10, 0x20], ruxe::RuxeAbiKind::Bootloader, 0x2000, 0x2000)
+            .expect("boot RUXE encodes");
+    fs::write(&boot_path, &boot_bytes).expect("boot writes");
+
+    assert!(Command::new(rux_binary())
+        .args([
+            "volume",
+            "init",
+            volume_path.to_str().unwrap(),
+            "--size",
+            "65536",
+        ])
+        .status()
+        .expect("init runs")
+        .success());
+    assert!(Command::new(rux_binary())
+        .args([
+            "volume",
+            "put-boot",
+            volume_path.to_str().unwrap(),
+            boot_path.to_str().unwrap(),
+        ])
+        .status()
+        .expect("put-boot runs")
+        .success());
+    assert!(Command::new(rux_binary())
+        .args([
+            "fs",
+            "ruxfs",
+            "format",
+            root_path.to_str().unwrap(),
+            "--blocks",
+            "95",
+        ])
+        .status()
+        .expect("ruxfs format runs")
+        .success());
+    assert!(Command::new(rux_binary())
+        .args([
+            "volume",
+            "replace-partition",
+            volume_path.to_str().unwrap(),
+            "ROOT",
+            root_path.to_str().unwrap(),
+        ])
+        .status()
+        .expect("replace ROOT runs")
+        .success());
+
+    let output = Command::new(rux_binary())
+        .args(["volume", "inspect-boot", volume_path.to_str().unwrap()])
+        .output()
+        .expect("inspect-boot runs");
+
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr)
+        .contains("ROOT/RuxFS /boot/kernel.ruxe is not readable"));
+}
+
+#[test]
 fn rux_volume_replace_partition_rejects_wrong_size_without_truncation() {
     let volume_path = temp_file("partition-size-storage0.ruxvol");
     let root_path = temp_file("oversized-root-partition.bin");
