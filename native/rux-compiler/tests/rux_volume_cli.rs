@@ -434,7 +434,13 @@ fn rux_volume_put_boot_and_kernel_creates_storage0_that_bundled_bios_executes() 
         Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/boot/kernel_loader.rx");
     fs::write(
         &kernel_source_path,
-        "fn main() {
+        "use rux::abi::computer::{
+            CONTROL_PANIC_CODE, DISPLAY0_COMMAND, DISPLAY0_COMMAND_CLEAR,
+            DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR, DISPLAY0_CURSOR_X, DISPLAY0_CURSOR_Y,
+            DISPLAY0_DATA
+        };
+
+        fn main() {
             unsafe {
                 mmio<i32>(DISPLAY0_COMMAND).store(DISPLAY0_COMMAND_CLEAR);
                 mmio<i32>(DISPLAY0_CURSOR_X).store(0);

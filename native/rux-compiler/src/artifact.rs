@@ -4,7 +4,6 @@ use crate::frontend::ast::{
 use crate::frontend::CompileError;
 use crate::rux16_asm;
 use crate::ruxe;
-use rux_vm::computer_abi;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -85,7 +84,7 @@ pub(crate) fn compile(
 
 struct Rux16ArtifactBackend {
     words: Vec<u16>,
-    consts: HashMap<String, i32>,
+    consts: HashMap<String, ConstValue>,
     functions: HashMap<String, FunctionDecl>,
     locals: HashMap<String, Rux16Local>,
     call_stack: Vec<String>,
@@ -101,7 +100,7 @@ struct Rux16Local {
 
 impl Rux16ArtifactBackend {
     fn new(
-        consts: HashMap<String, i32>,
+        consts: HashMap<String, ConstValue>,
         functions: HashMap<String, FunctionDecl>,
         base_address: u32,
     ) -> Self {
@@ -621,14 +620,11 @@ impl Rux16ArtifactBackend {
 
     fn eval_mmio_address(&self, expr: &Expr) -> Result<u32, CompileError> {
         match expr {
-            Expr::Local(name) => match resolve_builtin_constant(name) {
-                Some(BuiltinConstant::Addr(value)) => Ok(value),
-                Some(BuiltinConstant::I32(_)) => {
-                    unsupported(format!("`{name}` is an i32 value, expected MMIO address"))
+            Expr::Local(name) => match self.consts.get(name).copied() {
+                Some(ConstValue::U32(value)) => Ok(value),
+                Some(ConstValue::I32(_)) | Some(ConstValue::U8(_)) => {
+                    unsupported(format!("`{name}` is not an address, expected MMIO address"))
                 }
-                None if self.consts.contains_key(name) => unsupported(format!(
-                    "const `{name}` is an i32 value, expected MMIO address"
-                )),
                 None => unsupported(format!("unknown Rux16 MMIO address `{name}`")),
             },
             Expr::Int(value) => u32::try_from(*value).map_err(|_| CompileError {
@@ -672,9 +668,7 @@ impl Rux16ArtifactBackend {
             }),
             Expr::Local(name) => {
                 if let Some(value) = self.consts.get(name).copied() {
-                    return u32::try_from(value).map_err(|_| CompileError {
-                        message: format!("const `{name}` value `{value}` does not fit `u32`"),
-                    });
+                    return value.as_u32(name);
                 }
                 unsupported(format!("unknown Rux16 RAM address `{name}`"))
             }
@@ -707,15 +701,9 @@ impl Rux16ArtifactBackend {
             }),
             Expr::Local(name) => {
                 if let Some(value) = self.consts.get(name).copied() {
-                    return Ok(value);
+                    return value.as_i32(name);
                 }
-                match resolve_builtin_constant(name) {
-                    Some(BuiltinConstant::I32(value)) => Ok(value),
-                    Some(BuiltinConstant::Addr(_)) => {
-                        unsupported(format!("`{name}` is an address, expected i32 value"))
-                    }
-                    None => unsupported(format!("unknown Rux16 i32 value `{name}`")),
-                }
+                unsupported(format!("unknown Rux16 i32 value `{name}`"))
             }
             Expr::IntU32(value) => Err(CompileError {
                 message: format!("u32 literal `{value}` cannot be stored as i32 without a cast"),
@@ -747,23 +735,9 @@ impl Rux16ArtifactBackend {
             }),
             Expr::Local(name) => {
                 if let Some(value) = self.consts.get(name).copied() {
-                    return u8::try_from(value).map_err(|_| CompileError {
-                        message: format!("const `{name}` value `{value}` does not fit `u8`"),
-                    });
+                    return value.as_u8(name);
                 }
-                match resolve_builtin_constant(name) {
-                    Some(BuiltinConstant::I32(value)) => {
-                        u8::try_from(value).map_err(|_| CompileError {
-                            message: format!(
-                                "ABI constant `{name}` value `{value}` does not fit `u8`"
-                            ),
-                        })
-                    }
-                    Some(BuiltinConstant::Addr(_)) => {
-                        unsupported(format!("`{name}` is an address, expected u8 value"))
-                    }
-                    None => unsupported(format!("unknown Rux16 u8 value `{name}`")),
-                }
+                unsupported(format!("unknown Rux16 u8 value `{name}`"))
             }
             Expr::IntU32(value) => Err(CompileError {
                 message: format!("u32 literal `{value}` cannot be stored as u8 without a cast"),
@@ -817,88 +791,53 @@ fn collect_supported_functions(
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum BuiltinConstant {
-    Addr(u32),
+enum ConstValue {
     I32(i32),
+    U32(u32),
+    U8(u8),
 }
 
-fn resolve_builtin_constant(name: &str) -> Option<BuiltinConstant> {
-    match name {
-        "CONTROL_BASE" => Some(BuiltinConstant::Addr(computer_abi::CONTROL_BASE)),
-        "CONTROL_STATUS" => Some(BuiltinConstant::Addr(computer_abi::CONTROL_STATUS)),
-        "CONTROL_PANIC_CODE" => Some(BuiltinConstant::Addr(computer_abi::CONTROL_PANIC_CODE)),
-        "CONTROL_EXIT_CODE" => Some(BuiltinConstant::Addr(computer_abi::CONTROL_EXIT_CODE)),
-        "DEBUG_BASE" => Some(BuiltinConstant::Addr(computer_abi::DEBUG_BASE)),
-        "DEBUG_WRITE" => Some(BuiltinConstant::Addr(computer_abi::DEBUG_WRITE)),
-        "DISPLAY0_BASE" => Some(BuiltinConstant::Addr(computer_abi::DISPLAY0_BASE)),
-        "DISPLAY0_COLUMNS" => Some(BuiltinConstant::Addr(computer_abi::DISPLAY0_COLUMNS)),
-        "DISPLAY0_ROWS" => Some(BuiltinConstant::Addr(computer_abi::DISPLAY0_ROWS)),
-        "DISPLAY0_CURSOR_X" => Some(BuiltinConstant::Addr(computer_abi::DISPLAY0_CURSOR_X)),
-        "DISPLAY0_CURSOR_Y" => Some(BuiltinConstant::Addr(computer_abi::DISPLAY0_CURSOR_Y)),
-        "DISPLAY0_COMMAND" => Some(BuiltinConstant::Addr(computer_abi::DISPLAY0_COMMAND)),
-        "DISPLAY0_DATA" => Some(BuiltinConstant::Addr(computer_abi::DISPLAY0_DATA)),
-        "DISPLAY0_SEQUENCE_LOW" => Some(BuiltinConstant::Addr(computer_abi::DISPLAY0_SEQUENCE_LOW)),
-        "DISPLAY0_SEQUENCE_HIGH" => {
-            Some(BuiltinConstant::Addr(computer_abi::DISPLAY0_SEQUENCE_HIGH))
+impl ConstValue {
+    fn as_i32(self, name: &str) -> Result<i32, CompileError> {
+        match self {
+            ConstValue::I32(value) => Ok(value),
+            ConstValue::U8(value) => Ok(i32::from(value)),
+            ConstValue::U32(_) => {
+                unsupported(format!("`{name}` is an address, expected i32 value"))
+            }
         }
-        "DISPLAY0_COMMAND_CLEAR" => {
-            Some(BuiltinConstant::I32(computer_abi::DISPLAY0_COMMAND_CLEAR))
+    }
+
+    fn as_u32(self, name: &str) -> Result<u32, CompileError> {
+        match self {
+            ConstValue::U32(value) => Ok(value),
+            ConstValue::U8(value) => Ok(u32::from(value)),
+            ConstValue::I32(value) => u32::try_from(value).map_err(|_| CompileError {
+                message: format!("const `{name}` value `{value}` does not fit `u32`"),
+            }),
         }
-        "DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR" => Some(BuiltinConstant::I32(
-            computer_abi::DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR,
-        )),
-        "DISPLAY0_COMMAND_PUT_BYTE_AT_XY" => Some(BuiltinConstant::I32(
-            computer_abi::DISPLAY0_COMMAND_PUT_BYTE_AT_XY,
-        )),
-        "DISPLAY0_COMMAND_NEWLINE" => {
-            Some(BuiltinConstant::I32(computer_abi::DISPLAY0_COMMAND_NEWLINE))
+    }
+
+    fn as_u8(self, name: &str) -> Result<u8, CompileError> {
+        match self {
+            ConstValue::U8(value) => Ok(value),
+            ConstValue::I32(value) => u8::try_from(value).map_err(|_| CompileError {
+                message: format!("const `{name}` value `{value}` does not fit `u8`"),
+            }),
+            ConstValue::U32(_) => unsupported(format!("`{name}` is an address, expected u8 value")),
         }
-        "SERIAL_INPUT_BASE" => Some(BuiltinConstant::Addr(computer_abi::SERIAL_INPUT_BASE)),
-        "SERIAL_INPUT_READY" => Some(BuiltinConstant::Addr(computer_abi::SERIAL_INPUT_READY)),
-        "SERIAL_INPUT_READ" => Some(BuiltinConstant::Addr(computer_abi::SERIAL_INPUT_READ)),
-        "STORAGE0_BASE" => Some(BuiltinConstant::Addr(computer_abi::STORAGE0_BASE)),
-        "STORAGE0_STATUS" => Some(BuiltinConstant::Addr(computer_abi::STORAGE0_STATUS)),
-        "STORAGE0_ERROR" => Some(BuiltinConstant::Addr(computer_abi::STORAGE0_ERROR)),
-        "STORAGE0_COMMAND" => Some(BuiltinConstant::Addr(computer_abi::STORAGE0_COMMAND)),
-        "STORAGE0_BLOCK_SIZE" => Some(BuiltinConstant::Addr(computer_abi::STORAGE0_BLOCK_SIZE)),
-        "STORAGE0_LBA_LOW" => Some(BuiltinConstant::Addr(computer_abi::STORAGE0_LBA_LOW)),
-        "STORAGE0_LBA_HIGH" => Some(BuiltinConstant::Addr(computer_abi::STORAGE0_LBA_HIGH)),
-        "STORAGE0_BLOCK_COUNT" => Some(BuiltinConstant::Addr(computer_abi::STORAGE0_BLOCK_COUNT)),
-        "STORAGE0_BUFFER_ADDR" => Some(BuiltinConstant::Addr(computer_abi::STORAGE0_BUFFER_ADDR)),
-        "STORAGE0_BYTES_DONE" => Some(BuiltinConstant::Addr(computer_abi::STORAGE0_BYTES_DONE)),
-        "STORAGE_STATUS_READY" => Some(BuiltinConstant::I32(computer_abi::STORAGE_STATUS_READY)),
-        "STORAGE_STATUS_BUSY" => Some(BuiltinConstant::I32(computer_abi::STORAGE_STATUS_BUSY)),
-        "STORAGE_STATUS_DONE" => Some(BuiltinConstant::I32(computer_abi::STORAGE_STATUS_DONE)),
-        "STORAGE_STATUS_ERROR" => Some(BuiltinConstant::I32(computer_abi::STORAGE_STATUS_ERROR)),
-        "STORAGE_COMMAND_READ_BLOCKS" => Some(BuiltinConstant::I32(
-            computer_abi::STORAGE_COMMAND_READ_BLOCKS,
-        )),
-        "STATUS_RESET" => Some(BuiltinConstant::I32(computer_abi::STATUS_RESET)),
-        "STATUS_BOOTING" => Some(BuiltinConstant::I32(computer_abi::STATUS_BOOTING)),
-        "STATUS_READY" => Some(BuiltinConstant::I32(computer_abi::STATUS_READY)),
-        "STATUS_HALTED" => Some(BuiltinConstant::I32(computer_abi::STATUS_HALTED)),
-        "STATUS_PANIC" => Some(BuiltinConstant::I32(computer_abi::STATUS_PANIC)),
-        _ => None,
     }
 }
 
-fn evaluate_consts(consts: &[ConstDecl]) -> Result<HashMap<String, i32>, CompileError> {
+fn evaluate_consts(consts: &[ConstDecl]) -> Result<HashMap<String, ConstValue>, CompileError> {
     let mut values = HashMap::new();
     for declaration in consts {
-        if resolve_builtin_constant(&declaration.name).is_some() {
-            return Err(CompileError {
-                message: format!(
-                    "const `{}` cannot shadow built-in ABI constant",
-                    declaration.name
-                ),
-            });
-        }
         if values.contains_key(&declaration.name) {
             return Err(CompileError {
                 message: format!("duplicate const `{}`", declaration.name),
             });
         }
-        let value = evaluate_const_expr(&declaration.value, &values)?;
+        let value = evaluate_const_expr(&declaration.value, declaration.ty, &values)?;
         values.insert(declaration.name.clone(), value);
     }
     Ok(values)
@@ -906,32 +845,21 @@ fn evaluate_consts(consts: &[ConstDecl]) -> Result<HashMap<String, i32>, Compile
 
 fn evaluate_const_expr(
     expr: &Expr,
-    source_consts: &HashMap<String, i32>,
-) -> Result<i32, CompileError> {
+    ty: TypeName,
+    source_consts: &HashMap<String, ConstValue>,
+) -> Result<ConstValue, CompileError> {
     match expr {
-        Expr::Int(value) => i32::try_from(*value).map_err(|_| CompileError {
-            message: format!("integer literal `{value}` does not fit `i32`"),
-        }),
-        Expr::IntU8(value) => i32::try_from(*value).map_err(|_| CompileError {
-            message: format!("u8 literal `{value}` does not fit `i32`"),
-        }),
+        Expr::Int(value) => const_from_i64(*value, ty),
+        Expr::IntU8(value) => const_from_u8_literal(*value, ty),
         Expr::Local(name) => {
             if let Some(value) = source_consts.get(name).copied() {
-                return Ok(value);
+                return const_from_const_value(value, ty, name);
             }
-            match resolve_builtin_constant(name) {
-                Some(BuiltinConstant::I32(value)) => Ok(value),
-                Some(BuiltinConstant::Addr(_)) => Err(CompileError {
-                    message: format!("const initializer `{name}` is an address, expected `i32`"),
-                }),
-                None => Err(CompileError {
-                    message: format!("unknown const initializer identifier `{name}`"),
-                }),
-            }
+            Err(CompileError {
+                message: format!("unknown const initializer identifier `{name}`"),
+            })
         }
-        Expr::IntU32(value) => Err(CompileError {
-            message: format!("u32 literal `{value}` cannot initialize an i32 const without a cast"),
-        }),
+        Expr::IntU32(value) => const_from_u32_literal(*value, ty),
         Expr::Binary { .. }
         | Expr::ByteString(_)
         | Expr::Bool(_)
@@ -948,6 +876,68 @@ fn evaluate_const_expr(
         | Expr::Compare { .. } => Err(CompileError {
             message: "const initializer is not compile-time evaluable".to_string(),
         }),
+    }
+}
+
+fn const_from_i64(value: i64, ty: TypeName) -> Result<ConstValue, CompileError> {
+    match ty {
+        TypeName::I32 => i32::try_from(value)
+            .map(ConstValue::I32)
+            .map_err(|_| CompileError {
+                message: format!("integer literal `{value}` does not fit `i32`"),
+            }),
+        TypeName::U32 => u32::try_from(value)
+            .map(ConstValue::U32)
+            .map_err(|_| CompileError {
+                message: format!("integer literal `{value}` does not fit `u32`"),
+            }),
+        TypeName::U8 => u8::try_from(value)
+            .map(ConstValue::U8)
+            .map_err(|_| CompileError {
+                message: format!("integer literal `{value}` does not fit `u8`"),
+            }),
+        _ => unreachable!("const parser rejects non-numeric const types"),
+    }
+}
+
+fn const_from_u32_literal(value: i64, ty: TypeName) -> Result<ConstValue, CompileError> {
+    let value = u32::try_from(value).map_err(|_| CompileError {
+        message: format!("u32 literal `{value}` does not fit `u32`"),
+    })?;
+    match ty {
+        TypeName::U32 => Ok(ConstValue::U32(value)),
+        TypeName::I32 => Err(CompileError {
+            message: format!("u32 literal `{value}` cannot initialize an i32 const without a cast"),
+        }),
+        TypeName::U8 => Err(CompileError {
+            message: format!("u32 literal `{value}` cannot initialize a u8 const without a cast"),
+        }),
+        _ => unreachable!("const parser rejects non-numeric const types"),
+    }
+}
+
+fn const_from_u8_literal(value: i64, ty: TypeName) -> Result<ConstValue, CompileError> {
+    let value = u8::try_from(value).map_err(|_| CompileError {
+        message: format!("u8 literal `{value}` does not fit `u8`"),
+    })?;
+    match ty {
+        TypeName::I32 => Ok(ConstValue::I32(i32::from(value))),
+        TypeName::U32 => Ok(ConstValue::U32(u32::from(value))),
+        TypeName::U8 => Ok(ConstValue::U8(value)),
+        _ => unreachable!("const parser rejects non-numeric const types"),
+    }
+}
+
+fn const_from_const_value(
+    value: ConstValue,
+    ty: TypeName,
+    name: &str,
+) -> Result<ConstValue, CompileError> {
+    match ty {
+        TypeName::I32 => value.as_i32(name).map(ConstValue::I32),
+        TypeName::U32 => value.as_u32(name).map(ConstValue::U32),
+        TypeName::U8 => value.as_u8(name).map(ConstValue::U8),
+        _ => unreachable!("const parser rejects non-numeric const types"),
     }
 }
 

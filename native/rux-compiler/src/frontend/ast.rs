@@ -12,7 +12,9 @@ pub(crate) struct UseDecl {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ConstDecl {
+    pub(crate) visibility: Visibility,
     pub(crate) name: String,
+    pub(crate) ty: TypeName,
     pub(crate) value: Expr,
 }
 

@@ -8,3 +8,13 @@ pub(crate) fn module_source(module: &str) -> Option<&'static str> {
         _ => None,
     }
 }
+
+pub(crate) fn source_for_path(path: &[String]) -> Option<&'static str> {
+    match path {
+        [root, module] if root == "std" => module_source(module),
+        [root, abi, module] if root == "rux" && abi == "abi" && module == "computer" => {
+            Some(include_str!("../../stdlib/rux/abi/computer.rx"))
+        }
+        _ => None,
+    }
+}

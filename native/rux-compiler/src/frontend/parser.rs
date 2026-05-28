@@ -23,12 +23,21 @@ impl Parser {
         while self.peek() != &TokenKind::Eof {
             if self.consume(TokenKind::Use) {
                 uses.extend(self.parse_use_declaration()?);
-            } else if self.consume(TokenKind::Const) {
-                consts.push(self.parse_const_declaration()?);
-            } else if self.peek() == &TokenKind::Fn || self.peek() == &TokenKind::Pub {
-                functions.push(self.parse_function()?);
             } else {
-                return Err(self.error(format!("expected top-level item, found {:?}", self.peek())));
+                let visibility = if self.consume(TokenKind::Pub) {
+                    Visibility::Public
+                } else {
+                    Visibility::Private
+                };
+                if self.consume(TokenKind::Const) {
+                    consts.push(self.parse_const_declaration(visibility)?);
+                } else if self.consume(TokenKind::Fn) {
+                    functions.push(self.parse_function(visibility)?);
+                } else {
+                    return Err(
+                        self.error(format!("expected top-level item, found {:?}", self.peek()))
+                    );
+                }
             }
         }
         self.expect(TokenKind::Eof)?;
@@ -62,23 +71,28 @@ impl Parser {
         Ok(vec![UseDecl { path }])
     }
 
-    fn parse_const_declaration(&mut self) -> Result<ConstDecl, CompileError> {
+    fn parse_const_declaration(
+        &mut self,
+        visibility: Visibility,
+    ) -> Result<ConstDecl, CompileError> {
         let name = self.take_ident()?;
         self.expect(TokenKind::Colon)?;
-        self.expect(TokenKind::I32)?;
+        let ty = self.parse_type()?;
+        if !matches!(ty, TypeName::I32 | TypeName::U32 | TypeName::U8) {
+            return Err(self.error("const type must be i32, u32, or u8".to_string()));
+        }
         self.expect(TokenKind::Equal)?;
         let value = self.parse_expr()?;
         self.expect(TokenKind::Semicolon)?;
-        Ok(ConstDecl { name, value })
+        Ok(ConstDecl {
+            visibility,
+            name,
+            ty,
+            value,
+        })
     }
 
-    fn parse_function(&mut self) -> Result<FunctionDecl, CompileError> {
-        let visibility = if self.consume(TokenKind::Pub) {
-            Visibility::Public
-        } else {
-            Visibility::Private
-        };
-        self.expect(TokenKind::Fn)?;
+    fn parse_function(&mut self, visibility: Visibility) -> Result<FunctionDecl, CompileError> {
         let name = self.take_ident()?;
         self.expect(TokenKind::LeftParen)?;
         let mut parameters = Vec::new();
