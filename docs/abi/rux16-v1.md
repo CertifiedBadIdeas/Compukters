@@ -16,7 +16,14 @@ Rux16 has 16 architectural registers:
 r0..r15  u32 registers
 ```
 
-`r0` is a normal writable register. There is no zero register in v1.
+The compiler-owned helper call ABI currently assigns:
+
+```text
+r0      return value
+r1..r3  first three helper arguments
+```
+
+There is no zero register in v1.
 
 ## Stack Pointer
 
@@ -85,9 +92,11 @@ sp = sp + 4
 pc = return_pc
 ```
 
-The return address is the next instruction after `call`. Stack load/store
-faults are normal Rux16 CPU faults. The first ABI slice does not add stack
-bounds metadata or a fallback return path.
+The return address is the next instruction after `call`. Helper return values
+are passed in `r0`; the first three helper arguments are passed in `r1`, `r2`,
+and `r3`. Stack load/store faults are normal Rux16 CPU faults. The first ABI
+slice does not add stack bounds metadata, stack-passed arguments, or a fallback
+return path.
 
 ## Compiler-Generated Register Saves
 

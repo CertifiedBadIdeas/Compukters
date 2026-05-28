@@ -1,6 +1,8 @@
 pub(crate) const SECONDARY_SCRATCH_REGISTER: u8 = 13;
 pub(crate) const SCRATCH_REGISTER: u8 = 14;
 pub(crate) const STACK_POINTER_REGISTER: u8 = 15;
+pub(crate) const RETURN_REGISTER: u8 = 0;
+pub(crate) const ARGUMENT_REGISTERS: [u8; 3] = [1, 2, 3];
 
 pub(crate) fn encode_words(words: &[u16]) -> Vec<u8> {
     let mut bytes = Vec::with_capacity(words.len() * 2);

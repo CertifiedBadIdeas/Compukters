@@ -296,7 +296,7 @@ fn rux16_artifact_rejects_bare_abi_constants_without_import() {
     let error = compile_rux16_artifact(
         "fn main() {
             unsafe {
-                mmio<i32>(control::PANIC_CODE).store(status::READY);
+                mmio<i32>(control::PANIC_CODE).store(2);
             }
          }",
         Rux16ArtifactTarget::Bios,
@@ -796,7 +796,7 @@ fn rux16_artifact_preserves_live_locals_around_unit_helper_call_from_bios_flash(
 }
 
 #[test]
-fn rux16_artifact_inlines_helper_parameters_and_returns_from_bios_flash() {
+fn rux16_artifact_calls_helper_parameters_and_returns_from_bios_flash() {
     let artifact = compile_rux16_artifact(
         &with_computer_abi(
             "fn panic_addr() -> u32 {
@@ -830,7 +830,18 @@ fn rux16_artifact_inlines_helper_parameters_and_returns_from_bios_flash() {
         ),
         Rux16ArtifactTarget::Bios,
     )
-    .expect("helper parameters and returns compile to inlined Rux16");
+    .expect("helper parameters and returns compile to call/ret Rux16");
+    let disassembly =
+        rux16_disasm::disassemble_artifact(&artifact.bytes, Rux16ArtifactTarget::Bios)
+            .expect("BIOS artifact disassembles");
+    assert!(
+        disassembly.contains("call r"),
+        "helper parameters and returns must lower through the Rux16 call ABI:\n{disassembly}"
+    );
+    assert!(
+        disassembly.contains("ret"),
+        "called helper bodies must return through Rux16 ret:\n{disassembly}"
+    );
     let (mut machine, cpu_id) =
         ComputerMachine::from_rux16_bios_flash(&artifact.bytes, 64 * 1024, 128)
             .expect("machine boots Rux16 BIOS flash");
@@ -840,7 +851,7 @@ fn rux16_artifact_inlines_helper_parameters_and_returns_from_bios_flash() {
         Rux16Signal::Halt,
     );
     assert_eq!(machine.panic_code(), ComputerMachine::STATUS_READY);
-    assert_eq!(machine.debug_output_bytes(), b"O");
+    assert_eq!(machine.debug_output_bytes(), b"O", "{disassembly}");
     assert_eq!(machine.control_status(), ComputerMachine::STATUS_HALTED);
 }
 
