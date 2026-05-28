@@ -652,6 +652,47 @@ fn rux16_kernel_loader_source_finds_kernel_ruxe_entry() {
 }
 
 #[test]
+fn rux16_kernel_loader_source_reads_kernel_ruxe_inode_metadata() {
+    let source = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/boot/kernel_loader.rx"),
+    )
+    .expect("kernel loader source should exist");
+
+    assert!(
+        source.contains("fn probe_kernel_ruxe_inode_metadata("),
+        "kernel loader should expose a guest-side kernel.ruxe inode metadata probe"
+    );
+    assert!(
+        source.contains("kernel_ruxe_inode"),
+        "kernel.ruxe metadata probe should take the kernel.ruxe inode id"
+    );
+    assert!(
+        source.contains("read_storage0_blocks(inode_table_lba, 1, 0x3000)"),
+        "kernel.ruxe metadata probe should read the inode table block"
+    );
+    assert!(
+        source.contains("ptr<u8>(inode_addr).load()"),
+        "kernel.ruxe metadata probe should read the file inode state"
+    );
+    assert!(
+        source.contains("1u8"),
+        "kernel.ruxe metadata probe should require a file inode"
+    );
+    assert!(
+        source.contains("inode_addr + 8u32"),
+        "kernel.ruxe metadata probe should read the file size field"
+    );
+    assert!(
+        source.contains("inode_addr + 32u32"),
+        "kernel.ruxe metadata probe should read the first extent start block"
+    );
+    assert!(
+        source.contains("inode_addr + 36u32"),
+        "kernel.ruxe metadata probe should read the first extent block count"
+    );
+}
+
+#[test]
 fn rux_volume_put_boot_and_kernel_creates_storage0_that_bundled_bios_executes() {
     let volume_path = temp_file("boot-kernel-storage0.ruxvol");
     let boot_path = temp_file("kernel-loader.boot");
