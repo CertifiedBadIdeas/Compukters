@@ -111,6 +111,17 @@ The current compiler slice supports direct byte load/store for local
 arguments, returned from helpers, heap allocated, or exposed through the
 user-space ABI yet.
 
+Helpers may also compute a guest address for a local byte-array element:
+
+```text
+&mut array[index] => array_base + index
+```
+
+That address is a normal `u32` guest RAM address and can be consumed by
+`ptr<u8>(addr)` operations. This is intended for device-facing buffers, such as
+passing a helper-owned block buffer to storage MMIO code. The current slice does
+not add general pointer arithmetic or pointer-passed helper parameters.
+
 The current frame slice does not add stack-passed arguments, recursion, return
 slots, or a user-space ABI.
 

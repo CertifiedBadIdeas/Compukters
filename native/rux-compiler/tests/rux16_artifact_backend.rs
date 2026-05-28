@@ -1206,6 +1206,50 @@ fn rux16_artifact_uses_stack_array_helper_byte_buffer_from_frame_pointer() {
 }
 
 #[test]
+fn rux16_artifact_lowers_address_of_stack_array_element_to_guest_address() {
+    let artifact = compile_rux16_artifact(
+        &with_computer_abi(
+            "fn write_through_address() {
+            let mut buffer: [u8; 4] = b\"\\0\\0\\0\\0\";
+            let mut addr: u32 = &mut buffer[0u32];
+            unsafe {
+                ptr<u8>(addr).store(65u8);
+                mmio<u8>(debug::WRITE).store(buffer[0u32]);
+            }
+         }
+
+         fn main() {
+            write_through_address();
+            write_through_address();
+         }",
+        ),
+        Rux16ArtifactTarget::Bios,
+    )
+    .expect("helper can take a guest address of a stack-backed byte array element");
+    let disassembly =
+        rux16_disasm::disassemble_artifact(&artifact.bytes, Rux16ArtifactTarget::Bios)
+            .expect("BIOS artifact disassembles");
+    assert!(
+        disassembly.contains(", r12,"),
+        "address-of stack array element must derive from r12 frame pointer:\n{disassembly}"
+    );
+    assert!(
+        disassembly.contains("store8 [r"),
+        "pointer store must write through the computed guest address:\n{disassembly}"
+    );
+    let (mut machine, cpu_id) =
+        ComputerMachine::from_rux16_bios_flash(&artifact.bytes, 64 * 1024, 1024)
+            .expect("machine boots Rux16 BIOS flash");
+
+    assert_eq!(
+        machine.run_boot_rux16_until_signal(cpu_id).unwrap(),
+        Rux16Signal::Halt,
+    );
+    assert_eq!(machine.debug_output_bytes(), b"AA", "{disassembly}");
+    assert_eq!(machine.control_status(), ComputerMachine::STATUS_HALTED);
+}
+
+#[test]
 fn rux16_artifact_rejects_recursive_helper_inline() {
     let error = compile_rux16_artifact(
         "fn again() {
