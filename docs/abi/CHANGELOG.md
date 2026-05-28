@@ -13,6 +13,8 @@
   artifacts are rejected for boot media.
 - Added `rux volume put-kernel`, which writes a fixed `RUXK` kernel record and
   kernel payload for the bootloader-to-kernel chain.
+- Added `rux volume init`, which creates a partitioned `RUXPT` volume with
+  `BOOT` and `ROOT` partitions for the next filesystem-backed boot chain.
 - Added `rux-storage-volume-v1.md` for the current `RUXVOL`, `RUXB`, and `RUXK`
   storage0 media layout.
 - Retired the previous host-decoded executable ABI package from active

@@ -1,3 +1,4 @@
+use crate::partition;
 use crate::ruxe;
 
 pub const RUXVOL_MAGIC: &[u8; 6] = b"RUXVOL";
@@ -22,6 +23,24 @@ pub fn create_empty_volume(size: usize) -> Result<Vec<u8>, String> {
     bytes[..6].copy_from_slice(RUXVOL_MAGIC);
     bytes[6..8].copy_from_slice(&RUXVOL_VERSION.to_le_bytes());
     write_u64(&mut bytes, 8, volume_size);
+    Ok(bytes)
+}
+
+pub fn create_initialized_volume(size: usize) -> Result<Vec<u8>, String> {
+    if size % partition::RUXPT_BLOCK_SIZE != 0 {
+        return Err(format!(
+            "ruxvol init size must be a multiple of {} bytes",
+            partition::RUXPT_BLOCK_SIZE
+        ));
+    }
+    let total_blocks = u32::try_from(size / partition::RUXPT_BLOCK_SIZE)
+        .map_err(|_| "ruxvol init block count does not fit u32".to_string())?;
+    let table = partition::default_boot_root_table(total_blocks)?;
+    let table_bytes = partition::encode_partition_table(&table)?;
+    let mut bytes = create_empty_volume(size)?;
+    let table_start = RUXVOL_HEADER_SIZE;
+    let table_end = table_start + table_bytes.len();
+    bytes[table_start..table_end].copy_from_slice(&table_bytes);
     Ok(bytes)
 }
 

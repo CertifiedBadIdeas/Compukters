@@ -139,6 +139,15 @@ fn run_volume(args: &[String]) -> Result<(), String> {
             fs::write(&args[1], bytes)
                 .map_err(|error| format!("failed to write {}: {error}", args[1]))
         }
+        "init" => {
+            if args.len() != 4 || args[2] != "--size" {
+                return volume_usage_error();
+            }
+            let size = parse_size(&args[3])?;
+            let bytes = volume::create_initialized_volume(size)?;
+            fs::write(&args[1], bytes)
+                .map_err(|error| format!("failed to write {}: {error}", args[1]))
+        }
         "put-boot" => {
             if args.len() != 3 {
                 return volume_usage_error();
@@ -178,7 +187,7 @@ fn parse_size(value: &str) -> Result<usize, String> {
 }
 
 fn usage_error() -> Result<(), String> {
-    Err("usage: rux compile [--target <bios|boot|kernel|program>] <input.rx> -o <output>\n       rux disasm --target <bios|boot|kernel|program> <input>\n       rux volume <create|put-boot> ...".to_string())
+    Err("usage: rux compile [--target <bios|boot|kernel|program>] <input.rx> -o <output>\n       rux disasm --target <bios|boot|kernel|program> <input>\n       rux volume <create|init|put-boot|put-kernel> ...".to_string())
 }
 
 fn compile_usage_error() -> Result<CompileConfig, String> {
@@ -199,7 +208,7 @@ fn disasm_usage_message() -> String {
 
 fn volume_usage_error() -> Result<(), String> {
     Err(
-        "usage: rux volume create <volume.ruxvol> --size <bytes>\n       rux volume put-boot <volume.ruxvol> <boot.bin>"
+        "usage: rux volume create <volume.ruxvol> --size <bytes>\n       rux volume init <volume.ruxvol> --size <bytes>\n       rux volume put-boot <volume.ruxvol> <boot.bin>"
             .to_string()
             + "\n       rux volume put-kernel <volume.ruxvol> <kernel.ruxe>",
     )

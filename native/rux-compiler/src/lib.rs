@@ -1,5 +1,6 @@
 pub mod artifact;
 mod frontend;
+pub mod partition;
 mod runtime;
 mod rux16_asm;
 pub mod rux16_disasm;
