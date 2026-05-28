@@ -52,7 +52,7 @@ BOOT
 ROOT
 ```
 
-`BOOT` and `ROOT` contain the same minimal filesystem format. The first implementation may support only the read/write operations needed by tooling, plus the read-only subset needed by BIOS and bootloader.
+`BOOT` and `ROOT` contain the same RuxFS v1 filesystem format. BIOS and bootloader may implement only the read-only subset they need, but that subset reads normal RuxFS structures rather than a separate boot-only micro filesystem.
 
 ## Explicit Non-Goals
 
@@ -65,7 +65,7 @@ ROOT
 ## Implementation Slices
 
 1. Define and test `RUXPT` encode/decode/validation.
-2. Define the minimal `RUXFS` structures needed for file lookup by absolute path and extent-backed file reads.
+2. Define RuxFS v1 as the shared filesystem used by both `BOOT` and `ROOT`, with a firmware-friendly read-only subset for absolute path lookup and extent-backed file reads.
 3. Add `rux volume init` to create a deterministic `BOOT` + `ROOT` layout.
 4. Change volume tooling so bootloader/kernel artifacts are written as files, not fixed LBA records.
 5. In a follow-up, migrate BIOS to load `/boot/loader.ruxe` from `BOOT`.
