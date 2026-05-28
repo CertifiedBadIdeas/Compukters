@@ -210,6 +210,46 @@ fn find_kernel_ruxe_inode(root_start_lba: i32, boot_directory_inode: i32) -> i32
     }
 }
 
+fn probe_kernel_ruxe_inode_metadata(root_start_lba: i32, kernel_ruxe_inode: i32) -> i32 {
+    unsafe {
+        if kernel_ruxe_inode != 0 {
+            if probe_root_ruxfs_superblock(root_start_lba) == 1 {
+                let mut inode_table_start_block: i32 = ptr<i32>(0x3018u32).load();
+                let mut inode_table_lba: i32 = root_start_lba + inode_table_start_block;
+                let mut inode_status: i32 = read_storage0_blocks(inode_table_lba, 1, 0x3000);
+                if inode_status == storage0::STATUS_DONE {
+                    let mut inode_index: i32 = 0;
+                    let mut inode_addr: u32 = 0x3000u32;
+                    while inode_index != kernel_ruxe_inode {
+                        inode_addr = inode_addr + 64u32;
+                        inode_index = inode_index + 1;
+                    }
+
+                    let mut file_state: u8 = ptr<u8>(inode_addr).load();
+                    if file_state == 1u8 {
+                        let mut size_addr: u32 = inode_addr + 8u32;
+                        let mut file_size_low: i32 = ptr<i32>(size_addr).load();
+                        let mut extent_count_addr: u32 = inode_addr + 16u32;
+                        let mut extent_count: u8 = ptr<u8>(extent_count_addr).load();
+                        if extent_count != 0u8 {
+                            let mut extent_start_addr: u32 = inode_addr + 32u32;
+                            let mut kernel_start_block: i32 = ptr<i32>(extent_start_addr).load();
+                            let mut extent_block_count_addr: u32 = inode_addr + 36u32;
+                            let mut kernel_block_count: i32 = ptr<i32>(extent_block_count_addr).load();
+                            if file_size_low != 0 {
+                                if kernel_block_count != 0 {
+                                    return 1;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return 0;
+    }
+}
+
 fn load_kernel() {
     unsafe {
         let mut root_start_lba: i32 = find_root_partition_start_lba();
@@ -219,6 +259,10 @@ fn load_kernel() {
         let mut kernel_ruxe_inode: i32 = find_kernel_ruxe_inode(
             root_start_lba,
             boot_directory_inode
+        );
+        let mut kernel_ruxe_metadata_present: i32 = probe_kernel_ruxe_inode_metadata(
+            root_start_lba,
+            kernel_ruxe_inode
         );
         let mut status: i32 = read_storage0_blocks(16, 1, 0x3000);
         if status == storage0::STATUS_DONE {
