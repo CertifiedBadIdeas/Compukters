@@ -849,16 +849,15 @@ impl Rux16ArtifactBackend {
         };
         match op {
             CompareOp::Eq => {
-                let lhs = self.compile_i32_expr_to_scratch(lhs, unsafe_context)?;
-                let rhs = self.compile_i32_expr_to_register_or_use(14, rhs, unsafe_context)?;
-                self.words.extend_from_slice(&rux16_asm::eq(dst, lhs, rhs));
+                self.compile_equality_condition_into(dst, lhs, rhs, unsafe_context)?;
                 Ok(())
             }
             CompareOp::Ne => {
-                let lhs = self.compile_i32_expr_to_scratch(lhs, unsafe_context)?;
-                let rhs = self.compile_i32_expr_to_register_or_use(14, rhs, unsafe_context)?;
-                self.words.extend_from_slice(&rux16_asm::eq(dst, lhs, rhs));
-                self.words.extend_from_slice(&rux16_asm::eq(dst, dst, 0));
+                self.compile_equality_condition_into(dst, lhs, rhs, unsafe_context)?;
+                self.words
+                    .extend_from_slice(&rux16_asm::const32(rux16_asm::SCRATCH_REGISTER, 0));
+                self.words
+                    .extend_from_slice(&rux16_asm::eq(dst, dst, rux16_asm::SCRATCH_REGISTER));
                 Ok(())
             }
             CompareOp::Lt => {
@@ -870,6 +869,123 @@ impl Rux16ArtifactBackend {
             CompareOp::Gt | CompareOp::Le | CompareOp::Ge => unsupported(
                 "only `==`, `!=`, and unsigned `<` comparisons can be lowered as Rux16 conditions",
             ),
+        }
+    }
+
+    fn compile_equality_condition_into(
+        &mut self,
+        dst: u8,
+        lhs: &Expr,
+        rhs: &Expr,
+        unsafe_context: bool,
+    ) -> Result<(), CompileError> {
+        let lhs_ty = self.condition_operand_type(lhs)?;
+        let rhs_ty = self.condition_operand_type(rhs)?;
+        if lhs_ty != rhs_ty {
+            return unsupported(format!(
+                "mixed {} and {} equality comparisons cannot be lowered as Rux16 conditions",
+                type_name(lhs_ty),
+                type_name(rhs_ty)
+            ));
+        }
+        match lhs_ty {
+            TypeName::I32 => {
+                let lhs = self.compile_i32_expr_to_scratch(lhs, unsafe_context)?;
+                let rhs = self.compile_i32_expr_to_register_or_use(
+                    rux16_asm::SCRATCH_REGISTER,
+                    rhs,
+                    unsafe_context,
+                )?;
+                self.words.extend_from_slice(&rux16_asm::eq(dst, lhs, rhs));
+                Ok(())
+            }
+            TypeName::U8 => {
+                let lhs = self.compile_u8_expr_to_scratch(lhs, unsafe_context)?;
+                self.compile_u8_expr_into(rux16_asm::SCRATCH_REGISTER, rhs, unsafe_context)?;
+                self.words
+                    .extend_from_slice(&rux16_asm::eq(dst, lhs, rux16_asm::SCRATCH_REGISTER));
+                Ok(())
+            }
+            TypeName::U32
+            | TypeName::Bool
+            | TypeName::PtrI32
+            | TypeName::PtrU32
+            | TypeName::PtrU8
+            | TypeName::RefMutI32
+            | TypeName::RefMutU32
+            | TypeName::RefMutU8
+            | TypeName::ArrayU8(_) => unsupported(
+                "only i32 and u8 equality comparisons can be lowered as Rux16 conditions",
+            ),
+        }
+    }
+
+    fn condition_operand_type(&self, expr: &Expr) -> Result<TypeName, CompileError> {
+        match expr {
+            Expr::Int(_) => Ok(TypeName::I32),
+            Expr::IntU8(_) => Ok(TypeName::U8),
+            Expr::IntU32(_) => Ok(TypeName::U32),
+            Expr::Local(name) => {
+                if let Some(local) = self.locals.get(name) {
+                    return Ok(local.ty);
+                }
+                self.consts
+                    .get(name)
+                    .map(|value| value.type_name())
+                    .ok_or_else(|| CompileError {
+                        message: format!(
+                            "Rux16 backend does not support this program yet: unknown Rux16 condition value `{name}`"
+                        ),
+                    })
+            }
+            Expr::Path(path) => {
+                let name = path_name(path);
+                self.consts
+                    .get(&name)
+                    .map(|value| value.type_name())
+                    .ok_or_else(|| CompileError {
+                        message: format!(
+                            "Rux16 backend does not support this program yet: unknown Rux16 condition value `{name}`"
+                        ),
+                    })
+            }
+            Expr::Call { name, .. } => {
+                let function = self.functions.get(name).ok_or_else(|| CompileError {
+                    message: format!(
+                        "Rux16 backend does not support this program yet: unknown helper function `{name}`"
+                    ),
+                })?;
+                return_type_to_type_name(function.return_type).ok_or_else(|| CompileError {
+                    message: format!(
+                        "Rux16 backend does not support this program yet: helper function `{name}` does not return a condition value"
+                    ),
+                })
+            }
+            Expr::MethodCall {
+                receiver,
+                method,
+                args,
+            } if method == "load" && args.is_empty() => match receiver.as_ref() {
+                Expr::Mmio { ty, .. } | Expr::Ptr { ty, .. } => Ok(*ty),
+                _ => unsupported(
+                    "only `mmio<T>(...).load()` and `ptr<T>(...).load()` condition operands can be lowered",
+                ),
+            },
+            Expr::Binary { .. }
+            | Expr::ByteString(_)
+            | Expr::Bool(_)
+            | Expr::Mmio { .. }
+            | Expr::Ptr { .. }
+            | Expr::MethodCall { .. }
+            | Expr::Index { .. }
+            | Expr::AddressOfMut(_)
+            | Expr::Deref(_)
+            | Expr::Cast { .. }
+            | Expr::Unary { .. }
+            | Expr::Logical { .. }
+            | Expr::Compare { .. } => {
+                unsupported("only local, literal, const, and helper-call equality operands can be lowered as Rux16 conditions")
+            }
         }
     }
 
@@ -1664,6 +1780,14 @@ enum ConstValue {
 }
 
 impl ConstValue {
+    fn type_name(self) -> TypeName {
+        match self {
+            ConstValue::I32(_) => TypeName::I32,
+            ConstValue::U32(_) => TypeName::U32,
+            ConstValue::U8(_) => TypeName::U8,
+        }
+    }
+
     fn as_i32(self, name: &str) -> Result<i32, CompileError> {
         match self {
             ConstValue::I32(value) => Ok(value),

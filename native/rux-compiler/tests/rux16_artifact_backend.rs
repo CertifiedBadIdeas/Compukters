@@ -878,6 +878,43 @@ fn rux16_artifact_lowers_early_returning_helper_control_flow_from_bios_flash() {
 }
 
 #[test]
+fn rux16_artifact_lowers_u8_equality_helper_condition_from_bios_flash() {
+    let artifact = compile_rux16_artifact(
+        &with_computer_abi(
+            "fn choose_byte(flag: u8) -> u8 {
+            if flag == 1u8 {
+                return 79u8;
+            }
+            if flag != 0u8 {
+                return 63u8;
+            }
+            return 33u8;
+         }
+
+         fn main() {
+            unsafe {
+                mmio<u8>(debug::WRITE).store(choose_byte(1u8));
+                mmio<u8>(debug::WRITE).store(choose_byte(2u8));
+                mmio<u8>(debug::WRITE).store(choose_byte(0u8));
+            }
+         }",
+        ),
+        Rux16ArtifactTarget::Bios,
+    )
+    .expect("u8 equality helper condition compiles to Rux16");
+    let (mut machine, cpu_id) =
+        ComputerMachine::from_rux16_bios_flash(&artifact.bytes, 64 * 1024, 1024)
+            .expect("machine boots Rux16 BIOS flash");
+
+    assert_eq!(
+        machine.run_boot_rux16_until_signal(cpu_id).unwrap(),
+        Rux16Signal::Halt,
+    );
+    assert_eq!(machine.debug_output_bytes(), b"O?!");
+    assert_eq!(machine.control_status(), ComputerMachine::STATUS_HALTED);
+}
+
+#[test]
 fn rux16_artifact_calls_helper_parameters_and_returns_from_bios_flash() {
     let artifact = compile_rux16_artifact(
         &with_computer_abi(
