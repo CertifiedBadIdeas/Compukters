@@ -109,6 +109,7 @@ struct Rux16ArtifactBackend {
     base_address: u32,
     initial_stack_top: u32,
     stack_initialized: bool,
+    next_frame_slot_offset: u32,
     pending_functions: Vec<String>,
     function_addresses: HashMap<String, u32>,
     pending_call_patches: Vec<(usize, String)>,
@@ -117,7 +118,13 @@ struct Rux16ArtifactBackend {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Rux16Local {
     ty: TypeName,
-    register: u8,
+    storage: Rux16LocalStorage,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Rux16LocalStorage {
+    Register(u8),
+    FrameSlot { offset: u32 },
 }
 
 impl Rux16ArtifactBackend {
@@ -138,6 +145,7 @@ impl Rux16ArtifactBackend {
             base_address,
             initial_stack_top,
             stack_initialized: false,
+            next_frame_slot_offset: 0,
             pending_functions: Vec::new(),
             function_addresses: HashMap::new(),
             pending_call_patches: Vec::new(),
@@ -282,7 +290,10 @@ impl Rux16ArtifactBackend {
         let mut registers = self
             .locals
             .values()
-            .map(|local| local.register)
+            .filter_map(|local| match local.storage {
+                Rux16LocalStorage::Register(register) => Some(register),
+                Rux16LocalStorage::FrameSlot { .. } => None,
+            })
             .collect::<Vec<_>>();
         registers.sort_unstable();
         registers.dedup();
@@ -346,6 +357,39 @@ impl Rux16ArtifactBackend {
         self.emit_pop_register(rux16_asm::FRAME_POINTER_REGISTER);
     }
 
+    fn emit_frame_slot_address(&mut self, dst: u8, offset: u32) {
+        self.words
+            .extend_from_slice(&rux16_asm::const32(dst, 0u32.wrapping_sub(offset)));
+        self.words
+            .push(rux16_asm::add(dst, rux16_asm::FRAME_POINTER_REGISTER, dst));
+    }
+
+    fn emit_load_frame_slot(&mut self, dst: u8, offset: u32) {
+        let address = scratch_register_excluding(dst);
+        self.emit_frame_slot_address(address, offset);
+        self.words.push(rux16_asm::load32(dst, address));
+    }
+
+    fn emit_store_frame_slot(&mut self, offset: u32, src: u8) {
+        let address = scratch_register_excluding(src);
+        self.emit_frame_slot_address(address, offset);
+        self.words.push(rux16_asm::store32(address, src));
+    }
+
+    fn emit_allocate_frame_slot(&mut self) -> u32 {
+        self.next_frame_slot_offset += 4;
+        self.words.extend_from_slice(&rux16_asm::const32(
+            rux16_asm::SCRATCH_REGISTER,
+            u32::MAX - 3,
+        ));
+        self.words.push(rux16_asm::add(
+            rux16_asm::STACK_POINTER_REGISTER,
+            rux16_asm::STACK_POINTER_REGISTER,
+            rux16_asm::SCRATCH_REGISTER,
+        ));
+        self.next_frame_slot_offset
+    }
+
     fn emit_pending_function_bodies(&mut self) -> Result<(), CompileError> {
         let mut index = 0;
         while index < self.pending_functions.len() {
@@ -373,9 +417,11 @@ impl Rux16ArtifactBackend {
             self.call_stack.push(name);
             let caller_locals = std::mem::take(&mut self.locals);
             let caller_next_register = self.next_register;
+            let caller_next_frame_slot_offset = self.next_frame_slot_offset;
             let caller_return_type = self.active_function_return_type;
             self.locals = self.call_abi_parameter_locals(&function)?;
             self.next_register = first_callee_local_register(function.parameters.len());
+            self.next_frame_slot_offset = 0;
             self.active_function_return_type = Some(function.return_type);
             self.emit_function_prologue();
             let result = self.compile_function_body(&function);
@@ -385,6 +431,7 @@ impl Rux16ArtifactBackend {
             }
             self.locals = caller_locals;
             self.next_register = caller_next_register;
+            self.next_frame_slot_offset = caller_next_frame_slot_offset;
             self.active_function_return_type = caller_return_type;
             self.call_stack.pop();
             result?;
@@ -446,7 +493,7 @@ impl Rux16ArtifactBackend {
                 parameter.name.clone(),
                 Rux16Local {
                     ty: parameter.ty,
-                    register,
+                    storage: Rux16LocalStorage::Register(register),
                 },
             );
         }
@@ -503,7 +550,7 @@ impl Rux16ArtifactBackend {
                 parameter.name.clone(),
                 Rux16Local {
                     ty: parameter.ty,
-                    register,
+                    storage: Rux16LocalStorage::Register(register),
                 },
             );
         }
@@ -655,7 +702,44 @@ impl Rux16ArtifactBackend {
                 "Rux16 backend does not support this program yet: local `{name}` requires an initializer"
             ),
         })?;
-        let register = self.alloc_register()?;
+        let storage = self.alloc_local_storage()?;
+        match ty {
+            TypeName::I32 => {
+                self.compile_local_initializer(storage, TypeName::I32, initializer, unsafe_context)?
+            }
+            TypeName::U32 => {
+                self.compile_local_initializer(storage, TypeName::U32, initializer, unsafe_context)?
+            }
+            TypeName::U8 => {
+                self.compile_local_initializer(storage, TypeName::U8, initializer, unsafe_context)?
+            }
+            TypeName::Bool
+            | TypeName::PtrI32
+            | TypeName::PtrU32
+            | TypeName::PtrU8
+            | TypeName::RefMutI32
+            | TypeName::RefMutU32
+            | TypeName::RefMutU8
+            | TypeName::ArrayU8(_) => {
+                return unsupported("only i32, u32, and u8 locals can be lowered to Rux16 yet");
+            }
+        }
+        self.locals
+            .insert(name.to_string(), Rux16Local { ty, storage });
+        Ok(())
+    }
+
+    fn compile_local_initializer(
+        &mut self,
+        storage: Rux16LocalStorage,
+        ty: TypeName,
+        initializer: &Expr,
+        unsafe_context: bool,
+    ) -> Result<(), CompileError> {
+        let register = match storage {
+            Rux16LocalStorage::Register(register) => register,
+            Rux16LocalStorage::FrameSlot { .. } => rux16_asm::SECONDARY_SCRATCH_REGISTER,
+        };
         match ty {
             TypeName::I32 => self.compile_i32_expr_into(register, initializer, unsafe_context)?,
             TypeName::U32 => self.compile_u32_expr_into(register, initializer, unsafe_context)?,
@@ -671,8 +755,9 @@ impl Rux16ArtifactBackend {
                 return unsupported("only i32, u32, and u8 locals can be lowered to Rux16 yet");
             }
         }
-        self.locals
-            .insert(name.to_string(), Rux16Local { ty, register });
+        if let Rux16LocalStorage::FrameSlot { offset } = storage {
+            self.emit_store_frame_slot(offset, register);
+        }
         Ok(())
     }
 
@@ -688,9 +773,15 @@ impl Rux16ArtifactBackend {
             ),
         })?;
         match local.ty {
-            TypeName::I32 => self.compile_i32_expr_into(local.register, value, unsafe_context),
-            TypeName::U32 => self.compile_u32_expr_into(local.register, value, unsafe_context),
-            TypeName::U8 => self.compile_u8_expr_into(local.register, value, unsafe_context),
+            TypeName::I32 => {
+                self.compile_local_initializer(local.storage, TypeName::I32, value, unsafe_context)
+            }
+            TypeName::U32 => {
+                self.compile_local_initializer(local.storage, TypeName::U32, value, unsafe_context)
+            }
+            TypeName::U8 => {
+                self.compile_local_initializer(local.storage, TypeName::U8, value, unsafe_context)
+            }
             TypeName::Bool
             | TypeName::PtrI32
             | TypeName::PtrU32
@@ -722,14 +813,32 @@ impl Rux16ArtifactBackend {
         match local.ty {
             TypeName::I32 => {
                 let rhs = self.compile_i32_expr_to_register_or_use(14, value, unsafe_context)?;
-                self.words
-                    .push(rux16_asm::add(local.register, local.register, rhs));
+                let lhs = match local.storage {
+                    Rux16LocalStorage::Register(register) => register,
+                    Rux16LocalStorage::FrameSlot { offset } => {
+                        self.emit_load_frame_slot(rux16_asm::SECONDARY_SCRATCH_REGISTER, offset);
+                        rux16_asm::SECONDARY_SCRATCH_REGISTER
+                    }
+                };
+                self.words.push(rux16_asm::add(lhs, lhs, rhs));
+                if let Rux16LocalStorage::FrameSlot { offset } = local.storage {
+                    self.emit_store_frame_slot(offset, lhs);
+                }
                 Ok(())
             }
             TypeName::U32 => {
                 let rhs = self.compile_u32_expr_to_register_or_use(14, value, unsafe_context)?;
-                self.words
-                    .push(rux16_asm::add(local.register, local.register, rhs));
+                let lhs = match local.storage {
+                    Rux16LocalStorage::Register(register) => register,
+                    Rux16LocalStorage::FrameSlot { offset } => {
+                        self.emit_load_frame_slot(rux16_asm::SECONDARY_SCRATCH_REGISTER, offset);
+                        rux16_asm::SECONDARY_SCRATCH_REGISTER
+                    }
+                };
+                self.words.push(rux16_asm::add(lhs, lhs, rhs));
+                if let Rux16LocalStorage::FrameSlot { offset } = local.storage {
+                    self.emit_store_frame_slot(offset, lhs);
+                }
                 Ok(())
             }
             TypeName::U8
@@ -1018,8 +1127,8 @@ impl Rux16ArtifactBackend {
         unsafe_context: bool,
     ) -> Result<u8, CompileError> {
         if let Expr::Local(name) = expr {
-            if let Some(local) = self.local(name, TypeName::U32)? {
-                return Ok(local.register);
+            if let Some(register) = self.local_register_or_load(name, TypeName::U32, dst)? {
+                return Ok(register);
             }
         }
         if matches!(expr, Expr::Binary { .. } | Expr::Call { .. }) {
@@ -1039,8 +1148,8 @@ impl Rux16ArtifactBackend {
         unsafe_context: bool,
     ) -> Result<u8, CompileError> {
         if let Expr::Local(name) = expr {
-            if let Some(local) = self.local(name, TypeName::U32)? {
-                return Ok(local.register);
+            if let Some(register) = self.local_register_or_load(name, TypeName::U32, dst)? {
+                return Ok(register);
             }
         }
         if matches!(expr, Expr::Binary { .. } | Expr::Call { .. }) {
@@ -1059,8 +1168,8 @@ impl Rux16ArtifactBackend {
         unsafe_context: bool,
     ) -> Result<u8, CompileError> {
         if let Expr::Local(name) = expr {
-            if let Some(local) = self.local(name, TypeName::I32)? {
-                return Ok(local.register);
+            if let Some(register) = self.local_register_or_load(name, TypeName::I32, 2)? {
+                return Ok(register);
             }
         }
         self.compile_i32_expr_into(2, expr, unsafe_context)?;
@@ -1074,8 +1183,8 @@ impl Rux16ArtifactBackend {
         unsafe_context: bool,
     ) -> Result<u8, CompileError> {
         if let Expr::Local(name) = expr {
-            if let Some(local) = self.local(name, TypeName::I32)? {
-                return Ok(local.register);
+            if let Some(register) = self.local_register_or_load(name, TypeName::I32, dst)? {
+                return Ok(register);
             }
         }
         self.compile_i32_expr_into(dst, expr, unsafe_context)?;
@@ -1089,8 +1198,8 @@ impl Rux16ArtifactBackend {
         unsafe_context: bool,
     ) -> Result<u8, CompileError> {
         if let Expr::Local(name) = expr {
-            if let Some(local) = self.local(name, TypeName::U32)? {
-                return Ok(local.register);
+            if let Some(register) = self.local_register_or_load(name, TypeName::U32, dst)? {
+                return Ok(register);
             }
         }
         self.compile_u32_expr_into(dst, expr, unsafe_context)?;
@@ -1103,8 +1212,8 @@ impl Rux16ArtifactBackend {
         unsafe_context: bool,
     ) -> Result<u8, CompileError> {
         if let Expr::Local(name) = expr {
-            if let Some(local) = self.local(name, TypeName::U8)? {
-                return Ok(local.register);
+            if let Some(register) = self.local_register_or_load(name, TypeName::U8, 2)? {
+                return Ok(register);
             }
         }
         self.compile_u8_expr_into(2, expr, unsafe_context)?;
@@ -1120,7 +1229,7 @@ impl Rux16ArtifactBackend {
         match expr {
             Expr::Local(name) => {
                 if let Some(local) = self.local(name, TypeName::I32)? {
-                    self.emit_register_copy(dst, local.register);
+                    self.compile_local_into(dst, local);
                     return Ok(());
                 }
                 let value = self.eval_i32_value(expr)?;
@@ -1214,7 +1323,7 @@ impl Rux16ArtifactBackend {
         match expr {
             Expr::Local(name) => {
                 if let Some(local) = self.local(name, TypeName::U32)? {
-                    self.emit_register_copy(dst, local.register);
+                    self.compile_local_into(dst, local);
                     return Ok(());
                 }
                 let value = self.eval_u32_value(expr)?;
@@ -1348,7 +1457,7 @@ impl Rux16ArtifactBackend {
         match expr {
             Expr::Local(name) => {
                 if let Some(local) = self.local(name, TypeName::U8)? {
-                    self.emit_register_copy(dst, local.register);
+                    self.compile_local_into(dst, local);
                     return Ok(());
                 }
                 let value = self.eval_u8_value(expr)?;
@@ -1435,6 +1544,45 @@ impl Rux16ArtifactBackend {
             ));
         }
         Ok(Some(local))
+    }
+
+    fn compile_local_into(&mut self, dst: u8, local: Rux16Local) {
+        match local.storage {
+            Rux16LocalStorage::Register(register) => self.emit_register_copy(dst, register),
+            Rux16LocalStorage::FrameSlot { offset } => self.emit_load_frame_slot(dst, offset),
+        }
+    }
+
+    fn local_register_or_load(
+        &mut self,
+        name: &str,
+        expected: TypeName,
+        dst: u8,
+    ) -> Result<Option<u8>, CompileError> {
+        let Some(local) = self.local(name, expected)? else {
+            return Ok(None);
+        };
+        match local.storage {
+            Rux16LocalStorage::Register(register) => Ok(Some(register)),
+            Rux16LocalStorage::FrameSlot { offset } => {
+                self.emit_load_frame_slot(dst, offset);
+                Ok(Some(dst))
+            }
+        }
+    }
+
+    fn alloc_local_storage(&mut self) -> Result<Rux16LocalStorage, CompileError> {
+        if self.next_register < rux16_asm::FRAME_POINTER_REGISTER {
+            let register = self.next_register;
+            self.next_register += 1;
+            return Ok(Rux16LocalStorage::Register(register));
+        }
+        if self.active_function_return_type.is_some() {
+            return Ok(Rux16LocalStorage::FrameSlot {
+                offset: self.emit_allocate_frame_slot(),
+            });
+        }
+        unsupported("Rux16 backend ran out of registers")
     }
 
     fn alloc_register(&mut self) -> Result<u8, CompileError> {
