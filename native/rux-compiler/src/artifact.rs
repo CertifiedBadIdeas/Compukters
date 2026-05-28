@@ -362,7 +362,9 @@ impl Rux16ArtifactBackend {
             self.next_register = first_callee_local_register(function.parameters.len());
             self.active_function_return_type = Some(function.return_type);
             let result = self.compile_function_body(&function);
-            self.words.push(rux16_asm::ret());
+            if matches!(result, Ok(false)) {
+                self.words.push(rux16_asm::ret());
+            }
             self.locals = caller_locals;
             self.next_register = caller_next_register;
             self.active_function_return_type = caller_return_type;
@@ -490,16 +492,16 @@ impl Rux16ArtifactBackend {
         Ok(locals)
     }
 
-    fn compile_function_body(&mut self, function: &FunctionDecl) -> Result<(), CompileError> {
-        if function.return_type != ReturnType::Unit {
-            let Some(Statement::Return(Some(_))) = function.statements.last() else {
-                return unsupported(format!(
-                    "returning helper function `{}` requires a final return statement in Rux16 yet",
-                    function.name
-                ));
-            };
+    fn compile_function_body(&mut self, function: &FunctionDecl) -> Result<bool, CompileError> {
+        let returns_on_all_paths = statements_return_on_all_paths(&function.statements);
+        if function.return_type != ReturnType::Unit && !returns_on_all_paths {
+            return unsupported(format!(
+                "returning helper function `{}` does not return on all paths",
+                function.name
+            ));
         }
-        self.compile_statements(&function.statements, false)
+        self.compile_statements(&function.statements, false)?;
+        Ok(returns_on_all_paths)
     }
 
     fn compile_return_value_into(
@@ -1962,6 +1964,39 @@ fn first_callee_local_register(parameter_count: usize) -> u8 {
 
 fn is_call_abi_value_type(ty: TypeName) -> bool {
     matches!(ty, TypeName::I32 | TypeName::U32 | TypeName::U8)
+}
+
+fn statements_return_on_all_paths(statements: &[Statement]) -> bool {
+    statements
+        .iter()
+        .any(|statement| statement_returns_on_all_paths(statement))
+}
+
+fn statement_returns_on_all_paths(statement: &Statement) -> bool {
+    match statement {
+        Statement::Return(_) => true,
+        Statement::Unsafe(statements) => statements_return_on_all_paths(statements),
+        Statement::If {
+            then_branch,
+            else_branch: Some(else_branch),
+            ..
+        } => {
+            statements_return_on_all_paths(then_branch)
+                && statements_return_on_all_paths(else_branch)
+        }
+        Statement::If {
+            else_branch: None, ..
+        }
+        | Statement::Expr(_)
+        | Statement::Let { .. }
+        | Statement::Assign { .. }
+        | Statement::AssignOp { .. }
+        | Statement::IndexAssign { .. }
+        | Statement::DerefAssign { .. }
+        | Statement::While { .. }
+        | Statement::Break
+        | Statement::Continue => false,
+    }
 }
 
 fn return_type_to_type_name(return_type: ReturnType) -> Option<TypeName> {
