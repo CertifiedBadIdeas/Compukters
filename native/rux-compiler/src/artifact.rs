@@ -104,6 +104,7 @@ struct Rux16ArtifactBackend {
     functions: HashMap<String, FunctionDecl>,
     locals: HashMap<String, Rux16Local>,
     call_stack: Vec<String>,
+    active_function_return_type: Option<ReturnType>,
     next_register: u8,
     base_address: u32,
     initial_stack_top: u32,
@@ -132,6 +133,7 @@ impl Rux16ArtifactBackend {
             functions,
             locals: HashMap::new(),
             call_stack: Vec::new(),
+            active_function_return_type: None,
             next_register: 3,
             base_address,
             initial_stack_top,
@@ -355,20 +357,15 @@ impl Rux16ArtifactBackend {
             self.call_stack.push(name);
             let caller_locals = std::mem::take(&mut self.locals);
             let caller_next_register = self.next_register;
+            let caller_return_type = self.active_function_return_type;
             self.locals = self.call_abi_parameter_locals(&function)?;
             self.next_register = first_callee_local_register(function.parameters.len());
-            let result = match function.return_type {
-                ReturnType::Unit => self.compile_statements(&function.statements, false),
-                _ => self.compile_single_return_into(
-                    rux16_asm::RETURN_REGISTER,
-                    return_type_to_type_name(function.return_type).unwrap(),
-                    &function,
-                    false,
-                ),
-            };
+            self.active_function_return_type = Some(function.return_type);
+            let result = self.compile_function_body(&function);
             self.words.push(rux16_asm::ret());
             self.locals = caller_locals;
             self.next_register = caller_next_register;
+            self.active_function_return_type = caller_return_type;
             self.call_stack.pop();
             result?;
         }
@@ -493,19 +490,25 @@ impl Rux16ArtifactBackend {
         Ok(locals)
     }
 
-    fn compile_single_return_into(
+    fn compile_function_body(&mut self, function: &FunctionDecl) -> Result<(), CompileError> {
+        if function.return_type != ReturnType::Unit {
+            let Some(Statement::Return(Some(_))) = function.statements.last() else {
+                return unsupported(format!(
+                    "returning helper function `{}` requires a final return statement in Rux16 yet",
+                    function.name
+                ));
+            };
+        }
+        self.compile_statements(&function.statements, false)
+    }
+
+    fn compile_return_value_into(
         &mut self,
         dst: u8,
         expected_ty: TypeName,
-        function: &FunctionDecl,
+        expr: &Expr,
         unsafe_context: bool,
     ) -> Result<(), CompileError> {
-        let [Statement::Return(Some(expr))] = function.statements.as_slice() else {
-            return unsupported(format!(
-                "returning helper function `{}` requires a single return statement in Rux16 yet",
-                function.name
-            ));
-        };
         match expected_ty {
             TypeName::I32 => self.compile_i32_expr_into(dst, expr, unsafe_context),
             TypeName::U32 => self.compile_u32_expr_into(dst, expr, unsafe_context),
@@ -519,6 +522,43 @@ impl Rux16ArtifactBackend {
             | TypeName::RefMutU8
             | TypeName::ArrayU8(_) => {
                 unsupported("only i32, u32, and u8 returns can be lowered to Rux16 yet")
+            }
+        }
+    }
+
+    fn compile_return_statement(
+        &mut self,
+        value: Option<&Expr>,
+        unsafe_context: bool,
+    ) -> Result<(), CompileError> {
+        let Some(return_type) = self.active_function_return_type else {
+            return unsupported(
+                "return statements are only supported inside Rux16 helper bodies yet",
+            );
+        };
+        match (return_type, value) {
+            (ReturnType::Unit, None) => {
+                self.words.push(rux16_asm::ret());
+                Ok(())
+            }
+            (ReturnType::Unit, Some(_)) => {
+                unsupported("unit Rux16 helper return cannot carry a value")
+            }
+            (_, None) => unsupported("value-returning Rux16 helper return requires a value"),
+            (_, Some(expr)) => {
+                let expected_ty = return_type_to_type_name(return_type).ok_or_else(|| {
+                    CompileError {
+                        message: "Rux16 backend does not support this program yet: value-returning helper return requires a value".to_string(),
+                    }
+                })?;
+                self.compile_return_value_into(
+                    rux16_asm::RETURN_REGISTER,
+                    expected_ty,
+                    expr,
+                    unsafe_context,
+                )?;
+                self.words.push(rux16_asm::ret());
+                Ok(())
             }
         }
     }
@@ -566,11 +606,13 @@ impl Rux16ArtifactBackend {
             Statement::AssignOp { name, op, value } => {
                 self.compile_assign_op_statement(name, *op, value, unsafe_context)
             }
+            Statement::Return(value) => {
+                self.compile_return_statement(value.as_ref(), unsafe_context)
+            }
             Statement::IndexAssign { .. }
             | Statement::DerefAssign { .. }
             | Statement::Break
-            | Statement::Continue
-            | Statement::Return(_) => {
+            | Statement::Continue => {
                 unsupported("only unsafe MMIO store statements can be lowered")
             }
         }
