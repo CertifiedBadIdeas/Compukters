@@ -138,6 +138,41 @@ pub fn replace_partition(
     Ok(())
 }
 
+pub fn inspect(volume: &[u8]) -> Result<String, String> {
+    let payload_range = validate_volume_header(volume)?;
+    let payload_size = payload_range.len();
+    let payload = &volume[payload_range];
+    if payload_size % partition::RUXPT_BLOCK_SIZE != 0 {
+        return Err("ruxvol payload size is not block-aligned".to_string());
+    }
+    let table_bytes = payload
+        .get(..partition::RUXPT_BLOCK_SIZE)
+        .ok_or_else(|| "ruxvol payload is too small for RUXPT".to_string())?;
+    let table = partition::decode_partition_table(table_bytes)?;
+    let total_blocks = u32::try_from(payload_size / partition::RUXPT_BLOCK_SIZE)
+        .map_err(|_| "ruxvol block count does not fit u32".to_string())?;
+    partition::validate_partition_table(&table, total_blocks)?;
+
+    let mut output = format!("RUXVOL v{RUXVOL_VERSION} payload={payload_size}\n");
+    output.push_str(&format!(
+        "RUXPT v{} entries={}\n",
+        partition::RUXPT_VERSION,
+        table.entries.len()
+    ));
+    for entry in table.entries {
+        let bytes = partition_byte_offset(entry.block_count)?;
+        output.push_str(&format!(
+            "{} start_lba={} blocks={} bytes={} name={}\n",
+            entry.partition_type.tag(),
+            entry.start_lba,
+            entry.block_count,
+            bytes,
+            entry.name
+        ));
+    }
+    Ok(output)
+}
+
 fn partition_payload_range(
     payload: &[u8],
     selector: &str,

@@ -125,6 +125,37 @@ fn rux_volume_extracts_and_replaces_partition_bytes_by_name() {
 }
 
 #[test]
+fn rux_volume_inspect_prints_ruxpt_partition_layout() {
+    let volume_path = temp_file("inspect-storage0.ruxvol");
+    assert!(Command::new(rux_binary())
+        .args([
+            "volume",
+            "init",
+            volume_path.to_str().unwrap(),
+            "--size",
+            "65536",
+        ])
+        .status()
+        .expect("init runs")
+        .success());
+
+    let output = Command::new(rux_binary())
+        .args(["volume", "inspect", volume_path.to_str().unwrap()])
+        .output()
+        .expect("inspect runs");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8(output.stdout).expect("inspect stdout is UTF-8"),
+        "RUXVOL v1 payload=65536\nRUXPT v1 entries=2\nBOOT start_lba=1 blocks=32 bytes=16384 name=boot\nROOT start_lba=33 blocks=95 bytes=48640 name=root\n"
+    );
+}
+
+#[test]
 fn rux_volume_replace_partition_rejects_wrong_size_without_truncation() {
     let volume_path = temp_file("partition-size-storage0.ruxvol");
     let root_path = temp_file("oversized-root-partition.bin");
