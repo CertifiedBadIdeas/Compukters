@@ -63,6 +63,105 @@ fn rux_volume_init_writes_ruxpt_boot_and_root_partitions() {
 }
 
 #[test]
+fn rux_volume_extracts_and_replaces_partition_bytes_by_name() {
+    let volume_path = temp_file("partition-bridge-storage0.ruxvol");
+    let root_path = temp_file("root-partition.bin");
+    let extracted_path = temp_file("root-partition-extracted.bin");
+    let mut root_bytes = vec![0_u8; 95 * 512];
+    root_bytes[0..6].copy_from_slice(b"ROOTFS");
+    root_bytes[4096..4101].copy_from_slice(b"hello");
+    fs::write(&root_path, &root_bytes).expect("root partition writes");
+
+    assert!(Command::new(rux_binary())
+        .args([
+            "volume",
+            "init",
+            volume_path.to_str().unwrap(),
+            "--size",
+            "65536",
+        ])
+        .status()
+        .expect("init runs")
+        .success());
+
+    let replace_output = Command::new(rux_binary())
+        .args([
+            "volume",
+            "replace-partition",
+            volume_path.to_str().unwrap(),
+            "ROOT",
+            root_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("replace-partition runs");
+    assert!(
+        replace_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&replace_output.stderr)
+    );
+
+    let extract_output = Command::new(rux_binary())
+        .args([
+            "volume",
+            "extract-partition",
+            volume_path.to_str().unwrap(),
+            "ROOT",
+            extracted_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("extract-partition runs");
+    assert!(
+        extract_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&extract_output.stderr)
+    );
+    assert_eq!(fs::read(extracted_path).expect("extract reads"), root_bytes);
+
+    let volume_bytes = fs::read(&volume_path).expect("volume reads");
+    let payload = &volume_bytes[16..];
+    let root_offset = 33 * 512;
+    assert_eq!(&payload[root_offset..root_offset + 6], b"ROOTFS");
+    assert_eq!(&payload[root_offset + 4096..root_offset + 4101], b"hello");
+}
+
+#[test]
+fn rux_volume_replace_partition_rejects_wrong_size_without_truncation() {
+    let volume_path = temp_file("partition-size-storage0.ruxvol");
+    let root_path = temp_file("oversized-root-partition.bin");
+    fs::write(&root_path, vec![0x7f_u8; 95 * 512 + 1]).expect("root partition writes");
+
+    assert!(Command::new(rux_binary())
+        .args([
+            "volume",
+            "init",
+            volume_path.to_str().unwrap(),
+            "--size",
+            "65536",
+        ])
+        .status()
+        .expect("init runs")
+        .success());
+
+    let output = Command::new(rux_binary())
+        .args([
+            "volume",
+            "replace-partition",
+            volume_path.to_str().unwrap(),
+            "ROOT",
+            root_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("replace-partition runs");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("partition `ROOT` is 48640 bytes but input has 48641 bytes"),
+        "stderr: {stderr}"
+    );
+}
+
+#[test]
 fn rux_volume_put_boot_records_boot_artifact() {
     let volume_path = temp_file("boot-storage0.ruxvol");
     let boot_path = temp_file("boot.ruxe");

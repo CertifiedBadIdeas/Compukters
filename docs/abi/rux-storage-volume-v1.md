@@ -64,6 +64,18 @@ Filesystem-specific operations are not part of `rux volume`. Tooling for RuxFS
 uses `rux fs ruxfs ...`; future filesystems should use their own `rux fs
 <filesystem>` namespace.
 
+`rux volume` may copy partition bytes without interpreting their filesystem:
+
+```text
+rux volume extract-partition <volume.ruxvol> <partition> <output>
+rux volume replace-partition <volume.ruxvol> <partition> <input>
+```
+
+`<partition>` matches either the partition type tag, for example `BOOT` or
+`ROOT`, or the partition name, for example `boot` or `root`. Replacement input
+must match the partition size exactly. Tooling must reject wrong-sized input
+rather than truncating or padding it.
+
 ## RUXPT Partition Table
 
 `RUXPT` is guest-visible and starts at LBA 0 in the partitioned layout. It

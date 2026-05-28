@@ -111,6 +111,72 @@ pub fn put_kernel(volume: &mut [u8], kernel: &[u8]) -> Result<(), String> {
     Ok(())
 }
 
+pub fn extract_partition(volume: &[u8], selector: &str) -> Result<Vec<u8>, String> {
+    let payload_range = validate_volume_header(volume)?;
+    let payload = &volume[payload_range];
+    let partition_range = partition_payload_range(payload, selector)?;
+    Ok(payload[partition_range].to_vec())
+}
+
+pub fn replace_partition(
+    volume: &mut [u8],
+    selector: &str,
+    partition_bytes: &[u8],
+) -> Result<(), String> {
+    let payload_range = validate_volume_header(volume)?;
+    let payload = &volume[payload_range.clone()];
+    let partition_range = partition_payload_range(payload, selector)?;
+    let expected_len = partition_range.len();
+    if partition_bytes.len() != expected_len {
+        return Err(format!(
+            "partition `{selector}` is {expected_len} bytes but input has {} bytes",
+            partition_bytes.len()
+        ));
+    }
+    let payload = &mut volume[payload_range];
+    payload[partition_range].copy_from_slice(partition_bytes);
+    Ok(())
+}
+
+fn partition_payload_range(
+    payload: &[u8],
+    selector: &str,
+) -> Result<std::ops::Range<usize>, String> {
+    if payload.len() % partition::RUXPT_BLOCK_SIZE != 0 {
+        return Err("ruxvol payload size is not block-aligned".to_string());
+    }
+    let table_bytes = payload
+        .get(..partition::RUXPT_BLOCK_SIZE)
+        .ok_or_else(|| "ruxvol payload is too small for RUXPT".to_string())?;
+    let table = partition::decode_partition_table(table_bytes)?;
+    let total_blocks = u32::try_from(payload.len() / partition::RUXPT_BLOCK_SIZE)
+        .map_err(|_| "ruxvol block count does not fit u32".to_string())?;
+    partition::validate_partition_table(&table, total_blocks)?;
+    let entry = table
+        .entries
+        .iter()
+        .find(|entry| entry.partition_type.tag() == selector || entry.name == selector)
+        .ok_or_else(|| format!("RUXPT partition `{selector}` not found"))?;
+    let start = partition_byte_offset(entry.start_lba)?;
+    let len = partition_byte_offset(entry.block_count)?;
+    let end = start
+        .checked_add(len)
+        .ok_or_else(|| format!("RUXPT partition `{selector}` byte range overflows"))?;
+    if end > payload.len() {
+        return Err(format!(
+            "RUXPT partition `{selector}` is outside media bounds"
+        ));
+    }
+    Ok(start..end)
+}
+
+fn partition_byte_offset(blocks: u32) -> Result<usize, String> {
+    let bytes = blocks
+        .checked_mul(partition::RUXPT_BLOCK_SIZE as u32)
+        .ok_or_else(|| "RUXPT partition byte range overflows".to_string())?;
+    usize::try_from(bytes).map_err(|_| "RUXPT partition byte range does not fit usize".to_string())
+}
+
 fn validate_volume_header(volume: &[u8]) -> Result<std::ops::Range<usize>, String> {
     if volume.len() < RUXVOL_HEADER_SIZE {
         return Err("ruxvol is smaller than the header".to_string());

@@ -15,6 +15,9 @@
   kernel payload for the bootloader-to-kernel chain.
 - Added `rux volume init`, which creates a partitioned `RUXPT` volume with
   `BOOT` and `ROOT` partitions for the next filesystem-backed boot chain.
+- Added byte-level `rux volume extract-partition` and `replace-partition`
+  commands for moving partition images in and out of `RUXPT` volumes without
+  filesystem-specific logic.
 - Added experimental `RuxFS` v1 as the extent-based filesystem contract for
   the partitioned `ROOT` partition, with empty formatting and structural
   validation in compiler tooling.
