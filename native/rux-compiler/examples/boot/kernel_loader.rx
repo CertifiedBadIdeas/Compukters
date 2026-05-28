@@ -75,9 +75,31 @@ fn find_root_partition_start_lba() -> i32 {
     }
 }
 
+fn probe_root_ruxfs_superblock(root_start_lba: i32) -> i32 {
+    unsafe {
+        if root_start_lba != 0 {
+            let mut status: i32 = read_storage0_blocks(root_start_lba, 1, 0x3000);
+            if status == storage0::STATUS_DONE {
+                let mut magic: i32 = ptr<i32>(0x3000u32).load();
+                if magic == 0x46585552 {
+                    let mut tail: u8 = ptr<u8>(0x3004u32).load();
+                    if tail == 83u8 {
+                        let mut version: u8 = ptr<u8>(0x3005u32).load();
+                        if version == 1u8 {
+                            return 1;
+                        }
+                    }
+                }
+            }
+        }
+        return 0;
+    }
+}
+
 fn load_kernel() {
     unsafe {
         let mut root_start_lba: i32 = find_root_partition_start_lba();
+        let mut root_ruxfs_present: i32 = probe_root_ruxfs_superblock(root_start_lba);
         let mut status: i32 = read_storage0_blocks(16, 1, 0x3000);
         if status == storage0::STATUS_DONE {
             let mut magic: i32 = ptr<i32>(0x3000u32).load();

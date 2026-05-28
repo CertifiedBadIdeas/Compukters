@@ -512,6 +512,35 @@ fn rux16_kernel_loader_source_resolves_root_partition() {
 }
 
 #[test]
+fn rux16_kernel_loader_source_probes_root_ruxfs_superblock() {
+    let source = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/boot/kernel_loader.rx"),
+    )
+    .expect("kernel loader source should exist");
+
+    assert!(
+        source.contains("fn probe_root_ruxfs_superblock("),
+        "kernel loader should expose a guest-side ROOT RuxFS superblock probe"
+    );
+    assert!(
+        source.contains("read_storage0_blocks(root_start_lba, 1, 0x3000)"),
+        "RuxFS probe should read the ROOT partition first block"
+    );
+    assert!(
+        source.contains("0x46585552"),
+        "RuxFS probe should check the little-endian `RUXF` prefix"
+    );
+    assert!(
+        source.contains("83u8"),
+        "RuxFS probe should check the trailing `S` byte"
+    );
+    assert!(
+        source.contains("ptr<u8>(0x3005u32).load()"),
+        "RuxFS probe should read the superblock version byte"
+    );
+}
+
+#[test]
 fn rux_volume_put_boot_and_kernel_creates_storage0_that_bundled_bios_executes() {
     let volume_path = temp_file("boot-kernel-storage0.ruxvol");
     let boot_path = temp_file("kernel-loader.boot");
