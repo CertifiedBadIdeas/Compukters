@@ -29,10 +29,13 @@ version  1
 `payload_size` is the exact number of guest-visible media bytes after the host
 file header. The file length must be `16 + payload_size`.
 
-## Guest-Visible Layout
+## Guest-Visible Layouts
 
-The current layout reserves fixed media LBAs for the BIOS-to-bootloader and
-bootloader-to-kernel chain:
+RUXVOL v1 currently has two explicit tooling layouts.
+
+`rux volume create` creates an empty volume. `rux volume put-boot` and
+`rux volume put-kernel` write the legacy fixed boot layout used by the current
+BIOS/bootloader chain. This layout reserves fixed media LBAs:
 
 ```text
 LBA 0   RUXB bootloader record
@@ -43,6 +46,70 @@ LBA 17  kernel payload bytes
 
 Each LBA is 512 bytes. Tooling must reject artifacts that do not fit these
 fixed regions. It must not relocate records or payloads implicitly.
+
+`rux volume init` creates the partitioned layout targeted by the next boot
+chain:
+
+```text
+LBA 0        RUXPT partition table
+LBA 1..32    BOOT partition
+LBA 33..end  ROOT partition
+```
+
+The partitioned layout does not contain `RUXB` or `RUXK` fixed records.
+Current firmware does not boot it yet; future BIOS and bootloader work should
+consume `RUXPT` directly rather than probing both layouts.
+
+## RUXPT Partition Table
+
+`RUXPT` is guest-visible and starts at LBA 0 in the partitioned layout. It
+occupies one 512-byte block.
+
+Header:
+
+```text
+offset  size  name
+0x00    5     magic
+0x05    1     version
+0x06    1     entry_count
+0x07    1     reserved
+0x08    4     table_lba
+0x0C    4     table_blocks
+```
+
+Field values for v1:
+
+```text
+magic        "RUXPT"
+version      1
+reserved     0
+table_lba    0
+table_blocks 1
+```
+
+Entries start at offset `0x10`. Each entry is 32 bytes:
+
+```text
+offset  size  name
+0x00    4     type
+0x04    4     flags
+0x08    4     start_lba
+0x0C    4     block_count
+0x10    16    name
+```
+
+Accepted initial partition types:
+
+```text
+BOOT
+ROOT
+```
+
+`name` is UTF-8, NUL-padded, and must be 1..16 bytes.
+
+Validation must reject bad magic/version, non-zero reserved fields, too many
+entries, zero-sized partitions, partitions that start inside the table area,
+partitions outside the guest-visible media size, and overlapping partitions.
 
 ## RUXB Bootloader Record
 
@@ -101,5 +168,5 @@ The current boot chain is:
 5. Bootloader copies the kernel payload from LBA 17 to `load_addr`.
 6. Bootloader jumps to `entry_pc`.
 
-This is a fixed pre-filesystem layout. Future filesystem-backed loading should
-replace the fixed `RUXK` location rather than adding fallback guesses.
+This is a fixed pre-filesystem layout. Filesystem-backed loading should replace
+the fixed `RUXB`/`RUXK` locations rather than adding fallback guesses.

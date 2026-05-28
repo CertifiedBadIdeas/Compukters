@@ -30,6 +30,39 @@ fn rux_volume_create_writes_empty_ruxvol_header() {
 }
 
 #[test]
+fn rux_volume_init_writes_ruxpt_boot_and_root_partitions() {
+    let path = temp_file("init-storage0.ruxvol");
+    let output = Command::new(rux_binary())
+        .args(["volume", "init", path.to_str().unwrap(), "--size", "65536"])
+        .output()
+        .expect("rux runs");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let bytes = fs::read(&path).expect("volume exists");
+    assert_eq!(&bytes[..6], b"RUXVOL");
+    assert_eq!(u64::from_le_bytes(bytes[8..16].try_into().unwrap()), 65536);
+
+    let payload = &bytes[16..];
+    assert_eq!(&payload[0..5], b"RUXPT");
+    assert_eq!(payload[5], 1);
+    assert_eq!(payload[6], 2);
+
+    assert_eq!(&payload[16..20], b"BOOT");
+    assert_eq!(u32::from_le_bytes(payload[24..28].try_into().unwrap()), 1);
+    assert_eq!(u32::from_le_bytes(payload[28..32].try_into().unwrap()), 32);
+    assert_eq!(&payload[32..36], b"boot");
+
+    assert_eq!(&payload[48..52], b"ROOT");
+    assert_eq!(u32::from_le_bytes(payload[56..60].try_into().unwrap()), 33);
+    assert_eq!(u32::from_le_bytes(payload[60..64].try_into().unwrap()), 95);
+    assert_eq!(&payload[64..68], b"root");
+}
+
+#[test]
 fn rux_volume_put_boot_records_boot_artifact() {
     let volume_path = temp_file("boot-storage0.ruxvol");
     let boot_path = temp_file("boot.ruxe");
