@@ -863,6 +863,39 @@ fn rux16_artifact_preserves_live_locals_around_argument_helper_call_from_bios_fl
 }
 
 #[test]
+fn rux16_artifact_preserves_helper_parameters_from_scratch_clobbering() {
+    let artifact = compile_rux16_artifact(
+        &with_computer_abi(
+            "fn write_after_scratch(first: u8, second: u8, third: u8) {
+            unsafe {
+                mmio<i32>(control::STATUS).store(0);
+                mmio<u8>(debug::WRITE).store(first);
+                mmio<u8>(debug::WRITE).store(second);
+                mmio<i32>(control::PANIC_CODE).store(0);
+                mmio<u8>(debug::WRITE).store(third);
+            }
+         }
+
+         fn main() {
+            write_after_scratch(65u8, 66u8, 67u8);
+         }",
+        ),
+        Rux16ArtifactTarget::Bios,
+    )
+    .expect("helper parameters survive scratch register use in helper bodies");
+    let (mut machine, cpu_id) =
+        ComputerMachine::from_rux16_bios_flash(&artifact.bytes, 64 * 1024, 1024)
+            .expect("machine boots Rux16 BIOS flash");
+
+    assert_eq!(
+        machine.run_boot_rux16_until_signal(cpu_id).unwrap(),
+        Rux16Signal::Halt,
+    );
+    assert_eq!(machine.debug_output_bytes(), b"ABC");
+    assert_eq!(machine.control_status(), ComputerMachine::STATUS_HALTED);
+}
+
+#[test]
 fn rux16_artifact_lowers_early_returning_helper_control_flow_from_bios_flash() {
     let artifact = compile_rux16_artifact(
         &with_computer_abi(

@@ -24,6 +24,11 @@ r1..r3  first three helper arguments
 r12     helper frame pointer
 ```
 
+At helper entry, the compiler copies incoming `r1..r3` argument values into
+stable helper-local storage before lowering the helper body. Helper body code
+must not rely on parameters remaining in their incoming call ABI registers after
+the prologue.
+
 There is no zero register in v1.
 
 ## Stack Pointer
@@ -161,10 +166,11 @@ pc = return_pc
 ```
 
 The return address is the next instruction after `call`. Helper return values
-are passed in `r0`; the first three helper arguments are passed in `r1`, `r2`,
-and `r3`. Stack load/store faults are normal Rux16 CPU faults. The first ABI
-slice does not add stack bounds metadata, stack-passed arguments, or a fallback
-return path.
+are passed in `r0`; the first three helper arguments enter the callee in `r1`,
+`r2`, and `r3`, then the compiler-owned callee prologue copies them into stable
+local storage. Stack load/store faults are normal Rux16 CPU faults. The first
+ABI slice does not add stack bounds metadata, stack-passed arguments, or a
+fallback return path.
 
 ## Compiler-Generated Register Saves
 

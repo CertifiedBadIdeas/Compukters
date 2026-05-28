@@ -9,6 +9,9 @@
   pointer convention.
 - The Rux16 compiler now saves and restores live local registers around
   compiler-generated helper calls that use `call`/`ret`.
+- Rux16 helper parameters now enter through `r1..r3` and are copied into stable
+  callee-local storage before helper body lowering, so scratch register use does
+  not clobber parameters.
 - Added experimental `RUXE` v1 as the guest-loadable fixed-image container for
   Rux16 bootloader and kernel artifacts.
 - `RUXE` now carries an ABI kind: `bootloader` or `kernel`.
