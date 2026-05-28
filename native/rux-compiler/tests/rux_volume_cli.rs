@@ -471,6 +471,47 @@ fn rux16_kernel_loader_source_probes_ruxpt_header() {
 }
 
 #[test]
+fn rux16_kernel_loader_source_resolves_root_partition() {
+    let source = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/boot/kernel_loader.rx"),
+    )
+    .expect("kernel loader source should exist");
+
+    assert!(
+        source.contains("fn find_root_partition_start_lba("),
+        "kernel loader should expose a guest-side ROOT partition resolver"
+    );
+    assert!(
+        source.contains("ptr<u8>(0x3006u32).load()"),
+        "ROOT resolver should read the RUXPT entry count"
+    );
+    assert!(
+        source.contains("if probe_ruxpt_header() == 1"),
+        "ROOT resolver should validate the RUXPT header before scanning entries"
+    );
+    assert!(
+        source.contains("let mut entry_addr: u32 = 0x3010u32"),
+        "ROOT resolver should start scanning RUXPT entries after the 16-byte header"
+    );
+    assert!(
+        source.contains("entry_addr = entry_addr + 32u32"),
+        "ROOT resolver should advance by the 32-byte RUXPT entry size"
+    );
+    assert!(
+        source.contains("0x544f4f52"),
+        "ROOT resolver should match the little-endian `ROOT` partition type"
+    );
+    assert!(
+        source.contains("let mut start_lba_addr: u32 = entry_addr + 8u32"),
+        "ROOT resolver should compute the ROOT entry start_lba field address"
+    );
+    assert!(
+        source.contains("ptr<i32>(start_lba_addr).load()"),
+        "ROOT resolver should return the ROOT entry start_lba field"
+    );
+}
+
+#[test]
 fn rux_volume_put_boot_and_kernel_creates_storage0_that_bundled_bios_executes() {
     let volume_path = temp_file("boot-kernel-storage0.ruxvol");
     let boot_path = temp_file("kernel-loader.boot");
