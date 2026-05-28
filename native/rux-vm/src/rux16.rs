@@ -6,6 +6,10 @@ pub const RUX16_CSR_TRAP_CAUSE: u32 = 2;
 pub const RUX16_CSR_TRAP_PC: u32 = 3;
 pub const RUX16_CSR_TRAP_VALUE: u32 = 4;
 
+/// Rux16 ABI register reserved as the stack pointer. The stack lives in guest RAM,
+/// uses 4-byte slots, and grows toward lower addresses.
+pub const RUX16_STACK_POINTER_REGISTER: u8 = 15;
+
 pub const RUX16_TRAP_CAUSE_ILLEGAL_INSTRUCTION: u32 = 1;
 pub const RUX16_TRAP_CAUSE_INSTRUCTION_FETCH_FAULT: u32 = 2;
 pub const RUX16_TRAP_CAUSE_LOAD_FAULT: u32 = 3;
