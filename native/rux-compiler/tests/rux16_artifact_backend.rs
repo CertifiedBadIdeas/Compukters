@@ -766,6 +766,69 @@ fn rux16_artifact_rejects_numeric_logical_operands_without_truthiness() {
 }
 
 #[test]
+fn rux16_artifact_lowers_bool_locals_and_helper_returns_from_bios_flash() {
+    let artifact = compile_rux16_artifact(
+        &with_computer_abi(
+            "fn ready() -> bool {
+            return status::READY == status::READY;
+         }
+
+         fn main() {
+            unsafe {
+                let mut ok: bool = ready();
+                if ok {
+                    mmio<u8>(debug::WRITE).store(65u8);
+                }
+
+                ok = false;
+                if !ok {
+                    mmio<u8>(debug::WRITE).store(66u8);
+                }
+
+                ok = status::RESET == status::READY || ready();
+                if ok {
+                    mmio<u8>(debug::WRITE).store(67u8);
+                }
+            }
+         }",
+        ),
+        Rux16ArtifactTarget::Bios,
+    )
+    .expect("bool locals and helper returns compile to Rux16");
+    let (mut machine, cpu_id) =
+        ComputerMachine::from_rux16_bios_flash(&artifact.bytes, 64 * 1024, 256)
+            .expect("machine boots Rux16 BIOS flash");
+
+    assert_eq!(
+        machine.run_boot_rux16_until_signal(cpu_id).unwrap(),
+        Rux16Signal::Halt,
+    );
+    assert_eq!(machine.debug_output_bytes(), b"ABC");
+    assert_eq!(machine.control_status(), ComputerMachine::STATUS_HALTED);
+}
+
+#[test]
+fn rux16_artifact_rejects_numeric_bool_initializer_without_truthiness() {
+    let error = compile_rux16_artifact(
+        "fn main() {
+            let mut ok: bool = 1;
+            if ok {
+            }
+         }",
+        Rux16ArtifactTarget::Boot,
+    )
+    .unwrap_err();
+
+    assert!(
+        error
+            .message
+            .contains("bool values must be boolean expressions"),
+        "{}",
+        error.message
+    );
+}
+
+#[test]
 fn rux16_artifact_const_mmio_sequence_runs_from_bios_flash() {
     let artifact = compile_rux16_artifact(
         &with_computer_abi(

@@ -278,7 +278,7 @@ impl Rux16ArtifactBackend {
                 function.name
             )),
             (Some(expected), Some(actual))
-                if expected == actual && is_call_abi_value_type(actual) =>
+                if expected == actual && is_call_abi_return_value_type(actual) =>
             {
                 Ok(())
             }
@@ -611,8 +611,8 @@ impl Rux16ArtifactBackend {
             TypeName::I32 => self.compile_i32_expr_into(dst, expr, unsafe_context),
             TypeName::U32 => self.compile_u32_expr_into(dst, expr, unsafe_context),
             TypeName::U8 => self.compile_u8_expr_into(dst, expr, unsafe_context),
-            TypeName::Bool
-            | TypeName::PtrI32
+            TypeName::Bool => self.compile_bool_expr_into(dst, expr, unsafe_context),
+            TypeName::PtrI32
             | TypeName::PtrU32
             | TypeName::PtrU8
             | TypeName::RefMutI32
@@ -764,9 +764,19 @@ impl Rux16ArtifactBackend {
                 self.locals
                     .insert(name.to_string(), Rux16Local { ty, storage });
             }
+            TypeName::Bool => {
+                let storage = self.alloc_local_storage()?;
+                self.compile_local_initializer(
+                    storage,
+                    TypeName::Bool,
+                    initializer,
+                    unsafe_context,
+                )?;
+                self.locals
+                    .insert(name.to_string(), Rux16Local { ty, storage });
+            }
             TypeName::ArrayU8(len) => self.compile_array_let_statement(name, len, initializer)?,
-            TypeName::Bool
-            | TypeName::PtrI32
+            TypeName::PtrI32
             | TypeName::PtrU32
             | TypeName::PtrU8
             | TypeName::RefMutI32
@@ -948,8 +958,8 @@ impl Rux16ArtifactBackend {
             TypeName::I32 => self.compile_i32_expr_into(register, initializer, unsafe_context)?,
             TypeName::U32 => self.compile_u32_expr_into(register, initializer, unsafe_context)?,
             TypeName::U8 => self.compile_u8_expr_into(register, initializer, unsafe_context)?,
-            TypeName::Bool
-            | TypeName::PtrI32
+            TypeName::Bool => self.compile_bool_expr_into(register, initializer, unsafe_context)?,
+            TypeName::PtrI32
             | TypeName::PtrU32
             | TypeName::PtrU8
             | TypeName::RefMutI32
@@ -986,8 +996,10 @@ impl Rux16ArtifactBackend {
             TypeName::U8 => {
                 self.compile_local_initializer(local.storage, TypeName::U8, value, unsafe_context)
             }
-            TypeName::Bool
-            | TypeName::PtrI32
+            TypeName::Bool => {
+                self.compile_local_initializer(local.storage, TypeName::Bool, value, unsafe_context)
+            }
+            TypeName::PtrI32
             | TypeName::PtrU32
             | TypeName::PtrU8
             | TypeName::RefMutI32
@@ -1250,12 +1262,32 @@ impl Rux16ArtifactBackend {
                 .extend_from_slice(&rux16_asm::const32(dst, u32::from(*value)));
             return Ok(());
         }
+        if let Expr::Local(name) = expr {
+            if self
+                .locals
+                .get(name)
+                .is_some_and(|local| local.ty == TypeName::Bool)
+            {
+                self.compile_bool_expr_into(dst, expr, unsafe_context)?;
+                return Ok(());
+            }
+        }
+        if let Expr::Call { name, .. } = expr {
+            if self
+                .functions
+                .get(name)
+                .is_some_and(|function| function.return_type == ReturnType::Bool)
+            {
+                self.compile_bool_expr_into(dst, expr, unsafe_context)?;
+                return Ok(());
+            }
+        }
         if let Expr::Unary {
             op: UnaryOp::Not,
             expr,
         } = expr
         {
-            if !Self::is_boolean_condition_expr(expr) {
+            if !self.is_boolean_condition_expr(expr)? {
                 return unsupported("logical operator operands must be boolean conditions");
             }
             self.compile_condition_into(dst, expr, unsafe_context)?;
@@ -1305,7 +1337,7 @@ impl Rux16ArtifactBackend {
         rhs: &Expr,
         unsafe_context: bool,
     ) -> Result<(), CompileError> {
-        if !Self::is_boolean_condition_expr(lhs) || !Self::is_boolean_condition_expr(rhs) {
+        if !self.is_boolean_condition_expr(lhs)? || !self.is_boolean_condition_expr(rhs)? {
             return unsupported("logical operator operands must be boolean conditions");
         }
         match op {
@@ -1334,17 +1366,43 @@ impl Rux16ArtifactBackend {
         }
     }
 
-    fn is_boolean_condition_expr(expr: &Expr) -> bool {
-        matches!(
-            expr,
-            Expr::Bool(_)
-                | Expr::Unary {
-                    op: UnaryOp::Not,
-                    ..
+    fn is_boolean_condition_expr(&self, expr: &Expr) -> Result<bool, CompileError> {
+        match expr {
+            Expr::Bool(_) | Expr::Compare { .. } => Ok(true),
+            Expr::Unary {
+                op: UnaryOp::Not,
+                expr,
+            } => self.is_boolean_condition_expr(expr),
+            Expr::Logical { lhs, rhs, .. } => {
+                Ok(self.is_boolean_condition_expr(lhs)? && self.is_boolean_condition_expr(rhs)?)
+            }
+            Expr::Local(name) => {
+                if let Some(local) = self.locals.get(name) {
+                    return Ok(local.ty == TypeName::Bool);
                 }
-                | Expr::Logical { .. }
-                | Expr::Compare { .. }
-        )
+                Ok(false)
+            }
+            Expr::Call { name, .. } => Ok(self
+                .functions
+                .get(name)
+                .is_some_and(|function| function.return_type == ReturnType::Bool)),
+            Expr::Int(_)
+            | Expr::IntU32(_)
+            | Expr::IntU8(_)
+            | Expr::ByteString(_)
+            | Expr::Path(_)
+            | Expr::Mmio { .. }
+            | Expr::Ptr { .. }
+            | Expr::MethodCall { .. }
+            | Expr::Index { .. }
+            | Expr::AddressOfMut(_)
+            | Expr::Deref(_)
+            | Expr::Cast { .. }
+            | Expr::Unary {
+                op: UnaryOp::Neg, ..
+            }
+            | Expr::Binary { .. } => Ok(false),
+        }
     }
 
     fn compile_equality_condition_into(
@@ -1909,6 +1967,56 @@ impl Rux16ArtifactBackend {
         Ok(())
     }
 
+    fn compile_bool_expr_into(
+        &mut self,
+        dst: u8,
+        expr: &Expr,
+        unsafe_context: bool,
+    ) -> Result<(), CompileError> {
+        match expr {
+            Expr::Bool(value) => {
+                self.words
+                    .extend_from_slice(&rux16_asm::const32(dst, u32::from(*value)));
+                Ok(())
+            }
+            Expr::Local(name) => {
+                if let Some(local) = self.local(name, TypeName::Bool)? {
+                    self.compile_local_into(dst, local);
+                    return Ok(());
+                }
+                unsupported("bool values must be boolean expressions")
+            }
+            Expr::Call { name, args } => self.emit_real_function_call(
+                name,
+                args,
+                Some(TypeName::Bool),
+                Some(dst),
+                unsafe_context,
+            ),
+            Expr::Unary {
+                op: UnaryOp::Not, ..
+            }
+            | Expr::Logical { .. }
+            | Expr::Compare { .. } => self.compile_condition_into(dst, expr, unsafe_context),
+            Expr::Int(_)
+            | Expr::IntU32(_)
+            | Expr::IntU8(_)
+            | Expr::ByteString(_)
+            | Expr::Path(_)
+            | Expr::Mmio { .. }
+            | Expr::Ptr { .. }
+            | Expr::MethodCall { .. }
+            | Expr::Index { .. }
+            | Expr::AddressOfMut(_)
+            | Expr::Deref(_)
+            | Expr::Cast { .. }
+            | Expr::Unary {
+                op: UnaryOp::Neg, ..
+            }
+            | Expr::Binary { .. } => unsupported("bool values must be boolean expressions"),
+        }
+    }
+
     fn local(&self, name: &str, expected: TypeName) -> Result<Option<Rux16Local>, CompileError> {
         let Some(local) = self.locals.get(name).copied() else {
             return Ok(None);
@@ -2336,10 +2444,14 @@ fn collect_supported_functions(
         }
         if !matches!(
             function.return_type,
-            ReturnType::Unit | ReturnType::I32 | ReturnType::U32 | ReturnType::U8
+            ReturnType::Unit
+                | ReturnType::I32
+                | ReturnType::U32
+                | ReturnType::U8
+                | ReturnType::Bool
         ) {
             return unsupported(
-                "only unit, i32, u32, and u8 function returns are supported by the Rux16 backend yet",
+                "only unit, i32, u32, u8, and bool function returns are supported by the Rux16 backend yet",
             );
         }
         if functions
@@ -2562,6 +2674,13 @@ fn first_callee_local_register(parameter_count: usize) -> u8 {
 
 fn is_call_abi_value_type(ty: TypeName) -> bool {
     matches!(ty, TypeName::I32 | TypeName::U32 | TypeName::U8)
+}
+
+fn is_call_abi_return_value_type(ty: TypeName) -> bool {
+    matches!(
+        ty,
+        TypeName::I32 | TypeName::U32 | TypeName::U8 | TypeName::Bool
+    )
 }
 
 fn statements_return_on_all_paths(statements: &[Statement]) -> bool {
