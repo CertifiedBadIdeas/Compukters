@@ -37,4 +37,19 @@ class ComputerRuntimeDeviceFactoryArchitectureTest {
         assertTrue(source.contains("RuxComputerRuntimeFactory.createFromBiosFlash"))
         assertFalse(source.contains("RuxComputerRuntimeFactory.createFromResource(storage0Path"))
     }
+
+    @Test
+    fun inGameRuxComputerSeedsStorage0BeforeOpeningVolume() {
+        val source =
+            Path
+                .of("src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/block/ComputerRuntimeDeviceFactory.kt")
+                .readText()
+
+        val seedIndex = source.indexOf("RuxSystemVolumeWorkspace.prepareStorage0Volume(workspace)")
+        val openIndex = source.indexOf("volumeStore.openOrCreateComputerVolume(deviceId, \"storage0\")")
+
+        assertTrue(seedIndex >= 0, "storage0 should be seeded from the bundled system volume resource")
+        assertTrue(openIndex >= 0, "storage0 should still be opened through FileRuxVolumeStore")
+        assertTrue(seedIndex < openIndex, "storage0 must be seeded before FileRuxVolumeStore can create an empty volume")
+    }
 }

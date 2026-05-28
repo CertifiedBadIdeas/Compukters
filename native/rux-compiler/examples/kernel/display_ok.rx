@@ -1,0 +1,26 @@
+fn main() {
+    unsafe {
+        mmio<i32>(DISPLAY0_COMMAND).store(DISPLAY0_COMMAND_CLEAR);
+        mmio<i32>(DISPLAY0_CURSOR_X).store(0);
+        mmio<i32>(DISPLAY0_CURSOR_Y).store(0);
+        mmio<i32>(DISPLAY0_DATA).store(75);
+        mmio<i32>(DISPLAY0_COMMAND).store(DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR);
+        mmio<i32>(DISPLAY0_DATA).store(69);
+        mmio<i32>(DISPLAY0_COMMAND).store(DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR);
+        mmio<i32>(DISPLAY0_DATA).store(82);
+        mmio<i32>(DISPLAY0_COMMAND).store(DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR);
+        mmio<i32>(DISPLAY0_DATA).store(78);
+        mmio<i32>(DISPLAY0_COMMAND).store(DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR);
+        mmio<i32>(DISPLAY0_DATA).store(69);
+        mmio<i32>(DISPLAY0_COMMAND).store(DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR);
+        mmio<i32>(DISPLAY0_DATA).store(76);
+        mmio<i32>(DISPLAY0_COMMAND).store(DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR);
+        mmio<i32>(DISPLAY0_DATA).store(32);
+        mmio<i32>(DISPLAY0_COMMAND).store(DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR);
+        mmio<i32>(DISPLAY0_DATA).store(79);
+        mmio<i32>(DISPLAY0_COMMAND).store(DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR);
+        mmio<i32>(DISPLAY0_DATA).store(75);
+        mmio<i32>(DISPLAY0_COMMAND).store(DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR);
+        mmio<i32>(CONTROL_PANIC_CODE).store(75);
+    }
+}
