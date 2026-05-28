@@ -32,7 +32,7 @@ through memory-mapped peripherals.
 | Crate            | Purpose                                                                  |
 |------------------|--------------------------------------------------------------------------|
 | `native/rux-vm`  | Rust virtual machine: Rux16 CPU, memory-mapped devices, `RuxComputer` handle, JNI exports |
-| `native/rux-compiler` | Rux language frontend plus `rux compile`, `rux disasm`, and `rux volume` tooling for Rux16 artifacts |
+| `native/rux-compiler` | Rux language frontend plus `rux compile`, `rux disasm`, `rux volume`, and filesystem-specific `rux fs` tooling for Rux16 artifacts |
 
 ## Module ownership rules
 

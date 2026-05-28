@@ -1,5 +1,5 @@
 use rux_compiler::artifact::Rux16ArtifactTarget;
-use rux_compiler::{compile_rux16_artifact, rux16_disasm, volume};
+use rux_compiler::{compile_rux16_artifact, rux16_disasm, ruxfs, volume};
 use std::env;
 use std::fs;
 use std::process::ExitCode;
@@ -21,6 +21,7 @@ fn run(args: Vec<String>) -> Result<(), String> {
     match command.as_str() {
         "compile" => run_compile(&args[1..]),
         "disasm" | "disassemble" => run_disasm(&args[1..]),
+        "fs" => run_fs(&args[1..]),
         "volume" => run_volume(&args[1..]),
         _ => usage_error(),
     }
@@ -176,6 +177,87 @@ fn run_volume(args: &[String]) -> Result<(), String> {
     }
 }
 
+fn run_fs(args: &[String]) -> Result<(), String> {
+    let Some(filesystem) = args.first() else {
+        return fs_usage_error();
+    };
+    match filesystem.as_str() {
+        "ruxfs" => run_ruxfs(&args[1..]),
+        other => Err(format!("unsupported filesystem `{other}`")),
+    }
+}
+
+fn run_ruxfs(args: &[String]) -> Result<(), String> {
+    let Some(command) = args.first() else {
+        return fs_usage_error();
+    };
+    match command.as_str() {
+        "format" => {
+            if args.len() != 4 || args[2] != "--blocks" {
+                return fs_usage_error();
+            }
+            let total_blocks = parse_blocks(&args[3])?;
+            let bytes = ruxfs::format_empty_filesystem(total_blocks)?;
+            fs::write(&args[1], bytes)
+                .map_err(|error| format!("failed to write {}: {error}", args[1]))
+        }
+        "mkdir" => {
+            if args.len() != 3 {
+                return fs_usage_error();
+            }
+            let mut image = fs::read(&args[1])
+                .map_err(|error| format!("failed to read {}: {error}", args[1]))?;
+            ruxfs::create_directory(&mut image, &args[2])?;
+            fs::write(&args[1], image)
+                .map_err(|error| format!("failed to write {}: {error}", args[1]))
+        }
+        "put" => {
+            if args.len() != 4 {
+                return fs_usage_error();
+            }
+            let mut image = fs::read(&args[1])
+                .map_err(|error| format!("failed to read {}: {error}", args[1]))?;
+            let contents = fs::read(&args[3])
+                .map_err(|error| format!("failed to read {}: {error}", args[3]))?;
+            ruxfs::write_file(&mut image, &args[2], &contents)?;
+            fs::write(&args[1], image)
+                .map_err(|error| format!("failed to write {}: {error}", args[1]))
+        }
+        "get" => {
+            if args.len() != 4 {
+                return fs_usage_error();
+            }
+            let image = fs::read(&args[1])
+                .map_err(|error| format!("failed to read {}: {error}", args[1]))?;
+            let contents = ruxfs::read_file(&image, &args[2])?;
+            fs::write(&args[3], contents)
+                .map_err(|error| format!("failed to write {}: {error}", args[3]))
+        }
+        "ls" => {
+            if args.len() != 3 {
+                return fs_usage_error();
+            }
+            let image = fs::read(&args[1])
+                .map_err(|error| format!("failed to read {}: {error}", args[1]))?;
+            for name in ruxfs::list_directory(&image, &args[2])? {
+                println!("{name}");
+            }
+            Ok(())
+        }
+        _ => fs_usage_error(),
+    }
+}
+
+fn parse_blocks(value: &str) -> Result<u32, String> {
+    let blocks = value
+        .parse::<u32>()
+        .map_err(|_| format!("invalid block count `{value}`; expected u32"))?;
+    if blocks == 0 {
+        return Err("block count must be positive".to_string());
+    }
+    Ok(blocks)
+}
+
 fn parse_size(value: &str) -> Result<usize, String> {
     let size = value
         .parse::<usize>()
@@ -187,7 +269,7 @@ fn parse_size(value: &str) -> Result<usize, String> {
 }
 
 fn usage_error() -> Result<(), String> {
-    Err("usage: rux compile [--target <bios|boot|kernel|program>] <input.rx> -o <output>\n       rux disasm --target <bios|boot|kernel|program> <input>\n       rux volume <create|init|put-boot|put-kernel> ...".to_string())
+    Err("usage: rux compile [--target <bios|boot|kernel|program>] <input.rx> -o <output>\n       rux disasm --target <bios|boot|kernel|program> <input>\n       rux volume <create|init|put-boot|put-kernel> ...\n       rux fs <filesystem> ...".to_string())
 }
 
 fn compile_usage_error() -> Result<CompileConfig, String> {
@@ -211,5 +293,12 @@ fn volume_usage_error() -> Result<(), String> {
         "usage: rux volume create <volume.ruxvol> --size <bytes>\n       rux volume init <volume.ruxvol> --size <bytes>\n       rux volume put-boot <volume.ruxvol> <boot.bin>"
             .to_string()
             + "\n       rux volume put-kernel <volume.ruxvol> <kernel.ruxe>",
+    )
+}
+
+fn fs_usage_error() -> Result<(), String> {
+    Err(
+        "usage: rux fs ruxfs format <image.ruxfs> --blocks <blocks>\n       rux fs ruxfs mkdir <image.ruxfs> <path>\n       rux fs ruxfs put <image.ruxfs> <path> <host-input>\n       rux fs ruxfs get <image.ruxfs> <path> <host-output>\n       rux fs ruxfs ls <image.ruxfs> <path>"
+            .to_string(),
     )
 }
