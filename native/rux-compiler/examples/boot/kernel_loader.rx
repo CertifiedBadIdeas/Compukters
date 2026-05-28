@@ -25,15 +25,20 @@ fn write_kernel_load_failed() {
     }
 }
 
+fn read_storage0_blocks(lba: i32, block_count: i32, buffer_addr: i32) -> i32 {
+    unsafe {
+        mmio<i32>(storage0::LBA_LOW).store(lba);
+        mmio<i32>(storage0::LBA_HIGH).store(0);
+        mmio<i32>(storage0::BLOCK_COUNT).store(block_count);
+        mmio<i32>(storage0::BUFFER_ADDR).store(buffer_addr);
+        mmio<i32>(storage0::COMMAND).store(storage0::COMMAND_READ_BLOCKS);
+        return mmio<i32>(storage0::STATUS).load();
+    }
+}
+
 fn load_kernel() {
     unsafe {
-        mmio<i32>(storage0::LBA_LOW).store(16);
-        mmio<i32>(storage0::LBA_HIGH).store(0);
-        mmio<i32>(storage0::BLOCK_COUNT).store(1);
-        mmio<i32>(storage0::BUFFER_ADDR).store(0x3000);
-        mmio<i32>(storage0::COMMAND).store(storage0::COMMAND_READ_BLOCKS);
-
-        let mut status: i32 = mmio<i32>(storage0::STATUS).load();
+        let mut status: i32 = read_storage0_blocks(16, 1, 0x3000);
         if status == storage0::STATUS_DONE {
             let mut magic: i32 = ptr<i32>(0x3000u32).load();
             if magic == 0x4b585552 {
@@ -54,13 +59,11 @@ fn load_kernel() {
                             if start_lba == 0 {
                                 write_kernel_load_failed();
                             } else {
-                                mmio<i32>(storage0::LBA_LOW).store(start_lba);
-                                mmio<i32>(storage0::LBA_HIGH).store(0);
-                                mmio<i32>(storage0::BLOCK_COUNT).store(block_count);
-                                mmio<i32>(storage0::BUFFER_ADDR).store(load_addr);
-                                mmio<i32>(storage0::COMMAND).store(storage0::COMMAND_READ_BLOCKS);
-
-                                let mut payload_status: i32 = mmio<i32>(storage0::STATUS).load();
+                                let mut payload_status: i32 = read_storage0_blocks(
+                                    start_lba,
+                                    block_count,
+                                    load_addr
+                                );
                                 if payload_status == storage0::STATUS_DONE {
                                     rux16_jump(entry_pc);
                                 } else {
