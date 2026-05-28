@@ -425,6 +425,26 @@ fn rux_volume_put_boot_rejects_raw_boot_bytes_without_ruxe_fallback() {
 }
 
 #[test]
+fn rux16_kernel_loader_source_uses_guest_storage0_read_helper() {
+    let source = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/boot/kernel_loader.rx"),
+    )
+    .expect("kernel loader source should exist");
+
+    assert!(
+        source.contains("fn read_storage0_blocks("),
+        "kernel loader should expose one guest helper for storage0 block reads"
+    );
+    assert_eq!(
+        source
+            .matches("mmio<i32>(storage0::COMMAND).store(storage0::COMMAND_READ_BLOCKS)")
+            .count(),
+        1,
+        "storage0 read command setup should live in the helper only"
+    );
+}
+
+#[test]
 fn rux_volume_put_boot_and_kernel_creates_storage0_that_bundled_bios_executes() {
     let volume_path = temp_file("boot-kernel-storage0.ruxvol");
     let boot_path = temp_file("kernel-loader.boot");
