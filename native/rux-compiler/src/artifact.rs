@@ -171,7 +171,14 @@ impl Rux16ArtifactBackend {
         result
     }
 
-    fn emit_real_unit_function_call(&mut self, name: &str) -> Result<(), CompileError> {
+    fn emit_real_function_call(
+        &mut self,
+        name: &str,
+        args: &[Expr],
+        expected_return: Option<TypeName>,
+        return_destination: Option<u8>,
+        unsafe_context: bool,
+    ) -> Result<(), CompileError> {
         if self.call_stack.iter().any(|active| active == name) {
             return unsupported(format!("recursive Rux16 helper call `{name}`"));
         }
@@ -184,21 +191,19 @@ impl Rux16ArtifactBackend {
                     "Rux16 backend does not support this program yet: unknown helper function `{name}`"
                 ),
             })?;
-        if function.return_type != ReturnType::Unit || !function.parameters.is_empty() {
-            return unsupported(
-                "only no-argument unit helper functions can lower to real Rux16 calls yet",
-            );
-        }
+        self.validate_real_function_call(&function, args.len(), expected_return)?;
         self.ensure_stack_initialized();
         if !self.function_addresses.contains_key(name)
             && !self.pending_functions.iter().any(|pending| pending == name)
         {
             self.pending_functions.push(name.to_string());
         }
+        self.reject_live_argument_register_overlap(args.len())?;
         let saved_registers = self.live_local_registers();
         for register in &saved_registers {
             self.emit_push_register(*register);
         }
+        self.compile_call_abi_arguments(&function, args, unsafe_context)?;
         let const_index = self.words.len();
         self.words
             .extend_from_slice(&rux16_asm::const32(rux16_asm::SCRATCH_REGISTER, 0));
@@ -208,6 +213,80 @@ impl Rux16ArtifactBackend {
             .push((const_index, name.to_string()));
         for register in saved_registers.into_iter().rev() {
             self.emit_pop_register(register);
+        }
+        if let Some(destination) = return_destination {
+            self.emit_register_copy(destination, rux16_asm::RETURN_REGISTER);
+        }
+        Ok(())
+    }
+
+    fn validate_real_function_call(
+        &self,
+        function: &FunctionDecl,
+        arg_count: usize,
+        expected_return: Option<TypeName>,
+    ) -> Result<(), CompileError> {
+        if arg_count != function.parameters.len() {
+            return unsupported(format!(
+                "helper function `{}` expects {} arguments, got {}",
+                function.name,
+                function.parameters.len(),
+                arg_count
+            ));
+        }
+        if arg_count > rux16_asm::ARGUMENT_REGISTERS.len() {
+            return unsupported(format!(
+                "helper function `{}` has {} parameters, but the Rux16 call ABI supports at most {}",
+                function.name,
+                arg_count,
+                rux16_asm::ARGUMENT_REGISTERS.len()
+            ));
+        }
+        for parameter in &function.parameters {
+            if !is_call_abi_value_type(parameter.ty) {
+                return unsupported(
+                    "only i32, u32, and u8 parameters can be lowered to Rux16 calls yet",
+                );
+            }
+        }
+        let return_ty = return_type_to_type_name(function.return_type);
+        match (expected_return, return_ty) {
+            (None, None) => Ok(()),
+            (None, Some(_)) => unsupported(format!(
+                "helper function `{}` returns a value but is called as a statement",
+                function.name
+            )),
+            (Some(_), None) => unsupported(format!(
+                "helper function `{}` does not return a value",
+                function.name
+            )),
+            (Some(expected), Some(actual))
+                if expected == actual && is_call_abi_value_type(actual) =>
+            {
+                Ok(())
+            }
+            (Some(expected), Some(actual)) if actual == expected => {
+                unsupported("only i32, u32, and u8 returns can be lowered to Rux16 calls yet")
+            }
+            (Some(expected), Some(actual)) => unsupported(format!(
+                "helper function `{}` returns {}, expected {}",
+                function.name,
+                type_name(actual),
+                type_name(expected)
+            )),
+        }
+    }
+
+    fn reject_live_argument_register_overlap(&self, arg_count: usize) -> Result<(), CompileError> {
+        let used_argument_registers = &rux16_asm::ARGUMENT_REGISTERS[..arg_count];
+        let overlap = self
+            .live_local_registers()
+            .into_iter()
+            .find(|register| used_argument_registers.contains(register));
+        if let Some(register) = overlap {
+            return unsupported(format!(
+                "Rux16 call ABI argument register r{register} overlaps a live local in this call shape"
+            ));
         }
         Ok(())
     }
@@ -281,18 +360,27 @@ impl Rux16ArtifactBackend {
                         "Rux16 backend does not support this program yet: unknown helper function `{name}`"
                     ),
                 })?;
-            if function.return_type != ReturnType::Unit || !function.parameters.is_empty() {
-                return unsupported(
-                    "only no-argument unit helper functions can lower to real Rux16 calls yet",
-                );
-            }
+            self.validate_real_function_call(
+                &function,
+                function.parameters.len(),
+                return_type_to_type_name(function.return_type),
+            )?;
             self.function_addresses
                 .insert(name.clone(), self.current_address());
             self.call_stack.push(name);
             let caller_locals = std::mem::take(&mut self.locals);
             let caller_next_register = self.next_register;
-            self.next_register = 3;
-            let result = self.compile_statements(&function.statements, false);
+            self.locals = self.call_abi_parameter_locals(&function)?;
+            self.next_register = first_callee_local_register(function.parameters.len());
+            let result = match function.return_type {
+                ReturnType::Unit => self.compile_statements(&function.statements, false),
+                _ => self.compile_single_return_into(
+                    rux16_asm::RETURN_REGISTER,
+                    return_type_to_type_name(function.return_type).unwrap(),
+                    &function,
+                    false,
+                ),
+            };
             self.words.push(rux16_asm::ret());
             self.locals = caller_locals;
             self.next_register = caller_next_register;
@@ -313,48 +401,6 @@ impl Rux16ArtifactBackend {
             self.patch_absolute_const32(const_index, address)?;
         }
         Ok(())
-    }
-
-    fn inline_returning_function_into(
-        &mut self,
-        dst: u8,
-        expected_ty: TypeName,
-        name: &str,
-        args: &[Expr],
-        unsafe_context: bool,
-    ) -> Result<(), CompileError> {
-        if self.call_stack.iter().any(|active| active == name) {
-            return unsupported(format!("recursive Rux16 helper call `{name}`"));
-        }
-        let function = self
-            .functions
-            .get(name)
-            .cloned()
-            .ok_or_else(|| CompileError {
-                message: format!("Rux16 backend does not support this program yet: unknown helper function `{name}`"),
-            })?;
-        let return_ty = return_type_to_type_name(function.return_type).ok_or_else(|| {
-            CompileError {
-                message: format!(
-                    "Rux16 backend does not support this program yet: helper function `{name}` does not return a value"
-                ),
-            }
-        })?;
-        if return_ty != expected_ty {
-            return unsupported(format!(
-                "helper function `{name}` returns {}, expected {}",
-                type_name(return_ty),
-                type_name(expected_ty)
-            ));
-        }
-        let callee_locals = self.compile_call_arguments(&function, args, unsafe_context)?;
-        self.call_stack.push(name.to_string());
-        let caller_locals = std::mem::take(&mut self.locals);
-        self.locals = callee_locals;
-        let result = self.compile_single_return_into(dst, expected_ty, &function, false);
-        self.locals = caller_locals;
-        self.call_stack.pop();
-        result
     }
 
     fn compile_call_arguments(
@@ -393,6 +439,63 @@ impl Rux16ArtifactBackend {
                         "only i32, u32, and u8 parameters can be lowered to Rux16 yet",
                     );
                 }
+            }
+            locals.insert(
+                parameter.name.clone(),
+                Rux16Local {
+                    ty: parameter.ty,
+                    register,
+                },
+            );
+        }
+        Ok(locals)
+    }
+
+    fn compile_call_abi_arguments(
+        &mut self,
+        function: &FunctionDecl,
+        args: &[Expr],
+        unsafe_context: bool,
+    ) -> Result<(), CompileError> {
+        for ((parameter, arg), register) in function
+            .parameters
+            .iter()
+            .zip(args)
+            .zip(rux16_asm::ARGUMENT_REGISTERS)
+        {
+            match parameter.ty {
+                TypeName::I32 => self.compile_i32_expr_into(register, arg, unsafe_context)?,
+                TypeName::U32 => self.compile_u32_expr_into(register, arg, unsafe_context)?,
+                TypeName::U8 => self.compile_u8_expr_into(register, arg, unsafe_context)?,
+                TypeName::Bool
+                | TypeName::PtrI32
+                | TypeName::PtrU32
+                | TypeName::PtrU8
+                | TypeName::RefMutI32
+                | TypeName::RefMutU32
+                | TypeName::RefMutU8
+                | TypeName::ArrayU8(_) => {
+                    return unsupported(
+                        "only i32, u32, and u8 parameters can be lowered to Rux16 calls yet",
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn call_abi_parameter_locals(
+        &self,
+        function: &FunctionDecl,
+    ) -> Result<HashMap<String, Rux16Local>, CompileError> {
+        let mut locals = HashMap::new();
+        for (parameter, register) in function
+            .parameters
+            .iter()
+            .zip(rux16_asm::ARGUMENT_REGISTERS)
+        {
+            if locals.contains_key(&parameter.name) {
+                return unsupported(format!("duplicate Rux16 parameter `{}`", parameter.name));
             }
             locals.insert(
                 parameter.name.clone(),
@@ -649,10 +752,7 @@ impl Rux16ArtifactBackend {
                 self.words.push(rux16_asm::jmp(target));
                 return Ok(());
             }
-            if args.is_empty() {
-                return self.emit_real_unit_function_call(name);
-            }
-            return self.inline_unit_function(name, args, unsafe_context);
+            return self.emit_real_function_call(name, args, None, None, unsafe_context);
         }
 
         let Expr::MethodCall {
@@ -675,14 +775,25 @@ impl Rux16ArtifactBackend {
         if !unsafe_context {
             return unsupported("MMIO store requires `unsafe`");
         }
-        let address = self.compile_mmio_address_to_register_or_use(1, address, unsafe_context)?;
         match ty {
             TypeName::I32 => {
                 let src = self.compile_i32_expr_to_scratch(&args[0], unsafe_context)?;
+                let address_register = scratch_register_excluding(src);
+                let address = self.compile_mmio_address_to_register_or_use(
+                    address_register,
+                    address,
+                    unsafe_context,
+                )?;
                 self.words.push(rux16_asm::store32(address, src));
             }
             TypeName::U8 => {
                 let src = self.compile_u8_expr_to_scratch(&args[0], unsafe_context)?;
+                let address_register = scratch_register_excluding(src);
+                let address = self.compile_mmio_address_to_register_or_use(
+                    address_register,
+                    address,
+                    unsafe_context,
+                )?;
                 self.words.push(rux16_asm::store8(address, src));
             }
             TypeName::U32
@@ -861,9 +972,13 @@ impl Rux16ArtifactBackend {
                 self.words.push(rux16_asm::add(dst, lhs, rhs));
                 Ok(())
             }
-            Expr::Call { name, args } => {
-                self.inline_returning_function_into(dst, TypeName::I32, name, args, unsafe_context)
-            }
+            Expr::Call { name, args } => self.emit_real_function_call(
+                name,
+                args,
+                Some(TypeName::I32),
+                Some(dst),
+                unsafe_context,
+            ),
             Expr::Path(_) => {
                 let value = self.eval_i32_value(expr)?;
                 self.words
@@ -964,9 +1079,13 @@ impl Rux16ArtifactBackend {
                     unsupported("only u32 addition and multiplication by a constant can be lowered")
                 }
             },
-            Expr::Call { name, args } => {
-                self.inline_returning_function_into(dst, TypeName::U32, name, args, unsafe_context)
-            }
+            Expr::Call { name, args } => self.emit_real_function_call(
+                name,
+                args,
+                Some(TypeName::U32),
+                Some(dst),
+                unsafe_context,
+            ),
             Expr::Path(_) => {
                 let value = self.eval_u32_value(expr)?;
                 self.words
@@ -1070,9 +1189,13 @@ impl Rux16ArtifactBackend {
                     .extend_from_slice(&rux16_asm::const32(dst, u32::from(value)));
                 Ok(())
             }
-            Expr::Call { name, args } => {
-                self.inline_returning_function_into(dst, TypeName::U8, name, args, unsafe_context)
-            }
+            Expr::Call { name, args } => self.emit_real_function_call(
+                name,
+                args,
+                Some(TypeName::U8),
+                Some(dst),
+                unsafe_context,
+            ),
             Expr::Path(_) => {
                 let value = self.eval_u8_value(expr)?;
                 self.words
@@ -1674,6 +1797,18 @@ fn scratch_register_excluding(register: u8) -> u8 {
     } else {
         rux16_asm::SCRATCH_REGISTER
     }
+}
+
+fn first_callee_local_register(parameter_count: usize) -> u8 {
+    if parameter_count >= rux16_asm::ARGUMENT_REGISTERS.len() {
+        rux16_asm::ARGUMENT_REGISTERS[rux16_asm::ARGUMENT_REGISTERS.len() - 1] + 1
+    } else {
+        3
+    }
+}
+
+fn is_call_abi_value_type(ty: TypeName) -> bool {
+    matches!(ty, TypeName::I32 | TypeName::U32 | TypeName::U8)
 }
 
 fn return_type_to_type_name(return_type: ReturnType) -> Option<TypeName> {
