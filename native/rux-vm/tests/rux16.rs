@@ -186,6 +186,26 @@ fn rux16_eq_builds_condition_register_for_branching() {
 }
 
 #[test]
+fn rux16_ltu_builds_unsigned_less_than_condition() {
+    let mut bus = MachineBus::new(64).unwrap();
+    let mut program = vec![const4(1, 2), const4(2, 5)];
+    program.extend(ltu(3, 1, 2));
+    program.extend([branch_if_zero(3, 1), const4(4, 7)]);
+    program.extend([const4(1, 5), const4(2, 2)]);
+    program.extend(ltu(3, 1, 2));
+    program.extend([branch_if_nonzero(3, 1), const4(5, 9), halt()]);
+    write_words(&mut bus, 0, &program);
+    let mut cpu = Rux16Cpu::new(0);
+
+    assert_eq!(
+        cpu.run_until_signal(&mut bus, 64).unwrap(),
+        Rux16Signal::Halt,
+    );
+    assert_eq!(cpu.register(4), 7);
+    assert_eq!(cpu.register(5), 9);
+}
+
+#[test]
 fn rux16_test_bits_builds_condition_register_from_mask() {
     let mut bus = MachineBus::new(64).unwrap();
     let mut program = vec![const4(1, 0b1010)];
@@ -269,6 +289,13 @@ fn add(dst: u8, lhs: u8, rhs: u8) -> u16 {
 fn eq(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
     [
         0x3000 | (u16::from(dst) << 8),
+        (u16::from(lhs) << 4) | u16::from(rhs),
+    ]
+}
+
+fn ltu(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    [
+        0x3002 | (u16::from(dst) << 8),
         (u16::from(lhs) << 4) | u16::from(rhs),
     ]
 }

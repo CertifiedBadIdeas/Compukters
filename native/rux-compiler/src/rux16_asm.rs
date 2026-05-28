@@ -19,12 +19,29 @@ pub(crate) fn const32(register: u8, value: u32) -> [u16; 3] {
     ]
 }
 
+pub(crate) fn add(dst: u8, lhs: u8, rhs: u8) -> u16 {
+    assert_register(dst);
+    assert_register(lhs);
+    assert_register(rhs);
+    0x2000 | (u16::from(dst) << 8) | (u16::from(lhs) << 4) | u16::from(rhs)
+}
+
 pub(crate) fn eq(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
     assert_register(dst);
     assert_register(lhs);
     assert_register(rhs);
     [
         0x3000 | (u16::from(dst) << 8),
+        (u16::from(lhs) << 4) | u16::from(rhs),
+    ]
+}
+
+pub(crate) fn ltu(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {
+    assert_register(dst);
+    assert_register(lhs);
+    assert_register(rhs);
+    [
+        0x3002 | (u16::from(dst) << 8),
         (u16::from(lhs) << 4) | u16::from(rhs),
     ]
 }

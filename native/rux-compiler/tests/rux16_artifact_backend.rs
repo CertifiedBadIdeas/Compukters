@@ -539,6 +539,54 @@ fn rux16_artifact_uses_u32_local_as_mmio_address_from_bios_flash() {
 }
 
 #[test]
+fn rux16_artifact_lowers_u32_loop_and_address_arithmetic_from_bios_flash() {
+    let artifact = compile_rux16_artifact(
+        &with_computer_abi(
+            "fn sum_table() {
+            unsafe {
+                let mut base: u32 = 0x1000u32;
+                let mut count: u32 = 3u32;
+                let mut i: u32 = 0u32;
+                let mut sum: i32 = 0;
+                while i < count {
+                    let mut entry: u32 = base + i * 4u32;
+                    sum = sum + ptr<i32>(entry).load();
+                    i += 1u32;
+                }
+                let mut control_base: u32 = control::STATUS;
+                mmio<i32>(control_base + 4u32).store(sum);
+            }
+         }
+
+         fn main() {
+            sum_table();
+         }",
+        ),
+        Rux16ArtifactTarget::Bios,
+    )
+    .expect("u32 loop and address arithmetic compiles to Rux16");
+    let (mut machine, cpu_id) =
+        ComputerMachine::from_rux16_bios_flash(&artifact.bytes, 64 * 1024, 128)
+            .expect("machine boots Rux16 BIOS flash");
+    machine
+        .write_guest_ram_bytes(0x1000, &10i32.to_le_bytes())
+        .unwrap();
+    machine
+        .write_guest_ram_bytes(0x1004, &20i32.to_le_bytes())
+        .unwrap();
+    machine
+        .write_guest_ram_bytes(0x1008, &30i32.to_le_bytes())
+        .unwrap();
+
+    assert_eq!(
+        machine.run_boot_rux16_until_signal(cpu_id).unwrap(),
+        Rux16Signal::Halt,
+    );
+    assert_eq!(machine.panic_code(), 60);
+    assert_eq!(machine.control_status(), ComputerMachine::STATUS_HALTED);
+}
+
+#[test]
 fn rux16_artifact_lowers_if_eq_condition_from_bios_flash() {
     let artifact = compile_rux16_artifact(
         &with_computer_abi(
