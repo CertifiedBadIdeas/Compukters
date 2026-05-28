@@ -212,6 +212,12 @@ fn find_kernel_ruxe_inode(root_start_lba: i32, boot_directory_inode: i32) -> i32
 
 fn probe_kernel_ruxe_inode_metadata(root_start_lba: i32, kernel_ruxe_inode: i32) -> i32 {
     unsafe {
+        return load_kernel_ruxe_from_root_ruxfs(root_start_lba, kernel_ruxe_inode);
+    }
+}
+
+fn load_kernel_ruxe_from_root_ruxfs(root_start_lba: i32, kernel_ruxe_inode: i32) -> i32 {
+    unsafe {
         if kernel_ruxe_inode != 0 {
             if probe_root_ruxfs_superblock(root_start_lba) == 1 {
                 let mut inode_table_start_block: i32 = ptr<i32>(0x3018u32).load();
@@ -238,7 +244,14 @@ fn probe_kernel_ruxe_inode_metadata(root_start_lba: i32, kernel_ruxe_inode: i32)
                             let mut kernel_block_count: i32 = ptr<i32>(extent_block_count_addr).load();
                             if file_size_low != 0 {
                                 if kernel_block_count != 0 {
-                                    return 1;
+                                    let mut kernel_lba: i32 = root_start_lba + kernel_start_block;
+                                    let mut file_status: i32 = read_storage0_blocks(kernel_lba, kernel_block_count, 0x3000);
+                                    if file_status == storage0::STATUS_DONE {
+                                        let mut ruxe_magic: i32 = ptr<i32>(0x3000u32).load();
+                                        if ruxe_magic == 0x45585552 {
+                                            return 1;
+                                        }
+                                    }
                                 }
                             }
                         }

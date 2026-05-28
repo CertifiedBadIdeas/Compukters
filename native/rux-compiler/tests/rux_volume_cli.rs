@@ -693,6 +693,35 @@ fn rux16_kernel_loader_source_reads_kernel_ruxe_inode_metadata() {
 }
 
 #[test]
+fn rux16_kernel_loader_source_loads_kernel_ruxe_from_root_ruxfs() {
+    let source = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/boot/kernel_loader.rx"),
+    )
+    .expect("kernel loader source should exist");
+
+    assert!(
+        source.contains("fn load_kernel_ruxe_from_root_ruxfs("),
+        "kernel loader should expose a guest-side kernel.ruxe file load helper"
+    );
+    assert!(
+        source.contains("let mut kernel_lba: i32 = root_start_lba + kernel_start_block"),
+        "kernel.ruxe loader should translate the file extent block into an absolute storage LBA"
+    );
+    assert!(
+        source.contains("read_storage0_blocks(kernel_lba, kernel_block_count, 0x3000)"),
+        "kernel.ruxe loader should read file extent bytes into RAM"
+    );
+    assert!(
+        source.contains("ptr<i32>(0x3000u32).load()"),
+        "kernel.ruxe loader should inspect the loaded file header from RAM"
+    );
+    assert!(
+        source.contains("0x45585552"),
+        "kernel.ruxe loader should validate the loaded RUXE magic"
+    );
+}
+
+#[test]
 fn rux_volume_put_boot_and_kernel_creates_storage0_that_bundled_bios_executes() {
     let volume_path = temp_file("boot-kernel-storage0.ruxvol");
     let boot_path = temp_file("kernel-loader.boot");
