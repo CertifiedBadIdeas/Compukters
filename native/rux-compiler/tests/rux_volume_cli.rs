@@ -445,6 +445,32 @@ fn rux16_kernel_loader_source_uses_guest_storage0_read_helper() {
 }
 
 #[test]
+fn rux16_kernel_loader_source_probes_ruxpt_header() {
+    let source = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/boot/kernel_loader.rx"),
+    )
+    .expect("kernel loader source should exist");
+
+    assert!(
+        source.contains("fn probe_ruxpt_header("),
+        "kernel loader should expose a guest-side RUXPT header probe"
+    );
+    assert!(
+        source.contains("read_storage0_blocks(0, 1, 0x3000)"),
+        "RUXPT probe should read LBA0 through the storage0 helper"
+    );
+    assert!(
+        source.contains("0x50585552"),
+        "RUXPT probe should check the little-endian `RUXP` prefix"
+    );
+    assert!(
+        source.contains("84u8"),
+        "RUXPT probe should check the trailing `T` byte"
+    );
+    assert!(source.contains("1u8"), "RUXPT probe should check version 1");
+}
+
+#[test]
 fn rux_volume_put_boot_and_kernel_creates_storage0_that_bundled_bios_executes() {
     let volume_path = temp_file("boot-kernel-storage0.ruxvol");
     let boot_path = temp_file("kernel-loader.boot");

@@ -36,8 +36,28 @@ fn read_storage0_blocks(lba: i32, block_count: i32, buffer_addr: i32) -> i32 {
     }
 }
 
+fn probe_ruxpt_header() -> i32 {
+    unsafe {
+        let mut status: i32 = read_storage0_blocks(0, 1, 0x3000);
+        if status == storage0::STATUS_DONE {
+            let mut magic: i32 = ptr<i32>(0x3000u32).load();
+            if magic == 0x50585552 {
+                let mut tail: u8 = ptr<u8>(0x3004u32).load();
+                if tail == 84u8 {
+                    let mut version: u8 = ptr<u8>(0x3005u32).load();
+                    if version == 1u8 {
+                        return 1;
+                    }
+                }
+            }
+        }
+        return 0;
+    }
+}
+
 fn load_kernel() {
     unsafe {
+        let mut ruxpt_present: i32 = probe_ruxpt_header();
         let mut status: i32 = read_storage0_blocks(16, 1, 0x3000);
         if status == storage0::STATUS_DONE {
             let mut magic: i32 = ptr<i32>(0x3000u32).load();
