@@ -541,6 +541,39 @@ fn rux16_kernel_loader_source_probes_root_ruxfs_superblock() {
 }
 
 #[test]
+fn rux16_kernel_loader_source_probes_root_ruxfs_inode() {
+    let source = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/boot/kernel_loader.rx"),
+    )
+    .expect("kernel loader source should exist");
+
+    assert!(
+        source.contains("fn probe_root_ruxfs_inode("),
+        "kernel loader should expose a guest-side ROOT RuxFS inode probe"
+    );
+    assert!(
+        source.contains("ptr<i32>(0x3018u32).load()"),
+        "root inode probe should read inode_table_start_block from the superblock"
+    );
+    assert!(
+        source.contains("ptr<i32>(0x3020u32).load()"),
+        "root inode probe should read root_inode_id from the superblock"
+    );
+    assert!(
+        source.contains("read_storage0_blocks(inode_table_lba, 1, 0x3000)"),
+        "root inode probe should read the inode table block"
+    );
+    assert!(
+        source.contains("ptr<u8>(0x3040u32).load()"),
+        "root inode probe should read root inode 1 state from the inode table"
+    );
+    assert!(
+        source.contains("2u8"),
+        "root inode probe should require the root inode to be a directory"
+    );
+}
+
+#[test]
 fn rux_volume_put_boot_and_kernel_creates_storage0_that_bundled_bios_executes() {
     let volume_path = temp_file("boot-kernel-storage0.ruxvol");
     let boot_path = temp_file("kernel-loader.boot");
