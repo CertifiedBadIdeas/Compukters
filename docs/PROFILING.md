@@ -7,6 +7,21 @@ Compukter Kraft profiling has two layers:
 
 The in-code metrics explain what the VM/display/compiler did. External profilers explain where CPU time and allocations were spent.
 
+## Rux16 VM microbenchmarks
+
+The native Rux16 VM has a dependency-free microbenchmark example for local
+before/after comparisons:
+
+```bash
+cd native/rux-vm
+cargo run --release --example vm_microbenchmarks -- 100000 5
+```
+
+The current tracked local baseline is documented in
+[`docs/benchmarks/rux16-vm-baseline-2026-05-29.md`](benchmarks/rux16-vm-baseline-2026-05-29.md).
+These numbers are diagnostic points for optimization work, not CI performance
+budgets.
+
 ## Runtime/display profiling workload
 
 Runtime VM profiling records the Rust image runtime path. Use `profileRuntimeVmImage` to build the native library, run the profiling workload, write the stable raw profile, and archive a timestamped run with Markdown.
