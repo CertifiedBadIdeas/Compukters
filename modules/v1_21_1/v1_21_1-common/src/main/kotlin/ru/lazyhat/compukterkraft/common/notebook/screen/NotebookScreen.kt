@@ -43,6 +43,7 @@ private enum class NotebookRuntimeState(
     val label: String,
 ) {
     OFF("OFFLINE"),
+    FAILED("ERROR"),
     CONNECTING("BOOTING"),
     RUNNING("RUNNING"),
 }
@@ -209,6 +210,7 @@ class NotebookScreen(
 
     private fun runtimeState(): NotebookRuntimeState =
         when {
+            menu.hasComputerRuntimeFailure -> NotebookRuntimeState.FAILED
             !menu.isComputerOn -> NotebookRuntimeState.OFF
             menu.clientSide.displayBuffer?.hasReceivedFrames == true -> NotebookRuntimeState.RUNNING
             else -> NotebookRuntimeState.CONNECTING
@@ -217,6 +219,7 @@ class NotebookScreen(
     private fun runtimeStateColor(state: NotebookRuntimeState): Color =
         when (state) {
             NotebookRuntimeState.OFF -> DIM
+            NotebookRuntimeState.FAILED -> BOOTING
             NotebookRuntimeState.CONNECTING -> BOOTING
             NotebookRuntimeState.RUNNING -> STATUS
         }

@@ -30,6 +30,7 @@ import ru.lazyhat.compukterkraft.common.computer.data.ComputerContainerData
 import ru.lazyhat.compukterkraft.core.Config
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDevice
+import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDeviceFailureState
 import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 
 /**
@@ -93,7 +94,7 @@ abstract class AbstractComputerMenu(
         if (computer == null) {
             SimpleContainerData(1)
         } else {
-            SingleContainerData { if (computer.isOn) 1 else 0 }
+            SingleContainerData { computer.runtimeStateCode() }
         }
 
     /**
@@ -111,7 +112,9 @@ abstract class AbstractComputerMenu(
         }
 
     /** Whether the computer is currently on (synced from server via [ContainerData]). */
-    val isComputerOn: Boolean get() = data.get(0) == 1
+    val isComputerOn: Boolean get() = data.get(0) == RUNTIME_STATE_ON
+
+    val hasComputerRuntimeFailure: Boolean get() = data.get(0) == RUNTIME_STATE_FAILED
 
     val displayStack: ItemStack = containerData?.displayStack ?: ItemStack.EMPTY
 
@@ -137,5 +140,18 @@ abstract class AbstractComputerMenu(
         super.removed(player)
         (side as? MenuSide.Server)?.input?.close()
         onRemoved?.invoke()
+    }
+
+    private fun RuntimeDevice.runtimeStateCode(): Int =
+        when {
+            isOn -> RUNTIME_STATE_ON
+            (this as? RuntimeDeviceFailureState)?.runtimeFailureMessage != null -> RUNTIME_STATE_FAILED
+            else -> RUNTIME_STATE_OFF
+        }
+
+    private companion object {
+        const val RUNTIME_STATE_OFF = 0
+        const val RUNTIME_STATE_ON = 1
+        const val RUNTIME_STATE_FAILED = 2
     }
 }
