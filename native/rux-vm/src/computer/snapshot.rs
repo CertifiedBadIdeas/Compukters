@@ -3,13 +3,16 @@ use crate::rux16::{Rux16CpuSnapshot, Rux16CpuSnapshotState};
 
 pub const COMPUTER_SNAPSHOT_V1_MAGIC: &[u8; 8] = b"RUXSNAP\0";
 pub const COMPUTER_SNAPSHOT_V1_VERSION: u16 = 1;
-pub const COMPUTER_SNAPSHOT_V1_HEADER_SIZE: usize = 32;
+pub const COMPUTER_SNAPSHOT_V1_HEADER_SIZE: usize = 40;
 pub const COMPUTER_SNAPSHOT_V1_RUX16_CPU_KIND: u32 = 1;
 pub const COMPUTER_SNAPSHOT_V1_RUX16_CPU_RECORD_SIZE: usize = 112;
+pub const COMPUTER_SNAPSHOT_V1_CONTROL_DEVICE_KIND: u32 = 1;
+pub const COMPUTER_SNAPSHOT_V1_DEBUG_DEVICE_KIND: u32 = 2;
 const NO_BOOT_CPU: u32 = u32::MAX;
 const RUX16_CPU_STATE_RUNNING: u32 = 1;
 const RUX16_CPU_STATE_HALTED: u32 = 2;
 const RUX16_CPU_STATE_TRAPPED: u32 = 3;
+const CONTROL_DEVICE_PAYLOAD_SIZE: usize = 12;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ComputerMachineSnapshotHeader {
@@ -19,6 +22,7 @@ pub struct ComputerMachineSnapshotHeader {
     pub ram_size: u64,
     pub cpu_count: u32,
     pub boot_cpu_id: Option<u32>,
+    pub device_count: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -26,6 +30,7 @@ pub struct ComputerMachineSnapshot<'a> {
     pub header: ComputerMachineSnapshotHeader,
     pub ram: &'a [u8],
     pub cpus: Vec<ComputerCpuSnapshotRecord>,
+    pub devices: Vec<ComputerDeviceSnapshotRecord>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -36,15 +41,30 @@ pub enum ComputerCpuSnapshotRecord {
     },
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ComputerDeviceSnapshotRecord {
+    Control {
+        status: i32,
+        panic_code: i32,
+        exit_code: i32,
+    },
+    DebugSerial {
+        bytes: Vec<u8>,
+    },
+}
+
 pub fn encode_snapshot_v1(
     ram: &[u8],
     boot_cpu_id: Option<usize>,
     cpus: &[ComputerCpuSnapshotRecord],
+    devices: &[ComputerDeviceSnapshotRecord],
 ) -> Result<Vec<u8>, String> {
     let ram_size =
         u64::try_from(ram.len()).map_err(|_| "snapshot RAM size does not fit u64".to_string())?;
     let cpu_count =
         u32::try_from(cpus.len()).map_err(|_| "snapshot CPU count does not fit u32".to_string())?;
+    let device_count = u32::try_from(devices.len())
+        .map_err(|_| "snapshot device count does not fit u32".to_string())?;
     let boot_cpu_id = match boot_cpu_id {
         Some(id) => {
             u32::try_from(id).map_err(|_| "snapshot boot CPU id does not fit u32".to_string())?
@@ -55,9 +75,16 @@ pub fn encode_snapshot_v1(
         .len()
         .checked_mul(COMPUTER_SNAPSHOT_V1_RUX16_CPU_RECORD_SIZE)
         .ok_or_else(|| "snapshot CPU record size overflows usize".to_string())?;
+    let device_records_size = devices
+        .iter()
+        .try_fold(0_usize, |size, device| {
+            size.checked_add(device_record_size(device))
+        })
+        .ok_or_else(|| "snapshot device record size overflows usize".to_string())?;
     let capacity = COMPUTER_SNAPSHOT_V1_HEADER_SIZE
         .checked_add(ram.len())
         .and_then(|size| size.checked_add(cpu_records_size))
+        .and_then(|size| size.checked_add(device_records_size))
         .ok_or_else(|| "snapshot size overflows usize".to_string())?;
     let mut bytes = Vec::with_capacity(capacity);
     bytes.extend_from_slice(COMPUTER_SNAPSHOT_V1_MAGIC);
@@ -67,9 +94,14 @@ pub fn encode_snapshot_v1(
     write_u64(&mut bytes, ram_size);
     write_u32(&mut bytes, cpu_count);
     write_u32(&mut bytes, boot_cpu_id);
+    write_u32(&mut bytes, device_count);
+    write_u32(&mut bytes, 0);
     bytes.extend_from_slice(ram);
     for cpu in cpus {
         encode_cpu_record(&mut bytes, cpu)?;
+    }
+    for device in devices {
+        encode_device_record(&mut bytes, device)?;
     }
     Ok(bytes)
 }
@@ -105,9 +137,16 @@ pub fn decode_snapshot_v1(bytes: &[u8]) -> Result<ComputerMachineSnapshot<'_>, S
         NO_BOOT_CPU => None,
         id => Some(id),
     };
+    let device_count = read_u32(bytes, 32)?;
+    let reserved = read_u32(bytes, 36)?;
+    if reserved != 0 {
+        return Err(format!(
+            "unsupported ComputerMachine snapshot reserved header field {reserved:#010x}"
+        ));
+    }
     let ram_len = usize::try_from(ram_size)
         .map_err(|_| "ComputerMachine snapshot RAM size does not fit usize".to_string())?;
-    let expected_len = COMPUTER_SNAPSHOT_V1_HEADER_SIZE
+    let fixed_payload_len = COMPUTER_SNAPSHOT_V1_HEADER_SIZE
         .checked_add(ram_len)
         .and_then(|size| {
             usize::try_from(cpu_count).ok().and_then(|count| {
@@ -117,11 +156,11 @@ pub fn decode_snapshot_v1(bytes: &[u8]) -> Result<ComputerMachineSnapshot<'_>, S
             })
         })
         .ok_or_else(|| "ComputerMachine snapshot size overflows usize".to_string())?;
-    if bytes.len() != expected_len {
+    if bytes.len() < fixed_payload_len {
         let payload_len = bytes.len().saturating_sub(COMPUTER_SNAPSHOT_V1_HEADER_SIZE);
-        let expected_payload_len = expected_len - COMPUTER_SNAPSHOT_V1_HEADER_SIZE;
+        let expected_payload_len = fixed_payload_len - COMPUTER_SNAPSHOT_V1_HEADER_SIZE;
         return Err(format!(
-            "ComputerMachine snapshot declares {expected_payload_len} payload bytes but file has {payload_len} payload bytes"
+            "ComputerMachine snapshot declares at least {expected_payload_len} payload bytes but file has {payload_len} payload bytes"
         ));
     }
     let ram_start = COMPUTER_SNAPSHOT_V1_HEADER_SIZE;
@@ -133,6 +172,19 @@ pub fn decode_snapshot_v1(bytes: &[u8]) -> Result<ComputerMachineSnapshot<'_>, S
         cpus.push(decode_cpu_record(cpu_bytes, index)?);
         cpu_offset += COMPUTER_SNAPSHOT_V1_RUX16_CPU_RECORD_SIZE;
     }
+    let mut devices = Vec::with_capacity(device_count as usize);
+    let mut device_offset = cpu_offset;
+    for index in 0..device_count {
+        let (device, next_offset) = decode_device_record(bytes, device_offset, index)?;
+        devices.push(device);
+        device_offset = next_offset;
+    }
+    if device_offset != bytes.len() {
+        return Err(format!(
+            "ComputerMachine snapshot has {} trailing bytes after device records",
+            bytes.len() - device_offset
+        ));
+    }
     Ok(ComputerMachineSnapshot {
         header: ComputerMachineSnapshotHeader {
             version,
@@ -141,9 +193,11 @@ pub fn decode_snapshot_v1(bytes: &[u8]) -> Result<ComputerMachineSnapshot<'_>, S
             ram_size,
             cpu_count,
             boot_cpu_id,
+            device_count,
         },
         ram: &bytes[ram_start..ram_end],
         cpus,
+        devices,
     })
 }
 
@@ -173,6 +227,10 @@ fn write_u64(bytes: &mut Vec<u8>, value: u64) {
     bytes.extend_from_slice(&value.to_le_bytes());
 }
 
+fn write_i32(bytes: &mut Vec<u8>, value: i32) {
+    bytes.extend_from_slice(&value.to_le_bytes());
+}
+
 fn encode_cpu_record(
     bytes: &mut Vec<u8>,
     record: &ComputerCpuSnapshotRecord,
@@ -195,6 +253,94 @@ fn encode_cpu_record(
         }
     }
     Ok(())
+}
+
+fn device_record_size(record: &ComputerDeviceSnapshotRecord) -> usize {
+    8 + match record {
+        ComputerDeviceSnapshotRecord::Control { .. } => CONTROL_DEVICE_PAYLOAD_SIZE,
+        ComputerDeviceSnapshotRecord::DebugSerial { bytes } => bytes.len(),
+    }
+}
+
+fn encode_device_record(
+    bytes: &mut Vec<u8>,
+    record: &ComputerDeviceSnapshotRecord,
+) -> Result<(), String> {
+    match record {
+        ComputerDeviceSnapshotRecord::Control {
+            status,
+            panic_code,
+            exit_code,
+        } => {
+            write_u32(bytes, COMPUTER_SNAPSHOT_V1_CONTROL_DEVICE_KIND);
+            write_u32(bytes, CONTROL_DEVICE_PAYLOAD_SIZE as u32);
+            write_i32(bytes, *status);
+            write_i32(bytes, *panic_code);
+            write_i32(bytes, *exit_code);
+        }
+        ComputerDeviceSnapshotRecord::DebugSerial { bytes: debug_bytes } => {
+            let payload_size = u32::try_from(debug_bytes.len())
+                .map_err(|_| "snapshot debug device payload size does not fit u32".to_string())?;
+            write_u32(bytes, COMPUTER_SNAPSHOT_V1_DEBUG_DEVICE_KIND);
+            write_u32(bytes, payload_size);
+            bytes.extend_from_slice(debug_bytes);
+        }
+    }
+    Ok(())
+}
+
+fn decode_device_record(
+    bytes: &[u8],
+    offset: usize,
+    index: u32,
+) -> Result<(ComputerDeviceSnapshotRecord, usize), String> {
+    let header_end = offset.checked_add(8).ok_or_else(|| {
+        "ComputerMachine snapshot device record offset overflows usize".to_string()
+    })?;
+    if header_end > bytes.len() {
+        return Err(format!(
+            "ComputerMachine snapshot device {index} header is truncated"
+        ));
+    }
+    let kind = read_u32(bytes, offset)?;
+    let payload_size = read_u32(bytes, offset + 4)?;
+    let payload_size = usize::try_from(payload_size).map_err(|_| {
+        format!("ComputerMachine snapshot device {index} payload size does not fit usize")
+    })?;
+    let payload_start = header_end;
+    let payload_end = payload_start
+        .checked_add(payload_size)
+        .ok_or_else(|| "ComputerMachine snapshot device payload overflows usize".to_string())?;
+    if payload_end > bytes.len() {
+        return Err(format!(
+            "ComputerMachine snapshot device {index} payload is truncated"
+        ));
+    }
+    let payload = &bytes[payload_start..payload_end];
+    let record = match kind {
+        COMPUTER_SNAPSHOT_V1_CONTROL_DEVICE_KIND => {
+            if payload.len() != CONTROL_DEVICE_PAYLOAD_SIZE {
+                return Err(format!(
+                    "ComputerMachine snapshot control device payload has {} bytes but expected {CONTROL_DEVICE_PAYLOAD_SIZE}",
+                    payload.len()
+                ));
+            }
+            ComputerDeviceSnapshotRecord::Control {
+                status: read_i32(payload, 0)?,
+                panic_code: read_i32(payload, 4)?,
+                exit_code: read_i32(payload, 8)?,
+            }
+        }
+        COMPUTER_SNAPSHOT_V1_DEBUG_DEVICE_KIND => ComputerDeviceSnapshotRecord::DebugSerial {
+            bytes: payload.to_vec(),
+        },
+        _ => {
+            return Err(format!(
+                "unsupported ComputerMachine snapshot device {index} kind {kind}"
+            ));
+        }
+    };
+    Ok((record, payload_end))
 }
 
 fn decode_cpu_record(bytes: &[u8], index: u32) -> Result<ComputerCpuSnapshotRecord, String> {
@@ -275,4 +421,11 @@ fn read_u64(bytes: &[u8], offset: usize) -> Result<u64, String> {
         .get(offset..offset + 8)
         .ok_or_else(|| "ComputerMachine snapshot header is truncated".to_string())?;
     Ok(u64::from_le_bytes(raw.try_into().unwrap()))
+}
+
+fn read_i32(bytes: &[u8], offset: usize) -> Result<i32, String> {
+    let raw = bytes
+        .get(offset..offset + 4)
+        .ok_or_else(|| "ComputerMachine snapshot header is truncated".to_string())?;
+    Ok(i32::from_le_bytes(raw.try_into().unwrap()))
 }

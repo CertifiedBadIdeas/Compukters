@@ -9,8 +9,9 @@ state. It is not a guest-visible disk format and it is not stored on
 `storage0`. Its purpose is to support future persistence of a running computer
 across host unload/load boundaries.
 
-The current v1 slice records a versioned header, full RAM bytes, and fixed-size
-Rux16 CPU continuation records. Device state is not part of this slice yet.
+The current v1 slice records a versioned header, full RAM bytes, fixed-size
+Rux16 CPU continuation records, and explicit device records for `control` and
+`debug`.
 
 ## File Layout
 
@@ -20,20 +21,26 @@ All integers are little-endian.
 offset  size  field
 0x00    8     magic: "RUXSNAP\0"
 0x08    2     version: 1
-0x0A    2     header_size: 32
+0x0A    2     header_size: 40
 0x0C    4     flags: 0
 0x10    8     ram_size
 0x18    4     cpu_count
 0x1C    4     boot_cpu_id, or 0xffffffff when absent
-0x20    ...   RAM bytes, exactly ram_size bytes
+0x20    4     device_count
+0x24    4     reserved: 0
+0x28    ...   RAM bytes, exactly ram_size bytes
 ...     ...   CPU records, exactly cpu_count records
+...     ...   Device records, exactly device_count records
 ```
 
-The file size must be exactly:
+The fixed payload prefix must contain:
 
 ```text
 header_size + ram_size + cpu_count * 112
 ```
+
+The final file size is that fixed prefix plus the decoded sizes of all device
+records. Decoders must reject trailing bytes after the declared device records.
 
 ## CPU Record Layout
 
@@ -58,13 +65,37 @@ offset  size  field
 restored as a trapped CPU with preserved trap CSRs; the human-readable trap
 message is not serialized in v1.
 
+## Device Record Layout
+
+Device records have a common variable-length header:
+
+```text
+offset  size  field
+0x00    4     device_kind
+0x04    4     payload_size
+0x08    ...   payload bytes
+```
+
+Supported device kinds:
+
+```text
+kind  payload
+1     control: status i32, panic_code i32, exit_code i32
+2     debug: raw debug output bytes
+```
+
+Unknown device kinds are rejected. `control` payloads must be exactly 12 bytes.
+`debug` payloads may be empty.
+
 ## Restore Semantics
 
-Full restore recreates RAM, CPU contexts, and `boot_cpu_id` from the snapshot
-against an explicitly provided `ComputerMachineProfile`. Restore must reject a
-snapshot when its `ram_size` differs from the target profile memory size, when
-the boot CPU id points outside the CPU table, or when a CPU record contains an
-unsupported kind/state/reserved field.
+Full restore recreates RAM, CPU contexts, `boot_cpu_id`, `control` state, and
+`debug` output from the snapshot against an explicitly provided
+`ComputerMachineProfile`. Restore must reject a snapshot when its `ram_size`
+differs from the target profile memory size, when the boot CPU id points
+outside the CPU table, when a CPU record contains an unsupported
+kind/state/reserved field, or when the target profile does not expose a device
+recorded by the snapshot.
 
 RAM-only restore remains available as an explicitly named operation for tooling
 that only wants RAM bytes. It does not recreate CPU contexts, boot CPU id,
@@ -84,6 +115,11 @@ A decoder must reject:
 - unknown CPU kinds;
 - unknown Rux16 CPU states;
 - non-zero CPU record reserved fields;
-- zero `max_steps` when restoring CPU contexts.
+- zero `max_steps` when restoring CPU contexts;
+- non-zero header reserved field;
+- truncated device record headers or payloads;
+- unknown device kinds;
+- invalid fixed-size device payload lengths;
+- trailing bytes after declared device records.
 
 There is no fallback decoder for unknown snapshot formats.

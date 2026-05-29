@@ -7,7 +7,7 @@ use crate::computer::profile::{
     StorageMediaConfig,
 };
 use crate::computer::snapshot;
-use crate::computer::snapshot::ComputerCpuSnapshotRecord;
+use crate::computer::snapshot::{ComputerCpuSnapshotRecord, ComputerDeviceSnapshotRecord};
 use crate::computer_abi;
 use crate::low_bus::{MachineBus, MmioDeviceId};
 use crate::low_machine::{MachineMemory, MemoryFault};
@@ -306,7 +306,8 @@ impl ComputerMachine {
             .iter()
             .map(ComputerCpuContext::snapshot_record)
             .collect::<Vec<_>>();
-        snapshot::encode_snapshot_v1(self.memory().bytes(), self.boot_cpu, &cpus)
+        let devices = self.device_snapshot_records();
+        snapshot::encode_snapshot_v1(self.memory().bytes(), self.boot_cpu, &cpus, &devices)
     }
 
     pub fn restore_ram_snapshot_v1(
@@ -334,6 +335,9 @@ impl ComputerMachine {
             .cloned()
             .map(ComputerCpuContext::from_snapshot_record)
             .collect::<Result<Vec<_>, _>>()?;
+        for device in snapshot.devices {
+            machine.restore_device_snapshot_record(device)?;
+        }
         machine.boot_cpu = snapshot
             .header
             .boot_cpu_id
@@ -573,6 +577,52 @@ impl ComputerMachine {
     fn debug_device_mut(&mut self) -> Option<&mut DebugSerialDevice> {
         self.debug_device_id
             .and_then(|id| self.bus.device_mut::<DebugSerialDevice>(id))
+    }
+
+    fn device_snapshot_records(&self) -> Vec<ComputerDeviceSnapshotRecord> {
+        let mut devices = Vec::new();
+        if let Some(control) = self.control_device() {
+            devices.push(ComputerDeviceSnapshotRecord::Control {
+                status: control.status,
+                panic_code: control.panic_code,
+                exit_code: control.exit_code,
+            });
+        }
+        if let Some(debug) = self.debug_device() {
+            devices.push(ComputerDeviceSnapshotRecord::DebugSerial {
+                bytes: debug.bytes().to_vec(),
+            });
+        }
+        devices
+    }
+
+    fn restore_device_snapshot_record(
+        &mut self,
+        record: ComputerDeviceSnapshotRecord,
+    ) -> Result<(), String> {
+        match record {
+            ComputerDeviceSnapshotRecord::Control {
+                status,
+                panic_code,
+                exit_code,
+            } => {
+                let control = self.control_device_mut().ok_or_else(|| {
+                    "ComputerMachine snapshot contains control device state but profile has no control device"
+                        .to_string()
+                })?;
+                control.status = status;
+                control.panic_code = panic_code;
+                control.exit_code = exit_code;
+            }
+            ComputerDeviceSnapshotRecord::DebugSerial { bytes } => {
+                let debug = self.debug_device_mut().ok_or_else(|| {
+                    "ComputerMachine snapshot contains debug device state but profile has no debug device"
+                        .to_string()
+                })?;
+                debug.restore_bytes(bytes);
+            }
+        }
+        Ok(())
     }
 
     fn serial_input_device(&self) -> Option<&SerialInputDevice> {
