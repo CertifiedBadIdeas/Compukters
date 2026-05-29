@@ -1,7 +1,19 @@
 use rux::abi::computer::{control, debug, storage0};
 
+fn clear_init_handoff_info() {
+    unsafe {
+        ptr<i32>(0x3f20u32).store(0);
+        ptr<i32>(0x3f24u32).store(0);
+        ptr<i32>(0x3f28u32).store(0);
+        ptr<i32>(0x3f2cu32).store(0);
+        ptr<i32>(0x3f30u32).store(0);
+        ptr<i32>(0x3f34u32).store(0);
+    }
+}
+
 fn write_init_load_failed() {
     unsafe {
+        clear_init_handoff_info();
         mmio<u8>(debug::WRITE).store(73u8);
         mmio<u8>(debug::WRITE).store(78u8);
         mmio<u8>(debug::WRITE).store(73u8);
