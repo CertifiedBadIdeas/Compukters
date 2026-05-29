@@ -19,6 +19,7 @@
 
 package ru.lazyhat.compukterkraft.core.device.runtime
 
+import ru.lazyhat.compukterkraft.core.LOGGER
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 import ru.lazyhat.compukterkraft.core.device.DeviceProperties
 import ru.lazyhat.compukterkraft.core.device.runtime.ports.DeviceStateSink
@@ -46,7 +47,8 @@ class RuxRuntimeDevice(
     private val displayNetwork: DisplayNetworkBridge = NoopDisplayNetworkBridge,
 ) : RuntimeDevice,
     RuntimeDeviceSerialEndpoint,
-    RuntimeDeviceSnapshotPersistence {
+    RuntimeDeviceSnapshotPersistence,
+    RuntimeDeviceFailureState {
     override val family: DeviceFamily = properties.family
 
     private var endpoint: RuxComputerEndpoint? = null
@@ -55,6 +57,7 @@ class RuxRuntimeDevice(
     private val displaySnapshotRefreshDisplayIds = mutableSetOf<Int>()
     private var labelBacking: String? = properties.label
     private var renderedSerialBytes = 0
+    private var runtimeFailureMessageBacking: String? = null
 
     override var label: String?
         get() = labelBacking
@@ -65,9 +68,23 @@ class RuxRuntimeDevice(
     override val isOn: Boolean
         get() = endpoint != null
 
+    override val runtimeFailureMessage: String?
+        get() = runtimeFailureMessageBacking
+
     override fun turnOn() {
         if (endpoint != null) return
-        endpoint = endpointFactory()
+        endpoint =
+            try {
+                endpointFactory()
+            } catch (error: Throwable) {
+                runtimeFailureMessageBacking = error.message ?: error::class.java.name
+                LOGGER.error(error) {
+                    "RuxRuntimeDevice $deviceId failed to start: $runtimeFailureMessageBacking"
+                }
+                stateSink.onPowerStateChanged(false)
+                return
+            }
+        runtimeFailureMessageBacking = null
         stateSink.onPowerStateChanged(true)
     }
 

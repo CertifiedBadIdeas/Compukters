@@ -77,6 +77,10 @@ interface RuntimeDeviceSnapshotPersistence {
     fun snapshotRuntimeState(): ByteArray?
 }
 
+interface RuntimeDeviceFailureState {
+    val runtimeFailureMessage: String?
+}
+
 /** Umbrella: every present-day runtime device implements every role. Future minimal
  *  carriers (e.g. Pocket without terminal sessions) may implement only a subset; the
  *  umbrella is then narrowed accordingly. */

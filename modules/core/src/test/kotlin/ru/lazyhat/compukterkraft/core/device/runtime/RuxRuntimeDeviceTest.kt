@@ -294,6 +294,30 @@ class RuxRuntimeDeviceTest {
         assertEquals(null, device.snapshotRuntimeState())
     }
 
+    @Test
+    fun failedEndpointStartupRecordsRuntimeFailureWithoutPoweringOn() {
+        var endpointFactoryCalls = 0
+        val powerChanges = mutableListOf<Boolean>()
+        val device =
+            RuxRuntimeDevice(
+                deviceId = 17,
+                properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
+                endpointFactory = {
+                    endpointFactoryCalls += 1
+                    error("unsupported snapshot version")
+                },
+                stateSink = { powerChanges += it },
+            )
+
+        device.turnOn()
+
+        assertFalse(device.isOn)
+        assertEquals(1, endpointFactoryCalls)
+        assertEquals(listOf(false), powerChanges)
+        assertEquals("unsupported snapshot version", device.runtimeFailureMessage)
+        assertEquals(null, device.snapshotRuntimeState())
+    }
+
     private class RecordingRuxEndpoint : RuxComputerEndpoint {
         val inputs = mutableListOf<ByteArray>()
         var tickCalls = 0

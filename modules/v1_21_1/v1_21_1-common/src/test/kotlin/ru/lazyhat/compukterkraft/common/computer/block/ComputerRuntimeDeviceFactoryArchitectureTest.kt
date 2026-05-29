@@ -20,12 +20,16 @@
 package ru.lazyhat.compukterkraft.common.computer.block
 
 import java.nio.file.Path
+import kotlin.io.path.exists
 import kotlin.io.path.readText
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ComputerRuntimeDeviceFactoryArchitectureTest {
+    private val root = generateSequence(Path.of(System.getProperty("user.dir")).toAbsolutePath()) { it.parent }
+        .first { it.resolve("gradle/libs.versions.toml").exists() }
+
     @Test
     fun inGameRuxComputerStartsFromPreparedBiosFlashFile() {
         val source =
@@ -76,5 +80,25 @@ class ComputerRuntimeDeviceFactoryArchitectureTest {
         assertTrue(source.contains("runtimeSnapshot"))
         assertTrue(source.contains("snapshotRuntimeState()"))
         assertTrue(source.contains("consumePendingRuntimeSnapshot"))
+    }
+
+    @Test
+    fun runtimeStartupFailureIsVisibleToComputerMenuAndNotebookScreen() {
+        val runtimeSource =
+            root
+                .resolve("modules/core/src/main/kotlin/ru/lazyhat/compukterkraft/core/device/runtime/RuntimeDevice.kt")
+                .readText()
+        val menuSource =
+            Path
+                .of("src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/menu/AbstractComputerMenu.kt")
+                .readText()
+        val notebookScreenSource =
+            Path
+                .of("src/main/kotlin/ru/lazyhat/compukterkraft/common/notebook/screen/NotebookScreen.kt")
+                .readText()
+
+        assertTrue(runtimeSource.contains("RuntimeDeviceFailureState"))
+        assertTrue(menuSource.contains("hasComputerRuntimeFailure"))
+        assertTrue(notebookScreenSource.contains("FAILED(\"ERROR\")"))
     }
 }
