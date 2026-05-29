@@ -21,15 +21,15 @@ fn rux_disasm_requires_explicit_target() {
 }
 
 #[test]
-fn rux_disasm_rejects_program_target_until_user_space_abi_exists() {
+fn rux_disasm_prints_program_artifact_from_program_load_base() {
     let artifact_path = temp_file("program.ruxe");
     fs::write(
         &artifact_path,
         rux_compiler::ruxe::encode_rux16_executable(
-            &words_to_bytes(&[const4(1, 7), const4(2, 3), add(3, 1, 2), halt()]),
-            rux_compiler::ruxe::RuxeAbiKind::Bootloader,
-            2048,
-            2048,
+            &words_to_bytes(&[const4(1, 7), halt()]),
+            rux_compiler::ruxe::RuxeAbiKind::Program,
+            0x8000,
+            0x8000,
         )
         .expect("RUXE encodes"),
     )
@@ -45,12 +45,17 @@ fn rux_disasm_rejects_program_target_until_user_space_abi_exists() {
         .output()
         .expect("rux disasm runs");
 
-    assert!(!output.status.success());
-    let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("user-space program ABI is not defined yet"),
-        "stderr: {stderr}"
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
     );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("00008000: 1107  const4 r1, 7"),
+        "stdout: {stdout}"
+    );
+    assert!(stdout.contains("00008002: 0001  halt"), "stdout: {stdout}");
 }
 
 #[test]
@@ -263,10 +268,6 @@ fn words_to_bytes(words: &[u16]) -> Vec<u8> {
 
 fn const4(register: u8, value: u8) -> u16 {
     0x1000 | (u16::from(register) << 8) | u16::from(value & 0x0f)
-}
-
-fn add(dst: u8, lhs: u8, rhs: u8) -> u16 {
-    0x2000 | (u16::from(dst) << 8) | (u16::from(lhs) << 4) | u16::from(rhs)
 }
 
 fn ltu(dst: u8, lhs: u8, rhs: u8) -> [u16; 2] {

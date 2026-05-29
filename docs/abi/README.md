@@ -8,8 +8,8 @@ chosen, but the files here are the current references for firmware and tooling.
 
 Current specifications:
 
-- `ruxe-v1.md`: experimental guest-loadable fixed-image executable container
-  for Rux16 bootloader and kernel images.
+- `ruxe-v1.md`: experimental guest-loadable executable container for Rux16
+  bootloader, kernel, and user-space program images.
 - `rux16-v1.md`: experimental Rux16 CPU ABI, including the register file and
   stack pointer convention.
 - `rux-storage-volume-v1.md`: current storage0 volume, legacy fixed boot/kernel

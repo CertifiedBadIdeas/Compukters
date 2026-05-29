@@ -41,17 +41,16 @@ fn rux16_kernel_artifact_is_ruxe_fixed_image() {
 }
 
 #[test]
-fn rux16_program_artifact_is_rejected_until_user_space_abi_exists() {
-    let artifact =
-        compile_rux16_artifact("fn main() { }", Rux16ArtifactTarget::Program).unwrap_err();
+fn rux16_program_artifact_is_ruxe_program_executable() {
+    let artifact = compile_rux16_artifact("fn main() { }", Rux16ArtifactTarget::Program)
+        .expect("empty main compiles to program RUXE");
 
-    assert!(
-        artifact
-            .message
-            .contains("user-space program ABI is not defined yet"),
-        "{}",
-        artifact.message
-    );
+    assert_eq!(artifact.target, Rux16ArtifactTarget::Program);
+    let executable = ruxe::decode_rux16_executable(&artifact.bytes).expect("RUXE decodes");
+    assert_eq!(executable.abi_kind, ruxe::RuxeAbiKind::Program);
+    assert_eq!(executable.entry_pc, 0x8000);
+    assert_eq!(executable.load_addr, 0x8000);
+    assert_eq!(executable.payload, vec![0x01, 0x00]);
 }
 
 #[test]

@@ -3,10 +3,10 @@ use std::path::PathBuf;
 use std::process::Command;
 
 #[test]
-fn rux_compile_defaults_to_user_space_program_target_and_rejects_it_until_program_abi_exists() {
+fn rux_compile_defaults_to_user_space_program_target() {
     let source_path = temp_file("default-program.rx");
-    let default_output_path = temp_file("default-program.bin");
-    let explicit_output_path = temp_file("explicit-program.bin");
+    let default_output_path = temp_file("default-program.ruxe");
+    let explicit_output_path = temp_file("explicit-program.ruxe");
     fs::write(&source_path, "fn main() { }").expect("source writes");
 
     let default_output = Command::new(rux_binary())
@@ -18,11 +18,10 @@ fn rux_compile_defaults_to_user_space_program_target_and_rejects_it_until_progra
         ])
         .output()
         .expect("rux compile runs");
-    assert!(!default_output.status.success());
-    let default_stderr = String::from_utf8_lossy(&default_output.stderr);
     assert!(
-        default_stderr.contains("user-space program ABI is not defined yet"),
-        "stderr: {default_stderr}"
+        default_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&default_output.stderr)
     );
 
     let explicit_output = Command::new(rux_binary())
@@ -36,14 +35,20 @@ fn rux_compile_defaults_to_user_space_program_target_and_rejects_it_until_progra
         ])
         .output()
         .expect("rux compile runs");
-    assert!(!explicit_output.status.success());
-    let explicit_stderr = String::from_utf8_lossy(&explicit_output.stderr);
     assert!(
-        explicit_stderr.contains("user-space program ABI is not defined yet"),
-        "stderr: {explicit_stderr}"
+        explicit_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&explicit_output.stderr)
     );
-    assert!(!default_output_path.exists());
-    assert!(!explicit_output_path.exists());
+
+    for output_path in [default_output_path, explicit_output_path] {
+        let bytes = fs::read(output_path).expect("output reads");
+        assert_eq!(&bytes[0..4], b"RUXE");
+        assert_eq!(u32_at(&bytes, 24), 3);
+        assert_eq!(u32_at(&bytes, 12), 0x8000);
+        assert_eq!(u32_at(&bytes, 36), 0x8000);
+        assert_eq!(&bytes[52..], &[0x01, 0x00]);
+    }
 }
 
 #[test]
