@@ -13,10 +13,12 @@ pub mod jni;
 pub mod low_bus;
 pub mod low_machine;
 pub mod rux16;
+pub mod ruxe;
 pub mod rux_computer {
     pub use crate::computer::handle::{
         RuxComputerControl, RuxComputerHandle, RuxComputerTextDisplaySnapshot,
     };
     pub use crate::computer::machine::BootHandoffError;
 }
+pub mod storage_image;
 pub mod vm_microbenchmarks;

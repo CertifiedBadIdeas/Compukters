@@ -161,6 +161,18 @@ This reader composes byte-level volume partition extraction with RuxFS absolute
 path lookup. It is not a fallback path and does not make `rux volume`
 filesystem-aware.
 
+The VM runtime also has a read-only storage image reader for the guest-visible
+media payload:
+
+```text
+storage0 media bytes -> RUXPT ROOT partition -> RUXFS superblock -> absolute path
+```
+
+This runtime reader starts at LBA0 of the storage media payload. It does not
+accept a host `.ruxvol` path and does not strip the 16-byte `RUXVOL` host file
+header. The storage backend performs that file-to-media translation before the
+guest-visible storage path sees any bytes.
+
 The public CLI namespace is filesystem-specific:
 
 ```text
