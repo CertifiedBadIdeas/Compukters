@@ -931,11 +931,11 @@ fn rux16_kernel_loader_source_loads_kernel_ruxe_from_root_ruxfs() {
         "kernel.ruxe loader should translate the file extent block into an absolute storage LBA"
     );
     assert!(
-        source.contains("read_storage0_blocks(kernel_lba, kernel_block_count, 0x3000)"),
+        source.contains("read_storage0_blocks(kernel_lba, kernel_block_count, 0x6000)"),
         "kernel.ruxe loader should read file extent bytes into RAM"
     );
     assert!(
-        source.contains("ptr<i32>(0x3000u32).load()"),
+        source.contains("ptr<i32>(0x6000u32).load()"),
         "kernel.ruxe loader should inspect the loaded file header from RAM"
     );
     assert!(
@@ -956,19 +956,19 @@ fn rux16_kernel_loader_source_executes_kernel_ruxe_from_root_ruxfs() {
         "kernel loader should expose a guest-side RUXE execution helper"
     );
     assert!(
-        source.contains("ptr<i32>(0x300cu32).load()"),
+        source.contains("ptr<i32>(0x600cu32).load()"),
         "RUXE execution should read the entry_pc field"
     );
     assert!(
-        source.contains("ptr<u32>(0x3024u32).load()"),
+        source.contains("ptr<u32>(0x6024u32).load()"),
         "RUXE execution should read the load_addr field from the first section"
     );
     assert!(
-        source.contains("ptr<u32>(0x3028u32).load()"),
+        source.contains("ptr<u32>(0x6028u32).load()"),
         "RUXE execution should read the payload file offset"
     );
     assert!(
-        source.contains("ptr<u32>(0x302cu32).load()"),
+        source.contains("ptr<u32>(0x602cu32).load()"),
         "RUXE execution should read the payload file size"
     );
     assert!(
@@ -1133,6 +1133,197 @@ fn rux_volume_put_boot_and_kernel_creates_storage0_that_bundled_bios_executes() 
         .expect("computer profile maps display0");
     assert_eq!(display_row(&snapshot, 0), "KERNEL OK");
     assert_eq!(handle.control().panic_code, 75);
+}
+
+#[test]
+fn rux_volume_boot_kernel_and_init_executes_init_from_root_ruxfs() {
+    let volume_path = temp_file("boot-kernel-init-storage0.ruxvol");
+    let root_path = temp_file("boot-kernel-init-root.ruxfs");
+    let boot_path = temp_file("boot-kernel-init-loader.boot");
+    let kernel_path = temp_file("boot-kernel-init-kernel.ruxe");
+    let init_source_path = temp_file("init.rx");
+    let init_path = temp_file("init.ruxe");
+    let boot_source_path =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/boot/kernel_loader.rx");
+    let kernel_source_path =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/kernel/init_loader.rx");
+    fs::write(
+        &init_source_path,
+        "use rux::abi::computer::{display0};
+
+        fn main() {
+            unsafe {
+                mmio<i32>(display0::COMMAND).store(display0::COMMAND_CLEAR);
+                mmio<i32>(display0::CURSOR_X).store(0);
+                mmio<i32>(display0::CURSOR_Y).store(0);
+                mmio<i32>(display0::DATA).store(73);
+                mmio<i32>(display0::COMMAND).store(display0::COMMAND_PUT_BYTE_AT_CURSOR);
+                mmio<i32>(display0::DATA).store(78);
+                mmio<i32>(display0::COMMAND).store(display0::COMMAND_PUT_BYTE_AT_CURSOR);
+                mmio<i32>(display0::DATA).store(73);
+                mmio<i32>(display0::COMMAND).store(display0::COMMAND_PUT_BYTE_AT_CURSOR);
+                mmio<i32>(display0::DATA).store(84);
+                mmio<i32>(display0::COMMAND).store(display0::COMMAND_PUT_BYTE_AT_CURSOR);
+                mmio<i32>(display0::DATA).store(32);
+                mmio<i32>(display0::COMMAND).store(display0::COMMAND_PUT_BYTE_AT_CURSOR);
+                mmio<i32>(display0::DATA).store(79);
+                mmio<i32>(display0::COMMAND).store(display0::COMMAND_PUT_BYTE_AT_CURSOR);
+                mmio<i32>(display0::DATA).store(75);
+                mmio<i32>(display0::COMMAND).store(display0::COMMAND_PUT_BYTE_AT_CURSOR);
+            }
+        }",
+    )
+    .expect("init source writes");
+
+    let boot_compile_output = Command::new(rux_binary())
+        .args([
+            "compile",
+            "--target",
+            "boot",
+            boot_source_path.to_str().unwrap(),
+            "-o",
+            boot_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("rux compile boot runs");
+    assert!(
+        boot_compile_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&boot_compile_output.stderr)
+    );
+    let kernel_compile_output = Command::new(rux_binary())
+        .args([
+            "compile",
+            "--target",
+            "kernel",
+            kernel_source_path.to_str().unwrap(),
+            "-o",
+            kernel_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("rux compile kernel runs");
+    assert!(
+        kernel_compile_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&kernel_compile_output.stderr)
+    );
+    let init_compile_output = Command::new(rux_binary())
+        .args([
+            "compile",
+            init_source_path.to_str().unwrap(),
+            "-o",
+            init_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("rux compile init runs");
+    assert!(
+        init_compile_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&init_compile_output.stderr)
+    );
+
+    assert!(Command::new(rux_binary())
+        .args([
+            "volume",
+            "init",
+            volume_path.to_str().unwrap(),
+            "--size",
+            "65536",
+        ])
+        .status()
+        .expect("init runs")
+        .success());
+    assert!(Command::new(rux_binary())
+        .args([
+            "volume",
+            "put-boot",
+            volume_path.to_str().unwrap(),
+            boot_path.to_str().unwrap(),
+        ])
+        .status()
+        .expect("put-boot runs")
+        .success());
+    assert!(Command::new(rux_binary())
+        .args([
+            "fs",
+            "ruxfs",
+            "format",
+            root_path.to_str().unwrap(),
+            "--blocks",
+            "95",
+        ])
+        .status()
+        .expect("ruxfs format runs")
+        .success());
+    assert!(Command::new(rux_binary())
+        .args(["fs", "ruxfs", "mkdir", root_path.to_str().unwrap(), "/bin"])
+        .status()
+        .expect("ruxfs mkdir /bin runs")
+        .success());
+    assert!(Command::new(rux_binary())
+        .args([
+            "fs",
+            "ruxfs",
+            "put",
+            root_path.to_str().unwrap(),
+            "/bin/init.ruxe",
+            init_path.to_str().unwrap(),
+        ])
+        .status()
+        .expect("ruxfs put init runs")
+        .success());
+    assert!(Command::new(rux_binary())
+        .args([
+            "volume",
+            "replace-partition",
+            volume_path.to_str().unwrap(),
+            "ROOT",
+            root_path.to_str().unwrap(),
+        ])
+        .status()
+        .expect("replace ROOT runs")
+        .success());
+    assert!(Command::new(rux_binary())
+        .args([
+            "volume",
+            "put-kernel",
+            volume_path.to_str().unwrap(),
+            kernel_path.to_str().unwrap(),
+        ])
+        .status()
+        .expect("put-kernel runs")
+        .success());
+
+    let bios = compile_bundled_rux16_bios();
+    let mut handle = RuxComputerHandle::create_rux16_bios_flash_with_storage0_path(
+        &bios,
+        64 * 1024,
+        1_000_000,
+        &volume_path,
+    )
+    .expect("Rux16 BIOS flash computer creates with CLI boot/kernel/init volume path");
+
+    let signal_result = handle.run_rux16_until_signal();
+    let snapshot = handle
+        .display0_snapshot()
+        .expect("computer profile maps display0");
+    let signal = signal_result.unwrap_or_else(|error| {
+        panic!(
+            "run failed: {error}; debug={} panic={} row0={}",
+            String::from_utf8_lossy(handle.debug_output_bytes()),
+            handle.control().panic_code,
+            display_row(&snapshot, 0)
+        )
+    });
+    assert_eq!(
+        signal,
+        Rux16Signal::Halt,
+        "debug={} panic={} row0={}",
+        String::from_utf8_lossy(handle.debug_output_bytes()),
+        handle.control().panic_code,
+        display_row(&snapshot, 0)
+    );
+    assert_eq!(display_row(&snapshot, 0), "INIT OK");
 }
 
 #[test]
