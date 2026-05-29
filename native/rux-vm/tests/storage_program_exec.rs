@@ -1,4 +1,26 @@
+use rux_vm::computer_machine::ComputerMachine;
+use rux_vm::rux_computer::RuxComputerHandle;
 use rux_vm::{ruxe, storage_image};
+
+#[test]
+fn runtime_exec_runs_program_ruxe_payload_from_entry_pc() {
+    let bios = rux16_words(&[rux16_halt()]);
+    let mut program_words = vec![rux16_halt()];
+    program_words.extend(rux16_init_ok_program_words());
+    let program_payload = rux16_words(&program_words);
+    let init = encode_ruxe(3, 0x8002, 0x8000, &program_payload);
+    let mut handle =
+        RuxComputerHandle::create_rux16_bios_flash(&bios, 64 * 1024, 8).expect("VM creates");
+
+    handle
+        .exec_ruxe_program_from_bytes(&init, 256)
+        .expect("program RUXE transfers into Rux16 execution");
+    handle
+        .run_rux16_until_signal()
+        .expect("program runs until halt");
+
+    assert_eq!(handle.debug_output_bytes(), b"INIT OK");
+}
 
 #[test]
 fn runtime_reader_loads_program_ruxe_from_root_ruxfs() {
@@ -147,6 +169,40 @@ fn encode_ruxe(abi_kind: u32, entry_pc: u32, load_addr: u32, payload: &[u8]) -> 
     bytes.extend_from_slice(&(payload.len() as u32).to_le_bytes());
     bytes.extend_from_slice(payload);
     bytes
+}
+
+fn rux16_init_ok_program_words() -> Vec<u16> {
+    let mut words = Vec::new();
+    words.extend(rux16_const32(0, ComputerMachine::DEBUG_WRITE));
+    for byte in b"INIT OK" {
+        words.extend(rux16_const32(1, u32::from(*byte)));
+        words.push(rux16_store32(0, 1));
+    }
+    words.push(rux16_halt());
+    words
+}
+
+fn rux16_words(words: &[u16]) -> Vec<u8> {
+    words
+        .iter()
+        .flat_map(|word| word.to_le_bytes())
+        .collect::<Vec<_>>()
+}
+
+fn rux16_const32(dst: u8, value: u32) -> [u16; 3] {
+    [
+        0xe001 | (u16::from(dst) << 8),
+        value as u16,
+        (value >> 16) as u16,
+    ]
+}
+
+fn rux16_store32(addr: u8, src: u8) -> u16 {
+    0x5002 | (u16::from(addr) << 8) | (u16::from(src) << 4)
+}
+
+fn rux16_halt() -> u16 {
+    0x0001
 }
 
 fn write_u32(bytes: &mut [u8], offset: usize, value: u32) {

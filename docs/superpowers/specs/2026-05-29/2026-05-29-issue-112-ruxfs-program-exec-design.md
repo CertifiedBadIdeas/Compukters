@@ -17,13 +17,17 @@ storage0 media bytes -> RUXPT ROOT partition -> RUXFS absolute path -> file byte
 
 The reader is an internal VM/runtime building block, not a host API that accepts guest filesystem paths. It returns explicit errors for missing partitions, malformed RUXPT/RuxFS data, and missing paths. It does not search alternate partitions or paths.
 
-Add a small program exec validator next to the reader that accepts already-read bytes and validates that they decode as RUXE ABI kind `program`. The actual CPU transfer, process model, and `/bin/init` handoff remain follow-up work under #112.
+Add a small program exec validator next to the reader that accepts already-read bytes and validates that they decode as RUXE ABI kind `program`. The runtime transfer helper then copies the executable payload into guest RAM at `load_addr` and starts Rux16 execution at `entry_pc`.
+
+The actual kernel-side `/bin/init` policy remains follow-up work under #112.
 
 ## Scope
 
 - Port the read-only `RUXPT -> ROOT -> RUXFS -> absolute path` reader into `native/rux-vm`.
 - Add runtime RUXE decoding sufficient to identify the `program` ABI kind.
+- Add a runtime transfer helper for already-read program RUXE bytes.
 - Test that `/bin/init.ruxe` can be read from ROOT and accepted as a program executable.
+- Test that a program RUXE payload executes from `entry_pc`.
 - Test that kernel or malformed RUXE bytes are rejected as program executables.
 
 ## Out of Scope
@@ -37,4 +41,3 @@ Add a small program exec validator next to the reader that accepts already-read 
 
 - `cargo test` in `native/rux-vm`.
 - `cargo fmt -- --check` in `native/rux-vm`.
-

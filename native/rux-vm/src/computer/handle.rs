@@ -2,6 +2,7 @@ use crate::computer::{
     BootHandoffError, ComputerMachine, ComputerMachineProfile, ComputerTextDisplaySnapshot, CpuId,
 };
 use crate::rux16::Rux16Signal;
+use crate::ruxe;
 use std::fs;
 use std::path::Path;
 
@@ -149,5 +150,18 @@ impl RuxComputerHandle {
     ) -> Result<CpuId, BootHandoffError> {
         self.machine
             .boot_handoff_rux16_from_ram(entry_pc, byte_len, max_steps)
+    }
+
+    pub fn exec_ruxe_program_from_bytes(
+        &mut self,
+        program: &[u8],
+        max_steps: u64,
+    ) -> Result<CpuId, String> {
+        let executable = ruxe::decode_program_rux16_executable(program)?;
+        self.machine
+            .write_guest_ram_bytes(executable.load_addr, &executable.payload)?;
+        self.machine
+            .boot_handoff_rux16_from_ram(executable.entry_pc, 2, max_steps)
+            .map_err(|error| error.to_string())
     }
 }
