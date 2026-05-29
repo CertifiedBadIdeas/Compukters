@@ -73,6 +73,10 @@ interface RuntimeDeviceMetadata {
     var label: String?
 }
 
+interface RuntimeDeviceSnapshotPersistence {
+    fun snapshotRuntimeState(): ByteArray?
+}
+
 /** Umbrella: every present-day runtime device implements every role. Future minimal
  *  carriers (e.g. Pocket without terminal sessions) may implement only a subset; the
  *  umbrella is then narrowed accordingly. */

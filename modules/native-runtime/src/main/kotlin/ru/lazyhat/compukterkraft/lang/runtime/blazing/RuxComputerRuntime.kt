@@ -38,6 +38,8 @@ interface RuxComputerRuntimeBindings {
 
     fun storage0MediaSnapshot(handle: Long): ByteArray?
 
+    fun machineSnapshot(handle: Long): ByteArray
+
     fun free(handle: Long)
 }
 
@@ -62,6 +64,9 @@ object NativeRux16ComputerRuntimeBindings : RuxComputerRuntimeBindings {
     override fun storage0MediaSnapshot(handle: Long): ByteArray? =
         NativeVmBindings.ruxComputerStorage0MediaSnapshot(handle)
 
+    override fun machineSnapshot(handle: Long): ByteArray =
+        NativeVmBindings.ruxComputerMachineSnapshot(handle)
+
     override fun free(handle: Long) =
         NativeVmBindings.freeRuxComputer(handle)
 }
@@ -83,6 +88,23 @@ object RuxComputerRuntimeFactory {
                 memorySize = memorySize,
                 maxSteps = maxSteps,
                 storage0Path = storage0Path,
+        )
+        return RuxComputerRuntime(handle, bindings = NativeRux16ComputerRuntimeBindings)
+    }
+
+    fun restoreFromBiosFlashSnapshot(
+        biosFlashPath: Path,
+        storage0Path: Path,
+        snapshot: ByteArray,
+        memorySize: Int = DEFAULT_MEMORY_SIZE,
+    ): RuxComputerRuntime {
+        val handle =
+            NativeVmBindings.restoreRuxComputerFromBiosFlashSnapshot(
+                libraryPath = NativeLibraryLocator.requireLibraryPath(),
+                biosFlashPath = biosFlashPath,
+                memorySize = memorySize,
+                storage0Path = storage0Path,
+                snapshot = snapshot,
             )
         return RuxComputerRuntime(handle, bindings = NativeRux16ComputerRuntimeBindings)
     }
@@ -100,6 +122,8 @@ interface RuxComputerEndpoint : AutoCloseable {
     fun pollDisplay0Snapshot(): NativeRuxComputerDisplaySnapshot?
 
     fun clearOutput()
+
+    fun machineSnapshot(): ByteArray
 }
 
 class RuxComputerRuntime(
@@ -174,6 +198,11 @@ class RuxComputerRuntime(
     override fun clearOutput() {
         ensureOpen()
         terminalOutput.reset()
+    }
+
+    override fun machineSnapshot(): ByteArray {
+        ensureOpen()
+        return bindings.machineSnapshot(handle)
     }
 
     override fun close() {

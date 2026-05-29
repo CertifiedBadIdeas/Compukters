@@ -45,7 +45,8 @@ class RuxRuntimeDevice(
     private val stateSink: DeviceStateSink,
     private val displayNetwork: DisplayNetworkBridge = NoopDisplayNetworkBridge,
 ) : RuntimeDevice,
-    RuntimeDeviceSerialEndpoint {
+    RuntimeDeviceSerialEndpoint,
+    RuntimeDeviceSnapshotPersistence {
     override val family: DeviceFamily = properties.family
 
     private var endpoint: RuxComputerEndpoint? = null
@@ -120,6 +121,9 @@ class RuxRuntimeDevice(
     override fun clearSerialOutput() {
         endpoint?.clearOutput()
     }
+
+    override fun snapshotRuntimeState(): ByteArray? =
+        endpoint?.machineSnapshot()
 
     override fun attachDisplaySession(
         playerUuid: UUID,

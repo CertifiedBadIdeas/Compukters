@@ -551,7 +551,7 @@ impl ComputerMachine {
         });
     }
 
-    fn map_rux16_bios_flash(&mut self, bytes: Vec<u8>) -> Result<(), String> {
+    pub(crate) fn map_rux16_bios_flash(&mut self, bytes: Vec<u8>) -> Result<(), String> {
         if self.bios_flash_device_id.is_some() {
             return Err("Rux16 BIOS flash is already mapped".to_string());
         }

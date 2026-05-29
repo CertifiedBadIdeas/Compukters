@@ -81,6 +81,25 @@ impl RuxComputerHandle {
         Ok(Self { machine, boot_cpu })
     }
 
+    pub fn restore_rux16_bios_flash_snapshot_with_storage0_path(
+        bios_flash: &[u8],
+        memory_size: usize,
+        storage0_path: impl AsRef<Path>,
+        snapshot: &[u8],
+    ) -> Result<Self, String> {
+        if bios_flash.is_empty() {
+            return Err("Rux16 BIOS flash is empty".to_string());
+        }
+        let profile =
+            ComputerMachineProfile::computer_v1_with_storage0_path(memory_size, storage0_path);
+        let mut machine = ComputerMachine::restore_snapshot_v1(profile, snapshot)?;
+        machine.map_rux16_bios_flash(bios_flash.to_vec())?;
+        let boot_cpu = machine
+            .boot_cpu_id()
+            .ok_or_else(|| "Rux computer snapshot has no boot CPU".to_string())?;
+        Ok(Self { machine, boot_cpu })
+    }
+
     pub fn create_rux16_bios_flash_path_with_storage0_path(
         bios_flash_path: impl AsRef<Path>,
         memory_size: usize,
@@ -99,6 +118,27 @@ impl RuxComputerHandle {
             memory_size,
             max_steps,
             storage0_path,
+        )
+    }
+
+    pub fn restore_rux16_bios_flash_snapshot_path_with_storage0_path(
+        bios_flash_path: impl AsRef<Path>,
+        memory_size: usize,
+        storage0_path: impl AsRef<Path>,
+        snapshot: &[u8],
+    ) -> Result<Self, String> {
+        let bios_flash_path = bios_flash_path.as_ref();
+        let bios_flash = fs::read(bios_flash_path).map_err(|error| {
+            format!(
+                "Cannot read Rux16 BIOS flash at {}: {error}",
+                bios_flash_path.display(),
+            )
+        })?;
+        Self::restore_rux16_bios_flash_snapshot_with_storage0_path(
+            &bios_flash,
+            memory_size,
+            storage0_path,
+            snapshot,
         )
     }
 
@@ -132,6 +172,10 @@ impl RuxComputerHandle {
 
     pub fn storage0_media_snapshot(&self) -> Option<Vec<u8>> {
         self.machine.storage0_media_bytes()
+    }
+
+    pub fn snapshot_v1(&self) -> Result<Vec<u8>, String> {
+        self.machine.snapshot_v1()
     }
 
     pub fn write_guest_ram_bytes(&mut self, address: u32, bytes: &[u8]) -> Result<(), String> {

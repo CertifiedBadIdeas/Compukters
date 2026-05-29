@@ -132,6 +132,26 @@ object NativeVmBindings {
         return handle
     }
 
+    fun restoreRuxComputerFromBiosFlashSnapshot(
+        libraryPath: String,
+        biosFlashPath: Path,
+        memorySize: Int,
+        storage0Path: Path,
+        snapshot: ByteArray,
+    ): Long {
+        load(libraryPath)
+        require(snapshot.isNotEmpty()) { "Rux computer snapshot must not be empty" }
+        val handle =
+            restoreRuxComputerFromBiosFlashSnapshotNative(
+                biosFlashPath.toAbsolutePath().normalize().toString(),
+                memorySize.coerceAtLeast(1),
+                storage0Path.toAbsolutePath().normalize().toString(),
+                snapshot,
+            )
+        check(handle != 0L) { "Native Rux16 BIOS flash computer restore returned a zero handle" }
+        return handle
+    }
+
     fun runRux16ComputerUntilSignal(handle: Long): NativeRuxComputerSignal {
         require(handle != 0L) { "Native Rux computer handle is zero" }
         return NativeRuxComputerSignal.from(runRux16ComputerUntilSignalNative(handle))
@@ -160,6 +180,11 @@ object NativeVmBindings {
     fun ruxComputerStorage0MediaSnapshot(handle: Long): ByteArray? {
         require(handle != 0L) { "Native Rux computer handle is zero" }
         return ruxComputerStorage0MediaSnapshotNative(handle).takeIf { it.isNotEmpty() }
+    }
+
+    fun ruxComputerMachineSnapshot(handle: Long): ByteArray {
+        require(handle != 0L) { "Native Rux computer handle is zero" }
+        return ruxComputerMachineSnapshotNative(handle)
     }
 
     fun pushRuxComputerSerialInput(
@@ -197,6 +222,14 @@ object NativeVmBindings {
     ): Long
 
     @JvmStatic
+    private external fun restoreRuxComputerFromBiosFlashSnapshotNative(
+        biosFlashPath: String,
+        memorySize: Int,
+        storage0Path: String,
+        snapshot: ByteArray,
+    ): Long
+
+    @JvmStatic
     private external fun runRux16ComputerUntilSignalNative(handle: Long): LongArray
 
     @JvmStatic
@@ -213,6 +246,9 @@ object NativeVmBindings {
 
     @JvmStatic
     private external fun ruxComputerStorage0MediaSnapshotNative(handle: Long): ByteArray
+
+    @JvmStatic
+    private external fun ruxComputerMachineSnapshotNative(handle: Long): ByteArray
 
     @JvmStatic
     private external fun pushRuxComputerSerialInputNative(
