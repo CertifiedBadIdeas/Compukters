@@ -8,12 +8,18 @@ The current boot chain already reaches user-space code from persistent storage:
 
 `BIOS flash -> BOOT:/boot/loader.ruxe -> ROOT:/boot/kernel.ruxe -> ROOT:/bin/init.ruxe`
 
-The implemented examples prove the mechanics, but the boundary between `kernel.ruxe` and `/bin/init.ruxe` is still an implicit loader convention. This spec defines the first explicit ABI for that boundary. The goal is not to build a full OS yet; the goal is to make the first kernel/user-space handoff precise enough to test and evolve.
+The implemented examples prove the mechanics, but two boundaries are still implicit:
+
+- the bootloader-to-kernel handoff;
+- the kernel-to-init handoff.
+
+This spec makes both boundaries explicit while keeping the kernel small. The goal is not to build a full real-world kernel yet; the goal is to follow real boot architecture closely enough that later OS work has the right shape.
 
 ## Design Goals
 
 - Keep `kernel.ruxe` and `/bin/init.ruxe` as different ABI roles.
 - Keep `/bin/init.ruxe` a normal user-space `program` RUXE.
+- Put boot information on the bootloader-to-kernel boundary, not on the kernel-to-init boundary.
 - Avoid fallback paths. Missing or invalid init must fail explicitly.
 - Avoid adding processes, privilege rings, syscalls, or virtual memory in this slice.
 - Leave room for those features without changing the basic storage layout.
@@ -30,7 +36,7 @@ The kernel could load another kernel-profile executable. That keeps the ABI unif
 
 ### C. Kernel loads a program RUXE as init
 
-Recommended. `kernel.ruxe` remains the first OS-owned executable. It loads `/bin/init.ruxe`, validates that it is a `program` RUXE, prepares a minimal boot info block, and jumps to init. This keeps the first OS boundary real without adding a full process model yet.
+Recommended. `kernel.ruxe` remains the first OS-owned executable. The bootloader passes minimal boot information to the kernel. The kernel then loads `/bin/init.ruxe`, validates that it is a `program` RUXE, and jumps to init without inventing a process model yet.
 
 ## ABI v0
 
@@ -40,7 +46,7 @@ Recommended. `kernel.ruxe` remains the first OS-owned executable. It loads `/bin
 - `ROOT:/boot/kernel.ruxe` is a kernel RUXE.
 - `ROOT:/bin/init.ruxe` is a program RUXE.
 
-The kernel must reject `/bin/init.ruxe` if its RUXE ABI kind is not `program`. It must not retry another path or silently boot another image.
+The bootloader must reject `ROOT:/boot/kernel.ruxe` if its RUXE ABI kind is not `kernel`. The kernel must reject `/bin/init.ruxe` if its RUXE ABI kind is not `program`. Neither stage retries another path or silently boots another image.
 
 ### Storage Contract
 
@@ -52,36 +58,49 @@ ROOT:/bin/init.ruxe
 
 The first ABI version does not define a search path, initrd, boot menu, or configurable init path. Those can be later kernel policy.
 
+### Bootloader-to-Kernel Boot Info
+
+Real systems usually pass boot information from the bootloader to the kernel: memory layout, device description, command line, initrd pointers, or platform tables. Rux ABI v0 follows that shape, but keeps the payload small.
+
+Before entering `kernel.ruxe`, the bootloader writes a boot info block at `0x3F00`:
+
+```text
+offset  size  field
+0x00    4     magic: "RKBI"
+0x04    2     version: 1
+0x06    2     size_bytes
+0x08    4     root_start_lba
+0x0C    4     kernel_ruxe_size_bytes
+0x10    4     flags
+```
+
+For ABI v0, `flags` is zero. The kernel reads this block by fixed address. A register-passed pointer can replace the fixed address later when the CPU/language ABI has a stable function-call convention.
+
+### Kernel-to-Init Contract
+
+ABI v0 deliberately keeps init simple. The kernel does not pass a boot info block, argv, env, handles, or syscalls to init yet.
+
+The kernel:
+
+1. finds `ROOT:/bin/init.ruxe`;
+2. validates that it is a `program` RUXE;
+3. copies its payload to the RUXE-declared `load_addr`;
+4. jumps to the RUXE-declared `entry_pc`.
+
+Init starts as the only user-space program. It may use existing MMIO directly for now. That is not a final user-space security model; it is the minimal architecture-preserving step before syscalls exist.
+
 ### Memory Contract
 
 The current implementation already uses fixed staging/load regions. ABI v0 should name those regions so future tests stop relying on source-only expectations:
 
+- `0x3F00`: bootloader-to-kernel boot info block.
 - `0x6000`: kernel-side scratch/staging area for filesystem metadata and loaded file bytes while running `kernel.ruxe`.
 - `0x8000`: default user program load address used by program RUXE artifacts.
 - `0xA000`: current init RUXE staging address in the example kernel loader.
-- `0x7F00`: proposed ABI v0 boot info block address.
-
-The implementation may keep the existing staging address for the first slice, but the spec and tests should treat the boot info block address as the visible contract.
-
-### Boot Info Block
-
-Before jumping to init, the kernel writes a small boot info block at `0x7F00`:
-
-```text
-offset  size  field
-0x00    4     magic: "RUXI"
-0x04    2     version: 1
-0x06    2     size_bytes
-0x08    4     root_start_lba
-0x0C    4     init_ruxe_size_bytes
-0x10    4     flags
-```
-
-For ABI v0, `flags` is zero. Init receives the boot info address by convention: it may read `0x7F00` directly. A register-passed argument can be added later when the language/CPU ABI has a function-call convention.
 
 ### Entry Contract
 
-The kernel validates the RUXE header, copies the init payload to its declared `load_addr`, writes the boot info block, and jumps to the init RUXE `entry_pc`.
+The bootloader validates and enters the kernel. The kernel validates and enters init. Both handoffs use the RUXE `entry_pc` and declared load section metadata.
 
 The kernel does not create a separate process object in ABI v0. Init runs as the only user-space program on the current Rux16 CPU context.
 
@@ -105,6 +124,7 @@ All failures must be explicit and non-fallback:
 - init RUXE has wrong ABI kind: same failure path;
 - init RUXE has invalid section metadata: same failure path;
 - init payload would overlap protected kernel/staging memory: same failure path.
+- missing or invalid bootloader-to-kernel boot info: kernel emits `KERNEL BOOT INFO FAILED` and sets a deterministic panic code.
 
 The exact panic codes can be finalized in implementation, but tests should check both visible display/debug text and the code.
 
@@ -115,16 +135,17 @@ The first implementation plan should add or update tests for:
 - kernel loads `ROOT:/bin/init.ruxe` when it is a program RUXE;
 - kernel rejects a kernel-profile RUXE at `/bin/init.ruxe`;
 - kernel rejects missing `/bin/init.ruxe`;
-- kernel writes the `RUXI` boot info block before entering init;
-- init can read boot info and display or debug-print one field;
+- bootloader writes the `RKBI` boot info block before entering kernel;
+- kernel can read boot info and use `root_start_lba` instead of rediscovering ROOT;
 - init halt leaves the machine halted without reboot fallback.
 
 ## Follow-Up Slices
 
-1. Implement boot info block writing and tests in the existing `init_loader.rx` path.
-2. Add negative tests for wrong init ABI kind and missing init.
-3. Decide the first syscall/hostcall shape only after init can reliably read boot info.
-4. Later, split reusable RuxFS path reading out of the bootloader/kernel examples if duplication starts blocking changes.
+1. Implement bootloader-to-kernel boot info writing and kernel-side reading.
+2. Keep kernel-to-init as load program RUXE and jump.
+3. Add negative tests for wrong init ABI kind and missing init.
+4. Decide the first syscall/hostcall shape only after init can reliably run as the first user-space program.
+5. Later, split reusable RuxFS path reading out of the bootloader/kernel examples if duplication starts blocking changes.
 
 ## Non-Goals
 
