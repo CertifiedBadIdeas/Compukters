@@ -1099,6 +1099,53 @@ fn rux16_init_loader_source_reads_kernel_boot_info() {
 }
 
 #[test]
+fn rux16_init_loader_source_writes_init_handoff_info() {
+    let source = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/kernel/init_loader.rx"),
+    )
+    .expect("init loader source should exist");
+
+    assert!(
+        source.contains("fn write_init_handoff_info("),
+        "kernel should expose a guest-side RINI writer"
+    );
+    assert!(
+        source.contains("ptr<i32>(0x3f20u32).store(0x494e4952)"),
+        "RINI writer should store the little-endian `RINI` magic"
+    );
+    assert!(
+        source.contains("ptr<i32>(0x3f24u32).store(0x00180001)"),
+        "RINI writer should store version 1 and 24-byte header size"
+    );
+    assert!(
+        source.contains("ptr<i32>(0x3f28u32).store(root_start_lba)"),
+        "RINI writer should pass the ROOT partition start LBA to init"
+    );
+    assert!(
+        source.contains("ptr<i32>(0x3f2cu32).store(init_ruxe_size_bytes)"),
+        "RINI writer should pass the loaded init RUXE size"
+    );
+    assert!(
+        source.contains("ptr<i32>(0x3f30u32).store(init_entry_pc)"),
+        "RINI writer should pass the init entry point"
+    );
+    assert!(
+        source.contains("write_init_handoff_info(root_start_lba, file_size_low, entry_pc)"),
+        "kernel should write RINI immediately before entering init"
+    );
+    let write_index = source
+        .find("write_init_handoff_info(root_start_lba, file_size_low, entry_pc)")
+        .expect("RINI writer call should exist");
+    let jump_index = source
+        .find("rux16_jump(entry_pc)")
+        .expect("init jump should exist");
+    assert!(
+        write_index < jump_index,
+        "kernel should write RINI before jumping to init"
+    );
+}
+
+#[test]
 fn rux_volume_put_boot_and_kernel_creates_storage0_that_bundled_bios_executes() {
     let volume_path = temp_file("boot-kernel-storage0.ruxvol");
     let root_path = temp_file("boot-kernel-root.ruxfs");
