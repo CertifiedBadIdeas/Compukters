@@ -141,6 +141,10 @@ impl DebugSerialDevice {
     pub(crate) fn drain(&mut self) -> Vec<u8> {
         std::mem::take(&mut self.bytes)
     }
+
+    pub(crate) fn restore_bytes(&mut self, bytes: Vec<u8>) {
+        self.bytes = bytes;
+    }
 }
 
 impl MmioDevice for DebugSerialDevice {

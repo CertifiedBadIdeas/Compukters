@@ -4,6 +4,9 @@ use rux_vm::computer_machine::{
 };
 use rux_vm::rux16::Rux16Signal;
 
+const CONTROL_DEVICE_RECORD_SIZE: usize = 20;
+const EMPTY_DEBUG_DEVICE_RECORD_SIZE: usize = 8;
+
 #[test]
 fn computer_machine_snapshot_v1_records_header_and_ram_payload() {
     let bios = [0x01, 0x00];
@@ -17,7 +20,11 @@ fn computer_machine_snapshot_v1_records_header_and_ram_payload() {
     assert_eq!(&snapshot[0..8], COMPUTER_SNAPSHOT_V1_MAGIC);
     assert_eq!(
         snapshot.len(),
-        COMPUTER_SNAPSHOT_V1_HEADER_SIZE + 1024 + COMPUTER_SNAPSHOT_V1_RUX16_CPU_RECORD_SIZE
+        COMPUTER_SNAPSHOT_V1_HEADER_SIZE
+            + 1024
+            + COMPUTER_SNAPSHOT_V1_RUX16_CPU_RECORD_SIZE
+            + CONTROL_DEVICE_RECORD_SIZE
+            + EMPTY_DEBUG_DEVICE_RECORD_SIZE
     );
 
     let decoded = decode_snapshot_v1(&snapshot).expect("snapshot decodes");
@@ -30,9 +37,11 @@ fn computer_machine_snapshot_v1_records_header_and_ram_payload() {
     assert_eq!(decoded.header.ram_size, 1024);
     assert_eq!(decoded.header.cpu_count, 1);
     assert_eq!(decoded.header.boot_cpu_id, Some(boot_cpu as u32));
+    assert_eq!(decoded.header.device_count, 2);
     assert_eq!(decoded.ram[512], 0xA5);
     assert_eq!(decoded.ram[1023], 0x5A);
     assert_eq!(decoded.cpus.len(), 1);
+    assert_eq!(decoded.devices.len(), 2);
 }
 
 #[test]
@@ -84,6 +93,39 @@ fn computer_machine_snapshot_v1_restores_boot_cpu_continuation_state() {
 }
 
 #[test]
+fn computer_machine_snapshot_v1_restores_control_and_debug_device_state() {
+    let mut machine = ComputerMachine::new(1024).expect("machine creates");
+    machine
+        .bus_store_i32(ComputerMachine::DEBUG_WRITE, b'O'.into())
+        .unwrap();
+    machine
+        .bus_store_i32(ComputerMachine::DEBUG_WRITE, b'K'.into())
+        .unwrap();
+    machine
+        .bus_store_i32(
+            ComputerMachine::CONTROL_STATUS,
+            ComputerMachine::STATUS_PANIC,
+        )
+        .unwrap();
+    machine
+        .bus_store_i32(ComputerMachine::CONTROL_PANIC_CODE, 123)
+        .unwrap();
+    machine
+        .bus_store_i32(ComputerMachine::CONTROL_EXIT_CODE, 7)
+        .unwrap();
+
+    let snapshot = machine.snapshot_v1().expect("snapshot encodes");
+    let restored =
+        ComputerMachine::restore_snapshot_v1(ComputerMachineProfile::computer_v1(1024), &snapshot)
+            .expect("snapshot restores");
+
+    assert_eq!(restored.control_status(), ComputerMachine::STATUS_PANIC);
+    assert_eq!(restored.panic_code(), 123);
+    assert_eq!(restored.exit_code(), 7);
+    assert_eq!(restored.debug_output_bytes(), b"OK");
+}
+
+#[test]
 fn computer_machine_snapshot_v1_rejects_profile_ram_size_mismatch() {
     let machine = ComputerMachine::new(1024).expect("machine creates");
     let snapshot = machine.snapshot_v1().expect("snapshot encodes");
@@ -124,7 +166,7 @@ fn computer_machine_snapshot_v1_rejects_bad_magic_version_and_length() {
     let truncated = &snapshot[..snapshot.len() - 1];
     assert_eq!(
         decode_snapshot_v1(truncated).unwrap_err(),
-        "ComputerMachine snapshot declares 1024 payload bytes but file has 1023 payload bytes"
+        "ComputerMachine snapshot device 1 header is truncated"
     );
 }
 
@@ -162,6 +204,43 @@ fn computer_machine_snapshot_v1_rejects_invalid_cpu_record_fields() {
     assert_eq!(
         error,
         "ComputerMachine snapshot Rux16 CPU max_steps must be non-zero"
+    );
+}
+
+#[test]
+fn computer_machine_snapshot_v1_rejects_invalid_device_record_fields() {
+    let machine = ComputerMachine::new(1024).expect("machine creates");
+    let snapshot = machine.snapshot_v1().expect("snapshot encodes");
+    let first_device_record = COMPUTER_SNAPSHOT_V1_HEADER_SIZE + 1024;
+
+    let mut bad_reserved = snapshot.clone();
+    bad_reserved[36..40].copy_from_slice(&1_u32.to_le_bytes());
+    assert_eq!(
+        decode_snapshot_v1(&bad_reserved).unwrap_err(),
+        "unsupported ComputerMachine snapshot reserved header field 0x00000001"
+    );
+
+    let mut bad_device_kind = snapshot.clone();
+    bad_device_kind[first_device_record..first_device_record + 4]
+        .copy_from_slice(&99_u32.to_le_bytes());
+    assert_eq!(
+        decode_snapshot_v1(&bad_device_kind).unwrap_err(),
+        "unsupported ComputerMachine snapshot device 0 kind 99"
+    );
+
+    let mut bad_control_payload_size = snapshot.clone();
+    bad_control_payload_size[first_device_record + 4..first_device_record + 8]
+        .copy_from_slice(&11_u32.to_le_bytes());
+    assert_eq!(
+        decode_snapshot_v1(&bad_control_payload_size).unwrap_err(),
+        "ComputerMachine snapshot control device payload has 11 bytes but expected 12"
+    );
+
+    let mut trailing_bytes = snapshot;
+    trailing_bytes.push(0);
+    assert_eq!(
+        decode_snapshot_v1(&trailing_bytes).unwrap_err(),
+        "ComputerMachine snapshot has 1 trailing bytes after device records"
     );
 }
 

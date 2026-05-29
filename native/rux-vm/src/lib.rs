@@ -7,8 +7,8 @@ pub mod computer_machine {
     };
     pub use crate::computer::profile::{ComputerHardwareConfig, ComputerMachineProfile};
     pub use crate::computer::snapshot::{
-        decode_snapshot_v1, ComputerCpuSnapshotRecord, ComputerMachineSnapshot,
-        ComputerMachineSnapshotHeader, COMPUTER_SNAPSHOT_V1_HEADER_SIZE,
+        decode_snapshot_v1, ComputerCpuSnapshotRecord, ComputerDeviceSnapshotRecord,
+        ComputerMachineSnapshot, ComputerMachineSnapshotHeader, COMPUTER_SNAPSHOT_V1_HEADER_SIZE,
         COMPUTER_SNAPSHOT_V1_MAGIC, COMPUTER_SNAPSHOT_V1_RUX16_CPU_RECORD_SIZE,
     };
 }
