@@ -1025,6 +1025,80 @@ fn rux16_kernel_loader_source_executes_kernel_ruxe_from_root_ruxfs() {
 }
 
 #[test]
+fn rux16_kernel_loader_source_writes_kernel_boot_info() {
+    let source = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/boot/kernel_loader.rx"),
+    )
+    .expect("kernel loader source should exist");
+
+    assert!(
+        source.contains("fn write_kernel_boot_info("),
+        "kernel loader should expose a guest-side RKBI writer"
+    );
+    assert!(
+        source.contains("ptr<i32>(0x3f00u32).store(0x49424b52)"),
+        "RKBI writer should store the little-endian `RKBI` magic"
+    );
+    assert!(
+        source.contains("ptr<i32>(0x3f04u32).store(0x00140001)"),
+        "RKBI writer should store version 1 and 20-byte header size"
+    );
+    assert!(
+        source.contains("ptr<i32>(0x3f08u32).store(root_start_lba)"),
+        "RKBI writer should pass the ROOT partition start LBA to the kernel"
+    );
+    assert!(
+        source.contains("ptr<i32>(0x3f0cu32).store(kernel_ruxe_size_bytes)"),
+        "RKBI writer should pass the loaded kernel RUXE size"
+    );
+    assert!(
+        source.contains("write_kernel_boot_info(root_start_lba, file_size_low)"),
+        "kernel loader should write RKBI immediately before executing the loaded kernel"
+    );
+}
+
+#[test]
+fn rux16_init_loader_source_reads_kernel_boot_info() {
+    let source = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/kernel/init_loader.rx"),
+    )
+    .expect("init loader source should exist");
+
+    assert!(
+        source.contains("fn read_kernel_boot_info_root_start_lba("),
+        "kernel should expose a guest-side RKBI reader"
+    );
+    assert!(
+        source.contains("ptr<i32>(0x3f00u32).load()"),
+        "RKBI reader should read the boot info magic from RAM"
+    );
+    assert!(
+        source.contains("0x49424b52"),
+        "RKBI reader should validate the little-endian `RKBI` magic"
+    );
+    assert!(
+        source.contains("ptr<i32>(0x3f04u32).load()"),
+        "RKBI reader should validate the version and header size word"
+    );
+    assert!(
+        source.contains("ptr<i32>(0x3f08u32).load()"),
+        "RKBI reader should read the ROOT partition start LBA field"
+    );
+    assert!(
+        source.contains("let mut root_start_lba: i32 = read_kernel_boot_info_root_start_lba()"),
+        "kernel should use RKBI root_start_lba before loading init"
+    );
+    assert!(
+        !source.contains("fn find_root_partition_start_lba("),
+        "kernel should not keep a ROOT partition rediscovery path"
+    );
+    assert!(
+        source.contains("write_kernel_boot_info_failed()"),
+        "kernel should fail explicitly when RKBI is absent or invalid"
+    );
+}
+
+#[test]
 fn rux_volume_put_boot_and_kernel_creates_storage0_that_bundled_bios_executes() {
     let volume_path = temp_file("boot-kernel-storage0.ruxvol");
     let root_path = temp_file("boot-kernel-root.ruxfs");

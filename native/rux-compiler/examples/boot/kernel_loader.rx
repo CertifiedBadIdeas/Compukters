@@ -25,6 +25,16 @@ fn write_kernel_load_failed() {
     }
 }
 
+fn write_kernel_boot_info(root_start_lba: i32, kernel_ruxe_size_bytes: i32) {
+    unsafe {
+        ptr<i32>(0x3f00u32).store(0x49424b52);
+        ptr<i32>(0x3f04u32).store(0x00140001);
+        ptr<i32>(0x3f08u32).store(root_start_lba);
+        ptr<i32>(0x3f0cu32).store(kernel_ruxe_size_bytes);
+        ptr<i32>(0x3f10u32).store(0);
+    }
+}
+
 fn read_storage0_blocks(lba: i32, block_count: i32, buffer_addr: i32) -> i32 {
     unsafe {
         mmio<i32>(storage0::LBA_LOW).store(lba);
@@ -251,8 +261,9 @@ fn load_kernel_ruxe_from_root_ruxfs(root_start_lba: i32, kernel_ruxe_inode: i32)
     }
 }
 
-fn execute_loaded_kernel_ruxe() {
+fn execute_loaded_kernel_ruxe(root_start_lba: i32) {
     unsafe {
+        let mut file_size_low: i32 = ptr<i32>(0x6008u32).load();
         let mut entry_pc: i32 = ptr<i32>(0x600cu32).load();
         let mut section_kind: i32 = ptr<i32>(0x6020u32).load();
         let mut load_addr_i32: i32 = ptr<i32>(0x6024u32).load();
@@ -264,11 +275,13 @@ fn execute_loaded_kernel_ruxe() {
         let mut memory_size_i32: i32 = ptr<i32>(0x6030u32).load();
 
         if entry_pc != 0 &&
+            file_size_low != 0 &&
             section_kind == 1 &&
             load_addr_i32 != 0 &&
             payload_offset_i32 != 0 &&
             payload_size_i32 != 0 &&
             memory_size_i32 == payload_size_i32 {
+            write_kernel_boot_info(root_start_lba, file_size_low);
             let mut copied: u32 = 0u32;
             let mut source_addr: u32 = 0x6000u32 + payload_offset;
             let mut dest_addr: u32 = load_addr;
@@ -299,7 +312,7 @@ fn load_kernel() {
             kernel_ruxe_inode
         );
         if kernel_ruxe_metadata_present == 1 {
-            execute_loaded_kernel_ruxe();
+            execute_loaded_kernel_ruxe(root_start_lba);
         } else {
             write_kernel_load_failed();
         }
