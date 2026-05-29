@@ -173,6 +173,16 @@ accept a host `.ruxvol` path and does not strip the 16-byte `RUXVOL` host file
 header. The storage backend performs that file-to-media translation before the
 guest-visible storage path sees any bytes.
 
+The current guest boot chain uses the same RuxFS structure:
+
+```text
+bootloader -> storage0 ROOT/RuxFS /boot/kernel.ruxe -> kernel
+kernel     -> storage0 ROOT/RuxFS /bin/init.ruxe    -> program
+```
+
+Both guest loaders treat missing paths, malformed metadata, or wrong executable
+ABI kinds as hard load failures.
+
 The public CLI namespace is filesystem-specific:
 
 ```text
@@ -187,5 +197,4 @@ rux fs ruxfs ls <image.ruxfs> <path>
 commands; future filesystems should get their own `rux fs <filesystem>`
 subcommands.
 
-Delete, overwrite, and bootloader integration are next-step work under the same
-RuxFS v1 contract.
+Delete and overwrite remain next-step work under the same RuxFS v1 contract.

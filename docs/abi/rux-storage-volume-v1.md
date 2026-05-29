@@ -34,8 +34,8 @@ file header. The file length must be `16 + payload_size`.
 RUXVOL v1 currently has two explicit tooling layouts.
 
 `rux volume create` creates an empty volume. `rux volume put-boot` and
-`rux volume put-kernel` write the legacy fixed boot layout used by the current
-BIOS/bootloader chain. This layout reserves fixed media LBAs:
+the legacy raw-media boot flow use a fixed boot layout. This layout reserves
+fixed media LBAs:
 
 ```text
 LBA 0   RUXB bootloader record
@@ -47,8 +47,8 @@ LBA 17  kernel payload bytes
 Each LBA is 512 bytes. Tooling must reject artifacts that do not fit these
 fixed regions. It must not relocate records or payloads implicitly.
 
-`rux volume init` creates the partitioned layout targeted by the next boot
-chain:
+`rux volume init` creates the partitioned layout used by the active
+filesystem-backed boot chain:
 
 ```text
 LBA 0        RUXPT partition table
@@ -56,9 +56,11 @@ LBA 1..32    BOOT partition
 LBA 33..end  ROOT partition
 ```
 
-The partitioned layout does not contain `RUXB` or `RUXK` fixed records.
-Current firmware does not boot it yet; future BIOS and bootloader work should
-consume `RUXPT` directly rather than probing both layouts.
+In the partitioned layout, `rux volume put-boot` writes the `RUXB` bootloader
+record and bootloader payload inside the `BOOT` partition. `rux volume
+put-kernel` writes the kernel `RUXE` file to `/boot/kernel.ruxe` inside the
+`ROOT` RuxFS partition. The partitioned layout does not use the fixed `RUXK`
+record.
 
 Filesystem-specific operations are not part of `rux volume`. Tooling for RuxFS
 uses `rux fs ruxfs ...`; future filesystems should use their own `rux fs
@@ -197,6 +199,19 @@ The kernel payload bytes are copied from the `RUXE` load section to LBA 17.
 
 The current boot chain is:
 
+1. BIOS reads `RUXPT` from LBA 0.
+2. BIOS reads `RUXB` from the `BOOT` partition.
+3. BIOS copies the bootloader payload from the `BOOT` partition to `load_addr`.
+4. BIOS jumps to `entry_pc`.
+5. Bootloader reads `/boot/kernel.ruxe` from the `ROOT` RuxFS partition.
+6. Bootloader validates the kernel `RUXE`, copies its payload to `load_addr`,
+   and jumps to `entry_pc`.
+7. Kernel reads `/bin/init.ruxe` from the `ROOT` RuxFS partition.
+8. Kernel validates the program `RUXE`, copies its payload to `load_addr`, and
+   jumps to `entry_pc`.
+
+The legacy fixed-media boot chain is:
+
 1. BIOS reads `RUXB` from LBA 0.
 2. BIOS copies the bootloader payload from LBA 1 to `load_addr`.
 3. BIOS jumps to `entry_pc`.
@@ -204,5 +219,5 @@ The current boot chain is:
 5. Bootloader copies the kernel payload from LBA 17 to `load_addr`.
 6. Bootloader jumps to `entry_pc`.
 
-This is a fixed pre-filesystem layout. Filesystem-backed loading should replace
-the fixed `RUXB`/`RUXK` locations rather than adding fallback guesses.
+The active filesystem-backed chain should continue forward without adding
+fallback guesses to alternate paths or executable formats.

@@ -24,6 +24,9 @@
   future OS exec path.
 - The runtime `RuxComputerHandle` can transfer an already-read `RUXE` program
   into guest RAM and start Rux16 execution at the executable `entry_pc`.
+- Added a guest-side kernel init loader that reads `/bin/init.ruxe` from
+  `storage0` `ROOT`/RuxFS, validates `RUXE` ABI kind `program`, loads the
+  payload, and enters the program `entry_pc`.
 - `rux volume put-boot` now accepts a `RUXE` boot artifact and writes the
   current storage0 boot record from its entry/load metadata and payload. Kernel
   artifacts are rejected for boot media.

@@ -19,7 +19,9 @@ The reader is an internal VM/runtime building block, not a host API that accepts
 
 Add a small program exec validator next to the reader that accepts already-read bytes and validates that they decode as RUXE ABI kind `program`. The runtime transfer helper then copies the executable payload into guest RAM at `load_addr` and starts Rux16 execution at `entry_pc`.
 
-The actual kernel-side `/bin/init` policy remains follow-up work under #112.
+The final #112 slice adds the guest-side kernel policy: the kernel reads
+`/bin/init.ruxe` from `ROOT`/RuxFS, validates ABI kind `program`, loads the
+payload, and transfers execution to the program entry point.
 
 ## Scope
 
@@ -29,12 +31,13 @@ The actual kernel-side `/bin/init` policy remains follow-up work under #112.
 - Test that `/bin/init.ruxe` can be read from ROOT and accepted as a program executable.
 - Test that a program RUXE payload executes from `entry_pc`.
 - Test that kernel or malformed RUXE bytes are rejected as program executables.
+- Add a guest kernel loader for `/bin/init.ruxe`.
+- Test the full `BIOS -> bootloader -> kernel -> /bin/init.ruxe` chain.
 
 ## Out of Scope
 
 - Full process creation or scheduling.
 - Guest-visible syscalls.
-- Kernel-side source changes in `kernel_loader.rx`.
 - Host APIs that accept guest filesystem paths.
 
 ## Verification

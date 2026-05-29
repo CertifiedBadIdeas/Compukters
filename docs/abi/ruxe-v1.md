@@ -137,10 +137,11 @@ OS filesystem -> read RUXE file bytes into RAM -> exec service validates ABI kin
 ```
 
 The exec service receives bytes or guest RAM ranges, never a host-side path.
-The VM runtime currently provides the filesystem read and `program` ABI kind
-validation boundary, plus a host-callable transfer helper that copies the
-payload to `load_addr` and starts the Rux16 CPU at `entry_pc`. Wiring that
-helper into kernel-side `/bin/init` policy remains OS exec-service work.
+The VM runtime provides the filesystem read and `program` ABI kind validation
+boundary for already-read bytes. The first guest-side kernel loader now
+exercises the same policy directly from storage: it reads `/bin/init.ruxe` from
+the `ROOT` RuxFS partition, validates ABI kind `program`, copies the payload to
+`load_addr`, and jumps to `entry_pc`.
 
 ## Storage Volume Tooling
 
