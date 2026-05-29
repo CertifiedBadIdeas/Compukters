@@ -69,6 +69,68 @@ fn rux_fs_ruxfs_formats_writes_lists_and_reads_file() {
 }
 
 #[test]
+fn rux_fs_ruxfs_removes_file() {
+    let fs_path = temp_file("delete.ruxfs");
+    let input_path = temp_file("delete-input.ruxe");
+    fs::write(&input_path, b"BOOTLOADER").expect("input writes");
+
+    assert_success(
+        Command::new(rux_binary())
+            .args([
+                "fs",
+                "ruxfs",
+                "format",
+                fs_path.to_str().unwrap(),
+                "--blocks",
+                "128",
+            ])
+            .output()
+            .expect("format runs"),
+    );
+    assert_success(
+        Command::new(rux_binary())
+            .args(["fs", "ruxfs", "mkdir", fs_path.to_str().unwrap(), "/boot"])
+            .output()
+            .expect("mkdir runs"),
+    );
+    assert_success(
+        Command::new(rux_binary())
+            .args([
+                "fs",
+                "ruxfs",
+                "put",
+                fs_path.to_str().unwrap(),
+                "/boot/loader.ruxe",
+                input_path.to_str().unwrap(),
+            ])
+            .output()
+            .expect("put runs"),
+    );
+    assert_success(
+        Command::new(rux_binary())
+            .args([
+                "fs",
+                "ruxfs",
+                "rm",
+                fs_path.to_str().unwrap(),
+                "/boot/loader.ruxe",
+            ])
+            .output()
+            .expect("rm runs"),
+    );
+
+    let ls_output = Command::new(rux_binary())
+        .args(["fs", "ruxfs", "ls", fs_path.to_str().unwrap(), "/boot"])
+        .output()
+        .expect("ls runs");
+    assert_success(ls_output.clone());
+    assert_eq!(
+        String::from_utf8(ls_output.stdout).expect("stdout is UTF-8"),
+        ""
+    );
+}
+
+#[test]
 fn rux_fs_rejects_unknown_filesystem_type_without_volume_fallback() {
     let output = Command::new(rux_binary())
         .args(["fs", "fat32", "format", "ignored.img", "--blocks", "128"])

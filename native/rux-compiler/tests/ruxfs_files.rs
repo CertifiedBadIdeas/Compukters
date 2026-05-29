@@ -1,6 +1,6 @@
 use rux_compiler::ruxfs::{
-    create_directory, format_empty_filesystem, list_directory, read_file, validate_filesystem,
-    write_file,
+    create_directory, delete_file, format_empty_filesystem, list_directory, read_file,
+    validate_filesystem, write_file,
 };
 
 #[test]
@@ -59,4 +59,41 @@ fn ruxfs_rejects_invalid_paths_duplicate_directories_and_missing_files() {
     assert!(read_file(&image, "/boot/missing.ruxe")
         .unwrap_err()
         .contains("directory entry `missing.ruxe` not found"));
+}
+
+#[test]
+fn ruxfs_deletes_file_and_allows_recreating_same_path() {
+    let mut image = format_empty_filesystem(128).expect("filesystem formats");
+    create_directory(&mut image, "/boot").expect("directory creates");
+    write_file(&mut image, "/boot/loader.ruxe", b"OLD").expect("file writes");
+
+    delete_file(&mut image, "/boot/loader.ruxe").expect("file deletes");
+
+    assert_eq!(
+        list_directory(&image, "/boot").expect("boot lists after delete"),
+        Vec::<String>::new()
+    );
+    assert!(read_file(&image, "/boot/loader.ruxe")
+        .unwrap_err()
+        .contains("directory entry `loader.ruxe` not found"));
+    validate_filesystem(&image).expect("filesystem validates after delete");
+
+    write_file(&mut image, "/boot/loader.ruxe", b"NEW").expect("path can be recreated");
+    assert_eq!(
+        read_file(&image, "/boot/loader.ruxe").expect("recreated file reads"),
+        b"NEW"
+    );
+}
+
+#[test]
+fn ruxfs_delete_rejects_missing_paths_and_directories() {
+    let mut image = format_empty_filesystem(128).expect("filesystem formats");
+    create_directory(&mut image, "/boot").expect("directory creates");
+
+    assert!(delete_file(&mut image, "/boot/missing.ruxe")
+        .unwrap_err()
+        .contains("directory entry `missing.ruxe` not found"));
+    assert!(delete_file(&mut image, "/boot")
+        .unwrap_err()
+        .contains("is not a file"));
 }

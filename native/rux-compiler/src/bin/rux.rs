@@ -293,6 +293,16 @@ fn run_ruxfs(args: &[String]) -> Result<(), String> {
             fs::write(&args[3], contents)
                 .map_err(|error| format!("failed to write {}: {error}", args[3]))
         }
+        "rm" => {
+            if args.len() != 3 {
+                return fs_usage_error();
+            }
+            let mut image = fs::read(&args[1])
+                .map_err(|error| format!("failed to read {}: {error}", args[1]))?;
+            ruxfs::delete_file(&mut image, &args[2])?;
+            fs::write(&args[1], image)
+                .map_err(|error| format!("failed to write {}: {error}", args[1]))
+        }
         "ls" => {
             if args.len() != 3 {
                 return fs_usage_error();
@@ -366,7 +376,7 @@ fn volume_usage_error() -> Result<(), String> {
 
 fn fs_usage_error() -> Result<(), String> {
     Err(
-        "usage: rux fs ruxfs format <image.ruxfs> --blocks <blocks>\n       rux fs ruxfs mkdir <image.ruxfs> <path>\n       rux fs ruxfs put <image.ruxfs> <path> <host-input>\n       rux fs ruxfs get <image.ruxfs> <path> <host-output>\n       rux fs ruxfs ls <image.ruxfs> <path>"
+        "usage: rux fs ruxfs format <image.ruxfs> --blocks <blocks>\n       rux fs ruxfs mkdir <image.ruxfs> <path>\n       rux fs ruxfs put <image.ruxfs> <path> <host-input>\n       rux fs ruxfs get <image.ruxfs> <path> <host-output>\n       rux fs ruxfs rm <image.ruxfs> <path>\n       rux fs ruxfs ls <image.ruxfs> <path>"
             .to_string(),
     )
 }

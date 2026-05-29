@@ -185,6 +185,39 @@ pub fn read_file(image: &[u8], path: &str) -> Result<Vec<u8>, String> {
     read_inode_bytes(image, &inode)
 }
 
+pub fn delete_file(image: &mut [u8], path: &str) -> Result<(), String> {
+    let parsed = parse_parent_path(path)?;
+    let superblock = decode_superblock(image)?;
+    validate_filesystem(image)?;
+    let parent_inode_id = find_directory_inode(image, &superblock, &parsed.parent_components)?;
+    let entry = find_directory_entry_slot(image, &superblock, parent_inode_id, parsed.name)?;
+    let inode = decode_inode(image, &superblock, entry.entry.inode_id)?;
+    if inode.state != InodeState::File {
+        return Err(format!("RuxFS path `{path}` is not a file"));
+    }
+
+    for extent in &inode.extents {
+        let range = block_range(extent.start_block, extent.block_count)?;
+        image[range].fill(0);
+        for block in extent.start_block..extent.start_block + extent.block_count {
+            mark_free(image, &superblock, block)?;
+        }
+    }
+    encode_inode(
+        image,
+        &superblock,
+        entry.entry.inode_id,
+        &RuxFsInode {
+            state: InodeState::Deleted,
+            flags: 0,
+            size_bytes: 0,
+            extents: Vec::new(),
+        },
+    )?;
+    encode_deleted_directory_entry(image, entry.slot.image_offset)?;
+    validate_filesystem(image)
+}
+
 pub fn list_directory(image: &[u8], path: &str) -> Result<Vec<String>, String> {
     let components = parse_absolute_path(path)?;
     let superblock = decode_superblock(image)?;
@@ -492,10 +525,63 @@ fn find_directory_entry(
     directory_inode_id: u32,
     name: &str,
 ) -> Result<DirectoryEntry, String> {
-    read_directory_entries(image, superblock, directory_inode_id)?
-        .into_iter()
-        .find(|entry| entry.name == name)
-        .ok_or_else(|| format!("RuxFS directory entry `{name}` not found"))
+    Ok(find_directory_entry_slot(image, superblock, directory_inode_id, name)?.entry)
+}
+
+struct DirectoryEntrySlot {
+    entry: DirectoryEntry,
+    slot: DirectorySlot,
+}
+
+fn find_directory_entry_slot(
+    image: &[u8],
+    superblock: &RuxFsSuperblock,
+    directory_inode_id: u32,
+    name: &str,
+) -> Result<DirectoryEntrySlot, String> {
+    let directory = decode_inode(image, superblock, directory_inode_id)?;
+    if directory.state != InodeState::Directory {
+        return Err(format!(
+            "RuxFS inode {directory_inode_id} is not a directory"
+        ));
+    }
+    if directory.size_bytes % RUXFS_DIRECTORY_ENTRY_SIZE as u64 != 0 {
+        return Err(format!(
+            "RuxFS directory inode {directory_inode_id} has unaligned size"
+        ));
+    }
+    let mut remaining = directory.size_bytes as usize;
+    let mut directory_offset = 0;
+    for extent in &directory.extents {
+        for block in extent.start_block..extent.start_block + extent.block_count {
+            let mut block_offset = block as usize * RUXFS_BLOCK_SIZE;
+            for _ in 0..RUXFS_BLOCK_SIZE / RUXFS_DIRECTORY_ENTRY_SIZE {
+                if remaining == 0 {
+                    return Err(format!("RuxFS directory entry `{name}` not found"));
+                }
+                let bytes = image
+                    .get(block_offset..block_offset + RUXFS_DIRECTORY_ENTRY_SIZE)
+                    .ok_or_else(|| "RuxFS directory entry is truncated".to_string())?;
+                if let Some(entry) = decode_directory_entry(bytes)? {
+                    if entry.name == name {
+                        return Ok(DirectoryEntrySlot {
+                            entry,
+                            slot: DirectorySlot {
+                                image_offset: block_offset,
+                                directory_offset,
+                            },
+                        });
+                    }
+                }
+                remaining -= RUXFS_DIRECTORY_ENTRY_SIZE;
+                block_offset += RUXFS_DIRECTORY_ENTRY_SIZE;
+                directory_offset += RUXFS_DIRECTORY_ENTRY_SIZE;
+            }
+        }
+    }
+    Err(format!(
+        "RuxFS directory inode {directory_inode_id} size exceeds extents"
+    ))
 }
 
 fn ensure_missing_entry(
@@ -656,11 +742,20 @@ fn encode_directory_entry(
     Ok(())
 }
 
+fn encode_deleted_directory_entry(image: &mut [u8], offset: usize) -> Result<(), String> {
+    let bytes = image
+        .get_mut(offset..offset + RUXFS_DIRECTORY_ENTRY_SIZE)
+        .ok_or_else(|| "RuxFS directory entry is outside filesystem".to_string())?;
+    bytes.fill(0);
+    bytes[0] = 2;
+    Ok(())
+}
+
 fn allocate_inode(image: &[u8], superblock: &RuxFsSuperblock) -> Result<u32, String> {
     let inode_capacity = inode_capacity(superblock)?;
     for inode_id in 1..inode_capacity {
         let inode = decode_inode(image, superblock, inode_id)?;
-        if inode.state == InodeState::Free {
+        if matches!(inode.state, InodeState::Free | InodeState::Deleted) {
             return Ok(inode_id);
         }
     }
@@ -779,6 +874,23 @@ fn mark_allocated(
         .get_mut(byte_offset)
         .ok_or_else(|| "RuxFS bitmap is outside filesystem".to_string())?;
     *byte |= 1_u8 << bit;
+    Ok(())
+}
+
+fn mark_free(image: &mut [u8], superblock: &RuxFsSuperblock, block: u32) -> Result<(), String> {
+    if block >= superblock.total_blocks {
+        return Err(format!("RuxFS block {block} is outside filesystem"));
+    }
+    if range_overlaps_metadata(block, 1, superblock) {
+        return Err("RuxFS cannot free metadata block".to_string());
+    }
+    let bitmap_offset = superblock.bitmap_start_block as usize * RUXFS_BLOCK_SIZE;
+    let byte_offset = bitmap_offset + (block as usize / 8);
+    let bit = block as u8 % 8;
+    let byte = image
+        .get_mut(byte_offset)
+        .ok_or_else(|| "RuxFS bitmap is outside filesystem".to_string())?;
+    *byte &= !(1_u8 << bit);
     Ok(())
 }
 
