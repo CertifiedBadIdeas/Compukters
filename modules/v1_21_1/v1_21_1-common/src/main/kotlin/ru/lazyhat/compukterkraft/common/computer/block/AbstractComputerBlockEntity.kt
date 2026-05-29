@@ -163,7 +163,10 @@ abstract class AbstractComputerBlockEntity(
                     ServerContext
                         .get(deviceId)
                         ?.snapshotRuntimeState()
-                        ?.let { pendingRuntimeSnapshot = it.copyOf() }
+                        ?.let {
+                            pendingRuntimeSnapshot = it.copyOf()
+                            setChanged()
+                        }
                     ServerContext.remove(deviceId)?.close()
                 }
         }
