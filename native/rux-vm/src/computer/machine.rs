@@ -598,6 +598,11 @@ impl ComputerMachine {
                 snapshot: display0.snapshot(),
             });
         }
+        if let Some(serial_input) = self.serial_input_device() {
+            devices.push(ComputerDeviceSnapshotRecord::SerialInput {
+                bytes: serial_input.bytes(),
+            });
+        }
         devices
     }
 
@@ -632,6 +637,13 @@ impl ComputerMachine {
                         .to_string()
                 })?;
                 display0.restore_snapshot(snapshot)?;
+            }
+            ComputerDeviceSnapshotRecord::SerialInput { bytes } => {
+                let serial_input = self.serial_input_device_mut().ok_or_else(|| {
+                    "ComputerMachine snapshot contains serial input device state but profile has no serial input device"
+                        .to_string()
+                })?;
+                serial_input.restore_bytes(bytes);
             }
         }
         Ok(())

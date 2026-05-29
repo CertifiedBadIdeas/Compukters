@@ -7,6 +7,7 @@ use rux_vm::rux16::Rux16Signal;
 const CONTROL_DEVICE_RECORD_SIZE: usize = 20;
 const EMPTY_DEBUG_DEVICE_RECORD_SIZE: usize = 8;
 const EMPTY_DISPLAY0_DEVICE_RECORD_SIZE: usize = 2032;
+const EMPTY_SERIAL_INPUT_DEVICE_RECORD_SIZE: usize = 8;
 
 #[test]
 fn computer_machine_snapshot_v1_records_header_and_ram_payload() {
@@ -27,6 +28,7 @@ fn computer_machine_snapshot_v1_records_header_and_ram_payload() {
             + CONTROL_DEVICE_RECORD_SIZE
             + EMPTY_DEBUG_DEVICE_RECORD_SIZE
             + EMPTY_DISPLAY0_DEVICE_RECORD_SIZE
+            + EMPTY_SERIAL_INPUT_DEVICE_RECORD_SIZE
     );
 
     let decoded = decode_snapshot_v1(&snapshot).expect("snapshot decodes");
@@ -39,11 +41,11 @@ fn computer_machine_snapshot_v1_records_header_and_ram_payload() {
     assert_eq!(decoded.header.ram_size, 1024);
     assert_eq!(decoded.header.cpu_count, 1);
     assert_eq!(decoded.header.boot_cpu_id, Some(boot_cpu as u32));
-    assert_eq!(decoded.header.device_count, 3);
+    assert_eq!(decoded.header.device_count, 4);
     assert_eq!(decoded.ram[512], 0xA5);
     assert_eq!(decoded.ram[1023], 0x5A);
     assert_eq!(decoded.cpus.len(), 1);
-    assert_eq!(decoded.devices.len(), 3);
+    assert_eq!(decoded.devices.len(), 4);
 }
 
 #[test]
@@ -162,6 +164,44 @@ fn computer_machine_snapshot_v1_restores_display0_device_state() {
 }
 
 #[test]
+fn computer_machine_snapshot_v1_restores_serial_input_device_state() {
+    let mut machine = ComputerMachine::new(1024).expect("machine creates");
+    machine.push_serial_input(b"ABC");
+    assert_eq!(
+        machine
+            .bus_load_i32(ComputerMachine::SERIAL_INPUT_READ)
+            .unwrap(),
+        i32::from(b'A')
+    );
+
+    let snapshot = machine.snapshot_v1().expect("snapshot encodes");
+    let restored =
+        ComputerMachine::restore_snapshot_v1(ComputerMachineProfile::computer_v1(1024), &snapshot)
+            .expect("snapshot restores");
+
+    assert_eq!(restored.serial_input_len(), 2);
+    assert_eq!(
+        restored
+            .bus_load_i32(ComputerMachine::SERIAL_INPUT_READY)
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        restored
+            .bus_load_i32(ComputerMachine::SERIAL_INPUT_READ)
+            .unwrap(),
+        i32::from(b'B')
+    );
+    assert_eq!(
+        restored
+            .bus_load_i32(ComputerMachine::SERIAL_INPUT_READ)
+            .unwrap(),
+        i32::from(b'C')
+    );
+    assert_eq!(restored.serial_input_len(), 0);
+}
+
+#[test]
 fn computer_machine_snapshot_v1_rejects_profile_ram_size_mismatch() {
     let machine = ComputerMachine::new(1024).expect("machine creates");
     let snapshot = machine.snapshot_v1().expect("snapshot encodes");
@@ -202,7 +242,7 @@ fn computer_machine_snapshot_v1_rejects_bad_magic_version_and_length() {
     let truncated = &snapshot[..snapshot.len() - 1];
     assert_eq!(
         decode_snapshot_v1(truncated).unwrap_err(),
-        "ComputerMachine snapshot device 2 payload is truncated"
+        "ComputerMachine snapshot device 3 header is truncated"
     );
 }
 

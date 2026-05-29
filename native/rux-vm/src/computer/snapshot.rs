@@ -10,6 +10,7 @@ pub const COMPUTER_SNAPSHOT_V1_RUX16_CPU_RECORD_SIZE: usize = 112;
 pub const COMPUTER_SNAPSHOT_V1_CONTROL_DEVICE_KIND: u32 = 1;
 pub const COMPUTER_SNAPSHOT_V1_DEBUG_DEVICE_KIND: u32 = 2;
 pub const COMPUTER_SNAPSHOT_V1_DISPLAY0_DEVICE_KIND: u32 = 3;
+pub const COMPUTER_SNAPSHOT_V1_SERIAL_INPUT_DEVICE_KIND: u32 = 4;
 const NO_BOOT_CPU: u32 = u32::MAX;
 const RUX16_CPU_STATE_RUNNING: u32 = 1;
 const RUX16_CPU_STATE_HALTED: u32 = 2;
@@ -56,6 +57,9 @@ pub enum ComputerDeviceSnapshotRecord {
     },
     Display0 {
         snapshot: ComputerTextDisplaySnapshot,
+    },
+    SerialInput {
+        bytes: Vec<u8>,
     },
 }
 
@@ -268,6 +272,7 @@ fn device_record_size(record: &ComputerDeviceSnapshotRecord) -> usize {
         ComputerDeviceSnapshotRecord::Display0 { snapshot } => {
             DISPLAY0_DEVICE_PAYLOAD_HEADER_SIZE + snapshot.cells.len()
         }
+        ComputerDeviceSnapshotRecord::SerialInput { bytes } => bytes.len(),
     }
 }
 
@@ -311,6 +316,16 @@ fn encode_device_record(
             write_u32(bytes, snapshot.cursor_y);
             write_u64(bytes, snapshot.sequence);
             bytes.extend_from_slice(&snapshot.cells);
+        }
+        ComputerDeviceSnapshotRecord::SerialInput {
+            bytes: serial_bytes,
+        } => {
+            let payload_size = u32::try_from(serial_bytes.len()).map_err(|_| {
+                "snapshot serial input device payload size does not fit u32".to_string()
+            })?;
+            write_u32(bytes, COMPUTER_SNAPSHOT_V1_SERIAL_INPUT_DEVICE_KIND);
+            write_u32(bytes, payload_size);
+            bytes.extend_from_slice(serial_bytes);
         }
     }
     Ok(())
@@ -399,6 +414,11 @@ fn decode_device_record(
                     sequence,
                     cells,
                 },
+            }
+        }
+        COMPUTER_SNAPSHOT_V1_SERIAL_INPUT_DEVICE_KIND => {
+            ComputerDeviceSnapshotRecord::SerialInput {
+                bytes: payload.to_vec(),
             }
         }
         _ => {
