@@ -22,6 +22,8 @@
 - The VM runtime now has a read-only `storage0 media -> RUXPT ROOT -> RuxFS`
   reader and validates already-read `RUXE` bytes as `program` images for the
   future OS exec path.
+- The runtime `RuxComputerHandle` can transfer an already-read `RUXE` program
+  into guest RAM and start Rux16 execution at the executable `entry_pc`.
 - `rux volume put-boot` now accepts a `RUXE` boot artifact and writes the
   current storage0 boot record from its entry/load metadata and payload. Kernel
   artifacts are rejected for boot media.
