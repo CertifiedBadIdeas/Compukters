@@ -1146,6 +1146,32 @@ fn rux16_init_loader_source_writes_init_handoff_info() {
 }
 
 #[test]
+fn rux16_init_loader_source_installs_kernel_trap_handler() {
+    let source = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/kernel/init_loader.rx"),
+    )
+    .expect("kernel init loader source should exist");
+
+    assert!(
+        source.contains("const TRAP_HANDLER_ADDR: u32 = 0x7000u32;"),
+        "kernel should reserve an explicit trap handler address"
+    );
+    assert!(
+        source.contains("fn install_trap_handler()"),
+        "kernel should install a trap handler before userspace starts"
+    );
+    assert!(
+        source.contains("rux16_write_csr(1u32, TRAP_HANDLER_ADDR)"),
+        "kernel should set the Rux16 trap vector CSR"
+    );
+    assert!(
+        source.find("install_trap_handler();").unwrap()
+            < source.find("rux16_jump(entry_pc)").unwrap(),
+        "kernel should install the trap handler before jumping to init"
+    );
+}
+
+#[test]
 fn rux16_rini_init_source_reads_and_validates_handoff() {
     let source = fs::read_to_string(
         Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/init/rini_init.rx"),
@@ -1203,6 +1229,27 @@ fn rux16_rini_init_source_reads_and_validates_handoff() {
     assert!(
         source.contains("write_init_failed()"),
         "init should fail explicitly when RINI is invalid"
+    );
+}
+
+#[test]
+fn rux16_trap_init_source_requests_kernel_console_output() {
+    let source = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/init/trap_init.rx"),
+    )
+    .expect("trap init source should exist");
+
+    assert!(
+        source.contains("fn read_rini_handoff_valid("),
+        "trap init should validate RINI before making a kernel request"
+    );
+    assert!(
+        source.contains("rux16_write_csr(2u32, 1u32)"),
+        "trap init should trigger the first kernel trap syscall"
+    );
+    assert!(
+        !source.contains("display0::"),
+        "trap init should not write display0 directly"
     );
 }
 
@@ -1633,6 +1680,39 @@ fn rux16_rini_init_fails_with_invalid_handoff_magic() {
         .expect("computer profile maps display0");
     assert_eq!(display_row(&snapshot, 0), "INIT FAILED");
     assert_eq!(handle.control().panic_code, 73);
+}
+
+#[test]
+fn rux_volume_boot_kernel_and_trap_init_uses_kernel_handler() {
+    let init_bytes = compile_init_program(
+        "examples/init/trap_init.rx",
+        "trap-init-kernel-handler-init.ruxe",
+    );
+    let volume_path = create_boot_kernel_init_volume("trap-init-kernel-handler", Some(&init_bytes));
+    let bios = compile_bundled_rux16_bios();
+    let mut handle = RuxComputerHandle::create_rux16_bios_flash_with_storage0_path(
+        &bios,
+        64 * 1024,
+        1_000_000,
+        &volume_path,
+    )
+    .expect("Rux16 BIOS flash computer creates with trap init volume path");
+
+    let signal_result = handle.run_rux16_until_signal();
+    let snapshot = handle
+        .display0_snapshot()
+        .expect("computer profile maps display0");
+    let signal = signal_result.unwrap_or_else(|error| {
+        panic!(
+            "run failed: {error}; debug={} panic={} row0={}",
+            String::from_utf8_lossy(handle.debug_output_bytes()),
+            handle.control().panic_code,
+            display_row(&snapshot, 0)
+        )
+    });
+    assert_eq!(signal, Rux16Signal::Halt);
+    assert_eq!(display_row(&snapshot, 0), "INIT OK");
+    assert_eq!(handle.control().panic_code, 0);
 }
 
 #[test]
@@ -2118,7 +2198,11 @@ fn compile_bundled_rux16_bios() -> Vec<u8> {
 }
 
 fn compile_rini_init_program(name: &str) -> Vec<u8> {
-    let init_source_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/init/rini_init.rx");
+    compile_init_program("examples/init/rini_init.rx", name)
+}
+
+fn compile_init_program(source: &str, name: &str) -> Vec<u8> {
+    let init_source_path = Path::new(env!("CARGO_MANIFEST_DIR")).join(source);
     let init_path = temp_file(name);
     let init_compile_output = Command::new(rux_binary())
         .args([
