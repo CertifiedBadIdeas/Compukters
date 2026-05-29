@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added experimental `RUXSNAP` v1 as the host-side `ComputerMachine` snapshot
+  container. The first slice records a versioned header and full RAM bytes;
+  CPU/device continuation state remains future work.
 - Added `rux16-v1.md` and reserved `r15` as the Rux16 stack pointer. The stack
   lives in guest RAM, grows downward, and uses 4-byte slots in the first ABI
   slice.
@@ -76,3 +79,4 @@
 - `ruxe-v1.md`
 - `rux-storage-volume-v1.md`
 - `ruxfs-v1.md`
+- `rux-computer-snapshot-v1.md`

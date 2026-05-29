@@ -6,6 +6,7 @@ use crate::computer::profile::{
     validate_profile_v2, ComputerHardwareDevice, ComputerMachineProfile, HardwareTableEntry,
     StorageMediaConfig,
 };
+use crate::computer::snapshot;
 use crate::computer_abi;
 use crate::low_bus::{MachineBus, MmioDeviceId};
 use crate::low_machine::{MachineMemory, MemoryFault};
@@ -296,6 +297,21 @@ impl ComputerMachine {
             false,
         );
         map
+    }
+
+    pub fn snapshot_v1(&self) -> Result<Vec<u8>, String> {
+        snapshot::encode_snapshot_v1(self.memory().bytes(), self.cpus.len(), self.boot_cpu)
+    }
+
+    pub fn restore_ram_snapshot_v1(
+        profile: ComputerMachineProfile,
+        snapshot_bytes: &[u8],
+    ) -> Result<Self, String> {
+        let snapshot = snapshot::decode_snapshot_v1(snapshot_bytes)?;
+        snapshot::validate_snapshot_ram_matches_profile(&profile, &snapshot)?;
+        let mut machine = Self::from_profile(profile).map_err(|error| error.to_string())?;
+        machine.write_guest_ram_bytes(0, snapshot.ram)?;
+        Ok(machine)
     }
 
     pub fn bus_load_i32(&self, address: u32) -> Result<i32, MemoryFault> {
