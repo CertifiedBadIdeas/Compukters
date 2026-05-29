@@ -603,6 +603,19 @@ impl ComputerMachine {
                 bytes: serial_input.bytes(),
             });
         }
+        if let Some(storage0) = self.storage0_device() {
+            let snapshot = storage0.controller_snapshot();
+            devices.push(ComputerDeviceSnapshotRecord::Storage0 {
+                status: snapshot.status,
+                error: snapshot.error,
+                lba_low: snapshot.lba_low,
+                lba_high: snapshot.lba_high,
+                block_count: snapshot.block_count,
+                buffer_addr: snapshot.buffer_addr,
+                bytes_done: snapshot.bytes_done,
+                sequence: snapshot.sequence,
+            });
+        }
         devices
     }
 
@@ -645,6 +658,33 @@ impl ComputerMachine {
                 })?;
                 serial_input.restore_bytes(bytes);
             }
+            ComputerDeviceSnapshotRecord::Storage0 {
+                status,
+                error,
+                lba_low,
+                lba_high,
+                block_count,
+                buffer_addr,
+                bytes_done,
+                sequence,
+            } => {
+                let storage0 = self.storage0_device_mut().ok_or_else(|| {
+                    "ComputerMachine snapshot contains storage0 device state but profile has no storage0 device"
+                        .to_string()
+                })?;
+                storage0.restore_controller_snapshot(
+                    crate::computer::devices::StoragePortControllerSnapshot {
+                        status,
+                        error,
+                        lba_low,
+                        lba_high,
+                        block_count,
+                        buffer_addr,
+                        bytes_done,
+                        sequence,
+                    },
+                );
+            }
         }
         Ok(())
     }
@@ -667,6 +707,16 @@ impl ComputerMachine {
     fn display0_device_mut(&mut self) -> Option<&mut TextDisplayDevice> {
         self.display0_device_id
             .and_then(|id| self.bus.device_mut::<TextDisplayDevice>(id))
+    }
+
+    fn storage0_device(&self) -> Option<&StoragePortDevice> {
+        self.storage0_device_id
+            .and_then(|id| self.bus.device::<StoragePortDevice>(id))
+    }
+
+    fn storage0_device_mut(&mut self) -> Option<&mut StoragePortDevice> {
+        self.storage0_device_id
+            .and_then(|id| self.bus.device_mut::<StoragePortDevice>(id))
     }
 
     fn control_device_mut(&mut self) -> Option<&mut ComputerControlDevice> {

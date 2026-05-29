@@ -11,12 +11,14 @@ pub const COMPUTER_SNAPSHOT_V1_CONTROL_DEVICE_KIND: u32 = 1;
 pub const COMPUTER_SNAPSHOT_V1_DEBUG_DEVICE_KIND: u32 = 2;
 pub const COMPUTER_SNAPSHOT_V1_DISPLAY0_DEVICE_KIND: u32 = 3;
 pub const COMPUTER_SNAPSHOT_V1_SERIAL_INPUT_DEVICE_KIND: u32 = 4;
+pub const COMPUTER_SNAPSHOT_V1_STORAGE0_DEVICE_KIND: u32 = 5;
 const NO_BOOT_CPU: u32 = u32::MAX;
 const RUX16_CPU_STATE_RUNNING: u32 = 1;
 const RUX16_CPU_STATE_HALTED: u32 = 2;
 const RUX16_CPU_STATE_TRAPPED: u32 = 3;
 const CONTROL_DEVICE_PAYLOAD_SIZE: usize = 12;
 const DISPLAY0_DEVICE_PAYLOAD_HEADER_SIZE: usize = 24;
+const STORAGE0_DEVICE_PAYLOAD_SIZE: usize = 36;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ComputerMachineSnapshotHeader {
@@ -60,6 +62,16 @@ pub enum ComputerDeviceSnapshotRecord {
     },
     SerialInput {
         bytes: Vec<u8>,
+    },
+    Storage0 {
+        status: i32,
+        error: i32,
+        lba_low: u32,
+        lba_high: u32,
+        block_count: u32,
+        buffer_addr: u32,
+        bytes_done: u32,
+        sequence: u64,
     },
 }
 
@@ -273,6 +285,7 @@ fn device_record_size(record: &ComputerDeviceSnapshotRecord) -> usize {
             DISPLAY0_DEVICE_PAYLOAD_HEADER_SIZE + snapshot.cells.len()
         }
         ComputerDeviceSnapshotRecord::SerialInput { bytes } => bytes.len(),
+        ComputerDeviceSnapshotRecord::Storage0 { .. } => STORAGE0_DEVICE_PAYLOAD_SIZE,
     }
 }
 
@@ -326,6 +339,27 @@ fn encode_device_record(
             write_u32(bytes, COMPUTER_SNAPSHOT_V1_SERIAL_INPUT_DEVICE_KIND);
             write_u32(bytes, payload_size);
             bytes.extend_from_slice(serial_bytes);
+        }
+        ComputerDeviceSnapshotRecord::Storage0 {
+            status,
+            error,
+            lba_low,
+            lba_high,
+            block_count,
+            buffer_addr,
+            bytes_done,
+            sequence,
+        } => {
+            write_u32(bytes, COMPUTER_SNAPSHOT_V1_STORAGE0_DEVICE_KIND);
+            write_u32(bytes, STORAGE0_DEVICE_PAYLOAD_SIZE as u32);
+            write_i32(bytes, *status);
+            write_i32(bytes, *error);
+            write_u32(bytes, *lba_low);
+            write_u32(bytes, *lba_high);
+            write_u32(bytes, *block_count);
+            write_u32(bytes, *buffer_addr);
+            write_u32(bytes, *bytes_done);
+            write_u64(bytes, *sequence);
         }
     }
     Ok(())
@@ -419,6 +453,24 @@ fn decode_device_record(
         COMPUTER_SNAPSHOT_V1_SERIAL_INPUT_DEVICE_KIND => {
             ComputerDeviceSnapshotRecord::SerialInput {
                 bytes: payload.to_vec(),
+            }
+        }
+        COMPUTER_SNAPSHOT_V1_STORAGE0_DEVICE_KIND => {
+            if payload.len() != STORAGE0_DEVICE_PAYLOAD_SIZE {
+                return Err(format!(
+                    "ComputerMachine snapshot storage0 device payload has {} bytes but expected {STORAGE0_DEVICE_PAYLOAD_SIZE}",
+                    payload.len()
+                ));
+            }
+            ComputerDeviceSnapshotRecord::Storage0 {
+                status: read_i32(payload, 0)?,
+                error: read_i32(payload, 4)?,
+                lba_low: read_u32(payload, 8)?,
+                lba_high: read_u32(payload, 12)?,
+                block_count: read_u32(payload, 16)?,
+                buffer_addr: read_u32(payload, 20)?,
+                bytes_done: read_u32(payload, 24)?,
+                sequence: read_u64(payload, 28)?,
             }
         }
         _ => {

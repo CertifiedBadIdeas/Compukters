@@ -464,6 +464,17 @@ pub(crate) struct StoragePortDevice {
     media: Option<Box<dyn StorageMedia>>,
 }
 
+pub(crate) struct StoragePortControllerSnapshot {
+    pub(crate) status: i32,
+    pub(crate) error: i32,
+    pub(crate) lba_low: u32,
+    pub(crate) lba_high: u32,
+    pub(crate) block_count: u32,
+    pub(crate) buffer_addr: u32,
+    pub(crate) bytes_done: u32,
+    pub(crate) sequence: u64,
+}
+
 pub(crate) trait StorageMedia {
     fn len(&self) -> u64;
 
@@ -702,6 +713,30 @@ impl StoragePortDevice {
 
     pub(crate) fn media_bytes(&self) -> Option<Vec<u8>> {
         self.media.as_ref().and_then(|media| media.snapshot_bytes())
+    }
+
+    pub(crate) fn controller_snapshot(&self) -> StoragePortControllerSnapshot {
+        StoragePortControllerSnapshot {
+            status: self.status,
+            error: self.error,
+            lba_low: self.lba_low,
+            lba_high: self.lba_high,
+            block_count: self.block_count,
+            buffer_addr: self.buffer_addr,
+            bytes_done: self.bytes_done,
+            sequence: self.sequence,
+        }
+    }
+
+    pub(crate) fn restore_controller_snapshot(&mut self, snapshot: StoragePortControllerSnapshot) {
+        self.status = snapshot.status;
+        self.error = snapshot.error;
+        self.lba_low = snapshot.lba_low;
+        self.lba_high = snapshot.lba_high;
+        self.block_count = snapshot.block_count;
+        self.buffer_addr = snapshot.buffer_addr;
+        self.bytes_done = snapshot.bytes_done;
+        self.sequence = snapshot.sequence;
     }
 
     fn execute_command(&mut self, command: i32, memory: Option<&mut MachineMemory>) {
