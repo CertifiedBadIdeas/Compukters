@@ -1558,23 +1558,7 @@ fn rux_volume_boot_kernel_and_init_executes_init_from_root_ruxfs() {
 
 #[test]
 fn rux_volume_boot_kernel_and_rini_init_consumes_handoff() {
-    let init_source_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/init/rini_init.rx");
-    let init_path = temp_file("rini-init-consumes-handoff-init.ruxe");
-    let init_compile_output = Command::new(rux_binary())
-        .args([
-            "compile",
-            init_source_path.to_str().unwrap(),
-            "-o",
-            init_path.to_str().unwrap(),
-        ])
-        .output()
-        .expect("rux compile RINI init runs");
-    assert!(
-        init_compile_output.status.success(),
-        "stderr: {}",
-        String::from_utf8_lossy(&init_compile_output.stderr)
-    );
-    let init_bytes = fs::read(&init_path).expect("RINI init RUXE reads");
+    let init_bytes = compile_rini_init_program("rini-init-consumes-handoff-init.ruxe");
     let volume_path =
         create_boot_kernel_init_volume("rini-init-consumes-handoff", Some(&init_bytes));
     let bios = compile_bundled_rux16_bios();
@@ -1601,6 +1585,54 @@ fn rux_volume_boot_kernel_and_rini_init_consumes_handoff() {
     assert_eq!(signal, Rux16Signal::Halt);
     assert_eq!(display_row(&snapshot, 0), "INIT OK");
     assert_eq!(handle.control().panic_code, 0);
+}
+
+#[test]
+fn rux16_rini_init_fails_without_handoff() {
+    let init_bytes = compile_rini_init_program("rini-init-missing-handoff-init.ruxe");
+    let bios = vec![0x01, 0x00];
+    let mut handle = RuxComputerHandle::create_rux16_bios_flash(&bios, 64 * 1024, 1_000_000)
+        .expect("Rux16 BIOS flash computer creates");
+
+    handle
+        .exec_ruxe_program_from_bytes(&init_bytes, 1_000_000)
+        .expect("RINI init transfers into Rux16 execution");
+    assert_eq!(handle.run_rux16_until_signal().unwrap(), Rux16Signal::Halt);
+    let snapshot = handle
+        .display0_snapshot()
+        .expect("computer profile maps display0");
+    assert_eq!(display_row(&snapshot, 0), "INIT FAILED");
+    assert_eq!(handle.control().panic_code, 73);
+}
+
+#[test]
+fn rux16_rini_init_fails_with_invalid_handoff_magic() {
+    let init_bytes = compile_rini_init_program("rini-init-invalid-handoff-init.ruxe");
+    let bios = vec![0x01, 0x00];
+    let mut handle = RuxComputerHandle::create_rux16_bios_flash(&bios, 64 * 1024, 1_000_000)
+        .expect("Rux16 BIOS flash computer creates");
+    handle
+        .write_guest_ram_bytes(0x3f20, b"BAD!")
+        .expect("invalid RINI magic writes");
+    handle
+        .write_guest_ram_bytes(0x3f24, &0x00180001_u32.to_le_bytes())
+        .expect("RINI version and size writes");
+    handle
+        .write_guest_ram_bytes(0x3f28, &33_u32.to_le_bytes())
+        .expect("RINI root_start_lba writes");
+    handle
+        .write_guest_ram_bytes(0x3f30, &0x8000_u32.to_le_bytes())
+        .expect("RINI init_entry_pc writes");
+
+    handle
+        .exec_ruxe_program_from_bytes(&init_bytes, 1_000_000)
+        .expect("RINI init transfers into Rux16 execution");
+    assert_eq!(handle.run_rux16_until_signal().unwrap(), Rux16Signal::Halt);
+    let snapshot = handle
+        .display0_snapshot()
+        .expect("computer profile maps display0");
+    assert_eq!(display_row(&snapshot, 0), "INIT FAILED");
+    assert_eq!(handle.control().panic_code, 73);
 }
 
 #[test]
@@ -2083,6 +2115,26 @@ fn compile_bundled_rux16_bios() -> Vec<u8> {
     compile_rux16_artifact(&source, Rux16ArtifactTarget::Bios)
         .expect("Rux16 BIOS source compiles to BIOS flash")
         .bytes
+}
+
+fn compile_rini_init_program(name: &str) -> Vec<u8> {
+    let init_source_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/init/rini_init.rx");
+    let init_path = temp_file(name);
+    let init_compile_output = Command::new(rux_binary())
+        .args([
+            "compile",
+            init_source_path.to_str().unwrap(),
+            "-o",
+            init_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("rux compile RINI init runs");
+    assert!(
+        init_compile_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&init_compile_output.stderr)
+    );
+    fs::read(&init_path).expect("RINI init RUXE reads")
 }
 
 fn display_row(snapshot: &RuxComputerTextDisplaySnapshot, row: u32) -> String {
