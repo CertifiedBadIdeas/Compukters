@@ -5,9 +5,7 @@ use crate::ruxfs;
 pub const RUXVOL_MAGIC: &[u8; 6] = b"RUXVOL";
 pub const RUXVOL_VERSION: u16 = 1;
 pub const RUXVOL_HEADER_SIZE: usize = 16;
-pub const RUXVOL_BOOT_RECORD_OFFSET: usize = 0;
 pub const RUXVOL_BOOT_PAYLOAD_OFFSET: usize = 512;
-pub const RUXVOL_RAW_BOOT_AREA_END: usize = 8192;
 
 pub fn create_empty_volume(size: usize) -> Result<Vec<u8>, String> {
     if size < RUXVOL_BOOT_PAYLOAD_OFFSET {
@@ -49,48 +47,16 @@ pub fn put_boot(volume: &mut [u8], boot: &[u8]) -> Result<(), String> {
         return Err("boot media requires RUXE bootloader ABI kind".to_string());
     }
     let payload = &mut volume[payload_range];
-    if payload.get(..5) == Some(partition::RUXPT_MAGIC) {
-        let boot_range = partition_payload_range(payload, "BOOT")?;
-        let boot_blocks = u32::try_from(boot_range.len() / partition::RUXPT_BLOCK_SIZE)
-            .map_err(|_| "BOOT partition block count does not fit u32".to_string())?;
-        let mut boot_fs = ruxfs::format_empty_filesystem(boot_blocks)?;
-        ruxfs::create_directory(&mut boot_fs, "/boot")?;
-        ruxfs::write_file(&mut boot_fs, "/boot/loader.ruxe", boot)?;
-        payload[boot_range].copy_from_slice(&boot_fs);
-        return Ok(());
+    if payload.get(..5) != Some(partition::RUXPT_MAGIC) {
+        return Err("put-boot requires a RUXPT partitioned volume".to_string());
     }
-
-    let block_count = executable.payload.len().div_ceil(512);
-    let payload_len = payload.len();
-    let boot_layout = boot_layout(payload)?;
-    let boot_end = boot_layout
-        .payload_offset
-        .checked_add(executable.payload.len())
-        .ok_or_else(|| "boot artifact range overflows".to_string())?;
-    if boot_end > payload_len {
-        return Err(format!(
-            "boot artifact needs {boot_end} payload bytes but ruxvol payload has {payload_len} bytes",
-        ));
-    }
-    if boot_end > boot_layout.end_offset {
-        return Err(format!(
-            "boot artifact exceeds boot area ending at byte {}",
-            boot_layout.end_offset,
-        ));
-    }
-    let block_count = u32::try_from(block_count)
-        .map_err(|_| "boot artifact block count does not fit u32".to_string())?;
-
-    payload[boot_layout.record_offset..boot_layout.record_offset + 4].copy_from_slice(b"RUXB");
-    write_u32(payload, boot_layout.record_offset + 4, executable.entry_pc);
-    write_u32(payload, boot_layout.record_offset + 8, executable.load_addr);
-    write_u32(payload, boot_layout.record_offset + 12, block_count);
-    write_u32(
-        payload,
-        boot_layout.record_offset + 16,
-        boot_layout.payload_lba,
-    );
-    payload[boot_layout.payload_offset..boot_end].copy_from_slice(&executable.payload);
+    let boot_range = partition_payload_range(payload, "BOOT")?;
+    let boot_blocks = u32::try_from(boot_range.len() / partition::RUXPT_BLOCK_SIZE)
+        .map_err(|_| "BOOT partition block count does not fit u32".to_string())?;
+    let mut boot_fs = ruxfs::format_empty_filesystem(boot_blocks)?;
+    ruxfs::create_directory(&mut boot_fs, "/boot")?;
+    ruxfs::write_file(&mut boot_fs, "/boot/loader.ruxe", boot)?;
+    payload[boot_range].copy_from_slice(&boot_fs);
     Ok(())
 }
 
@@ -275,54 +241,6 @@ fn partition_entry_by_type(
         .ok_or_else(|| format!("RUXPT {} partition not found", partition_type.tag()))
 }
 
-struct BootLayout {
-    record_offset: usize,
-    payload_offset: usize,
-    end_offset: usize,
-    payload_lba: u32,
-}
-
-fn boot_layout(payload: &[u8]) -> Result<BootLayout, String> {
-    if payload.get(..5) == Some(partition::RUXPT_MAGIC) {
-        let table_bytes = payload
-            .get(..partition::RUXPT_BLOCK_SIZE)
-            .ok_or_else(|| "ruxvol payload is too small for RUXPT".to_string())?;
-        let table = partition::decode_partition_table(table_bytes)?;
-        let total_blocks = u32::try_from(payload.len() / partition::RUXPT_BLOCK_SIZE)
-            .map_err(|_| "ruxvol block count does not fit u32".to_string())?;
-        partition::validate_partition_table(&table, total_blocks)?;
-        let entry = table
-            .entries
-            .iter()
-            .find(|entry| entry.partition_type == partition::PartitionType::Boot)
-            .ok_or_else(|| "RUXPT BOOT partition not found".to_string())?;
-        let record_offset = partition_byte_offset(entry.start_lba)?;
-        let payload_lba = entry
-            .start_lba
-            .checked_add(1)
-            .ok_or_else(|| "BOOT payload LBA overflows".to_string())?;
-        let payload_offset = partition_byte_offset(payload_lba)?;
-        let end_lba = entry
-            .start_lba
-            .checked_add(entry.block_count)
-            .ok_or_else(|| "BOOT partition range overflows".to_string())?;
-        let end_offset = partition_byte_offset(end_lba)?;
-        return Ok(BootLayout {
-            record_offset,
-            payload_offset,
-            end_offset,
-            payload_lba,
-        });
-    }
-
-    Ok(BootLayout {
-        record_offset: RUXVOL_BOOT_RECORD_OFFSET,
-        payload_offset: RUXVOL_BOOT_PAYLOAD_OFFSET,
-        end_offset: RUXVOL_RAW_BOOT_AREA_END,
-        payload_lba: 1,
-    })
-}
-
 fn ensure_boot_directory(root: &mut [u8]) -> Result<(), String> {
     match ruxfs::list_directory(root, "/boot") {
         Ok(_) => Ok(()),
@@ -371,10 +289,6 @@ fn read_u64(bytes: &[u8], offset: usize) -> Result<u64, String> {
         .get(offset..offset + 8)
         .ok_or_else(|| "ruxvol header is truncated".to_string())?;
     Ok(u64::from_le_bytes(value.try_into().unwrap()))
-}
-
-fn write_u32(bytes: &mut [u8], offset: usize, value: u32) {
-    bytes[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
 }
 
 fn write_u64(bytes: &mut [u8], offset: usize, value: u64) {

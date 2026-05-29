@@ -112,29 +112,6 @@ fn draw_no_bootable_device() {
     }
 }
 
-fn write_boot_record_found() {
-    unsafe {
-        mmio<u8>(debug::WRITE).store(66u8);
-        mmio<u8>(debug::WRITE).store(79u8);
-        mmio<u8>(debug::WRITE).store(79u8);
-        mmio<u8>(debug::WRITE).store(84u8);
-        mmio<u8>(debug::WRITE).store(32u8);
-        mmio<u8>(debug::WRITE).store(82u8);
-        mmio<u8>(debug::WRITE).store(69u8);
-        mmio<u8>(debug::WRITE).store(67u8);
-        mmio<u8>(debug::WRITE).store(79u8);
-        mmio<u8>(debug::WRITE).store(82u8);
-        mmio<u8>(debug::WRITE).store(68u8);
-        mmio<u8>(debug::WRITE).store(32u8);
-        mmio<u8>(debug::WRITE).store(70u8);
-        mmio<u8>(debug::WRITE).store(79u8);
-        mmio<u8>(debug::WRITE).store(85u8);
-        mmio<u8>(debug::WRITE).store(78u8);
-        mmio<u8>(debug::WRITE).store(68u8);
-        mmio<u8>(debug::WRITE).store(10u8);
-    }
-}
-
 fn write_boot_loader_found() {
     unsafe {
         mmio<u8>(debug::WRITE).store(66u8);
@@ -191,43 +168,6 @@ fn read_storage0_blocks(lba: i32, block_count: i32, buffer_addr: i32) -> i32 {
         mmio<i32>(storage0::BUFFER_ADDR).store(buffer_addr);
         mmio<i32>(storage0::COMMAND).store(storage0::COMMAND_READ_BLOCKS);
         return mmio<i32>(storage0::STATUS).load();
-    }
-}
-
-fn load_boot_payload() {
-    unsafe {
-        let mut entry_pc: i32 = ptr<i32>(516u32).load();
-        let mut load_addr: i32 = ptr<i32>(520u32).load();
-        let mut block_count: i32 = ptr<i32>(524u32).load();
-        let mut start_lba: i32 = ptr<i32>(528u32).load();
-
-        if entry_pc == 0 {
-            write_no_bootable_device();
-        } else {
-            if load_addr == 0 {
-                write_no_bootable_device();
-            } else {
-                if block_count == 0 {
-                    write_no_bootable_device();
-                } else {
-                    if start_lba == 0 {
-                        write_no_bootable_device();
-                    } else {
-                        let mut status: i32 = read_storage0_blocks(
-                            start_lba,
-                            block_count,
-                            load_addr
-                        );
-                        if status == storage0::STATUS_DONE {
-                            write_boot_payload_loaded();
-                            rux16_jump(entry_pc);
-                        } else {
-                            write_no_bootable_device();
-                        }
-                    }
-                }
-            }
-        }
     }
 }
 
@@ -485,17 +425,11 @@ fn load_partitioned_bootloader() {
     }
 }
 
-fn discover_boot_record() {
+fn discover_bootloader() {
     unsafe {
         let mut status: i32 = read_storage0_blocks(0, 1, 512);
         if status == storage0::STATUS_DONE {
-            let mut magic: i32 = ptr<i32>(512u32).load();
-            if magic == 1113085266 {
-                write_boot_record_found();
-                load_boot_payload();
-            } else {
-                load_partitioned_bootloader();
-            }
+            load_partitioned_bootloader();
         } else {
             write_no_bootable_device();
         }
@@ -509,7 +443,7 @@ fn main() {
 
     write_banner();
     draw_banner();
-    discover_boot_record();
+    discover_bootloader();
 
     unsafe {
         mmio<i32>(control::PANIC_CODE).store(status::READY);

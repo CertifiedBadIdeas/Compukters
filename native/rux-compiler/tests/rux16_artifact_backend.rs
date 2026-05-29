@@ -92,16 +92,16 @@ fn rux16_bios_firmware_source_draws_no_bootable_device_screen() {
 }
 
 #[test]
-fn rux16_bios_firmware_source_rejects_incomplete_storage0_boot_record() {
+fn rux16_bios_firmware_source_rejects_incomplete_raw_ruxb_storage0_media() {
     let artifact = compile_bundled_rux16_bios();
     let mut media = vec![0; 512];
     media[0..4].copy_from_slice(b"RUXB");
 
-    assert_bios_rejects_boot_media(&artifact.bytes, media);
+    assert_bios_rejects_non_partitioned_boot_media(&artifact.bytes, media);
 }
 
 #[test]
-fn rux16_bios_firmware_source_rejects_invalid_storage0_boot_header_fields() {
+fn rux16_bios_firmware_source_rejects_raw_ruxb_header_fields_without_fallback() {
     let artifact = compile_bundled_rux16_bios();
     let payload = compile_stage2_program();
     let invalid_headers = [
@@ -112,60 +112,28 @@ fn rux16_bios_firmware_source_rejects_invalid_storage0_boot_header_fields() {
     ];
 
     for media in invalid_headers {
-        assert_bios_rejects_boot_media(&artifact.bytes, media);
+        assert_bios_rejects_non_partitioned_boot_media(&artifact.bytes, media);
     }
 }
 
 #[test]
-fn rux16_bios_firmware_source_loads_storage0_boot_payload() {
+fn rux16_bios_firmware_source_rejects_raw_ruxb_boot_payload_without_fallback() {
     let artifact = compile_bundled_rux16_bios();
     let payload = compile_stage2_program();
     let payload = ruxe::decode_rux16_executable(&payload.bytes).expect("stage2 RUXE decodes");
     let media = rux16_boot_media(payload.entry_pc, payload.load_addr, 1, 1, &payload.payload);
-    let mut handle = RuxComputerHandle::create_rux16_bios_flash_with_storage0_media(
-        &artifact.bytes,
-        64 * 1024,
-        1024,
-        media,
-    )
-    .expect("machine boots Rux16 BIOS flash with storage0 boot media");
 
-    assert_eq!(handle.run_rux16_until_signal().unwrap(), Rux16Signal::Halt);
-    assert_eq!(
-        handle.debug_output_bytes(),
-        b"RUX16 BIOS\nBOOT RECORD FOUND\nBOOT PAYLOAD LOADED\nS2"
-    );
-    assert_eq!(handle.control().status, ComputerMachine::STATUS_HALTED);
-    assert_eq!(handle.control().panic_code, 82);
-    assert_eq!(
-        handle
-            .read_guest_ram_bytes(2048, payload.payload.len() as u32)
-            .unwrap(),
-        payload.payload
-    );
+    assert_bios_rejects_non_partitioned_boot_media(&artifact.bytes, media);
 }
 
 #[test]
-fn rux16_bios_firmware_source_jumps_to_loaded_storage0_boot_payload() {
+fn rux16_bios_firmware_source_does_not_jump_to_raw_ruxb_boot_payload() {
     let artifact = compile_bundled_rux16_bios();
     let payload = compile_stage2_program();
     let payload = ruxe::decode_rux16_executable(&payload.bytes).expect("stage2 RUXE decodes");
     let media = rux16_boot_media(payload.entry_pc, payload.load_addr, 1, 1, &payload.payload);
-    let mut handle = RuxComputerHandle::create_rux16_bios_flash_with_storage0_media(
-        &artifact.bytes,
-        64 * 1024,
-        1024,
-        media,
-    )
-    .expect("machine boots Rux16 BIOS flash with executable storage0 boot media");
 
-    assert_eq!(handle.run_rux16_until_signal().unwrap(), Rux16Signal::Halt);
-    assert_eq!(
-        handle.debug_output_bytes(),
-        b"RUX16 BIOS\nBOOT RECORD FOUND\nBOOT PAYLOAD LOADED\nS2"
-    );
-    assert_eq!(handle.control().status, ComputerMachine::STATUS_HALTED);
-    assert_eq!(handle.control().panic_code, 82);
+    assert_bios_rejects_non_partitioned_boot_media(&artifact.bytes, media);
 }
 
 #[test]
@@ -214,7 +182,7 @@ fn compile_stage2_program() -> rux_compiler::artifact::Rux16Artifact {
     .expect("stage2 program compiles to Rux16")
 }
 
-fn assert_bios_rejects_boot_media(bios_flash: &[u8], media: Vec<u8>) {
+fn assert_bios_rejects_non_partitioned_boot_media(bios_flash: &[u8], media: Vec<u8>) {
     let mut handle = RuxComputerHandle::create_rux16_bios_flash_with_storage0_media(
         bios_flash,
         64 * 1024,
@@ -226,7 +194,7 @@ fn assert_bios_rejects_boot_media(bios_flash: &[u8], media: Vec<u8>) {
     assert_eq!(handle.run_rux16_until_signal().unwrap(), Rux16Signal::Halt);
     assert_eq!(
         handle.debug_output_bytes(),
-        b"RUX16 BIOS\nBOOT RECORD FOUND\nNO BOOTABLE DEVICE\n"
+        b"RUX16 BIOS\nNO BOOTABLE DEVICE\n"
     );
     assert_eq!(handle.control().status, ComputerMachine::STATUS_HALTED);
     assert_eq!(handle.control().panic_code, ComputerMachine::STATUS_READY);

@@ -346,7 +346,7 @@ fn rux_volume_replace_partition_rejects_wrong_size_without_truncation() {
 }
 
 #[test]
-fn rux_volume_put_boot_records_boot_artifact() {
+fn rux_volume_put_boot_rejects_non_partitioned_volume_without_ruxb_fallback() {
     let volume_path = temp_file("boot-storage0.ruxvol");
     let boot_path = temp_file("boot.ruxe");
     fs::write(
@@ -382,23 +382,12 @@ fn rux_volume_put_boot_records_boot_artifact() {
         .output()
         .expect("put-boot runs");
 
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        output.status.success(),
-        "stderr: {}",
-        String::from_utf8_lossy(&output.stderr)
+        stderr.contains("put-boot requires a RUXPT partitioned volume"),
+        "stderr: {stderr}"
     );
-    let bytes = fs::read(&volume_path).expect("volume reads");
-    let payload = &bytes[16..];
-    assert_eq!(&payload[0..4], b"RUXB");
-    assert_eq!(u32::from_le_bytes(payload[4..8].try_into().unwrap()), 0x900);
-    assert_eq!(
-        u32::from_le_bytes(payload[8..12].try_into().unwrap()),
-        0x900
-    );
-    assert_eq!(u32::from_le_bytes(payload[12..16].try_into().unwrap()), 1);
-    assert_eq!(u32::from_le_bytes(payload[16..20].try_into().unwrap()), 1);
-    assert_eq!(&payload[512..516], &[0x01, 0x02, 0x03, 0x04]);
-    assert!(payload[516..1024].iter().all(|byte| *byte == 0));
 }
 
 #[test]
@@ -1327,68 +1316,6 @@ fn rux_volume_boot_kernel_and_init_executes_init_from_root_ruxfs() {
         display_row(&snapshot, 0)
     );
     assert_eq!(display_row(&snapshot, 0), "INIT OK");
-}
-
-#[test]
-fn rux_volume_put_boot_creates_storage0_that_bundled_bios_executes() {
-    let volume_path = temp_file("bootable-storage0.ruxvol");
-    let boot_path = temp_file("stage2.boot");
-    let boot_source_path =
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/boot/stage2_display.rx");
-
-    let compile_output = Command::new(rux_binary())
-        .args([
-            "compile",
-            "--target",
-            "boot",
-            boot_source_path.to_str().unwrap(),
-            "-o",
-            boot_path.to_str().unwrap(),
-        ])
-        .output()
-        .expect("rux compile runs");
-    assert!(
-        compile_output.status.success(),
-        "stderr: {}",
-        String::from_utf8_lossy(&compile_output.stderr)
-    );
-    assert!(Command::new(rux_binary())
-        .args([
-            "volume",
-            "create",
-            volume_path.to_str().unwrap(),
-            "--size",
-            "4096",
-        ])
-        .status()
-        .expect("create runs")
-        .success());
-    assert!(Command::new(rux_binary())
-        .args([
-            "volume",
-            "put-boot",
-            volume_path.to_str().unwrap(),
-            boot_path.to_str().unwrap(),
-        ])
-        .status()
-        .expect("put-boot runs")
-        .success());
-
-    let bios = compile_bundled_rux16_bios();
-    let mut handle = RuxComputerHandle::create_rux16_bios_flash_with_storage0_path(
-        &bios,
-        64 * 1024,
-        1024,
-        &volume_path,
-    )
-    .expect("Rux16 BIOS flash computer creates with CLI boot volume path");
-
-    assert_eq!(handle.run_rux16_until_signal().unwrap(), Rux16Signal::Halt);
-    let snapshot = handle
-        .display0_snapshot()
-        .expect("computer profile maps display0");
-    assert_eq!(display_row(&snapshot, 0), "STAGE2 OK");
-    assert_eq!(handle.control().panic_code, 83);
 }
 
 fn compile_bundled_rux16_bios() -> Vec<u8> {

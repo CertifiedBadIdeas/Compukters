@@ -146,16 +146,18 @@ the `ROOT` RuxFS partition, validates ABI kind `program`, copies the payload to
 ## Storage Volume Tooling
 
 `RUXE` is the artifact format produced by the compiler. The current `RUXVOL`
-storage tooling decodes fixed-image `RUXE` artifacts and writes compact
-guest-visible records:
+storage tooling installs fixed-image `RUXE` artifacts into the partitioned
+system volume:
 
-- `put-boot` accepts ABI kind `bootloader` and writes a `RUXB` record.
-- `put-kernel` accepts ABI kind `kernel` and writes a `RUXK` record.
+- `put-boot` accepts ABI kind `bootloader` and writes
+  `BOOT`/RuxFS `/boot/loader.ruxe`.
+- `put-kernel` accepts ABI kind `kernel` and writes
+  `ROOT`/RuxFS `/boot/kernel.ruxe`.
 - `program` artifacts are not installed by `rux volume put-boot` or
   `put-kernel`; they belong in a filesystem such as `RuxFS` and are selected by
   OS policy.
 
-The fixed storage layout is defined in `rux-storage-volume-v1.md`.
+The storage layout is defined in `rux-storage-volume-v1.md`.
 
 ## Validation Errors
 

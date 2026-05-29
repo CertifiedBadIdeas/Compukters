@@ -26,9 +26,10 @@ The BIOS flash region is read-only and mapped outside RAM. Firmware fetches
 instructions directly from that region. The host writes profile v2 boot info and
 the hardware table into RAM before the CPU starts.
 
-Storage boot is firmware policy. The current BIOS can inspect storage0, read a
-boot record, copy a Rux16 payload into RAM, and jump to the payload entry
-address. There is no host-side executable decode step in this path.
+Storage boot is firmware policy. The current BIOS reads `RUXPT` from storage0,
+loads `BOOT`/RuxFS `/boot/loader.ruxe`, validates the `RUXE` bootloader image,
+copies its payload into RAM, and jumps to the payload entry address. There is
+no host-side executable decode step in this path.
 
 ## Base Machine Profile
 
