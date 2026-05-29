@@ -1,5 +1,5 @@
 use rux_compiler::artifact::Rux16ArtifactTarget;
-use rux_compiler::{advice, compile_rux16_artifact, rux16_disasm, ruxfs, volume};
+use rux_compiler::{advice, compile_rux16_artifact, inspect, rux16_disasm, ruxfs, volume};
 use std::env;
 use std::fs;
 use std::process::ExitCode;
@@ -22,10 +22,21 @@ fn run(args: Vec<String>) -> Result<(), String> {
         "compile" => run_compile(&args[1..]),
         "check" => run_check(&args[1..]),
         "disasm" | "disassemble" => run_disasm(&args[1..]),
+        "inspect" => run_inspect(&args[1..]),
         "fs" => run_fs(&args[1..]),
         "volume" => run_volume(&args[1..]),
         _ => usage_error(),
     }
+}
+
+fn run_inspect(args: &[String]) -> Result<(), String> {
+    if args.len() != 1 {
+        return inspect_usage_error();
+    }
+    let bytes =
+        fs::read(&args[0]).map_err(|error| format!("failed to read {}: {error}", args[0]))?;
+    print!("{}", inspect::inspect_blob(&bytes)?);
+    Ok(())
 }
 
 fn run_check(args: &[String]) -> Result<(), String> {
@@ -339,7 +350,7 @@ fn parse_size(value: &str) -> Result<usize, String> {
 }
 
 fn usage_error() -> Result<(), String> {
-    Err("usage: rux check <input.rx>\n       rux compile [--target <bios|boot|kernel|program>] <input.rx> -o <output>\n       rux disasm --target <bios|boot|kernel|program> <input>\n       rux volume <create|init|put-boot|put-kernel> ...\n       rux fs <filesystem> ...".to_string())
+    Err("usage: rux check <input.rx>\n       rux compile [--target <bios|boot|kernel|program>] <input.rx> -o <output>\n       rux disasm --target <bios|boot|kernel|program> <input>\n       rux inspect <blob>\n       rux volume <create|init|put-boot|put-kernel> ...\n       rux fs <filesystem> ...".to_string())
 }
 
 fn check_usage_error() -> Result<(), String> {
@@ -360,6 +371,10 @@ fn disasm_usage_error() -> Result<DisasmConfig, String> {
 
 fn disasm_usage_message() -> String {
     "usage: rux disasm --target <bios|boot|kernel|program> <input>".to_string()
+}
+
+fn inspect_usage_error() -> Result<(), String> {
+    Err("usage: rux inspect <blob>".to_string())
 }
 
 fn volume_usage_error() -> Result<(), String> {
