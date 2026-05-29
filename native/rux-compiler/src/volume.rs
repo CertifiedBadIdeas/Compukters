@@ -37,6 +37,16 @@ pub fn create_initialized_volume(size: usize) -> Result<Vec<u8>, String> {
     let table_start = RUXVOL_HEADER_SIZE;
     let table_end = table_start + table_bytes.len();
     bytes[table_start..table_end].copy_from_slice(&table_bytes);
+    let root_entry = partition_entry_by_type(&table, partition::PartitionType::Root)?;
+    let root_start = RUXVOL_HEADER_SIZE
+        .checked_add(partition_byte_offset(root_entry.start_lba)?)
+        .ok_or_else(|| "ROOT partition byte range overflows".to_string())?;
+    let root_len = partition_byte_offset(root_entry.block_count)?;
+    let root_end = root_start
+        .checked_add(root_len)
+        .ok_or_else(|| "ROOT partition byte range overflows".to_string())?;
+    let root = ruxfs::format_empty_filesystem(root_entry.block_count)?;
+    bytes[root_start..root_end].copy_from_slice(&root);
     Ok(bytes)
 }
 

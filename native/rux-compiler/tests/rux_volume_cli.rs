@@ -528,6 +528,49 @@ fn rux_volume_put_kernel_installs_kernel_ruxe_in_root_ruxfs() {
 }
 
 #[test]
+fn rux_volume_init_creates_root_ruxfs_for_put_kernel() {
+    let volume_path = temp_file("init-rootfs-storage0.ruxvol");
+    let kernel_path = temp_file("init-rootfs-kernel.ruxe");
+    let kernel_bytes =
+        ruxe::encode_rux16_executable(&[0x10, 0x20], ruxe::RuxeAbiKind::Kernel, 0x3000, 0x3000)
+            .expect("RUXE encodes");
+    fs::write(&kernel_path, &kernel_bytes).expect("kernel writes");
+
+    assert!(Command::new(rux_binary())
+        .args([
+            "volume",
+            "init",
+            volume_path.to_str().unwrap(),
+            "--size",
+            "65536",
+        ])
+        .status()
+        .expect("init runs")
+        .success());
+    let output = Command::new(rux_binary())
+        .args([
+            "volume",
+            "put-kernel",
+            volume_path.to_str().unwrap(),
+            kernel_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("put-kernel runs");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let bytes = fs::read(&volume_path).expect("volume reads");
+    let root = volume::extract_partition(&bytes, "ROOT").expect("ROOT extracts");
+    assert_eq!(
+        ruxfs::read_file(&root, "/boot/kernel.ruxe").expect("kernel reads from ROOT"),
+        kernel_bytes
+    );
+}
+
+#[test]
 fn rux_volume_put_kernel_rejects_boot_artifact_without_profile_fallback() {
     let volume_path = temp_file("boot-as-kernel-storage0.ruxvol");
     let kernel_path = temp_file("boot-as-kernel.ruxe");

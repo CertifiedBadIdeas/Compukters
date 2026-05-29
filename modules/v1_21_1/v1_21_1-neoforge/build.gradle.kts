@@ -201,7 +201,7 @@ val createRux16SystemStorage0 =
             "rux",
             "--",
             "volume",
-            "create",
+            "init",
             rux16SystemStorage0Resource.get().asFile.absolutePath,
             "--size",
             "1048576",
