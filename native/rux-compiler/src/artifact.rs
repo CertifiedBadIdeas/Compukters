@@ -16,6 +16,9 @@ pub enum Rux16ArtifactTarget {
 }
 
 impl Rux16ArtifactTarget {
+    pub const PROGRAM_LOAD_BASE: u32 = 0x8000;
+    pub const PROGRAM_STACK_TOP: u32 = 0x1_0000;
+
     pub fn parse(value: &str) -> Result<Self, String> {
         match value {
             "bios" => Ok(Self::Bios),
@@ -33,7 +36,7 @@ impl Rux16ArtifactTarget {
             Self::Bios => rux_vm::computer_machine::ComputerMachine::RUX16_BIOS_FLASH_BASE,
             Self::Boot => 2048,
             Self::Kernel => 0x4000,
-            Self::Program => 0,
+            Self::Program => Self::PROGRAM_LOAD_BASE,
         }
     }
 
@@ -41,7 +44,8 @@ impl Rux16ArtifactTarget {
         match self {
             Self::Boot => Some(ruxe::RuxeAbiKind::Bootloader),
             Self::Kernel => Some(ruxe::RuxeAbiKind::Kernel),
-            Self::Bios | Self::Program => None,
+            Self::Program => Some(ruxe::RuxeAbiKind::Program),
+            Self::Bios => None,
         }
     }
 
@@ -50,7 +54,7 @@ impl Rux16ArtifactTarget {
             Self::Bios => Self::Boot.base_address(),
             Self::Boot => Self::Boot.base_address(),
             Self::Kernel => Self::Kernel.base_address(),
-            Self::Program => 0,
+            Self::Program => Self::PROGRAM_STACK_TOP,
         }
     }
 }
@@ -65,11 +69,6 @@ pub(crate) fn compile(
     program: Program,
     target: Rux16ArtifactTarget,
 ) -> Result<Rux16Artifact, CompileError> {
-    if target == Rux16ArtifactTarget::Program {
-        return Err(CompileError {
-            message: "Rux16 user-space program ABI is not defined yet".to_string(),
-        });
-    }
     let consts = evaluate_consts(&program.consts)?;
     let functions = collect_supported_functions(&program)?;
     let mut backend = Rux16ArtifactBackend::new(
@@ -85,15 +84,16 @@ pub(crate) fn compile(
 
     let code = rux16_asm::encode_words(&backend.words);
     let bytes = match target {
-        Rux16ArtifactTarget::Boot | Rux16ArtifactTarget::Kernel => ruxe::encode_rux16_executable(
-            &code,
-            target.fixed_image_abi_kind().unwrap(),
-            target.base_address(),
-            target.base_address(),
-        )
-        .map_err(|message| CompileError { message })?,
+        Rux16ArtifactTarget::Boot | Rux16ArtifactTarget::Kernel | Rux16ArtifactTarget::Program => {
+            ruxe::encode_rux16_executable(
+                &code,
+                target.fixed_image_abi_kind().unwrap(),
+                target.base_address(),
+                target.base_address(),
+            )
+            .map_err(|message| CompileError { message })?
+        }
         Rux16ArtifactTarget::Bios => code,
-        Rux16ArtifactTarget::Program => unreachable!("program target is rejected before lowering"),
     };
 
     Ok(Rux16Artifact { target, bytes })

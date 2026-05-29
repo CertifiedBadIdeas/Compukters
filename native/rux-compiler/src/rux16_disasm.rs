@@ -3,7 +3,7 @@ use crate::ruxe;
 
 pub fn disassemble_artifact(bytes: &[u8], target: Rux16ArtifactTarget) -> Result<String, String> {
     let (bytes, base_address) = match target {
-        Rux16ArtifactTarget::Boot | Rux16ArtifactTarget::Kernel => {
+        Rux16ArtifactTarget::Boot | Rux16ArtifactTarget::Kernel | Rux16ArtifactTarget::Program => {
             let executable = ruxe::decode_rux16_executable(bytes)?;
             let expected = target.fixed_image_abi_kind().unwrap();
             if executable.abi_kind != expected {
@@ -15,9 +15,6 @@ pub fn disassemble_artifact(bytes: &[u8], target: Rux16ArtifactTarget) -> Result
             (executable.payload, executable.load_addr)
         }
         Rux16ArtifactTarget::Bios => (bytes.to_vec(), target.base_address()),
-        Rux16ArtifactTarget::Program => {
-            return Err("Rux16 user-space program ABI is not defined yet".to_string());
-        }
     };
     if bytes.len() % 2 != 0 {
         return Err("Rux16 artifact byte length must be even".to_string());

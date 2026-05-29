@@ -1,16 +1,17 @@
-# RUXE v1 Fixed Image Executable
+# RUXE v1 Rux16 Executable
 
 ## Status
 
 Status: experimental.
 
-`RUXE` is the guest-loadable executable container for fixed-address Rux16 boot
-images. It is the format firmware and boot loaders should read from storage
-before copying image bytes into guest RAM and jumping to an entry address.
+`RUXE` is the guest-loadable executable container for Rux16 bootloader,
+kernel, and user-space program images. It is the format firmware, boot loaders,
+and future OS exec services should read from storage before copying image bytes
+into guest RAM and jumping to an entry address.
 
 This first version intentionally supports one load section. It is enough to
 separate "executable image file" from "raw instruction bytes" without
-introducing a user-space process model yet.
+introducing relocation, dynamic linking, or a full process model yet.
 
 ## Relationship To Existing Targets
 
@@ -19,7 +20,7 @@ introducing a user-space process model yet.
 ```text
 boot     RUXE v1 fixed image, ABI kind bootloader, prepared for storage0 boot media
 kernel   RUXE v1 fixed image, ABI kind kernel, loaded by a bootloader
-program  reserved for future user-space executable ABI; not emitted by v1 tooling yet
+program  RUXE v1 user-space executable, ABI kind program, loaded by an OS exec service
 bios     raw Rux16 bytes mapped as BIOS flash
 ```
 
@@ -58,25 +59,33 @@ isa                   1  (Rux16)
 flags                 0
 section_table_offset  32
 section_count         1
-abi_kind              1  (bootloader) or 2  (kernel)
+abi_kind              1  (bootloader), 2  (kernel), or 3  (program)
 reserved1             0
 ```
 
 `entry_pc` is the guest physical address where execution starts after all load
 sections have been copied. In v1 this is part of a trusted fixed-image ABI:
 the image describes where it was linked to run, and the loader must reject it
-if that range is not allowed by the current boot policy.
+if that range is not allowed by the current boot or exec policy.
 
 ABI kind values:
 
 ```text
 1  bootloader
 2  kernel
+3  program
 ```
 
-User-space programs are deliberately not represented by a v1 ABI kind. They
-need a future executable ABI where the kernel, not the file, decides physical
-placement.
+The `program` kind is the first filesystem-backed user-space executable
+profile. It is intended for OS-level `spawn(path, argv)` style services: the OS
+resolves paths and reads file bytes from storage, then validates and loads a
+`RUXE` program image. Host APIs must not accept guest filesystem paths.
+
+The first `program` compiler profile links code at `0x00008000`. This address
+is part of the target profile selected by `rux compile --target program`; Rux
+source code does not choose an arbitrary load address. A kernel or exec service
+must still validate that a program image uses the allowed user program range
+before execution.
 
 ## Section Record
 
@@ -121,6 +130,14 @@ A loader should:
 No loader should guess an entry address from file position, reinterpret a
 different ABI kind, or fall back to raw instruction bytes.
 
+For `program` images, the normal path is:
+
+```text
+OS filesystem -> read RUXE file bytes into RAM -> exec service validates ABI kind program -> load payload -> enter entry_pc
+```
+
+The exec service receives bytes or guest RAM ranges, never a host-side path.
+
 ## Storage Volume Tooling
 
 `RUXE` is the artifact format produced by the compiler. The current `RUXVOL`
@@ -129,6 +146,9 @@ guest-visible records:
 
 - `put-boot` accepts ABI kind `bootloader` and writes a `RUXB` record.
 - `put-kernel` accepts ABI kind `kernel` and writes a `RUXK` record.
+- `program` artifacts are not installed by `rux volume put-boot` or
+  `put-kernel`; they belong in a filesystem such as `RuxFS` and are selected by
+  OS policy.
 
 The fixed storage layout is defined in `rux-storage-volume-v1.md`.
 

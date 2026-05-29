@@ -13,6 +13,7 @@ pub const RUXE_PAYLOAD_OFFSET_SINGLE_LOAD: u32 =
 pub enum RuxeAbiKind {
     Bootloader,
     Kernel,
+    Program,
 }
 
 impl RuxeAbiKind {
@@ -20,6 +21,7 @@ impl RuxeAbiKind {
         match self {
             Self::Bootloader => 1,
             Self::Kernel => 2,
+            Self::Program => 3,
         }
     }
 
@@ -27,6 +29,7 @@ impl RuxeAbiKind {
         match code {
             1 => Ok(Self::Bootloader),
             2 => Ok(Self::Kernel),
+            3 => Ok(Self::Program),
             _ => Err(format!("unsupported RUXE ABI kind {code}")),
         }
     }

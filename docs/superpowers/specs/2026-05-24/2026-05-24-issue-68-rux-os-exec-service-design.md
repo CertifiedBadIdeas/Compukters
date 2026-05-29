@@ -16,13 +16,12 @@ Rux storage is moving toward a real machine model:
 
 After #62, the first program loaded from disk can become a small OS. That OS
 will eventually need to launch additional programs from files such as
-`/bin/shell.ruxi`, `/bin/ls.ruxi`, or `/apps/editor.ruxi`.
+`/bin/shell.ruxe`, `/bin/ls.ruxe`, or `/apps/editor.ruxe`.
 
-The current VM cannot treat arbitrary bytes in guest RAM as directly executable
-machine code. `RUXI` bytes are decoded by the host-side VM into an internal
-image before execution. Because of that, a future OS needs a temporary execution
-primitive: the OS owns filesystem and process policy, while the VM helps decode
-and spawn executable images from RAM buffers.
+The current boot chain already uses `RUXE` files for bootloader and kernel
+images. A future OS needs the same ownership split for normal programs: the OS
+owns filesystem and process policy, while the VM/runtime helps validate and
+enter executable images from RAM buffers.
 
 This must not become host-side path execution. The host must not know that a
 program came from `/bin/foo`; it should only receive a RAM buffer containing
@@ -32,7 +31,7 @@ candidate executable bytes.
 
 - Define the boundary between OS-owned filesystem policy and VM-owned image
   decode/spawn mechanics.
-- Provide a first exec model that can launch filesystem-backed `RUXI` programs
+- Provide a first exec model that can launch filesystem-backed `RUXE` programs
   without making the host understand filesystem paths.
 - Preserve a migration path to a future guest-side loader.
 - Keep BIOS handoff and normal post-boot program execution separate.
@@ -42,7 +41,7 @@ candidate executable bytes.
 - No filesystem format, partition table, shell, users, permissions, packages, or
   dynamic linker in this issue.
 - No host API that accepts paths such as `/bin/foo`.
-- No change to frozen `RUXI` v1 instruction encoding.
+- No dynamic linker, relocation model, or richer executable section model.
 - No requirement that the first implementation support fully isolated address
   spaces.
 
@@ -54,7 +53,7 @@ candidate executable bytes.
 - **Exec service**: the low-level VM service that receives executable bytes from
   guest RAM and attempts to create a process.
 - **Guest-side loader**: a future loader where the OS can parse and map an
-  executable format itself without host-side RUXI decode help.
+  executable format itself without VM/runtime decode help.
 
 ## Architecture
 
@@ -66,7 +65,7 @@ shell / init / user program
     -> OS filesystem reads file from storage0
       -> OS copies executable bytes into RAM
         -> exec service receives buffer address + length
-          -> VM decodes RUXI and creates a process/image instance
+          -> VM validates RUXE and creates a process/image instance
 ```
 
 The exec service must not accept filesystem paths. It should accept only guest
@@ -75,7 +74,7 @@ RAM addresses, byte lengths, argument/environment buffers, and handle ids.
 The host/VM side owns:
 
 - reading bytes from the supplied RAM range;
-- validating and decoding the `RUXI` image;
+- validating and decoding the `RUXE` image;
 - creating a process/image instance;
 - returning a PID or structured error.
 
@@ -98,7 +97,7 @@ The exact transport can be MMIO, syscall, or another VM call surface. The
 contract should be equivalent to:
 
 ```text
-exec_spawn_ruxi(
+exec_spawn_ruxe(
   image_addr: u32,
   image_len: u32,
   argv_addr: u32,
@@ -112,7 +111,7 @@ exec_spawn_ruxi(
 ```
 
 `image_addr..image_addr + image_len` is a guest RAM range containing the
-complete candidate `RUXI` byte stream. The service must reject buffers outside
+complete candidate `RUXE` byte stream. The service must reject buffers outside
 guest RAM or ranges that overflow the address space.
 
 `argv` and `env` should be serialized guest-owned data. The first slice may keep
@@ -137,10 +136,10 @@ exit(code)
 Implementation sketch:
 
 ```text
-spawn("/bin/ls.ruxi", ["ls", "/"])
-  -> open("/bin/ls.ruxi")
+spawn("/bin/ls.ruxe", ["ls", "/"])
+  -> open("/bin/ls.ruxe")
   -> read file bytes into RAM buffer
-  -> call exec_spawn_ruxi(buffer, len, argv, env, std handles)
+  -> call exec_spawn_ruxe(buffer, len, argv, env, std handles)
   -> return pid
 ```
 
@@ -181,7 +180,7 @@ The implementation can evolve:
 
 ```text
 Phase 1:
-  spawn(path) -> read file -> exec service decodes RUXI -> VM process
+  spawn(path) -> read file -> exec service validates RUXE -> VM process
 
 Phase 2:
   spawn(path) -> guest loader parses executable -> maps memory -> starts process
@@ -190,7 +189,7 @@ Phase 2:
 As long as the exec service stays byte-buffer based and path-free, replacing it
 later does not require changing filesystem semantics or shell APIs.
 
-The first service can remain available as a compatibility backend for `RUXI`
+The first service can remain available as a compatibility backend for `RUXE`
 programs even after a richer guest-loadable executable format exists.
 
 ## Error Model
@@ -200,7 +199,7 @@ The exec service should return structured errors, not panic the machine:
 - `bad_buffer`: image, argv, or env buffer is outside guest RAM or overflows.
 - `empty_image`: `image_len == 0`.
 - `image_too_large`: image exceeds configured executable size limits.
-- `invalid_image`: bytes are not valid `RUXI`.
+- `invalid_image`: bytes are not valid `RUXE`.
 - `unsupported_format`: image is valid bytes but not a supported executable
   format for this machine.
 - `out_of_memory`: process/image allocation failed.
@@ -214,7 +213,7 @@ errors. The VM should not inspect or print the source path.
 
 Initial native coverage should avoid requiring a real filesystem:
 
-- spawning a valid in-memory `RUXI` byte buffer returns a PID;
+- spawning a valid in-memory `RUXE` byte buffer returns a PID;
 - invalid magic returns `invalid_image`;
 - out-of-RAM buffer returns `bad_buffer`;
 - oversized image returns `image_too_large`;
@@ -223,7 +222,7 @@ Initial native coverage should avoid requiring a real filesystem:
 
 Later integration coverage can add:
 
-- a tiny OS fixture reads a `RUXI` file from `storage0`;
+- a tiny OS fixture reads a `RUXE` file from `storage0`;
 - the OS launches it through the exec service;
 - stdout/display proves the child program ran;
 - the same OS-level `spawn(path, argv)` API remains stable if the backend changes.

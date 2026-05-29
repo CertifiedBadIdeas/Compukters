@@ -39,6 +39,20 @@ fn ruxe_decodes_single_rux16_load_segment() {
 }
 
 #[test]
+fn ruxe_decodes_user_space_program_abi_kind() {
+    let bytes =
+        ruxe::encode_rux16_executable(&[0x01, 0x00], ruxe::RuxeAbiKind::Program, 0x8000, 0x8000)
+            .expect("RUXE encodes");
+
+    assert_eq!(u32_at(&bytes, 24), 3);
+    let executable = ruxe::decode_rux16_executable(&bytes).expect("RUXE decodes");
+
+    assert_eq!(executable.abi_kind, ruxe::RuxeAbiKind::Program);
+    assert_eq!(executable.entry_pc, 0x8000);
+    assert_eq!(executable.load_addr, 0x8000);
+}
+
+#[test]
 fn ruxe_rejects_unknown_abi_kind_without_user_space_fallback() {
     let mut bytes =
         ruxe::encode_rux16_executable(&[0x01, 0x00], ruxe::RuxeAbiKind::Bootloader, 0x800, 0x800)

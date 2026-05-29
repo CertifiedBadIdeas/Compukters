@@ -127,8 +127,10 @@ That address is a normal `u32` guest RAM address and can be consumed by
 passing a helper-owned block buffer to storage MMIO code. The current slice does
 not add general pointer arithmetic or pointer-passed helper parameters.
 
-The current frame slice does not add stack-passed arguments, recursion, return
-slots, or a user-space ABI.
+The current frame slice does not add stack-passed arguments, recursion, or
+return slots. User-space programs use the same compiler-owned helper stack
+convention as other Rux16 targets, with process ownership defined by the OS exec
+service rather than by helper call lowering.
 
 ## Target Stack Ownership
 
@@ -139,12 +141,12 @@ by different layers:
 bios        firmware-owned temporary stack if needed
 boot        BIOS or boot entry contract initializes boot stack top
 kernel      bootloader passes or installs kernel stack top before entry
-program     kernel allocates and initializes user stack before entry
+program     compiler profile initializes the first user stack top at 0x00010000
 ```
 
 The current implementation only reserves the convention and proves the memory
-behavior. Full call/return lowering, kernel/user privilege separation, and
-process stack allocation are later ABI slices.
+behavior. Kernel/user privilege separation and dynamic per-process stack
+allocation are later ABI slices.
 
 ## Call And Return
 
