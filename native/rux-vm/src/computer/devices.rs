@@ -279,6 +279,36 @@ impl TextDisplayDevice {
         }
     }
 
+    pub(crate) fn restore_snapshot(
+        &mut self,
+        snapshot: ComputerTextDisplaySnapshot,
+    ) -> Result<(), String> {
+        if snapshot.columns != self.columns || snapshot.rows != self.rows {
+            return Err(format!(
+                "display0 snapshot dimensions {}x{} do not match device dimensions {}x{}",
+                snapshot.columns, snapshot.rows, self.columns, self.rows
+            ));
+        }
+        let expected_cells = (self.columns * self.rows) as usize;
+        if snapshot.cells.len() != expected_cells {
+            return Err(format!(
+                "display0 snapshot has {} cells but expected {expected_cells}",
+                snapshot.cells.len()
+            ));
+        }
+        if snapshot.cursor_x >= self.columns || snapshot.cursor_y >= self.rows {
+            return Err(format!(
+                "display0 snapshot cursor {},{} is outside {}x{}",
+                snapshot.cursor_x, snapshot.cursor_y, self.columns, self.rows
+            ));
+        }
+        self.cursor_x = snapshot.cursor_x;
+        self.cursor_y = snapshot.cursor_y;
+        self.sequence = snapshot.sequence;
+        self.cells = snapshot.cells;
+        Ok(())
+    }
+
     pub(crate) fn sequence(&self) -> u64 {
         self.sequence
     }

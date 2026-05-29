@@ -1,4 +1,5 @@
 use crate::computer::profile::ComputerMachineProfile;
+use crate::computer::ComputerTextDisplaySnapshot;
 use crate::rux16::{Rux16CpuSnapshot, Rux16CpuSnapshotState};
 
 pub const COMPUTER_SNAPSHOT_V1_MAGIC: &[u8; 8] = b"RUXSNAP\0";
@@ -8,11 +9,13 @@ pub const COMPUTER_SNAPSHOT_V1_RUX16_CPU_KIND: u32 = 1;
 pub const COMPUTER_SNAPSHOT_V1_RUX16_CPU_RECORD_SIZE: usize = 112;
 pub const COMPUTER_SNAPSHOT_V1_CONTROL_DEVICE_KIND: u32 = 1;
 pub const COMPUTER_SNAPSHOT_V1_DEBUG_DEVICE_KIND: u32 = 2;
+pub const COMPUTER_SNAPSHOT_V1_DISPLAY0_DEVICE_KIND: u32 = 3;
 const NO_BOOT_CPU: u32 = u32::MAX;
 const RUX16_CPU_STATE_RUNNING: u32 = 1;
 const RUX16_CPU_STATE_HALTED: u32 = 2;
 const RUX16_CPU_STATE_TRAPPED: u32 = 3;
 const CONTROL_DEVICE_PAYLOAD_SIZE: usize = 12;
+const DISPLAY0_DEVICE_PAYLOAD_HEADER_SIZE: usize = 24;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ComputerMachineSnapshotHeader {
@@ -50,6 +53,9 @@ pub enum ComputerDeviceSnapshotRecord {
     },
     DebugSerial {
         bytes: Vec<u8>,
+    },
+    Display0 {
+        snapshot: ComputerTextDisplaySnapshot,
     },
 }
 
@@ -259,6 +265,9 @@ fn device_record_size(record: &ComputerDeviceSnapshotRecord) -> usize {
     8 + match record {
         ComputerDeviceSnapshotRecord::Control { .. } => CONTROL_DEVICE_PAYLOAD_SIZE,
         ComputerDeviceSnapshotRecord::DebugSerial { bytes } => bytes.len(),
+        ComputerDeviceSnapshotRecord::Display0 { snapshot } => {
+            DISPLAY0_DEVICE_PAYLOAD_HEADER_SIZE + snapshot.cells.len()
+        }
     }
 }
 
@@ -284,6 +293,24 @@ fn encode_device_record(
             write_u32(bytes, COMPUTER_SNAPSHOT_V1_DEBUG_DEVICE_KIND);
             write_u32(bytes, payload_size);
             bytes.extend_from_slice(debug_bytes);
+        }
+        ComputerDeviceSnapshotRecord::Display0 { snapshot } => {
+            let payload_size = DISPLAY0_DEVICE_PAYLOAD_HEADER_SIZE
+                .checked_add(snapshot.cells.len())
+                .ok_or_else(|| {
+                    "snapshot display0 device payload size overflows usize".to_string()
+                })?;
+            let payload_size = u32::try_from(payload_size).map_err(|_| {
+                "snapshot display0 device payload size does not fit u32".to_string()
+            })?;
+            write_u32(bytes, COMPUTER_SNAPSHOT_V1_DISPLAY0_DEVICE_KIND);
+            write_u32(bytes, payload_size);
+            write_u32(bytes, snapshot.columns);
+            write_u32(bytes, snapshot.rows);
+            write_u32(bytes, snapshot.cursor_x);
+            write_u32(bytes, snapshot.cursor_y);
+            write_u64(bytes, snapshot.sequence);
+            bytes.extend_from_slice(&snapshot.cells);
         }
     }
     Ok(())
@@ -334,6 +361,46 @@ fn decode_device_record(
         COMPUTER_SNAPSHOT_V1_DEBUG_DEVICE_KIND => ComputerDeviceSnapshotRecord::DebugSerial {
             bytes: payload.to_vec(),
         },
+        COMPUTER_SNAPSHOT_V1_DISPLAY0_DEVICE_KIND => {
+            if payload.len() < DISPLAY0_DEVICE_PAYLOAD_HEADER_SIZE {
+                return Err(format!(
+                    "ComputerMachine snapshot display0 device payload has {} bytes but expected at least {DISPLAY0_DEVICE_PAYLOAD_HEADER_SIZE}",
+                    payload.len()
+                ));
+            }
+            let columns = read_u32(payload, 0)?;
+            let rows = read_u32(payload, 4)?;
+            let cursor_x = read_u32(payload, 8)?;
+            let cursor_y = read_u32(payload, 12)?;
+            let sequence = read_u64(payload, 16)?;
+            let expected_cells = usize::try_from(columns)
+                .ok()
+                .and_then(|columns| {
+                    usize::try_from(rows)
+                        .ok()
+                        .and_then(|rows| columns.checked_mul(rows))
+                })
+                .ok_or_else(|| {
+                    "ComputerMachine snapshot display0 cell count overflows usize".to_string()
+                })?;
+            let cells = payload[DISPLAY0_DEVICE_PAYLOAD_HEADER_SIZE..].to_vec();
+            if cells.len() != expected_cells {
+                return Err(format!(
+                    "ComputerMachine snapshot display0 device payload has {} cells but expected {expected_cells}",
+                    cells.len()
+                ));
+            }
+            ComputerDeviceSnapshotRecord::Display0 {
+                snapshot: ComputerTextDisplaySnapshot {
+                    columns,
+                    rows,
+                    cursor_x,
+                    cursor_y,
+                    sequence,
+                    cells,
+                },
+            }
+        }
         _ => {
             return Err(format!(
                 "unsupported ComputerMachine snapshot device {index} kind {kind}"

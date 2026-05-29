@@ -6,6 +6,7 @@ use rux_vm::rux16::Rux16Signal;
 
 const CONTROL_DEVICE_RECORD_SIZE: usize = 20;
 const EMPTY_DEBUG_DEVICE_RECORD_SIZE: usize = 8;
+const EMPTY_DISPLAY0_DEVICE_RECORD_SIZE: usize = 2032;
 
 #[test]
 fn computer_machine_snapshot_v1_records_header_and_ram_payload() {
@@ -25,6 +26,7 @@ fn computer_machine_snapshot_v1_records_header_and_ram_payload() {
             + COMPUTER_SNAPSHOT_V1_RUX16_CPU_RECORD_SIZE
             + CONTROL_DEVICE_RECORD_SIZE
             + EMPTY_DEBUG_DEVICE_RECORD_SIZE
+            + EMPTY_DISPLAY0_DEVICE_RECORD_SIZE
     );
 
     let decoded = decode_snapshot_v1(&snapshot).expect("snapshot decodes");
@@ -37,11 +39,11 @@ fn computer_machine_snapshot_v1_records_header_and_ram_payload() {
     assert_eq!(decoded.header.ram_size, 1024);
     assert_eq!(decoded.header.cpu_count, 1);
     assert_eq!(decoded.header.boot_cpu_id, Some(boot_cpu as u32));
-    assert_eq!(decoded.header.device_count, 2);
+    assert_eq!(decoded.header.device_count, 3);
     assert_eq!(decoded.ram[512], 0xA5);
     assert_eq!(decoded.ram[1023], 0x5A);
     assert_eq!(decoded.cpus.len(), 1);
-    assert_eq!(decoded.devices.len(), 2);
+    assert_eq!(decoded.devices.len(), 3);
 }
 
 #[test]
@@ -126,6 +128,40 @@ fn computer_machine_snapshot_v1_restores_control_and_debug_device_state() {
 }
 
 #[test]
+fn computer_machine_snapshot_v1_restores_display0_device_state() {
+    let mut machine = ComputerMachine::new(1024).expect("machine creates");
+    machine
+        .bus_store_i32(ComputerMachine::DISPLAY0_CURSOR_X, 3)
+        .unwrap();
+    machine
+        .bus_store_i32(ComputerMachine::DISPLAY0_CURSOR_Y, 2)
+        .unwrap();
+    machine
+        .bus_store_i32(ComputerMachine::DISPLAY0_DATA, i32::from(b'R'))
+        .unwrap();
+    machine
+        .bus_store_i32(
+            ComputerMachine::DISPLAY0_COMMAND,
+            ComputerMachine::DISPLAY0_COMMAND_PUT_BYTE_AT_CURSOR,
+        )
+        .unwrap();
+    machine
+        .bus_store_i32(ComputerMachine::DISPLAY0_CURSOR_X, 12)
+        .unwrap();
+
+    let before = machine.display0_snapshot().expect("display0 is present");
+    let snapshot = machine.snapshot_v1().expect("snapshot encodes");
+    let restored =
+        ComputerMachine::restore_snapshot_v1(ComputerMachineProfile::computer_v1(1024), &snapshot)
+            .expect("snapshot restores");
+
+    assert_eq!(
+        restored.display0_snapshot().expect("display0 is present"),
+        before
+    );
+}
+
+#[test]
 fn computer_machine_snapshot_v1_rejects_profile_ram_size_mismatch() {
     let machine = ComputerMachine::new(1024).expect("machine creates");
     let snapshot = machine.snapshot_v1().expect("snapshot encodes");
@@ -166,7 +202,7 @@ fn computer_machine_snapshot_v1_rejects_bad_magic_version_and_length() {
     let truncated = &snapshot[..snapshot.len() - 1];
     assert_eq!(
         decode_snapshot_v1(truncated).unwrap_err(),
-        "ComputerMachine snapshot device 1 header is truncated"
+        "ComputerMachine snapshot device 2 payload is truncated"
     );
 }
 
@@ -212,6 +248,8 @@ fn computer_machine_snapshot_v1_rejects_invalid_device_record_fields() {
     let machine = ComputerMachine::new(1024).expect("machine creates");
     let snapshot = machine.snapshot_v1().expect("snapshot encodes");
     let first_device_record = COMPUTER_SNAPSHOT_V1_HEADER_SIZE + 1024;
+    let display0_device_record =
+        first_device_record + CONTROL_DEVICE_RECORD_SIZE + EMPTY_DEBUG_DEVICE_RECORD_SIZE;
 
     let mut bad_reserved = snapshot.clone();
     bad_reserved[36..40].copy_from_slice(&1_u32.to_le_bytes());
@@ -235,6 +273,26 @@ fn computer_machine_snapshot_v1_rejects_invalid_device_record_fields() {
         decode_snapshot_v1(&bad_control_payload_size).unwrap_err(),
         "ComputerMachine snapshot control device payload has 11 bytes but expected 12"
     );
+
+    let mut bad_display0_cells = snapshot.clone();
+    bad_display0_cells[display0_device_record + 4..display0_device_record + 8]
+        .copy_from_slice(&(EMPTY_DISPLAY0_DEVICE_RECORD_SIZE as u32 - 9).to_le_bytes());
+    assert_eq!(
+        decode_snapshot_v1(&bad_display0_cells).unwrap_err(),
+        "ComputerMachine snapshot display0 device payload has 1999 cells but expected 2000"
+    );
+
+    let mut bad_display0_cursor = snapshot.clone();
+    bad_display0_cursor[display0_device_record + 16..display0_device_record + 20]
+        .copy_from_slice(&80_u32.to_le_bytes());
+    let error = match ComputerMachine::restore_snapshot_v1(
+        ComputerMachineProfile::computer_v1(1024),
+        &bad_display0_cursor,
+    ) {
+        Ok(_) => panic!("snapshot restore should reject out-of-bounds display0 cursor"),
+        Err(error) => error,
+    };
+    assert_eq!(error, "display0 snapshot cursor 80,0 is outside 80x25");
 
     let mut trailing_bytes = snapshot;
     trailing_bytes.push(0);
