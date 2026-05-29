@@ -44,17 +44,28 @@ pub fn create_initialized_volume(size: usize) -> Result<Vec<u8>, String> {
 
 pub fn put_boot(volume: &mut [u8], boot: &[u8]) -> Result<(), String> {
     let payload_range = validate_volume_header(volume)?;
-    let boot = ruxe::decode_rux16_executable(boot)?;
-    if boot.abi_kind != ruxe::RuxeAbiKind::Bootloader {
+    let executable = ruxe::decode_rux16_executable(boot)?;
+    if executable.abi_kind != ruxe::RuxeAbiKind::Bootloader {
         return Err("boot media requires RUXE bootloader ABI kind".to_string());
     }
-    let block_count = boot.payload.len().div_ceil(512);
-    let payload_len = payload_range.len();
     let payload = &mut volume[payload_range];
+    if payload.get(..5) == Some(partition::RUXPT_MAGIC) {
+        let boot_range = partition_payload_range(payload, "BOOT")?;
+        let boot_blocks = u32::try_from(boot_range.len() / partition::RUXPT_BLOCK_SIZE)
+            .map_err(|_| "BOOT partition block count does not fit u32".to_string())?;
+        let mut boot_fs = ruxfs::format_empty_filesystem(boot_blocks)?;
+        ruxfs::create_directory(&mut boot_fs, "/boot")?;
+        ruxfs::write_file(&mut boot_fs, "/boot/loader.ruxe", boot)?;
+        payload[boot_range].copy_from_slice(&boot_fs);
+        return Ok(());
+    }
+
+    let block_count = executable.payload.len().div_ceil(512);
+    let payload_len = payload.len();
     let boot_layout = boot_layout(payload)?;
     let boot_end = boot_layout
         .payload_offset
-        .checked_add(boot.payload.len())
+        .checked_add(executable.payload.len())
         .ok_or_else(|| "boot artifact range overflows".to_string())?;
     if boot_end > payload_len {
         return Err(format!(
@@ -71,15 +82,15 @@ pub fn put_boot(volume: &mut [u8], boot: &[u8]) -> Result<(), String> {
         .map_err(|_| "boot artifact block count does not fit u32".to_string())?;
 
     payload[boot_layout.record_offset..boot_layout.record_offset + 4].copy_from_slice(b"RUXB");
-    write_u32(payload, boot_layout.record_offset + 4, boot.entry_pc);
-    write_u32(payload, boot_layout.record_offset + 8, boot.load_addr);
+    write_u32(payload, boot_layout.record_offset + 4, executable.entry_pc);
+    write_u32(payload, boot_layout.record_offset + 8, executable.load_addr);
     write_u32(payload, boot_layout.record_offset + 12, block_count);
     write_u32(
         payload,
         boot_layout.record_offset + 16,
         boot_layout.payload_lba,
     );
-    payload[boot_layout.payload_offset..boot_end].copy_from_slice(&boot.payload);
+    payload[boot_layout.payload_offset..boot_end].copy_from_slice(&executable.payload);
     Ok(())
 }
 
@@ -156,17 +167,14 @@ pub fn inspect_boot_chain(volume: &[u8]) -> Result<String, String> {
     let boot_entry = partition_entry_by_type(&table, partition::PartitionType::Boot)?;
     let root_entry = partition_entry_by_type(&table, partition::PartitionType::Root)?;
 
-    let boot_record_offset = partition_byte_offset(boot_entry.start_lba)?;
-    let boot_record = payload
-        .get(boot_record_offset..boot_record_offset + 20)
-        .ok_or_else(|| "BOOT partition boot record is outside media bounds".to_string())?;
-    if &boot_record[0..4] != b"RUXB" {
-        return Err("BOOT partition does not contain a RUXB boot record".to_string());
+    let boot_range = partition_entry_payload_range(payload, boot_entry)?;
+    let boot_fs = &payload[boot_range];
+    let bootloader_bytes = ruxfs::read_file(boot_fs, "/boot/loader.ruxe")
+        .map_err(|error| format!("BOOT/RuxFS /boot/loader.ruxe is not readable: {error}"))?;
+    let bootloader = ruxe::decode_rux16_executable(&bootloader_bytes)?;
+    if bootloader.abi_kind != ruxe::RuxeAbiKind::Bootloader {
+        return Err("BOOT/RuxFS /boot/loader.ruxe is not a bootloader RUXE".to_string());
     }
-    let boot_entry_pc = read_u32(boot_record, 4)?;
-    let boot_load_addr = read_u32(boot_record, 8)?;
-    let boot_blocks = read_u32(boot_record, 12)?;
-    let boot_payload_lba = read_u32(boot_record, 16)?;
 
     let root_range = partition_entry_payload_range(payload, root_entry)?;
     let root = &payload[root_range];
@@ -178,9 +186,21 @@ pub fn inspect_boot_chain(volume: &[u8]) -> Result<String, String> {
     }
 
     let root_bytes = partition_byte_offset(root_entry.block_count)?;
+    let boot_bytes = partition_byte_offset(boot_entry.block_count)?;
     let mut output = "RUXVOL boot-chain\n".to_string();
     output.push_str(&format!(
-        "BOOT record entry_pc={boot_entry_pc:#010x} load_addr={boot_load_addr:#010x} blocks={boot_blocks} payload_lba={boot_payload_lba}\n"
+        "BOOT partition start_lba={} blocks={} bytes={} name={}\n",
+        boot_entry.start_lba, boot_entry.block_count, boot_bytes, boot_entry.name
+    ));
+    output.push_str(&format!(
+        "BOOT RuxFS /boot/loader.ruxe file_bytes={}\n",
+        bootloader_bytes.len()
+    ));
+    output.push_str(&format!(
+        "BOOTLOADER RUXE abi=bootloader entry_pc={:#010x} load_addr={:#010x} payload_bytes={}\n",
+        bootloader.entry_pc,
+        bootloader.load_addr,
+        bootloader.payload.len()
     ));
     output.push_str(&format!(
         "ROOT partition start_lba={} blocks={} bytes={} name={}\n",
@@ -351,13 +371,6 @@ fn read_u64(bytes: &[u8], offset: usize) -> Result<u64, String> {
         .get(offset..offset + 8)
         .ok_or_else(|| "ruxvol header is truncated".to_string())?;
     Ok(u64::from_le_bytes(value.try_into().unwrap()))
-}
-
-fn read_u32(bytes: &[u8], offset: usize) -> Result<u32, String> {
-    let value = bytes
-        .get(offset..offset + 4)
-        .ok_or_else(|| "ruxvol field is truncated".to_string())?;
-    Ok(u32::from_le_bytes(value.try_into().unwrap()))
 }
 
 fn write_u32(bytes: &mut [u8], offset: usize, value: u32) {

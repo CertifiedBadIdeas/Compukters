@@ -176,12 +176,13 @@ guest-visible storage path sees any bytes.
 The current guest boot chain uses the same RuxFS structure:
 
 ```text
+BIOS       -> storage0 BOOT/RuxFS /boot/loader.ruxe -> bootloader
 bootloader -> storage0 ROOT/RuxFS /boot/kernel.ruxe -> kernel
 kernel     -> storage0 ROOT/RuxFS /bin/init.ruxe    -> program
 ```
 
-Both guest loaders treat missing paths, malformed metadata, or wrong executable
-ABI kinds as hard load failures.
+Guest loaders treat missing paths, malformed metadata, or wrong executable ABI
+kinds as hard load failures.
 
 The public CLI namespace is filesystem-specific:
 
@@ -193,8 +194,9 @@ rux fs ruxfs get <image.ruxfs> <path> <host-output>
 rux fs ruxfs ls <image.ruxfs> <path>
 ```
 
-`rux volume` remains storage-container tooling. It must not grow RuxFS-specific
-commands; future filesystems should get their own `rux fs <filesystem>`
-subcommands.
+`rux volume` remains storage-container tooling. General filesystem operations
+must stay in `rux fs <filesystem>` subcommands. The current `put-boot` and
+`put-kernel` commands are boot-chain installation helpers that write the
+standard system files into the active RuxFS-backed volume layout.
 
 Delete and overwrite remain next-step work under the same RuxFS v1 contract.

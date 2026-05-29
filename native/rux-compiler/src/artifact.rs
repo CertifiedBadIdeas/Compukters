@@ -51,7 +51,7 @@ impl Rux16ArtifactTarget {
 
     fn initial_stack_top(self) -> u32 {
         match self {
-            Self::Bios => Self::Boot.base_address(),
+            Self::Bios => Self::PROGRAM_STACK_TOP,
             Self::Boot => Self::Boot.base_address(),
             Self::Kernel => Self::Kernel.base_address(),
             Self::Program => Self::PROGRAM_STACK_TOP,

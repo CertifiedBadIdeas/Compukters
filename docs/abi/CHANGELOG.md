@@ -27,9 +27,12 @@
 - Added a guest-side kernel init loader that reads `/bin/init.ruxe` from
   `storage0` `ROOT`/RuxFS, validates `RUXE` ABI kind `program`, loads the
   payload, and enters the program `entry_pc`.
+- The bundled BIOS now loads `/boot/loader.ruxe` from the `BOOT` RuxFS
+  partition in the partitioned boot path, validates `RUXE` ABI kind
+  `bootloader`, and enters the bootloader `entry_pc`.
 - `rux volume put-boot` now accepts a `RUXE` boot artifact and writes the
-  current storage0 boot record from its entry/load metadata and payload. Kernel
-  artifacts are rejected for boot media.
+  bootloader file to `BOOT`/RuxFS `/boot/loader.ruxe` for partitioned volumes.
+  Kernel artifacts are rejected for boot media.
 - Added `rux volume put-kernel`, which writes a fixed `RUXK` kernel record and
   kernel payload for the bootloader-to-kernel chain.
 - Added `rux volume init`, which creates a partitioned `RUXPT` volume with

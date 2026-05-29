@@ -56,15 +56,16 @@ LBA 1..32    BOOT partition
 LBA 33..end  ROOT partition
 ```
 
-In the partitioned layout, `rux volume put-boot` writes the `RUXB` bootloader
-record and bootloader payload inside the `BOOT` partition. `rux volume
-put-kernel` writes the kernel `RUXE` file to `/boot/kernel.ruxe` inside the
-`ROOT` RuxFS partition. The partitioned layout does not use the fixed `RUXK`
-record.
+In the partitioned layout, `rux volume put-boot` formats the `BOOT` partition
+as RuxFS and writes the bootloader `RUXE` file to `/boot/loader.ruxe`.
+`rux volume put-kernel` writes the kernel `RUXE` file to `/boot/kernel.ruxe`
+inside the `ROOT` RuxFS partition. The partitioned layout does not use fixed
+`RUXB` or `RUXK` records.
 
-Filesystem-specific operations are not part of `rux volume`. Tooling for RuxFS
+General filesystem operations are not part of `rux volume`. Tooling for RuxFS
 uses `rux fs ruxfs ...`; future filesystems should use their own `rux fs
-<filesystem>` namespace.
+<filesystem>` namespace. `put-boot` and `put-kernel` are boot-chain
+installation helpers for the current RuxFS-backed system volume layout.
 
 `rux volume` may copy partition bytes without interpreting their filesystem:
 
@@ -151,8 +152,8 @@ partitions outside the guest-visible media size, and overlapping partitions.
 
 ## RUXB Bootloader Record
 
-`rux volume put-boot` accepts only `RUXE` artifacts with ABI kind `bootloader`
-and writes this record at LBA 0.
+In the legacy raw-media layout, `rux volume put-boot` accepts only `RUXE`
+artifacts with ABI kind `bootloader` and writes this record at LBA 0.
 
 ```text
 offset  size  name
@@ -174,8 +175,8 @@ The bootloader payload bytes are copied from the `RUXE` load section to LBA 1.
 
 ## RUXK Kernel Record
 
-`rux volume put-kernel` accepts only `RUXE` artifacts with ABI kind `kernel`
-and writes this record at LBA 16.
+In the legacy raw-media layout, `rux volume put-kernel` accepts only `RUXE`
+artifacts with ABI kind `kernel` and writes this record at LBA 16.
 
 ```text
 offset  size  name
@@ -200,9 +201,9 @@ The kernel payload bytes are copied from the `RUXE` load section to LBA 17.
 The current boot chain is:
 
 1. BIOS reads `RUXPT` from LBA 0.
-2. BIOS reads `RUXB` from the `BOOT` partition.
-3. BIOS copies the bootloader payload from the `BOOT` partition to `load_addr`.
-4. BIOS jumps to `entry_pc`.
+2. BIOS reads `/boot/loader.ruxe` from the `BOOT` RuxFS partition.
+3. BIOS validates the bootloader `RUXE`, copies its payload to `load_addr`,
+   and jumps to `entry_pc`.
 5. Bootloader reads `/boot/kernel.ruxe` from the `ROOT` RuxFS partition.
 6. Bootloader validates the kernel `RUXE`, copies its payload to `load_addr`,
    and jumps to `entry_pc`.
