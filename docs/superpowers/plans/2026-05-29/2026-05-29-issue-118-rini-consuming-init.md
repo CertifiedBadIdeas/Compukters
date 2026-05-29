@@ -53,3 +53,14 @@ Expected: focused tests pass.
 - [x] Run `cargo test`.
 - [x] Commit with `feat(os): make init consume RINI handoff`.
 - [x] Update `#118` with commit and verification.
+
+### Task 4: Cover Init Failure Path
+
+**Files:**
+- Modify: `native/rux-compiler/tests/rux_volume_cli.rs`
+
+- [x] Add direct runtime tests for the RINI init program with missing and invalid handoff data.
+- [x] Run `cargo test --test rux_volume_cli rini_init`.
+- [x] Run `cargo test --test rux_volume_cli`.
+- [x] Run `cargo test`.
+- [x] Commit and close `#118` when acceptance criteria are covered.
