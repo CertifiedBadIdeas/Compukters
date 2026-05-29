@@ -193,6 +193,14 @@ impl SerialInputDevice {
     pub(crate) fn len(&self) -> usize {
         self.bytes.borrow().len()
     }
+
+    pub(crate) fn bytes(&self) -> Vec<u8> {
+        self.bytes.borrow().iter().copied().collect()
+    }
+
+    pub(crate) fn restore_bytes(&mut self, bytes: Vec<u8>) {
+        self.bytes = RefCell::new(VecDeque::from(bytes));
+    }
 }
 
 impl MmioDevice for SerialInputDevice {

@@ -11,7 +11,7 @@ across host unload/load boundaries.
 
 The current v1 slice records a versioned header, full RAM bytes, fixed-size
 Rux16 CPU continuation records, and explicit device records for `control`,
-`debug`, and `display0`.
+`debug`, `display0`, and serial input.
 
 ## File Layout
 
@@ -84,6 +84,7 @@ kind  payload
 2     debug: raw debug output bytes
 3     display0: columns u32, rows u32, cursor_x u32, cursor_y u32,
       sequence u64, followed by cell bytes
+4     serial input: pending input bytes in read order
 ```
 
 Unknown device kinds are rejected. `control` payloads must be exactly 12 bytes.
@@ -94,12 +95,12 @@ bytes of metadata, and the remaining cell byte count must equal
 ## Restore Semantics
 
 Full restore recreates RAM, CPU contexts, `boot_cpu_id`, `control` state,
-`debug` output, and `display0` screen state from the snapshot against an
-explicitly provided `ComputerMachineProfile`. Restore must reject a snapshot
-when its `ram_size` differs from the target profile memory size, when the boot
-CPU id points outside the CPU table, when a CPU record contains an unsupported
-kind/state/reserved field, or when the target profile does not expose a device
-recorded by the snapshot.
+`debug` output, `display0` screen state, and pending serial input bytes from
+the snapshot against an explicitly provided `ComputerMachineProfile`. Restore
+must reject a snapshot when its `ram_size` differs from the target profile
+memory size, when the boot CPU id points outside the CPU table, when a CPU
+record contains an unsupported kind/state/reserved field, or when the target
+profile does not expose a device recorded by the snapshot.
 
 RAM-only restore remains available as an explicitly named operation for tooling
 that only wants RAM bytes. It does not recreate CPU contexts, boot CPU id,

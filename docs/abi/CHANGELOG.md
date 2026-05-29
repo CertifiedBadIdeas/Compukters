@@ -4,8 +4,8 @@
 
 - Added experimental `RUXSNAP` v1 as the host-side `ComputerMachine` snapshot
   container. It records a versioned header, full RAM bytes, and Rux16 CPU
-  continuation records; `control`, `debug`, and `display0` device state are
-  now restored. Serial input and storage controller continuation state remain
+  continuation records; `control`, `debug`, `display0`, and serial input
+  device state are now restored. Storage controller continuation state remains
   future work.
 - Added `rux16-v1.md` and reserved `r15` as the Rux16 stack pointer. The stack
   lives in guest RAM, grows downward, and uses 4-byte slots in the first ABI
