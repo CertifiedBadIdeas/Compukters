@@ -42,6 +42,26 @@ fn memory_loop_runs_on_rux16() {
 }
 
 #[test]
+fn mmio_loop_runs_on_rux16() {
+    let iterations = 7;
+
+    assert_eq!(
+        run_rux16_workload(VmBenchmarkWorkload::MmioLoop, iterations).unwrap(),
+        iterations,
+    );
+}
+
+#[test]
+fn benchmark_workload_list_includes_mmio_loop_for_cli_output() {
+    let names = VmBenchmarkWorkload::all()
+        .iter()
+        .map(|workload| workload.name())
+        .collect::<Vec<_>>();
+
+    assert_eq!(names, vec!["compute-loop", "memory-loop", "mmio-loop"]);
+}
+
+#[test]
 fn memory_loop_budget_covers_larger_benchmark_runs() {
     let iterations = 1_000;
 

@@ -17,16 +17,19 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use crate::low_bus::MachineBus;
+use crate::low_bus::{MachineBus, MmioDevice};
+use crate::low_machine::MemoryFault;
 use crate::rux16::{Rux16Cpu, Rux16Signal};
 
 const MEMORY_SIZE: usize = 1024;
 const DATA_ADDR: u32 = 512;
+const MMIO_ADDR: u32 = 0x1000_0000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VmBenchmarkWorkload {
     ComputeLoop,
     MemoryLoop,
+    MmioLoop,
 }
 
 impl VmBenchmarkWorkload {
@@ -34,11 +37,12 @@ impl VmBenchmarkWorkload {
         match self {
             Self::ComputeLoop => "compute-loop",
             Self::MemoryLoop => "memory-loop",
+            Self::MmioLoop => "mmio-loop",
         }
     }
 
     pub fn all() -> &'static [Self] {
-        &[Self::ComputeLoop, Self::MemoryLoop]
+        &[Self::ComputeLoop, Self::MemoryLoop, Self::MmioLoop]
     }
 }
 
@@ -49,6 +53,7 @@ impl std::str::FromStr for VmBenchmarkWorkload {
         match value {
             "compute-loop" => Ok(Self::ComputeLoop),
             "memory-loop" => Ok(Self::MemoryLoop),
+            "mmio-loop" => Ok(Self::MmioLoop),
             _ => Err(format!("unknown VM benchmark workload: {value}")),
         }
     }
@@ -56,6 +61,10 @@ impl std::str::FromStr for VmBenchmarkWorkload {
 
 pub fn run_rux16_workload(workload: VmBenchmarkWorkload, iterations: u32) -> Result<u32, String> {
     let mut bus = MachineBus::new(MEMORY_SIZE).map_err(|error| error.to_string())?;
+    if workload == VmBenchmarkWorkload::MmioLoop {
+        bus.map_mmio(MMIO_ADDR, Box::new(BenchmarkRegisterDevice { value: 0 }))
+            .map_err(|error| error.to_string())?;
+    }
     let (words, result_register) = rux16_workload(workload, iterations);
     write_words(&mut bus, 0, &words)?;
     let mut cpu = Rux16Cpu::new(0);
@@ -112,6 +121,31 @@ fn rux16_workload(workload: VmBenchmarkWorkload, iterations: u32) -> (Vec<u16>, 
             ],
             5,
         ),
+        VmBenchmarkWorkload::MmioLoop => (
+            vec![
+                const32(0),
+                low16(iterations),
+                high16(iterations),
+                const4(1, 0),
+                const4(2, 1),
+                const32(4),
+                low16(MMIO_ADDR),
+                high16(MMIO_ADDR),
+                const32(6),
+                low16(22),
+                high16(22),
+                eq(3),
+                eq_operands(1, 0),
+                branch_if_zero(3, 2),
+                load32(5, 4),
+                halt(),
+                add(1, 1, 2),
+                store32(4, 1),
+                load32(5, 4),
+                jump(6),
+            ],
+            5,
+        ),
     }
 }
 
@@ -119,6 +153,38 @@ fn rux16_max_steps(workload: VmBenchmarkWorkload, iterations: u32) -> u64 {
     match workload {
         VmBenchmarkWorkload::ComputeLoop => u64::from(iterations) * 4 + 16,
         VmBenchmarkWorkload::MemoryLoop => u64::from(iterations) * 7 + 16,
+        VmBenchmarkWorkload::MmioLoop => u64::from(iterations) * 7 + 16,
+    }
+}
+
+struct BenchmarkRegisterDevice {
+    value: i32,
+}
+
+impl MmioDevice for BenchmarkRegisterDevice {
+    fn size(&self) -> u32 {
+        4
+    }
+
+    fn load_i32(&self, offset: u32) -> Result<i32, MemoryFault> {
+        if offset == 0 {
+            Ok(self.value)
+        } else {
+            Err(MemoryFault::new(format!(
+                "benchmark register offset {offset} is not mapped"
+            )))
+        }
+    }
+
+    fn store_i32(&mut self, offset: u32, value: i32) -> Result<(), MemoryFault> {
+        if offset == 0 {
+            self.value = value;
+            Ok(())
+        } else {
+            Err(MemoryFault::new(format!(
+                "benchmark register offset {offset} is not mapped"
+            )))
+        }
     }
 }
 
