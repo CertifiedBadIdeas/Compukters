@@ -83,6 +83,23 @@ class ComputerRuntimeDeviceFactoryArchitectureTest {
     }
 
     @Test
+    fun computerBlockEntityMarksChunkDirtyAfterCapturingUnloadSnapshot() {
+        val source =
+            Path
+                .of("src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/block/AbstractComputerBlockEntity.kt")
+                .readText()
+
+        val snapshotIndex = source.indexOf("pendingRuntimeSnapshot = it.copyOf()")
+        val dirtyIndex = source.indexOf("setChanged()", snapshotIndex)
+
+        assertTrue(snapshotIndex >= 0, "releaseRuntimeDevice should capture a pending runtime snapshot.")
+        assertTrue(
+            dirtyIndex > snapshotIndex,
+            "releaseRuntimeDevice should mark the block entity dirty after capturing the unload snapshot.",
+        )
+    }
+
+    @Test
     fun runtimeStartupFailureIsVisibleToComputerMenuAndNotebookScreen() {
         val runtimeSource =
             root
