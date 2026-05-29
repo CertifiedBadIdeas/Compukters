@@ -65,6 +65,17 @@ rux volume replace-partition <volume.ruxvol> <partition> <input>
 `inspect` prints the RUXVOL header summary and the decoded `RUXPT` partition
 layout, including partition type, start LBA, block count, byte size, and name.
 
+For format auto-detection across storage artifacts, use the read-only generic
+inspector:
+
+```text
+rux inspect <blob>
+```
+
+It identifies `RUXVOL`, standalone `RUXPT` media bytes, standalone `RUXFS`
+filesystem images, and `RUXE` executables. Snapshot blobs are intentionally not
+reported here until the native ComputerMachine snapshot format is defined.
+
 `<partition>` matches either the partition type tag, for example `BOOT` or
 `ROOT`, or the partition name, for example `boot` or `root`. Replacement input
 must match the partition size exactly. Tooling must reject wrong-sized input
