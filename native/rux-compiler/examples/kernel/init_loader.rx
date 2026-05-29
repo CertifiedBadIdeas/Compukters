@@ -272,6 +272,11 @@ fn execute_loaded_init_ruxe(root_start_lba: i32) {
         let mut payload_size: u32 = ptr<u32>(0xa02cu32).load();
         let mut memory_size_i32: i32 = ptr<i32>(0xa030u32).load();
 
+        if load_addr < 0x8000u32 {
+            write_init_load_failed();
+            return;
+        }
+
         if entry_pc != 0 &&
             file_size_low != 0 &&
             section_kind == 1 &&

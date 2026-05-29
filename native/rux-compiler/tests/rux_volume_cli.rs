@@ -1146,6 +1146,19 @@ fn rux16_init_loader_source_writes_init_handoff_info() {
 }
 
 #[test]
+fn rux16_init_loader_source_rejects_protected_init_load_address() {
+    let source = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/kernel/init_loader.rx"),
+    )
+    .expect("init loader source should exist");
+
+    assert!(
+        source.contains("if load_addr < 0x8000u32"),
+        "kernel should reject init load addresses below the user-space program region"
+    );
+}
+
+#[test]
 fn rux_volume_put_boot_and_kernel_creates_storage0_that_bundled_bios_executes() {
     let volume_path = temp_file("boot-kernel-storage0.ruxvol");
     let root_path = temp_file("boot-kernel-root.ruxfs");
@@ -1480,6 +1493,146 @@ fn rux_volume_boot_kernel_and_init_executes_init_from_root_ruxfs() {
         display_row(&snapshot, 0)
     );
     assert_eq!(display_row(&snapshot, 0), "INIT OK");
+}
+
+#[test]
+fn rux_volume_boot_kernel_rejects_protected_init_load_address() {
+    let volume_path = temp_file("protected-init-load-storage0.ruxvol");
+    let root_path = temp_file("protected-init-load-root.ruxfs");
+    let boot_path = temp_file("protected-init-load-loader.boot");
+    let kernel_path = temp_file("protected-init-load-kernel.ruxe");
+    let init_path = temp_file("protected-init-load-init.ruxe");
+    let boot_source_path =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/boot/kernel_loader.rx");
+    let kernel_source_path =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/kernel/init_loader.rx");
+    fs::write(
+        &init_path,
+        ruxe::encode_rux16_executable(&[0x01, 0x00], ruxe::RuxeAbiKind::Program, 0x7000, 0x7000)
+            .expect("protected init RUXE encodes"),
+    )
+    .expect("protected init writes");
+
+    let boot_compile_output = Command::new(rux_binary())
+        .args([
+            "compile",
+            "--target",
+            "boot",
+            boot_source_path.to_str().unwrap(),
+            "-o",
+            boot_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("rux compile boot runs");
+    assert!(
+        boot_compile_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&boot_compile_output.stderr)
+    );
+    let kernel_compile_output = Command::new(rux_binary())
+        .args([
+            "compile",
+            "--target",
+            "kernel",
+            kernel_source_path.to_str().unwrap(),
+            "-o",
+            kernel_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("rux compile kernel runs");
+    assert!(
+        kernel_compile_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&kernel_compile_output.stderr)
+    );
+
+    assert!(Command::new(rux_binary())
+        .args([
+            "volume",
+            "init",
+            volume_path.to_str().unwrap(),
+            "--size",
+            "65536",
+        ])
+        .status()
+        .expect("init runs")
+        .success());
+    assert!(Command::new(rux_binary())
+        .args([
+            "volume",
+            "put-boot",
+            volume_path.to_str().unwrap(),
+            boot_path.to_str().unwrap(),
+        ])
+        .status()
+        .expect("put-boot runs")
+        .success());
+    assert!(Command::new(rux_binary())
+        .args([
+            "fs",
+            "ruxfs",
+            "format",
+            root_path.to_str().unwrap(),
+            "--blocks",
+            "95",
+        ])
+        .status()
+        .expect("ruxfs format runs")
+        .success());
+    assert!(Command::new(rux_binary())
+        .args(["fs", "ruxfs", "mkdir", root_path.to_str().unwrap(), "/bin"])
+        .status()
+        .expect("ruxfs mkdir /bin runs")
+        .success());
+    assert!(Command::new(rux_binary())
+        .args([
+            "fs",
+            "ruxfs",
+            "put",
+            root_path.to_str().unwrap(),
+            "/bin/init.ruxe",
+            init_path.to_str().unwrap(),
+        ])
+        .status()
+        .expect("ruxfs put protected init runs")
+        .success());
+    assert!(Command::new(rux_binary())
+        .args([
+            "volume",
+            "replace-partition",
+            volume_path.to_str().unwrap(),
+            "ROOT",
+            root_path.to_str().unwrap(),
+        ])
+        .status()
+        .expect("replace ROOT runs")
+        .success());
+    assert!(Command::new(rux_binary())
+        .args([
+            "volume",
+            "put-kernel",
+            volume_path.to_str().unwrap(),
+            kernel_path.to_str().unwrap(),
+        ])
+        .status()
+        .expect("put-kernel runs")
+        .success());
+
+    let bios = compile_bundled_rux16_bios();
+    let mut handle = RuxComputerHandle::create_rux16_bios_flash_with_storage0_path(
+        &bios,
+        64 * 1024,
+        1_000_000,
+        &volume_path,
+    )
+    .expect("Rux16 BIOS flash computer creates with protected init volume path");
+
+    assert_eq!(handle.run_rux16_until_signal().unwrap(), Rux16Signal::Halt);
+    assert!(
+        String::from_utf8_lossy(handle.debug_output_bytes()).contains("INIT LOAD FAILED"),
+        "debug output should describe the init load failure"
+    );
+    assert_eq!(handle.control().panic_code, 73);
 }
 
 fn compile_bundled_rux16_bios() -> Vec<u8> {
