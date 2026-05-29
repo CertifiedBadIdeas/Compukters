@@ -73,6 +73,16 @@ class RuxComputerRuntimeTest {
     }
 
     @Test
+    fun exposesNativeMachineSnapshot() {
+        val bindings = EchoBindings()
+        bindings.machineSnapshot = byteArrayOf(0x52, 0x55, 0x58)
+        val runtime = RuxComputerRuntime(handle = 15L, bindings = bindings)
+
+        assertContentEquals(byteArrayOf(0x52, 0x55, 0x58), runtime.machineSnapshot())
+        assertEquals(listOf(15L), bindings.machineSnapshotHandles)
+    }
+
+    @Test
     fun exposesDisplaySnapshotAndPollsOnlyChangedSequences() {
         val bindings = EchoBindings()
         val runtime = RuxComputerRuntime(handle = 11L, bindings = bindings)
@@ -117,8 +127,10 @@ class RuxComputerRuntimeTest {
     private class EchoBindings : RuxComputerRuntimeBindings {
         val serialInputs = mutableListOf<ByteArray>()
         val freedHandles = mutableListOf<Long>()
+        val machineSnapshotHandles = mutableListOf<Long>()
         var displaySnapshot: NativeRuxComputerDisplaySnapshot? = null
         var storage0Media: ByteArray? = null
+        var machineSnapshot: ByteArray = ByteArray(0)
         private val pendingOutput = ArrayDeque<ByteArray>()
 
         override fun runUntilSignal(handle: Long): NativeRuxComputerSignal = NativeRuxComputerSignal.Pause
@@ -144,6 +156,11 @@ class RuxComputerRuntimeTest {
         override fun display0Snapshot(handle: Long): NativeRuxComputerDisplaySnapshot? = displaySnapshot
 
         override fun storage0MediaSnapshot(handle: Long): ByteArray? = storage0Media?.copyOf()
+
+        override fun machineSnapshot(handle: Long): ByteArray {
+            machineSnapshotHandles += handle
+            return machineSnapshot.copyOf()
+        }
 
         override fun free(handle: Long) {
             freedHandles += handle

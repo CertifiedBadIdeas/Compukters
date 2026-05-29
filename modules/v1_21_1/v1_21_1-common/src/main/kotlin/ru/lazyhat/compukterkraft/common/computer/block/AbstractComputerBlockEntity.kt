@@ -33,9 +33,11 @@ import ru.lazyhat.compukterkraft.common.computer.context.ServerContext
 import ru.lazyhat.compukterkraft.common.utils.computerID
 import ru.lazyhat.compukterkraft.common.utils.computerLabel
 import ru.lazyhat.compukterkraft.common.utils.ifServerSide
+import ru.lazyhat.compukterkraft.common.utils.runtimeSnapshot
 import ru.lazyhat.compukterkraft.common.utils.updateBlock
 import ru.lazyhat.compukterkraft.core.block.DeviceFamily
 import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDevice
+import ru.lazyhat.compukterkraft.core.device.runtime.RuntimeDeviceSnapshotPersistence
 
 abstract class AbstractComputerBlockEntity(
     type: BlockEntityType<out AbstractComputerBlockEntity>,
@@ -49,6 +51,7 @@ abstract class AbstractComputerBlockEntity(
         private set
     private var _label: String? = null
     private var _computerID: Int? = null
+    private var pendingRuntimeSnapshot: ByteArray? = null
     private var runtimeBlockStateUpdatesEnabled: Boolean = true
 
     var label: String?
@@ -87,6 +90,11 @@ abstract class AbstractComputerBlockEntity(
 
     abstract fun createComputer(id: Int): RuntimeDevice
 
+    internal fun consumePendingRuntimeSnapshot(): ByteArray? =
+        pendingRuntimeSnapshot?.copyOf()?.also {
+            pendingRuntimeSnapshot = null
+        }
+
     fun serverTick() {
         if (level?.isClientSide ?: true) return
         if (_computerID == null) return
@@ -119,6 +127,7 @@ abstract class AbstractComputerBlockEntity(
     ) {
         tag.computerID = _computerID
         tag.computerLabel = _label
+        tag.runtimeSnapshot = runtimeSnapshotForSave()
 
         super.saveAdditional(tag, registries)
     }
@@ -131,6 +140,7 @@ abstract class AbstractComputerBlockEntity(
 
         _computerID = tag.computerID
         _label = tag.computerLabel
+        pendingRuntimeSnapshot = tag.runtimeSnapshot?.copyOf()
     }
 
     override fun setRemoved() {
@@ -149,8 +159,13 @@ abstract class AbstractComputerBlockEntity(
         ifServerSide(level) {
             _computerID
                 .takeIf { ServerContext.isInitialized }
-                ?.let(ServerContext::remove)
-                ?.close()
+                ?.let { deviceId ->
+                    ServerContext
+                        .get(deviceId)
+                        ?.snapshotRuntimeState()
+                        ?.let { pendingRuntimeSnapshot = it.copyOf() }
+                    ServerContext.remove(deviceId)?.close()
+                }
         }
     }
 
@@ -158,4 +173,15 @@ abstract class AbstractComputerBlockEntity(
         runtimeBlockStateUpdatesEnabled &&
             !isRemoved &&
             currentState.block == blockState.block
+
+    private fun runtimeSnapshotForSave(): ByteArray? =
+        _computerID
+            ?.takeIf { ServerContext.isInitialized }
+            ?.let(ServerContext::get)
+            ?.snapshotRuntimeState()
+            ?.copyOf()
+            ?: pendingRuntimeSnapshot?.copyOf()
+
+    private fun RuntimeDevice.snapshotRuntimeState(): ByteArray? =
+        (this as? RuntimeDeviceSnapshotPersistence)?.snapshotRuntimeState()
 }

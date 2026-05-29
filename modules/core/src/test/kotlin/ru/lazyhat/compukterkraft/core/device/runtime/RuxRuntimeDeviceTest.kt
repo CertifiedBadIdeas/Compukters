@@ -33,6 +33,7 @@ import ru.lazyhat.compukterkraft.lang.runtime.display.DisplayFrameDelta
 import java.nio.ByteBuffer
 import java.util.UUID
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -270,6 +271,29 @@ class RuxRuntimeDeviceTest {
         assertEquals(listOf(listOf(0x08)), endpoint.inputs.map { it.map(Byte::toInt) })
     }
 
+    @Test
+    fun exposesRunningEndpointSnapshotForPersistence() {
+        val endpoint = RecordingRuxEndpoint()
+        endpoint.runtimeSnapshot = byteArrayOf(0x52, 0x55, 0x58)
+        val device =
+            RuxRuntimeDevice(
+                deviceId = 16,
+                properties = DeviceProperties(DeviceFamily.NORMAL, label = null),
+                endpointFactory = { endpoint },
+                stateSink = {},
+            )
+
+        assertEquals(null, device.snapshotRuntimeState())
+
+        device.turnOn()
+
+        assertContentEquals(byteArrayOf(0x52, 0x55, 0x58), device.snapshotRuntimeState())
+
+        device.shutdown()
+
+        assertEquals(null, device.snapshotRuntimeState())
+    }
+
     private class RecordingRuxEndpoint : RuxComputerEndpoint {
         val inputs = mutableListOf<ByteArray>()
         var tickCalls = 0
@@ -277,6 +301,7 @@ class RuxRuntimeDeviceTest {
         var closeCalls = 0
             private set
         var displaySnapshot: NativeRuxComputerDisplaySnapshot? = null
+        var runtimeSnapshot: ByteArray = ByteArray(0)
         private var lastPolledDisplaySequence: Long? = null
         private val injectedOutput = StringBuilder()
 
@@ -308,6 +333,8 @@ class RuxRuntimeDeviceTest {
         }
 
         override fun clearOutput() = Unit
+
+        override fun machineSnapshot(): ByteArray = runtimeSnapshot.copyOf()
 
         override fun close() {
             closeCalls += 1

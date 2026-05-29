@@ -51,6 +51,59 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
 }
 
 #[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_restoreRuxComputerFromBiosFlashSnapshotNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    bios_flash_path: JString<'_>,
+    memory_size: jint,
+    storage0_path: JString<'_>,
+    snapshot: JByteArray<'_>,
+) -> jlong {
+    let bios_flash_path = match env.get_string(&bios_flash_path) {
+        Ok(path) => path.to_string_lossy().into_owned(),
+        Err(error) => {
+            let _ = env.throw_new(
+                "java/lang/IllegalArgumentException",
+                format!("Cannot read Rux16 BIOS flash path: {error}"),
+            );
+            return 0;
+        }
+    };
+    let storage0_path = match env.get_string(&storage0_path) {
+        Ok(path) => path.to_string_lossy().into_owned(),
+        Err(error) => {
+            let _ = env.throw_new(
+                "java/lang/IllegalArgumentException",
+                format!("Cannot read Rux computer storage0 path: {error}"),
+            );
+            return 0;
+        }
+    };
+    let snapshot = match env.convert_byte_array(&snapshot) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            let _ = env.throw_new(
+                "java/lang/IllegalArgumentException",
+                format!("Cannot read Rux computer snapshot bytes: {error}"),
+            );
+            return 0;
+        }
+    };
+    match RuxComputerHandle::restore_rux16_bios_flash_snapshot_path_with_storage0_path(
+        bios_flash_path,
+        memory_size.max(1) as usize,
+        storage0_path,
+        &snapshot,
+    ) {
+        Ok(handle) => Box::into_raw(Box::new(handle)) as jlong,
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalArgumentException", error);
+            0
+        }
+    }
+}
+
+#[no_mangle]
 pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_runRux16ComputerUntilSignalNative(
     mut env: JNIEnv<'_>,
     _class: JClass<'_>,
@@ -145,6 +198,26 @@ pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_Nativ
         None => return null_mut(),
     };
     let payload = handle.storage0_media_snapshot().unwrap_or_default();
+    byte_array_or_throw(&mut env, &payload)
+}
+
+#[no_mangle]
+pub extern "system" fn Java_ru_lazyhat_compukterkraft_lang_runtime_blazing_NativeVmBindings_ruxComputerMachineSnapshotNative(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    handle: jlong,
+) -> jbyteArray {
+    let handle = match rux_computer_handle_mut(&mut env, handle) {
+        Some(handle) => handle,
+        None => return null_mut(),
+    };
+    let payload = match handle.snapshot_v1() {
+        Ok(payload) => payload,
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalStateException", error);
+            return null_mut();
+        }
+    };
     byte_array_or_throw(&mut env, &payload)
 }
 

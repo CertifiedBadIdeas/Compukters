@@ -49,6 +49,19 @@ class RuxComputerRuntimeFactoryTest {
     }
 
     @Test
+    fun restoreFromBiosFlashSnapshotAcceptsSnapshotBytesExplicitly() {
+        val restoreMethods = RuxComputerRuntimeFactory::class.java.methods.filter { it.name == "restoreFromBiosFlashSnapshot" }
+        val hasExplicitSnapshotRestore =
+            restoreMethods.any { method ->
+                val pathParameterCount = method.parameterTypes.count { parameterType -> parameterType == Path::class.java }
+                val byteArrayParameterCount = method.parameterTypes.count { parameterType -> parameterType == ByteArray::class.java }
+                pathParameterCount >= 2 && byteArrayParameterCount == 1
+            }
+
+        assertEquals(true, hasExplicitSnapshotRestore)
+    }
+
+    @Test
     fun nativeRuntimeMainDoesNotExposeLowImageAbiPackage() {
         val lowImagePackage =
             Path.of(

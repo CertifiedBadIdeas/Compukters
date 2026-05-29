@@ -52,4 +52,29 @@ class ComputerRuntimeDeviceFactoryArchitectureTest {
         assertTrue(openIndex >= 0, "storage0 should still be opened through FileRuxVolumeStore")
         assertTrue(seedIndex < openIndex, "storage0 must be seeded before FileRuxVolumeStore can create an empty volume")
     }
+
+    @Test
+    fun inGameRuxComputerRestoresPendingRuntimeSnapshotBeforeFreshBoot() {
+        val source =
+            Path
+                .of("src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/block/ComputerRuntimeDeviceFactory.kt")
+                .readText()
+
+        assertTrue(source.contains("tile.consumePendingRuntimeSnapshot()"))
+        assertTrue(source.contains("RuxComputerRuntimeFactory.restoreFromBiosFlashSnapshot"))
+        assertTrue(source.contains("RuxComputerRuntimeFactory.createFromBiosFlash"))
+        assertFalse(source.contains("var pendingRuntimeSnapshot"))
+    }
+
+    @Test
+    fun computerBlockEntityPersistsRuntimeSnapshotBytes() {
+        val source =
+            Path
+                .of("src/main/kotlin/ru/lazyhat/compukterkraft/common/computer/block/AbstractComputerBlockEntity.kt")
+                .readText()
+
+        assertTrue(source.contains("runtimeSnapshot"))
+        assertTrue(source.contains("snapshotRuntimeState()"))
+        assertTrue(source.contains("consumePendingRuntimeSnapshot"))
+    }
 }

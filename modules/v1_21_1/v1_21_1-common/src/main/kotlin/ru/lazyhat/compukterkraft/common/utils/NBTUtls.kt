@@ -29,6 +29,7 @@ private object NBT {
     const val ID: String = "ComputerID"
     const val FAMILY_ID: String = "DeviceFamilyId"
     const val LABEL: String = "Label"
+    const val RUNTIME_SNAPSHOT: String = "RuxRuntimeSnapshot"
 }
 
 private val ItemStack.computerData: CustomData?
@@ -56,6 +57,12 @@ var CompoundTag.deviceFamilyId: String?
     get() = takeIf { it.contains(NBT.FAMILY_ID) }?.let { getString(NBT.FAMILY_ID) }
     set(value) {
         value?.let { putString(NBT.FAMILY_ID, it) }
+    }
+
+var CompoundTag.runtimeSnapshot: ByteArray?
+    get() = takeIf { it.contains(NBT.RUNTIME_SNAPSHOT) }?.let { getByteArray(NBT.RUNTIME_SNAPSHOT) }
+    set(value) {
+        value?.let { putByteArray(NBT.RUNTIME_SNAPSHOT, it) }
     }
 
 val ItemStack.computerLabelByHoverName: String?

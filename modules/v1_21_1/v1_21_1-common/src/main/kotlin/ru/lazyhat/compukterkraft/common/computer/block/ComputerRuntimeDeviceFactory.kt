@@ -49,7 +49,8 @@ object ComputerRuntimeDeviceFactory {
                 RuxSystemVolumeWorkspace.prepareStorage0Volume(workspace)
                 val storage0 = volumeStore.openOrCreateComputerVolume(deviceId, "storage0")
                 val biosFlashPath = RuxBiosFlashWorkspace.prepareBiosFlash(workspace)
-                createRuxComputerEndpoint(biosFlashPath, storage0)
+                val snapshot = tile.consumePendingRuntimeSnapshot()
+                createRuxComputerEndpoint(biosFlashPath, storage0, snapshot)
             },
             stateSink = host.stateSink,
             displayNetwork = host.displayNetwork,
@@ -59,14 +60,23 @@ object ComputerRuntimeDeviceFactory {
     private fun createRuxComputerEndpoint(
         biosFlashPath: Path,
         storage0: RuxVolumeBlob,
+        snapshot: ByteArray?,
     ) =
         try {
             val storage0Path = storage0.path
             storage0.close()
-            RuxComputerRuntimeFactory.createFromBiosFlash(
-                biosFlashPath = biosFlashPath,
-                storage0Path = storage0Path,
-            )
+            if (snapshot == null) {
+                RuxComputerRuntimeFactory.createFromBiosFlash(
+                    biosFlashPath = biosFlashPath,
+                    storage0Path = storage0Path,
+                )
+            } else {
+                RuxComputerRuntimeFactory.restoreFromBiosFlashSnapshot(
+                    biosFlashPath = biosFlashPath,
+                    storage0Path = storage0Path,
+                    snapshot = snapshot,
+                )
+            }
         } catch (error: Throwable) {
             storage0.close()
             throw error

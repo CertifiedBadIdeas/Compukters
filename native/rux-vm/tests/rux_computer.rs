@@ -274,6 +274,42 @@ fn rux_computer_handle_loads_rux16_bios_flash_from_path_with_storage0_path() {
 }
 
 #[test]
+fn rux_computer_handle_restores_snapshot_with_bios_flash_and_storage0_path() {
+    let bios = rux16_words(&rux16_mmio_firmware_words());
+    let storage_path = temp_volume_path("rux16-restore-storage-path");
+    write_rux_volume(&storage_path, &[0; 1024]);
+    let mut handle = RuxComputerHandle::create_rux16_bios_flash_with_storage0_path(
+        &bios,
+        64 * 1024,
+        128,
+        &storage_path,
+    )
+    .expect("Rux16 BIOS flash computer creates with storage0 path");
+
+    assert_eq!(handle.run_rux16_until_signal().unwrap(), Rux16Signal::Halt);
+
+    let snapshot = handle.snapshot_v1().expect("snapshot encodes");
+    let restored = RuxComputerHandle::restore_rux16_bios_flash_snapshot_with_storage0_path(
+        &bios,
+        64 * 1024,
+        &storage_path,
+        &snapshot,
+    )
+    .expect("snapshot restores");
+
+    assert_eq!(restored.debug_output_bytes(), b"RUX");
+    assert_eq!(
+        restored.control(),
+        RuxComputerControl {
+            status: ComputerMachine::STATUS_HALTED,
+            exit_code: 0,
+            panic_code: 0x16,
+        },
+    );
+    fs::remove_file(storage_path).unwrap();
+}
+
+#[test]
 fn rux_computer_handle_rux16_bios_rejects_corrupt_boot_header_magic() {
     let entry_pc = 2048;
     let bios = rux16_words(&rux16_stage2_boot_bios_words());
