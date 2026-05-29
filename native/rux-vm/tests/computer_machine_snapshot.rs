@@ -8,6 +8,7 @@ const CONTROL_DEVICE_RECORD_SIZE: usize = 20;
 const EMPTY_DEBUG_DEVICE_RECORD_SIZE: usize = 8;
 const EMPTY_DISPLAY0_DEVICE_RECORD_SIZE: usize = 2032;
 const EMPTY_SERIAL_INPUT_DEVICE_RECORD_SIZE: usize = 8;
+const STORAGE0_DEVICE_RECORD_SIZE: usize = 44;
 
 #[test]
 fn computer_machine_snapshot_v1_records_header_and_ram_payload() {
@@ -29,6 +30,7 @@ fn computer_machine_snapshot_v1_records_header_and_ram_payload() {
             + EMPTY_DEBUG_DEVICE_RECORD_SIZE
             + EMPTY_DISPLAY0_DEVICE_RECORD_SIZE
             + EMPTY_SERIAL_INPUT_DEVICE_RECORD_SIZE
+            + STORAGE0_DEVICE_RECORD_SIZE
     );
 
     let decoded = decode_snapshot_v1(&snapshot).expect("snapshot decodes");
@@ -41,11 +43,11 @@ fn computer_machine_snapshot_v1_records_header_and_ram_payload() {
     assert_eq!(decoded.header.ram_size, 1024);
     assert_eq!(decoded.header.cpu_count, 1);
     assert_eq!(decoded.header.boot_cpu_id, Some(boot_cpu as u32));
-    assert_eq!(decoded.header.device_count, 4);
+    assert_eq!(decoded.header.device_count, 5);
     assert_eq!(decoded.ram[512], 0xA5);
     assert_eq!(decoded.ram[1023], 0x5A);
     assert_eq!(decoded.cpus.len(), 1);
-    assert_eq!(decoded.devices.len(), 4);
+    assert_eq!(decoded.devices.len(), 5);
 }
 
 #[test]
@@ -202,6 +204,95 @@ fn computer_machine_snapshot_v1_restores_serial_input_device_state() {
 }
 
 #[test]
+fn computer_machine_snapshot_v1_restores_storage0_controller_state() {
+    let profile =
+        ComputerMachineProfile::computer_v1_with_storage0_media(2048, vec![0x5A; 1024], false);
+    let mut machine = ComputerMachine::from_profile(profile.clone()).expect("machine creates");
+    machine
+        .bus_store_i32(ComputerMachine::STORAGE0_LBA_LOW, 1)
+        .unwrap();
+    machine
+        .bus_store_i32(ComputerMachine::STORAGE0_BLOCK_COUNT, 1)
+        .unwrap();
+    machine
+        .bus_store_i32(ComputerMachine::STORAGE0_BUFFER_ADDR, 512)
+        .unwrap();
+    machine
+        .bus_store_i32(
+            ComputerMachine::STORAGE0_COMMAND,
+            rux_vm::computer_abi::STORAGE_COMMAND_READ_BLOCKS,
+        )
+        .unwrap();
+    machine
+        .bus_store_i32(ComputerMachine::STORAGE0_LBA_LOW, 3)
+        .unwrap();
+
+    let snapshot = machine.snapshot_v1().expect("snapshot encodes");
+    let restored = ComputerMachine::restore_snapshot_v1(profile, &snapshot).expect("restores");
+
+    assert_eq!(
+        restored
+            .bus_load_i32(ComputerMachine::STORAGE0_STATUS)
+            .unwrap(),
+        rux_vm::computer_abi::STORAGE_STATUS_DONE
+    );
+    assert_eq!(
+        restored
+            .bus_load_i32(ComputerMachine::STORAGE0_ERROR)
+            .unwrap(),
+        rux_vm::computer_abi::STORAGE_ERROR_NONE
+    );
+    assert_eq!(
+        restored
+            .bus_load_i32(ComputerMachine::STORAGE0_LBA_LOW)
+            .unwrap(),
+        3
+    );
+    assert_eq!(
+        restored
+            .bus_load_i32(ComputerMachine::STORAGE0_LBA_HIGH)
+            .unwrap(),
+        0
+    );
+    assert_eq!(
+        restored
+            .bus_load_i32(ComputerMachine::STORAGE0_BLOCK_COUNT)
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        restored
+            .bus_load_i32(ComputerMachine::STORAGE0_BUFFER_ADDR)
+            .unwrap(),
+        512
+    );
+    assert_eq!(
+        restored
+            .bus_load_i32(ComputerMachine::STORAGE0_BYTES_DONE)
+            .unwrap(),
+        512
+    );
+    assert_eq!(
+        restored
+            .bus_load_i32(ComputerMachine::STORAGE0_SEQUENCE_LOW)
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        restored
+            .bus_load_i32(ComputerMachine::STORAGE0_SEQUENCE_HIGH)
+            .unwrap(),
+        0
+    );
+    assert_eq!(
+        restored
+            .bus_load_i32(ComputerMachine::STORAGE0_MEDIA_STATUS)
+            .unwrap(),
+        rux_vm::computer_abi::STORAGE_MEDIA_PRESENT
+    );
+}
+
+#[test]
 fn computer_machine_snapshot_v1_rejects_profile_ram_size_mismatch() {
     let machine = ComputerMachine::new(1024).expect("machine creates");
     let snapshot = machine.snapshot_v1().expect("snapshot encodes");
@@ -242,7 +333,7 @@ fn computer_machine_snapshot_v1_rejects_bad_magic_version_and_length() {
     let truncated = &snapshot[..snapshot.len() - 1];
     assert_eq!(
         decode_snapshot_v1(truncated).unwrap_err(),
-        "ComputerMachine snapshot device 3 header is truncated"
+        "ComputerMachine snapshot device 4 payload is truncated"
     );
 }
 
@@ -290,6 +381,9 @@ fn computer_machine_snapshot_v1_rejects_invalid_device_record_fields() {
     let first_device_record = COMPUTER_SNAPSHOT_V1_HEADER_SIZE + 1024;
     let display0_device_record =
         first_device_record + CONTROL_DEVICE_RECORD_SIZE + EMPTY_DEBUG_DEVICE_RECORD_SIZE;
+    let storage0_device_record = display0_device_record
+        + EMPTY_DISPLAY0_DEVICE_RECORD_SIZE
+        + EMPTY_SERIAL_INPUT_DEVICE_RECORD_SIZE;
 
     let mut bad_reserved = snapshot.clone();
     bad_reserved[36..40].copy_from_slice(&1_u32.to_le_bytes());
@@ -333,6 +427,14 @@ fn computer_machine_snapshot_v1_rejects_invalid_device_record_fields() {
         Err(error) => error,
     };
     assert_eq!(error, "display0 snapshot cursor 80,0 is outside 80x25");
+
+    let mut bad_storage0_payload_size = snapshot.clone();
+    bad_storage0_payload_size[storage0_device_record + 4..storage0_device_record + 8]
+        .copy_from_slice(&35_u32.to_le_bytes());
+    assert_eq!(
+        decode_snapshot_v1(&bad_storage0_payload_size).unwrap_err(),
+        "ComputerMachine snapshot storage0 device payload has 35 bytes but expected 36"
+    );
 
     let mut trailing_bytes = snapshot;
     trailing_bytes.push(0);
