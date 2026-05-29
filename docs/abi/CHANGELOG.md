@@ -19,6 +19,9 @@
   Explicit `bios` continues to emit raw Rux16 instruction bytes for BIOS flash.
 - `RUXE` now carries ABI kind `program`, and the program target emits a
   filesystem-backed user-space executable profile linked at `0x8000`.
+- The VM runtime now has a read-only `storage0 media -> RUXPT ROOT -> RuxFS`
+  reader and validates already-read `RUXE` bytes as `program` images for the
+  future OS exec path.
 - `rux volume put-boot` now accepts a `RUXE` boot artifact and writes the
   current storage0 boot record from its entry/load metadata and payload. Kernel
   artifacts are rejected for boot media.

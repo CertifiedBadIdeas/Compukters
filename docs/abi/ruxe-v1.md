@@ -137,6 +137,9 @@ OS filesystem -> read RUXE file bytes into RAM -> exec service validates ABI kin
 ```
 
 The exec service receives bytes or guest RAM ranges, never a host-side path.
+The VM runtime currently provides the filesystem read and `program` ABI kind
+validation boundary. Copying the payload into a process image and transferring
+control to `entry_pc` remains OS exec-service work.
 
 ## Storage Volume Tooling
 
