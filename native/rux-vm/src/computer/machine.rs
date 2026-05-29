@@ -593,6 +593,11 @@ impl ComputerMachine {
                 bytes: debug.bytes().to_vec(),
             });
         }
+        if let Some(display0) = self.display0_device() {
+            devices.push(ComputerDeviceSnapshotRecord::Display0 {
+                snapshot: display0.snapshot(),
+            });
+        }
         devices
     }
 
@@ -621,6 +626,13 @@ impl ComputerMachine {
                 })?;
                 debug.restore_bytes(bytes);
             }
+            ComputerDeviceSnapshotRecord::Display0 { snapshot } => {
+                let display0 = self.display0_device_mut().ok_or_else(|| {
+                    "ComputerMachine snapshot contains display0 device state but profile has no display0 device"
+                        .to_string()
+                })?;
+                display0.restore_snapshot(snapshot)?;
+            }
         }
         Ok(())
     }
@@ -638,6 +650,11 @@ impl ComputerMachine {
     fn display0_device(&self) -> Option<&TextDisplayDevice> {
         self.display0_device_id
             .and_then(|id| self.bus.device::<TextDisplayDevice>(id))
+    }
+
+    fn display0_device_mut(&mut self) -> Option<&mut TextDisplayDevice> {
+        self.display0_device_id
+            .and_then(|id| self.bus.device_mut::<TextDisplayDevice>(id))
     }
 
     fn control_device_mut(&mut self) -> Option<&mut ComputerControlDevice> {

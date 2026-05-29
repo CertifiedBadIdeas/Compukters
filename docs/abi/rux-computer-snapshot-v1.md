@@ -10,8 +10,8 @@ state. It is not a guest-visible disk format and it is not stored on
 across host unload/load boundaries.
 
 The current v1 slice records a versioned header, full RAM bytes, fixed-size
-Rux16 CPU continuation records, and explicit device records for `control` and
-`debug`.
+Rux16 CPU continuation records, and explicit device records for `control`,
+`debug`, and `display0`.
 
 ## File Layout
 
@@ -82,18 +82,22 @@ Supported device kinds:
 kind  payload
 1     control: status i32, panic_code i32, exit_code i32
 2     debug: raw debug output bytes
+3     display0: columns u32, rows u32, cursor_x u32, cursor_y u32,
+      sequence u64, followed by cell bytes
 ```
 
 Unknown device kinds are rejected. `control` payloads must be exactly 12 bytes.
-`debug` payloads may be empty.
+`debug` payloads may be empty. `display0` payloads must contain at least 24
+bytes of metadata, and the remaining cell byte count must equal
+`columns * rows`.
 
 ## Restore Semantics
 
-Full restore recreates RAM, CPU contexts, `boot_cpu_id`, `control` state, and
-`debug` output from the snapshot against an explicitly provided
-`ComputerMachineProfile`. Restore must reject a snapshot when its `ram_size`
-differs from the target profile memory size, when the boot CPU id points
-outside the CPU table, when a CPU record contains an unsupported
+Full restore recreates RAM, CPU contexts, `boot_cpu_id`, `control` state,
+`debug` output, and `display0` screen state from the snapshot against an
+explicitly provided `ComputerMachineProfile`. Restore must reject a snapshot
+when its `ram_size` differs from the target profile memory size, when the boot
+CPU id points outside the CPU table, when a CPU record contains an unsupported
 kind/state/reserved field, or when the target profile does not expose a device
 recorded by the snapshot.
 
@@ -120,6 +124,7 @@ A decoder must reject:
 - truncated device record headers or payloads;
 - unknown device kinds;
 - invalid fixed-size device payload lengths;
+- invalid `display0` cell counts;
 - trailing bytes after declared device records.
 
 There is no fallback decoder for unknown snapshot formats.
