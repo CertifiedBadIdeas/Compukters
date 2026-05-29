@@ -1052,7 +1052,7 @@ fn rux16_kernel_loader_source_writes_kernel_boot_info() {
         "RKBI writer should pass the loaded kernel RUXE size"
     );
     assert!(
-        source.contains("write_kernel_boot_info(root_start_lba, file_size_low)"),
+        source.contains("write_kernel_boot_info(root_start_lba, kernel_ruxe_size_bytes)"),
         "kernel loader should write RKBI immediately before executing the loaded kernel"
     );
 }
@@ -1130,11 +1130,11 @@ fn rux16_init_loader_source_writes_init_handoff_info() {
         "RINI writer should pass the init entry point"
     );
     assert!(
-        source.contains("write_init_handoff_info(root_start_lba, file_size_low, entry_pc)"),
+        source.contains("write_init_handoff_info(root_start_lba, init_ruxe_size_bytes, entry_pc)"),
         "kernel should write RINI immediately before entering init"
     );
     let write_index = source
-        .find("write_init_handoff_info(root_start_lba, file_size_low, entry_pc)")
+        .find("write_init_handoff_info(root_start_lba, init_ruxe_size_bytes, entry_pc)")
         .expect("RINI writer call should exist");
     let jump_index = source
         .find("rux16_jump(entry_pc)")
@@ -1496,6 +1496,153 @@ fn rux_volume_boot_kernel_and_init_executes_init_from_root_ruxfs() {
 }
 
 #[test]
+fn rux_volume_boot_kernel_and_init_runtime_handoff_blocks_match_artifacts() {
+    let volume_path = temp_file("runtime-handoff-blocks-storage0.ruxvol");
+    let root_path = temp_file("runtime-handoff-blocks-root.ruxfs");
+    let boot_path = temp_file("runtime-handoff-blocks-loader.boot");
+    let kernel_path = temp_file("runtime-handoff-blocks-kernel.ruxe");
+    let init_path = temp_file("runtime-handoff-blocks-init.ruxe");
+    let boot_source_path =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/boot/kernel_loader.rx");
+    let kernel_source_path =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/kernel/init_loader.rx");
+    let init_bytes =
+        ruxe::encode_rux16_executable(&[0x01, 0x00], ruxe::RuxeAbiKind::Program, 0x8000, 0x8000)
+            .expect("init RUXE encodes");
+    fs::write(&init_path, &init_bytes).expect("init writes");
+
+    let boot_compile_output = Command::new(rux_binary())
+        .args([
+            "compile",
+            "--target",
+            "boot",
+            boot_source_path.to_str().unwrap(),
+            "-o",
+            boot_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("rux compile boot runs");
+    assert!(
+        boot_compile_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&boot_compile_output.stderr)
+    );
+    let kernel_compile_output = Command::new(rux_binary())
+        .args([
+            "compile",
+            "--target",
+            "kernel",
+            kernel_source_path.to_str().unwrap(),
+            "-o",
+            kernel_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("rux compile kernel runs");
+    assert!(
+        kernel_compile_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&kernel_compile_output.stderr)
+    );
+    let kernel_bytes = fs::read(&kernel_path).expect("kernel RUXE reads");
+
+    assert!(Command::new(rux_binary())
+        .args([
+            "volume",
+            "init",
+            volume_path.to_str().unwrap(),
+            "--size",
+            "65536",
+        ])
+        .status()
+        .expect("volume init runs")
+        .success());
+    assert!(Command::new(rux_binary())
+        .args([
+            "volume",
+            "put-boot",
+            volume_path.to_str().unwrap(),
+            boot_path.to_str().unwrap(),
+        ])
+        .status()
+        .expect("put-boot runs")
+        .success());
+    assert!(Command::new(rux_binary())
+        .args([
+            "fs",
+            "ruxfs",
+            "format",
+            root_path.to_str().unwrap(),
+            "--blocks",
+            "95",
+        ])
+        .status()
+        .expect("ruxfs format runs")
+        .success());
+    assert!(Command::new(rux_binary())
+        .args(["fs", "ruxfs", "mkdir", root_path.to_str().unwrap(), "/bin"])
+        .status()
+        .expect("ruxfs mkdir /bin runs")
+        .success());
+    assert!(Command::new(rux_binary())
+        .args([
+            "fs",
+            "ruxfs",
+            "put",
+            root_path.to_str().unwrap(),
+            "/bin/init.ruxe",
+            init_path.to_str().unwrap(),
+        ])
+        .status()
+        .expect("ruxfs put init runs")
+        .success());
+    assert!(Command::new(rux_binary())
+        .args([
+            "volume",
+            "replace-partition",
+            volume_path.to_str().unwrap(),
+            "ROOT",
+            root_path.to_str().unwrap(),
+        ])
+        .status()
+        .expect("replace ROOT runs")
+        .success());
+    assert!(Command::new(rux_binary())
+        .args([
+            "volume",
+            "put-kernel",
+            volume_path.to_str().unwrap(),
+            kernel_path.to_str().unwrap(),
+        ])
+        .status()
+        .expect("put-kernel runs")
+        .success());
+
+    let bios = compile_bundled_rux16_bios();
+    let mut handle = RuxComputerHandle::create_rux16_bios_flash_with_storage0_path(
+        &bios,
+        64 * 1024,
+        1_000_000,
+        &volume_path,
+    )
+    .expect("Rux16 BIOS flash computer creates with runtime handoff volume path");
+
+    assert_eq!(handle.run_rux16_until_signal().unwrap(), Rux16Signal::Halt);
+
+    assert_eq!(read_guest_u32(&handle, 0x3f00), 0x49424b52);
+    assert_eq!(read_guest_u32(&handle, 0x3f04), 0x00140001);
+    assert_eq!(read_guest_u32(&handle, 0x3f08), 33);
+    assert_eq!(read_guest_u32(&handle, 0x3f0c), kernel_bytes.len() as u32);
+    assert_eq!(read_guest_u32(&handle, 0x3f10), 0);
+
+    assert_eq!(read_guest_u32(&handle, 0x3f20), 0x494e4952);
+    assert_eq!(read_guest_u32(&handle, 0x3f24), 0x00180001);
+    assert_eq!(read_guest_u32(&handle, 0x3f28), 33);
+    assert_eq!(read_guest_u32(&handle, 0x3f2c), init_bytes.len() as u32);
+    assert_eq!(read_guest_u32(&handle, 0x3f30), 0x8000);
+    assert_eq!(read_guest_u32(&handle, 0x3f34), 0);
+}
+
+#[test]
 fn rux_volume_boot_kernel_rejects_protected_init_load_address() {
     let volume_path = temp_file("protected-init-load-storage0.ruxvol");
     let root_path = temp_file("protected-init-load-root.ruxfs");
@@ -1839,6 +1986,13 @@ fn display_row(snapshot: &RuxComputerTextDisplaySnapshot, row: u32) -> String {
         .rposition(|byte| *byte != b' ' && *byte != 0)
         .map_or(0, |index| index + 1);
     String::from_utf8_lossy(&row[..visible_end]).to_string()
+}
+
+fn read_guest_u32(handle: &RuxComputerHandle, address: u32) -> u32 {
+    let bytes = handle
+        .read_guest_ram_bytes(address, 4)
+        .expect("guest RAM bytes read");
+    u32::from_le_bytes(bytes.try_into().expect("guest RAM read returns 4 bytes"))
 }
 
 fn temp_file(name: &str) -> PathBuf {
