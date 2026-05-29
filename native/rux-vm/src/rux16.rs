@@ -27,6 +27,25 @@ pub struct Rux16Metrics {
     pub steps: u64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Rux16CpuSnapshotState {
+    Running,
+    Halted,
+    Trapped,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Rux16CpuSnapshot {
+    pub pc: u32,
+    pub registers: [u32; 16],
+    pub trap_vector: u32,
+    pub trap_cause: u32,
+    pub trap_pc: u32,
+    pub trap_value: u32,
+    pub state: Rux16CpuSnapshotState,
+    pub metrics_steps: u64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Rux16Trap {
     cause: u32,
@@ -281,6 +300,44 @@ impl Rux16Cpu {
 
     pub fn metrics(&self) -> &Rux16Metrics {
         &self.metrics
+    }
+
+    pub fn snapshot(&self) -> Rux16CpuSnapshot {
+        Rux16CpuSnapshot {
+            pc: self.pc,
+            registers: self.registers,
+            trap_vector: self.trap_vector,
+            trap_cause: self.trap_cause,
+            trap_pc: self.trap_pc,
+            trap_value: self.trap_value,
+            state: match &self.state {
+                Rux16State::Running => Rux16CpuSnapshotState::Running,
+                Rux16State::Halted => Rux16CpuSnapshotState::Halted,
+                Rux16State::Trapped(_) => Rux16CpuSnapshotState::Trapped,
+            },
+            metrics_steps: self.metrics.steps,
+        }
+    }
+
+    pub fn from_snapshot(snapshot: Rux16CpuSnapshot) -> Self {
+        Self {
+            pc: snapshot.pc,
+            registers: snapshot.registers,
+            trap_vector: snapshot.trap_vector,
+            trap_cause: snapshot.trap_cause,
+            trap_pc: snapshot.trap_pc,
+            trap_value: snapshot.trap_value,
+            state: match snapshot.state {
+                Rux16CpuSnapshotState::Running => Rux16State::Running,
+                Rux16CpuSnapshotState::Halted => Rux16State::Halted,
+                Rux16CpuSnapshotState::Trapped => {
+                    Rux16State::Trapped("restored trapped Rux16 CPU".to_string())
+                }
+            },
+            metrics: Rux16Metrics {
+                steps: snapshot.metrics_steps,
+            },
+        }
     }
 
     pub fn trap(&self) -> Option<&str> {
