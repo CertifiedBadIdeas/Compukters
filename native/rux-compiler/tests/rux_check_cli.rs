@@ -39,6 +39,53 @@ fn main() {
 }
 
 #[test]
+fn rux_check_reports_redundant_bool_comparison_suggestions() {
+    let source_path = temp_file("bool-comparisons.rx");
+    fs::write(
+        &source_path,
+        r#"
+fn main() {
+    let mut ready: bool = true;
+    if ready == true {
+        return;
+    }
+    if ready != false {
+        return;
+    }
+    if ready == false {
+        return;
+    }
+    if ready != true {
+        return;
+    }
+}
+"#,
+    )
+    .expect("source writes");
+
+    let output = Command::new(rux_binary())
+        .args(["check", source_path.to_str().unwrap()])
+        .output()
+        .expect("rux check runs");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8(output.stdout).expect("stdout is UTF-8"),
+        format!(
+            "{}:4:5: suggestion: bool comparison can be simplified\n  help: if ready {{ ... }}\n{}:7:5: suggestion: bool comparison can be simplified\n  help: if ready {{ ... }}\n{}:10:5: suggestion: bool comparison can be simplified\n  help: if !ready {{ ... }}\n{}:13:5: suggestion: bool comparison can be simplified\n  help: if !ready {{ ... }}\n",
+            source_path.display(),
+            source_path.display(),
+            source_path.display(),
+            source_path.display()
+        )
+    );
+}
+
+#[test]
 fn rux_check_does_not_suggest_nested_if_when_outer_if_has_else() {
     let source_path = temp_file("nested-if-else.rx");
     fs::write(

@@ -11,7 +11,10 @@ pub struct AdviceDiagnostic {
 pub fn check_source(source: &str) -> Result<Vec<AdviceDiagnostic>, CompileError> {
     let tokens = lex(source)?;
     parse(tokens.clone())?;
-    Ok(find_nested_if_advice(source, &tokens))
+    let mut diagnostics = find_nested_if_advice(source, &tokens);
+    diagnostics.extend(find_bool_comparison_advice(source, &tokens));
+    diagnostics.sort_by_key(|diagnostic| (diagnostic.line, diagnostic.column));
+    Ok(diagnostics)
 }
 
 fn find_nested_if_advice(source: &str, tokens: &[Token]) -> Vec<AdviceDiagnostic> {
@@ -61,6 +64,79 @@ fn find_nested_if_advice(source: &str, tokens: &[Token]) -> Vec<AdviceDiagnostic
     diagnostics
 }
 
+fn find_bool_comparison_advice(source: &str, tokens: &[Token]) -> Vec<AdviceDiagnostic> {
+    let mut diagnostics = Vec::new();
+    for index in 0..tokens.len() {
+        if tokens[index].kind != TokenKind::If {
+            continue;
+        }
+        let Some(if_tokens) = parse_if_tokens(tokens, index) else {
+            continue;
+        };
+        let condition_start = index + 1;
+        let condition_end = if_tokens.open_brace;
+        if condition_end <= condition_start {
+            continue;
+        }
+
+        let condition_tokens = &tokens[condition_start..condition_end];
+        let condition_end_offset = tokens[if_tokens.open_brace].offset;
+        let Some((expression_text, direct_condition)) =
+            bool_comparison_suggestion(source, condition_tokens, condition_end_offset)
+        else {
+            continue;
+        };
+
+        let (line, column) = line_column(source, tokens[index].offset);
+        let help = if direct_condition {
+            format!("if {expression_text} {{ ... }}")
+        } else {
+            format!("if !{expression_text} {{ ... }}")
+        };
+        diagnostics.push(AdviceDiagnostic {
+            line,
+            column,
+            message: "bool comparison can be simplified".to_string(),
+            help,
+        });
+    }
+    diagnostics
+}
+
+fn bool_comparison_suggestion(
+    source: &str,
+    tokens: &[Token],
+    condition_end_offset: usize,
+) -> Option<(String, bool)> {
+    if tokens.len() != 3 {
+        return None;
+    }
+    let compare_token = &tokens[1];
+    let equals = match compare_token.kind {
+        TokenKind::EqualEqual => true,
+        TokenKind::BangEqual => false,
+        _ => return None,
+    };
+
+    let rhs_bool = match tokens[2].kind {
+        TokenKind::True => Some(true),
+        TokenKind::False => Some(false),
+        _ => None,
+    };
+    if let Some(bool_value) = rhs_bool {
+        let expression_text = token_text(source, &tokens[0], compare_token.offset);
+        return Some((expression_text, equals == bool_value));
+    }
+
+    let lhs_bool = match tokens[0].kind {
+        TokenKind::True => Some(true),
+        TokenKind::False => Some(false),
+        _ => None,
+    }?;
+    let expression_text = token_text(source, &tokens[2], condition_end_offset);
+    Some((expression_text, equals == lhs_bool))
+}
+
 #[derive(Debug, Clone, Copy)]
 struct IfTokens {
     open_brace: usize,
@@ -105,6 +181,10 @@ fn matching_right_brace(tokens: &[Token], open_brace: usize) -> Option<usize> {
 fn condition_text(source: &str, if_offset: usize, open_brace_offset: usize) -> String {
     let start = if_offset + "if".len();
     source[start..open_brace_offset].trim().to_string()
+}
+
+fn token_text(source: &str, token: &Token, end_offset: usize) -> String {
+    source[token.offset..end_offset].trim().to_string()
 }
 
 fn line_column(source: &str, offset: usize) -> (usize, usize) {
