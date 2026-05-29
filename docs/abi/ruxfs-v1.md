@@ -149,6 +149,7 @@ The current compiler crate provides:
   inode state, inode extents, directory entries, and duplicate directory names;
 - absolute-path directory creation;
 - absolute-path file creation and full-file reads;
+- absolute-path file deletion;
 - directory listing.
 
 The host-side read path used to model future bootloader behavior is:
@@ -191,6 +192,7 @@ rux fs ruxfs format <image.ruxfs> --blocks <blocks>
 rux fs ruxfs mkdir <image.ruxfs> <path>
 rux fs ruxfs put <image.ruxfs> <path> <host-input>
 rux fs ruxfs get <image.ruxfs> <path> <host-output>
+rux fs ruxfs rm <image.ruxfs> <path>
 rux fs ruxfs ls <image.ruxfs> <path>
 ```
 
@@ -199,4 +201,4 @@ must stay in `rux fs <filesystem>` subcommands. The current `put-boot` and
 `put-kernel` commands are boot-chain installation helpers that write the
 standard system files into the active RuxFS-backed volume layout.
 
-Delete and overwrite remain next-step work under the same RuxFS v1 contract.
+Overwrite remains next-step work under the same RuxFS v1 contract.
