@@ -239,7 +239,7 @@ fn rux_volume_inspect_boot_prints_boot_chain_metadata() {
     );
     assert_eq!(
         String::from_utf8(output.stdout).expect("inspect-boot stdout is UTF-8"),
-        "RUXVOL boot-chain\nBOOT record entry_pc=0x00002000 load_addr=0x00002000 blocks=1 payload_lba=2\nROOT partition start_lba=33 blocks=95 bytes=48640 name=root\nROOT RuxFS /boot/kernel.ruxe file_bytes=54\nKERNEL RUXE abi=kernel entry_pc=0x00003000 load_addr=0x00003000 payload_bytes=2\n"
+        "RUXVOL boot-chain\nBOOT partition start_lba=1 blocks=32 bytes=16384 name=boot\nBOOT RuxFS /boot/loader.ruxe file_bytes=54\nBOOTLOADER RUXE abi=bootloader entry_pc=0x00002000 load_addr=0x00002000 payload_bytes=2\nROOT partition start_lba=33 blocks=95 bytes=48640 name=root\nROOT RuxFS /boot/kernel.ruxe file_bytes=54\nKERNEL RUXE abi=kernel entry_pc=0x00003000 load_addr=0x00003000 payload_bytes=2\n"
     );
 }
 
@@ -402,7 +402,7 @@ fn rux_volume_put_boot_records_boot_artifact() {
 }
 
 #[test]
-fn rux_volume_put_boot_records_boot_artifact_in_boot_partition() {
+fn rux_volume_put_boot_installs_loader_ruxe_in_boot_ruxfs_partition() {
     let volume_path = temp_file("partitioned-boot-storage0.ruxvol");
     let boot_path = temp_file("partitioned-boot.ruxe");
     fs::write(
@@ -446,18 +446,21 @@ fn rux_volume_put_boot_records_boot_artifact_in_boot_partition() {
     let bytes = fs::read(&volume_path).expect("volume reads");
     let payload = &bytes[16..];
     assert_eq!(&payload[0..5], b"RUXPT");
-    assert_eq!(&payload[512..516], b"RUXB");
+    let boot = volume::extract_partition(&bytes, "BOOT").expect("BOOT extracts");
     assert_eq!(
-        u32::from_le_bytes(payload[516..520].try_into().unwrap()),
-        0x900
+        ruxfs::read_file(&boot, "/boot/loader.ruxe").expect("loader reads from BOOT"),
+        ruxe::encode_rux16_executable(
+            &[0x01, 0x02, 0x03, 0x04],
+            ruxe::RuxeAbiKind::Bootloader,
+            0x900,
+            0x900,
+        )
+        .expect("RUXE encodes")
     );
-    assert_eq!(
-        u32::from_le_bytes(payload[520..524].try_into().unwrap()),
-        0x900
+    assert!(
+        !boot.windows(4).any(|window| window == b"RUXB"),
+        "partitioned put-boot should not write the fixed RUXB record"
     );
-    assert_eq!(u32::from_le_bytes(payload[524..528].try_into().unwrap()), 1);
-    assert_eq!(u32::from_le_bytes(payload[528..532].try_into().unwrap()), 2);
-    assert_eq!(&payload[1024..1028], &[0x01, 0x02, 0x03, 0x04]);
 }
 
 #[test]
@@ -1122,7 +1125,7 @@ fn rux_volume_put_boot_and_kernel_creates_storage0_that_bundled_bios_executes() 
     let mut handle = RuxComputerHandle::create_rux16_bios_flash_with_storage0_path(
         &bios,
         64 * 1024,
-        50_000,
+        1_000_000,
         &volume_path,
     )
     .expect("Rux16 BIOS flash computer creates with CLI boot/kernel volume path");
