@@ -7,6 +7,7 @@ use crate::computer::profile::{
     StorageMediaConfig,
 };
 use crate::computer::snapshot;
+use crate::computer::snapshot::ComputerCpuSnapshotRecord;
 use crate::computer_abi;
 use crate::low_bus::{MachineBus, MmioDeviceId};
 use crate::low_machine::{MachineMemory, MemoryFault};
@@ -300,7 +301,12 @@ impl ComputerMachine {
     }
 
     pub fn snapshot_v1(&self) -> Result<Vec<u8>, String> {
-        snapshot::encode_snapshot_v1(self.memory().bytes(), self.cpus.len(), self.boot_cpu)
+        let cpus = self
+            .cpus
+            .iter()
+            .map(ComputerCpuContext::snapshot_record)
+            .collect::<Vec<_>>();
+        snapshot::encode_snapshot_v1(self.memory().bytes(), self.boot_cpu, &cpus)
     }
 
     pub fn restore_ram_snapshot_v1(
@@ -311,6 +317,35 @@ impl ComputerMachine {
         snapshot::validate_snapshot_ram_matches_profile(&profile, &snapshot)?;
         let mut machine = Self::from_profile(profile).map_err(|error| error.to_string())?;
         machine.write_guest_ram_bytes(0, snapshot.ram)?;
+        Ok(machine)
+    }
+
+    pub fn restore_snapshot_v1(
+        profile: ComputerMachineProfile,
+        snapshot_bytes: &[u8],
+    ) -> Result<Self, String> {
+        let snapshot = snapshot::decode_snapshot_v1(snapshot_bytes)?;
+        snapshot::validate_snapshot_ram_matches_profile(&profile, &snapshot)?;
+        let mut machine = Self::from_profile(profile).map_err(|error| error.to_string())?;
+        machine.write_guest_ram_bytes(0, snapshot.ram)?;
+        machine.cpus = snapshot
+            .cpus
+            .iter()
+            .cloned()
+            .map(ComputerCpuContext::from_snapshot_record)
+            .collect::<Result<Vec<_>, _>>()?;
+        machine.boot_cpu = snapshot
+            .header
+            .boot_cpu_id
+            .map(|id| {
+                let id = usize::try_from(id)
+                    .map_err(|_| "ComputerMachine snapshot boot CPU id does not fit usize")?;
+                if id >= machine.cpus.len() {
+                    return Err("ComputerMachine snapshot boot CPU id is outside CPU table");
+                }
+                Ok(id)
+            })
+            .transpose()?;
         Ok(machine)
     }
 
@@ -574,6 +609,33 @@ impl ComputerMachine {
             control.panic_code = stable_panic_code(message);
         }
         Err(message.to_string())
+    }
+}
+
+impl ComputerCpuContext {
+    fn snapshot_record(&self) -> ComputerCpuSnapshotRecord {
+        match self {
+            ComputerCpuContext::Rux16 { cpu, max_steps } => ComputerCpuSnapshotRecord::Rux16 {
+                cpu: cpu.snapshot(),
+                max_steps: *max_steps,
+            },
+        }
+    }
+
+    fn from_snapshot_record(record: ComputerCpuSnapshotRecord) -> Result<Self, String> {
+        match record {
+            ComputerCpuSnapshotRecord::Rux16 { cpu, max_steps } => {
+                if max_steps == 0 {
+                    return Err(
+                        "ComputerMachine snapshot Rux16 CPU max_steps must be non-zero".to_string(),
+                    );
+                }
+                Ok(ComputerCpuContext::Rux16 {
+                    cpu: Rux16Cpu::from_snapshot(cpu),
+                    max_steps,
+                })
+            }
+        }
     }
 }
 
