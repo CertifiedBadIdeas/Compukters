@@ -1476,3 +1476,46 @@ fn rux16_artifact_rejects_recursive_helper_inline() {
         error.message
     );
 }
+
+#[test]
+fn rux16_artifact_lowers_write_csr_builtin_from_kernel() {
+    let artifact = compile_rux16_artifact(
+        "fn main() {
+            unsafe {
+                rux16_write_csr(1u32, 0x4200u32);
+            }
+        }",
+        Rux16ArtifactTarget::Kernel,
+    )
+    .expect("Rux16 write CSR builtin compiles");
+    let disassembly =
+        rux16_disasm::disassemble_artifact(&artifact.bytes, Rux16ArtifactTarget::Kernel)
+            .expect("artifact disassembles");
+
+    assert!(
+        disassembly.contains("write_csr 1, r"),
+        "write CSR builtin must lower to a real Rux16 CSR write:\n{disassembly}"
+    );
+}
+
+#[test]
+fn rux16_artifact_lowers_read_csr_builtin_from_kernel() {
+    let artifact = compile_rux16_artifact(
+        "fn main() {
+            unsafe {
+                let mut cause: u32 = rux16_read_csr(2u32);
+                cause = cause + 1u32;
+            }
+        }",
+        Rux16ArtifactTarget::Kernel,
+    )
+    .expect("Rux16 read CSR builtin compiles");
+    let disassembly =
+        rux16_disasm::disassemble_artifact(&artifact.bytes, Rux16ArtifactTarget::Kernel)
+            .expect("artifact disassembles");
+
+    assert!(
+        disassembly.contains("read_csr r"),
+        "read CSR builtin must lower to a real Rux16 CSR read:\n{disassembly}"
+    );
+}

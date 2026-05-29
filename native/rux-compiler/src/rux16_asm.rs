@@ -96,11 +96,27 @@ pub(crate) fn ret() -> u16 {
     0x9000
 }
 
+pub(crate) fn read_csr(dst: u8, csr: u8) -> u16 {
+    assert_register(dst);
+    assert_csr(csr);
+    0x0002 | (u16::from(dst) << 8) | (u16::from(csr) << 4)
+}
+
+pub(crate) fn write_csr(csr: u8, src: u8) -> u16 {
+    assert_csr(csr);
+    assert_register(src);
+    0x0003 | (u16::from(csr) << 8) | (u16::from(src) << 4)
+}
+
 fn assert_register(register: u8) {
     assert!(
         register <= STACK_POINTER_REGISTER,
         "Rux16 register index {register} is outside 0..=15"
     );
+}
+
+fn assert_csr(csr: u8) {
+    assert!(csr <= 15, "Rux16 CSR index {csr} is outside 0..=15");
 }
 
 fn encode_signed_nibble(value: i8) -> u16 {

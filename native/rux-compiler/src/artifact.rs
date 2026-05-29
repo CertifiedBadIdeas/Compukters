@@ -1121,6 +1121,22 @@ impl Rux16ArtifactBackend {
         unsafe_context: bool,
     ) -> Result<(), CompileError> {
         if let Expr::Call { name, args } = expr {
+            if name == "rux16_write_csr" {
+                if args.len() != 2 {
+                    return unsupported("Rux16 write CSR requires exactly two arguments");
+                }
+                if !unsafe_context {
+                    return unsupported("Rux16 write CSR requires `unsafe`");
+                }
+                let csr = self.eval_rux16_csr(&args[0])?;
+                let src = self.compile_u32_expr_to_register_or_use(
+                    rux16_asm::SCRATCH_REGISTER,
+                    &args[1],
+                    unsafe_context,
+                )?;
+                self.words.push(rux16_asm::write_csr(csr, src));
+                return Ok(());
+            }
             if name == "rux16_jump" {
                 if args.len() != 1 {
                     return unsupported("Rux16 jump requires exactly one target argument");
@@ -1756,13 +1772,26 @@ impl Rux16ArtifactBackend {
                     unsupported("only u32 addition and multiplication by a constant can be lowered")
                 }
             },
-            Expr::Call { name, args } => self.emit_real_function_call(
-                name,
-                args,
-                Some(TypeName::U32),
-                Some(dst),
-                unsafe_context,
-            ),
+            Expr::Call { name, args } => {
+                if name == "rux16_read_csr" {
+                    if args.len() != 1 {
+                        return unsupported("Rux16 read CSR requires exactly one argument");
+                    }
+                    if !unsafe_context {
+                        return unsupported("Rux16 read CSR requires `unsafe`");
+                    }
+                    let csr = self.eval_rux16_csr(&args[0])?;
+                    self.words.push(rux16_asm::read_csr(dst, csr));
+                    return Ok(());
+                }
+                self.emit_real_function_call(
+                    name,
+                    args,
+                    Some(TypeName::U32),
+                    Some(dst),
+                    unsafe_context,
+                )
+            }
             Expr::Path(_) => {
                 let value = self.eval_u32_value(expr)?;
                 self.words
@@ -2343,6 +2372,16 @@ impl Rux16ArtifactBackend {
             | Expr::Logical { .. }
             | Expr::Compare { .. } => unsupported("expected a compile-time u32 constant"),
         }
+    }
+
+    fn eval_rux16_csr(&self, expr: &Expr) -> Result<u8, CompileError> {
+        let csr = self.eval_u32_const_value(expr)?;
+        u8::try_from(csr)
+            .ok()
+            .filter(|value| *value <= 15)
+            .ok_or_else(|| CompileError {
+                message: format!("Rux16 CSR index {csr} is outside 0..=15"),
+            })
     }
 
     fn eval_optional_u32_const_value(&self, expr: &Expr) -> Result<Option<u32>, CompileError> {

@@ -1,5 +1,7 @@
 use rux::abi::computer::{control, debug, storage0};
 
+const TRAP_HANDLER_ADDR: u32 = 0x7000u32;
+
 fn clear_init_handoff_info() {
     unsafe {
         ptr<i32>(0x3f20u32).store(0);
@@ -86,6 +88,76 @@ fn write_init_handoff_info(root_start_lba: i32, init_ruxe_size_bytes: i32, init_
         ptr<i32>(0x3f2cu32).store(init_ruxe_size_bytes);
         ptr<i32>(0x3f30u32).store(init_entry_pc);
         ptr<i32>(0x3f34u32).store(0);
+    }
+}
+
+fn install_trap_handler() {
+    unsafe {
+        ptr<u32>(0x7000u32).store(0x0310e101u32);
+        ptr<u32>(0x7004u32).store(0xe2011000u32);
+        ptr<u32>(0x7008u32).store(0x00000001u32);
+        ptr<u32>(0x700cu32).store(0xe1015122u32);
+        ptr<u32>(0x7010u32).store(0x10000308u32);
+        ptr<u32>(0x7014u32).store(0x0000e201u32);
+        ptr<u32>(0x7018u32).store(0x51220000u32);
+        ptr<u32>(0x701cu32).store(0x030ce101u32);
+        ptr<u32>(0x7020u32).store(0xe2011000u32);
+        ptr<u32>(0x7024u32).store(0x00000000u32);
+        ptr<u32>(0x7028u32).store(0xe1015122u32);
+        ptr<u32>(0x702cu32).store(0x10000314u32);
+        ptr<u32>(0x7030u32).store(0x0049e201u32);
+        ptr<u32>(0x7034u32).store(0x51220000u32);
+        ptr<u32>(0x7038u32).store(0x0310e101u32);
+        ptr<u32>(0x703cu32).store(0xe2011000u32);
+        ptr<u32>(0x7040u32).store(0x00000002u32);
+        ptr<u32>(0x7044u32).store(0xe1015122u32);
+        ptr<u32>(0x7048u32).store(0x10000314u32);
+        ptr<u32>(0x704cu32).store(0x004ee201u32);
+        ptr<u32>(0x7050u32).store(0x51220000u32);
+        ptr<u32>(0x7054u32).store(0x0310e101u32);
+        ptr<u32>(0x7058u32).store(0xe2011000u32);
+        ptr<u32>(0x705cu32).store(0x00000002u32);
+        ptr<u32>(0x7060u32).store(0xe1015122u32);
+        ptr<u32>(0x7064u32).store(0x10000314u32);
+        ptr<u32>(0x7068u32).store(0x0049e201u32);
+        ptr<u32>(0x706cu32).store(0x51220000u32);
+        ptr<u32>(0x7070u32).store(0x0310e101u32);
+        ptr<u32>(0x7074u32).store(0xe2011000u32);
+        ptr<u32>(0x7078u32).store(0x00000002u32);
+        ptr<u32>(0x707cu32).store(0xe1015122u32);
+        ptr<u32>(0x7080u32).store(0x10000314u32);
+        ptr<u32>(0x7084u32).store(0x0054e201u32);
+        ptr<u32>(0x7088u32).store(0x51220000u32);
+        ptr<u32>(0x708cu32).store(0x0310e101u32);
+        ptr<u32>(0x7090u32).store(0xe2011000u32);
+        ptr<u32>(0x7094u32).store(0x00000002u32);
+        ptr<u32>(0x7098u32).store(0xe1015122u32);
+        ptr<u32>(0x709cu32).store(0x10000314u32);
+        ptr<u32>(0x70a0u32).store(0x0020e201u32);
+        ptr<u32>(0x70a4u32).store(0x51220000u32);
+        ptr<u32>(0x70a8u32).store(0x0310e101u32);
+        ptr<u32>(0x70acu32).store(0xe2011000u32);
+        ptr<u32>(0x70b0u32).store(0x00000002u32);
+        ptr<u32>(0x70b4u32).store(0xe1015122u32);
+        ptr<u32>(0x70b8u32).store(0x10000314u32);
+        ptr<u32>(0x70bcu32).store(0x004fe201u32);
+        ptr<u32>(0x70c0u32).store(0x51220000u32);
+        ptr<u32>(0x70c4u32).store(0x0310e101u32);
+        ptr<u32>(0x70c8u32).store(0xe2011000u32);
+        ptr<u32>(0x70ccu32).store(0x00000002u32);
+        ptr<u32>(0x70d0u32).store(0xe1015122u32);
+        ptr<u32>(0x70d4u32).store(0x10000314u32);
+        ptr<u32>(0x70d8u32).store(0x004be201u32);
+        ptr<u32>(0x70dcu32).store(0x51220000u32);
+        ptr<u32>(0x70e0u32).store(0x0310e101u32);
+        ptr<u32>(0x70e4u32).store(0xe2011000u32);
+        ptr<u32>(0x70e8u32).store(0x00000002u32);
+        ptr<u32>(0x70ecu32).store(0xe1015122u32);
+        ptr<u32>(0x70f0u32).store(0x10000004u32);
+        ptr<u32>(0x70f4u32).store(0x0000e201u32);
+        ptr<u32>(0x70f8u32).store(0x51220000u32);
+        ptr<u32>(0x70fcu32).store(0x00000001u32);
+        rux16_write_csr(1u32, TRAP_HANDLER_ADDR);
     }
 }
 
@@ -306,6 +378,7 @@ fn execute_loaded_init_ruxe(root_start_lba: i32) {
             }
             let mut init_ruxe_size_bytes: i32 = payload_offset_i32 + payload_size_i32;
             write_init_handoff_info(root_start_lba, init_ruxe_size_bytes, entry_pc);
+            install_trap_handler();
             rux16_jump(entry_pc);
         }
 
