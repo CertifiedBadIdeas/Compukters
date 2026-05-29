@@ -76,16 +76,34 @@ offset  size  field
 
 For ABI v0, `flags` is zero. The kernel reads this block by fixed address. A register-passed pointer can replace the fixed address later when the CPU/language ABI has a stable function-call convention.
 
-### Kernel-to-Init Contract
+### Kernel-to-Init Handoff Info
 
-ABI v0 deliberately keeps init simple. The kernel does not pass a boot info block, argv, env, handles, or syscalls to init yet.
+Real kernels usually enter the first user-space process with a small, explicit startup contract. Rux ABI v0 follows that shape without adding processes, syscalls, argv, env, or handles yet.
+
+Before entering `/bin/init.ruxe`, the kernel writes an init handoff block at `0x3F20`:
+
+```text
+offset  size  field
+0x00    4     magic: "RINI"
+0x04    2     version: 1
+0x06    2     size_bytes
+0x08    4     root_start_lba
+0x0C    4     init_ruxe_size_bytes
+0x10    4     init_entry_pc
+0x14    4     flags
+```
+
+For ABI v0, `flags` is zero. Init is not required to consume this block yet, but the kernel must write it before jumping so future init/runtime code has a stable ABI surface to read from.
+
+### Kernel-to-Init Contract
 
 The kernel:
 
 1. finds `ROOT:/bin/init.ruxe`;
 2. validates that it is a `program` RUXE;
 3. copies its payload to the RUXE-declared `load_addr`;
-4. jumps to the RUXE-declared `entry_pc`.
+4. writes the `RINI` handoff block;
+5. jumps to the RUXE-declared `entry_pc`.
 
 Init starts as the only user-space program. It may use existing MMIO directly for now. That is not a final user-space security model; it is the minimal architecture-preserving step before syscalls exist.
 
@@ -94,6 +112,7 @@ Init starts as the only user-space program. It may use existing MMIO directly fo
 The current implementation already uses fixed staging/load regions. ABI v0 should name those regions so future tests stop relying on source-only expectations:
 
 - `0x3F00`: bootloader-to-kernel boot info block.
+- `0x3F20`: kernel-to-init handoff info block.
 - `0x6000`: kernel-side scratch/staging area for filesystem metadata and loaded file bytes while running `kernel.ruxe`.
 - `0x8000`: default user program load address used by program RUXE artifacts.
 - `0xA000`: current init RUXE staging address in the example kernel loader.
@@ -137,12 +156,13 @@ The first implementation plan should add or update tests for:
 - kernel rejects missing `/bin/init.ruxe`;
 - bootloader writes the `RKBI` boot info block before entering kernel;
 - kernel can read boot info and use `root_start_lba` instead of rediscovering ROOT;
+- kernel writes the `RINI` handoff block before entering init;
 - init halt leaves the machine halted without reboot fallback.
 
 ## Follow-Up Slices
 
 1. Implement bootloader-to-kernel boot info writing and kernel-side reading.
-2. Keep kernel-to-init as load program RUXE and jump.
+2. Write kernel-to-init `RINI` handoff info before jumping to init.
 3. Add negative tests for wrong init ABI kind and missing init.
 4. Decide the first syscall/hostcall shape only after init can reliably run as the first user-space program.
 5. Later, split reusable RuxFS path reading out of the bootloader/kernel examples if duplication starts blocking changes.
