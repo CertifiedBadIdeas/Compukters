@@ -29,26 +29,9 @@ version  1
 `payload_size` is the exact number of guest-visible media bytes after the host
 file header. The file length must be `16 + payload_size`.
 
-## Guest-Visible Layouts
+## Guest-Visible Layout
 
-RUXVOL v1 currently has two explicit tooling layouts.
-
-`rux volume create` creates an empty volume. `rux volume put-boot` and
-the legacy raw-media boot flow use a fixed boot layout. This layout reserves
-fixed media LBAs:
-
-```text
-LBA 0   RUXB bootloader record
-LBA 1   bootloader payload bytes
-LBA 16  RUXK kernel record
-LBA 17  kernel payload bytes
-```
-
-Each LBA is 512 bytes. Tooling must reject artifacts that do not fit these
-fixed regions. It must not relocate records or payloads implicitly.
-
-`rux volume init` creates the partitioned layout used by the active
-filesystem-backed boot chain:
+RUXVOL v1 uses the partitioned layout created by `rux volume init`:
 
 ```text
 LBA 0        RUXPT partition table
@@ -61,6 +44,10 @@ as RuxFS and writes the bootloader `RUXE` file to `/boot/loader.ruxe`.
 `rux volume put-kernel` writes the kernel `RUXE` file to `/boot/kernel.ruxe`
 inside the `ROOT` RuxFS partition. The partitioned layout does not use fixed
 `RUXB` or `RUXK` records.
+
+`rux volume create` creates an unpartitioned volume for non-boot data and tests.
+Boot installation commands must reject unpartitioned volumes instead of writing
+fixed boot records.
 
 General filesystem operations are not part of `rux volume`. Tooling for RuxFS
 uses `rux fs ruxfs ...`; future filesystems should use their own `rux fs
@@ -150,52 +137,6 @@ Validation must reject bad magic/version, non-zero reserved fields, too many
 entries, zero-sized partitions, partitions that start inside the table area,
 partitions outside the guest-visible media size, and overlapping partitions.
 
-## RUXB Bootloader Record
-
-In the legacy raw-media layout, `rux volume put-boot` accepts only `RUXE`
-artifacts with ABI kind `bootloader` and writes this record at LBA 0.
-
-```text
-offset  size  name
-0x00    4     magic
-0x04    4     entry_pc
-0x08    4     load_addr
-0x0C    4     block_count
-0x10    4     start_lba
-```
-
-Field values:
-
-```text
-magic      "RUXB"
-start_lba  1
-```
-
-The bootloader payload bytes are copied from the `RUXE` load section to LBA 1.
-
-## RUXK Kernel Record
-
-In the legacy raw-media layout, `rux volume put-kernel` accepts only `RUXE`
-artifacts with ABI kind `kernel` and writes this record at LBA 16.
-
-```text
-offset  size  name
-0x00    4     magic
-0x04    4     entry_pc
-0x08    4     load_addr
-0x0C    4     block_count
-0x10    4     start_lba
-```
-
-Field values:
-
-```text
-magic      "RUXK"
-start_lba  17
-```
-
-The kernel payload bytes are copied from the `RUXE` load section to LBA 17.
-
 ## Boot Chain
 
 The current boot chain is:
@@ -204,21 +145,19 @@ The current boot chain is:
 2. BIOS reads `/boot/loader.ruxe` from the `BOOT` RuxFS partition.
 3. BIOS validates the bootloader `RUXE`, copies its payload to `load_addr`,
    and jumps to `entry_pc`.
-5. Bootloader reads `/boot/kernel.ruxe` from the `ROOT` RuxFS partition.
-6. Bootloader validates the kernel `RUXE`, copies its payload to `load_addr`,
+4. Bootloader reads `/boot/kernel.ruxe` from the `ROOT` RuxFS partition.
+5. Bootloader validates the kernel `RUXE`, copies its payload to `load_addr`,
    and jumps to `entry_pc`.
-7. Kernel reads `/bin/init.ruxe` from the `ROOT` RuxFS partition.
-8. Kernel validates the program `RUXE`, copies its payload to `load_addr`, and
+6. Kernel reads `/bin/init.ruxe` from the `ROOT` RuxFS partition.
+7. Kernel validates the program `RUXE`, copies its payload to `load_addr`, and
    jumps to `entry_pc`.
 
-The legacy fixed-media boot chain is:
+There is no fallback probing for fixed boot records, alternate paths, or raw
+instruction bytes.
 
-1. BIOS reads `RUXB` from LBA 0.
-2. BIOS copies the bootloader payload from LBA 1 to `load_addr`.
-3. BIOS jumps to `entry_pc`.
-4. Bootloader reads `RUXK` from LBA 16.
-5. Bootloader copies the kernel payload from LBA 17 to `load_addr`.
-6. Bootloader jumps to `entry_pc`.
+## Retired Fixed Records
 
-The active filesystem-backed chain should continue forward without adding
-fallback guesses to alternate paths or executable formats.
+Earlier development slices used fixed raw-media records named `RUXB` and
+`RUXK`. They are retired from the active ABI. Current BIOS and volume tooling
+must reject missing or malformed `RUXPT`/RuxFS structures instead of booting
+from fixed LBA records.

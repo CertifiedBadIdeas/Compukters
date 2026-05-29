@@ -33,8 +33,11 @@
 - `rux volume put-boot` now accepts a `RUXE` boot artifact and writes the
   bootloader file to `BOOT`/RuxFS `/boot/loader.ruxe` for partitioned volumes.
   Kernel artifacts are rejected for boot media.
-- Added `rux volume put-kernel`, which writes a fixed `RUXK` kernel record and
-  kernel payload for the bootloader-to-kernel chain.
+- Added `rux volume put-kernel`, which writes the kernel `RUXE` file to
+  `ROOT`/RuxFS `/boot/kernel.ruxe` for the bootloader-to-kernel chain.
+- Retired the legacy fixed `RUXB` raw boot path from active BIOS and
+  `put-boot` behavior. Partitioned `RUXPT` plus RuxFS is now the only supported
+  boot path.
 - Added `rux volume init`, which creates a partitioned `RUXPT` volume with
   `BOOT` and `ROOT` partitions for the next filesystem-backed boot chain.
 - Added byte-level `rux volume extract-partition` and `replace-partition`
@@ -54,8 +57,8 @@
   in-memory filesystem image.
 - Added `rux fs ruxfs`, keeping filesystem-specific commands separate from
   `rux volume` so additional filesystems can be introduced explicitly.
-- Added `rux-storage-volume-v1.md` for the current `RUXVOL`, `RUXB`, and `RUXK`
-  storage0 media layout.
+- Added `rux-storage-volume-v1.md` for the earlier fixed-record `RUXVOL`,
+  `RUXB`, and `RUXK` storage0 media layout.
 - Retired the previous host-decoded executable ABI package from active
   documentation.
 - Removed the obsolete decoder, runner, disassembler, conformance examples,
