@@ -20,6 +20,8 @@ Current specifications:
   and hardware table contract.
 - `rux-computer-profile-v1.md`: concrete hardware IDs and MMIO register layout
   for the current `ComputerMachine`.
+- `rux-computer-snapshot-v1.md`: experimental host-side `ComputerMachine`
+  snapshot container.
 - `CHANGELOG.md`: active ABI history.
 
 The supported execution model is Rux16 guest instruction-memory execution from

@@ -6,6 +6,10 @@ pub mod computer_machine {
         BootHandoffError, ComputerMachine, ComputerMemoryMap, ComputerMemoryRegion, CpuId,
     };
     pub use crate::computer::profile::{ComputerHardwareConfig, ComputerMachineProfile};
+    pub use crate::computer::snapshot::{
+        decode_snapshot_v1, ComputerMachineSnapshot, ComputerMachineSnapshotHeader,
+        COMPUTER_SNAPSHOT_V1_HEADER_SIZE, COMPUTER_SNAPSHOT_V1_MAGIC,
+    };
 }
 pub mod display;
 pub mod generated;
