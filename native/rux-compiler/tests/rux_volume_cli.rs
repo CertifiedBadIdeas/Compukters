@@ -1146,6 +1146,67 @@ fn rux16_init_loader_source_writes_init_handoff_info() {
 }
 
 #[test]
+fn rux16_rini_init_source_reads_and_validates_handoff() {
+    let source = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/init/rini_init.rx"),
+    )
+    .expect("RINI init source should exist");
+
+    assert!(
+        source.contains("fn read_rini_handoff_valid("),
+        "init should expose a RINI validation helper"
+    );
+    assert!(
+        source.contains("ptr<i32>(0x3f20u32).load()"),
+        "init should read the RINI magic from guest RAM"
+    );
+    assert!(
+        source.contains("0x494e4952"),
+        "init should validate the little-endian `RINI` magic"
+    );
+    assert!(
+        source.contains("ptr<i32>(0x3f24u32).load()"),
+        "init should read the RINI version and size word"
+    );
+    assert!(
+        source.contains("0x00180001"),
+        "init should require RINI version 1 and 24-byte header size"
+    );
+    assert!(
+        source.contains("ptr<i32>(0x3f28u32).load()"),
+        "init should read root_start_lba"
+    );
+    assert!(
+        source.contains("root_start_lba == 33"),
+        "init should validate the current ROOT partition LBA"
+    );
+    assert!(
+        source.contains("ptr<i32>(0x3f30u32).load()"),
+        "init should read init_entry_pc"
+    );
+    assert!(
+        source.contains("init_entry_pc == 0x8000"),
+        "init should validate its entry point"
+    );
+    assert!(
+        source.contains("ptr<i32>(0x3f34u32).load()"),
+        "init should read RINI flags"
+    );
+    assert!(
+        source.contains("flags == 0"),
+        "init should reject unsupported RINI flags"
+    );
+    assert!(
+        source.contains("write_init_ok()"),
+        "init should report success only after validation"
+    );
+    assert!(
+        source.contains("write_init_failed()"),
+        "init should fail explicitly when RINI is invalid"
+    );
+}
+
+#[test]
 fn rux16_init_loader_source_rejects_protected_init_load_address() {
     let source = fs::read_to_string(
         Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/kernel/init_loader.rx"),
@@ -1493,6 +1554,53 @@ fn rux_volume_boot_kernel_and_init_executes_init_from_root_ruxfs() {
         display_row(&snapshot, 0)
     );
     assert_eq!(display_row(&snapshot, 0), "INIT OK");
+}
+
+#[test]
+fn rux_volume_boot_kernel_and_rini_init_consumes_handoff() {
+    let init_source_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/init/rini_init.rx");
+    let init_path = temp_file("rini-init-consumes-handoff-init.ruxe");
+    let init_compile_output = Command::new(rux_binary())
+        .args([
+            "compile",
+            init_source_path.to_str().unwrap(),
+            "-o",
+            init_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("rux compile RINI init runs");
+    assert!(
+        init_compile_output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&init_compile_output.stderr)
+    );
+    let init_bytes = fs::read(&init_path).expect("RINI init RUXE reads");
+    let volume_path =
+        create_boot_kernel_init_volume("rini-init-consumes-handoff", Some(&init_bytes));
+    let bios = compile_bundled_rux16_bios();
+    let mut handle = RuxComputerHandle::create_rux16_bios_flash_with_storage0_path(
+        &bios,
+        64 * 1024,
+        1_000_000,
+        &volume_path,
+    )
+    .expect("Rux16 BIOS flash computer creates with RINI init volume path");
+
+    let signal_result = handle.run_rux16_until_signal();
+    let snapshot = handle
+        .display0_snapshot()
+        .expect("computer profile maps display0");
+    let signal = signal_result.unwrap_or_else(|error| {
+        panic!(
+            "run failed: {error}; debug={} panic={} row0={}",
+            String::from_utf8_lossy(handle.debug_output_bytes()),
+            handle.control().panic_code,
+            display_row(&snapshot, 0)
+        )
+    });
+    assert_eq!(signal, Rux16Signal::Halt);
+    assert_eq!(display_row(&snapshot, 0), "INIT OK");
+    assert_eq!(handle.control().panic_code, 0);
 }
 
 #[test]
