@@ -128,7 +128,7 @@ object NativeVmBindings {
                 maxSteps.coerceAtLeast(1),
                 storage0Path.toAbsolutePath().normalize().toString(),
             )
-        check(handle != 0L) { "Native Rux16 BIOS flash computer create returned a zero handle" }
+        check(handle != 0L) { "Native K16 BIOS flash computer create returned a zero handle" }
         return handle
     }
 
@@ -148,11 +148,11 @@ object NativeVmBindings {
                 storage0Path.toAbsolutePath().normalize().toString(),
                 snapshot,
             )
-        check(handle != 0L) { "Native Rux16 BIOS flash computer restore returned a zero handle" }
+        check(handle != 0L) { "Native K16 BIOS flash computer restore returned a zero handle" }
         return handle
     }
 
-    fun runRux16ComputerUntilSignal(handle: Long): NativeRuxComputerSignal {
+    fun runK16ComputerUntilSignal(handle: Long): NativeRuxComputerSignal {
         require(handle != 0L) { "Native Rux computer handle is zero" }
         return NativeRuxComputerSignal.from(runRux16ComputerUntilSignalNative(handle))
     }
