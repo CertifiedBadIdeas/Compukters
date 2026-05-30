@@ -21,11 +21,17 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
 
     let llvm_smoke = fs::read_to_string(&llvm_smoke_script).expect("LLVM smoke script exists");
     assert!(llvm_smoke.contains("--bin k16"));
+    assert!(llvm_smoke.contains("main.kx"));
+    assert!(llvm_smoke.contains("call-helper.kx"));
+    assert!(llvm_smoke.contains("stack-local-main.kx"));
     assert!(!llvm_smoke.contains("--bin rux"));
+    assert!(!llvm_smoke.contains(".ruxe"));
 
     let clang_smoke = fs::read_to_string(&clang_smoke_script).expect("Clang smoke script exists");
     assert!(clang_smoke.contains("--bin k16"));
+    assert!(clang_smoke.contains("main.kx"));
     assert!(!clang_smoke.contains("--bin rux"));
+    assert!(!clang_smoke.contains(".ruxe"));
 
     let script = fs::read_to_string(&smoke_script).expect("Rust no_core smoke script exists");
     assert!(script.contains("#![no_core]"));
@@ -34,9 +40,11 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     assert!(script.contains("pointee_sized"));
     assert!(script.contains("rux16-memory-helpers"));
     assert!(script.contains("\"$WORK_DIR/helpers.o\""));
+    assert!(script.contains("main.kx"));
     assert!(script.contains("debug_bytes=2a"));
     assert!(script.contains("--bin k16"));
     assert!(!script.contains("--bin rux"));
+    assert!(!script.contains(".ruxe"));
     assert!(!script.contains("|| true"));
 
     let helpers = fs::read_to_string(&runtime_helpers).expect("Rux16 runtime helper source exists");
@@ -59,7 +67,9 @@ fn rust_nocore_smoke_artifacts_are_documented_and_strict() {
     let docs = fs::read_to_string(&docs).expect("Rust no_core smoke docs exist");
     assert!(docs.contains("tools/rux16-rust-nocore-smoke.sh"));
     assert!(docs.contains("custom rustc"));
+    assert!(docs.contains("KX"));
     assert!(docs.contains("debug_bytes=2a"));
+    assert!(!docs.contains(".ruxe"));
 
     let bootstrap_docs = fs::read_to_string(&bootstrap_docs).expect("Rust bootstrap docs exist");
     assert!(bootstrap_docs.contains("tools/rux16-rustc-bootstrap-probe.sh"));
